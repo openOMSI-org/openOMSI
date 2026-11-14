@@ -4,24 +4,40 @@ use omsi_plugin::{HostConfig, Plugin, PluginIo, Plugins, Remote};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-fn demo_library() -> &'static Path {
-    static LIBRARY: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
-    LIBRARY.get_or_init(|| {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-        let target = std::env::temp_dir().join(format!("omsi-demo-plugin-{}", std::process::id()));
-        let release = !cfg!(debug_assertions);
-        let mut cmd = std::process::Command::new(cargo);
-        cmd.args(["build", "--locked", "-q", "-p", "omsi-demo-plugin", "--manifest-path"])
-            .arg(root.join("Cargo.toml"))
-            .arg("--target-dir").arg(&target);
-        if release {
-            cmd.arg("--release");
+fn demo_library() -> PathBuf {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let release = !cfg!(debug_assertions);
+    let mut cmd = std::process::Command::new(cargo);
+    cmd.args(["build", "--message-format=json-render-diagnostics", "-p", "omsi-demo-plugin", "--manifest-path"])
+        .arg(root.join("Cargo.toml"))
+        .stdout(std::process::Stdio::piped());
+    if release {
+        cmd.arg("--release");
+    }
+    let mut child = cmd.spawn().expect("building the demo plugin");
+    let output = child.stdout.take().expect("Cargo's JSON output");
+    let mut library = None;
+    for line in std::io::BufRead::lines(std::io::BufReader::new(output)) {
+        let line = line.expect("reading Cargo's JSON output");
+        let Ok(message) = serde_json::from_str::<serde_json::Value>(&line) else { continue };
+        let is_demo_cdylib = message["reason"] == "compiler-artifact"
+            && message["target"]["name"] == "omsi_demo_plugin"
+            && message["target"]["kind"].as_array().is_some_and(|kinds| kinds.iter().any(|kind| kind == "cdylib"));
+        if is_demo_cdylib {
+            library = message["filenames"]
+                .as_array()
+                .and_then(|files| {
+                    files
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .find(|file| file.ends_with(std::env::consts::DLL_SUFFIX))
+                })
+                .map(PathBuf::from);
         }
-        assert!(cmd.status().unwrap().success(), "building the demo plugin");
-        let name = format!("{}omsi_demo_plugin{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
-        target.join(if release { "release" } else { "debug" }).join(name)
-    })
+    }
+    assert!(child.wait().unwrap().success(), "building the demo plugin");
+    library.expect("Cargo reported the demo plugin library")
 }
 
 /// A plugins folder with the demo as `Demo\demo.dll`, listed in `Demo\demo.opl`.
