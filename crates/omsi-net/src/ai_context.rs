@@ -188,15 +188,16 @@ impl Receiver {
         if replace {
             let reserved: usize = self.entries.values().map(|a| a.bytes.len()).sum();
             let old = self.entries.get(&id).map_or(0, |a| a.bytes.len());
-            let previous = self
-                .entries
-                .get_mut(&id)
-                .and_then(|a| a.layout.take().or_else(|| a.previous.take()));
             if reserved - old + len > 16 * 1024 * 1024
                 || (self.entries.len() >= 1024 && !self.entries.contains_key(&id))
             {
                 return None;
             }
+            // Only once the new version is accepted, or a rejected one loses the old trip.
+            let previous = self
+                .entries
+                .get_mut(&id)
+                .and_then(|a| a.layout.take().or_else(|| a.previous.take()));
             self.entries.insert(
                 id,
                 Assembly {
@@ -308,9 +309,10 @@ mod tests {
         let count = c.layout().unwrap().len().div_ceil(CHUNK);
         let mut rx = Receiver::default();
         for p in (1..count).rev() {
-            assert!(rx
-                .receive(&c.packet(9, 7, p as u32, p).unwrap(), 9)
-                .is_none());
+            assert!(
+                rx.receive(&c.packet(9, 7, p as u32, p).unwrap(), 9)
+                    .is_none()
+            );
         }
         c.index = 9;
         c.delay = 5.0;
@@ -371,6 +373,37 @@ mod tests {
             last = rx.receive(&new.packet(9, 7, 60 + p as u32, p).unwrap(), 9);
         }
         assert_eq!(last.unwrap().1, new);
+    }
+    #[test]
+    fn a_rejected_replacement_keeps_the_last_whole_trip() {
+        let old = context();
+        let mut rx = Receiver::default();
+        let (_, count) = old.pages().unwrap();
+        for p in 0..count {
+            rx.receive(&old.packet(9, 7, p as u32, p).unwrap(), 9);
+        }
+        let used = rx.entries[&7].bytes.len();
+        rx.entries.insert(
+            8,
+            Assembly {
+                hash: 0,
+                seq: 0,
+                bytes: vec![0; 16 * 1024 * 1024 - used],
+                parts: Vec::new(),
+                dynamic: Context::default(),
+                layout: None,
+                previous: None,
+            },
+        );
+        let mut bigger = context();
+        bigger.stops.push((100, "one more stop".into(), 0.0, 0.0));
+        assert!(
+            rx.receive(&bigger.packet(9, 7, 50, 0).unwrap(), 9)
+                .is_none()
+        );
+        assert_eq!(rx.entries[&7].layout.as_ref().unwrap().stops, old.stops);
+        let got = rx.receive(&old.packet(9, 7, 51, 0).unwrap(), 9).unwrap().1;
+        assert_eq!(got.stops, old.stops);
     }
     #[test]
     fn invalid_protocol_lengths_and_nonfinite_values_are_rejected() {
