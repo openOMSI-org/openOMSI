@@ -1202,7 +1202,7 @@ impl TrafficSim {
             .map(|_| PULL_OUT_ACCEL);
         let (speed_before, lane_now, s_now) = (car.state.speed, car.state.lane, car.state.s);
         if debug && car.stopped > 30.0 {
-            car.holding = Some(format!("lead {:?} (car {:?}), stop {:?} (light {:?}, junction {:?}, merge {:?}), bus {:?}, lane {} s {:.1} of {:.1}, next {:?}, lateral {:.2}, stops {:?}", lead_now, lead_id, stop_at.map(|x| x - car.state.front), light, yield_at, merge_wait, car.bus.as_ref().map(|b| (b.phase, b.phase_t as i32)), car.state.lane, car.state.s, self.net.lanes[car.state.lane].length(), car.state.planned_next, car.state.lateral, car.next_stop()));
+            car.holding = Some(format!("lead {:?} (car {:?}), stop {:?} why {:?} (light {:?}, junction {:?}, merge {:?}), bus {:?}, lane {} s {:.1} of {:.1}, next {:?}, lateral {:.2}, stops {:?}", lead_now, lead_id, stop_at.map(|x| x - car.state.front), car.why, light, yield_at, merge_wait, car.bus.as_ref().map(|b| (b.phase, b.phase_t as i32)), car.state.lane, car.state.s, self.net.lanes[car.state.lane].length(), car.state.planned_next, car.state.lateral, car.next_stop()));
             if car.stopped - dt <= 30.0 {
                 log::info!(
                     "t={:.1}: car {} ({}) has stood for 30 s at ({:.0}, {:.0}): {}",
