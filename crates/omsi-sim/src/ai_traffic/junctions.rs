@@ -50,7 +50,7 @@ fn ring_queue_blocks(
 
 #[cfg(test)]
 mod long_waiter_tests {
-    use super::{is_long_waiter, ring_queue_blocks, COURTESY_WAIT};
+    use super::{is_long_waiter, long_waiter_may_be_let_in, ring_queue_blocks, COURTESY_WAIT};
 
     #[test]
     fn a_car_waiting_inside_a_junction_can_be_recognized_as_a_long_waiter() {
