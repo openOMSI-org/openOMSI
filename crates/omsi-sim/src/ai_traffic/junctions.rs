@@ -780,11 +780,18 @@ impl TrafficSim {
             holds.retain(|h| !matches!(h.1, Hold::Rule | Hold::Courtesy));
         }
         let need = st.front + self.cars[i].tail + st.min_gap + if self.cars[i].exit_wait { EXIT_HYSTERESIS } else { 0.0 };
-        let (exit_full, exit_car) = if jn.inside { (false, None) } else { self.exit_room(i, jn, way, lead, on_lane, book, need, committed, started || cannot_stop_comfortably, &mut why) };
-        // A full exit is a physical obstruction, not a circular right-of-way deadlock.
-        // Never age it out: doing so admits a vehicle without room for its body and can
-        // leave it standing across the junction. Circular waits are resolved separately
-        // below through the soft-claim wait handling.
+        let (mut exit_full, mut exit_car) = if jn.inside { (false, None) } else { self.exit_room(i, jn, way, lead, on_lane, book, need, committed, started || cannot_stop_comfortably, &mut why) };
+        // Keep the proven deadlock release for a false-positive/full-exit hold. It is
+        // deliberately unavailable when any real right-of-way, pedestrian, or courtesy
+        // blocker exists. This lets a queued vehicle proceed after waiting, without
+        // overriding crossing traffic or priority rules.
+        if exit_full && wait > 10.0 && !hard && !ruled && soft.is_empty() && !people && !courtesy {
+            exit_full = false;
+            exit_car = None;
+            if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
+                log::info!("t={:.1}: car {} releases a junction exit deadlock after {wait:.1} s", self.time, self.cars[i].id);
+            }
+        }
         if let Some(id) = exit_car {
             holds.push((id, Hold::Exit));
         }
