@@ -381,6 +381,22 @@ mod tests {
         assert!(super::rasterize("no_such_icon", 32).is_none());
     }
 
+    #[test]
+    fn speed_limit_sign_asset_has_a_red_ring_and_white_center_without_a_value() {
+        let src = super::svg("speed_limit_sign").expect("the sign background is built in");
+        assert!(!src.contains("<text"));
+        let rgba = super::rasterize_rgba(src, 56, 56).unwrap();
+        let pixel = |x: usize, y: usize| &rgba[(y * 56 + x) * 4..(y * 56 + x) * 4 + 4];
+        assert_eq!(pixel(28, 28), [255, 255, 255, 255]);
+        for (x, y) in [(28, 0), (55, 28), (28, 55), (0, 28)] {
+            assert_eq!(pixel(x, y), [155, 155, 155, 255]);
+        }
+        for (x, y) in [(28, 4), (51, 28), (28, 51), (4, 28)] {
+            assert_eq!(pixel(x, y), [214, 38, 38, 255]);
+        }
+        assert_eq!(pixel(0, 0)[3], 0);
+    }
+
     /// An `<image>` of a logo that names a file outside it is left out (usvg's own options
     /// would read any file); one inside it (`data:`) is drawn.
     #[test]

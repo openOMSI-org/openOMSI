@@ -13,6 +13,12 @@ pub struct SurfaceState<'w> {
     pub(crate) encode: Option<srgb_encode::SrgbEncode>,
     /// A glass theme is in force: the window's picture is copied from (`set_glass`).
     glass: bool,
+    /// Frame generation, while it is on: the frames are drawn into its buffer and shown by
+    /// it, a generated one before each (`set_frame_generation`).
+    generation: Option<temporal::GenerationWindow>,
+    /// It was asked for and could not start, or gave up: not tried again until it is turned
+    /// off and on.
+    generation_refused: bool,
 }
 
 impl Drop for SurfaceState<'_> {
@@ -112,7 +118,7 @@ impl<'w> SurfaceState<'w> {
         config.width = width.max(1);
         config.height = height.max(1);
         surface.configure(&renderer.device, &config);
-        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: renderer.errors.device_lost.clone(), encode, glass: false })
+        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: renderer.errors.device_lost.clone(), encode, glass: false, generation: None, generation_refused: false })
     }
 
     /// The window's surface on a device whose renderer is still being built ([`Opened`]'s
@@ -132,7 +138,7 @@ impl<'w> SurfaceState<'w> {
             view_formats: vec![],
         };
         surface.configure(device, &config);
-        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: Default::default(), encode: None, glass: false })
+        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: Default::default(), encode: None, glass: false, generation: None, generation_refused: false })
     }
 
     /// The renderer built for the device this surface was made on ([`Self::early`]) takes
@@ -164,6 +170,41 @@ impl<'w> SurfaceState<'w> {
         }
     }
 
+    /// Frame generation turned on or off for this window (cheap to call every frame, before
+    /// the frame is acquired): on, the frames are drawn into its buffer ([`Self::view`]) and
+    /// [`Self::present`] shows a generated one before each. The handle is the renderer's
+    /// ([`Renderer::set_frame_generation`]); None where it is off, cannot run (logged once) or
+    /// gave up.
+    pub fn set_frame_generation(&mut self, renderer: &Renderer, on: bool) -> Option<temporal::FrameGeneration> {
+        if !on || renderer.device_lost().is_some() {
+            if let Some(g) = self.generation.take() {
+                g.handle().wait();
+                log::info!("frame generation: off");
+            }
+            self.generation_refused = false;
+            return None;
+        }
+        if self.generation.as_ref().is_some_and(|g| !g.working()) {
+            self.generation = None;
+            self.generation_refused = true;
+        }
+        if self.generation_refused {
+            return None;
+        }
+        let size = (self.config.width, self.config.height);
+        match self.generation.as_mut() {
+            Some(g) => g.resize(&renderer.device, &renderer.queue, size),
+            None => match temporal::GenerationWindow::new(&renderer.device, &renderer.queue, self.config.format, size) {
+                Ok(g) => self.generation = Some(g),
+                Err(e) => {
+                    log::warn!("frame generation is off: {e:#}");
+                    self.generation_refused = true;
+                }
+            },
+        }
+        self.generation.as_ref().map(|g| g.handle())
+    }
+
     /// The window's next picture.
     pub fn acquire(&self) -> wgpu::CurrentSurfaceTexture {
         self.surface.get_current_texture()
@@ -171,6 +212,9 @@ impl<'w> SurfaceState<'w> {
 
     /// The view `frame` is drawn into (of the renderer's format).
     pub fn view(&self, device: &wgpu::Device, frame: &wgpu::SurfaceTexture) -> wgpu::TextureView {
+        if let Some(g) = &self.generation {
+            return g.view();
+        }
         match &self.encode {
             Some(e) => e.view(device, frame.texture.size()),
             None => frame.texture.create_view(&Default::default()),
@@ -180,6 +224,9 @@ impl<'w> SurfaceState<'w> {
     /// The texture `frame` is drawn into ([`Self::view`]: the window's own, or the stand-in it is
     /// encoded from), to be copied from - none where it cannot be (a window that allows no copy).
     pub fn picture(&self, frame: &wgpu::SurfaceTexture) -> Option<wgpu::Texture> {
+        if let Some(g) = &self.generation {
+            return Some(g.texture());
+        }
         let t = match &self.encode {
             Some(e) => e.texture()?,
             None => frame.texture.clone(),
@@ -189,6 +236,9 @@ impl<'w> SurfaceState<'w> {
 
     /// Shows `frame`, drawn into [`Self::view`].
     pub fn present(&self, device: &wgpu::Device, queue: &wgpu::Queue, frame: wgpu::SurfaceTexture) {
+        if let Some(g) = &self.generation {
+            return g.present(&self.surface, device, queue, frame);
+        }
         if let Some(e) = &self.encode {
             e.encode(device, queue, &frame);
         }

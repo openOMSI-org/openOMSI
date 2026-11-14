@@ -51,6 +51,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         pick("ai_max_scheduled", "Timetable vehicles", later),
         pick("ai_max_parked", "Parked cars", later),
         pick("ai_max_humans", "People at once", later),
+        pick("parked_buses_drawn", "Parked buses on a server", "How many of the buses parked near you are drawn; fewer take less memory"),
     ]
         .into_iter()
         .flatten()
@@ -155,6 +156,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "head_idle", "Head sway at a standstill", "How much the view sways on its own when nothing is done to it - a head at rest is never quite still, most of it seen while the bus waits at a stop", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{:.0}%", v * 100.0) }),
         slider_row(app, "head_idle_pace", "Sway pace", "How fast that sway moves (100% is the pace it is designed at)", &|v| format!("{:.0}%", v * 100.0)),
         switch_row(app, "hands_in_cab", "Driver's hands in the cab view", "Shows the driver's hand on the steering wheel (Cockpit only)"),
+        switch_row(app, "driver_like_omsi", "Driver sits as in OMSI 2", "The driver sits back on the seat with his hands off the wheel, as in OMSI 2, instead of leaning forward to hold it"),
         switch_row(app, "driver", "Driver at the wheel (outside views)", "Shows the driver in the outside views and in the mirrors"),
     ]
         .into_iter()
@@ -568,10 +570,12 @@ fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let fsr = app.settings.upscaler == "fsr1";
     let temporal = app.settings.temporal_upscaling().is_some();
     let offered = !omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir()).is_empty();
+    let generation = app.settings.temporal_upscaling().is_some_and(|t| omsi_cfg::upscaler_files::frame_generation_choices().contains(&t.upscaler.as_str()));
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     [
         select_row(file, "upscaler", "Upscaling", omsi_cfg::upscaler_files::menu_help(offered)),
         select_row(file, "upscale_quality", "Upscaling quality", "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate").filter(|_| temporal),
+        select_row(file, "frame_generation", "Frame generation", omsi_cfg::upscaler_files::frame_generation_help()).filter(|_| generation),
         select_row(file, "fsr_quality", "FSR quality", &fsr_size(app)).filter(|_| fsr),
         slider_row(app, "fsr_sharpness", "FSR sharpness", "RCAS sharpening strength", &pct).filter(|_| fsr),
     ]

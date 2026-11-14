@@ -116,9 +116,15 @@ impl Offscreen<'_> {
             let hub = omsi_lan::admin::hub().map(|h| &**h);
             let rules = crate::admin::server_rules(srv_metar.is_some());
             for (from, text) in l.take_commands() {
-                omsi_lan::admin::server_command(l, from, &text, srv_admin, &positions, &rules, hub);
+                if !omsi_lan::parked::server_command(l, from, &text) {
+                    omsi_lan::admin::server_command(l, from, &text, srv_admin, &positions, &rules, hub);
+                }
             }
+            omsi_lan::parked::server_tick(l, dt as f32);
             for text in crate::lan::take_local_admin() {
+                if omsi_lan::parked::server_admin(&text, &|x, y, near| crate::server::parked_floor(world, x, y, near)) {
+                    continue;
+                }
                 srv_admin.admins.insert(crate::admin::LOCAL_ADMIN, omsi_admin::Role::Admin);
                 omsi_lan::admin::server_command(l, crate::admin::LOCAL_ADMIN, &format!("admin {text}"), srv_admin, &positions, &rules, hub);
             }

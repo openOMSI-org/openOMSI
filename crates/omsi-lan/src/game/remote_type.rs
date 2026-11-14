@@ -18,6 +18,14 @@ pub(super) struct RemoteType {
     pub(super) reads: Vec<std::path::PathBuf>,
 }
 
+/// The players' buses are read and made before a server's parked ones (`tick_receive` takes
+/// them in that order), and one parked bus is made, or let go to be made again, a frame: a
+/// game that comes back to a yard has them read already, and two dozen made in one frame
+/// stopped it. (Let go without its turn, every box that waited saw the reader free.)
+pub(super) fn its_turn(game: &LanGame, id: u32) -> bool {
+    !omsi_net::is_parked(id) || !game.drawn.events.iter().any(|e| matches!(e, RemoteEvent::Made(m) if omsi_net::is_parked(*m)))
+}
+
 /// The type a remote player drives - as that player has it. While it is on its way here as
 /// that bus (or still being read off the frame: `remote_load`) a neutral box of its size
 /// stands in for it (`mods::placeholder`); once it is not to be had as itself (given up, not

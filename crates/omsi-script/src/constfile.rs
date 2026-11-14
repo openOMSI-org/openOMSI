@@ -59,6 +59,7 @@ impl ConstFile {
                 "const" => {
                     let name = r.word().to_string();
                     let value = r.f32();
+                    // Keep source order; the compiler resolves duplicates across the full script set.
                     out.consts.push((name, value));
                 }
                 "newcurve" => {
@@ -77,5 +78,20 @@ impl ConstFile {
             }
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ConstFile;
+
+    #[test]
+    fn duplicate_consts_preserve_source_order() {
+        let file = omsi_cfg::CfgFile::from_str(
+            "duplicate.txt",
+            "[const]\nDoorAftOpenTime\n0.8\n[const]\ndooraftopentime\n0\n",
+        );
+        let parsed = ConstFile::parse(&file);
+        assert_eq!(parsed.consts, vec![("DoorAftOpenTime".to_string(), 0.8), ("dooraftopentime".to_string(), 0.0)]);
     }
 }

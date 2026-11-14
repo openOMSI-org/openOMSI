@@ -457,6 +457,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "camcoll" => s.camera_collision,
         "steer_look" => s.steer_look,
         "hands_in_cab" => s.hands_in_cab,
+        "driver_like_omsi" => s.driver_like_omsi,
         "ff" => s.ff_enabled,
         "brake_hold" => s.brake_hold,
         "auto_clutch" => s.auto_clutch,
@@ -766,6 +767,10 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
         "hands_in_cab" => {
             app.settings.hands_in_cab = on;
             Some(("hands_in_cab", bit))
+        }
+        "driver_like_omsi" => {
+            app.settings.driver_like_omsi = on;
+            Some(("driver_like_omsi", bit))
         }
         "brake_hold" => {
             app.settings.brake_hold = on;
