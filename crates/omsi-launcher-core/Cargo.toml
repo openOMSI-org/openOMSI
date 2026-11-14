@@ -40,3 +40,6 @@ windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_Syst
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 rfd.workspace = true
+
+[dev-dependencies]
+serde-saphyr = "1.3"
