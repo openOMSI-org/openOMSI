@@ -740,7 +740,7 @@ impl TrafficSim {
             holds.retain(|h| !matches!(h.1, Hold::Rule | Hold::Courtesy));
         }
         let need = st.front + self.cars[i].tail + st.min_gap + if self.cars[i].exit_wait { EXIT_HYSTERESIS } else { 0.0 };
-        let (mut exit_full, mut exit_car) = if jn.inside { (false, None) } else { self.exit_room(i, jn, way, lead, on_lane, book, need, committed, started || cannot_stop_comfortably, &mut why) };
+        let (exit_full, exit_car) = if jn.inside { (false, None) } else { self.exit_room(i, jn, way, lead, on_lane, book, need, committed, started || cannot_stop_comfortably, &mut why) };
         // A full exit is a physical obstruction, not a circular right-of-way deadlock.
         // Never age it out: doing so admits a vehicle without room for its body and can
         // leave it standing across the junction. Circular waits are resolved separately
