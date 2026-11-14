@@ -24,7 +24,15 @@ pub struct PassPos {
     /// openOMSI's: a script variable the engine sets to 1 while somebody is on the place and
     /// to 0 while nobody is, named on the line after that.
     pub taken_var: Option<String>,
+    /// openOMSI's: the place is a berth - a `[passpos_lying]` after the `[passpos]` gives the
+    /// angle of the backrest over the horizontal in degrees (0: flat on the mattress), and
+    /// the passenger lies on it, hip on the `[passpos]` point, feet towards its rotation.
+    /// Omsi.exe does not know the block and seats them there as on any `[passpos]`.
+    pub recline: Option<f32>,
 }
+
+/// The steepest backrest a `[passpos_lying]` takes: past it the pose is a seat's anyway.
+pub const MAX_RECLINE: f32 = 80.0;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Entry {
@@ -132,7 +140,7 @@ impl PassengerCabin {
                     };
                     let switch_var = more();
                     let taken_var = switch_var.as_ref().and_then(|_| more());
-                    let p = PassPos { pos, height, rot, illumination, file_index, switch_var, taken_var };
+                    let p = PassPos { pos, height, rot, illumination, file_index, switch_var, taken_var, recline: None };
                     if k == "passpos" {
                         c.pass_positions.push(p);
                         last = Some((false, c.pass_positions.len() - 1));
@@ -151,6 +159,15 @@ impl PassengerCabin {
                     };
                     if let Some(seat) = seat {
                         seat.illumination = l;
+                    }
+                }
+                "passpos_lying" => {
+                    // (one line, the backrest's angle; it makes the `[passpos]` written last a
+                    // berth - a `[drivpos]` stays a driver's seat)
+                    let angle = r.f32();
+                    if let Some((false, i)) = last {
+                        let angle = if angle.is_finite() { angle.clamp(0.0, MAX_RECLINE) } else { 0.0 };
+                        c.pass_positions[i].recline = Some(angle);
                     }
                 }
                 _ => {}
@@ -215,6 +232,22 @@ mod tests {
         assert_eq!(c.entries[0].path_point, 0);
         assert!(c.entries[0].no_ticket_sale);
         assert_eq!(c.driver_positions[0].switch_var, None);
+    }
+
+    /// A `[passpos_lying]` makes the `[passpos]` before it a berth (a sleeper coach's): the
+    /// lines straight after the place's values still name its variables, and a `[drivpos]`
+    /// is never laid down.
+    #[test]
+    fn a_passpos_lying_makes_the_place_before_it_a_berth() {
+        let text = "[passpos]\n-0.95\n2.85\n2.42\n1.09\n0\nberth_on\n[passpos_lying]\n30\n\n\
+                    [passpos]\n0.5\n1\n1.33\n0.45\n0\n\n[passpos]\n0\n0\n1.48\n0.15\n0\n\n[passpos_lying]\n95\n\n\
+                    [drivpos]\n-0.6\n4.9\n1.3\n0.5\n0\n[passpos_lying]\n20\n";
+        let c = PassengerCabin::parse(&CfgFile::from_str("passengercabin.cfg", text));
+        let reclines: Vec<Option<f32>> = c.pass_positions.iter().map(|p| p.recline).collect();
+        assert_eq!(reclines, [Some(30.0), None, Some(MAX_RECLINE)]);
+        assert_eq!(c.pass_positions[0].switch_var.as_deref(), Some("berth_on"));
+        assert_eq!(c.pass_positions[0].pos, [-0.95, 2.85, 2.42]);
+        assert_eq!(c.driver_positions[0].recline, None);
     }
 
     #[test]

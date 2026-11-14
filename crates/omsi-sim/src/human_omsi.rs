@@ -287,6 +287,9 @@ pub struct AnimInput {
     pub smooth: bool,
     /// Frame time (ms).
     pub dt_ms: f32,
+    /// openOMSI's: sitting (`kind` 2) on a berth (`[passpos_lying]`) - lying instead, the
+    /// back at this angle over the horizontal (degrees).
+    pub recline: Option<f32>,
 }
 
 /// A person's animation state: the walk phase and the thirty angles (degrees).
@@ -298,13 +301,24 @@ pub struct OmsiAnim {
     pub angles: [f32; 30],
     /// The pelvis bob of the last frame (the translation of +0x4f0).
     bob: f32,
+    /// openOMSI's: how far the whole body is laid back about the hips (degrees, 0 upright;
+    /// eased like the angles) and whether the person lies on a berth.
+    lie: f32,
+    lying: bool,
 }
 
 impl Default for OmsiAnim {
     fn default() -> Self {
-        OmsiAnim { phase: 0.0, angles: [0.0; 30], bob: 0.0 }
+        OmsiAnim { phase: 0.0, angles: [0.0; 30], bob: 0.0, lie: 0.0, lying: false }
     }
 }
+
+/// Lying on a berth (openOMSI's, there is no such pose in Omsi.exe): the seated pose's
+/// joints with the legs stretched along the mattress - the knees and the neck bent this much
+/// (degrees), as somebody on a sleeper coach's berth lies with the head on its headrest.
+const LIE_KNEE: f32 = 8.0;
+const LIE_NECK: f32 = 15.0;
+const LIE_ELBOW: f32 = 10.0;
 
 /// What [`OmsiAnim::advance`] reports.
 #[derive(Debug, Clone, Copy, Default)]
@@ -408,14 +422,38 @@ impl OmsiAnim {
                 a[3] = spread;
                 a[4] = 90.0 + extra;
                 a[5] = 90.0 + extra;
+                if let Some(back) = inp.recline {
+                    // Lying: the hips bent as far as the backrest rises (the body is laid
+                    // back by the rest about the hips in `bones_d3d`, so the thighs come to
+                    // lie flat on the mattress and the back on the backrest), the knees and
+                    // the neck a little, the lower torso straight.
+                    a[9] = 0.0;
+                    a[0] = back;
+                    a[1] = back;
+                    let spread = -(rig.feet_dist / (2.0 * rig.hip.y)) / DEG;
+                    a[2] = spread;
+                    a[3] = spread;
+                    a[4] = LIE_KNEE;
+                    a[5] = LIE_KNEE;
+                    a[7] = LIE_NECK;
+                }
             }
             _ => {}
         }
+        let lying = kind == 2 && inp.recline.is_some();
+        let lie_to = match inp.recline {
+            Some(back) if lying => 90.0 - back,
+            _ => 0.0,
+        };
         // how much of the arm swing is left when stooping
         let upright = ((90.0 - stoop) / 90.0).max(0.0);
         let sin2 = (2.0 * std::f32::consts::PI * self.phase).sin();
+        // Lying: the arms of somebody standing, along the body. The seated arms (hands in the
+        // lap, the upper arm forward) laid back with the body pointed at the ceiling - the
+        // passengers of the sleeper coaches lay with their arms up.
+        let arm_kind = if lying { 0 } else { kind };
         // the left arm (+0x661 is set for everybody: the left hand holds, the right reaches)
-        match kind {
+        match arm_kind {
             2 => {
                 a[13] = -3.0 - 0.4 * stoop;
                 a[15] = 67.0;
@@ -473,7 +511,7 @@ impl OmsiAnim {
             let s2 = (arm.y / l58).clamp(-1.0, 1.0).asin();
             a[16] = (s1 - s2) / DEG;
         } else {
-            match kind {
+            match arm_kind {
                 2 => {
                     a[14] = -3.0 - 0.4 * stoop;
                     a[16] = 67.0;
@@ -501,6 +539,13 @@ impl OmsiAnim {
                 }
             }
         }
+        if lying {
+            // (the elbows less bent than standing: the forearms rest on the mattress)
+            a[21] = LIE_ELBOW;
+            if inp.reach.is_none() {
+                a[22] = LIE_ELBOW;
+            }
+        }
         // the head
         if let Some(t) = inp.look {
             let v = t - (rig.neck + Vec3::new(0.0, 0.13, 0.0));
@@ -513,7 +558,7 @@ impl OmsiAnim {
         // to the angles: at once, or easing towards them (0x628c95)
         let k = (inp.dt_ms / 1000.0 * 10.0).min(1.0);
         let lim = 18000.0 * inp.dt_ms / 1000.0;
-        for (cur, to) in self.angles.iter_mut().zip(a.iter()) {
+        for (cur, to) in self.angles.iter_mut().chain(std::iter::once(&mut self.lie)).zip(a.iter().chain(std::iter::once(&lie_to))) {
             if inp.smooth {
                 let d = ((to - *cur) * k).clamp(-lim, lim);
                 *cur += d;
@@ -521,8 +566,15 @@ impl OmsiAnim {
                 *cur = *to;
             }
         }
+        self.lying = lying;
         self.bob = bob;
         ev
+    }
+
+    /// On a berth (openOMSI's `[passpos_lying]`): the enhanced posing has no lying pose and
+    /// leaves such a person to this one.
+    pub fn lying(&self) -> bool {
+        self.lying || self.lie.abs() > 0.5
     }
 
     /// The thirteen bone matrices (sub_626ae8 from 0x628e78), Direct3D's.
@@ -601,6 +653,16 @@ impl OmsiAnim {
             .mul(&DMat::rot_y((a[6] - a[29]) * RAD))
             .mul(&t(n))
             .mul(&b[9]);
+        if self.lie.abs() > 1e-3 {
+            // (lying: the whole body laid back about the middle of the hips - the head goes
+            // back, the feet forward - which keeps the hips where a seated person's are, on
+            // the `[passpos]` point)
+            let pivot = m(0.0, h.y, h.z);
+            let back = t(-pivot).mul(&DMat::rot_x(-self.lie * RAD)).mul(&t(pivot));
+            for bone in b.iter_mut() {
+                *bone = bone.mul(&back);
+            }
+        }
         b
     }
 
@@ -739,5 +801,47 @@ mod tests {
         an.advance(&r, &AnimInput { kind: 2, room_height: 50.0, seat_height: 0.45, dt_ms: 16.0, ..Default::default() });
         assert!(an.angles[0] >= 60.0 && an.angles[4] >= 90.0);
         assert_eq!(an.angles[9], -20.0);
+        assert!(!an.lying());
+    }
+
+    /// A berth (`[passpos_lying]`): the hips stay where a seated person's are (on the place's
+    /// point), the legs lie flat forwards at the hips' height, and the back rises behind them
+    /// at the backrest's angle - measured on a sleeper coach's berth (Samco Primas: 30
+    /// degrees, the head on its headrest 0.35 m over the mattress).
+    #[test]
+    fn lying_on_a_berth_lays_the_body_back_about_the_hips() {
+        let r = rig();
+        let seated = {
+            let mut an = OmsiAnim::default();
+            an.advance(&r, &AnimInput { kind: 2, room_height: 50.0, seat_height: 0.45, dt_ms: 16.0, ..Default::default() });
+            an.bones(&r)
+        };
+        for back in [0.0f32, 30.0, 45.0] {
+            let mut an = OmsiAnim::default();
+            an.advance(&r, &AnimInput { kind: 2, room_height: 50.0, seat_height: 1.09, dt_ms: 16.0, recline: Some(back), ..Default::default() });
+            assert!(an.lying());
+            let b = an.bones(&r);
+            // (engine frame: x right, y forward, z up; the rig's hip at 0.92, neck at 1.55)
+            let hip = Vec3::new(0.0, 0.0, 0.92);
+            let hips = (b[0].transform_point3(Vec3::new(0.09, 0.0, 0.92)) + b[1].transform_point3(Vec3::new(-0.09, 0.0, 0.92))) * 0.5;
+            assert!((hips - hip).length() < 0.02, "{back}: the hips moved to {hips:?}");
+            let ankle = b[3].transform_point3(Vec3::new(0.09, -0.03, 0.05));
+            assert!(ankle.y > 0.75 && (ankle.z - hip.z).abs() < 0.15, "{back}: the foot at {ankle:?}");
+            let neck = b[9].transform_point3(Vec3::new(0.0, -0.04, 1.55));
+            let rise = (neck.z - hip.z).atan2(-(neck.y - hip.y)).to_degrees();
+            assert!(neck.y < -0.4 && (rise - back).abs() < 4.0, "{back}: the back rises {rise} degrees, the neck at {neck:?}");
+            // the arms along the body, the hands down by the hips - not pointed at the ceiling
+            // (the seated arms laid back with the body raised them over the chest)
+            for (bone, x) in [(11, -0.69f32), (12, 0.69)] {
+                let hand = b[bone].transform_point3(Vec3::new(x, -0.03, 1.43));
+                assert!(hand.z < hip.z + 0.25 && hand.y > neck.y + 0.3, "{back}: a hand up at {hand:?}");
+            }
+        }
+        // gone again when the person gets up: the bones are a seated person's at once
+        let mut an = OmsiAnim::default();
+        an.advance(&r, &AnimInput { kind: 2, room_height: 50.0, seat_height: 1.09, dt_ms: 16.0, recline: Some(30.0), ..Default::default() });
+        an.advance(&r, &AnimInput { kind: 2, room_height: 50.0, seat_height: 0.45, dt_ms: 16.0, ..Default::default() });
+        assert!(!an.lying());
+        assert!(an.bones(&r).iter().zip(&seated).all(|(a, c)| a.abs_diff_eq(*c, 1e-5)));
     }
 }

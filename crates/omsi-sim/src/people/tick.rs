@@ -384,6 +384,7 @@ impl PeopleSim {
                             look,
                             smooth: x.smooth,
                             dt_ms,
+                            recline: if kind == 2 { x.recline } else { None },
                         },
                         pack,
                     )

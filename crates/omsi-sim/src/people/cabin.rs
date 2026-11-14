@@ -67,6 +67,9 @@ pub struct Seat {
     pub taken_var: Option<String>,
     /// The sections it lies in that people walk between (see `Cabin::groups`).
     pub group: usize,
+    /// A berth (`[passpos_lying]`): the backrest's angle over the horizontal, degrees. Its
+    /// `floor` is then the aisle beside it, not the floor in front.
+    pub recline: Option<f32>,
 }
 
 /// What passengers need to know about one vehicle type's cabin.
@@ -466,16 +469,8 @@ impl Cabin {
             .map(|(p, offset, omsi_seat, group)| {
                 let pos = Vec3::from(p.pos) + *offset;
                 let seated = p.height > 0.01;
-                let floor = if seated {
-                    let r = p.rot.to_radians();
-                    Vec3::new(
-                        pos.x + r.sin() * SEAT_FRONT,
-                        pos.y + r.cos() * SEAT_FRONT,
-                        pos.z - p.height,
-                    )
-                } else {
-                    pos
-                };
+                let recline = p.recline.filter(|_| seated);
+                let floor = Self::place_floor(p, pos, recline.is_some(), &points);
                 Seat {
                     pos,
                     floor,
@@ -486,6 +481,7 @@ impl Cabin {
                     switch_var: p.switch_var.clone(),
                     taken_var: p.taken_var.clone(),
                     group: *group,
+                    recline,
                 }
             })
             .collect();
@@ -516,6 +512,25 @@ impl Cabin {
             money_var,
             change_point,
         })
+    }
+
+    /// Where a person stands to take a place at `pos`: in front of a seat (on the floor its
+    /// height says), on a standing place itself. A berth is got into from the aisle beside it:
+    /// in front of it (its feet's way) is the mattress, and in a double-decker sleeper the berth
+    /// under the next one - the nearest path point not above it in plan, else as for a seat.
+    fn place_floor(p: &omsi_vehicle::cabin::PassPos, pos: Vec3, berth: bool, points: &[Vec3]) -> Vec3 {
+        let aisle = points
+            .iter()
+            .filter(|q| berth && q.z <= pos.z + 0.05)
+            .min_by(|a, b| (a.truncate() - pos.truncate()).length().total_cmp(&(b.truncate() - pos.truncate()).length()));
+        if let Some(a) = aisle {
+            *a
+        } else if p.height > 0.01 {
+            let r = p.rot.to_radians();
+            Vec3::new(pos.x + r.sin() * SEAT_FRONT, pos.y + r.cos() * SEAT_FRONT, pos.z - p.height)
+        } else {
+            pos
+        }
     }
 
     /// Every point of the path network (Omsi.exe's list +0xc of the paths).

@@ -47,6 +47,8 @@ impl PeopleSim {
                 match sp {
                     Some(sp) if sp.height != 0.0 => {
                         p.seat_h = sp.height;
+                        // (a stop's bench: sitting, even after a night on a berth)
+                        p.recline = None;
                         p.pos = sp.pos - DVec3::Z * seatheight as f64;
                         p.yaw = sp.face.to_radians();
                         p.pax_state = 2.0;
@@ -236,6 +238,7 @@ impl PeopleSim {
                 if let Some(s) = seat {
                     if s.seated {
                         p.seat_h = s.height;
+                        p.recline = s.recline;
                         p.pos = (s.pos - Vec3::Z * seatheight).as_dvec3();
                         p.pax_state = 2.0;
                     } else {

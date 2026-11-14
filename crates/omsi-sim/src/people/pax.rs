@@ -165,6 +165,9 @@ pub struct Pax {
     /// `HeightOfSeat` (+0x648) and `PAX_State` (+0x64c: 0 stand, 1 walk, 2 sit).
     pub seat_h: f32,
     pub pax_state: f32,
+    /// On a berth (`[passpos_lying]`, openOMSI's): its backrest angle, degrees. Read only
+    /// while `pax_state` is 2, set with `seat_h` wherever a place is taken.
+    pub recline: Option<f32>,
     /// A countdown in seconds (+0x650) and one in metres walked (+0x654).
     pub timer: f32,
     pub dist_timer: f32,
@@ -253,6 +256,7 @@ impl Pax {
             door: None,
             stamper: None,
             seat_h: 0.0,
+            recline: None,
             pax_state: 0.0,
             timer: 0.0,
             dist_timer: 0.0,

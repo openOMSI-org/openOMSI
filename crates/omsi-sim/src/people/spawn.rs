@@ -739,6 +739,7 @@ impl PeopleSim {
                 p.st = 0;
                 if s.seated {
                     p.seat_h = s.height;
+                    p.recline = s.recline;
                     p.pos = (s.pos - Vec3::Z * seatheight).as_dvec3();
                     p.pax_state = 2.0;
                 } else {
