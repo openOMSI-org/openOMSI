@@ -621,8 +621,9 @@ impl Navigator {
         if let Some(v) = limit {
             let lc = Vec2::new(c.x + r * 2.0 + 2.0 * s, c.y);
             let lr = 15.0 * s;
-            ui.circle(lc, lr, Color::rgba(214, 38, 38, 1.0));
-            ui.circle(lc, lr * 0.78, Color::WHITE);
+            if let Some(sign) = self.atlas.color_icon("speed_limit_sign", (lr * 2.0).round() as u32) {
+                ui.sprite(sign, lc - Vec2::splat(lr), Vec2::splat(lr * 2.0), Color::WHITE);
+            }
             let t = format!("{:.0}", units.speed_limit(v));
             let px = if t.len() > 2 { 9.5 } else { 12.0 } * s;
             ui.text(&mut self.atlas, &self.fonts, &t, px, Weight::Black, Vec2::new(lc.x, lc.y + self.fonts.cap_height(px, Weight::Black) * 0.5), Align::Center, Color::rgba(15, 15, 15, 1.0));
