@@ -31,15 +31,20 @@ const LONGEST_WAIT: f32 = 0.05;
 
 /// Apple: "try to have at minimum 30 frames per second before interpolation". Below that the
 /// generated frames guess across too wide a gap (wheels and the steering wheel flickered at 10).
-/// Generation stops once the drawn frames fall under `GATE_OFF` a second (a little under 30: a
-/// 60 Hz screen with V-sync holds them at 30 exactly) and starts again only from `GATE_ON` without
-/// it, as it costs the graphics chip about a third of its frames (an M2 at 2940x1846: 14 to 9.6).
+/// Generation is tried once `GATE_ON` frames a second are drawn without it, and paused once
+/// fewer than `GATE_OFF` are drawn with it (a little under 30: a 60 Hz screen with V-sync holds
+/// them at 30 exactly). It costs the graphics chip about a third of its frames (an M2 at
+/// 2940x1846: 14 to 9.6), so a try from 30 can fail: each try that is paused again within
+/// `GATE_TRIAL` waits twice as long before the next (from `GATE_BACKOFF` up to `GATE_BACKOFF_MOST`).
 const GATE_OFF: f32 = 27.0;
-const GATE_ON: f32 = 40.0;
+const GATE_ON: f32 = 30.0;
 /// How long the frame rate has to stay past a bound before generation is switched (s), and how
-/// long it then stays as it is at least.
+/// long it stays paused at least.
 const GATE_HOLD: f32 = 1.5;
 const GATE_REST: f32 = 5.0;
+const GATE_TRIAL: f32 = 20.0;
+const GATE_BACKOFF: f32 = 10.0;
+const GATE_BACKOFF_MOST: f32 = 120.0;
 
 /// Whether frame generation runs, from the drawn frame rate ([`GATE_OFF`]).
 pub(crate) struct Gate {
@@ -49,16 +54,24 @@ pub(crate) struct Gate {
     /// How long the rate has been past the bound that would switch it, and since the last switch (s).
     past: f32,
     resting: f32,
+    /// How long a pause lasts at least (s), and the wait after the last failed try (0: none).
+    rest: f32,
+    backoff: f32,
 }
 
 impl Gate {
     pub(crate) fn new() -> Gate {
-        Gate { on: false, interval: 0.0, past: 0.0, resting: GATE_REST }
+        Gate { on: false, interval: 0.0, past: 0.0, resting: GATE_REST, rest: GATE_REST, backoff: 0.0 }
     }
 
     /// The drawn frame rate now (0 until known).
     pub(crate) fn fps(&self) -> f32 {
         if self.interval > 0.0 { 1.0 / self.interval } else { 0.0 }
+    }
+
+    /// How long the next try waits after a pause (s).
+    pub(crate) fn rest(&self) -> f32 {
+        self.rest
     }
 
     /// A drawn frame `seconds` after the last one: whether this one gets a generated frame.
@@ -72,7 +85,13 @@ impl Gate {
         let fps = self.fps();
         let switch = if self.on { fps < GATE_OFF } else { fps >= GATE_ON };
         self.past = if switch { self.past + seconds } else { 0.0 };
-        if switch && self.past >= GATE_HOLD && self.resting >= GATE_REST {
+        // (it pauses as soon as the rate stays low; only a new try waits for its rest)
+        if switch && self.past >= GATE_HOLD && (self.on || self.resting >= self.rest) {
+            if self.on {
+                // (paused soon after it was tried: the next try waits longer)
+                self.backoff = if self.resting < GATE_TRIAL { (self.backoff * 2.0).clamp(GATE_BACKOFF, GATE_BACKOFF_MOST) } else { 0.0 };
+                self.rest = self.backoff.max(GATE_REST);
+            }
             self.on = !self.on;
             self.past = 0.0;
             self.resting = 0.0;
@@ -537,7 +556,7 @@ impl GenerationWindow {
             let was = gate.0.on;
             let on = gate.0.step(seconds);
             if on != was {
-                log::info!("frame generation: {} ({:.0} frames drawn a second; it runs from {GATE_ON:.0} and stops under {GATE_OFF:.0})", if on { "on" } else { "paused" }, gate.0.fps());
+                log::info!("frame generation: {} ({:.0} frames drawn a second; tried from {GATE_ON:.0}, paused under {GATE_OFF:.0}{})", if on { "on" } else { "paused" }, gate.0.fps(), if on { String::new() } else { format!(", next try in {:.0} s at the earliest", gate.0.rest()) });
             }
             // (OMSI_FG_SHOW looks at one kind of frame whatever the rate)
             let on = on || self.show != Show::Both;

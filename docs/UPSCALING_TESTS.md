@@ -88,7 +88,7 @@ with MetalFX upscaling on. Start the game with `MTL_HUD_ENABLED=1` and the frame
 | 8 | as 6 | switched off and on in the game's menu | `frame generation: off`, then 6's line again, no restart |
 | 9 | as 6 | Upscaling changed to Standard while on | no generated frames (the corner without `+ FG`) |
 | 10 | macOS 25 or older | - | Frame generation is not in the list |
-| 11 | as 6 | a heavy place (or a large window) where fewer than 27 frames a second are drawn | `frame generation: paused (N frames drawn a second ...)`, no `+ FG` in the corner; back to a light place, `frame generation: on` once 40 or more are drawn |
+| 11 | as 6 | a heavy place (or a large window) where fewer than 27 frames a second are drawn | `frame generation: paused (N frames drawn a second ...)`, no `+ FG` in the corner; back to a light place, `frame generation: on` once 30 or more are drawn; a try that falls under 27 again says `next try in 10 s at the earliest`, then 20, up to 120 |
 
 Look at the HUD, the cab's displays and the menus over generated frames (they must stay steady,
 not doubled or wobbling), and at fast turns and camera cuts (no smear from the frame before).

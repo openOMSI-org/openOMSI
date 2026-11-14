@@ -113,8 +113,8 @@ fn the_drawn_frame_follows_the_generated_one_at_half_a_frame() {
     assert_eq!(half_interval(f32::NAN), 0.0);
 }
 
-/// Apple's 30 drawn frames a second: generation starts from 40 (it costs about a third of them),
-/// pauses under 27 (a 60 Hz screen with V-sync holds it at 30 exactly), and does not flap.
+/// Apple's 30 drawn frames a second: generation is tried from 30, pauses under 27 (a 60 Hz screen
+/// with V-sync holds it at 30 exactly), and a try that fails waits longer each time.
 #[cfg(target_os = "macos")]
 #[test]
 fn frame_generation_needs_30_drawn_frames_a_second() {
@@ -122,16 +122,30 @@ fn frame_generation_needs_30_drawn_frames_a_second() {
     let run = |gate: &mut Gate, fps: f32, seconds: f32| (0..(fps * seconds) as usize).map(|_| gate.step(1.0 / fps)).last().unwrap();
     let mut g = Gate::new();
     assert!(!run(&mut g, 14.0, 10.0), "not at 14 fps");
-    assert!(!run(&mut g, 35.0, 10.0), "not at 35: it would drop under 30 with it");
-    assert!(run(&mut g, 45.0, 10.0), "on at 45");
-    assert!(run(&mut g, 30.0, 10.0), "kept at 30, a 60 Hz screen's half");
-    assert!(run(&mut g, 28.0, 10.0), "kept a little under 30");
-    assert!(!run(&mut g, 20.0, 10.0), "paused at 20");
+    assert!(!run(&mut g, 25.0, 10.0), "not under 30");
+    assert!(run(&mut g, 33.0, 3.0), "tried at 33");
+    assert!(run(&mut g, 30.0, 25.0), "kept at 30, a 60 Hz screen's half");
+    assert!(run(&mut g, 28.0, 3.0), "kept a little under 30");
+    assert!(!run(&mut g, 20.0, 3.0), "paused at 20 (it was on long enough: the next try is not held back)");
+    assert_eq!(g.rest(), 5.0);
+    // a Mac that cannot hold 30 with it: 33 without, 22 with
+    let mut g = Gate::new();
+    assert!(run(&mut g, 33.0, 3.0));
+    assert!(!run(&mut g, 22.0, 3.0), "the try fails");
+    assert_eq!(g.rest(), 10.0);
+    assert!(!run(&mut g, 33.0, 8.0), "the next try waits 10 s");
+    assert!(run(&mut g, 33.0, 4.0));
+    assert!(!run(&mut g, 22.0, 3.0));
+    assert_eq!(g.rest(), 20.0, "then 20 s");
+    for _ in 0..8 {
+        let wait = g.rest() + 2.0;
+        assert!(run(&mut g, 33.0, wait), "tried again after {wait} s");
+        assert!(!run(&mut g, 22.0, 3.0));
+    }
+    assert_eq!(g.rest(), 120.0, "never more than 2 minutes");
+    // a short dip changes nothing
     let mut g = Gate::new();
     assert!(run(&mut g, 60.0, 10.0));
-    assert!(run(&mut g, 20.0, 0.5), "a short dip changes nothing");
-    assert!(!run(&mut g, 20.0, 3.0), "a dip that lasts pauses it");
-    assert!(!run(&mut g, 60.0, 2.0), "rests a while before it starts again");
-    assert!(run(&mut g, 60.0, 6.0));
+    assert!(run(&mut g, 20.0, 0.5));
     assert!(!g.step(f32::NAN) || g.on);
 }
