@@ -32,12 +32,7 @@ pub(crate) fn shift_stops(net: &Network, route: &[usize], base: usize, stops: &m
             ss += net.lanes[route[k]].length();
         }
         while ss > 0.0 && k + 1 < route.len() && ss > net.lanes[route[k]].length() {
-            let len = net.lanes[route[k]].length();
-            if len <= 1e-6 {
-                k += 1;
-                continue;
-            }
-            ss -= len;
+            ss -= net.lanes[route[k]].length();
             k += 1;
         }
         st.0 = base + k;
@@ -268,11 +263,7 @@ pub(crate) fn way_between(net: &Network, a: usize, b: usize, max: f32) -> Option
         if l == b {
             let mut way = Vec::new();
             let mut at = from;
-            let mut seen = std::collections::HashSet::new();
             while at != a {
-                if !seen.insert(at) {
-                    return None;
-                }
                 way.push(at);
                 at = best.get(&at)?.1;
             }

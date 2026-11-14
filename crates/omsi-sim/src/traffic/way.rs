@@ -158,7 +158,7 @@ fn way_search(net: &Network, bus: DVec3, heading: f64, ahead: &[usize], max_cost
     seen.insert(c);
     while let Some(&p) = parent.get(&c) {
         if !seen.insert(p) {
-            break;
+            return None;
         }
         path.push(p);
         c = p;
