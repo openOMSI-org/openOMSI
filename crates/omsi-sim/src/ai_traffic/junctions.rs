@@ -370,11 +370,6 @@ mod exit_room_limit_tests {
         assert_eq!(exit_room_limits(7.0, 4.0), 11.0);
     }
 
-    #[test]
-    fn waiting_does_not_add_an_extra_release_margin() {
-        // The threshold is independent of how long the car has already waited.
-        assert_eq!(exit_room_limits(7.0, 0.0), exit_room_limits(7.0, 0.0));
-    }
 }
 
 /// Comfortable braking of a vehicle on a junction's exit, for where it will have stopped
@@ -446,6 +441,15 @@ mod queued_exit_vehicle_tests {
             queued_exit_vehicle(&way, (10, 0.0), 7.0, occupied),
             Some((1.0, 1.0, 10))
         );
+    }
+
+    #[test]
+    fn queue_beyond_physical_room_does_not_block_the_exit() {
+        // 10.1 m is more than the 7.6 m physical requirement. An extra 3 m
+        // release margin must not keep a waiting car out of the junction.
+        let way = [(10, 0.0)];
+        let occupied = [(10, 10.1, 0.0, 0.0, 0.9, 3.5)];
+        assert_eq!(queued_exit_vehicle(&way, (10, 0.0), 7.6, occupied), None);
     }
 
     #[test]
