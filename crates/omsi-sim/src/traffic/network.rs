@@ -274,13 +274,13 @@ impl Network {
                     // see `Lane::blocks`)
                     if let Some((sa, sb)) = place {
                         // (after a joint the two are in one lane, and follow each other)
-                        let (mut ab, mut aa) = if merge { (meeting_extent(a, sa, b).0, 0.5) } else { meeting_extent(a, sa, b) };
-                        let (mut bb, mut ba) = if merge { (meeting_extent(b, sb, a).0, 0.5) } else { meeting_extent(b, sb, a) };
-                        if a.crossing_problem || b.crossing_problem {
-                            // the meeting place is the whole of both lanes: a vehicle on
-                            // either holds the other until its tail has left its lane
-                            (ab, aa, bb, ba) = (sa, a.length() - sa, sb, b.length() - sb);
-                        }
+                        let (ab, aa) = if merge { (meeting_extent(a, sa, b).0, 0.5) } else { meeting_extent(a, sa, b) };
+                        let (bb, ba) = if merge { (meeting_extent(b, sb, a).0, 0.5) } else { meeting_extent(b, sb, a) };
+                        // Keep the conflict envelope tied to the actual meeting geometry.
+                        // Expanding a [crossingproblem] pair to the entire remaining lanes
+                        // made every vehicle on a long approach hold crossing traffic until
+                        // its tail left that whole lane, even when the paths only overlap
+                        // near the junction. That produced unnecessary stops and queues.
                         self.conflicts[i].push(j);
                         self.conflicts[j].push(i);
                         self.crossings[i].push(Crossing { other: j, at: sa, other_at: sb, merge, before: ab, after: aa, other_before: bb, other_after: ba });

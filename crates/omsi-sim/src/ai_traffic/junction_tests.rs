@@ -286,9 +286,9 @@ fn plain(f: &Fixture, mut net: Network) -> TrafficSim {
 /// Lane of the crossroads (`crossroads`): 0..4 in, 4..8 the junction's paths (24 m), 8..12
 /// out (`exit` m).
 #[test]
-fn nobody_follows_a_standing_queue_into_a_junction() {
-    // the car ahead stands in the junction's path just past the middle, 20 m in: a car
-    // following it would stand with its rear across the east-west paths
+fn a_queue_can_follow_into_a_junction_when_crossing_paths_are_unclaimed() {
+    // The car ahead stands on its own path, past the middle. No other path is claimed,
+    // so the following car may use the junction up to the queue.
     let f = Fixture::new();
     let mut t = plain(&f, crossroads(150.0));
     let ahead = car(&mut t, &f, 4, 20.0, 0x41, 0.0);
@@ -298,7 +298,26 @@ fn nobody_follows_a_standing_queue_into_a_junction() {
         t.tick(super::fixed_step::SIM_DT, None);
     }
     let c = get(&t, me);
-    assert_eq!(c.state.lane, 0, "it followed into the junction (s {:.1})", c.state.s);
+    assert_eq!(c.state.lane, 4, "it left the junction empty (lane {} s {:.1})", c.state.lane, c.state.s);
+    assert!(c.state.speed < 0.1, "it should queue behind the stopped car");
+}
+
+#[test]
+fn a_queue_stops_before_a_crossing_path_claimed_by_another_vehicle() {
+    // The vehicle on the east-west path has claimed it. A northbound queue must not
+    // enter that conflicting path even though its own path is free.
+    let f = Fixture::new();
+    let mut t = plain(&f, crossroads(150.0));
+    let ahead = car(&mut t, &f, 4, 20.0, 0x43, 0.0);
+    let crossing = car(&mut t, &f, 5, 12.0, 0x44, 0.0);
+    let me = car(&mut t, &f, 0, 100.0, 0x45, 8.0);
+    for _ in 0..(20.0 / super::fixed_step::SIM_DT) as usize {
+        hold_still(&mut t, ahead);
+        hold_still(&mut t, crossing);
+        t.tick(super::fixed_step::SIM_DT, None);
+    }
+    let c = get(&t, me);
+    assert_eq!(c.state.lane, 0, "it entered a claimed crossing path (lane {} s {:.1})", c.state.lane, c.state.s);
     assert!(c.state.speed < 0.1);
 }
 

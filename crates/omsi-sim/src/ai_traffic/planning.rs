@@ -458,7 +458,13 @@ impl TrafficSim {
                 // it (not the head of a queue that waits for a light, a junction or a car),
                 // or the end of a queue standing behind a bus at its stop
                 o.standing_for(self.day_time) > 4.0
-                    || (o.stopped > 25.0 && !o.held && self.cars[i].stopped > 6.0)
+                    || (long_stopped_car_can_be_passed(
+                        o.stopped,
+                        o.held,
+                        o.light_hold,
+                        o.yielding,
+                        o.why.0,
+                    ) && self.cars[i].stopped > 6.0)
                     || (o.stopped > 3.0 && self.standing_queue(j).1)
             }
             Some(_) => player_standing.min(self.cars[i].since_player_at_light) > 10.0,
@@ -505,9 +511,37 @@ impl TrafficSim {
         let gap = lead.map(|l| l.0.gap);
         let st = &self.cars[i].state;
         let stuck = self.cars[i].stopped;
-        if stuck > 20.0 && standing && omsi_cfg::flags::OMSI_DEBUG_STUCK.is_set() && (self.time * 0.2).fract() < 0.01 {
+        if stuck > 20.0 && omsi_cfg::flags::OMSI_DEBUG_STUCK.is_set() && (self.time * 0.2).fract() < 0.01 {
             let lane = &self.net.lanes[st.lane];
-            log::info!("t={:.1}: car {} behind an obstacle {:.1} m for {stuck:.0} s: change {:?} route {} cooldown {:.1} light {} yielding {} left {:?} right {:?} left clear {:?}", self.time, self.cars[i].id, gap.unwrap_or(-1.0), st.change.map(|c| (c.to, c.t, c.wait, c.bypass, c.length)), st.route.len(), st.change_cooldown, self.cars[i].light_hold, self.cars[i].yielding, lane.left, lane.right, lane.left.map(|l| { let s_side = st.s / lane.length().max(1.0) * self.net.lanes[l].length(); (self.open_to(i, l), self.lane_clear(i, l, s_side, 12.0, 30.0, by_lane), self.can_merge(i, l, s_side, by_lane)) }));
+            log::info!(
+                "t={:.1}: car {} stuck {:.0} s: lane {} s={:.1} v={:.1} standing {} gap {:.1} change {:?} route {}:{} next {:?} cooldown {:.1} light {} yielding {} junction {:?} left {:?} right {:?} left clear {:?}",
+                self.time,
+                self.cars[i].id,
+                stuck,
+                st.lane,
+                st.s,
+                st.speed,
+                standing,
+                gap.unwrap_or(-1.0),
+                st.change.map(|c| (c.to, c.t, c.wait, c.bypass, c.length)),
+                st.route_index,
+                st.route.len(),
+                st.planned_next,
+                st.change_cooldown,
+                self.cars[i].light_hold,
+                self.cars[i].yielding,
+                self.cars[i].junction_why,
+                lane.left,
+                lane.right,
+                lane.left.map(|l| {
+                    let s_side = st.s / lane.length().max(1.0) * self.net.lanes[l].length();
+                    (
+                        self.open_to(i, l),
+                        self.lane_clear(i, l, s_side, 12.0, 30.0, by_lane),
+                        self.can_merge(i, l, s_side, by_lane),
+                    )
+                })
+            );
         }
         let st = &self.cars[i].state;
         if st.change.is_some()
@@ -1321,4 +1355,47 @@ pub struct PullOut {
     pub side: f32,
     pub until: f32,
     pub back: f32,
+}
+
+
+/// A long-stopped vehicle is only an obstacle to pass when it is not part of a traffic
+/// queue. Otherwise every car behind a queue member reserves passing room, spreading the
+/// queue out even when the road ahead is simply waiting at a junction.
+fn long_stopped_car_can_be_passed(
+    stopped: f32,
+    held: bool,
+    light_hold: bool,
+    yielding: bool,
+    why: &str,
+) -> bool {
+    stopped > 25.0
+        && !held
+        && !light_hold
+        && !yielding
+        && why != "lead"
+        && why != "keep_back"
+}
+
+#[cfg(test)]
+mod standing_obstacle_tests {
+    use super::long_stopped_car_can_be_passed;
+
+    #[test]
+    fn a_long_stopped_queue_member_is_not_a_passing_obstacle() {
+        assert!(!long_stopped_car_can_be_passed(30.0, false, false, false, "lead"));
+        assert!(!long_stopped_car_can_be_passed(30.0, false, false, false, "keep_back"));
+    }
+
+    #[test]
+    fn a_long_stopped_junction_waiter_is_not_a_passing_obstacle() {
+        assert!(!long_stopped_car_can_be_passed(30.0, false, false, true, ""));
+        assert!(!long_stopped_car_can_be_passed(30.0, false, true, false, ""));
+        assert!(!long_stopped_car_can_be_passed(30.0, true, false, false, ""));
+    }
+
+    #[test]
+    fn an_unheld_stopped_vehicle_can_still_be_passed() {
+        assert!(long_stopped_car_can_be_passed(30.0, false, false, false, "parked"));
+        assert!(!long_stopped_car_can_be_passed(20.0, false, false, false, "parked"));
+    }
 }

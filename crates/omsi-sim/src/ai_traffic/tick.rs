@@ -228,10 +228,20 @@ impl TrafficSim {
             // (and on the junction lanes further back that a long body still covers)
             tail_bodies(&self.net, i, c, &mut by_lane);
             if let Some(ch) = c.state.change {
+                // The car is not at the centre of the destination lane until the lane
+                // change is complete. Use its actual way point (the same smooth blend
+                // the body follows) and measure it from the destination lane's centre.
+                // Otherwise every changing car is reported at lateral 0 and blocks the
+                // whole exit as if it were already fully in that lane.
+                let position = c.state.way_point(&self.net, 0.0);
+                let (target, heading) = self.net.lanes[ch.to].at(ch.s_to);
+                let h = (heading as f64).to_radians();
+                let right = DVec3::new(h.cos(), -h.sin(), 0.0);
+                let lateral = (position - target).dot(right) as f32;
                 by_lane
                     .entry(ch.to)
                     .or_default()
-                    .push((i, ch.s_to, 0.0, false));
+                    .push((i, ch.s_to, lateral, false));
             }
             if let Some(p) = c.passing {
                 // Out on the oncoming lane: the traffic there stops short of the place where
@@ -1108,6 +1118,13 @@ impl TrafficSim {
     #[allow(clippy::too_many_arguments)]
     fn drive_car(&mut self, i: usize, ts: &TickScene, lead: LeadOf, stop_at: Option<f32>, why: (&'static str, f32), light: Option<f32>, yield_at: Option<f32>, merge_wait: Option<f32>) -> Option<AiFrame> {
         let (debug, dt) = (ts.debug, ts.dt);
+        // `obstacle_ahead` follows the car's upcoming route across lane
+        // segments. A queue on a roundabout therefore often has its leader on the
+        // next lane, not the same lane id. Restricting this to equal lane ids left
+        // the normal moving gap in place at every segment boundary.
+        let tight_queue = lead.is_some_and(|(l, source)| {
+            l.speed < 0.3 && source.is_some_and(|j| j < self.cars.len())
+        });
         let lead_id = lead
             .and_then(|l| l.1)
             .filter(|&j| j < self.cars.len())
@@ -1195,7 +1212,7 @@ impl TrafficSim {
             .map(|_| PULL_OUT_ACCEL);
         let (speed_before, lane_now, s_now) = (car.state.speed, car.state.lane, car.state.s);
         if debug && car.stopped > 30.0 {
-            car.holding = Some(format!("lead {:?} (car {:?}), stop {:?} (light {:?}, junction {:?}, merge {:?}), bus {:?}, lane {} s {:.1} of {:.1}, next {:?}, lateral {:.2}, stops {:?}", lead_now, lead_id, stop_at.map(|x| x - car.state.front), light, yield_at, merge_wait, car.bus.as_ref().map(|b| (b.phase, b.phase_t as i32)), car.state.lane, car.state.s, self.net.lanes[car.state.lane].length(), car.state.planned_next, car.state.lateral, car.next_stop()));
+            car.holding = Some(format!("lead {:?} (car {:?}), stop {:?} why {:?} (light {:?}, junction {:?}, merge {:?}), bus {:?}, lane {} s {:.1} of {:.1}, next {:?}, lateral {:.2}, stops {:?}", lead_now, lead_id, stop_at.map(|x| x - car.state.front), car.why, light, yield_at, merge_wait, car.bus.as_ref().map(|b| (b.phase, b.phase_t as i32)), car.state.lane, car.state.s, self.net.lanes[car.state.lane].length(), car.state.planned_next, car.state.lateral, car.next_stop()));
             if car.stopped - dt <= 30.0 {
                 log::info!(
                     "t={:.1}: car {} ({}) has stood for 30 s at ({:.0}, {:.0}): {}",
@@ -1212,7 +1229,13 @@ impl TrafficSim {
             let up: Vec<usize> = car.state.upcoming().take(4).collect();
             log::info!("t={:.2} car {}: v {:.2} lane {} s {:.1}/{:.1} upcoming {:?} bend {:.2} desired {:.2} lead {:?} stop {:?} why {:?}", self.time, car.id, car.state.speed, car.state.lane, car.state.s, self.net.lanes[car.state.lane].length(), up, car.state.curve_speed(&self.net), car.state.desired_accel(&self.net, lead_now, stop_at), lead_now.map(|l| l.gap), stop_at.map(|x| x - car.state.front), car.why);
         }
-        if !car.state.drive(&self.net, dt, lead_now, stop_at) {
+        let original_min_gap = car.state.min_gap;
+        if tight_queue {
+            car.state.min_gap = car.state.standstill_gap;
+        }
+        let drove = car.state.drive(&self.net, dt, lead_now, stop_at);
+        car.state.min_gap = original_min_gap;
+        if !drove {
             if debug {
                 // (where, and the nearest lane start beyond the end: a network gap the map's
                 // paths do not close shows here)
