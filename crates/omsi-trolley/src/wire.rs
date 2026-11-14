@@ -265,7 +265,7 @@ pub struct WireNet {
     pub spans: Vec<Span>,
     pub nodes: Vec<Node>,
     pub switches: Vec<SwitchDef>,
-    /// The places where two wires cross without joining.
+    /// Interior conductor intersections, including frogs' inner crossings; joined endpoints excluded.
     pub crossings: Vec<Crossing>,
     /// The crossings on each span: the crossing and where on the span it is.
     span_crossings: Vec<Vec<(u32, f64)>>,

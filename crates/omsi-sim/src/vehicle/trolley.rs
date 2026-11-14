@@ -725,7 +725,7 @@ mod tests {
         let def = TrolleyDef { poles: vec![pole(-1), pole(1)], ..Default::default() };
         vehicle.trolley = Some(TrolleyGear::for_type(&def, 1).unwrap());
         vehicle.attach_wires(Some(net.clone()));
-        vehicle.heading = 90.0; // east, along the span
+        vehicle.heading = 90.0;
         vehicle.position = glam::DVec3::new(-20.0, 0.0, 0.0);
         vehicle.trolley_put_on(false);
         for _ in 0..(8 * 60) {
@@ -774,7 +774,7 @@ mod tests {
         let def = TrolleyDef { poles: vec![pole(-1, 1.0), pole(1, -3.0)], ..Default::default() };
         vehicle.trolley = Some(TrolleyGear::for_type(&def, 1).unwrap());
         vehicle.attach_wires(Some(net.clone()));
-        vehicle.heading = 90.0; // east, along the span
+        vehicle.heading = 90.0;
         vehicle.position = glam::DVec3::new(-20.0, 0.0, 0.0);
         vehicle.trolley_put_on(false);
         for _ in 0..(8 * 60) {

@@ -34,8 +34,6 @@ fn cross_2d(a0: DVec3, a1: DVec3, b0: DVec3, b1: DVec3) -> Option<(f64, f64)> {
 }
 
 impl WireNet {
-    /// Find crossings between the actual left and right conductors, using the span grid to
-    /// avoid comparing every pair in a map.
     pub(super) fn build_crossings(&mut self) {
         let boxes: Vec<(DVec3, DVec3)> = self
             .spans
@@ -96,7 +94,6 @@ impl WireNet {
         cells
     }
 
-    /// Every intersection between the two spans' physical wires, excluding span endpoints.
     fn wire_intersections(&self, a: usize, b: u32) -> Vec<(u8, u8, f64, f64, DVec3)> {
         let sa = &self.spans[a];
         let sb = &self.spans[b as usize];

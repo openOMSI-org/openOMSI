@@ -100,7 +100,7 @@ pub enum PoleEventKind {
     GapEntered,
     GapLeft,
     FrogPassed { switch: u32, branch: bool },
-    /// The shoe went over a crossing: two wires cross there without joining.
+    /// The shoe passed a conductor intersection, including a frog's inner crossing.
     CrossingPassed { crossing: u32 },
     Plate { switch: u32 },
     /// A loose boom rose as far as its rope lets it, at this speed (rad/s).
