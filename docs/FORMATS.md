@@ -118,7 +118,9 @@ operators compiles to nothing, silently (a lone `$`, `$=>`, `$++`, `$SetLengthM`
 another unknown word is an error.
 
 Constfiles: `[const] name value`, `[newcurve] name` followed by `[pnt] x y` (piece-wise linear,
-clamped). Varlists / stringvarlists: one name per line. A `(F.L.name)` whose curve no constfile
+clamped). Constants and curves each keep the first definition of a name (ASCII
+case-insensitive), both within a constfile and across constfiles in their listed order.
+Varlists / stringvarlists: one name per line. A `(F.L.name)` whose curve no constfile
 defines is logged as `SC_ErrorInCommand_functioninvalid` and still takes its argument, giving
 0 (the O530 Facelift's ZF-6AP-1300/1700 lack two converter curves that its `zf-eco.osc` uses
 in the line that computes `M_Wheel`).
