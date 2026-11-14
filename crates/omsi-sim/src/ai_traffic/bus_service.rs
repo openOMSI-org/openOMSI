@@ -1084,9 +1084,11 @@ impl BusService {
         }
         // (right behind a bus at the berth it serves the stop together with it)
         let queued = berths.holder(key).is_some_and(|h| h != ctx.id) && d < SERVE_QUEUED_REACH;
-        if self.rest_t >= SERVE_HERE_AFTER && (0.0..SERVE_BEHIND_REACH).contains(&d) && (queued || berths.held_long(key, ctx.time)) {
+        let held_long = berths.held_long(key, ctx.time);
+        let timeout = self.rest_t >= super::berths::BLOCKED_LONG;
+        if (self.rest_t >= SERVE_HERE_AFTER && (queued || held_long) || timeout) && (0.0..SERVE_BEHIND_REACH).contains(&d) {
             if ctx.debug || omsi_cfg::flags::OMSI_DEBUG_STOPS.is_set() {
-                log::info!("t={:.1}: timetable bus {} serves its stop {} from {d:.0} m behind: {}", ctx.day_time, ctx.id, stop.id, if queued { "right behind the bus at the berth" } else { "the berth is taken for long" });
+                log::info!("t={:.1}: timetable bus {} serves its stop {} from {d:.0} m behind: {}", ctx.day_time, ctx.id, stop.id, if queued { "right behind the bus at the berth" } else if held_long { "the berth is taken for long" } else { "timed out waiting for berth" });
             }
             self.behind = true;
             self.near_d = f32::INFINITY;
