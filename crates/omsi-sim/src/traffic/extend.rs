@@ -56,16 +56,8 @@ impl Network {
                 }
             }
         }
-        // links: ends of new lanes to any start, ends of old lanes to new starts
-        let joins = |net: &Network, from: usize, to: usize| -> bool {
-            let (a, b) = (&net.lanes[from], &net.lanes[to]);
-            if from == to || a.kind != b.kind {
-                return false;
-            }
-            let (e, s) = (a.end(), b.start());
-            let dh = ((b.start_heading() - a.end_heading() + 540.0) % 360.0 - 180.0).abs();
-            (s - e).truncate().length() <= tol && dh < 40.0 && (s.z - e.z).abs() < 3.0
-        };
+        // Find possible predecessors as well as successors so a streamed signal
+        // lane can replace a direct link that was made before it was loaded.
         let near = |net: &Network, p: DVec3| -> Vec<usize> {
             let c = ((p.x / GRID_CELL).floor() as i32, (p.y / GRID_CELL).floor() as i32);
             let mut out: Vec<usize> = Vec::new();
@@ -80,26 +72,29 @@ impl Network {
             out.dedup();
             out
         };
-        let mut added: Vec<(usize, usize)> = Vec::new();
-        for i in first..end {
-            let e = self.lanes[i].end();
-            let found: Vec<usize> = near(self, e).into_iter().filter(|&j| joins(self, i, j)).collect();
-            for &j in &found {
-                added.push((i, j));
-            }
-            self.lanes[i].next = found;
-            let s = self.lanes[i].start();
-            for j in near(self, s) {
-                if j < first && joins(self, j, i) && !self.lanes[j].next.contains(&i) {
-                    self.lanes[j].next.push(i);
-                    added.push((j, i));
+        let mut sources: Vec<usize> = (first..end).collect();
+        for to in first..end {
+            for from in near(self, self.lanes[to].start()) {
+                if from < first && self.can_link(from, to, tol) {
+                    sources.push(from);
                 }
             }
         }
+        sources.sort_unstable();
+        sources.dedup();
+
         self.prev.resize(end, Vec::new());
-        for (from, to) in added {
-            if !self.prev[to].contains(&from) {
-                self.prev[to].push(from);
+        for from in sources {
+            let candidates = near(self, self.lanes[from].end());
+            let next = self.link_targets(from, candidates, tol);
+            let previous = std::mem::replace(&mut self.lanes[from].next, next.clone());
+            for to in previous.iter().copied().filter(|to| !next.contains(to)) {
+                self.prev[to].retain(|&source| source != from);
+            }
+            for to in next.iter().copied().filter(|to| !previous.contains(to)) {
+                if !self.prev[to].contains(&from) {
+                    self.prev[to].push(from);
+                }
             }
         }
         // meeting places and footpath crossings inside the new junction objects, and how far
