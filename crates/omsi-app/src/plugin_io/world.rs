@@ -335,7 +335,7 @@ pub(crate) fn lan(app: &App) -> Option<(bool, u32, String)> {
 pub(crate) fn lan_players(app: &App) -> Vec<op::LanPlayer> {
     let Some(l) = app.net.lan.as_ref() else { return Vec::new() };
     l.peers()
-        .filter(|p| p.has_info)
+        .filter(|p| p.has_info && !omsi_net::is_parked(p.pose.id))
         .map(|p| {
             let s = &p.pose;
             let (pos, on_foot) = match (&s.walker, s.has_vehicle()) {
