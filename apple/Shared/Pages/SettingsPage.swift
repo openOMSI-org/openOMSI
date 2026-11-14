@@ -181,6 +181,7 @@ struct SettingsPage: View {
                 SettingToggle(label: "V-sync", key: "vsync", fallback: true)
             }
             SettingToggle(label: "Simulation on its own thread", key: "sim_thread")
+            SettingToggle(label: "mX Graphics (Experimental)", key: "mx_graphics", help: "Draws the game with mX, openOMSI's own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before.")
             SettingSelect(label: "Frame limit", key: "max_fps", options: phone ? [("0", "Screen refresh rate"), ("30", "30 fps"), ("45", "45 fps"), ("60", "60 fps"), ("120", "120 fps (ProMotion)")] : Choices.maxFps)
             SectionTitle("World & memory").padding(.top, 8)
             SettingSelect(label: "View distance", key: "view_distance", options: Choices.viewDistance, heavy: { (Double($0) ?? 0) >= 2000 })

@@ -522,6 +522,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bit-set"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ec2f926cc3060f09db9ebc5b52823d85268d24bb917e472c0c4bea35780a7d"
+dependencies = [
+ "bit-vec",
+]
+
+[[package]]
 name = "bit-vec"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3195,12 +3204,97 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
+name = "mx"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=85fc5c9396d374401772a87d1139aa931fa6d408#85fc5c9396d374401772a87d1139aa931fa6d408"
+dependencies = [
+ "mx-dx12",
+ "mx-metal",
+ "mx-shader",
+ "mx-types",
+ "mx-vulkan",
+]
+
+[[package]]
+name = "mx-dx12"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=85fc5c9396d374401772a87d1139aa931fa6d408#85fc5c9396d374401772a87d1139aa931fa6d408"
+dependencies = [
+ "log",
+ "mx-shader",
+ "mx-types",
+ "parking_lot 0.12.5",
+ "raw-window-handle",
+ "thiserror 2.0.21",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+]
+
+[[package]]
+name = "mx-metal"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=85fc5c9396d374401772a87d1139aa931fa6d408#85fc5c9396d374401772a87d1139aa931fa6d408"
+dependencies = [
+ "log",
+ "mx-shader",
+ "mx-types",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-foundation 0.3.2",
+ "objc2-metal 0.3.2",
+ "objc2-quartz-core 0.3.2",
+ "objc2-ui-kit 0.3.2",
+ "parking_lot 0.12.5",
+ "raw-window-handle",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "mx-shader"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=85fc5c9396d374401772a87d1139aa931fa6d408#85fc5c9396d374401772a87d1139aa931fa6d408"
+dependencies = [
+ "naga 30.0.2",
+ "naga-types",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "mx-types"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=85fc5c9396d374401772a87d1139aa931fa6d408#85fc5c9396d374401772a87d1139aa931fa6d408"
+dependencies = [
+ "bitflags 2.13.2",
+ "bytemuck",
+]
+
+[[package]]
+name = "mx-vulkan"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=85fc5c9396d374401772a87d1139aa931fa6d408#85fc5c9396d374401772a87d1139aa931fa6d408"
+dependencies = [
+ "ash",
+ "gpu-allocator",
+ "log",
+ "mx-shader",
+ "mx-types",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-quartz-core 0.3.2",
+ "objc2-ui-kit 0.3.2",
+ "parking_lot 0.12.5",
+ "raw-window-handle",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "naga"
 version = "29.0.4"
 source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
 dependencies = [
  "arrayvec",
- "bit-set",
+ "bit-set 0.9.1",
  "bitflags 2.13.2",
  "cfg-if",
  "cfg_aliases",
@@ -3217,6 +3311,44 @@ dependencies = [
  "spirv",
  "thiserror 2.0.21",
  "unicode-ident",
+]
+
+[[package]]
+name = "naga"
+version = "30.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd0dd362bf26c0ffdd143df6da66a25d287e196eff482f117771010b207ad163"
+dependencies = [
+ "arrayvec",
+ "bit-set 0.10.0",
+ "bitflags 2.13.2",
+ "cfg-if",
+ "cfg_aliases",
+ "codespan-reporting",
+ "half",
+ "hashbrown 0.17.1",
+ "indexmap",
+ "libm",
+ "log",
+ "naga-types",
+ "num-traits",
+ "once_cell",
+ "rustc-hash 1.1.0",
+ "spirv",
+ "thiserror 2.0.21",
+ "unicode-ident",
+]
+
+[[package]]
+name = "naga-types"
+version = "30.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14474170feb673cfb18b3565111a9869797cc1d290fb9ec969c53f5e1e231c6d"
+dependencies = [
+ "hashbrown 0.17.1",
+ "indexmap",
+ "rustc-hash 1.1.0",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -3447,8 +3579,10 @@ dependencies = [
  "bitflags 2.13.2",
  "block2 0.6.2",
  "objc2 0.6.5",
+ "objc2-core-foundation",
  "objc2-core-graphics",
  "objc2-foundation 0.3.2",
+ "objc2-quartz-core 0.3.2",
 ]
 
 [[package]]
@@ -3561,6 +3695,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272"
 dependencies = [
  "bitflags 2.13.2",
+ "block2 0.6.2",
+ "libc",
  "objc2 0.6.5",
  "objc2-core-foundation",
 ]
@@ -3630,7 +3766,9 @@ checksum = "a0125f776a10d00af4152d74616409f0d4a2053a6f57fa5b7d6aa2854ac04794"
 dependencies = [
  "bitflags 2.13.2",
  "block2 0.6.2",
+ "dispatch2",
  "objc2 0.6.5",
+ "objc2-core-foundation",
  "objc2-foundation 0.3.2",
 ]
 
@@ -3689,6 +3827,18 @@ dependencies = [
  "objc2-symbols",
  "objc2-uniform-type-identifiers",
  "objc2-user-notifications",
+]
+
+[[package]]
+name = "objc2-ui-kit"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d87d638e33c06f577498cbcc50491496a3ed4246998a7fbba7ccb98b1e7eab22"
+dependencies = [
+ "bitflags 2.13.2",
+ "objc2 0.6.5",
+ "objc2-foundation 0.3.2",
+ "objc2-quartz-core 0.3.2",
 ]
 
 [[package]]
@@ -3826,6 +3976,7 @@ dependencies = [
  "steamworks",
  "ureq",
  "wgpu",
+ "wgpu-mx",
  "windows 0.62.2",
  "winit",
  "winresource",
@@ -4286,7 +4437,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "libc",
  "log",
- "naga",
+ "naga 29.0.4",
  "objc2 0.6.5",
  "objc2-metal 0.3.2",
  "omsi-cfg",
@@ -4296,6 +4447,7 @@ dependencies = [
  "rayon",
  "wgpu",
  "wgpu-hal",
+ "wgpu-mx",
  "windows 0.62.2",
  "windows-core 0.62.2",
  "winit",
@@ -4487,7 +4639,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "image",
  "log",
- "naga",
+ "naga 29.0.4",
  "omsi-cfg",
  "pollster 1.0.1",
  "resvg",
@@ -7179,7 +7331,7 @@ version = "29.0.4"
 source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
 dependencies = [
  "arrayvec",
- "bit-set",
+ "bit-set 0.9.1",
  "bit-vec",
  "bitflags 2.13.2",
  "bytemuck",
@@ -7188,7 +7340,7 @@ dependencies = [
  "hashbrown 0.16.1",
  "indexmap",
  "log",
- "naga",
+ "naga 29.0.4",
  "once_cell",
  "parking_lot 0.12.5",
  "portable-atomic",
@@ -7237,7 +7389,7 @@ dependencies = [
  "android_system_properties",
  "arrayvec",
  "ash",
- "bit-set",
+ "bit-set 0.9.1",
  "bitflags 2.13.2",
  "block2 0.6.2",
  "bytemuck",
@@ -7253,7 +7405,7 @@ dependencies = [
  "libc",
  "libloading 0.8.9",
  "log",
- "naga",
+ "naga 29.0.4",
  "ndk-sys 0.6.0+11769913",
  "objc2 0.6.5",
  "objc2-core-foundation",
@@ -7283,11 +7435,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "wgpu-mx"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=85fc5c9396d374401772a87d1139aa931fa6d408#85fc5c9396d374401772a87d1139aa931fa6d408"
+dependencies = [
+ "log",
+ "mx",
+ "mx-types",
+ "naga 29.0.4",
+ "parking_lot 0.12.5",
+ "raw-window-handle",
+ "wgpu",
+ "wgpu-types",
+]
+
+[[package]]
 name = "wgpu-naga-bridge"
 version = "29.0.4"
 source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
 dependencies = [
- "naga",
+ "naga 29.0.4",
  "wgpu-types",
 ]
 
@@ -7647,7 +7814,7 @@ dependencies = [
  "objc2 0.5.2",
  "objc2-app-kit 0.2.2",
  "objc2-foundation 0.2.2",
- "objc2-ui-kit",
+ "objc2-ui-kit 0.2.2",
  "orbclient",
  "percent-encoding",
  "pin-project",

@@ -2383,6 +2383,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["detailed_trees"] = json!(true);
     v["road_snow"] = json!(false); // opt-in; off preserves the weather's classic snow on roads
     v["sim_thread"] = json!(false); // (switched in the game's Display menu, saved through this writer)
+    v["mx_graphics"] = json!(false);
     v["mirror_hud_every_frame"] = json!(false);
     v["mirror_shadows"] = json!(false);
     v["mirror_particles"] = json!(false);
@@ -2563,6 +2564,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "info_size" | "timetable_size" | "perf_size" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.6, 2.0)),
             "perf_overlay" => v[&k] = json!(perf_overlay_mode(val)),
             "sim_thread" => v[&k] = json!(b(val)),
+            "mx_graphics" => v[&k] = json!(b(val)),
             "mirror_hud" => v[&k] = json!(val.trim().parse::<u8>().map(|x| x.min(7)).unwrap_or(0)),
             "windy_trees" | "detailed_trees" | "road_snow" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "passenger_connections" | "passenger_hailing" | "passenger_full_bus_reaction" | "pax_short_rides_stand" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
             "head_tracking_source" => v[&k] = json!(head_tracking_source(val)),
@@ -2936,6 +2938,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("detailed_trees={}\n", b("detailed_trees", true)));
     text.push_str(&format!("road_snow={}\n", b("road_snow", false)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));
+    text.push_str(&format!("mx_graphics={}\n", b("mx_graphics", false)));
     text.push_str(&format!("mirror_hud_every_frame={}\n", b("mirror_hud_every_frame", false)));
     text.push_str(&format!("mirror_shadows={}\nmirror_particles={}\n", b("mirror_shadows", false), b("mirror_particles", false)));
     text.push_str(&format!("mirror_hud={}\n", n("mirror_hud", 0).clamp(0, 7)));

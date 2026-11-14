@@ -16,6 +16,9 @@ omsi-cfg = { path = "../omsi-cfg" }
 omsi-geometry = { path = "../omsi-geometry" }
 omsi-texture = { path = "../omsi-texture" }
 wgpu.workspace = true
+# (mX Graphics: what differs when the game draws with mX - MetalFX on mX's Metal objects,
+# the main pass without render bundles)
+wgpu-mx.workspace = true
 bytemuck.workspace = true
 glam.workspace = true
 pollster.workspace = true

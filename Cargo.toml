@@ -82,6 +82,9 @@ wgpu = { version = "29", default-features = false, features = ["std", "parking_l
 # match wgpu's (Dependabot's `wgpu` group updates the three together)
 wgpu-hal = "29"
 naga = "29"
+# mX, openOMSI's own graphics library, as one of wgpu's backends: Settings → Graphics →
+# mX Graphics (Experimental), `mx_graphics` (see `startup::graphics_instance`)
+wgpu-mx = { git = "https://github.com/openOMSI-org/mX", rev = "85fc5c9396d374401772a87d1139aa931fa6d408", features = ["custom"] }
 winit = "0.30"
 bytemuck = { version = "1", features = ["derive"] }
 memmap2 = "0.9"

@@ -198,6 +198,46 @@ pub(crate) fn find_root() -> Option<PathBuf> {
     omsi_cfg::find_original_install(&first)
 }
 
+/// mX Graphics (Experimental): the game's instance is mX's, openOMSI's own graphics library
+/// behind wgpu's API, instead of one of wgpu's own backends. Set from the settings before the
+/// game makes its instance (`game_graphics_instance`); the launcher's previews stay on wgpu.
+static MX_GRAPHICS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The game's instance: mX's when `setting` says so (`mx_graphics`) or `OMSI_MX=on` does,
+/// else `graphics_instance`'s.
+pub(crate) fn game_graphics_instance(setting: bool) -> wgpu::Instance {
+    let on = match omsi_cfg::flags::OMSI_MX.var() {
+        Some(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "on" | "true" | "yes"),
+        None => setting,
+    };
+    MX_GRAPHICS.store(on, std::sync::atomic::Ordering::Relaxed);
+    if on {
+        log::info!("graphics: mX Graphics (experimental) asked for");
+    }
+    graphics_instance()
+}
+
+/// mX's instance, when mX Graphics is on and mX finds a device it can draw on (Metal 3 on a
+/// Mac, Vulkan 1.2 with descriptor indexing, Direct3D 12): else none, and wgpu's own backends
+/// draw as usual. A device mX lists but cannot open is passed over the same way, by `Opener`.
+fn mx_instance() -> Option<wgpu::Instance> {
+    if !MX_GRAPHICS.load(std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
+    let instance = wgpu_mx::custom::instance();
+    let adapters = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::all()));
+    match adapters.first() {
+        Some(a) => {
+            log::info!("graphics: mX Graphics (experimental) on {}", a.get_info().name);
+            Some(instance)
+        }
+        None => {
+            log::warn!("graphics: mX Graphics found no graphics chip it can draw on; wgpu draws instead");
+            None
+        }
+    }
+}
+
 /// Use the native supported API for both windowed and offscreen rendering.
 pub(crate) fn graphics_instance() -> wgpu::Instance {
     let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
@@ -206,6 +246,9 @@ pub(crate) fn graphics_instance() -> wgpu::Instance {
         descriptor.backends = wgpu::Backends::NOOP;
         descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
         return wgpu::Instance::new(descriptor);
+    }
+    if let Some(instance) = mx_instance() {
+        return instance;
     }
     descriptor.backend_options.gl.context_lock_timeout = Some(GL_CONTEXT_LOCK_TIMEOUT);
     // (an interface whose only adapter is a software renderer - DirectX 12's "Microsoft
