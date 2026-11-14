@@ -14,7 +14,7 @@ mod versions;
 pub use versions::installing;
 
 use omsi_launcher_lib as core;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -67,14 +67,35 @@ fn bootstrap(p: &dyn Platform) -> Answer {
     }
     let config = core::load_config();
     let settings = core::get_settings().unwrap_or_else(|_| core::settings_from_text(None));
-    let lang = settings.get("language").and_then(|v| v.as_str()).unwrap_or("ENG").to_string();
+    let lang = settings
+        .get("language")
+        .and_then(|v| v.as_str())
+        .unwrap_or("ENG")
+        .to_string();
     let root = core::root_dir().map(|p| p.to_string_lossy().to_string());
-    let choice: Value = std::fs::read_to_string(core::data_dir().join("launcher-duty.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(json!({}));
-    let favourites: Vec<String> = std::fs::read_to_string(core::data_dir().join("favourite-buses.txt")).map(|t| t.lines().map(str::trim).filter(|l| !l.is_empty()).map(|l| l.replace('\\', "/").to_lowercase()).collect()).unwrap_or_default();
-    let languages: Vec<Value> = core::LANGUAGES.iter().map(|(code, name, iso, _, _)| json!({ "code": code, "name": name, "iso": iso })).collect();
+    let choice: Value = std::fs::read_to_string(core::data_dir().join("launcher-duty.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(json!({}));
+    let favourites: Vec<String> =
+        std::fs::read_to_string(core::data_dir().join("favourite-buses.txt"))
+            .map(|t| {
+                t.lines()
+                    .map(str::trim)
+                    .filter(|l| !l.is_empty())
+                    .map(|l| l.replace('\\', "/").to_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default();
+    let languages: Vec<Value> = core::LANGUAGES
+        .iter()
+        .map(|(code, name, iso, _, _)| json!({ "code": code, "name": name, "iso": iso }))
+        .collect();
     // (a crash the last run left behind with nobody to tell: shown at the start, as the
     // game's own launcher did)
-    let crash = p.previous_run_crash().map(|(what, tail)| crash_json(&what, &tail));
+    let crash = p
+        .previous_run_crash()
+        .map(|(what, tail)| crash_json(&what, &tail));
     Ok(json!({
         "crash": crash,
         "version": omsi_platform::VERSION,
@@ -117,9 +138,13 @@ fn config_save(root: String, game: String) -> Answer {
     core::save_config(&c).map_err(err)?;
     omsi_cfg::content_changed();
     let config = core::load_config();
-    let other = (!chosen.is_empty() && std::path::Path::new(&chosen) != std::path::Path::new(&config.root)).then(|| config.root.clone());
+    let other = (!chosen.is_empty()
+        && std::path::Path::new(&chosen) != std::path::Path::new(&config.root))
+    .then(|| config.root.clone());
     let r = core::root_dir().map(|p| p.to_string_lossy().to_string());
-    Ok(json!({ "saved": true, "config": config, "root": r.as_ref().ok(), "root_error": r.err().map(err), "game": core::game_binary(), "used_other": other }))
+    Ok(
+        json!({ "saved": true, "config": config, "root": r.as_ref().ok(), "root_error": r.err().map(err), "game": core::game_binary(), "used_other": other }),
+    )
 }
 
 // --- content ---------------------------------------------------------------------------
@@ -193,15 +218,35 @@ fn lines(map: String, date: String) -> Answer {
     to_json(core::list_lines(&map, &date).map_err(err)?)
 }
 
-fn ibis(bus: String, hof: String, line: String, terminus: Option<String>, stops: Option<Vec<String>>) -> Answer {
-    to_json(core::ibis_info(&bus, &hof, &line, &terminus.unwrap_or_default(), &stops.unwrap_or_default()).map_err(err)?)
+fn ibis(
+    bus: String,
+    hof: String,
+    line: String,
+    terminus: Option<String>,
+    stops: Option<Vec<String>>,
+) -> Answer {
+    to_json(
+        core::ibis_info(
+            &bus,
+            &hof,
+            &line,
+            &terminus.unwrap_or_default(),
+            &stops.unwrap_or_default(),
+        )
+        .map_err(err)?,
+    )
 }
 
 /// The depot file the duty would use (see `core::default_hof`).
 fn default_hof(map: Value, bus: Value, date: String, line: Option<String>) -> Answer {
     let map: Option<core::MapInfo> = serde_json::from_value(map).ok();
     let bus: Option<core::VehicleInfo> = serde_json::from_value(bus).ok();
-    Ok(json!(core::default_hof(map.as_ref(), bus.as_ref(), &date, line.as_deref())))
+    Ok(json!(core::default_hof(
+        map.as_ref(),
+        bus.as_ref(),
+        &date,
+        line.as_deref()
+    )))
 }
 
 fn saved_situations(map: String) -> Answer {
@@ -210,18 +255,24 @@ fn saved_situations(map: String) -> Answer {
 
 /// Delete one of the situations `saved_situations` lists for `map` (#2556).
 fn delete_situation(map: String, file: String) -> Answer {
-    Ok(json!(core::delete_situation(&map, Path::new(&file)).map_err(err)?))
+    Ok(json!(
+        core::delete_situation(&map, Path::new(&file)).map_err(err)?
+    ))
 }
 
 fn rename_situation(map: String, file: String, name: String) -> Answer {
-    Ok(json!(core::rename_situation(&map, Path::new(&file), &name).map_err(err)?))
+    Ok(json!(
+        core::rename_situation(&map, Path::new(&file), &name).map_err(err)?
+    ))
 }
 
 /// A season and its phase chosen: the date the game will have (none: by date), and the word
 /// the game's `--season` takes.
 fn season_date(season: String, phase: String, date: String, map: String, keep: bool) -> Answer {
-    use omsi_weather::season_phase::{map_latitude, phase_date, SeasonChoice};
-    let Some(choice) = SeasonChoice::parse(&format!("{season}-{phase}")) else { return Ok(json!({ "date": null, "word": null })) };
+    use omsi_weather::season_phase::{SeasonChoice, map_latitude, phase_date};
+    let Some(choice) = SeasonChoice::parse(&format!("{season}-{phase}")) else {
+        return Ok(json!({ "date": null, "word": null }));
+    };
     let num = |r: std::ops::Range<usize>| date.get(r).and_then(|x| x.parse::<u32>().ok());
     let root = core::root_dir().unwrap_or_default();
     let lat = map_latitude(&root, &map);
@@ -237,7 +288,12 @@ fn season_date(season: String, phase: String, date: String, map: String, keep: b
 }
 
 fn tutorials() -> Answer {
-    Ok(json!(core::tutorials().into_iter().map(|(n, title, text)| json!({ "number": n, "title": title, "text": text })).collect::<Vec<_>>()))
+    Ok(json!(
+        core::tutorials()
+            .into_iter()
+            .map(|(n, title, text)| json!({ "number": n, "title": title, "text": text }))
+            .collect::<Vec<_>>()
+    ))
 }
 
 // --- profiles --------------------------------------------------------------------------
@@ -304,12 +360,22 @@ fn settings_defaults() -> Answer {
 }
 
 fn option_presets() -> Answer {
-    Ok(json!(core::option_presets().into_iter().map(|(name, v)| json!({ "name": name, "settings": v })).collect::<Vec<_>>()))
+    Ok(json!(
+        core::option_presets()
+            .into_iter()
+            .map(|(name, v)| json!({ "name": name, "settings": v }))
+            .collect::<Vec<_>>()
+    ))
 }
 
 /// The six quality presets, Low to Ultra (the mode asked for is of the days when they kept it).
 fn graphics_presets(_mode: String) -> Answer {
-    Ok(json!(core::graphics_presets().into_iter().map(|(name, v)| json!({ "name": name, "settings": v })).collect::<Vec<_>>()))
+    Ok(json!(
+        core::graphics_presets()
+            .into_iter()
+            .map(|(name, v)| json!({ "name": name, "settings": v }))
+            .collect::<Vec<_>>()
+    ))
 }
 
 fn optimise_arm(target: u32) -> Answer {
@@ -327,7 +393,9 @@ fn graphics_profiles() -> Answer {
 }
 
 fn graphics_profile_save(name: String, settings: Value) -> Answer {
-    Ok(json!(core::save_graphics_profile(&name, &settings).map_err(err)?))
+    Ok(json!(
+        core::save_graphics_profile(&name, &settings).map_err(err)?
+    ))
 }
 
 fn graphics_profile_delete(name: String) -> Answer {
@@ -350,12 +418,20 @@ fn radio_stations() -> Answer {
 }
 
 fn stations_json() -> Answer {
-    Ok(json!(omsi_cfg::radio::own_stations().into_iter().map(|(name, address)| json!({ "name": name, "address": address })).collect::<Vec<_>>()))
+    Ok(json!(
+        omsi_cfg::radio::own_stations()
+            .into_iter()
+            .map(|(name, address)| json!({ "name": name, "address": address }))
+            .collect::<Vec<_>>()
+    ))
 }
 
 fn radio_stations_save(list: Vec<Value>) -> Answer {
     let text = |s: &Value, k: &str| s.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let list: Vec<(String, String)> = list.iter().map(|s| (text(s, "name"), text(s, "address"))).collect();
+    let list: Vec<(String, String)> = list
+        .iter()
+        .map(|s| (text(s, "name"), text(s, "address")))
+        .collect();
     let _one = RADIO_WRITE.lock().unwrap_or_else(|e| e.into_inner());
     omsi_cfg::radio::save_stations(&list).map_err(err)?;
     stations_json()
@@ -397,7 +473,13 @@ fn mod_inspect(path: String) -> Answer {
 
 /// Start installing `path` (`mode`: auto, extract, inplace); `poll` follows it.
 fn mod_install(path: String, mode: String) -> Answer {
-    to_json(core::start_install(Path::new(&path), if mode.is_empty() { "auto" } else { &mode }).map_err(err)?)
+    to_json(
+        core::start_install(
+            Path::new(&path),
+            if mode.is_empty() { "auto" } else { &mode },
+        )
+        .map_err(err)?,
+    )
 }
 
 // --- games -----------------------------------------------------------------------------
@@ -419,7 +501,10 @@ pub fn game_ended(game: &core::instances::Instance) -> Option<(&'static str, Val
     }
     let log = std::path::Path::new(&game.log);
     if let Some(why) = core::crash::disconnect_of(log) {
-        return Some(("game-disconnected", json!({ "why": core::i18n::tr_said(&why) })));
+        return Some((
+            "game-disconnected",
+            json!({ "why": core::i18n::tr_said(&why) }),
+        ));
     }
     let (what, tail) = core::crash::crash_of(log)?;
     Some(("game-crashed", crash_json(&what, &tail)))
@@ -471,21 +556,39 @@ fn servers_path() -> PathBuf {
 
 /// The saved servers, the official one first.
 fn servers_get() -> Answer {
-    let mut list: Vec<Value> = std::fs::read_to_string(servers_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
-    if !list.iter().any(|s| s.get("address").and_then(|a| a.as_str()).is_some_and(omsi_net::official::is_alias)) {
-        list.insert(0, json!({ "name": omsi_net::official::NAME, "address": omsi_net::official::ALIAS }));
+    let mut list: Vec<Value> = std::fs::read_to_string(servers_path())
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    if !list.iter().any(|s| {
+        s.get("address")
+            .and_then(|a| a.as_str())
+            .is_some_and(omsi_net::official::is_alias)
+    }) {
+        list.insert(
+            0,
+            json!({ "name": omsi_net::official::NAME, "address": omsi_net::official::ALIAS }),
+        );
     }
     Ok(json!(list))
 }
 
 fn servers_save(list: Value) -> Answer {
-    std::fs::write(servers_path(), serde_json::to_vec_pretty(&list).map_err(err)?).map_err(err)?;
+    std::fs::write(
+        servers_path(),
+        serde_json::to_vec_pretty(&list).map_err(err)?,
+    )
+    .map_err(err)?;
     Ok(json!(true))
 }
 
 /// A server's or a session code's status: name, map, players, its buses.
 fn server_query(address: String) -> Answer {
-    let info = if omsi_net::looks_like_code(&address) { host_status(&address) } else { omsi_net::ws::query(&address, true) };
+    let info = if omsi_net::looks_like_code(&address) {
+        host_status(&address)
+    } else {
+        omsi_net::ws::query(&address, true)
+    };
     let i = info?;
     let icon = (!i.icon.is_empty()).then(|| format!("data:image/png;base64,{}", base64(&i.icon)));
     Ok(json!({
@@ -520,11 +623,21 @@ fn base64(bytes: &[u8]) -> String {
     const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for c in bytes.chunks(3) {
-        let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+        let n = (c[0] as u32) << 16
+            | (*c.get(1).unwrap_or(&0) as u32) << 8
+            | *c.get(2).unwrap_or(&0) as u32;
         out.push(A[(n >> 18) as usize & 63] as char);
         out.push(A[(n >> 12) as usize & 63] as char);
-        out.push(if c.len() > 1 { A[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if c.len() > 2 { A[n as usize & 63] as char } else { '=' });
+        out.push(if c.len() > 1 {
+            A[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            A[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -534,13 +647,20 @@ fn base64(bytes: &[u8]) -> String {
 /// The duty as chosen, kept for the next start (`launcher-duty.json`, which the Swift
 /// launcher's model reads as well).
 fn choice_save(choice: Value) -> Answer {
-    std::fs::write(core::data_dir().join("launcher-duty.json"), serde_json::to_vec_pretty(&choice).map_err(err)?).map_err(err)?;
+    std::fs::write(
+        core::data_dir().join("launcher-duty.json"),
+        serde_json::to_vec_pretty(&choice).map_err(err)?,
+    )
+    .map_err(err)?;
     Ok(json!(true))
 }
 
 /// The starred buses (one bus file a line).
 fn favourites_save(list: Vec<String>) -> Answer {
-    let text: String = list.iter().map(|l| format!("{}\n", l.replace('\\', "/").to_lowercase())).collect();
+    let text: String = list
+        .iter()
+        .map(|l| format!("{}\n", l.replace('\\', "/").to_lowercase()))
+        .collect();
     std::fs::write(core::data_dir().join("favourite-buses.txt"), text).map_err(err)?;
     Ok(json!(true))
 }
@@ -552,7 +672,11 @@ fn notes_path() -> PathBuf {
 }
 
 fn notes_get() -> Answer {
-    Ok(std::fs::read_to_string(notes_path()).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()).filter(Value::is_object).unwrap_or_else(|| json!({})))
+    Ok(std::fs::read_to_string(notes_path())
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .filter(Value::is_object)
+        .unwrap_or_else(|| json!({})))
 }
 
 fn notes_save(key: String, text: String) -> Answer {
@@ -594,10 +718,24 @@ fn depot_get() -> Answer {
 }
 
 /// A new bus in the depot, with a plate none of the others has; its id.
-fn depot_add(bus: String, paint: Option<String>, number: Option<String>, name: String, group: Option<String>) -> Answer {
+fn depot_add(
+    bus: String,
+    paint: Option<String>,
+    number: Option<String>,
+    name: String,
+    group: Option<String>,
+) -> Answer {
     let id = core::depot::update(|d| {
         let plate = d.new_plate(plate_seed());
-        Ok(d.add(core::depot::DepotBus { name, bus, paint: paint.unwrap_or_default(), plate, number: number.unwrap_or_default(), group: group.unwrap_or_default(), ..Default::default() }))
+        Ok(d.add(core::depot::DepotBus {
+            name,
+            bus,
+            paint: paint.unwrap_or_default(),
+            plate,
+            number: number.unwrap_or_default(),
+            group: group.unwrap_or_default(),
+            ..Default::default()
+        }))
     })
     .map_err(err)?;
     Ok(json!(id))
@@ -606,7 +744,9 @@ fn depot_add(bus: String, paint: Option<String>, number: Option<String>, name: S
 /// A depot bus's name, paint, plate or fleet number changed (its wear stays).
 fn depot_update(id: String, patch: Value) -> Answer {
     core::depot::update(|d| {
-        let b = d.get_mut(&id).ok_or_else(|| anyhow::anyhow!(core::i18n::tr("No depot bus {id}").replace("{id}", &id)))?;
+        let b = d.get_mut(&id).ok_or_else(|| {
+            anyhow::anyhow!(core::i18n::tr("No depot bus {id}").replace("{id}", &id))
+        })?;
         let text = |k: &str| patch.get(k).and_then(Value::as_str).map(str::to_string);
         if let Some(v) = text("name") {
             b.name = v;
@@ -632,7 +772,9 @@ fn depot_update(id: String, patch: Value) -> Answer {
 /// Refuel, wash or repair a depot bus (all of it, or one part): its next drive starts so.
 fn depot_service(id: String, kind: String) -> Answer {
     core::depot::update(|d| {
-        let b = d.get_mut(&id).ok_or_else(|| anyhow::anyhow!(core::i18n::tr("No depot bus {id}").replace("{id}", &id)))?;
+        let b = d.get_mut(&id).ok_or_else(|| {
+            anyhow::anyhow!(core::i18n::tr("No depot bus {id}").replace("{id}", &id))
+        })?;
         if !b.service(&kind) {
             anyhow::bail!(core::i18n::tr("No depot service {kind}").replace("{kind}", &kind));
         }
@@ -664,7 +806,10 @@ fn depot_group(op: &str, name: String, to: Option<String>) -> Answer {
             }
         };
         if !done {
-            anyhow::bail!(core::i18n::tr("There is already a depot called {name}").replace("{name}", to.as_deref().unwrap_or(&name).trim()));
+            anyhow::bail!(
+                core::i18n::tr("There is already a depot called {name}")
+                    .replace("{name}", to.as_deref().unwrap_or(&name).trim())
+            );
         }
         Ok(d.group_names())
     })
@@ -679,14 +824,25 @@ fn depot_plate() -> Answer {
 }
 
 fn plate_seed() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|t| t.as_nanos() as u64).unwrap_or(0)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|t| t.as_nanos() as u64)
+        .unwrap_or(0)
 }
 
 // --- the game's renderer: the bus preview and the city map (see `service`) -----------
 
 /// What the bus preview shows: the bus, its paint, and the map, weather, time and date that
 /// light it.
-fn preview_look(p: &dyn Platform, bus: String, paint: String, map: String, weather: String, time: i32, date: String) -> Answer {
+fn preview_look(
+    p: &dyn Platform,
+    bus: String,
+    paint: String,
+    map: String,
+    weather: String,
+    time: i32,
+    date: String,
+) -> Answer {
     p.renderer(json!({ "cmd": "look", "bus": bus, "paint": paint, "map": map, "weather": weather, "time": time, "date": date }), Duration::from_secs(10))?;
     Ok(json!(true))
 }
@@ -702,7 +858,17 @@ fn preview_warm(p: &dyn Platform) -> Answer {
 /// (`busy`, `moving`, `failed`, `error`), the state, then a JPEG when the picture changed
 /// since the last one asked for.
 #[allow(clippy::too_many_arguments)]
-fn preview_frame(p: &dyn Platform, w: u32, h: u32, force: bool, dx: Option<f32>, dy: Option<f32>, zoom: Option<f32>, quality: Option<u8>, view: Option<String>) -> Result<Vec<u8>, String> {
+fn preview_frame(
+    p: &dyn Platform,
+    w: u32,
+    h: u32,
+    force: bool,
+    dx: Option<f32>,
+    dy: Option<f32>,
+    zoom: Option<f32>,
+    quality: Option<u8>,
+    view: Option<String>,
+) -> Result<Vec<u8>, String> {
     let req = json!({ "cmd": "frame", "w": w.clamp(64, 4096), "h": h.clamp(64, 4096), "force": force, "dx": dx.unwrap_or(0.0), "dy": dy.unwrap_or(0.0), "zoom": zoom.unwrap_or(1.0), "quality": quality.unwrap_or(90), "view": view });
     let (head, jpeg) = p.renderer(req, Duration::from_secs(30))?;
     let head = head.to_string().into_bytes();
@@ -714,14 +880,33 @@ fn preview_frame(p: &dyn Platform, w: u32, h: u32, force: bool, dx: Option<f32>,
 }
 
 /// The map with the trip's route over it (see `mapview::export` in the launcher crate).
-fn route_map(p: &dyn Platform, map: String, date: String, trip: String, surface: Option<bool>, editor: Option<bool>, route_only: Option<bool>) -> Answer {
-    serde_json::from_slice(&route_map_bytes(p, map, date, trip, surface, editor, route_only)?).map_err(err)
+fn route_map(
+    p: &dyn Platform,
+    map: String,
+    date: String,
+    trip: String,
+    surface: Option<bool>,
+    editor: Option<bool>,
+    route_only: Option<bool>,
+) -> Answer {
+    serde_json::from_slice(&route_map_bytes(
+        p, map, date, trip, surface, editor, route_only,
+    )?)
+    .map_err(err)
 }
 
 /// `editor`: the timetable editor's map, which carries every stop of the timetable too;
 /// `route_only`: the trip's route alone. A `trip` of `@stops:<id>,<id>,...` is the route a
 /// list of stops would drive.
-fn route_map_bytes(p: &dyn Platform, map: String, date: String, trip: String, surface: Option<bool>, editor: Option<bool>, route_only: Option<bool>) -> Result<Vec<u8>, String> {
+fn route_map_bytes(
+    p: &dyn Platform,
+    map: String,
+    date: String,
+    trip: String,
+    surface: Option<bool>,
+    editor: Option<bool>,
+    route_only: Option<bool>,
+) -> Result<Vec<u8>, String> {
     let (_, body) = p.renderer(json!({ "cmd": "map", "map": map, "date": date, "trip": trip, "surface": surface.unwrap_or(true), "editor": editor.unwrap_or(false), "route_only": route_only.unwrap_or(false) }), Duration::from_secs(120))?;
     Ok(body)
 }
@@ -747,26 +932,43 @@ fn controllers(p: &dyn Platform, op: &str, mut req: Value, wait: u64) -> Answer 
 /// The support package (logs, settings, the machine), written by the game program into
 /// the data folder; answers where it went.
 fn support_package(p: &dyn Platform) -> Answer {
-    let out = core::data_dir().join(format!("support-{}.zip", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)));
+    let out = core::data_dir().join(format!(
+        "support-{}.zip",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    ));
     if let Some(done) = p.support_package(&out) {
         return Ok(json!(done?.to_string_lossy()));
     }
     let game = core::game_binary().ok_or("the game program was not found")?;
-    let status = std::process::Command::new(game).arg("--export-diagnostics").arg(&out).status().map_err(err)?;
+    let status = std::process::Command::new(game)
+        .arg("--export-diagnostics")
+        .arg(&out)
+        .status()
+        .map_err(err)?;
     if !status.success() || !out.exists() {
         return Err("the game could not write the support package".into());
     }
     Ok(json!(out.to_string_lossy()))
 }
 
-
 /// A picture of the content (`maps/Grundorf/picture.jpg`) from the content folder, an archive
 /// used in place or the OMSI folder: pictures only, and nothing outside those folders.
 pub fn content_picture(rel: &str) -> Option<Vec<u8>> {
     let rel = rel.replace('\\', "/");
     let ext = rel.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
-    let inside = !rel.is_empty() && Path::new(&rel).components().all(|c| matches!(c, std::path::Component::Normal(_)));
-    if !inside || !matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "bmp" | "gif" | "webp") {
+    let inside = !rel.is_empty()
+        && Path::new(&rel)
+            .components()
+            .all(|c| matches!(c, std::path::Component::Normal(_)));
+    if !inside
+        || !matches!(
+            ext.as_str(),
+            "jpg" | "jpeg" | "png" | "bmp" | "gif" | "webp"
+        )
+    {
         return None;
     }
     let p = core::content_path(&rel).ok()?;
@@ -775,7 +977,8 @@ pub fn content_picture(rel: &str) -> Option<Vec<u8>> {
 
 /// A value of the arguments (`null` when it is not there: an `Option` takes that as `None`).
 fn arg<T: serde::de::DeserializeOwned>(args: &Value, name: &str) -> Result<T, String> {
-    serde_json::from_value(args.get(name).cloned().unwrap_or(Value::Null)).map_err(|e| format!("{name}: {e}"))
+    serde_json::from_value(args.get(name).cloned().unwrap_or(Value::Null))
+        .map_err(|e| format!("{name}: {e}"))
 }
 
 /// Run a command of the page (on the caller's thread: a window runs it on a worker).
@@ -789,10 +992,17 @@ fn list_dir(path: Option<String>, archives: bool) -> Answer {
             .iter()
             .map(std::path::PathBuf::from)
             .find(|p| p.is_dir())
-            .or_else(|| std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(std::path::PathBuf::from))
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .or_else(|| std::env::var_os("USERPROFILE"))
+                    .map(std::path::PathBuf::from)
+            })
             .unwrap_or_else(|| std::path::PathBuf::from("/"))
     };
-    let dir = path.filter(|p| !p.trim().is_empty()).map(std::path::PathBuf::from).unwrap_or_else(start);
+    let dir = path
+        .filter(|p| !p.trim().is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(start);
     let rd = std::fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let (mut dirs, mut files) = (Vec::new(), Vec::new());
     for e in rd.flatten() {
@@ -803,7 +1013,11 @@ fn list_dir(path: Option<String>, archives: bool) -> Answer {
         let Ok(kind) = e.file_type() else { continue };
         if kind.is_dir() {
             dirs.push(name);
-        } else if archives && [".zip", ".7z", ".rar"].iter().any(|x| name.to_ascii_lowercase().ends_with(x)) {
+        } else if archives
+            && [".zip", ".7z", ".rar"]
+                .iter()
+                .any(|x| name.to_ascii_lowercase().ends_with(x))
+        {
             files.push(name);
         }
     }
@@ -827,46 +1041,112 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "translations" => translations(arg::<String>(args, "lang")?),
         "config_save" => config_save(arg::<String>(args, "root")?, arg::<String>(args, "game")?),
         "maps" => maps(),
-        "list_dir" => list_dir(arg::<Option<String>>(args, "path")?, arg::<Option<bool>>(args, "archives")?.unwrap_or(false)),
+        "list_dir" => list_dir(
+            arg::<Option<String>>(args, "path")?,
+            arg::<Option<bool>>(args, "archives")?.unwrap_or(false),
+        ),
         "vehicles" => vehicles(p),
         "weather" => weather(),
         "nearest_airport" => nearest_airport(arg::<String>(args, "map")?),
-        "tour_buses" => Ok(json!(core::tour_buses(&arg::<String>(args, "map")?, &arg::<String>(args, "group")?, &arg::<String>(args, "date")?)
+        "tour_buses" => Ok(json!(
+            core::tour_buses(
+                &arg::<String>(args, "map")?,
+                &arg::<String>(args, "group")?,
+                &arg::<String>(args, "date")?
+            )
             .into_iter()
             .map(|(file, paint, number)| json!({ "file": file, "paint": paint, "number": number }))
-            .collect::<Vec<_>>())),
+            .collect::<Vec<_>>()
+        )),
         "metar_airports" => metar_airports(),
         "custom_weather" => custom_weather(arg::<String>(args, "weather")?),
         "custom_weather_text" => custom_weather_text(arg::<Value>(args, "custom")?),
         "lines" => lines(arg::<String>(args, "map")?, arg::<String>(args, "date")?),
-        "ibis" => ibis(arg::<String>(args, "bus")?, arg::<String>(args, "hof")?, arg::<String>(args, "line")?, arg::<Option<String>>(args, "terminus")?, arg::<Option<Vec<String>>>(args, "stops")?),
-        "default_hof" => default_hof(arg::<Value>(args, "map")?, arg::<Value>(args, "bus")?, arg::<String>(args, "date")?, arg::<Option<String>>(args, "line")?),
+        "ibis" => ibis(
+            arg::<String>(args, "bus")?,
+            arg::<String>(args, "hof")?,
+            arg::<String>(args, "line")?,
+            arg::<Option<String>>(args, "terminus")?,
+            arg::<Option<Vec<String>>>(args, "stops")?,
+        ),
+        "default_hof" => default_hof(
+            arg::<Value>(args, "map")?,
+            arg::<Value>(args, "bus")?,
+            arg::<String>(args, "date")?,
+            arg::<Option<String>>(args, "line")?,
+        ),
         "saved_situations" => saved_situations(arg::<String>(args, "map")?),
-        "delete_situation" => delete_situation(arg::<String>(args, "map")?, arg::<String>(args, "file")?),
-        "rename_situation" => rename_situation(arg::<String>(args, "map")?, arg::<String>(args, "file")?, arg::<String>(args, "name")?),
-        "season_date" => season_date(arg::<String>(args, "season")?, arg::<String>(args, "phase")?, arg::<String>(args, "date")?, arg::<String>(args, "map")?, arg::<bool>(args, "keep")?),
+        "delete_situation" => {
+            delete_situation(arg::<String>(args, "map")?, arg::<String>(args, "file")?)
+        }
+        "rename_situation" => rename_situation(
+            arg::<String>(args, "map")?,
+            arg::<String>(args, "file")?,
+            arg::<String>(args, "name")?,
+        ),
+        "season_date" => season_date(
+            arg::<String>(args, "season")?,
+            arg::<String>(args, "phase")?,
+            arg::<String>(args, "date")?,
+            arg::<String>(args, "map")?,
+            arg::<bool>(args, "keep")?,
+        ),
         "tutorials" => tutorials(),
-        "ai_vehicles" => to_json(core::ai_lists::vehicles(arg::<Option<bool>>(args, "refresh")?.unwrap_or(false)).map_err(err)?),
-        "ai_vehicle_paints" => to_json(core::ai_lists::paints(&arg::<String>(args, "file")?).map_err(err)?),
-        "ai_lists" => core::ai_lists::view(&arg::<String>(args, "map")?, &arg::<String>(args, "date")?).map_err(err),
-        "ai_lists_save" => core::ai_lists::save(&arg::<String>(args, "map")?, &arg::<String>(args, "date")?, &arg::<Vec<core::ai_lists::GroupJson>>(args, "groups")?, &arg::<Vec<core::ai_lists::RuleJson>>(args, "rules")?).map_err(err),
-        "ai_lists_reset" => core::ai_lists::reset(&arg::<String>(args, "map")?).map(|_| json!({})).map_err(err),
+        "ai_vehicles" => to_json(
+            core::ai_lists::vehicles(arg::<Option<bool>>(args, "refresh")?.unwrap_or(false))
+                .map_err(err)?,
+        ),
+        "ai_vehicle_paints" => {
+            to_json(core::ai_lists::paints(&arg::<String>(args, "file")?).map_err(err)?)
+        }
+        "ai_lists" => {
+            core::ai_lists::view(&arg::<String>(args, "map")?, &arg::<String>(args, "date")?)
+                .map_err(err)
+        }
+        "ai_lists_save" => core::ai_lists::save(
+            &arg::<String>(args, "map")?,
+            &arg::<String>(args, "date")?,
+            &arg::<Vec<core::ai_lists::GroupJson>>(args, "groups")?,
+            &arg::<Vec<core::ai_lists::RuleJson>>(args, "rules")?,
+        )
+        .map_err(err),
+        "ai_lists_reset" => core::ai_lists::reset(&arg::<String>(args, "map")?)
+            .map(|_| json!({}))
+            .map_err(err),
         "addons" => addons::list(),
-        "timetable" => timetable::load(arg::<String>(args, "map")?, arg::<Option<String>>(args, "date")?),
-        "timetable_save" => timetable::save(arg::<String>(args, "map")?, arg::<Vec<timetable::LineEdit>>(args, "lines")?, arg::<Option<String>>(args, "date")?),
+        "timetable" => timetable::load(
+            arg::<String>(args, "map")?,
+            arg::<Option<String>>(args, "date")?,
+        ),
+        "timetable_save" => timetable::save(
+            arg::<String>(args, "map")?,
+            arg::<Vec<timetable::LineEdit>>(args, "lines")?,
+            arg::<Option<String>>(args, "date")?,
+        ),
         "timetable_reset" => timetable::reset(arg::<String>(args, "map")?),
-        "timetable_trip_save" => timetable::save_trip(arg::<String>(args, "map")?, arg::<timetable::TripNew>(args, "trip")?, arg::<Option<String>>(args, "date")?),
+        "timetable_trip_save" => timetable::save_trip(
+            arg::<String>(args, "map")?,
+            arg::<timetable::TripNew>(args, "trip")?,
+            arg::<Option<String>>(args, "date")?,
+        ),
         "profiles" => profiles(),
         "profile" => profile(arg::<String>(args, "name")?),
-        "profile_create" => profile_create(arg::<String>(args, "name")?, arg::<String>(args, "sex")?),
+        "profile_create" => {
+            profile_create(arg::<String>(args, "name")?, arg::<String>(args, "sex")?)
+        }
         "profile_delete" => profile_delete(arg::<String>(args, "name")?),
         "profile_select" => profile_select(arg::<String>(args, "name")?),
         "update_status" => Ok(updates::status()),
-        "update_check" => Ok(updates::check(arg::<Option<bool>>(args, "again")?.unwrap_or(false))),
+        "update_check" => Ok(updates::check(
+            arg::<Option<bool>>(args, "again")?.unwrap_or(false),
+        )),
         "update_install" => Ok(updates::install(p)),
         "update_dismiss" => Ok(updates::dismiss()),
         "storage_status" => to_json(core::storage::status()),
-        "storage_cleanup" => to_json(core::storage::cleanup(&arg::<String>(args, "scope")?, arg::<Option<bool>>(args, "clear")?.unwrap_or(false))?),
+        "storage_cleanup" => to_json(core::storage::cleanup(
+            &arg::<String>(args, "scope")?,
+            arg::<Option<bool>>(args, "clear")?.unwrap_or(false),
+        )?),
         "settings_get" => settings_get(),
         "settings_save" => settings_save(arg::<Value>(args, "settings")?),
         "settings_patch" => settings_patch(arg::<Value>(args, "patch")?),
@@ -874,7 +1154,10 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "option_presets" => option_presets(),
         "graphics_presets" => graphics_presets(arg::<String>(args, "mode").unwrap_or_default()),
         "graphics_profiles" => graphics_profiles(),
-        "graphics_profile_save" => graphics_profile_save(arg::<String>(args, "name")?, arg::<Value>(args, "settings")?),
+        "graphics_profile_save" => graphics_profile_save(
+            arg::<String>(args, "name")?,
+            arg::<Value>(args, "settings")?,
+        ),
         "graphics_profile_delete" => graphics_profile_delete(arg::<String>(args, "name")?),
         "optimise_status" => Ok(core::optimise::status()),
         "optimise_arm" => optimise_arm(arg::<u32>(args, "target")?),
@@ -888,10 +1171,18 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "radio_stations" => radio_stations(),
         "radio_stations_save" => radio_stations_save(arg::<Vec<Value>>(args, "list")?),
         "mods_status" => mods_status(),
-        // the plugin list (#3919): on/off, what the last game made of them, their settings
         "plugins_status" => Ok(core::plugins::status()),
-        "plugin_set_enabled" => core::plugins::set_enabled(&arg::<String>(args, "name")?, arg::<bool>(args, "on")?).map(|_| json!(true)).map_err(err),
-        "plugin_settings_save" => core::plugins::save_settings(&arg::<String>(args, "name")?, &arg::<Value>(args, "values")?).map(|_| json!(true)).map_err(err),
+        "plugin_set_enabled" => {
+            core::plugins::set_enabled(&arg::<String>(args, "name")?, arg::<bool>(args, "on")?)
+                .map(|_| json!(true))
+                .map_err(err)
+        }
+        "plugin_settings_save" => core::plugins::save_settings(
+            &arg::<String>(args, "name")?,
+            &arg::<Value>(args, "values")?,
+        )
+        .map(|_| json!(true))
+        .map_err(err),
         "add_hofs" => add_hofs(arg::<Vec<String>>(args, "files")?),
         "share_map_hofs" => share_map_hofs(arg::<String>(args, "map")?),
         "mod_set_enabled" => mod_set_enabled(arg::<String>(args, "id")?, arg::<bool>(args, "on")?),
@@ -906,9 +1197,15 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         }
         "poll" => poll(),
         "stop_game" => stop_game(arg::<u32>(args, "pid")?),
-        "game_log" => game_log(arg::<u32>(args, "pid")?, arg::<Option<usize>>(args, "lines")?),
+        "game_log" => game_log(
+            arg::<u32>(args, "pid")?,
+            arg::<Option<usize>>(args, "lines")?,
+        ),
         "model_check" => content_check(arg::<String>(args, "bus")?, false),
-        "content_check" => content_check(arg::<String>(args, "path")?, arg::<Option<bool>>(args, "deep")?.unwrap_or(false)),
+        "content_check" => content_check(
+            arg::<String>(args, "path")?,
+            arg::<Option<bool>>(args, "deep")?.unwrap_or(false),
+        ),
         "launch" => launch(p, arg::<Value>(args, "duty")?),
         "duty_args" => duty_args(arg::<Value>(args, "duty")?),
         "check_join" => check_join(arg::<String>(args, "text")?),
@@ -919,9 +1216,19 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "choice_save" => choice_save(arg::<Value>(args, "choice")?),
         "favourites_save" => favourites_save(arg::<Vec<String>>(args, "list")?),
         "depot_get" => depot_get(),
-        "depot_add" => depot_add(arg::<String>(args, "bus")?, arg::<Option<String>>(args, "paint")?, arg::<Option<String>>(args, "number")?, arg::<String>(args, "name")?, arg::<Option<String>>(args, "group")?),
+        "depot_add" => depot_add(
+            arg::<String>(args, "bus")?,
+            arg::<Option<String>>(args, "paint")?,
+            arg::<Option<String>>(args, "number")?,
+            arg::<String>(args, "name")?,
+            arg::<Option<String>>(args, "group")?,
+        ),
         "depot_group_add" => depot_group("add", arg::<String>(args, "name")?, None),
-        "depot_group_rename" => depot_group("rename", arg::<String>(args, "name")?, arg::<Option<String>>(args, "to")?),
+        "depot_group_rename" => depot_group(
+            "rename",
+            arg::<String>(args, "name")?,
+            arg::<Option<String>>(args, "to")?,
+        ),
         "depot_group_remove" => depot_group("remove", arg::<String>(args, "name")?, None),
         "depot_update" => depot_update(arg::<String>(args, "id")?, arg::<Value>(args, "patch")?),
         "depot_remove" => depot_remove(arg::<String>(args, "id")?),
@@ -929,16 +1236,55 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "depot_plate" => depot_plate(),
         "notes_get" => notes_get(),
         "notes_save" => notes_save(arg::<String>(args, "key")?, arg::<String>(args, "text")?),
-        "preview_look" => preview_look(p, arg::<String>(args, "bus")?, arg::<String>(args, "paint")?, arg::<String>(args, "map")?, arg::<String>(args, "weather")?, arg::<i32>(args, "time")?, arg::<String>(args, "date")?),
+        "preview_look" => preview_look(
+            p,
+            arg::<String>(args, "bus")?,
+            arg::<String>(args, "paint")?,
+            arg::<String>(args, "map")?,
+            arg::<String>(args, "weather")?,
+            arg::<i32>(args, "time")?,
+            arg::<String>(args, "date")?,
+        ),
         "preview_warm" => preview_warm(p),
-        "route_map" => route_map(p, arg::<String>(args, "map")?, arg::<String>(args, "date")?, arg::<String>(args, "trip")?, arg(args, "surface")?, arg(args, "editor")?, arg(args, "route_only")?),
-        "keyboard_actions" => keyboard_actions(p, json!({ "lang": arg::<Option<String>>(args, "lang")?, "actions": arg::<Option<Vec<String>>>(args, "actions")?, "vehicles": arg::<Option<Vec<String>>>(args, "vehicles")?, "catalog": arg::<Option<bool>>(args, "catalog")?, "scan": arg::<Option<bool>>(args, "scan")?, "have": arg::<Option<String>>(args, "have")? })),
+        "route_map" => route_map(
+            p,
+            arg::<String>(args, "map")?,
+            arg::<String>(args, "date")?,
+            arg::<String>(args, "trip")?,
+            arg(args, "surface")?,
+            arg(args, "editor")?,
+            arg(args, "route_only")?,
+        ),
+        "keyboard_actions" => keyboard_actions(
+            p,
+            json!({ "lang": arg::<Option<String>>(args, "lang")?, "actions": arg::<Option<Vec<String>>>(args, "actions")?, "vehicles": arg::<Option<Vec<String>>>(args, "vehicles")?, "catalog": arg::<Option<bool>>(args, "catalog")?, "scan": arg::<Option<bool>>(args, "scan")?, "have": arg::<Option<String>>(args, "have")? }),
+        ),
         "controllers_load" => controllers(p, "load", json!({}), 20),
-        "controllers_state" => controllers(p, "state", json!({ "off": arg::<Option<Vec<String>>>(args, "off")?.unwrap_or_default() }), 5),
-        "controllers_save" => controllers(p, "save", json!({ "devices": arg::<Value>(args, "devices")? }), 20),
-        "controllers_ffb_test" => controllers(p, "ffb_test", json!({ "name": arg::<String>(args, "name")?, "axis": arg::<usize>(args, "axis")?, "strength": arg::<Option<f32>>(args, "strength")?, "token": arg::<Option<u64>>(args, "token")? }), 20),
+        "controllers_state" => controllers(
+            p,
+            "state",
+            json!({ "off": arg::<Option<Vec<String>>>(args, "off")?.unwrap_or_default() }),
+            5,
+        ),
+        "controllers_save" => controllers(
+            p,
+            "save",
+            json!({ "devices": arg::<Value>(args, "devices")? }),
+            20,
+        ),
+        "controllers_ffb_test" => controllers(
+            p,
+            "ffb_test",
+            json!({ "name": arg::<String>(args, "name")?, "axis": arg::<usize>(args, "axis")?, "strength": arg::<Option<f32>>(args, "strength")?, "token": arg::<Option<u64>>(args, "token")? }),
+            20,
+        ),
         "controllers_release" => controllers(p, "release", json!({}), 5),
-        "controllers_ffb_stop" => controllers(p, "ffb_stop", json!({ "token": arg::<Option<u64>>(args, "token")? }), 5),
+        "controllers_ffb_stop" => controllers(
+            p,
+            "ffb_stop",
+            json!({ "token": arg::<Option<u64>>(args, "token")? }),
+            5,
+        ),
         "support_package" => support_package(p),
         "versions" => versions::list(),
         "version_install" => versions::install(arg::<String>(args, "version")?),
@@ -955,15 +1301,35 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
 /// Run a command that answers bytes (the bus preview's pictures).
 pub fn call_bytes(cmd: &str, args: &Value, p: &dyn Platform) -> Result<Vec<u8>, String> {
     match cmd {
-        "content_picture" => content_picture(&arg::<String>(args, "path")?).ok_or_else(|| "not found".to_string()),
-        "route_map" => route_map_bytes(p, arg::<String>(args, "map")?, arg::<String>(args, "date")?, arg::<String>(args, "trip")?, arg(args, "surface")?, arg(args, "editor")?, arg(args, "route_only")?),
+        "content_picture" => {
+            content_picture(&arg::<String>(args, "path")?).ok_or_else(|| "not found".to_string())
+        }
+        "route_map" => route_map_bytes(
+            p,
+            arg::<String>(args, "map")?,
+            arg::<String>(args, "date")?,
+            arg::<String>(args, "trip")?,
+            arg(args, "surface")?,
+            arg(args, "editor")?,
+            arg(args, "route_only")?,
+        ),
         "map_ground" => {
             let mut req = args.clone();
             req["cmd"] = json!("map_ground");
             let (_, body) = p.renderer(req, Duration::from_secs(120))?;
             Ok(body)
         }
-        "preview_frame" => preview_frame(p, arg(args, "w")?, arg(args, "h")?, arg::<Option<bool>>(args, "force")?.unwrap_or(false), arg(args, "dx")?, arg(args, "dy")?, arg(args, "zoom")?, arg(args, "quality")?, arg(args, "view")?),
+        "preview_frame" => preview_frame(
+            p,
+            arg(args, "w")?,
+            arg(args, "h")?,
+            arg::<Option<bool>>(args, "force")?.unwrap_or(false),
+            arg(args, "dx")?,
+            arg(args, "dy")?,
+            arg(args, "zoom")?,
+            arg(args, "quality")?,
+            arg(args, "view")?,
+        ),
         _ => Err(format!("unknown command {cmd}")),
     }
 }
@@ -1003,7 +1369,8 @@ mod settings_tests {
     fn a_launcher_change_keeps_what_the_game_changed_meanwhile() {
         let game_wrote = "volume=0.25\nwheel_range=540\nmsaa=4\n";
         let on_disk = core::settings_from_text(Some(game_wrote));
-        let text = core::settings_to_text(&patched(on_disk, &json!({ "msaa": 8 })), Some(game_wrote));
+        let text =
+            core::settings_to_text(&patched(on_disk, &json!({ "msaa": 8 })), Some(game_wrote));
         let now = core::settings_from_text(Some(&text));
         assert_eq!(now["msaa"], json!(8));
         assert_eq!(now["volume"], json!(0.25));
@@ -1022,16 +1389,41 @@ mod game_end_tests {
         let game = |pid: u32, log: &str| {
             let p = dir.join(format!("game-{pid}.log"));
             std::fs::write(&p, log).unwrap();
-            core::instances::Instance { pid, log: p.to_string_lossy().to_string(), ..Default::default() }
+            core::instances::Instance {
+                pid,
+                log: p.to_string_lossy().to_string(),
+                ..Default::default()
+            }
         };
-        let crashed = game(11, "[t INFO x] starting the game: omsi\n[t ERROR omsi_render] ending the session: the graphics device was lost (Unknown: Out of memory)\n[t INFO x] game ends\n");
+        let crashed = game(
+            11,
+            "[t INFO x] starting the game: omsi\n[t ERROR omsi_render] ending the session: the graphics device was lost (Unknown: Out of memory)\n[t INFO x] game ends\n",
+        );
         let (event, what) = game_ended(&crashed).unwrap();
         assert_eq!(event, "game-crashed");
         assert_eq!(what["lost"], json!(true));
-        let kicked = game(12, &format!("[t INFO x] starting the game: omsi\n[t WARN openomsi_game::lan] {}Expelled: dangerous driving\n[t INFO x] game ends\n", omsi_net::LEFT_SERVER));
-        assert_eq!(game_ended(&kicked).map(|(e, w)| (e, w["why"].clone())), Some(("game-disconnected", json!("Expelled: dangerous driving"))));
-        assert!(game_ended(&game(13, "[t INFO x] starting the game: omsi\n[t INFO x] game ends\n")).is_none());
-        let mut stopped = game(14, "[t INFO x] starting the game: omsi\n[t ERROR x] the game stopped on an error: panicked at a.rs:1:1\n");
+        let kicked = game(
+            12,
+            &format!(
+                "[t INFO x] starting the game: omsi\n[t WARN openomsi_game::lan] {}Expelled: dangerous driving\n[t INFO x] game ends\n",
+                omsi_net::LEFT_SERVER
+            ),
+        );
+        assert_eq!(
+            game_ended(&kicked).map(|(e, w)| (e, w["why"].clone())),
+            Some(("game-disconnected", json!("Expelled: dangerous driving")))
+        );
+        assert!(
+            game_ended(&game(
+                13,
+                "[t INFO x] starting the game: omsi\n[t INFO x] game ends\n"
+            ))
+            .is_none()
+        );
+        let mut stopped = game(
+            14,
+            "[t INFO x] starting the game: omsi\n[t ERROR x] the game stopped on an error: panicked at a.rs:1:1\n",
+        );
         assert!(game_ended(&stopped).is_some());
         stopped.stopping = Some(1);
         assert!(game_ended(&stopped).is_none());
@@ -1051,7 +1443,17 @@ mod custom_weather_tests {
         w["snow_on_road"] = json!(true);
         let text = custom_weather_text(w).unwrap();
         let back = core::CustomWeather::parse(text.as_str().unwrap()).unwrap();
-        let want = core::CustomWeather { visibility_m: 800.0, temp_c: -5.0, precip: 1, precip_intensity: 200.0, cloud_base_m: 900.0, pressure: 990.0, wind_speed: 12.5, snow_on_road: true, ..Default::default() };
+        let want = core::CustomWeather {
+            visibility_m: 800.0,
+            temp_c: -5.0,
+            precip: 1,
+            precip_intensity: 200.0,
+            cloud_base_m: 900.0,
+            pressure: 990.0,
+            wind_speed: 12.5,
+            snow_on_road: true,
+            ..Default::default()
+        };
         assert_eq!(back, want);
     }
 }
@@ -1063,11 +1465,16 @@ mod custom_weather_tests {
 /// loaders' warnings and errors and whatever it names that is not there as JSON. `deep`: a
 /// map's objects and splines are loaded whole (models, meshes, textures), not only read.
 fn content_check(path: String, deep: bool) -> Answer {
-    let game = core::game_binary().ok_or_else(|| "the game program was not found: set it under Setup".to_string())?;
+    let game = core::game_binary()
+        .ok_or_else(|| "the game program was not found: set it under Setup".to_string())?;
     let root = core::root_dir().map_err(err)?;
     let mut cmd = std::process::Command::new(&game);
     // (a mod's folders come one to a line)
-    cmd.arg("--check").args(path.lines().map(str::trim).filter(|l| !l.is_empty())).arg("--root").arg(&root).env("OMSI_NO_GUARD", "1");
+    cmd.arg("--check")
+        .args(path.lines().map(str::trim).filter(|l| !l.is_empty()))
+        .arg("--root")
+        .arg(&root)
+        .env("OMSI_NO_GUARD", "1");
     if deep {
         cmd.arg("--deep");
     }
@@ -1076,20 +1483,39 @@ fn content_check(path: String, deep: bool) -> Answer {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
-    let out = cmd.output().map_err(|e| format!("the game {} cannot start: {e}", game.display()))?;
+    let out = cmd
+        .output()
+        .map_err(|e| format!("the game {} cannot start: {e}", game.display()))?;
     let text = String::from_utf8_lossy(&out.stdout);
-    let line = text.lines().rev().find(|l| l.trim_start().starts_with('{')).ok_or_else(|| {
-        let last = String::from_utf8_lossy(&out.stderr);
-        format!("the game gave no answer ({})", last.lines().last().unwrap_or("").trim())
-    })?;
+    let line = text
+        .lines()
+        .rev()
+        .find(|l| l.trim_start().starts_with('{'))
+        .ok_or_else(|| {
+            let last = String::from_utf8_lossy(&out.stderr);
+            format!(
+                "the game gave no answer ({})",
+                last.lines().last().unwrap_or("").trim()
+            )
+        })?;
     let mut v: Value = serde_json::from_str(line).map_err(err)?;
-    for f in v.get_mut("findings").and_then(Value::as_array_mut).into_iter().flatten() {
+    for f in v
+        .get_mut("findings")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+    {
         for k in ["text", "what"] {
             if let Some(t) = f.get(k).and_then(Value::as_str).map(core::i18n::tr) {
                 f[k] = json!(t);
             }
         }
-        if let Some(t) = f.get("hint").and_then(Value::as_str).map(|h| h.split("; ").map(core::i18n::tr).collect::<Vec<_>>().join("; ")) {
+        if let Some(t) = f.get("hint").and_then(Value::as_str).map(|h| {
+            h.split("; ")
+                .map(core::i18n::tr)
+                .collect::<Vec<_>>()
+                .join("; ")
+        }) {
             f["hint"] = json!(t);
         }
     }
@@ -1104,9 +1530,13 @@ mod support_package_tests {
     impl Platform for PhoneFolder {
         fn emit(&self, _: &str, _: Value) {}
         fn launched(&self) {}
-        fn renderer(&self, _: Value, _: Duration) -> Result<(Value, Vec<u8>), String> { unreachable!() }
+        fn renderer(&self, _: Value, _: Duration) -> Result<(Value, Vec<u8>), String> {
+            unreachable!()
+        }
         fn support_package(&self, suggested: &Path) -> Option<Result<std::path::PathBuf, String>> {
-            Some(Ok(Path::new("/storage/emulated/0/openOMSI").join(suggested.file_name().unwrap())))
+            Some(Ok(
+                Path::new("/storage/emulated/0/openOMSI").join(suggested.file_name().unwrap())
+            ))
         }
     }
 
@@ -1114,7 +1544,10 @@ mod support_package_tests {
     fn returns_the_platforms_actual_export_path() {
         let actual = support_package(&PhoneFolder).unwrap();
         let path = Path::new(actual.as_str().unwrap());
-        assert_eq!(path.parent(), Some(Path::new("/storage/emulated/0/openOMSI")));
+        assert_eq!(
+            path.parent(),
+            Some(Path::new("/storage/emulated/0/openOMSI"))
+        );
         let filename = path.file_name().unwrap().to_str().unwrap();
         assert!(filename.starts_with("support-"), "{filename}");
         assert!(filename.ends_with(".zip"), "{filename}");

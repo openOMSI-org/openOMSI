@@ -13,15 +13,20 @@ pub const STATUS_FILE: &str = "plugins-status.json";
 /// The names in `dir`'s [`OFF_FILE`] (none without one).
 pub fn read_off(dir: &Path) -> Vec<String> {
     std::fs::read_to_string(dir.join(OFF_FILE))
-        .map(|t| t.lines().map(key).filter(|l| !l.is_empty() && !l.starts_with('#')).collect())
+        .map(|t| {
+            t.lines()
+                .map(key)
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
 /// One plugin's line.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Entry {
-    /// The name the launcher switches it by: a `.lua` file's stem, a folder's name, a
-    /// `.oop`'s or `.opl`'s stem (in lower case).
+    /// The name the launcher switches it by (in lower case): a `.lua` file's or a folder's
+    /// stem, a `.oop`'s stem, an `.opl`'s path under `plugins` ([`opl_key`]).
     pub name: String,
     pub path: String,
     /// `"lua"`, `"oop"` or `"opl"`.
@@ -52,10 +57,29 @@ pub fn key(name: &str) -> String {
     name.trim().to_ascii_lowercase()
 }
 
+/// An `.opl` plugin's name: its path under the `plugins` folder `dir`, `/` between the parts
+/// (`Pablo/MBAS.opl`), so two `Config.opl` in different subfolders are switched apart.
+pub fn opl_key(opl: &Path, dir: &Path) -> String {
+    let rel = opl.strip_prefix(dir).unwrap_or(opl);
+    key(&rel
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/"))
+}
+
 impl Status {
     pub fn new(file: Option<PathBuf>) -> Status {
-        let at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-        Status { file, report: Report { at, plugins: Vec::new() } }
+        let at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        Status {
+            file,
+            report: Report {
+                at,
+                plugins: Vec::new(),
+            },
+        }
     }
 
     pub fn add(&mut self, name: &str, path: &Path, kind: &str, state: &str, error: &str) {
@@ -64,16 +88,33 @@ impl Status {
             path: path.display().to_string(),
             kind: kind.into(),
             state: state.into(),
-            error: error.lines().next().unwrap_or("").chars().take(400).collect(),
+            error: error
+                .lines()
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(400)
+                .collect(),
         });
     }
 
     /// A loaded plugin the game switched off (too many errors, a call too long).
     pub fn switched_off(&mut self, name: &str, error: &str) {
         let k = key(name);
-        if let Some(e) = self.report.plugins.iter_mut().find(|e| e.name == k && e.state == "loaded") {
+        if let Some(e) = self
+            .report
+            .plugins
+            .iter_mut()
+            .find(|e| e.name == k && e.state == "loaded")
+        {
             e.state = "switched_off".into();
-            e.error = error.lines().next().unwrap_or("").chars().take(400).collect();
+            e.error = error
+                .lines()
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(400)
+                .collect();
             self.write();
         }
     }
@@ -82,7 +123,9 @@ impl Status {
     /// reading it).
     pub fn write(&self) {
         let Some(file) = &self.file else { return };
-        let Ok(text) = serde_json::to_string_pretty(&self.report) else { return };
+        let Ok(text) = serde_json::to_string_pretty(&self.report) else {
+            return;
+        };
         let tmp = file.with_extension("json.tmp");
         if let Err(e) = std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, file)) {
             log::warn!("plugin status not written to {}: {e}", file.display());
@@ -100,13 +143,38 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("plugins-status.json");
         let mut s = Status::new(Some(file.clone()));
-        s.add("Cruise", std::path::Path::new("plugins/cruise.lua"), "lua", "loaded", "");
-        s.add("broken", std::path::Path::new("plugins/broken.lua"), "lua", "failed", "syntax error near 'end'\nstack");
+        s.add(
+            "Cruise",
+            std::path::Path::new("plugins/cruise.lua"),
+            "lua",
+            "loaded",
+            "",
+        );
+        s.add(
+            "broken",
+            std::path::Path::new("plugins/broken.lua"),
+            "lua",
+            "failed",
+            "syntax error near 'end'\nstack",
+        );
         s.write();
         s.switched_off("CRUISE", "attempt to index a nil value");
         let back: Report = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
         assert_eq!(back.plugins[0].state, "switched_off");
         assert_eq!(back.plugins[1].error, "syntax error near 'end'");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_opl_is_named_by_its_path_under_plugins() {
+        let dir = Path::new("omsi/plugins");
+        assert_eq!(
+            opl_key(&dir.join("Pablo").join("MBAS.opl"), dir),
+            "pablo/mbas.opl"
+        );
+        assert_ne!(
+            opl_key(&dir.join("Pablo").join("Config.opl"), dir),
+            opl_key(&dir.join("Config.opl"), dir)
+        );
     }
 }
