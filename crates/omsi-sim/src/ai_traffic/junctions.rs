@@ -936,7 +936,19 @@ impl TrafficSim {
                     // (the last car of that queue on that lane)
                     let last = on_lane
                         .get(&lane)
-                        .and_then(|v| v.iter().filter(|e| !e.3 && e.0 != i).min_by(|a, b| (a.1 - self.cars[a.0].tail).total_cmp(&(b.1 - self.cars[b.0].tail))))
+                        .and_then(|v| {
+                            v.iter()
+                                .filter(|e| {
+                                    !e.3
+                                        && e.0 != i
+                                        && e.2.abs() - self.cars[e.0].half_width
+                                            < self.net.lanes[lane].width * 0.5
+                                })
+                                .min_by(|a, b| {
+                                    (a.1 - self.cars[a.0].tail)
+                                        .total_cmp(&(b.1 - self.cars[b.0].tail))
+                                })
+                        })
                         .map(|e| self.cars[e.0].id);
                     if explain {
                         why.push(format!("exit {} full on lane {lane}: {space:.1} m to queue rear, {need_all:.1} m needed, queue speed {speed:.1} m/s, exit {:.1} m past entry, {promised:.1} m promised", exit.0, exit.1 - entry));
