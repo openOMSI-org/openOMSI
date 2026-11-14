@@ -111,7 +111,12 @@ fn set(app: &mut crate::App, form: &DestForm, clear: bool) -> String {
         if !route.is_empty() {
             crate::game_lists::set_route_by_hand(app, route);
         }
-        return omsi_ui::tr("Route number set").into_owned();
+        // (the same messages as with destination lines when there is no bus or depot file)
+        return match app.player.as_ref() {
+            None => String::new(),
+            Some(p) if p.vehicle.host.hof.is_none() => omsi_ui::tr("This bus has no depot file (.hof) with destinations").into_owned(),
+            Some(_) => omsi_ui::tr("Route number set").into_owned(),
+        };
     }
     if !clear && !route.is_empty() && crate::game_lists::numeric_ibis_line(route) {
         crate::game_lists::set_route_by_hand(app, route);
