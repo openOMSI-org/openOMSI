@@ -85,6 +85,9 @@ impl FrameGeneration {
     pub(crate) fn working(&self) -> bool {
         match *self {}
     }
+    pub(crate) fn wanted(&self) -> bool {
+        match *self {}
+    }
     pub(crate) fn generated(&self) -> u64 {
         match *self {}
     }

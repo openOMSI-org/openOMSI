@@ -52,7 +52,6 @@ const vrOn = (s, p) => windows(s, p) && !!s.vr;
 // (the upscalers `temporal_upscalers` may name, as `omsi_cfg::upscaler_files::label` calls them)
 const TEMPORAL_LABELS = { dlss: 'NVIDIA DLSS (experimental)', fsr3: 'AMD FSR 3 (experimental)', metalfx: 'Apple MetalFX (experimental)' };
 const temporalOn = (s, p) => (s.temporal_upscalers || []).includes(s.upscaler) && !tripleOn(s) && !vrOn(s, p);
-// (frame generation works with the upscaler of its own name: `Settings::frame_generation`)
 const generationOn = (s, p) => temporalOn(s, p) && (s.frame_generators || []).includes(s.upscaler);
 
 /** The window sizes the settings offer (`resolution`). */

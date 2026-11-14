@@ -153,7 +153,8 @@ fn macos_major(plist: &str) -> Option<u32> {
 /// Apple's MetalFX frame interpolator: MetalFX on macOS 26 or newer. A candidate, as
 /// `metalfx_present` is: the interpolator itself is asked when the game starts it.
 pub fn metalfx_frames_present() -> bool {
-    metalfx_present() && std::fs::read_to_string(SYSTEM_VERSION).ok().and_then(|p| macos_major(&p)).is_some_and(|v| v >= 26)
+    static PRESENT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PRESENT.get_or_init(|| metalfx_present() && std::fs::read_to_string(SYSTEM_VERSION).ok().and_then(|p| macos_major(&p)).is_some_and(|v| v >= 26))
 }
 
 /// The frame generation this machine can run, as the menus offer it: `metalfx` on a Mac.

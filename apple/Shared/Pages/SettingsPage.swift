@@ -103,7 +103,6 @@ struct SettingsPage: View {
         // on a Mac; one at work takes the place of the anti-aliasing and the render scale)
         let temporal = Choices.temporal(store.setting("temporal_upscalers"))
         let temporalOn = temporal.contains { $0.0 == store.setting("upscaler")?.string } && !store.flag("triple_screen")
-        // (frame generation works with the upscaler of its own name)
         let generators = Choices.temporal(store.setting("frame_generators"))
         let generationOn = temporalOn && generators.contains { $0.0 == store.setting("upscaler")?.string }
         return Card("Graphics") {

@@ -107,6 +107,9 @@ struct Shared {
     gap: bool,
     generated: u64,
     stopped: bool,
+    /// The window will show generated frames (the 30 fps rule lets it): the renderer draws the
+    /// picture before the HUD for it only then.
+    wanted: bool,
 }
 
 // (used from the render thread only; the lock is for the two owners, renderer and window)
@@ -127,7 +130,7 @@ impl FrameGeneration {
         if !supported {
             bail!("this Mac's graphics chip cannot run MetalFX's frame interpolator");
         }
-        Ok(FrameGeneration(Arc::new(Mutex::new(Shared { device: raw, prepared: None, interpolator: None, last: None, gap: true, generated: 0, stopped: false }))))
+        Ok(FrameGeneration(Arc::new(Mutex::new(Shared { device: raw, prepared: None, interpolator: None, last: None, gap: true, generated: 0, stopped: false, wanted: false }))))
     }
 
     fn shared(&self) -> std::sync::MutexGuard<'_, Shared> {
@@ -137,6 +140,16 @@ impl FrameGeneration {
     /// False once it gave up: the window then draws without it.
     pub(crate) fn working(&self) -> bool {
         !self.shared().stopped
+    }
+
+    /// Whether the next frame is to be handed over ([`Self::prepare`]): not while it is paused.
+    pub(crate) fn wanted(&self) -> bool {
+        let shared = self.shared();
+        shared.wanted && !shared.stopped
+    }
+
+    pub(crate) fn set_wanted(&self, wanted: bool) {
+        self.shared().wanted = wanted;
     }
 
     /// The in-between frames made so far.
@@ -527,7 +540,9 @@ impl GenerationWindow {
                 log::info!("frame generation: {} ({:.0} frames drawn a second; it runs from {GATE_ON:.0} and stops under {GATE_OFF:.0})", if on { "on" } else { "paused" }, gate.0.fps());
             }
             // (OMSI_FG_SHOW looks at one kind of frame whatever the rate)
-            on || self.show != Show::Both
+            let on = on || self.show != Show::Both;
+            self.handle.set_wanted(on);
+            on
         };
         let generated = match prepared.as_ref().filter(|_| fast_enough && self.show != Show::Drawn && self.handle.working()) {
             Some(inputs) => self.handle.generate(queue, inputs, &self.drawn, &self.made).unwrap_or_else(|e| {
