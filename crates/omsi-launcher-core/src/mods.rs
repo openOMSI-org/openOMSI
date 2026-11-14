@@ -398,7 +398,10 @@ pub fn remove_preview(content: &Path, id: &str) -> anyhow::Result<Plan> {
 
 fn plan_in(content: &Path, r: &Registry, k: usize, roots: &[PathBuf], full: bool) -> Plan {
     let m = &r.mods[k];
-    let at = |p: &String| [content.join(p), disabled_dir(content, &m.id).join(p)];
+    let off = disabled_dir(content, &m.id);
+    // (a switched-off map is the copy under Mods/disabled: a map of the same name in the content
+    // folder then is another one, installed while it was off, and counts among the others)
+    let at = |p: &String| if !m.enabled && off.join(p).symlink_metadata().is_ok() { vec![off.join(p)] } else { vec![content.join(p), off.join(p)] };
     let mut lost = false;
     let mut mine: Vec<PathBuf> = Vec::new();
     for p in &m.paths {
@@ -442,16 +445,27 @@ fn remove_in(content: &Path, id: &str, roots: &[PathBuf]) -> anyhow::Result<Stri
     map_uses::forget();
     let plan = plan_in(content, &r, k, roots, true);
     let m = r.mods.remove(k);
-    for p in &plan.kept {
-        let (from, to) = (disabled_dir(content, &m.id).join(p), content.join(p));
-        if from.exists() && !to.exists() {
-            move_path(&from, &to)?;
-        }
+    let off = disabled_dir(content, &m.id);
+    fn here(p: &Path) -> bool {
+        p.symlink_metadata().is_ok()
+    }
+    // (the kept folders of a switched-off map go back before anything is deleted; one whose
+    // place in the content folder is taken - another mod's folder of the same name, installed
+    // while the map was off - stops the delete before anything moves, so neither copy is lost)
+    let back: Vec<(PathBuf, PathBuf)> = plan.kept.iter().map(|p| (off.join(p), content.join(p))).filter(|(from, _)| here(from)).collect();
+    if let Some((_, to)) = back.iter().find(|(_, to)| here(to)) {
+        anyhow::bail!(trf("{path} is in the way", &[("path", &to.display())]));
+    }
+    for (from, to) in &back {
+        move_path(from, to)?;
     }
     unmount(content, &m.paths);
     for p in m.paths.iter().filter(|p| !plan.kept.contains(p)) {
         install::check_installed_rel(p)?;
-        for at in [content.join(p), disabled_dir(content, &m.id).join(p)] {
+        // (a switched-off mod's folder is the one under Mods/disabled: a folder of the same
+        // name in the content folder then is another mod's, installed while it was off)
+        let places = if !m.enabled && here(&off.join(p)) { vec![off.join(p)] } else { vec![content.join(p), off.join(p)] };
+        for at in places {
             if at.is_dir() {
                 std::fs::remove_dir_all(&at).map_err(|e| anyhow::anyhow!(trf("deleting {path}: {e}", &[("path", &at.display()), ("e", &e)])))?;
             } else if at.exists() {
@@ -459,7 +473,7 @@ fn remove_in(content: &Path, id: &str, roots: &[PathBuf]) -> anyhow::Result<Stri
             }
         }
     }
-    let _ = std::fs::remove_dir_all(disabled_dir(content, &m.id));
+    let _ = std::fs::remove_dir_all(&off);
     // (an inbox install's leftovers: gone with it, so it is not taken for a new install)
     let installed = content.join("Mods").join("installed").join(&m.name);
     let _ = std::fs::remove_dir_all(&installed);
@@ -788,6 +802,45 @@ mod tests {
         remove_in(&c, &id, &roots).unwrap();
         assert!(c.join("Sceneryobjects/Shared/f.txt").exists() && !disabled_dir(&c, &id).exists() && !c.join("maps/Hill Town").exists());
         assert!(c.join("Sceneryobjects/PackA").exists());
+        std::fs::remove_dir_all(c).unwrap();
+        std::fs::remove_dir_all(omsi).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_kept_folder_whose_place_is_taken_stops_the_delete_and_both_copies_stay() {
+        let (c, omsi, id) = two_maps();
+        std::fs::remove_file(c.join("maps/Valley/parklist_p.txt")).unwrap();
+        let roots = [c.clone(), omsi.clone()];
+        set_enabled_in(&c, &id, false, &roots).unwrap();
+        let id = list(&c).into_iter().find(|m| m.name == "Hill Town").unwrap().id;
+        let off = disabled_dir(&c, &id);
+        assert!(off.join("Sceneryobjects/Shared/f.txt").exists() && !c.join("Sceneryobjects/Shared").exists());
+        // (another mod's folder of the same name, with other files, installed while the map is off)
+        put(&c.join("Sceneryobjects/Shared/new.txt"), "other");
+        std::os::unix::fs::symlink(c.join("Archives"), c.join("Archives")).unwrap();
+        assert!(remove_in(&c, &id, &roots).is_err());
+        assert_eq!(std::fs::read_to_string(off.join("Sceneryobjects/Shared/f.txt")).unwrap(), "1234");
+        assert_eq!(std::fs::read_to_string(c.join("Sceneryobjects/Shared/new.txt")).unwrap(), "other");
+        assert!(!c.join("Sceneryobjects/Shared/f.txt").exists() && off.join("maps/Hill Town/tile_0_0.map").exists());
+        assert!(load(&c).mods.iter().any(|m| m.id == id && !m.enabled));
+        std::fs::remove_dir_all(c).unwrap();
+        std::fs::remove_dir_all(omsi).unwrap();
+    }
+
+    #[test]
+    fn deleting_a_switched_off_map_leaves_a_folder_of_the_same_name_installed_meanwhile() {
+        let (c, omsi, id) = two_maps();
+        std::fs::remove_file(c.join("maps/Valley/parklist_p.txt")).unwrap();
+        let roots = [c.clone(), omsi.clone()];
+        set_enabled_in(&c, &id, false, &roots).unwrap();
+        let id = list(&c).into_iter().find(|m| m.name == "Hill Town").unwrap().id;
+        put(&c.join("Sceneryobjects/Shared/new.txt"), "other");
+        put(&c.join("maps/Hill Town/global.cfg"), "another map of the same name");
+        remove_in(&c, &id, &roots).unwrap();
+        assert!(!disabled_dir(&c, &id).exists());
+        assert_eq!(std::fs::read_to_string(c.join("Sceneryobjects/Shared/new.txt")).unwrap(), "other");
+        assert_eq!(std::fs::read_to_string(c.join("maps/Hill Town/global.cfg")).unwrap(), "another map of the same name");
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
     }
