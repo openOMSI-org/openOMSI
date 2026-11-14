@@ -133,14 +133,15 @@ impl Berths {
     /// its origin is this far before the stop point (m).
     pub fn ask(&mut self, key: BerthKey, id: u64, there: bool, dist: f32) {
         let step = self.step;
+        let d = (dist.max(0.0) * 10.0).clamp(0.0, 1e6) as i32;
         let b = self.berths.entry(key).or_default();
         match b.asks.iter_mut().find(|a| a.id == id) {
             Some(a) => {
                 a.seen = step;
                 a.there |= there;
-                a.dist = (dist * 10.0).clamp(-1e6, 1e6) as i32;
+                a.dist = d;
             }
-            None => b.asks.push(Ask { there, since: step, seen: step, dist: (dist * 10.0).clamp(-1e6, 1e6) as i32, id }),
+            None => b.asks.push(Ask { there, since: step, seen: step, dist: d, id }),
         }
     }
 

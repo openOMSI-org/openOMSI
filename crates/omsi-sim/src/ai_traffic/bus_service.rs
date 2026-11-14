@@ -864,7 +864,7 @@ impl BusService {
                 if self.behind {
                     // served from behind: it keeps its place in the queue for the berth, so
                     // that a bus that came after it does not pull up in front of it
-                    berths.ask(key, ctx.id, false, st.route_distance(ctx.net, stop.ri, stop.s));
+                    berths.ask(key, ctx.id, false, 0.0);
                 } else {
                     berths.ask(key, ctx.id, true, 0.0);
                     if berths.grant(key, ctx.id, ctx.berth.free) {
@@ -1084,8 +1084,7 @@ impl BusService {
         }
         // (right behind a bus at the berth it serves the stop together with it)
         let queued = berths.holder(key).is_some_and(|h| h != ctx.id) && d < SERVE_QUEUED_REACH;
-        let held_long = berths.held_long(key, ctx.time);
-        if self.rest_t >= SERVE_HERE_AFTER && (queued || held_long) && (0.0..SERVE_BEHIND_REACH).contains(&d) {
+        if self.rest_t >= SERVE_HERE_AFTER && (0.0..SERVE_BEHIND_REACH).contains(&d) && (queued || berths.held_long(key, ctx.time)) {
             if ctx.debug || omsi_cfg::flags::OMSI_DEBUG_STOPS.is_set() {
                 log::info!("t={:.1}: timetable bus {} serves its stop {} from {d:.0} m behind: {}", ctx.day_time, ctx.id, stop.id, if queued { "right behind the bus at the berth" } else { "the berth is taken for long" });
             }
