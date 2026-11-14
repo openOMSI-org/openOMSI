@@ -364,6 +364,7 @@ impl Shell {
             drop(game);
             lan_mods::clean_up();
             log::info!("session ended: back to the launcher");
+            crate::android_launcher::preview_rests(false);
             // (the launcher page over the window again)
             crate::android_launcher::session_ended();
             self.spare = window;
@@ -407,15 +408,19 @@ impl Shell {
                 return;
             }
         };
+        // (before the map is read, which takes the most memory of the whole start)
+        crate::android_launcher::preview_rests(true);
         let game = prepare(args, false).and_then(|p| match p {
             Some((args, server)) => make_app(args, server),
             None => Ok(None),
         });
         let mut app = match game {
             Ok(Some(app)) => app,
-            Ok(None) => return,
-            Err(e) => {
-                log::error!("the game could not start: {e:#}");
+            no_game => {
+                if let Err(e) = no_game {
+                    log::error!("the game could not start: {e:#}");
+                }
+                crate::android_launcher::preview_rests(false);
                 return;
             }
         };

@@ -512,6 +512,44 @@ mod tests {
             0.0
         }
     }
+    /// A .zug must carry the car folder's HOF into BusSetup: its destination
+    /// trigger uses that depot to build the [matl_freetex] filename.
+    #[test]
+    fn zug_choice_supplies_hof_for_destination_texture() {
+        let dir = std::env::temp_dir().join(format!("omsi_zug_hof_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("rail.hof"), "[name]\nRail depot\nstringcount_terminus\n1\n[addterminus]\n0\nDepot\nblank.bmp\n[addterminus]\n42\nAirport\nairport.bmp\n").unwrap();
+        let w = World { path: dir.clone(), ai: Default::default(), positions: Default::default() };
+        let mut v = crate::timetable_run::tests::script_test_vehicle(
+            "{trigger:ai_scheduled_settarget}\n(L.L.AI_target_index) 0 (M.V.GetTerminusString) (S.$.destination_texture)\n{end}\n",
+            "AI_target_index\nSetLineTo\n",
+            "destination_texture\n",
+        );
+        Arc::make_mut(&mut v.ty).def.path = dir.join("car.ovh");
+        let mut s = ScheduleSim::new(&dir, &w, &crate::SimClock::default());
+        s.departures.push(Departure {
+            time: 0.0, trip: 0, profile: 0, line: "R1".into(),
+            ai_group: "Rail".into(), tour: "1".into(), mask: 1023,
+            spawned: false, yesterday: false,
+        });
+        s.trains.insert("rail".into(), vec![vec![(v.ty.clone(), false)]]);
+        let choice = s.choose(0, &w).unwrap();
+        assert!(choice.train.is_some());
+        let hof = choice.hof.expect("a train needs its car's depot");
+        assert_eq!(hof.name, "Rail depot");
+        v.host.hof = Some(hof.clone());
+        set_ai_destination(&mut v, Some(&hof), "R1", "Airport", &[]);
+        assert_eq!(v.var("AI_target_index"), Some(1.0));
+        let slot = v.ty.program.str_var("destination_texture").unwrap() as usize;
+        assert_eq!(v.state.str_vars[slot], "airport.bmp");
+        // The cache is shared with plain AI pools; repeated choices keep the depot.
+        assert!(Arc::ptr_eq(&hof, s.choose(0, &w).unwrap().hof.as_ref().unwrap()));
+        std::fs::remove_file(dir.join("rail.hof")).unwrap();
+        s.pool_hofs.clear();
+        assert!(s.choose(0, &w).unwrap().hof.is_none(), "a missing HOF must still allow a train");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn full_tour_snapshot_preserves_profiles_passing_stops_and_service_day() {
         let w = World {

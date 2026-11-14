@@ -3,7 +3,7 @@
 //! writes each pixel's motion (`motion.wgsl`), and `temporal_present` runs the upscaler on
 //! wgpu's queue, then the HUD at full size.
 
-use super::{fallback_render_size, fidelityfx, streamline, FrameConstants, Inputs, TemporalQuality, TemporalUpscaler};
+use super::{fallback_render_size, fidelityfx, metalfx, streamline, FrameConstants, GenerationInputs, Inputs, TemporalQuality, TemporalUpscaler};
 use crate::passes::FrameCtx;
 use crate::pipelines::common::uniform_buffer;
 use crate::*;
@@ -22,7 +22,8 @@ pub(crate) const TEMPORAL_MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat
 /// bits of picture over the scene. 8 m is about 290 km/h at 10 fps.
 const MAX_FRAME_JUMP: f32 = 8.0;
 
-/// How much `upscale.wgsl` sharpens DLSS's result: DLSS no longer sharpens, FSR 3 does.
+/// How much `upscale.wgsl` sharpens DLSS's and MetalFX's result: DLSS no longer sharpens and
+/// MetalFX never did, FSR 3 does.
 const DLSS_SHARPEN: f32 = 0.25;
 
 pub(crate) struct TemporalPipelines {
@@ -63,6 +64,7 @@ struct TemporalPrev {
 pub(crate) enum Runtime {
     Dlss(streamline::Runtime),
     Fsr3(fidelityfx::Upscaler),
+    MetalFx(metalfx::Upscaler),
 }
 
 pub(crate) struct TemporalState {
@@ -78,6 +80,10 @@ pub(crate) struct TemporalState {
     prev_entries: u32,
     prev: Option<TemporalPrev>,
     frame: u64,
+    /// For frame generation: the window's picture before the HUD, two in turn (this frame's and
+    /// the last one's), and the frame the newest was drawn in.
+    hudless: Vec<(wgpu::Texture, wgpu::TextureView)>,
+    hudless_frame: Option<u64>,
 }
 
 pub(crate) struct TemporalFrame {
@@ -125,6 +131,23 @@ pub(crate) fn temporal_mip_bias(render_w: u32, full_w: u32) -> f32 {
     (render_w.max(1) as f32 / full_w.max(1) as f32).log2().clamp(-3.0, 0.0)
 }
 
+/// A picture of the window's size and format for frame generation: a plain UNORM resource (the
+/// sRGB-encoded numbers, as the upscaler's input), drawn through the renderer's sRGB view.
+fn hudless_target(device: &wgpu::Device, (width, height): (u32, u32), format: wgpu::TextureFormat) -> (wgpu::Texture, wgpu::TextureView) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("frame generation: the picture before the HUD"),
+        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: format.remove_srgb_suffix(),
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[format],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor { format: Some(format), ..Default::default() });
+    (texture, view)
+}
+
 impl Renderer {
     /// Whether a window of this size can be upscaled at all. A minimised one is 1x1: asked for
     /// that, NGX refuses (0xbad00005) and DLSS would be gone for the session. Its history does
@@ -150,6 +173,7 @@ impl Renderer {
         match &mut d.runtime {
             Runtime::Dlss(r) => r.wait(),
             Runtime::Fsr3(r) => r.wait(),
+            Runtime::MetalFx(r) => r.wait(),
         }
         Some(d.runtime)
     }
@@ -167,9 +191,10 @@ impl Renderer {
         }
         let Some(asked) = self.options.temporal.filter(|_| self.temporal_pipes.is_some()) else { return false };
         let loaded = match (asked.upscaler, self.temporal_kept.take()) {
-            (TemporalUpscaler::Dlss, Some(r @ Runtime::Dlss(_))) | (TemporalUpscaler::Fsr3, Some(r @ Runtime::Fsr3(_))) => Ok(r),
+            (TemporalUpscaler::Dlss, Some(r @ Runtime::Dlss(_))) | (TemporalUpscaler::Fsr3, Some(r @ Runtime::Fsr3(_))) | (TemporalUpscaler::MetalFx, Some(r @ Runtime::MetalFx(_))) => Ok(r),
             (TemporalUpscaler::Dlss, _) => streamline::Runtime::load(&self.device).map(Runtime::Dlss),
             (TemporalUpscaler::Fsr3, _) => fidelityfx::Upscaler::load(&self.device).map(Runtime::Fsr3),
+            (TemporalUpscaler::MetalFx, _) => metalfx::Upscaler::load(&self.device).map(Runtime::MetalFx),
         };
         match loaded {
             Ok(runtime) => {
@@ -184,6 +209,8 @@ impl Renderer {
                     prev_entries: 0,
                     prev: None,
                     frame: 0,
+                    hudless: Vec::new(),
+                    hudless_frame: None,
                 });
                 log::info!("{} upscaling ({}) running on {}", asked.upscaler.as_str(), asked.quality.as_str(), self.adapter_name);
                 true
@@ -215,6 +242,7 @@ impl Renderer {
         let quality = self.temporal_quality();
         match self.temporal.as_mut().map(|t| &mut t.runtime) {
             Some(Runtime::Dlss(r)) => r.render_size(quality, full),
+            Some(Runtime::MetalFx(r)) => r.render_size(quality, full),
             _ => fallback_render_size(quality, full),
         }
     }
@@ -399,6 +427,7 @@ impl Renderer {
         let result = match &mut d.runtime {
             Runtime::Dlss(r) => r.evaluate(&self.queue, quality, &inputs, &constants),
             Runtime::Fsr3(r) => r.upscale(&self.queue, &inputs, &constants),
+            Runtime::MetalFx(r) => r.upscale(&self.queue, &inputs, &constants),
         };
         let upscaled = clock.elapsed();
         let ok = match result {
@@ -415,7 +444,7 @@ impl Renderer {
         d.prev = Some(TemporalPrev { camera: *camera, aspect: frame.aspect, origin: ro, render, output: full });
         // (`upscale.wgsl`'s third mode: the upscalers return the sRGB-encoded numbers they were
         // given, and writing them to the sRGB window unconverted would encode them twice)
-        let sharpen = if matches!(d.runtime, Runtime::Dlss(_)) { DLSS_SHARPEN } else { 0.0 };
+        let sharpen = if matches!(d.runtime, Runtime::Dlss(_) | Runtime::MetalFx(_)) { DLSS_SHARPEN } else { 0.0 };
         self.queue.write_buffer(&d.blit_buf, 0, bytemuck::cast_slice(&[full.0 as f32, full.1 as f32, sharpen, 2.0]));
         let bg = if ok { &t.output_bg } else { &t.color_bg };
         if !ok {
@@ -423,6 +452,37 @@ impl Renderer {
             self.queue.write_buffer(&self.scale.upscale_buf, 0, bytemuck::cast_slice(&[render.0 as f32, render.1 as f32, 0.0, 0.0]));
         }
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("temporal hud") });
+        // Frame generation (MetalFX's, which takes the scaler's depth and motion): the same
+        // picture as the window's below the HUD, to the bit - it tells the interface apart
+        // by what differs between the two.
+        let generation = self.frame_generation.clone().filter(|g| ok && g.working() && matches!(d.runtime, Runtime::MetalFx(_)));
+        let hudless = generation.as_ref().map(|_| {
+            if d.hudless.first().is_none_or(|(h, _)| (h.width(), h.height()) != full) {
+                d.hudless = (0..2).map(|_| hudless_target(&self.device, full, self.format)).collect();
+                d.hudless_frame = None;
+            }
+            let last = d.hudless_frame.filter(|at| at + 1 == d.frame).map(|_| d.hudless[((d.frame + 1) % 2) as usize].0.clone());
+            d.hudless_frame = Some(d.frame);
+            (d.hudless[(d.frame % 2) as usize].clone(), last)
+        });
+        if let Some(((_, view), _)) = hudless.as_ref() {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("frame generation hudless"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.scale.upscale_pipeline);
+            pass.set_bind_group(0, bg, &[]);
+            pass.draw(0..3, 0..1);
+        }
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("temporal hud"),
@@ -451,6 +511,28 @@ impl Renderer {
             }
         }
         self.queue.submit(Some(encoder.finish()));
+        if let (Some(g), Some(((picture, _), last_picture))) = (generation, hudless) {
+            let scaler = match &d.runtime {
+                Runtime::MetalFx(r) => r.scaler(),
+                _ => None,
+            };
+            g.prepare(GenerationInputs {
+                picture,
+                last_picture,
+                depth: ao.depth_tex.clone(),
+                motion: t.motion.clone(),
+                render_size: render,
+                output_size: full,
+                jitter: frame.jitter,
+                near: camera.near,
+                far: camera.depth_far(),
+                fov,
+                aspect: frame.aspect,
+                seconds: frame.dt,
+                cut: frame.reset,
+                scaler,
+            });
+        }
         if self.profiling {
             let mut stats = self.stats.borrow_mut();
             *stats.entry("upscale").or_default() += upscaled.as_secs_f64();
