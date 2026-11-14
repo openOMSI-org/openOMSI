@@ -195,6 +195,11 @@ impl RailDrive {
     /// vehicle's class, kept within what its pantograph reaches (a wire it cannot touch would
     /// strand it on a map that draws none), staggered across the track as a real wire is so
     /// that the strip wears evenly, hard where the track forks or crosses, rougher in the wet.
+    /// Metres travelled along the track since the vehicle was put on it (forward positive).
+    pub(crate) fn travelled(&self) -> f64 {
+        self.u
+    }
+
     pub(crate) fn catenary(&self, net: &Network, v: &omsi_sim::VehicleInstance) -> Option<omsi_sim::vehicle::Catenary> {
         let g = v.pantograph()?;
         let shape = g.shape()?;

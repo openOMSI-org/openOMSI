@@ -10,6 +10,8 @@ use super::{def, multi, nums, o, p, rec};
 use crate::api::{ApiError, ApiFn, Ctx, Value};
 
 const NEW: &str = crate::api::VERSION;
+/// The track position of a rail vehicle (#3969).
+const TRACK: &str = "0.3.55";
 
 fn has(c: &mut Ctx<'_>) -> bool {
     c.io().has_vehicle()
@@ -134,6 +136,9 @@ pub static FNS: &[ApiFn] = &[
     def!("bus.dirt", "vehicle", [], "number or nil", "How dirty the bus is, 0 (clean) to 1.", NEW, None, false, |c, a| c.io().bus_dirt().map(Value::from)),
     def!("bus.damage", "vehicle", [], "table or nil", "`{crashes, last_impact_kj, repair_minutes}`: the bus's crashes, the energy of the last one and how long a repair would take (`nil`: nothing to repair).", NEW, None, false, |c, a| c.io().bus_damage().map(|(n, j, m)| rec(vec![("crashes", n.into()), ("last_impact_kj", ((j / 1000.0) as f64).into()), ("repair_minutes", m.map(|m| m as f64).into())]))),
     def!("bus.controls", "vehicle", [], "throttle, brake, clutch, steering", "What the bus drives with now: the pedals (0 to 1) and the steering (-1 left to 1 right), from the keys, the mouse or a controller.", NEW, None, true, |c, a| nums(c.io().bus_controls().map(|v| v.map(|x| x as f64)))),
+    def!("bus.track", "vehicle", [], "table or nil", "Where the player's rail vehicle (tram, metro, train) is on its track, as distances along it rather than x and y: `{lane, s, lane_length, forward, travelled}` - the track (a rail lane of the map's paths, numbered as `map.lane` gives its `index`), the metres from its start and its length, whether the vehicle faces the track's direction, and the metres it has come along the tracks since it was put on them. `nil` for a road vehicle. A plugin can work out block sections, distances to a signal or a stop, or a train protection system from it.", TRACK, None, false, |c, a| {
+        c.io().bus_track().map(|t| rec(vec![("lane", Value::Int(t.lane as i64)), ("s", Value::from(t.s)), ("lane_length", Value::from(t.lane_length)), ("forward", t.forward.into()), ("travelled", t.travelled.into())]))
+    }),
     def!("bus.steering_angle", "vehicle", [], "angle, max", "The front wheels' angle and the most they turn, degrees (right positive).", NEW, None, true, |c, a| nums(c.io().bus_steer().map(|(s, m)| [s as f64, m as f64]))),
     def!("bus.wheels", "vehicle", [], "list of tables", "Each wheel: `{axle, side, rpm, radius, suspension, driven}` (`side` 0 left, 1 right; `suspension` the spring's travel).", NEW, None, false, |c, a| {
         Value::List(c.io().bus_wheels().into_iter().map(|w| rec(vec![("axle", w.axle.into()), ("side", w.side.into()), ("rpm", Value::from(w.rpm)), ("radius", Value::from(w.radius)), ("suspension", Value::from(w.suspension)), ("driven", w.driven.into())])).collect())
