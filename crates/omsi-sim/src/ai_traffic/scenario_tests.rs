@@ -146,9 +146,9 @@ fn the_exit_counts_a_crawling_queue_where_it_will_stop() {
     let way = [(10, -20.0), (20, 5.0), (21, 15.0)];
     // the last car of the queue 4 m beyond the exit's start, crawling at 1.8 m/s (it will
     // be 0.8 m further on when it has stopped): no room for 7 m
-    assert!(queued_exit_vehicle(&way, (20, 5.0), 7.0, [(20, 4.0, 1.8)]).is_some());
+    assert!(queued_exit_vehicle(&way, (20, 5.0), 7.0, [(20, 4.0, 1.8, 0.0, 0.9, 3.5)]).is_some());
     // driving off at 8 m/s: room
-    assert!(queued_exit_vehicle(&way, (20, 5.0), 7.0, [(20, 4.0, 8.0)]).is_none());
+    assert!(queued_exit_vehicle(&way, (20, 5.0), 7.0, [(20, 4.0, 8.0, 0.0, 0.9, 3.5)]).is_none());
 }
 
 /// A main road west to east (lane 0 in, the junction's path 1, lane 2 out) and a side road
