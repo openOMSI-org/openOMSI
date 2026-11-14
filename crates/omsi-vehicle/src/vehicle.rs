@@ -167,6 +167,8 @@ pub struct Vehicle {
     pub manufacturer: String,
     pub type_name: String,
     pub default_paint: String,
+    /// openOMSI multiplayer extension; absent keeps the legacy sharing default.
+    pub lan_file_transfer: Option<bool>,
     /// The file has a `[friendlyname]`: OMSI offers exactly these in its vehicle list.
     /// Rear sections of articulated buses, trailers and most AI-only variants have none.
     pub has_friendly_name: bool,
@@ -363,6 +365,10 @@ impl Vehicle {
         Ok(Self::parse(&f))
     }
 
+    pub fn allows_file_transfer(&self) -> bool {
+        self.lan_file_transfer.unwrap_or(true)
+    }
+
     pub fn dir(&self) -> &Path {
         self.path.parent().unwrap_or(Path::new(""))
     }
@@ -457,6 +463,18 @@ impl Vehicle {
                     v.manufacturer = r.str().to_string();
                     v.type_name = r.str().to_string();
                     v.default_paint = r.str().to_string();
+                }
+                "openomsi_multiplayer" => {
+                    // Absence of the option preserves normal automatic transfers.
+                    // A present but malformed option fails closed.
+                    for line in r.rest_of_block() {
+                        let line = line.split("//").next().unwrap_or("").trim();
+                        let (key, value) = line.split_once(char::is_whitespace).unwrap_or((line, ""));
+                        if key.eq_ignore_ascii_case("allow_file_transfer") {
+                            let allowed = value.trim() == "1";
+                            v.lan_file_transfer = Some(v.lan_file_transfer.unwrap_or(true) && allowed);
+                        }
+                    }
                 }
                 "friendlyname_inv" => v.friendly_name_inv = (0..3).map(|_| r.str().to_string()).collect(),
                 "description" => v.description = r.until("[end]").join("\n"),
@@ -805,6 +823,30 @@ impl Vehicle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn multiplayer_transfer_policy_is_optional_and_keeps_next_block() {
+        let plain = Vehicle::parse(&CfgFile::from_str("plain.bus", "[friendlyname]\nA\nB\nC\n"));
+        assert!(plain.allows_file_transfer());
+        assert_eq!(plain.lan_file_transfer, None);
+        let empty = Vehicle::parse(&CfgFile::from_str("empty.bus", "[openomsi_multiplayer]\n[mass]\n10\n"));
+        assert!(empty.allows_file_transfer(), "an unrelated or empty policy block must not disable transfers");
+        assert_eq!(empty.lan_file_transfer, None);
+        let private = Vehicle::parse(&CfgFile::from_str("private.bus", "[openomsi_multiplayer]\nallow_file_transfer 0\n[mass]\n10\n"));
+        assert!(!private.allows_file_transfer());
+        assert_eq!(private.mass, 10.0);
+        assert!(Vehicle::parse(&CfgFile::from_str("public.bus", "[openomsi_multiplayer]\nallow_file_transfer 1\n")).allows_file_transfer());
+        assert!(!Vehicle::parse(&CfgFile::from_str("bad.bus", "[openomsi_multiplayer]\nallow_file_transfer typo\n")).allows_file_transfer());
+        // Cars and other traffic vehicles use .ovh, not just buses (.bus).
+        for value in ["", "yes", "1 0", "0\nallow_file_transfer 1"] {
+            let config = format!("[openomsi_multiplayer]\nallow_file_transfer {value}\n");
+            assert!(!Vehicle::parse(&CfgFile::from_str("unsafe.bus", &config)).allows_file_transfer());
+        }
+        let private_car = Vehicle::parse(&CfgFile::from_str("car.ovh", "[openomsi_multiplayer]\nallow_file_transfer 0\n"));
+        assert!(!private_car.allows_file_transfer());
+        let old_car = Vehicle::parse(&CfgFile::from_str("oldcar.ovh", "[type]\n0\n"));
+        assert!(old_car.allows_file_transfer(), "unmarked legacy cars remain shareable");
+    }
 
     #[test]
     fn suspension_blocks_pick_the_strut_of_each_axle() {

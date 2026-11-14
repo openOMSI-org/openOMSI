@@ -38,7 +38,7 @@ nothing is drawn. `server.cfg` is written with a comment for every key on the fi
 | `vehicles` | the buses players may drive, separated by `;` (empty: every bus on the server) |
 | `share_positions` | `GET /players` on the web port (below) |
 | `accept_uploads`, `uploads_keep_days` | players' buses (below) |
-| `share_maps` | a player who joins without the server's map gets it from the server (the map and everything it uses, gigabytes for a big map); off (the written default), players install it themselves and are told which one is missing |
+| `share_maps` | Set to `1` to let players download the map and its eligible dependencies. Defaults to off in new configs and in old configs without this key. Players can use their locally installed map. |
 | `voice_*` | voice chat (below) |
 | `public_server`, `public_list_url` | list the server in the public server list ([below](#public-server-list)); the list service's address (empty: openOMSI's own) |
 | `owner_bans`, `require_hardware_id` | machine bans ([below](#machine-bans)): the file of the owner's list shared by all your sessions (empty: `~/.openomsi/bans-owner.json`), and turning away players whose game sends no machine identifier |
@@ -214,6 +214,42 @@ them on to every other player, so nobody sees a stand-in.
   with a `vehicles` list only those buses are taken.
 * `accept_uploads = 0` switches it off. A player's game hosting a session (`--lan-host`) takes
   the joining players' buses the same way, and keeps its own bus in its store for them.
+
+### Private vehicles and dependencies
+
+Add this block to a private vehicle's `.bus` or `.ovh` file:
+
+```ini
+[openomsi_multiplayer]
+allow_file_transfer 0
+```
+
+Use `1` to permit automatic transfer. A missing setting preserves legacy sharing unless
+the machine runs with `OMSI_LAN_REQUIRE_TRANSFER_OPT_IN=1`. Invalid values deny transfer.
+Keep private shared resources and repaints in a directory with a `.openomsi-no-share`
+marker. The policy applies to dependencies such as articulated sections as well as the
+primary descriptor. Locally installed vehicles remain driveable.
+
+Use `OMSI_NO_LAN_VEHICLE_TRANSFER=1` to stop automatic vehicle transfers on this machine.
+Player-hosted LAN leaves map sharing off. For a dedicated server, `share_maps = 1` may
+include eligible vehicles referenced by the map. Leave it off when the rights to share
+map dependencies are unclear.
+
+Updated peers negotiate an upload preflight. The host checks the descriptors against
+their manifest hashes and permissions before asking for dependencies. In legacy mode,
+an updated host requests only descriptors until it can verify them. A fresh offer
+can then request the dependencies. An older client that attempts the upload only once
+may keep using its local files until it offers the vehicle again. Strict mode requires
+preflight on both ends and continues to allow local driving. A directory marked
+private on the host also revokes sharing of the corresponding cached vehicle files
+after the sharing policy refreshes (normally within five seconds). Set markers
+before starting a session if the content is already private.
+Directory markers are checked in ordinary folders, symlink targets and mounted ZIPs.
+Outside shared files need their own marker because a vehicle descriptor does not
+establish the redistribution rights of unrelated content.
+
+The transport and file store remain encrypted. A recipient of authorized files can still
+extract them with a modified client. These settings cannot recall previously delivered files.
 
 ## Optional RP speed governor
 

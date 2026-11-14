@@ -50,6 +50,7 @@ mod quarantine;
 mod server_fleet;
 pub use server_fleet::{fingerprint as fleet_fingerprint, fingerprint_loaded as fleet_fingerprint_loaded};
 mod store;
+mod transfer_policy;
 pub mod upload;
 pub mod vehicles;
 
@@ -179,12 +180,17 @@ pub struct ModSource {
 /// from (a folder or a mounted archive).
 fn collect(args: &ModSource) -> (Manifest, Vec<PathBuf>) {
     let t0 = Instant::now();
-    let (list, _) = session_files(&args.map, args.bus.as_deref(), args.weather.as_deref(), Some(&args.root));
+    let (mut list, _) = session_files(&args.map, args.bus.as_deref(), args.weather.as_deref(), Some(&args.root));
+    list.retain(|(_, path)| server_fleet::trusted_source(&args.root, path));
+    transfer_policy::filter_session_files(&mut list);
     // (streamed by two private workers, with hashes remembered by size and time: thousands of
     // files - put on a server through a slow shared folder - is read once, not at each start)
     let entries = upload::hashed(&list);
     let by_rel: HashMap<&str, &PathBuf> = list.iter().map(|(r, p)| (r.as_str(), p)).collect();
     let sources: Vec<PathBuf> = entries.iter().filter_map(|e| by_rel.get(e.path.as_str()).map(|p| (*p).clone())).collect();
+    let bus = args.bus.as_deref().filter(|bus| {
+        entries.iter().any(|entry| entry.path.eq_ignore_ascii_case(&bus.replace('\\', "/")))
+    }).unwrap_or_default().replace('\\', "/");
     let total: u64 = entries.iter().map(|e| e.size).sum();
     log::info!(
         "LAN mods: {} files ({:.1} MB) of this session are not stock content and go to joining players (listed in {:.1} s)",
@@ -193,7 +199,7 @@ fn collect(args: &ModSource) -> (Manifest, Vec<PathBuf>) {
         t0.elapsed().as_secs_f64()
     );
     (
-        Manifest { map: args.map.replace('\\', "/"), bus: args.bus.clone().unwrap_or_default().replace('\\', "/"), entries },
+        Manifest { map: args.map.replace('\\', "/"), bus, entries },
         sources,
     )
 }
@@ -445,9 +451,9 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
     (list, missing)
 }
 
-/// Whether the map goes to players who join without it (`share_maps` of a server; a game
-/// that hosts a session shares it).
-static SHARE_MAPS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// Whether the host may send map files to clients. Off by default for both
+/// dedicated and player-hosted LAN. Dedicated hosts opt in via `share_maps = 1`.
+static SHARE_MAPS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub fn share_maps(on: bool) {
     SHARE_MAPS.store(on, std::sync::atomic::Ordering::Relaxed);
@@ -483,7 +489,57 @@ fn read_line_within(input: &mut impl BufRead, line: &mut String, max: u64) -> st
     Ok(n)
 }
 
-fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>, stopped: &std::sync::atomic::AtomicBool, fleet_cache: &server_fleet::Cache, root: &Path) -> std::io::Result<()> {
+type ReadyManifest = Mutex<Option<Arc<ServedManifest>>>;
+
+#[derive(Debug)]
+struct ServedManifest(Manifest, Vec<PathBuf>, Mutex<ManifestPolicy>);
+
+#[derive(Debug)]
+struct ManifestPolicy {
+    checked: Instant,
+    generation: u64,
+    blocked: std::collections::HashSet<String>,
+    fleet: bool,
+    allowed: bool,
+}
+
+impl ServedManifest {
+    fn new((manifest, sources): (Manifest, Vec<PathBuf>), fleet: bool) -> Self {
+        let policy = ManifestPolicy::check(&manifest, &sources, fleet);
+        Self(manifest, sources, Mutex::new(policy))
+    }
+
+    fn allows(&self, entry: &Entry) -> bool {
+        let mut policy = self.2.lock().unwrap_or_else(|e| e.into_inner());
+        if policy.generation != omsi_cfg::content_generation() || policy.checked.elapsed() >= Duration::from_secs(5) {
+            *policy = ManifestPolicy::check(&self.0, &self.1, policy.fleet);
+        }
+        policy.allowed && transfer_policy::vehicle_folder(&entry.path)
+            .is_none_or(|folder| transfer_policy::transfers_enabled() && !policy.blocked.contains(&folder))
+    }
+}
+
+impl ManifestPolicy {
+    fn check(manifest: &Manifest, sources: &[PathBuf], fleet: bool) -> Self {
+        let generation = omsi_cfg::content_generation();
+        let mut blocked = std::collections::HashSet::new();
+        let mut allowed = manifest.entries.len() == sources.len();
+        if fleet {
+            allowed &= server_fleet::package_allowed(manifest, sources);
+        } else {
+            for (entry, source) in manifest.entries.iter().zip(sources) {
+                if transfer_policy::is_descriptor(&entry.path) && !transfer_policy::allows_file(source) {
+                    if let Some(folder) = transfer_policy::vehicle_folder(&entry.path) {
+                        blocked.insert(folder);
+                    }
+                }
+            }
+        }
+        Self { checked: Instant::now(), generation, blocked, fleet, allowed }
+    }
+}
+
+fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &ReadyManifest, stopped: &std::sync::atomic::AtomicBool, fleet_cache: &server_fleet::Cache, root: &Path) -> std::io::Result<()> {
     let session = key.session();
     stream.set_read_timeout(Some(Duration::from_secs(120)))?;
     stream.set_nodelay(true).ok();
@@ -544,7 +600,7 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                     continue;
                 };
                 let key = server_fleet::cache_key(false, &bus, &paint);
-                let selected = server_fleet::cached(fleet_cache, key, || server_fleet::package(root, &data, &bus, &paint));
+                let selected = server_fleet::cached(fleet_cache, key, || server_fleet::package(root, (&data.0, &data.1), &bus, &paint));
                 match selected {
                     Ok(package) => {
                         active = package;
@@ -588,11 +644,11 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                 // a plain file goes as it is read (never all of it in memory); one in a
                 // mounted archive is read whole (archives hold small files)
                 let src = &sources[k];
-                // Re-check before every GET: files may have been replaced by a
-                // symlink since the fleet manifest was built. Never serve files
-                // that resolve outside the declared content roots.
-                if !server_fleet::trusted_source(root, src) {
-                    writeln!(out, "ERR file outside trusted content roots")?;
+                let entry = &active.0.entries[k];
+                if !active.allows(entry) || !server_fleet::trusted_source(root, src) || transfer_policy::marked_private(src)
+                    || (transfer_policy::is_descriptor(&entry.path) && !transfer_policy::allows_file(src))
+                {
+                    writeln!(out, "ERR file is not shareable")?;
                     continue;
                 }
                 if omsi_cfg::vfs::archive_of(src).is_none() && !omsi_cfg::vfs::is_sealed(src) {
@@ -1236,6 +1292,26 @@ mod tests {
         }
     }
 
+    #[test]
+    fn map_policy_refresh_blocks_the_whole_folder_of_a_newly_private_vehicle() {
+        let dir = std::env::temp_dir().join(format!("openomsi-map-policy-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let descriptor = dir.join("bus.bus");
+        std::fs::write(&descriptor, "[openomsi_multiplayer]\nallow_file_transfer 1\n").unwrap();
+        let entries = ["Vehicles/Mix/bus.bus", "Vehicles/Mix/paint.cti", "maps/M/global.cfg"]
+            .map(|path| Entry { path: path.into(), size: 0, sha256: String::new() });
+        let package = ServedManifest::new(
+            (Manifest { entries: entries.to_vec(), ..Default::default() }, vec![descriptor.clone(), dir.join("paint.cti"), dir.join("global.cfg")]),
+            false,
+        );
+        assert!(package.allows(&entries[1]));
+        std::fs::write(&descriptor, "[openomsi_multiplayer]\nallow_file_transfer 0\n").unwrap();
+        package.2.lock().unwrap().checked -= Duration::from_secs(5);
+        assert!(!package.allows(&entries[1]));
+        assert!(package.allows(&entries[2]));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     /// A host serving `files` (relative path, contents) on a local port: its address.
     fn serve_files(files: &[(&str, Vec<u8>)]) -> (SocketAddr, PathBuf, u64) {
         let key = Arc::new(omsi_net::hostkey::HostKey::generate().unwrap());
@@ -1250,7 +1326,7 @@ mod tests {
             entries.push(Entry { path: rel.to_string(), size: data.len() as u64, sha256: sha256_of(data) });
             sources.push(p);
         }
-        let ready = Arc::new(Mutex::new(Some(Arc::new((Manifest { map: "maps/M/global.cfg".into(), bus: String::new(), entries }, sources)))));
+        let ready = Arc::new(Mutex::new(Some(Arc::new(ServedManifest::new((Manifest { map: "maps/M/global.cfg".into(), bus: String::new(), entries }, sources), false)))));
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let addr = listener.local_addr().unwrap();
         std::thread::spawn(move || {

@@ -26,6 +26,9 @@ struct Vehicles {
     manifests: Vec<(String, VehicleManifest)>,
     /// The size of each kept file by its SHA-256 (what a blob is asked for by).
     sizes: HashMap<String, u64>,
+    shareable: HashMap<String, u64>,
+    shareable_manifests: HashSet<String>,
+    policy_generation: u64,
     mounted: HashSet<String>,
     /// Files refused for what they are (`quarantine`), by their content and kind
     /// (`held_key`): why. A bus is kept and drawn without them (`withhold`).

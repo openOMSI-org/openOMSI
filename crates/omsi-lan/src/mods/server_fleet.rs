@@ -3,7 +3,7 @@
 use super::*;
 use crate::server_cfg::SERVER_VEHICLES;
 
-type Package = Arc<(Manifest, Vec<PathBuf>)>;
+type Package = Arc<ServedManifest>;
 
 /// A fleet bus's complete list (every paint) as the fleet check made it at the start, with
 /// its paints' names and each source's size and time: a player asking for the bus
@@ -66,7 +66,22 @@ pub(super) fn cached(cache: &Cache, key: String, build: impl FnOnce() -> Result<
             entry
         }
     };
-    entry.get_or_init(|| build().map(Arc::new)).clone()
+    let package = entry.get_or_init(|| build().map(|package| Arc::new(ServedManifest::new(package, true)))).clone()?;
+    if package.0.entries.len() != package.1.len() {
+        return Err("cached vehicle has mismatched sources".into());
+    }
+    if !package_allowed(&package.0, &package.1) {
+        return Err("cached vehicle now forbids file transfers".into());
+    }
+    Ok(package)
+}
+
+/// Only a package's vehicle descriptors and source markers decide its eligibility.
+pub(super) fn package_allowed(manifest: &Manifest, sources: &[PathBuf]) -> bool {
+    transfer_policy::transfers_enabled() && manifest.entries.iter().zip(sources).all(|(entry, path)| {
+        !transfer_policy::marked_private(path)
+            && (!transfer_policy::is_descriptor(&entry.path) || transfer_policy::allows_file(path))
+    })
 }
 
 pub(super) fn cache_key(exact: bool, bus: &str, paint: &str) -> String {
@@ -90,6 +105,11 @@ pub(super) fn trusted_source(root: &Path, source: &Path) -> bool {
     };
     // Physical files, including symlinks, must resolve inside their declared
     // content root. Do not let an existing symlink use the virtual-file bypass.
+    if let Some(archive) = omsi_cfg::vfs::archive_of(source) {
+        let boundary = if archive == *declared { archive.parent().unwrap_or(declared) } else { declared };
+        return archive.canonicalize().ok().zip(boundary.canonicalize().ok())
+            .is_some_and(|(file, base)| file.is_file() && file.starts_with(base));
+    }
     if std::fs::symlink_metadata(source).is_ok() {
         let (Ok(file), Ok(base)) = (source.canonicalize(), declared.canonicalize()) else {
             return false;
@@ -100,7 +120,7 @@ pub(super) fn trusted_source(root: &Path, source: &Path) -> bool {
 }
 
 /// The selected bus is offered only when its canonical path is explicitly configured.
-pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, paint: &str) -> Result<(Manifest, Vec<PathBuf>), String> {
+pub(super) fn package(root: &Path, base: (&Manifest, &[PathBuf]), bus: &str, paint: &str) -> Result<(Manifest, Vec<PathBuf>), String> {
     let bus = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
     let Some(allowed) = SERVER_VEHICLES.get().filter(|v| !v.is_empty()) else {
         return Err("fleet not configured".into());
@@ -112,6 +132,9 @@ pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, p
     let path = omsi_cfg::find_in_roots(&bus).map(|(_, p)| p).unwrap_or_else(|| root.join(&bus));
     if !trusted_source(root, &path) {
         return Err("the selected bus resolves outside the trusted content roots".into());
+    }
+    if !transfer_policy::allows_file(&path) {
+        return Err("this vehicle forbids multiplayer file transfers".into());
     }
     // (a list not kept yet - asked for before the fleet check got to the bus, or its files
     // changed - is made by one request at a time: players asking together wait for it)
@@ -133,7 +156,7 @@ pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, p
 }
 
 /// `package` with the bus's kept list: the paint asked for checked, the map's files beside.
-fn finish_package(base: &(Manifest, Vec<PathBuf>), bus: &str, paint: &str, model: Arc<Model>) -> Result<(Manifest, Vec<PathBuf>), String> {
+fn finish_package(base: (&Manifest, &[PathBuf]), bus: &str, paint: &str, model: Arc<Model>) -> Result<(Manifest, Vec<PathBuf>), String> {
     let bus = bus.to_string();
     if !paint.is_empty() && !model.paints.iter().any(|p| p.eq_ignore_ascii_case(paint)) {
         return Err("the selected repaint is not offered by the server".into());
@@ -195,7 +218,11 @@ fn gathered(root: &Path, ty: &omsi_sim::VehicleType) -> Result<Vec<(String, Path
     if all.iter().any(|path| !trusted_source(root, path)) {
         return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
     }
-    Ok(upload::listed(root, all.into_iter().collect()))
+    let files = upload::listed(root, all.into_iter().collect());
+    if !transfer_policy::allows_dependencies(&files) {
+        return Err("the vehicle package includes a private coupled vehicle".into());
+    }
+    Ok(files)
 }
 
 fn model_manifest(root: &Path, bus: &str, ty: &omsi_sim::VehicleType) -> Result<(identity::VehicleManifest, Vec<PathBuf>), String> {
@@ -251,6 +278,9 @@ pub(super) fn exact(root: &Path, bus: &str, paint: &str) -> Result<(Manifest, Ve
     if !trusted_source(root, &path) {
         return Err("the selected bus resolves outside the trusted content roots".into());
     }
+    if !transfer_policy::allows_file(&path) {
+        return Err("this vehicle forbids multiplayer file transfers".into());
+    }
     let ty = omsi_sim::VehicleType::load(root, &path).map_err(|e| format!("{bus}: {e}"))?;
     let scheme = if paint.is_empty() { None } else {
         Some(ty.paint_schemes.iter().take(128).position(|p| p.name.eq_ignore_ascii_case(paint))
@@ -261,6 +291,9 @@ pub(super) fn exact(root: &Path, bus: &str, paint: &str) -> Result<(Manifest, Ve
         return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
     }
     let files = upload::listed(root, dependencies);
+    if !transfer_policy::allows_dependencies(&files) {
+        return Err("the vehicle package includes a private coupled vehicle".into());
+    }
     let entries = upload::hashed(&files);
     if entries.len() != files.len() {
         return Err(format!("{} of {} selected vehicle files could not be verified", files.len() - entries.len(), files.len()));
@@ -312,6 +345,24 @@ mod tests {
         assert_eq!(first, second);
         assert!(cached(&cache, first, || Err("not offered".into())).is_err());
         assert_eq!(cached(&cache, second, || panic!("a failed request must be cached")).unwrap_err(), "not offered");
+    }
+
+    #[test]
+    fn cached_fleet_does_not_serve_a_bus_after_a_no_share_marker_is_added() {
+        let root = std::env::temp_dir().join(format!("openomsi-cache-policy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("Vehicles/CityBus");
+        std::fs::create_dir_all(&dir).unwrap();
+        let bus = dir.join("main.bus");
+        std::fs::write(&bus, "[friendlyname]\nMaker\nCityBus\nStandard\n").unwrap();
+        let cache = Cache::default();
+        let manifest = Manifest { bus: "Vehicles/CityBus/main.bus".into(),
+            entries: vec![Entry { path: "Vehicles/CityBus/main.bus".into(), size: 4, sha256: "ab".repeat(32) }],
+            ..Default::default() };
+        assert!(cached(&cache, "bus".into(), || Ok((manifest, vec![bus.clone()]))).is_ok());
+        std::fs::write(dir.join(".openomsi-no-share"), "").unwrap();
+        assert!(cached(&cache, "bus".into(), || panic!("cache must be reused")).is_err());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

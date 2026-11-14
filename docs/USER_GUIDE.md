@@ -1087,8 +1087,13 @@ for every destination (some mobile networks) cannot be punched through; a dedica
 or a VPN works there. Whichever way, the host's firewall must let the game receive UDP on
 its port (27015 by default; Windows counts a Hamachi network as public). A busy host (loading a heavy part of the map) still answers, and the
 joining game waits up to 8 s for it before it loads anything. The joining game plays on
-the host's map whatever map was chosen before, when that map is installed or comes with
-the host's mods (below); one that is not is said in the HUD.
+the host's map when it is installed locally. Map downloads are off for player-hosted LAN
+and require `share_maps = 1` on a dedicated server. The HUD reports a missing map.
+
+Use **Esc → Vehicle options → Livery** to change the driven vehicle's paint in place.
+Other players use the matching locally installed paint or receive eligible files through
+multiplayer. See [Private vehicles and dependencies](SERVER.md#private-vehicles-and-dependencies)
+for the vehicle author and server controls.
 
 Everybody sends the state of their own bus up to twenty times a second (five while nothing
 changes, about 60 bytes: a bit-packed datagram with the pose, pedals, lights, indicators,

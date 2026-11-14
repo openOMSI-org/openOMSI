@@ -96,6 +96,10 @@ impl Sender {
 
     pub(in crate::mods) fn begin(&'static self, root: &Path, bus: &str, paint: &str, own: impl FnOnce() -> Vec<PathBuf> + Send + 'static) {
         let Some((host, session)) = self.host() else { return };
+        if !crate::mods::transfer_policy::allows_bus(root, bus) {
+            log::info!("LAN upload: {bus} is private; its files are not sent");
+            return;
+        }
         if bus.is_empty() || self.refused.load(Ordering::Relaxed) || self.sending.lock().unwrap_or_else(|e| e.into_inner()).as_ref().is_some_and(|s| s.busy) {
             return;
         }
@@ -181,6 +185,10 @@ impl Sender {
         if !due {
             return;
         }
+        if !crate::mods::transfer_policy::allows_bus(root, bus) {
+            s.last = Some(Instant::now());
+            return;
+        }
         s.busy = true;
         s.last = Some(Instant::now());
         let (root, bus, paint) = (root.to_path_buf(), bus.to_string(), paint.to_string());
@@ -200,11 +208,12 @@ impl Sender {
     }
 }
 
-/// `OFFER2` on a connection: for each file of `manifest` (as `body`) the host wants, the
-/// pieces of it it lacks.
+/// Request a piece plan using the negotiated offer format. The legacy format sends
+/// only the manifest. The preflight format also sends the matching descriptors.
 /// (A host of a version before the pieces answers `ERR what`: `Failure::older_host`.)
-pub(super) fn offer_pieces(out: &mut impl Write, input: &mut impl std::io::BufRead, body: &[u8]) -> Result<Vec<(usize, Vec<u64>)>, Failure> {
-    writeln!(out, "OFFER2 {}", body.len()).and_then(|_| out.write_all(body)).and_then(|_| out.flush()).map_err(|e| e.to_string())?;
+pub(super) fn offer_pieces(out: &mut impl Write, input: &mut impl std::io::BufRead, body: &[u8], preflight: bool) -> Result<Vec<(usize, Vec<u64>)>, Failure> {
+    let command = if preflight { "OFFER3" } else { "OFFER2" };
+    writeln!(out, "{command} {}", body.len()).and_then(|_| out.write_all(body)).and_then(|_| out.flush()).map_err(|e| e.to_string())?;
     let len = failure::reply(input)?.ok_or("no answer")?;
     if len > 64 << 20 {
         return Err("the host's answer is too large".into());
@@ -216,6 +225,9 @@ pub(super) fn offer_pieces(out: &mut impl Write, input: &mut impl std::io::BufRe
 
 /// Piece `i` of the file `e` of ours, read from `path`.
 pub(super) fn local_piece(path: &Path, e: &crate::mods::Entry, i: u64) -> Result<Vec<u8>, String> {
+    if super::super::transfer_policy::marked_private(path) {
+        return Err(format!("{} is in a private directory", path.display()));
+    }
     let (start, len) = crate::mods::pieces::span(e.size, i);
     let changed = || format!("{} changed while it was sent", path.display());
     if omsi_cfg::vfs::archive_of(path).is_none() && !omsi_cfg::vfs::is_sealed(path) {
@@ -241,10 +253,36 @@ pub(super) fn local_piece(path: &Path, e: &crate::mods::Entry, i: u64) -> Result
 /// it lacks - what came before, in an upload that broke off, is not sent again. Then the
 /// host keeps the bus (`DONE`). How many files it took.
 pub(super) fn send_pieces(bus: &str, manifest: &VehicleManifest, source: &HashMap<String, PathBuf>, host: SocketAddr, session: u64) -> Result<usize, Failure> {
-    let body = serde_json::to_vec(manifest).map_err(|e| e.to_string())?;
+    let mut descriptors = Vec::new();
+    let mut descriptor_bytes = 0;
+    for e in manifest.entries.iter().filter(|e| super::super::transfer_policy::is_descriptor(&e.path)) {
+        descriptor_bytes += e.size;
+        if descriptor_bytes > MAX_DESCRIPTOR_BYTES {
+            return Err("vehicle descriptors are too large for transfer preflight".into());
+        }
+        let path = source.get(&e.path.to_lowercase()).ok_or("missing vehicle descriptor source")?;
+        let data = omsi_cfg::vfs::read(path).map_err(|e| e.to_string())?;
+        if data.len() as u64 != e.size || crate::mods::sha256_of(&data) != e.sha256
+            || !super::super::transfer_policy::allows_description_bytes(&e.path, &data)
+            || super::super::transfer_policy::marked_private(path)
+        {
+            return Err("vehicle descriptor changed or forbids file transfers".into());
+        }
+        descriptors.push(data);
+    }
+    let proof = serde_json::to_vec(&UploadPreflight { manifest: manifest.clone(), descriptors }).map_err(|e| e.to_string())?;
     let wait = Duration::from_secs(600);
     let (raw, mut out, mut input) = failure::connect(host, session, wait)?;
-    let plan = offer_pieces(&mut out, &mut input, &body)?;
+    writeln!(out, "UPLOAD-PREFLIGHT").and_then(|_| out.flush()).map_err(|e| e.to_string())?;
+    let (body, preflight) = match failure::reply(&mut input) {
+        Ok(None) => (proof, true),
+        Err(e) if e.older_host() && !super::super::transfer_policy::strict_mode() => {
+            (serde_json::to_vec(manifest).map_err(|e| e.to_string())?, false)
+        }
+        Err(e) => return Err(e),
+        Ok(Some(_)) => return Err("unexpected upload preflight response".into()),
+    };
+    let plan = offer_pieces(&mut out, &mut input, &body, preflight)?;
     let _ = writeln!(out, "BYE").and_then(|_| out.flush());
     let _ = raw.shutdown(std::net::Shutdown::Both);
     let sources: HashMap<usize, PathBuf> = plan
@@ -295,7 +333,7 @@ pub(super) fn send_pieces(bus: &str, manifest: &VehicleManifest, source: &HashMa
             let (raw, mut out, mut input) = failure::connect(host, session, wait)?;
             let r = (|| {
                 // (this connection's offer: the pieces it sends are of that list)
-                offer_pieces(&mut out, &mut input, &body)?;
+                offer_pieces(&mut out, &mut input, &body, preflight)?;
                 loop {
                     let batch = take();
                     if batch.is_empty() {
@@ -333,7 +371,7 @@ pub(super) fn send_pieces(bus: &str, manifest: &VehicleManifest, source: &HashMa
     // file already - else the others asked it for this bus and waited for one never kept)
     let (raw, mut out, mut input) = failure::connect(host, session, wait)?;
     let r = (|| {
-        let still = offer_pieces(&mut out, &mut input, &body)?;
+        let still = offer_pieces(&mut out, &mut input, &body, preflight)?;
         if !still.is_empty() {
             return Err(format!("{} files of {bus} did not come whole{}", still.len(), refused.first().map(|r| format!(" ({r})")).unwrap_or_default()).into());
         }
@@ -352,6 +390,11 @@ pub(super) fn send_pieces(bus: &str, manifest: &VehicleManifest, source: &HashMa
 
 /// `send` with the files chosen: (relative path, where it is read from).
 pub(super) fn send_files(bus: &str, files: Vec<(String, PathBuf)>, host: SocketAddr, session: u64, quiet: bool) -> Result<usize, Failure> {
+    // Last line of defence: no network connection (not even a manifest) for
+    // protected .bus/.ovh files, regardless of which caller prepared this upload.
+    if !crate::mods::transfer_policy::allows_dependencies(&files) {
+        return Err(Failure::from("this vehicle forbids multiplayer file transfers"));
+    }
     if files.is_empty() {
         return Ok(0);
     }
@@ -372,7 +415,7 @@ pub(super) fn send_files(bus: &str, files: Vec<(String, PathBuf)>, host: SocketA
     let source: HashMap<String, PathBuf> = files.iter().map(|(rel, p)| (rel.to_lowercase(), p.clone())).collect();
     // in pieces (a server of this version); whole files to an older one, on this connection
     match send_pieces(bus, &manifest, &source, host, session) {
-        Err(e) if e.older_host() => log::info!("uploads: the host takes whole files only"),
+        Err(e) if e.older_host() && !super::super::transfer_policy::strict_mode() => log::info!("uploads: the host takes whole files only"),
         r => {
             let _ = writeln!(out, "BYE").and_then(|_| out.flush());
             let _ = raw.shutdown(std::net::Shutdown::Both);
@@ -421,6 +464,9 @@ pub(super) fn send_files(bus: &str, files: Vec<(String, PathBuf)>, host: SocketA
     let writer = std::thread::spawn(move || -> Result<(), String> {
         let r = (|| {
             for (k, size, path) in sources {
+                if super::super::transfer_policy::marked_private(&path) {
+                    return Err(format!("{} is in a private directory", path.display()));
+                }
                 let data = omsi_cfg::vfs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
                 if data.len() as u64 != size {
                     return Err(format!("{} changed while it was sent", path.display()));

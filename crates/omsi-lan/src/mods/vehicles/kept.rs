@@ -3,7 +3,87 @@
 
 use super::*;
 
-// (what the rest of the game asks, of the game's own store)
+fn shareable_manifest(store: &Store, m: &VehicleManifest) -> bool {
+    if !super::super::transfer_policy::transfers_enabled() || omsi_net::vehicle_path(&m.bus).is_none() {
+        return false;
+    }
+    let mut checked = false;
+    for e in m.entries.iter().filter(|e| super::super::transfer_policy::is_descriptor(&e.path)) {
+        if e.size > crate::mods::upload::MAX_DESCRIPTOR_BYTES { return false; }
+        let Ok(bytes) = store.read(e) else { return false };
+        if !super::super::transfer_policy::allows_description_bytes(&e.path, &bytes) { return false }
+        checked = true;
+    }
+    checked
+}
+
+fn locally_shareable(m: &VehicleManifest, roots: &[PathBuf]) -> bool {
+    m.entries.iter().all(|e| {
+        crate::mods::refuse_path(&e.path).is_none()
+            && !super::super::transfer_policy::marked_local_path(&e.path, roots)
+    })
+}
+
+impl Vehicles {
+    pub(super) fn shareable_size(&self, sha: &str) -> Option<u64> {
+        if self.policy_generation != omsi_cfg::content_generation() {
+            return None;
+        }
+        self.shareable.get(sha).copied()
+    }
+
+    pub(super) fn rebuild_shareable(&mut self, recheck_markers: bool) {
+        let generation = omsi_cfg::content_generation();
+        if recheck_markers || self.policy_generation != generation {
+            let roots = omsi_cfg::content_roots();
+            self.shareable_manifests = self.manifests.iter()
+                .filter(|(_, m)| locally_shareable(m, &roots))
+                .map(|(fp, _)| fp.clone())
+                .collect();
+        }
+        self.shareable.clear();
+        for (fp, m) in &self.manifests {
+            if self.shareable_manifests.contains(fp) {
+                add_shareable(&mut self.shareable, &self.sizes, m, self.withheld_of.get(fp).map(Vec::as_slice));
+            }
+        }
+        self.policy_generation = generation;
+    }
+}
+
+fn add_shareable(
+    shareable: &mut HashMap<String, u64>,
+    sizes: &HashMap<String, u64>,
+    m: &VehicleManifest,
+    withheld: Option<&[Withheld]>,
+) {
+    let held: HashSet<&str> = withheld.into_iter().flatten().map(|w| w.path.as_str()).collect();
+    for e in &m.entries {
+        if !held.contains(e.path.as_str()) {
+            if let Some(&size) = sizes.get(&e.sha256) {
+                shareable.insert(e.sha256.clone(), size);
+            }
+        }
+    }
+}
+
+pub(in crate::mods) fn refresh_shareable() {
+    buses().refresh_shareable();
+}
+
+pub(in crate::mods) fn shareable_manifest_for_serving(fp: &str) -> Option<VehicleManifest> {
+    let g = buses().lock();
+    let v = g.as_ref()?;
+    if v.policy_generation != omsi_cfg::content_generation() || !v.shareable_manifests.contains(fp) {
+        return None;
+    }
+    v.manifests.iter().find(|(f, _)| f == fp).map(|(_, m)| m.clone())
+}
+
+pub(in crate::mods) fn descriptors_allow_transfer(m: &VehicleManifest) -> bool {
+    let store = buses().lock().as_ref().map(|v| v.store.clone());
+    store.is_some_and(|store| shareable_manifest(&store, m))
+}
 
 pub(in crate::mods) fn open() -> bool {
     buses().open()
@@ -111,6 +191,12 @@ pub(super) const SERVED_BYTES: usize = 512 << 20;
 pub(super) const ANNOUNCE_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 
 impl Buses {
+    pub(super) fn refresh_shareable(&self) {
+        if let Some(v) = self.lock().as_mut() {
+            v.rebuild_shareable(true);
+        }
+    }
+
     /// The buses kept in the store's folder opened, each with all its files there.
     /// False when there is no store.
     pub(super) fn open(&self) -> bool {
@@ -138,6 +224,8 @@ impl Buses {
         std::fs::create_dir_all(&vdir).map_err(|e| format!("{}: {e}", vdir.display()))?;
         let mut found: Vec<(std::time::SystemTime, String, VehicleManifest)> = Vec::new();
         let (mut withheld, mut withheld_of) = (HashMap::new(), HashMap::new());
+        let policy_generation = omsi_cfg::content_generation();
+        let roots = omsi_cfg::content_roots();
         for e in std::fs::read_dir(&vdir).map_err(|e| e.to_string())?.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             let Some(fp) = name.strip_suffix(".json").filter(|f| omsi_net::is_fingerprint(f)) else { continue };
@@ -156,6 +244,10 @@ impl Buses {
                 log::warn!("vehicles: {name} lacks {} in the store; left aside", lost.path);
                 continue;
             }
+            if !shareable_manifest(&store, &m) || !locally_shareable(&m, &roots) {
+                log::warn!("vehicles: {name} is private or unreadable; cannot redistribute its files");
+                continue;
+            }
             if !held.is_empty() {
                 for w in &held {
                     if let Some(e) = m.entries.iter().find(|e| e.path == w.path) {
@@ -171,11 +263,21 @@ impl Buses {
         let mut sizes = HashMap::new();
         for (_, _, m) in &found {
             for e in &m.entries {
-                sizes.insert(e.sha256.clone(), e.size);
+                if store.has(e).is_some() {
+                    sizes.insert(e.sha256.clone(), e.size);
+                }
             }
         }
         log::info!("vehicles: {} buses players sent are kept", found.len());
-        *self.lock() = Some(Vehicles { store, dir: vdir, manifests: found.into_iter().map(|(_, fp, m)| (fp, m)).collect(), sizes, mounted: HashSet::new(), withheld, withheld_of });
+        let shareable_manifests = found.iter().map(|(_, fp, _)| fp.clone()).collect();
+        let mut vehicles = Vehicles {
+            store, dir: vdir,
+            manifests: found.into_iter().map(|(_, fp, m)| (fp, m)).collect(),
+            sizes, shareable: HashMap::new(), shareable_manifests, policy_generation,
+            mounted: HashSet::new(), withheld, withheld_of,
+        };
+        vehicles.rebuild_shareable(false);
+        *self.lock() = Some(vehicles);
         // (what nobody has used for longer than buses are kept goes at once)
         self.collect(0, IN_USE);
         if let Some(v) = self.lock().as_ref() { write_cache_pins(v); }
@@ -240,15 +342,15 @@ impl Buses {
     }
 
     pub(super) fn put_making_room(&self, e: &Entry, data: &[u8], unused_for: std::time::Duration) -> Result<(), String> {
+        if !super::super::transfer_policy::allows_description_bytes(&e.path, data) {
+            return Err(format!("{}: vehicle forbids multiplayer file transfers", e.path));
+        }
         self.make_room(e.size, unused_for)?;
         // (sealed and written with the store let go, as a piece is: a file of a GB held the
         // store - and the host's frame asking which buses are in use, or mounting one - for
         // the whole write. The write goes to a file of its own and is renamed into place.)
         let store = self.lock().as_ref().ok_or("no store")?.store.clone();
         store.put(e, data).map_err(|x| x.to_string())?;
-        if let Some(v) = self.lock().as_mut() {
-            v.sizes.insert(e.sha256.to_ascii_lowercase(), e.size);
-        }
         Ok(())
     }
 
@@ -259,7 +361,7 @@ impl Buses {
         let (store, size) = {
             let g = self.lock();
             let v = g.as_ref()?;
-            (v.store.clone(), *v.sizes.get(&sha)?)
+            (v.store.clone(), v.shareable_size(&sha)?)
         };
         store.read(&Entry { path: String::new(), size, sha256: sha }).ok()
     }
@@ -268,6 +370,7 @@ impl Buses {
     /// one of them.
     pub(super) fn served(&self, sha: &str) -> Option<Arc<Vec<u8>>> {
         let sha = sha.to_ascii_lowercase();
+        self.lock().as_ref()?.shareable_size(&sha)?;
         let last = || self.served_last.lock().unwrap_or_else(|e| e.into_inner());
         {
             let mut c = last();
@@ -370,6 +473,10 @@ impl Buses {
             drop_pieces();
             return Err(format!("{}: not the file the list names", e.path));
         }
+        if !super::super::transfer_policy::allows_description_bytes(&e.path, &data) {
+            drop_pieces();
+            return Err(format!("{}: vehicle forbids multiplayer file transfers", e.path));
+        }
         // (refused for what it is: the bus goes on without it - `withhold`)
         let refused = crate::mods::quarantine::screen(&e.path, &data).err();
         if let Some(why) = refused {
@@ -389,6 +496,10 @@ impl Buses {
         let fp = m.fingerprint();
         let mut g = self.lock();
         let v = g.as_mut().ok_or("no store")?;
+        let policy_generation = omsi_cfg::content_generation();
+        if !locally_shareable(&m, &omsi_cfg::content_roots()) {
+            return Err("this vehicle contains files in a private directory".into());
+        }
         if v.manifests.iter().any(|(f, _)| *f == fp) {
             return Ok((fp, false));
         }
@@ -402,6 +513,9 @@ impl Buses {
                 _ => return Err(format!("{} has not come", e.path)),
             }
         }
+        if !shareable_manifest(&v.store, &m) {
+            return Err("this vehicle forbids multiplayer file transfers".into());
+        }
         if !held.is_empty() {
             let file = v.dir.join(format!("{fp}.withheld.json"));
             std::fs::write(&file, serde_json::to_vec(&held).unwrap_or_default()).map_err(|e| format!("{}: {e}", file.display()))?;
@@ -411,13 +525,22 @@ impl Buses {
         // (what is served by its SHA-256 is known by the kept lists after a restart: a file
         // kept before one - for a bus never finished then - was in the store but not served,
         // and the bus kept now that has it was asked for in vain: "no such file")
-        for e in &m.entries {
-            v.sizes.insert(e.sha256.to_ascii_lowercase(), e.size);
-        }
         let file = v.dir.join(format!("{fp}.json"));
         let tmp = file.with_extension("part");
         std::fs::write(&tmp, serde_json::to_vec(&m).unwrap_or_default()).and_then(|_| std::fs::rename(&tmp, &file)).map_err(|e| format!("{}: {e}", file.display()))?;
+        for e in &m.entries {
+            if v.store.has(e).is_some() {
+                v.sizes.insert(e.sha256.clone(), e.size);
+            }
+        }
+        v.shareable_manifests.insert(fp.clone());
+        if v.policy_generation == policy_generation {
+            add_shareable(&mut v.shareable, &v.sizes, &m, v.withheld_of.get(&fp).map(Vec::as_slice));
+        }
         v.manifests.push((fp.clone(), m));
+        if v.policy_generation != policy_generation {
+            v.rebuild_shareable(true);
+        }
         write_cache_pins(v);
         drop(g);
         // (whoever waits for a bus hears of it at once: `wait_for`)

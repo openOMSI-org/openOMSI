@@ -9,7 +9,7 @@ pub(crate) fn car_meta(v: &omsi_sim::VehicleInstance) -> omsi_net::traffic_table
     let hof = v.host.hof.as_ref().and_then(|h| h.path.file_stem()).map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     // (the players fetch this very file and draw the bus with it: `omsi_lan::mods::hofs`)
     if let Some(h) = v.host.hof.as_ref().filter(|_| !hof.is_empty()) {
-        omsi_lan::mods::hofs::offer(&hof, &h.path);
+        omsi_lan::mods::hofs::offer(&hof, &h.path, &v.ty.def.path);
     }
     omsi_net::traffic_table::Meta { line, destination, number: text("number"), ident: text("ident"), hof }
 }

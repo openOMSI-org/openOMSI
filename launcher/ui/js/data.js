@@ -192,11 +192,12 @@ export function selectableVehicles(c = S.choice) {
   // copy of a broken/non-advertised bus to bypass version verification.
   const out = local.filter((v) => byKey.has(busFile(v.file))).map((v) => {
     const offer = byKey.get(busFile(v.file));
+    if (offer.local_only) return v;
     return { ...v, local_paints: v.paints || [], paints: offeredPaints(offer.paints, v.default_paint), server_catalog: true };
   });
   const have = new Set(out.map((v) => busFile(v.file)));
   for (const offer of byKey.values()) {
-    if (have.has(busFile(offer.bus))) continue;
+    if (offer.local_only || have.has(busFile(offer.bus))) continue;
     const components = offer.bus.replace(/\\/g, '/').split('/');
     const basename = (components.pop() || 'Bus').replace(/\.(bus|ovh)$/i, '').replace(/_/g, ' ');
     const maker = (components[components.length - 1] || 'Server').replace(/_/g, ' ');
@@ -576,7 +577,7 @@ export async function duty(extra = {}) {
 export function serverFleetSelection(c = S.choice) {
   const allowed = serverBuses(c);
   return !!allowed?.has(busFile(c.bus)) && c.lan_server?.fleet_version === 1
-    && (c.lan_server.fleet || []).some((offer) => busFile(offer.bus) === busFile(c.bus));
+    && (c.lan_server.fleet || []).some((offer) => !offer.local_only && busFile(offer.bus) === busFile(c.bus));
 }
 
 export async function start(extra) {
@@ -585,7 +586,8 @@ export async function start(extra) {
     // UI-only consent: do not serialize this ephemeral flag into the launch duty.
     const { __fleetApproved: _consent, ...dutyExtra } = extra || {};
     const d = await duty(dutyExtra);
-    if (serverBuses() && S.choice?.lan_server?.fleet_version === 1 && !serverFleetSelection()) {
+    const localFleet = selectableVehicles().some((v) => busFile(v.file) === busFile(S.choice.bus) && !v.server_catalog);
+    if (serverBuses() && S.choice?.lan_server?.fleet_version === 1 && !serverFleetSelection() && !localFleet) {
       // Only the new authoritative catalogue requires a verified LISTBUS offer.
       // Older player-hosted and dedicated sessions still use their original
       // map-only LIST protocol and must remain joinable with local vehicles.

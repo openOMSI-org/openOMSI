@@ -1083,6 +1083,8 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **Static buses of Praha 200 no longer lose their outer skin**: a mesh from the Blender exporter was turned round as a mirrored one when its matrix (the quarter turn about x that thousands of ordinary meshes carry) was positive and its normals faced against its faces, so the IVECO buses at Letnany station showed their inside; Omsi.exe draws such a mesh as wound.
 ### Multiplayer
 
+- Automatic map downloads are off in player-hosted LAN sessions and in dedicated server configurations that omit `share_maps`. To share a dedicated server’s map and eligible dependencies, set `share_maps = 1`. Players can still join using their installed map.
+
 - **The map's timetable buses show their fleet number, plate and the right destination for
   every player**, not only on the server or the hosting game: the host now tells each player
   the number and plate it drew for a bus and the depot file it reads its signs from. A player's

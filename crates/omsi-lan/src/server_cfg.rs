@@ -85,8 +85,8 @@ pub struct ServerCfg {
     pub parked_buses: usize,
     /// The map (and what it uses) goes to players who join without it (`mods`); off,
     /// they install it themselves - the server's line is kept for the players' buses. A
-    /// `server.cfg` without the key shares it, as servers did before the key came; the new
-    /// file (`DEFAULT_CFG`) says 0.
+    /// Missing `share_maps` also defaults off, including configs written before this key
+    /// existed; sharing requires an explicit `share_maps = 1`.
     pub share_maps: bool,
     /// Voice chat of the players: on or off, the session-wide radio, how far a player is
     /// heard (`voice`, `voice_radio`, `voice_range`).
@@ -373,7 +373,7 @@ impl ServerCfg {
             accept_uploads: flag("accept_uploads", true),
             uploads_keep_days: num("uploads_keep_days", 30).clamp(1, 3650) as u64,
             parked_buses: num("parked_buses", 0).clamp(0, 536) as usize,
-            share_maps: flag("share_maps", true),
+            share_maps: kv.get("share_maps").is_some_and(|value| value == "1"),
             voice: voice_policy(&kv),
             public_server: flag("public_server", false),
             public_list_url: kv.get("public_list_url").cloned().unwrap_or_default(),
@@ -759,13 +759,14 @@ mod cfg_tests {
         cfg
     }
 
-    /// A server that upgrades with its old `server.cfg` (no `share_maps`) goes on passing its
-    /// map to players who join without it; only the file written new leaves it to them.
+    /// Every server starts with map transfers off unless the admin opts in explicitly.
     #[test]
-    fn an_old_server_cfg_still_shares_the_map() {
-        assert!(load("name = old server\nmap = maps/Grundorf/global.cfg\n").share_maps);
+    fn map_sharing_requires_explicit_opt_in_even_for_legacy_configs() {
+        assert!(!load("name = old server\nmap = maps/Grundorf/global.cfg\n").share_maps);
         assert!(!load(DEFAULT_CFG).share_maps);
         assert!(!load("share_maps = 0\n").share_maps);
+        assert!(load("share_maps = 1\n").share_maps);
+        assert!(!load("share_maps = yes\n").share_maps);
     }
     /// Voice chat is on in a new file and stays off in an old one that does not name it (an
     /// update opens nothing); the keys of the earlier outside voice server do nothing; a wrong

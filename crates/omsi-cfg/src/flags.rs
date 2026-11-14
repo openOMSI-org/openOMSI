@@ -332,6 +332,7 @@ flags! {
     OMSI_LAN_AUDIO: Bool, Test, Use, "off", "Offscreen LAN: with the other buses' sounds.";
     OMSI_LAN_IP: Text, Setup, Use, "-", "a.b.c.d[,e.f.g.h]: LAN addresses to offer first (when the detection gets them wrong).";
     OMSI_LAN_JOIN_TIMEOUT: Num, Tuning, Use, "default", "LAN: seconds to wait when joining a game.";
+    OMSI_LAN_REQUIRE_TRANSFER_OPT_IN: Bool, Switch, Use, "off", "LAN strict privacy mode: only auto-share .bus/.ovh vehicles with an explicit allow_file_transfer 1; unmarked legacy vehicles stay private until this switch is disabled.";
     OMSI_LAN_SAY: Text, Test, Use, "-", "\"30=Hallo;45=Bye\": LAN chat lines said at these seconds of the session.";
     OMSI_LAN_TRACE: Text, Debug, Use, "-", "LAN CSV file: where the host's people are drawn.";
     OMSI_LAUNCHER: Text, Setup, Use, "-", "Program a plain start opens as the launcher instead of the desktop launcher (openomsi-launcher-app) beside the game.";
@@ -385,6 +386,7 @@ flags! {
     OMSI_NO_LAMP_SIGHT: Bool, Switch, Use, "off", "Enhanced by night: every lamp near the line of sight dazzles, hidden or not.";
     OMSI_NO_LAN_MODS: Bool, Switch, Use, "off", "LAN: do not exchange mods.";
     OMSI_NO_LAN_UPLOADS: Bool, Switch, Use, "off", "LAN: a game hosting a session takes no buses from the players who join.";
+    OMSI_NO_LAN_VEHICLE_TRANSFER: Bool, Switch, Use, "off", "LAN: do not automatically upload or serve vehicle files from this machine, including the host bus and dedicated fleet. Does not affect driving or already distributed copies.";
     OMSI_NO_LIGHT_MAP: Bool, Switch, Use, "off", "No night light maps on the tiles (A/B).";
     OMSI_NO_MAP_CACHE: Bool, Test, Use, "off", "Read the map's navigator layers (houses, ground, paving) again instead of from the cache.";
     OMSI_NO_MATERIAL_SPLINE_BATCHING: Bool, Switch, Use, "off", "No batching of splines by material.";

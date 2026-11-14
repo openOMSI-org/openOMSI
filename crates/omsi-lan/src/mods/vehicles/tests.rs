@@ -14,6 +14,97 @@ fn entry(path: &str, data: &[u8]) -> Entry {
     Entry { path: path.into(), size: data.len() as u64, sha256: super::super::sha256_of(data) }
 }
 
+#[test]
+fn an_unapproved_upload_cannot_be_downloaded_by_guessing_its_hash() {
+    let dir = temp("unapproved-blob");
+    let kept = Buses::default();
+    kept.open_in(&dir).unwrap();
+    let bus = b"[friendlyname]\nMaker\nModel\nDefault\n";
+    let entry = entry("Vehicles/Approved/model.bus", bus);
+    kept.put(&entry, bus).unwrap();
+    assert!(kept.blob(&entry.sha256).is_none(), "uploaded bytes without an approved manifest must not be served");
+    let list = VehicleManifest { bus: entry.path.clone(), entries: vec![entry.clone()] }.validated().unwrap();
+    kept.commit(list).unwrap();
+    assert_eq!(kept.blob(&entry.sha256).unwrap(), bus);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_private_marker_revokes_cached_vehicle_blobs_before_and_after_restart() {
+    let dir = temp("marker-revalidation");
+    let source = dir.join("source");
+    let folder = source.join("Vehicles/MarkerRevalidation");
+    std::fs::create_dir_all(&folder).unwrap();
+    omsi_cfg::add_content_root(source.clone());
+    let store = dir.join("store");
+    let kept = Buses::default();
+    kept.open_in(&store).unwrap();
+    let bus = b"[openomsi_multiplayer]\nallow_file_transfer 1\n";
+    let descriptor = entry("Vehicles/MarkerRevalidation/bus.bus", bus);
+    std::fs::write(folder.join("bus.bus"), bus).unwrap();
+    kept.put(&descriptor, bus).unwrap();
+    let m = VehicleManifest { bus: descriptor.path.clone(), entries: vec![descriptor.clone()] };
+    let (fp, _) = kept.commit(m).unwrap();
+    assert!(kept.served(&descriptor.sha256).is_some());
+    std::fs::write(folder.join(".openomsi-no-share"), "").unwrap();
+    kept.refresh_shareable();
+    assert!(kept.blob(&descriptor.sha256).is_none());
+    assert!(kept.served(&descriptor.sha256).is_none());
+    kept.open_in(&store).unwrap();
+    assert!(kept.manifest(&fp).is_none());
+    assert!(kept.blob(&descriptor.sha256).is_none());
+    omsi_cfg::remove_content_root(&source);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn private_vehicle_manifest_is_never_committed_or_reopened() {
+    let dir = temp("private-policy");
+    let kept = Buses::default();
+    kept.open_in(&dir).unwrap();
+    let bus = b"[openomsi_multiplayer]\nallow_file_transfer 0\n";
+    let e = entry("Vehicles/Private/private.bus", bus);
+    assert!(kept.put(&e, bus).is_err(), "private descriptor must not enter the current upload store");
+    // A legacy version may already have persisted this content. Simulate it
+    // directly in the encrypted store to verify it cannot be re-advertised.
+    super::super::store::Store::open(&dir).unwrap().put(&e, bus).unwrap();
+    let m = VehicleManifest {
+        bus: e.path.clone(),
+        entries: vec![e],
+    }.validated().unwrap();
+    assert!(kept.commit(m.clone()).is_err(), "a private bus cannot be offered to other players");
+
+    // Reproduce a manifest written by an older version before the opt-out existed.
+    let fp = m.fingerprint();
+    std::fs::write(dir.join("vehicles").join(format!("{fp}.json")), serde_json::to_vec(&m).unwrap()).unwrap();
+    kept.open_in(&dir).unwrap();
+    assert!(kept.manifest(&fp).is_none(), "a persisted private bus cannot be re-served");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn unmarked_and_explicitly_public_vehicles_remain_shareable() {
+    for (name, bus) in [
+        ("legacy-public", "[friendlyname]\\nMaker\\nModel\\nDefault\\n"),
+        ("explicit-public", "[openomsi_multiplayer]\\nallow_file_transfer 1\\n"),
+        ("empty-policy", "[openomsi_multiplayer]\\n[mass]\\n10\\n"),
+    ] {
+        let dir = temp(name);
+        let kept = Buses::default();
+        kept.open_in(&dir).unwrap();
+        let bus = bus.replace("\\n", "\n");
+        let e = entry(&format!("Vehicles/Public/{name}.bus"), bus.as_bytes());
+        kept.put(&e, bus.as_bytes()).unwrap();
+        let manifest = VehicleManifest { bus: e.path.clone(), entries: vec![e] }.validated().unwrap();
+        let (fp, inserted) = kept.commit(manifest.clone()).unwrap();
+        assert!(inserted, "{name} must be accepted for automatic transfers");
+        assert!(kept.manifest(&fp).is_some());
+        kept.open_in(&dir).unwrap();
+        assert!(kept.manifest(&fp).is_some(), "{name} must still be served after restart");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
 /// A host that answers MANIFEST with `list`, and BLOB and PIECE from `files` (by
 /// SHA-256), on the encrypted mods connection - a host with a store of its own, apart from
 /// this test's.
@@ -611,8 +702,19 @@ fn putting_a_file_together_waits_for_room_in_the_transfers_budget() {
         });
         assert_eq!(kept.put_piece_sent(&e, 0, &data), Ok(true));
     });
-    assert_eq!(kept.blob(&e.sha256).as_deref(), Some(&data[..]));
+    // The complete bytes are stored, but the BLOB endpoint must not expose
+    // them until a vehicle manifest is validated and explicitly committed.
+    assert!(kept.blob(&e.sha256).is_none());
     assert!(kept.missing_pieces(&e).is_empty());
+    let bus = b"[friendlyname]\nTest\nPieces\nDefault\n";
+    let desc = entry("Vehicles/Pieces/pieces.bus", bus);
+    kept.put(&desc, bus).unwrap();
+    let manifest = VehicleManifest {
+        bus: desc.path.clone(),
+        entries: vec![desc, e.clone()],
+    }.validated().unwrap();
+    kept.commit(manifest).unwrap();
+    assert_eq!(kept.blob(&e.sha256).as_deref(), Some(&data[..]));
     assert_eq!(transfers().held(), 0);
     let _ = std::fs::remove_dir_all(&store);
 }
