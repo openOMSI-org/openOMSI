@@ -511,28 +511,50 @@ pub fn scale_reaction(reaction: f32, factor: f32) -> f32 {
 }
 
 /// The driver of a random car: how fast, how close, how patient (see `AiState`).
-pub fn personality(state: &mut AiState, seed: u64, heavy: bool) {
+pub fn personality(state: &mut AiState, seed: u64, heavy: bool, rowdy_factor: Option<(f32, f32)>) {
     let ru = |k: u32| ((seed >> k) & 0xff) as f32 / 255.0;
     let rg = |k: u64| random::draw_gaussian(seed, 50000 + k);
 
-    state.desire = if heavy {
+    let rowdy = rowdy_factor.map(|(a, b)| {
+        let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+        lo + (hi - lo) * ru(3)
+    });
+
+    state.desire = if let Some(r) = rowdy {
+        // OMSI 2: -1.0 -> 87%, 0.0 -> 110%, +1.0 -> 131%
+        let base = if r < 0.0 {
+            1.10 + r * 0.23
+        } else {
+            1.10 + r * 0.21
+        };
+        if heavy {
+            // a lorry or a bus keeps its slower cruise (what gets it overtaken, and an AI
+            // bus keeps to the limit): the rowdy factor moves it as much as a car's
+            (0.93 + (base - 1.10) + 0.02 * rg(3)).clamp(0.5, 2.0)
+        } else {
+            (base + 0.02 * rg(3)).clamp(0.5, 2.0)
+        }
+    } else if heavy {
         (0.93 + 0.05 * rg(3)).clamp(0.8, 1.2)
     } else {
         (1.01 + 0.11 * rg(3)).clamp(0.7, 1.3)
     };
-    state.headway = 1.4 + 0.2 * rg(11);
-    state.min_gap = 1.6 + 1.4 * ru(19);
-    state.accel = if heavy {
-        0.8 + 0.4 * ru(27)
-    } else {
-        1.3 + 1.0 * ru(27)
-    };
-    state.decel = if heavy { 1.6 } else { 2.0 + 0.8 * ru(35) };
-    state.accept_gap = (4.0 + 1.0 * rg(43)).max(2.0);
-    state.reaction = (0.8 + 0.2 * rg(51)).max(0.2);
 
-    state.honk_factor = (1.0 + 0.2 * rg(8)).max(0.2);
-    state.amber_factor = (0.03 + 0.01 * rg(9)).max(0.0);
+    let r_bias = rowdy.map(|r| r.clamp(-1.5, 1.5)).unwrap_or(0.0);
+
+    state.headway = (1.4 - 0.15 * r_bias + 0.2 * rg(11)).max(0.8);
+    state.min_gap = (1.6 - 0.2 * r_bias + 1.4 * ru(19)).max(1.0);
+    state.accel = if heavy {
+        (0.8 + 0.4 * ru(27) + 0.15 * r_bias).max(0.5)
+    } else {
+        (1.3 + 1.0 * ru(27) + 0.25 * r_bias).max(0.6)
+    };
+    state.decel = if heavy { 1.6 } else { (2.0 + 0.8 * ru(35) + 0.2 * r_bias).max(1.0) };
+    state.accept_gap = (4.0 - 0.4 * r_bias + 1.0 * rg(43)).max(1.5);
+    state.reaction = (0.8 - 0.1 * r_bias + 0.2 * rg(51)).max(0.2);
+
+    state.honk_factor = (1.0 - 0.25 * r_bias + 0.2 * rg(8)).max(0.1);
+    state.amber_factor = (0.03 + 0.02 * r_bias + 0.01 * rg(9)).clamp(0.0, 0.2);
     // the hardest braking of ordinary driving: a lorry's or a bus's driver stays further
     // under the emergency stop's ceiling than a car's
     let r2 = (((seed >> 7) ^ (seed >> 41)) & 0xff) as f32 / 255.0;
@@ -587,6 +609,34 @@ mod bicycle_tests {
             assert!(!is_bicycle(&def), "{path} ({mass} t)");
         }
     }
+
+    #[test]
+    fn rowdy_factor_influences_speed_desire_and_driving_personality() {
+        use crate::traffic::AiState;
+        use super::personality;
+
+        let mut slow_st = AiState::new(0, 0.0, 12345);
+        personality(&mut slow_st, 12345, false, Some((-1.0, -1.0)));
+        assert!((slow_st.desire - 0.87).abs() < 0.06, "desire {:.3} expected ~0.87", slow_st.desire);
+
+        let mut neutral_st = AiState::new(0, 0.0, 12345);
+        personality(&mut neutral_st, 12345, false, Some((0.0, 0.0)));
+        assert!((neutral_st.desire - 1.10).abs() < 0.06, "desire {:.3} expected ~1.10", neutral_st.desire);
+
+        let mut fast_st = AiState::new(0, 0.0, 12345);
+        personality(&mut fast_st, 12345, false, Some((1.0, 1.0)));
+        assert!((fast_st.desire - 1.31).abs() < 0.06, "desire {:.3} expected ~1.31", fast_st.desire);
+
+        assert!(fast_st.desire > slow_st.desire);
+        assert!(fast_st.headway < slow_st.headway);
+        assert!(fast_st.accel > slow_st.accel);
+
+        // A lorry or a bus with a neutral rowdy factor keeps its slower cruise.
+        let mut heavy_st = AiState::new(0, 0.0, 12345);
+        personality(&mut heavy_st, 12345, true, Some((0.0, 0.0)));
+        assert!((heavy_st.desire - 0.93).abs() < 0.06, "desire {:.3} expected ~0.93", heavy_st.desire);
+        assert!(heavy_st.desire < neutral_st.desire);
+    }
 }
 
 impl TrafficSim {
@@ -618,7 +668,7 @@ impl TrafficSim {
         state.plan_next(&self.net);
         // heavy vehicles (trucks, vans) cruise slower, which is what gets them overtaken
         let heavy = ty.def.mass > 6.0 || bus.is_some();
-        personality(&mut state, seed, heavy);
+        personality(&mut state, seed, heavy, ty.def.rowdy_factor);
         state.reaction = scale_reaction(state.reaction, self.reaction_factor);
         state.max_speed_kmh = if kind == LaneKind::Air {
             AIRCRAFT_KMH
