@@ -615,6 +615,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   which on a 16 GB machine was 2.2 GB of textures beside a big map and the game itself, and the
   device was lost. It is now a tenth of the machine's memory at most (at least 1000 MB)
   (#2720).
+- **Fogged-up windows stay on the glass on a slope**: the condensation on the bus's panes was
+  laid out level with the world, so going up or down a hill it slid down or up the glass, and
+  the defroster's cleared fan with it. It now follows the bus's pitch and roll (#3958).
 - **Pixel XC list rows no longer cut off**: on the MZKP SOR NBG 12, the direction and line lists
   of the Pixel XC display showed each row's text sliced along its middle. The text strip of
   every row is skewed a tenth of a millimetre over its tile, and was not taken as printed on
