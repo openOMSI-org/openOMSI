@@ -379,6 +379,7 @@ fn stock_state_codes_mean_what_the_lamp_scripts_show() {
     assert_eq!(TrafficLightController::lamps(9), (false, true, false));
     assert_eq!(TrafficLightController::lamps(12), (false, false, false));
     assert!(TrafficLightController::allows_go(6) && !TrafficLightController::allows_go(9) && !TrafficLightController::allows_go(3));
+    assert!(TrafficLightController::allows_go(8));
     // the clock starts from the time of day: two crossings with one cycle run in step
     let (mut a, mut b) = (erzgebirgs(), erzgebirgs());
     a.start(8.0 * 3600.0 + 10.0);
@@ -403,7 +404,7 @@ fn a_level_crossing_waits_for_its_train() {
     for _ in 0..600 {
         c.advance(0.1);
     }
-    assert!((c.time - 1.0).abs() < 1e-6 && c.held, "holding at {}", c.time);
+    assert!((c.time - (1.0 - 1e-5)).abs() < 1e-6 && c.held, "holding at {}", c.time);
     assert_eq!(c.state(1), 6, "road green while no train comes");
     c.request[0] = true;
     let mut t = 0.0;
@@ -411,7 +412,7 @@ fn a_level_crossing_waits_for_its_train() {
         c.advance(0.1);
         t += 0.1;
     }
-    assert!((c.time - 16.0).abs() < 1e-6 && c.held, "the train is still there: holding at {}", c.time);
+    assert!((c.time - (16.0 - 1e-5)).abs() < 1e-6 && c.held, "the train is still there: holding at {}", c.time);
     assert_eq!(c.state(0), 6);
     assert_eq!(c.state(1), 0, "road red while the train passes");
     c.request[0] = false;
@@ -564,6 +565,178 @@ fn simultaneous_inactive_events_do_not_hide_a_later_active_jump() {
 }
 
 #[test]
+fn a_stop_before_the_step_stops_the_clock() {
+    // The step would cross the active stop at 4 s and the jump at 8 s. The stop is a
+    // barrier just before it, before either point.
+    let mut c = TrafficLightController::from_program(
+        vec![(vec![(0, 4.0), (6, 16.0)], None); 2],
+        Some(20.0),
+        &[[0.0, 4.0, 0.0]],
+        &[[1.0, 8.0, 0.0, 12.0]],
+    );
+    c.time = 3.9;
+    c.request[0] = true;
+    c.request[1] = true;
+    c.advance(10.0);
+    assert!((c.time - (4.0 - 1e-5)).abs() < 1e-6);
+    assert!(c.held);
+    // Once the request goes, the stop is behind the clock and the jump is taken.
+    c.request[0] = false;
+    c.advance(10.0);
+    assert!(c.time > 12.0, "clock at {}", c.time);
+    assert!(!c.held);
+}
+
+#[test]
+fn a_stop_after_a_changeover_is_not_skipped() {
+    // The step starts in red-and-yellow and crosses the stop in green. The clock must
+    // neither freeze in the changeover nor skip the stop: it holds just before 6 s.
+    let mut c = TrafficLightController::from_program(
+        vec![(vec![(3, 2.0), (6, 8.0)], None)],
+        Some(10.0),
+        &[[0.0, 6.0, 0.0]],
+        &[],
+    );
+    c.time = 1.9;
+    c.request[0] = true;
+    c.advance(5.0);
+    assert!((c.time - (6.0 - 1e-5)).abs() < 1e-6, "held at {}", c.time);
+    assert!(c.held);
+    assert_eq!(c.state(0), 6);
+}
+
+#[test]
+fn a_stop_on_the_first_green_after_red_yellow_holds_at_the_stop() {
+    // Red 20 s, red-and-yellow 20-22 s, green 22-30 s: the stop at 22.0 is green at its
+    // own time but the instant before it is red-and-yellow, so it must hold at 22.0
+    // rather than freeze the changeover.
+    let mut c = TrafficLightController::from_program(
+        vec![(vec![(0, 20.0), (3, 2.0), (6, 8.0)], None)],
+        Some(30.0),
+        &[[0.0, 22.0, 0.0]],
+        &[],
+    );
+    c.time = 21.0;
+    c.request[0] = true;
+    c.advance(2.0);
+    assert_eq!(c.time, 22.0);
+    assert!(c.held);
+    assert_eq!(c.state(0), 6, "held in green, not the red-yellow before it");
+    c.advance(1.0);
+    assert_eq!(c.time, 22.0, "the exact stop keeps holding");
+    assert!(c.held);
+    assert_eq!(c.state(0), 6);
+    c.request[0] = false;
+    c.advance(1.0);
+    assert!(!c.held);
+    assert!((c.time - 23.0).abs() < 1e-6, "clock at {}", c.time);
+}
+
+#[test]
+fn a_stop_within_the_margin_of_the_first_green_holds_at_the_stop() {
+    let mut c = TrafficLightController::from_program(
+        vec![(vec![(0, 20.0), (3, 2.0), (6, 8.0)], None)],
+        Some(30.0),
+        &[[0.0, 22.0, 0.0]],
+        &[],
+    );
+    c.time = 22.0 - 5e-7;
+    c.request[0] = true;
+    c.advance(0.5);
+    assert_eq!(c.time, 22.0);
+    assert!(c.held);
+    assert_eq!(c.state(0), 6);
+}
+
+#[test]
+fn a_stop_inside_red_yellow_is_passed() {
+    let mut c = TrafficLightController::from_program(
+        vec![(vec![(0, 20.0), (3, 2.0), (6, 8.0)], None)],
+        Some(30.0),
+        &[[0.0, 21.0, 0.0]],
+        &[],
+    );
+    c.time = 20.5;
+    c.request[0] = true;
+    c.advance(1.0);
+    assert!(!c.held);
+    assert!((c.time - 21.5).abs() < 1e-6, "clock at {}", c.time);
+}
+
+#[test]
+fn a_stop_holds_just_before_it_on_a_long_cycle() {
+    // At 300 s an f32 step is about 3e-5 s: state_at must stay in f64, or the 1e-5
+    // margin rounds back onto the stop and shows the yellow after it.
+    let mut c = TrafficLightController::from_program(
+        vec![(vec![(6, 300.0), (9, 3.0), (0, 97.0)], None)],
+        Some(400.0),
+        &[[0.0, 300.0, 0.0]],
+        &[],
+    );
+    c.time = 299.0;
+    c.request[0] = true;
+    c.advance(2.0);
+    assert!(c.held);
+    assert!((c.time - (300.0 - 1e-5)).abs() < 1e-9, "held at {}", c.time);
+    assert_eq!(c.state(0), 6);
+}
+
+#[test]
+fn a_stop_does_not_move_the_clock_back_inside_its_hold_margin() {
+    let mut c = TrafficLightController::from_program(
+        vec![(vec![(0, 4.0), (6, 16.0)], None)],
+        Some(20.0),
+        &[[0.0, 4.0, 0.0]],
+        &[],
+    );
+    c.time = 4.0 - 5e-6;
+    c.request[0] = true;
+    c.advance(1.0);
+    assert_eq!(c.time, 4.0 - 5e-6);
+    assert!(c.held);
+}
+
+#[test]
+fn a_held_stop_stays_held_through_a_zero_or_tiny_step() {
+    let mut c = TrafficLightController::from_program(
+        vec![(vec![(0, 4.0), (6, 16.0)], None)],
+        Some(20.0),
+        &[[0.0, 4.0, 0.0]],
+        &[],
+    );
+    c.time = 3.9;
+    c.request[0] = true;
+    c.advance(0.2);
+    assert!(c.held);
+    c.advance(0.0);
+    assert!(c.held, "the network snapshot still says held");
+    c.advance(5e-6);
+    assert!(c.held, "a step shorter than the margin keeps the hold");
+    c.request[0] = false;
+    c.advance(0.0);
+    assert!(!c.held, "the request is gone: release even on a zero step");
+}
+
+#[test]
+fn a_jump_at_a_stop_time_goes_first() {
+    let mut c = TrafficLightController::from_program(
+        vec![(vec![(0, 4.0), (6, 16.0)], None); 2],
+        Some(20.0),
+        &[[0.0, 4.0, 0.0]],
+        &[[1.0, 4.0, 0.0, 12.0]],
+    );
+    c.time = 3.9;
+    c.request[0] = true;
+    c.advance(0.2);
+    assert!((c.time - (4.0 - 1e-5)).abs() < 1e-6, "the active stop holds while its jump is not asked");
+    assert!(c.held);
+    c.request[1] = true;
+    c.advance(0.2);
+    assert!(c.time > 12.0, "clock at {}", c.time);
+    assert!(!c.held);
+}
+
+#[test]
 fn simultaneous_stops_release_and_are_checked_on_the_next_cycle() {
     let mut c = TrafficLightController::from_program(
         vec![(vec![(0, 4.0), (6, 16.0)], None); 3],
@@ -574,19 +747,19 @@ fn simultaneous_stops_release_and_are_checked_on_the_next_cycle() {
     c.request[2] = true;
     c.start(0.0);
     c.advance(5.0);
-    assert_eq!(c.time, 4.0);
+    assert!((c.time - (4.0 - 1e-5)).abs() < 1e-6);
     assert!(c.held);
-    c.advance(1.0);
-    assert_eq!(c.time, 4.0, "an active stop remains held next frame");
+    c.advance(5.0);
+    assert!((c.time - (4.0 - 1e-5)).abs() < 1e-6, "an active stop remains held next frame");
     c.request[2] = false;
-    c.advance(1.0);
-    assert_eq!(c.time, 5.0);
+    c.advance(5.0);
+    assert!((c.time - (9.0 - 1e-5)).abs() < 1e-6);
     assert!(!c.held);
-    c.advance(16.0);
-    assert_eq!(c.time, 1.0);
+    c.advance(12.0);
+    assert!((c.time - (1.0 - 1e-5)).abs() < 1e-6);
     c.request[2] = true;
     c.advance(4.0);
-    assert_eq!(c.time, 4.0, "the released stop is evaluated after wrapping");
+    assert!((c.time - (4.0 - 1e-5)).abs() < 1e-6, "the active stop is found again after wrapping");
     assert!(c.held);
 }
 
@@ -1305,7 +1478,8 @@ fn a_door_program_without_green_holds_its_stop_in_state_four() {
     c.start(0.0);
     c.request[0] = true;
     c.advance(3.0);
-    assert_eq!(c.time, 1.5);
+    assert!((c.time - (1.5 - 1e-5)).abs() < 1e-6);
+    assert_eq!(c.state(0), 4);
     assert!(c.held);
     let mut gdr = TrafficLightController::new(vec![vec![(0, 1.0), (4, 2.0), (8, 1.0)]], 4.0);
     gdr.stops = c.stops.clone();

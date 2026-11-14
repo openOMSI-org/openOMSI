@@ -5,11 +5,16 @@ use super::*;
 // (the cloud kinds, a hand-set weather's text and the METAR airports: omsi_content::weather_choice)
 pub(crate) use omsi_content::weather_choice::{cloud_kind_index, cloud_kind_nearest, cover_of, custom_weather, dew_point_c, metar_airports, relative_humidity, CustomWeather, CLOUD_KINDS};
 pub(crate) use omsi_weather::conditions::{cloud_drift_at, cloud_drift_step, initial_wetness, precip_of, road_wetness, street_condition};
+use omsi_weather::climate::ClimateStats;
 
 
 /// Weather from `--weather`, else the clear-sky default.
 pub(crate) fn load_weather(args: &Args) -> omsi_content::weather::Weather {
     load_weather_run(args).0
+}
+
+fn load_map_climate(args: &Args) -> Option<ClimateStats> {
+    ClimateStats::for_map(&args.map, &args.root)
 }
 
 /// [`load_weather`], and the physical model's run when the weather is the model's, for the
@@ -23,7 +28,7 @@ pub(crate) fn load_weather_run(args: &Args) -> (omsi_content::weather::Weather, 
     }
     // no weather chosen, or `natural`: the physical model (weather_model.rs)
     if crate::weather_model::is_natural(args.weather.as_deref()) {
-        let (run, w) = crate::weather_model::ModelRun::start(&crate::situation::start_clock(args));
+        let (run, w) = crate::weather_model::ModelRun::start(&crate::situation::start_clock(args), &load_map_climate(args));
         omsi_sim::host::set_ambient_weather(w.temp.0, w.temp.1);
         crate::weather_setup::publish_page_weather(&w);
         return (w, Some(run));

@@ -6,17 +6,16 @@ use std::ffi::CStr;
 
 pub(super) fn usable(asked: Option<Temporal>, info: &wgpu::AdapterInfo) -> Option<Temporal> {
     let t = asked?;
-    let api = cfg!(windows) && matches!(info.backend, wgpu::Backend::Dx12 | wgpu::Backend::Vulkan);
-    let card = t.upscaler == TemporalUpscaler::Fsr3 || omsi_cfg::upscaler_files::rtx_candidate(info.vendor, &info.name);
-    if api && card {
+    let windows = cfg!(windows) && matches!(info.backend, wgpu::Backend::Dx12 | wgpu::Backend::Vulkan);
+    let (can, needed) = match t.upscaler {
+        TemporalUpscaler::Dlss => (windows && omsi_cfg::upscaler_files::rtx_candidate(info.vendor, &info.name), "DirectX 12 or Vulkan on Windows and an NVIDIA RTX card are needed"),
+        TemporalUpscaler::Fsr3 => (windows, "DirectX 12 or Vulkan on Windows is needed"),
+        TemporalUpscaler::MetalFx => (cfg!(target_os = "macos") && info.backend == wgpu::Backend::Metal, "Metal on a Mac is needed"),
+    };
+    if can {
         return Some(t);
     }
-    log::warn!(
-        "{} upscaling asked for, but {} on {:?} cannot do it (DirectX 12 or Vulkan is needed, and for DLSS an NVIDIA RTX card); drawing without it",
-        t.upscaler.as_str(),
-        info.name,
-        info.backend
-    );
+    log::warn!("{} upscaling asked for, but {} on {:?} cannot do it ({needed}); drawing without it", t.upscaler.as_str(), info.name, info.backend);
     None
 }
 

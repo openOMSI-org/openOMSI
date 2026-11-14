@@ -69,6 +69,10 @@ pub(super) fn tick(lan: &mut LanSession, args: &LanConfig, mine: &Pose, player: 
             });
         }
     }
+    // (a parked bus taken from the server is the server's own already: nothing to work out or send)
+    if crate::mods::upload::drives_kept(player.and_then(|v| crate::mods::vehicles::mounted(&v.ty.def.path)).map(|m| m.0)) {
+        return;
+    }
     // what our bus is, by its content (`mods::identity`), for whoever draws it
     crate::mods::upload::identify(&args.root, &mine.bus, &mine.paint, crate::mods::upload::own_files(&args.root, player));
     // our bus to a server that lacks it, and the others' buses it passes on (`mods::upload`);

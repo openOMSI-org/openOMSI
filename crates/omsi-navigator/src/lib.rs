@@ -240,6 +240,8 @@ const WORDS: Words = Words { days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "S
 struct Route {
     key: String,
     lanes: Vec<usize>,
+    /// Original timetable route, retained when navigation replaces `lanes` with a way back.
+    original_lanes: Vec<usize>,
     complete: bool,
     generation: u64,
     /// Index into `lanes` of the lane the bus is on, and how far along it.
@@ -358,9 +360,11 @@ pub struct Navigator {
     waypoints: Vec<destination::Destination>,
     duty_route: Option<Route>,
     entries: Vec<destination::EntryMarker>,
-    /// The route mesh (buffers 1 and 9): the route and traffic versions, the anchor, its
-    /// size, the bus's lane, look and along-lane position it was built for.
-    route_mesh: (u64, u64, DVec2, u32, usize, u64, f32),
+    route_mesh_history: [Option<((u64, u64, DVec2, usize, u64, f32), std::sync::Arc<[omsi_ui::paint::Vertex]>, u32)>; 2],
+    route_mesh_generation: [u64; 2],
+    route_mesh_uploaded: Option<(usize, u64)>,
+    completed_stops: Vec<NavStop>,
+    trip_completed: bool,
     /// Per lane of the traffic: how congested it is (0 free … 1 standing), smoothed.
     congestion: HashMap<usize, f32>,
     /// The same for the route's lanes ahead (in the route's network), and a version that
@@ -463,23 +467,6 @@ pub struct Navigator {
     first: bool,
     screen: Option<Screen>,
     screen_state: screen::ScreenState,
-}
-
-/// The duty as the navigator shows it: line, terminus, the stops from the next one on,
-/// and the current trip (a key that changes with it, and its name).
-#[allow(clippy::type_complexity)]
-pub fn duty_parts(duty: Option<&omsi_sim::timetable_run::PlayerDuty>) -> (Option<String>, Option<String>, Vec<NavStop>, Option<(String, String)>) {
-    let Some(d) = duty else { return (None, None, Vec::new(), None) };
-    let Some(trip) = d.trips.get(d.trip_index) else { return (None, None, Vec::new(), None) };
-    let line = if trip.line.trim().is_empty() { d.line.trim() } else { trip.line.trim() };
-    let stops = trip
-        .stops
-        .iter()
-        .skip(d.next_stop)
-        .filter(|s| s.stops)
-        .map(|s| NavStop { object_id: s.object_id, position: s.position.unwrap_or(DVec3::ZERO), name: s.name.clone(), arrival: s.arr, closed: s.closed.clone() })
-        .collect();
-    (Some(line.to_string()), Some(trip.terminus.clone()), stops, Some((format!("{}/{}", d.trip_index, trip.name), trip.name.clone())))
 }
 
 /// Screen position of a world point (relative to the anchor) in target pixels.
@@ -587,7 +574,11 @@ impl Navigator {
             waypoints: Vec::new(),
             duty_route: None,
             entries: Vec::new(),
-            route_mesh: (u64::MAX, 0, DVec2::ZERO, 0, 0, 0, 0.0),
+            route_mesh_history: [None, None],
+            route_mesh_generation: [0; 2],
+            route_mesh_uploaded: None,
+            completed_stops: Vec::new(),
+            trip_completed: false,
             congestion: HashMap::new(),
             route_jam: HashMap::new(),
             jam_version: 0,
@@ -795,6 +786,10 @@ impl Navigator {
     pub fn set_route(&mut self, key: &str, lanes: Vec<usize>, complete: bool, generation: u64) {
         let r = self.duty_route_mut();
         let same_trip = r.key == key;
+        if !same_trip || !lanes.is_empty() {
+            r.original_lanes = lanes.clone();
+            r.version += 1;
+        }
         r.key = key.to_string();
         r.complete = complete;
         r.generation = generation;
@@ -817,12 +812,13 @@ impl Navigator {
 
     /// No duty: nothing to follow.
     pub fn clear_route(&mut self) {
+        self.completed_stops.clear();
+        self.trip_completed = false;
         let r = self.duty_route_mut();
         if !r.key.is_empty() || !r.lanes.is_empty() {
             *r = Route { version: r.version + 1, ..Route::default() };
         }
     }
-
 
     /// Where the bus is along the route, and a way back when it left it.
     fn follow(&mut self, f: &NavFrame) {
@@ -1236,7 +1232,8 @@ impl Navigator {
                     // routes and roads again on the whole map
                     self.roads = None;
                     self.reset_navigation_network();
-                    self.route_mesh.0 = u64::MAX;
+                    self.route_mesh_history = [None, None];
+                    self.route_mesh_uploaded = None;
                     self.route_jam.clear();
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) if self.streets.is_none() => {
@@ -1464,6 +1461,8 @@ pub use omsi_mapdraw as mapmesh;
 mod panel;
 mod screen;
 pub use screen::Screen;
+mod duty;
+pub use duty::duty_parts;
 mod live;
 mod build;
 pub use build::{Built, MapGround};

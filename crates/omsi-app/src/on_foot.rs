@@ -13,6 +13,8 @@
 
 mod door_requests;
 mod ground;
+mod parked;
+pub(crate) use parked::{parked_drawn, ParkedTransfer};
 
 use crate::humans::{AvatarCmd, BusId, Humans};
 use crate::App;
@@ -736,6 +738,9 @@ impl App {
             }
             return;
         }
+        if let Some(id) = self.parked_cab_near(pos) {
+            return self.ask_for_parked(id);
+        }
         // at the cab of a vehicle one placed (or with no bus of one's own): its wheel
         if let Some(k) = self.placed_cab_near(pos) {
             let own_near = self.player.as_ref().and_then(|p| self.session.humans.as_mut().and_then(|h| h.vehicle_driver_door(&p.vehicle))).map(|d| (d - pos).truncate().length() < DOOR_REACH).unwrap_or(false);
@@ -805,9 +810,12 @@ impl App {
         if self.session.on_foot.is_none() {
             return false;
         }
+        let alt = self.input.keys.contains(&KeyCode::AltLeft) || self.input.keys.contains(&KeyCode::AltRight);
         match code {
             // the game's own keys stay (menu, pause, screenshots, chat)
-            KeyCode::Escape | KeyCode::F12 | KeyCode::KeyP | KeyCode::KeyV | KeyCode::Slash => false,
+            KeyCode::Escape | KeyCode::F12 | KeyCode::KeyV | KeyCode::Slash => false,
+            KeyCode::KeyP if ctrl && shift => false,
+            _ if omsi_input::actions::is_pause_key(&self.input.game_keys, code, shift, ctrl, alt, &self.input.own_keys) => false,
             KeyCode::F1 => {
                 if pressed && !repeat {
                     if let Some(f) = self.session.on_foot.as_mut() {
@@ -1051,7 +1059,7 @@ pub(crate) fn take_placed(
 }
 
 /// Back at the wheel of the own bus.
-fn sit_at_the_wheel(people: &mut crate::app::PeoplePart, view: &mut crate::app::ViewPart, ui: &mut crate::app::UiPart, player: &crate::app::PlayerPart) {
+pub(crate) fn sit_at_the_wheel(people: &mut crate::app::PeoplePart, view: &mut crate::app::ViewPart, ui: &mut crate::app::UiPart, player: &crate::app::PlayerPart) {
     let Some(f) = people.on_foot.take() else { return };
     if let Some(h) = people.humans.as_mut() {
         h.avatar_remove(AVATAR_KEY);
