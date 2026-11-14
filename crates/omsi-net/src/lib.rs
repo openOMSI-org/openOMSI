@@ -154,7 +154,9 @@ pub use wire::{
 /// 16: `REALM`: the hardware identifier is made for each host owner, not the same everywhere.
 /// 17: the timetable buses' fleet number, plate and depot file in `TRAF` (`meta numbers`): a
 /// game of 16 drew the map's buses without numbers and with another depot's signs.
-pub const PROTOCOL: u32 = 17;
+/// 18: the AI script context pages only the static trip; `schedule_active` rides in the
+/// header, so a timetable bus's context no longer restarts while it runs (#3957).
+pub const PROTOCOL: u32 = 18;
 /// (omsi-plugin's `MULTIPLAYER_PORTS` keeps `omsi.send` off this one and the `PORT_RANGE` after it.)
 pub const DEFAULT_PORT: u16 = 27015;
 /// Ports a host tries after the default one when that is taken (a second session on the

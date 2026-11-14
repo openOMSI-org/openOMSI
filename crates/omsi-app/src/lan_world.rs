@@ -67,12 +67,22 @@ struct ContextSent {
     page: usize,
     sent: u32,
     age: f32,
+    /// The trip's hash last sent and the pages it takes: a new trip goes out quickly again,
+    /// every page of it (#3957).
+    version: u64,
+    pages: u32,
 }
 
 impl ContextSent {
-    fn due(&mut self, dt: f32, bus: bool) -> bool {
+    fn due(&mut self, dt: f32, bus: bool, (version, pages): (u64, usize)) -> bool {
+        if version != self.version {
+            self.version = version;
+            self.pages = pages as u32;
+            self.sent = 0;
+        }
         self.age += dt;
-        let every = if self.sent < 4 { 0.15 } else if bus { 1.0 } else { 4.0 };
+        let burst = self.pages.max(1).saturating_mul(2).max(4);
+        let every = if self.sent < burst { 0.15 } else if bus { 1.0 } else { 4.0 };
         self.age >= every
     }
 }
@@ -539,8 +549,10 @@ impl LanWorld {
                     let Some(tid) = t.table.id_of(c.id) else { continue };
                     cars.insert(tid.raw());
                     let sent = view.context_pages.entry(tid.raw()).or_default();
-                    if !sent.due(MOVING_EVERY_S, c.is_bus()) { continue; }
-                    if let Some(packet) = ai_context(&c.vehicle.host).packet(omsi_net::PROTOCOL as u8, tid.raw(), lan.stamp_ms(), sent.page) {
+                    let context = ai_context(&c.vehicle.host);
+                    let Some(pages) = context.pages() else { continue };
+                    if !sent.due(MOVING_EVERY_S, c.is_bus(), pages) { continue; }
+                    if let Some(packet) = context.packet(omsi_net::PROTOCOL as u8, tid.raw(), lan.stamp_ms(), sent.page) {
                         lan.send_ai_context(id, &packet);
                         sent.page = sent.page.wrapping_add(1);
                         sent.sent += 1;

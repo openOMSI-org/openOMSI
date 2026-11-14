@@ -609,6 +609,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   sound's name (a cut-off download, a web page), the warning now gives its path, its size and its
   first bytes. Before, the log only had the line `probe reach EOF at n bytes` with no file name,
   which read like the cause of a crash (#3956); that line is still logged just before ours.
+- **LAN: timetable buses no longer stay invisible on a client**: a scheduled bus or
+  trolleybus with a long line (several pages of timetable) could stay "waiting for a context"
+  on a client for good, because its pages started over each time its schedule state changed.
+  Only the trip itself is paged now, every page of a new trip goes out quickly, and the client
+  keeps the last complete trip until the new one is whole. Both players need this version
+  (LAN protocol 18) (#3957).
 - **Pixel XC list rows no longer cut off**: on the MZKP SOR NBG 12, the direction and line lists
   of the Pixel XC display showed each row's text sliced along its middle. The text strip of
   every row is skewed a tenth of a millimetre over its tile, and was not taken as printed on
