@@ -13,6 +13,7 @@ file 1517 crates/omsi-net/src/tests.rs
 file 1520 crates/omsi-render/src/rt.rs
 file 1511 crates/omsi-scene/src/vehicles.rs
 file 1609 crates/omsi-ui/src/kit.rs
+fn 301 crates/omsi-app::assemble_app crates/omsi-app/src/lib.rs
 fn 305 crates/omsi-app::run_input_script crates/omsi-app/src/input_script.rs
 fn 381 crates/omsi-render::plan_shadow_casters crates/omsi-render/src/passes/shadow_plan.rs
 fn 369 crates/omsi-render::prepare_ray_tracing crates/omsi-render/src/rt.rs
