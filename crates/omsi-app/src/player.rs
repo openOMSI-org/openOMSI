@@ -41,6 +41,12 @@ fn kept_indicator(cancel: bool, before: Option<f32>, after: Option<f32>) -> Opti
     (!cancel && (before == 1.0 || before == 2.0) && after == 0.0).then_some(before)
 }
 
+fn is_blinker_cancel_trigger(name: &str) -> bool {
+    let n = name.trim().to_ascii_lowercase();
+    let n = n.strip_prefix("ev_").unwrap_or(&n);
+    n.strip_prefix("lights_").unwrap_or(n) == "blinker_swoff"
+}
+
 /// Whether the view follows the steering (the setting on): only from the driver's seat as the
 /// bus places it, its standard camera - a look at the ticket printer or out of the side
 /// window from another of the cab's cameras turned with the wheel as well.
@@ -1058,10 +1064,11 @@ impl Player {
                 _ => self.axes.steering,
             },
         });
-        let lever = self.vehicle.var("lights_sw_blinker");
+        let (lever, mark) = (self.vehicle.var("lights_sw_blinker"), self.vehicle.host.trigger_mark());
         self.vehicle.update(dt);
         if let Some(keep) = kept_indicator(self.blinker_cancel, lever, self.vehicle.var("lights_sw_blinker")) {
             self.vehicle.set_var("lights_sw_blinker", keep);
+            self.vehicle.host.drop_triggers_since(mark, is_blinker_cancel_trigger);
         }
         // OMSI_SUSP_TRACE_WINDOW=<csv>: each wheel's travel every frame of a window run
         // (the offscreen run has OMSI_SUSP_TRACE)
@@ -1265,6 +1272,19 @@ mod kept_indicator_tests {
         assert_eq!(kept_indicator(false, Some(1.0), Some(2.0)), None);
         assert_eq!(kept_indicator(false, Some(0.0), Some(0.0)), None);
         assert_eq!(kept_indicator(false, None, Some(0.0)), None);
+    }
+
+    #[test]
+    fn only_known_lever_snap_triggers_are_suppressed() {
+        for t in ["ev_lights_blinker_swoff", "EV_LIGHTS_BLINKER_SWOFF", "lights_blinker_swoff"] {
+            assert!(super::is_blinker_cancel_trigger(t), "{t}");
+        }
+        for k in ["ev_lights_blinker_off", "ev_lights_blinker_on", "ev_lights_blinker_swon"] {
+            assert!(!super::is_blinker_cancel_trigger(k), "{k}");
+        }
+        for k in ["ev_lights_blinker_sw_on", "ev_warnblinker_schalter", "ev_blinker_relais_aus"] {
+            assert!(!super::is_blinker_cancel_trigger(k), "{k}");
+        }
     }
 }
 

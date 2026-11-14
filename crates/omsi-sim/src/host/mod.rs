@@ -261,6 +261,37 @@ pub fn ambient_weather() -> Option<(f32, f32)> {
 }
 
 impl VehicleHost {
+    pub fn trigger_mark(&self) -> (usize, usize, usize, usize) {
+        (
+            self.fired_triggers.len(),
+            self.fired_trigger_vars.len(),
+            self.network_sound_triggers.len(),
+            self.fired_file_triggers.len(),
+        )
+    }
+
+    pub fn drop_triggers_since(
+        &mut self,
+        mark: (usize, usize, usize, usize),
+        mut drop_if: impl FnMut(&str) -> bool,
+    ) {
+        fn filter_tail<T>(
+            vec: &mut Vec<T>,
+            start: usize,
+            mut name: impl FnMut(&T) -> &str,
+            mut drop_if: impl FnMut(&str) -> bool,
+        ) {
+            if start < vec.len() {
+                let tail = vec.split_off(start);
+                vec.extend(tail.into_iter().filter(|item| !drop_if(name(item))));
+            }
+        }
+        filter_tail(&mut self.fired_triggers, mark.0, |s| s, &mut drop_if);
+        filter_tail(&mut self.fired_trigger_vars, mark.1, |(s, _)| s, &mut drop_if);
+        filter_tail(&mut self.network_sound_triggers, mark.2, |(s, _, _)| s, &mut drop_if);
+        filter_tail(&mut self.fired_file_triggers, mark.3, |(s, _)| s, &mut drop_if);
+    }
+
     /// The latest `$msg` of the scripts when it was said no more than `secs` seconds of play
     /// ago: a script repeating it keeps it fresh.
     pub fn fresh_message(&self, secs: f64) -> Option<&str> {
@@ -951,6 +982,25 @@ mod tests {
         vm.run_trigger(&p, "collision", &mut st, &mut host);
         assert_eq!(st.get(p.var("collision_energy").unwrap()), 135.5);
         assert_eq!(st.get(p.var("collision_energy_eng").unwrap()), 115.5);
+    }
+
+    #[test]
+    fn drop_triggers_since_filters_only_new_matching_triggers() {
+        let mut h = VehicleHost::default();
+        h.capture_sound_triggers = true;
+        h.snapshot_triggers.insert("ev_lights_blinker_sw_off".into());
+        h.sound_trigger_vars("ev_lights_blinker_sw_off", 0, &[1.0]);
+        let mark = h.trigger_mark();
+        h.sound_trigger_vars("ev_lights_blinker_sw_off", 1, &[0.0]);
+        h.sound_trigger_vars("ev_lights_blinker_off", 2, &[0.0]);
+        h.sound_trigger_file("ev_blinker_aus", "click.wav");
+        h.sound_trigger_file("ev_door", "door.wav");
+        h.drop_triggers_since(mark, |n| n == "ev_lights_blinker_sw_off" || n == "ev_blinker_aus");
+        assert_eq!(h.fired_triggers, ["ev_lights_blinker_sw_off", "ev_lights_blinker_off"]);
+        assert_eq!(h.fired_trigger_vars, vec![("ev_lights_blinker_sw_off".into(), vec![1.0])]);
+        let network: Vec<&str> = h.network_sound_triggers.iter().map(|t| t.0.as_str()).collect();
+        assert_eq!(network, ["ev_lights_blinker_sw_off", "ev_lights_blinker_off", "ev_door"]);
+        assert_eq!(h.fired_file_triggers, vec![("ev_door".into(), "door.wav".into())]);
     }
 }
 
