@@ -33,7 +33,9 @@ pub fn door_action(name: &str) -> Option<usize> {
     if n == "doors_all" {
         return Some(0);
     }
-    n.strip_prefix("door_").and_then(|d| d.parse::<usize>().ok()).filter(|d| (1..=9).contains(d))
+    n.strip_prefix("door_")
+        .and_then(|d| d.parse::<usize>().ok())
+        .filter(|d| (1..=9).contains(d))
 }
 
 /// The door release on any bus, `doors_release` (see `Player::door_release`).
@@ -49,28 +51,52 @@ pub fn is_door_release(name: &str) -> bool {
 /// keyboard.cfg keeps the keys of every bus ever installed: a key only another add-on uses
 /// must not take a game shortcut such as Ctrl+Shift+M from this bus (#2577), while one this
 /// bus answers - Ctrl+Left on `blinker_left_set` - must.
-pub fn bus_uses_action(program: &omsi_script::Program, name: &str, aliases: &[(&str, &[&str])]) -> bool {
+pub fn bus_uses_action(
+    program: &omsi_script::Program,
+    name: &str,
+    aliases: &[(&str, &[&str])],
+) -> bool {
     let n = name.to_ascii_lowercase();
-    matches!(n.as_str(), "blinker_left_toggle" | "blinker_right_toggle" | "ticket_give" | "change_give" | "change_take")
-        || door_action(&n).is_some()
+    matches!(
+        n.as_str(),
+        "blinker_left_toggle"
+            | "blinker_right_toggle"
+            | "ticket_give"
+            | "change_give"
+            | "change_take"
+    ) || door_action(&n).is_some()
         || is_door_release(&n)
         || crate::hpattern::resolve(program, name).is_some()
         || program.trigger(name).is_some()
-        || aliases.iter().find(|(a, _)| a.eq_ignore_ascii_case(name)).is_some_and(|(_, al)| al.iter().any(|a| program.trigger(a).is_some()))
-        || n.strip_suffix("_toggle").is_some_and(|b| program.trigger(&format!("{b}_up")).is_some() && program.trigger(&format!("{b}_down")).is_some())
+        || aliases
+            .iter()
+            .find(|(a, _)| a.eq_ignore_ascii_case(name))
+            .is_some_and(|(_, al)| al.iter().any(|a| program.trigger(a).is_some()))
+        || n.strip_suffix("_toggle").is_some_and(|b| {
+            program.trigger(&format!("{b}_up")).is_some()
+                && program.trigger(&format!("{b}_down")).is_some()
+        })
 }
 
 /// A `keyboard.cfg` action of the VR headset (`vr_recenter`, `vr_position_navigator`, ...).
 pub fn is_vr_action(action: &str) -> bool {
-    action.get(..3).is_some_and(|p| p.eq_ignore_ascii_case("vr_"))
+    action
+        .get(..3)
+        .is_some_and(|p| p.eq_ignore_ascii_case("vr_"))
 }
 
 /// Whether a [game] key of `keys` takes the chord (`scan` with the modifier bits `chord`): the
 /// headset's keys only while a headset runs (`vr`), as their actions do nothing without one.
 /// Everybody's list has `vr_position_navigator` on Ctrl+Shift+M (`with_vr_defaults`), and
 /// outside VR it held the mirror editor's shortcut dead since 0.2.46 (#2577).
-pub fn game_chord_bound(keys: &[omsi_content::KeyBinding], scan: i32, chord: i32, vr: bool) -> bool {
-    keys.iter().any(|b| b.scan_code == scan && b.matches(chord) && (vr || !is_vr_action(&b.action)))
+pub fn game_chord_bound(
+    keys: &[omsi_content::KeyBinding],
+    scan: i32,
+    chord: i32,
+    vr: bool,
+) -> bool {
+    keys.iter()
+        .any(|b| b.scan_code == scan && b.matches(chord) && (vr || !is_vr_action(&b.action)))
 }
 
 /// True when `code` + modifiers triggers pause (configured `sim_pause`, or plain `P` if unconfigured and free).
@@ -87,7 +113,10 @@ pub fn is_pause_key(
     };
     let own_mod = crate::keys::own_modifier_bit(code);
     let chord = omsi_content::input::chord(shift, ctrl, alt) & !own_mod;
-    if game_keys.iter().any(|b| b.action.eq_ignore_ascii_case("sim_pause")) {
+    if game_keys
+        .iter()
+        .any(|b| b.action.eq_ignore_ascii_case("sim_pause"))
+    {
         return game_keys.iter().any(|b| {
             b.action.eq_ignore_ascii_case("sim_pause")
                 && b.scan_code != 0
@@ -105,7 +134,9 @@ pub fn is_pause_fallback(
     own_keys: &std::collections::HashSet<i32>,
 ) -> bool {
     code == winit::keyboard::KeyCode::KeyP
-        && !game_keys.iter().any(|b| b.action.eq_ignore_ascii_case("sim_pause"))
+        && !game_keys
+            .iter()
+            .any(|b| b.action.eq_ignore_ascii_case("sim_pause"))
         && crate::keys::dik_code(code).is_some_and(|scan| !own_keys.contains(&scan))
 }
 
@@ -117,7 +148,10 @@ mod tests {
     /// VR the mirror editor has the chord, in VR the key (#2577).
     #[test]
     fn the_mirror_editor_chord_is_only_a_vr_key() {
-        let keys = omsi_content::KeyboardCfg::default().with_game_defaults().with_vr_defaults().game;
+        let keys = omsi_content::KeyboardCfg::default()
+            .with_game_defaults()
+            .with_vr_defaults()
+            .game;
         let scan = crate::keys::dik_code(winit::keyboard::KeyCode::KeyM).unwrap();
         let chord = omsi_content::input::chord(true, true, false);
         assert!(!game_chord_bound(&keys, scan, chord, false));
@@ -136,15 +170,34 @@ mod tests {
     #[test]
     fn a_key_counts_where_the_bus_uses_it() {
         let src = "{trigger:kw_m_enginestart}\n{end}\n{trigger:lights_up}\n{end}\n{trigger:lights_down}\n{end}\n{trigger:bremse_halte_on}\n{end}\n";
-        let file = std::env::temp_dir().join(format!("omsi-input-actions-{}.osc", std::process::id()));
+        let file =
+            std::env::temp_dir().join(format!("omsi-input-actions-{}.osc", std::process::id()));
         std::fs::write(&file, src).unwrap();
-        let program = omsi_script::compile(&omsi_script::CompileInput { scripts: vec![file.clone()], ..Default::default() });
+        let program = omsi_script::compile(&omsi_script::CompileInput {
+            scripts: vec![file.clone()],
+            ..Default::default()
+        });
         std::fs::remove_file(&file).ok();
-        let aliases: &[(&str, &[&str])] = &[("haltestellenbremse", &["bremse_halte_on"]), ("unused_alias", &["no_such_trigger"])];
-        for used in ["blinker_left_toggle", "door_2", "doors_all", "ticket_give", "kw_m_enginestart", "haltestellenbremse", "lights_toggle"] {
+        let aliases: &[(&str, &[&str])] = &[
+            ("haltestellenbremse", &["bremse_halte_on"]),
+            ("unused_alias", &["no_such_trigger"]),
+        ];
+        for used in [
+            "blinker_left_toggle",
+            "door_2",
+            "doors_all",
+            "ticket_give",
+            "kw_m_enginestart",
+            "haltestellenbremse",
+            "lights_toggle",
+        ] {
             assert!(bus_uses_action(&program, used, aliases), "{used}");
         }
-        for unused in ["mirror_editor_of_another_bus", "unused_alias", "wipers_toggle"] {
+        for unused in [
+            "mirror_editor_of_another_bus",
+            "unused_alias",
+            "wipers_toggle",
+        ] {
             assert!(!bus_uses_action(&program, unused, aliases), "{unused}");
         }
     }
@@ -172,15 +225,44 @@ mod tests {
         assert!(is_pause_key(&[], KeyCode::KeyP, false, false, false, &none));
         assert!(!is_pause_key(&[], KeyCode::KeyP, true, false, false, &none));
         let rebound = vec![kb(KeyCode::F6, 0)];
-        assert!(!is_pause_key(&rebound, KeyCode::KeyP, false, false, false, &none));
-        assert!(is_pause_key(&rebound, KeyCode::F6, false, false, false, &none));
-        let unbound = vec![omsi_content::KeyBinding { action: "sim_pause".into(), scan_code: 0, modifier: 0 }];
-        assert!(!is_pause_key(&unbound, KeyCode::KeyP, false, false, false, &none));
+        assert!(!is_pause_key(
+            &rebound,
+            KeyCode::KeyP,
+            false,
+            false,
+            false,
+            &none
+        ));
+        assert!(is_pause_key(
+            &rebound,
+            KeyCode::F6,
+            false,
+            false,
+            false,
+            &none
+        ));
+        let unbound = vec![omsi_content::KeyBinding {
+            action: "sim_pause".into(),
+            scan_code: 0,
+            modifier: 0,
+        }];
+        assert!(!is_pause_key(
+            &unbound,
+            KeyCode::KeyP,
+            false,
+            false,
+            false,
+            &none
+        ));
         let p_scan = crate::keys::dik_code(KeyCode::KeyP).unwrap();
         let own = [p_scan].into_iter().collect();
         assert!(!is_pause_key(&[], KeyCode::KeyP, false, false, false, &own));
         assert!(is_pause_fallback(&[], KeyCode::KeyP, &none));
-        assert!(!is_pause_fallback(&[kb(KeyCode::KeyP, 0)], KeyCode::KeyP, &none));
+        assert!(!is_pause_fallback(
+            &[kb(KeyCode::KeyP, 0)],
+            KeyCode::KeyP,
+            &none
+        ));
         assert!(!is_pause_fallback(&rebound, KeyCode::KeyP, &none));
         assert!(!is_pause_fallback(&unbound, KeyCode::KeyP, &none));
         assert!(!is_pause_fallback(&[], KeyCode::KeyP, &own));
