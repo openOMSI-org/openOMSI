@@ -22,6 +22,8 @@ jobs:
       MAX_BYTES: 1000000
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
