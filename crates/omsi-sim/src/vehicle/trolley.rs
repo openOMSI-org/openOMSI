@@ -605,7 +605,6 @@ impl VehicleInstance {
             let bf = self.get(self.v_brakeforce);
             self.put(self.v_brakeforce, bf + out.mech_brake);
         }
-        // a shoe going through a frog or over a crossing: the script may react to it
         if !frogs.is_empty() || !crossings.is_empty() {
             self.fire_wire_triggers(&frogs, &crossings, net.as_deref());
         }
@@ -705,9 +704,6 @@ impl VehicleInstance {
 mod tests {
     use super::*;
 
-    /// A bus that drives over a crossing of two wires: each of its poles goes over the two
-    /// conductors of the other wire it meets there, and the script's `Trolley_Crossing` fires
-    /// once for the crossing as a whole (see `docs/TROLLEYBUS.md`).
     #[test]
     fn a_bus_driving_over_a_crossing_reports_it_once() {
         let mut vehicle = crate::timetable_run::tests::script_test_vehicle(
@@ -715,25 +711,21 @@ mod tests {
             "crossing_count\npole1_count\npole2_count\njoint_count\n",
             "",
         );
-        // two wires crossing at the same height, without joining
         let net = Arc::new(WireNet::parse(
             "[trolley_span]\np -40 0 5.5\np 40 0 5.5\n[trolley_span]\np 0 -40 5.5\np 0 40 5.5\n",
         ));
         assert_eq!(net.crossings.len(), 4, "the wires cross without joining");
-        // a pole on each wire of the span the bus drives along
         let pole = |side: i8| omsi_trolley::PoleDef { side, base: glam::Vec3::new(0.3 * side as f32, -1.0, 3.0), ..Default::default() };
         let def = TrolleyDef { poles: vec![pole(-1), pole(1)], ..Default::default() };
         vehicle.trolley = Some(TrolleyGear::for_type(&def, 1).unwrap());
         vehicle.attach_wires(Some(net.clone()));
         vehicle.heading = 90.0; // east, along the span
         vehicle.position = glam::DVec3::new(-20.0, 0.0, 0.0);
-        // the poles up on the wire
         vehicle.trolley_put_on(false);
         for _ in 0..(8 * 60) {
             vehicle.step_physics(1.0 / 60.0);
         }
         assert!(vehicle.trolley.as_ref().unwrap().rig.all_on_wire(), "both poles on the wire");
-        // and over the crossing
         let mut batches: Vec<Vec<(usize, u32)>> = Vec::new();
         vehicle.set_speed(8.0);
         for _ in 0..(6 * 60) {
@@ -749,27 +741,22 @@ mod tests {
         assert_eq!(batches.len(), 2, "{batches:?}");
         assert!(batches.iter().all(|b| b.len() == 2), "{batches:?}");
         let crossed: Vec<(usize, u32)> = batches.concat();
-        // each pole went over the two conductors of the wire that crosses here
         for p in 0..2 {
             assert_eq!(crossed.iter().filter(|(pole, _)| *pole == p).count(), 2, "{crossed:?}");
         }
-        // the four conductor intersections are one physical crossing
         assert_eq!(vehicle.var("joint_count"), Some(4.0));
         assert_eq!(vehicle.var("pole1_count"), Some(2.0));
         assert_eq!(vehicle.var("pole2_count"), Some(2.0));
         assert_eq!(vehicle.var("crossing_count"), Some(1.0));
     }
 
-    /// A bus that drives over a frog: its poles are apart, so they cross it in steps of their
-    /// own, but the frog's own trigger fires once for the frog (see `docs/TROLLEYBUS.md`).
     #[test]
     fn a_bus_driving_over_a_frog_reports_it_once() {
         let mut vehicle = crate::timetable_run::tests::script_test_vehicle(
-            "{trigger:Trolley_Frog}\n(L.L.frog_count) 1 + (S.L.frog_count)\n{end}\n{trigger:Trolley_Pole1_Frog}\n(L.L.pole1_count) 1 + (S.L.pole1_count)\n{end}\n{trigger:Trolley_Pole2_Frog}\n(L.L.pole2_count) 1 + (S.L.pole2_count)\n{end}\n",
-            "frog_count\npole1_count\npole2_count\n",
+            "{trigger:Trolley_Frog}\n(L.L.frog_count) 1 + (S.L.frog_count)\n{end}\n{trigger:Trolley_Pole1_Frog}\n(L.L.pole1_count) 1 + (S.L.pole1_count)\n{end}\n{trigger:Trolley_Pole2_Frog}\n(L.L.pole2_count) 1 + (S.L.pole2_count)\n{end}\n{trigger:Trolley_Joint}\n(L.L.joint_count) 1 + (S.L.joint_count)\n{end}\n",
+            "frog_count\npole1_count\npole2_count\njoint_count\n",
             "",
         );
-        // a wire with a frog at the origin: the toe to the west, the straight way east
         let net = Arc::new(WireNet::parse(
             "[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np -60 0 5.5\np 0 0 5.5\n\
              [trolley_span]\nsection 1\np 0 0 5.5\np 25 0 5.5\np 50 0 5.5\n\
@@ -783,13 +770,11 @@ mod tests {
         vehicle.attach_wires(Some(net.clone()));
         vehicle.heading = 90.0; // east, along the span
         vehicle.position = glam::DVec3::new(-20.0, 0.0, 0.0);
-        // the poles up on the wire
         vehicle.trolley_put_on(false);
         for _ in 0..(8 * 60) {
             vehicle.step_physics(1.0 / 60.0);
         }
         assert!(vehicle.trolley.as_ref().unwrap().rig.all_on_wire(), "both poles on the wire");
-        // and over the frog
         let mut batches: Vec<Vec<(usize, u32)>> = Vec::new();
         vehicle.set_speed(8.0);
         for _ in 0..(6 * 60) {
@@ -800,11 +785,10 @@ mod tests {
             }
         }
         assert!(vehicle.position.x > 20.0, "the bus did not reach the frog: {:.1}", vehicle.position.x);
-        // the poles crossed the frog in steps of their own
         assert_eq!(batches.len(), 2, "{batches:?}");
         assert!(batches.iter().all(|b| b.len() == 1), "{batches:?}");
-        // the frog is one frog all the same
         assert_eq!(vehicle.var("frog_count"), Some(1.0));
+        assert_eq!(vehicle.var("joint_count"), Some(1.0), "the frog's inner crossing fires a joint");
         assert_eq!(vehicle.var("pole1_count"), Some(1.0));
         assert_eq!(vehicle.var("pole2_count"), Some(1.0));
     }

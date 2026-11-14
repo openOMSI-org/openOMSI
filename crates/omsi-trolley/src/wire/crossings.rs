@@ -3,10 +3,8 @@
 use super::WireNet;
 use glam::DVec3;
 
-/// Where two physical trolley wires cross.
 #[derive(Debug, Clone, Copy)]
 pub struct Crossing {
-    /// The spans that cross.
     pub a: u32,
     pub b: u32,
     /// The side of each span (0 right/positive, 1 left/negative).
@@ -15,7 +13,6 @@ pub struct Crossing {
     /// Where on each span the crossing is (the length along the span).
     pub sa: f64,
     pub sb: f64,
-    /// Where it is in the world.
     pub pos: DVec3,
 }
 
@@ -23,10 +20,7 @@ pub struct Crossing {
 const CROSS_HEIGHT: f64 = 0.25;
 /// Wire extent in XY, including the largest allowed mitre and half spacing.
 const WIRE_REACH: f64 = 2.0;
-/// Ignore conductor contacts this far from a shared node, where joined wires can overlap.
-const SHARED_NODE_REACH: f64 = WIRE_REACH + super::JOIN;
 
-/// Where two horizontal segments cross, if they do: the parameters along each.
 fn cross_2d(a0: DVec3, a1: DVec3, b0: DVec3, b1: DVec3) -> Option<(f64, f64)> {
     let (r, s) = (a1 - a0, b1 - b0);
     let den = r.x * s.y - r.y * s.x;
@@ -73,15 +67,6 @@ impl WireNet {
                 let (blo, bhi) = boxes[b as usize];
                 if ahi.x < blo.x || bhi.x < alo.x || ahi.y < blo.y || bhi.y < alo.y { continue; }
                 for (side_a, side_b, sa, sb, pos) in self.wire_intersections(a, b) {
-                    if self.spans[a].ends.iter().enumerate().any(|(end_a, node)| {
-                        self.spans[b as usize].ends.iter().enumerate().any(|(end_b, other_node)| {
-                            node == other_node
-                                && sa_from_end(&self.spans[a], end_a, sa) <= SHARED_NODE_REACH
-                                && sa_from_end(&self.spans[b as usize], end_b, sb) <= SHARED_NODE_REACH
-                        })
-                    }) {
-                        continue;
-                    }
                     let ci = crossings.len() as u32;
                     crossings.push(Crossing { a: a as u32, b, side_a, side_b, sa, sb, pos });
                     on_span[a].push((ci, sa));
@@ -93,7 +78,6 @@ impl WireNet {
         self.span_crossings = on_span;
     }
 
-    /// The grid cells a span's physical wires may pass through.
     fn cells_of(&self, span: u32) -> Vec<(i32, i32)> {
         let mut cells = Vec::new();
         for w in self.spans[span as usize].pts.windows(2) {
@@ -152,11 +136,6 @@ impl WireNet {
     }
 }
 
-#[inline]
-fn sa_from_end(span: &super::Span, end: usize, s: f64) -> f64 {
-    if end == 0 { s } else { span.len() - s }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,11 +157,46 @@ mod tests {
     }
 
     #[test]
-    fn a_frog_does_not_create_wire_crossings_at_its_shared_node() {
+    fn a_frog_records_its_inner_crossing_but_not_its_shared_node() {
         let net = WireNet::parse(
             "[trolley_span]\np -50 0 5.5\np 100 0 5.5\n[trolley_span]\np 100 0 5.5\np 400 0 5.5\n[trolley_span]\np 100 0 5.5\np 300 80 5.5\n[trolley_switch]\npos 100 0 5.5\nmode fixed\n",
         );
-        assert!(net.crossings.is_empty(), "joined frog spans should not create crossings");
+        assert_eq!(net.crossings.len(), 1, "only the inner conductors cross");
+        let crossing = &net.crossings[0];
+        assert_eq!((crossing.a, crossing.b), (1, 2));
+        assert_ne!(crossing.side_a, crossing.side_b);
+        assert!(crossing.sa > 0.1 && crossing.sb > 0.1);
+    }
+
+    #[test]
+    fn frog_inner_crossings_survive_angle_spacing_and_span_splits() {
+        for angle in [10.0_f64, 17.0, 22.0, 45.0] {
+            for spacing in [0.2, 0.6, 2.0] {
+                for split in [false, true] {
+                    let direction = DVec3::new(angle.to_radians().cos(), angle.to_radians().sin(), 0.0);
+                    let end = direction * 50.0;
+                    let branch = if split {
+                        let mid = direction * 1.0;
+                        format!(
+                            "[trolley_span]\np 0 0 5.5\np {} {} 5.5\n[trolley_span]\np {} {} 5.5\np {} {} 5.5\n",
+                            mid.x, mid.y, mid.x, mid.y, end.x, end.y,
+                        )
+                    } else {
+                        format!("[trolley_span]\np 0 0 5.5\np {} {} 5.5\n", end.x, end.y)
+                    };
+                    let net = WireNet::parse(&format!(
+                        "[trolley_net]\nspacing {spacing}\n\
+                         [trolley_span]\np -50 0 5.5\np 0 0 5.5\n\
+                         [trolley_span]\np 0 0 5.5\np 50 0 5.5\n\
+                         {branch}[trolley_switch]\npos 0 0 5.5\nmode fixed\n",
+                    ));
+                    assert_eq!(net.crossings.len(), 1, "angle={angle}, spacing={spacing}, split={split}");
+                    let crossing = &net.crossings[0];
+                    assert_eq!(crossing.a, 1);
+                    assert_ne!(crossing.side_a, crossing.side_b);
+                }
+            }
+        }
     }
 
     #[test]

@@ -118,7 +118,10 @@ the constants are in the vehicle's file, not in the game.
 * **A shoe going over a crossing.** Where two wires cross without joining (an overhead
   crossing with insulated sections) the shoe goes over it: the crossing fires the script's
   triggers `Trolley_Pole<k>_Joint` (that pole's own) and `Trolley_Joint` (a crossing,
-  whichever pole). Each conductor intersection fires both triggers once. At a perpendicular
+  whichever pole). This includes the inner conductor crossing between a frog's straight and
+  branch legs, even though those spans join at the frog. The joined endpoints themselves do
+  not fire joint triggers; `Trolley_Frog` reports passage through the frog separately.
+  Each conductor intersection fires both triggers once. At a perpendicular
   crossing, each of the two conductors on one span crosses both conductors on the other span,
   resulting in four conductor intersections. Consequently, `Trolley_Joint` fires **four times** and
   the corresponding pole-specific trigger each fire **two times** for one physical crossing.
