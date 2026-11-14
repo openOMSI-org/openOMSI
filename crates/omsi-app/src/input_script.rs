@@ -488,6 +488,12 @@ impl App {
                     self.quick_save();
                     return true;
                 }
+                // Num0: cruise control (as AUXI has it, #3976), where neither the game's keys
+                // nor this bus use Num0 alone (Ctrl+Num0 is OMSI's IBIS 0)
+                KeyCode::Numpad0 if !alt && !ctrl && !shift_now && self.player.is_some() && !self.chord_bound(code, shift_now, ctrl, alt) => {
+                    self.game_action("cruise_control");
+                    return true;
+                }
                 // Alt+F: the flashlight (F alone is the bus's high beam)
                 KeyCode::KeyF if alt && !ctrl && !shift_now && !self.chord_bound(code, shift_now, ctrl, alt) => {
                     self.toggle_flashlight();

@@ -193,7 +193,7 @@ where keyboard.cfg does not make it the ticket desk camera.
 The mouse wheel (and **=** / **-**, a pinch on a phone) zooms: outside the camera comes closer,
 inside the bus the view narrows, as in OMSI; **Ctrl**+wheel outside narrows the view instead
 (a telephoto, the camera stays where it is). F1-F4 driver / passenger / outside / map (free) camera, F5-F8 the destination
-sign and roller blind keys as in OMSI, Ctrl+S quick save (OMSI's `quicksave`; Alt+S works too), **Alt+F** the flashlight (a lamp at the eye that shines where the view looks; plain F is the bus's high beam), F9 write the
+sign and roller blind keys as in OMSI, Ctrl+S quick save (OMSI's `quicksave`; Alt+S works too), **Alt+F** the flashlight (a lamp at the eye that shines where the view looks; plain F is the bus's high beam), **Num0** the cruise control (it holds the speed you drive at by working the pedals; the brake switches it off, the throttle pressed further wins while held; buses that use Num0 themselves keep it), F9 write the
 run into the personnel file, WASD+QE in the free camera (**Ctrl**+click on the ground there
 moves the bus to the nearest street), left click on cockpit elements, the chat key (**/** by default, see Controls) opens the chat line in a
 LAN session.

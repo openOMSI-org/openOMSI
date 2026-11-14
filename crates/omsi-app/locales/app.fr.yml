@@ -4378,3 +4378,6 @@
 "At most 5": "Au plus 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Les dossiers d'objets et de splines qu'aucune autre carte n'utilise sont supprimés avec lui : {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Les dossiers d'objets et de splines qu'une autre carte utilise encore restent : {n}."
+"Cruise control: {} km/h": "Régulateur de vitesse : {} km/h"
+"Cruise control off": "Régulateur de vitesse coupé"
+"Cruise control works above {} km/h": "Le régulateur de vitesse fonctionne au-dessus de {} km/h"

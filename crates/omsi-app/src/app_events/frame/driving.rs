@@ -93,6 +93,9 @@ pub(super) fn player_step(cx: PlayerStepCx, dt: f32) {
             !matches!(cx.view.view.as_str(), "free" | "foot"),
         );
         crate::devtools::apply_holds(cx.ui.devtools.as_deref(), &mut p.vehicle);
+        if let Some(n) = p.cruise_note.take() {
+            *cx.ui.service_msg = Some((omsi_ui::tr(&n).into_owned(), 2.5));
+        }
         if let Some(g) = p.vehicle.trolley.as_deref_mut() {
             if let Some(n) = g.rig.take_notes().pop() {
                 *cx.ui.service_msg = Some((n, 3.0));

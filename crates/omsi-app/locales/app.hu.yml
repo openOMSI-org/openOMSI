@@ -3219,3 +3219,6 @@
 "At most 5": "Legfeljebb 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Azok az objektum- és spline-mappák, amelyeket más térkép nem használ, vele együtt törlődnek: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Azok az objektum- és spline-mappák, amelyeket egy másik térkép még használ, megmaradnak: {n}."
+"Cruise control: {} km/h": "Tempomat: {} km/h"
+"Cruise control off": "Tempomat kikapcsolva"
+"Cruise control works above {} km/h": "A tempomat {} km/h felett működik"

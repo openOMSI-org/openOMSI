@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Default)]
 pub struct Game {
+    pub cruise: Option<f32>,
     pub hof: Option<api::Value>,
     pub vehicle: bool,
     pub vars: HashMap<String, f32>,
@@ -298,6 +299,16 @@ impl PluginIo for Game {
     }
     fn bus_steer(&self) -> Option<(f32, f32)> {
         Some((-10.0, 45.0))
+    }
+    fn bus_cruise(&self) -> Option<f32> {
+        self.cruise
+    }
+    fn bus_set_cruise(&mut self, kmh: Option<f32>) -> bool {
+        if kmh.is_some_and(|k| k < 5.0) {
+            return false;
+        }
+        self.cruise = kmh;
+        true
     }
     fn bus_action(&mut self, name: &str, down: bool) -> bool {
         self.did(format!("action {name} {down}"));

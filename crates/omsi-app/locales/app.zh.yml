@@ -3610,3 +3610,6 @@
 "At most 5": "最多5辆"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地图都未使用的物体和样条文件夹会一并删除：{n} 个，{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "其他地图仍在使用的物体和样条文件夹会保留：{n} 个。"
+"Cruise control: {} km/h": "定速巡航:{} 公里/小时"
+"Cruise control off": "定速巡航已关闭"
+"Cruise control works above {} km/h": "定速巡航在时速 {} 公里以上才能使用"

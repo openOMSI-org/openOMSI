@@ -735,6 +735,18 @@ impl PluginIo for Io<'_> {
             [c.throttle, c.brake, c.clutch, c.steering]
         })
     }
+    fn bus_cruise(&self) -> Option<f32> {
+        self.app()?.player.as_ref()?.cruise.as_ref().map(|c| c.kmh)
+    }
+    fn bus_set_cruise(&mut self, kmh: Option<f32>) -> bool {
+        let Some(p) = self.player_mut() else { return false };
+        match kmh {
+            Some(k) if k.is_finite() && k >= crate::player::cruise::MIN_KMH => p.cruise = Some(crate::player::cruise::Cruise::new(k)),
+            Some(_) => return false,
+            None => p.cruise = None,
+        }
+        true
+    }
     fn bus_steer(&self) -> Option<(f32, f32)> {
         self.veh().map(|v| (v.physics.steer_deg, v.physics.max_steer_deg))
     }

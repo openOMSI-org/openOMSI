@@ -146,6 +146,12 @@ impl App {
             }
             "screenshot" => self.take_screenshot(),
             "flashlight" => self.toggle_flashlight(),
+            "cruise_control" => {
+                if let Some(p) = self.player.as_mut() {
+                    let msg = p.toggle_cruise();
+                    self.service_msg = Some((omsi_ui::tr(&msg).into_owned(), 2.5));
+                }
+            }
             "clean_screen" => self.toggle_clean_screen(),
             "get_up" => {
                 if self.session.on_foot.as_ref().is_some_and(|f| f.inside.is_some()) {

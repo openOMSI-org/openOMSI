@@ -4377,3 +4377,6 @@
 "At most 5": "მაქსიმუმ 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "ობიექტებისა და სპლაინების საქაღალდეები, რომლებსაც სხვა რუკა არ იყენებს, მასთან ერთად წაიშლება: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "ობიექტებისა და სპლაინების საქაღალდეები, რომლებსაც სხვა რუკა ჯერ კიდევ იყენებს, რჩება: {n}."
+"Cruise control: {} km/h": "კრუიზ-კონტროლი: {} კმ/სთ"
+"Cruise control off": "კრუიზ-კონტროლი გამორთულია"
+"Cruise control works above {} km/h": "კრუიზ-კონტროლი მუშაობს {} კმ/სთ-ზე მეტ სიჩქარეზე"

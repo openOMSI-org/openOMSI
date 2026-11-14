@@ -39,6 +39,8 @@ fn the_bus() {
         local d = omsi.bus.damage(); assert(d.crashes == 1 and d.last_impact_kj == 136 and d.repair_minutes == 30)
         local t, b, c, st = omsi.bus.controls(); assert(t == 0.5 and st == -0.25)
         assert(omsi.bus.steering_angle() == -10)
+        assert(omsi.bus.cruise() == nil and not omsi.bus.set_cruise(3) and omsi.bus.set_cruise(50) and omsi.bus.cruise() == 50)
+        assert(omsi.bus.set_cruise() and omsi.bus.cruise() == nil)
         assert(#omsi.bus.wheels() == 1 and omsi.bus.wheels()[1].radius == 0.5)
         assert(omsi.bus.horn() == false and omsi.bus.sound_horn(true) and omsi.bus.horn() == true)
         assert(omsi.bus.handbrake() == true and omsi.bus.toggle_handbrake())

@@ -4,6 +4,7 @@ use super::*;
 use omsi_input::auto_shift::GateMemory;
 
 mod cameras;
+pub(crate) mod cruise;
 mod doors;
 mod gears;
 mod ibis;
@@ -174,6 +175,10 @@ pub(crate) struct Player {
     pub(crate) auto_drag: Option<AutoDrag>,
     /// Running auto-start (Shift+U).
     pub(crate) startup: Option<omsi_sim::startup::StartUp>,
+    /// Cruise control, while it is on (Num0, #3976).
+    pub(crate) cruise: Option<cruise::Cruise>,
+    /// What the cruise control has to say on the screen (it switched itself off).
+    pub(crate) cruise_note: Option<String>,
     /// When the running auto-start began (one that has gone on for long is given up by the
     /// next Shift+U).
     pub(crate) startup_at: Option<std::time::Instant>,
@@ -775,6 +780,39 @@ impl Player {
         self.from_keyboard = false;
     }
 
+    /// Cruise control on at the speed driven now, or off (Num0). The text for the screen.
+    pub(crate) fn toggle_cruise(&mut self) -> String {
+        if self.cruise.take().is_some() {
+            return "Cruise control off".into();
+        }
+        let kmh = self.vehicle.physics.velocity_kmh();
+        if kmh < cruise::MIN_KMH {
+            return format!("Cruise control works above {} km/h", cruise::MIN_KMH as i32);
+        }
+        let kmh = kmh.round();
+        self.cruise = Some(cruise::Cruise::new(kmh));
+        format!("Cruise control: {} km/h", kmh as i32)
+    }
+
+    /// The pedals with the cruise control's foot on them: the brake switches it off, a
+    /// throttle pressed further wins while held.
+    fn cruise_pedals(&mut self, dt: f32, throttle: f32, brake: f32) -> (f32, f32) {
+        let Some(c) = self.cruise.as_mut() else { return (throttle, brake) };
+        let kmh = self.vehicle.physics.velocity_kmh();
+        // (reversing, or the bus brought to a stand by something else: no speed to hold)
+        if brake > 0.05 || self.axes.brake_key || kmh < 1.0 {
+            self.cruise = None;
+            self.cruise_note = Some("Cruise control off".into());
+            return (throttle, brake);
+        }
+        let (t, b) = c.pedals(kmh, dt);
+        if throttle > t {
+            c.overridden();
+            return (throttle, 0.0);
+        }
+        (t, b)
+    }
+
     /// Start the whole bus by itself (Shift+U): everything a driver does to put it into
     /// service. Returns what to show in the HUD.
     pub(crate) fn start_up(&mut self) -> String {
@@ -1045,6 +1083,7 @@ impl Player {
         self.tick_auto_shift(dt, a.throttle.unwrap_or(0.0).max(self.axes.throttle), a.brake.unwrap_or(0.0).max(self.axes.brake));
         let throttle = a.throttle.unwrap_or(self.axes.throttle).max(self.axes.throttle);
         let brake = a.brake.unwrap_or(self.axes.brake).max(self.axes.brake);
+        let (throttle, brake) = self.cruise_pedals(dt, throttle, brake);
         let (throttle, brake) = rp_speed_limit::controls(
             f64::from(self.vehicle.physics.velocity_kmh()),
             omsi_lan::commands::speed_limit_kmh(),

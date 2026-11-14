@@ -654,6 +654,7 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | `omsi.bus.acceleration()` | across, along, up | Its acceleration in its own frame, m/s² without gravity: to the right, forwards, up. | 0.2.22 |
 | `omsi.bus.action(name, [down])` | boolean | A key action of the vehicles (`[vehicles]` of keyboard.cfg: `horn`, `parking_brake_toggle`, `kw_scheinwerfer_toggle`, `blinker_left_set`, `ticket_give`, ...): pressed and let go, or held (`down` true) and let go (`false`). `true` when the bus knows it. *Permission: `vehicle_write`.* | 0.2.22 |
 | `omsi.bus.controls()` | throttle, brake, clutch, steering | What the bus drives with now: the pedals (0 to 1) and the steering (-1 left to 1 right), from the keys, the mouse or a controller. | 0.2.22 |
+| `omsi.bus.cruise()` | number or nil | The speed the cruise control holds, km/h (`nil` while it is off). The player switches it with Num0. | 0.3.55 |
 | `omsi.bus.damage()` | table or nil | `{crashes, last_impact_kj, repair_minutes}`: the bus's crashes, the energy of the last one and how long a repair would take (`nil`: nothing to repair). | 0.2.22 |
 | `omsi.bus.destination()` | name, index | The destination the bus shows and its index in `destinations` (nothing when none). | 0.2.22 |
 | `omsi.bus.destinations()` | list of tables | The destinations of the bus's depot file: `{index, code, name, all_exit}` (`index` from 1, for `set_destination`). | 0.2.22 |
@@ -686,6 +687,7 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | `omsi.bus.retarder()` | number or nil | The retarder's step, where the bus has one. | 0.2.22 |
 | `omsi.bus.rpm()` | number or nil | The engine's revolutions per minute. | 0.2.22 |
 | `omsi.bus.sales()` | tickets, money | Tickets sold this session and the money taken (the game knows no currency). | 0.2.22 |
+| `omsi.bus.set_cruise([kmh])` | boolean | Switches the cruise control on to hold `kmh` (5 km/h or more), or off (`nil`). It works the throttle and the brake the bus's scripts read, which a plugin's `set_var("Throttle")` cannot: the player's pedals are written over it every step. The brake switches it off; the throttle pressed further wins while held. *Permission: `vehicle_write`.* | 0.3.55 |
 | `omsi.bus.set_destination(index)` | boolean | Shows destination `index` (from 1, as `destinations` lists them). *Permission: `vehicle_write`.* | 0.2.22 |
 | `omsi.bus.set_indicator(state)` | boolean | Sets the indicators: `"off"`, `"left"`, `"right"` or `"hazard"`. *Permission: `vehicle_write`.* | 0.2.22 |
 | `omsi.bus.set_interior_light(on)` | boolean | Switches the passenger room's light on or off. *Permission: `vehicle_write`.* | 0.2.22 |
