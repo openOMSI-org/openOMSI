@@ -67,9 +67,6 @@ impl WireNet {
             near.sort_unstable();
             near.dedup();
             for b in near {
-                if self.spans[a].ends.iter().any(|node| self.spans[b as usize].ends.contains(node)) {
-                    continue;
-                }
                 let (alo, ahi) = boxes[a];
                 let (blo, bhi) = boxes[b as usize];
                 if ahi.x < blo.x || bhi.x < alo.x || ahi.y < blo.y || bhi.y < alo.y { continue; }
