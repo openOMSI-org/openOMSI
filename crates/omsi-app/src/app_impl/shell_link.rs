@@ -171,6 +171,13 @@ impl App {
     /// What the clicks on the screens asked for, done (at the start of a frame, with the
     /// event loop at hand).
     pub(crate) fn apply_shell_actions(&mut self, event_loop: &ActiveEventLoop) {
+        if let Some(file) = self.menus.load_request.take() {
+            if self.load_situation_file(&file) {
+                self.finish_session();
+                crate::platform::exit(event_loop);
+                return;
+            }
+        }
         let actions = std::mem::take(&mut self.shell.actions);
         for a in actions {
             log::info!("screens: {a:?}");

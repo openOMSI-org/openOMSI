@@ -3272,3 +3272,8 @@
 "At most 5": "最大5台"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "他のどのマップも使っていないオブジェクトとスプラインのフォルダも一緒に削除されます：{n} 個、{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "他のマップがまだ使っているオブジェクトとスプラインのフォルダは残ります：{n} 個。"
+"Load a situation...": "状況を読み込む..."
+"Enter saves, Esc cancels": "Enter で保存、Esc で取り消し"
+"Save under a name...": "名前を付けて保存..."
+"No saved situation of this map yet": "このマップの保存された状況はまだありません"
+"Saved as \"{}\"": "「{}」として保存しました"

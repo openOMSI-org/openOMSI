@@ -262,13 +262,14 @@ impl App {
         }
         let Some(id) = self.game_menu_items().get(k).map(|m| m.0) else { return };
         match id {
-            "load" => {
+            "load" if self.integrations.plugin_command => {
                 self.close_game_menu();
-                if self.load_quicksave() {
-                    self.finish_session();
-                    crate::platform::exit(event_loop);
+                match self.quicksave_file() {
+                    Some(file) => self.menus.load_request = Some(file),
+                    None => self.service_msg = Some(("No quicksave yet (Ctrl+S saves one)".into(), 4.0)),
                 }
             }
+            "load" => self.open_list(crate::game_lists::ListKind::LoadSaves),
             "quit" => {
                 self.menus.game_menu = None;
                 self.finish_session();
@@ -680,7 +681,7 @@ pub(crate) const GAME_MENU: [(&str, &str); 17] = [
     ("endduty", "End the tour"),
     ("save", "Save the situation"),
     ("saveslot", "Save to a slot..."),
-    ("load", "Load the quicksave"),
+    ("load", "Load a situation..."),
     ("shot", "Screenshot"),
     ("photo", "Photo mode"),
     ("quit", "End the session"),

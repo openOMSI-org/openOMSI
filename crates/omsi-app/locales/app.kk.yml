@@ -3217,3 +3217,8 @@
 "At most 5": "Ең көбі 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Басқа ешбір карта пайдаланбайтын нысандар мен сплайндар қалталары онымен бірге жойылады: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Басқа карта әлі пайдаланатын нысандар мен сплайндар қалталары қалады: {n}."
+"Load a situation...": "Жағдайды жүктеу..."
+"Enter saves, Esc cancels": "Enter сақтайды, Esc болдырмайды"
+"Save under a name...": "Атаумен сақтау..."
+"No saved situation of this map yet": "Бұл картаның сақталған жағдайы әзірге жоқ"
+"Saved as \"{}\"": "«{}» ретінде сақталды"

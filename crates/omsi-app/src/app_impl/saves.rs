@@ -61,23 +61,23 @@ impl App {
         self.session.career.seconds = 0.0;
     }
 
-    /// Start the game again on the quicksave (`Situations/quicksave.osn` of the content
-    /// folder): a fresh process, as OMSI loads a situation into a fresh world. False when
-    /// there is none.
-    pub(crate) fn load_quicksave(&mut self) -> bool {
+    /// The quicksave, where there is one: the newer of the content folder's and the fallback
+    /// folder's (see `save_or_fallback`).
+    pub(crate) fn quicksave_file(&self) -> Option<PathBuf> {
         let dir = crate::startup::content_dir().unwrap_or_else(|| self.args.root.clone()).join("Situations");
         let mut file = dir.join("quicksave.osn");
-        // (the newer of the content folder's and the fallback folder's, see `save_or_fallback`)
         if let Some(f) = crate::startup::save_fallback_dir().map(|f| f.join("Situations").join("quicksave.osn")) {
             let age = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
             if f.exists() && (!file.exists() || age(&f) > age(&file)) {
                 file = f;
             }
         }
-        if !file.exists() {
-            self.service_msg = Some(("No quicksave yet (Ctrl+S saves one)".into(), 4.0));
-            return false;
-        }
+        file.exists().then_some(file)
+    }
+
+    /// Start the game again on the situation `file` (a fresh process, as OMSI loads a
+    /// situation into a fresh world); true when it started. The caller ends this session.
+    pub(crate) fn load_situation_file(&mut self, file: &Path) -> bool {
         let Ok(exe) = std::env::current_exe() else { return false };
         let mut cmd = std::process::Command::new(exe);
         cmd.arg("--root").arg(&self.args.root).arg("--no-menu").arg("--situation").arg(&file);
@@ -261,7 +261,9 @@ impl App {
     /// the map's folder in the content folder, or with `over` into that slot of the map,
     /// which it replaces (#2556). The launcher offers them, with the last situation, to
     /// continue from.
-    pub(crate) fn save_slot_to(&mut self, over: Option<std::path::PathBuf>) {
+    /// `typed`: a name the player gave it in the menu (#3975), which it keeps when it is
+    /// saved over later, as a name given in the launcher does.
+    pub(crate) fn save_slot_to(&mut self, over: Option<std::path::PathBuf>, typed: Option<String>) {
         let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else { return };
         let Some(dir) = crate::startup::content_dir().and_then(|base| {
             std::path::Path::new(&self.args.map.replace('\\', "/")).parent().map(|d| base.join(d).join(SAVES))
@@ -276,7 +278,8 @@ impl App {
         // (a slot saved over keeps its number: "Slot 3" stays the third; only one of this
         // map's own slots is ever written over)
         let over = over.and_then(|f| self.save_slots().into_iter().find(|s| s.file == f));
-        let named = over.as_ref().filter(|s| s.chosen).map(|s| s.name.clone());
+        let typed = typed.map(|t| t.trim().chars().filter(|c| !c.is_control()).take(NAME_MAX).collect::<String>()).filter(|t| !t.is_empty());
+        let named = typed.or_else(|| over.as_ref().filter(|s| s.chosen).map(|s| s.name.clone()));
         let over = over.map(|s| s.file);
         let number_of = |f: &std::path::Path| f.file_stem().and_then(|s| s.to_string_lossy().strip_prefix("Slot ").and_then(|n| n.trim().parse::<usize>().ok()));
         let (n, out) = match over {
@@ -311,7 +314,10 @@ impl App {
                     None => crate::situation::write_script_textures(&out, &[] as &[(&[u8], u32, u32)]),
                 }
                 log::info!("saved situation {} ({} vehicles)", out.display(), sit.vehicles.len());
-                self.service_msg = Some((format!("Saved as slot {n}: the launcher continues from it"), 4.0));
+                self.service_msg = Some(match &named {
+                    Some(name) => (omsi_ui::tr("Saved as \"{}\"").replace("{}", name), 4.0),
+                    None => (format!("Saved as slot {n}: the launcher continues from it"), 4.0),
+                });
             }
             Err(e) => {
                 log::warn!("saving {}: {e}", out.display());
@@ -324,6 +330,8 @@ impl App {
 /// The folder of a map's save slots, inside the map's folder in the content folder (the
 /// launcher reads it as well: `omsi_launcher_lib::saved_situations`).
 pub(crate) const SAVES: &str = "Saves";
+/// The longest name a save is given in the game's menu.
+pub(crate) const NAME_MAX: usize = 60;
 
 /// Save `sit` to `out`; where that folder takes no file, to `rel` under the fallback folder
 /// (`startup::save_fallback_dir`) instead (#1673). The file written.

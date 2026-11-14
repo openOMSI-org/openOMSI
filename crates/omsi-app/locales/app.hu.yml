@@ -3219,3 +3219,8 @@
 "At most 5": "Legfeljebb 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Azok az objektum- és spline-mappák, amelyeket más térkép nem használ, vele együtt törlődnek: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Azok az objektum- és spline-mappák, amelyeket egy másik térkép még használ, megmaradnak: {n}."
+"Load a situation...": "Helyzet betöltése..."
+"Enter saves, Esc cancels": "Enter ment, Esc mégse"
+"Save under a name...": "Mentés név alatt..."
+"No saved situation of this map yet": "Ehhez a térképhez még nincs mentett helyzet"
+"Saved as \"{}\"": "Mentve ezen a néven: „{}”"
