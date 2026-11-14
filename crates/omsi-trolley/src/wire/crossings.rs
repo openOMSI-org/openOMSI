@@ -23,6 +23,8 @@ pub struct Crossing {
 const CROSS_HEIGHT: f64 = 0.25;
 /// Wire extent in XY, including the largest allowed mitre and half spacing.
 const WIRE_REACH: f64 = 2.0;
+/// Ignore conductor contacts this far from a shared node, where joined wires can overlap.
+const SHARED_NODE_REACH: f64 = WIRE_REACH + super::JOIN;
 
 /// Where two horizontal segments cross, if they do: the parameters along each.
 fn cross_2d(a0: DVec3, a1: DVec3, b0: DVec3, b1: DVec3) -> Option<(f64, f64)> {
@@ -71,6 +73,15 @@ impl WireNet {
                 let (blo, bhi) = boxes[b as usize];
                 if ahi.x < blo.x || bhi.x < alo.x || ahi.y < blo.y || bhi.y < alo.y { continue; }
                 for (side_a, side_b, sa, sb, pos) in self.wire_intersections(a, b) {
+                    if self.spans[a].ends.iter().enumerate().any(|(end_a, node)| {
+                        self.spans[b as usize].ends.iter().enumerate().any(|(end_b, other_node)| {
+                            node == other_node
+                                && sa_from_end(&self.spans[a], end_a, sa) <= SHARED_NODE_REACH
+                                && sa_from_end(&self.spans[b as usize], end_b, sb) <= SHARED_NODE_REACH
+                        })
+                    }) {
+                        continue;
+                    }
                     let ci = crossings.len() as u32;
                     crossings.push(Crossing { a: a as u32, b, side_a, side_b, sa, sb, pos });
                     on_span[a].push((ci, sa));
@@ -101,7 +112,7 @@ impl WireNet {
         cells
     }
 
-    /// Every intersection between the two spans' physical wires, including shared endpoints.
+    /// Every intersection between the two spans' physical wires, excluding span endpoints.
     fn wire_intersections(&self, a: usize, b: u32) -> Vec<(u8, u8, f64, f64, DVec3)> {
         let sa = &self.spans[a];
         let sb = &self.spans[b as usize];
@@ -118,6 +129,10 @@ impl WireNet {
                         if (za - zb).abs() > CROSS_HEIGHT { continue; }
                         let la = sa.cum[i] + t * sa.pts[i].distance(sa.pts[i + 1]);
                         let lb = sb.cum[j] + u * sb.pts[j].distance(sb.pts[j + 1]);
+                        const END_EPS: f64 = 1e-1;
+                        if la <= END_EPS || sa.len() - la <= END_EPS || lb <= END_EPS || sb.len() - lb <= END_EPS {
+                            continue;
+                        }
                         let pos = a0.lerp(a1, t);
                         // Adjacent polyline pieces can describe the same conductor crossing.
                         if out.iter().any(|(as_, bs, x, y, _): &(u8, u8, f64, f64, DVec3)| {
@@ -135,6 +150,11 @@ impl WireNet {
     pub fn crossings_of(&self, span: u32) -> &[(u32, f64)] {
         self.span_crossings.get(span as usize).map(|v| v.as_slice()).unwrap_or(&[])
     }
+}
+
+#[inline]
+fn sa_from_end(span: &super::Span, end: usize, s: f64) -> f64 {
+    if end == 0 { s } else { span.len() - s }
 }
 
 #[cfg(test)]
@@ -171,5 +191,29 @@ mod tests {
             "[trolley_span]\np -50 0 5.5\np 0 0 5.5\n[trolley_span]\np 0 0 5.5\np 50 50 5.5\n",
         );
         assert!(net.crossings.is_empty(), "joined angled spans should not create crossings");
+    }
+
+    #[test]
+    fn spans_meeting_at_endpoints_do_not_create_crossings() {
+        let net = WireNet::parse(
+            "[trolley_span]\np -20 0 5.5\np 0 0 5.5\n[trolley_span]\np 0 0 5.5\np 0 20 5.5\n",
+        );
+        assert!(net.crossings.is_empty(), "endpoint meetings should not be recorded as crossings");
+    }
+
+    #[test]
+    fn crossing_in_the_middle_of_a_span_is_still_detected() {
+        let net = WireNet::parse(
+            "[trolley_span]\np -20 0 5.5\np 20 0 5.5\n[trolley_span]\np 0 -20 5.5\np 0 20 5.5\n",
+        );
+        assert!(!net.crossings.is_empty(), "interior crossings should still be recorded");
+    }
+
+    #[test]
+    fn shared_endpoint_does_not_hide_another_interior_crossing() {
+        let net = WireNet::parse(
+            "[trolley_span]\np 0 0 5.5\np 20 0 5.5\np 20 20 5.5\n[trolley_span]\np 0 0 5.5\np 10 -10 5.5\np 10 10 5.5\n",
+        );
+        assert!(!net.crossings.is_empty(), "a shared endpoint should not hide a separate interior crossing");
     }
 }

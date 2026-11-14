@@ -104,9 +104,10 @@ the constants are in the vehicle's file, not in the game.
   configurable reception coverage, not a model of antenna propagation or a safety interlock.
 * **A shoe going through a frog.** A bus's script can react to a pole crossing a frog: the
   crossing fires the script's triggers `Trolley_Pole<k>_Frog` (that pole's own),
-  `Trolley_Frog` (a pole, whichever) and, when the map gave the frog a name,
+  `Trolley_Frog` (that frog, whichever pole crossed it) and, when the map gave the frog a name,
   `Trolley_Frog_<name>` (that frog, its spaces written as underscores). The frog's own two
-  are fired once for each frog crossed, even when both poles crossed at once. The trigger
+  are fired once for each frog crossed, even when both poles crossed it: the poles are apart,
+  so they cross a frog in steps of their own. The trigger
   runs before the step's `{frame}`, so what it writes is read in the same frame:
 
   ```
