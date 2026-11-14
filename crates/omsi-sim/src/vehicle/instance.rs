@@ -93,13 +93,7 @@ impl VehicleInstance {
             };
             state.vars[id as usize] = value;
         }
-        let mut model_only_vars: Vec<String> = Vec::new();
-        for c in ty.model.meshes.iter().flat_map(|m| m.visible_groups()).flatten() {
-            let key = c.variable.to_ascii_lowercase();
-            if !var_index.contains_key(&key) && !model_only_vars.contains(&key) {
-                model_only_vars.push(key);
-            }
-        }
+        let model_only_vars = collect_model_vars(&ty, &mut var_index, &mut state.vars);
 
         // `Axle_Springfactor_*` (varlist_roadvehicle.txt): the engine's spring scale, which
         // air-suspension scripts overwrite with their bellows pressure; a steel-sprung bus
@@ -540,4 +534,33 @@ pub(super) fn control_cables(ty: &VehicleType) -> Vec<(omsi_script::VarId, omsi_
     cables.sort_unstable();
     cables.dedup();
     cables
+}
+
+fn collect_model_vars(
+    ty: &VehicleType,
+    var_index: &mut std::collections::BTreeMap<String, omsi_script::VarId>,
+    vars: &mut Vec<f32>,
+) -> Vec<String> {
+    let mut model_only_vars: Vec<String> = Vec::new();
+    for m in &ty.model.meshes {
+        for c in m.visible_groups().into_iter().flatten() {
+            let key = c.variable.to_ascii_lowercase();
+            if !var_index.contains_key(&key) && !model_only_vars.contains(&key) {
+                model_only_vars.push(key);
+            }
+        }
+        for a in &m.animations {
+            let key = a.variable.to_ascii_lowercase();
+            if !key.is_empty() && key.parse::<f32>().is_err() && !var_index.contains_key(&key) && !model_only_vars.contains(&key) {
+                model_only_vars.push(key);
+            }
+        }
+    }
+    for var in &model_only_vars {
+        if !var_index.contains_key(var) {
+            var_index.insert(var.clone(), vars.len() as omsi_script::VarId);
+            vars.push(0.0);
+        }
+    }
+    model_only_vars
 }

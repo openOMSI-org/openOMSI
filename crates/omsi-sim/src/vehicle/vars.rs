@@ -131,6 +131,10 @@ impl VehicleInstance {
         fired
     }
 
+    pub fn has_trigger(&self, name: &str) -> bool {
+        self.ty.program.trigger(name).is_some()
+    }
+
     /// The script variables as `names` would leave them, run one after another, with the
     /// vehicle left exactly as it was: its variables, the machine's random numbers, the
     /// sounds and messages the triggers asked for.
