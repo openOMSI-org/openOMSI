@@ -538,7 +538,7 @@ pub(super) fn control_cables(ty: &VehicleType) -> Vec<(omsi_script::VarId, omsi_
 
 fn collect_model_vars(
     ty: &VehicleType,
-    var_index: &mut std::collections::BTreeMap<String, omsi_script::VarId>,
+    var_index: &mut std::collections::HashMap<String, omsi_script::VarId>,
     vars: &mut Vec<f32>,
 ) -> Vec<String> {
     let mut model_only_vars: Vec<String> = Vec::new();
