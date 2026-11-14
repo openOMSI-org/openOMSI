@@ -92,7 +92,14 @@ impl VehicleInstance {
         });
         match slot {
             Ok(i) => self.state.vars[i as usize] = v,
-            Err(true) => self.add_var(name, v),
+            Err(true) => {
+                self.add_var(name, v);
+                // a variable only the model names (#3887): its animations move from now on
+                let id = (self.state.vars.len() - 1) as omsi_script::VarId;
+                for a in &mut self.animators {
+                    a.bind_missing(name, id);
+                }
+            }
             Err(false) => return false,
         }
         true
@@ -129,6 +136,10 @@ impl VehicleInstance {
             }
         }
         fired
+    }
+
+    pub fn has_trigger(&self, name: &str) -> bool {
+        self.ty.program.trigger(name).is_some()
     }
 
     /// The script variables as `names` would leave them, run one after another, with the

@@ -407,8 +407,15 @@ impl Player {
                     allow_auto_drag && auto_drag_click(&ev, self.press_info.0, self.press_info.1), anim) {
                     let now = self.vehicle.var(&var).unwrap_or(0.0);
                     let target = if now > 0.5 { 0.0 } else { 1.0 };
-                    log::info!("mouse event {ev}: a click on a drag control, {var} {now:.2} -> {target}");
-                    self.auto_drag = Some(AutoDrag { ev, var, target, axis: 0, sign: if target > now { -1.0 } else { 1.0 }, last: now, stalled: 0, t: 0.0 });
+                    // (a variable of the scripts is theirs to move; only one that the model
+                    // alone names is flipped here, #3887)
+                    if self.vehicle.has_trigger(&format!("{ev}_drag")) || self.vehicle.ty.program.var(&var).is_some() {
+                        log::info!("mouse event {ev}: a click on a drag control, {var} {now:.2} -> {target}");
+                        self.auto_drag = Some(AutoDrag { ev, var, target, axis: 0, sign: if target > now { -1.0 } else { 1.0 }, last: now, stalled: 0, t: 0.0 });
+                    } else {
+                        log::info!("mouse event {ev}: toggle control, {var} {now:.2} -> {target}");
+                        self.vehicle.set_var(&var, target);
+                    }
                 }
             }
         }

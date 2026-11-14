@@ -397,3 +397,15 @@ fn a_coupled_car_lets_go_of_the_value_it_took_from_the_painted_bus() {
         assert_eq!((v.var("v_drzwi"), v.trailers[0].run_var("v_drzwi")), (Some(0.0), Some(0.0)), "{scheme:?}");
     }
 }
+
+#[test]
+fn animation_only_variable_binds_and_animates_without_script_declaration() {
+    let seed = crate::timetable_run::tests::script_test_vehicle("", "", "");
+    let mut ty = (*seed.ty).clone();
+    let cfg = "[mesh]\ntimetable.o3d\n[newanim]\norigin_rot_y\n90\nanim_trans\nsched\n0.1\n";
+    ty.model = Model::parse(&omsi_cfg::CfgFile::from_str("test.cfg", cfg));
+    let mut v = VehicleInstance::new(Arc::new(ty), VehicleHost::new(Default::default()));
+    assert_eq!(v.var("sched"), None, "lazy before set");
+    assert!(v.set_var("sched", 1.0));
+    assert_eq!(v.var("sched"), Some(1.0));
+}

@@ -64,6 +64,16 @@ impl MeshAnimator {
         Self { anims, parent: None }
     }
 
+    /// Bind the animations on `name` that found no variable when the vehicle was made to
+    /// `id`, a variable only the model names that was created since (#3887).
+    pub fn bind_missing(&mut self, name: &str, id: VarId) {
+        for (a, _, st) in &mut self.anims {
+            if st.var.is_none() && a.variable.trim().eq_ignore_ascii_case(name.trim()) {
+                st.var = Some(id);
+            }
+        }
+    }
+
     pub fn has_animations(&self) -> bool {
         !self.anims.is_empty() || self.parent.is_some()
     }
