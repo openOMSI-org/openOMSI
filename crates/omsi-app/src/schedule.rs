@@ -26,9 +26,11 @@ use omsi_sim::timetable_run::*;
 pub use omsi_sim::timetable_run::{PlannedStop, PlannedTrip, PlayerDuty};
 pub(crate) use omsi_sim::timetable_run::{
     has_roller_blind, hhmm, ibis_stop_index, player_ibis, set_ai_destination,
-    set_ai_destination_at, set_player_destination_at, set_player_destination_directly,
+    set_ai_destination_at, set_player_destination_directly, set_player_destination_with_display,
     shown_destination, turn_roller_blind, BlindPick,
 };
+#[cfg(test)]
+pub(crate) use omsi_sim::timetable_run::set_player_destination_at;
 
 /// The timetable (`ScheduleSim`, which everything of the timetable reads through `Deref`)
 /// with the vehicle sets it reads and uploads ahead for the GPU.

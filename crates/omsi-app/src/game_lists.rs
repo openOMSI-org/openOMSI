@@ -170,26 +170,18 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
         return;
     }
     if let Some(p) = app.player.as_mut() {
-        if numeric_ibis_line(line) {
-            let hof = p.vehicle.host.hof.clone();
-            if let Some(hof) = hof.as_deref() {
-                if let Some(ti) = crate::schedule::shown_destination(&p.vehicle, hof, p.blind_pick.as_ref()) {
-                    p.set_destination_by_hand(hof, line, ti, false);
-                }
+        let shown_ti = p.vehicle.host.hof.clone().and_then(|hof| {
+            crate::schedule::shown_destination(&p.vehicle, &hof, p.blind_pick.as_ref()).map(|ti| (hof, ti))
+        });
+        let shown_row = shown_ti.as_ref().map(|(_, ti)| *ti);
+        match (numeric_ibis_line(line), display_route_line(line), shown_ti) {
+            (true, _, Some((hof, ti))) => p.set_destination_by_hand(&hof, line, ti, false),
+            (false, true, Some((hof, ti))) => {
+                let ibis_line = destination_line(&p.vehicle);
+                p.set_destination_by_hand_with_display(&hof, &ibis_line, Some(line), ti, true);
             }
-        } else {
-            // OMSI's route-number field is also used as arbitrary display text. Do not
-            // force symbols/unknown letters through IBIS_LinieKurs: that would turn "-10"
-            // into line 0 (and matrix scripts would then blank or rewrite the rear sign).
-            for name in ["SetLineTo", "Matrix_Nr", "Linie"] {
-                if let Some(i) = p.vehicle.ty.program.str_var(name) {
-                    p.vehicle.state.str_vars[i as usize] = line.to_string();
-                }
-            }
-            if crate::schedule::has_roller_blind(&p.vehicle) {
-                let shown = p.vehicle.host.hof.clone().and_then(|hof| crate::schedule::shown_destination(&p.vehicle, &hof, p.blind_pick.as_ref()));
-                p.blind_pick = blind_with_line(p.blind_pick.take(), shown, line);
-            }
+            (true, _, None) => {}
+            (false, _, _) => set_symbol_route(p, shown_row, line),
         }
         log::info!(
             "route number set by hand: {line} (IBIS_LinieKurs {:?}, Matrix_Nr {:?})",
@@ -231,6 +223,23 @@ fn line_shown(v: &omsi_sim::VehicleInstance) -> Option<String> {
 
 fn ibis_line_number(v: &omsi_sim::VehicleInstance) -> Option<String> {
     v.var("IBIS_LinieKurs").filter(|l| *l > 0.0).map(|l| format!("{}", l as i64))
+}
+
+pub(crate) fn display_route_line(s: &str) -> bool {
+    s.trim().chars().next().is_some_and(|c| c.is_alphanumeric())
+}
+
+pub(crate) fn set_symbol_route(p: &mut crate::player::Player, shown: Option<usize>, line: &str) {
+    // Symbols such as `-10` stay out of `ai_scheduled_settarget` / `IBIS_LinieKurs`.
+    for name in ["SetLineTo", "Matrix_Nr", "Linie"] {
+        if let Some(i) = p.vehicle.ty.program.str_var(name) {
+            p.vehicle.state.str_vars[i as usize] = line.to_string();
+        }
+    }
+    if crate::schedule::has_roller_blind(&p.vehicle) {
+        p.blind_pick = blind_with_line(p.blind_pick.take(), shown, line);
+        crate::schedule::turn_roller_blind(&mut p.vehicle, &mut p.blind_pick, p.startup.is_some());
+    }
 }
 
 /// The line a destination picked from the list is set with: the route number the bus
@@ -1357,6 +1366,12 @@ mod tests {
         // a route number the IBIS cannot take is left to the display: the IBIS keeps its own
         set_str(&mut v, "Matrix_Nr", "-10");
         assert_eq!(super::destination_line(&v), "92");
+        for alpha in ["R56", "CE19", "SB15"] {
+            set_str(&mut v, "Matrix_Nr", alpha);
+            assert_eq!(super::destination_line(&v), "92");
+            assert_eq!(super::form_route(&v, None), alpha);
+        }
+        assert!(super::display_route_line("R56") && !super::display_route_line("-10"));
         // nothing shown: the IBIS's number
         set_str(&mut v, "Matrix_Nr", "   ");
         set_str(&mut v, "SetLineTo", "");
