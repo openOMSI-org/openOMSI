@@ -274,8 +274,8 @@ impl Network {
                     // see `Lane::blocks`)
                     if let Some((sa, sb)) = place {
                         // (after a joint the two are in one lane, and follow each other)
-                        let (mut ab, mut aa) = if merge { (meeting_extent(a, sa, b).0, 0.5) } else { meeting_extent(a, sa, b) };
-                        let (mut bb, mut ba) = if merge { (meeting_extent(b, sb, a).0, 0.5) } else { meeting_extent(b, sb, a) };
+                        let (ab, aa) = if merge { (meeting_extent(a, sa, b).0, 0.5) } else { meeting_extent(a, sa, b) };
+                        let (bb, ba) = if merge { (meeting_extent(b, sb, a).0, 0.5) } else { meeting_extent(b, sb, a) };
                         // Keep the conflict envelope tied to the actual meeting geometry.
                         // Expanding a [crossingproblem] pair to the entire remaining lanes
                         // made every vehicle on a long approach hold crossing traffic until
