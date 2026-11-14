@@ -3236,3 +3236,8 @@
 "At most 5": "Al massimo 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Le cartelle di oggetti e spline che nessun'altra mappa usa vengono eliminate insieme: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Le cartelle di oggetti e spline che un'altra mappa usa ancora vengono mantenute: {n}."
+"Yes": "Sì"
+"Take control of this bus?": "Prendere il controllo di questo autobus?"
+"The bus cannot be changed while a timetable is active": "Non si può cambiare autobus mentre un orario è attivo"
+"The bus could not be taken over": "Non è stato possibile prendere il controllo dell'autobus"
+"You have control of the bus": "Hai il controllo dell'autobus"

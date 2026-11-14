@@ -4378,3 +4378,8 @@
 "At most 5": "Najviše 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Fascikle objekata i splajnova koje ne koristi nijedna druga mapa brišu se zajedno s njim: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Fascikle objekata i splajnova koje druga mapa još koristi ostaju: {n}."
+"Yes": "Da"
+"Take control of this bus?": "Preuzeti upravljanje ovim autobusom?"
+"The bus cannot be changed while a timetable is active": "Autobus se ne može promeniti dok je red vožnje aktivan"
+"The bus could not be taken over": "Autobus nije mogao biti preuzet"
+"You have control of the bus": "Upravljate autobusom"

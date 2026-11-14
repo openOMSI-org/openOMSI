@@ -680,6 +680,11 @@ impl App {
         // the map camera (F4): a click on the ground that worked nothing of the bus asks
         // whether to move the bus there (`game_panels::move_here`)
         if pressed && self.view == "free" && !self.cam.ego && !self.input.dragging && self.menus.game_menu.is_none() && !self.mouse_steering_now() {
+            if let Some(id) = crate::game_panels::take_control::bus_under_cursor(self) {
+                if crate::game_panels::take_control::ask(self, id) {
+                    return;
+                }
+            }
             if self.player.as_ref().is_some_and(|p| crate::rail_drive::is_rail(&p.vehicle.ty.def)) {
                 return;
             }

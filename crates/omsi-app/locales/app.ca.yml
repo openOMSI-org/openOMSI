@@ -4072,3 +4072,8 @@
 "At most 5": "Com a màxim 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Les carpetes d'objectes i splines que cap altre mapa no fa servir se suprimeixen amb ell: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Les carpetes d'objectes i splines que un altre mapa encara fa servir es conserven: {n}."
+"Yes": "Sí"
+"Take control of this bus?": "Vols prendre el control d'aquest autobús?"
+"The bus cannot be changed while a timetable is active": "No es pot canviar d'autobús mentre hi ha un horari actiu"
+"The bus could not be taken over": "No s'ha pogut prendre el control de l'autobús"
+"You have control of the bus": "Ara condueixes l'autobús"

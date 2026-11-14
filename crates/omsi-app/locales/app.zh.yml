@@ -3610,3 +3610,8 @@
 "At most 5": "最多5辆"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地图都未使用的物体和样条文件夹会一并删除：{n} 个，{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "其他地图仍在使用的物体和样条文件夹会保留：{n} 个。"
+"Yes": "是"
+"Take control of this bus?": "要接管这辆公交车吗?"
+"The bus cannot be changed while a timetable is active": "时刻表进行中时无法更换公交车"
+"The bus could not be taken over": "无法接管这辆公交车"
+"You have control of the bus": "你已接管这辆公交车"

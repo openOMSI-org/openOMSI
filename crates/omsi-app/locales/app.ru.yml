@@ -4377,3 +4377,8 @@
 "At most 5": "Не больше 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Папки объектов и сплайнов, которые не использует ни одна другая карта, удаляются вместе с ним: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Папки объектов и сплайнов, которые ещё использует другая карта, остаются: {n}."
+"Yes": "Да"
+"Take control of this bus?": "Взять управление этим автобусом?"
+"The bus cannot be changed while a timetable is active": "Нельзя сменить автобус, пока активно расписание"
+"The bus could not be taken over": "Не удалось перехватить автобус"
+"You have control of the bus": "Вы управляете автобусом"

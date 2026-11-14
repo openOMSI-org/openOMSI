@@ -4378,3 +4378,8 @@
 "At most 5": "最多 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地圖都未使用的物件與樣條資料夾會一併刪除：{n} 個，{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "其他地圖仍在使用的物件與樣條資料夾會保留：{n} 個。"
+"Yes": "是"
+"Take control of this bus?": "要接手駕駛這輛公車嗎?"
+"The bus cannot be changed while a timetable is active": "時刻表進行中時無法更換公車"
+"The bus could not be taken over": "無法接手這輛公車"
+"You have control of the bus": "你已接手駕駛這輛公車"
