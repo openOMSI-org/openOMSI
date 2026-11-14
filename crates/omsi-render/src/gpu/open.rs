@@ -779,6 +779,7 @@ impl Renderer {
             temporal_failed: false,
             temporal_window: false,
             temporal_kept: None,
+            frame_generation: None,
             temporal_pending: None,
             prepass_msaa_pipelines: prepass.msaa_pipelines,
             prepass_eye_pipelines: prepass.eye_pipelines,
