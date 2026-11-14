@@ -879,7 +879,7 @@ impl TrafficSim {
                 // (a queue that stands near the junction, at any braking a driver calls
                 // gentle; one that is about to stand, only if the car can stop for it
                 // comfortably)
-                let standing = speed < 1.5 && space < need_all && exit.1 < 40.0;
+                let standing = speed < 1.5 && space < need_all && exit.1 < 40.0 && !late;
                 let will_stand = space + speed.powi(2) / (2.0 * EXIT_BRAKE) < need_all && exit.1 - entry < 60.0;
                 if standing || (will_stand && !late) {
                     // (the last car of that queue on that lane)
