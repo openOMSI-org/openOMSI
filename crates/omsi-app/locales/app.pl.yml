@@ -3479,3 +3479,5 @@
 "Parked buses on a server": "Zaparkowane autobusy na serwerze"
 "How many of the buses parked near you are drawn; fewer take less memory": "Ile zaparkowanych w pobliżu autobusów jest rysowanych; mniej zajmuje mniej pamięci"
 "At most 5": "Maks. 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Foldery obiektów i splajnów, których nie używa żadna inna mapa, są usuwane razem z nim: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "Foldery obiektów i splajnów, których używa jeszcze inna mapa, zostają: {n}."

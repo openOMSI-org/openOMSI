@@ -4373,3 +4373,5 @@
 "Parked buses on a server": "სერვერზე გაჩერებული ავტობუსები"
 "How many of the buses parked near you are drawn; fewer take less memory": "თქვენთან ახლოს გაჩერებული რამდენი ავტობუსი იხატება; ნაკლები ნაკლებ მეხსიერებას იკავებს"
 "At most 5": "მაქსიმუმ 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "ობიექტებისა და სპლაინების საქაღალდეები, რომლებსაც სხვა რუკა არ იყენებს, მასთან ერთად წაიშლება: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "ობიექტებისა და სპლაინების საქაღალდეები, რომლებსაც სხვა რუკა ჯერ კიდევ იყენებს, რჩება: {n}."

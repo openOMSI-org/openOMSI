@@ -4374,3 +4374,5 @@
 "Parked buses on a server": "Parkirani autobusi na serveru"
 "How many of the buses parked near you are drawn; fewer take less memory": "Koliko se autobusa parkiranih u tvojoj blizini crta; manje ih zauzima manje memorije"
 "At most 5": "Najviše 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Fascikle objekata i splajnova koje ne koristi nijedna druga mapa brišu se zajedno s njim: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "Fascikle objekata i splajnova koje druga mapa još koristi ostaju: {n}."

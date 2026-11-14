@@ -8753,3 +8753,7 @@ _version: 2
   en: "How many of the buses parked near you are drawn; fewer take less memory"
 "At most 5":
   en: "At most 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.":
+  en: "Folders of objects and splines that no other map uses go with it: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.":
+  en: "Folders of objects and splines that another map still uses stay: {n}."

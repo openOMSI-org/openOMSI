@@ -584,6 +584,12 @@ impl Renderer {
         let scene = scene::SceneBase::new(&device, leave_out_enhanced, options.detailed_trees);
         let hdr_format = wgpu::TextureFormat::Rgba16Float;
         let shadows = shadows::build(&device, &scene, shadow_size, !leave_out_enhanced && !options.no_enhanced, options.light_shadows >= 2);
+        if shadows.size < shadow_size {
+            update_ceiling(|ceiling| {
+                if let Some(c) = ceiling.as_mut() { c.shadow_size = c.shadow_size.min(shadows.size); }
+            });
+        }
+        let options = RenderOptions { shadow_size: shadows.size, ..options };
         let defaults = defaults::build(&device, &queue, options.anisotropy);
         let (coronas, corona_texture) = coronas::Coronas::new(&device, &queue, &scene);
         let precip = crate::passes::PrecipMap::new(&device);

@@ -3213,3 +3213,5 @@
 "Parked buses on a server": "Сервердегі тұрақтағы автобустар"
 "How many of the buses parked near you are drawn; fewer take less memory": "Жаныңыздағы тұрақтағы автобустардың қаншасы көрсетіледі; азырақ болса, жад азырақ қажет"
 "At most 5": "Ең көбі 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Басқа ешбір карта пайдаланбайтын нысандар мен сплайндар қалталары онымен бірге жойылады: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "Басқа карта әлі пайдаланатын нысандар мен сплайндар қалталары қалады: {n}."

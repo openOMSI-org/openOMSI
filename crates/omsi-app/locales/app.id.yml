@@ -2922,3 +2922,5 @@
 "Parked buses on a server": "Bus yang diparkir di server"
 "How many of the buses parked near you are drawn; fewer take less memory": "Berapa banyak bus yang diparkir di dekat Anda yang digambar; lebih sedikit memakai lebih sedikit memori"
 "At most 5": "Maksimal 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Folder objek dan spline yang tidak dipakai peta lain ikut dihapus: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "Folder objek dan spline yang masih dipakai peta lain tetap ada: {n}."

@@ -2922,3 +2922,5 @@
 "Parked buses on a server": "Xe buýt đỗ trên máy chủ"
 "How many of the buses parked near you are drawn; fewer take less memory": "Số xe buýt đỗ gần bạn được vẽ; càng ít càng tốn ít bộ nhớ"
 "At most 5": "Tối đa 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Các thư mục vật thể và spline mà không bản đồ nào khác dùng sẽ bị xóa cùng: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "Các thư mục vật thể và spline mà bản đồ khác vẫn dùng sẽ được giữ lại: {n}."

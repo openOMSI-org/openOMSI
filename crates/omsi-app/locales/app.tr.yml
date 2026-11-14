@@ -3227,3 +3227,5 @@
 "Parked buses on a server": "Sunucudaki park halindeki otobüsler"
 "How many of the buses parked near you are drawn; fewer take less memory": "Yakınınızda park halindeki otobüslerin kaçının çizileceği; daha azı daha az bellek kullanır"
 "At most 5": "En fazla 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Başka hiçbir haritanın kullanmadığı nesne ve spline klasörleri de onunla birlikte silinir: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "Başka bir haritanın hâlâ kullandığı nesne ve spline klasörleri kalır: {n}."

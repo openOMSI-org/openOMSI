@@ -3215,3 +3215,5 @@
 "Parked buses on a server": "Parkoló buszok a szerveren"
 "How many of the buses parked near you are drawn; fewer take less memory": "Hány közelben parkoló busz jelenik meg; a kevesebb kevesebb memóriát foglal"
 "At most 5": "Legfeljebb 5"
+"Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Azok az objektum- és spline-mappák, amelyeket más térkép nem használ, vele együtt törlődnek: {n}, {size}."
+"Folders of objects and splines that another map still uses stay: {n}.": "Azok az objektum- és spline-mappák, amelyeket egy másik térkép még használ, megmaradnak: {n}."
