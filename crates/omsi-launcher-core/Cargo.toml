@@ -42,5 +42,4 @@ windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_Syst
 rfd.workspace = true
 
 [dev-dependencies]
-# the translation files read as YAML in `tests/translations.rs` (the parser rust-i18n reads them with)
 serde-saphyr = "1.3"

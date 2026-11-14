@@ -17,7 +17,6 @@ const required = [
   'Paste the complete session code from your friend.',
 ];
 const languages = ['es', 'zh-tw', 'pt', 'ca', 'fr', 'sr', 'ru', 'de', 'pt-pt', 'ka', 'sv', 'uk', 'be', 'kk', 'pl', 'cs', 'hu', 'it', 'nl', 'tr', 'ja', 'zh', 'hi', 'ko', 'th', 'vi', 'id', 'ms', 'tl'];
-// app.<language>.yml: one line `"English": "translation"` per text
 const catalogue = new Map();
 for (const language of languages) {
   const source = readFileSync(new URL(`../../crates/omsi-app/locales/app.${language}.yml`, import.meta.url), 'utf8');

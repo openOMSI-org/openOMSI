@@ -161,11 +161,9 @@ mod weather_tomorrow;
 use omsi_weather::{weather_cycle, weather_model};
 mod world_load;
 
-// the interface's translations (locales/app.yml, the English reference; app.<language>.yml, one
-// file per language; the English text is the key)
+// the interface's translations (locales/app.yml and app.<language>.yml; the English text is the key)
 rust_i18n::i18n!("locales");
-// (the tables are read when this crate compiles: omsi_launcher_lib includes every one of them,
-// app.<language>.yml too, and this makes cargo compile it again when they
+// (the tables are read when this crate compiles: this makes cargo compile it again when they
 // change - the macro alone left the old texts in the program)
 use omsi_launcher_lib::i18n::TABLES as _LOCALES;
 

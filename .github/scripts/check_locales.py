@@ -66,13 +66,10 @@ def load_file(path: Path) -> dict:
 
 
 def language_files(folder: Path) -> dict[str, Path]:
-    """app.<language>.yml of `folder`, by language."""
     return {p.name[len("app."):-len(".yml")]: p for p in sorted(folder.glob("app.*.yml"))}
 
 
 def load(folder: str) -> dict:
-    """Every text of app.yml with its translations, {key: {language: text}}, English (`en`) aside:
-    app.yml's own languages and those of each app.<language>.yml."""
     folder = Path(folder)
     out = {}
     if (folder / "app.yml").exists():
@@ -102,9 +99,6 @@ def code_strings(root: Path) -> set[str]:
 
 
 class Places:
-    """Where a text is in the new folder, for the annotation: app.yml for the key itself,
-    app.<language>.yml for its translation into that language."""
-
     def __init__(self, folder: str):
         self.folder = Path(folder)
         self.lines: dict[str, list[str]] = {}

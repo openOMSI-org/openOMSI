@@ -31,8 +31,6 @@ def unquote(s):
 
 
 def read_yml(path):
-    """app.yml (the English reference) and its translations, app.<language>.yml beside it:
-    {English text: {language: translation}}, English itself aside."""
     table, key = {}, None
     for line in open(path, encoding="utf-8"):
         if line.startswith('"') and line.rstrip().endswith(":"):

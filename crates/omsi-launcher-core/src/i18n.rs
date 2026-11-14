@@ -12,8 +12,6 @@ pub static TABLES: &str = concat!(
 
 macro_rules! languages {
     ($($lang:literal)*) => {
-        /// app.yml's translations, one file per language (`app.<language>.yml`): the language and
-        /// its lines `"English": "translation"`.
         pub static LANGUAGES: &[(&str, &str)] = &[$(($lang, include_str!(concat!("../../omsi-app/locales/app.", $lang, ".yml")))),*];
     };
 }
@@ -64,7 +62,6 @@ pub fn table(text: &str, lang: &str) -> HashMap<String, String> {
     out
 }
 
-/// The lines `"key": "value"` of a language's own file (`app.<language>.yml`).
 pub fn pairs(text: &str) -> HashMap<String, String> {
     text.lines()
         .filter_map(|line| {
@@ -81,8 +78,6 @@ pub fn pairs(text: &str) -> HashMap<String, String> {
         .collect()
 }
 
-/// Every text in `lang` (`ru`, `de` ...): app.yml's from the language's own file, the smaller
-/// tables' from `TABLES`.
 pub fn language_table(lang: &str) -> HashMap<String, String> {
     let mut out = table(TABLES, lang);
     for (_, text) in LANGUAGES.iter().filter(|(l, _)| *l == lang) {
