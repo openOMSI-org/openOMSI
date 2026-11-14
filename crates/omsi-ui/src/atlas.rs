@@ -8,6 +8,7 @@ use hashbrown::HashMap;
 enum Key {
     Text(String, u32, Weight),
     Icon(String, u32),
+    ColorIcon(String, u32),
 }
 
 /// Where something is in the atlas: texture coordinates, its size in pixels, and for text
@@ -105,6 +106,10 @@ impl Atlas {
     }
 
     fn put(&mut self, key: Key, w: u32, h: u32, alpha: &[u8], ascent: f32) -> Sprite {
+        self.put_pixels(key, w, h, ascent, |i| [255, 255, 255, alpha[i]])
+    }
+
+    fn put_pixels(&mut self, key: Key, w: u32, h: u32, ascent: f32, pixel: impl Fn(usize) -> [u8; 4]) -> Sprite {
         let at = match self.alloc(w, h) {
             Some(a) => a,
             None => {
@@ -118,9 +123,9 @@ impl Atlas {
         };
         for y in 0..h {
             for x in 0..w {
-                let a = alpha[(y * w + x) as usize];
+                let rgba = pixel((y * w + x) as usize);
                 let i = (((at.1 + y) * self.size + at.0 + x) * 4) as usize;
-                self.rgba[i..i + 4].copy_from_slice(&[255, 255, 255, a]);
+                self.rgba[i..i + 4].copy_from_slice(&rgba);
             }
         }
         let r = [at.0, at.1, w, h];
@@ -159,6 +164,21 @@ impl Atlas {
         let a = crate::icons::rasterize(name, size)?;
         Some(self.put(key, size, size, &a, 0.0))
     }
+
+    /// A built-in SVG icon in its own colours, cached at `size` pixels.
+    pub fn color_icon(&mut self, name: &str, size: u32) -> Option<Sprite> {
+        let key = Key::ColorIcon(name.to_string(), size);
+        if let Some(e) = self.entries.get_mut(&key) {
+            e.1 = self.frame;
+            return Some(e.0);
+        }
+        let src = crate::icons::svg(name)?;
+        let rgba = crate::icons::rasterize_rgba(src, size, size)?;
+        Some(self.put_pixels(key, size, size, 0.0, |i| {
+            let i = i * 4;
+            [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+        }))
+    }
 }
 
 #[cfg(test)]
@@ -193,5 +213,23 @@ mod tests {
             a.text(&fonts, &format!("line {k}"), 18.0, Weight::Regular);
         }
         assert!(a.generation > 0);
+    }
+
+    #[test]
+    fn color_icons_keep_their_svg_colors_and_are_cached_by_size() {
+        let mut a = Atlas::new(256);
+        let sign = a.color_icon("speed_limit_sign", 28).expect("built-in sign");
+        let x = (sign.uv[0] * a.size as f32) as usize;
+        let y = (sign.uv[1] * a.size as f32) as usize;
+        let pixel = |x: usize, y: usize| {
+            let i = (y * a.size as usize + x) * 4;
+            &a.rgba[i..i + 4]
+        };
+        assert_eq!(pixel(x + 14, y + 14), [255, 255, 255, 255]);
+        assert_eq!(pixel(x, y + 14), [155, 155, 155, 255]);
+        assert_eq!(pixel(x + 3, y + 14), [214, 38, 38, 255]);
+        assert_eq!(a.color_icon("speed_limit_sign", 28), Some(sign));
+        assert_ne!(a.color_icon("speed_limit_sign", 32), Some(sign));
+        assert!(a.color_icon("no_such_icon", 28).is_none());
     }
 }
