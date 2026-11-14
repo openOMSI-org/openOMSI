@@ -1300,6 +1300,20 @@ struct SlotAlpha {
     tint_cut: bool,
 }
 
+pub(super) fn is_reflective_body(
+    mesh_name: &str,
+    named_pane: bool,
+    has_transmap: bool,
+    has_envmap: bool,
+    has_volume: bool,
+    has_overlay: bool,
+    has_bumpmap: bool,
+) -> bool {
+    let named_body = ["body", "wagenkasten", "karos", "chassis", "kuzov"].iter().any(|part| mesh_name.contains(part));
+    let body_hint = (named_body || has_bumpmap || !has_overlay) && has_volume;
+    body_hint && named_body && !named_pane && !has_transmap && has_envmap
+}
+
 /// The alpha mode of a vehicle's material slot: what the model.cfg declares, mended for dirt films, shadow decals, panes and (on request) bodies.
 fn slot_alpha(cx: &SlotCx, ov: &[&MaterialDef], tex: Option<TextureId>, transmap: Option<(TextureId, bool)>) -> SlotAlpha {
     let SlotCx { vt, mesh_index, vm, def, slot, m, dirs_ref, subst, .. } = *cx;
@@ -1366,8 +1380,24 @@ fn slot_alpha(cx: &SlotCx, ov: &[&MaterialDef], tex: Option<TextureId>, transmap
     if cover {
         log::debug!("  {} slot {slot} '{}': an invisible cover (clear texture), writes depth in model order", def.file, m.texture);
     }
+    let named_body = ["body", "wagenkasten", "karos", "chassis", "kuzov"].iter().any(|part| mesh_name.contains(part));
+    let mesh_has_overlay = def.materials.iter().any(|o| o.no_z_write);
+    // (a body-sized part in any case: a name or a bump map alone also took a
+    // dashboard's display or a sticker on a mesh called "body" for bodywork)
+    let body_hint = (named_body || ov.iter().any(|o| o.bumpmap.is_some()) || !mesh_has_overlay)
+        && material_has_vehicle_volume(&vm.data, slot);
+    let is_env_body = is_reflective_body(
+        &mesh_name,
+        named_pane,
+        transmap.is_some(),
+        ov.iter().any(|o| o.envmap.is_some()),
+        material_has_vehicle_volume(&vm.data, slot),
+        mesh_has_overlay,
+        ov.iter().any(|o| o.bumpmap.is_some()),
+    );
     let see_through = !named_pane
         && !cover
+        && !is_env_body
         && declared_alpha == AlphaMode::Blend
         && coverage.as_ref().is_some_and(|mask| slot_is_see_through(&vm.data, slot, mask));
     if see_through {
@@ -1385,12 +1415,6 @@ fn slot_alpha(cx: &SlotCx, ov: &[&MaterialDef], tex: Option<TextureId>, transmap
     // (the name alone still says what is drawn as glass: the same test finds
     // a gauge's needle film, a blind's net and the shadow under the bus)
     let transparent_layer_hint = named_pane;
-    let named_body = ["body", "wagenkasten", "karos", "chassis", "kuzov"].iter().any(|part| mesh_name.contains(part));
-    let mesh_has_overlay = def.materials.iter().any(|o| o.no_z_write);
-    // (a body-sized part in any case: a name or a bump map alone also took a
-    // dashboard's display or a sticker on a mesh called "body" for bodywork)
-    let body_hint = (named_body || ov.iter().any(|o| o.bumpmap.is_some()) || !mesh_has_overlay)
-        && material_has_vehicle_volume(&vm.data, slot);
     // a layer over another mesh of the same shape drawn before it (the WH UK
     // AI cars' baked shading over their paint, `[matl_alpha] 2`): blended as
     // the model says - made opaque, the dark bake covered the paint and the
