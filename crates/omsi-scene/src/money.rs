@@ -65,7 +65,9 @@ pub fn sync(m: &mut Money, renderer: &Renderer, scene: &mut Scene, bus: &Vehicle
         renderer.set_params(scene, inst, &[], false, &[]);
     }
     let rot = bus.body_rotation();
-    let interior = bus.interior_light();
+    // lit like the bus's own meshes (`MeshProps::interior`, half the lamp) and its
+    // passengers: the full lamp made them glow brighter than the desk they lie on
+    let interior = bus.interior_light() * 0.5;
     for (inst, local, _, _, parent) in &m.placed {
         let on = parent.as_deref().map(|n| mesh_of(bus, n)).unwrap_or(Mat4::IDENTITY);
         renderer.set_transform(scene, *inst, bus.position, rot * on * *local);
@@ -209,7 +211,8 @@ impl TicketBlocks {
 
     pub fn sync(&self, renderer: &Renderer, scene: &mut Scene, bus: &VehicleInstance) {
         let rot = bus.body_rotation();
-        let interior = bus.interior_light();
+        // (lit like the bus's own meshes: half the lamp, see `money::sync`)
+        let interior = bus.interior_light() * 0.5;
         // Existing ticket blocks
         for (inst, local, _, _) in &self.blocks {
             renderer.set_transform(scene, *inst, bus.position, rot * *local);
