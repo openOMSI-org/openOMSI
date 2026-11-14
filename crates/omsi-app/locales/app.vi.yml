@@ -2924,3 +2924,5 @@
 "At most 5": "Tối đa 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Các thư mục vật thể và spline mà không bản đồ nào khác dùng sẽ bị xóa cùng: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Các thư mục vật thể và spline mà bản đồ khác vẫn dùng sẽ được giữ lại: {n}."
+"Lights in fog at full resolution": "Đèn trong sương mù ở độ phân giải đầy đủ"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in a foggy night": "Enhanced: ánh sáng của đèn đường và đèn pha trong sương mù, mưa và tuyết được tính cho từng điểm ảnh - không còn bậc thang hay sọc dọc hàng rào, cây cối và mặt đất xa; tốn thêm chút thời gian khung hình trong đêm sương mù"

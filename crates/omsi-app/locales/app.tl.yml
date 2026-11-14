@@ -2923,3 +2923,5 @@
 "At most 5": "Hanggang 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Kasamang buburahin ang mga folder ng object at spline na hindi ginagamit ng ibang mapa: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Mananatili ang mga folder ng object at spline na ginagamit pa ng ibang mapa: {n}."
+"Lights in fog at full resolution": "Mga ilaw sa hamog sa buong resolusyon"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in a foggy night": "Enhanced: ang liwanag ng mga poste at headlamp sa hamog, ulan at niyebe ay kinakalkula sa bawat pixel - walang baitang o guhit sa mga bakod, puno at malayong lupa; kumukuha ng kaunting oras ng frame sa gabing mahamog"

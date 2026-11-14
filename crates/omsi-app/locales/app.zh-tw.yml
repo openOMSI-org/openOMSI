@@ -4376,3 +4376,5 @@
 "At most 5": "最多 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地圖都未使用的物件與樣條資料夾會一併刪除：{n} 個，{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "其他地圖仍在使用的物件與樣條資料夾會保留：{n} 個。"
+"Lights in fog at full resolution": "霧中燈光全解析度"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in a foggy night": "Enhanced: 霧、雨、雪中路燈與頭燈的光逐像素計算 - 圍欄、樹木與遠處地面不再出現階梯或條紋；霧夜會稍微增加每幀時間"

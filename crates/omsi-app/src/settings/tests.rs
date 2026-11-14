@@ -352,6 +352,22 @@ fn enhanced_options_and_ray_tracing() {
     assert!(old.to_text().contains("ray_tracing=1\n") && !old.to_text().contains("enhanced_plus"));
 }
 
+/// The lamps' light in fog at full resolution: off by default, kept and read back, handed to
+/// the renderer, and dropped with the other Enhanced extras after a lost graphics device.
+#[test]
+fn fog_full_res_option() {
+    assert!(!Settings::default().fog_full_res && !Settings::default().render_options().fog_full_res);
+    let on = Settings::from_text("graphics=enhanced\nfog_full_res=1\n");
+    assert!(on.fog_full_res && on.render_options().fog_full_res);
+    let text = on.to_text();
+    assert!(text.contains("fog_full_res=1\n"), "{text}");
+    assert_eq!(Settings::from_text(&text), on);
+    assert!(!Settings::from_text("fog_full_res=0\n").fog_full_res);
+    let mut lost = on.clone();
+    lost.apply_safe_gpu(1);
+    assert!(!lost.fog_full_res && !lost.render_options().fog_full_res);
+}
+
 #[test]
 fn mirror_size_zero_disables_mirror_rendering() {
     assert_eq!(Settings::from_text("mirror_size=0\n").mirror_size, 0);

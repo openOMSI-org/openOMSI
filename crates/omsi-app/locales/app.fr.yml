@@ -4376,3 +4376,5 @@
 "At most 5": "Au plus 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Les dossiers d'objets et de splines qu'aucune autre carte n'utilise sont supprimés avec lui : {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Les dossiers d'objets et de splines qu'une autre carte utilise encore restent : {n}."
+"Lights in fog at full resolution": "Lumières dans le brouillard en pleine résolution"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in a foggy night": "Enhanced : la lumière des lampadaires et des phares dans le brouillard, la pluie et la neige calculée pour chaque pixel - sans marches ni bandes le long des clôtures, des arbres et du sol lointain ; coûte un peu de temps par image par une nuit de brouillard"

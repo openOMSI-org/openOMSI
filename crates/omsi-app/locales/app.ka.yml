@@ -4375,3 +4375,5 @@
 "At most 5": "მაქსიმუმ 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "ობიექტებისა და სპლაინების საქაღალდეები, რომლებსაც სხვა რუკა არ იყენებს, მასთან ერთად წაიშლება: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "ობიექტებისა და სპლაინების საქაღალდეები, რომლებსაც სხვა რუკა ჯერ კიდევ იყენებს, რჩება: {n}."
+"Lights in fog at full resolution": "შუქები ნისლში სრული გარჩევადობით"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in a foggy night": "Enhanced: ფარნებისა და ფარების შუქი ნისლში, წვიმასა და თოვლში ყოველი პიქსელისთვის გამოითვლება - საფეხურებისა და ზოლების გარეშე ღობეების, ხეებისა და შორეული მიწის გასწვრივ; ნისლიან ღამეს კადრის დროს ცოტათი ზრდის"

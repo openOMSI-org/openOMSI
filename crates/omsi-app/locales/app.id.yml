@@ -2924,3 +2924,5 @@
 "At most 5": "Maksimal 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Folder objek dan spline yang tidak dipakai peta lain ikut dihapus: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Folder objek dan spline yang masih dipakai peta lain tetap ada: {n}."
+"Lights in fog at full resolution": "Lampu dalam kabut pada resolusi penuh"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in a foggy night": "Enhanced: cahaya lampu jalan dan lampu depan dalam kabut, hujan, dan salju dihitung untuk setiap piksel - tanpa tangga atau garis di sepanjang pagar, pohon, dan tanah jauh; memakan sedikit waktu frame pada malam berkabut"

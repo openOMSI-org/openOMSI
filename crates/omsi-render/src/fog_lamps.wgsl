@@ -51,6 +51,8 @@ struct FogLampParams {
     // added, the half-size result holds only the sun's row), w the share of the weather's
     // extinction that is mist and fog (not rain)
     size: vec4<f32>,
+    // x 1: `fog_full_res`, the light worked out per full-size pixel (`full_size_air_light`)
+    opts: vec4<f32>,
 };
 @group(1) @binding(0) var<uniform> fp: FogLampParams;
 @group(1) @binding(1) var t_depth: texture_depth_2d;
@@ -308,7 +310,11 @@ fn fs_fog_composite(in: FogVsOut) -> @location(0) vec4<f32> {
     let ray = pixel_ray(in.clip.xy);
     var air_light = vec3<f32>(0.0);
     if (fp.size.z < 1.5) {
-        air_light = gathered_air_light(in.clip.xy, ray.w);
+        if (fp.opts.x > 0.5) {
+            air_light = full_size_air_light(in.clip.xy, ray);
+        } else {
+            air_light = gathered_air_light(in.clip.xy, ray.w);
+        }
     }
     // the eye's glare from the sun, on top of everything (fp.size.z: on)
     var glare = vec3<f32>(0.0);
@@ -316,6 +322,26 @@ fn fs_fog_composite(in: FogVsOut) -> @location(0) vec4<f32> {
         glare = sun_glare(ray.xyz) * enh.exposure.x;
     }
     return vec4<f32>(air_light + min(glare, vec3<f32>(4000.0)), 0.0);
+}
+
+// `fog_full_res`: this pixel's own ray at the half-size pass's four offsets, where any ray round it is lit.
+fn full_size_air_light(at: vec2<f32>, ray: vec4<f32>) -> vec3<f32> {
+    let base = vec2<i32>(floor(at * 0.5 - vec2<f32>(0.5)));
+    let hd = vec2<i32>(textureDimensions(t_fog)) - vec2<i32>(1, 2);
+    var lit = false;
+    for (var k = 0; k < 16; k = k + 1) {
+        let o = vec2<i32>(k & 3, k >> 2) - vec2<i32>(1);
+        lit = lit || any(textureLoad(t_fog, clamp(base + o, vec2<i32>(0), hd), 0).rgb != vec3<f32>(0.0));
+    }
+    if (!lit) {
+        return vec3<f32>(0.0);
+    }
+    var l = vec3<f32>(0.0);
+    for (var j = 0; j < 4; j = j + 1) {
+        let ign = (f32(j) + 0.5) * 0.25;
+        l = l + lamp_airlight(camera.cam_pos.xyz, ray.xyz, 0.0, ray.w, ign, fp.size.w) + sun_shafts(camera.cam_pos.xyz, ray.xyz, ray.w, ign);
+    }
+    return clamp(l * 0.25 * enh.exposure.x, vec3<f32>(-4000.0), vec3<f32>(4000.0));
 }
 
 fn gathered_air_light(at: vec2<f32>, len: f32) -> vec3<f32> {

@@ -3229,3 +3229,5 @@
 "At most 5": "En fazla 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Başka hiçbir haritanın kullanmadığı nesne ve spline klasörleri de onunla birlikte silinir: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Başka bir haritanın hâlâ kullandığı nesne ve spline klasörleri kalır: {n}."
+"Lights in fog at full resolution": "Siste ışıklar tam çözünürlükte"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in a foggy night": "Enhanced: sis, yağmur ve karda sokak lambaları ile farların ışığı her piksel için hesaplanır - çitler, ağaçlar ve uzak zemin boyunca basamak veya şerit olmaz; sisli bir gecede biraz kare süresi harcar"

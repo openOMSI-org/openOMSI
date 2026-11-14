@@ -2306,6 +2306,7 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["light_shadows"] = json!("off");
     v["cloud_shadows"] = json!(false);
     v["light_glow"] = json!(false);
+    v["fog_full_res"] = json!(false);
     v["pause_quick_actions"] = json!("default");
     // (the interface theme's id: "openomsi" is openOMSI's own look)
     v["ui_theme_pack"] = json!("openomsi");
@@ -2463,7 +2464,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "street_light" => v[&k] = json!(street_light(val)),
             "ray_tracing" | "rt" => v["ray_tracing"] = json!(b(val)),
             "light_shadows" => v[&k] = json!(light_shadows(val)),
-            "cloud_shadows" | "light_glow" => v[&k] = json!(b(val)),
+            "cloud_shadows" | "light_glow" | "fog_full_res" => v[&k] = json!(b(val)),
             "rain_quality" => v[&k] = json!(rain_quality(val)),
             "vehicle_smoke" => v[&k] = json!(vehicle_smoke(val)),
             "puddles" => v[&k] = json!(puddles(val)),
@@ -2916,6 +2917,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("cloud_quality={}\n", cloud_quality(v.get("cloud_quality").and_then(|x| x.as_str()).unwrap_or("high"))));
     text.push_str(&format!("street_light={}\n", street_light(v.get("street_light").and_then(|x| x.as_str()).unwrap_or("off"))));
     text.push_str(&format!("ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\n", b("ray_tracing", false) | (graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")) == "enhanced_plus") as u8, light_shadows(v.get("light_shadows").and_then(|x| x.as_str()).unwrap_or("off")), b("cloud_shadows", false), b("light_glow", false)));
+    text.push_str(&format!("fog_full_res={}\n", b("fog_full_res", false)));
     text.push_str(&format!("rain_quality={}\n", rain_quality(v.get("rain_quality").and_then(|x| x.as_str()).unwrap_or("high"))));
     text.push_str(&format!("vehicle_smoke={}\n", vehicle_smoke(v.get("vehicle_smoke").and_then(|x| x.as_str()).unwrap_or("all"))));
     text.push_str(&format!("puddles={}\n", puddles(v.get("puddles").and_then(|x| x.as_str()).unwrap_or("high"))));

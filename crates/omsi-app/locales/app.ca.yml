@@ -4070,3 +4070,5 @@
 "At most 5": "Com a màxim 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Les carpetes d'objectes i splines que cap altre mapa no fa servir se suprimeixen amb ell: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Les carpetes d'objectes i splines que un altre mapa encara fa servir es conserven: {n}."
+"Lights in fog at full resolution": "Llums a la boira a resolució completa"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in a foggy night": "Enhanced: la llum dels fanals i dels fars a la boira, la pluja i la neu calculada per a cada píxel - sense esglaons ni franges a tanques, arbres i terra llunyana; costa una mica de temps per fotograma en una nit de boira"
