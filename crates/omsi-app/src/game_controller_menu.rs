@@ -50,6 +50,19 @@ fn row(name: &str, value: &str, desc: &str, action: String) -> (String, String) 
     (crate::game_lists::row(name, 'a', value, desc, None), action)
 }
 
+/// A slider row, as the launcher's Force feedback sliders: `now` is the step the value sits
+/// on out of `count` steps, which puts the knob on the track; a click or drag on the track
+/// sends `Move::To` and `step` turns that back into a step.
+fn slider(name: &str, value: &str, desc: &str, action: String, now: usize, count: usize) -> (String, String) {
+    let frac = if count > 1 { now.min(count - 1) as f32 / (count - 1) as f32 } else { 0.0 };
+    (crate::game_lists::row(name, 'v', value, desc, Some(frac)), action)
+}
+
+/// The actions of the Force feedback tab that are sliders (a click on their track sets the value there).
+pub(crate) fn slider_verb(verb: &str) -> bool {
+    matches!(verb, "force" | "vibration") || TUNING.iter().any(|r| r.0 == verb)
+}
+
 const DEVICE_TABS: [&str; 4] = ["Device", "Axes and pedals", "Buttons", "Force feedback"];
 pub(crate) const COMMON_TABS: [&str; 4] = ["Devices", "Driving", "Gamepad", "Force feedback"];
 const AXES: [&str; 8] = ["X axis", "Y axis", "Z axis", "X rotation", "Y rotation", "Z rotation", "Slider 1", "Slider 2"];
@@ -261,17 +274,18 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                 2 => out = button_rows(&d, &crate::describe::names(&app.args.root, &app.settings.language)),
                 _ => {
                     let ff = d.ff_scale.unwrap_or((1.0, 1.0));
-                    out.push(row("Steering force", &format!("{:.0} %", ff.0 * 100.0), "Left/right adjusts in steps of 5 % (0-200 %)", "force".into()));
-                    out.push(row("Vibration", &format!("{:.0} %", ff.1 * 100.0), "Left/right adjusts in steps of 5 % (0-200 %)", "vibration".into()));
+                    let on_step = |v: f32| (v * 20.0).round().clamp(0.0, 40.0) as usize;
+                    out.push(slider("Steering force", &format!("{:.0} %", ff.0 * 100.0), "Overall strength of the steering forces on this wheel; lower it on a strong direct-drive base, raise it on a weak wheel (steps of 5 %, 0-200 %)", "force".into(), on_step(ff.0), 41));
+                    out.push(slider("Vibration", &format!("{:.0} %", ff.1 * 100.0), "Overall strength of shakes, kerb jolts and the road and engine tremble on this wheel (steps of 5 %, 0-200 %)", "vibration".into(), on_step(ff.1), 41));
                     let invert = d.ff_invert.unwrap_or(app.settings.ff_invert);
                     out.push((crate::game_lists::row("Invert force feedback", 's', if invert { "on" } else { "off" }, "Motor direction for this device", None), "force_invert".into()));
                     // what the wheel does on its own: centring, damping, the parked weight,
                     // the dead centre of belt wheels, the grain of strong ones (#2103, #3289)
                     out.push(("Fine tuning".into(), HEADING.into()));
                     let mut t = d.ff_tune.unwrap_or_default();
-                    for (verb, label, help, _, _, scale, unit) in TUNING {
+                    for (verb, label, help, per, top, scale, unit) in TUNING {
                         let v = tuning(&mut t, verb).map(|v| *v).unwrap_or_default();
-                        out.push(row(label, &format!("{:.0} {unit}", v * scale), help, verb.into()));
+                        out.push(slider(label, &format!("{:.0} {unit}", v * scale), help, verb.into(), (v * per).round().clamp(0.0, top as f32) as usize, top + 1));
                     }
                     out.push(crate::game_lists::button("Reset tuning", "Reset", "Return the fine tuning to its defaults", "reset_tuning"));
                 }
@@ -436,6 +450,7 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
         devices.len() - 1
     });
     let d = &mut devices[i];
+    let before = (d.ff_scale, d.ff_tune);
     let axis = arg.parse::<usize>().ok().filter(|a| *a < 8);
     match verb {
         "axis" => if let Some(a) = axis {
@@ -499,6 +514,11 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
         }
         _ => return Some(kind.clone()),
     }
+    // a slider dragged sends the same value many times over: nothing to save or redraw then
+    if slider_verb(verb) && (d.ff_scale, d.ff_tune) == before {
+        return Some(kind.clone());
+    }
+    app.menus.list_dirty = true;
     save(app, devices);
     Some(kind.clone())
 }
@@ -601,6 +621,27 @@ mod tests {
         let rows = action_rows(vec![("horn".into(), "Horn".into()), ("door_front".into(), "Door".into()), ("door_rear".into(), "Door".into())]);
         assert_eq!(rows, vec![("Horn".into(), "bind horn".into()),
             ("Door | door_front".into(), "bind door_front".into()), ("Door | door_rear".into(), "bind door_rear".into())]);
+    }
+
+    #[test]
+    fn the_force_feedback_sliders_are_sliders_and_sit_on_their_step() {
+        for verb in ["force", "vibration", "centring", "damping", "parking", "min_force", "smoothing"] {
+            assert!(slider_verb(verb), "{verb}");
+            assert!(crate::game_lists::is_slider(verb), "{verb}");
+        }
+        for verb in ["force_invert", "reset_tuning", "bind", "axis"] {
+            assert!(!slider_verb(verb), "{verb}");
+        }
+        // the knob is `now` of the way along `count` steps; a click at that place comes back to `now`
+        let (row, action) = slider("Steering force", "50 %", "", "force".into(), 10, 41);
+        let parts: Vec<&str> = row.split('\u{1f}').collect();
+        assert_eq!((parts[1], parts[4], action.as_str()), ("v", "0.250", "force"));
+        for now in [0usize, 1, 10, 39, 40] {
+            let f: f32 = slider("x", "", "", String::new(), now, 41).0.split('\u{1f}').nth(4).unwrap().parse().unwrap();
+            assert_eq!(step(0, 41, Move::To(f)), now);
+        }
+        // one step has no track to be on
+        assert_eq!(slider("x", "", "", String::new(), 0, 1).0.split('\u{1f}').nth(4), Some("0.000"));
     }
 
     #[test]
