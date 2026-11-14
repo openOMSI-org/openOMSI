@@ -741,17 +741,6 @@ impl TrafficSim {
         }
         let need = st.front + self.cars[i].tail + st.min_gap + if self.cars[i].exit_wait { EXIT_HYSTERESIS } else { 0.0 };
         let (mut exit_full, mut exit_car) = if jn.inside { (false, None) } else { self.exit_room(i, jn, way, lead, on_lane, book, need, committed, started || cannot_stop_comfortably, &mut why) };
-        // A permanently blocked exit can otherwise keep a roundabout queue locked forever.
-        // After a sustained wait, let one vehicle proceed only when no right-of-way,
-        // crossing-traffic, pedestrian or courtesy condition is holding it. This is a
-        // deadlock release, not a general relaxation of junction priority.
-        if exit_full && wait > 10.0 && !hard && !ruled && soft.is_empty() && !people && !courtesy {
-            exit_full = false;
-            exit_car = None;
-            if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
-                log::info!("t={:.1}: car {} releases a junction exit deadlock after {wait:.1} s", self.time, self.cars[i].id);
-            }
-        }
         if let Some(id) = exit_car {
             holds.push((id, Hold::Exit));
         }
