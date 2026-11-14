@@ -196,7 +196,11 @@ impl App {
                         // at the smallest scale and still waiting for the card: after
                         // two such readings the picture gets lighter itself (a weak or
                         // old graphics chip keeps a playable frame rate)
-                        self.perf.governor_low += 1;
+                        // (not on a reading taken with frame generation on: it goes first, and
+                        // its slow frames once took SSAO and the shadows along with it)
+                        if self.perf.generation_since.is_none() {
+                            self.perf.governor_low += 1;
+                        }
                         if self.perf.governor_low >= 2 && fps < 30.0 {
                             self.perf.governor_low = 0;
                             // (SSAO first, then the shadows; for this drive only)

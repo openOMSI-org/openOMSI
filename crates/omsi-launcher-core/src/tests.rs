@@ -591,7 +591,9 @@ fn frame_generation_survives_the_settings_file() {
     let page = super::settings_from_text(Some("upscaler=metalfx\nframe_generation=MetalFX\n"));
     assert_eq!(page["frame_generation"].as_str(), Some("metalfx"));
     assert!(super::settings_to_text(&page, None).contains("frame_generation=metalfx\n"));
-    let other = super::settings_from_text(Some("frame_generation=dlss2x\n"));
+    let windows = super::settings_from_text(Some("frame_generation=dlss2x\n"));
+    assert!(super::settings_to_text(&windows, None).contains("frame_generation=dlss2x\n"), "a Windows choice is kept");
+    let other = super::settings_from_text(Some("frame_generation=warp\n"));
     assert!(super::settings_to_text(&other, None).contains("frame_generation=off\n"));
     assert!(crate::graphics_profiles::GRAPHICS_PROFILE_KEYS.contains(&"frame_generation"));
 }

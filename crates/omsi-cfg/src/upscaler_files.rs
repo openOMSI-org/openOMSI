@@ -136,10 +136,17 @@ pub fn menu_help(offered: bool) -> &'static str {
     }
 }
 
-/// The `frame_generation` setting's word: `metalfx` (Apple MetalFX), anything else `off`.
+/// The `frame_generation` setting's word: `metalfx` (Apple MetalFX); `fsr3` and `dlss2x` to
+/// `dlss4x` too, the Windows words of #3763, so that a Mac build saving the settings file does
+/// not turn a Windows choice into `off` (where the game cannot run one, it simply does not);
+/// anything else `off`.
 pub fn frame_generation_word(s: &str) -> &'static str {
     match s.trim().to_ascii_lowercase().as_str() {
         "metalfx" => "metalfx",
+        "fsr3" => "fsr3",
+        "dlss" | "dlss2x" => "dlss2x",
+        "dlss3x" => "dlss3x",
+        "dlss4x" => "dlss4x",
         _ => "off",
     }
 }
@@ -287,9 +294,11 @@ mod tests {
     #[test]
     fn frame_generation_words_and_choices() {
         assert_eq!(frame_generation_word(" MetalFX "), "metalfx");
-        for word in ["off", "", "fsr3", "dlss2x", "on"] {
+        for word in ["off", "", "on", "dlss8x"] {
             assert_eq!(frame_generation_word(word), "off");
         }
+        // (the Windows words of #3763 are kept, not turned into `off` by a Mac build)
+        assert_eq!([frame_generation_word("FSR3"), frame_generation_word("dlss"), frame_generation_word("dlss4x")], ["fsr3", "dlss2x", "dlss4x"]);
         assert_eq!(generators(true), ["metalfx"]);
         assert!(generators(false).is_empty());
         assert_eq!(frame_generation_menu(&[]), [("off", "Off")]);

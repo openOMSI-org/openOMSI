@@ -41,7 +41,9 @@ fn frame_generation_round_trips_and_needs_its_upscaler() {
     let mut s = Settings::from_text("upscaler=metalfx\nframe_generation=MetalFX\n");
     assert_eq!(s.frame_generation, "metalfx");
     assert!(s.to_text().contains("frame_generation=metalfx\n"));
-    assert_eq!(Settings::from_text("frame_generation=dlss4x\n").frame_generation, "off");
+    assert_eq!(Settings::from_text("frame_generation=dlss4x\n").frame_generation, "dlss4x", "a Windows choice is kept");
+    assert!(!Settings::from_text("upscaler=metalfx\nframe_generation=dlss4x\n").frame_generation(), "and not run on a Mac");
+    assert_eq!(Settings::from_text("frame_generation=warp\n").frame_generation, "off");
     assert!(s.frame_generation(), "on with MetalFX upscaling chosen");
     s.upscaler = "fsr1".into();
     assert!(!s.frame_generation(), "not without MetalFX upscaling");
