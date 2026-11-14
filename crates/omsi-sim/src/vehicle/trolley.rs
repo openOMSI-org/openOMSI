@@ -671,9 +671,15 @@ impl VehicleInstance {
                 (crossing.b, crossing.a)
             };
             let conductor_intersections = net
-                .map(|n| n.crossings.iter().filter(|c| {
-                    (c.a.min(c.b), c.a.max(c.b)) == pair
-                }).count())
+                .map(|n| {
+                    n.crossings_of(crossing.a)
+                        .iter()
+                        .filter(|&&(ci, _)| {
+                            let c = &n.crossings[ci as usize];
+                            (c.a.min(c.b), c.a.max(c.b)) == pair
+                        })
+                        .count()
+                })
                 .unwrap_or(0);
             if conductor_intersections < 4 {
                 continue;
