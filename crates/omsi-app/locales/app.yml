@@ -4461,10 +4461,6 @@ _version: 2
   en: "Line {name} added: give it tours, then save"
 "New tour":
   en: "New tour"
-"Add a trip":
-  en: "Add a trip"
-"Close the list":
-  en: "Close the list"
 "Copy +min":
   en: "Copy +min"
 "Delete tour":
@@ -7041,6 +7037,8 @@ _version: 2
   en: "Tomorrow.io response has no weather values"
 "The graphics card cannot keep up: {what} for this drive":
   en: "The graphics card cannot keep up: {what} for this drive"
+"frame generation off":
+  en: "frame generation off"
 "shadows off":
   en: "shadows off"
 "ambient occlusion (SSAO) off":
@@ -8149,8 +8147,6 @@ _version: 2
   en: "Click the next stop: the ringed ones are the stops the map has a way to from {name}."
 "Copies":
   en: "Copies"
-"Duplicate tour":
-  en: "Duplicate tour"
 "Copy the tour later in the day, or every few minutes":
   en: "Copy the tour later in the day, or every few minutes"
 "Copy this tour later":
@@ -8559,6 +8555,10 @@ _version: 2
   en: "Upscaling quality"
 "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate":
   en: "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate"
+"Frame generation":
+  en: "Frame generation"
+"Shows a generated frame between every two drawn ones: smoother motion for a little more input lag. Needs Apple MetalFX upscaling and works best from 30 drawn frames a second; with V-sync the game draws half the display's rate":
+  en: "Shows a generated frame between every two drawn ones: smoother motion for a little more input lag. Needs Apple MetalFX upscaling and works best from 30 drawn frames a second; with V-sync the game draws half the display's rate"
 "Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start":
   en: "Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start"
 "Standard Catmull-Rom or AMD FSR 1 change at once; Apple MetalFX takes the place of the anti-aliasing and the render scale, from the next start":
@@ -8743,3 +8743,13 @@ _version: 2
   en: "Get openOMSI"
 "Join the Discord":
   en: "Join the Discord"
+"Somebody else has just taken this bus":
+  en: "Somebody else has just taken this bus"
+"The server is still confirming the bus you took":
+  en: "The server is still confirming the bus you took"
+"Parked buses on a server":
+  en: "Parked buses on a server"
+"How many of the buses parked near you are drawn; fewer take less memory":
+  en: "How many of the buses parked near you are drawn; fewer take less memory"
+"At most 5":
+  en: "At most 5"

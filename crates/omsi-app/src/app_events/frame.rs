@@ -6,6 +6,13 @@
 use super::*;
 use crate::view_sync::{self, ViewSync};
 
+/// Frame generation is turned off for the drive after this many frame rate readings in a row
+/// (5 s each) under Apple's 30 drawn frames a second, as SSAO and the shadows are (`frame_time`).
+const GENERATION_SLOW_READINGS: u8 = 2;
+/// ... and only once it has been making frames this long (s): the first seconds after a map is
+/// loaded, and MetalFX building its interpolator, once read 7 frames a second where 35 were drawn.
+const GENERATION_SETTLE: f32 = 15.0;
+
 mod controls;
 mod drawn;
 mod driving;

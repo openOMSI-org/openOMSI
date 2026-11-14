@@ -9,15 +9,35 @@ fn demo_library() -> PathBuf {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let release = !cfg!(debug_assertions);
     let mut cmd = std::process::Command::new(cargo);
-    cmd.args(["build", "-q", "-p", "omsi-demo-plugin", "--manifest-path"]).arg(root.join("Cargo.toml"));
+    cmd.args(["build", "--message-format=json-render-diagnostics", "-p", "omsi-demo-plugin", "--manifest-path"])
+        .arg(root.join("Cargo.toml"))
+        .stdout(std::process::Stdio::piped());
     if release {
         cmd.arg("--release");
     }
-    assert!(cmd.status().unwrap().success(), "building the demo plugin");
-    let name = format!("{}omsi_demo_plugin{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
-    // the test binary is target/<profile>/deps/…; the library sits in target/<profile>
-    let exe = std::env::current_exe().unwrap();
-    exe.parent().unwrap().parent().unwrap().join(name)
+    let mut child = cmd.spawn().expect("building the demo plugin");
+    let output = child.stdout.take().expect("Cargo's JSON output");
+    let mut library = None;
+    for line in std::io::BufRead::lines(std::io::BufReader::new(output)) {
+        let line = line.expect("reading Cargo's JSON output");
+        let Ok(message) = serde_json::from_str::<serde_json::Value>(&line) else { continue };
+        let is_demo_cdylib = message["reason"] == "compiler-artifact"
+            && message["target"]["name"] == "omsi_demo_plugin"
+            && message["target"]["kind"].as_array().is_some_and(|kinds| kinds.iter().any(|kind| kind == "cdylib"));
+        if is_demo_cdylib {
+            library = message["filenames"]
+                .as_array()
+                .and_then(|files| {
+                    files
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .find(|file| file.ends_with(std::env::consts::DLL_SUFFIX))
+                })
+                .map(PathBuf::from);
+        }
+    }
+    assert!(child.wait().unwrap().success(), "building the demo plugin");
+    library.expect("Cargo reported the demo plugin library")
 }
 
 /// A plugins folder with the demo as `Demo\demo.dll`, listed in `Demo\demo.opl`.
