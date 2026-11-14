@@ -14,6 +14,7 @@ impl App {
         }
         let walker = self.walker_pose();
         let radio_keyed = self.voice_radio_keyed();
+        self.tell_took_parked(dt);
         let Some(lan) = self.net.lan.as_mut() else {
             self.gfx.sim_view.lan.stop_freetex();
             // (the session is over: voice chat with it)
@@ -30,6 +31,7 @@ impl App {
             return;
         };
         if lan.role == omsi_net::Role::Client {
+            lan.set_parked_drawn(crate::on_foot::parked_drawn(self.settings.parked_buses_drawn, self.world.as_ref().map(|w| w.texture_budget_bytes()).unwrap_or(0)));
             if !lan.connected {
                 self.net.speed_limit_welcome = None;
                 self.net.dedicated_teleport = None;
@@ -97,8 +99,6 @@ impl App {
         let world_ms = phase.elapsed().as_secs_f64() * 1000.0;
         let phase = std::time::Instant::now();
         if let Some(t) = self.session.traffic.as_mut().filter(|t| t.sim.mirror) {
-            // Matching every car against a Vec was quadratic in AI traffic:
-            // on crowded LAN servers this ran every frame while mirroring sounds.
             let ready: std::collections::HashSet<_> = t.sim.cars.iter().filter(|c| t.has_sound_set(c.id)).map(|c| c.id).collect();
             for c in &mut t.sim.cars {
                 if ready.contains(&c.id) { self.net.remotes.apply_ai_sounds(&mut c.vehicle, c.id, &config.root); }
@@ -166,6 +166,9 @@ impl App {
         }
         // Player-hosted sessions do not advertise dedicated-server capabilities.
         if text == "tp-policy?" { return; }
+        if from == 1 && self.parked_answer(text) {
+            return;
+        }
         if from == 1 {
             if let Some(policy) = text.strip_prefix("tp-policy ") {
                 self.net.dedicated_teleport = match policy.trim() {

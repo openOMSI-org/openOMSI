@@ -88,6 +88,7 @@ pub struct Device {
     pub hardware_id: Option<(u16, u16)>,
     dev: IDirectInputDevice8W,
     path: Option<String>,
+    xinput_path: bool,
     retry_at: Option<Instant>,
     /// The slots the device has (an axis it lacks is not in the list).
     has_axis: [bool; 8],
@@ -232,6 +233,15 @@ impl Device {
     pub fn ff_capable(&self) -> bool {
         self.ff_capable
     }
+
+    /// True when Windows DirectInput opened the `&IG_` XInput HID twin of a gamepad.
+    pub fn is_xinput_path(&self) -> bool {
+        self.xinput_path
+    }
+}
+
+pub(crate) fn is_xinput_hid_path(path: &str) -> bool {
+    path.as_bytes().windows(4).any(|w| w.eq_ignore_ascii_case(b"&ig_"))
 }
 
 /// The devices, and the thread that finds them.
@@ -1084,6 +1094,7 @@ impl DirectInput {
                 guid: *guid,
                 hardware_id,
                 dev,
+                xinput_path: path.as_deref().is_some_and(is_xinput_hid_path),
                 path,
                 retry_at: None,
                 has_axis,

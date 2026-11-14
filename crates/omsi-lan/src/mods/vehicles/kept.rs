@@ -3,8 +3,6 @@
 
 use super::*;
 
-// Validate the actual stored .bus/.ovh bytes, never a permission asserted by a peer.
-// Used for new uploads and while reopening persisted manifests from an older release.
 fn shareable_manifest(store: &Store, m: &VehicleManifest) -> bool {
     if !super::super::transfer_policy::transfers_enabled() || omsi_net::vehicle_path(&m.bus).is_none() {
         return false;
@@ -28,25 +26,59 @@ fn locally_shareable(m: &VehicleManifest, roots: &[PathBuf]) -> bool {
 
 impl Vehicles {
     pub(super) fn shareable_size(&self, sha: &str) -> Option<u64> {
-        let size = *self.sizes.get(sha)?;
-        let roots = omsi_cfg::content_roots();
-        self.manifests.iter().any(|(fp, m)| {
-            m.entries.iter().any(|e| e.sha256 == sha)
-                && !self.withheld_of.get(fp).is_some_and(|held| {
-                    m.entries.iter().filter(|e| e.sha256 == sha)
-                        .all(|e| held.iter().any(|w| w.path == e.path))
-                })
-                && locally_shareable(m, &roots)
-        }).then_some(size)
+        if self.policy_generation != omsi_cfg::content_generation() {
+            return None;
+        }
+        self.shareable.get(sha).copied()
+    }
+
+    pub(super) fn rebuild_shareable(&mut self, recheck_markers: bool) {
+        let generation = omsi_cfg::content_generation();
+        if recheck_markers || self.policy_generation != generation {
+            let roots = omsi_cfg::content_roots();
+            self.shareable_manifests = self.manifests.iter()
+                .filter(|(_, m)| locally_shareable(m, &roots))
+                .map(|(fp, _)| fp.clone())
+                .collect();
+        }
+        self.shareable.clear();
+        for (fp, m) in &self.manifests {
+            if self.shareable_manifests.contains(fp) {
+                add_shareable(&mut self.shareable, &self.sizes, m, self.withheld_of.get(fp).map(Vec::as_slice));
+            }
+        }
+        self.policy_generation = generation;
     }
 }
 
-pub(in crate::mods) fn shareable_manifest_for_serving(fp: &str) -> Option<VehicleManifest> {
-    let m = buses().manifest(fp)?;
-    locally_shareable(&m, &omsi_cfg::content_roots()).then_some(m)
+fn add_shareable(
+    shareable: &mut HashMap<String, u64>,
+    sizes: &HashMap<String, u64>,
+    m: &VehicleManifest,
+    withheld: Option<&[Withheld]>,
+) {
+    let held: HashSet<&str> = withheld.into_iter().flatten().map(|w| w.path.as_str()).collect();
+    for e in &m.entries {
+        if !held.contains(e.path.as_str()) {
+            if let Some(&size) = sizes.get(&e.sha256) {
+                shareable.insert(e.sha256.clone(), size);
+            }
+        }
+    }
 }
 
-// (what the rest of the game asks, of the game's own store)
+pub(in crate::mods) fn refresh_shareable() {
+    buses().refresh_shareable();
+}
+
+pub(in crate::mods) fn shareable_manifest_for_serving(fp: &str) -> Option<VehicleManifest> {
+    let g = buses().lock();
+    let v = g.as_ref()?;
+    if v.policy_generation != omsi_cfg::content_generation() || !v.shareable_manifests.contains(fp) {
+        return None;
+    }
+    v.manifests.iter().find(|(f, _)| f == fp).map(|(_, m)| m.clone())
+}
 
 pub(in crate::mods) fn descriptors_allow_transfer(m: &VehicleManifest) -> bool {
     let store = buses().lock().as_ref().map(|v| v.store.clone());
@@ -61,7 +93,6 @@ pub(in crate::mods) fn is_open() -> bool {
     buses().is_open()
 }
 
-#[cfg(test)]
 pub(crate) fn manifest(fp: &str) -> Option<VehicleManifest> {
     buses().manifest(fp)
 }
@@ -80,6 +111,10 @@ pub(in crate::mods) fn is_withheld(e: &Entry) -> bool {
 
 pub(crate) fn withheld_of(fp: &str) -> Vec<Withheld> {
     buses().withheld_of(fp)
+}
+
+pub(crate) fn kept_fingerprints() -> Vec<String> {
+    buses().lock().as_ref().map(|v| v.manifests.iter().map(|m| m.0.clone()).collect()).unwrap_or_default()
 }
 
 pub(in crate::mods) fn put(e: &Entry, data: &[u8]) -> Result<(), String> {
@@ -156,9 +191,23 @@ pub(super) const SERVED_BYTES: usize = 512 << 20;
 pub(super) const ANNOUNCE_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 
 impl Buses {
+    pub(super) fn refresh_shareable(&self) {
+        if let Some(v) = self.lock().as_mut() {
+            v.rebuild_shareable(true);
+        }
+    }
+
     /// The buses kept in the store's folder opened, each with all its files there.
     /// False when there is no store.
     pub(super) fn open(&self) -> bool {
+        // (one at a time, and once: every bus wanted while the store is not open yet asked
+        // for it to be opened - two dozen parked buses round a joining player read a store of
+        // thousands of files two dozen times at once, minutes of boxes)
+        static ONE: Mutex<()> = Mutex::new(());
+        let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
+        if self.is_open() {
+            return true;
+        }
         match crate::mods::store_dir().map(|d| self.open_in(&d)) {
             Some(Ok(())) => true,
             Some(Err(e)) => {
@@ -175,6 +224,7 @@ impl Buses {
         std::fs::create_dir_all(&vdir).map_err(|e| format!("{}: {e}", vdir.display()))?;
         let mut found: Vec<(std::time::SystemTime, String, VehicleManifest)> = Vec::new();
         let (mut withheld, mut withheld_of) = (HashMap::new(), HashMap::new());
+        let policy_generation = omsi_cfg::content_generation();
         let roots = omsi_cfg::content_roots();
         for e in std::fs::read_dir(&vdir).map_err(|e| e.to_string())?.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
@@ -219,7 +269,15 @@ impl Buses {
             }
         }
         log::info!("vehicles: {} buses players sent are kept", found.len());
-        *self.lock() = Some(Vehicles { store, dir: vdir, manifests: found.into_iter().map(|(_, fp, m)| (fp, m)).collect(), sizes, mounted: HashSet::new(), withheld, withheld_of });
+        let shareable_manifests = found.iter().map(|(_, fp, _)| fp.clone()).collect();
+        let mut vehicles = Vehicles {
+            store, dir: vdir,
+            manifests: found.into_iter().map(|(_, fp, m)| (fp, m)).collect(),
+            sizes, shareable: HashMap::new(), shareable_manifests, policy_generation,
+            mounted: HashSet::new(), withheld, withheld_of,
+        };
+        vehicles.rebuild_shareable(false);
+        *self.lock() = Some(vehicles);
         // (what nobody has used for longer than buses are kept goes at once)
         self.collect(0, IN_USE);
         if let Some(v) = self.lock().as_ref() { write_cache_pins(v); }
@@ -292,9 +350,6 @@ impl Buses {
         // store - and the host's frame asking which buses are in use, or mounting one - for
         // the whole write. The write goes to a file of its own and is renamed into place.)
         let store = self.lock().as_ref().ok_or("no store")?.store.clone();
-        // A received blob is not public merely because its bytes passed the
-        // hash check: it belongs to no approved vehicle until commit succeeds.
-        // Only commit() adds hashes to the table consulted by BLOB/PIECE.
         store.put(e, data).map_err(|x| x.to_string())?;
         Ok(())
     }
@@ -441,6 +496,7 @@ impl Buses {
         let fp = m.fingerprint();
         let mut g = self.lock();
         let v = g.as_mut().ok_or("no store")?;
+        let policy_generation = omsi_cfg::content_generation();
         if !locally_shareable(&m, &omsi_cfg::content_roots()) {
             return Err("this vehicle contains files in a private directory".into());
         }
@@ -457,9 +513,6 @@ impl Buses {
                 _ => return Err(format!("{} has not come", e.path)),
             }
         }
-        // Preserve the existing missing-file error (including quarantined bus
-        // descriptors) before checking the author's transfer policy. No manifest
-        // or cache is committed unless its actual stored .bus files opt in.
         if !shareable_manifest(&v.store, &m) {
             return Err("this vehicle forbids multiplayer file transfers".into());
         }
@@ -480,7 +533,14 @@ impl Buses {
                 v.sizes.insert(e.sha256.clone(), e.size);
             }
         }
+        v.shareable_manifests.insert(fp.clone());
+        if v.policy_generation == policy_generation {
+            add_shareable(&mut v.shareable, &v.sizes, &m, v.withheld_of.get(&fp).map(Vec::as_slice));
+        }
         v.manifests.push((fp.clone(), m));
+        if v.policy_generation != policy_generation {
+            v.rebuild_shareable(true);
+        }
         write_cache_pins(v);
         drop(g);
         // (whoever waits for a bus hears of it at once: `wait_for`)

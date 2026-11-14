@@ -15,6 +15,7 @@ pub mod install;
 pub mod instances;
 pub mod storage;
 pub mod mods;
+pub mod map_uses;
 pub mod optimise;
 mod hof_sync;
 mod file_dialog;
@@ -752,6 +753,11 @@ pub fn mod_set_enabled(id: &str, on: bool) -> Result<String> {
 pub fn mod_remove(id: &str) -> Result<String> {
     let content = content_dir().ok_or_else(|| anyhow!(i18n::tr("no game binary configured, so no content folder")))?;
     mods::remove(&content, id)
+}
+
+pub fn mod_remove_preview(id: &str) -> Result<map_uses::Plan> {
+    let content = content_dir().ok_or_else(|| anyhow!(i18n::tr("no game binary configured, so no content folder")))?;
+    mods::remove_preview(&content, id)
 }
 
 /// What the page asks every few seconds: whether the content changed (then it asks for the
@@ -2017,6 +2023,7 @@ pub fn get_settings() -> Result<Value> {
     // (what the page may offer beside the upscalers that are always there; not a setting)
     let game_dir = find_game(&load_config_raw().game).and_then(|g| g.parent().map(Path::to_path_buf));
     v["temporal_upscalers"] = json!(game_dir.map_or_else(omsi_cfg::upscaler_files::of_the_system, |d| omsi_cfg::upscaler_files::available(&d)));
+    v["frame_generators"] = json!(omsi_cfg::upscaler_files::frame_generation_choices());
     // no settings of our own yet: start from what the player set in OMSI 2
     if text.is_none() {
         if let Some(o) = root().ok().and_then(|r| omsi_options(&r)) {
@@ -2291,6 +2298,7 @@ fn passenger_defaults(v: &mut Value) {
 fn graphics_and_interface_defaults(v: &mut Value) {
     v["upscaler"] = json!("default");
     v["upscale_quality"] = json!("quality");
+    v["frame_generation"] = json!("off");
     v["fsr_quality"] = json!("quality");
     v["fsr_sharpness"] = json!(0.8);
     v["street_light"] = json!("off");
@@ -2387,7 +2395,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // the arrival half of the stops of a depot file that keeps two recordings per stop
     v["auto_announce"] = json!(false);
     // OMSI's own options
-    for (k, d) in [("maintenance", json!(0)), ("ai_unsched_factor", json!(100)), ("ai_reaction", json!(100)), ("standing_chance", json!(5)), ("ai_max_scheduled", json!(0)), ("ai_max_parked", json!(0)), ("ai_max_humans", json!(200)), ("use_real_time", json!(false)), ("use_real_date", json!(false)), ("use_real_year", json!(false)), ("collision_vehicles", json!(true)), ("collision_objects", json!(true)), ("collision_pedestrians", json!(true)), ("realistic_road_physics", json!(false)), ("head_movement", json!(true)), ("driverview_smooth", json!(true)), ("hands_in_cab", json!(false)), ("driver_like_omsi", json!(false)), ("alt_view", json!(true)), ("precision_zoom", json!(false))] {
+    for (k, d) in [("maintenance", json!(0)), ("ai_unsched_factor", json!(100)), ("ai_reaction", json!(100)), ("standing_chance", json!(5)), ("ai_max_scheduled", json!(0)), ("ai_max_parked", json!(0)), ("ai_max_humans", json!(200)), ("parked_buses_drawn", json!(-1)), ("use_real_time", json!(false)), ("use_real_date", json!(false)), ("use_real_year", json!(false)), ("collision_vehicles", json!(true)), ("collision_objects", json!(true)), ("collision_pedestrians", json!(true)), ("realistic_road_physics", json!(false)), ("head_movement", json!(true)), ("driverview_smooth", json!(true)), ("hands_in_cab", json!(false)), ("driver_like_omsi", json!(false)), ("alt_view", json!(true)), ("precision_zoom", json!(false))] {
         v[k] = d;
     }
     // openOMSI's own: what passengers say, OMSI's route arrows, getting up from the seat
@@ -2461,6 +2469,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "puddles" => v[&k] = json!(puddles(val)),
             "upscaler" => v[&k] = json!(upscaler_word(val)),
             "upscale_quality" => v[&k] = json!(omsi_cfg::upscaler_files::quality_word(val)),
+            "frame_generation" => v[&k] = json!(omsi_cfg::upscaler_files::frame_generation_word(val)),
             "fsr_quality" => v[&k] = json!(match val.to_ascii_lowercase().as_str() {
                 "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
                 "custom" => "custom", "auto" => "auto", _ => "quality",
@@ -2475,6 +2484,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             // (-1: no parked cars at all, #864)
             "ai_max_parked" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(0)),
             "ai_max_humans" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200)),
+            "parked_buses_drawn" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(-1)),
             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices" => v[&k] = json!(val),
             "touch_door_mode" => v[&k] = json!(if val.eq_ignore_ascii_case("direct") { "direct" } else { "standard" }),
             "update_channel" => v[&k] = json!(if val.eq_ignore_ascii_case("beta") { "beta" } else { "stable" }),
@@ -2750,13 +2760,14 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     // OMSI's own options (options.cfg): maintenance ([wear_lifespan]), the AI counts and
     // the share of random traffic, the real clock and calendar, collisions, head movement
     let text = format!(
-        "{text}maintenance={}\nai_unsched_factor={}\nai_reaction={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nrealistic_road_physics={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\ndriver_like_omsi={}\nalt_view={}\nprecision_zoom={}\n",
+        "{text}maintenance={}\nai_unsched_factor={}\nai_reaction={}\nai_max_scheduled={}\nai_max_parked={}\nai_max_humans={}\nparked_buses_drawn={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nrealistic_road_physics={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\ndriver_like_omsi={}\nalt_view={}\nprecision_zoom={}\n",
         n("maintenance", 0).clamp(0, 4),
         n("ai_unsched_factor", 100).clamp(0, 300),
         n("ai_reaction", 100).clamp(25, 200),
         n("ai_max_scheduled", 0).max(0),
         n("ai_max_parked", 0).max(-1),
         n("ai_max_humans", 200).max(1),
+        n("parked_buses_drawn", -1).max(-1),
         b("use_real_time", false),
         b("use_real_date", false),
         b("use_real_year", false),
@@ -2951,9 +2962,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         head_tracking_value("head_tracking_smoothing", v.get("head_tracking_smoothing").and_then(|x| x.as_f64())),
         head_tracking_value("head_tracking_dead_zone", v.get("head_tracking_dead_zone").and_then(|x| x.as_f64())),
     ));
-    text.push_str(&format!("upscaler={}\nupscale_quality={}\nfsr_quality={}\nfsr_sharpness={}\n",
+    text.push_str(&format!("upscaler={}\nupscale_quality={}\nframe_generation={}\nfsr_quality={}\nfsr_sharpness={}\n",
         upscaler_word(v.get("upscaler").and_then(|x| x.as_str()).unwrap_or("")),
         omsi_cfg::upscaler_files::quality_word(v.get("upscale_quality").and_then(|x| x.as_str()).unwrap_or("")),
+        omsi_cfg::upscaler_files::frame_generation_word(v.get("frame_generation").and_then(|x| x.as_str()).unwrap_or("")),
         match v.get("fsr_quality").and_then(|x| x.as_str()).unwrap_or("quality") {
             "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
             "custom" => "custom", "auto" => "auto", _ => "quality",

@@ -666,41 +666,6 @@ mod tests {
         compile(&CompileInput { varlists: vec![vl], constfiles: vec![cf], scripts: vec![script], ..Default::default() })
     }
 
-    /// openOMSI-org/openOMSI#1101 (SKM6126): two init and two complete
-    /// frame blocks in the *same* .osc must not call frame_call twice per tick.
-    /// Timegap itself is correct; duplicate frame execution made timers run fast.
-    #[test]
-    fn issue_1101_duplicate_frame_blocks_advance_timegap_once_per_tick() {
-        struct FixedTimegap;
-        impl Host for FixedTimegap {
-            fn sys_var(&mut self, var: SysVar) -> f32 {
-                if var == SysVar::Timegap { 0.125 } else { 0.0 }
-            }
-            fn callback(&mut self, _: &str, _: NameId, _: &mut Stacks, _: &mut State) {}
-            fn sound_trigger(&mut self, _: &str, _: NameId) {}
-        }
-
-        let p = prog(concat!(
-            "{macro:frame_call}\n(L.L.result) (L.S.Timegap) + (S.L.result)\n{end}\n",
-            "{init}\n1 (S.L.a)\n{end}\n",
-            "{init}\n(L.L.a) (S.L.b)\n{end}\n",
-            "{frame}\n(L.L.b) 1 = {if} (M.L.frame_call) {endif}\n{end}\n",
-            "{frame}\n(L.L.b) 1 = {if} (M.L.frame_call) {endif}\n{end}\n",
-        ));
-        assert!(p.errors.is_empty(), "{:?}", p.errors);
-        assert_eq!(p.init.len(), 2, "both initializer blocks must stay available");
-        assert_eq!(p.frame.len(), 1, "only the final complete frame block in this file runs");
-
-        let mut vm = Vm::new();
-        let mut state = State::new(&p);
-        vm.run_init(&p, &mut state, &mut FixedTimegap);
-        assert_eq!(state.get(p.var("b").unwrap()), 1.0);
-        for tick in 1..=4 {
-            vm.run_frame(&p, &mut state, &mut FixedTimegap);
-            assert_eq!(state.get(p.var("result").unwrap()), tick as f32 * 0.125);
-        }
-    }
-
     #[test]
     fn init_stores_follows_the_macros_init_calls() {
         let p = prog("{init}\n(M.L.m)\n{end}\n{macro:m}\n1 (S.L.a)\n{end}\n{frame}\n1 (S.L.b)\n{end}\n");

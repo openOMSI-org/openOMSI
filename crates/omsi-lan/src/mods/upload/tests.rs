@@ -5,7 +5,7 @@ use std::net::TcpListener;
 use std::sync::Arc;
 
 /// The served list of the parent module: (list, where each file is read from).
-type Ready = Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>;
+use super::super::{ReadyManifest, ServedManifest};
 
 fn temp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("openomsi-upload-{name}-{}", std::process::id()));
@@ -145,7 +145,7 @@ fn an_upload_that_broke_off_goes_on_where_it_stopped() {
     let store_dir = temp("resume-up-store");
     super::super::vehicles::open_for_test(&store_dir);
     accept(true);
-    let ready: Arc<Ready> = Arc::new(Mutex::new(Some(Arc::new((Manifest::default(), Vec::new())))));
+    let ready: Arc<ReadyManifest> = Arc::new(Mutex::new(Some(Arc::new(ServedManifest::new((Manifest::default(), Vec::new()), false)))));
     let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let host = listener.local_addr().unwrap();
     {
@@ -218,7 +218,7 @@ fn a_file_the_bus_has_twice_never_ends_the_upload() {
     let store_dir = temp("twice-store");
     super::super::vehicles::open_for_test(&store_dir);
     accept(true);
-    let ready: Arc<Ready> = Arc::new(Mutex::new(Some(Arc::new((Manifest::default(), Vec::new())))));
+    let ready: Arc<ReadyManifest> = Arc::new(Mutex::new(Some(Arc::new(ServedManifest::new((Manifest::default(), Vec::new()), false)))));
     let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let host = listener.local_addr().unwrap();
     {
@@ -286,7 +286,7 @@ fn two_versions_of_a_bus_are_kept_side_by_side_by_their_content() {
     let store_dir = temp("store");
     super::super::vehicles::open_for_test(&store_dir);
     accept(true);
-    let ready: Arc<Ready> = Arc::new(Mutex::new(Some(Arc::new((Manifest::default(), Vec::new())))));
+    let ready: Arc<ReadyManifest> = Arc::new(Mutex::new(Some(Arc::new(ServedManifest::new((Manifest::default(), Vec::new()), false)))));
     let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let host = listener.local_addr().unwrap();
     {

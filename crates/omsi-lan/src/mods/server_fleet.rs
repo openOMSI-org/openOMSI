@@ -3,7 +3,7 @@
 use super::*;
 use crate::server_cfg::SERVER_VEHICLES;
 
-type Package = Arc<(Manifest, Vec<PathBuf>)>;
+type Package = Arc<ServedManifest>;
 
 /// A fleet bus's complete list (every paint) as the fleet check made it at the start, with
 /// its paints' names and each source's size and time: a player asking for the bus
@@ -66,9 +66,7 @@ pub(super) fn cached(cache: &Cache, key: String, build: impl FnOnce() -> Result<
             entry
         }
     };
-    let package = entry.get_or_init(|| build().map(Arc::new)).clone()?;
-    // Cached packages must not bypass a marker or policy added after the
-    // package was first assembled. Check before exposing the cached GET list.
+    let package = entry.get_or_init(|| build().map(|package| Arc::new(ServedManifest::new(package, true)))).clone()?;
     if package.0.entries.len() != package.1.len() {
         return Err("cached vehicle has mismatched sources".into());
     }
@@ -122,7 +120,7 @@ pub(super) fn trusted_source(root: &Path, source: &Path) -> bool {
 }
 
 /// The selected bus is offered only when its canonical path is explicitly configured.
-pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, paint: &str) -> Result<(Manifest, Vec<PathBuf>), String> {
+pub(super) fn package(root: &Path, base: (&Manifest, &[PathBuf]), bus: &str, paint: &str) -> Result<(Manifest, Vec<PathBuf>), String> {
     let bus = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
     let Some(allowed) = SERVER_VEHICLES.get().filter(|v| !v.is_empty()) else {
         return Err("fleet not configured".into());
@@ -158,7 +156,7 @@ pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, p
 }
 
 /// `package` with the bus's kept list: the paint asked for checked, the map's files beside.
-fn finish_package(base: &(Manifest, Vec<PathBuf>), bus: &str, paint: &str, model: Arc<Model>) -> Result<(Manifest, Vec<PathBuf>), String> {
+fn finish_package(base: (&Manifest, &[PathBuf]), bus: &str, paint: &str, model: Arc<Model>) -> Result<(Manifest, Vec<PathBuf>), String> {
     let bus = bus.to_string();
     if !paint.is_empty() && !model.paints.iter().any(|p| p.eq_ignore_ascii_case(paint)) {
         return Err("the selected repaint is not offered by the server".into());

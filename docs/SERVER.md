@@ -241,7 +241,9 @@ an updated host requests only descriptors until it can verify them. A fresh offe
 can then request the dependencies. An older client that attempts the upload only once
 may keep using its local files until it offers the vehicle again. Strict mode requires
 preflight on both ends and continues to allow local driving. A directory marked
-private on the host also revokes sharing of the corresponding cached vehicle files.
+private on the host also revokes sharing of the corresponding cached vehicle files
+after the sharing policy refreshes (normally within five seconds). Set markers
+before starting a session if the content is already private.
 Directory markers are checked in ordinary folders, symlink targets and mounted ZIPs.
 Outside shared files need their own marker because a vehicle descriptor does not
 establish the redistribution rights of unrelated content.

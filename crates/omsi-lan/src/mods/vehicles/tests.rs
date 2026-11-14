@@ -47,6 +47,7 @@ fn a_private_marker_revokes_cached_vehicle_blobs_before_and_after_restart() {
     let (fp, _) = kept.commit(m).unwrap();
     assert!(kept.served(&descriptor.sha256).is_some());
     std::fs::write(folder.join(".openomsi-no-share"), "").unwrap();
+    kept.refresh_shareable();
     assert!(kept.blob(&descriptor.sha256).is_none());
     assert!(kept.served(&descriptor.sha256).is_none());
     kept.open_in(&store).unwrap();

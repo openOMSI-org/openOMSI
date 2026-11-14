@@ -195,6 +195,8 @@ const CHAT_RATE: (f32, f32) = (1.0, 3.0);
 mod receive_budget;
 mod receive_world;
 mod join_queue;
+mod parked;
+pub use parked::{is_parked, FIRST_PARKED_ID};
 pub use join_queue::LOADING_ALIVE;
 // ---------------------------------------------------------------------------------------
 // session codes
@@ -1316,6 +1318,7 @@ pub struct LanSession {
     pending: Vec<JoinRequest>,
     /// Vehicles of the host's own world (its bus, AI traffic), for the lists it sends.
     local_footprints: Vec<Footprint>,
+    parked: parked::Parked,
     host_seen: Instant,
     host_clock: Option<HostClock>,
     events: Vec<LanEvent>,
@@ -1472,6 +1475,7 @@ impl LanSession {
             near: None,
             pending: Vec::new(),
             local_footprints: Vec::new(),
+            parked: Default::default(),
             host_seen: now,
             host_clock: None,
             events: Vec::new(),
@@ -1674,11 +1678,11 @@ impl LanSession {
 
     /// Everybody else as we know them.
     pub fn peers(&self) -> impl Iterator<Item = &Peer> {
-        self.peers.values()
+        self.peers.values().filter(|p| !self.parked.hidden.contains(&p.pose.id))
     }
 
     pub fn peer_count(&self) -> usize {
-        self.peers.len()
+        self.peers.keys().filter(|id| !is_parked(**id)).count()
     }
 
     /// Bytes sent so far.
@@ -1758,6 +1762,7 @@ impl LanSession {
     pub fn answer_joins(&mut self) {
         for req in std::mem::take(&mut self.pending) {
             let mut near: Vec<Footprint> = self.local_footprints.clone();
+            near.extend(self.parked.footprints());
             for (pid, p) in &self.peers {
                 if *pid != req.id && p.has_pose && p.has_info && p.pose.has_vehicle() {
                     near.push(p.pose.footprint());
@@ -2348,6 +2353,7 @@ impl LanSession {
             self.lost_at = Some(now);
         }
         self.check_join_timeout();
+        self.hide_far_parked(mine);
         gone
     }
 
@@ -2863,7 +2869,7 @@ impl LanSession {
                 None => return,
             },
             Role::Client => {
-                if !self.peers.contains_key(&id) && self.peers.len() >= MAX_PEERS {
+                if !self.peers.contains_key(&id) && !self.room_for(id) {
                     return;
                 }
                 self.peers
@@ -2914,7 +2920,7 @@ impl LanSession {
                     None => return,
                 },
                 Role::Client => {
-                    if !self.peers.contains_key(&id) && self.peers.len() >= MAX_PEERS {
+                    if !self.peers.contains_key(&id) && !self.room_for(id) {
                         return;
                     }
                     self.peers
@@ -3230,21 +3236,6 @@ impl LanSession {
                 format!("NOTE|In this session: {}", clean_text(&here, 200)).as_bytes(),
                 from,
             );
-        }
-    }
-
-    /// The next player id nobody has (2 … 65535; the host is 1).
-    fn fresh_id(&mut self) -> u32 {
-        loop {
-            let id = self.next_id;
-            self.next_id = if self.next_id >= u16::MAX as u32 {
-                2
-            } else {
-                self.next_id + 1
-            };
-            if !self.peers.contains_key(&id) {
-                return id;
-            }
         }
     }
 

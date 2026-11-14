@@ -153,6 +153,19 @@ pub(crate) fn info_of(cfg: &ServerCfg, _root: &Path) -> omsi_net::ws::ServerInfo
     }
 }
 
+/// The floor nearest the height a parked bus stands at (a bus on the lower of two floors
+/// stays on it); only where there is none, the one further up, then the terrain.
+pub(crate) fn parked_floor(world: &World, x: f64, y: f64, near: f64) -> Option<f64> {
+    world.stand_height(x, y, near).or_else(|| world.stand_height(x, y, near + 4.0)).or_else(|| world.ground_height(x, y))
+}
+
+pub(crate) fn park_buses(server: bool, args: &Args, world: &World) {
+    if server {
+        let spots: Vec<omsi_lan::parked::Spot> = world.global.entry_points.iter().filter_map(|e| world.entry_point_place(e)).map(|(at, h)| (at.to_array(), h[0] as f32)).collect();
+        omsi_lan::parked::start(&args.root, &args.map, &spots, &|x, y, near| parked_floor(world, x, y, near));
+    }
+}
+
 /// Set up the arguments for a server run from `server.cfg` (the rest is the offscreen
 /// host loop, see `offscreen::run_offscreen`).
 pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
@@ -320,7 +333,8 @@ pub(crate) fn tick_status(lan: &omsi_net::LanSession, time: f64, weather: &str) 
     // out as "00:-52")
     omsi_net::addrs::find_direct(lan, |a| crate::lan::update_server_direct(a));
     crate::lan::update_server_info(players, &lan.world.date, &crate::schedule::hhmm(time.rem_euclid(86400.0)), weather);
-    let poses: Vec<&omsi_net::Pose> = lan.peers().filter(|p| p.has_info && p.has_pose).map(|p| &p.pose).collect();
+    let parked = omsi_lan::parked::server_free();
+    let poses: Vec<&omsi_net::Pose> = lan.peers().filter(|p| p.has_info && p.has_pose).map(|p| &p.pose).chain(&parked).collect();
     let list = poses.iter().filter_map(|q| player_info(q, |id| poses.iter().copied().find(|o| o.id == id))).collect();
     crate::lan::update_server_players(list);
 }

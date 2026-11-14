@@ -347,10 +347,12 @@ impl Renderer {
             .contains(wgpu::Features::TEXTURE_COMPRESSION_BC);
         let compress =
             bc && options.compress_textures && !omsi_cfg::flags::OMSI_NO_TEXCOMPRESS.is_set();
+        let halve = halves_plain(adapter.features(), &options);
         if auxiliary_context().is_none() {
             omsi_texture::set_gpu_options(omsi_texture::GpuOptions { bc, compress });
+            omsi_texture::gpu::set_halve_plain(halve);
         }
-        log::info!("renderer: {} ({:?}), {:?}, {}x MSAA{}, anisotropy {}, shadow map {}, SSAO {}, render scale {}, textures {}", info.name, info.backend, format, options.msaa, if adapter_table { " (adapter format table)" } else { "" }, options.anisotropy, options.shadow_size, options.ssao, if options.render_scale > 0.0 { format!("{:.2}", options.render_scale.clamp(0.5, 1.0)) } else { "auto".to_string() }, match (bc, compress) { (false, _) => "RGBA (no BC on this device)", (true, false) => "DXT as blocks, others RGBA", (true, true) => "DXT as blocks, others compressed where close" });
+        log::info!("renderer: {} ({:?}), {:?}, {}x MSAA{}, anisotropy {}, shadow map {}, SSAO {}, render scale {}, textures {}", info.name, info.backend, format, options.msaa, if adapter_table { " (adapter format table)" } else { "" }, options.anisotropy, options.shadow_size, options.ssao, if options.render_scale > 0.0 { format!("{:.2}", options.render_scale.clamp(0.5, 1.0)) } else { "auto".to_string() }, match (bc, compress) { (false, _) if halve => "RGBA at half size (no BC on this device)", (false, _) => "RGBA (no BC on this device)", (true, false) => "DXT as blocks, others RGBA", (true, true) => "DXT as blocks, others compressed where close" });
         // Every pipeline is built under an error scope of every kind and the renderer built
         // again with less where one fails: without multisampling (a driver whose table
         // promises more than it takes), then without the pipelines a picture can do without
@@ -363,6 +365,11 @@ impl Renderer {
         let name = format!("{} ({:?})", info.name, info.backend);
         Ok(Opened { adapter, info, device, queue, format, options, asked_options, mesh_pages, name })
     }
+}
+
+/// Only a chip with no BC at all (a phone's), not one whose BC a setting turned off.
+fn halves_plain(adapter: wgpu::Features, options: &RenderOptions) -> bool {
+    !adapter.contains(wgpu::Features::TEXTURE_COMPRESSION_BC) && options.compress_textures && !omsi_cfg::flags::OMSI_NO_TEXCOMPRESS.is_set()
 }
 
 /// A graphics device opened for a renderer whose pipelines are not built yet
@@ -577,6 +584,12 @@ impl Renderer {
         let scene = scene::SceneBase::new(&device, leave_out_enhanced, options.detailed_trees);
         let hdr_format = wgpu::TextureFormat::Rgba16Float;
         let shadows = shadows::build(&device, &scene, shadow_size, !leave_out_enhanced && !options.no_enhanced, options.light_shadows >= 2);
+        if shadows.size < shadow_size {
+            update_ceiling(|ceiling| {
+                if let Some(c) = ceiling.as_mut() { c.shadow_size = c.shadow_size.min(shadows.size); }
+            });
+        }
+        let options = RenderOptions { shadow_size: shadows.size, ..options };
         let defaults = defaults::build(&device, &queue, options.anisotropy);
         let (coronas, corona_texture) = coronas::Coronas::new(&device, &queue, &scene);
         let precip = crate::passes::PrecipMap::new(&device);
@@ -772,6 +785,7 @@ impl Renderer {
             temporal_failed: false,
             temporal_window: false,
             temporal_kept: None,
+            frame_generation: None,
             temporal_pending: None,
             prepass_msaa_pipelines: prepass.msaa_pipelines,
             prepass_eye_pipelines: prepass.eye_pipelines,

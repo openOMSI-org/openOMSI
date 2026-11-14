@@ -143,6 +143,7 @@ impl Buses {
                 continue;
             }
             let (_, m) = v.manifests.remove(k);
+            v.shareable_manifests.remove(&fp);
             let _ = std::fs::remove_file(v.dir.join(format!("{fp}.json")));
             if v.withheld_of.remove(&fp).is_some() {
                 let _ = std::fs::remove_file(v.dir.join(format!("{fp}.withheld.json")));
@@ -173,6 +174,7 @@ impl Buses {
             }
         }
         if out.buses > 0 {
+            v.rebuild_shareable(false);
             write_cache_pins(v);
             log::info!("vehicles: {} buses nobody uses let go - {} files, {:.1} MB", out.buses, out.files, out.bytes as f64 / 1e6);
         }

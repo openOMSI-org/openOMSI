@@ -26,6 +26,9 @@ struct Vehicles {
     manifests: Vec<(String, VehicleManifest)>,
     /// The size of each kept file by its SHA-256 (what a blob is asked for by).
     sizes: HashMap<String, u64>,
+    shareable: HashMap<String, u64>,
+    shareable_manifests: HashSet<String>,
+    policy_generation: u64,
     mounted: HashSet<String>,
     /// Files refused for what they are (`quarantine`), by their content and kind
     /// (`held_key`): why. A bus is kept and drawn without them (`withhold`).
@@ -116,6 +119,14 @@ impl Buses {
 /// Where the buses are mounted (no folder on the disk).
 fn mounts() -> Option<PathBuf> {
     super::sandbox_base().map(|b| b.with_file_name("lan-vehicles"))
+}
+
+/// The kept bus `path` is a file of (it lies in that bus's mount): the bus's fingerprint,
+/// and the file as the bus's list names it.
+pub(crate) fn mounted(path: &Path) -> Option<(String, String)> {
+    let rel = path.strip_prefix(mounts()?).ok()?.to_string_lossy().replace('\\', "/");
+    let (fp, file) = rel.split_once('/')?;
+    omsi_net::is_fingerprint(fp).then(|| (fp.to_string(), file.to_string()))
 }
 
 mod kept;

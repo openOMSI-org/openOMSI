@@ -306,11 +306,28 @@ impl Ui {
                     ui.text
                         .label_op(r, scene, text, value_px | BOLD, [255, 255, 255, 0], 1.0)
                 });
+                let sign_size = if item.style == InfoItemStyle::SpeedLimit {
+                    28.0 * s
+                } else {
+                    0.0
+                };
                 let icon_color = tint.unwrap_or(look.accent);
-                let icon = icon_name.and_then(|name| {
+                let icon = if item.style == InfoItemStyle::SpeedLimit && !secondary {
                     ui.text
-                        .icon(r, scene, name, icon_size.round() as u32, icon_color)
-                });
+                        .color_icon(
+                            r,
+                            scene,
+                            "speed_limit_sign",
+                            sign_size.round().max(8.0) as u32,
+                        )
+                        .map(|icon| (icon, sign_size))
+                } else {
+                    icon_name.and_then(|name| {
+                        ui.text
+                            .icon(r, scene, name, icon_size.round() as u32, icon_color)
+                            .map(|icon| (icon, icon_size))
+                    })
+                };
                 let label_width = labels
                     .iter()
                     .map(|label| label.w as f32)
@@ -328,12 +345,7 @@ impl Ui {
                     + stack_gap * labels.len().saturating_sub(1) as f32;
                 let value_height = values.iter().map(|value| value.h as f32).sum::<f32>()
                     + stack_gap * values.len().saturating_sub(1) as f32;
-                let sign_size = if item.style == InfoItemStyle::SpeedLimit {
-                    28.0 * s
-                } else {
-                    0.0
-                };
-                let icon_width = icon.map_or(0.0, |_| icon_size);
+                let icon_width = icon.map_or(0.0, |(_, size)| size);
                 let content_height = value_height
                     .max(
                         badge
@@ -377,7 +389,7 @@ impl Ui {
                     labels,
                     values,
                     badge,
-                    icon: icon.map(|icon| (icon, icon_size)),
+                    icon,
                     progress: item.progress,
                     style: item.style,
                     tint,
@@ -424,26 +436,11 @@ impl Ui {
             let diameter = item.width.min(28.0 * s);
             let sign_x = item_x + (item.width - diameter) * 0.5;
             let sign_y = item_y + (item.height - diameter) * 0.5;
-            self.text.rounded(
-                r,
-                scene,
-                [sign_x, sign_y, sign_x + diameter, sign_y + diameter],
-                diameter * 0.5,
-                [214, 38, 38, 255],
-            );
-            let inset = diameter * 0.11;
-            self.text.rounded(
-                r,
-                scene,
-                [
-                    sign_x + inset,
-                    sign_y + inset,
-                    sign_x + diameter - inset,
-                    sign_y + diameter - inset,
-                ],
-                diameter * 0.5 - inset,
-                [255, 255, 255, 255],
-            );
+            if let Some((icon, _)) = item.icon {
+                scene
+                    .overlays
+                    .push((icon, [sign_x, sign_y, sign_x + diameter, sign_y + diameter]));
+            }
             if let Some(value) = item.values.first() {
                 let value_x = sign_x + (diameter - value.w as f32) * 0.5;
                 let value_y = sign_y + (diameter - value.h as f32) * 0.5;

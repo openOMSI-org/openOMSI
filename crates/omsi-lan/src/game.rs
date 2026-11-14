@@ -150,7 +150,7 @@ pub struct RemoteVehicle {
     made_ready: bool,
     /// A box made while its bus was being read off the frame (`remote_load`): the count of
     /// buses read then, and that bus (file, paint). It is made again when a bus is done and
-    /// its own is no longer being read (done itself, or its turn has come).
+    /// its own is among them, or its turn to be read has come (`remote_load::due`).
     made_reading: Option<(u64, std::path::PathBuf, String)>,
     pub last: Pose,
     /// The bus file, paint scheme and fingerprint it was made in (`last` is the state drawn,
@@ -322,9 +322,7 @@ pub struct LanGame {
     last_received: u64,
     /// The host's weather last taken over from its clock messages.
     weather_seen: Option<String>,
-    /// Vehicles another player drives that could not be made here, and when that was
-    /// tried: tried again only after a while (every frame, a server read a big add-on bus
-    /// it could not load over and over and stood still for everybody).
+    /// Cooldown for failed loads of a remote vehicle and its current livery.
     failed: hashbrown::HashMap<(u32, String, String), std::time::Instant>,
     /// Our vehicle's variable table (by its program), for `omsi_net::vars`.
     my_vars: Option<(usize, Arc<VarTable>)>,
@@ -960,7 +958,7 @@ pub fn host_addresses(port: u16) -> Vec<(&'static str, String, &'static str)> {
 fn write_status(lan: &LanSession, game: &LanGame, player: Option<&omsi_sim::VehicleInstance>) {
     let Some(p) = status_path() else { return };
     let players: Vec<serde_json::Value> = lan
-        .peers()
+        .peers().filter(|peer| !omsi_net::is_parked(peer.pose.id))
         .map(|peer| {
             let d = player.filter(|_| peer.pose.has_vehicle()).map(|pl| relative_position(pl, &peer.pose));
             serde_json::json!({ "id": peer.pose.id, "name": peer.pose.name, "bus": peer.pose.bus, "line": peer.pose.line, "destination": peer.pose.destination, "passengers": peer.pose.passengers, "where": d, "drawn": game.remotes.contains_key(&peer.pose.id) })
@@ -1042,7 +1040,7 @@ fn relative_position(me: &omsi_sim::VehicleInstance, pose: &Pose) -> serde_json:
 /// The other players for the navigator and the city map (#1011, #1080); `my_id` is ours.
 pub fn nav_players(game: &LanGame, my_id: u32) -> Vec<NavPlayer> {
     let bus_of = |id: u32| game.remotes.get(&id).map(|r| (r.vehicle.position, r.vehicle.heading));
-    let mut out: Vec<_> = game.remotes.values().filter_map(|r| nav_player(&r.last, &r.name, (r.vehicle.position, r.vehicle.heading), my_id, bus_of)).collect();
+    let mut out: Vec<_> = game.remotes.iter().filter(|(id, _)| !omsi_net::is_parked(**id)).filter_map(|(_, r)| nav_player(&r.last, &r.name, (r.vehicle.position, r.vehicle.heading), my_id, bus_of)).collect();
     // (always in the same order: the tags of two players close together do not swap)
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out
@@ -1069,7 +1067,7 @@ fn nav_player(pose: &Pose, name: &str, bus: (DVec3, f64), my_id: u32, bus_of: im
 pub fn content_relative(path: &Path, root: &Path) -> String {
     let mut roots = omsi_cfg::content_roots();
     roots.push(root.to_path_buf());
-    crate::mirror::relative_to_roots(path, &roots).unwrap_or_default()
+    crate::mirror::relative_to_roots(path, &roots).or_else(|| crate::mods::vehicles::mounted(path).map(|m| m.1)).unwrap_or_default()
 }
 
 /// The drive starts, the map there and our player's bus `v` (None: no bus to drive) ready:
@@ -1930,6 +1928,7 @@ fn drive_remote(rv: &mut RemoteVehicle, pose: &Pose, dt: f32, exact: bool) {
             w.suspension = it.next().copied().unwrap_or(0.0);
         }
     }
+    if rv.track.stands_still(pose.id, dt) { return rv.last = pose.clone(); }
     // the horn: pressed and let go as theirs (the scripts fire its sound events)
     let horn = pose.flags & omsi_net::FLAG_HORN != 0;
     if horn != rv.horn {
@@ -2386,11 +2385,12 @@ pub fn tick_receive(
             game.drawn.events.push(RemoteEvent::Gone(id));
         }
     }
-    let poses: Vec<Pose> = lan
+    let mut poses: Vec<Pose> = lan
         .peers()
         .filter(|p| p.has_pose && p.has_info && p.pose.has_vehicle())
         .map(|p| p.pose.clone())
         .collect();
+    poses.sort_by_key(|p| omsi_net::is_parked(p.id));
     for pose in poses {
         // (a bus another stands in for is still asked for, in the background, when it is time
         // - the one standing in is not made again each time: only once theirs is here)
@@ -2401,7 +2401,7 @@ pub fn tick_receive(
         // it: made again
         if game
             .remotes
-            .get(&pose.id)
+            .get(&pose.id).filter(|_| remote_type::its_turn(game, pose.id))
             .map(|rv| {
                 rv.made_as.0 != pose.bus
                     || rv.made_as.1 != pose.paint
@@ -2414,7 +2414,7 @@ pub fn tick_receive(
                     // between the bus's mount and the fetch saying it is done)
                     || rv.stand_in && !rv.made_ready && crate::mods::vehicles::ready(&pose.content)
                     // (a box while its bus was read off the frame, when a bus is done)
-                    || rv.made_reading.as_ref().is_some_and(|(g, path, paint)| *g != crate::remote_load::generation() && !crate::remote_load::being_read(path, paint))
+                    || rv.made_reading.as_ref().is_some_and(|(g, path, paint)| *g != crate::remote_load::generation() && crate::remote_load::due(path, paint))
                     // (another bus standing in for theirs, once theirs is here)
                     || rv.fallback && rv.read_failed.is_none() && omsi_net::is_fingerprint(&pose.content) && crate::mods::vehicles::ready(&pose.content)
                     // (their own bus that could not be read, once it reads: tried again after a
@@ -2428,7 +2428,7 @@ pub fn tick_receive(
                 game.drawn.events.push(RemoteEvent::Gone(pose.id));
             }
         }
-        if !game.remotes.contains_key(&pose.id) {
+        if !game.remotes.contains_key(&pose.id) && remote_type::its_turn(game, pose.id) {
             game.failed.retain(|(id, bus, paint), _| *id != pose.id || (bus == &pose.bus && paint == &pose.paint));
             let key = (pose.id, pose.bus.clone(), pose.paint.clone());
             if game.failed.get(&key).is_some_and(|t| t.elapsed().as_secs_f32() < 30.0) {

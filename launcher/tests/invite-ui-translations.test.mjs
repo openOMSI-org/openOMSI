@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const source = readFileSync(new URL('../../crates/omsi-app/locales/app.yml', import.meta.url), 'utf8');
 const required = [
   'Play mode', 'Solo driving', 'Drive on your own without creating a room.',
   'Host your selected map, bus and duty. Share the code after starting.',
@@ -19,31 +18,24 @@ const required = [
 ];
 const languages = ['es', 'zh-tw', 'pt', 'ca', 'fr', 'sr', 'ru', 'de', 'pt-pt', 'ka', 'sv', 'uk', 'be', 'kk', 'pl', 'cs', 'hu', 'it', 'nl', 'tr', 'ja', 'zh', 'hi', 'ko', 'th', 'vi', 'id', 'ms', 'tl'];
 const catalogue = new Map();
-let current;
-for (const line of source.split(/\r?\n/)) {
-  if (/^\S/.test(line)) {
-    current = undefined;
-    if (line.startsWith('"') && line.endsWith(':')) {
-      const key = JSON.parse(line.slice(0, -1));
-      if (required.includes(key)) {
-        assert(!catalogue.has(key), 'Duplicate key: ' + key);
-        current = new Map();
-        catalogue.set(key, current);
-      }
-    }
-  } else if (current && line.trim()) {
-    const match = /^  ([a-z-]+): (".*")$/.exec(line);
-    assert(match, 'Invalid translation line: ' + line);
-    const [, language, value] = match;
-    assert(!current.has(language), 'Duplicate language: ' + language);
-    current.set(language, JSON.parse(value));
+for (const language of languages) {
+  const source = readFileSync(new URL(`../../crates/omsi-app/locales/app.${language}.yml`, import.meta.url), 'utf8');
+  const table = new Map();
+  for (const line of source.split(/\r?\n/)) {
+    if (!line.trim() || line.startsWith('#')) continue;
+    const match = /^("(?:[^"\\]|\\.)*"): (".*")$/.exec(line);
+    assert(match, 'Invalid translation line in app.' + language + '.yml: ' + line);
+    const key = JSON.parse(match[1]);
+    assert(!table.has(key), 'Duplicate key in app.' + language + '.yml: ' + key);
+    table.set(key, JSON.parse(match[2]));
   }
+  catalogue.set(language, table);
 }
 const placeholders = value => [...value.matchAll(/%\{\w+\}|(?<!%)\{[^{}]*\}/g)].map(m => m[0]).sort();
 for (const language of languages) {
   test('invitation UI translations are complete: ' + language, () => {
     for (const key of required) {
-      const value = catalogue.get(key)?.get(language);
+      const value = catalogue.get(language).get(key);
       assert.equal(typeof value, 'string', language + ' missing: ' + key);
       assert(value.trim(), language + ' empty: ' + key);
       assert.deepEqual(placeholders(value), placeholders(key), language + ' placeholders: ' + key);

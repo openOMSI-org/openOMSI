@@ -51,6 +51,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         pick("ai_max_scheduled", "Timetable vehicles", later),
         pick("ai_max_parked", "Parked cars", later),
         pick("ai_max_humans", "People at once", later),
+        pick("parked_buses_drawn", "Parked buses on a server", "How many of the buses parked near you are drawn; fewer take less memory"),
     ]
         .into_iter()
         .flatten()
@@ -295,7 +296,7 @@ pub(super) fn vehicle_pages(app: &App) -> Vec<Page> {
         display.push(opens("Depot file (HOF)", "Change the current depot file (used for the timetable)", "hof"));
         display.push(opens("Fleet number", "Change the vehicle's current fleet number", "number"));
         if !app.player.as_ref().unwrap().vehicle.ty.paint_schemes.is_empty() {
-            display.push(opens("Livery", "Change the paint of the current bus without respawning; multiplayer peers receive the new livery", "livery"));
+            display.push(opens("Livery", "Repaint the vehicle you drive where it stands: same bus, same passengers", "livery"));
         }
         display.push((row("Custom fleet number", if app.menus.menu_edit_number{'E'}else{'e'}, &typed_number, "Enter custom fleet number (not from the list)", None), "custom_number_edit".to_string()));
         display.push((row("Custom plate", if app.menus.menu_edit_ident{'E'}else{'e'}, &typed_ident, "Enter custom plate (leave free for automatic)", None), "custom_ident_edit".to_string()));
@@ -569,10 +570,12 @@ fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let fsr = app.settings.upscaler == "fsr1";
     let temporal = app.settings.temporal_upscaling().is_some();
     let offered = !omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir()).is_empty();
+    let generation = app.settings.temporal_upscaling().is_some_and(|t| omsi_cfg::upscaler_files::frame_generation_choices().contains(&t.upscaler.as_str()));
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     [
         select_row(file, "upscaler", "Upscaling", omsi_cfg::upscaler_files::menu_help(offered)),
         select_row(file, "upscale_quality", "Upscaling quality", "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate").filter(|_| temporal),
+        select_row(file, "frame_generation", "Frame generation", omsi_cfg::upscaler_files::frame_generation_help()).filter(|_| generation),
         select_row(file, "fsr_quality", "FSR quality", &fsr_size(app)).filter(|_| fsr),
         slider_row(app, "fsr_sharpness", "FSR sharpness", "RCAS sharpening strength", &pct).filter(|_| fsr),
     ]

@@ -57,9 +57,8 @@ fn serve_with_accept(
         log::warn!("LAN mods: cannot make the listener interruptible: {e}");
         return None;
     }
-    let ready: Arc<Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>> = Arc::new(Mutex::new(None));
+    let ready: Arc<ReadyManifest> = Arc::new(Mutex::new(None));
     let state = Arc::new(State::default());
-    // Fleet manifests are immutable for this session and shared by all request handlers.
     let fleet_cache: Arc<server_fleet::Cache> = Arc::new(Mutex::new(HashMap::new()));
     let fleet_root = args.root.clone();
     upload::open();
@@ -73,7 +72,20 @@ fn serve_with_accept(
                 (Manifest { map: args.map.replace('\\', "/"), bus: String::new(), entries: Vec::new() }, Vec::new())
             };
             if !state.stopped.load(Ordering::Acquire) {
-                *ready.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(manifest));
+                *ready.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(ServedManifest::new(manifest, false)));
+            }
+        }).ok()?;
+    }
+    {
+        let state = Arc::downgrade(&state);
+        std::thread::Builder::new().name("lan-transfer-policy".into()).spawn(move || {
+            while let Some(state) = state.upgrade() {
+                if state.stopped.load(Ordering::Acquire) {
+                    break;
+                }
+                vehicles::refresh_shareable();
+                drop(state);
+                std::thread::sleep(Duration::from_secs(5));
             }
         }).ok()?;
     }

@@ -92,7 +92,8 @@ pub(crate) fn apply_lan(
             game.apply_player_sounds(id);
         }
         if let (Some(rv), Some(v)) = (game.remotes.get_mut(&id), view.remotes.get_mut(&id)) {
-            sound_remote(rv, v, audio, frame.listener, frame.muffled, inside);
+            // (a parked bus stands with everything off: no sound sets, no clips read for it)
+            sound_remote(rv, v, audio.filter(|_| !omsi_net::is_parked(id)), frame.listener, frame.muffled, inside);
         }
     }
     if let Some(a) = audio {
@@ -113,7 +114,7 @@ pub(crate) fn apply_lan(
     // draw them like AI traffic
     for (id, rv) in game.remotes.iter_mut() {
         let Some(v) = view.remotes.get_mut(id) else { continue };
-        if v.driver_for.as_deref() != Some(rv.last.figure.as_str()) && !rv.stand_in {
+        if v.driver_for.as_deref() != Some(rv.last.figure.as_str()) && !rv.stand_in && !omsi_net::is_parked(*id) {
             v.driver_for = Some(rv.last.figure.clone());
             if let Some(mut d) = v.driver.take() {
                 d.hide(r, scene);

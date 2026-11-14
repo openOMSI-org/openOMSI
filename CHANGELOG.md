@@ -8,9 +8,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Frame generation on a Mac**: with Apple MetalFX upscaling on, Settings → Graphics → *Frame generation* shows a generated frame between every two drawn ones (Apple's MetalFX frame interpolator; a Mac with Apple silicon on macOS 26 or newer), for smoother motion at the price of a little more input lag. Where fewer than 30 frames a second are drawn with it (Apple's advice), it is turned off for the drive, as SSAO and the shadows are. The frame rate's corner then reads e.g. `90 fps (45 + FG)`. Off by default, experimental.
 - **Apple MetalFX upscaling on a Mac**: Settings → Graphics → Upscaling offers *Apple MetalFX* on a Mac with Apple silicon (macOS 13 or newer), with the same quality levels as NVIDIA DLSS and AMD FSR 3 on Windows: the picture is drawn smaller and brought up to the window with the help of the last frames, in place of the anti-aliasing and the render scale, from the next start. It is part of macOS, so there is nothing to install. Where the Mac's graphics chip scales up less than Ultra performance asks for, the picture is drawn at the smallest size it takes.
 - **Rename a save**: the pencil beside a save slot in the launcher's *Continue* list gives it a name of your own, without editing its `.osn` file in the map's `Saves` folder. Saving over that slot in the game keeps the name (#3849).
 - **AI reaction time**: the new `ai_reaction` setting (25 to 200 %, default 100 %, a slider in the launcher's Traffic settings) scales how long the AI drivers wait before moving off, so a queue at a light pulls away closer together at a lower value. It never goes under 0.4 s, the shortest reaction the junction code is built for (#3793).
+- **Force feedback sliders in the game's options**: a device's Force feedback tab in the game's controller settings now shows steering force, vibration, self-centring, damping, parking resistance, minimum force and smoothing as sliders like the launcher's, which you can drag as well as step with Left and Right.
 - **What's new in the launcher**: after an update the launcher shows the notes of every
   version since the one last seen, opened, and the others folded below them; *What's new*
   beside *Check now* (Settings) opens them at any time, and the offer of an update shows that
@@ -598,6 +600,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **A sharper picture with Apple MetalFX upscaling**: the textures are read one level sharper
+  and the picture is sharpened a little more, so bark, grass and the numbers of the gauges come
+  closer to the picture drawn at the window's size, without halos around the lamp posts at night.
 - **Vehicle-actuated traffic lights wait before the stop, not in the yellow**: a stop whose
   request is present now holds the clock at the phase before it, so a queue can no longer
   leave a light stuck on yellow; an exact stop time still holds, and a jump at the same time
@@ -1077,6 +1082,8 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   lookups the Adreno 710 refused ([#2009](https://github.com/openOMSI-org/openOMSI/issues/2009)).
 - **Static buses of Praha 200 no longer lose their outer skin**: a mesh from the Blender exporter was turned round as a mirrored one when its matrix (the quarter turn about x that thousands of ordinary meshes carry) was positive and its normals faced against its faces, so the IVECO buses at Letnany station showed their inside; Omsi.exe draws such a mesh as wound.
 ### Multiplayer
+
+- Automatic map downloads are off in player-hosted LAN sessions and in dedicated server configurations that omit `share_maps`. To share a dedicated server’s map and eligible dependencies, set `share_maps = 1`. Players can still join using their installed map.
 
 - **The map's timetable buses show their fleet number, plate and the right destination for
   every player**, not only on the server or the hosting game: the host now tells each player
