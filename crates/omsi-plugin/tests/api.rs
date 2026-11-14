@@ -202,6 +202,30 @@ fn storage_and_files_stay_in_the_data_folder() {
 }
 
 #[test]
+fn the_launcher_switches_plugins_off_and_reads_what_became_of_them() {
+    let d = dir("manager");
+    std::fs::write(d.join("good.lua"), r#"omsi.plugin.settings({ { key = "beep", type = "bool", label = "Beep", default = true } }, "Good")"#).unwrap();
+    std::fs::write(d.join("Quiet.lua"), "omsi.message('should not run')").unwrap();
+    std::fs::write(d.join("broken.lua"), "function (").unwrap();
+    let file = d.join("plugins-status.json");
+    let hosts = HostConfig { off: vec!["quiet".into()], status_file: Some(file.clone()), ..Default::default() };
+    let mut p = Plugins::load(std::slice::from_ref(&d), &hosts);
+    let mut g = Game::new();
+    p.frame(&mut g);
+    assert!(g.messages.iter().all(|m| !m.contains("should not run")), "{:?}", g.messages);
+    let report: omsi_plugin::status::Report = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let state = |n: &str| report.plugins.iter().find(|e| e.name == n).map(|e| (e.state.clone(), e.error.is_empty()));
+    assert_eq!(state("good"), Some(("loaded".into(), true)));
+    assert_eq!(state("quiet"), Some(("off".into(), true)));
+    assert_eq!(state("broken"), Some(("failed".into(), false)));
+    // the settings' description, for the launcher's form
+    let schema = json::decode(&std::fs::read_to_string(d.join("good.data/settings.schema.json")).unwrap(), false).unwrap();
+    assert_eq!(schema.get("title"), Some(&Value::Str("Good".into())));
+    let first = &schema.get("settings").unwrap().items()[0];
+    assert_eq!((first.get("key"), first.get("type"), first.get("default")), (Some(&Value::Str("beep".into())), Some(&Value::Str("bool".into())), Some(&Value::Bool(true))));
+}
+
+#[test]
 fn settings_make_a_panel_and_tell_their_changes() {
     let mut g = Game::new();
     let src = r#"

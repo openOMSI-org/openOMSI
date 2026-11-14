@@ -77,6 +77,24 @@ ever; a vehicle can have both.
 Other `.lua` files are not started on their own, so a folder plugin's modules stay modules.
 `OMSI_NO_PLUGINS=1` leaves every plugin out, Lua ones included.
 
+### The launcher's plugin list
+
+The launcher's **Plugins** page lists every plugin of the `plugins` folders (Lua, `.oop` and
+`.opl`). Players switch each on or off there without moving its files, see what the last game
+made of it, and change the settings it declared with `plugin.settings`:
+
+* The names switched off are in `~/.openomsi/plugins-off.txt`, one a line (a `.lua`'s file name
+  without `.lua`, a folder plugin's folder name, a `.oop`'s or `.opl`'s name, in lower case).
+  The game reads it before it loads the plugins and leaves those out.
+* After loading, the game writes `~/.openomsi/plugins-status.json`: every plugin with its
+  `state` (`loaded`, `off`, `failed` with the load error, e.g. a syntax error) and, when one is
+  switched off during the game for its errors, `switched_off` with the error.
+* `plugin.settings(...)` also writes `settings.schema.json` into the plugin's data folder,
+  beside `settings.json`: `{title, settings: [{key, type, label, default, min, max, step,
+  choices}]}`. The launcher makes a form of it and writes the values into `settings.json`,
+  which the plugin gets back from `plugin.settings` the next time it starts. A plugin that has
+  not run yet has no settings to show.
+
 ### How a plugin runs
 
 The file's top level runs once when the game starts. After that the plugin reacts to

@@ -185,7 +185,7 @@ fn through_the_host() {
     assert!(r.procs().variable && r.procs().trigger && r.procs().system && r.procs().string && r.procs().texture && r.procs().pointer && r.procs().ticket);
     drop(r);
     // the same frames through a plugin whose library will not load here: force the host
-    let hosts = HostConfig { host32: Some(host.to_path_buf()), runner: None };
+    let hosts = HostConfig { host32: Some(host.to_path_buf()), runner: None, ..Default::default() };
     std::fs::write(dir.join("Demo/demo.opl"), "[dll]\r\nDemo\\notalibrary.dll\r\n").unwrap();
     std::fs::write(dir.join("Demo/notalibrary.dll"), b"MZ not really").unwrap();
     let err = Plugin::load(&dir.join("Demo/demo.opl"), &dir, &hosts).err().expect("a file that is no library fails");

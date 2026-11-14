@@ -11,6 +11,7 @@ import { DepotPage } from './pages/depot.js';
 import { MultiplayerPage } from './pages/multiplayer.js';
 import { ProfilePage } from './pages/profile.js';
 import { ModsPage } from './pages/mods.js';
+import { PluginsPage } from './pages/plugins.js';
 import { TroubleshootPage, problems } from './pages/troubleshoot.js';
 import { SettingsPage } from './pages/settings.js';
 import { ControlsPage } from './pages/controls.js';
@@ -31,7 +32,7 @@ if (PHONE) document.documentElement.classList.add('phone');
 
 const GROUPS = [
   ['Play', [['drive', 'Drive', 'bus', DrivePage], ['depot', 'Depot', 'garage', DepotPage], ['multiplayer', 'Servers', 'globe', MultiplayerPage], ['games', 'Running games', 'gamepad', GamesPage]]],
-  ['Content', [['mods', 'Mods', 'puzzle', ModsPage], ['timetable', 'Timetable', 'clock', TimetablePage], ['addons', 'Add-ons', 'globe', AddonsPage]]],
+  ['Content', [['mods', 'Mods', 'puzzle', ModsPage], ['plugins', 'Plugins', 'sliders', PluginsPage], ['timetable', 'Timetable', 'clock', TimetablePage], ['addons', 'Add-ons', 'globe', AddonsPage]]],
   ['Options', [['settings', 'Settings', 'sliders', SettingsPage], ['controls', 'Controls', 'keyboard', ControlsPage], ['setup', 'Setup', 'folder', SetupPage]]],
   ['Help', [['tutorials', 'Tutorials', 'book', TutorialsPage], ['troubleshoot', 'Troubleshooting', 'alert', TroubleshootPage]]],
 ];

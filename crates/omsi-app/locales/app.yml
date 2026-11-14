@@ -8761,3 +8761,19 @@ _version: 2
   en: "Folders of objects and splines that no other map uses go with it: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.":
   en: "Folders of objects and splines that another map still uses stay: {n}."
+"Plugins":
+  en: "Plugins"
+"Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.":
+  en: "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay."
+"No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder.":
+  en: "No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder."
+"Plugins folder":
+  en: "Plugins folder"
+"Ran in the last game":
+  en: "Ran in the last game"
+"Did not load in the last game":
+  en: "Did not load in the last game"
+"Stopped in the last game after errors":
+  en: "Stopped in the last game after errors"
+"Plugins are disabled in Settings, so none of them runs.":
+  en: "Plugins are disabled in Settings, so none of them runs."

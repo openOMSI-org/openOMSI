@@ -12,6 +12,9 @@ const NEW: &str = crate::api::VERSION;
 pub const SETTINGS_PANEL: &str = "__settings";
 /// The settings' file in the data folder.
 const SETTINGS_FILE: &str = "settings.json";
+/// What the settings are (keys, types, labels, ranges), beside them: the launcher's plugin
+/// list makes its own form of it, and writes the values into `settings.json` (#3919).
+const SCHEMA_FILE: &str = "settings.schema.json";
 /// Most settings of a plugin.
 const MAX_SETTINGS: usize = 40;
 
@@ -120,6 +123,40 @@ fn save(s: &PluginState) {
     let text = crate::api::json::encode_pretty(&s.settings.values());
     if let Err(e) = std::fs::create_dir_all(&s.data_dir).and_then(|_| std::fs::write(s.data_dir.join(SETTINGS_FILE), text)) {
         log::warn!("{} settings not saved: {e}", s.tag);
+    }
+}
+
+/// The settings as the launcher reads them: `{title, settings: [{key, type, label, default,
+/// min, max, step, choices}]}`.
+fn schema(s: &Settings) -> Value {
+    let list = s.list.iter().map(|st| {
+        let mut m = vec![("key".to_string(), Value::Str(st.key.clone())), ("label".to_string(), Value::Str(st.label.clone()))];
+        let ty = match &st.kind {
+            SettingKind::Bool => "bool",
+            SettingKind::Number { min, max, step } => {
+                m.extend([("min".to_string(), Value::Num(*min as f64)), ("max".to_string(), Value::Num(*max as f64)), ("step".to_string(), Value::Num(*step as f64))]);
+                "number"
+            }
+            SettingKind::Text => "text",
+            SettingKind::Choice(c) => {
+                m.push(("choices".to_string(), Value::List(c.iter().cloned().map(Value::Str).collect())));
+                "choice"
+            }
+        };
+        m.push(("type".to_string(), Value::Str(ty.into())));
+        m.push(("default".to_string(), st.value.clone()));
+        Value::Map(m)
+    });
+    Value::Map(vec![("title".to_string(), Value::Str(s.title.clone())), ("settings".to_string(), Value::List(list.collect()))])
+}
+
+fn save_schema(s: &PluginState, defaults: &Settings) {
+    let text = crate::api::json::encode_pretty(&schema(defaults));
+    if std::fs::read_to_string(s.data_dir.join(SCHEMA_FILE)).ok().as_deref() == Some(text.as_str()) {
+        return;
+    }
+    if let Err(e) = std::fs::create_dir_all(&s.data_dir).and_then(|_| std::fs::write(s.data_dir.join(SCHEMA_FILE), text)) {
+        log::warn!("{} settings' description not saved: {e}", s.tag);
     }
 }
 
@@ -255,6 +292,7 @@ pub static FNS: &[ApiFn] = &[
         let s = c.state();
         let saved = load_saved(s);
         s.settings.title = title.unwrap_or_else(|| s.name.clone());
+        save_schema(s, &Settings { list: list.clone(), title: s.settings.title.clone() });
         s.settings.list = list;
         for st in s.settings.list.iter_mut() {
             if let Some(v) = saved.iter().find(|(k, _)| *k == st.key).and_then(|(_, v)| fit(&st.kind, v)) {
