@@ -780,39 +780,6 @@ impl Player {
         self.from_keyboard = false;
     }
 
-    /// Cruise control on at the speed driven now, or off (Num0). The text for the screen.
-    pub(crate) fn toggle_cruise(&mut self) -> String {
-        if self.cruise.take().is_some() {
-            return "Cruise control off".into();
-        }
-        let kmh = self.vehicle.physics.velocity_kmh();
-        if kmh < cruise::MIN_KMH {
-            return format!("Cruise control works above {} km/h", cruise::MIN_KMH as i32);
-        }
-        let kmh = kmh.round();
-        self.cruise = Some(cruise::Cruise::new(kmh));
-        format!("Cruise control: {} km/h", kmh as i32)
-    }
-
-    /// The pedals with the cruise control's foot on them: the brake switches it off, a
-    /// throttle pressed further wins while held.
-    fn cruise_pedals(&mut self, dt: f32, throttle: f32, brake: f32) -> (f32, f32) {
-        let Some(c) = self.cruise.as_mut() else { return (throttle, brake) };
-        let kmh = self.vehicle.physics.velocity_kmh();
-        // (reversing, or the bus brought to a stand by something else: no speed to hold)
-        if brake > 0.05 || self.axes.brake_key || kmh < 1.0 {
-            self.cruise = None;
-            self.cruise_note = Some("Cruise control off".into());
-            return (throttle, brake);
-        }
-        let (t, b) = c.pedals(kmh, dt);
-        if throttle > t {
-            c.overridden();
-            return (throttle, 0.0);
-        }
-        (t, b)
-    }
-
     /// Start the whole bus by itself (Shift+U): everything a driver does to put it into
     /// service. Returns what to show in the HUD.
     pub(crate) fn start_up(&mut self) -> String {
@@ -1503,37 +1470,4 @@ mod held_repeat_tests {
 }
 
 #[cfg(test)]
-mod steering_view_tests {
-    use super::steering_view_yaw;
-
-    #[test]
-    fn follows_both_directions_without_snapping_or_overshooting() {
-        let right = steering_view_yaw(0.0, 1.0, 0.016, true, 30.0, 0.25);
-        assert!(right > 0.0 && right < 30.0);
-        assert_eq!(steering_view_yaw(0.0, -1.0, 0.016, true, 30.0, 0.25), -right);
-        let changed = steering_view_yaw(30.0, -1.0, 0.016, true, 30.0, 0.25);
-        assert!(changed < 30.0 && changed > -30.0);
-    }
-
-    #[test]
-    fn smoothing_is_frame_rate_independent_even_at_five_fps() {
-        let mut reference: Option<f32> = None;
-        for fps in [5, 30, 60, 144] {
-            let mut yaw = 0.0;
-            for _ in 0..fps { yaw = steering_view_yaw(yaw, 0.8, 1.0 / fps as f32, true, 40.0, 0.25); }
-            if let Some(reference) = reference { assert!((yaw - reference).abs() < 0.0001); }
-            reference = Some(yaw);
-        }
-    }
-
-    #[test]
-    fn configurable_angle_response_and_return_to_center() {
-        let slow = steering_view_yaw(0.0, 1.0, 0.1, true, 45.0, 0.5);
-        let fast = steering_view_yaw(0.0, 1.0, 0.1, true, 45.0, 0.1);
-        assert!(fast > slow);
-        assert_eq!(steering_view_yaw(0.0, 2.0, 0.1, true, 45.0, 0.1), fast);
-        let centered = steering_view_yaw(30.0, 1.0, 0.1, false, 45.0, 0.25);
-        assert!(centered > 0.0 && centered < 30.0);
-        assert_eq!(steering_view_yaw(30.0, 0.0, 0.0, true, 45.0, 0.25), 30.0);
-    }
-}
+mod steering_view_tests;

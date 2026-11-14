@@ -44,6 +44,41 @@ impl Cruise {
     }
 }
 
+impl super::Player {
+    /// Cruise control on at the speed driven now, or off (Num0). The text for the screen.
+    pub(crate) fn toggle_cruise(&mut self) -> String {
+        if self.cruise.take().is_some() {
+            return "Cruise control off".into();
+        }
+        let kmh = self.vehicle.physics.velocity_kmh();
+        if kmh < MIN_KMH {
+            return format!("Cruise control works above {} km/h", MIN_KMH as i32);
+        }
+        let kmh = kmh.round();
+        self.cruise = Some(Cruise::new(kmh));
+        format!("Cruise control: {} km/h", kmh as i32)
+    }
+
+    /// The pedals with the cruise control's foot on them: the brake switches it off, a
+    /// throttle pressed further wins while held.
+    pub(super) fn cruise_pedals(&mut self, dt: f32, throttle: f32, brake: f32) -> (f32, f32) {
+        let Some(c) = self.cruise.as_mut() else { return (throttle, brake) };
+        let kmh = self.vehicle.physics.velocity_kmh();
+        // (reversing, or the bus brought to a stand by something else: no speed to hold)
+        if brake > 0.05 || self.axes.brake_key || kmh < 1.0 {
+            self.cruise = None;
+            self.cruise_note = Some("Cruise control off".into());
+            return (throttle, brake);
+        }
+        let (t, b) = c.pedals(kmh, dt);
+        if throttle > t {
+            c.overridden();
+            return (throttle, 0.0);
+        }
+        (t, b)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
