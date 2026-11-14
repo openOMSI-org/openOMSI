@@ -20,7 +20,11 @@ impl ScheduleSim {
             Vec<omsi_map::DepotEntry>,
             Option<Arc<omsi_vehicle::Hof>>,
         ) = match (&train, self.depots.get(&group).filter(|v| !v.is_empty())) {
-            (Some(cars), _) => (cars[0].0.clone(), Vec::new(), None),
+            (Some(cars), _) => {
+                let ty = cars[0].0.clone();
+                let hof = self.pool_hof(ty.def.dir(), world);
+                (ty, Vec::new(), hof)
+            }
             (None, Some(vehicles)) => {
                 // The depot's types come out in proportion to their fleets: a typgroup
                 // listing 40 fleet numbers appears eight times as often as one with
@@ -172,7 +176,7 @@ impl ScheduleSim {
         self.pools.get(group).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
-    /// The depot file a bus of a plain `[aigroup_2]` group runs with (see [`pool_depot`]),
+    /// The depot file a plain `[aigroup_2]` vehicle or `.zug` train runs with (see [`pool_depot`]),
     /// looked up once per vehicle folder.
     pub fn pool_hof(&mut self, dir: &Path, world: &dyn TimetableWorld) -> Option<Arc<omsi_vehicle::Hof>> {
         if let Some(h) = self.pool_hofs.get(dir) {

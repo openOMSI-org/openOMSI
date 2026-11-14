@@ -91,7 +91,12 @@ impl LampSight {
         self.waiting.is_none()
     }
 
-    pub(crate) fn take(&mut self) {
+    pub(crate) fn take(&mut self, device_lost: bool) {
+        if device_lost {
+            self.waiting = None;
+            self.frames_waiting = 0;
+            return;
+        }
         let Some(lamps) = self.waiting.as_ref() else { return };
         self.frames_waiting += 1;
         if self.frames_waiting > 240 {
@@ -184,4 +189,27 @@ pub(crate) fn brightest_glare(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, f
         sources.truncate(SIGHT_LAMPS);
     }
     sources.into_iter().map(|s| s.0).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn discards_a_completed_readback_after_device_loss() {
+        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+        descriptor.backends = wgpu::Backends::NOOP;
+        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
+        let instance = wgpu::Instance::new(descriptor);
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
+        let (device, _) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+        let mut sight = LampSight::build(&device);
+        sight.readback.destroy();
+        sight.waiting = Some(vec![DVec3::ZERO]);
+        sight.state.store(1, Ordering::Relaxed);
+
+        sight.take(true);
+
+        assert!(sight.waiting.is_none());
+    }
 }

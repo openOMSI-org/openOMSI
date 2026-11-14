@@ -116,9 +116,15 @@ impl Offscreen<'_> {
             let hub = omsi_lan::admin::hub().map(|h| &**h);
             let rules = crate::admin::server_rules(srv_metar.is_some());
             for (from, text) in l.take_commands() {
-                omsi_lan::admin::server_command(l, from, &text, srv_admin, &positions, &rules, hub);
+                if !omsi_lan::parked::server_command(l, from, &text) {
+                    omsi_lan::admin::server_command(l, from, &text, srv_admin, &positions, &rules, hub);
+                }
             }
+            omsi_lan::parked::server_tick(l, dt as f32);
             for text in crate::lan::take_local_admin() {
+                if omsi_lan::parked::server_admin(&text, &|x, y, near| crate::server::parked_floor(world, x, y, near)) {
+                    continue;
+                }
                 srv_admin.admins.insert(crate::admin::LOCAL_ADMIN, omsi_admin::Role::Admin);
                 omsi_lan::admin::server_command(l, crate::admin::LOCAL_ADMIN, &format!("admin {text}"), srv_admin, &positions, &rules, hub);
             }
@@ -725,7 +731,10 @@ impl Offscreen<'_> {
             h.eye = Some(humans::Eye::of(&eye_cam, view_aspect).widened(triple_extent(settings, &eye_cam, size.0, size.1)));
             h.set_remote_buses(remotes_off.remotes.iter().map(|(id, r)| (*id, r.vehicle())));
             h.set_duty(duty.as_ref());
-            h.set_player_next_stop(duty.as_ref().and_then(|d| d.trip().stops.get(d.next_stop)));
+            h.set_player_next_stop(duty.as_ref().and_then(|d| {
+                let stops = &d.trip().stops;
+                stops.get(omsi_sim::timetable_run::next_calling_stop(stops, d.next_stop))
+            }));
             let took = steps::tick_humans(h, &mut sim_view.people, dt, world, player.as_mut(), traffic.as_mut(), renderer, scene);
             if let Some(p) = player.as_mut() {
                 if took {

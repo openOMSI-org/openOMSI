@@ -279,6 +279,7 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         "msaa" => vec![("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")],
         "render_scale" => vec![("auto", "Auto"), ("1", "100%"), ("0.85", "85%"), ("0.75", "75%"), ("0.67", "67%"), ("0.5", "50%")],
         "upscaler" => [("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1")].into_iter().chain(omsi_cfg::upscaler_files::menu_choices()).collect(),
+        "frame_generation" => omsi_cfg::upscaler_files::frame_generation_menu(&omsi_cfg::upscaler_files::frame_generation_choices()),
         "upscale_quality" => vec![("native", "Native"), ("quality", "Quality"), ("balanced", "Balanced"), ("performance", "Performance"), ("ultra_performance", "Ultra performance")],
         "fsr_quality" => vec![("ultra", "Ultra Quality (77%)"), ("quality", "Quality (67%)"), ("balanced", "Balanced (59%)"), ("performance", "Performance (50%)"), ("auto", "Automatic (keeps the frame rate)"), ("custom", "Use render scale")],
         "anisotropy" => vec![("1", "Off"), ("2", "2x"), ("4", "4x"), ("8", "8x"), ("16", "16x")],
@@ -308,6 +309,7 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
         "ai_max_parked" => vec![("-1", "None"), ("0", "Every space"), ("35", "At most 35"), ("100", "At most 100"), ("250", "At most 250")],
         // (OMSI's AIMaxHumans, #2087)
         "ai_max_humans" => vec![("50", "50"), ("100", "100"), ("200", "200"), ("400", "400"), ("720", "720"), ("1000", "1000")],
+        "parked_buses_drawn" => vec![("-1", "Automatic"), ("0", "None"), ("5", "At most 5"), ("10", "At most 10"), ("25", "At most 25")],
         "language" => omsi_launcher_lib::LANGUAGES.iter().map(|l| (l.0, l.1)).collect(),
         // (openOMSI's own look as "openomsi": the setting reads it as "")
         "ui_theme_pack" => crate::themes::choices().iter().map(|(id, name)| (if id.is_empty() { crate::themes::OWN } else { id.as_str() }, name.as_str())).collect(),
@@ -396,7 +398,7 @@ pub(super) fn select_row(file: &serde_json::Value, key: &str, name: &str, desc: 
     if options.is_empty() {
         return None;
     }
-    // (DLSS or FSR 3 whose DLLs are gone: the game draws with the standard upscaler)
+    // (DLSS or FSR 3 whose DLLs are gone, MetalFX on another machine: the standard upscaler)
     let at = at.or((key == "upscaler").then_some(0));
     let label = at.map(|i| omsi_ui::tr(options[i].1).into_owned()).unwrap_or(cur);
     Some((row(name, 'o', &label, desc, None), format!("sel {key}")))
