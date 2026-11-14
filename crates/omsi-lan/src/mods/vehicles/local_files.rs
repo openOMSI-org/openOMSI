@@ -2,8 +2,8 @@
 
 use super::*;
 
-pub(in crate::mods) fn adopt_local(m: &VehicleManifest) -> usize {
-    buses().adopt_local(m)
+pub(in crate::mods) fn adopt_local(m: &VehicleManifest, descriptors_only: bool) -> usize {
+    buses().adopt_local(m, descriptors_only)
 }
 
 /// Hashes of this machine's own files, by path: (size, modification time, SHA-256).
@@ -19,11 +19,14 @@ impl Buses {
     /// had the server read and hash its whole installation over and over), each file by its
     /// size first and by its hash remembered (`local_sha`) - only a file that is the same is
     /// read.
-    pub(super) fn adopt_local(&self, m: &VehicleManifest) -> usize {
+    pub(super) fn adopt_local(&self, m: &VehicleManifest, descriptors_only: bool) -> usize {
         let _one = self.adopting.lock().unwrap_or_else(|e| e.into_inner());
         let mut n = 0;
         for k in self.missing(m) {
             let e = &m.entries[k];
+            if descriptors_only && !crate::mods::transfer_policy::is_descriptor(&e.path) {
+                continue;
+            }
             if let Some(d) = self.own_copy(e) {
                 if self.put_sent(e, &d).is_ok() {
                     n += 1;

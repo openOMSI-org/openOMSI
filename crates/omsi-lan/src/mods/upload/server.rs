@@ -190,9 +190,10 @@ impl Incoming {
         if let Some(bad) = m.entries.iter().find(|e| crate::mods::refuse_path(&e.path).is_some() || e.size > crate::mods::MAX_FILE) {
             return Ok(Err(format!("{}: {}", bad.path, crate::mods::refuse_path(&bad.path).unwrap_or_else(|| "too large".into()))));
         }
+        let roots = omsi_cfg::content_roots();
         if m.entries.iter().any(|e| {
             e.path.split('/').any(|part| part.eq_ignore_ascii_case(".openomsi-no-share"))
-                || omsi_cfg::find_in_roots(&e.path).is_some_and(|(_, source)| super::super::transfer_policy::marked_private(&source))
+                || super::super::transfer_policy::marked_local_path(&e.path, &roots)
         }) {
             return Ok(Err("offer includes a private directory marker".into()));
         }
@@ -221,13 +222,15 @@ impl Incoming {
         self.lease = Some(crate::mods::vehicles::lease(&m));
         // (what the server has itself in the same version - a stock bus, a pack installed
         // here - is taken from its own files, not sent)
-        let adopted = if self.approved || crate::mods::vehicles::descriptors_allow_transfer(&m) {
-            self.approved = true;
-            crate::mods::vehicles::adopt_local(&m)
-        } else {
-            0
-        };
-        let wanted = crate::mods::vehicles::missing(&m);
+        let mut adopted = 0;
+        if !self.approved {
+            adopted = crate::mods::vehicles::adopt_local(&m, true);
+            self.approved = crate::mods::vehicles::descriptors_allow_transfer(&m);
+        }
+        if self.approved {
+            adopted += crate::mods::vehicles::adopt_local(&m, false);
+        }
+        let mut wanted = crate::mods::vehicles::missing(&m);
         if adopted > 0 {
             log::info!("uploads: {adopted} files of {} are the server's own, not sent", m.bus);
         }
@@ -243,6 +246,11 @@ impl Incoming {
             let differ: Vec<String> = wanted.iter().take(8).map(|k| format!("{} ({} bytes)", m.entries[*k].path, m.entries[*k].size)).collect();
             log::info!("uploads: {} is another version of a bus this server offers: refused ({} of its {} files are not the server's, e.g. {})", m.bus, wanted.len(), m.entries.len(), differ.join(", "));
             return Ok(Err("this server offers its own copies of its buses only".into()));
+        }
+        // Legacy senders can send a plan concurrently. Give them a descriptor-only
+        // plan until a fresh offer finds all descriptors approved.
+        if !self.approved {
+            wanted.retain(|k| super::super::transfer_policy::is_descriptor(&m.entries[*k].path));
         }
         let bytes: u64 = wanted.iter().map(|k| m.entries[*k].size).sum();
         log::info!("uploads: a player offers {} ({} files): {} wanted ({:.1} MB)", m.bus, m.entries.len(), wanted.len(), bytes as f64 / 1e6);
@@ -398,7 +406,7 @@ pub(in crate::mods) fn send_manifest(out: &mut impl Write, fp: &Fingerprint) -> 
     let Some(_held) = transfers().hold(memory) else {
         return writeln!(out, "ERR {}", says::BUSY);
     };
-    let Some(m) = crate::mods::vehicles::manifest(fp) else {
+    let Some(m) = crate::mods::vehicles::shareable_manifest_for_serving(fp) else {
         return writeln!(out, "ERR {}", says::NO_SUCH_BUS);
     };
     // (the "withheld" list beside it only when a bus is kept without some file - rare; a

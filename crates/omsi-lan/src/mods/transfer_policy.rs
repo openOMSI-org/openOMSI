@@ -30,6 +30,13 @@ pub(super) fn marked_private(path: &Path) -> bool {
         })
 }
 
+/// Apply local directory policy to cached paths, including a file removed after caching.
+pub(super) fn marked_local_path(path: &str, roots: &[PathBuf]) -> bool {
+    roots.iter().any(|root| {
+        marked_private(&omsi_cfg::resolve_path(root, path)) || marked_private(&root.join(path))
+    })
+}
+
 pub(super) fn strict_mode() -> bool {
     omsi_cfg::flags::OMSI_LAN_REQUIRE_TRANSFER_OPT_IN.is_set()
 }

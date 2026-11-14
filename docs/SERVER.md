@@ -237,9 +237,11 @@ map dependencies are unclear.
 
 Updated peers negotiate an upload preflight. The host checks the descriptors against
 their manifest hashes and permissions before asking for dependencies. In legacy mode,
-an updated host accepts older upload commands only when descriptors arrive and pass
-policy before their dependencies. An older client may have to retry or use its local
-files. Strict mode requires preflight on both ends and continues to allow local driving.
+an updated host requests only descriptors until it can verify them. A fresh offer
+can then request the dependencies. An older client that attempts the upload only once
+may keep using its local files until it offers the vehicle again. Strict mode requires
+preflight on both ends and continues to allow local driving. A directory marked
+private on the host also revokes sharing of the corresponding cached vehicle files.
 Directory markers are checked in ordinary folders, symlink targets and mounted ZIPs.
 Outside shared files need their own marker because a vehicle descriptor does not
 establish the redistribution rights of unrelated content.

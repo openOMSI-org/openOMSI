@@ -19,6 +19,33 @@ fn shareable_manifest(store: &Store, m: &VehicleManifest) -> bool {
     checked
 }
 
+fn locally_shareable(m: &VehicleManifest, roots: &[PathBuf]) -> bool {
+    m.entries.iter().all(|e| {
+        crate::mods::refuse_path(&e.path).is_none()
+            && !super::super::transfer_policy::marked_local_path(&e.path, roots)
+    })
+}
+
+impl Vehicles {
+    pub(super) fn shareable_size(&self, sha: &str) -> Option<u64> {
+        let size = *self.sizes.get(sha)?;
+        let roots = omsi_cfg::content_roots();
+        self.manifests.iter().any(|(fp, m)| {
+            m.entries.iter().any(|e| e.sha256 == sha)
+                && !self.withheld_of.get(fp).is_some_and(|held| {
+                    m.entries.iter().filter(|e| e.sha256 == sha)
+                        .all(|e| held.iter().any(|w| w.path == e.path))
+                })
+                && locally_shareable(m, &roots)
+        }).then_some(size)
+    }
+}
+
+pub(in crate::mods) fn shareable_manifest_for_serving(fp: &str) -> Option<VehicleManifest> {
+    let m = buses().manifest(fp)?;
+    locally_shareable(&m, &omsi_cfg::content_roots()).then_some(m)
+}
+
 // (what the rest of the game asks, of the game's own store)
 
 pub(in crate::mods) fn descriptors_allow_transfer(m: &VehicleManifest) -> bool {
@@ -34,6 +61,7 @@ pub(in crate::mods) fn is_open() -> bool {
     buses().is_open()
 }
 
+#[cfg(test)]
 pub(crate) fn manifest(fp: &str) -> Option<VehicleManifest> {
     buses().manifest(fp)
 }
@@ -147,6 +175,7 @@ impl Buses {
         std::fs::create_dir_all(&vdir).map_err(|e| format!("{}: {e}", vdir.display()))?;
         let mut found: Vec<(std::time::SystemTime, String, VehicleManifest)> = Vec::new();
         let (mut withheld, mut withheld_of) = (HashMap::new(), HashMap::new());
+        let roots = omsi_cfg::content_roots();
         for e in std::fs::read_dir(&vdir).map_err(|e| e.to_string())?.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             let Some(fp) = name.strip_suffix(".json").filter(|f| omsi_net::is_fingerprint(f)) else { continue };
@@ -165,7 +194,7 @@ impl Buses {
                 log::warn!("vehicles: {name} lacks {} in the store; left aside", lost.path);
                 continue;
             }
-            if !shareable_manifest(&store, &m) {
+            if !shareable_manifest(&store, &m) || !locally_shareable(&m, &roots) {
                 log::warn!("vehicles: {name} is private or unreadable; cannot redistribute its files");
                 continue;
             }
@@ -277,7 +306,7 @@ impl Buses {
         let (store, size) = {
             let g = self.lock();
             let v = g.as_ref()?;
-            (v.store.clone(), *v.sizes.get(&sha)?)
+            (v.store.clone(), v.shareable_size(&sha)?)
         };
         store.read(&Entry { path: String::new(), size, sha256: sha }).ok()
     }
@@ -286,9 +315,7 @@ impl Buses {
     /// one of them.
     pub(super) fn served(&self, sha: &str) -> Option<Arc<Vec<u8>>> {
         let sha = sha.to_ascii_lowercase();
-        if !self.lock().as_ref().is_some_and(|v| v.sizes.contains_key(&sha)) {
-            return None;
-        }
+        self.lock().as_ref()?.shareable_size(&sha)?;
         let last = || self.served_last.lock().unwrap_or_else(|e| e.into_inner());
         {
             let mut c = last();
@@ -414,6 +441,9 @@ impl Buses {
         let fp = m.fingerprint();
         let mut g = self.lock();
         let v = g.as_mut().ok_or("no store")?;
+        if !locally_shareable(&m, &omsi_cfg::content_roots()) {
+            return Err("this vehicle contains files in a private directory".into());
+        }
         if v.manifests.iter().any(|(f, _)| *f == fp) {
             return Ok((fp, false));
         }

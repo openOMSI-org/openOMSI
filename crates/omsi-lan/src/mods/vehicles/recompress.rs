@@ -33,7 +33,7 @@ impl Buses {
         let sha = sha.to_ascii_lowercase();
         let g = self.lock();
         let v = g.as_ref()?;
-        let size = *v.sizes.get(&sha)?;
+        let size = v.shareable_size(&sha)?;
         if i >= pieces::count(size) {
             return None;
         }

@@ -53,20 +53,27 @@ fn offer(host: SocketAddr, session: u64, m: &VehicleManifest) -> (super::super::
 
 /// Offer `m`, send the wanted files out of `data` (by index) and finish: the files that came.
 fn upload(host: SocketAddr, session: u64, m: &VehicleManifest, data: &[Vec<u8>]) -> (Vec<usize>, Result<Option<u64>, String>) {
-    let ((raw, mut out, mut input), wanted) = offer(host, session, m);
-    let wanted = wanted.unwrap();
-    for k in &wanted {
-        writeln!(out, "PUT {k} {}", data[*k].len()).unwrap();
-        out.write_all(&data[*k]).unwrap();
+    let mut sent = Vec::new();
+    for _ in 0..2 {
+        let ((raw, mut out, mut input), wanted) = offer(host, session, m);
+        let wanted = wanted.unwrap();
+        for k in &wanted {
+            writeln!(out, "PUT {k} {}", data[*k].len()).unwrap();
+            out.write_all(&data[*k]).unwrap();
+        }
+        writeln!(out, "DONE").unwrap();
+        out.flush().unwrap();
+        for _ in &wanted {
+            assert_eq!(super::super::read_reply(&mut input).unwrap(), None);
+        }
+        let done = super::super::read_reply(&mut input);
+        let _ = raw.shutdown(std::net::Shutdown::Both);
+        sent.extend(wanted);
+        if done.is_ok() {
+            return (sent, done);
+        }
     }
-    writeln!(out, "DONE").unwrap();
-    out.flush().unwrap();
-    for _ in &wanted {
-        assert_eq!(super::super::read_reply(&mut input).unwrap(), None);
-    }
-    let done = super::super::read_reply(&mut input);
-    let _ = raw.shutdown(std::net::Shutdown::Both);
-    (wanted, done)
+    panic!("the legacy upload did not complete after both offers");
 }
 
 /// One request on the mods connection, its answer's bytes.
@@ -323,7 +330,7 @@ fn two_versions_of_a_bus_are_kept_side_by_side_by_their_content() {
     assert_eq!(got, m1);
     assert!(took < std::time::Duration::from_millis(1900), "answered when it came, not at the end of the wait ({took:?})");
     assert_eq!(wanted.len(), 3);
-    assert_eq!(done, Ok(Some(3)));
+    assert_eq!(done, Ok(Some(2)));
     let fp1 = m1.fingerprint();
     assert_eq!(super::super::vehicles::manifest(&fp1), Some(m1.clone()));
     // another player's version of the same mod (same paths, another texture): only what
@@ -366,8 +373,15 @@ fn two_versions_of_a_bus_are_kept_side_by_side_by_their_content() {
     let bad_bus = b"[model]\nbad\n".to_vec();
     let mb = VehicleManifest { bus: "Vehicles/Bad/bad.bus".into(), entries: vec![entry("Vehicles/Bad/bad.bus", &bad_bus), entry("Vehicles/Bad/t.dds", &fake)] }.validated().unwrap();
     let ((raw, mut out, mut input), wanted) = offer(host, session, &mb);
-    assert_eq!(wanted.unwrap().len(), 2);
-    for e in &mb.entries {
+    assert_eq!(wanted.unwrap(), vec![0]);
+    writeln!(out, "PUT 0 {}", bad_bus.len()).unwrap();
+    out.write_all(&bad_bus).unwrap();
+    out.flush().unwrap();
+    assert_eq!(super::super::read_reply(&mut input).unwrap(), None);
+    let _ = raw.shutdown(std::net::Shutdown::Both);
+    let ((raw, mut out, mut input), wanted) = offer(host, session, &mb);
+    assert_eq!(wanted.unwrap(), vec![1]);
+    for e in &mb.entries[1..] {
         let d = if e.path.ends_with(".bus") { &bad_bus } else { &fake };
         let k = mb.entries.iter().position(|x| x.path == e.path).unwrap();
         writeln!(out, "PUT {k} {}", d.len()).unwrap();
@@ -375,10 +389,10 @@ fn two_versions_of_a_bus_are_kept_side_by_side_by_their_content() {
     }
     writeln!(out, "DONE").unwrap();
     out.flush().unwrap();
-    let replies: Vec<Result<Option<u64>, String>> = (0..3).map(|_| super::super::read_reply(&mut input)).collect();
+    let replies: Vec<Result<Option<u64>, String>> = (0..2).map(|_| super::super::read_reply(&mut input)).collect();
     let _ = raw.shutdown(std::net::Shutdown::Both);
     assert!(replies.iter().any(|r| r.as_ref().is_err_and(|e| e.contains("t.dds") && e.contains("not a picture"))), "{replies:?}");
-    assert_eq!(replies[2], Ok(Some(1)), "kept with the one file that came");
+    assert_eq!(replies[1], Ok(Some(0)), "kept with the one file that came");
     assert_eq!(super::super::vehicles::manifest(&mb.fingerprint()), Some(mb.clone()), "kept by the fingerprint of all its files");
     let answer: serde_json::Value = serde_json::from_slice(&ask(host, session, &format!("MANIFEST {}", mb.fingerprint())).unwrap()).unwrap();
     assert_eq!(answer["withheld"][0]["path"], "Vehicles/Bad/t.dds", "{answer}");
@@ -563,6 +577,7 @@ fn an_offer_and_its_plan_are_held_against_the_memory_budget() {
     let mut entries: Vec<Entry> = (0..10u64).map(|k| Entry { path: format!("Vehicles/Budget/t{k}.dat"), size: super::super::MAX_FILE, sha256: format!("{:064x}", k + 1) }).collect();
     entries.push(entry("Vehicles/Budget/b.bus", b"[model]\nmodel.cfg\n"));
     let m = VehicleManifest { bus: "Vehicles/Budget/b.bus".into(), entries };
+    super::super::vehicles::put(&m.entries[10], b"[model]\nmodel.cfg\n").unwrap();
     let body = serde_json::to_vec(&m).unwrap();
     let busy = format!("ERR {}", crate::mods::failure::says::BUSY);
     // a connection with its offer kept: held against the kept lists' budget while it lives
@@ -612,12 +627,16 @@ fn a_connection_keeping_its_offer_still_sends_its_files_whole() {
     inc.offer(&mut &body[..], &mut out, body.len() as u64).unwrap();
     let wanted: Vec<usize> = serde_json::from_slice(&out[out.iter().position(|b| *b == b'\n').unwrap() + 1..]).unwrap();
     let idx = m.entries.iter().position(|e| e.path.ends_with("t.dat")).unwrap();
-    assert!(wanted.contains(&idx));
+    assert_eq!(wanted, vec![0]);
+    inc.put(&mut &bus[..], &mut Vec::new(), 0, bus.len() as u64).unwrap();
+    let mut out = Vec::new();
+    inc.offer(&mut &body[..], &mut out, body.len() as u64).unwrap();
+    let wanted: Vec<usize> = serde_json::from_slice(&out[out.iter().position(|b| *b == b'\n').unwrap() + 1..]).unwrap();
+    assert_eq!(wanted, vec![idx]);
     assert!(kept_lists().held() > 0, "the offer is kept");
     // a file larger than the whole transfers' budget comes alone, the offer kept beside it
     drop(transfers().hold(2 * TRANSFER_MEMORY).expect("admitted alone"));
     // with all but this file's bytes taken, it is admitted all the same
-    inc.put(&mut &bus[..], &mut Vec::new(), 0, bus.len() as u64).unwrap();
     let most = transfers().hold(TRANSFER_MEMORY - data.len() as u64).unwrap();
     let mut out = Vec::new();
     inc.put(&mut &data[..], &mut out, idx, data.len() as u64).unwrap();
@@ -719,6 +738,57 @@ fn one_file_by_two_unicode_spellings_is_listed_once() {
 }
 
 #[test]
+fn legacy_piece_plans_request_descriptors_before_fragmented_dependencies() {
+    let _turn = super::super::vehicles::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let store = temp("legacy-piece-plans");
+    super::super::vehicles::open_for_test(&store);
+    accept(true);
+    let descriptor = b"[openomsi_multiplayer]\nallow_file_transfer 1\n";
+    let piece_size = super::super::pieces::PIECE as usize;
+    let asset = vec![b'X'; piece_size + 3];
+    let manifest = VehicleManifest {
+        bus: "Vehicles/LegacyPlan/public.bus".into(),
+        entries: vec![
+            entry("Vehicles/LegacyPlan/a.dat", &asset),
+            entry("Vehicles/LegacyPlan/public.bus", descriptor),
+        ],
+    }.validated().unwrap();
+    let offer = serde_json::to_vec(&manifest).unwrap();
+    let plan = |connection: &mut Incoming| {
+        let mut out = Vec::new();
+        connection.offer_pieces(&mut &offer[..], &mut out, offer.len() as u64, false).unwrap();
+        serde_json::from_slice::<Vec<(usize, Vec<u64>)>>(
+            &out[out.iter().position(|b| *b == b'\n').unwrap() + 1..],
+        ).unwrap()
+    };
+    let put = |connection: &mut Incoming, index, piece, data: &[u8]| {
+        let (codec, wire) = super::super::pieces::pack(data);
+        let request = PutPiece { index, piece, raw: data.len() as u64, codec: codec.to_string(), wire: wire.len() as u64 };
+        let mut out = Vec::new();
+        connection.put_piece(&mut &wire[..], &mut out, &request).unwrap();
+        assert_eq!(out, b"OK\n");
+    };
+    let mut first = Incoming::default();
+    assert_eq!(plan(&mut first), vec![(1, vec![0])]);
+    put(&mut first, 1, 0, descriptor);
+    let mut a = Incoming::default();
+    let mut b = Incoming::default();
+    assert_eq!(plan(&mut a), vec![(0, vec![0, 1])]);
+    assert_eq!(plan(&mut b), vec![(0, vec![0, 1])]);
+    put(&mut b, 0, 1, &asset[piece_size..]);
+    put(&mut a, 0, 0, &asset[..piece_size]);
+    assert!(super::super::vehicles::blob(&manifest.entries[0].sha256).is_none());
+    let mut last = Incoming::default();
+    assert!(plan(&mut last).is_empty());
+    let mut out = Vec::new();
+    last.done(&mut out).unwrap();
+    assert!(out.starts_with(b"OK "));
+    assert!(super::super::vehicles::blob(&manifest.entries[0].sha256).is_some());
+    accept(false);
+    let _ = std::fs::remove_dir_all(store);
+}
+
+#[test]
 fn private_preflight_and_legacy_uploads_cannot_store_dependencies() {
     let _turn = super::super::vehicles::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let store_dir = temp("private-preflight");
@@ -752,7 +822,7 @@ fn private_preflight_and_legacy_uploads_cannot_store_dependencies() {
     assert!(out.starts_with(b"ERR"));
     let mut untouched = &asset[..];
     let denied = incoming.put(&mut untouched, &mut Vec::new(), 2, asset.len() as u64);
-    assert!(denied.unwrap_err().to_string().contains("descriptors must be approved"));
+    assert!(denied.is_err());
     assert_eq!(untouched, asset);
     assert_eq!(super::super::vehicles::missing(&manifest), vec![1, 2]);
     assert!(super::super::vehicles::served(&manifest.entries[2].sha256).is_none());

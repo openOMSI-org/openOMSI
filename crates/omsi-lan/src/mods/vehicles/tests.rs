@@ -30,6 +30,33 @@ fn an_unapproved_upload_cannot_be_downloaded_by_guessing_its_hash() {
 }
 
 #[test]
+fn a_private_marker_revokes_cached_vehicle_blobs_before_and_after_restart() {
+    let dir = temp("marker-revalidation");
+    let source = dir.join("source");
+    let folder = source.join("Vehicles/MarkerRevalidation");
+    std::fs::create_dir_all(&folder).unwrap();
+    omsi_cfg::add_content_root(source.clone());
+    let store = dir.join("store");
+    let kept = Buses::default();
+    kept.open_in(&store).unwrap();
+    let bus = b"[openomsi_multiplayer]\nallow_file_transfer 1\n";
+    let descriptor = entry("Vehicles/MarkerRevalidation/bus.bus", bus);
+    std::fs::write(folder.join("bus.bus"), bus).unwrap();
+    kept.put(&descriptor, bus).unwrap();
+    let m = VehicleManifest { bus: descriptor.path.clone(), entries: vec![descriptor.clone()] };
+    let (fp, _) = kept.commit(m).unwrap();
+    assert!(kept.served(&descriptor.sha256).is_some());
+    std::fs::write(folder.join(".openomsi-no-share"), "").unwrap();
+    assert!(kept.blob(&descriptor.sha256).is_none());
+    assert!(kept.served(&descriptor.sha256).is_none());
+    kept.open_in(&store).unwrap();
+    assert!(kept.manifest(&fp).is_none());
+    assert!(kept.blob(&descriptor.sha256).is_none());
+    omsi_cfg::remove_content_root(&source);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn private_vehicle_manifest_is_never_committed_or_reopened() {
     let dir = temp("private-policy");
     let kept = Buses::default();
