@@ -52,6 +52,7 @@ const vrOn = (s, p) => windows(s, p) && !!s.vr;
 // (the upscalers `temporal_upscalers` may name, as `omsi_cfg::upscaler_files::label` calls them)
 const TEMPORAL_LABELS = { dlss: 'NVIDIA DLSS (experimental)', fsr3: 'AMD FSR 3 (experimental)', metalfx: 'Apple MetalFX (experimental)' };
 const temporalOn = (s, p) => (s.temporal_upscalers || []).includes(s.upscaler) && !tripleOn(s) && !vrOn(s, p);
+const generationOn = (s, p) => temporalOn(s, p) && (s.frame_generators || []).includes(s.upscaler);
 
 /** The window sizes the settings offer (`resolution`). */
 export const RESOLUTIONS = [
@@ -93,6 +94,7 @@ const graphics = {
         { type: 'select', key: 'upscaler', label: 'Upscaling', unknown: 'default', options: (s) => [['default', 'Standard (Catmull-Rom)'], ['fsr1', 'AMD FSR 1'], ...(s.temporal_upscalers || []).filter((u) => TEMPORAL_LABELS[u]).map((u) => [u, TEMPORAL_LABELS[u]])], help: (s) => (!(s.temporal_upscalers || []).length ? 'Standard Catmull-Rom or AMD FSR 1; changes show at once' : (s.temporal_upscalers || []).includes('metalfx') ? 'Standard Catmull-Rom or AMD FSR 1 change at once; Apple MetalFX takes the place of the anti-aliasing and the render scale, from the next start' : 'Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start') },
         { type: 'custom', id: 'nvidia_dlss_install', when: (s, p) => windows(s, p) },
         { type: 'select', key: 'upscale_quality', label: 'Upscaling quality', options: [['native', 'Native'], ['quality', 'Quality'], ['balanced', 'Balanced'], ['performance', 'Performance'], ['ultra_performance', 'Ultra performance']], help: "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate", when: (s, p) => temporalOn(s, p) },
+        { type: 'select', key: 'frame_generation', label: 'Frame generation', unknown: 'off', options: (s) => [['off', 'Off'], ...(s.frame_generators || []).filter((u) => TEMPORAL_LABELS[u]).map((u) => [u, TEMPORAL_LABELS[u]])], help: "Shows a generated frame between every two drawn ones: smoother motion for a little more input lag. Needs Apple MetalFX upscaling and works best from 30 drawn frames a second; with V-sync the game draws half the display's rate", when: (s, p) => generationOn(s, p) },
         { type: 'select', key: 'fsr_quality', label: 'FSR quality', options: [['ultra', 'Ultra Quality (77%)'], ['quality', 'Quality (67%)'], ['balanced', 'Balanced (59%)'], ['performance', 'Performance (50%)'], ['auto', 'Automatic (keeps the frame rate)'], ['custom', 'Use render scale']], when: (s) => s.upscaler === 'fsr1' },
         { type: 'slider', key: 'fsr_sharpness', label: 'FSR sharpness', help: 'RCAS sharpening strength', min: 0, max: 1, step: 0.05, def: 0.8, store: snap(0.05), format: pct, when: (s) => s.upscaler === 'fsr1' },
         { type: 'select', key: 'render_scale', label: 'Render scale', options: [['auto', 'Auto'], ['1', '100%'], ['0.85', '85%'], ['0.75', '75%'], ['0.67', '67%'], ['0.5', '50%']], when: (s, p) => !temporalOn(s, p) },
@@ -510,6 +512,6 @@ export const SETTINGS_TABS = [graphics, driving, camera, sound, gameplay, genera
 
 /** The settings a saved graphics profile holds (`GRAPHICS_PROFILE_KEYS`). */
 export const GRAPHICS_PROFILE_KEYS = [
-  'graphics', 'msaa', 'render_scale', 'upscaler', 'upscale_quality', 'fsr_quality', 'fsr_sharpness', 'anisotropy', 'shadow_size', 'ssao', 'shadows', 'shadow_casters', 'detail_textures', 'night_brightness', 'led_glow', 'led_mips', 'shadow_blobs', 'lamp_shadows', 'reflections', 'road_glare', 'traffic_headlights', 'clouds', 'cloud_quality', 'street_light', 'rain_quality', 'vehicle_smoke', 'puddles', 'windy_trees', 'detailed_trees', 'road_snow', 'ray_tracing', 'light_shadows', 'cloud_shadows', 'light_glow',
+  'graphics', 'msaa', 'render_scale', 'upscaler', 'upscale_quality', 'frame_generation', 'fsr_quality', 'fsr_sharpness', 'anisotropy', 'shadow_size', 'ssao', 'shadows', 'shadow_casters', 'detail_textures', 'night_brightness', 'led_glow', 'led_mips', 'shadow_blobs', 'lamp_shadows', 'reflections', 'road_glare', 'traffic_headlights', 'clouds', 'cloud_quality', 'street_light', 'rain_quality', 'vehicle_smoke', 'puddles', 'windy_trees', 'detailed_trees', 'road_snow', 'ray_tracing', 'light_shadows', 'cloud_shadows', 'light_glow',
   'vsync', 'max_fps', 'view_distance', 'max_obj_dist', 'min_obj_size', 'mirror_size', 'mirror_refresh', 'mirror_quality', 'mirror_hud_every_frame', 'video_memory', 'texture_compression', 'gpu_texture_compression',
 ];

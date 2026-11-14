@@ -118,7 +118,9 @@ operators compiles to nothing, silently (a lone `$`, `$=>`, `$++`, `$SetLengthM`
 another unknown word is an error.
 
 Constfiles: `[const] name value`, `[newcurve] name` followed by `[pnt] x y` (piece-wise linear,
-clamped). Varlists / stringvarlists: one name per line. A `(F.L.name)` whose curve no constfile
+clamped). Constants and curves each keep the first definition of a name (ASCII
+case-insensitive), both within a constfile and across constfiles in their listed order.
+Varlists / stringvarlists: one name per line. A `(F.L.name)` whose curve no constfile
 defines is logged as `SC_ErrorInCommand_functioninvalid` and still takes its argument, giving
 0 (the O530 Facelift's ZF-6AP-1300/1700 lack two converter curves that its `zf-eco.osc` uses
 in the line that computes `M_Wheel`).
@@ -891,7 +893,8 @@ the line after the page's path makes it a **surface** - shaded by the world's li
 other material is, on every slot that shows the page, a scenery object's or a vehicle's -
 where a page is a display, drawn unlit at its own brightness, by default.
 An openOMSI extension; Omsi.exe draws such a slot unlit either way.
-`[navigatortexture] w h [variable]` declares a screen the game's navigator draws its small map
+`[navigatortexture] w h [variable] [mapScale] [fixedNorth] [noNavUI] [navCenter] [showHistory]`
+declares a screen the game's navigator draws its small map
 on, while the optional variable is not 0 (see `NAVIGATORTEXTURE.md`); `[useNavigatorTexture] n`
 puts the n-th on a material. Also an openOMSI extension. The
 scripts draw with `(M.V.ST…)` callbacks, arguments pushed in order (index first):
