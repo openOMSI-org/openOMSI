@@ -19,12 +19,13 @@ for (const name of ['app', 'graphics']) {
   }
 }
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.woff2': 'font/woff2' };
-const harness = `<!doctype html><html data-theme="dark"><head><link rel="stylesheet" href="/ui/styles.css"></head>
-<body style="padding:24px"><main id="app"></main><script>
+const harness = `<!doctype html><html data-theme="dark"><head><link rel="stylesheet" href="/ui/styles.css"><link rel="stylesheet" href="/ui/settings-navigation.css"></head>
+<body><div class="shell"><main class="main"><div id="app" class="page page-settings"></div></main></div><script>
 window.calls = []; window.profiles = {}; window.importResult = null; window.exportResult = null;
 window.__TAURI__ = {core: {invoke: async (cmd, args) => {
   calls.push([cmd, args]);
   if (cmd === 'graphics_profile_import') {
+    if (window.holdImport) await new Promise(resolve => { window.finishImport = resolve; });
     if (importResult instanceof Error) throw importResult;
     if (importResult) profiles[importResult] = {msaa: 8};
     return importResult;
@@ -49,6 +50,7 @@ const fixture = ${JSON.stringify(fixture)};
 window.settings = fixture.settings;
 S.settings = fixture.settings; S.boot = {...fixture, platform: 'windows'}; S.config = fixture.config;
 localStorage.setItem('settings-tab', 'graphics');
+localStorage.setItem('settings-section-graphics', 'profiles');
 render(html\`<\$\{SettingsPage\} />\`, document.querySelector('#app'));
 window.ready = true;
 </script></body></html>`.replaceAll('\\`', '`').replaceAll('\\$\\{', '${');
@@ -97,17 +99,20 @@ try {
   await page('Emulation.setDeviceMetricsOverride', {width: 1280, height: 900, deviceScaleFactor: 1, mobile: false});
   await page('Page.navigate', {url: 'http://127.0.0.1:' + server.address().port + '/test'});
   await wait("window.ready && [...document.querySelectorAll('button')].some(b => b.textContent.includes('Import graphics profile'))");
-  await evaluate(`window.button = text => [...document.querySelectorAll('button')].find(b => b.textContent.trim() === text); window.card = () => button('Import graphics profile').closest('.card');`);
+  await evaluate(`window.button = text => [...document.querySelectorAll('button')].find(b => b.textContent.trim() === text); window.card = () => button('Import graphics profile').closest('.settings-profiles');`);
   await wait("card().textContent.includes('No saved profiles')");
   assert.equal(await evaluate("button('Export graphics profile').disabled"), true);
   assert.equal(await evaluate("button('Import graphics profile').disabled"), false);
-  await evaluate("button('Import graphics profile').click()");
+  await evaluate("window.holdImport = true; button('Import graphics profile').click()");
+  await wait("button('Import graphics profile').disabled");
+  assert.equal(await evaluate("['Load', 'Delete', 'Save current graphics as profile', 'Export graphics profile'].every(label => button(label).disabled) && card().querySelector('input').disabled"), true);
+  await evaluate("window.holdImport = false; window.finishImport()");
   await wait("!button('Import graphics profile').disabled");
   assert.equal(await evaluate("card().textContent.includes('Imported')"), false);
   await evaluate("window.importResult = 'Friend (2)'; button('Import graphics profile').click()");
   await wait("card().textContent.includes('Imported')");
   assert.equal(await evaluate("card().querySelector('input[placeholder=\"Profile name\"]').value"), 'Friend (2)');
-  assert.equal(await evaluate("[...card().querySelectorAll('.setting-row')].find(r => r.textContent.startsWith('Saved profile')).querySelector('.select').textContent.trim()"), 'Friend (2)');
+  assert.equal(await evaluate("card().querySelector('.settings-profile-saved .select').textContent.trim()"), 'Friend (2)');
   assert.equal(await evaluate("calls.some(([cmd, args]) => cmd === 'call' && args.cmd === 'settings_patch')"), false);
   await evaluate("window.exportResult = null; button('Export graphics profile').click()");
   await wait("!button('Export graphics profile').disabled");
@@ -121,7 +126,7 @@ try {
   await evaluate("button('Load').click()");
   await wait("card().textContent.includes('Loaded')");
   assert.equal(await evaluate("calls.filter(([cmd, args]) => cmd === 'call' && args.cmd === 'settings_patch').at(-1)[1].args.patch.msaa"), 8);
-  await evaluate("window.profileCard = card(); window.profileStart = [...profileCard.querySelectorAll('.setting-row')].find(r => r.textContent.startsWith('Saved profile')).previousElementSibling;");
+  await evaluate("window.profileCard = card(); window.profileStart = profileCard.querySelector('.settings-profile-saved');");
   await evaluate("import('/ui/js/i18n.js').then(m => m.setLanguage('zh-tw'))");
   await evaluate("window.importResult = null; button('Import graphics profile').click()");
   await wait("profileCard.textContent.includes('匯入圖像設定檔')");
