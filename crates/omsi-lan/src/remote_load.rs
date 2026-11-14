@@ -70,10 +70,16 @@ pub enum Got {
     Failed(String),
 }
 
-/// Is the bus `path` in `paint` being read now (on its thread; not waiting for its turn)?
-pub fn being_read(path: &Path, paint: &str) -> bool {
+/// Has a box that stands for the bus `path` in `paint` anything to be made again for: its
+/// bus read (or not readable), or its turn to be read come? Every bus done made every box
+/// that waited be made again - two dozen buses coming at once were three hundred boxes.
+pub fn due(path: &Path, paint: &str) -> bool {
     let key = (path.to_path_buf(), paint.to_ascii_lowercase());
-    matches!(BUSES.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|m| m.get(&key)), Some(State::Reading))
+    match BUSES.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|m| m.get(&key)) {
+        Some(State::Reading) => false,
+        Some(_) => true,
+        None => READING.load(Ordering::Acquire) < AT_ONCE,
+    }
 }
 
 /// The count of buses that became ready (see `READY`).
@@ -174,6 +180,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(generation() > before, "the box is told the bus is done");
+        assert!(due(&path, ""), "and its own bus is the one done");
         assert!(matches!(get(&root, &path, ""), Got::Failed(_)), "a bus that cannot be read says why");
     }
 }

@@ -411,7 +411,7 @@ impl World {
         let img = if worth {
             Arc::new(omsi_texture::gpu::halved_for_now(Arc::try_unwrap(img).unwrap_or_else(|a| (*a).clone())))
         } else {
-            img
+            omsi_texture::gpu::halved_plain(&img).map(Arc::new).unwrap_or(img)
         };
         let id = {
             let mut gpu = self.gpu.lock();

@@ -118,6 +118,14 @@ fn mounts() -> Option<PathBuf> {
     super::sandbox_base().map(|b| b.with_file_name("lan-vehicles"))
 }
 
+/// The kept bus `path` is a file of (it lies in that bus's mount): the bus's fingerprint,
+/// and the file as the bus's list names it.
+pub(crate) fn mounted(path: &Path) -> Option<(String, String)> {
+    let rel = path.strip_prefix(mounts()?).ok()?.to_string_lossy().replace('\\', "/");
+    let (fp, file) = rel.split_once('/')?;
+    omsi_net::is_fingerprint(fp).then(|| (fp.to_string(), file.to_string()))
+}
+
 mod kept;
 mod local_files;
 mod recompress;
