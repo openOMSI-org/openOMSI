@@ -162,11 +162,20 @@ fn connected_json(d: &Devices, c: &Connected, auto: Option<&DeviceCfg>) -> Value
         "gamepad": c.gamepad,
         "ff": c.ff_capable,
         "buttons_only": d.buttons_only(&c.name),
+        "preset": preset_json(c.hardware_id),
         "pad": PadKind::detect(&c.name, c.hardware_id).map(|k| match k {
             PadKind::Xbox => "xbox",
             PadKind::Ps4 => "ps4",
             PadKind::Ps5 => "ps5",
         }),
+    })
+}
+
+fn preset_json(id: Option<(u16, u16)>) -> Value {
+    let Some(p) = crate::wheel_defaults::preset(id) else { return Value::Null };
+    json!({
+        "wheel": p.wheel,
+        "pedals": p.pedals.iter().map(|a| json!({ "axis": a.axis, "function": a.function, "optional": a.optional })).collect::<Vec<_>>(),
     })
 }
 

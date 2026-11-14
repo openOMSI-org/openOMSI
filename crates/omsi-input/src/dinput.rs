@@ -44,16 +44,10 @@ impl Default for RawState {
 
 const RANGE: i32 = 10_000;
 const VJOY_HARDWARE_ID: (u16, u16) = (0x1234, 0xBEAD);
-const LOGITECH_VENDOR: u16 = 0x046D;
-/// The G923's product ids (PlayStation/PC and Xbox models, each in both of its modes).
-const G923_PRODUCTS: [u16; 4] = [0xC266, 0xC267, 0xC26D, 0xC26E];
 
-/// A G923 turns the other way from DirectInput's positive force (measured with a pulse test:
-/// +0.15 turned it left, -0.15 right), which made the game's centring spring a push away from
-/// the middle. Only the G923, the one wheel measured: the other models stay as they were
-/// until one of them is.
+/// A wheel in `defaults/` whose motor turns the other way from a positive force.
 fn force_flipped_for(hardware_id: Option<(u16, u16)>) -> bool {
-    hardware_id.is_some_and(|(vendor, product)| vendor == LOGITECH_VENDOR && G923_PRODUCTS.contains(&product))
+    crate::wheel_defaults::ffb_flipped(hardware_id)
 }
 
 /// `OMSI_TRACE_FFB=<csv>`: the force feedback frame by frame - the wheel's position (now and

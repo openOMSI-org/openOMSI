@@ -1,0 +1,9 @@
+{
+  "platform": ["linux", "macos"],
+  "id": ["046d:c24f", "046d:c260", "046d:c262", "046d:c266", "046d:c267", "046d:c26d", "046d:c26e"],
+  "pedals": [
+    { "axis": 1, "function": "clutch" },
+    { "axis": 2, "function": "throttle" },
+    { "axis": 5, "function": "brake" }
+  ]
+}
