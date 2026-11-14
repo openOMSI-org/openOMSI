@@ -432,6 +432,9 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
     omsi_cfg::vfs::mount_env_zips();
     if let Some(c) = content_dir() {
         omsi_cfg::vfs::mount_dir_zips(&c.join("Archives"));
+        if let Err(e) = omsi_cfg::publisher::mount_packs(&c) {
+            log::warn!("publisher packs: {e}");
+        }
     }
     omsi_cfg::add_content_root(args.root.clone());
     if args.list_maps {

@@ -423,7 +423,7 @@ impl World {
             }
             let lamp = object_lamp(&ot, o, pos, &index);
             // lights of the placed object
-            object_lights(&mut state, &ot, pos, xf, lamp, o.key);
+            object_lights(&mut state, &ot, pos, xf, lamp, o.key, &self.publisher_texture_dirs);
             if debug_objects {
                 let kind = match (&o.place, o.map_object) {
                     (Placement::Attached { .. }, _) => "attachObj",
@@ -760,7 +760,7 @@ impl World {
             let mut ground = Vec::new();
             for (mesh, ty, casts, sort_origin, level) in splines {
                 let slots: &Vec<usize> = slots_by_type.entry(Arc::as_ptr(&ty) as usize).or_insert_with(|| {
-                    let dirs = texture_dirs(&self.root, &ty.dir);
+                    let dirs = self.texture_dirs(&self.root, &ty.dir);
                     let dirs: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
                     ty.def.textures.iter().enumerate()
                         .filter(|(_, t)| self.textures.cfg(&t.file, &dirs).terrain_mapping)
@@ -940,13 +940,13 @@ fn mesh_encloses_light(mesh: &MeshData, source: glam::Vec3) -> bool {
 }
 
 /// The sprites and `[maplight]`s of a placed object.
-fn object_lights(state: &mut TileState, ot: &ObjectType, pos: DVec3, xf: Mat4, lamp: Option<(i64, usize, bool)>, key: i64) {
+fn object_lights(state: &mut TileState, ot: &ObjectType, pos: DVec3, xf: Mat4, lamp: Option<(i64, usize, bool)>, key: i64, publisher_texture_dirs: &[PathBuf]) {
     let switches: Mutex<Vec<LightSwitch>> = Mutex::new(Vec::new());
     // (a light gives several sprites: each takes its own light's switch)
-    let coronas = model_lights_owned(&ot.model, &|_| xf, pos, &|var| {
+    let coronas = model_lights_owned_with_texture_dirs(&ot.model, &|_| xf, pos, &|var| {
         switches.lock().push(LightSwitch::parse(var));
         1.0
-    }, &[]);
+    }, &[], publisher_texture_dirs);
     let switches = switches.into_inner();
     for (c, sw) in coronas.into_iter().filter_map(|(c, k)| switches.get(k).cloned().map(|sw| (c, sw))) {
         // a traffic lamp's red, yellow and green glow with its state
@@ -1022,16 +1022,16 @@ fn script_switched(ot: &ObjectType, sw: &LightSwitch) -> bool {
 /// and by night, as in OMSI. Kept with the static lamps, which glow whenever it is dark,
 /// Gerolstein's departure boards showed their orange "due" and green "departing" lamps all
 /// night.
-pub(super) fn lamps_switched_by_script(ot: &ObjectType, pos: DVec3, xf: Mat4) -> Vec<crate::staging::ScriptLamp> {
+pub(super) fn lamps_switched_by_script(ot: &ObjectType, pos: DVec3, xf: Mat4, publisher_texture_dirs: &[PathBuf]) -> Vec<crate::staging::ScriptLamp> {
     if ot.program.is_none() {
         return Vec::new();
     }
     // (the model's lamps, each with its switch, in the order they are made)
     let named: Mutex<Vec<LightSwitch>> = Mutex::new(Vec::new());
-    let glows = model_lights_owned(&ot.model, &|_| xf, pos, &|var| {
+    let glows = model_lights_owned_with_texture_dirs(&ot.model, &|_| xf, pos, &|var| {
         named.lock().push(LightSwitch::parse(var));
         1.0
-    }, &[]);
+    }, &[], publisher_texture_dirs);
     let named = named.into_inner();
     let mut out = Vec::new();
     for (glow, k) in glows {
@@ -1205,7 +1205,7 @@ mod embedded_light_tests {
         effect.dir = [0.0; 3]; // Direction is irrelevant for an omnidirectional effect.
         assert!(embedded_pole_light(&fixture, glam::Vec3::ZERO));
         let mut state = TileState::default();
-        object_lights(&mut state, &fixture, DVec3::ZERO, Mat4::IDENTITY, None, 456);
+        object_lights(&mut state, &fixture, DVec3::ZERO, Mat4::IDENTITY, None, 456, &[]);
         assert_eq!(state.lights[0].shadow_owner, Some(456));
 
         fixture.model.meshes[1].light_enh_2[0].pos[0] = 0.01;
@@ -1235,7 +1235,7 @@ mod embedded_light_tests {
         let mut state = TileState::default();
         let position = DVec3::new(10.0, 20.0, 30.0);
         let transform = Mat4::from_rotation_x(std::f32::consts::FRAC_PI_2);
-        object_lights(&mut state, &fixture, position, transform, None, 123);
+        object_lights(&mut state, &fixture, position, transform, None, 123, &[]);
         assert_eq!(state.lights.len(), 2);
         assert_eq!(state.lights[0].shadow_owner, Some(123));
         assert_eq!(state.lights[1].shadow_owner, None);
@@ -1262,7 +1262,7 @@ mod embedded_light_tests {
             omsi_scenery::sco::MapLight { pos: [8.0, 0.0, 0.0], color: [1.0; 3], radius: 60.0 },
         ];
         let mut state = TileState::default();
-        object_lights(&mut state, &fixture, DVec3::ZERO, Mat4::IDENTITY, None, 7);
+        object_lights(&mut state, &fixture, DVec3::ZERO, Mat4::IDENTITY, None, 7, &[]);
         assert_eq!(state.lights.len(), 3);
         let [plain, enhanced, glow] = [&state.lights[0], &state.lights[1], &state.lights[2]];
         assert_eq!((plain.mode, plain.core, plain.radius), (LightMode::Vanilla, 15.0, 90.0));
@@ -1273,7 +1273,7 @@ mod embedded_light_tests {
         assert!((glow.color[0] - 0.2).abs() < 1e-6);
         // a street lamp's source (a `lamp`) is a lamp's full colour, one light for both
         let mut state = TileState::default();
-        object_lights(&mut state, &fixture, DVec3::ZERO, Mat4::IDENTITY, Some((3, 0, true)), 7);
+        object_lights(&mut state, &fixture, DVec3::ZERO, Mat4::IDENTITY, Some((3, 0, true)), 7, &[]);
         assert!(state.lights.iter().all(|l| l.mode == LightMode::Both && l.color[0] == 1.0));
     }
 }
@@ -1402,14 +1402,14 @@ mod script_lamp_tests {
         let ot = Arc::new(crossing_sign());
         let at = DVec3::new(-300.0, 45.0, 12.0);
         let mut statics = TileState::default();
-        object_lights(&mut statics, &ot, at, Mat4::IDENTITY, None, 1);
+        object_lights(&mut statics, &ot, at, Mat4::IDENTITY, None, 1, &[]);
         let static_switches: Vec<_> = statics.coronas.iter().map(|c| c.switch.clone()).collect();
         assert!(!static_switches.is_empty());
         assert!(static_switches.iter().all(|s| *s == LightSwitch::Variable("street_lamp".into())), "{static_switches:?}");
-        let lamps = lamps_switched_by_script(&ot, at, Mat4::IDENTITY);
+        let lamps = lamps_switched_by_script(&ot, at, Mat4::IDENTITY, &[]);
         assert!(!lamps.is_empty() && lamps.iter().all(|l| l.variable == "warn_blink"));
         let mut signal = TileState::default();
-        object_lights(&mut signal, &ot, at, Mat4::IDENTITY, Some((2, 1, false)), 1);
+        object_lights(&mut signal, &ot, at, Mat4::IDENTITY, Some((2, 1, false)), 1, &[]);
         assert_eq!(signal.coronas.len(), 0);
 
         let mut set = ScriptedSet::default();
