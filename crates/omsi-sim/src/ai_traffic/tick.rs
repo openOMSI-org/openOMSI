@@ -228,10 +228,20 @@ impl TrafficSim {
             // (and on the junction lanes further back that a long body still covers)
             tail_bodies(&self.net, i, c, &mut by_lane);
             if let Some(ch) = c.state.change {
+                // The car is not at the centre of the destination lane until the lane
+                // change is complete. Use its actual way point (the same smooth blend
+                // the body follows) and measure it from the destination lane's centre.
+                // Otherwise every changing car is reported at lateral 0 and blocks the
+                // whole exit as if it were already fully in that lane.
+                let position = c.state.way_point(&self.net, 0.0);
+                let (target, heading) = self.net.lanes[ch.to].at(ch.s_to);
+                let h = (heading as f64).to_radians();
+                let right = DVec3::new(h.cos(), -h.sin(), 0.0);
+                let lateral = (position - target).dot(right) as f32;
                 by_lane
                     .entry(ch.to)
                     .or_default()
-                    .push((i, ch.s_to, 0.0, false));
+                    .push((i, ch.s_to, lateral, false));
             }
             if let Some(p) = c.passing {
                 // Out on the oncoming lane: the traffic there stops short of the place where
