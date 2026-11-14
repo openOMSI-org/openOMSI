@@ -486,8 +486,9 @@ impl Renderer {
         // unless it comes before the window's first frame)
         if enhanced && lead_view {
             let ground = lighting.fog_base.or(lighting.inside.map(|v| v.0.z)).map(|z| (z - scene.render_origin.z) as f32);
+            let device_lost = self.device_lost().is_some();
             if let Some(s) = self.tone.lamp_sight.as_mut() {
-                s.take();
+                s.take(device_lost);
             }
             let sight = self.tone.lamp_sight.as_ref();
             let seen = |at: DVec3| sight.map_or(1.0, |s| s.seen(at));

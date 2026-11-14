@@ -8,6 +8,7 @@ use hashbrown::HashMap;
 enum Key {
     Text(String, u32, Weight),
     Icon(String, u32),
+    ColorIcon(String, u32),
 }
 
 /// Where something is in the atlas: texture coordinates, its size in pixels, and for text
@@ -22,7 +23,8 @@ pub struct Sprite {
 
 pub struct Atlas {
     pub size: u32,
-    /// Straight-alpha RGBA (white glyphs and icons: the colour comes from the vertex).
+    /// Straight-alpha RGBA; glyphs and monochrome icons are white and vertex-tinted, while
+    /// coloured icons keep their own RGB values.
     pub rgba: Vec<u8>,
     entries: HashMap<Key, (Sprite, u64)>,
     shelf_y: u32,
@@ -105,6 +107,10 @@ impl Atlas {
     }
 
     fn put(&mut self, key: Key, w: u32, h: u32, alpha: &[u8], ascent: f32) -> Sprite {
+        self.put_pixels(key, w, h, ascent, |i| [255, 255, 255, alpha[i]])
+    }
+
+    fn put_pixels(&mut self, key: Key, w: u32, h: u32, ascent: f32, pixel: impl Fn(usize) -> [u8; 4]) -> Sprite {
         let at = match self.alloc(w, h) {
             Some(a) => a,
             None => {
@@ -118,9 +124,9 @@ impl Atlas {
         };
         for y in 0..h {
             for x in 0..w {
-                let a = alpha[(y * w + x) as usize];
+                let rgba = pixel((y * w + x) as usize);
                 let i = (((at.1 + y) * self.size + at.0 + x) * 4) as usize;
-                self.rgba[i..i + 4].copy_from_slice(&[255, 255, 255, a]);
+                self.rgba[i..i + 4].copy_from_slice(&rgba);
             }
         }
         let r = [at.0, at.1, w, h];
@@ -159,6 +165,48 @@ impl Atlas {
         let a = crate::icons::rasterize(name, size)?;
         Some(self.put(key, size, size, &a, 0.0))
     }
+
+    /// A built-in SVG icon in its own colours, cached at `size` pixels.
+    pub fn color_icon(&mut self, name: &str, size: u32) -> Option<Sprite> {
+        let key = Key::ColorIcon(name.to_string(), size);
+        if let Some(e) = self.entries.get_mut(&key) {
+            e.1 = self.frame;
+            return Some(e.0);
+        }
+        let src = crate::icons::svg(name)?;
+        let mut rgba = crate::icons::rasterize_rgba(src, size, size)?;
+        let original = rgba.clone();
+        for y in 0..size {
+            for x in 0..size {
+                let i = ((y * size + x) * 4) as usize;
+                if original[i + 3] != 0 {
+                    continue;
+                }
+                let mut rgb = [0u16; 3];
+                let mut count = 0u16;
+                for ny in y.saturating_sub(1)..=(y + 1).min(size - 1) {
+                    for nx in x.saturating_sub(1)..=(x + 1).min(size - 1) {
+                        let ni = ((ny * size + nx) * 4) as usize;
+                        if original[ni + 3] != 0 {
+                            for channel in 0..3 {
+                                rgb[channel] += original[ni + channel] as u16;
+                            }
+                            count += 1;
+                        }
+                    }
+                }
+                if count > 0 {
+                    for channel in 0..3 {
+                        rgba[i + channel] = (rgb[channel] / count) as u8;
+                    }
+                }
+            }
+        }
+        Some(self.put_pixels(key, size, size, 0.0, |i| {
+            let i = i * 4;
+            [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+        }))
+    }
 }
 
 #[cfg(test)]
@@ -193,5 +241,40 @@ mod tests {
             a.text(&fonts, &format!("line {k}"), 18.0, Weight::Regular);
         }
         assert!(a.generation > 0);
+    }
+
+    #[test]
+    fn color_icons_keep_their_svg_colors_and_are_cached_by_size() {
+        let mut a = Atlas::new(256);
+        let sign = a.color_icon("speed_limit_sign", 28).expect("built-in sign");
+        let x = (sign.uv[0] * a.size as f32) as usize;
+        let y = (sign.uv[1] * a.size as f32) as usize;
+        let pixel = |x: usize, y: usize| {
+            let i = (y * a.size as usize + x) * 4;
+            &a.rgba[i..i + 4]
+        };
+        assert_eq!(pixel(x + 14, y + 14), [255, 255, 255, 255]);
+        assert_eq!(pixel(x, y + 14), [155, 155, 155, 255]);
+        assert_eq!(pixel(x + 3, y + 14), [214, 38, 38, 255]);
+        let has_bleed = (0..28).any(|py| {
+            (0..28).any(|px| {
+                let p = pixel(x + px, y + py);
+                p[3] == 0 && p[0..3] != [0, 0, 0]
+                    && (py.saturating_sub(1)..=(py + 1).min(27)).any(|ny| {
+                        (px.saturating_sub(1)..=(px + 1).min(27)).any(|nx| pixel(x + nx, y + ny)[3] > 0)
+                    })
+            })
+        });
+        assert!(has_bleed, "transparent edge texels carry neighbouring RGB");
+        assert_eq!(a.color_icon("speed_limit_sign", 28), Some(sign));
+        assert_ne!(a.color_icon("speed_limit_sign", 32), Some(sign));
+        assert!(a.color_icon("no_such_icon", 28).is_none());
+    }
+
+    #[test]
+    fn three_digit_speed_limit_fits_inside_the_sign_at_navigator_size() {
+        let fonts = Fonts::new();
+        let width = fonts.width("120", 9.5, Weight::Black);
+        assert!(width <= 19.0, "three-digit text is {width:.2}px wide; sign centre is 19px");
     }
 }

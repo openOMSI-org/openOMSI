@@ -111,9 +111,9 @@ impl App {
         }
         if self.quick_editor_key(code) { return; }
         let sel = self.menus.game_menu.unwrap_or(0);
-        let modified = self.input.keys.iter().any(|key| {
-            matches!(*key, KeyCode::ControlLeft | KeyCode::ControlRight | KeyCode::AltLeft | KeyCode::AltRight | KeyCode::ShiftLeft | KeyCode::ShiftRight)
-        });
+        let has = |l, r| self.input.keys.contains(&l) || self.input.keys.contains(&r);
+        let (shift, ctrl, alt) = (has(KeyCode::ShiftLeft, KeyCode::ShiftRight), has(KeyCode::ControlLeft, KeyCode::ControlRight), has(KeyCode::AltLeft, KeyCode::AltRight));
+        let modified = shift || ctrl || alt;
         self.menus.menu_top = None;
         if code == KeyCode::KeyE && !modified && !self.vr_active() && self.shell.pause_category == crate::shell::pause::navigation::Category::Home {
             self.shell.quick_edit = true;
@@ -122,8 +122,8 @@ impl App {
             return;
         }
         match code {
-            // P changes only the simulation state, even while a menu is open.
-            KeyCode::KeyP if !modified => self.toggle_pause(),
+            // Pause changes only the simulation state, even while a menu is open.
+            _ if omsi_input::actions::is_pause_key(&self.input.game_keys, code, shift, ctrl, alt, &self.input.own_keys) => self.toggle_pause(),
             KeyCode::Escape => self.close_game_menu(),
             KeyCode::ArrowUp | KeyCode::KeyW => self.menus.game_menu = Some(self.pause_menu_step(sel, false)),
             KeyCode::ArrowDown | KeyCode::KeyS => self.menus.game_menu = Some(self.pause_menu_step(sel, true)),

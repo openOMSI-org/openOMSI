@@ -4,9 +4,10 @@ use glam::{Mat4, Vec3};
 
 #[test]
 fn the_settings_words_read_back() {
-    for u in [TemporalUpscaler::Dlss, TemporalUpscaler::Fsr3] {
+    for u in [TemporalUpscaler::Dlss, TemporalUpscaler::Fsr3, TemporalUpscaler::MetalFx] {
         assert_eq!(TemporalUpscaler::parse(u.as_str()), Some(u));
     }
+    assert_eq!(TemporalUpscaler::parse("MetalFX"), Some(TemporalUpscaler::MetalFx));
     assert_eq!(TemporalUpscaler::parse(" DLSS "), Some(TemporalUpscaler::Dlss));
     for word in ["default", "fsr1", ""] {
         assert_eq!(TemporalUpscaler::parse(word), None);
@@ -56,13 +57,32 @@ fn fsr3_masks_the_glass_less_and_leaves_the_screens_out() {
     let motion = include_str!("motion.wgsl");
     assert!(motion.contains("fn fs_glass_mask_fsr("));
     assert!(motion.contains("const FSR_GLASS_SHARE: f32 = 0.4;"));
-    for upscaler in [TemporalUpscaler::Dlss, TemporalUpscaler::Fsr3] {
+    for upscaler in [TemporalUpscaler::Dlss, TemporalUpscaler::Fsr3, TemporalUpscaler::MetalFx] {
         assert!(motion.contains(&format!("fn {}(", upscaler.glass_mask_entry())));
     }
     assert_eq!(TemporalUpscaler::Fsr3.glass_mask_entry(), "fs_glass_mask_fsr");
     assert_ne!(TemporalUpscaler::Dlss.glass_mask_entry(), TemporalUpscaler::Fsr3.glass_mask_entry());
     assert!(TemporalUpscaler::Dlss.masks_screens());
     assert!(!TemporalUpscaler::Fsr3.masks_screens());
+    // (MetalFX reads its mask as FSR 3 does: 1 gives the history up altogether)
+    assert_eq!(TemporalUpscaler::MetalFx.glass_mask_entry(), TemporalUpscaler::Fsr3.glass_mask_entry());
+    assert!(!TemporalUpscaler::MetalFx.masks_screens());
+}
+
+/// MetalFX scales up as far as the Mac says and no further: a quality that asks for more is
+/// drawn at the smallest size it takes, the others at their own.
+#[test]
+fn metalfx_draws_no_smaller_than_it_can_scale_up() {
+    let out = (2560, 1440);
+    for q in [TemporalQuality::Native, TemporalQuality::Quality, TemporalQuality::Balanced, TemporalQuality::Performance] {
+        assert_eq!(metalfx_render_size(q, out, 2.0), (fallback_render_size(q, out), false), "{q:?}");
+    }
+    assert_eq!(metalfx_render_size(TemporalQuality::UltraPerformance, out, 2.0), ((1280, 720), true));
+    assert_eq!(metalfx_render_size(TemporalQuality::UltraPerformance, out, 3.0), ((854, 480), true));
+    assert_eq!(metalfx_render_size(TemporalQuality::UltraPerformance, out, 4.0), (fallback_render_size(TemporalQuality::UltraPerformance, out), false));
+    // (a side that does not divide evenly is rounded up, or the scale would be a hair over)
+    assert_eq!(metalfx_render_size(TemporalQuality::UltraPerformance, (1001, 601), 2.0), ((501, 301), true));
+    assert_eq!(metalfx_render_size(TemporalQuality::Performance, (1, 1), 2.0), ((1, 1), false));
 }
 
 /// Streamline's Vulkan `getFormat` has no VK_FORMAT_R8_UNORM: a mask of that format logged four
@@ -78,4 +98,17 @@ fn a_minimised_window_is_not_upscaled() {
     assert!(!super::frame::window_fits((1, 1)));
     assert!(!super::frame::window_fits((3264, 1)));
     assert!(super::frame::window_fits((640, 360)));
+}
+
+/// Frame generation shows the drawn frame a little under half a frame time after the generated
+/// one, and never holds it back long: below 10 fps there is nothing left to pace.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_drawn_frame_follows_the_generated_one_at_half_a_frame() {
+    use super::metalfx_frames::half_interval;
+    assert!((half_interval(1.0 / 30.0) - 31.0 / 64.0 / 30.0).abs() < 1e-6);
+    assert!(half_interval(1.0 / 30.0) < 1.0 / 60.0);
+    assert_eq!(half_interval(0.5), 0.05);
+    assert_eq!(half_interval(0.0), 0.0);
+    assert_eq!(half_interval(f32::NAN), 0.0);
 }

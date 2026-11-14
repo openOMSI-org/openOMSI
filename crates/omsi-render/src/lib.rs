@@ -56,7 +56,7 @@ pub(crate) use shaders::*;
 pub use sky::*;
 pub use surface::*;
 pub(crate) use targets::*;
-pub use temporal::{Temporal, TemporalQuality, TemporalUpscaler};
+pub use temporal::{FrameGeneration, FrameGenerationKind, Temporal, TemporalQuality, TemporalUpscaler};
 pub(crate) use temporal::{temporal_mip_bias, TemporalFrame, TemporalPipelines, TemporalState, TEMPORAL_MASK_FORMAT, TEMPORAL_MOTION_FORMAT};
 pub use uniforms::*;
 pub use view::*;
@@ -160,6 +160,8 @@ pub struct Renderer {
     temporal_failed: bool,
     temporal_window: bool,
     temporal_kept: Option<temporal::Runtime>,
+    /// The window's frame generation, while it has one (`SurfaceState::set_frame_generation`).
+    frame_generation: Option<temporal::FrameGeneration>,
     /// The frame's numbers, waiting for `temporal_present` at the end of it.
     temporal_pending: Option<TemporalFrame>,
     /// The same, at the main pass's sample count (colour writes off):
@@ -298,9 +300,9 @@ pub struct RenderOptions {
     pub render_scale: f32,
     /// Experimental FSR1 spatial upscaler (at the start, or later with `set_upscaler`).
     pub fsr1: bool,
-    /// NVIDIA DLSS or AMD FSR 3 instead of multisampling, FXAA and the render scale: DirectX 12
-    /// with the vendor's DLLs beside the game (see `temporal`). Elsewhere, or when it cannot
-    /// start, the picture is drawn as without it.
+    /// NVIDIA DLSS, AMD FSR 3 or Apple MetalFX instead of multisampling, FXAA and the render
+    /// scale: DirectX 12 or Vulkan with the vendor's DLLs beside the game, or Metal on a Mac
+    /// (see `temporal`). Elsewhere, or when it cannot start, the picture is drawn as without it.
     pub temporal: Option<Temporal>,
     /// The player's MSAA while an upscaler has taken its place.
     pub msaa_fallback: u32,
@@ -627,6 +629,17 @@ impl Renderer {
     /// smaller than the window).
     pub fn fsr_active(&self, width: u32, height: u32) -> bool {
         self.options.fsr1 && self.scale.fsr.is_some() && self.scene_size(width, height) != (width, height)
+    }
+
+    /// The window's frame generation ([`SurfaceState::set_frame_generation`]): upscaled frames
+    /// hand it what it makes the in-between frames from.
+    pub fn set_frame_generation(&mut self, frame_generation: Option<temporal::FrameGeneration>) {
+        self.frame_generation = frame_generation;
+    }
+
+    /// The in-between frames frame generation has made since it started, while it runs.
+    pub fn frames_generated(&self) -> Option<u64> {
+        self.frame_generation.as_ref().filter(|g| g.working()).map(|g| g.generated())
     }
 
     /// The size the 3D scene is drawn at for a window of this size.

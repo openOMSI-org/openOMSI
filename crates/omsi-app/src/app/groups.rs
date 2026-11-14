@@ -122,6 +122,13 @@ pub(crate) struct Integrations {
 /// the log.
 pub(crate) struct PerfState {
     pub(crate) fps: f32,
+    /// Frame generation: its count when the last second ended, and the frames it made in that second.
+    pub(crate) generated: (u64, f32),
+    /// Frame rate readings in a row with frame generation on and under 30 drawn frames a second;
+    /// at `GENERATION_SLOW_READINGS` it is off for the drive.
+    pub(crate) generation_too_slow: u8,
+    /// When frame generation made its first frame this drive (None: it has made none).
+    pub(crate) generation_since: Option<Instant>,
     /// Per-stage frame time accumulators (OMSI_PROFILE), seconds.
     pub(crate) profile: crate::profile_keys::ProfileTimes,
     /// `profile` as it was at the start of the last frame: what a slow frame spent where.
@@ -176,6 +183,9 @@ impl PerfState {
     pub(crate) fn new(input_script: Vec<(f32, String)>, fps_t: Instant) -> PerfState {
         PerfState {
             fps: 0.0,
+            generated: (0, 0.0),
+            generation_too_slow: 0,
+            generation_since: None,
             profile: Default::default(),
             profile_prev: Default::default(),
             total_frames: 0,
@@ -484,6 +494,8 @@ pub(crate) struct MenuState {
     /// (the game menu's "Swap for another vehicle", #728).
     pub(crate) swap_pending: bool,
     pub(crate) swapped_in: Option<u64>,
+    /// The taking of a server's parked bus under way (`on_foot::parked`).
+    pub(crate) parked_transfer: Option<crate::on_foot::ParkedTransfer>,
     /// The vehicle chosen being read on a worker thread (see `App::place_vehicle`).
     pub(crate) pending_placement: Option<crate::spawn::PendingPlacement>,
     /// The line of the open list whose slider the mouse button holds (it follows the cursor).

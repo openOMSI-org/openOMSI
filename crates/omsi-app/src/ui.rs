@@ -345,6 +345,8 @@ pub struct Frame<'a> {
     pub notes: &'a [String],
     /// The frame rate, top right (the `show_fps` setting).
     pub fps: Option<f32>,
+    /// The frames frame generation added to them in that second: the corner then reads `90 fps (45 + FG)`.
+    pub fps_generated: f32,
     pub perf: Option<&'a crate::perf_overlay::PerfOverlay>,
     pub perf_detailed: bool,
     pub perf_touch: Option<Option<f32>>,
@@ -663,7 +665,7 @@ impl Ui {
         self.draw_notices(r, scene, f, s);
         if let Some(fps) = f.fps {
             // (on a small flat card, as the other plates: over a bright sky bare text was hard to read)
-            let l = self.text.label_op(r, scene, &format!("{fps:.0} fps"), (12.0 * s).round() as u32, hud::text(self.hud.dim), 1.0);
+            let l = self.text.label_op(r, scene, &if f.fps_generated >= 1.0 { format!("{:.0} fps ({fps:.0} + FG)", fps + f.fps_generated) } else { format!("{fps:.0} fps") }, (12.0 * s).round() as u32, hud::text(self.hud.dim), 1.0);
             let x = (f.width - l.w as f32 - 14.0 * s).round();
             let y = (10.0 * s).round();
             self.hud_card(r, scene, [x - 8.0 * s, y, x + l.w as f32 + 8.0 * s, y + l.h as f32], hud::RADIUS * s, self.text.backdrop, s);

@@ -59,7 +59,7 @@ jobs:
         run: bash scripts/size-budget.sh
 
       # Which crate may depend on which (nothing on omsi-app, the simulation on no renderer,
-      # ...) and the app crate only shrinking: scripts/arch-guard.sh, rules in scripts/arch-rules.txt.
+      # ...) and no change growing the app crate much: scripts/arch-guard.sh, rules in scripts/arch-rules.txt.
       - name: Crate layers
         if: ${{ !cancelled() }}
         run: bash scripts/arch-guard.sh

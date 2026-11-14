@@ -232,7 +232,7 @@ fn pose_player(p: &mut Player, renderer: &Renderer, scene: &mut Scene, args: &Ar
     p.panto_fx.update(0.0, &mut p.vehicle);
     p.finish_window_paints(renderer, scene);
     crate::scene::sync_vehicle_damage(renderer, scene, &mut p.vehicle, &mut p.render);
-    p.sync_driver(renderer, scene, 1.0 / 30.0, settings.driver, args.view == "driver");
+    p.sync_driver_hands(renderer, scene, 1.0 / 30.0, settings.driver, args.view == "driver", false, settings.driver_like_omsi);
 }
 
 /// The lights of a picture: the lamps' cones in this weather, the corona pictures, the
