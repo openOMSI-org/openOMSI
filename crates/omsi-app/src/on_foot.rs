@@ -12,9 +12,11 @@
 //! own, eased as theirs are; the camera eases into each new view instead of cutting.
 
 mod door_requests;
+mod camera;
 mod ground;
 mod parked;
 pub(crate) use parked::{parked_drawn, ParkedTransfer};
+use camera::{follow_eye, EYE_FORWARD, FOOT_NEAR};
 
 use crate::humans::{AvatarCmd, BusId, Humans};
 use crate::App;
@@ -67,6 +69,10 @@ pub(crate) enum FootCam {
     First,
     /// The free camera (F4): the walker stands where it was.
     Free,
+}
+
+fn avatar_visible(cam: FootCam) -> bool {
+    matches!(cam, FootCam::First | FootCam::Free)
 }
 
 pub(crate) struct OnFoot {
@@ -174,7 +180,7 @@ impl OnFoot {
         }
         let eye = h.avatar_body(AVATAR_KEY).map(|b| b.2).unwrap_or(f.pos + DVec3::new(0.0, 0.0, 1.62)) + f.eye_drop();
         let y = (f.eye_yaw as f64).to_radians();
-        let at = eye + DVec3::new(y.sin(), y.cos(), 0.0) * 0.08 + f.lag;
+        let at = eye + DVec3::new(y.sin(), y.cos(), 0.0) * EYE_FORWARD + f.lag;
         f.eye = Some(at);
         if let Some(cam) = camera {
             cam.position = at;
@@ -1052,6 +1058,9 @@ pub(crate) fn take_placed(
     *view.view = "driver".into();
     crate::app_impl::sync_view_look(view.cam, view.view, player.player.as_ref());
     view.cam.look = (0.0, 0.0);
+    if let Some(cam) = view.camera.as_mut() {
+        cam.near = 0.1;
+    }
     if let (Some(cam), Some(p)) = (view.camera.as_ref(), player.player.as_ref()) {
         *view.camera = Some(p.camera("driver", cam));
     }
@@ -1071,6 +1080,9 @@ pub(crate) fn sit_at_the_wheel(people: &mut crate::app::PeoplePart, view: &mut c
     }
     crate::app_impl::sync_view_look(view.cam, view.view, player.player.as_ref());
     view.cam.look = (0.0, 0.0);
+    if let Some(cam) = view.camera.as_mut() {
+        cam.near = 0.1;
+    }
     // (the walking keys' help goes with the walking: it stood over the cab view)
     if ui.service_msg.as_ref().is_some_and(|m| m.0.starts_with("On foot")) {
         *ui.service_msg = None;
@@ -1281,7 +1293,7 @@ pub(crate) fn tick(cx: &mut OnFootCx, dt: f32) {
         }
     }
     // the avatar
-    let show = free;
+    let show = avatar_visible(f.cam);
     if let (Some(h), Some(w), Some(r), Some(scene)) = (cx.people.humans.as_mut(), cx.world.world.as_ref(), cx.gfx.renderer.as_ref(), cx.gfx.scene.as_mut()) {
         // (stepping through a door the feet keep to the step, not to the road under it)
         let cmd = AvatarCmd { pos: f.pos, heading: f.heading, vel: f.vel, lift: f.lift, seat: f.seat, floor: f.inside.map(|_| f.pos.z).or(f.transit.map(|_| f.pos.z)), aboard: f.inside };
@@ -1312,7 +1324,7 @@ pub(crate) fn tick(cx: &mut OnFootCx, dt: f32) {
     if let (Some(cam), false) = (cx.view.camera.as_mut(), free) {
         let eye = body.map(|b| b.2).unwrap_or(f.pos + DVec3::new(0.0, 0.0, 1.62 + f.lift)) + f.eye_drop();
         let y = (f.yaw as f64).to_radians();
-        let (want, want_yaw, want_pitch) = (eye + DVec3::new(y.sin(), y.cos(), 0.0) * 0.08, f.yaw, f.pitch);
+        let (want, want_yaw, want_pitch) = (eye + DVec3::new(y.sin(), y.cos(), 0.0) * EYE_FORWARD, f.yaw, f.pitch);
         // just got up: 4 per second at first (a glide out of the cab's camera), then up to
         // the walk's 18 over the second
         let settling = f.settle > 0.0;
@@ -1325,13 +1337,9 @@ pub(crate) fn tick(cx: &mut OnFootCx, dt: f32) {
         // or a bus's stair they glide (a third of a second), as eyes do on a person's
         // stride, so that the picture does not jump with each step the legs take
         let k_up = 1.0 - (-dt64 * (4.0 + 6.0 * ease)).exp();
-        let at = match f.eye {
-            Some(e) if (e - want).length() < 60.0 => {
-                let d = want - e;
-                DVec3::new(e.x + d.x * k, e.y + d.y * k, e.z + d.z * if f.inside.is_some() || f.seat.is_some() { k } else { k_up })
-            }
-            _ => want,
-        };
+        let vertical_k = if f.inside.is_some() || f.seat.is_some() { k } else { k_up };
+        let horizontal_k = if settling { k } else { 1.0 };
+        let at = follow_eye(f.eye, want, horizontal_k, vertical_k);
         f.eye = Some(at);
         // (what the glide is still behind by is kept while it lasts and let go of after:
         // `foot_after_humans` puts the eyes on the head from then on, and without this
@@ -1340,11 +1348,17 @@ pub(crate) fn tick(cx: &mut OnFootCx, dt: f32) {
         let dy = ((want_yaw - f.eye_yaw + 540.0).rem_euclid(360.0)) - 180.0;
         f.eye_yaw = (f.eye_yaw + dy * k as f32).rem_euclid(360.0);
         cam.position = at;
+        cam.near = FOOT_NEAR;
         cam.yaw = f.eye_yaw;
         cam.pitch += (want_pitch - cam.pitch) * k as f32;
         // (the cab's camera leans with the bus: the lean goes out of the picture with the
         // rest of the glide)
         cam.roll += (0.0 - cam.roll) * k as f32;
+    }
+    if free {
+        if let Some(cam) = cx.view.camera.as_mut() {
+            cam.near = 0.1;
+        }
     }
     if omsi_cfg::flags::OMSI_DEBUG_FOOT.is_set() && (cx.perf.total_frames % 30 == 0) {
         let body = cx.people.humans.as_ref().and_then(|h| h.avatar_body(AVATAR_KEY));

@@ -2,6 +2,29 @@
 
 use super::*;
 
+#[test]
+fn the_player_avatar_is_visible_from_both_walking_cameras() {
+    assert!(avatar_visible(FootCam::First));
+    assert!(avatar_visible(FootCam::Free));
+}
+
+#[test]
+fn the_walk_camera_keeps_up_horizontally_and_eases_only_vertical_steps() {
+    let want = DVec3::new(2.0, 3.8 / 60.0, 1.7);
+    let at = follow_eye(Some(DVec3::ZERO), want, 1.0, 0.25);
+    assert_eq!(at.truncate(), want.truncate());
+    assert!(at.z > 0.0 && at.z < want.z, "{at:?}");
+}
+
+#[test]
+fn leaving_the_driver_seat_keeps_the_camera_glide() {
+    let want = DVec3::new(1.0, 0.0, 1.7);
+    let at = follow_eye(Some(DVec3::ZERO), want, 0.25, 0.25);
+    assert!(at.x > 0.0 && at.x < want.x, "{at:?}");
+    assert!(at.z > 0.0 && at.z < want.z, "{at:?}");
+}
+
+
 fn walker() -> OnFoot {
     OnFoot {
         pos: DVec3::ZERO,
