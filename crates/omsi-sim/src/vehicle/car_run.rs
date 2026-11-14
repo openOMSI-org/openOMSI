@@ -609,4 +609,28 @@ mod tests {
         assert_eq!(a.take_own_brakeforce(), 0.0);
         assert_eq!(b.take_own_brakeforce(), 0.0);
     }
+
+    #[test]
+    fn ai_train_couplings_hide_inner_tail_lights_and_light_the_last_car() {
+        let car = unit_car();
+        let mut train = VehicleInstance::new(car.clone(), VehicleHost::new(Default::default()));
+        train.attach_trailer_ex(car.clone(), false);
+        train.attach_trailer_ex(car.clone(), true);
+        let frame = AiFrame { lights: true, ..Default::default() };
+        for _ in 0..5 {
+            train.update_ai(0.05, &frame);
+        }
+        assert_eq!(train.var("train_frontcoupling"), Some(0.0));
+        assert_eq!(train.var("train_backcoupling"), Some(1.0));
+        assert_eq!(lit(&train.light_fade), [true, false, false, false], "lead AI locomotive must not light rear tail lamps");
+        assert_eq!(lit(&train.trailers[0].light_fade), [false; 4], "middle car stays dark at both ends");
+        assert_eq!(lit(&train.trailers[1].light_fade), [false, true, false, false], "last car lights tail lamps");
+
+        let mut lone = VehicleInstance::new(car, VehicleHost::new(Default::default()));
+        for _ in 0..5 {
+            lone.update_ai(0.05, &frame);
+        }
+        assert_eq!(lone.var("train_backcoupling"), Some(0.0));
+        assert_eq!(lit(&lone.light_fade), [true, false, false, true], "uncoupled railcar lights front white and rear tail lamps");
+    }
 }
