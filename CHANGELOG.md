@@ -601,6 +601,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **A broken sound file is named in the log**: a file under a sound's name that is no sound at
+  all (a cut-off download, a web page) is now refused at once with its path, its size and its
+  first bytes, instead of being scanned for a megabyte and leaving only the line
+  `probe reach EOF at n bytes`, which read like the cause of a crash (#3956).
 - **Pixel XC list rows no longer cut off**: on the MZKP SOR NBG 12, the direction and line lists
   of the Pixel XC display showed each row's text sliced along its middle. The text strip of
   every row is skewed a tenth of a millimetre over its tile, and was not taken as printed on

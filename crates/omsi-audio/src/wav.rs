@@ -259,6 +259,13 @@ mod tests {
     }
 
     #[test]
+    fn a_file_of_no_sound_format_is_refused_without_probing() {
+        let junk: Vec<u8> = b"<html>not a sound</html>".iter().copied().cycle().take(189_140).collect();
+        let e = parse_any(&junk).err().expect("refused").to_string();
+        assert!(e.contains("not a sound file") && e.contains("189140 bytes"), "{e}");
+    }
+
+    #[test]
     fn every_format_becomes_16_bit() {
         // 8-bit is unsigned around 128
         assert_eq!(parse_wav(&wav(1, 8, &[0, 128, 255])).unwrap().samples, vec![-32768, 0, 32512]);
@@ -313,9 +320,17 @@ pub fn parse_compressed(bytes: &[u8]) -> Result<WavData> {
     if bytes.len() < 4 {
         return Err(anyhow!("the sound file is empty ({} bytes)", bytes.len()));
     }
+    // a file of no sound format at all (a cut-off download, a text or picture under a sound's
+    // name): symphonia would scan up to a megabyte of it for a marker and then log only "probe
+    // reach EOF at n bytes", with no file name, as an error; players then took that line for
+    // the cause of a crash (#3956). The caller logs this with the path.
+    let Some(kind) = sniff(bytes) else {
+        let head: Vec<String> = bytes.iter().take(8).map(|b| format!("{b:02X}")).collect();
+        return Err(anyhow!("not a sound file of a known format ({} bytes, starting {})", bytes.len(), head.join(" ")));
+    };
     let mss = MediaSourceStream::new(Box::new(std::io::Cursor::new(bytes.to_vec())), Default::default());
     let mut hint = Hint::new();
-    hint.with_extension(sniff(bytes).unwrap_or("ogg"));
+    hint.with_extension(kind);
     let mut format = symphonia::default::get_probe().format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())?.format;
     let track = format.default_track().ok_or_else(|| anyhow!("no audio track"))?.clone();
     let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
