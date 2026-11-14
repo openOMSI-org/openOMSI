@@ -123,9 +123,18 @@ impl VehicleInstance {
             .run_trigger(&p, name, &mut self.state, &mut self.host);
         if let Some(value) = changer_value(name) {
             let given = &mut self.host.change_coins[coins_before..];
-            let each = value / given.len().max(1) as f32;
-            for coin in given {
-                coin.1 = each;
+            let dm_euro_lever = match (name.to_ascii_lowercase().strip_prefix("cashdesk_change_"), given.first().map(|c| c.0)) {
+                (Some("0050"), Some(2)) => true,
+                (Some("0100"), Some(3)) => true,
+                (Some("0200"), Some(4)) => true,
+                (Some("0500"), Some(5)) => true,
+                _ => false,
+            };
+            if !dm_euro_lever {
+                let each = value / given.len().max(1) as f32;
+                for coin in given {
+                    coin.1 = each;
+                }
             }
         }
         fired
@@ -250,7 +259,20 @@ mod tests {
         assert_eq!(changer_value("cashdesk_changer_0_5"), None);
         assert_eq!(changer_value("ticket_give"), None);
         assert_eq!(changer_value("cashdesk_change_0500"), Some(5.0));
+        assert_eq!(changer_value("cashdesk_change_0050"), Some(0.5));
         assert_eq!(changer_value("cashdesk_change_1000_off"), None);
+    }
+
+    #[test]
+    fn dm_lever_names_on_euro_scripts_keep_the_script_coin() {
+        let osc = "{trigger:cashdesk_change_0050}\n2 (M.V.GiveChangeCoin)\n{end}\n{trigger:cashdesk_change_0500}\n5 (M.V.GiveChangeCoin)\n{end}\n{trigger:cashdesk_changer_0_50}\n0 (M.V.GiveChangeCoin)\n{end}\n";
+        let mut v = crate::timetable_run::tests::script_test_vehicle(osc, "", "");
+        v.trigger("cashdesk_change_0050");
+        assert_eq!(v.host.change_coins.pop(), Some((2, 0.0)));
+        v.trigger("cashdesk_change_0500");
+        assert_eq!(v.host.change_coins.pop(), Some((5, 0.0)));
+        v.trigger("cashdesk_changer_0_50");
+        assert_eq!(v.host.change_coins.pop(), Some((0, 0.5)));
     }
 }
 
