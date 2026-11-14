@@ -4210,6 +4210,7 @@ dependencies = [
  "serde-saphyr",
  "serde_json",
  "sevenz-rust2",
+ "sha2",
  "unrar-rs",
  "windows 0.62.2",
  "winresource",
