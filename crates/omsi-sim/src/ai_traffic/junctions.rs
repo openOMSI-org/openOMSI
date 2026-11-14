@@ -374,14 +374,22 @@ pub fn queued_exit_vehicle(
     way: &[(usize, f32)],
     exit: (usize, f32),
     need: f32,
-    occupied: impl IntoIterator<Item = (usize, f32, f32)>,
+    // lane, rear from lane start, speed, lateral centre, vehicle half-width, lane width
+    occupied: impl IntoIterator<Item = (usize, f32, f32, f32, f32, f32)>,
 ) -> Option<(f32, f32, usize)> {
     let start = way
         .iter()
         .position(|&(lane, distance)| lane == exit.0 && (distance - exit.1).abs() < 0.01)?;
     occupied
         .into_iter()
-        .filter_map(|(lane, rear, speed)| {
+        .filter_map(|(lane, rear, speed, lateral, half_width, lane_width)| {
+            // Occupancy is indexed by path, but a vehicle can be physically outside that
+            // path (for example in a bus bay or on the adjacent side of a wide road).
+            // Such a vehicle must not make this exit appear full. Keep partially-overlapping
+            // vehicles: their body still intrudes into the lane and is a real obstruction.
+            if lateral.abs() - half_width >= lane_width * 0.5 {
+                return None;
+            }
             let offset = way[start..]
                 .iter()
                 .take_while(|&&(_, distance)| distance - exit.1 < need)
@@ -393,6 +401,38 @@ pub fn queued_exit_vehicle(
         })
         .min_by(|a, b| a.0.total_cmp(&b.0))
         .map(|(_, space, speed, lane)| (space, speed, lane))
+}
+
+#[cfg(test)]
+mod queued_exit_vehicle_tests {
+    use super::queued_exit_vehicle;
+
+    #[test]
+    fn a_vehicle_outside_the_exit_lane_does_not_block_it() {
+        let way = [(10, 0.0)];
+        let occupied = [(10, 1.0, 0.0, 3.0, 0.9, 3.5)];
+        assert_eq!(queued_exit_vehicle(&way, (10, 0.0), 7.0, occupied), None);
+    }
+
+    #[test]
+    fn a_vehicle_partly_overlapping_the_exit_lane_still_blocks_it() {
+        let way = [(10, 0.0)];
+        let occupied = [(10, 1.0, 0.0, 2.3, 0.9, 3.5)];
+        assert_eq!(
+            queued_exit_vehicle(&way, (10, 0.0), 7.0, occupied),
+            Some((1.0, 1.0, 10))
+        );
+    }
+
+    #[test]
+    fn a_vehicle_in_the_exit_lane_still_blocks_it() {
+        let way = [(10, 0.0)];
+        let occupied = [(10, 1.0, 0.0, 0.0, 0.9, 3.5)];
+        assert_eq!(
+            queued_exit_vehicle(&way, (10, 0.0), 7.0, occupied),
+            Some((1.0, 1.0, 10))
+        );
+    }
 }
 
 /// A vehicle the AI does not drive, put onto the lanes for the right of way: the street
@@ -870,9 +910,16 @@ impl TrafficSim {
             // clear road for all of it.
             let all_cars = &self.cars;
             let occupied = on_lane.iter().flat_map(|(&lane, cars)| {
-                cars.iter().filter_map(move |&(j, s, _, passing)| {
+                cars.iter().filter_map(move |&(j, s, lateral, passing)| {
                     // (one standing aside for this emergency vehicle is no queue to it)
-                    (!passing && j != i && !self.aside_for(j, i)).then_some((lane, s - all_cars[j].tail, all_cars[j].state.speed))
+                    (!passing && j != i && !self.aside_for(j, i)).then_some((
+                        lane,
+                        s - all_cars[j].tail,
+                        all_cars[j].state.speed,
+                        lateral,
+                        all_cars[j].half_width,
+                        self.net.lanes[lane].width,
+                    ))
                 })
             });
             if let Some((space, speed, lane)) = queued_exit_vehicle(way, exit, need_all, occupied) {
