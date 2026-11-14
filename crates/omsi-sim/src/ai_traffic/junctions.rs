@@ -810,7 +810,7 @@ impl TrafficSim {
         // The body and its ordinary safety gap are physical space. Hysteresis is only
         // the extra clearance a car that is already waiting wants before it is released.
         let need = st.front + self.cars[i].tail + st.min_gap;
-        let (mut exit_full, mut exit_car) = if jn.inside { (false, None) } else { self.exit_room(i, jn, way, lead, on_lane, book, need, committed, started || cannot_stop_comfortably, &mut why) };
+        let (exit_full, exit_car) = if jn.inside { (false, None) } else { self.exit_room(i, jn, way, lead, on_lane, book, need, committed, started || cannot_stop_comfortably, &mut why) };
         // A physically full exit is never released by a timeout. Letting a car enter
         // after ten seconds merely transfers the deadlock into the junction and can block
         // crossing traffic. The exit is checked again on the next step instead.
