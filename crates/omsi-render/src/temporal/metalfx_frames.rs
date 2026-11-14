@@ -67,6 +67,9 @@ pub struct FrameGeneration(Arc<Mutex<Shared>>);
 
 impl FrameGeneration {
     pub(crate) fn load(device: &wgpu::Device) -> Result<FrameGeneration> {
+        if wgpu_mx::custom::is_mx(device) {
+            bail!("MetalFX frame generation does not run with mX Graphics yet");
+        }
         let hal = unsafe { device.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("the game is not running on Metal"))?;
         let raw = hal.raw_device().clone();
         drop(hal);

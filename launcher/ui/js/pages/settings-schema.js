@@ -146,6 +146,8 @@ const graphics = {
         // (a Mac has Metal only; ANGLE is Windows' path for a chip with none of the others)
         { type: 'select', key: 'graphics_api', label: 'Graphics API', options: [['auto', 'Automatic'], ['vulkan', 'Vulkan'], ['dx12', 'DirectX 12'], ['gl', 'OpenGL'], ['angle', 'ANGLE (DirectX 11)']], when: windows },
         { type: 'select', key: 'graphics_api', label: 'Graphics API', options: [['auto', 'Automatic'], ['vulkan', 'Vulkan'], ['gl', 'OpenGL']], when: (s, p) => p !== 'windows' && p !== 'macos' },
+        // (mX, openOMSI's own graphics library behind wgpu's API; see startup::graphics_instance)
+        { type: 'toggle', key: 'mx_graphics', label: 'mX Graphics (Experimental)', help: 'Draws the game with mX, openOMSI\'s own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before.' },
         { type: 'section', title: 'World & memory' },
         { type: 'select', key: 'view_distance', label: 'View distance', options: [['auto', 'Default (1200 m)'], ['600', '600 m - fastest'], ['900', '900 m'], ['1200', '1200 m'], ['1500', '1500 m'], ['2000', '2000 m'], ['2500', '2500 m']], heavy: (v) => Number(v) >= 2000 },
         { type: 'select', key: 'max_obj_dist', label: 'Object distance', options: [['auto', 'Automatic'], ['500', '500 m'], ['750', '750 m'], ['900', '900 m'], ['1500', '1500 m'], ['3000', '3000 m']], heavy: (v) => Number(v) >= 1500 },

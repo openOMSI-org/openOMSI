@@ -2213,6 +2213,8 @@
 "Upscaling": "अपस्केलिंग"
 "AMD FSR 1 (experimental)": "AMD FSR 1 (प्रायोगिक)"
 "Apple MetalFX (experimental)": "Apple MetalFX (प्रायोगिक)"
+"mX Graphics (Experimental)": "mX Graphics (प्रायोगिक)"
+"Draws the game with mX, openOMSI's own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before.": "गेम को wgpu के बजाय mX, openOMSI की अपनी ग्राफ़िक्स लाइब्रेरी, से बनाता है (गेम अगली बार शुरू होने पर लागू होगा)। इसके साथ रे ट्रेसिंग और फ़्रेम जनरेशन बंद रहते हैं; जहाँ mX शुरू नहीं हो पाता, गेम पहले की तरह बनता है।"
 "Standard (Catmull-Rom)": "मानक (Catmull-Rom)"
 "Standard Catmull-Rom or experimental FSR 1; changes show at once": "मानक Catmull-Rom या प्रायोगिक FSR 1; बदलाव तुरंत दिखते हैं"
 "FSR quality": "FSR गुणवत्ता"
