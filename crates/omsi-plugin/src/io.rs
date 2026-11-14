@@ -690,6 +690,15 @@ pub struct AiCar {
     pub blinker: u8,
     /// The line of a timetable bus.
     pub line: Option<String>,
+    /// Its `[boundingbox]`: width, length, height and the box centre's offset from the
+    /// vehicle's origin (x right, y forward, z up), in metres, as the .bus/.ovh gives it, or
+    /// the collision code's default when it gives none.
+    pub bounding_box: [f32; 6],
+    /// The box comes from the default, not the vehicle's file.
+    pub box_default: bool,
+    /// The heading the box's axes follow (the body's; the path's `heading` + 180 for a
+    /// vehicle driven backwards along its file's axis).
+    pub box_heading: f64,
 }
 
 /// A timetable bus on the road.

@@ -24,11 +24,28 @@ fn car(c: &AiCar, from: Option<[f64; 4]>) -> Value {
         ("braking", c.braking.into()),
         ("blinker", ["off", "left", "right"].get(c.blinker as usize).copied().unwrap_or("off").into()),
         ("line", c.line.clone().into()),
+        ("bounding_box", bounding_box(c)),
     ];
     if let Some(p) = from {
         r.push(("distance", (c.pos[0] - p[0]).hypot(c.pos[1] - p[1]).into()));
     }
     rec(r)
+}
+
+/// `{width, length, height, cx, cy, cz, heading, default}`: the vehicle's `[boundingbox]` and
+/// the heading its axes follow.
+fn bounding_box(c: &AiCar) -> Value {
+    let b = c.bounding_box;
+    rec(vec![
+        ("width", Value::from(b[0])),
+        ("length", Value::from(b[1])),
+        ("height", Value::from(b[2])),
+        ("cx", Value::from(b[3])),
+        ("cy", Value::from(b[4])),
+        ("cz", Value::from(b[5])),
+        ("heading", c.box_heading.rem_euclid(360.0).into()),
+        ("default", c.box_default.into()),
+    ])
 }
 
 /// A person as `people.list` and `people.get` give them.
@@ -106,7 +123,7 @@ fn cars(c: &mut Ctx<'_>, r: Option<f64>) -> Vec<(f64, AiCar)> {
 }
 
 pub static FNS: &[ApiFn] = &[
-    def!("traffic.list", "traffic", [o("radius", "number")], "list of tables", "The AI vehicles (within `radius` m of the player's bus, when given): `{id, kind, name, x, y, z, heading, speed, max_speed, waiting_for, standing, braking, blinker, line, distance}`. `kind`: `\"car\"`, `\"taxi\"`, `\"bus\"`, `\"truck\"`, `\"timetable_bus\"`, `\"tram\"`, `\"bicycle\"`; `waiting_for` why it waits or slows (`\"lead\"`, `\"light\"`, `\"yield\"`, `\"people\"`, ...); `standing` the seconds it has stood.", NEW, None, false, |c, a| {
+    def!("traffic.list", "traffic", [o("radius", "number")], "list of tables", "The AI vehicles (within `radius` m of the player's bus, when given): `{id, kind, name, x, y, z, heading, speed, max_speed, waiting_for, standing, braking, blinker, line, bounding_box, distance}`. `kind`: `\"car\"`, `\"taxi\"`, `\"bus\"`, `\"truck\"`, `\"timetable_bus\"`, `\"tram\"`, `\"bicycle\"`; `waiting_for` why it waits or slows (`\"lead\"`, `\"light\"`, `\"yield\"`, `\"people\"`, ...); `standing` the seconds it has stood; `bounding_box` the body's `[boundingbox]` as `{width, length, height, cx, cy, cz, heading, default}` (metres, the .bus/.ovh order; `cx`/`cy`/`cz` the box centre's offset from the vehicle's x, y, z along the body's right, forward and up, which follow `heading`; `default` when the file gives no box and the collision code's 2.5 x 12 x 3 m is used).", NEW, None, false, |c, a| {
         let r = a.opt_num(0)?;
         let me = c.io().position();
         Ok::<_, ApiError>(Value::List(cars(c, r).iter().map(|(_, x)| car(x, me)).collect()))

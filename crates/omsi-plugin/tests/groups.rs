@@ -143,6 +143,8 @@ fn traffic_and_people() {
         assert(omsi.traffic.get(9).kind == "timetable_bus" and omsi.traffic.get(1) == nil)
         assert(omsi.traffic.nearest().id == 7 and omsi.traffic.nearest("timetable_bus").id == 9)
         assert(omsi.traffic.ahead(100).id == 7)
+        local b = omsi.traffic.get(7).bounding_box
+        assert(math.abs(b.width - 1.8) < 1e-6 and math.abs(b.length - 4.4) < 1e-6 and math.abs(b.cy + 0.6) < 1e-6 and b.heading == 90 and b.default == false)
         local driving, buses = omsi.traffic.counts(); assert(driving == 2 and buses == 1)
         assert(omsi.traffic.density() == 30 and omsi.traffic.set_density(50, 0.5))
         assert(omsi.traffic.remove(7) and not omsi.traffic.remove(7) and omsi.traffic.clear() == 1)

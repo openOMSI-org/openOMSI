@@ -194,6 +194,9 @@ pub(crate) fn traffic_list(app: &App) -> Vec<op::AiCar> {
                 braking: c.state.braking,
                 blinker: c.state.blinker.clamp(0, 2) as u8,
                 line: c.is_bus().then(|| v.host.tt_line.trim().to_string()).filter(|l| !l.is_empty()),
+                bounding_box: v.ty.def.bounding_box.unwrap_or(omsi_sim::ai_traffic::model::DEFAULT_BOX),
+                box_default: v.ty.def.bounding_box.is_none(),
+                box_heading: v.body_heading(),
             }
         })
         .collect()
