@@ -349,36 +349,31 @@ pub fn crossing_arrival(st: &AiState, distance: f32, claimed: bool, waits_short:
     }
 }
 
-/// Metres of extra clearance a car already waiting for a full exit wants before it goes.
-/// This is a release margin, not part of the vehicle's physical length or its reservation.
-pub const EXIT_HYSTERESIS: f32 = 3.0;
-
-/// The physical room to reserve and the clearance threshold to release a car onto an exit.
-/// Promised room is physical space for other admitted vehicles; hysteresis only raises the
-/// threshold for a car that is already waiting.
-fn exit_room_limits(need: f32, promised: f32, waiting: bool) -> (f32, f32) {
-    let physical = need + promised;
-    let release = physical + if waiting { EXIT_HYSTERESIS } else { 0.0 };
-    (physical, release)
+/// The physical room needed on an exit, including room promised to vehicles
+/// already admitted ahead. A waiting car must not be held back by an extra release margin:
+/// if its body fits, it can proceed.
+fn exit_room_limits(need: f32, promised: f32) -> f32 {
+    need + promised
 }
 
 #[cfg(test)]
 mod exit_room_limit_tests {
-    use super::{exit_room_limits, EXIT_HYSTERESIS};
+    use super::exit_room_limits;
 
     #[test]
-    fn a_new_arrival_needs_only_its_physical_room() {
-        assert_eq!(exit_room_limits(7.0, 0.0, false), (7.0, 7.0));
+    fn a_car_needs_only_its_physical_room() {
+        assert_eq!(exit_room_limits(7.0, 0.0), 7.0);
     }
 
     #[test]
-    fn a_waiting_car_needs_extra_clearance_to_be_released() {
-        assert_eq!(exit_room_limits(7.0, 0.0, true), (7.0, 7.0 + EXIT_HYSTERESIS));
+    fn promised_room_is_added_to_the_physical_requirement() {
+        assert_eq!(exit_room_limits(7.0, 4.0), 11.0);
     }
 
     #[test]
-    fn promised_room_is_reserved_but_hysteresis_is_not_added_to_the_reservation() {
-        assert_eq!(exit_room_limits(7.0, 4.0, true), (11.0, 11.0 + EXIT_HYSTERESIS));
+    fn waiting_does_not_add_an_extra_release_margin() {
+        // The threshold is independent of how long the car has already waited.
+        assert_eq!(exit_room_limits(7.0, 0.0), exit_room_limits(7.0, 0.0));
     }
 }
 
@@ -812,17 +807,9 @@ impl TrafficSim {
         // the extra clearance a car that is already waiting wants before it is released.
         let need = st.front + self.cars[i].tail + st.min_gap;
         let (mut exit_full, mut exit_car) = if jn.inside { (false, None) } else { self.exit_room(i, jn, way, lead, on_lane, book, need, committed, started || cannot_stop_comfortably, &mut why) };
-        // Keep the proven deadlock release for a false-positive/full-exit hold. It is
-        // deliberately unavailable when any real right-of-way, pedestrian, or courtesy
-        // blocker exists. This lets a queued vehicle proceed after waiting, without
-        // overriding crossing traffic or priority rules.
-        if exit_full && wait > 10.0 && !hard && !ruled && soft.is_empty() && !people && !courtesy {
-            exit_full = false;
-            exit_car = None;
-            if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
-                log::info!("t={:.1}: car {} releases a junction exit deadlock after {wait:.1} s", self.time, self.cars[i].id);
-            }
-        }
+        // A physically full exit is never released by a timeout. Letting a car enter
+        // after ten seconds merely transfers the deadlock into the junction and can block
+        // crossing traffic. The exit is checked again on the next step instead.
         if let Some(id) = exit_car {
             holds.push((id, Hold::Exit));
         }
@@ -940,7 +927,7 @@ impl TrafficSim {
             // (a car holding its claim keeps the room promised to it: only the cars let in
             // before a newcomer count against him)
             let promised = if committed { 0.0 } else { book.promised(i, exit.0, exit.1, |j| self.cars.get(j).map_or(0.0, |c| c.state.odometer)) };
-            let (need_all, release_need) = exit_room_limits(need, promised, self.cars[i].exit_wait);
+            let need_all = exit_room_limits(need, promised);
             // A map often builds the road immediately beyond a crossing from several short
             // path objects. Looking only at the first exit lane then calls the exit empty
             // while a queue stands on the next 2 m piece, and a car enters the box with
@@ -960,7 +947,7 @@ impl TrafficSim {
                     ))
                 })
             });
-            if let Some((space, speed, lane)) = queued_exit_vehicle(way, exit, release_need, occupied) {
+            if let Some((space, speed, lane)) = queued_exit_vehicle(way, exit, need_all, occupied) {
                 // (a car within its distance to decide looks across the junction however
                 // long it is: with the exit taken only within 40 m of the car, a big
                 // junction's exit came into view when the car could no longer stop for it,
@@ -968,8 +955,8 @@ impl TrafficSim {
                 // (a queue that stands near the junction, at any braking a driver calls
                 // gentle; one that is about to stand, only if the car can stop for it
                 // comfortably)
-                let standing = speed < 1.5 && space < release_need && exit.1 < 40.0 && !late;
-                let will_stand = space + speed.powi(2) / (2.0 * EXIT_BRAKE) < release_need && exit.1 - entry < 60.0;
+                let standing = speed < 1.5 && space < need_all && exit.1 < 40.0 && !late;
+                let will_stand = space + speed.powi(2) / (2.0 * EXIT_BRAKE) < need_all && exit.1 - entry < 60.0;
                 if standing || (will_stand && !late) {
                     // (the last car of that queue on that lane)
                     let last = on_lane
@@ -989,7 +976,7 @@ impl TrafficSim {
                         })
                         .map(|e| self.cars[e.0].id);
                     if explain {
-                        why.push(format!("exit {} full on lane {lane}: {space:.1} m to queue rear, {release_need:.1} m needed ({need_all:.1} m physical, {:.1} m hysteresis), queue speed {speed:.1} m/s, exit {:.1} m past entry, {promised:.1} m promised", exit.0, release_need - need_all, exit.1 - entry));
+                        why.push(format!("exit {} full on lane {lane}: {space:.1} m to queue rear, {need_all:.1} m physical room needed, queue speed {speed:.1} m/s, exit {:.1} m past entry, {promised:.1} m promised", exit.0, exit.1 - entry));
                     }
                     return (true, last);
                 }
