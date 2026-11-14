@@ -655,11 +655,11 @@ impl Devices {
                             out.push((name, n, down));
                         }
                     }
-                    // (the hat switches: a wheel rim's, a gamepad's D-pad - on macOS gilrs
-                    // turns every hat into two axes and, its filters off, never into buttons)
+                    // (the hat switches: a wheel rim's, a gamepad's D-pad - on macOS and Linux
+                    // gilrs turns a hat into axes and, when mapped as DPadY, inverts up/down)
                     #[cfg(any(target_os = "linux", target_os = "macos"))]
-                    EventType::AxisChanged(axis_name, value, code) if hat_axis(code.into_u32(), value, cfg!(target_os = "macos") && axis_name == Axis::DPadY).is_some() => {
-                        let Some((axis, value)) = hat_axis(code.into_u32(), value, cfg!(target_os = "macos") && axis_name == Axis::DPadY) else { continue };
+                    EventType::AxisChanged(axis_name, value, code) if hat_axis(code.into_u32(), value, axis_name == Axis::DPadY).is_some() => {
+                        let Some((axis, value)) = hat_axis(code.into_u32(), value, axis_name == Axis::DPadY) else { continue };
                         let name = pad.name().to_string();
                         let k = match self.hats.iter().position(|(n, _)| *n == name) {
                             Some(k) => k,
@@ -884,14 +884,19 @@ fn same_hid_device(hid_name: &str, hid_id: Option<(u16, u16)>, pad_names: [&str;
 /// A hat switch's axis as gilrs reports it: its number (hat * 2, + 1 for up/down) and its
 /// value, right and down positive. Linux: evdev's ABS_HAT0X..ABS_HAT3Y. macOS: gilrs makes
 /// a hat two axes, 0x39 and 0x3A of the generic desktop page, and turns the up/down one
-/// round when an SDL mapping names it the D-pad's (`mapped_y`).
+/// round when an SDL mapping names it the D-pad's (`mapped_y`). On Linux gilrs also maps
+/// DPadY with up positive, so `mapped_y` inverts it.
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn hat_axis(code: u32, value: f32, mapped_y: bool) -> Option<(usize, f32)> {
     // (the two kinds of code cannot meet: gilrs's axes on Linux are all of evdev's EV_ABS, 3)
     match (code >> 16, code & 0xFFFF) {
         (1, 0x39) => Some((0, value)),
         (1, 0x3A) => Some((1, if mapped_y { -value } else { value })),
-        (3, lo @ 0x10..=0x17) => Some(((lo - 0x10) as usize, value)),
+        (3, lo @ 0x10..=0x17) => {
+            let axis = (lo - 0x10) as usize;
+            let v = if axis % 2 == 1 && mapped_y { -value } else { value };
+            Some((axis, v))
+        }
         _ => None,
     }
 }
@@ -2332,8 +2337,10 @@ mod tests {
         assert_eq!(super::hat_axis(0x10039, 1.0, false), Some((0, 1.0)));
         assert_eq!(super::hat_axis(0x1003A, 1.0, true), Some((1, -1.0)));
         assert_eq!(super::hat_axis(0x1003A, 1.0, false), Some((1, 1.0)));
-        // Linux: ABS_HAT0X .. ABS_HAT3Y
+        // Linux: ABS_HAT0X .. ABS_HAT3Y; D-pad Y mapped by SDL/gilrs comes turned round
         assert_eq!(super::hat_axis(0x30010, -1.0, false), Some((0, -1.0)));
+        assert_eq!(super::hat_axis(0x30011, 1.0, true), Some((1, -1.0)));
+        assert_eq!(super::hat_axis(0x30011, 1.0, false), Some((1, 1.0)));
         assert_eq!(super::hat_axis(0x30017, 1.0, false), Some((7, 1.0)));
         assert_eq!(super::hat_axis(0x30018, 1.0, false), None);
         assert_eq!(super::hat_axis(0x10030, 1.0, false), None);
