@@ -741,6 +741,16 @@ impl TrafficSim {
         }
         let need = st.front + self.cars[i].tail + st.min_gap + if self.cars[i].exit_wait { EXIT_HYSTERESIS } else { 0.0 };
         let (mut exit_full, mut exit_car) = if jn.inside { (false, None) } else { self.exit_room(i, jn, way, lead, on_lane, book, need, committed, started || cannot_stop_comfortably, &mut why) };
+        // A full exit may be the only thing holding this vehicle. Keep the deadlock
+        // release as a fallback, but never use it to overrule right of way, crossing
+        // traffic, pedestrians or courtesy.
+        if exit_full && wait > 10.0 && !hard && !ruled && soft.is_empty() && !people && !courtesy {
+            exit_full = false;
+            exit_car = None;
+            if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
+                log::info!("t={:.1}: car {} releases a junction exit deadlock after {wait:.1} s", self.time, self.cars[i].id);
+            }
+        }
         if let Some(id) = exit_car {
             holds.push((id, Hold::Exit));
         }
@@ -888,7 +898,7 @@ impl TrafficSim {
                         .and_then(|v| v.iter().filter(|e| !e.3 && e.0 != i).min_by(|a, b| (a.1 - self.cars[a.0].tail).total_cmp(&(b.1 - self.cars[b.0].tail))))
                         .map(|e| self.cars[e.0].id);
                     if explain {
-                        why.push(format!("exit {} full on lane {lane} ({space:.1} m, {promised:.1} m promised)", exit.0));
+                        why.push(format!("exit {} full on lane {lane}: {space:.1} m to queue rear, {need_all:.1} m needed, queue speed {speed:.1} m/s, exit {:.1} m past entry, {promised:.1} m promised", exit.0, exit.1 - entry));
                     }
                     return (true, last);
                 }
