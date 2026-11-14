@@ -9,9 +9,9 @@
 //! bus may pull in (the boarding region, `region`), and how far before the stop the bus
 //! moves over into the bay (`bus_service`'s approach distance).
 //!
-//! The coordinator hands each berth to the bus that asked first (the step it first asked,
-//! then its id), but a bus whose body already stands in the berth comes before any other:
-//! it is there. The holder keeps the berth through boarding, the doors closing and pulling
+//! The coordinator hands each berth to the bus that is there, then to the nearest bus
+//! approaching on the lane (its distance refreshed on every ask, then the step it first asked,
+//! then its id). The holder keeps the berth through boarding, the doors closing and pulling
 //! out, until its rear has left it; a route change, its removal or the network changing
 //! give it up too. Who has not got the berth waits `QUEUE_STANDOFF` before it. Standing
 //! right behind the bus at the berth it serves the stop where it stands, as two buses at one
@@ -62,8 +62,8 @@ struct Ask {
     /// The step it first asked in, and the step it last asked in.
     since: u64,
     seen: u64,
-    /// How far from the stop it was when it first asked (dm): of two that ask in the same
-    /// step the one nearer goes first (it is in front).
+    /// How far from the stop it is (dm), refreshed on each ask: of two asking, the one
+    /// nearer goes first (it is in front on the lane).
     dist: i32,
     id: u64,
 }
@@ -80,9 +80,10 @@ struct Berth {
 }
 
 impl Berth {
-    /// The asks in the order the berth is handed out: who is there, then who came first.
+    /// The asks in the order the berth is handed out: who is there, then who is closer,
+    /// then who came first.
     fn first(&self) -> Option<u64> {
-        self.asks.iter().min_by_key(|a| (!a.there, a.since, a.dist, a.id)).map(|a| a.id)
+        self.asks.iter().min_by_key(|a| (!a.there, a.dist, a.since, a.id)).map(|a| a.id)
     }
 }
 
@@ -132,13 +133,15 @@ impl Berths {
     /// its origin is this far before the stop point (m).
     pub fn ask(&mut self, key: BerthKey, id: u64, there: bool, dist: f32) {
         let step = self.step;
+        let d = (dist.max(0.0) * 10.0).clamp(0.0, 1e6) as i32;
         let b = self.berths.entry(key).or_default();
         match b.asks.iter_mut().find(|a| a.id == id) {
             Some(a) => {
                 a.seen = step;
                 a.there |= there;
+                a.dist = d;
             }
-            None => b.asks.push(Ask { there, since: step, seen: step, dist: (dist * 10.0).clamp(-1e6, 1e6) as i32, id }),
+            None => b.asks.push(Ask { there, since: step, seen: step, dist: d, id }),
         }
     }
 
@@ -420,5 +423,30 @@ mod tests {
         assert!(b.held_long(K, 100.0 + BLOCKED_LONG + 1.0));
         b.note_blocked(K, false, 130.0);
         assert!(!b.held_long(K, 130.0));
+    }
+
+    #[test]
+    fn closer_vehicle_gets_berth_ahead_of_earlier_asker_further_away() {
+        let mut b = Berths::default();
+        b.begin_step(0, |_| true);
+        b.ask(K, 9, false, 30.0);
+        b.begin_step(0, |_| true);
+        b.ask(K, 9, false, 30.0);
+        b.ask(K, 4, false, 5.0);
+        assert!(b.grant(K, 4, true));
+        assert!(!b.grant(K, 9, true));
+    }
+
+    #[test]
+    fn ask_distance_updates_as_vehicle_approaches() {
+        let mut b = Berths::default();
+        b.begin_step(0, |_| true);
+        b.ask(K, 9, false, 50.0);
+        b.ask(K, 4, false, 20.0);
+        assert_eq!(b.berths.get(&K).unwrap().first(), Some(4));
+        b.begin_step(0, |_| true);
+        b.ask(K, 9, false, 10.0);
+        b.ask(K, 4, false, 20.0);
+        assert_eq!(b.berths.get(&K).unwrap().first(), Some(9));
     }
 }

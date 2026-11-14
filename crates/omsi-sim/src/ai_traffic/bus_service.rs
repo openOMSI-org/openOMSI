@@ -864,7 +864,7 @@ impl BusService {
                 if self.behind {
                     // served from behind: it keeps its place in the queue for the berth, so
                     // that a bus that came after it does not pull up in front of it
-                    berths.ask(key, ctx.id, false, st.route_distance(ctx.net, stop.ri, stop.s));
+                    berths.ask(key, ctx.id, false, 0.0);
                 } else {
                     berths.ask(key, ctx.id, true, 0.0);
                     if berths.grant(key, ctx.id, ctx.berth.free) {
