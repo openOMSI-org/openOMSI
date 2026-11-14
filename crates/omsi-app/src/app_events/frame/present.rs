@@ -49,8 +49,16 @@ impl App {
         crate::themes::sync(&self.settings.ui_theme_pack, self.settings.is_light_theme());
         if let (Some(s), Some(r)) = (self.gfx.surface.as_mut(), self.renderer.as_mut()) {
             s.set_glass(r, omsi_ui::theme::th().glass.is_some());
-            let generation = s.set_frame_generation(r, self.settings.frame_generation());
+            // (off for this drive once the frame rate check found it too slow, `frame_time`;
+            // switched off and on in the menu, it is tried again)
+            let asked = self.settings.frame_generation();
+            if !asked {
+                self.perf.generation_too_slow = 0;
+            }
+            let generation = s.set_frame_generation(r, asked && self.perf.generation_too_slow < GENERATION_SLOW_READINGS);
             r.set_frame_generation(generation);
+            let making = r.frames_generated().is_some_and(|n| n > 0);
+            self.perf.generation_since = if making { self.perf.generation_since.or_else(|| Some(Instant::now())) } else { None };
         }
         let shot = self.perf.shot.take();
         if let Some(s) = self.gfx.surface.as_ref() {

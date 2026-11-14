@@ -145,6 +145,18 @@ impl App {
                 let fps = self.perf.governor.1 as f32 / self.perf.governor.0;
                 let wait_share = self.perf.governor.2 / self.perf.governor.0;
                 self.perf.governor = (0.0, 0, 0.0);
+                // Frame generation under Apple's 30 drawn frames a second: its generated frames
+                // cost the card more than they bring (an M2 at 2940x1846: 35 a second fell to 13
+                // with it). Off for this drive, as SSAO and the shadows below.
+                let settled = self.perf.generation_since.is_some_and(|t| t.elapsed().as_secs_f32() >= GENERATION_SETTLE);
+                if self.perf.generation_too_slow < GENERATION_SLOW_READINGS && settled {
+                    self.perf.generation_too_slow = if fps < 30.0 { self.perf.generation_too_slow + 1 } else { 0 };
+                    if self.perf.generation_too_slow >= GENERATION_SLOW_READINGS {
+                        log::warn!("frame rate {fps:.0} fps with frame generation: frame generation off to keep up");
+                        let what = "frame generation off";
+                        self.service_msg = Some((format!("The graphics card cannot keep up: {what} for this drive"), 4.0));
+                    }
+                }
                 let free = self.settings.scene_render_scale() <= 0.0
                     && (self.settings.max_fps == 0 || self.settings.max_fps >= 50)
                     && !omsi_cfg::flags::OMSI_FIXED_SCALE.is_set()

@@ -124,6 +124,11 @@ pub(crate) struct PerfState {
     pub(crate) fps: f32,
     /// Frame generation: its count when the last second ended, and the frames it made in that second.
     pub(crate) generated: (u64, f32),
+    /// Frame rate readings in a row with frame generation on and under 30 drawn frames a second;
+    /// at `GENERATION_SLOW_READINGS` it is off for the drive.
+    pub(crate) generation_too_slow: u8,
+    /// When frame generation made its first frame this drive (None: it has made none).
+    pub(crate) generation_since: Option<Instant>,
     /// Per-stage frame time accumulators (OMSI_PROFILE), seconds.
     pub(crate) profile: crate::profile_keys::ProfileTimes,
     /// `profile` as it was at the start of the last frame: what a slow frame spent where.
@@ -179,6 +184,8 @@ impl PerfState {
         PerfState {
             fps: 0.0,
             generated: (0, 0.0),
+            generation_too_slow: 0,
+            generation_since: None,
             profile: Default::default(),
             profile_prev: Default::default(),
             total_frames: 0,

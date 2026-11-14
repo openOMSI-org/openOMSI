@@ -455,7 +455,7 @@ impl Renderer {
         // Frame generation (MetalFX's, which takes the scaler's depth and motion): the same
         // picture as the window's below the HUD, to the bit - it tells the interface apart
         // by what differs between the two.
-        let generation = self.frame_generation.clone().filter(|g| ok && g.wanted() && matches!(d.runtime, Runtime::MetalFx(_)));
+        let generation = self.frame_generation.clone().filter(|g| ok && g.working() && matches!(d.runtime, Runtime::MetalFx(_)));
         let hudless = generation.as_ref().map(|_| {
             if d.hudless.first().is_none_or(|(h, _)| (h.width(), h.height()) != full) {
                 d.hudless = (0..2).map(|_| hudless_target(&self.device, full, self.format)).collect();

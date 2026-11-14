@@ -486,7 +486,6 @@ fn metalfx_makes_the_frame_between_two() {
         Ok(g) => g,
         Err(e) => return eprintln!("skipped: {e:#}"),
     };
-    generation.set_wanted(true);
     r.set_frame_generation(Some(generation.clone()));
     let mut scene = rails_scene(&mut r);
     let srgb = wgpu::TextureFormat::Rgba8UnormSrgb;
