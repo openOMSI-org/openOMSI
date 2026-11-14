@@ -13,6 +13,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,
   the .bus/.ovh `[boundingbox]`), so a blind-spot or distance plugin knows where a truck's or an
   articulated bus's body really is, not only its origin (#3936).
+- **Plugin catalog in the launcher**: Content → Plugins → Browse lists the plugins of the new
+  [openOMSI-Plugins](https://github.com/openOMSI-org/openOMSI-Plugins) repository: open source,
+  read by a maintainer before they are added. One click installs a plugin into the plugins
+  folder (only when every file is the one the catalog names, by its SHA-256), an update is
+  offered when its version goes up and keeps its settings, and *Read the code* opens its source
+  (#3920).
 - **Plugins page in the launcher**: Content → Plugins lists the Lua, `.oop` and OMSI
   plugins of the game's plugins folders. Each has a switch (a plugin switched off is left out
   of the next game, its files and settings stay where they are), shows whether it ran, did not

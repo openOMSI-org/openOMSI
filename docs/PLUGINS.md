@@ -96,6 +96,17 @@ made of it, and change the settings it declared with `plugin.settings`:
   which the plugin gets back from `plugin.settings` the next time it starts. A plugin that has
   not run yet has no settings to show.
 
+#### Publishing a plugin in the catalog
+
+The page's **Browse** tab lists the plugins of
+[openOMSI-org/openOMSI-Plugins](https://github.com/openOMSI-org/openOMSI-Plugins): a folder
+plugin (`main.lua` and its files) with a `plugin.json` (name, author, version, description,
+an open source licence), sent as a pull request and read by a maintainer before it is merged.
+The launcher installs it as `plugins/<id>/` only when each file's size and SHA-256 are the ones
+in the repository's `catalog.json`, offers an update when `version` goes up, and keeps
+`plugins/<id>/data/` (settings and saved data) on an update. The repository's CONTRIBUTING.md
+has the rules.
+
 ### How a plugin runs
 
 The file's top level runs once when the game starts. After that the plugin reacts to
