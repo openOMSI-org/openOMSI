@@ -1,11 +1,11 @@
-// Plugins (#3919): switch the game's plugins on and off, see their last load, edit their settings.
+// Plugins (#3919, #3920): switch, check and set up the game's plugins; install reviewed ones.
 
 import { html, useState, useEffect } from '../../vendor/preact-htm.js';
 import { useStore, toast } from '../store.js';
 import { t } from '../i18n.js';
 import { call } from '../api.js';
 import { Icon } from '../icons.js';
-import { Button, Card, Dialog, Empty, Notice, PageHead, Select, Slider, Spinner, Tag, Toggle, Input } from '../ui.js';
+import { Button, Card, Dialog, Empty, Notice, PageHead, Search, Select, Slider, Spinner, Tabs, Tag, Toggle, Input, useConfirm } from '../ui.js';
 import { cached } from '../data.js';
 
 const KIND = { lua: 'Lua', oop: '.oop', opl: 'OMSI' };
@@ -58,8 +58,80 @@ function SettingsDialog({ plugin, onClose, onSaved }) {
   </${Dialog}>`;
 }
 
+/** The catalog: the plugins of openOMSI-org/openOMSI-Plugins, to install, update or remove. */
+function Browse({ onChanged }) {
+  const [list, setList] = useState(null);
+  const [error, setError] = useState('');
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState({});
+  const [ask, confirm] = useConfirm();
+  const read = () => call('plugin_catalog').then((c) => (setList(c.plugins || []), setError(''))).catch((e) => setError(e.message));
+  useEffect(() => {
+    read();
+  }, []);
+  const source = (p) => call('open_url', { url: p.source }).catch((e) => toast(t(e.message), 'error'));
+  const install = async (p) => {
+    if (!p.installed) {
+      const ok = await ask({ title: t('Install {name}?', { name: p.name }), text: ['Plugins run code in your game. The catalog\'s plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.'], yes: 'Install' });
+      if (!ok) return;
+    }
+    setBusy((b) => ({ ...b, [p.id]: true }));
+    try {
+      await call('plugin_install', { id: p.id });
+      toast(t(p.installed ? '{name} updated' : '{name} installed', { name: p.name }), 'ok');
+      await read();
+      onChanged();
+    } catch (e) {
+      toast(t(e.message), 'error');
+    }
+    setBusy((b) => ({ ...b, [p.id]: false }));
+  };
+  const remove = async (p) => {
+    if (!(await ask({ title: t('Remove {name}?', { name: p.name }), text: ['Its files, settings and saved data are deleted.'], yes: 'Remove', danger: true }))) return;
+    setBusy((b) => ({ ...b, [p.id]: true }));
+    try {
+      await call('plugin_remove', { id: p.id });
+      toast(t('{name} removed', { name: p.name }), 'ok');
+      await read();
+      onChanged();
+    } catch (e) {
+      toast(t(e.message), 'error');
+    }
+    setBusy((b) => ({ ...b, [p.id]: false }));
+  };
+  const shown = (list || []).filter((p) => !q || `${p.name} ${p.author} ${p.description} ${(p.tags || []).join(' ')}`.toLowerCase().includes(q.toLowerCase()));
+  return html`
+    <${Card} title="Browse" hint="Reviewed, open source plugins of the openOMSI plugin catalog." actions=${html`<div style="width:220px;max-width:100%"><${Search} value=${q} onInput=${setQ} /></div>`}>
+      ${error && html`<${Notice} kind="danger"><span class="selectable">${t(error)}</span> <${Button} small kind="ghost" icon="refresh" label="Refresh" onClick=${read} /></${Notice}>`}
+      ${list == null && !error
+        ? html`<div class="row muted"><${Spinner} /></div>`
+        : list && shown.length === 0
+          ? html`<${Empty} icon="puzzle" text="No plugin matches." />`
+          : html`<div class="list" style="margin:0 -8px">${shown.map((p) => html`<div class="list-item" key=${p.id}>
+              <${Icon} name="puzzle" />
+              <div class="grow" style="min-width:0">
+                <div class="title">${p.name} <span class="muted small">${p.version}</span></div>
+                <div class="sub">${[p.author, p.license, ...(p.tags || [])].join(' - ')}</div>
+                <div class="small dim" style="margin-top:2px">${p.description}</div>
+                ${p.update && html`<div style="margin-top:4px"><${Tag} kind="warn">${t('Update available')}: ${p.installed} → ${p.version}</${Tag}></div>`}
+              </div>
+              ${busy[p.id] && html`<${Spinner} />`}
+              <${Button} small kind="ghost" icon="external" title="Read the code" onClick=${() => source(p)} />
+              ${p.installed && html`<${Button} small kind="ghost" icon="trash" title="Remove" disabled=${!!busy[p.id]} onClick=${() => remove(p)} />`}
+              ${!p.installed
+                ? html`<${Button} small kind="primary" icon="download" label="Install" disabled=${!!busy[p.id]} onClick=${() => install(p)} />`
+                : p.update
+                  ? html`<${Button} small kind="primary" icon="download" label="Update" disabled=${!!busy[p.id]} onClick=${() => install(p)} />`
+                  : html`<${Tag} kind="ok">${t('Installed')}</${Tag}>`}
+            </div>`)}</div>`}
+    </${Card}>
+    ${confirm}
+  `;
+}
+
 export function PluginsPage() {
   const s = useStore();
+  const [tab, setTab] = useState('installed');
   const status = s.cache.plugins ?? null;
   const [busy, setBusy] = useState({});
   const [editing, setEditing] = useState(null);
@@ -84,7 +156,8 @@ export function PluginsPage() {
     ${editing && html`<${SettingsDialog} plugin=${editing} onClose=${() => setEditing(null)} onSaved=${read} />`}
     <${PageHead} title="Plugins" text="Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay." />
     ${s.settings?.disable_plugins && html`<${Notice} kind="warn">${t('Plugins are disabled in Settings, so none of them runs.')}</${Notice}>`}
-    <${Card} title="Installed" actions=${dir && html`<${Button} small icon="folder" label="Plugins folder" onClick=${() => call('open_path', { path: dir }).catch((e) => toast(t(e.message), 'error'))} />`}>
+    <div style="margin-bottom:12px"><${Tabs} value=${tab} options=${[['installed', 'Installed'], ['browse', 'Browse']]} onChange=${setTab} /></div>
+    ${tab === 'browse' ? html`<${Browse} onChanged=${read} />` : html`<${Card} title="Installed" actions=${dir && html`<${Button} small icon="folder" label="Plugins folder" onClick=${() => call('open_path', { path: dir }).catch((e) => toast(t(e.message), 'error'))} />`}>
       ${status == null
         ? html`<div class="row muted"><${Spinner} /></div>`
         : list.length === 0
@@ -95,7 +168,7 @@ export function PluginsPage() {
                 <${Icon} name=${state?.[0] === 'danger' ? 'alert' : 'puzzle'} />
                 <div class="grow" style="min-width:0">
                   <div class="title ellipsis" style=${p.enabled ? '' : 'opacity:.55'}>${p.title}</div>
-                  <div class="sub ellipsis" title=${p.path}>${[KIND[p.kind] || p.kind, p.path].join(' - ')}</div>
+                  <div class="sub ellipsis" title=${p.path}>${[KIND[p.kind] || p.kind, p.catalog && `v${p.catalog}`, p.path].filter(Boolean).join(' - ')}</div>
                   ${state && html`<div class="row" style="gap:6px;margin-top:4px;flex-wrap:wrap"><${Tag} kind=${state[0]}>${t(state[1])}</${Tag}>${p.error && html`<span class="small selectable" style="color:var(--danger);overflow-wrap:anywhere">${p.error}</span>`}</div>`}
                 </div>
                 ${busy[p.name] && html`<${Spinner} />`}
@@ -103,6 +176,6 @@ export function PluginsPage() {
                 <${Toggle} checked=${p.enabled} disabled=${!!busy[p.name]} onChange=${(on) => toggle(p, on)} />
               </div>`;
             })}</div>`}
-    </${Card}>
+    </${Card}>`}
   `;
 }

@@ -44,6 +44,11 @@ fn child(dir: &Path, name: &str) -> Option<PathBuf> {
         })
 }
 
+/// `dir`'s child `name`, in any case (`Plugins`, `plugins`).
+pub(crate) fn child_dir(dir: &Path, name: &str) -> Option<PathBuf> {
+    child(dir, name).filter(|d| d.is_dir())
+}
+
 fn key(name: &str) -> String {
     name.trim().to_ascii_lowercase()
 }
@@ -240,6 +245,8 @@ pub fn status_in(data: &Path, dirs: &[PathBuf]) -> Value {
                 "error": last.as_ref().and_then(|e| e["error"].as_str()).unwrap_or(""),
                 "settings": schema.as_ref().map(|s| s["settings"].clone()).filter(|s| s.as_array().is_some_and(|a| !a.is_empty())).unwrap_or(Value::Null),
                 "values": values.unwrap_or(Value::Null),
+                // (a folder plugin the catalog installed: its id and version there)
+                "catalog": (f.kind == "lua" && f.path.is_dir()).then(|| f.path.file_name().and_then(|n| crate::plugin_catalog::installed(dir, &n.to_string_lossy()))).flatten(),
             }));
         }
     }

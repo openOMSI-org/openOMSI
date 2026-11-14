@@ -9,6 +9,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 ### New
 
 - **mX Graphics (Experimental)** on a Mac: Settings → Graphics → Display → *mX Graphics (Experimental)* draws the game on Metal with [mX](https://github.com/openOMSI-org/mX), openOMSI's own graphics library, instead of wgpu, from the next start. The picture is meant to be the same. It is an early step: the game's shaders do not use mX's bindless textures yet, and in the tests so far it spent less processor time on a frame than wgpu and the same time on the graphics chip. Ray tracing and frame generation stay off with it; where mX cannot open the graphics chip, the game draws with wgpu as before. Off by default. mX's Direct3D 12 and Vulkan have not drawn the game on a real graphics card yet, so Windows and Linux do not offer the switch; `OMSI_MX=on` tries them for one run (without DLSS, FSR 3 and VR), and `OMSI_MX=off` turns mX off for a run on a Mac.
+- **Plugin catalog in the launcher**: Content → Plugins → Browse lists the plugins of the new
+  [openOMSI-Plugins](https://github.com/openOMSI-org/openOMSI-Plugins) repository: open source,
+  read by a maintainer before they are added. One click installs a plugin into the plugins
+  folder (only when every file is the one the catalog names, by its SHA-256), an update is
+  offered when its version goes up and keeps its settings, and *Read the code* opens its source
+  (#3920).
 - **Plugins page in the launcher**: Content → Plugins lists the Lua, `.oop` and OMSI
   plugins of the game's plugins folders. Each has a switch (a plugin switched off is left out
   of the next game, its files and settings stay where they are), shows whether it ran, did not

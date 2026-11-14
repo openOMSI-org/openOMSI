@@ -24,6 +24,7 @@ pub mod map_uses;
 pub mod mods;
 pub mod optimise;
 pub mod plugins;
+pub mod plugin_catalog;
 pub mod storage;
 pub use graphics_profile_transfer::{export_graphics_profile, import_graphics_profile};
 pub use graphics_profiles::*;

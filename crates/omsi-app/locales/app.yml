@@ -8777,3 +8777,25 @@ _version: 2
   en: "Stopped in the last game after errors"
 "Plugins are disabled in Settings, so none of them runs.":
   en: "Plugins are disabled in Settings, so none of them runs."
+"Update":
+  en: "Update"
+"{name} removed":
+  en: "{name} removed"
+"{name} updated":
+  en: "{name} updated"
+"Update available":
+  en: "Update available"
+"Read the code":
+  en: "Read the code"
+"No plugin matches.":
+  en: "No plugin matches."
+"Install {name}?":
+  en: "Install {name}?"
+"Remove {name}?":
+  en: "Remove {name}?"
+"Its files, settings and saved data are deleted.":
+  en: "Its files, settings and saved data are deleted."
+"Reviewed, open source plugins of the openOMSI plugin catalog.":
+  en: "Reviewed, open source plugins of the openOMSI plugin catalog."
+"Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.":
+  en: "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first."
