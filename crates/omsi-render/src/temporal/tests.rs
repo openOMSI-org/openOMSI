@@ -45,9 +45,21 @@ fn a_screenshot_keeps_the_colours_and_is_opaque() {
 
 #[test]
 fn the_mip_bias_is_the_log_of_the_scale() {
-    assert_eq!(temporal_mip_bias(2560, 2560), 0.0);
-    assert_eq!(temporal_mip_bias(1280, 2560), -1.0);
-    assert_eq!(temporal_mip_bias(1, 3840), -3.0);
+    assert_eq!(temporal_mip_bias(2560, 2560, 0.0), 0.0);
+    assert_eq!(temporal_mip_bias(1280, 2560, 0.0), -1.0);
+    assert_eq!(temporal_mip_bias(1, 3840, 0.0), -3.0);
+}
+
+/// MetalFX's textures one level sharper, as Apple advises: -1.58 at Quality (1.5x), -2 at
+/// Performance (2x), -1 at Native; never past -3 nor above 0.
+#[test]
+fn metalfx_samples_one_mip_level_sharper() {
+    let close = |a: f32, b: f32| (a - b).abs() < 0.01;
+    assert!(close(temporal_mip_bias(1707, 2560, -1.0), -1.58));
+    assert_eq!(temporal_mip_bias(1280, 2560, -1.0), -2.0);
+    assert_eq!(temporal_mip_bias(2560, 2560, -1.0), -1.0);
+    assert_eq!(temporal_mip_bias(1, 3840, -1.0), -3.0);
+    assert_eq!(temporal_mip_bias(2560, 2560, 1.0), 0.0);
 }
 
 /// FSR 3 has its own, weaker mask on the panes and none on the screens: at DLSS's strength the
