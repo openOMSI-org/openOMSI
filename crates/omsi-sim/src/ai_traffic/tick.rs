@@ -1108,12 +1108,12 @@ impl TrafficSim {
     #[allow(clippy::too_many_arguments)]
     fn drive_car(&mut self, i: usize, ts: &TickScene, lead: LeadOf, stop_at: Option<f32>, why: (&'static str, f32), light: Option<f32>, yield_at: Option<f32>, merge_wait: Option<f32>) -> Option<AiFrame> {
         let (debug, dt) = (ts.debug, ts.dt);
+        // `obstacle_ahead` follows the car's upcoming route across lane
+        // segments. A queue on a roundabout therefore often has its leader on the
+        // next lane, not the same lane id. Restricting this to equal lane ids left
+        // the normal moving gap in place at every segment boundary.
         let tight_queue = lead.is_some_and(|(l, source)| {
-            l.speed < 0.3
-                && source.is_some_and(|j| {
-                    j < self.cars.len()
-                        && self.cars[j].state.lane == self.cars[i].state.lane
-                })
+            l.speed < 0.3 && source.is_some_and(|j| j < self.cars.len())
         });
         let lead_id = lead
             .and_then(|l| l.1)
