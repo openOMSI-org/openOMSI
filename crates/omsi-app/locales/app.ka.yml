@@ -3370,6 +3370,8 @@
 "Upscaling": "გაფართოება"
 "AMD FSR 1 (experimental)": "AMD FSR 1 (ექსპერიმენტული)"
 "Apple MetalFX (experimental)": "Apple MetalFX (ექსპერიმენტული)"
+"mX Graphics (Experimental)": "mX Graphics (ექსპერიმენტული)"
+"Draws the game with mX, openOMSI's own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before.": "თამაში იხატება mX-ით, openOMSI-ის საკუთარი გრაფიკული ბიბლიოთეკით, wgpu-ის ნაცვლად (ძალაში შევა თამაშის შემდეგი გაშვებისას). სხივების მიდევნება და კადრების გენერაცია გამორთული რჩება; სადაც mX ვერ ეშვება, თამაში ძველებურად იხატება."
 "Standard (Catmull-Rom)": "სტანდარტული (Catmull-Rom)"
 "Standard Catmull-Rom or experimental FSR 1; changes show at once": "სტანდარტული Catmull-Rom ან ექსპერიმენტული FSR 1; ცვლილებები მაშინვე ჩანს"
 "FSR quality": "FSR-ის ხარისხი"

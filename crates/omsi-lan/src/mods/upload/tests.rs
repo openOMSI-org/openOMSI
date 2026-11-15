@@ -27,8 +27,6 @@ fn private_vehicle_cannot_reach_upload_or_local_cache_paths() {
     let files = vec![("Vehicles/P/private.bus".to_string(), bus_file.clone())];
     let host = SocketAddr::from(([127, 0, 0, 1], 1));
 
-    // No connection is made to this deliberately unavailable endpoint:
-    // rejection must happen inside send_files before any network traffic.
     let err = sending::send_files("Vehicles/P/private.bus", files.clone(), host, 1, false).unwrap_err();
     assert!(err.to_string().contains("forbids multiplayer file transfers"), "{err}");
     let err = server::keep_files("Vehicles/P/private.bus", files).unwrap_err();
@@ -695,9 +693,6 @@ fn a_bus_that_makes_no_list_is_not_worked_out_every_frame() {
             Vec::new()
         }
     };
-    // A readable vehicle with an empty list still fails its manifest. Keep the
-    // existing "list only once per bus/paint" regression independent of the new
-    // fast rejection of invalid or protected vehicle paths.
     let bus = "Vehicles/NoList/no-list.bus";
     let bus_path = root.join(bus);
     std::fs::create_dir_all(bus_path.parent().unwrap()).unwrap();

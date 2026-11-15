@@ -48,6 +48,8 @@ mod pieces;
 pub mod placeholder;
 mod quarantine;
 mod server_fleet;
+mod served_manifest;
+use served_manifest::{ReadyManifest, ServedManifest};
 pub use server_fleet::{fingerprint as fleet_fingerprint, fingerprint_loaded as fleet_fingerprint_loaded};
 mod store;
 mod transfer_policy;
@@ -487,56 +489,6 @@ fn read_line_within(input: &mut impl BufRead, line: &mut String, max: u64) -> st
         return Err(std::io::Error::other("line too long"));
     }
     Ok(n)
-}
-
-type ReadyManifest = Mutex<Option<Arc<ServedManifest>>>;
-
-#[derive(Debug)]
-struct ServedManifest(Manifest, Vec<PathBuf>, Mutex<ManifestPolicy>);
-
-#[derive(Debug)]
-struct ManifestPolicy {
-    checked: Instant,
-    generation: u64,
-    blocked: std::collections::HashSet<String>,
-    fleet: bool,
-    allowed: bool,
-}
-
-impl ServedManifest {
-    fn new((manifest, sources): (Manifest, Vec<PathBuf>), fleet: bool) -> Self {
-        let policy = ManifestPolicy::check(&manifest, &sources, fleet);
-        Self(manifest, sources, Mutex::new(policy))
-    }
-
-    fn allows(&self, entry: &Entry) -> bool {
-        let mut policy = self.2.lock().unwrap_or_else(|e| e.into_inner());
-        if policy.generation != omsi_cfg::content_generation() || policy.checked.elapsed() >= Duration::from_secs(5) {
-            *policy = ManifestPolicy::check(&self.0, &self.1, policy.fleet);
-        }
-        policy.allowed && transfer_policy::vehicle_folder(&entry.path)
-            .is_none_or(|folder| transfer_policy::transfers_enabled() && !policy.blocked.contains(&folder))
-    }
-}
-
-impl ManifestPolicy {
-    fn check(manifest: &Manifest, sources: &[PathBuf], fleet: bool) -> Self {
-        let generation = omsi_cfg::content_generation();
-        let mut blocked = std::collections::HashSet::new();
-        let mut allowed = manifest.entries.len() == sources.len();
-        if fleet {
-            allowed &= server_fleet::package_allowed(manifest, sources);
-        } else {
-            for (entry, source) in manifest.entries.iter().zip(sources) {
-                if transfer_policy::is_descriptor(&entry.path) && !transfer_policy::allows_file(source) {
-                    if let Some(folder) = transfer_policy::vehicle_folder(&entry.path) {
-                        blocked.insert(folder);
-                    }
-                }
-            }
-        }
-        Self { checked: Instant::now(), generation, blocked, fleet, allowed }
-    }
 }
 
 fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &ReadyManifest, stopped: &std::sync::atomic::AtomicBool, fleet_cache: &server_fleet::Cache, root: &Path) -> std::io::Result<()> {
@@ -1290,26 +1242,6 @@ mod tests {
         ] {
             assert!(refuse_path(bad).is_some(), "{bad} should be refused");
         }
-    }
-
-    #[test]
-    fn map_policy_refresh_blocks_the_whole_folder_of_a_newly_private_vehicle() {
-        let dir = std::env::temp_dir().join(format!("openomsi-map-policy-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let descriptor = dir.join("bus.bus");
-        std::fs::write(&descriptor, "[openomsi_multiplayer]\nallow_file_transfer 1\n").unwrap();
-        let entries = ["Vehicles/Mix/bus.bus", "Vehicles/Mix/paint.cti", "maps/M/global.cfg"]
-            .map(|path| Entry { path: path.into(), size: 0, sha256: String::new() });
-        let package = ServedManifest::new(
-            (Manifest { entries: entries.to_vec(), ..Default::default() }, vec![descriptor.clone(), dir.join("paint.cti"), dir.join("global.cfg")]),
-            false,
-        );
-        assert!(package.allows(&entries[1]));
-        std::fs::write(&descriptor, "[openomsi_multiplayer]\nallow_file_transfer 0\n").unwrap();
-        package.2.lock().unwrap().checked -= Duration::from_secs(5);
-        assert!(!package.allows(&entries[1]));
-        assert!(package.allows(&entries[2]));
-        std::fs::remove_dir_all(dir).unwrap();
     }
 
     /// A host serving `files` (relative path, contents) on a local port: its address.

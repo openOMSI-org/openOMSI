@@ -47,6 +47,12 @@ fn kept_model(bus: &str) -> Option<Arc<Model>> {
 type Cached = Arc<std::sync::OnceLock<Result<Package, String>>>;
 pub(super) type Cache = Mutex<HashMap<String, (Instant, Cached)>>;
 
+pub(super) fn cached_packages(cache: &Cache) -> Vec<Package> {
+    cache.lock().unwrap_or_else(|e| e.into_inner()).values()
+        .filter_map(|(_, cached)| cached.get()?.as_ref().ok().cloned())
+        .collect()
+}
+
 /// Bound memory while keeping every request cached, including negative answers.
 /// One builder per key runs outside the map lock, so case variants and simultaneous
 /// requests cannot repeatedly load and hash the same vehicle.
@@ -73,6 +79,7 @@ pub(super) fn cached(cache: &Cache, key: String, build: impl FnOnce() -> Result<
     if !package_allowed(&package.0, &package.1) {
         return Err("cached vehicle now forbids file transfers".into());
     }
+    package.refresh();
     Ok(package)
 }
 

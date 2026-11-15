@@ -47,7 +47,7 @@ fn a_private_marker_revokes_cached_vehicle_blobs_before_and_after_restart() {
     let (fp, _) = kept.commit(m).unwrap();
     assert!(kept.served(&descriptor.sha256).is_some());
     std::fs::write(folder.join(".openomsi-no-share"), "").unwrap();
-    kept.refresh_shareable();
+    kept.refresh_shareable(true);
     assert!(kept.blob(&descriptor.sha256).is_none());
     assert!(kept.served(&descriptor.sha256).is_none());
     kept.open_in(&store).unwrap();
@@ -65,8 +65,6 @@ fn private_vehicle_manifest_is_never_committed_or_reopened() {
     let bus = b"[openomsi_multiplayer]\nallow_file_transfer 0\n";
     let e = entry("Vehicles/Private/private.bus", bus);
     assert!(kept.put(&e, bus).is_err(), "private descriptor must not enter the current upload store");
-    // A legacy version may already have persisted this content. Simulate it
-    // directly in the encrypted store to verify it cannot be re-advertised.
     super::super::store::Store::open(&dir).unwrap().put(&e, bus).unwrap();
     let m = VehicleManifest {
         bus: e.path.clone(),

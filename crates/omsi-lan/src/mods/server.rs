@@ -78,14 +78,22 @@ fn serve_with_accept(
     }
     {
         let state = Arc::downgrade(&state);
+        let (ready, fleet_cache) = (ready.clone(), fleet_cache.clone());
         std::thread::Builder::new().name("lan-transfer-policy".into()).spawn(move || {
             while let Some(state) = state.upgrade() {
                 if state.stopped.load(Ordering::Acquire) {
                     break;
                 }
-                vehicles::refresh_shareable();
                 drop(state);
-                std::thread::sleep(Duration::from_secs(5));
+                vehicles::refresh_shareable();
+                let map = ready.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                if let Some(map) = map {
+                    map.refresh();
+                }
+                for package in server_fleet::cached_packages(&fleet_cache) {
+                    package.refresh();
+                }
+                std::thread::sleep(Duration::from_secs(1));
             }
         }).ok()?;
     }

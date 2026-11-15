@@ -465,8 +465,6 @@ impl Vehicle {
                     v.default_paint = r.str().to_string();
                 }
                 "openomsi_multiplayer" => {
-                    // Absence of the option preserves normal automatic transfers.
-                    // A present but malformed option fails closed.
                     for line in r.rest_of_block() {
                         let line = line.split("//").next().unwrap_or("").trim();
                         let (key, value) = line.split_once(char::is_whitespace).unwrap_or((line, ""));

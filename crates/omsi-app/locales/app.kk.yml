@@ -2212,6 +2212,8 @@
 "Upscaling": "Масштабты үлкейту"
 "AMD FSR 1 (experimental)": "AMD FSR 1 (тәжірибелік)"
 "Apple MetalFX (experimental)": "Apple MetalFX (тәжірибелік)"
+"mX Graphics (Experimental)": "mX Graphics (тәжірибелік)"
+"Draws the game with mX, openOMSI's own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before.": "Ойын wgpu орнына openOMSI-дің өз графикалық кітапханасы mX арқылы салынады (ойын келесі рет іске қосылғанда күшіне енеді). Сәулелерді трассалау мен кадр генерациясы өшірулі қалады; mX іске қосыла алмаса, ойын бұрынғыдай салынады."
 "Standard (Catmull-Rom)": "Стандартты (Catmull-Rom)"
 "Standard Catmull-Rom or experimental FSR 1; changes show at once": "Стандартты Catmull-Rom немесе тәжірибелік FSR 1; өзгерістер бірден көрінеді"
 "FSR quality": "FSR сапасы"

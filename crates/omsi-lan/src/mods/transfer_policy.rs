@@ -1,6 +1,6 @@
 //! One per-vehicle sharing policy across LAN, dedicated fleet and player uploads.
 //! This is a software opt-out, not DRM against modified clients.
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 pub(super) fn is_descriptor(name: &str) -> bool {
@@ -13,28 +13,54 @@ pub(super) fn is_descriptor(name: &str) -> bool {
 /// Files nested in a marked folder cannot leave as a public vehicle's dependencies.
 const PRIVATE_MARKER: &str = ".openomsi-no-share";
 
-pub(super) fn marked_private(path: &Path) -> bool {
-    let marked = |file: &Path| {
-        file.parent().is_some_and(|parent| {
-            parent
-                .ancestors()
-                .any(|dir| omsi_cfg::vfs::exists(&dir.join(PRIVATE_MARKER)))
-        })
-    };
-    // Check both textual and resolved locations: a symlink into a private asset
-    // directory must not bypass the marker merely by being listed under a public path.
-    marked(path)
-        || path.canonicalize().is_ok_and(|real| marked(&real))
-        || omsi_cfg::vfs::archive_of(path).is_some_and(|archive| {
-            marked(&archive) || archive.canonicalize().is_ok_and(|real| marked(&real))
-        })
+pub(super) const POLICY_REFRESH: std::time::Duration = std::time::Duration::from_secs(60);
+
+#[derive(Default)]
+pub(super) struct MarkerScan {
+    directories: HashMap<PathBuf, bool>,
 }
 
-/// Apply local directory policy to cached paths, including a file removed after caching.
+impl MarkerScan {
+    fn marked_directory(&mut self, dir: &Path) -> bool {
+        if let Some(&marked) = self.directories.get(dir) {
+            return marked;
+        }
+        let marked = omsi_cfg::vfs::exists(&dir.join(PRIVATE_MARKER))
+            || dir.parent().is_some_and(|parent| self.marked_directory(parent));
+        self.directories.insert(dir.to_path_buf(), marked);
+        marked
+    }
+
+    fn marked_parent(&mut self, file: &Path) -> bool {
+        file.parent().is_some_and(|dir| self.marked_directory(dir))
+    }
+
+    pub(super) fn marked_private(&mut self, path: &Path) -> bool {
+        // Resolve the whole file because the final component can itself be a symlink.
+        self.marked_parent(path)
+            || path.canonicalize().is_ok_and(|real| self.marked_parent(&real))
+            || omsi_cfg::vfs::archive_of(path).is_some_and(|archive| {
+                self.marked_parent(&archive)
+                    || archive.canonicalize().is_ok_and(|real| self.marked_parent(&real))
+            })
+    }
+
+    pub(super) fn marked_local_path(&mut self, path: &str, roots: &[PathBuf]) -> bool {
+        roots.iter().any(|root| {
+            let original = root.join(path);
+            let resolved = omsi_cfg::resolve_path(root, path);
+            self.marked_private(&original)
+                || (resolved != original && self.marked_private(&resolved))
+        })
+    }
+}
+
+pub(super) fn marked_private(path: &Path) -> bool {
+    MarkerScan::default().marked_private(path)
+}
+
 pub(super) fn marked_local_path(path: &str, roots: &[PathBuf]) -> bool {
-    roots.iter().any(|root| {
-        marked_private(&omsi_cfg::resolve_path(root, path)) || marked_private(&root.join(path))
-    })
+    MarkerScan::default().marked_local_path(path, roots)
 }
 
 pub(super) fn strict_mode() -> bool {
@@ -59,11 +85,11 @@ pub(super) fn allows_description_bytes(name: &str, bytes: &[u8]) -> bool {
             ))
 }
 
-/// Fail closed if a referenced vehicle description cannot be read.
 pub(super) fn transfers_enabled() -> bool {
     !omsi_cfg::flags::OMSI_NO_LAN_VEHICLE_TRANSFER.is_set()
 }
 
+/// Fail closed if a referenced vehicle description cannot be read.
 pub(super) fn allows_file(path: &Path) -> bool {
     if !transfers_enabled() || marked_private(path) {
         return false;

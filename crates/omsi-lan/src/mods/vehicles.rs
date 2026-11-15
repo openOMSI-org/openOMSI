@@ -29,6 +29,8 @@ struct Vehicles {
     shareable: HashMap<String, u64>,
     shareable_manifests: HashSet<String>,
     policy_generation: u64,
+    policy_checked: std::time::Instant,
+    policy_revision: Arc<()>,
     mounted: HashSet<String>,
     /// Files refused for what they are (`quarantine`), by their content and kind
     /// (`held_key`): why. A bus is kept and drawn without them (`withhold`).
