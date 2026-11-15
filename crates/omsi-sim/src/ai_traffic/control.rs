@@ -253,11 +253,24 @@ impl TrafficSim {
             let Some(car) = self.cars.iter_mut().find(|car| car.id == id) else {
                 continue;
             };
-            car.body.collision_impulse(
+            // OMSI 2: the player's vehicle knocks an AI vehicle off its route (unless its
+            // type is `[fixed]`); it stays where the blow left it, braked, hazards on,
+            // until the police are called or its tile goes (`Traffic` in omsi-app)
+            if !car.vehicle.ty.def.fixed && car.body.kind == crate::ai_motion::MotionKind::Road && !car.body.is_loose() {
+                car.body.set_loose(true);
+                self.accidents += 1;
+            }
+            let dv = car.body.collision_impulse(
                 impact.push.truncate(),
                 impact.speed,
                 impact.mass,
                 car.vehicle.physics.mass_kg,
+            );
+            car.body.collision_spin(
+                (impact.point - car.vehicle.position).truncate(),
+                impact.push.truncate(),
+                dv,
+                2.0 * car.half_width,
             );
             let inverse = car.vehicle.body_rotation().inverse();
             let point = inverse.transform_point3((impact.point - car.vehicle.position).as_vec3());

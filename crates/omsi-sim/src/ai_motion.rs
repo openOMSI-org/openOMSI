@@ -144,6 +144,16 @@ pub const AI_RAY_UP: f64 = 3.0;
 /// over on its spring rather than drops onto (the lane stays its height there).
 const AI_DROP: f64 = 0.3;
 
+/// A loose AI vehicle (knocked off its route): the friction of its locked wheels (m/s²,
+/// about 0.7 g), and how fast its turn dies away (deg/s²).
+const LOOSE_FRICTION: f64 = 7.0;
+const LOOSE_YAW_FRICTION: f64 = 120.0;
+/// The most a blow gives a loose vehicle (m/s, deg/s) and how far it may slide from its
+/// way (m): a bus at speed sends a car flying, but not out of the loaded world.
+const LOOSE_MAX_SPEED: f64 = 25.0;
+const LOOSE_MAX_YAW_RATE: f64 = 120.0;
+const LOOSE_MAX_OFFSET: f64 = 60.0;
+
 #[derive(Debug, Clone)]
 pub struct AiBody {
     pub kind: MotionKind,
@@ -197,6 +207,12 @@ pub struct AiBody {
     pub position: DVec3,
     impact_offset: DVec2,
     impact_velocity: DVec2,
+    /// Knocked off its route by the player's vehicle (OMSI 2's accident): the blow's offset
+    /// is no longer drawn back to the way, the body slides on, fully braked, and turns with
+    /// the blow (`impact_yaw`, deg, and its rate in deg/s) until the accident is cleared.
+    loose: bool,
+    impact_yaw: f64,
+    impact_yaw_rate: f64,
     pub pitch_deg: f32,
     pub bank_deg: f32,
     /// Per axle (left, right): how far the wheel hangs below its rest position against
@@ -321,6 +337,9 @@ impl AiBody {
             position: DVec3::ZERO,
             impact_offset: DVec2::ZERO,
             impact_velocity: DVec2::ZERO,
+            loose: false,
+            impact_yaw: 0.0,
+            impact_yaw_rate: 0.0,
             pitch_deg: 0.0,
             bank_deg: 0.0,
             suspension: vec![[0.0; 2]; axle_count],
@@ -347,6 +366,8 @@ impl AiBody {
         self.contact_z.clear();
         self.impact_offset = DVec2::ZERO;
         self.impact_velocity = DVec2::ZERO;
+        self.impact_yaw = 0.0;
+        self.impact_yaw_rate = 0.0;
         self.last_speed = speed;
         self.step(0.0, speed, way, ground, contact);
     }
@@ -383,7 +404,7 @@ impl AiBody {
         closing_speed: f32,
         striker: f32,
         mass: f32,
-    ) {
+    ) -> f32 {
         if self.kind != MotionKind::Road
             || !direction.is_finite()
             || !closing_speed.is_finite()
@@ -393,12 +414,50 @@ impl AiBody {
             || striker <= 0.0
             || mass <= 0.0
         {
-            return;
+            return 0.0;
         }
         let e = if closing_speed > 1.0 { crate::rigid::RESTITUTION } else { 0.0 };
         let recoil_speed = (1.0 + e) * striker / (striker + mass) * closing_speed;
         self.impact_velocity += direction.normalize_or_zero() * recoil_speed as f64;
-        self.impact_velocity = self.impact_velocity.clamp_length_max(12.0);
+        self.impact_velocity = self.impact_velocity.clamp_length_max(self.max_impact_speed());
+        recoil_speed
+    }
+
+    /// The turn a blow off the body's centre gives it: `lever` from the vehicle's origin
+    /// to where it was hit (world, m), the blow's `direction` and the change of speed it
+    /// made (`collision_impulse`). A plate of the body's length and width turns by
+    /// 12 (r × n) Δv / (L² + W²) rad/s. Only a loose body turns: on its route the driver
+    /// holds the heading.
+    pub fn collision_spin(&mut self, lever: DVec2, direction: DVec2, delta_v: f32, width: f32) {
+        if !self.loose || !lever.is_finite() || !direction.is_finite() || !delta_v.is_finite() {
+            return;
+        }
+        let n = direction.normalize_or_zero();
+        let length = (self.front_long - self.rear_long).abs().max(1.0) as f64 + 1.5;
+        let width = width.max(1.0) as f64;
+        // counter-clockwise positive (x east, y north); the heading turns clockwise
+        let omega = 12.0 * (lever.x * n.y - lever.y * n.x) * delta_v as f64 / (length * length + width * width);
+        self.impact_yaw_rate = (self.impact_yaw_rate - omega.to_degrees()).clamp(-LOOSE_MAX_YAW_RATE, LOOSE_MAX_YAW_RATE);
+    }
+
+    /// Knocked off its route (`true`) or put back on it (`false`): back on the route the
+    /// body stands where its driver left the way, straight, as the accident is cleared.
+    pub fn set_loose(&mut self, loose: bool) {
+        if self.loose && !loose {
+            self.impact_offset = DVec2::ZERO;
+            self.impact_velocity = DVec2::ZERO;
+            self.impact_yaw = 0.0;
+            self.impact_yaw_rate = 0.0;
+        }
+        self.loose = loose;
+    }
+
+    pub fn is_loose(&self) -> bool {
+        self.loose
+    }
+
+    fn max_impact_speed(&self) -> f64 {
+        if self.loose { LOOSE_MAX_SPEED } else { 12.0 }
     }
 
     fn settle_collision(&mut self, dt: f32) {
@@ -407,6 +466,26 @@ impl AiBody {
         }
         let steps = (dt / 0.015).ceil().clamp(1.0, 20.0) as usize;
         let step = (dt / steps as f32).min(0.25) as f64;
+        if self.loose {
+            // off its route: nothing draws it back, it slides on its locked wheels until
+            // the friction has taken its speed and its turn
+            for _ in 0..steps {
+                let v = self.impact_velocity.length();
+                let dv = (LOOSE_FRICTION * step).min(v);
+                if v > 0.0 {
+                    self.impact_velocity -= self.impact_velocity / v * dv;
+                }
+                self.impact_offset += self.impact_velocity * step;
+                let r = self.impact_yaw_rate;
+                let dr = (LOOSE_YAW_FRICTION * step).min(r.abs());
+                self.impact_yaw_rate = r - r.signum() * dr;
+                self.impact_yaw = (self.impact_yaw + self.impact_yaw_rate * step).rem_euclid(360.0);
+            }
+            self.impact_offset = self.impact_offset.clamp_length_max(LOOSE_MAX_OFFSET);
+            self.position.x += self.impact_offset.x;
+            self.position.y += self.impact_offset.y;
+            return;
+        }
         for _ in 0..steps {
             // A damped suspension-like response returns the displaced car to its planned
             // path without cancelling its initial backwards or sideways impulse.
@@ -752,6 +831,12 @@ impl AiBody {
         self.steer_cmd = steer_cmd;
         self.look_scale = look_scale;
         self.moved = 0.0;
+        // a loose car that slid into something stops at it (it is not pushed back out to
+        // slide into it again every step)
+        if self.loose {
+            self.impact_velocity = DVec2::ZERO;
+            self.impact_yaw_rate = 0.0;
+        }
     }
 
     /// Hand the pose to the vehicle: position and attitude, the accelerations its scripts
@@ -763,7 +848,7 @@ impl AiBody {
         // follow their path's own height.
         let (lift, delta) = if self.kind == MotionKind::Road { v.ai_rest_offset() } else { (0.0, 0.0) };
         v.position = self.position + DVec3::new(0.0, 0.0, lift as f64);
-        v.heading = self.heading;
+        v.heading = (self.heading + self.impact_yaw).rem_euclid(360.0);
         v.pitch = self.pitch_deg;
         v.bank = self.bank_deg;
         v.physics.accel = Vec3::new(self.a_lat, self.a_long, 0.0);
@@ -820,6 +905,43 @@ mod tests {
         assert!(heavy > light * 1.5, "light striker {light:.3} m/s, heavy striker {heavy:.3} m/s");
         // momentum: a 12 t bus at 3 m/s gives a 1 t car at most (1 + e) 12/13 of it
         assert!((heavy - 1.2 * 12.0 / 13.0 * 3.0).abs() < 1e-3, "{heavy}");
+    }
+
+    /// OMSI 2's accident: a car knocked off its route slides off with the blow, turns
+    /// with a blow off its centre, stops on its locked wheels and stays there - until it
+    /// is put back on its way.
+    #[test]
+    fn a_loose_car_slides_off_its_path_and_stays_there() {
+        let mut body = AiBody::new(&golf(), MotionKind::Road);
+        body.place(&|_| DVec3::ZERO, None, None, 0.0);
+        body.set_loose(true);
+        let dv = body.collision_impulse(DVec2::new(1.0, 0.0), 10.0, 12_000.0, 1_000.0);
+        assert!(dv > 9.0, "the car takes the bus's blow: {dv}");
+        body.collision_spin(DVec2::new(0.0, 2.0), DVec2::new(1.0, 0.0), dv, 1.8);
+        assert!(body.impact_yaw_rate > 0.0, "hit at the front from the left, it turns clockwise");
+        for _ in 0..300 {
+            body.step(0.02, 0.0, &|_| DVec3::ZERO, None, None);
+        }
+        assert!(body.impact_velocity.length() < 1e-9, "stopped by its locked wheels");
+        let x = body.position.x;
+        assert!(x > 5.0, "it slid off its path: {x:.2} m");
+        assert!(body.impact_yaw > 10.0 && body.impact_yaw < 350.0, "turned {:.1} deg", body.impact_yaw);
+        for _ in 0..100 {
+            body.step(0.02, 0.0, &|_| DVec3::ZERO, None, None);
+        }
+        assert_eq!(body.position.x, x, "nothing draws a loose car back");
+        body.set_loose(false);
+        body.step(0.02, 0.0, &|_| DVec3::ZERO, None, None);
+        assert!(body.position.x.abs() < 1e-6, "cleared, it stands on its way again");
+        assert_eq!(body.impact_yaw, 0.0);
+    }
+
+    #[test]
+    fn a_car_on_its_route_does_not_spin() {
+        let mut body = AiBody::new(&golf(), MotionKind::Road);
+        body.place(&|_| DVec3::ZERO, None, None, 0.0);
+        body.collision_spin(DVec2::new(0.0, 2.0), DVec2::new(1.0, 0.0), 5.0, 1.8);
+        assert_eq!(body.impact_yaw_rate, 0.0);
     }
 
     /// A tram on OMSI's near-rigid springs (Mainz's GT6M: `achse_feder` and `achse_daempfer`

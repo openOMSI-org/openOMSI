@@ -181,6 +181,8 @@ impl TrafficSim {
             lan_centers: Vec::new(),
             lan_eyes: Vec::new(),
             retired: Vec::new(),
+            accidents: 0,
+            fled: 0,
             honked: Vec::new(),
             stats: stats::TrafficStats::from_env(),
             scenery_through: Vec::new(),

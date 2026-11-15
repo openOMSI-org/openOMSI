@@ -56,6 +56,27 @@ impl App {
         }
     }
 
+    /// OMSI 2's "Call the police" (manual 2.11, "First Aid"): after a collision with
+    /// another vehicle the driver stops, switches the hazard lights on and calls the police,
+    /// who take up the accident - the vehicles knocked off their route go back onto it and
+    /// drive on. Not called, the player is charged with leaving the scene once those
+    /// vehicles' tile goes (`Traffic::take_fled`).
+    pub(crate) fn call_police(&mut self) {
+        let Some(p) = self.player.as_ref() else { return };
+        let Some(t) = self.session.traffic.as_mut() else { return };
+        if !t.accident_open() {
+            self.service_msg = Some(("No accident to report".into(), 4.0));
+            return;
+        }
+        if !police_may_be_called(&p.vehicle) {
+            self.service_msg = Some(("Stop and switch on the hazard lights first".into(), 6.0));
+            return;
+        }
+        let n = t.clear_accidents();
+        log::info!("the police took up the accident: {n} vehicles back on their way");
+        self.service_msg = Some(("The police have taken up the accident".into(), 6.0));
+    }
+
     /// Who runs a line of the game menu now: a plugin's `omsi.command`, or the player.
     pub(crate) fn menu_by(&self) -> &'static str {
         if self.integrations.plugin_command {
@@ -120,4 +141,14 @@ fn service_event(plugin_events: &mut Vec<omsi_plugin::GameEvent>, kind: &'static
     let mut args = vec![Text(kind.into()), Text(by.into())];
     args.extend(amount.map(|a| Num(a as f64)));
     crate::plugins::queue_event(plugin_events, "service", args);
+}
+
+/// The bus stands (below 1 km/h) with its hazard lights on: the switch where its script has
+/// one, else both indicator lamps.
+pub(crate) fn police_may_be_called(v: &omsi_sim::VehicleInstance) -> bool {
+    let hazards = match v.var("lights_sw_warnblinker") {
+        Some(s) => s > 0.5,
+        None => omsi_lan::game::indicator(v) == 3,
+    };
+    hazards && v.physics.velocity_kmh().abs() < 1.0
 }
