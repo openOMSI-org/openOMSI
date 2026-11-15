@@ -252,7 +252,7 @@ pub fn set_system_memory_mb(mb: u64) {
     SYSTEM_MB.store(mb, std::sync::atomic::Ordering::Relaxed);
 }
 
-pub(super) fn system_memory_mb() -> Option<u64> {
+fn system_memory_mb() -> Option<u64> {
     Some(SYSTEM_MB.load(std::sync::atomic::Ordering::Relaxed)).filter(|m| *m > 0)
 }
 
@@ -264,6 +264,14 @@ fn shared_cap_mb(ram: Option<u64>) -> Option<u64> {
 /// Conservative texture allowance in MB, distinct from physical VRAM.
 /// Low-memory discrete GPUs need room for render targets and driver allocations.
 pub(super) fn texture_allowance_mb(
+    info: &wgpu::AdapterInfo,
+    vram: Option<u64>,
+    mem: Option<&wgpu::AdapterMemoryInfo>,
+) -> u64 {
+    allowance_with_ram(info, vram, mem, system_memory_mb())
+}
+
+fn allowance_with_ram(
     info: &wgpu::AdapterInfo,
     vram: Option<u64>,
     mem: Option<&wgpu::AdapterMemoryInfo>,
@@ -657,8 +665,8 @@ impl Renderer {
 #[cfg(all(test, not(target_os = "android")))]
 mod tests {
     use super::{
-        Ceiling, GpuMemory, Picture, Seen, ceiling_for, chip_name, dxgi_names_card, one_card,
-        picture, shared_cap_mb, shared_chip_by_name, texture_allowance_mb,
+        Ceiling, GpuMemory, Picture, Seen, allowance_with_ram, ceiling_for, chip_name,
+        dxgi_names_card, one_card, picture, shared_cap_mb, shared_chip_by_name,
     };
     use wgpu::{Backend, DeviceType};
 
@@ -787,14 +795,14 @@ mod tests {
             subgroup_max_size: 0,
             transient_saves_memory: false,
         };
-        assert_eq!(texture_allowance_mb(&igpu, None, None, Some(16_849)), 1_000);
+        assert_eq!(allowance_with_ram(&igpu, None, None, Some(16_849)), 1_000);
         let mem = wgpu::AdapterMemoryInfo {
             budget_bytes: Some(7_400 << 20),
             ..Default::default()
         };
-        assert_eq!(texture_allowance_mb(&igpu, None, Some(&mem), None), 2_220);
+        assert_eq!(allowance_with_ram(&igpu, None, Some(&mem), None), 2_220);
         assert_eq!(
-            texture_allowance_mb(&igpu, None, Some(&mem), Some(16_849)),
+            allowance_with_ram(&igpu, None, Some(&mem), Some(16_849)),
             1_684
         );
     }
