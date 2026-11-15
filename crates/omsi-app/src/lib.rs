@@ -795,6 +795,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             sky,
         },
         menus: MenuState {
+            accident_open: false,
             list_dirty: false,
             graphics_before: None,
             page_titles: Default::default(),
