@@ -404,8 +404,26 @@ fn animation_only_variable_binds_and_animates_without_script_declaration() {
     let mut ty = (*seed.ty).clone();
     let cfg = "[mesh]\ntimetable.o3d\n[newanim]\norigin_rot_y\n90\nanim_trans\nsched\n0.1\n";
     ty.model = Model::parse(&omsi_cfg::CfgFile::from_str("test.cfg", cfg));
+    ty.meshes.push(VehicleMesh {
+        def_index: 0,
+        data: Default::default(),
+        file: "timetable.o3d".into(),
+        materials: vec![],
+        overrides: vec![],
+        pivot: glam::Mat4::IDENTITY,
+        viewpoint: 0,
+        skin: vec![],
+        keep_winding: false,
+    });
     let mut v = VehicleInstance::new(Arc::new(ty), VehicleHost::new(Default::default()));
     assert_eq!(v.var("sched"), None, "lazy before set");
+    assert_eq!(v.animators[0].anims[0].2.var, None, "animator var unbound before set");
+    v.update_visuals(0.0);
+    assert_eq!(v.mesh_transforms[0], glam::Mat4::IDENTITY);
+
     assert!(v.set_var("sched", 1.0));
     assert_eq!(v.var("sched"), Some(1.0));
+    assert_ne!(v.animators[0].anims[0].2.var, None, "animator bound to variable");
+    v.update_visuals(0.0);
+    assert_ne!(v.mesh_transforms[0], glam::Mat4::IDENTITY);
 }
