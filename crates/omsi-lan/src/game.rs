@@ -2007,12 +2007,7 @@ fn drive_remote(rv: &mut RemoteVehicle, pose: &Pose, dt: f32, exact: bool) {
         priority_warning: false,
         engine_off: false,
     };
-    // Pin model animation inputs at the pose's playback time. The raw variable
-    // updates must not overwrite interpolated doors and moving parts again.
-    pinned.extend(rv.synced.iter().map(|(id, v)| {
-        (*id as VarId, rv.animations.value(*id, rv.draw_time).unwrap_or(*v))
-    }));
-    pinned.extend(rv.vehicle.ty.program.var("CameraView").map(|id| (id, 3.0)));
+    remote_vars::pin_view_values(rv, &mut pinned);
     // Pose strings remain a fallback until the full value arrives. Pin them too, so
     // local AI scripts cannot replace a stand-in's display before visual updates.
     let display_names = display_vars(&rv.vehicle);
@@ -2831,6 +2826,7 @@ thread_local! {
 }
 
 mod remote_type;
+mod remote_vars;
 mod local_fleet;
 use remote_type::{remote_type, RemoteType};
 mod tag;

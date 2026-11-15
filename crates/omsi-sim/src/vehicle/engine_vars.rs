@@ -135,14 +135,24 @@ mod tests {
             "CameraView\nobserved_view\n",
             "",
         );
-        for (view, expected) in [("driver", 1.0), ("outside", 3.0), ("pax", 2.0), ("free", 0.0), ("foot", 0.0)] {
+        for (view, expected) in [
+            ("driver", 1.0),
+            ("outside", 3.0),
+            ("pax", 2.0),
+            ("free", 0.0),
+            ("foot", 0.0),
+        ] {
             v.set_camera_view(view);
             v.update(0.01);
             assert_eq!(v.var("observed_view"), Some(expected), "{view}");
         }
         v.set_camera_view("driver");
         v.update_ai(0.01, &AiFrame::default());
-        assert_eq!(v.var("observed_view"), Some(0.0), "handing the bus to AI clears its camera");
+        assert_eq!(
+            v.var("observed_view"),
+            Some(0.0),
+            "handing the bus to AI clears its camera"
+        );
     }
 
     #[test]

@@ -31,9 +31,9 @@ impl Offscreen<'_> {
         self.run_clock = clock;
         let daylight = omsi_sim::Daylight::compute(&self.run_clock, self.envir.as_ref());
         if let Some(p) = self.player.as_mut() {
-            let view= if self.server || self.args.cam.is_some() || self.args.follow.is_some() { 
+            let view = if self.server || self.args.cam.is_some() || self.args.follow.is_some() {
                 "free"
-            } else { 
+            } else {
                 self.args.view.as_str()
             };
             p.vehicle.set_camera_view(view);
