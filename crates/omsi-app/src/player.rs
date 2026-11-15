@@ -1228,18 +1228,15 @@ impl Player {
         if a.throttle.is_some_and(|t| t > 0.05) {
             self.axes.brake = 0.0;
         }
-        self.auto_clutch_bite(a.throttle.unwrap_or(0.0).max(self.axes.throttle));
-        self.tick_auto_shift(
-            dt,
-            a.throttle.unwrap_or(0.0).max(self.axes.throttle),
-            a.brake.unwrap_or(0.0).max(self.axes.brake),
-        );
         let throttle = a
             .throttle
             .unwrap_or(self.axes.throttle)
             .max(self.axes.throttle);
         let brake = a.brake.unwrap_or(self.axes.brake).max(self.axes.brake);
         let (throttle, brake) = self.cruise_pedals(dt, throttle, brake);
+        // (the cruise control's pedals: the automated manual shifts up under it)
+        self.auto_clutch_bite(throttle);
+        self.tick_auto_shift(dt, throttle, brake);
         let (throttle, brake) = rp_speed_limit::controls(
             f64::from(self.vehicle.physics.velocity_kmh()),
             omsi_lan::commands::speed_limit_kmh(),

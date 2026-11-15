@@ -1032,8 +1032,9 @@ impl PluginIo for Io<'_> {
         let Some(p) = self.player_mut() else {
             return false;
         };
+        let min = crate::player::cruise::MIN_KMH;
         match kmh {
-            Some(k) if k.is_finite() && k >= crate::player::cruise::MIN_KMH => {
+            Some(k) if k.is_finite() && k >= min && p.vehicle.physics.velocity_kmh() >= min => {
                 p.cruise = Some(crate::player::cruise::Cruise::new(k))
             }
             Some(_) => return false,

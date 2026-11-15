@@ -470,7 +470,7 @@ pub static FNS: &[ApiFn] = &[
         "vehicle",
         [o("kmh", "number")],
         "boolean",
-        "Switches the cruise control on to hold `kmh` (5 km/h or more), or off (`nil`). It works the throttle and the brake the bus's scripts read, which a plugin's `set_var(\"Throttle\")` cannot: the player's pedals are written over it every step. The brake switches it off; the throttle pressed further wins while held.",
+        "Switches the cruise control on to hold `kmh` (5 km/h or more), or off (`nil`). Like Num0, it is refused (false) while the bus goes slower than 5 km/h. It works the throttle and the brake the bus's scripts read, which a plugin's `set_var(\"Throttle\")` cannot: the player's pedals are written over it every step. The brake switches it off; the throttle pressed further wins while held.",
         CRUISE,
         VehicleWrite,
         false,

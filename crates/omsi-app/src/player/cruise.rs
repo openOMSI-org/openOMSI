@@ -148,6 +148,16 @@ mod tests {
     }
 
     #[test]
+    fn its_pedals_shift_an_automated_manual_up() {
+        use omsi_input::auto_shift::auto_shift_gear;
+        // the keys let go a little below the speed held: the driver's pedals alone keep second
+        let mut c = Cruise::new(50.0);
+        let (t, b) = c.with_driver(47.0, 0.016, 0.0, 0.0, false).unwrap();
+        assert_eq!(auto_shift_gear(2, 5, 2.8, 0.0, 0.0, 0.0, 47.0), 2);
+        assert_eq!(auto_shift_gear(2, 5, 2.8, 0.0, t, b, 47.0), 3);
+    }
+
+    #[test]
     fn nonsense_in_gives_no_pedals() {
         let mut c = Cruise::new(30.0);
         assert_eq!(c.pedals(f32::NAN, 0.016), (0.0, 0.0));

@@ -761,8 +761,7 @@ impl App {
                     self.quick_save();
                     return true;
                 }
-                // Num0: cruise control (as AUXI has it, #3976), where neither the game's keys
-                // nor this bus use Num0 alone (Ctrl+Num0 is OMSI's IBIS 0)
+                // Num0: cruise control (#3976), unless the game's keys or this bus use Num0 alone
                 KeyCode::Numpad0
                     if !alt
                         && !ctrl
