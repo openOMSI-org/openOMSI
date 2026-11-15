@@ -160,6 +160,7 @@ impl World {
             object_type_loads: Default::default(),
             spline_type_loads: Default::default(),
             textures: Arc::new(TextureCache::new()),
+            alpha_masks: Default::default(),
             data,
             vehicle_gpu: Mutex::new(HashMap::new()),
             vehicle_textures: Default::default(),

@@ -712,6 +712,7 @@ fn want_preview(s: &State) {
         map: c.map.clone(),
         bus: c.bus.clone(),
         paint: c.paint.clone(),
+        paint_index: None,
         weather: c.weather.clone(),
         time: c.time,
         date: c.date.clone(),

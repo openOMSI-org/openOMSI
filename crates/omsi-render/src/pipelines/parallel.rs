@@ -55,18 +55,21 @@ pub(crate) fn compile_all<'a, T: Send>(device: &wgpu::Device, jobs: Vec<Job<'a, 
         }
     };
     let caught: Vec<wgpu::Error> = std::thread::scope(|s| {
+        let context = crate::auxiliary_context();
         let workers: Vec<_> = (1..threads)
             .filter_map(|i| {
+                let context = context.clone();
+                let work = &work;
                 std::thread::Builder::new()
                     .name(format!("renderer pipelines {i}"))
                     .stack_size(STACK)
-                    .spawn_scoped(s, || {
+                    .spawn_scoped(s, move || crate::with_auxiliary_context(context, || {
                         let scopes = scoped.then(|| [wgpu::ErrorFilter::Internal, wgpu::ErrorFilter::OutOfMemory, wgpu::ErrorFilter::Validation].map(|f| device.push_error_scope(f)));
                         work();
                         scopes.map_or_else(Vec::new, |[internal, memory, validation]| {
                             pollster::block_on(async { [validation.pop().await, memory.pop().await, internal.pop().await] }).into_iter().flatten().collect()
                         })
-                    })
+                    }))
                     .ok()
             })
             .collect();

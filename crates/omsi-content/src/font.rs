@@ -252,10 +252,7 @@ impl FontAtlas {
         let glyph_h = self.font.height.max(1) as i32;
         let mut x = align.offset(w as i32, self.text_width(text), self.font.gap);
         for ch in text.chars() {
-            if ch.is_whitespace() {
-                x += self.font.space_width() + self.font.gap;
-                continue;
-            }
+            // Explicit space glyphs can carry pixels in inverted bitmap fonts.
             let Some(g) = self.font.glyph(ch) else {
                 x += self.font.space_width() + self.font.gap;
                 continue;
@@ -339,6 +336,33 @@ mod tests {
         assert_eq!(font.glyph(' '), None);
         // space_width should fall back to '0' width (8)
         assert_eq!(font.space_width(), 8);
+    }
+
+    #[test]
+    fn explicit_space_glyph_keeps_its_bitmap_coverage() {
+        let font = Font {
+            name: "inverted-test".into(),
+            height: 2,
+            chars: vec![
+                FontChar { ch: 'A', x0: 0, x1: 1, y: 0 },
+                FontChar { ch: ' ', x0: 1, x1: 3, y: 0 },
+            ],
+            ..Default::default()
+        };
+        let alpha = vec![255; 3 * 2 * 4];
+        let color = [20, 40, 60, 255].repeat(3 * 2);
+        let atlas = FontAtlas::new(font, 3, 2, color, alpha);
+        assert_eq!(atlas.font.text_width("A A"), 4);
+        assert_eq!(atlas.text_width("A A"), 4);
+        for full_color in [false, true] {
+            for (text, height) in [("A A", 2), ("A A@A A", 4)] {
+                let rendered = atlas.render_aligned(text, 4, height, full_color, [236, 250, 249], TextAlign { orientation: 1, grid: 1 });
+                let expected = if full_color { [20, 40, 60, 255] } else { [236, 250, 249, 255] };
+                for pixel in rendered.chunks_exact(4) {
+                    assert_eq!(pixel, expected, "explicit spaces must render their atlas pixels");
+                }
+            }
+        }
     }
 
     #[test]

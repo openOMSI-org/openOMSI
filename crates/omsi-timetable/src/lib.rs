@@ -3,6 +3,7 @@
 pub mod transit;
 
 use omsi_cfg::CfgFile;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// `Busstops.cfg` `[busstop]`: name, index within the group, object id, ?, ?, ?
@@ -466,6 +467,7 @@ impl TimetableData {
         let off_after = |name: &str, k: usize| {
             deactivated.iter().any(|(l, dir)| l.trim().eq_ignore_ascii_case(name.trim()) && chrono_dirs.iter().position(|c| c == dir).is_some_and(|ci| ci + 1 > k))
         };
+        let mut seen_lines: HashSet<String> = d.lines.iter().map(|x| x.name.to_ascii_lowercase()).collect();
         for (k, f) in folders.iter().enumerate().rev() {
             if f.as_os_str().is_empty() {
                 continue;
@@ -477,11 +479,15 @@ impl TimetableData {
                     continue;
                 }
                 let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-                if d.lines.iter().any(|x| x.name.eq_ignore_ascii_case(&stem)) || off_after(&stem, k) {
+                let stem_lower = stem.to_ascii_lowercase();
+                if seen_lines.contains(&stem_lower) || off_after(&stem, k) {
                     continue;
                 }
                 match Line::load(&p) {
-                    Ok(l) => d.lines.push(l),
+                    Ok(l) => {
+                        seen_lines.insert(stem_lower);
+                        d.lines.push(l);
+                    }
                     Err(e) => d.errors.push(e.to_string()),
                 }
             }
@@ -502,35 +508,69 @@ impl TimetableData {
     fn merge_dir(&mut self, dir: &Path, lines: bool) {
         let d = self;
         if let Ok(f) = CfgFile::read(dir.join("Busstops.cfg")) {
+            let mut seen_stops: HashSet<(i64, i32)> = d.bus_stops.iter().map(|x| (x.object_id, x.group)).collect();
             for b in parse_busstops(&f) {
-                if !d.bus_stops.iter().any(|x| x.object_id == b.object_id && x.group == b.group) {
+                if seen_stops.insert((b.object_id, b.group)) {
                     d.bus_stops.push(b);
                 }
             }
         }
         if let Ok(f) = CfgFile::read(dir.join("StnLinks.cfg")) {
+            let mut link_map: HashMap<(i64, i64), usize> =
+                d.stn_links.iter().enumerate().map(|(i, l)| ((l.from_id, l.to_id), i)).collect();
             for l in parse_stnlinks(&f) {
-                d.stn_links.retain(|x| !(x.from_id == l.from_id && x.to_id == l.to_id));
-                d.stn_links.push(l);
+                let key = (l.from_id, l.to_id);
+                if let Some(&idx) = link_map.get(&key) {
+                    d.stn_links[idx] = l;
+                } else {
+                    link_map.insert(key, d.stn_links.len());
+                    d.stn_links.push(l);
+                }
             }
         }
         let mut names: Vec<PathBuf> = omsi_cfg::vfs::read_dir_paths(dir);
         names.sort();
+        let mut trip_map: HashMap<String, usize> =
+            d.trips.iter().enumerate().map(|(i, t)| (t.name.to_ascii_lowercase(), i)).collect();
+        let mut track_map: HashMap<String, usize> = d
+            .tracks
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| t.path.file_stem().map(|s| (s.to_string_lossy().to_ascii_lowercase(), i)))
+            .collect();
+        let mut line_map: HashMap<String, usize> =
+            d.lines.iter().enumerate().map(|(i, l)| (l.name.to_ascii_lowercase(), i)).collect();
+
         for p in names {
             let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
             let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
             let res = match ext.as_str() {
                 "ttp" => Trip::load(&p).map(|t| {
-                    d.trips.retain(|x| !x.name.eq_ignore_ascii_case(&t.name));
-                    d.trips.push(t)
+                    let key = t.name.to_ascii_lowercase();
+                    if let Some(&idx) = trip_map.get(&key) {
+                        d.trips[idx] = t;
+                    } else {
+                        trip_map.insert(key, d.trips.len());
+                        d.trips.push(t);
+                    }
                 }),
                 "ttr" => Track::load(&p).map(|t| {
-                    d.tracks.retain(|x| x.path.file_stem().map(|s| !s.to_string_lossy().eq_ignore_ascii_case(&stem)).unwrap_or(true));
-                    d.tracks.push(t)
+                    let key = stem.to_ascii_lowercase();
+                    if let Some(&idx) = track_map.get(&key) {
+                        d.tracks[idx] = t;
+                    } else {
+                        track_map.insert(key, d.tracks.len());
+                        d.tracks.push(t);
+                    }
                 }),
                 "ttl" if lines => Line::load(&p).map(|t| {
-                    d.lines.retain(|x| !x.name.eq_ignore_ascii_case(&t.name));
-                    d.lines.push(t)
+                    let key = t.name.to_ascii_lowercase();
+                    if let Some(&idx) = line_map.get(&key) {
+                        d.lines[idx] = t;
+                    } else {
+                        line_map.insert(key, d.lines.len());
+                        d.lines.push(t);
+                    }
                 }),
                 _ => Ok(()),
             };
@@ -610,6 +650,20 @@ mod line_tests {
         let d = folder("mixed");
         assert!(line_of("5_Łódź-Вокзал").save(&d.join("5.ttl")).is_err());
         assert!(!d.join("5.ttl").exists());
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn merge_dir_deduplicates_stops_and_updates_links() {
+        let d = folder("merge_dir_test");
+        std::fs::write(d.join("Busstops.cfg"), "[busstop]\nStop A\n0\n101\n0\n0\n0\n\n[busstop]\nStop A dup\n0\n101\n0\n0\n0\n").unwrap();
+        std::fs::write(d.join("StnLinks.cfg"), "[StnLink]\n100.0\n101\n102\n0\n0\n0\n0\n0\n0\n\n[StnLink]\n150.0\n101\n102\n0\n0\n0\n0\n0\n0\n").unwrap();
+        let mut tt = TimetableData::default();
+        tt.merge_dir(&d, false);
+        assert_eq!(tt.bus_stops.len(), 1);
+        assert_eq!(tt.bus_stops[0].name, "Stop A");
+        assert_eq!(tt.stn_links.len(), 1);
+        assert_eq!(tt.stn_links[0].length, 150.0);
         std::fs::remove_dir_all(&d).ok();
     }
 }

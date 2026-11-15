@@ -161,7 +161,7 @@ mod weather_tomorrow;
 use omsi_weather::{weather_cycle, weather_model};
 mod world_load;
 
-// the interface's translations (locales/app.yml; the English text is the key)
+// the interface's translations (locales/app.yml and app.<language>.yml; the English text is the key)
 rust_i18n::i18n!("locales");
 // (the tables are read when this crate compiles: this makes cargo compile it again when they
 // change - the macro alone left the old texts in the program)
@@ -781,6 +781,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             menu_search: String::new(),
             swap_pending: false,
             swapped_in: None,
+            parked_transfer: None,
             pending_placement: None,
             menu_drag: None,
             menu_kbd: true,

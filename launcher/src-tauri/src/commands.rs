@@ -21,7 +21,7 @@ async fn work<F: FnOnce() -> Answer + Send + 'static>(f: F) -> Answer {
 }
 
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
-    tauri::generate_handler![call, call_bytes, pick_folder, pick_file, pick_mod, pick_hofs, open_path, open_url, update_relaunch, selftest_done, fit_zoom, nvidia_dlss_status, nvidia_dlss_install]
+    tauri::generate_handler![call, call_bytes, graphics_profile_import, graphics_profile_export, pick_folder, pick_file, pick_mod, pick_hofs, open_path, open_url, update_relaunch, selftest_done, fit_zoom, nvidia_dlss_status, nvidia_dlss_install]
 }
 
 /// Read-only DLSS runtime presence and NVIDIA RTX adapter status.
@@ -107,6 +107,20 @@ pub fn start_watch(app: AppHandle) {
 }
 
 // --- the system ------------------------------------------------------------------------
+
+/// The pickers stay on the window thread, as required by macOS.
+#[tauri::command]
+fn graphics_profile_import() -> Answer {
+    let Some(path) = core::pick_graphics_profile(false) else { return Ok(Value::Null) };
+    core::import_graphics_profile(&path).map(|name| json!(name)).map_err(err)
+}
+
+#[tauri::command]
+fn graphics_profile_export(name: String) -> Answer {
+    let Some(path) = core::pick_graphics_profile(true) else { return Ok(Value::Null) };
+    core::export_graphics_profile(&name, &path).map_err(err)?;
+    Ok(json!(true))
+}
 
 /// A folder picker (the window's thread: these commands are not async).
 #[tauri::command]

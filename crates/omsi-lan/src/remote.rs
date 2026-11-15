@@ -23,7 +23,16 @@ pub struct PoseTrack {
     pub min_delay: f64,
     /// Changes when the owner clock restarts, invalidating dependent animation samples.
     pub generation: u64,
+    /// A parked bus's scripts: the seconds they have run, and the seconds since they last did.
+    still: (f32, f32),
 }
+
+/// A server's parked bus stands with everything off and nobody in it: once its scripts have
+/// run this long (s) they run twice a second only (by the clock, not by frames: the same on
+/// a game that draws 30 frames a second and on one that draws 144) - nothing of it moves, and
+/// two dozen of them run every frame took the frame as long as drawing the world.
+const SETTLED: f32 = 5.0;
+const STILL_EVERY: f32 = 0.5;
 
 /// Seconds on our clock (for comparing with the others' `sent_ms`).
 pub fn lan_now() -> f64 {
@@ -36,6 +45,23 @@ pub fn lan_now() -> f64 {
 pub const INTERP_DELAY: f64 = 0.12;
 
 impl PoseTrack {
+    /// Are the scripts of bus `id` left alone this frame (see `SETTLED`)?
+    pub fn stands_still(&mut self, id: u32, dt: f32) -> bool {
+        if !omsi_net::is_parked(id) {
+            return false;
+        }
+        if self.still.0 < SETTLED {
+            self.still.0 += dt;
+            return false;
+        }
+        self.still.1 += dt;
+        if self.still.1 < STILL_EVERY {
+            return true;
+        }
+        self.still.1 = 0.0;
+        false
+    }
+
     /// Take in the states that came (with when they arrived).
     pub fn take(&mut self, history: &std::collections::VecDeque<(Instant, Pose)>) {
         let now_i = Instant::now();
@@ -222,6 +248,17 @@ impl PoseTrack {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_parked_bus_runs_its_scripts_until_they_have_settled_and_now_and_then_after() {
+        let mut t = PoseTrack::default();
+        assert!((0..100).all(|_| !t.stands_still(7, 0.25)), "a player's bus runs them every frame");
+        let bus = omsi_net::FIRST_PARKED_ID;
+        assert_eq!((0..20).filter(|_| !t.stands_still(bus, 0.25)).count(), 20, "five seconds, every frame");
+        // then twice a second, whatever the frame rate: ten seconds at 32 and at 128 frames a second
+        assert_eq!((0..320).filter(|_| !t.stands_still(bus, 1.0 / 32.0)).count(), 20);
+        assert_eq!((0..1280).filter(|_| !t.stands_still(bus, 1.0 / 128.0)).count(), 20);
+    }
 
     #[test]
     fn animations_share_the_pose_playback_timestamp_and_required_buffer() {

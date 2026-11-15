@@ -1052,3 +1052,20 @@ fn a_later_stop_counts_only_with_the_doors_open() {
     assert_eq!(duty.next_stop, 4);
     assert_eq!(duty.take_skipped(), Some((3, 2, 5)), "stops 2 to 4 passed, at stop 5");
 }
+
+#[test]
+fn catch_up_skips_pass_through_stations() {
+    let mut trip = planned(0.0, &[(0.0, 0.0, 0.0), (100.0, 60.0, 60.0), (500.0, 120.0, 120.0), (1000.0, 200.0, 200.0)]);
+    trip.stops[2].stops = false;
+    trip.set_dirs();
+
+    let mut duty = PlayerDuty::new("5".into(), "1".into(), vec![trip], 0, 0, true);
+    duty.placed = true;
+    duty.next_stop = 1;
+    duty.left_late = Some(0.0);
+
+    duty.catch_up(glam::DVec3::new(1000.0, 0.0, 0.0), glam::DVec2::new(1.0, 0.0));
+
+    assert_eq!(duty.next_stop, 3);
+    assert_eq!(duty.take_skipped(), Some((1, 2, 4)));
+}

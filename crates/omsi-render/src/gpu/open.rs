@@ -4,9 +4,14 @@ use crate::*;
 use super::upscaler_device;
 
 /// The chosen MSAA is being tried again after a remembered fallback (see `build_with_fallbacks`).
-static MSAA_RETRY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static MSAA_RETRY: super::auxiliary::AdapterBool = super::auxiliary::AdapterBool::new(5);
 
 impl Renderer {
+    /// The adapter used by this renderer. Auxiliary devices must reuse it, not select again.
+    pub fn adapter(&self) -> Option<wgpu::Adapter> {
+        self.adapter.clone()
+    }
+
     /// Create a renderer with the default options. `surface` is used to pick a compatible
     /// adapter and format.
     pub async fn new(
@@ -83,10 +88,7 @@ impl Renderer {
         let mem = adapter.memory_info();
         let vram = adapter_vram_mb(&adapter, &info, mem.as_ref());
         let guess_mb = gpu_memory::texture_allowance_mb(&info, vram, mem.as_ref());
-        ADAPTER_TEXTURE_MB.store(guess_mb, std::sync::atomic::Ordering::Relaxed);
         let discrete_vram = gpu_memory::own_card_vram_mb(&info, vram);
-        ADAPTER_VRAM_MB.store(discrete_vram, std::sync::atomic::Ordering::Relaxed);
-        *ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()) = Some(info.clone());
         log::info!("graphics adapter: {} ({:?}, {:?}{}), texture memory taken for it: {guess_mb} MB", info.name, info.device_type, info.backend, vram.map(|v| format!(", {v} MB of its own")).unwrap_or_default());
         if let Some(m) = mem {
             let mb = |b: Option<u64>| b.map_or_else(|| "-".to_string(), |b| format!("{} MB", b >> 20));
@@ -121,8 +123,8 @@ impl Renderer {
         AMD_VULKAN.store(info.backend == wgpu::Backend::Vulkan && info.vendor == 0x1002, std::sync::atomic::Ordering::Relaxed);
         MULTISAMPLED_SHADING.store(!cfg!(any(target_os = "android", target_vendor = "apple")) && info.backend != wgpu::Backend::Gl && adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::MULTISAMPLED_SHADING), std::sync::atomic::Ordering::Relaxed);
         let options = gpu_memory::lighter_picture(&info, vram, options);
-        // Temporal upscaling (DirectX 12 or Vulkan; DLSS an NVIDIA RTX card too) replaces the
-        // MSAA. DLSS on Vulkan starts Streamline now: the device is made with its extensions.
+        // Temporal upscaling (DirectX 12 or Vulkan, DLSS an NVIDIA RTX card too; MetalFX on
+        // Metal) replaces the MSAA. DLSS on Vulkan starts Streamline now: the device is made with its extensions.
         let temporal = upscaler_device::usable(options.temporal, &info);
         let (temporal, dlss_extensions) = upscaler_device::dlss_vulkan(temporal, &adapter, &info);
         let options = match temporal {
@@ -130,7 +132,7 @@ impl Renderer {
             None => RenderOptions { temporal: None, ..options },
         };
         let most = gpu_memory::ceiling(&info, vram);
-        *CEILING.lock().unwrap_or_else(|e| e.into_inner()) = Some(if intel_vulkan_safe { gpu_memory::Ceiling { msaa: 1, ssao: false, shadow_size: most.shadow_size.min(2048), ..most } } else { most });
+        update_ceiling(|c| *c = Some(if intel_vulkan_safe { gpu_memory::Ceiling { msaa: 1, ssao: false, shadow_size: most.shadow_size.min(2048), ..most } } else { most }));
         let shadow_size = options
             .shadow_size
             .clamp(512, if intel_vulkan_safe { 2048 } else { 8192 });
@@ -287,7 +289,12 @@ impl Renderer {
             None => adapter.request_device(&desc).await.context("request_device")?,
         };
         log::info!("graphics device opened; compiling renderer pipelines");
-        pipeline_cache::open(&device, &info);
+        if auxiliary_context().is_none() {
+            ADAPTER_TEXTURE_MB.store(guess_mb, std::sync::atomic::Ordering::Relaxed);
+            ADAPTER_VRAM_MB.store(discrete_vram, std::sync::atomic::Ordering::Relaxed);
+            *ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()) = Some(info.clone());
+            pipeline_cache::open(&device, &info);
+        }
         // the same choice wgpu-core makes when it validates a texture or a pipeline
         let adapter_table = device
             .features()
@@ -315,9 +322,11 @@ impl Renderer {
             .filter(|&n| n <= wanted)
             .find(|&n| supported(n))
             .unwrap_or(1);
-        if let Some(c) = CEILING.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            c.sample_counts = [1, 2, 4, 8].into_iter().filter(|&n| supported(n)).fold(0, |m, n| m | n);
-        }
+        update_ceiling(|ceiling| {
+            if let Some(c) = ceiling.as_mut() {
+                c.sample_counts = [1, 2, 4, 8].into_iter().filter(|&n| supported(n)).fold(0, |m, n| m | n);
+            }
+        });
         if msaa != wanted {
             log::warn!("{}x MSAA is not supported by {} (the device takes {:?} samples for {:?}, {:?} for the HDR target, {:?} for depth); using {}x", wanted, info.name, flags_of(format).supported_sample_counts(), format, flags_of(targets[1]).supported_sample_counts(), flags_of(DEPTH_FORMAT).supported_sample_counts(), msaa);
         }
@@ -338,8 +347,12 @@ impl Renderer {
             .contains(wgpu::Features::TEXTURE_COMPRESSION_BC);
         let compress =
             bc && options.compress_textures && !omsi_cfg::flags::OMSI_NO_TEXCOMPRESS.is_set();
-        omsi_texture::set_gpu_options(omsi_texture::GpuOptions { bc, compress });
-        log::info!("renderer: {} ({:?}), {:?}, {}x MSAA{}, anisotropy {}, shadow map {}, SSAO {}, render scale {}, textures {}", info.name, info.backend, format, options.msaa, if adapter_table { " (adapter format table)" } else { "" }, options.anisotropy, options.shadow_size, options.ssao, if options.render_scale > 0.0 { format!("{:.2}", options.render_scale.clamp(0.5, 1.0)) } else { "auto".to_string() }, match (bc, compress) { (false, _) => "RGBA (no BC on this device)", (true, false) => "DXT as blocks, others RGBA", (true, true) => "DXT as blocks, others compressed where close" });
+        let halve = halves_plain(adapter.features(), &options);
+        if auxiliary_context().is_none() {
+            omsi_texture::set_gpu_options(omsi_texture::GpuOptions { bc, compress });
+            omsi_texture::gpu::set_halve_plain(halve);
+        }
+        log::info!("renderer: {} ({:?}), {:?}, {}x MSAA{}, anisotropy {}, shadow map {}, SSAO {}, render scale {}, textures {}", info.name, info.backend, format, options.msaa, if adapter_table { " (adapter format table)" } else { "" }, options.anisotropy, options.shadow_size, options.ssao, if options.render_scale > 0.0 { format!("{:.2}", options.render_scale.clamp(0.5, 1.0)) } else { "auto".to_string() }, match (bc, compress) { (false, _) if halve => "RGBA at half size (no BC on this device)", (false, _) => "RGBA (no BC on this device)", (true, false) => "DXT as blocks, others RGBA", (true, true) => "DXT as blocks, others compressed where close" });
         // Every pipeline is built under an error scope of every kind and the renderer built
         // again with less where one fails: without multisampling (a driver whose table
         // promises more than it takes), then without the pipelines a picture can do without
@@ -352,6 +365,11 @@ impl Renderer {
         let name = format!("{} ({:?})", info.name, info.backend);
         Ok(Opened { adapter, info, device, queue, format, options, asked_options, mesh_pages, name })
     }
+}
+
+/// Only a chip with no BC at all (a phone's), not one whose BC a setting turned off.
+fn halves_plain(adapter: wgpu::Features, options: &RenderOptions) -> bool {
+    !adapter.contains(wgpu::Features::TEXTURE_COMPRESSION_BC) && options.compress_textures && !omsi_cfg::flags::OMSI_NO_TEXCOMPRESS.is_set()
 }
 
 /// A graphics device opened for a renderer whose pipelines are not built yet
@@ -441,7 +459,8 @@ impl Opened {
         // (the retry is over; a device lost later in the run takes the usual way)
         MSAA_RETRY.store(false, std::sync::atomic::Ordering::Relaxed);
         match &made {
-            Ok(_) => pipeline_cache::save(),
+            Ok(_) if auxiliary_context().is_none() => pipeline_cache::save(),
+            Ok(_) => {}
             Err(_) => pipeline_cache::close(&device),
         }
         made
@@ -565,6 +584,12 @@ impl Renderer {
         let scene = scene::SceneBase::new(&device, leave_out_enhanced, options.detailed_trees);
         let hdr_format = wgpu::TextureFormat::Rgba16Float;
         let shadows = shadows::build(&device, &scene, shadow_size, !leave_out_enhanced && !options.no_enhanced, options.light_shadows >= 2);
+        if shadows.size < shadow_size {
+            update_ceiling(|ceiling| {
+                if let Some(c) = ceiling.as_mut() { c.shadow_size = c.shadow_size.min(shadows.size); }
+            });
+        }
+        let options = RenderOptions { shadow_size: shadows.size, ..options };
         let defaults = defaults::build(&device, &queue, options.anisotropy);
         let (coronas, corona_texture) = coronas::Coronas::new(&device, &queue, &scene);
         let precip = crate::passes::PrecipMap::new(&device);
@@ -760,6 +785,7 @@ impl Renderer {
             temporal_failed: false,
             temporal_window: false,
             temporal_kept: None,
+            frame_generation: None,
             temporal_pending: None,
             prepass_msaa_pipelines: prepass.msaa_pipelines,
             prepass_eye_pipelines: prepass.eye_pipelines,

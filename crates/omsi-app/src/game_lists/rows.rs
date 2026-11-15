@@ -195,7 +195,7 @@ pub(crate) fn set_precip(app: &mut App, to: usize) {
 
 /// Whether `verb` is a slider (a click on its track sets the value there).
 pub(crate) fn is_slider(verb: &str) -> bool {
-    steps_of(verb).is_some()
+    steps_of(verb).is_some() || crate::game_controller_menu::slider_verb(verb)
 }
 
 /// The index of the value in `steps` nearest to `now`.

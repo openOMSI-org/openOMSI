@@ -11,6 +11,7 @@
 pub(crate) mod navigation;
 pub(crate) mod search;
 mod navigation_ui;
+mod vehicles;
 pub(crate) mod online_ui;
 mod quick_actions_ui;
 pub(crate) mod quick_actions;
@@ -268,6 +269,7 @@ fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
     match list.kind {
         MenuKind::Options | MenuKind::Sections => settings_rows(sh, v, list, body, &mut anchor),
         MenuKind::Lines | MenuKind::Tours => timetable_lists(sh, v, list, body),
+        MenuKind::Vehicles => vehicles::draw(sh, v, list, body),
         _ => plain_list(sh, v, list, body),
     }
     (sh.ui.input.pressed, sh.ui.input.released) = saved;
@@ -611,7 +613,7 @@ fn list_rows(sh: &mut Shell, v: &PauseView, list: &ListView, r: Rect, keep_marke
             }
             let marked = (keep_marked && k == list.sel) || kbd;
             if ui.row(&format!("pause-lr-{}-{k}", list.key), row, marked) {
-                acts.push(Action::Choose(k));
+                acts.push(if list.kind == MenuKind::Vehicles && crate::game_lists::bus_preview::selectable(id) { Action::BusSelect(k) } else { Action::Choose(k) });
             }
             let h = ui.hover(row);
             let ink = if marked || h { th().text } else { th().text_soft };

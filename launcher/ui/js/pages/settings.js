@@ -322,12 +322,13 @@ function PresetRow() {
   </div>`;
 }
 
-/** Save, load and delete the graphics settings as named profiles. */
+/** Save, load, share and delete the graphics settings as named profiles. */
 function ProfilesBlock() {
   const [names, setNames] = useState(null);
   const [sel, setSel] = useState('');
   const [name, setName] = useState('');
   const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
   const reload = async (pick) => {
     const all = await call('graphics_profiles').catch(() => ({}));
     const list = Object.keys(all || {});
@@ -372,24 +373,50 @@ function ProfilesBlock() {
       setMsg(e.message);
     }
   };
+  const transfer = async (importing) => {
+    if (busy) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      const result = await call(importing ? 'graphics_profile_import' : 'graphics_profile_export', importing ? {} : { name: sel });
+      if (result == null) return;
+      if (importing) {
+        setName(result);
+        await reload(result);
+        setMsg(t('Imported "{name}". Load it to apply these settings.', { name: result }));
+      } else {
+        setMsg(t('Exported "{name}".', { name: sel }));
+      }
+    } catch (e) {
+      setMsg(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
   return html`
     <div class="setting-row">
       <${Name} label="Saved profile" />
-      <${Select} raw value=${sel} disabled=${!list.length} options=${list.length ? list.map((n) => [n, n]) : [['', t('No saved profiles')]]} onChange=${(n) => {
+      <${Select} raw value=${sel} disabled=${busy || !list.length} options=${list.length ? list.map((n) => [n, n]) : [['', t('No saved profiles')]]} onChange=${(n) => {
         setSel(n);
         setName(n);
       }} />
     </div>
     <div class="setting-row full">
       <div class="grid-2">
-        <${Button} icon="download" label="Load" disabled=${!list.length} onClick=${load} />
-        <${Button} kind="danger" icon="trash" label="Delete" disabled=${!list.length} onClick=${remove} />
+        <${Button} icon="download" label="Load" disabled=${busy || !list.length} onClick=${load} />
+        <${Button} kind="danger" icon="trash" label="Delete" disabled=${busy || !list.length} onClick=${remove} />
       </div>
     </div>
+    ${!onPhone && html`<div class="setting-row full">
+      <div class="grid-2">
+        <${Button} icon="file" label="Import graphics profile" disabled=${busy} onClick=${() => transfer(true)} />
+        <${Button} icon="download" label="Export graphics profile" disabled=${busy || !list.length} onClick=${() => transfer(false)} />
+      </div>
+    </div>`}
     <div class="setting-row full">
       <div class="stack" style="gap:10px">
         <${Input} value=${name} placeholder="Profile name" onInput=${setName} maxlength="40" />
-        <${Button} kind="primary" icon="save" label="Save current graphics as profile" onClick=${save} />
+        <${Button} kind="primary" icon="save" label="Save current graphics as profile" disabled=${busy} onClick=${save} />
       </div>
     </div>
     ${msg && html`<p class="muted small" style="margin:8px 0">${msg}</p>`}

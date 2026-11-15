@@ -8,6 +8,7 @@ use crate::shell::Action;
 
 fn pause_kind(kind: Option<&ListKind>, original: crate::ui::MenuKind, remote_admin: bool) -> crate::ui::MenuKind {
     match kind {
+        kind if crate::game_lists::bus_preview::is_vehicle_list(kind) => crate::ui::MenuKind::Vehicles,
         Some(ListKind::AdminClassic) => crate::ui::MenuKind::Sections,
         Some(ListKind::Admin) if !remote_admin => crate::ui::MenuKind::Sections,
         _ => original,
@@ -54,6 +55,18 @@ impl App {
         let dpi = self.window.as_ref().map(|w| w.scale_factor() as f32).unwrap_or(1.0);
         let scale = dpi * ui::size_factor(h, dpi, self.settings.ui_scale, self.settings.ui_scale_window);
         self.fix_pause_focus();
+        if self.menus.chooser.is_some() && crate::game_lists::bus_preview::is_vehicle_list(self.menus.list_kind.as_ref())
+            && self.renderer.as_ref().is_some_and(|r| r.device.adapter_info().backend != wgpu::Backend::Gl) {
+            let kind = self.menus.list_kind.as_ref().unwrap();
+            let index = self.menus.chooser.unwrap();
+            let row = self.menus.admin_list.as_ref().and_then(|rows| rows.get(index));
+            if self.shell.bus_preview.selection_changed(kind, index, row) {
+                let (look, title, meta) = crate::game_lists::bus_preview::selection(self);
+                self.shell.bus_preview.select(look, title, meta);
+            }
+            self.shell.bus_preview.update(crate::launcher::showroom_options(&self.settings), self.renderer.as_ref().and_then(|r| r.adapter()));
+            if let Some(renderer) = self.renderer.as_ref() { self.shell.upload_bus_preview(renderer); }
+        } else if self.shell.bus_preview.active { self.shell.clear_bus_preview(); }
         let rail = self.game_menu_items();
         let tabs = match self.menus.list_kind.as_ref() {
             Some(k) if self.menus.chooser.is_some() => crate::game_lists::page_titles(self, k),
@@ -165,6 +178,12 @@ impl App {
             self.menus.menu_kbd = false;
             match a {
                 Action::ProcessPermission(id, decision) => { self.answer_process_permission(id, decision); }
+                Action::BusSelect(k) => {
+                    if self.menus.game_menu.is_some() && self.menus.chooser.is_some() && crate::game_lists::bus_preview::is_vehicle_list(self.menus.list_kind.as_ref())
+                        && self.menus.admin_list.as_ref().and_then(|rows| rows.get(k)).is_some_and(|row| crate::game_lists::bus_preview::selectable(&row.1)) {
+                        self.menus.chooser = Some(k);
+                    }
+                }
                 Action::Choose(k) => {
                     if self.menus.game_menu.is_none() {
                         continue;
@@ -232,6 +251,27 @@ mod pause_navigation_tests {
         assert_eq!(pause_kind(Some(&ListKind::Admin), MenuKind::List, true), MenuKind::List);
         assert_eq!(pause_kind(Some(&ListKind::AdminClassic), MenuKind::List, true), MenuKind::Sections);
     }
+    #[test]
+    fn in_game_bus_preview_uses_a_dedicated_vehicle_page() {
+        use super::{pause_kind, ListKind};
+        for kind in [ListKind::Liveries, ListKind::PlaceMaker, ListKind::PlaceType("maker".into()), ListKind::PlaceLivery("bus".into()), ListKind::PlaceHof("bus".into(), "paint".into())] {
+            assert_ne!(pause_kind(Some(&kind), crate::ui::MenuKind::List, false), crate::ui::MenuKind::List);
+        }
+        assert_eq!(pause_kind(Some(&ListKind::Hofs), crate::ui::MenuKind::List, false), crate::ui::MenuKind::List);
+    }
+
+    #[test]
+    fn in_game_bus_preview_is_released_when_closing_the_menu_or_list() {
+        use clap::Parser;
+        let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+        app.shell.bus_preview.active = true;
+        app.close_list();
+        assert!(!app.shell.bus_preview.active);
+        app.shell.bus_preview.active = true;
+        app.close_game_menu();
+        assert!(!app.shell.bus_preview.active);
+    }
+
 }
 
 #[cfg(test)]
@@ -327,5 +367,4 @@ mod online_action_tests {
         assert!(app.menus.game_panels.multiplayer.is_some());
         assert!(app.net.lan.is_none());
     }
-
 }

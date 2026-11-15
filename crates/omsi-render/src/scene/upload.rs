@@ -15,6 +15,7 @@ impl Renderer {
     /// per material slot.
     pub(crate) fn instance_entries(
         i: &Instance,
+        mesh: &GpuMesh,
         ro: DVec3,
         mats: &mut Vec<[[f32; 4]; 4]>,
         params: &mut Vec<[f32; 4]>,
@@ -22,9 +23,24 @@ impl Renderer {
         let m =
             (Mat4::from_translation((i.origin - ro).as_vec3()) * i.transform).to_cols_array_2d();
         let vis = if i.visible { 1.0 } else { 0.0 };
+        let normal_matrix = if mesh.depth_normals.is_empty() || !i.slot_levels.iter().any(|&l| l > 0) {
+            Mat4::IDENTITY
+        } else {
+            i.transform.inverse().transpose()
+        };
         for (k, a) in i.slot_alpha.iter().enumerate() {
             let mut m = m;
             m[0][3] = draw_order_level(i, k);
+            let n = if i.slot_levels.get(k).copied().unwrap_or(0) > 0 {
+                super::depth_plane::encode(
+                    normal_matrix,
+                    mesh.depth_normals.get(k).copied().unwrap_or(Vec3::ZERO),
+                )
+            } else {
+                super::depth_plane::NO_PLANE
+            };
+            m[1][3] = n[0];
+            m[2][3] = n[1];
             mats.push(m);
             let uv = i.slot_uv.get(k).copied().unwrap_or([0.0; 2]);
             params.push([*a, vis, uv[0], uv[1]]);
@@ -117,7 +133,7 @@ impl Renderer {
             let mut base = scene.uploaded_entries;
             for i in scene.instances[first..].iter_mut() {
                 i.base = base;
-                Self::instance_entries(i, ro, &mut mats, &mut params);
+                Self::instance_entries(i, &scene.meshes[i.mesh], ro, &mut mats, &mut params);
                 base = scene.uploaded_entries + mats.len() as u32;
             }
             let (buf, pbuf) = (
@@ -199,7 +215,7 @@ impl Renderer {
                         };
                         mats.clear();
                         params.clear();
-                        Self::instance_entries(i, ro, &mut mats, &mut params);
+                        Self::instance_entries(i, &scene.meshes[i.mesh], ro, &mut mats, &mut params);
                         let (b, n) = (i.base as usize, mats.len());
                         if b + n > scene.cpu_models.len() || (b + n) * 2 > scene.cpu_params.len() {
                             continue;
@@ -244,7 +260,7 @@ impl Renderer {
         let ro = scene.render_origin;
         for i in scene.instances.iter_mut() {
             i.base = mats.len() as u32;
-            Self::instance_entries(i, ro, &mut mats, &mut params);
+            Self::instance_entries(i, &scene.meshes[i.mesh], ro, &mut mats, &mut params);
         }
         if mats.is_empty() {
             mats.push(Mat4::IDENTITY.to_cols_array_2d());
@@ -487,11 +503,20 @@ pub(crate) fn draw_order_level(i: &Instance, slot: usize) -> f32 {
         return 0.0;
     }
     let max = crate::scene::overlay::MAX_LEVEL as u64;
-    match mode {
-        0 => level as f32,
+    let level = match mode {
+        0 => level,
         _ => {
             let h = 1 + (slot as u64 ^ i.draw_order).wrapping_mul(0x9e37_79b9_7f4a_7c15) % max;
-            (if mode == 1 { h } else { max + 1 - h }) as f32
+            (if mode == 1 { h } else { max + 1 - h }) as u8
         }
+    };
+    if mode != 0 {
+        return level as f32;
     }
+    let Some(cap) = i.slot_depth_caps.get(slot).copied().filter(|cap| cap.is_finite()) else {
+        return level as f32;
+    };
+    // Pack the cap into exactly representable float metadata.
+    let micrometres = (cap * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;
+    (4096 | (micrometres << 2) | level as u32) as f32
 }

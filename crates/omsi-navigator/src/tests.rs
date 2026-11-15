@@ -520,6 +520,30 @@ fn closed_stops_stay_on_the_list_marked() {
     d.set_closed_stops(&["rathaus".into()], "via Kirchweg");
     let (_, _, stops, _) = duty_parts(Some(&d));
     assert_eq!(stops.iter().map(|s| s.closed.as_deref()).collect::<Vec<_>>(), [None, Some("via Kirchweg"), None]);
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    d.next_stop = 2;
+    n.set_completed_stops(Some(&d));
+    assert_eq!(n.completed_stops.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["Markt", "Rathaus"]);
+    d.next_stop = 1;
+    n.set_completed_stops(Some(&d));
+    assert_eq!(n.completed_stops.len(), 1, "moving back restores upcoming stops");
+    n.set_completed_stops(None);
+    assert!(n.completed_stops.is_empty());
+}
+
+#[test]
+fn original_trip_route_survives_rerouting_and_resets_for_a_new_trip() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    n.set_route("trip1", vec![0, 1, 2], true, 1);
+    n.route.lanes = vec![4, 2];
+    n.route.on_route = false;
+    n.set_route("trip1", vec![0, 1, 2, 3], true, 2);
+    assert_eq!(n.route.lanes, vec![4, 2]);
+    assert_eq!(n.route.original_lanes, vec![0, 1, 2, 3]);
+    n.set_route("trip2", vec![5, 6], true, 2);
+    assert_eq!(n.route.original_lanes, vec![5, 6]);
+    n.clear_route();
+    assert!(n.route.original_lanes.is_empty());
 }
 
 #[test]

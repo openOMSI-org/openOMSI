@@ -2,8 +2,7 @@
 # Architecture guard: which workspace crate may depend on which, and how big the app crate
 # may get. The rules live in scripts/arch-rules.txt (see there); this script only checks them.
 #
-#   scripts/arch-guard.sh            check every crates/*/Cargo.toml and the size of omsi-app
-#   scripts/arch-guard.sh --update   lower the recorded size of omsi-app to today's (never raises it)
+#   scripts/arch-guard.sh            check every crates/*/Cargo.toml and what a change adds to omsi-app
 #   scripts/arch-guard.sh --graph    print the workspace dependency graph, one crate per line
 #
 # Normal and build dependencies count, target-specific ones included; dev-dependencies do not
@@ -11,20 +10,24 @@
 # the check when a crate matching <from> depends on one matching <to>; `allow <from> <to>`
 # records an existing edge that breaks a rule and is still to be removed. An allowance that is
 # no longer needed fails the check as well, so that the line is deleted and the edge cannot
-# come back. `app-lines <n>` caps the Rust lines of crates/omsi-app at n + 2 %: the app crate is
-# the glue between the others and should only shrink; new subsystems get crates of their own.
+# come back. `app-growth <n>`: a change may grow crates/omsi-app by at most n lines of Rust
+# (added minus removed), its tests aside, against $BASE (the pull request's base; locally the
+# merge base with main): the app crate is the glue between the others, new subsystems get
+# crates of their own. A cap on the crate's total stopped every small pull request once main
+# came near it.
 #
-# Needs nothing but python3 (3.8+) and the checkout.
+# Needs nothing but python3 (3.8+), git and the checkout.
 set -euo pipefail
 
 repo="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 exec python3 -I - "$repo" "$@" <<'PY'
-import fnmatch, os, re, sys
+import fnmatch, os, re, subprocess, sys
 
 repo = sys.argv[1]
 mode = sys.argv[2] if len(sys.argv) > 2 else "--check"
 rules_path = os.path.join(repo, "scripts", "arch-rules.txt")
-APP, GROWTH = "omsi-app", 1.02
+APP = "omsi-app"
+TEST_FILE = re.compile(r"(^|/)tests?(/|\.rs$)|_tests?\.rs$")
 
 
 def deps_of(manifest):
@@ -64,14 +67,33 @@ def graph():
     return g
 
 
-def app_lines():
-    total = 0
-    for root, _, files in os.walk(os.path.join(repo, "crates", APP)):
-        for f in files:
-            if f.endswith(".rs"):
-                with open(os.path.join(root, f), encoding="utf-8", errors="replace") as fh:
-                    total += sum(1 for _ in fh)
-    return total
+def git(*args):
+    r = subprocess.run(["git", "-C", repo, *args], capture_output=True, encoding="utf-8", errors="replace")
+    return r.stdout.strip("\n") if r.returncode == 0 else None
+
+
+def base_rev():
+    if os.environ.get("BASE"):
+        return os.environ["BASE"]
+    for main in ("upstream/main", "origin/main", "main"):
+        b = git("merge-base", "HEAD", main)
+        if b:
+            return b
+    return None
+
+
+def app_growth(base):
+    """Lines of Rust a change adds to omsi-app (added minus removed), test files aside."""
+    # (-z: a quoted or renamed path would not end in .rs; no renames: a test moved out counts)
+    out = git("diff", "--numstat", "-z", "--no-renames", base, "HEAD", "--", f"crates/{APP}")
+    if out is None:
+        sys.exit(f"arch guard: cannot compare with {base} (BASE): is that commit fetched?")
+    n = 0
+    for record in filter(None, out.split("\0")):
+        added, removed, path = record.split("\t", 2)
+        if path.endswith(".rs") and added != "-" and not TEST_FILE.search(path):
+            n += int(added) - int(removed)
+    return n
 
 
 def read_rules():
@@ -83,7 +105,7 @@ def read_rules():
             continue
         if line[0] in ("forbid", "allow") and len(line) == 3:
             (forbid if line[0] == "forbid" else allow).append((line[1], line[2]))
-        elif line[0] == "app-lines" and len(line) == 2:
+        elif line[0] == "app-growth" and len(line) == 2:
             cap = int(line[1])
         else:
             sys.exit(f"{rules_path}: cannot read line: {raw.rstrip()}")
@@ -96,17 +118,7 @@ if mode == "--graph":
         print(f"{c}: {' '.join(sorted(ds)) or '-'}")
     sys.exit(0)
 
-forbid, allow, cap, rule_lines = read_rules()
-now = app_lines()
-if mode == "--update":
-    if cap is not None and now < cap:
-        with open(rules_path, "w", encoding="utf-8") as out:
-            for raw in rule_lines:
-                out.write(re.sub(r"^app-lines\s+\d+", f"app-lines {now}", raw))
-        print(f"app-lines lowered from {cap} to {now}")
-    else:
-        print("nothing to lower")
-    sys.exit(0)
+forbid, allow, cap, _ = read_rules()
 if mode != "--check":
     sys.exit(f"unknown option {mode}")
 
@@ -128,15 +140,17 @@ for c, ds in g.items():
 for f, t in allow:
     if (f, t) not in used_allow:
         errors.append(f"scripts/arch-rules.txt: `allow {f} {t}` is no longer needed: delete the line so the edge cannot come back")
-if cap is not None and now > int(cap * GROWTH):
-    errors.append(f"crates/{APP}: {now} lines of Rust, over its cap of {int(cap * GROWTH)} (app-lines {cap} + 2 %). "
-                  "Put new subsystems into a crate of their own; omsi-app is the glue.")
+base = base_rev() if cap is not None else None
+grown = app_growth(base) if base else None
+if grown is not None and grown > cap:
+    errors.append(f"crates/{APP}: this change adds {grown} lines of Rust (tests aside), more than the {cap} a change may add "
+                  "(app-growth in scripts/arch-rules.txt). Put new subsystems into a crate of their own; omsi-app is the glue.")
 
 for e in errors:
     print(f"::error::{e}" if os.environ.get("GITHUB_ACTIONS") else e)
 if errors:
     print(f"\narch guard: {len(errors)} problem(s) (scripts/arch-guard.sh explains the rules)")
     sys.exit(1)
-lower = f"; app-lines could be lowered to {now} with --update" if cap is not None and now < cap else ""
-print(f"arch guard: ok ({len(g)} crates, {APP} {now} lines){lower}")
+growth = f"{APP} {grown:+} lines against {base[:9]}" if grown is not None else f"{APP}'s growth not checked (no base to compare with)"
+print(f"arch guard: ok ({len(g)} crates, {growth})")
 PY

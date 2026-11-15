@@ -1121,7 +1121,7 @@ html.phone, html.phone body { font-size: 15px; -webkit-tap-highlight-color: tran
 .tte-empty { padding: 20px; }
 .tte-side { min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; padding: 0; }
 .tte-left { padding: 14px 14px 12px; gap: 14px; overflow: auto; }
-.tte-block { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.tte-block { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: none; }
 .tte-block.grow { flex: 1 1 auto; }
 .tte-block .section-title { margin: 0; }
 .tte-lines { height: auto; max-height: 190px; flex: none; }

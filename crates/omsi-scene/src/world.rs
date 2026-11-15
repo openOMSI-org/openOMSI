@@ -29,6 +29,8 @@ pub struct World {
     pub(super) object_type_loads: super::open::OnceByKey<Option<Arc<ObjectType>>>,
     pub(super) spline_type_loads: super::open::OnceByKey<Option<Arc<SplineType>>>,
     pub textures: Arc<TextureCache>,
+    /// Alpha coverage belongs to this world, including its background prefetches.
+    pub(super) alpha_masks: Arc<vehicle_materials::AlphaMasks>,
     /// What the simulation reads of the map, as one snapshot replaced whole (no lock to
     /// read it): the loaded tiles' ground, the lists made from them (stops, waiting places,
     /// obstacles, parked cars' boxes, petrol stations, echoing places), where the objects
