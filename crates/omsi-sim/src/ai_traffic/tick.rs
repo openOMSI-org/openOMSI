@@ -501,6 +501,9 @@ impl TrafficSim {
     /// Car `i`'s plan for this tick and its drive: its frame for the body and the scripts,
     /// None when it ran out of road (it is taken off).
     fn plan_car(&mut self, i: usize, ts: &TickScene, reservations: &mut ClaimBook) -> Option<AiFrame> {
+        if self.cars[i].body.is_loose() {
+            return Some(self.stand_loose(i));
+        }
         let (lead, player, player_standing) = self.car_lead(i, ts);
         let (lead, parked_ahead, parked_box, kerb_swerve) = self.kerb_and_squeeze(i, lead, &ts.by_lane);
         let (standing, obstacle_len, at_stop, keep_back) = self.keep_back(i, lead, parked_ahead, player, player_standing);
