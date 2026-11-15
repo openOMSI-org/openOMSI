@@ -338,3 +338,14 @@ fn a_cut_tile_still_asks_for_its_painted_ground_textures() {
     assert!(names.iter().any(|n| n == "paint.png"), "{names:?}");
     assert!(names.iter().any(|n| n == "wall.png"), "{names:?}");
 }
+
+#[test]
+fn ground_dirs_searches_root_then_map_dir() {
+    let fixture = Fixture::new();
+    fixture.write("global.cfg", "[name]\nGround dirs\n");
+    let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    let dirs = world.ground_dirs();
+    assert_eq!(dirs.len(), 2);
+    assert_eq!(dirs[0], world.root);
+    assert_eq!(dirs[1], world.map_dir);
+}
