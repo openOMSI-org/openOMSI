@@ -554,7 +554,7 @@ impl crate::App {
         }
         // OMSI 2's "Call the police" (manual 2.11), while an AI vehicle the bus knocked off
         // its route still stands where it was left
-        if self.player.is_some() && self.session.traffic.as_ref().is_some_and(|t| t.accident_open()) {
+        if self.player.is_some() && self.menus.accident_open {
             v.insert(at, ("police", "Call the police".into(), None));
             at += 1;
         }

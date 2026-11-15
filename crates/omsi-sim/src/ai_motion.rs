@@ -419,7 +419,9 @@ impl AiBody {
         let e = if closing_speed > 1.0 { crate::rigid::RESTITUTION } else { 0.0 };
         let recoil_speed = (1.0 + e) * striker / (striker + mass) * closing_speed;
         self.impact_velocity += direction.normalize_or_zero() * recoil_speed as f64;
-        self.impact_velocity = self.impact_velocity.clamp_length_max(self.max_impact_speed());
+        self.impact_velocity = self
+            .impact_velocity
+            .clamp_length_max(self.max_impact_speed());
         recoil_speed
     }
 
@@ -436,8 +438,10 @@ impl AiBody {
         let length = (self.front_long - self.rear_long).abs().max(1.0) as f64 + 1.5;
         let width = width.max(1.0) as f64;
         // counter-clockwise positive (x east, y north); the heading turns clockwise
-        let omega = 12.0 * (lever.x * n.y - lever.y * n.x) * delta_v as f64 / (length * length + width * width);
-        self.impact_yaw_rate = (self.impact_yaw_rate - omega.to_degrees()).clamp(-LOOSE_MAX_YAW_RATE, LOOSE_MAX_YAW_RATE);
+        let omega = 12.0 * (lever.x * n.y - lever.y * n.x) * delta_v as f64
+            / (length * length + width * width);
+        self.impact_yaw_rate = (self.impact_yaw_rate - omega.to_degrees())
+            .clamp(-LOOSE_MAX_YAW_RATE, LOOSE_MAX_YAW_RATE);
     }
 
     /// Knocked off its route (`true`) or put back on it (`false`): back on the route the
@@ -918,21 +922,34 @@ mod tests {
         let dv = body.collision_impulse(DVec2::new(1.0, 0.0), 10.0, 12_000.0, 1_000.0);
         assert!(dv > 9.0, "the car takes the bus's blow: {dv}");
         body.collision_spin(DVec2::new(0.0, 2.0), DVec2::new(1.0, 0.0), dv, 1.8);
-        assert!(body.impact_yaw_rate > 0.0, "hit at the front from the left, it turns clockwise");
+        assert!(
+            body.impact_yaw_rate > 0.0,
+            "hit at the front from the left, it turns clockwise"
+        );
         for _ in 0..300 {
             body.step(0.02, 0.0, &|_| DVec3::ZERO, None, None);
         }
-        assert!(body.impact_velocity.length() < 1e-9, "stopped by its locked wheels");
+        assert!(
+            body.impact_velocity.length() < 1e-9,
+            "stopped by its locked wheels"
+        );
         let x = body.position.x;
         assert!(x > 5.0, "it slid off its path: {x:.2} m");
-        assert!(body.impact_yaw > 10.0 && body.impact_yaw < 350.0, "turned {:.1} deg", body.impact_yaw);
+        assert!(
+            body.impact_yaw > 10.0 && body.impact_yaw < 350.0,
+            "turned {:.1} deg",
+            body.impact_yaw
+        );
         for _ in 0..100 {
             body.step(0.02, 0.0, &|_| DVec3::ZERO, None, None);
         }
         assert_eq!(body.position.x, x, "nothing draws a loose car back");
         body.set_loose(false);
         body.step(0.02, 0.0, &|_| DVec3::ZERO, None, None);
-        assert!(body.position.x.abs() < 1e-6, "cleared, it stands on its way again");
+        assert!(
+            body.position.x.abs() < 1e-6,
+            "cleared, it stands on its way again"
+        );
         assert_eq!(body.impact_yaw, 0.0);
     }
 

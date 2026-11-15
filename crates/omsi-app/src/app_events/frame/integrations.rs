@@ -179,11 +179,22 @@ impl App {
             let (new, fled) = (t.take_accidents(), t.take_fled());
             if fled > 0 {
                 self.session.career.crashes[2] += fled as i32;
-                self.service_msg = Some(("You left the scene of the accident without calling the police".into(), 8.0));
+                self.service_msg = Some((
+                    "You left the scene of the accident without calling the police".into(),
+                    8.0,
+                ));
             } else if new > 0 {
-                self.service_msg = Some(("Accident! Stop, switch on the hazard lights and call the police".into(), 8.0));
+                self.service_msg = Some((
+                    "Accident! Stop, switch on the hazard lights and call the police".into(),
+                    8.0,
+                ));
             }
         }
+        self.menus.accident_open = self
+            .session
+            .traffic
+            .as_ref()
+            .is_some_and(|t| t.accident_open());
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

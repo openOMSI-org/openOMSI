@@ -318,7 +318,13 @@ fn a_stop_request_fires_the_trigger_on_the_timetable_bus_only() {
 fn a_car_the_player_hits_stands_with_its_hazards_on_until_the_police_come() {
     let f = Fixture::new();
     let lane = LaneBuilder::arc(DVec3::ZERO, 0.0, 1000.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut t = traffic(&f, Network { lanes: vec![lane], ..Default::default() });
+    let mut t = traffic(
+        &f,
+        Network {
+            lanes: vec![lane],
+            ..Default::default()
+        },
+    );
     let id = add_car(&mut t, &f, 0, 50.0, 42, Some(8.0));
     for _ in 0..25 {
         t.advance(0.02, None);
@@ -326,7 +332,14 @@ fn a_car_the_player_hits_stands_with_its_hazards_on_until_the_police_come() {
     assert!(!t.accident_open());
     let (x0, h0) = (car(&t, id).vehicle.position.x, car(&t, id).vehicle.heading);
     let point = car(&t, id).vehicle.position + DVec3::new(-1.0, 1.5, 0.5);
-    t.player_impacts(vec![crate::vehicle::DynamicImpact { obstacle_id: -2 - id as i64, point, push: DVec3::new(1.0, 0.0, 0.0), speed: 8.0, energy: 60_000.0, mass: 12_000.0 }]);
+    t.player_impacts(vec![crate::vehicle::DynamicImpact {
+        obstacle_id: -2 - id as i64,
+        point,
+        push: DVec3::new(1.0, 0.0, 0.0),
+        speed: 8.0,
+        energy: 60_000.0,
+        mass: 12_000.0,
+    }]);
     assert!(t.accident_open());
     assert_eq!(t.take_accidents(), 1);
     for _ in 0..250 {
@@ -337,12 +350,26 @@ fn a_car_the_player_hits_stands_with_its_hazards_on_until_the_police_come() {
     assert_eq!(c.state.speed, 0.0);
     assert_eq!(c.state.blinker, 3, "hazard lights");
     assert_eq!(c.vehicle.physics.controls.brake, 1.0);
-    assert!(c.vehicle.position.x - x0 > 2.0, "knocked off its lane: {:.2} m", c.vehicle.position.x - x0);
+    assert!(
+        c.vehicle.position.x - x0 > 2.0,
+        "knocked off its lane: {:.2} m",
+        c.vehicle.position.x - x0
+    );
     let turned = (c.vehicle.heading - h0).rem_euclid(360.0);
-    assert!(turned > 5.0 && turned < 355.0, "turned by the blow: {turned:.1} deg");
+    assert!(
+        turned > 5.0 && turned < 355.0,
+        "turned by the blow: {turned:.1} deg"
+    );
     let s = c.state.s;
     // a second blow on a car already loose is no new accident
-    t.player_impacts(vec![crate::vehicle::DynamicImpact { obstacle_id: -2 - id as i64, point, push: DVec3::new(1.0, 0.0, 0.0), speed: 2.0, energy: 5_000.0, mass: 12_000.0 }]);
+    t.player_impacts(vec![crate::vehicle::DynamicImpact {
+        obstacle_id: -2 - id as i64,
+        point,
+        push: DVec3::new(1.0, 0.0, 0.0),
+        speed: 2.0,
+        energy: 5_000.0,
+        mass: 12_000.0,
+    }]);
     assert_eq!(t.take_accidents(), 0);
     for _ in 0..50 {
         t.advance(0.02, None);
@@ -355,7 +382,11 @@ fn a_car_the_player_hits_stands_with_its_hazards_on_until_the_police_come() {
         t.advance(0.02, None);
     }
     let c = car(&t, id);
-    assert!((c.vehicle.position.x - x0).abs() < 0.5, "back on its lane: {:.2}", c.vehicle.position.x - x0);
+    assert!(
+        (c.vehicle.position.x - x0).abs() < 0.5,
+        "back on its lane: {:.2}",
+        c.vehicle.position.x - x0
+    );
     assert!(c.state.s > s + 1.0, "driving on");
     assert_eq!(t.take_fled(), 0);
 }

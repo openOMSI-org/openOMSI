@@ -333,8 +333,13 @@ pub(super) fn vehicle_pages(app: &App) -> Vec<Page> {
         service.push(button("Refuel", "Refuel", "Fills the tank of the current vehicle", "refuel"));
         service.push(button("Wash", "Wash", "Cleans the current vehicle", "wash"));
         service.push(button("Repair", "Repair", "Repairs the current vehicle", "repair"));
-        if app.session.traffic.as_ref().is_some_and(|t| t.accident_open()) {
-            service.push(button("Call the police", "Call the police", "The police take up the accident: stop and switch on the hazard lights first", "police"));
+        if app.menus.accident_open {
+            service.push(button(
+                "Call the police",
+                "Call the police",
+                "The police take up the accident: stop and switch on the hazard lights first",
+                "police",
+            ));
         }
         service.push(button("Put back on its wheels", "Reset", "Return the vehicle to an upright position", "reset"));
         if !server && app.menus.navigator.is_some() {
