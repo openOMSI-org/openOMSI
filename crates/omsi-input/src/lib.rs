@@ -24,6 +24,8 @@ pub mod tobii;
 
 #[cfg(windows)]
 mod dinput;
+#[cfg(windows)]
+mod xinput;
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 mod evdev_buttons;
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]

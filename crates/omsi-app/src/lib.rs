@@ -161,7 +161,7 @@ mod weather_tomorrow;
 use omsi_weather::{weather_cycle, weather_model};
 mod world_load;
 
-// the interface's translations (locales/app.yml; the English text is the key)
+// the interface's translations (locales/app.yml and app.<language>.yml; the English text is the key)
 rust_i18n::i18n!("locales");
 // (the tables are read when this crate compiles: this makes cargo compile it again when they
 // change - the macro alone left the old texts in the program)
@@ -631,7 +631,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     } else {
         crate::steam::Steam::start()
     };
-    let instance = graphics_instance();
+    let instance = game_graphics_instance(settings.mx_graphics);
     let vr_nav_profiles = crate::vr_navigator::Profiles::load(crate::vr_navigator::profiles_path().as_deref());
     let ui = ui::Ui::new();
     let rain = rain::Rain::new();
