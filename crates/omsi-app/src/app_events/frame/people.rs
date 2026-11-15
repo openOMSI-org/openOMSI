@@ -87,14 +87,20 @@ impl App {
 
 crate::app::stage_ctx!(
     /// The stage after the people's part of the game.
-    AfterHumansCx { reads: [clock], writes: [people, view, player, ui, integrations] }
+    AfterHumansCx { reads: [clock, gfx], writes: [people, view, player, ui, integrations] }
 );
 
 /// After the people: the walker aboard a bus where the bus is this frame, and the fuel pump
 /// or bus wash running.
 pub(super) fn after_humans(cx: AfterHumansCx, dt: f32) {
     if let Some(f) = cx.people.on_foot.as_mut() {
-        f.after_humans(cx.people.humans.as_ref(), cx.view.camera.as_mut());
+        let posed_eye = cx
+            .people
+            .humans
+            .as_ref()
+            .and_then(|h| h.sim.avatars.get(&crate::on_foot::AVATAR_KEY))
+            .and_then(|id| cx.gfx.gfx.sim_view.people.avatar_eye_world(*id));
+        f.after_humans(cx.people.humans.as_ref(), posed_eye, cx.view.camera.as_mut());
     }
     if !*cx.clock.paused {
         cx.player.tick_service(dt, cx.ui.service_msg, &mut cx.integrations.plugin_events);

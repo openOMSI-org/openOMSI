@@ -3,17 +3,32 @@
 use super::*;
 
 #[test]
-fn the_player_avatar_is_visible_from_both_walking_cameras() {
-    assert!(avatar_visible(FootCam::First));
-    assert!(avatar_visible(FootCam::Free));
+fn the_player_avatar_stays_hidden_during_the_driver_camera_glide() {
+    assert!(!avatar_visible(FootCam::First, true));
+    assert!(avatar_visible(FootCam::First, false));
+    assert!(avatar_visible(FootCam::Free, true));
 }
 
 #[test]
-fn the_walk_camera_keeps_up_horizontally_and_eases_only_vertical_steps() {
+fn the_walk_camera_eases_head_sway_and_vertical_steps() {
     let want = DVec3::new(2.0, 3.8 / 60.0, 1.7);
-    let at = follow_eye(Some(DVec3::ZERO), want, 1.0, 0.25);
-    assert_eq!(at.truncate(), want.truncate());
+    let at = follow_eye(Some(DVec3::ZERO), want, 0.3, 0.25);
+    assert!(at.x > 0.0 && at.x < want.x, "{at:?}");
+    assert!(at.y > 0.0 && at.y < want.y, "{at:?}");
     assert!(at.z > 0.0 && at.z < want.z, "{at:?}");
+}
+
+#[test]
+fn the_walk_camera_stays_close_to_the_head_while_moving() {
+    let dt = 1.0 / 60.0;
+    let speed = 12.0;
+    let mut target = DVec3::new(0.0, 0.0, 1.7);
+    let mut at = target;
+    for _ in 0..120 {
+        target.y += speed * dt;
+        at = follow_eye(Some(at), target, horizontal_follow_k(dt, speed), 1.0);
+    }
+    assert!(target.distance(at) < 0.08, "camera lag: {} m", target.distance(at));
 }
 
 #[test]
@@ -23,7 +38,6 @@ fn leaving_the_driver_seat_keeps_the_camera_glide() {
     assert!(at.x > 0.0 && at.x < want.x, "{at:?}");
     assert!(at.z > 0.0 && at.z < want.z, "{at:?}");
 }
-
 
 fn walker() -> OnFoot {
     OnFoot {

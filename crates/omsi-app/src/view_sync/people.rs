@@ -598,6 +598,19 @@ impl PeopleView {
     /// the renderer. Near people are posed every frame, far ones every few frames and people
     /// out of view rarely; the posing and skinning run in parallel. Reads nothing of the
     /// simulation but the frame.
+    pub(crate) fn avatar_eye_world(&self, id: u32) -> Option<DVec3> {
+        let st = self.people.get(&id)?;
+        let person = self.frame.people.iter().find(|p| p.id == id)?;
+        let ty = st.avatar.as_ref().unwrap_or(&person.ty);
+        let bones = st.skin_bones.as_ref()?;
+        let head = omsi_sim::human::slot_of(omsi_sim::human::BONE_HEAD)?;
+        let eye_h = ty.rig.head_top - 0.11 * ty.rig.scale;
+        let eye = posed_head_eye(Vec3::Z * eye_h, bones[head]);
+        let (origin, heading) = st.posed_at;
+        let local_to_world = Mat4::from_rotation_z((-heading).to_radians() as f32);
+        Some(origin + local_to_world.transform_point3(eye).as_dvec3())
+    }
+
     pub(crate) fn pose(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene, camera: DVec3) {
         for inst in self.hidden.drain(..) {
             renderer.set_params(scene, inst, &[], false, &[]);
@@ -874,6 +887,13 @@ mod seat_back_tests {
     use super::*;
 
     #[test]
+    fn first_person_eye_tracks_the_animated_head_bone() {
+        let rest = Vec3::new(0.0, 0.0, 1.6);
+        let head = glam::Affine3A::from_translation(Vec3::new(0.0, 0.15, 0.1));
+        assert_eq!(posed_head_eye(rest, head), Vec3::new(0.0, 0.15, 1.7));
+    }
+
+    #[test]
     fn only_a_back_deeper_than_the_seat_allows_is_moved_forward() {
         let hip = 0.9;
         let body = |rear: f32| vec![Vec3::new(0.0, rear, hip + 0.2), Vec3::new(0.0, 0.1, hip + 0.2), Vec3::new(0.0, -2.0, 0.1)];
@@ -883,6 +903,10 @@ mod seat_back_tests {
         assert_eq!(seat_back_shift(&body(-1.0), hip, 0.15), 0.12);
         assert_eq!(seat_back_shift(&[], hip, 0.15), 0.0);
     }
+}
+
+fn posed_head_eye(eye: Vec3, head: glam::Affine3A) -> Vec3 {
+    head.transform_point3(eye)
 }
 
 fn person_radius(ty: &HumanType) -> f32 {
