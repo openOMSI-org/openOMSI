@@ -1426,6 +1426,14 @@ mod tests {
     }
 
     #[test]
+    fn visibility_goes_down_to_50_m_like_omsi() {
+        let steps = super::steps_of("visibility").unwrap();
+        assert_eq!(steps.first(), Some(&50.0));
+        assert_eq!(steps.last(), Some(&50000.0));
+        assert!(steps.windows(2).all(|w| w[0] < w[1]) && steps.contains(&100.0));
+    }
+
+    #[test]
     fn lines_sort_as_numbers() {
         let mut v = vec!["13N", "5", "137", "N30", "92"];
         v.sort_by(|a, b| super::natural(a, b));
