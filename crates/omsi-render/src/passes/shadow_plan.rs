@@ -1,8 +1,8 @@
 //! The sun's shadow cascades of a frame: which are redrawn (and with which light
 //! matrices), and what each of them draws.
 
+use super::shadow::{LampSigs, lamp_item_hash};
 use super::*;
-use super::shadow::{lamp_item_hash, LampSigs};
 
 /// The shadow cascades of a frame (see `Renderer::plan_shadow_cache`).
 pub(crate) struct ShadowPlan {
@@ -31,7 +31,10 @@ pub(crate) fn cascade_matrix(sun: Vec3, cam_rel: Vec3, range: f32, texels: u32) 
     let up = if sun.z.abs() > 0.95 { Vec3::Y } else { Vec3::Z };
     let view0 = Mat4::look_at_rh(sun * 900.0, Vec3::ZERO, up);
     let ls = view0.transform_point3(cam_rel);
-    let snapped = glam::Vec2::new((ls.x / texel).round() * texel, (ls.y / texel).round() * texel);
+    let snapped = glam::Vec2::new(
+        (ls.x / texel).round() * texel,
+        (ls.y / texel).round() * texel,
+    );
     // (the snapped centre as a translation in light space, the eye 900 m from it towards the
     // sun: built as a new look-at instead, its dot products with a 900 m eye rounded the
     // offset off the texel grid)
@@ -61,22 +64,37 @@ impl Renderer {
     /// The light matrices of the cascades, the near and far ones kept from an earlier
     /// frame while they still fit (and the second XR eye taking the first one's).
     pub(crate) fn plan_shadow_cache(&self, scene: &Scene, f: &FrameCtx) -> ShadowPlan {
-        let (lighting, cam_rel, projection, second_eye) = (f.lighting, f.cam_rel, f.projection, f.second_eye);
+        let (lighting, cam_rel, projection, second_eye) =
+            (f.lighting, f.cam_rel, f.projection, f.second_eye);
         let enhanced_frame = f.enhanced_frame;
         // sun shadow map: an orthographic box around the camera, looking along the sun (by
         // night along the moon, see `Lighting::casts_moon_shadows`)
         let moon_shadows = enhanced_frame && lighting.casts_moon_shadows();
-        let sun = if moon_shadows { lighting.moon_dir.normalize_or_zero() } else { lighting.sun_dir.normalize_or_zero() };
+        let sun = if moon_shadows {
+            lighting.moon_dir.normalize_or_zero()
+        } else {
+            lighting.sun_dir.normalize_or_zero()
+        };
         let casts = lighting.casts_sun_shadows() || moon_shadows;
         // A mirror's picture (a texture, no overlays) has no shadow pass: it looks the window's
         // cascades up as they were last drawn, with their own matrices. They are the sun's
         // for this origin, or the mirror has no shadows (the first frames, a moved origin).
-        if !f.with_overlays && projection.is_none() && f.exclude_texture.is_some() && (self.options.mirror_shadows || self.options.mirror_enhanced) && casts {
+        if !f.with_overlays
+            && projection.is_none()
+            && f.exclude_texture.is_some()
+            && (self.options.mirror_shadows || self.options.mirror_enhanced)
+            && casts
+        {
             let (near, _, near_origin, near_sun) = self.shadows.shadow_near_cache.get();
             let (far, _, far_origin, far_sun) = self.shadows.shadow_far_cache.get();
             let (close, close_origin, close_sun) = self.shadows.shadow_close_cache.get();
             let same = |o: DVec3, s: Vec3| o == scene.render_origin && s.dot(sun) > 0.99999;
-            let kept = near != Mat4::IDENTITY && far != Mat4::IDENTITY && close != Mat4::IDENTITY && same(near_origin, near_sun) && same(far_origin, far_sun) && same(close_origin, close_sun);
+            let kept = near != Mat4::IDENTITY
+                && far != Mat4::IDENTITY
+                && close != Mat4::IDENTITY
+                && same(near_origin, near_sun)
+                && same(far_origin, far_sun)
+                && same(close_origin, close_sun);
             return ShadowPlan {
                 precip: None,
                 moon_shadows,
@@ -91,9 +109,12 @@ impl Renderer {
         }
         let shadows = (f.with_overlays || projection.is_some()) && casts;
         let shared_xr_shadows = if second_eye && shadows {
-            self.shadows.xr_shadow_cache
+            self.shadows
+                .xr_shadow_cache
                 .get()
-                .filter(|(origin, previous_sun, _, _, _)| *origin == scene.render_origin && *previous_sun == sun)
+                .filter(|(origin, previous_sun, _, _, _)| {
+                    *origin == scene.render_origin && *previous_sun == sun
+                })
         } else {
             None
         };
@@ -110,7 +131,8 @@ impl Renderer {
         let near_wanted = light_matrix(SHADOW_RANGE, self.options.shadow_size);
         let (near_m, frames, near_origin, near_sun) = self.shadows.shadow_near_cache.get();
         let phase = ShadowPhase(frames);
-        let near_jumped = (near_m.project_point3(cam_rel) - near_wanted.project_point3(cam_rel)).length() > 0.03;
+        let near_jumped =
+            (near_m.project_point3(cam_rel) - near_wanted.project_point3(cam_rel)).length() > 0.03;
         let redraw_near = draw_shadows
             && (phase.near_due()
                 || near_jumped
@@ -123,15 +145,30 @@ impl Renderer {
         } else if !shadows {
             near_wanted
         } else if redraw_near {
-            self.shadows.shadow_near_cache.set((near_wanted, frames.wrapping_add(1), scene.render_origin, sun));
+            self.shadows.shadow_near_cache.set((
+                near_wanted,
+                frames.wrapping_add(1),
+                scene.render_origin,
+                sun,
+            ));
             near_wanted
         } else {
-            self.shadows.shadow_near_cache.set((near_m, frames.wrapping_add(1), near_origin, near_sun));
+            self.shadows.shadow_near_cache.set((
+                near_m,
+                frames.wrapping_add(1),
+                near_origin,
+                near_sun,
+            ));
             near_m
         };
         let light_view_proj_close = shared_xr_shadows
             .map(|(_, _, _, _, close)| close)
-            .unwrap_or_else(|| light_matrix(SHADOW_RANGE_CLOSE, self.options.shadow_size.min(SHADOW_CLOSE_MAX)));
+            .unwrap_or_else(|| {
+                light_matrix(
+                    SHADOW_RANGE_CLOSE,
+                    self.options.shadow_size.min(SHADOW_CLOSE_MAX),
+                )
+            });
         // The far cascade (700 m, metre-sized texels) is drawn every 4th frame (one of the
         // frames that keep the near cascade, see `ShadowPhase`), or at once
         // when the camera has left the middle of the one drawn, the sun has moved or the
@@ -140,7 +177,8 @@ impl Renderer {
         // texels, and a tile streamed in waits three frames at most for its shadow.
         let far_wanted = light_matrix(SHADOW_RANGE_FAR, self.options.shadow_size);
         let (far_m, far_age, far_origin, far_sun) = self.shadows.shadow_far_cache.get();
-        let far_moved = (far_m.project_point3(cam_rel) - far_wanted.project_point3(cam_rel)).length() > 0.12;
+        let far_moved =
+            (far_m.project_point3(cam_rel) - far_wanted.project_point3(cam_rel)).length() > 0.12;
         let redraw_far = draw_shadows
             && (phase.far_due()
                 || far_age >= 3
@@ -150,7 +188,11 @@ impl Renderer {
                 || far_sun.dot(sun) < 0.99999
                 || f.env.shadow_far_every_frame);
         if redraw_far && f.env.debug_shadow_far {
-            log::info!("far shadow redrawn: age {far_age} moved {far_moved} origin {} sun {:.6}", far_origin != scene.render_origin, far_sun.dot(sun));
+            log::info!(
+                "far shadow redrawn: age {far_age} moved {far_moved} origin {} sun {:.6}",
+                far_origin != scene.render_origin,
+                far_sun.dot(sun)
+            );
         }
         // The desktop view and the first XR eye maintain this cache; mirrors and
         // the second XR eye leave it alone.
@@ -159,14 +201,20 @@ impl Renderer {
         } else if !shadows {
             far_wanted
         } else if redraw_far {
-            self.shadows.shadow_far_cache.set((far_wanted, 0, scene.render_origin, sun));
+            self.shadows
+                .shadow_far_cache
+                .set((far_wanted, 0, scene.render_origin, sun));
             far_wanted
         } else {
-            self.shadows.shadow_far_cache.set((far_m, far_age + 1, far_origin, far_sun));
+            self.shadows
+                .shadow_far_cache
+                .set((far_m, far_age + 1, far_origin, far_sun));
             far_m
         };
         if shadows && f.with_overlays && projection.is_none() {
-            self.shadows.shadow_close_cache.set((light_view_proj_close, scene.render_origin, sun));
+            self.shadows
+                .shadow_close_cache
+                .set((light_view_proj_close, scene.render_origin, sun));
         }
         if projection.is_some() && !second_eye && shadows {
             self.shadows.xr_shadow_cache.set(Some((
@@ -177,9 +225,24 @@ impl Renderer {
                 light_view_proj_close,
             )));
         }
-        let raining = scene.rainfall.rate > 0.001 && !f.env.no_rain && self.main_pass(f.enhanced, f.reflection_frame, f.eye_color).rain_fall_pipeline.is_some();
-        let snowing = lighting.snowfall > 0.01 && !f.env.no_snowfall && self.main_pass(f.enhanced, f.reflection_frame, f.eye_color).snow_pipeline.is_some();
-        let precip = ((raining || snowing) && f.with_overlays && projection.is_none() && f.exclude_texture.is_none() && !f.env.no_precip_roof).then(|| precip_matrix(cam_rel));
+        let raining = scene.rainfall.rate > 0.001
+            && !f.env.no_rain
+            && self
+                .main_pass(f.enhanced, f.reflection_frame, f.eye_color)
+                .rain_fall_pipeline
+                .is_some();
+        let snowing = lighting.snowfall > 0.01
+            && !f.env.no_snowfall
+            && self
+                .main_pass(f.enhanced, f.reflection_frame, f.eye_color)
+                .snow_pipeline
+                .is_some();
+        let precip = ((raining || snowing)
+            && f.with_overlays
+            && projection.is_none()
+            && f.exclude_texture.is_none()
+            && !f.env.no_precip_roof)
+            .then(|| precip_matrix(cam_rel));
         ShadowPlan {
             precip,
             moon_shadows,
@@ -195,10 +258,25 @@ impl Renderer {
 
     /// The shadow casters of each cascade (near, far, close) and of the street lamps'
     /// maps, as batches over the frame's draw list.
-    pub(crate) fn plan_shadow_casters(&self, scene: &Scene, f: &FrameCtx, sh: &ShadowPlan, list: &mut Vec<u32>) -> [Vec<Batch>; SHADOW_LISTS] {
+    pub(crate) fn plan_shadow_casters(
+        &self,
+        scene: &Scene,
+        f: &FrameCtx,
+        sh: &ShadowPlan,
+        list: &mut Vec<u32>,
+    ) -> [Vec<Batch>; SHADOW_LISTS] {
         let (camera, cam_rel, rt_frame) = (f.camera, f.cam_rel, f.rt_frame);
-        let (moon_shadows, draw_shadows, redraw_near, redraw_far) = (sh.moon_shadows, sh.draw_shadows, sh.redraw_near, sh.redraw_far);
-        let (light_view_proj, light_view_proj_far, light_view_proj_close) = (sh.light_view_proj, sh.light_view_proj_far, sh.light_view_proj_close);
+        let (moon_shadows, draw_shadows, redraw_near, redraw_far) = (
+            sh.moon_shadows,
+            sh.draw_shadows,
+            sh.redraw_near,
+            sh.redraw_far,
+        );
+        let (light_view_proj, light_view_proj_far, light_view_proj_close) = (
+            sh.light_view_proj,
+            sh.light_view_proj_far,
+            sh.light_view_proj_close,
+        );
         let lamp_shadows = &f.lamp_shadows;
         let debug_draws = f.env.debug_draws;
         // near, far, close
@@ -209,7 +287,10 @@ impl Renderer {
         // (a sphere round every lamp's reach, tried first: most of the instances in a lit block
         // are out of all the forty-four maps' reach at once)
         let lamp_union = LampShadow::union_sphere(lamp_shadows);
-        let lamp_reach = |c: Vec3, r: f32| lamp_union.is_none_or(|(uc, ur)| (c - uc).length() < ur + r) && lamp_shadows.iter().any(|l| lamp_reaches(l, c, r));
+        let lamp_reach = |c: Vec3, r: f32| {
+            lamp_union.is_none_or(|(uc, ur)| (c - uc).length() < ur + r)
+                && lamp_shadows.iter().any(|l| lamp_reaches(l, c, r))
+        };
         // (what stands still in the player's vehicle, for its saloon lamps' tiles)
         if let Some(cabin) = lamp_shadows.iter().find_map(|l| l.cabin.as_ref()) {
             self.shadows.cabin_motion.borrow_mut().update(scene, cabin);
@@ -220,12 +301,24 @@ impl Renderer {
         let lod_fov = camera.fov_deg.to_radians().max(1e-3);
         let lod_size = |inst: &Instance| -> f32 {
             let scale = Self::instance_scale(scene, inst);
-            let radius = if inst.object_radius > 0.0 { inst.object_radius } else { scene.meshes[inst.mesh].bounds_radius } * scale;
+            let radius = if inst.object_radius > 0.0 {
+                inst.object_radius
+            } else {
+                scene.meshes[inst.mesh].bounds_radius
+            } * scale;
             let distance = ((inst.origin - scene.render_origin).as_vec3() - cam_rel).length();
             object_screen_size(radius, distance, lod_fov)
         };
-        let active = [draw_shadows && redraw_near, draw_shadows && redraw_far, draw_shadows];
-        let boxes = [(SHADOW_RANGE, light_view_proj, 0.4f32), (SHADOW_RANGE_FAR, light_view_proj_far, 6.0), (SHADOW_RANGE_CLOSE, light_view_proj_close, 0.1)];
+        let active = [
+            draw_shadows && redraw_near,
+            draw_shadows && redraw_far,
+            draw_shadows,
+        ];
+        let boxes = [
+            (SHADOW_RANGE, light_view_proj, 0.4f32),
+            (SHADOW_RANGE_FAR, light_view_proj_far, 6.0),
+            (SHADOW_RANGE_CLOSE, light_view_proj_close, 0.1),
+        ];
         // (the precipitation's roof map: what stands over the ground round the camera)
         let precip_box = sh.precip;
         let dbg_shadow = f.env.debug_shadow;
@@ -241,7 +334,10 @@ impl Renderer {
         // (what each street lamp's tile draws, summed up: the tile is kept while it stays the
         // same, see `LampTiles`; bending foliage changes every frame)
         let windy = f.lighting.windy_trees;
-        let casters = |span: std::ops::Range<usize>, out: &mut [Vec<DrawItem>; SHADOW_LISTS], ranges: &mut Vec<(u8, u32, u32, usize, u32)>, sig: &mut LampSigs| {
+        let casters = |span: std::ops::Range<usize>,
+                       out: &mut [Vec<DrawItem>; SHADOW_LISTS],
+                       ranges: &mut Vec<(u8, u32, u32, usize, u32)>,
+                       sig: &mut LampSigs| {
             let first = span.start;
             for (at, inst) in scene.instances[span].iter().enumerate() {
                 // (the roof map takes the ground and the roads as well, which cast no shadow:
@@ -268,7 +364,10 @@ impl Renderer {
                     let size = lod_size(inst);
                     if size < inst.lod.0 || (inst.lod.1 < f32::MAX && size >= inst.lod.1) {
                         if dbg_shadow && r >= dbg_r {
-                            log::info!("shadow: mesh r={r:.1} at {:?} is another LOD than the one shown", inst.origin);
+                            log::info!(
+                                "shadow: mesh r={r:.1} at {:?} is another LOD than the one shown",
+                                inst.origin
+                            );
                         }
                         continue;
                     }
@@ -277,7 +376,10 @@ impl Renderer {
                 // most frames only the close cascade (30 m round the camera) is drawn, and
                 // most of a city's instances lie outside it - looking up the materials of
                 // every one of them first was most of this planning's time.
-                let lamp_hit = caster && !lamp_shadows.is_empty() && !(m.bounds_radius > 0.0 && m.bounds_radius < 0.1) && lamp_reach(c, r);
+                let lamp_hit = caster
+                    && !lamp_shadows.is_empty()
+                    && !(m.bounds_radius > 0.0 && m.bounds_radius < 0.1)
+                    && lamp_reach(c, r);
                 let mut hits = [false; 3];
                 for (cascade, &(range, lvp, min_radius)) in boxes.iter().enumerate() {
                     if !active[cascade] {
@@ -285,7 +387,11 @@ impl Renderer {
                     }
                     if m.bounds_radius > 0.0 && m.bounds_radius < min_radius {
                         if dbg_shadow && cascade == 0 && m.bounds_radius >= dbg_r {
-                            log::info!("shadow: mesh r={:.1} skipped (ranges {})", m.bounds_radius, m.ranges.len());
+                            log::info!(
+                                "shadow: mesh r={:.1} skipped (ranges {})",
+                                m.bounds_radius,
+                                m.ranges.len()
+                            );
                         }
                         continue;
                     }
@@ -293,7 +399,11 @@ impl Renderer {
                     let rr = r / range;
                     if lc.x.abs() > 1.0 + rr || lc.y.abs() > 1.0 + rr {
                         if dbg_shadow && cascade == 0 && r >= dbg_r {
-                            log::info!("shadow: mesh r={r:.1} outside the light box at ({:.2}, {:.2})", lc.x, lc.y);
+                            log::info!(
+                                "shadow: mesh r={r:.1} outside the light box at ({:.2}, {:.2})",
+                                lc.x,
+                                lc.y
+                            );
                         }
                         continue;
                     }
@@ -303,7 +413,9 @@ impl Renderer {
                 let roof_hit = precip_box.is_some_and(|pm| {
                     let lc = pm.project_point3(c);
                     let rr = r / PRECIP_RANGE;
-                    !(m.bounds_radius > 0.0 && m.bounds_radius < 0.25) && lc.x.abs() <= 1.0 + rr && lc.y.abs() <= 1.0 + rr
+                    !(m.bounds_radius > 0.0 && m.bounds_radius < 0.25)
+                        && lc.x.abs() <= 1.0 + rr
+                        && lc.y.abs() <= 1.0 + rr
                 });
                 if !lamp_hit && !roof_hit && hits == [false; 3] {
                     continue;
@@ -311,12 +423,18 @@ impl Renderer {
                 ranges.clear();
                 for (ri, (_, _, slot)) in m.ranges.iter().enumerate() {
                     let mat_id = inst.materials.get(*slot as usize).copied().unwrap_or(0);
-                    let mat = &scene.materials[mat_id];
+                    let Some(mat) = scene.materials.get(mat_id) else {
+                        crate::passes::batch::warn_invalid_material(inst.mesh, *slot, mat_id);
+                        continue;
+                    };
                     let mut kind = kind_of(mat.alpha);
                     let cut_body = kind == PIPE_BLEND && mat.transmap.is_some() && !mat.no_z_write;
                     if (kind == PIPE_BLEND && !cut_body) || mat.no_z_check {
                         if dbg_shadow && r >= dbg_r {
-                            log::info!("shadow: mesh r={r:.1} at {:?} slot {slot} is blended, never a caster", inst.origin);
+                            log::info!(
+                                "shadow: mesh r={r:.1} at {:?} slot {slot} is blended, never a caster",
+                                inst.origin
+                            );
                         }
                         continue;
                     }
@@ -336,25 +454,62 @@ impl Renderer {
                     // drawn into every map cost each lamp the others' casters as well)
                     for light in lamp_shadows.iter() {
                         let k = light.slot;
-                        if (light.owner.is_some() && light.owner == inst.shadow_owner) || !lamp_reaches(light, c, r) {
+                        if (light.owner.is_some() && light.owner == inst.shadow_owner)
+                            || !lamp_reaches(light, c, r)
+                        {
                             continue;
                         }
                         // (the parts of the vehicle whose headlamps these are cast nothing: the
                         // lamps stand in them)
-                        if light.hosts && inst.roof.is_some() && (c - light.position).length() < r + 0.4 {
+                        if light.hosts
+                            && inst.roof.is_some()
+                            && (c - light.position).length() < r + 0.4
+                        {
                             continue;
                         }
                         // (a saloon lamp's tile holds what stands still in the vehicle, see `CabinMotion`)
-                        if light.cabin.is_some() && !still.get(first + at).copied().unwrap_or(false) {
+                        if light.cabin.is_some() && !still.get(first + at).copied().unwrap_or(false)
+                        {
                             continue;
                         }
                         for &(kind, ri, slot, mat_id, look) in ranges.iter() {
-                            let kind = if kind == PIPE_KINDS { PIPE_OPAQUE } else { kind };
+                            let kind = if kind == PIPE_KINDS {
+                                PIPE_OPAQUE
+                            } else {
+                                kind
+                            };
                             let (material, look) = depth_only_material(kind, mat_id, look);
-                            out[3 + k].push(DrawItem { pipe: kind, mesh: inst.mesh as u32, range: ri, material, look, entry: (inst.base + slot) | ((k as u32) << LAMP_ENTRY_BITS) });
+                            out[3 + k].push(DrawItem {
+                                pipe: kind,
+                                mesh: inst.mesh as u32,
+                                range: ri,
+                                material,
+                                look,
+                                entry: (inst.base + slot) | ((k as u32) << LAMP_ENTRY_BITS),
+                            });
                             let alpha = inst.slot_alpha.get(slot as usize).copied().unwrap_or(1.0);
-                            sig.add(k, lamp_item_hash(inst, m.pose, kind, ri, material, look, alpha, light.cabin.as_ref().map(|c| (&c.to_local, scene.render_origin))));
-                            if windy && scene.materials[mat_id].uniform.sway[0] >= 0.5 {
+                            sig.add(
+                                k,
+                                lamp_item_hash(
+                                    inst,
+                                    m.pose,
+                                    kind,
+                                    ri,
+                                    material,
+                                    look,
+                                    alpha,
+                                    light
+                                        .cabin
+                                        .as_ref()
+                                        .map(|c| (&c.to_local, scene.render_origin)),
+                                ),
+                            );
+                            if windy
+                                && scene
+                                    .materials
+                                    .get(mat_id)
+                                    .is_some_and(|m| m.uniform.sway[0] >= 0.5)
+                            {
                                 sig.volatile |= 1u64 << k;
                             }
                         }
@@ -362,9 +517,20 @@ impl Renderer {
                 }
                 if roof_hit {
                     for &(kind, ri, slot, mat_id, look) in ranges.iter() {
-                        let kind = if kind == PIPE_KINDS { PIPE_OPAQUE } else { kind };
+                        let kind = if kind == PIPE_KINDS {
+                            PIPE_OPAQUE
+                        } else {
+                            kind
+                        };
                         let (material, look) = depth_only_material(kind, mat_id, look);
-                        out[PRECIP_LIST].push(DrawItem { pipe: kind, mesh: inst.mesh as u32, range: ri, material, look, entry: inst.base + slot });
+                        out[PRECIP_LIST].push(DrawItem {
+                            pipe: kind,
+                            mesh: inst.mesh as u32,
+                            range: ri,
+                            material,
+                            look,
+                            entry: inst.base + slot,
+                        });
                     }
                 }
                 for cascade in 0..3 {
@@ -372,7 +538,11 @@ impl Renderer {
                         continue;
                     }
                     if dbg_shadow && cascade == 0 && r >= dbg_r {
-                        log::info!("shadow: caster r={r:.1} at {:?} slots {:?}", inst.origin, ranges.iter().map(|x| x.0).collect::<Vec<_>>());
+                        log::info!(
+                            "shadow: caster r={r:.1} at {:?} slots {:?}",
+                            inst.origin,
+                            ranges.iter().map(|x| x.0).collect::<Vec<_>>()
+                        );
                     }
                     for &(kind, ri, slot, mat_id, look) in ranges.iter() {
                         let kind = if kind == PIPE_KINDS {
@@ -405,15 +575,17 @@ impl Renderer {
             let lit = |b: usize| {
                 blocks.as_ref().is_none_or(|bl| {
                     let (c, r) = bl[b];
-                    lamp_reach(c, r) || precip_box.is_some_and(|pm| {
-                        let lc = pm.project_point3(c);
-                        let rr = r / PRECIP_RANGE;
-                        lc.x.abs() <= 1.0 + rr && lc.y.abs() <= 1.0 + rr
-                    }) || boxes.iter().enumerate().any(|(k, &(range, lvp, _))| {
-                        let lc = lvp.project_point3(c);
-                        let rr = r / range;
-                        active[k] && lc.x.abs() <= 1.0 + rr && lc.y.abs() <= 1.0 + rr
-                    })
+                    lamp_reach(c, r)
+                        || precip_box.is_some_and(|pm| {
+                            let lc = pm.project_point3(c);
+                            let rr = r / PRECIP_RANGE;
+                            lc.x.abs() <= 1.0 + rr && lc.y.abs() <= 1.0 + rr
+                        })
+                        || boxes.iter().enumerate().any(|(k, &(range, lvp, _))| {
+                            let lc = lvp.project_point3(c);
+                            let rr = r / range;
+                            active[k] && lc.x.abs() <= 1.0 + rr && lc.y.abs() <= 1.0 + rr
+                        })
                 })
             };
             let mut found: [Vec<DrawItem>; SHADOW_LISTS] = std::array::from_fn(|_| Vec::new());
@@ -450,7 +622,13 @@ impl Renderer {
                 if debug_draws {
                     log::info!("shadow cascade {cascade}: {} draws", found[cascade].len());
                 }
-                batch_items(scene, &mut found[cascade], true, list, &mut shadow_batches[cascade]);
+                batch_items(
+                    scene,
+                    &mut found[cascade],
+                    true,
+                    list,
+                    &mut shadow_batches[cascade],
+                );
             }
         }
         if sh.shadows && debug_draws {
@@ -486,7 +664,11 @@ mod tests {
     fn cascades_move_by_whole_texels() {
         let sun = Vec3::new(0.4, -0.5, 0.75).normalize();
         let point = Vec3::new(3.3, -7.1, 0.4);
-        for (range, texels) in [(SHADOW_RANGE_CLOSE, 2048u32), (SHADOW_RANGE, 4096), (SHADOW_RANGE_FAR, 2048)] {
+        for (range, texels) in [
+            (SHADOW_RANGE_CLOSE, 2048u32),
+            (SHADOW_RANGE, 4096),
+            (SHADOW_RANGE_FAR, 2048),
+        ] {
             let frac = |cam: Vec3| {
                 let p = cascade_matrix(sun, cam, range, texels).project_point3(point);
                 let t = (glam::Vec2::new(p.x, p.y) * 0.5 + 0.5) * texels as f32;
@@ -495,7 +677,12 @@ mod tests {
             let f0 = frac(Vec3::ZERO);
             for k in 1..40 {
                 let cam = Vec3::new(0.013 * k as f32, -0.021 * k as f32, 0.005 * k as f32);
-                assert!((frac(cam) - f0).abs().max_element() < 0.02, "range {range}: {:?} vs {:?}", frac(cam), f0);
+                assert!(
+                    (frac(cam) - f0).abs().max_element() < 0.02,
+                    "range {range}: {:?} vs {:?}",
+                    frac(cam),
+                    f0
+                );
             }
         }
     }
