@@ -4,7 +4,6 @@
 use crate::*;
 
 mod instances;
-pub(crate) mod depth_plane;
 pub(crate) mod overlay;
 mod upload;
 mod lod;
