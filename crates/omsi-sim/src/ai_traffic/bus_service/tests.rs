@@ -357,7 +357,35 @@ fn a_bus_served_from_behind_keeps_its_place_in_the_queue() {
     assert!(berths.grant(key, 2, true));
     service.step(&mut state, &mut vehicle, &ctx, &mut berths);
     berths.begin_step(0, |_| true);
+    service.step(&mut state, &mut vehicle, &ctx, &mut berths);
+    berths.ask(key, 4, false, 10.0);
+    berths.release(key, 2);
+    assert!(!berths.grant(key, 4, true), "the third bus went first");
+    assert!(berths.grant(key, 1, true));
+}
+
+#[test]
+fn a_bus_served_from_behind_keeps_its_place_when_done_boarding() {
+    let net = service_network();
+    let mut vehicle = service_vehicle();
+    let mut state = AiState::new(0, 0.0, 1);
+    let mut service = BusService::new(vec![Stop::from_tuple((0, 30.0, 0.0, 400.0, 7, 0.0))]);
+    service.arrive(&service_context(&net, 100.0, 0.0), 400.0, (0, 10.0));
+    service.behind = true;
     service.boarding = 0.0;
+    let mut ctx = service_context(&net, 200.0, 0.1);
+    ctx.berth = BerthScene {
+        applies: true,
+        free: false,
+        there: false,
+        pull_out_blocked: false,
+    };
+    let key = BerthKey { stop: 7, lane: 0 };
+    let mut berths = Berths::default();
+    berths.ask(key, 2, true, 0.0);
+    assert!(berths.grant(key, 2, true));
+    service.step(&mut state, &mut vehicle, &ctx, &mut berths);
+    berths.begin_step(0, |_| true);
     service.step(&mut state, &mut vehicle, &ctx, &mut berths);
     berths.ask(key, 4, false, 10.0);
     berths.release(key, 2);
