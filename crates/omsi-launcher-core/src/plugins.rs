@@ -258,7 +258,8 @@ fn fit(setting: &Value, v: &Value) -> Option<Value> {
             let n = v.as_f64()?.clamp(min, max);
             let step = setting["step"].as_f64().unwrap_or(0.0);
             let n = if step > 0.0 && min.is_finite() {
-                min + ((n - min) / step).round() * step
+                // (again after the step: a range not a multiple of it went past max)
+                (min + ((n - min) / step).round() * step).clamp(min, max)
             } else {
                 n
             };
@@ -394,6 +395,14 @@ mod tests {
         assert!(save_settings_in(&dirs, "old", &json!({})).is_err());
         let _ = std::fs::remove_dir_all(&data);
         let _ = std::fs::remove_dir_all(&plugins);
+    }
+
+    #[test]
+    fn a_number_rounded_to_its_step_stays_in_range() {
+        let setting = json!({"type": "number", "min": 0, "max": 10, "step": 4});
+        assert_eq!(fit(&setting, &json!(10)), Some(json!(10.0)));
+        assert_eq!(fit(&setting, &json!(5)), Some(json!(4.0)));
+        assert_eq!(fit(&setting, &json!(-3)), Some(json!(0.0)));
     }
 
     #[test]
