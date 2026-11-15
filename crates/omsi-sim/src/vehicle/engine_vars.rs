@@ -74,7 +74,6 @@ pub(super) const NAMES: [&str; COUNT] = [
 pub(crate) type EngineVarIds = [Option<VarId>; COUNT];
 
 impl VehicleInstance {
-    /// Local player's vehicle camera: 1 driver, 2 passenger, 3 exterior, 0 other.
     pub fn set_camera_view(&mut self, view: &str) {
         let value = match view {
             "driver" => 1.0,

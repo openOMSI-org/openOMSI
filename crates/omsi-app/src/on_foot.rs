@@ -1036,6 +1036,7 @@ pub(crate) fn take_placed(
         if let Some(h) = people.humans.as_mut() {
             h.player_bus_swapped(now.uid, next.uid, &mut next.vehicle);
         }
+        now.vehicle.set_camera_view("free");
         player.placed.push(now);
     } else if let Some(h) = people.humans.as_mut() {
         // (no bus driven before: whoever rides in this one is the player's bus's now)

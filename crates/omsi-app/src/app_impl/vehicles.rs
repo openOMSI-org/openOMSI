@@ -404,6 +404,7 @@ fn switch_vehicle(
         h.player_bus_swapped(now.uid, next.uid, &mut next.vehicle);
     }
     next.vehicle.host.auto_clutch = if settings.auto_clutch { 1.0 } else { 0.0 };
+    now.vehicle.set_camera_view("free");
     player.placed.push(now);
     let name = format!("{} {}", next.vehicle.ty.def.manufacturer, next.vehicle.ty.def.type_name);
     if let Some(cam) = view.camera.as_ref() {

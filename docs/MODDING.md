@@ -19,6 +19,7 @@ interior and exterior views. For your own bus, it reports your selected view:
 The engine supplies this built-in variable before the vehicle's frame scripts run;
 it does not need an entry in the bus's varlist. Treat it as read-only. It starts at
 `0` during initialization. Mirror rendering does not change it.
+When you switch buses, the bus you leave behind is reset to `0`.
 
 In multiplayer, your own bus reports your selected view. Remote players' buses
 always report `3` on your client, regardless of their owners' camera choices.
