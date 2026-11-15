@@ -6,8 +6,8 @@
 //! the game's renderer - it is asked through `Platform`.
 
 mod addons;
-mod plugin_catalog;
 pub mod i18n;
+mod plugin_catalog;
 mod timetable;
 mod updates;
 mod versions;
