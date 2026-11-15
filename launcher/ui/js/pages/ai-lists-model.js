@@ -13,6 +13,38 @@ export const dirty = (a) => JSON.stringify(a.groups) !== JSON.stringify(a.saved)
  * replace them: the lists stay those of the date they were read on, the one a save compares with). */
 export const shouldRead = (a, map, date) => !!map && a.loaded !== `${map}|${date}` && a.loading !== `${map}|${date}` && !a.busy && !dirty(a);
 
+// --- buses ticked in a depot's type, to be given one paint at once ------------------------
+// One type at a time: the buses of a type share its repaints, so the paint chosen exists on
+// every one of them. `at` names the type (its depot, place and file) and `n` its buses then:
+// the ticks lapse when another type is ticked, when the type is replaced or when buses are
+// added or removed (the rows would no longer be the ones ticked).
+
+/** The rows of the type `at` with `n` buses that are ticked, if the ticks still hold. */
+export const tickedRows = (ticked, at, n) => (ticked && ticked.at === at && ticked.n === n ? ticked.rows : []);
+
+/** `ticked` with row `i` of the type `at` (of `n` buses) ticked or unticked. */
+export function tickRow(ticked, at, n, i) {
+  const rows = tickedRows(ticked, at, n);
+  const next = rows.includes(i) ? rows.filter((r) => r !== i) : [...rows, i].sort((a, b) => a - b);
+  return next.length ? { at, n, rows: next } : null;
+}
+
+/** `ticked` with every bus of the type `at` ticked, or none when all of them were. */
+export function tickAll(ticked, at, n) {
+  return tickedRows(ticked, at, n).length === n || !n ? null : { at, n, rows: [...Array(n).keys()] };
+}
+
+/** The paint the ticked `rows` of `entries` share, or null when they differ. */
+export function sharedPaint(entries, rows) {
+  const paints = new Set(rows.map((i) => entries[i]?.paint || ''));
+  return paints.size === 1 ? [...paints][0] : null;
+}
+
+/** Give the ticked `rows` of `entries` the paint `paint` ('' is the bus's own). */
+export function paintRows(entries, rows, paint) {
+  for (const i of rows) if (entries[i]) entries[i].paint = paint;
+}
+
 /** `io`: `call(cmd, args)`, `get()` the page's state, `up(patch)` to change it, `toast(text, kind)`
  * and `t(text)`. */
 export function listsModel({ call, get, up, toast, t }) {

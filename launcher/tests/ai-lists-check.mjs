@@ -1,7 +1,7 @@
 // AI Lists: the order of the answers (launcher/ui/js/pages/ai-lists-model.js), no browser needed:
 //   node launcher/tests/ai-lists-check.mjs
 import assert from 'node:assert/strict';
-import { listsModel, shouldRead } from '../ui/js/pages/ai-lists-model.js';
+import { listsModel, shouldRead, tickedRows, tickRow, tickAll, sharedPaint, paintRows } from '../ui/js/pages/ai-lists-model.js';
 
 const lists = (map, weight = 1) => ({
   groups: [{ name: map, depot: false, vehicles: [{ file: `Vehicles\\${map}.bus`, weight }], typgroups: [], random: true, modified: false }],
@@ -111,6 +111,30 @@ function page(answers) {
   assert.equal(shouldRead(p.state, 'A', 'd2'), true, 'read again once they are gone');
   p.state.busy = true;
   assert.equal(shouldRead(p.state, 'A', 'd2'), false, 'not while a save is under way');
+}
+
+// 7. Depot buses ticked to be given one paint: one type at a time, lapsing when its rows change.
+{
+  const A = 'map|d:depot|0|vehicles\\man\\a.bus';
+  const B = 'map|d:depot|1|vehicles\\man\\b.bus';
+  let ticked = tickRow(null, A, 4, 2);
+  ticked = tickRow(ticked, A, 4, 0);
+  assert.deepEqual(tickedRows(ticked, A, 4), [0, 2], 'rows in order');
+  assert.deepEqual(tickedRows(ticked, A, 5), [], 'a bus added: the ticks lapse');
+  assert.deepEqual(tickedRows(ticked, B, 4), [], 'not shown on another type');
+  assert.deepEqual(tickedRows(tickRow(ticked, B, 3, 1), A, 4), [], 'ticking another type starts again there');
+  assert.equal(tickRow(tickRow(null, A, 4, 1), A, 4, 1), null, 'unticking the last one leaves none');
+  assert.deepEqual(tickedRows(tickAll(ticked, A, 4), A, 4), [0, 1, 2, 3], 'select all');
+  assert.equal(tickAll(tickAll(null, A, 4), A, 4), null, 'select all again: none');
+  assert.equal(tickAll(null, A, 0), null, 'a type without buses has nothing to tick');
+
+  const entries = [{ paint: 'red' }, { paint: '' }, { paint: 'red' }, { paint: 'blue' }];
+  assert.equal(sharedPaint(entries, [0, 2]), 'red');
+  assert.equal(sharedPaint(entries, [0, 1]), null, 'different paints');
+  paintRows(entries, [0, 1, 3], 'green');
+  assert.deepEqual(entries.map((e) => e.paint), ['green', 'green', 'red', 'green'], 'only the ticked rows');
+  paintRows(entries, [0], '');
+  assert.equal(entries[0].paint, '', "back to the bus's own paint");
 }
 
 console.log('ai-lists-check: ok');
