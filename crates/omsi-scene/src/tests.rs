@@ -286,10 +286,10 @@ fn a_transmapped_slot_is_see_through_by_its_transmap_not_its_reflection_mask() {
 #[test]
 fn a_reflective_car_body_stays_solid_while_unnamed_pane_is_see_through() {
     use crate::vehicles::is_reflective_body;
-    assert!(is_reflective_body("golf_body.o3d", false, false, true, true, false, false));
-    assert!(!is_reflective_body("celokint.o3d", false, false, true, true, false, false));
-    assert!(!is_reflective_body("fenster_body.o3d", true, false, true, true, false, false));
-    assert!(!is_reflective_body("golf_body.o3d", false, true, true, true, false, false));
+    assert!(is_reflective_body(true, false, false, true, true));
+    assert!(!is_reflective_body(false, false, false, true, true));
+    assert!(!is_reflective_body(true, true, false, true, true));
+    assert!(!is_reflective_body(true, false, true, true, true));
 }
 
 #[test]
