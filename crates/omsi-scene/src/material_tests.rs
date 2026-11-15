@@ -417,7 +417,7 @@ fn a_text_texture_glows_as_its_slot_does() {
 /// depth), or real partial transparency (a soft shadow blob, a translucent side: a blend).
 #[test]
 fn a_pictures_alpha_decides_how_a_blend_is_drawn() {
-    use super::staging::{picture_blend_fade, BlendFade};
+    use super::staging::{BlendFade, picture_blend_fade};
     let dir = std::env::temp_dir().join(format!("omsi_blend_fade_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let write = |name: &str, alphas: &[u8]| {

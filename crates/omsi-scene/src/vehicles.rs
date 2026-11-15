@@ -1015,7 +1015,20 @@ impl World {
         materials.dedup();
         if omsi_cfg::flags::OMSI_PROFILE.is_set() {
             let (tn, ts) = *tex_time.borrow();
-            log::info!("  vehicle set {}: {} meshes ({:.1} ms), {} textures uploaded ({:.1} ms), {} materials, {:.1} ms in all", vt.def.path.file_name().unwrap_or_default().to_string_lossy(), mesh_keys.len(), mesh_secs * 1000.0, tn, ts * 1000.0, materials.len(), t_all.elapsed().as_secs_f64() * 1000.0);
+            log::info!(
+                "  vehicle set {}: {} meshes ({:.1} ms), {} textures uploaded ({:.1} ms), {} materials, {:.1} ms in all",
+                vt.def
+                    .path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy(),
+                mesh_keys.len(),
+                mesh_secs * 1000.0,
+                tn,
+                ts * 1000.0,
+                materials.len(),
+                t_all.elapsed().as_secs_f64() * 1000.0
+            );
         }
         VehicleSet {
             meshes: instances,
@@ -1272,7 +1285,29 @@ impl World {
             missing_tex.push(format!("{} ({})", tex_name, def.file));
         }
         if only.is_some() {
-            log::info!("  {} slot {slot} '{}' diffuse={:?} emissive={:?} specular={:?}/{} tex={:?} alpha={:?} transmap={:?} night={:?} light={:?} env={:?} mask={:?} bump={:?} text={:?} script={:?} script_trans={:?} noZwrite={} noZcheck={} zbias={}", def.file, m.texture, m.diffuse, m.emissive, m.specular, m.specular_power, tex, alpha, transmap, night, lightmap, envmap, env_mask, bump, text_slot, script_slot, script_trans, ov.iter().any(|o| o.no_z_write), ov.iter().any(|o| o.no_z_check), ov.iter().map(|o| o.z_bias).find(|b| *b != 0).unwrap_or(0));
+            log::info!(
+                "  {} slot {slot} '{}' diffuse={:?} emissive={:?} specular={:?}/{} tex={:?} alpha={:?} transmap={:?} night={:?} light={:?} env={:?} mask={:?} bump={:?} text={:?} script={:?} script_trans={:?} noZwrite={} noZcheck={} zbias={}",
+                def.file,
+                m.texture,
+                m.diffuse,
+                m.emissive,
+                m.specular,
+                m.specular_power,
+                tex,
+                alpha,
+                transmap,
+                night,
+                lightmap,
+                envmap,
+                env_mask,
+                bump,
+                text_slot,
+                script_slot,
+                script_trans,
+                ov.iter().any(|o| o.no_z_write),
+                ov.iter().any(|o| o.no_z_check),
+                ov.iter().map(|o| o.z_bias).find(|b| *b != 0).unwrap_or(0)
+            );
         }
         let static_diffuse = static_diffuse(tex, freetex, rain_layer, &tex_name);
         let textured = tex.is_some()
@@ -1467,7 +1502,15 @@ impl World {
         };
         if only.is_some() {
             if let Some(it) = &item_spec {
-                log::info!("  {} slot {slot} item (switched by {:?}): alpha={:?} night={:?} light={:?} switched={}", def.file, change_var, it.alpha, it.night, it.lightmap, it.extra.night_switched);
+                log::info!(
+                    "  {} slot {slot} item (switched by {:?}): alpha={:?} night={:?} light={:?} switched={}",
+                    def.file,
+                    change_var,
+                    it.alpha,
+                    it.night,
+                    it.lightmap,
+                    it.extra.night_switched
+                );
             }
         }
         // [matl_noZwrite]: glass, the rain film and the dirt layer are blended
@@ -1787,7 +1830,11 @@ fn slot_alpha(
         && !ov.iter().any(|o| o.no_z_write || o.no_z_check)
         && coverage.as_ref().is_some_and(|mask| texture_is_clear(mask));
     if cover {
-        log::debug!("  {} slot {slot} '{}': an invisible cover (clear texture), writes depth in model order", def.file, m.texture);
+        log::debug!(
+            "  {} slot {slot} '{}': an invisible cover (clear texture), writes depth in model order",
+            def.file,
+            m.texture
+        );
     }
     let named_body = ["body", "wagenkasten", "karos", "chassis", "kuzov"]
         .iter()

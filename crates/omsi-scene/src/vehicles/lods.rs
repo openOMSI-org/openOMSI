@@ -210,7 +210,7 @@ impl World {
         if on && !set.far.is_empty() && bands.len() > 1 {
             for &inst in instances {
                 if scene.instances.get(inst).is_some_and(|x| !x.blob) {
-                    renderer.set_lod_range(scene, inst, bands[0].1 .0, bands[0].1 .1);
+                    renderer.set_lod_range(scene, inst, bands[0].1.0, bands[0].1.1);
                 }
             }
             renderer.begin_shared_object(scene, (&vt.def.path, "far"));
@@ -310,7 +310,7 @@ mod tests {
             for size in [0.0f32, 0.01, 0.049, 0.05, 0.07, 0.099, 0.1, 0.5, 1.0e9] {
                 let hits = bands
                     .iter()
-                    .filter(|b| size >= b.1 .0 && size < b.1 .1)
+                    .filter(|b| size >= b.1.0 && size < b.1.1)
                     .count();
                 assert!(hits >= 1, "{present:?}: size {size} drawn by none");
             }
