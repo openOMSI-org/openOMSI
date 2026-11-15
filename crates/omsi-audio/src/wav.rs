@@ -325,7 +325,7 @@ mod tests {
             .collect();
         let e = parse_any(&junk).err().expect("refused").to_string();
         assert!(
-            e.contains("not a sound file") && e.contains("189140 bytes"),
+            e.contains("no sound could be read") && e.contains("189140 bytes"),
             "{e}"
         );
     }
@@ -430,10 +430,6 @@ pub fn parse_compressed(bytes: &[u8]) -> Result<WavData> {
     if bytes.len() < 4 {
         return Err(anyhow!("the sound file is empty ({} bytes)", bytes.len()));
     }
-    // The signature is only a hint: symphonia's probe still scans for a known marker, so an
-    // MP3 with leading junk (an ID3 tag it does not know, a cut header) decodes. When nothing
-    // is found, its own error is "probe reach EOF at n bytes" with no file name, which players
-    // took for the cause of a crash (#3956); say what the file is. The caller adds the path.
     let mss = MediaSourceStream::new(
         Box::new(std::io::Cursor::new(bytes.to_vec())),
         Default::default(),
@@ -448,10 +444,11 @@ pub fn parse_compressed(bytes: &[u8]) -> Result<WavData> {
     );
     let mut format = match probed {
         Ok(p) => p.format,
+        // symphonia's own error names no file; the size and first bytes say what it was
         Err(e) => {
             let head: Vec<String> = bytes.iter().take(8).map(|b| format!("{b:02X}")).collect();
             return Err(anyhow!(
-                "not a sound file of a known format ({} bytes, starting {}): {e}",
+                "no sound could be read ({} bytes, starting {}): {e}",
                 bytes.len(),
                 head.join(" ")
             ));
