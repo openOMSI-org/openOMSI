@@ -46,6 +46,28 @@ fn links_do_not_skip_signalized_segments() {
 }
 
 #[test]
+fn cars_keep_direct_link_around_bus_only_signalized_lane() {
+    let mut bus_only_signal = straight(0.0, 10.0, 11.0, 2, (0, 0));
+    bus_only_signal.traffic_light = Some((0, 0));
+    bus_only_signal.no_cars = true;
+    bus_only_signal.rule_bus = true;
+    let mut net = Network {
+        lanes: vec![
+            straight(0.0, 0.0, 10.0, 1, (0, 0)),
+            bus_only_signal,
+            straight(0.0, 11.0, 21.0, 3, (0, 0)),
+        ],
+        ..Default::default()
+    };
+    net.link(1.5);
+
+    assert!(!net.lanes[1].allows(0), "the signalized lane excludes cars");
+    assert!(net.lanes[1].allows(2), "the signalized lane allows buses");
+    assert!(net.lanes[0].next.contains(&2), "cars retain the direct route");
+    assert!(net.lanes[0].next.contains(&1), "the bus route remains available");
+}
+
+#[test]
 fn extending_with_a_signalized_segment_removes_the_existing_bypass_link() {
     let before = vec![
         straight(0.0, 0.0, 10.0, 1, (0, 0)),

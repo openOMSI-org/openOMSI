@@ -28,6 +28,7 @@ impl Network {
                         || !candidates.iter().any(|&via| {
                             via != to
                                 && self.lanes[via].traffic_light.is_some()
+                                && self.lanes[via].allows_every_vehicle_allowed_by(&self.lanes[to])
                                 && self.can_link(from, via, tol)
                                 && self.can_link(via, to, tol)
                         }))

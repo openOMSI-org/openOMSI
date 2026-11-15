@@ -149,6 +149,10 @@ impl Lane {
         }
     }
 
+    pub(super) fn allows_every_vehicle_allowed_by(&self, other: &Lane) -> bool {
+        (0..=3).all(|veh_type| !other.allows(veh_type) || self.allows(veh_type))
+    }
+
     /// How much of `unsched_vehgroups.txt` group `pool`'s traffic the lane carries (see
     /// [`pool_density`]).
     pub fn pool_density(&self, defaults: &[i32], pool: usize) -> f32 {
