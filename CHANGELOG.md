@@ -601,6 +601,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The next arrow shows in the pause menu's Line and shift page**: the button beside the start time (and the next arrow of the vehicle pages) was an empty square, as the game had no `arrow_forward` icon to draw on it.
 - **Pixel XC list rows no longer cut off**: on the MZKP SOR NBG 12, the direction and line lists
   of the Pixel XC display showed each row's text sliced along its middle. The text strip of
   every row is skewed a tenth of a millimetre over its tile, and was not taken as printed on

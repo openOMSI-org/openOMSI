@@ -423,3 +423,14 @@ mod tests {
         assert_eq!(images(super::tree(&src).unwrap().root()), 1);
     }
 }
+
+#[cfg(test)]
+mod icon_pair_tests {
+    /// The next arrow beside the back one (the pause menu's trip and vehicle pages draw both).
+    #[test]
+    fn the_arrows_come_in_a_pair() {
+        for name in ["arrow_back", "arrow_forward"] {
+            assert!(super::rasterize(name, 32).is_some_and(|px| px.iter().any(|a| *a > 0)), "{name}");
+        }
+    }
+}
