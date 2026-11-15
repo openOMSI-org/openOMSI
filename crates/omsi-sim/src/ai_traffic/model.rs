@@ -528,9 +528,8 @@ pub fn personality(state: &mut AiState, seed: u64, heavy: bool, rowdy_factor: Op
             1.10 + r * 0.21
         };
         if heavy {
-            // a lorry or a bus keeps its slower cruise (what gets it overtaken, and an AI
-            // bus keeps to the limit): the rowdy factor moves it as much as a car's
-            (0.93 + (base - 1.10) + 0.02 * rg(3)).clamp(0.5, 2.0)
+            // A lorry or a bus keeps a slower cruise and caps at the speed limit (1.0).
+            (0.93 + (base - 1.10) + 0.02 * rg(3)).clamp(0.5, 1.0)
         } else {
             (base + 0.02 * rg(3)).clamp(0.5, 2.0)
         }
@@ -550,10 +549,10 @@ pub fn personality(state: &mut AiState, seed: u64, heavy: bool, rowdy_factor: Op
         (1.3 + 1.0 * ru(27) + 0.25 * r_bias).max(0.6)
     };
     state.decel = if heavy { 1.6 } else { (2.0 + 0.8 * ru(35) + 0.2 * r_bias).max(1.0) };
-    state.accept_gap = (4.0 - 0.4 * r_bias + 1.0 * rg(43)).max(1.5);
+    state.accept_gap = (4.0 - 0.4 * r_bias + 1.0 * rg(43)).max(if rowdy.is_some() { 1.5 } else { 2.0 });
     state.reaction = (0.8 - 0.1 * r_bias + 0.2 * rg(51)).max(0.2);
 
-    state.honk_factor = (1.0 - 0.25 * r_bias + 0.2 * rg(8)).max(0.1);
+    state.honk_factor = (1.0 - 0.25 * r_bias + 0.2 * rg(8)).max(if rowdy.is_some() { 0.1 } else { 0.2 });
     state.amber_factor = (0.03 + 0.02 * r_bias + 0.01 * rg(9)).clamp(0.0, 0.2);
     // the hardest braking of ordinary driving: a lorry's or a bus's driver stays further
     // under the emergency stop's ceiling than a car's
@@ -609,33 +608,59 @@ mod bicycle_tests {
             assert!(!is_bicycle(&def), "{path} ({mass} t)");
         }
     }
+}
+
+#[cfg(test)]
+mod personality_tests {
+    use super::personality;
+    use crate::traffic::AiState;
 
     #[test]
     fn rowdy_factor_influences_speed_desire_and_driving_personality() {
-        use crate::traffic::AiState;
-        use super::personality;
-
         let mut slow_st = AiState::new(0, 0.0, 12345);
         personality(&mut slow_st, 12345, false, Some((-1.0, -1.0)));
-        assert!((slow_st.desire - 0.87).abs() < 0.06, "desire {:.3} expected ~0.87", slow_st.desire);
+        assert!(
+            (slow_st.desire - 0.87).abs() < 0.06,
+            "desire {:.3} expected ~0.87",
+            slow_st.desire
+        );
 
         let mut neutral_st = AiState::new(0, 0.0, 12345);
         personality(&mut neutral_st, 12345, false, Some((0.0, 0.0)));
-        assert!((neutral_st.desire - 1.10).abs() < 0.06, "desire {:.3} expected ~1.10", neutral_st.desire);
+        assert!(
+            (neutral_st.desire - 1.10).abs() < 0.06,
+            "desire {:.3} expected ~1.10",
+            neutral_st.desire
+        );
 
         let mut fast_st = AiState::new(0, 0.0, 12345);
         personality(&mut fast_st, 12345, false, Some((1.0, 1.0)));
-        assert!((fast_st.desire - 1.31).abs() < 0.06, "desire {:.3} expected ~1.31", fast_st.desire);
+        assert!(
+            (fast_st.desire - 1.31).abs() < 0.06,
+            "desire {:.3} expected ~1.31",
+            fast_st.desire
+        );
 
         assert!(fast_st.desire > slow_st.desire);
         assert!(fast_st.headway < slow_st.headway);
         assert!(fast_st.accel > slow_st.accel);
 
-        // A lorry or a bus with a neutral rowdy factor keeps its slower cruise.
         let mut heavy_st = AiState::new(0, 0.0, 12345);
         personality(&mut heavy_st, 12345, true, Some((0.0, 0.0)));
-        assert!((heavy_st.desire - 0.93).abs() < 0.06, "desire {:.3} expected ~0.93", heavy_st.desire);
+        assert!(
+            (heavy_st.desire - 0.93).abs() < 0.06,
+            "desire {:.3} expected ~0.93",
+            heavy_st.desire
+        );
         assert!(heavy_st.desire < neutral_st.desire);
+
+        let mut heavy_fast = AiState::new(0, 0.0, 12345);
+        personality(&mut heavy_fast, 12345, true, Some((1.0, 1.0)));
+        assert!(
+            heavy_fast.desire <= 1.0,
+            "heavy desire {:.3} should not exceed limit",
+            heavy_fast.desire
+        );
     }
 }
 
