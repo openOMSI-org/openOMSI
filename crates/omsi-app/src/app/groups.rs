@@ -432,6 +432,10 @@ pub(crate) struct InputState {
 /// their lists and drop-downs, the object editor, the vehicle placer, the tutorial, the
 /// hover, the HUD, the navigator and the timetable.
 pub(crate) struct MenuState {
+    /// An AI vehicle the bus knocked off its route still waits for the police (OMSI 2's
+    /// accident, `TrafficSim::accident_open`), as of the frame's integrations stage: the
+    /// game menu offers "Call the police" while it does.
+    pub(crate) accident_open: bool,
     /// The game menu's vehicle chooser is open, with this vehicle chosen (index into
     /// `vehicle_list`), and the vehicles it offers (name, path).
     pub(crate) chooser: Option<usize>,

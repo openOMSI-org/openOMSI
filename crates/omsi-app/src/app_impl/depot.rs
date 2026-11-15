@@ -62,8 +62,12 @@ impl App {
     /// drive on. Not called, the player is charged with leaving the scene once those
     /// vehicles' tile goes (`Traffic::take_fled`).
     pub(crate) fn call_police(&mut self) {
-        let Some(p) = self.player.as_ref() else { return };
-        let Some(t) = self.session.traffic.as_mut() else { return };
+        let Some(p) = self.player.as_ref() else {
+            return;
+        };
+        let Some(t) = self.session.traffic.as_mut() else {
+            return;
+        };
         if !t.accident_open() {
             self.service_msg = Some(("No accident to report".into(), 4.0));
             return;
@@ -73,6 +77,7 @@ impl App {
             return;
         }
         let n = t.clear_accidents();
+        self.menus.accident_open = false;
         log::info!("the police took up the accident: {n} vehicles back on their way");
         self.service_msg = Some(("The police have taken up the accident".into(), 6.0));
     }
