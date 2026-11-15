@@ -18,7 +18,14 @@ impl Player {
     /// From outside, a switch behind another part of the bus cannot be reached through it
     /// ([`Self::reach`]); from the cab nothing hides one, as in Omsi.exe.
     pub(crate) fn pick(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
-        let (i, centre) = pick_in(&self.vehicle, origin, dir, spread, self.reach(origin, dir), self.drawn_outside)?;
+        let (i, centre) = pick_in(
+            &self.vehicle,
+            origin,
+            dir,
+            spread,
+            self.reach(origin, dir),
+            self.drawn_outside,
+        )?;
         if !centre && self.occlude_controls && self.control_hidden(origin, dir, None, i) {
             return None;
         }
@@ -31,9 +38,23 @@ impl Player {
     fn reach(&self, origin: DVec3, dir: Vec3) -> Reach {
         let (dir, outside) = (dir.normalize_or_zero(), self.occlude_controls);
         let v = &self.vehicle;
-        let mut reach = reach_into(&v.ty, &v.mesh_props, |i| v.mesh_local_transform(i), (origin - v.position).as_vec3(), dir, outside);
+        let mut reach = reach_into(
+            &v.ty,
+            &v.mesh_props,
+            |i| v.mesh_local_transform(i),
+            (origin - v.position).as_vec3(),
+            dir,
+            outside,
+        );
         for tr in &v.trailers {
-            let part = reach_into(&tr.ty, &tr.mesh_props, |i| tr.mesh_local_transform(i), (origin - tr.position).as_vec3(), dir, outside);
+            let part = reach_into(
+                &tr.ty,
+                &tr.mesh_props,
+                |i| tr.mesh_local_transform(i),
+                (origin - tr.position).as_vec3(),
+                dir,
+                outside,
+            );
             reach = Reach(reach.0.min(part.0));
         }
         reach
@@ -41,21 +62,49 @@ impl Player {
 
     /// The page (`[htmltexture]`, or a script texture an `.opl` plugin draws) under a ray and
     /// where it lands on it: the script texture index and `u`/`v` from 0 to 1, `v` down.
-    pub(crate) fn html_hit(&self, origin: DVec3, dir: Vec3, plugins: &omsi_plugin::TexturePointer) -> Option<(usize, f32, f32)> {
+    pub(crate) fn html_hit(
+        &self,
+        origin: DVec3,
+        dir: Vec3,
+        plugins: &omsi_plugin::TexturePointer,
+    ) -> Option<(usize, f32, f32)> {
         pick_html_in(&self.vehicle, origin, dir, &plugins.pages)
     }
 
     /// A press, release or move on a page. What the page does with it (`omsi.setVar`,
     /// `omsi.trigger`) reaches the bus at once; on a plugin's texture it waits for the plugin.
-    pub(crate) fn html_pointer(&mut self, page: usize, u: f32, v: f32, kind: omsi_sim::htmltex::PointerKind, plugins: &mut omsi_plugin::TexturePointer) -> bool {
+    pub(crate) fn html_pointer(
+        &mut self,
+        page: usize,
+        u: f32,
+        v: f32,
+        kind: omsi_sim::htmltex::PointerKind,
+        plugins: &mut omsi_plugin::TexturePointer,
+    ) -> bool {
         use omsi_sim::htmltex::PointerKind as K;
-        let k = match kind { K::Down => omsi_plugin::POINTER_DOWN, K::Move => omsi_plugin::POINTER_MOVE, K::Up => omsi_plugin::POINTER_UP };
+        let k = match kind {
+            K::Down => omsi_plugin::POINTER_DOWN,
+            K::Move => omsi_plugin::POINTER_MOVE,
+            K::Up => omsi_plugin::POINTER_UP,
+        };
         plugins.push(page, k, u, v) || self.vehicle.html_pointer(page, u, v, kind)
     }
 
     /// The same forgiving pick as `pick`, for the coupled sections of an articulated bus.
-    pub(crate) fn pick_trailer(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<(usize, usize)> {
-        let ((ti, i), centre) = pick_trailer_in(&self.vehicle, origin, dir, spread, self.reach(origin, dir), self.drawn_outside)?;
+    pub(crate) fn pick_trailer(
+        &self,
+        origin: DVec3,
+        dir: Vec3,
+        spread: f32,
+    ) -> Option<(usize, usize)> {
+        let ((ti, i), centre) = pick_trailer_in(
+            &self.vehicle,
+            origin,
+            dir,
+            spread,
+            self.reach(origin, dir),
+            self.drawn_outside,
+        )?;
         if !centre && self.occlude_controls && self.control_hidden(origin, dir, Some(ti), i) {
             return None;
         }
@@ -67,9 +116,10 @@ impl Player {
     #[cfg_attr(not(windows), allow(dead_code))]
     pub(crate) fn surface_hit(&self, origin: DVec3, dir: Vec3) -> Option<DVec3> {
         let (mut nearest, nearest_control) = self.nearest_hits(origin, dir);
-        if nearest_control.is_finite() { nearest = nearest_control; }
-        (nearest.is_finite() && nearest < 8.0)
-            .then(|| origin + (dir * nearest).as_dvec3())
+        if nearest_control.is_finite() {
+            nearest = nearest_control;
+        }
+        (nearest.is_finite() && nearest < 8.0).then(|| origin + (dir * nearest).as_dvec3())
     }
 
     /// How far along a ray the bus (any visible mesh, trailers too) is.
@@ -81,11 +131,18 @@ impl Player {
     pub(crate) fn is_mesh_glass(&self, trailer: Option<usize>, i: usize) -> bool {
         let (ty, def_idx) = match trailer {
             None => (&self.vehicle.ty, self.vehicle.ty.meshes[i].def_index),
-            Some(ti) => (&self.vehicle.trailers[ti].ty, self.vehicle.trailers[ti].ty.meshes[i].def_index),
+            Some(ti) => (
+                &self.vehicle.trailers[ti].ty,
+                self.vehicle.trailers[ti].ty.meshes[i].def_index,
+            ),
         };
         let def = &ty.model.meshes[def_idx];
         let file_low = def.file.to_ascii_lowercase();
-        if file_low.contains("glas") || file_low.contains("scheibe") || file_low.contains("window") || file_low.contains("fenster") {
+        if file_low.contains("glas")
+            || file_low.contains("scheibe")
+            || file_low.contains("window")
+            || file_low.contains("fenster")
+        {
             return true;
         }
         def.materials.iter().any(|m| m.alpha == 2)
@@ -96,21 +153,33 @@ impl Player {
         let mut nearest = f32::INFINITY;
         let o = (origin - self.vehicle.position).as_vec3();
         for (i, mesh) in self.vehicle.ty.meshes.iter().enumerate() {
-            if !self.vehicle.mesh_props[i].visible || self.is_mesh_glass(None, i) { continue; }
+            if !self.vehicle.mesh_props[i].visible || self.is_mesh_glass(None, i) {
+                continue;
+            }
             let transform = self.vehicle.mesh_local_transform(i);
-            if !ray_may_hit(&self.vehicle.ty, i, &transform, o, dir, 0.0) { continue; }
+            if !ray_may_hit(&self.vehicle.ty, i, &transform, o, dir, 0.0) {
+                continue;
+            }
             if let Some(t) = omsi_geometry::ray_mesh(o, dir, &mesh.data, &transform) {
-                if t > 0.02 && t < nearest { nearest = t; }
+                if t > 0.02 && t < nearest {
+                    nearest = t;
+                }
             }
         }
         for (ti, trailer) in self.vehicle.trailers.iter().enumerate() {
             let o = (origin - trailer.position).as_vec3();
             for (i, mesh) in trailer.ty.meshes.iter().enumerate() {
-                if !trailer.mesh_props[i].visible || self.is_mesh_glass(Some(ti), i) { continue; }
+                if !trailer.mesh_props[i].visible || self.is_mesh_glass(Some(ti), i) {
+                    continue;
+                }
                 let transform = trailer.mesh_local_transform(i);
-                if !ray_may_hit(&trailer.ty, i, &transform, o, dir, 0.0) { continue; }
+                if !ray_may_hit(&trailer.ty, i, &transform, o, dir, 0.0) {
+                    continue;
+                }
                 if let Some(t) = omsi_geometry::ray_mesh(o, dir, &mesh.data, &transform) {
-                    if t > 0.02 && t < nearest { nearest = t; }
+                    if t > 0.02 && t < nearest {
+                        nearest = t;
+                    }
                 }
             }
         }
@@ -121,7 +190,11 @@ impl Player {
     /// mesh `i` (of coupled part `trailer`, or of the bus itself), so it cannot be reached.
     fn control_hidden(&self, origin: DVec3, dir: Vec3, trailer: Option<usize>, i: usize) -> bool {
         let (ty, position, xf) = match trailer {
-            None => (&self.vehicle.ty, self.vehicle.position, self.vehicle.mesh_local_transform(i)),
+            None => (
+                &self.vehicle.ty,
+                self.vehicle.position,
+                self.vehicle.mesh_local_transform(i),
+            ),
             Some(ti) => {
                 let t = &self.vehicle.trailers[ti];
                 (&t.ty, t.position, t.mesh_local_transform(i))
@@ -151,28 +224,50 @@ impl Player {
         let vehicle = &self.vehicle;
         let o = (origin - vehicle.position).as_vec3();
         for (i, mesh) in vehicle.ty.meshes.iter().enumerate() {
-            if !vehicle.mesh_props[i].visible { continue; }
+            if !vehicle.mesh_props[i].visible {
+                continue;
+            }
             let transform = vehicle.mesh_local_transform(i);
-            if !ray_may_hit(&vehicle.ty, i, &transform, o, dir, 0.0) { continue; }
+            if !ray_may_hit(&vehicle.ty, i, &transform, o, dir, 0.0) {
+                continue;
+            }
             if let Some(t) = omsi_geometry::ray_mesh(o, dir, &mesh.data, &transform) {
                 if t > 0.02 {
-                    if t < nearest { nearest = t; }
-                    if vehicle.ty.model.meshes[mesh.def_index].mouse_event.is_some()
-                        && t < nearest_control { nearest_control = t; }
+                    if t < nearest {
+                        nearest = t;
+                    }
+                    if vehicle.ty.model.meshes[mesh.def_index]
+                        .mouse_event
+                        .is_some()
+                        && t < nearest_control
+                    {
+                        nearest_control = t;
+                    }
                 }
             }
         }
         for trailer in &vehicle.trailers {
             let o = (origin - trailer.position).as_vec3();
             for (i, mesh) in trailer.ty.meshes.iter().enumerate() {
-                if !trailer.mesh_props[i].visible { continue; }
+                if !trailer.mesh_props[i].visible {
+                    continue;
+                }
                 let transform = trailer.mesh_local_transform(i);
-                if !ray_may_hit(&trailer.ty, i, &transform, o, dir, 0.0) { continue; }
+                if !ray_may_hit(&trailer.ty, i, &transform, o, dir, 0.0) {
+                    continue;
+                }
                 if let Some(t) = omsi_geometry::ray_mesh(o, dir, &mesh.data, &transform) {
                     if t > 0.02 {
-                        if t < nearest { nearest = t; }
-                        if trailer.ty.model.meshes[mesh.def_index].mouse_event.is_some()
-                            && t < nearest_control { nearest_control = t; }
+                        if t < nearest {
+                            nearest = t;
+                        }
+                        if trailer.ty.model.meshes[mesh.def_index]
+                            .mouse_event
+                            .is_some()
+                            && t < nearest_control
+                        {
+                            nearest_control = t;
+                        }
                     }
                 }
             }
@@ -185,14 +280,25 @@ impl Player {
     /// "this is not a control" from "the cursor is not hitting anything".
     /// The flag beside it: a `[mouseevent]` mesh is under the ray, named or not - Omsi.exe
     /// shows the hand cursor over any of them (0x6f34c0 @0x6f45b4).
-    pub(crate) fn hovered_part(&self, origin: DVec3, dir: Vec3, spread: f32) -> (Option<(String, bool)>, bool) {
+    pub(crate) fn hovered_part(
+        &self,
+        origin: DVec3,
+        dir: Vec3,
+        spread: f32,
+    ) -> (Option<(String, bool)>, bool) {
         if let Some(i) = self.pick(origin, dir, spread) {
             let def = &self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index];
             if let Some(ev) = def.mouse_event.clone() {
                 // a whole panel that can be dragged into place (the VDV dashboard's
                 // `VDV_position`) is no switch to name: its name covered the whole cockpit
                 // (the hand still shows over it, a door leaf or the steering column)
-                let big = self.vehicle.ty.mesh_bounds.get(i).map(|b| b.1 > 0.45).unwrap_or(false);
+                let big = self
+                    .vehicle
+                    .ty
+                    .mesh_bounds
+                    .get(i)
+                    .map(|b| b.1 > 0.45)
+                    .unwrap_or(false);
                 if big {
                     return (None, true);
                 }
@@ -356,7 +462,10 @@ impl Player {
     pub(crate) fn release_keeping(&mut self) {
         if let Some(i) = self.pressed_mesh.take() {
             let def = &self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index];
-            log::info!("mouse event {:?}: let go with the right button held, the switch stays", def.mouse_event);
+            log::info!(
+                "mouse event {:?}: let go with the right button held, the switch stays",
+                def.mouse_event
+            );
         }
         self.pressed_trailer_mesh = None;
     }
@@ -383,7 +492,11 @@ impl Player {
     }
 
     pub(crate) fn release_for_menu(&mut self, vr_active: bool) {
-        if vr_active { self.release_precise(); } else { self.release(); }
+        if vr_active {
+            self.release_precise();
+        } else {
+            self.release();
+        }
     }
 
     fn cancel_auto_drag(&mut self) {
@@ -402,16 +515,33 @@ impl Player {
                 // a plain click on a control the scripts only know as a drag: dragged to its
                 // other end (a click opened the NL/NG driver's door by the mouse's jitter
                 // and a second click never shut it again)
-                let anim = def.animations.first().map(|a| a.variable.clone()).filter(|v| !v.trim().is_empty() && v.trim().parse::<f32>().is_err());
+                let anim = def
+                    .animations
+                    .first()
+                    .map(|a| a.variable.clone())
+                    .filter(|v| !v.trim().is_empty() && v.trim().parse::<f32>().is_err());
                 if let (true, Some(var)) = (
-                    allow_auto_drag && auto_drag_click(&ev, self.press_info.0, self.press_info.1), anim) {
+                    allow_auto_drag && auto_drag_click(&ev, self.press_info.0, self.press_info.1),
+                    anim,
+                ) {
                     let now = self.vehicle.var(&var).unwrap_or(0.0);
                     let target = if now > 0.5 { 0.0 } else { 1.0 };
                     // (a variable of the scripts is theirs to move; only one that the model
                     // alone names is flipped here, #3887)
-                    if self.vehicle.has_trigger(&format!("{ev}_drag")) || self.vehicle.ty.program.var(&var).is_some() {
+                    if self.vehicle.has_trigger(&format!("{ev}_drag"))
+                        || self.vehicle.ty.program.var(&var).is_some()
+                    {
                         log::info!("mouse event {ev}: a click on a drag control, {var} {now:.2} -> {target}");
-                        self.auto_drag = Some(AutoDrag { ev, var, target, axis: 0, sign: if target > now { -1.0 } else { 1.0 }, last: now, stalled: 0, t: 0.0 });
+                        self.auto_drag = Some(AutoDrag {
+                            ev,
+                            var,
+                            target,
+                            axis: 0,
+                            sign: if target > now { -1.0 } else { 1.0 },
+                            last: now,
+                            stalled: 0,
+                            t: 0.0,
+                        });
                     } else {
                         log::info!("mouse event {ev}: toggle control, {var} {now:.2} -> {target}");
                         self.vehicle.set_var(&var, target);
@@ -553,10 +683,8 @@ mod roller_blind_tests {
                 continue;
             }
             let ty = std::sync::Arc::new(omsi_sim::VehicleType::load(&root, &bus).expect(path));
-            let mut vehicle = omsi_sim::VehicleInstance::new(
-                ty,
-                omsi_sim::VehicleHost::new(Default::default()),
-            );
+            let mut vehicle =
+                omsi_sim::VehicleInstance::new(ty, omsi_sim::VehicleHost::new(Default::default()));
             vehicle.host.clock.timegap = 1.0 / 60.0;
             let program = vehicle.ty.program.clone();
             for &(blind, pos, ratchet) in blinds {
@@ -564,13 +692,24 @@ mod roller_blind_tests {
                 assert!(vehicle.set_var(ratchet, 0.6));
                 let event = format!("{blind}_drag");
                 drag(&mut vehicle, &event, -100.0);
-                assert!(vehicle.var(pos).unwrap() < 0.59, "{path}: {blind} follows the hand");
+                assert!(
+                    vehicle.var(pos).unwrap() < 0.59,
+                    "{path}: {blind} follows the hand"
+                );
                 assert!(vehicle.trigger(&format!("{blind}_off")));
                 for _ in 0..120 {
-                    vehicle.vm.run_frame(&program, &mut vehicle.state, &mut vehicle.host);
+                    vehicle
+                        .vm
+                        .run_frame(&program, &mut vehicle.state, &mut vehicle.host);
                 }
-                assert!((vehicle.var(pos).unwrap() - 0.6).abs() < 1e-3, "{path}: {blind} falls back");
-                assert!((vehicle.var(ratchet).unwrap() - 0.6).abs() < 1e-6, "{path}: {blind}");
+                assert!(
+                    (vehicle.var(pos).unwrap() - 0.6).abs() < 1e-3,
+                    "{path}: {blind} falls back"
+                );
+                assert!(
+                    (vehicle.var(ratchet).unwrap() - 0.6).abs() < 1e-6,
+                    "{path}: {blind}"
+                );
             }
         }
     }
@@ -593,7 +732,9 @@ pub(crate) struct AutoDrag {
 impl Player {
     /// Drag a clicked drag-only control (see `auto_drag`) a step towards its other end.
     pub(crate) fn tick_auto_drag(&mut self, dt: f32) {
-        let Some(mut a) = self.auto_drag.take() else { return };
+        let Some(mut a) = self.auto_drag.take() else {
+            return;
+        };
         let now = self.vehicle.var(&a.var).unwrap_or(a.last);
         a.t += dt;
         if (now - a.target).abs() < 0.03 || a.t > 2.5 {
@@ -624,7 +765,11 @@ impl Player {
         }
         a.last = now;
         let step = 900.0 * dt.min(0.05) * a.sign;
-        self.vehicle.host.mouse = if a.axis == 0 { (step, 0.0) } else { (0.0, step) };
+        self.vehicle.host.mouse = if a.axis == 0 {
+            (step, 0.0)
+        } else {
+            (0.0, step)
+        };
         let exists = self.vehicle.trigger(&format!("{}_drag", a.ev));
         self.vehicle.host.mouse = (0.0, 0.0);
         if exists {
