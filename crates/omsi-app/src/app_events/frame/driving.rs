@@ -45,6 +45,7 @@ pub(super) fn player_step(cx: PlayerStepCx, dt: f32) {
     ) else {
         return;
     };
+    p.vehicle.set_camera_view(cx.view.view.as_str());
     // (while the tile under the bus is being read again - the weather turned
     // to snow and every tile came back with the winter textures - there is
     // no ground under it: it is held where it is rather than falling through

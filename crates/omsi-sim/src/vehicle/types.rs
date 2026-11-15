@@ -63,6 +63,9 @@ pub fn builtin_vars(root: &Path) -> Vec<String> {
                 .collect(),
             Err(_) => ["Velocity", "Velocity_Ground", "Throttle", "Brake", "Clutch", "M_Wheel", "n_Wheel", "Brakeforce", "A_Trans_X", "A_Trans_Y", "A_Trans_Z", "Spot_Select", "Snd_OutsideVol"].into_iter().chain(super::engine_vars::NAMES).map(String::from).collect(),
         };
+    if !v.iter().any(|n| n.eq_ignore_ascii_case("CameraView")) {
+        v.push("CameraView".into());
+    }
     for a in 0..8 {
         for side in ["L", "R"] {
             for pre in [

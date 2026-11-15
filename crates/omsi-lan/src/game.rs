@@ -2012,6 +2012,9 @@ fn drive_remote(rv: &mut RemoteVehicle, pose: &Pose, dt: f32, exact: bool) {
     pinned.extend(rv.synced.iter().map(|(id, v)| {
         (*id as VarId, rv.animations.value(*id, rv.draw_time).unwrap_or(*v))
     }));
+    if let Some(id) = rv.vehicle.ty.program.var("CameraView") {
+        pinned.push((id, 3.0));
+    }
     // Pose strings remain a fallback until the full value arrives. Pin them too, so
     // local AI scripts cannot replace a stand-in's display before visual updates.
     let display_names = display_vars(&rv.vehicle);

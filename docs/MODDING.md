@@ -4,6 +4,33 @@ openOMSI reads OMSI 2 content as it is: a bus, a map or an object made for OMSI 
 without changes. It also lifts limits OMSI 2 put on modders. Everything on this page is an
 addition. A file that uses it still loads in OMSI 2, which ignores what it does not know.
 
+## Vehicle scripts: camera view
+
+Vehicle scripts can use `(L.L.CameraView)` to distinguish the driver's cab, passenger
+interior and exterior views. For your own bus, it reports your selected view:
+
+| Value | View |
+| --- | --- |
+| `0` | No active vehicle view (free camera, on foot, AI vehicle, or dedicated server) |
+| `1` | Driver / first-person cab |
+| `2` | Passenger interior |
+| `3` | Exterior / third-person |
+
+The engine supplies this built-in variable before the vehicle's frame scripts run;
+it does not need an entry in the bus's varlist. Treat it as read-only. It starts at
+`0` during initialization. Mirror rendering does not change it.
+
+In multiplayer, your own bus reports your selected view. Remote players' buses
+always report `3` on your client, regardless of their owners' camera choices.
+Likewise, other clients read `3` for your bus even when you are in the driver's cab.
+The variable reports a view; writing it does not switch anyone's camera.
+
+For example, in a frame block, set a variable declared in your varlist:
+
+```
+(L.L.CameraView) 1 = (S.L.in_driver_view)
+```
+
 ## Interior lights: more than four per mesh
 
 OMSI 2 lights a mesh with at most four `[interiorlight]` lamps, the four numbers of its

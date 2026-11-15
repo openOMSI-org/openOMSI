@@ -35,9 +35,10 @@ pub(crate) enum Ev {
     AiAtStation,
     AiAtStationSide,
     PriorityWarning,
+    CameraView,
 }
 
-const COUNT: usize = Ev::PriorityWarning as usize + 1;
+const COUNT: usize = Ev::CameraView as usize + 1;
 
 /// The variables' names, in the order of [`Ev`].
 pub(super) const NAMES: [&str; COUNT] = [
@@ -66,12 +67,24 @@ pub(super) const NAMES: [&str; COUNT] = [
     "AI_Scheduled_AtStation",
     "AI_Scheduled_AtStation_Side",
     "TrafficPriorityWarningNeeded",
+    "CameraView",
 ];
 
 /// The ids of [`NAMES`] in a vehicle's variables (None: it has none of that name).
 pub(crate) type EngineVarIds = [Option<VarId>; COUNT];
 
 impl VehicleInstance {
+    /// Local player's vehicle camera: 1 driver, 2 passenger, 3 exterior, 0 other.
+    pub fn set_camera_view(&mut self, view: &str) {
+        let value = match view {
+            "driver" => 1.0,
+            "pax" => 2.0,
+            "outside" => 3.0,
+            _ => 0.0,
+        };
+        self.set_engine_ev(Ev::CameraView, value);
+    }
+
     fn ev_id(&self, ev: Ev) -> Option<VarId> {
         self.engine_ids.get_or_init(|| NAMES.map(|n| omsi_script::compile::with_lower(n, |k| self.var_index.get(k).copied())))[ev as usize]
     }
@@ -113,6 +126,24 @@ mod tests {
         assert_eq!(NAMES[Ev::Ai as usize], "AI");
         assert_eq!(NAMES[Ev::AiAtStationSide as usize], "AI_Scheduled_AtStation_Side");
         assert_eq!(NAMES[Ev::PriorityWarning as usize], "TrafficPriorityWarningNeeded");
+        assert_eq!(NAMES[Ev::CameraView as usize], "CameraView");
+    }
+
+    #[test]
+    fn scripts_observe_camera_changes() {
+        let mut v = crate::timetable_run::tests::script_test_vehicle(
+            "{frame}\n(L.L.CameraView) (S.L.observed_view)\n{end}\n",
+            "CameraView\nobserved_view\n",
+            "",
+        );
+        for (view, expected) in [("driver", 1.0), ("outside", 3.0), ("pax", 2.0), ("free", 0.0), ("foot", 0.0)] {
+            v.set_camera_view(view);
+            v.update(0.01);
+            assert_eq!(v.var("observed_view"), Some(expected), "{view}");
+        }
+        v.set_camera_view("driver");
+        v.update_ai(0.01, &AiFrame::default());
+        assert_eq!(v.var("observed_view"), Some(0.0), "handing the bus to AI clears its camera");
     }
 
     #[test]

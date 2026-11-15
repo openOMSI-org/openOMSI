@@ -412,6 +412,7 @@ impl VehicleInstance {
         };
         for (ev, v) in [
             (Ev::Ai, 1.0),
+            (Ev::CameraView, 0.0),
             (Ev::AiBlinkerL, matches!(ai.blinker, 1 | 3) as i32 as f32),
             (Ev::AiBlinkerR, matches!(ai.blinker, 2 | 3) as i32 as f32),
             (Ev::AiBrakelight, ai.brake as i32 as f32),
