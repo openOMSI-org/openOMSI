@@ -200,9 +200,8 @@ impl PeopleSim {
     /// The floor person `i` stands on while waiting at a stop, or walking back to their place
     /// there: the floor of their waiting place (a seat's `[passpos]` is the hip, its floor
     /// the seat's height lower, as `Task::WalkingToBusstop` aims for it), else the stop's
-    /// own height. None for anybody else. The ground under them is not asked: at a sloped or
-    /// angled kerb it found the road as well, and the people waiting sank into the street in
-    /// front of the buses.
+    /// own height. None for anybody else. The ground only lifts a standing place's floor (see
+    /// `raised_by_ground`), never lowers it: at a sloped kerb it found the road.
     pub fn waiting_height(&self, i: usize) -> Option<f64> {
         let p = self.pax(i)?;
         if p.inside.is_some() || !matches!(p.task, Task::WaitingForBus | Task::WalkingToBusstop) {
@@ -213,6 +212,14 @@ impl PeopleSim {
             Some(sp) => place_floor(sp, s.pos.z),
             None => s.pos.z,
         })
+    }
+
+    /// Whether person `i` waits on (or walks back to) a seat at their stop: its floor is the
+    /// bench's own, which a pavement beside it must not lift.
+    pub fn waits_seated(&self, i: usize) -> bool {
+        let Some(p) = self.pax(i) else { return false };
+        let spot = p.stop.and_then(|s| self.stops.get(&s)).zip(p.spot).and_then(|(s, k)| s.spots.get(k));
+        spot.is_some_and(|sp| sp.height != 0.0)
     }
 
     /// Whether the bus stands in the stop's box (the flag of its entry, sub_61ee18).

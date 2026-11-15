@@ -15,6 +15,7 @@ pub mod install;
 pub mod instances;
 pub mod storage;
 pub mod mods;
+pub mod map_uses;
 pub mod optimise;
 mod hof_sync;
 mod file_dialog;
@@ -752,6 +753,11 @@ pub fn mod_set_enabled(id: &str, on: bool) -> Result<String> {
 pub fn mod_remove(id: &str) -> Result<String> {
     let content = content_dir().ok_or_else(|| anyhow!(i18n::tr("no game binary configured, so no content folder")))?;
     mods::remove(&content, id)
+}
+
+pub fn mod_remove_preview(id: &str) -> Result<map_uses::Plan> {
+    let content = content_dir().ok_or_else(|| anyhow!(i18n::tr("no game binary configured, so no content folder")))?;
+    mods::remove_preview(&content, id)
 }
 
 /// What the page asks every few seconds: whether the content changed (then it asks for the
