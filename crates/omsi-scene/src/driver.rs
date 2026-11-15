@@ -197,7 +197,7 @@ const UPPER_ARM: f32 = 0.30;
 /// `LEAD_MAX` degrees ahead), and a lone hand (the other at the gear lever) goes this far
 /// (degrees) past its range before it lets go.
 const REGRIP_LEAD: f32 = 0.08;
-const LEAD_MAX: f32 = 14.0;
+const LEAD_MAX: f32 = 50.0;
 const ONE_HAND_OVER: f32 = 15.0;
 /// What a gear lever measures (m, the diagonal of its parts' box): less is a button or a
 /// switch (an automatic's selector), more a panel.

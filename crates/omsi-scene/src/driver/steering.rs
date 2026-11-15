@@ -46,7 +46,7 @@ pub(super) struct Regrip {
 
 impl Regrip {
     fn new(from: f32, to: f32, dur: f32, rate: f32) -> Regrip {
-        let v = (rate * dur).clamp(-60.0, 60.0);
+        let v = (rate * dur).clamp(-180.0, 180.0);
         Regrip {
             from,
             to,
@@ -93,9 +93,9 @@ pub(super) struct Targets {
     pub(super) tubes: [Vec3; 2],
 }
 
-const WHEEL_RATE_LIMIT: f32 = 1800.0;
-const WHEEL_DELTA_BASE: f32 = 45.0;
-const WHEEL_MESH_TOLERANCE: f32 = 35.0;
+const WHEEL_RATE_LIMIT: f32 = 2500.0;
+const WHEEL_DELTA_BASE: f32 = 60.0;
+const WHEEL_MESH_TOLERANCE: f32 = 60.0;
 
 #[derive(Default)]
 pub(super) struct WheelAngleTracker {
@@ -272,8 +272,13 @@ impl DriverFigure {
             // With the other hand at the gear lever this one is the wheel's only: it pushes
             // the wheel round as far as it goes and only then takes it again further back.
             let lone = away[1 - k];
+            let other_free = match &self.hands[1 - k].mv {
+                None => true,
+                Some(m) if self.rate.abs() > 300.0 => m.t >= 0.6,
+                _ => false,
+            };
             // Always keep both hands on wheel unless shifting (rare and brief)
-            let can_regrip = self.hands[1 - k].mv.is_none()
+            let can_regrip = other_free
                 && !freeze
                 && (!lone || a > hi + ONE_HAND_OVER || a < lo - ONE_HAND_OVER);
             // (the other hand keeps hold meanwhile, sliding if it has to)
@@ -301,8 +306,9 @@ impl DriverFigure {
                 // an unhurried reach back, only a little quicker the faster the wheel turns
                 // (at a tenth of a second a hand flew back to its hold); a lone hand is
                 // quicker, the wheel has none else
-                let dur = (0.38 + (to - from).abs() / 350.0) / (1.0 + self.rate.abs() / 2000.0);
-                let dur = dur.max(0.32);
+                let dur = (0.38 + (to - from).abs() / 350.0) / (1.0 + self.rate.abs() / 1500.0);
+                let min_dur = (0.32 / (1.0 + self.rate.abs() / 800.0)).max(0.12);
+                let dur = dur.max(min_dur);
                 self.hands[k] = Hand {
                     on_rim: self.hands[k].on_rim,
                     mv: Some(Regrip::new(from, to, dur, self.rate)),
@@ -385,8 +391,9 @@ impl DriverFigure {
                 .to_degrees()
                 .clamp(ROLL.0, ROLL.1);
             let want = ROLL_PLAIN + (want - ROLL_PLAIN) * smooth((proj.length() - 0.2) / 0.4);
+            let roll_ease = (ROLL_EASE / (1.0 + self.rate.abs() / 400.0)).max(0.025);
             let roll = match self.rolls[k] {
-                Some(r) if dt > 0.0 => r + (want - r) * (1.0 - (-dt / ROLL_EASE).exp()),
+                Some(r) if dt > 0.0 => r + (want - r) * (1.0 - (-dt / roll_ease).exp()),
                 _ => want,
             };
             self.rolls[k] = Some(roll);
@@ -444,6 +451,7 @@ impl DriverFigure {
                 }
             }
             // the hand turns into its new frame over a moment, not in one frame
+            let frame_ease = (FRAME_EASE / (1.0 + self.rate.abs() / 400.0)).max(0.02);
             let (dir, palm) = match self.frames[k] {
                 Some((d0, p0)) if dt > 0.0 => {
                     let q0 = glam::Quat::from_mat3(&glam::Mat3::from_cols(d0, p0, d0.cross(p0)))
@@ -451,7 +459,7 @@ impl DriverFigure {
                     let q1 =
                         glam::Quat::from_mat3(&glam::Mat3::from_cols(dir, palm, dir.cross(palm)))
                             .normalize();
-                    let q = q0.slerp(q1, 1.0 - (-dt / FRAME_EASE).exp()).normalize();
+                    let q = q0.slerp(q1, 1.0 - (-dt / frame_ease).exp()).normalize();
                     (q * Vec3::X, q * Vec3::Y)
                 }
                 _ => (dir, palm),
