@@ -2817,6 +2817,8 @@
 "Upscaling": "Uppskalning"
 "AMD FSR 1 (experimental)": "AMD FSR 1 (experimentell)"
 "Apple MetalFX (experimental)": "Apple MetalFX (experimentell)"
+"mX Graphics (Experimental)": "mX Graphics (experimentell)"
+"Draws the game with mX, openOMSI's own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before.": "Ritar spelet med mX, openOMSI:s eget grafikbibliotek, i stället för wgpu (gäller nästa gång spelet startas). Strålspårning och bildrutegenerering förblir avstängda; där mX inte kan starta ritas spelet som förut."
 "Standard (Catmull-Rom)": "Standard (Catmull-Rom)"
 "Standard Catmull-Rom or experimental FSR 1; changes show at once": "Standard-Catmull-Rom eller experimentell FSR 1; ändringar syns direkt"
 "FSR quality": "FSR-kvalitet"
