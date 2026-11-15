@@ -1,11 +1,12 @@
-#![rustfmt::skip]
 //! The vehicle upload: a vehicle type's meshes and materials made into render instances.
 use super::*;
 
+#[rustfmt::skip]
 pub(crate) mod lods;
 mod night_coverage;
 use night_coverage::{load_night, night_coverage, static_diffuse};
 
+#[rustfmt::skip]
 impl World {
     /// Upload a vehicle type's meshes and create render instances for one vehicle (the
     /// player's: its set is not shared and stays).
@@ -1256,6 +1257,7 @@ impl World {
 /// lists the slot's free textures and its own (the NLC's switch stripes keep the white
 /// picture under their light map in item 1 while item 2 swaps it for the black one under
 /// its night map).
+#[rustfmt::skip]
 fn slot_halves<'a>(plain: &[&'a MaterialDef], first_item: &[&'a MaterialDef], later_items: &[&'a MaterialDef], has_item: bool) -> Vec<Vec<&'a MaterialDef>> {
     let mut halves = vec![plain.to_vec()];
     if has_item {
@@ -1265,6 +1267,7 @@ fn slot_halves<'a>(plain: &[&'a MaterialDef], first_item: &[&'a MaterialDef], la
     halves
 }
 
+#[rustfmt::skip]
 pub(crate) fn shadow_blob(is_shadow: bool, positions: &[glam::Vec3]) -> bool {
     let (lo, hi) = positions.iter().fold((f32::MAX, f32::MIN), |(lo, hi), p| (lo.min(p.z), hi.max(p.z)));
     is_shadow && (positions.is_empty() || hi - lo <= 0.3)
@@ -1272,6 +1275,7 @@ pub(crate) fn shadow_blob(is_shadow: bool, positions: &[glam::Vec3]) -> bool {
 
 /// One material slot of a vehicle mesh being uploaded (see [`World::vehicle_slot_material`]).
 #[derive(Clone, Copy)]
+#[rustfmt::skip]
 struct SlotCx<'s> {
     alpha_masks: &'s crate::vehicle_materials::AlphaMasks,
     vt: &'s omsi_sim::VehicleType,
@@ -1288,6 +1292,7 @@ struct SlotCx<'s> {
 
 /// How a vehicle's material slot is blended and whether it writes depth.
 #[derive(Clone, Copy)]
+#[rustfmt::skip]
 struct SlotAlpha {
     alpha: AlphaMode,
     declared_alpha: AlphaMode,
@@ -1302,6 +1307,7 @@ struct SlotAlpha {
     tint_cut: bool,
 }
 
+#[rustfmt::skip]
 pub(super) fn is_reflective_body(
     named_body: bool,
     named_pane: bool,
@@ -1313,6 +1319,7 @@ pub(super) fn is_reflective_body(
 }
 
 /// The alpha mode of a vehicle's material slot: what the model.cfg declares, mended for dirt films, shadow decals, panes and (on request) bodies.
+#[rustfmt::skip]
 fn slot_alpha(cx: &SlotCx, ov: &[&MaterialDef], tex: Option<TextureId>, transmap: Option<(TextureId, bool)>) -> SlotAlpha {
     let SlotCx { vt, mesh_index, vm, def, slot, m, dirs_ref, subst, .. } = *cx;
     let base_overrides: Vec<MaterialDef> = ov.iter().map(|o| (*o).clone()).collect();
@@ -1451,6 +1458,7 @@ fn slot_alpha(cx: &SlotCx, ov: &[&MaterialDef], tex: Option<TextureId>, transmap
 
 /// The colours and the shader flags (`MaterialExtra`) of a vehicle's material slot.
 #[allow(clippy::type_complexity)]
+#[rustfmt::skip]
 fn slot_extra(
     cx: &SlotCx,
     ov: &[&MaterialDef],
@@ -1461,7 +1469,7 @@ fn slot_extra(
     (script_slot, script_trans, rain_layer, has_transmap): (Option<usize>, Option<usize>, bool, bool),
     lm_white: &dyn Fn(&[&MaterialDef]) -> bool,
 ) -> ([f32; 4], [f32; 3], MaterialExtra) {
-    let SlotCx { vm, def, slot, m, .. } = *cx;
+    let SlotCx { vm, def, m, .. } = *cx;
     let SlotAlpha { alpha, declared_alpha, dirt_overlay, cover, see_through, transparent_layer_hint, named_body, has_volume, repair_body_depth, tint_cut } = *a;
     let (color, emissive, specular, ambient) = d3d_material(m, ov.iter().find_map(|o| o.allcolor), textured);
     let mut extra = material_extra(ov, env_mask, bump, specular);
@@ -1537,6 +1545,7 @@ fn slot_extra(
     (color, emissive, extra)
 }
 /// What uploading a vehicle set gathers, slot by slot (see [`World::upload_vehicle`]).
+#[rustfmt::skip]
 struct VehicleUpload<'a> {
     vt: &'a omsi_sim::VehicleType,
     player: bool,
