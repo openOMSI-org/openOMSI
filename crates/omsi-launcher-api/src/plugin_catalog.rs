@@ -1,6 +1,4 @@
-//! The Plugins page's catalog (#3920): the list of openOMSI-org/openOMSI-Plugins with what is
-//! installed of it, and installing, updating and removing a plugin of it (see
-//! `omsi_launcher_lib::plugin_catalog`, which checks every file against the catalog).
+//! The Plugins page's catalog commands (#3920); `omsi_launcher_lib::plugin_catalog` checks the files.
 
 use crate::{Answer, err};
 use omsi_launcher_lib::plugin_catalog as cat;

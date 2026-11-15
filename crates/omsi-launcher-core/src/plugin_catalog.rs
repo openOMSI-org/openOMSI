@@ -1,28 +1,19 @@
-//! The plugin catalog (#3920): the reviewed, open source Lua plugins of the repository
-//! openOMSI-org/openOMSI-Plugins, listed in the launcher's Plugins page and installed from it.
-//!
-//! The catalog (`catalog.json`) names each plugin's files with their size and SHA-256; a file
-//! is downloaded from the same repository and installed only when both match, into
-//! `plugins/<id>/` of the content folder. An update replaces the files and keeps
-//! `plugins/<id>/data/` (the plugin's settings and saved data). Only plugins the catalog put
-//! there (`.catalog.json` beside them) are updated or removed: a folder of that name the
-//! player made is never touched.
+//! The plugin catalog (#3920). Only files whose size and SHA-256 match `catalog.json` are
+//! installed, and only folders the catalog put there (`.catalog.json`) are updated or removed.
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::path::{Path, PathBuf};
 
-/// The repository's catalog, and where its plugins' files are.
 pub const CATALOG_URL: &str =
     "https://raw.githubusercontent.com/openOMSI-org/openOMSI-Plugins/main/catalog.json";
 pub const FILES_URL: &str =
     "https://raw.githubusercontent.com/openOMSI-org/openOMSI-Plugins/main/plugins/";
-/// The plugin's page in the repository (its source, for the player to read).
 pub const SOURCE_URL: &str = "https://github.com/openOMSI-org/openOMSI-Plugins/tree/main/plugins/";
-/// The catalog's format; a newer one is not read (the page says to update the launcher).
+/// A newer catalog format is not read: the page says to update the launcher.
 const VERSION: u32 = 1;
-/// What the catalog put into a plugin's folder: `{id, version}`.
+/// `{id, version}`, in the folder of every plugin the catalog installed.
 const MARK: &str = ".catalog.json";
 const MAX_FILE: u64 = 2 * 1024 * 1024;
 const MAX_PLUGIN: u64 = 10 * 1024 * 1024;
@@ -154,8 +145,7 @@ pub fn parse(text: &str) -> Result<Vec<Entry>> {
     Ok(out)
 }
 
-/// The catalog version of the plugin installed in `plugins/<id>/` (None: not from the
-/// catalog, or not there).
+/// The version the catalog installed in `plugins/<id>/` (None: not from the catalog).
 pub fn installed(plugins: &Path, id: &str) -> Option<String> {
     let v: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(plugins.join(id).join(MARK)).ok()?).ok()?;
@@ -164,23 +154,24 @@ pub fn installed(plugins: &Path, id: &str) -> Option<String> {
         .flatten()
 }
 
-/// Download (`fetch`: a URL's bytes), check and install `e` into `plugins/<id>/`, keeping its
-/// `data` folder on an update. Nothing changes when a file does not match.
+/// Nothing changes when a file does not match; an update keeps `data/`.
 pub fn install(plugins: &Path, e: &Entry, fetch: &dyn Fn(&str) -> Result<Vec<u8>>) -> Result<()> {
     if let Some(why) = problem(e) {
         bail!("{} is not a plugin of the catalog ({why})", e.id);
     }
     let target = plugins.join(&e.id);
+    std::fs::create_dir_all(plugins)?;
+    // (beside the plugins folder, on the same disk, where the game finds no plugin)
+    let parent = plugins.parent().unwrap_or(plugins);
+    let tmp = parent.join(format!(".plugin-install-{}", e.id));
+    let old = parent.join(format!(".plugin-old-{}", e.id));
+    recover(&target, &old)?;
     if target.exists() && installed(plugins, &e.id).is_none() {
         bail!(
             "plugins/{} is there already and did not come from the catalog: rename or remove it first",
             e.id
         );
     }
-    std::fs::create_dir_all(plugins)?;
-    // (beside the plugins folder, on the same disk, where the game finds no plugin)
-    let parent = plugins.parent().unwrap_or(plugins);
-    let tmp = parent.join(format!(".plugin-install-{}", e.id));
     let _ = std::fs::remove_dir_all(&tmp);
     let result = (|| -> Result<()> {
         for f in &e.files {
@@ -205,19 +196,61 @@ pub fn install(plugins: &Path, e: &Entry, fetch: &dyn Fn(&str) -> Result<Vec<u8>
             tmp.join(MARK),
             serde_json::to_string_pretty(&serde_json::json!({ "id": e.id, "version": e.version }))?,
         )?;
-        if target.exists() {
-            if target.join("data").is_dir() {
-                std::fs::rename(target.join("data"), tmp.join("data"))?;
-            }
-            std::fs::remove_dir_all(&target)?;
-        }
-        std::fs::rename(&tmp, &target)?;
-        Ok(())
+        replace(&tmp, &target, &old, &|a, b| std::fs::rename(a, b))
     })();
     if result.is_err() {
         let _ = std::fs::remove_dir_all(&tmp);
     }
     result
+}
+
+/// Put `new` in place of `target` and move the old folder's `data/` over. The old folder waits
+/// at `old` until then, so on an error the plugin and its data are put back.
+fn replace(
+    new: &Path,
+    target: &Path,
+    old: &Path,
+    rename: &dyn Fn(&Path, &Path) -> std::io::Result<()>,
+) -> Result<()> {
+    if !target.exists() {
+        rename(new, target)?;
+        return Ok(());
+    }
+    rename(target, old)?;
+    if let Err(e) = rename(new, target) {
+        let _ = rename(old, target);
+        return Err(e.into());
+    }
+    let data = old.join("data");
+    let moved = if data.is_dir() {
+        rename(data.as_path(), target.join("data").as_path())
+    } else {
+        Ok(())
+    };
+    if let Err(e) = moved {
+        let _ = rename(target, new).and_then(|_| rename(old, target));
+        return Err(e.into());
+    }
+    // (what is left there is the old version's code: a leftover is cleared by `recover`)
+    let _ = std::fs::remove_dir_all(old);
+    Ok(())
+}
+
+/// An update cut short (the launcher closed, a failed rollback) left the old folder at `old`:
+/// put it back, or move its `data/` into the new one.
+fn recover(target: &Path, old: &Path) -> Result<()> {
+    if !old.exists() {
+        return Ok(());
+    }
+    if !target.exists() {
+        std::fs::rename(old, target)?;
+        return Ok(());
+    }
+    if old.join("data").is_dir() && !target.join("data").exists() {
+        std::fs::rename(old.join("data"), target.join("data"))?;
+    }
+    std::fs::remove_dir_all(old)?;
+    Ok(())
 }
 
 /// Remove a plugin the catalog installed, its settings and data with it.
@@ -336,6 +369,49 @@ mod tests {
 
         remove(&plugins, "speed-warning").unwrap();
         assert!(!plugins.join("speed-warning").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_update_cut_short_keeps_the_plugin_and_its_data() {
+        fn read(p: &Path) -> String {
+            std::fs::read_to_string(p).unwrap()
+        }
+        let root = std::env::temp_dir().join(format!("plugin-catalog-swap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (new, target, old) = (root.join("new"), root.join("plugins/p"), root.join("old"));
+        std::fs::create_dir_all(target.join("data")).unwrap();
+        std::fs::write(target.join("main.lua"), "-- one").unwrap();
+        std::fs::write(target.join("data/settings.json"), "{}").unwrap();
+        std::fs::create_dir_all(&new).unwrap();
+        std::fs::write(new.join("main.lua"), "-- two").unwrap();
+
+        // the new folder cannot be moved in, then the data cannot be moved over: each time
+        // the plugin and its data are back as they were
+        for fails in [new.clone(), old.join("data")] {
+            let r = replace(&new, &target, &old, &|a, b| {
+                if a == fails.as_path() {
+                    Err(std::io::Error::other("held open"))
+                } else {
+                    std::fs::rename(a, b)
+                }
+            });
+            assert!(r.is_err());
+            assert_eq!(read(&target.join("main.lua")), "-- one");
+            assert!(target.join("data/settings.json").is_file());
+            assert_eq!(read(&new.join("main.lua")), "-- two");
+            assert!(!old.exists());
+        }
+
+        replace(&new, &target, &old, &|a, b| std::fs::rename(a, b)).unwrap();
+        assert_eq!(read(&target.join("main.lua")), "-- two");
+        assert!(target.join("data/settings.json").is_file());
+        assert!(!old.exists() && !new.exists());
+
+        // stopped with the old folder aside: the next install puts it back
+        std::fs::rename(&target, &old).unwrap();
+        recover(&target, &old).unwrap();
+        assert!(target.join("data/settings.json").is_file() && !old.exists());
         let _ = std::fs::remove_dir_all(&root);
     }
 }
