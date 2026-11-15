@@ -417,6 +417,23 @@ impl TextCache {
         }))
     }
 
+    /// A built-in SVG icon with its own colours, cached at its rendered size.
+    pub(super) fn color_icon(
+        &mut self,
+        r: &Renderer,
+        scene: &mut Scene,
+        name: &str,
+        px: u32,
+    ) -> Option<TextureId> {
+        let svg = omsi_ui::icons::svg(name)?;
+        let px = px.max(8);
+        let key = (format!("\u{0}color_icon:{name}"), px, [0; 4]);
+        Some(self.cached(r, scene, key, (px, px), || {
+            omsi_ui::icons::rasterize_rgba(svg, px, px)
+                .unwrap_or_else(|| vec![0; px as usize * px as usize * 4])
+        }))
+    }
+
     /// A whole rounded plate of `w` x `h` pixels in one texture, anti-aliased.
     pub(super) fn rrect(&mut self, r: &Renderer, scene: &mut Scene, w: u32, h: u32, rad: f32, rgba: [u8; 4]) -> TextureId {
         let key = (format!("\u{0}rr{w}x{h}r{}", rad as u32), 0, rgba);

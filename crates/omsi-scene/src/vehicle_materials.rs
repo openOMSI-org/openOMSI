@@ -303,11 +303,12 @@ pub(super) fn load_texture_key(key: &Path, compress: bool) -> Option<TextureData
             .ok()
             .map(|img| omsi_texture::gpu::prepare_bump(&img, compress)),
         None => {
-            if compress {
-                omsi_texture::gpu::load_gpu(key).ok().map(|t| t.0)
+            let t = if compress {
+                omsi_texture::gpu::load_gpu(key).ok()?.0
             } else {
-                omsi_texture::gpu::load_gpu_fast(key).ok().map(|t| t.0)
-            }
+                omsi_texture::gpu::load_gpu_fast(key).ok()?.0
+            };
+            Some(omsi_texture::gpu::halved_plain(&t).unwrap_or(t))
         }
     }
 }

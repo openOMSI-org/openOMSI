@@ -654,4 +654,9 @@ fn the_people_waiting_keep_the_floor_of_their_place() {
     assert!(near(floor(&mut h, Task::WalkingToBusstop, Some(1)), 10.15), "walking back to it");
     assert!(near(floor(&mut h, Task::WaitingForBus, None), 10.0), "the stop's own height");
     assert_eq!(floor(&mut h, Task::ToBus, None), None, "off to a bus: the ground");
+    // (a seat keeps its bench's floor: the pavement beside it lifts only a standing place)
+    h.people = vec![person(Task::WaitingForBus, Some(1))];
+    assert!(h.waits_seated(0));
+    h.people = vec![person(Task::WaitingForBus, Some(0))];
+    assert!(!h.waits_seated(0));
 }

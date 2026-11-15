@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The Swift launcher's string catalog (apple/Resources/Localizable.xcstrings) and
 apple/Resources/InfoPlist.xcstrings (the permission prompts of the Info.plists) from the game
-launcher's translations (crates/omsi-app/locales/app.yml): the English text is the key in
+launcher's translations (crates/omsi-app/locales/app.yml and app.<language>.yml): the English text is the key in
 both. Only the texts the Swift sources use are taken. Run after changing either:
 
     python3 apple/Tools/gen-strings.py
@@ -38,8 +38,24 @@ def read_yml(path):
             table[key] = {}
         elif key is not None and line.startswith("  ") and ":" in line:
             lang, _, value = line.strip().partition(":")
-            if value.strip():
+            if value.strip() and lang.strip() != "en":
                 table[key][lang.strip()] = unquote(value)
+    folder = os.path.dirname(path)
+    for name in sorted(os.listdir(folder)):
+        if not (name.startswith("app.") and name.endswith(".yml")):
+            continue
+        lang = name[len("app."):-len(".yml")]
+        for line in open(os.path.join(folder, name), encoding="utf-8"):
+            if not line.startswith('"'):
+                continue
+            # `"English": "translation"`: the key ends at its first unescaped quote
+            line, i, escaped = line.rstrip("\r\n"), 1, False
+            while i < len(line) and (line[i] != '"' or escaped):
+                escaped = line[i] == "\\" and not escaped
+                i += 1
+            k, rest = line[: i + 1], line[i + 1 :]
+            if rest.startswith(": ") and json.loads(k) in table:
+                table[json.loads(k)][lang] = unquote(rest[2:])
     return table
 
 

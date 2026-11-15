@@ -207,6 +207,7 @@ impl<'a> Offscreen<'a> {
         }
         let mut run_clock = start_clock(args);
         run_clock.advance(service_seconds as f32);
+        crate::server::park_buses(server, args, &world);
         // a dedicated server's administration and clock (see `admin`)
         let mut srv_admin = crate::admin::ServerAdmin::default();
         let srv_clock = 0.0f64;

@@ -36,8 +36,21 @@ pub(in crate::mods) fn own_bus() -> &'static OwnBus {
     &OWN_BUS
 }
 
+/// The bus we drive is one the server keeps (a parked bus taken there, read from its kept
+/// files): its fingerprint, which is what it is for everybody - nothing of it is listed or sent.
+static DRIVES_KEPT: Mutex<Option<String>> = Mutex::new(None);
+
+pub(crate) fn drives_kept(fp: Option<String>) -> bool {
+    let mut kept = DRIVES_KEPT.lock().unwrap_or_else(|e| e.into_inner());
+    *kept = fp;
+    kept.is_some()
+}
+
 /// The fingerprint of our bus in that paint, once it is known (else empty).
 pub(crate) fn own_fingerprint(bus: &str, paint: &str) -> String {
+    if let Some(fp) = DRIVES_KEPT.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        return fp;
+    }
     own_bus().fingerprint(bus, paint)
 }
 

@@ -386,6 +386,10 @@ fn mod_remove(id: String) -> Answer {
     Ok(json!(core::mod_remove(&id).map_err(err)?))
 }
 
+fn mod_remove_preview(id: String) -> Answer {
+    to_json(core::mod_remove_preview(&id).map_err(err)?)
+}
+
 /// What installing `path` would take (size, room, whether it can be used in place).
 fn mod_inspect(path: String) -> Answer {
     to_json(core::inspect_mod(Path::new(&path)).map_err(err)?)
@@ -848,10 +852,10 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "ai_lists_save" => core::ai_lists::save(&arg::<String>(args, "map")?, &arg::<String>(args, "date")?, &arg::<Vec<core::ai_lists::GroupJson>>(args, "groups")?, &arg::<Vec<core::ai_lists::RuleJson>>(args, "rules")?).map_err(err),
         "ai_lists_reset" => core::ai_lists::reset(&arg::<String>(args, "map")?).map(|_| json!({})).map_err(err),
         "addons" => addons::list(),
-        "timetable" => timetable::load(arg::<String>(args, "map")?),
-        "timetable_save" => timetable::save(arg::<String>(args, "map")?, arg::<Vec<timetable::LineEdit>>(args, "lines")?),
+        "timetable" => timetable::load(arg::<String>(args, "map")?, arg::<Option<String>>(args, "date")?),
+        "timetable_save" => timetable::save(arg::<String>(args, "map")?, arg::<Vec<timetable::LineEdit>>(args, "lines")?, arg::<Option<String>>(args, "date")?),
         "timetable_reset" => timetable::reset(arg::<String>(args, "map")?),
-        "timetable_trip_save" => timetable::save_trip(arg::<String>(args, "map")?, arg::<timetable::TripNew>(args, "trip")?),
+        "timetable_trip_save" => timetable::save_trip(arg::<String>(args, "map")?, arg::<timetable::TripNew>(args, "trip")?, arg::<Option<String>>(args, "date")?),
         "profiles" => profiles(),
         "profile" => profile(arg::<String>(args, "name")?),
         "profile_create" => profile_create(arg::<String>(args, "name")?, arg::<String>(args, "sex")?),
@@ -888,6 +892,7 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "share_map_hofs" => share_map_hofs(arg::<String>(args, "map")?),
         "mod_set_enabled" => mod_set_enabled(arg::<String>(args, "id")?, arg::<bool>(args, "on")?),
         "mod_remove" => mod_remove(arg::<String>(args, "id")?),
+        "mod_remove_preview" => mod_remove_preview(arg::<String>(args, "id")?),
         "mod_inspect" => mod_inspect(arg::<String>(args, "path")?),
         "mod_install" => mod_install(arg::<String>(args, "path")?, arg::<String>(args, "mode")?),
         "mod_cancel" => Ok(json!(core::install::cancel(arg::<u64>(args, "id")?))),

@@ -1,15 +1,20 @@
 """Checks a pull request's changes to the interface translations, for
 .github/workflows/pr_checks.yml.
 
-    check_locales.py <app.yml before> <app.yml after>
+    check_locales.py <locales/ before> <locales/ after>
 
-The English text is the key of every entry (see `omsi_ui::tr`), so a translation PR should
-only add or correct texts. Errors (the check fails):
+The interface texts are crates/omsi-app/locales/app.yml (the English reference: every text,
+`en` only) and app.<language>.yml beside it (one language's translations of those texts). The
+English text is the key of every entry (see `omsi_ui::tr`), so a translation PR should only
+add or correct texts. A folder of the base with the older layout (every language in app.yml)
+is read the same way. Errors (the check fails):
 
-* the file does not parse, or a key is written twice (YAML keeps the last one silently);
+* a file does not parse, or a key is written twice (YAML keeps the last one silently);
 * a translation added or changed here has other placeholders than its key (`%{packs}`,
   `{}`): the text the game fills in would be lost or garbled;
-* a key is removed whose text the code still uses: that text loses every language.
+* a key is removed whose text the code still uses: that text loses every language;
+* a key new in app.yml is not translated in every app.<language>.yml (texts that were missing
+  before may stay missing; only new ones must come with every language).
 
 Warnings (shown on the pull request, the check passes):
 
@@ -20,6 +25,7 @@ Warnings (shown on the pull request, the check passes):
 
 Annotations go to stdout in the GitHub Actions format, a summary to $GITHUB_STEP_SUMMARY.
 """
+import json
 import os
 import re
 import sys
@@ -27,7 +33,8 @@ from pathlib import Path
 
 import yaml
 
-FILE = "crates/omsi-app/locales/app.yml"
+DIR = "crates/omsi-app/locales"
+FILE = f"{DIR}/app.yml"
 PLACEHOLDER = re.compile(r"%\{\w+\}|(?<!%)\{[^{}]*\}")
 
 
@@ -52,10 +59,28 @@ def mapping(loader, node, deep=False):
 Loader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, mapping)
 
 
-def load(path: str) -> dict:
+def load_file(path: Path) -> dict:
     with open(path, encoding="utf-8") as f:
         data = yaml.load(f, Loader=Loader) or {}
     return {k: v for k, v in data.items() if k != "_version"}
+
+
+def language_files(folder: Path) -> dict[str, Path]:
+    return {p.name[len("app."):-len(".yml")]: p for p in sorted(folder.glob("app.*.yml"))}
+
+
+def load(folder: str) -> dict:
+    folder = Path(folder)
+    out = {}
+    if (folder / "app.yml").exists():
+        for key, langs in load_file(folder / "app.yml").items():
+            out[key] = {l: t for l, t in langs.items() if l != "en"} if isinstance(langs, dict) else langs
+    for lang, path in language_files(folder).items():
+        for key, text in load_file(path).items():
+            entry = out.setdefault(key, {})
+            if isinstance(entry, dict):
+                entry[lang] = text
+    return out
 
 
 def code_strings(root: Path) -> set[str]:
@@ -73,20 +98,19 @@ def code_strings(root: Path) -> set[str]:
     return out
 
 
-def line_of(lines: list[str], key: str, lang: str | None = None) -> int:
-    """The line of `key` in the new file (and of its `lang:` entry), for the annotation."""
-    quoted = [f'"{key}":', f"'{key}':", f"{key}:"]
-    for i, line in enumerate(lines):
-        if any(line.startswith(q) for q in quoted):
-            if lang is None:
-                return i + 1
-            for j in range(i + 1, min(i + 60, len(lines))):
-                if not lines[j].startswith(" "):
-                    break
-                if lines[j].strip().startswith(f"{lang}:"):
-                    return j + 1
-            return i + 1
-    return 1
+class Places:
+    def __init__(self, folder: str):
+        self.folder = Path(folder)
+        self.lines: dict[str, list[str]] = {}
+
+    def __call__(self, key: str, lang: str | None = None) -> tuple[str, int]:
+        name = "app.yml" if lang is None else f"app.{lang}.yml"
+        if name not in self.lines:
+            path = self.folder / name
+            self.lines[name] = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        quoted = [f"{json.dumps(key, ensure_ascii=False)}:", f"'{key}':", f"{key}:"]
+        line = next((i + 1 for i, l in enumerate(self.lines[name]) if any(l.startswith(q) for q in quoted)), 1)
+        return f"{DIR}/{name}", line
 
 
 def main() -> int:
@@ -99,35 +123,40 @@ def main() -> int:
     try:
         after = load(after_path)
     except (DuplicateKey, yaml.YAMLError) as e:
-        print(f"::error file={FILE}::{FILE} does not load: {e}")
+        print(f"::error file={FILE}::the translations in {DIR} do not load: {e}")
         return 1
-    lines = Path(after_path).read_text(encoding="utf-8").splitlines()
+    place = Places(after_path)
     code = code_strings(Path("."))
+    all_langs = sorted(language_files(Path(after_path)))
 
     changed_langs: dict[str, int] = {}
     for key, langs in after.items():
         if not isinstance(langs, dict):
-            errors.append((line_of(lines, key), f"{key!r} is not a list of languages"))
+            errors.append((place(key), f"{key!r} is not a list of languages"))
             continue
         old = before.get(key) or {}
         for lang, text in langs.items():
             if old.get(lang) == text:
                 continue
             if sorted(PLACEHOLDER.findall(str(key))) != sorted(PLACEHOLDER.findall(str(text))):
-                errors.append((line_of(lines, key, lang), f"{lang}: the placeholders of {key!r} ({' '.join(PLACEHOLDER.findall(str(key))) or 'none'}) are not in the translation {text!r}"))
+                errors.append((place(key, lang), f"{lang}: the placeholders of {key!r} ({' '.join(PLACEHOLDER.findall(str(key))) or 'none'}) are not in the translation {text!r}"))
             if lang in old:
                 changed_langs[lang] = changed_langs.get(lang, 0) + 1
-                warnings.append((line_of(lines, key, lang), f"{lang}: an existing translation of {key!r} is changed from {old[lang]!r} to {text!r}"))
+                warnings.append((place(key, lang), f"{lang}: an existing translation of {key!r} is changed from {old[lang]!r} to {text!r}"))
+        if key not in before:
+            lacking = [l for l in all_langs if l not in langs]
+            if lacking:
+                errors.append((place(key), f"the new text {key!r} is not translated into: {', '.join(lacking)} (add it to each app.<language>.yml)"))
         if key not in before and key not in code:
-            warnings.append((line_of(lines, key), f"{key!r} is not a text the code uses, so this entry is never shown"))
+            warnings.append((place(key), f"{key!r} is not a text the code uses, so this entry is never shown"))
     for key in before:
         if key not in after and key in code:
-            errors.append((1, f"{key!r} is removed, but the code still uses it: it loses every language"))
+            errors.append(((FILE, 1), f"{key!r} is removed, but the code still uses it: it loses every language"))
 
-    for line, msg in errors:
-        print(f"::error file={FILE},line={line}::{msg}")
-    for line, msg in warnings[:50]:
-        print(f"::warning file={FILE},line={line}::{msg}")
+    for (file, line), msg in errors:
+        print(f"::error file={file},line={line}::{msg}")
+    for (file, line), msg in warnings[:50]:
+        print(f"::warning file={file},line={line}::{msg}")
     added = sum(len(v) for k, v in after.items() if isinstance(v, dict)) - sum(len(v) for v in before.values() if isinstance(v, dict))
     summary = [
         "### Translations",
