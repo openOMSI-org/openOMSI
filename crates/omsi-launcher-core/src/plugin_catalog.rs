@@ -249,8 +249,12 @@ fn recover(target: &Path, old: &Path) -> Result<()> {
     if old.join("data").is_dir() && !target.join("data").exists() {
         std::fs::rename(old.join("data"), target.join("data"))?;
     }
-    std::fs::remove_dir_all(old)?;
-    Ok(())
+    std::fs::remove_dir_all(old).with_context(|| {
+        format!(
+            "{} is left from an earlier update and cannot be removed: close what holds it open, or delete it",
+            old.display()
+        )
+    })
 }
 
 /// Remove a plugin the catalog installed, its settings and data with it.
