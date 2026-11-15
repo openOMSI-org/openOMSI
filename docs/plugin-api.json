@@ -730,7 +730,7 @@
       "name": "bus.track",
       "group": "vehicle",
       "since": "0.3.55",
-      "doc": "Where the player's rail vehicle (tram, metro, train) is on its track, as distances along it rather than x and y: `{lane, s, lane_length, forward, travelled}` - the track (a rail lane of the map's paths, numbered as `map.lane` gives its `index`), the metres from its start and its length, whether the vehicle faces the track's direction, and the metres it has come along the tracks since it was put on them. `nil` for a road vehicle. A plugin can work out block sections, distances to a signal or a stop, or a train protection system from it.",
+      "doc": "Where the player's rail vehicle (tram, metro, train) is on its track, as distances along it rather than x and y: `{lane, s, lane_length, forward, travelled}` - the track (an index into the map's lanes), the metres from its start and its length, whether the vehicle faces the track's direction, and the net metres it has moved along the tracks since it was put on them (they go down, below zero too, while it backs up). `nil` for a road vehicle. A plugin can work out block sections, distances to a signal or a stop, or a train protection system from it.",
       "params": [],
       "returns": "table or nil",
       "multi": false,

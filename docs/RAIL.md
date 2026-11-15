@@ -230,7 +230,7 @@ is a pull request of its own; nothing here changes how OMSI 2 content loads.
 
 | Part | Now | Next |
 | --- | --- | --- |
-| Track position | A rail vehicle runs on a rail lane of the map's paths (`RailDrive`: the lane, the metres along it, the direction, the distance travelled). Plugins read it with `omsi.bus.track()`. | Routes as chains of lanes with a running distance (kilometre posts), the same for the AI trains. |
+| Track position | A rail vehicle runs on a rail lane of the map's paths (`RailDrive`: the lane, the metres along it, the direction, the net distance moved). Plugins read it with `omsi.bus.track()`. | Routes as chains of lanes with a running distance (kilometre posts), the same for the AI trains. |
 | Switches | Set by the driver's keys, the AI's by their route (see *Switches*). | Switch positions as state that signals and interlockings can lock. |
 | Signals and blocks | The AI trains' signals ask the switches ahead. | Block sections on the lane chains, signals with aspects, a train occupying the blocks under it; the player's train and the AI's both. |
 | Train protection | - | Built on the block state: a plugin API first (`omsi.bus.track()` plus the blocks), then PZB/LZB-like systems as vehicle blocks. |

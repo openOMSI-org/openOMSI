@@ -191,15 +191,16 @@ impl RailDrive {
         RailDrive { lane: self.lane, s: self.s, along: self.along, trail: Default::default(), u: self.u, body: omsi_sim::rail::Body::default(), last_heading: None }
     }
 
-    /// The contact wire above the track at the pantograph: at the standard height of the
-    /// vehicle's class, kept within what its pantograph reaches (a wire it cannot touch would
-    /// strand it on a map that draws none), staggered across the track as a real wire is so
-    /// that the strip wears evenly, hard where the track forks or crosses, rougher in the wet.
-    /// Metres travelled along the track since the vehicle was put on it (forward positive).
+    /// Net metres along the tracks since the vehicle was put on them: backing up takes them
+    /// off, below zero too (not an odometer).
     pub(crate) fn travelled(&self) -> f64 {
         self.u
     }
 
+    /// The contact wire above the track at the pantograph: at the standard height of the
+    /// vehicle's class, kept within what its pantograph reaches (a wire it cannot touch would
+    /// strand it on a map that draws none), staggered across the track as a real wire is so
+    /// that the strip wears evenly, hard where the track forks or crosses, rougher in the wet.
     pub(crate) fn catenary(&self, net: &Network, v: &omsi_sim::VehicleInstance) -> Option<omsi_sim::vehicle::Catenary> {
         let g = v.pantograph()?;
         let shape = g.shape()?;

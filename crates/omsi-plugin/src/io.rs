@@ -754,14 +754,13 @@ pub struct AiCar {
 /// Where a rail vehicle is on its track, along the track rather than in x and y (#3969).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TrackPos {
-    /// The track (a rail lane of the map's path network) it is on.
+    /// An index into the map's lanes.
     pub lane: usize,
-    /// Metres along that track from its start, and the track's length.
     pub s: f32,
     pub lane_length: f32,
-    /// It faces the track's own direction (else it is on it backwards).
     pub forward: bool,
-    /// Metres it has travelled along the track since it was put on it (forward positive).
+    /// Net metres along the tracks since it was put on them: backing up takes them off,
+    /// below zero too.
     pub travelled: f64,
 }
 
