@@ -8761,3 +8761,17 @@ _version: 2
   en: "Folders of objects and splines that no other map uses go with it: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.":
   en: "Folders of objects and splines that another map still uses stay: {n}."
+"Call the police":
+  en: "Call the police"
+"No accident to report":
+  en: "No accident to report"
+"Stop and switch on the hazard lights first":
+  en: "Stop and switch on the hazard lights first"
+"The police have taken up the accident":
+  en: "The police have taken up the accident"
+"You left the scene of the accident without calling the police":
+  en: "You left the scene of the accident without calling the police"
+"Accident! Stop, switch on the hazard lights and call the police":
+  en: "Accident! Stop, switch on the hazard lights and call the police"
+"The police take up the accident: stop and switch on the hazard lights first":
+  en: "The police take up the accident: stop and switch on the hazard lights first"
