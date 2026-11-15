@@ -30,8 +30,8 @@ fn diagnostic_type(reverse: bool) -> VehicleType {
         }
         let material = |id: &str, visible: &str, variable: &str| {
             format!(
-            "[mesh]\n{id}{value}.o3d\n{visible}[matl_change]\nlamp.png\n0\n{variable}\n[matl_item]\n[matl_nightmap]\nlamp_on.png\n"
-        )
+                "[mesh]\n{id}{value}.o3d\n{visible}[matl_change]\nlamp.png\n0\n{variable}\n[matl_item]\n[matl_nightmap]\nlamp_on.png\n"
+            )
         };
         let variable = format!("missing_material_{value}");
         blocks.push(material(

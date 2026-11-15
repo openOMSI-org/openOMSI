@@ -531,7 +531,9 @@ impl Player {
                     if self.vehicle.has_trigger(&format!("{ev}_drag"))
                         || self.vehicle.ty.program.var(&var).is_some()
                     {
-                        log::info!("mouse event {ev}: a click on a drag control, {var} {now:.2} -> {target}");
+                        log::info!(
+                            "mouse event {ev}: a click on a drag control, {var} {now:.2} -> {target}"
+                        );
                         self.auto_drag = Some(AutoDrag {
                             ev,
                             var,
