@@ -268,7 +268,6 @@ impl Receiver {
 }
 
 impl Context {
-    /// This context's moving values over `layout`'s trip.
     fn with(&self, layout: &Context) -> Context {
         Context {
             active: self.active,
