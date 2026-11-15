@@ -7,7 +7,7 @@ import { t, bytes, ago } from '../i18n.js';
 import { call, onPhone } from '../api.js';
 import { Icon } from '../icons.js';
 import { Button, Card, Dialog, Empty, PageHead, Search, Select, Spinner, Tag, Toggle, Notice, useConfirm } from '../ui.js';
-import { pollNow, loadContent, cached, installMod, jobRunning } from '../data.js';
+import { pollNow, loadContent, cached, reread, installMod, jobRunning } from '../data.js';
 
 const KIND = { bus: ['bus', 'Bus'], map: ['map', 'Map'], archive: ['folder', 'Archive'], other: ['puzzle', 'Other'] };
 
@@ -32,6 +32,9 @@ export function ModsPage() {
   const [q, setQ] = useState('');
   const [show, setShow] = useState('all');
   const [busy, setBusy] = useState({});
+  // (a switch shows what was asked of it right away, until the list read after it says so
+  // itself: the read takes seconds on a big content folder, #4017)
+  const [want, setWant] = useState({});
   const [open, setOpen] = useState(null);
   const [ask, confirm] = useConfirm();
   const read = () => cached('mods', 'mods_status');
@@ -99,15 +102,21 @@ export function ModsPage() {
     await f();
     setBusy((b) => ({ ...b, [m.id]: false }));
   };
+  const wish = (id, on) => setWant((w) => {
+    const { [id]: _, ...rest } = w;
+    return on === undefined ? rest : { ...rest, [id]: on };
+  });
   const toggle = (m, on) => busyWhile(m, async () => {
+    wish(m.id, on);
     try {
       await call('mod_set_enabled', { id: m.id, on });
       toast(t(on ? '{name} switched on' : '{name} switched off', { name: m.name }), 'ok');
-      read();
       loadContent();
+      await reread('mods', 'mods_status');
     } catch (e) {
       toast(t(e.message), 'error');
     }
+    wish(m.id);
   });
   const remove = async (m) => {
     setBusy((b) => ({ ...b, [m.id]: true }));
@@ -124,8 +133,9 @@ export function ModsPage() {
       try {
         await call('mod_remove', { id: m.id });
         toast(t('{name} deleted', { name: m.name }), 'ok');
-        read();
         loadContent();
+        // (its row stays, busy, until the list no longer has it)
+        await reread('mods', 'mods_status');
       } catch (e) {
         toast(t(e.message), 'error');
       }
@@ -180,7 +190,7 @@ export function ModsPage() {
                         <div class="sub">${[t(KIND[m.kind]?.[1] || 'Other'), holds, bytes(m.bytes), m.installed ? ago(m.installed) : !m.noted ? t('found in the content folder') : ''].filter(Boolean).join(' - ')}</div>
                       </div>
                       ${busy[m.id] && html`<${Spinner} />`}
-                      <div onClick=${(e) => e.stopPropagation()}><${Toggle} checked=${m.enabled} disabled=${!!busy[m.id]} onChange=${(on) => toggle(m, on)} /></div>
+                      <div onClick=${(e) => e.stopPropagation()}><${Toggle} checked=${m.id in want ? want[m.id] : m.enabled} disabled=${!!busy[m.id]} onChange=${(on) => toggle(m, on)} /></div>
                       <${Button} small kind="ghost" icon="trash" disabled=${!!busy[m.id]} title="Delete this mod (asks first; switch it off instead to keep it)" onClick=${(e) => (e.stopPropagation(), remove(m))} />
                     </div>
                     ${open === m.id && html`<div style="padding:4px 12px 12px 44px" class="small selectable stack">${tree.map(([folder, items]) => html`<div class="row" style="align-items:baseline;gap:12px">
