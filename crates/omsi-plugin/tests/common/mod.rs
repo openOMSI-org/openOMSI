@@ -46,8 +46,27 @@ pub struct Game {
 impl Game {
     /// A bus on a duty at noon, on a map with a little traffic.
     pub fn new() -> Game {
-        let stop = |id: i64, name: &str, t: f64, x: f64| Stop { id, name: name.into(), arr: t, dep: t + 20.0, pos: Some([x, 0.0, 0.0]), stops: true, closed: false };
-        let trip = Trip { name: "Spandau".into(), line: "136".into(), terminus: "Rathaus".into(), departure: 43200.0, end: 44400.0, stops: vec![stop(11, "Zoo", 43200.0, 0.0), stop(12, "Markt", 43500.0, 300.0), stop(13, "Rathaus", 44400.0, 900.0)] };
+        let stop = |id: i64, name: &str, t: f64, x: f64| Stop {
+            id,
+            name: name.into(),
+            arr: t,
+            dep: t + 20.0,
+            pos: Some([x, 0.0, 0.0]),
+            stops: true,
+            closed: false,
+        };
+        let trip = Trip {
+            name: "Spandau".into(),
+            line: "136".into(),
+            terminus: "Rathaus".into(),
+            departure: 43200.0,
+            end: 44400.0,
+            stops: vec![
+                stop(11, "Zoo", 43200.0, 0.0),
+                stop(12, "Markt", 43500.0, 300.0),
+                stop(13, "Rathaus", 44400.0, 900.0),
+            ],
+        };
         let mut g = Game {
             vehicle: true,
             pos: [100.0, 50.0, 2.0, 90.0],
@@ -55,16 +74,66 @@ impl Game {
             gear: 1.0,
             passengers: 3,
             view: "driver".into(),
-            clock: Clock { time: 43200.0, year: 2026, month: 10, day: 8, day_of_year: 281, weekday: 3, run_time: 10.0 },
-            weather: Weather { name: "Sunny".into(), visibility_m: 20000.0, temperature: 18.0, clouds: "-1".into(), ..Default::default() },
-            duty: Some(Duty { line: "136".into(), tour: "3".into(), trip: 0, trips: 4, next: 1, at_stop: false, trip_done: false, delay: 30.0, current: trip }),
-            cars: vec![AiCar { id: 7, kind: "car", name: "VW Golf".into(), pos: [130.0, 50.0, 2.0, 90.0], speed_kmh: 30.0, bounding_box: [1.8, 4.4, 1.5, 0.0, -0.6, 0.75], box_heading: 90.0, ..Default::default() }, AiCar { id: 9, kind: "timetable_bus", name: "MAN NL".into(), pos: [600.0, 50.0, 2.0, 0.0], line: Some("137".into()), ..Default::default() }],
+            clock: Clock {
+                time: 43200.0,
+                year: 2026,
+                month: 10,
+                day: 8,
+                day_of_year: 281,
+                weekday: 3,
+                run_time: 10.0,
+            },
+            weather: Weather {
+                name: "Sunny".into(),
+                visibility_m: 20000.0,
+                temperature: 18.0,
+                clouds: "-1".into(),
+                ..Default::default()
+            },
+            duty: Some(Duty {
+                line: "136".into(),
+                tour: "3".into(),
+                trip: 0,
+                trips: 4,
+                next: 1,
+                at_stop: false,
+                trip_done: false,
+                delay: 30.0,
+                current: trip,
+            }),
+            cars: vec![
+                AiCar {
+                    id: 7,
+                    kind: "car",
+                    name: "VW Golf".into(),
+                    pos: [130.0, 50.0, 2.0, 90.0],
+                    speed_kmh: 30.0,
+                    bounding_box: [1.8, 4.4, 1.5, 0.0, -0.6, 0.75],
+                    box_heading: 90.0,
+                    ..Default::default()
+                },
+                AiCar {
+                    id: 9,
+                    kind: "timetable_bus",
+                    name: "MAN NL".into(),
+                    pos: [600.0, 50.0, 2.0, 0.0],
+                    line: Some("137".into()),
+                    ..Default::default()
+                },
+            ],
             ..Default::default()
         };
-        for (k, v) in [("Velocity", 0.0), ("door_0", 0.0), ("cockpit_hupe", 0.0), ("bremse_feststell", 1.0), ("engine_tank_content", 180.0)] {
+        for (k, v) in [
+            ("Velocity", 0.0),
+            ("door_0", 0.0),
+            ("cockpit_hupe", 0.0),
+            ("bremse_feststell", 1.0),
+            ("engine_tank_content", 180.0),
+        ] {
             g.vars.insert(k.into(), v);
         }
-        g.strings.insert("IBIS_terminus_name".into(), "Rathaus".into());
+        g.strings
+            .insert("IBIS_terminus_name".into(), "Rathaus".into());
         g
     }
 
@@ -79,11 +148,19 @@ impl PluginIo for Game {
     }
     fn hof_terminus(&self, identifier: &str) -> Option<api::Value> {
         let data = self.hof_data()?;
-        data.get("termini")?.items().iter().find(|t| t.get("identifier") == Some(&identifier.into())).cloned()
+        data.get("termini")?
+            .items()
+            .iter()
+            .find(|t| t.get("identifier") == Some(&identifier.into()))
+            .cloned()
     }
     fn hof_busstop(&self, identifier: &str) -> Option<api::Value> {
         let data = self.hof_data()?;
-        data.get("bus_stops")?.items().iter().find(|t| t.get("identifier") == Some(&identifier.into())).cloned()
+        data.get("bus_stops")?
+            .items()
+            .iter()
+            .find(|t| t.get("identifier") == Some(&identifier.into()))
+            .cloned()
     }
     fn system(&mut self, name: &str) -> Option<f32> {
         match name {
@@ -193,7 +270,11 @@ impl PluginIo for Game {
         true
     }
     fn bus_engine(&self) -> Option<(bool, Option<f32>, bool)> {
-        Some((self.engine, Some(if self.engine { 750.5 } else { 0.0 }), true))
+        Some((
+            self.engine,
+            Some(if self.engine { 750.5 } else { 0.0 }),
+            true,
+        ))
     }
     fn bus_start_up(&mut self) -> Option<String> {
         self.engine = true;
@@ -229,7 +310,21 @@ impl PluginIo for Game {
         Some(0)
     }
     fn bus_destinations(&self) -> (Vec<Terminus>, Option<i64>) {
-        (vec![Terminus { code: 1, name: "Rathaus".into(), all_exit: false }, Terminus { code: 0, name: "Betriebsfahrt".into(), all_exit: true }], Some(0))
+        (
+            vec![
+                Terminus {
+                    code: 1,
+                    name: "Rathaus".into(),
+                    all_exit: false,
+                },
+                Terminus {
+                    code: 0,
+                    name: "Betriebsfahrt".into(),
+                    all_exit: true,
+                },
+            ],
+            Some(0),
+        )
     }
     fn bus_set_destination(&mut self, index: usize) -> bool {
         self.did(format!("destination {index}"));
@@ -243,16 +338,34 @@ impl PluginIo for Game {
         Some(("2711".into(), "Vehicles/MAN_SD202/SD202.bus".into()))
     }
     fn bus_passengers(&self) -> Option<(usize, usize, usize)> {
-        Some((self.passengers, self.passengers.min(2), self.passengers.saturating_sub(2)))
+        Some((
+            self.passengers,
+            self.passengers.min(2),
+            self.passengers.saturating_sub(2),
+        ))
     }
     fn bus_tickets(&self) -> (Vec<Ticket>, Option<(String, f32)>) {
-        (vec![Ticket { name: "Einzelfahrschein".into(), price: 2.1, day_ticket: false }], Some(("Einzelfahrschein".into(), 2.1)))
+        (
+            vec![Ticket {
+                name: "Einzelfahrschein".into(),
+                price: 2.1,
+                day_ticket: false,
+            }],
+            Some(("Einzelfahrschein".into(), 2.1)),
+        )
     }
     fn bus_sales(&self) -> Option<(u32, f64)> {
         Some((4, 8.4))
     }
     fn bus_wheels(&self) -> Vec<Wheel> {
-        vec![Wheel { axle: 0, side: 0, rpm: 10.0, radius: 0.5, suspension: 0.01, driven: false }]
+        vec![Wheel {
+            axle: 0,
+            side: 0,
+            rpm: 10.0,
+            radius: 0.5,
+            suspension: 0.01,
+            driven: false,
+        }]
     }
     fn bus_triggers(&self) -> Vec<String> {
         vec!["bus_doorfront0".into()]
@@ -283,7 +396,14 @@ impl PluginIo for Game {
         Some(1)
     }
     fn traffic_buses(&self) -> Vec<AiBus> {
-        vec![AiBus { id: 9, line: "137".into(), tour: "1".into(), trip: "x".into(), delay: 60.0, ..Default::default() }]
+        vec![AiBus {
+            id: 9,
+            line: "137".into(),
+            tour: "1".into(),
+            trip: "x".into(),
+            delay: 60.0,
+            ..Default::default()
+        }]
     }
     fn traffic_light_ahead(&self, _: f64) -> Option<Light> {
         self.light.clone()
@@ -292,10 +412,30 @@ impl PluginIo for Game {
         Some([20, 5, 3])
     }
     fn people_list(&self) -> Vec<Person> {
-        vec![Person { id: 1, pos: [101.0, 50.0, 2.0], state: "seated", aboard: true, ..Default::default() }, Person { id: 2, pos: [900.0, 0.0, 0.0], state: "waiting", stop: Some(13), ..Default::default() }]
+        vec![
+            Person {
+                id: 1,
+                pos: [101.0, 50.0, 2.0],
+                state: "seated",
+                aboard: true,
+                ..Default::default()
+            },
+            Person {
+                id: 2,
+                pos: [900.0, 0.0, 0.0],
+                state: "waiting",
+                stop: Some(13),
+                ..Default::default()
+            },
+        ]
     }
     fn people_stops(&self) -> Vec<PaxStop> {
-        vec![PaxStop { id: 13, name: "Rathaus".into(), pos: [900.0, 0.0, 0.0], waiting: 5 }]
+        vec![PaxStop {
+            id: 13,
+            name: "Rathaus".into(),
+            pos: [900.0, 0.0, 0.0],
+            waiting: 5,
+        }]
     }
     fn people_density(&self) -> Option<f32> {
         Some(1.0)
@@ -311,7 +451,10 @@ impl PluginIo for Game {
         if id != 1 {
             return Err("not boarding the bus yet".into());
         }
-        self.did(format!("ticket {id} {:?} {:?} {:?} {:?} {:?} {:?} by {by}", c.kind, c.ticket, c.name, c.price, c.voice, c.tag));
+        self.did(format!(
+            "ticket {id} {:?} {:?} {:?} {:?} {:?} {:?} by {by}",
+            c.kind, c.ticket, c.name, c.price, c.voice, c.tag
+        ));
         Ok(())
     }
     fn duty(&self) -> Option<Duty> {
@@ -335,7 +478,13 @@ impl PluginIo for Game {
             _ => false,
         }
     }
-    fn duty_start(&mut self, line: &str, tour: &str, trip: usize, stop: usize) -> Result<(), String> {
+    fn duty_start(
+        &mut self,
+        line: &str,
+        tour: &str,
+        trip: usize,
+        stop: usize,
+    ) -> Result<(), String> {
         if line != "136" {
             return Err(format!("no line {line}"));
         }
@@ -359,7 +508,9 @@ impl PluginIo for Game {
         self.duty.is_some()
     }
     fn duty_set_closed_stops(&mut self, stops: &[String], via: &str) -> bool {
-        let Some(d) = self.duty.as_mut() else { return false };
+        let Some(d) = self.duty.as_mut() else {
+            return false;
+        };
         for s in &mut d.current.stops {
             s.closed = stops.iter().any(|c| c.eq_ignore_ascii_case(&s.name));
         }
@@ -367,23 +518,54 @@ impl PluginIo for Game {
         true
     }
     fn timetable_lines(&self) -> Vec<Line> {
-        vec![Line { name: "136".into(), user_allowed: true, tours: vec![Tour { number: "3".into(), today: true, trips: 4 }] }]
+        vec![Line {
+            name: "136".into(),
+            user_allowed: true,
+            tours: vec![Tour {
+                number: "3".into(),
+                today: true,
+                trips: 4,
+            }],
+        }]
     }
-    fn timetable_stops(&self, _: &str, _: &str, trip: Option<usize>) -> Vec<(usize, usize, String, f64)> {
+    fn timetable_stops(
+        &self,
+        _: &str,
+        _: &str,
+        trip: Option<usize>,
+    ) -> Vec<(usize, usize, String, f64)> {
         let t = trip.unwrap_or(0);
-        vec![(t, 0, "Zoo".into(), 43200.0), (t, 1, "Markt".into(), 43500.0)]
+        vec![
+            (t, 0, "Zoo".into(), 43200.0),
+            (t, 1, "Markt".into(), 43500.0),
+        ]
     }
     fn timetable_stop_names(&self) -> Vec<(i64, String)> {
         vec![(11, "Zoo".into())]
     }
     fn map_info(&self) -> Option<MapInfo> {
-        Some(MapInfo { name: "Spandau".into(), friendly_name: "Berlin-Spandau".into(), path: "maps/Berlin-Spandau/global.cfg".into(), left_hand_traffic: false, tile_size: 300.0 })
+        Some(MapInfo {
+            name: "Spandau".into(),
+            friendly_name: "Berlin-Spandau".into(),
+            path: "maps/Berlin-Spandau/global.cfg".into(),
+            left_hand_traffic: false,
+            tile_size: 300.0,
+        })
     }
     fn map_tiles(&self) -> Vec<Tile> {
-        vec![Tile { x: 0, y: 0, file: "tile_0_0.map".into(), loaded: true }]
+        vec![Tile {
+            x: 0,
+            y: 0,
+            file: "tile_0_0.map".into(),
+            loaded: true,
+        }]
     }
     fn map_stops(&self) -> Vec<MapStop> {
-        vec![MapStop { id: 11, name: "Zoo".into(), pos: [0.0, 0.0, 0.0, 90.0] }]
+        vec![MapStop {
+            id: 11,
+            name: "Zoo".into(),
+            pos: [0.0, 0.0, 0.0, 90.0],
+        }]
     }
     fn map_object(&self, id: i64) -> Option<[f64; 4]> {
         (id == 11).then_some([0.0, 0.0, 0.0, 90.0])
@@ -395,7 +577,11 @@ impl PluginIo for Game {
         (Some(2.5), Some(2.0))
     }
     fn map_entrypoints(&self) -> Vec<Entry> {
-        vec![Entry { index: 0, name: "Depot".into(), pos: Some([5.0, 5.0, 0.0, 180.0]) }]
+        vec![Entry {
+            index: 0,
+            name: "Depot".into(),
+            pos: Some([5.0, 5.0, 0.0, 180.0]),
+        }]
     }
     fn map_teleport(&mut self, at: [f64; 3], heading: f64) -> bool {
         self.pos = [at[0], at[1], at[2], heading];
@@ -408,7 +594,13 @@ impl PluginIo for Game {
         true
     }
     fn map_lane(&self, _: f64, _: f64) -> Option<Lane> {
-        Some(Lane { index: 4, distance: 1.0, speed_limit_kmh: 50.0, name: "Street".into(), has_light: false })
+        Some(Lane {
+            index: 4,
+            distance: 1.0,
+            speed_limit_kmh: 50.0,
+            name: "Street".into(),
+            has_light: false,
+        })
     }
     fn clock(&self) -> Option<Clock> {
         Some(self.clock.clone())
@@ -458,7 +650,17 @@ impl PluginIo for Game {
         Ok(())
     }
     fn camera(&self) -> Option<Camera> {
-        Some(Camera { view: self.view.clone(), pos: [0.0, -10.0, 2.0], yaw: 0.0, pitch: 0.0, fov: 60.0, zoom: 1.0, width: 1920, height: 1080, ..Default::default() })
+        Some(Camera {
+            view: self.view.clone(),
+            pos: [0.0, -10.0, 2.0],
+            yaw: 0.0,
+            pitch: 0.0,
+            fov: 60.0,
+            zoom: 1.0,
+            width: 1920,
+            height: 1080,
+            ..Default::default()
+        })
     }
     fn set_view(&mut self, name: &str) -> bool {
         self.view = name.into();
@@ -481,16 +683,31 @@ impl PluginIo for Game {
         self.held.clone()
     }
     fn mouse(&self) -> Option<Mouse> {
-        Some(Mouse { x: 200.0, y: 100.0, left: true, ..Default::default() })
+        Some(Mouse {
+            x: 200.0,
+            y: 100.0,
+            left: true,
+            ..Default::default()
+        })
     }
     fn controllers(&self) -> Vec<Controller> {
-        vec![Controller { name: "Wheel".into(), gamepad: false, axes: vec![0.0, 1.0], buttons: 12 }]
+        vec![Controller {
+            name: "Wheel".into(),
+            gamepad: false,
+            axes: vec![0.0, 1.0],
+            buttons: 12,
+        }]
     }
     fn bindings(&self, vehicle: bool) -> Vec<(String, String)> {
-        vec![(if vehicle { "horn" } else { "sim_pause" }.into(), "P".into())]
+        vec![(
+            if vehicle { "horn" } else { "sim_pause" }.into(),
+            "P".into(),
+        )]
     }
     fn sound_play(&mut self, file: &Path, s: &Sound) -> Option<u64> {
-        self.sounds.borrow_mut().push((file.to_path_buf(), s.clone()));
+        self.sounds
+            .borrow_mut()
+            .push((file.to_path_buf(), s.clone()));
         Some(self.sounds.borrow().len() as u64)
     }
     fn sound_set(&mut self, _: u64, _: &Sound) -> bool {
@@ -506,7 +723,10 @@ impl PluginIo for Game {
         Some(0.8)
     }
     fn settings(&self) -> Vec<(&'static str, InfoValue)> {
-        vec![("graphics", InfoValue::Text("enhanced".into())), ("units", InfoValue::Text("metric".into()))]
+        vec![
+            ("graphics", InfoValue::Text("enhanced".into())),
+            ("units", InfoValue::Text("metric".into())),
+        ]
     }
     fn stats(&self) -> Vec<(&'static str, InfoValue)> {
         vec![("km", InfoValue::Num(12.5))]
@@ -529,7 +749,12 @@ impl PluginIo for Game {
         Some((true, 1, "Host".into()))
     }
     fn lan_players(&self) -> Vec<LanPlayer> {
-        vec![LanPlayer { id: 2, name: "Anna".into(), bus: "x.bus".into(), ..Default::default() }]
+        vec![LanPlayer {
+            id: 2,
+            name: "Anna".into(),
+            bus: "x.bus".into(),
+            ..Default::default()
+        }]
     }
     fn lan_send(&mut self, plugin: &str, to: u32, text: &str) -> Result<(), String> {
         self.lan_sent.push((plugin.into(), to, text.into()));
