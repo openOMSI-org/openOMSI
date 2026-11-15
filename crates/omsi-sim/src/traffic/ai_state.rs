@@ -129,6 +129,12 @@ pub struct AiState {
     /// At most this speed for now (m/s): rolling aside at walking pace for an emergency
     /// vehicle, or one crossing against a red light on the junction kept for it.
     pub speed_cap: Option<f32>,
+    /// A long vehicle's line through a bend (`ai_traffic::wide_turn`): its hazard lights are
+    /// on, the sideways move is that line (no indicator for it), and its speed is at most
+    /// `wide_cap`.
+    pub hazard: bool,
+    pub wide_swing: bool,
+    pub wide_cap: Option<f32>,
     /// A rail vehicle's traction as power over mass (W/kg): its acceleration falls with speed as
     /// `P / (m v)` once the starting effort is no longer what limits it. None for a road vehicle.
     pub rail_power: Option<f32>,
@@ -386,7 +392,7 @@ const TRAP_DEPTH: u32 = 3;
 
 impl AiState {
     pub fn new(lane: usize, s: f32, seed: u64) -> AiState {
-        AiState { traffic_pool: None, veh_type: 0, lane, s, speed: 0.0, max_speed_kmh: 50.0, accel: 1.2, decel: 3.0, length: 5.0, rng: seed | 1, blinker: 0, braking: false, brake_lamp: 0.0, odometer: 0.0, planned_next: None, ahead: Vec::new(), change_plan: Vec::new(), prev_lane: None, yield_time: 0.0, route: Vec::new(), route_index: 0, change: None, change_cooldown: 5.0, lateral: 0.0, lateral_target: 0.0, lateral_ramp: (0.0, 0.0, 0.0, 1.0), turn_wish: 0, signal: 0, signal_time: 0.0, lat_accel: 2.8, desire: 1.0, headway: 1.4, min_gap: 2.0, accept_gap: 4.0, reaction: 0.7, honk_factor: 1.0, amber_factor: 0.03, front: 2.5, rear: 2.5, held: false, start_timer: 0.0, acc: 0.0, accel_cap: None, ordinary_brake: ORDINARY_BRAKE, emergency_brake: MAX_BRAKE, jerk: JERK, cmd: 0.0, emergency: false, emergency_began: false, body: BodyLink::default(), nudge_ramp: (0.0, 0.0, 0.0, 1.0), priority_drive: false, speed_cap: None, rail_power: None, bend: BendCache::default() }
+        AiState { traffic_pool: None, veh_type: 0, lane, s, speed: 0.0, max_speed_kmh: 50.0, accel: 1.2, decel: 3.0, length: 5.0, rng: seed | 1, blinker: 0, hazard: false, wide_swing: false, wide_cap: None, braking: false, brake_lamp: 0.0, odometer: 0.0, planned_next: None, ahead: Vec::new(), change_plan: Vec::new(), prev_lane: None, yield_time: 0.0, route: Vec::new(), route_index: 0, change: None, change_cooldown: 5.0, lateral: 0.0, lateral_target: 0.0, lateral_ramp: (0.0, 0.0, 0.0, 1.0), turn_wish: 0, signal: 0, signal_time: 0.0, lat_accel: 2.8, desire: 1.0, headway: 1.4, min_gap: 2.0, accept_gap: 4.0, reaction: 0.7, honk_factor: 1.0, amber_factor: 0.03, front: 2.5, rear: 2.5, held: false, start_timer: 0.0, acc: 0.0, accel_cap: None, ordinary_brake: ORDINARY_BRAKE, emergency_brake: MAX_BRAKE, jerk: JERK, cmd: 0.0, emergency: false, emergency_began: false, body: BodyLink::default(), nudge_ramp: (0.0, 0.0, 0.0, 1.0), priority_drive: false, speed_cap: None, rail_power: None, bend: BendCache::default() }
     }
 
     fn rand(&mut self) -> u64 {
@@ -851,11 +857,13 @@ impl AiState {
     /// parked car and back, and a turn at the junction ahead - from about four seconds
     /// before it (at least 25 m, at most 60 m) until the turn is done.
     pub fn update_blinker(&mut self, net: &Network) {
-        self.blinker = if let Some(c) = self.change {
+        self.blinker = if self.hazard {
+            3
+        } else if let Some(c) = self.change {
             c.dir
         } else if self.signal != 0 && self.signal_time > 0.0 {
             self.signal
-        } else if (self.lateral_target - self.lateral).abs() > 0.3 {
+        } else if !self.wide_swing && (self.lateral_target - self.lateral).abs() > 0.3 {
             if self.lateral_target > self.lateral { 2 } else { 1 }
         } else {
             let within = (self.speed * 4.0).clamp(25.0, 60.0);
@@ -899,6 +907,9 @@ impl AiState {
         };
         let mut v0 = limit(lane);
         if let Some(cap) = self.speed_cap {
+            v0 = v0.min(cap.max(0.3));
+        }
+        if let Some(cap) = self.wide_cap {
             v0 = v0.min(cap.max(0.3));
         }
         // a lower limit on the lanes ahead (a junction's turning lanes, a 30 zone) is

@@ -242,6 +242,8 @@
 "Good": "Dobro"
 "Random traffic": "Slučajni saobraćaj"
 "AI reaction time": "Vreme reakcije AI"
+"Long buses take tight bends wide": "Dugi autobusi široko ulaze u oštre krivine"
+"Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not.": "Dugi autobusi u oštroj krivini izlaze preko središnje linije kada je put slobodan, a kada nije, drže se svoje strane sa uključenim sigurnosnim treptačima."
 "Navigator": "Navigacija"
 "Navigator (Shift+N: map, schedule, off)": "Navigator (Shift+N: mapa, raspored, isključeno)"
 "AI vehicles on the map": "AI vozila na mapi"

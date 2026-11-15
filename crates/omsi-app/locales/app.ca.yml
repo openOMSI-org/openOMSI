@@ -242,6 +242,8 @@
 "Good": "Bo"
 "Random traffic": "Trànsit aleatori"
 "AI reaction time": "Temps de reacció de la IA"
+"Long buses take tight bends wide": "Els autobusos llargs prenen àmpliament els revolts tancats"
+"Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not.": "Els autobusos llargs s'obren cap a la línia central en un revolt tancat quan la via és lliure, i, si no ho és, es mantenen al seu costat amb els llums d'emergència encesos."
 "Navigator": "Navegador"
 "Navigator (Shift+N: map, schedule, off)": "Navegador (Maj+N: mapa, horari, desactivat)"
 "AI vehicles on the map": "Vehicles d'IA al mapa"

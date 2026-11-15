@@ -242,6 +242,8 @@
 "Good": "良好"
 "Random traffic": "隨機車流"
 "AI reaction time": "AI 反應時間"
+"Long buses take tight bends wide": "長巴士以較寬的路線轉急彎"
+"Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not.": "道路暢通時，長巴士在急彎處會向外擺出越過中線；道路不暢通時，則開啟警示燈並保持在自己的一側。"
 "Navigator": "導航"
 "Navigator (Shift+N: map, schedule, off)": "導航（Shift+N：地圖、時間表、關閉）"
 "AI vehicles on the map": "地圖上顯示 AI 車輛"

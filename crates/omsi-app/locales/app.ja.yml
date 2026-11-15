@@ -206,6 +206,8 @@
 "Good": "良い"
 "Random traffic": "ランダム交通"
 "AI reaction time": "AIの反応時間"
+"Long buses take tight bends wide": "長いバスは急カーブを大きく回る"
+"Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not.": "道が空いているとき、長いバスは急カーブで中央線をはみ出して大きく回り、空いていないときはハザードランプを点灯して自分の側を走ります。"
 "Navigator": "ナビゲーター"
 "Navigator (Shift+N: map, schedule, off)": "ナビゲーター(Shift+N:地図、時刻表、オフ)"
 "AI vehicles on the map": "地図上のAI車両"

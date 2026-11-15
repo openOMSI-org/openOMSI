@@ -242,6 +242,8 @@
 "Good": "კარგი"
 "Random traffic": "შემთხვევითი მოძრაობა"
 "AI reaction time": "AI-ის რეაქციის დრო"
+"Long buses take tight bends wide": "გრძელი ავტობუსები მკვეთრ მოსახვევებს ფართოდ გადიან"
+"Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not.": "გზის თავისუფლების შემთხვევაში გრძელი ავტობუსები მკვეთრ მოსახვევში შუა ხაზს გადაცდებიან, წინააღმდეგ შემთხვევაში კი საავარიო განათებით თავის მხარეს რჩებიან."
 "Navigator": "ნავიგატორი"
 "Navigator (Shift+N: map, schedule, off)": "ნავიგატორი (Shift+N: რუკა, განრიგი, გამორთული)"
 "AI vehicles on the map": "AI მანქანები რუკაზე"

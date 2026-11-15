@@ -242,6 +242,8 @@
 "Good": "Хорошее"
 "Random traffic": "Случайное движение"
 "AI reaction time": "Время реакции ИИ"
+"Long buses take tight bends wide": "Длинные автобусы широко берут крутые повороты"
+"Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not.": "Длинные автобусы на крутом повороте выходят за осевую линию, когда дорога свободна, а если нет — держатся своей стороны с включённой аварийной сигнализацией."
 "Navigator": "Навигатор"
 "Navigator (Shift+N: map, schedule, off)": "Навигатор (Shift+N: карта, расписание, выкл.)"
 "AI vehicles on the map": "ИИ-транспорт на карте"

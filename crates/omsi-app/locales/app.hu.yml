@@ -206,6 +206,8 @@
 "Good": "Jó"
 "Random traffic": "Véletlenszerű forgalom"
 "AI reaction time": "Az MI reakcióideje"
+"Long buses take tight bends wide": "A hosszú buszok szélesen veszik be a szűk kanyarokat"
+"Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not.": "A hosszú buszok szűk kanyarban kisodródnak a középvonal fölé, ha szabad az út, egyébként a saját oldalukon maradnak bekapcsolt vészvillogóval."
 "Navigator": "Navigátor"
 "Navigator (Shift+N: map, schedule, off)": "Navigátor (Shift+N: térkép, menetrend, ki)"
 "AI vehicles on the map": "MI-járművek a térképen"

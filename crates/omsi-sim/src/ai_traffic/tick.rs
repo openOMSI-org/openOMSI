@@ -272,6 +272,13 @@ impl TrafficSim {
                     }
                 }
             }
+            if c.wide.active && c.wide.white > 0.3 {
+                // (a long vehicle swinging over the centre line in a bend: the oncoming side
+                // stops short of it)
+                if let Some((l, s, _)) = self.net.opposite(c.wide.lane, c.wide.at) {
+                    by_lane.entry(l).or_default().push((i, s, 0.0, true));
+                }
+            }
             for (l, d) in self
                 .way_lanes(&c.state, LOOK_AHEAD + 30.0)
                 .into_iter()
@@ -511,6 +518,7 @@ impl TrafficSim {
         self.emergency_speed(i, &way);
         let (stop_at, why) = self.stop_points(i, ts, &way, lead, light, yield_at, [merge_wait, make_way], keep_back);
         let (stop_at, why) = self.service_and_park(i, ts, &way, kerb_swerve, park, stop_at, why);
+        self.wide_turn(i, ts, kerb_swerve);
         let (stop_at, why) = self.end_of_way(i, ts, &way, stop_at, why);
         let (stop_at, why) = self.scenery_stop(i, ts, stop_at, why);
         self.drive_car(i, ts, lead, stop_at, why, light, yield_at, merge_wait)

@@ -205,6 +205,8 @@
 "Good": "ดี"
 "Random traffic": "การจราจรแบบสุ่ม"
 "AI reaction time": "เวลาตอบสนองของ AI"
+"Long buses take tight bends wide": "รถบัสคันยาวเลี้ยวโค้งหักศอกแบบกว้าง"
+"Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not.": "เมื่อถนนว่าง รถบัสคันยาวจะแกว่งออกนอกเส้นกึ่งกลางถนนในโค้งแคบ และเมื่อไม่ว่างจะอยู่ในฝั่งของตนพร้อมเปิดไฟฉุกเฉิน"
 "Navigator": "ระบบนำทาง"
 "Navigator (Shift+N: map, schedule, off)": "ระบบนำทาง (Shift+N: แผนที่ ตารางเวลา ปิด)"
 "AI vehicles on the map": "แสดงรถ AI บนแผนที่"

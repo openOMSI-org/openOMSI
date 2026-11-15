@@ -135,6 +135,7 @@ impl TrafficSim {
             max_scheduled,
             timed_waits_only: false,
             reaction_factor: 1.0,
+            wide_turns: false,
             no_timetable_buses: false,
             viewer: None,
             occluders: None,

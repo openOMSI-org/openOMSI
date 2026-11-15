@@ -35,6 +35,7 @@ pub mod stats;
 pub mod tick;
 pub mod viewer;
 pub mod waving;
+pub mod wide_turn;
 #[cfg(test)]
 mod body_tests;
 #[cfg(test)]
@@ -215,6 +216,9 @@ pub struct TrafficSim {
     /// `model::personality` draws it, about 0.8 s). Below 1.0 a queue pulls away closer
     /// together; `model::scale_reaction` keeps it from going under `PULL_OUT_WAIT`.
     pub reaction_factor: f32,
+    /// The `ai_bus_wide_turns` setting: long vehicles choose their line through a tight
+    /// bend (`wide_turn`).
+    pub wide_turns: bool,
     /// `--no-timetable-buses`: the timetable runs for the player's duty, but puts no AI
     /// bus on the road (#1762).
     pub no_timetable_buses: bool,
