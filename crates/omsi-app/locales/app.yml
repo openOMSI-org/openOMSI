@@ -487,6 +487,10 @@ _version: 2
   en: "Random traffic"
 "AI reaction time":
   en: "AI reaction time"
+"Long buses take tight bends wide":
+  en: "Long buses take tight bends wide"
+"Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not.":
+  en: "Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not."
 "Navigator":
   en: "Navigator"
 "Navigator (Shift+N: map, schedule, off)":

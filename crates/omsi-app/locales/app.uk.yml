@@ -206,6 +206,8 @@
 "Good": "Добре"
 "Random traffic": "Випадковий рух"
 "AI reaction time": "Час реакції ШІ"
+"Long buses take tight bends wide": "Довгі автобуси широко беруть круті повороти"
+"Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not.": "Довгі автобуси на крутому повороті виїжджають за осьову лінію, коли дорога вільна, а якщо ні — тримаються своєї сторони з увімкненою аварійною сигналізацією."
 "Navigator": "Навігатор"
 "Navigator (Shift+N: map, schedule, off)": "Навігатор (Shift+N: мапа, розклад, вимк.)"
 "AI vehicles on the map": "ШІ-транспорт на мапі"

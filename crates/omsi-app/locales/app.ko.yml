@@ -205,6 +205,8 @@
 "Good": "좋음"
 "Random traffic": "무작위 교통량"
 "AI reaction time": "AI 반응 시간"
+"Long buses take tight bends wide": "긴 버스는 급커브를 크게 돈다"
+"Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not.": "도로가 비어 있으면 긴 버스는 급커브에서 중앙선 쪽으로 크게 벗어나 돌고, 그렇지 않으면 비상등을 켠 채 자기 쪽에 머뭅니다."
 "Navigator": "내비게이터"
 "Navigator (Shift+N: map, schedule, off)": "내비게이터 (Shift+N: 지도, 시간표, 끔)"
 "AI vehicles on the map": "지도에 AI 차량 표시"

@@ -243,6 +243,8 @@
 "Good": "Bom"
 "Random traffic": "Trânsito aleatório"
 "AI reaction time": "Tempo de reação da IA"
+"Long buses take tight bends wide": "Os autocarros longos abrem nas curvas apertadas"
+"Long buses swing out over the centre line in a tight bend when the road is clear, and keep to their side with the hazard lights on when it is not.": "Os autocarros longos abrem sobre a linha central numa curva apertada quando a estrada está livre e, se não estiver, mantêm-se do seu lado com os quatro piscas ligados."
 "Navigator": "Navegador"
 "Navigator (Shift+N: map, schedule, off)": "Navegador (Shift+N: mapa, tabela, desligado)"
 "AI vehicles on the map": "Veículos de IA no mapa"

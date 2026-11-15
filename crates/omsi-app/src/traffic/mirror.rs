@@ -124,6 +124,7 @@ impl Traffic {
             waits_on: None,
             yield_to: None,
             sideways: Default::default(),
+            wide: Default::default(),
             yield_pass: f32::MIN,
             tail_claims: Vec::new(),
             tail: 0.0,

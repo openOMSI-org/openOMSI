@@ -142,6 +142,7 @@ impl Traffic {
         let settings = crate::settings::Settings::load();
         sim.timed_waits_only = settings.ai_wait_timed_stops_only;
         sim.reaction_factor = settings.ai_reaction;
+        sim.wide_turns = settings.ai_bus_wide_turns;
         Ok(Traffic::with_sim(sim, root))
     }
 

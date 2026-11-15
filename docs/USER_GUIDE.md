@@ -432,6 +432,7 @@ as designed),
 at its first and last stop, railway stations and the stops the timetable gives a time of their
 own, and drives on from the others once boarding is done; off by default: it waits at every
 stop it serves, as in OMSI),
+`ai_bus_wide_turns` (on by default: a long bus takes a tight bend wide, over the centre line when the road is clear, and keeps to its side with the hazard lights on when it is not),
 `graphics` (the graphics mode: `vanilla` - as OMSI 2 draws it, without sun shadows, ambient
 occlusion, detail grain, snow cover or rain drops of openOMSI's own -, `vanilla_plus` - the
 same renderer with those extras, the default -, `enhanced` or `enhanced_plus`, see below),

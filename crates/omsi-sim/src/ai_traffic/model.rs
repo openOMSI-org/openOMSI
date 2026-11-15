@@ -158,6 +158,8 @@ pub struct AiCar {
     pub yield_to: Option<u64>,
     /// Its sideways moves (`lateral`): what it wishes, its last lane change.
     pub sideways: super::lateral::Sideways,
+    /// Its line through a tight bend (a long vehicle only, see `wide_turn`).
+    pub wide: super::wide_turn::WideTurn,
     /// Its body's watch over the scenery (see `scenery`).
     pub guard: super::scenery::SceneryGuard,
     /// Chosen to end a circle of cars that all only give way to each other (`deadlock`):
@@ -762,6 +764,7 @@ impl TrafficSim {
             waits_on: None,
             yield_to: None,
             sideways: Default::default(),
+            wide: Default::default(),
             yield_pass: f32::MIN,
             tail_claims: Vec::new(),
             tail: 0.0,
