@@ -1,6 +1,14 @@
 use super::*;
 
 #[test]
+fn stacked_depth_slant_uses_the_vertex_normal() {
+    let shader = include_str!("../shaders/scene/03_vertex.wgsl");
+    assert!(shader.contains("let plane = max(abs(dot(safe_normal(nw), cp - camera.cam_pos.xyz))"));
+    assert!(shader.contains("let level_code = u32(round(models[e * 4u].w));"));
+    assert!(!shader.contains("let encoded = vec2<f32>(models[e * 4u + 1u].w"));
+}
+
+#[test]
 fn deforming_a_mesh_invalidates_and_reuploads_its_static_depth_plane() {
     let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
     descriptor.backends = wgpu::Backends::NOOP;

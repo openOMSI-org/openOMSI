@@ -121,6 +121,7 @@ pub(crate) struct ObjectRun {
     origin: [u64; 3],
     next: u64,
     flats: Vec<(Flat, u8)>,
+    flat_meshes: Vec<usize>,
     by_normal: HashMap<(i32, i32, i32), Vec<usize>>,
     model: Option<u64>,
     added: usize,
@@ -187,6 +188,7 @@ impl ObjectRun {
         self.open = true;
         self.fresh = true;
         self.flats.clear();
+        self.flat_meshes.clear();
         self.by_normal.clear();
         self.model = model;
         self.added = 0;
@@ -218,6 +220,7 @@ impl ObjectRun {
             self.open = false;
             self.model = None;
             self.flats.clear();
+            self.flat_meshes.clear();
             self.by_normal.clear();
         }
         self.fresh = false;
@@ -280,7 +283,8 @@ impl ObjectRun {
             let gap = beside
                 .iter()
                 .filter(|(near, _, _)| {
-                    under.iter().any(|&base| {
+                    // Same-mesh slots are submitted in order; only another mesh may cap this stack.
+                    self.flat_meshes[*near] != mesh && under.iter().any(|&base| {
                         boxes_overlap(&self.flats[*near].0, &self.flats[base].0, BOX_GAP)
                     })
                 })
@@ -304,6 +308,7 @@ impl ObjectRun {
             for f in mine {
                 self.by_normal.entry(normal_key(f.normal)).or_default().push(self.flats.len());
                 self.flats.push((*f, level));
+                self.flat_meshes.push(mesh);
             }
         }
         if let Some(m) = self.model {
@@ -438,7 +443,7 @@ mod tests {
         assert_eq!(run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&label), 1), vec![0]);
         let mut final_cap = f32::INFINITY;
         for (k, m) in [deep(0.0, 1.0, false, 0), deep(0.0, 0.5, true, 0), deep(0.0, 0.3, false, 0), deep(0.0, 0.2, true, 0)].iter().enumerate() {
-            let (levels, caps) = run.levels_with_caps([0; 3], k as u64 + 1, 0, Mat4::IDENTITY, &mesh_flats(m), 1);
+            let (levels, caps) = run.levels_with_caps([0; 3], k as u64 + 1, k, Mat4::IDENTITY, &mesh_flats(m), 1);
             assert_eq!(levels, vec![[0, 1, 2, 2][k]]);
             if k == 0 {
                 assert!(caps[0].is_infinite());
@@ -452,6 +457,36 @@ mod tests {
         // (a millimetre is past what the step's lift reaches: nothing is cut back)
         let past = quad(-0.001, 0.2, 0, false);
         assert_eq!(levels_of(&[past, base, glass]), vec![0, 0, 1]);
+    }
+
+    #[test]
+    fn a_nearby_slot_in_the_same_mesh_does_not_cap_a_deep_print() {
+        let mut mesh = quad(0.0002, 0.1, 0, false);
+        let parts = [
+            quad(0.0, 0.3, 1, false),
+            quad(0.0, 0.25, 2, true),
+            quad(0.0, 0.2, 3, false),
+            quad(0.0, 0.15, 4, true),
+            quad(0.000025, 1.0, 5, false),
+        ];
+        for part in parts {
+            let base = mesh.positions.len() as u32;
+            let index_start = mesh.indices.len() as u32;
+            mesh.positions.extend(&part.positions);
+            mesh.normals.extend(&part.normals);
+            mesh.uvs.extend(&part.uvs);
+            mesh.indices.extend(part.indices.iter().map(|i| i + base));
+            mesh.ranges.extend(
+                part.ranges
+                    .iter()
+                    .map(|(first, count, slot)| (index_start + first, *count, *slot)),
+            );
+        }
+        let mut run = ObjectRun::default();
+        run.begin(None);
+        let (levels, caps) = run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 6);
+        assert_eq!(levels[5], 2);
+        assert!(caps[5].is_infinite(), "same-mesh slots already have draw order");
     }
 
     /// A print on a dial keeps its step when the instrument's glass lies a few millimetres
