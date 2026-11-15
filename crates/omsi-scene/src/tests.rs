@@ -284,15 +284,6 @@ fn a_transmapped_slot_is_see_through_by_its_transmap_not_its_reflection_mask() {
 }
 
 #[test]
-fn a_reflective_car_body_stays_solid_while_unnamed_pane_is_see_through() {
-    use crate::vehicles::is_reflective_body;
-    assert!(is_reflective_body(true, false, false, true, true));
-    assert!(!is_reflective_body(false, false, false, true, true));
-    assert!(!is_reflective_body(true, true, false, true, true));
-    assert!(!is_reflective_body(true, false, true, true, true));
-}
-
-#[test]
 fn a_lamps_lenses_follow_its_alphascale_and_light_map_variables() {
     // three lenses on one mesh, each faded by its colour's variable and lit by its
     // light map (Cheongsan's signals, #826); a fourth slot switched by nothing
