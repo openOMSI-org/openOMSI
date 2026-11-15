@@ -26,7 +26,9 @@ impl MarkerScan {
             return marked;
         }
         let marked = omsi_cfg::vfs::exists(&dir.join(PRIVATE_MARKER))
-            || dir.parent().is_some_and(|parent| self.marked_directory(parent));
+            || dir
+                .parent()
+                .is_some_and(|parent| self.marked_directory(parent));
         self.directories.insert(dir.to_path_buf(), marked);
         marked
     }
@@ -38,10 +40,14 @@ impl MarkerScan {
     pub(super) fn marked_private(&mut self, path: &Path) -> bool {
         // Resolve the whole file because the final component can itself be a symlink.
         self.marked_parent(path)
-            || path.canonicalize().is_ok_and(|real| self.marked_parent(&real))
+            || path
+                .canonicalize()
+                .is_ok_and(|real| self.marked_parent(&real))
             || omsi_cfg::vfs::archive_of(path).is_some_and(|archive| {
                 self.marked_parent(&archive)
-                    || archive.canonicalize().is_ok_and(|real| self.marked_parent(&real))
+                    || archive
+                        .canonicalize()
+                        .is_ok_and(|real| self.marked_parent(&real))
             })
     }
 
