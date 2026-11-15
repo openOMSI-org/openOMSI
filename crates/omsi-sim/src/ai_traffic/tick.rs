@@ -1229,12 +1229,17 @@ impl TrafficSim {
             let up: Vec<usize> = car.state.upcoming().take(4).collect();
             log::info!("t={:.2} car {}: v {:.2} lane {} s {:.1}/{:.1} upcoming {:?} bend {:.2} desired {:.2} lead {:?} stop {:?} why {:?}", self.time, car.id, car.state.speed, car.state.lane, car.state.s, self.net.lanes[car.state.lane].length(), up, car.state.curve_speed(&self.net), car.state.desired_accel(&self.net, lead_now, stop_at), lead_now.map(|l| l.gap), stop_at.map(|x| x - car.state.front), car.why);
         }
-        let original_min_gap = car.state.min_gap;
+        let (original_min_gap, original_headway) = (car.state.min_gap, car.state.headway);
         if tight_queue {
+            // In a queue on a roundabout, keep the moving headway from spreading the
+            // line out. The braking-distance term in desired_accel still preserves
+            // the room needed to stop safely if the vehicle ahead brakes.
             car.state.min_gap = car.state.standstill_gap;
+            car.state.headway = 0.5;
         }
         let drove = car.state.drive(&self.net, dt, lead_now, stop_at);
         car.state.min_gap = original_min_gap;
+        car.state.headway = original_headway;
         if !drove {
             if debug {
                 // (where, and the nearest lane start beyond the end: a network gap the map's
