@@ -23,7 +23,12 @@ pub struct Passwords {
 impl std::fmt::Debug for Passwords {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // (never the passwords themselves)
-        write!(f, "Passwords {{ admin: {}, moderator: {} }}", !self.admin.is_empty(), !self.moderator.is_empty())
+        write!(
+            f,
+            "Passwords {{ admin: {}, moderator: {} }}",
+            !self.admin.is_empty(),
+            !self.moderator.is_empty()
+        )
     }
 }
 
@@ -45,7 +50,14 @@ pub struct AuthCfg {
 
 impl Default for AuthCfg {
     fn default() -> AuthCfg {
-        AuthCfg { idle: Duration::from_secs(30 * 60), max_age: Duration::from_secs(12 * 3600), max_sessions: 16, per_source: 5, overall: 30, window: Duration::from_secs(120) }
+        AuthCfg {
+            idle: Duration::from_secs(30 * 60),
+            max_age: Duration::from_secs(12 * 3600),
+            max_sessions: 16,
+            per_source: 5,
+            overall: 30,
+            window: Duration::from_secs(120),
+        }
     }
 }
 
@@ -73,7 +85,10 @@ pub enum LoginError {
     Disabled,
     /// Too many wrong passwords lately: again in `wait` seconds; `first`: the first knock on
     /// this lock (the one to note - not every knock, which would fill the records).
-    Locked { wait: u64, first: bool },
+    Locked {
+        wait: u64,
+        first: bool,
+    },
     Wrong,
     /// Every session is taken by a role above the one asked for.
     Full,
@@ -82,10 +97,16 @@ pub enum LoginError {
 impl LoginError {
     pub fn message(&self) -> String {
         match self {
-            LoginError::Disabled => "the server has no admin password: its administration is off".into(),
-            LoginError::Locked { wait, .. } => format!("too many wrong passwords: try again in {wait} s"),
+            LoginError::Disabled => {
+                "the server has no admin password: its administration is off".into()
+            }
+            LoginError::Locked { wait, .. } => {
+                format!("too many wrong passwords: try again in {wait} s")
+            }
             LoginError::Wrong => "wrong password".into(),
-            LoginError::Full => "every session is taken by an admin: try again when one ends".into(),
+            LoginError::Full => {
+                "every session is taken by an admin: try again when one ends".into()
+            }
         }
     }
 }
@@ -113,7 +134,10 @@ fn digest(s: &str) -> [u8; 32] {
 
 /// Equal in time independent of where they differ (on digests: of equal length).
 fn same(a: &[u8; 32], b: &[u8; 32]) -> bool {
-    a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 /// The source a wrong password counts against: an IPv6 address by its /64 (a v4 one mapped
@@ -140,7 +164,16 @@ fn token() -> Option<String> {
 
 impl Auth {
     pub fn new(pw: Passwords, cfg: AuthCfg) -> Auth {
-        Auth { pw, cfg, sessions: HashMap::new(), fails: HashMap::new(), all_fails: Vec::new(), told: HashMap::new(), penalty: HashMap::new(), counter: 0 }
+        Auth {
+            pw,
+            cfg,
+            sessions: HashMap::new(),
+            fails: HashMap::new(),
+            all_fails: Vec::new(),
+            told: HashMap::new(),
+            penalty: HashMap::new(),
+            counter: 0,
+        }
     }
 
     /// Whether any password is set.
@@ -169,7 +202,12 @@ impl Auth {
     /// the wrong password that began it). The lock for everybody leaves a request straight
     /// from this machine alone (`direct`: its own peer, through no proxy): a flood from afar
     /// cannot keep the operator out of their own panel.
-    fn locked(&mut self, source: IpAddr, direct: bool, now: Instant) -> Option<(u64, Option<IpAddr>, Instant)> {
+    fn locked(
+        &mut self,
+        source: IpAddr,
+        direct: bool,
+        now: Instant,
+    ) -> Option<(u64, Option<IpAddr>, Instant)> {
         let window = self.cfg.window;
         let keep = |v: &mut Vec<Instant>| v.retain(|t| now.saturating_duration_since(*t) < window);
         keep(&mut self.all_fails);
@@ -177,12 +215,27 @@ impl Auth {
             keep(v);
             !v.is_empty()
         });
-        let wait = |v: &[Instant], whose: Option<IpAddr>| v.first().map(|t| (window.saturating_sub(now.saturating_duration_since(*t)).as_secs().max(1), whose, *t));
+        let wait = |v: &[Instant], whose: Option<IpAddr>| {
+            v.first().map(|t| {
+                (
+                    window
+                        .saturating_sub(now.saturating_duration_since(*t))
+                        .as_secs()
+                        .max(1),
+                    whose,
+                    *t,
+                )
+            })
+        };
         if self.all_fails.len() >= self.cfg.overall && !direct {
             return wait(&self.all_fails, None);
         }
         if let Some(&(_, until)) = self.penalty.get(&source).filter(|(_, until)| *until > now) {
-            return Some((until.saturating_duration_since(now).as_secs().max(1), Some(source), until));
+            return Some((
+                until.saturating_duration_since(now).as_secs().max(1),
+                Some(source),
+                until,
+            ));
         }
         match self.fails.get(&source) {
             Some(v) if v.len() >= self.cfg.per_source => wait(v, Some(source)),
@@ -191,12 +244,23 @@ impl Auth {
     }
 
     /// A password for a session: its token (to give the client once) and what it may do.
-    pub fn login(&mut self, password: &str, source: IpAddr, now: Instant) -> Result<(String, SessionInfo), LoginError> {
+    pub fn login(
+        &mut self,
+        password: &str,
+        source: IpAddr,
+        now: Instant,
+    ) -> Result<(String, SessionInfo), LoginError> {
         self.login_from(password, source, false, now)
     }
 
     /// `login`, for a request that came straight from this machine (`direct`) or not.
-    pub fn login_from(&mut self, password: &str, source: IpAddr, direct: bool, now: Instant) -> Result<(String, SessionInfo), LoginError> {
+    pub fn login_from(
+        &mut self,
+        password: &str,
+        source: IpAddr,
+        direct: bool,
+        now: Instant,
+    ) -> Result<(String, SessionInfo), LoginError> {
         if !self.enabled() {
             return Err(LoginError::Disabled);
         }
@@ -226,7 +290,11 @@ impl Auth {
                     self.penalty.retain(|_, (_, until)| *until > now);
                 }
                 let strikes = self.penalty.get(&key).map_or(0, |p| p.0).saturating_add(1);
-                let hold = self.cfg.window.saturating_mul(1 << (strikes - 1).min(10)).min(Duration::from_secs(3600));
+                let hold = self
+                    .cfg
+                    .window
+                    .saturating_mul(1 << (strikes - 1).min(10))
+                    .min(Duration::from_secs(3600));
                 self.penalty.insert(key, (strikes, now + hold));
             }
             return Err(LoginError::Wrong);
@@ -236,7 +304,12 @@ impl Auth {
         while self.sessions.len() >= self.cfg.max_sessions {
             // (the least used of this role or a lower one: a moderator's logins never end an
             // admin's session)
-            let oldest = self.sessions.iter().filter(|(_, s)| s.role == role || role == Role::Admin).min_by_key(|(_, s)| s.last).map(|(k, _)| *k);
+            let oldest = self
+                .sessions
+                .iter()
+                .filter(|(_, s)| s.role == role || role == Role::Admin)
+                .min_by_key(|(_, s)| s.last)
+                .map(|(k, _)| *k);
             match oldest {
                 Some(k) => self.sessions.remove(&k),
                 None => return Err(LoginError::Full),
@@ -245,21 +318,43 @@ impl Auth {
         let token = token().ok_or(LoginError::Disabled)?;
         self.counter += 1;
         let actor = format!("web#{} ({source})", self.counter);
-        self.sessions.insert(digest(&token), Session { role, actor, created: now, last: now });
+        self.sessions.insert(
+            digest(&token),
+            Session {
+                role,
+                actor,
+                created: now,
+                last: now,
+            },
+        );
         let info = self.info(&digest(&token), now).expect("just made");
         Ok((token, info))
     }
 
     fn info(&self, key: &[u8; 32], now: Instant) -> Option<SessionInfo> {
         let s = self.sessions.get(key)?;
-        let idle_left = self.cfg.idle.saturating_sub(now.saturating_duration_since(s.last));
-        let age_left = self.cfg.max_age.saturating_sub(now.saturating_duration_since(s.created));
-        Some(SessionInfo { role: s.role, permissions: s.role.perms(), actor: s.actor.clone(), expires_in: idle_left.min(age_left).as_secs() })
+        let idle_left = self
+            .cfg
+            .idle
+            .saturating_sub(now.saturating_duration_since(s.last));
+        let age_left = self
+            .cfg
+            .max_age
+            .saturating_sub(now.saturating_duration_since(s.created));
+        Some(SessionInfo {
+            role: s.role,
+            permissions: s.role.perms(),
+            actor: s.actor.clone(),
+            expires_in: idle_left.min(age_left).as_secs(),
+        })
     }
 
     fn prune(&mut self, now: Instant) {
         let (idle, max_age) = (self.cfg.idle, self.cfg.max_age);
-        self.sessions.retain(|_, s| now.saturating_duration_since(s.last) < idle && now.saturating_duration_since(s.created) < max_age);
+        self.sessions.retain(|_, s| {
+            now.saturating_duration_since(s.last) < idle
+                && now.saturating_duration_since(s.created) < max_age
+        });
     }
 
     /// The session of a token, if it still lives (its use keeps it alive).
@@ -299,7 +394,13 @@ mod tests {
     use super::*;
 
     fn auth() -> Auth {
-        Auth::new(Passwords { admin: "admin-secret".into(), moderator: "mod-secret".into() }, AuthCfg::default())
+        Auth::new(
+            Passwords {
+                admin: "admin-secret".into(),
+                moderator: "mod-secret".into(),
+            },
+            AuthCfg::default(),
+        )
     }
 
     fn ip(n: u8) -> IpAddr {
@@ -329,9 +430,24 @@ mod tests {
     #[test]
     fn no_password_no_door() {
         let mut a = Auth::new(Passwords::default(), AuthCfg::default());
-        assert_eq!(a.login("", ip(1), Instant::now()), Err(LoginError::Disabled));
-        assert_eq!(a.login("anything", ip(1), Instant::now()), Err(LoginError::Disabled));
-        assert_eq!(format!("{:?}", Passwords { admin: "hunter22".into(), moderator: String::new() }), "Passwords { admin: true, moderator: false }");
+        assert_eq!(
+            a.login("", ip(1), Instant::now()),
+            Err(LoginError::Disabled)
+        );
+        assert_eq!(
+            a.login("anything", ip(1), Instant::now()),
+            Err(LoginError::Disabled)
+        );
+        assert_eq!(
+            format!(
+                "{:?}",
+                Passwords {
+                    admin: "hunter22".into(),
+                    moderator: String::new()
+                }
+            ),
+            "Passwords { admin: true, moderator: false }"
+        );
     }
 
     #[test]
@@ -349,7 +465,10 @@ mod tests {
             assert!(a.check(&t, now).is_some(), "{:?}", now.duration_since(t0));
         }
         // ... but not past its longest life
-        assert!(a.check(&t, t0 + Duration::from_secs(12 * 3600 + 1)).is_none());
+        assert!(
+            a.check(&t, t0 + Duration::from_secs(12 * 3600 + 1))
+                .is_none()
+        );
         // idle for half an hour: over
         let (t, _) = a.login("admin-secret", ip(1), t0).unwrap();
         assert!(a.check(&t, t0 + Duration::from_secs(31 * 60)).is_none());
@@ -359,7 +478,10 @@ mod tests {
         assert!(a.check(&t, t0).is_none());
         assert!(!a.logout(&t));
         let (t, _) = a.login("admin-secret", ip(1), t0).unwrap();
-        a.set_passwords(Passwords { admin: "a new one!".into(), moderator: String::new() });
+        a.set_passwords(Passwords {
+            admin: "a new one!".into(),
+            moderator: String::new(),
+        });
         assert!(a.check(&t, t0).is_none());
         assert_eq!(a.login("admin-secret", ip(1), t0), Err(LoginError::Wrong));
     }
@@ -382,20 +504,36 @@ mod tests {
             now += Duration::from_secs(waits.last().copied().unwrap_or(0) + 1);
         }
         assert_eq!(&waits[..4], [120, 240, 480, 960]);
-        assert!(waits.iter().all(|&w| w <= 3600) && waits.last() == Some(&3600), "{waits:?}");
+        assert!(
+            waits.iter().all(|&w| w <= 3600) && waits.last() == Some(&3600),
+            "{waits:?}"
+        );
         // in at last: the count starts over
         assert!(a.login("admin-secret", ip(1), now).is_ok());
         for _ in 0..5 {
             let _ = a.login("nope", ip(1), now);
         }
-        assert!(matches!(a.login("admin-secret", ip(1), now), Err(LoginError::Locked { wait: 120, .. })));
+        assert!(matches!(
+            a.login("admin-secret", ip(1), now),
+            Err(LoginError::Locked { wait: 120, .. })
+        ));
         // a /64 is one source, whatever address in it
         let v6 = |n: u16| IpAddr::from([0x2001, 0xdb8, 1, 2, n, n, n, n]);
         for n in 0..5 {
             let _ = a.login("nope", v6(n), now);
         }
-        assert!(matches!(a.login("admin-secret", v6(77), now), Err(LoginError::Locked { .. })));
-        assert!(a.login("admin-secret", IpAddr::from([0x2001, 0xdb8, 1, 3, 0, 0, 0, 1]), now).is_ok());
+        assert!(matches!(
+            a.login("admin-secret", v6(77), now),
+            Err(LoginError::Locked { .. })
+        ));
+        assert!(
+            a.login(
+                "admin-secret",
+                IpAddr::from([0x2001, 0xdb8, 1, 3, 0, 0, 0, 1]),
+                now
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -406,36 +544,59 @@ mod tests {
             assert_eq!(a.login("nope", ip(1), now), Err(LoginError::Wrong));
         }
         // locked for that source, even with the right password
-        assert!(matches!(a.login("admin-secret", ip(1), now), Err(LoginError::Locked { wait, first: true }) if wait > 0 && wait <= 120));
+        assert!(
+            matches!(a.login("admin-secret", ip(1), now), Err(LoginError::Locked { wait, first: true }) if wait > 0 && wait <= 120)
+        );
         // (told of once: knocking again is the same lock)
-        assert!(matches!(a.login("nope", ip(1), now), Err(LoginError::Locked { first: false, .. })));
+        assert!(matches!(
+            a.login("nope", ip(1), now),
+            Err(LoginError::Locked { first: false, .. })
+        ));
         // another source is still let in
         assert!(a.login("admin-secret", ip(2), now).is_ok());
         // and the lock ends with its window
-        assert!(a.login("admin-secret", ip(1), now + Duration::from_secs(121)).is_ok());
+        assert!(
+            a.login("admin-secret", ip(1), now + Duration::from_secs(121))
+                .is_ok()
+        );
         // wrong passwords from many sources lock the door for all
         let mut a = auth();
         for n in 0..30 {
             let _ = a.login("nope", ip(10 + n), now);
         }
-        assert!(matches!(a.login("admin-secret", ip(200), now), Err(LoginError::Locked { first: true, .. })));
-        assert!(matches!(a.login("admin-secret", ip(201), now), Err(LoginError::Locked { first: false, .. })));
+        assert!(matches!(
+            a.login("admin-secret", ip(200), now),
+            Err(LoginError::Locked { first: true, .. })
+        ));
+        assert!(matches!(
+            a.login("admin-secret", ip(201), now),
+            Err(LoginError::Locked { first: false, .. })
+        ));
         // but not for this machine itself: a flood from afar keeps no operator out
         let here = IpAddr::from([127, 0, 0, 1]);
         assert!(a.login_from("admin-secret", here, true, now).is_ok());
         // (a loopback address said by a proxy is not this machine: locked like the rest)
-        assert!(matches!(a.login("admin-secret", here, now), Err(LoginError::Locked { .. })));
+        assert!(matches!(
+            a.login("admin-secret", here, now),
+            Err(LoginError::Locked { .. })
+        ));
         // (its own wrong passwords still lock it)
         for _ in 0..5 {
             let _ = a.login_from("nope", here, true, now);
         }
-        assert!(matches!(a.login_from("admin-secret", here, true, now), Err(LoginError::Locked { .. })));
+        assert!(matches!(
+            a.login_from("admin-secret", here, true, now),
+            Err(LoginError::Locked { .. })
+        ));
         // a new lock is told of again
         let later = now + Duration::from_secs(121);
         for _ in 0..5 {
             let _ = a.login("nope", ip(1), later);
         }
-        assert!(matches!(a.login("nope", ip(1), later), Err(LoginError::Locked { first: true, .. })));
+        assert!(matches!(
+            a.login("nope", ip(1), later),
+            Err(LoginError::Locked { first: true, .. })
+        ));
     }
 
     #[test]
@@ -444,25 +605,37 @@ mod tests {
         let now = Instant::now();
         let first = a.login("admin-secret", ip(1), now).unwrap().0;
         for k in 1..=16u64 {
-            a.login("admin-secret", ip(1), now + Duration::from_millis(k)).unwrap();
+            a.login("admin-secret", ip(1), now + Duration::from_millis(k))
+                .unwrap();
         }
         assert_eq!(a.sessions(), 16);
         // (the least lately used made room)
         assert!(a.check(&first, now + Duration::from_secs(1)).is_none());
         // a moderator's logins make room among the moderators only: never an admin's
         let mut a = auth();
-        let admins: Vec<String> = (0..10u64).map(|k| a.login("admin-secret", ip(1), now + Duration::from_millis(k)).unwrap().0).collect();
+        let admins: Vec<String> = (0..10u64)
+            .map(|k| {
+                a.login("admin-secret", ip(1), now + Duration::from_millis(k))
+                    .unwrap()
+                    .0
+            })
+            .collect();
         let later = now + Duration::from_secs(1);
         for k in 0..40u64 {
             let r = a.login("mod-secret", ip(2), later + Duration::from_millis(k));
             assert!(r.is_ok(), "{k}: {r:?}");
         }
-        assert!(admins.iter().all(|t| a.check(t, later + Duration::from_secs(1)).is_some()));
+        assert!(
+            admins
+                .iter()
+                .all(|t| a.check(t, later + Duration::from_secs(1)).is_some())
+        );
         assert_eq!(a.sessions(), 16);
         // all taken by admins: a moderator waits, an admin still gets in
         let mut a = auth();
         for k in 0..16u64 {
-            a.login("admin-secret", ip(1), now + Duration::from_millis(k)).unwrap();
+            a.login("admin-secret", ip(1), now + Duration::from_millis(k))
+                .unwrap();
         }
         assert_eq!(a.login("mod-secret", ip(2), later), Err(LoginError::Full));
         assert!(a.login("admin-secret", ip(1), later).is_ok());
