@@ -107,8 +107,20 @@ pub fn set_player_destination_at(
     ti: usize,
     stops: &[&str],
 ) -> Option<BlindPick> {
-    set_destination_at(v, hof, line, ti, stops, true);
-    (has_roller_blind(v) && ti < hof.termini.len()).then(|| BlindPick { row: ti, line: line.trim().to_string() })
+    set_player_destination_with_display(v, hof, line, None, ti, stops)
+}
+
+pub fn set_player_destination_with_display(
+    v: &mut crate::VehicleInstance,
+    hof: &omsi_vehicle::Hof,
+    line: &str,
+    display_line: Option<&str>,
+    ti: usize,
+    stops: &[&str],
+) -> Option<BlindPick> {
+    set_destination_at_display(v, hof, line, display_line, ti, stops, true);
+    let blind = display_line.unwrap_or(line).trim().to_string();
+    (has_roller_blind(v) && ti < hof.termini.len()).then(|| BlindPick { row: ti, line: blind })
 }
 
 /// A destination picked by hand for a hand-cranked roller blind: its row of the depot file
@@ -484,6 +496,7 @@ pub(crate) fn set_destination(
 pub(crate) struct PendingDestination {
     hof: std::sync::Arc<omsi_vehicle::Hof>,
     line: String,
+    display_line: Option<String>,
     ti: usize,
     stops: Vec<String>,
     player: bool,
@@ -509,7 +522,7 @@ pub(crate) fn apply_pending_destination(v: &mut crate::VehicleInstance) {
         return;
     }
     let stops: Vec<&str> = pending.stops.iter().map(String::as_str).collect();
-    set_destination_at(v, &pending.hof, &pending.line, pending.ti, &stops, pending.player);
+    set_destination_at_display(v, &pending.hof, &pending.line, pending.display_line.as_deref(), pending.ti, &stops, pending.player);
 }
 
 /// [`set_destination`] with the depot file's terminus `ti` itself.
@@ -517,6 +530,18 @@ pub(crate) fn set_destination_at(
     v: &mut crate::VehicleInstance,
     hof: &omsi_vehicle::Hof,
     line: &str,
+    ti: usize,
+    stops: &[&str],
+    player: bool,
+) {
+    set_destination_at_display(v, hof, line, None, ti, stops, player);
+}
+
+fn set_destination_at_display(
+    v: &mut crate::VehicleInstance,
+    hof: &omsi_vehicle::Hof,
+    line: &str,
+    display_line: Option<&str>,
     ti: usize,
     stops: &[&str],
     player: bool,
@@ -532,6 +557,7 @@ pub(crate) fn set_destination_at(
         v.pending_destination = Some(PendingDestination {
             hof,
             line: line.to_string(),
+            display_line: display_line.map(str::to_string),
             ti,
             stops: stops.iter().map(|s| s.to_string()).collect(),
             player,
@@ -558,7 +584,7 @@ pub(crate) fn set_destination_at(
         line_num
     };
     // the original's way: SetLineTo + AI_target_index, then the ai_scheduled_settarget trigger
-    set_line_to(v, line);
+    set_line_to(v, display_line.unwrap_or(line));
     v.set_var("AI_target_index", ti as f32);
     let pending_blind = (player && has_roller_blind(v)).then(|| v.var("rlbnd_ziel_target")).flatten();
     let target_triggered = v.trigger("ai_scheduled_settarget");
@@ -608,4 +634,10 @@ pub(crate) fn set_destination_at(
         "IBIS_terminus_texture",
         hof.termini[ti].texture_id.clone(),
     );
+    if player {
+        if let Some(d) = display_line {
+            set_str(v, "Matrix_Nr", d.to_string());
+            set_str(v, "Linie", d.to_string());
+        }
+    }
 }
