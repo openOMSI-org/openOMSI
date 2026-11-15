@@ -1,3 +1,4 @@
+#![rustfmt::skip]
 use super::*;
 
 #[test]

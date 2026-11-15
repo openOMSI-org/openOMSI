@@ -1,3 +1,4 @@
+#![rustfmt::skip]
 //! The vehicle upload: a vehicle type's meshes and materials made into render instances.
 use super::*;
 
