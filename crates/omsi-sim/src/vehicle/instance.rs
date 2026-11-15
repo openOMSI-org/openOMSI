@@ -616,7 +616,7 @@ fn collect_model_vars(
 }
 
 fn init_engine_visual_inputs(
-    state: &mut VehicleState,
+    state: &mut State,
     var_index: &mut HashMap<String, omsi_script::VarId>,
 ) {
     for (name, value) in [
