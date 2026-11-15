@@ -14,7 +14,7 @@ interior and exterior views. For your own bus, it reports your selected view:
 | `0` | No active vehicle view (free camera, on foot, AI vehicle, or dedicated server) |
 | `1` | Driver / first-person cab |
 | `2` | Passenger interior |
-| `3` | Exterior / third-person |
+| `3` | Exterior / third-person, including remote players' buses |
 
 The engine supplies this built-in variable before the vehicle's frame scripts run;
 it does not need an entry in the bus's varlist. Treat it as read-only. It starts at
@@ -22,8 +22,11 @@ it does not need an entry in the bus's varlist. Treat it as read-only. It starts
 When you switch buses, the bus you leave behind is reset to `0`.
 
 In multiplayer, your own bus reports your selected view. Remote players' buses
-always report `3` on your client, regardless of their owners' camera choices.
+are pinned to `3` before and after their frame scripts run on your client, overriding
+the owner's synchronized `CameraView` value regardless of their camera choice.
 Likewise, other clients read `3` for your bus even when you are in the driver's cab.
+This also applies when you view a remote bus from a passenger seat; `2` describes
+the passenger view of your own bus, not a remote player's bus.
 The variable reports a view; writing it does not switch anyone's camera.
 
 For example, in a frame block, set a variable declared in your varlist:
