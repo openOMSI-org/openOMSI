@@ -722,7 +722,8 @@ impl Settings {
             "night_brightness" => self.night_brightness = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 3.0)).unwrap_or(self.night_brightness),
             "led_mips" => self.led_mips = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(self.led_mips),
             "graphics_api" => self.graphics_api = v.to_ascii_lowercase(),
-            _ => self.mx_graphics = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
+            "mx_graphics" => self.mx_graphics = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
+            _ => {}
         }
     }
 
