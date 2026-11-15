@@ -22,7 +22,14 @@ use super::*;
 /// (#767); somebody on the way out does, wherever.
 #[test]
 fn a_hold_counts_at_the_stop_served() {
-    let stop = Stop { ri: 0, s: 0.0, bay: 0.0, depart: 0.0, id: 42, side: 0.0 };
+    let stop = Stop {
+        ri: 0,
+        s: 0.0,
+        bay: 0.0,
+        depart: 0.0,
+        id: 42,
+        side: 0.0,
+    };
     let mut s = BusService::new(vec![stop]);
     s.phase = Phase::Boarding;
     s.boarding = 0.0;
@@ -145,7 +152,10 @@ fn interpolated_intermediate_stop_cannot_hold_a_bus_for_many_minutes() {
     assert_eq!(service.stop_wait(1200.0, 0.0, false, false, false), 1180.0);
     service.holds.clear();
     service.stops.pop_front();
-    assert!(service.waits_here(false, false, 1200.0), "the terminus still keeps its layover");
+    assert!(
+        service.waits_here(false, false, 1200.0),
+        "the terminus still keeps its layover"
+    );
     assert_eq!(service.stop_wait(1200.0, 0.0, false, false, false), 1180.0);
 }
 
@@ -169,15 +179,36 @@ fn station_side_comes_from_the_stop_it_boards_at() {
 }
 
 fn service_context(net: &Network, day_time: f64, dt: f32) -> Ctx<'_> {
-    Ctx { net, way: &[], day_time, dt, id: 1, stopped: 0.0, passing: false,
-        kerb_swerve: None, wanted: Some(false), debug: false, timed_waits_only: false,
-        time: day_time as f32, berth: BerthScene::default() }
+    Ctx {
+        net,
+        way: &[],
+        day_time,
+        dt,
+        id: 1,
+        stopped: 0.0,
+        passing: false,
+        kerb_swerve: None,
+        wanted: Some(false),
+        debug: false,
+        timed_waits_only: false,
+        time: day_time as f32,
+        berth: BerthScene::default(),
+    }
 }
 
 fn service_network() -> Network {
-    Network { lanes: vec![crate::traffic::LaneBuilder::arc(
-        glam::DVec3::ZERO, 0.0, 100.0, 0.0, 0.0, LaneKind::Street, 3.0)],
-        ..Default::default() }
+    Network {
+        lanes: vec![crate::traffic::LaneBuilder::arc(
+            glam::DVec3::ZERO,
+            0.0,
+            100.0,
+            0.0,
+            0.0,
+            LaneKind::Street,
+            3.0,
+        )],
+        ..Default::default()
+    }
 }
 
 fn service_vehicle() -> VehicleInstance {
@@ -189,15 +220,27 @@ fn three_stop_service_closes_each_stop_and_completes_only_at_the_end() {
     let net = service_network();
     let mut vehicle = service_vehicle();
     let mut state = AiState::new(0, 0.0, 1);
-    let stops: Vec<_> = (1..=3).map(|id| Stop::from_tuple((0, 10.0, 0.0, id as f64 * 100.0, id, 0.0))).collect();
+    let stops: Vec<_> = (1..=3)
+        .map(|id| Stop::from_tuple((0, 10.0, 0.0, id as f64 * 100.0, id, 0.0)))
+        .collect();
     let mut service = BusService::new(stops);
     for visit in 1..=3 {
         let depart = visit as f64 * 100.0;
         service.arrive(&service_context(&net, depart, 0.0), depart, (0, 10.0));
         assert_eq!(service.phase, Phase::Boarding);
-        service.step(&mut state, &mut vehicle, &service_context(&net, depart + 8.0, 8.0), &mut Berths::default());
+        service.step(
+            &mut state,
+            &mut vehicle,
+            &service_context(&net, depart + 8.0, 8.0),
+            &mut Berths::default(),
+        );
         assert_eq!(service.phase, Phase::Closing);
-        service.step(&mut state, &mut vehicle, &service_context(&net, depart + 9.5, CLOSE_MIN), &mut Berths::default());
+        service.step(
+            &mut state,
+            &mut vehicle,
+            &service_context(&net, depart + 9.5, CLOSE_MIN),
+            &mut Berths::default(),
+        );
         assert_eq!(service.stops.len(), 3 - visit as usize);
         assert_eq!(service.trip_done(), visit == 3);
         if visit != 3 {
@@ -231,7 +274,12 @@ fn a_bus_served_from_behind_pulls_up_when_the_berth_comes_free() {
         s
     };
     let mut ctx = service_context(&net, 200.0, 0.1);
-    ctx.berth = BerthScene { applies: true, free: true, there: false, pull_out_blocked: false };
+    ctx.berth = BerthScene {
+        applies: true,
+        free: true,
+        there: false,
+        pull_out_blocked: false,
+    };
     let key = BerthKey { stop: 7, lane: 0 };
     // the berth still the other bus's: it stays, doors open
     let mut state = AiState::new(0, 0.0, 1);
@@ -239,12 +287,18 @@ fn a_bus_served_from_behind_pulls_up_when_the_berth_comes_free() {
     berths.ask(key, 2, true, 0.0);
     assert!(berths.grant(key, 2, true));
     let mut service = behind();
-    assert_eq!(service.step(&mut state, &mut vehicle, &ctx, &mut berths), Some(state.front));
+    assert_eq!(
+        service.step(&mut state, &mut vehicle, &ctx, &mut berths),
+        Some(state.front)
+    );
     assert_eq!(service.phase, Phase::Boarding);
     // gone: the doors close first, it does not move yet
     berths.release(key, 2);
     let mut service = behind();
-    assert_eq!(service.step(&mut state, &mut vehicle, &ctx, &mut berths), Some(state.front));
+    assert_eq!(
+        service.step(&mut state, &mut vehicle, &ctx, &mut berths),
+        Some(state.front)
+    );
     assert_eq!(service.phase, Phase::Closing);
     assert_eq!(state.signal, 0, "no blinker for pulling up");
     // shut: it moves up
@@ -259,7 +313,11 @@ fn a_bus_served_from_behind_pulls_up_when_the_berth_comes_free() {
     later.day_time = 220.0;
     service.step(&mut state, &mut vehicle, &later, &mut berths);
     assert_eq!(service.phase, Phase::Boarding);
-    assert!(service.at_station() && service.boarding > 150.0, "{}", service.boarding);
+    assert!(
+        service.at_station() && service.boarding > 150.0,
+        "{}",
+        service.boarding
+    );
     // somebody still at its doors: it waits for them first
     let mut state = AiState::new(0, 0.0, 1);
     let mut berths = Berths::default();
@@ -287,13 +345,19 @@ fn a_bus_served_from_behind_keeps_its_place_in_the_queue() {
     service.behind = true;
     service.boarding = 5.0;
     let mut ctx = service_context(&net, 200.0, 0.1);
-    ctx.berth = BerthScene { applies: true, free: false, there: false, pull_out_blocked: false };
+    ctx.berth = BerthScene {
+        applies: true,
+        free: false,
+        there: false,
+        pull_out_blocked: false,
+    };
     let key = BerthKey { stop: 7, lane: 0 };
     let mut berths = Berths::default();
     berths.ask(key, 2, true, 0.0);
     assert!(berths.grant(key, 2, true));
     service.step(&mut state, &mut vehicle, &ctx, &mut berths);
     berths.begin_step(0, |_| true);
+    service.boarding = 0.0;
     service.step(&mut state, &mut vehicle, &ctx, &mut berths);
     berths.ask(key, 4, false, 10.0);
     berths.release(key, 2);
@@ -315,12 +379,24 @@ fn a_bus_moving_up_gives_up_at_its_departure() {
     service.boarded = false;
     service.phase = Phase::Waiting;
     let mut ctx = service_context(&net, 300.0, 0.1);
-    ctx.berth = BerthScene { applies: true, free: true, there: false, pull_out_blocked: false };
+    ctx.berth = BerthScene {
+        applies: true,
+        free: true,
+        there: false,
+        pull_out_blocked: false,
+    };
     let mut berths = Berths::default();
-    assert!(service.step(&mut state, &mut vehicle, &ctx, &mut berths).is_some_and(|d| d > state.front + 20.0));
+    assert!(
+        service
+            .step(&mut state, &mut vehicle, &ctx, &mut berths)
+            .is_some_and(|d| d > state.front + 20.0)
+    );
     assert_eq!(service.phase, Phase::Waiting);
     ctx.day_time = 400.0;
-    assert_eq!(service.step(&mut state, &mut vehicle, &ctx, &mut berths), Some(state.front));
+    assert_eq!(
+        service.step(&mut state, &mut vehicle, &ctx, &mut berths),
+        Some(state.front)
+    );
     assert_eq!(service.phase, Phase::Closing);
     assert!(!service.behind && !service.at_station());
 }
@@ -348,13 +424,33 @@ fn early_late_and_layover_boundaries_keep_the_omsi_departure_rule() {
     service.arrive(&service_context(&net, 100.0, 0.0), 400.0, (0, 10.0));
     assert_eq!(service.phase, Phase::Waiting);
     assert!(!service.at_station());
-    service.step(&mut state, &mut vehicle, &service_context(&net, 354.0, 254.0), &mut Berths::default());
+    service.step(
+        &mut state,
+        &mut vehicle,
+        &service_context(&net, 354.0, 254.0),
+        &mut Berths::default(),
+    );
     assert_eq!(service.phase, Phase::Waiting);
-    service.step(&mut state, &mut vehicle, &service_context(&net, 355.0, 1.0), &mut Berths::default());
+    service.step(
+        &mut state,
+        &mut vehicle,
+        &service_context(&net, 355.0, 1.0),
+        &mut Berths::default(),
+    );
     assert_eq!(service.phase, Phase::Boarding);
-    service.step(&mut state, &mut vehicle, &service_context(&net, 396.0, 41.0), &mut Berths::default());
+    service.step(
+        &mut state,
+        &mut vehicle,
+        &service_context(&net, 396.0, 41.0),
+        &mut Berths::default(),
+    );
     assert_eq!(service.phase, Phase::Boarding);
-    service.step(&mut state, &mut vehicle, &service_context(&net, 400.0, 4.0), &mut Berths::default());
+    service.step(
+        &mut state,
+        &mut vehicle,
+        &service_context(&net, 400.0, 4.0),
+        &mut Berths::default(),
+    );
     assert_eq!(service.phase, Phase::Closing);
 }
 
@@ -371,7 +467,12 @@ fn people_at_the_doors_hold_a_bus_a_minute_past_its_time_at_most() {
     while t < 400.0 && service.phase == Phase::Boarding {
         service.hold(Some(1), 2.5);
         t += 0.5;
-        service.step(&mut state, &mut vehicle, &service_context(&net, t, 0.5), &mut Berths::default());
+        service.step(
+            &mut state,
+            &mut vehicle,
+            &service_context(&net, t, 0.5),
+            &mut Berths::default(),
+        );
     }
     assert_ne!(service.phase, Phase::Boarding, "still boarding at {t}");
     assert!(t < 100.0 + 90.0, "held until {t}");
@@ -396,7 +497,10 @@ fn streamed_route_tail_is_not_trip_completion_and_platform_side_survives_restart
         assert_eq!(service.phase, Phase::Running);
         assert!(!service.trip_done());
         // Geometry returns later: preserve the new visit's side and departure.
-        service.restart(vec![Stop::from_tuple((0, 10.0, 0.0, 200.0, 42, side))], false);
+        service.restart(
+            vec![Stop::from_tuple((0, 10.0, 0.0, 200.0, 42, side))],
+            false,
+        );
         service.arrive(&service_context(&net, 200.0, 0.0), 200.0, (0, 10.0));
         assert_eq!(service.at_station_side(), side);
         assert_eq!(service.stops.front().unwrap().depart, 200.0);
@@ -404,7 +508,11 @@ fn streamed_route_tail_is_not_trip_completion_and_platform_side_survives_restart
 }
 /// The doors closing at a stop: how long until the bus pulls out (None: still there
 /// after a minute), and the fault it notes.
-fn close_doors(vehicle: &mut VehicleInstance, at_station: f32, door: Option<f32>) -> (Option<f32>, Option<ServiceFault>) {
+fn close_doors(
+    vehicle: &mut VehicleInstance,
+    at_station: f32,
+    door: Option<f32>,
+) -> (Option<f32>, Option<ServiceFault>) {
     let net = service_network();
     let mut state = AiState::new(0, 0.0, 1);
     let stop = |id: i64| Stop::from_tuple((0, 10.0 * id as f32, 0.0, 100.0, id, 0.0));
@@ -417,7 +525,12 @@ fn close_doors(vehicle: &mut VehicleInstance, at_station: f32, door: Option<f32>
     let mut t = 0.0;
     while t < 60.0 {
         t += 0.1;
-        service.step(&mut state, vehicle, &service_context(&net, 100.0 + t as f64, 0.1), &mut Berths::default());
+        service.step(
+            &mut state,
+            vehicle,
+            &service_context(&net, 100.0 + t as f64, 0.1),
+            &mut Berths::default(),
+        );
         if service.phase != Phase::Closing {
             return (Some(t), service.fault);
         }
@@ -432,22 +545,39 @@ fn the_bus_pulls_out_when_its_script_says_the_doors_are_shut() {
     // the script has answered: after the short close
     let mut v = crate::timetable_run::tests::script_test_vehicle(answering, vars, "");
     let (left, fault) = close_doors(&mut v, 0.0, Some(0.0));
-    assert!(left.is_some_and(|t| (CLOSE_MIN..CLOSE_MIN + 0.3).contains(&t)), "{left:?}");
+    assert!(
+        left.is_some_and(|t| (CLOSE_MIN..CLOSE_MIN + 0.3).contains(&t)),
+        "{left:?}"
+    );
     assert_eq!(fault, None);
     // it has not, and its doors stand open: the bus waits for them, but not for good
     let mut v = crate::timetable_run::tests::script_test_vehicle(answering, vars, "");
     let (left, fault) = close_doors(&mut v, -1.0, Some(1.0));
-    assert!(left.is_some_and(|t| (DOORS_GIVE_UP..DOORS_GIVE_UP + 0.3).contains(&t)), "{left:?}");
+    assert!(
+        left.is_some_and(|t| (DOORS_GIVE_UP..DOORS_GIVE_UP + 0.3).contains(&t)),
+        "{left:?}"
+    );
     assert_eq!(fault, Some(ServiceFault::DoorsOpenUnanswered));
     // it has not, and nobody knows about the doors: off after the longest wait
-    let mut v = crate::timetable_run::tests::script_test_vehicle(answering, "AI_Scheduled_AtStation\n", "");
+    let mut v =
+        crate::timetable_run::tests::script_test_vehicle(answering, "AI_Scheduled_AtStation\n", "");
     let (left, fault) = close_doors(&mut v, -1.0, None);
-    assert!(left.is_some_and(|t| (CLOSE_MAX..CLOSE_MAX + 0.3).contains(&t)), "{left:?}");
+    assert!(
+        left.is_some_and(|t| (CLOSE_MAX..CLOSE_MAX + 0.3).contains(&t)),
+        "{left:?}"
+    );
     assert_eq!(fault, Some(ServiceFault::DoorsUnanswered));
     // a script that never answers at all has nothing to wait for: the short close
-    let mut v = crate::timetable_run::tests::script_test_vehicle("{frame_ai}\n{end}\n", "AI_Scheduled_AtStation\n", "");
+    let mut v = crate::timetable_run::tests::script_test_vehicle(
+        "{frame_ai}\n{end}\n",
+        "AI_Scheduled_AtStation\n",
+        "",
+    );
     let (left, fault) = close_doors(&mut v, -1.0, None);
-    assert!(left.is_some_and(|t| (CLOSE_MIN..CLOSE_MIN + 0.3).contains(&t)), "{left:?}");
+    assert!(
+        left.is_some_and(|t| (CLOSE_MIN..CLOSE_MIN + 0.3).contains(&t)),
+        "{left:?}"
+    );
     assert_eq!(fault, None);
 }
 
@@ -465,7 +595,12 @@ fn the_trip_ends_where_the_track_ends() {
         let mut service = BusService::new(vec![Stop::from_tuple((0, 10.0, 0.0, 100.0, 1, 0.0))]);
         service.set_phase(Phase::Closing);
         service.phase_t = CLOSE_MIN;
-        service.step(&mut state, &mut vehicle, &service_context(&net, 100.0, 0.1), &mut Berths::default());
+        service.step(
+            &mut state,
+            &mut vehicle,
+            &service_context(&net, 100.0, 0.1),
+            &mut Berths::default(),
+        );
         assert_eq!(service.trip_done(), done, "the track runs on: {route_on}");
         assert!(service.stops.is_empty());
     }
@@ -475,12 +610,37 @@ fn the_trip_ends_where_the_track_ends() {
 /// whole lane further - it keeps its berth until its rear has left it.
 #[test]
 fn the_way_past_a_stop_counts_a_lane_beside_as_beside() {
-    let key = |path: u16| Some(crate::traffic::LaneKey { tile: (0, 0), id: 9, path });
-    let mut a = crate::traffic::LaneBuilder::arc(glam::DVec3::ZERO, 0.0, 100.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut b = crate::traffic::LaneBuilder::arc(glam::DVec3::new(3.5, 0.0, 0.0), 0.0, 100.0, 0.0, 0.0, LaneKind::Street, 3.0);
+    let key = |path: u16| {
+        Some(crate::traffic::LaneKey {
+            tile: (0, 0),
+            id: 9,
+            path,
+        })
+    };
+    let mut a = crate::traffic::LaneBuilder::arc(
+        glam::DVec3::ZERO,
+        0.0,
+        100.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut b = crate::traffic::LaneBuilder::arc(
+        glam::DVec3::new(3.5, 0.0, 0.0),
+        0.0,
+        100.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
     a.key = key(0);
     b.key = key(1);
-    let net = Network { lanes: vec![a, b], ..Default::default() };
+    let net = Network {
+        lanes: vec![a, b],
+        ..Default::default()
+    };
     assert!(net.parallel(0, 1));
     let mut st = AiState::new(1, 21.5, 1);
     st.route = vec![0, 1];
@@ -544,8 +704,11 @@ fn timetable_tracks_repeated_stops_streaming_and_trip_changes() {
             (7, "A".into(), 300.0, 320.0),
         ],
     };
-    let mut v =
-        crate::timetable_run::tests::script_test_vehicle("{frame_ai}\n{end}\n", "schedule_active\n", "");
+    let mut v = crate::timetable_run::tests::script_test_vehicle(
+        "{frame_ai}\n{end}\n",
+        "schedule_active\n",
+        "",
+    );
     v.host.hof = Some(std::sync::Arc::new(omsi_vehicle::Hof {
         termini: vec![omsi_vehicle::hof::Terminus {
             texture_id: "terminal".into(),
@@ -597,7 +760,13 @@ fn a_bus_stands_at_its_trips_last_stop_until_its_time_however_long() {
     service.last_stop = Some(6);
     // at an earlier stop the timetable holds it at, the early wait stays capped
     service.holds = vec![5];
-    assert_eq!(service.stop_wait(depart, now, false, false, false), LAYOVER_WAIT);
+    assert_eq!(
+        service.stop_wait(depart, now, false, false, false),
+        LAYOVER_WAIT
+    );
     service.stops.pop_front();
-    assert_eq!(service.stop_wait(depart, now, false, false, false), depart - EARLY_LEAVE - now);
+    assert_eq!(
+        service.stop_wait(depart, now, false, false, false),
+        depart - EARLY_LEAVE - now
+    );
 }
