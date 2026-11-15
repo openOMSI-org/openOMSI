@@ -3271,4 +3271,4 @@
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "他のどのマップも使っていないオブジェクトとスプラインのフォルダも一緒に削除されます：{n} 個、{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "他のマップがまだ使っているオブジェクトとスプラインのフォルダは残ります：{n} 個。"
 "Lights in fog at full resolution": "霧の中の光をフル解像度で"
-"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in a foggy night": "Enhanced: 霧・雨・雪の中の街灯とヘッドライトの光をピクセルごとに計算 - フェンス、木、遠くの地面に沿った段差や縞模様がなくなります。霧の夜はフレーム時間が少し増えます"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in fog": "Enhanced: 霧・雨・雪の中の街灯とヘッドライトの光をピクセルごとに計算 - フェンス、木、遠くの地面に沿った段差や縞模様がなくなります。霧の中ではフレーム時間が少し増えます"

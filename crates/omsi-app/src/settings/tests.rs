@@ -352,8 +352,6 @@ fn enhanced_options_and_ray_tracing() {
     assert!(old.to_text().contains("ray_tracing=1\n") && !old.to_text().contains("enhanced_plus"));
 }
 
-/// The lamps' light in fog at full resolution: off by default, kept and read back, handed to
-/// the renderer, and dropped with the other Enhanced extras after a lost graphics device.
 #[test]
 fn fog_full_res_option() {
     assert!(!Settings::default().fog_full_res && !Settings::default().render_options().fog_full_res);

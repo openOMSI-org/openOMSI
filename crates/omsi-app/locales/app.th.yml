@@ -2925,4 +2925,4 @@
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "โฟลเดอร์วัตถุและสไปลน์ที่ไม่มีแผนที่อื่นใช้จะถูกลบไปด้วย: {n} โฟลเดอร์, {size}"
 "Folders of objects and splines that another map still uses stay: {n}.": "โฟลเดอร์วัตถุและสไปลน์ที่แผนที่อื่นยังใช้อยู่จะยังคงอยู่: {n} โฟลเดอร์"
 "Lights in fog at full resolution": "แสงไฟในหมอกที่ความละเอียดเต็ม"
-"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in a foggy night": "Enhanced: แสงจากโคมไฟและไฟหน้าในหมอก ฝน และหิมะคำนวณทุกพิกเซล - ไม่มีขั้นบันไดหรือแถบตามรั้ว ต้นไม้ และพื้นไกล ๆ; ใช้เวลาต่อเฟรมเพิ่มขึ้นเล็กน้อยในคืนที่มีหมอก"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in fog": "Enhanced: แสงจากโคมไฟและไฟหน้าในหมอก ฝน และหิมะคำนวณทุกพิกเซล - ไม่มีขั้นบันไดหรือแถบตามรั้ว ต้นไม้ และพื้นไกล ๆ; ใช้เวลาต่อเฟรมเพิ่มขึ้นเล็กน้อยในหมอก"
