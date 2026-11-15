@@ -428,9 +428,9 @@ pub struct Settings {
     /// `dx12`, `gl` or `angle` (OpenGL ES on ANGLE over DirectX 11, Windows; see
     /// `startup::backend_order`).
     pub graphics_api: String,
-    /// mX Graphics (Experimental): the game drawn by mX, openOMSI's own graphics library,
-    /// through wgpu; where mX cannot open a device, wgpu's own backends take over
-    /// (`startup::graphics_instance`; `OMSI_MX` overrides it).
+    /// mX Graphics (Experimental, read on a Mac only): the game drawn by mX, openOMSI's own
+    /// graphics library, through wgpu; where mX cannot open a device, wgpu's own backends take
+    /// over (`startup::game_graphics_instance`; `OMSI_MX` overrides it on every system).
     pub mx_graphics: bool,
     /// Default motor polarity for wheels without a saved per-device direction.
     pub ff_invert: bool,
@@ -713,6 +713,19 @@ impl Settings {
         }
     }
 
+    /// The lit LEDs' glow and mipmaps, the night's brightness and the graphics interface
+    /// (`from_text`): an unreadable number keeps the default.
+    fn read_graphics(&mut self, k: &str, v: &str) {
+        let v = v.trim();
+        match k {
+            "led_glow" => self.led_glow = v.parse::<i32>().map(|x| x.clamp(0, 15) as u8).unwrap_or(self.led_glow),
+            "night_brightness" => self.night_brightness = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 3.0)).unwrap_or(self.night_brightness),
+            "led_mips" => self.led_mips = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(self.led_mips),
+            "graphics_api" => self.graphics_api = v.to_ascii_lowercase(),
+            _ => self.mx_graphics = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
+        }
+    }
+
     pub fn from_text(text: &str) -> Settings {
         let mut s = Settings::default();
         let mut version = 0u32;
@@ -918,10 +931,7 @@ impl Settings {
                 "reflections" | "envmap" => s.reflections = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map_or_else(|| if b(v) { 1.0 } else { 0.0 }, |x| x.clamp(0.0, 1.0)),
                 "road_glare" => s.road_glare = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 2.0)).unwrap_or(1.0),
                 "traffic_headlights" => s.traffic_headlights = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 2.0)).unwrap_or(1.0),
-                "led_glow" => s.led_glow = v.trim().parse::<i32>().map(|x| x.clamp(0, 15) as u8).unwrap_or(s.led_glow),
-                "night_brightness" => s.night_brightness = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 3.0)).unwrap_or(s.night_brightness),
-                "led_mips" => s.led_mips = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(s.led_mips),
-                "graphics_api" => s.graphics_api = v.trim().to_ascii_lowercase(), "mx_graphics" => s.mx_graphics = b(v),
+                "led_glow" | "night_brightness" | "led_mips" | "graphics_api" | "mx_graphics" => s.read_graphics(&k, v),
                 "ctrl_off" => s.ctrl_off = v.trim().to_string(),
                 "steering_linear" => s.steering_linear = b(v),
                 "old_steering" => s.old_steering = b(v),

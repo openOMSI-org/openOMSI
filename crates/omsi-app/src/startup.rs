@@ -203,12 +203,13 @@ pub(crate) fn find_root() -> Option<PathBuf> {
 /// game makes its instance (`game_graphics_instance`); the launcher's previews stay on wgpu.
 static MX_GRAPHICS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// The game's instance: mX's when `setting` says so (`mx_graphics`) or `OMSI_MX=on` does,
-/// else `graphics_instance`'s.
+/// The game's instance: mX's when `setting` says so (`mx_graphics`, read on a Mac only: mX has
+/// drawn the game on Metal, not yet on Direct3D 12 or Vulkan) or `OMSI_MX=on` does, else
+/// `graphics_instance`'s.
 pub(crate) fn game_graphics_instance(setting: bool) -> wgpu::Instance {
     let on = match omsi_cfg::flags::OMSI_MX.var() {
         Some(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "on" | "true" | "yes"),
-        None => setting,
+        None => setting && cfg!(target_os = "macos"),
     };
     MX_GRAPHICS.store(on, std::sync::atomic::Ordering::Relaxed);
     if on {

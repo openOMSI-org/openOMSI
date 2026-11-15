@@ -36,7 +36,6 @@ fn descriptor_class() -> Result<&'static AnyClass> {
 }
 
 pub(super) fn texture(t: &wgpu::Texture, what: &str) -> Result<Texture> {
-    // (mX Graphics: the texture is mX's)
     if let Some(m) = wgpu_mx::custom::texture(t) {
         return Ok(m.raw().retain());
     }
