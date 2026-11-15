@@ -100,7 +100,11 @@ pub(super) fn after_humans(cx: AfterHumansCx, dt: f32) {
             .as_ref()
             .and_then(|h| h.sim.avatars.get(&crate::on_foot::AVATAR_KEY))
             .and_then(|id| cx.gfx.gfx.sim_view.people.avatar_eye_world(*id));
-        f.after_humans(cx.people.humans.as_ref(), posed_eye, cx.view.camera.as_mut());
+        f.after_humans(
+            cx.people.humans.as_ref(),
+            posed_eye,
+            cx.view.camera.as_mut(),
+        );
     }
     if !*cx.clock.paused {
         cx.player.tick_service(dt, cx.ui.service_msg, &mut cx.integrations.plugin_events);

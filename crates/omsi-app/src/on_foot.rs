@@ -1337,7 +1337,11 @@ pub(crate) fn tick(cx: &mut OnFootCx, dt: f32) {
         // stride, so that the picture does not jump with each step the legs take
         let k_up = 1.0 - (-dt64 * (4.0 + 6.0 * ease)).exp();
         let vertical_k = if f.inside.is_some() || f.seat.is_some() { k } else { k_up };
-        let horizontal_k = if settling { k } else { horizontal_follow_k(dt64, f.vel.length()) };
+        let horizontal_k = if settling {
+            k
+        } else {
+            horizontal_follow_k(dt64, f.vel.length())
+        };
         let at = follow_eye(f.eye, want, horizontal_k, vertical_k);
         f.eye = Some(at);
         // (what the glide is still behind by is kept while it lasts and let go of after:

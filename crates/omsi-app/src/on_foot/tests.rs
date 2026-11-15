@@ -28,7 +28,11 @@ fn the_walk_camera_stays_close_to_the_head_while_moving() {
         target.y += speed * dt;
         at = follow_eye(Some(at), target, horizontal_follow_k(dt, speed), 1.0);
     }
-    assert!(target.distance(at) < 0.08, "camera lag: {} m", target.distance(at));
+    assert!(
+        target.distance(at) < 0.08,
+        "camera lag: {} m",
+        target.distance(at)
+    );
 }
 
 #[test]
