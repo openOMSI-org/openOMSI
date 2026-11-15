@@ -615,6 +615,7 @@ fn collect_model_vars(
     model_only_vars
 }
 
+/// Initialise engine visual inputs before `{init}` so stock buses (like the GN92) do not start with full dirt until the first tick.
 fn init_engine_visual_inputs(
     state: &mut State,
     var_index: &mut HashMap<String, omsi_script::VarId>,
