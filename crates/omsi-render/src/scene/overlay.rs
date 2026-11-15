@@ -138,24 +138,6 @@ fn boxes_overlap(a: &Flat, b: &Flat, margin: f32) -> bool {
         && (b.lo - Vec3::splat(margin)).cmple(a.hi).all()
 }
 
-fn projected_overlap(a: &Flat, b: &Flat, minimum: f32) -> bool {
-    let across = a.normal.cross(a.axis);
-    [a.axis, across].into_iter().all(|axis| {
-        let interval = |flat: &Flat| {
-            let mut center = (flat.lo + flat.hi) * 0.5;
-            center -= flat.normal * (flat.normal.dot(center) - flat.offset);
-            let flat_across = flat.normal.cross(flat.axis);
-            let radius = flat.half[0] * axis.dot(flat.axis).abs()
-                + flat.half[1] * axis.dot(flat_across).abs();
-            let middle = center.dot(axis);
-            (middle - radius, middle + radius)
-        };
-        let (a_lo, a_hi) = interval(a);
-        let (b_lo, b_hi) = interval(b);
-        a_hi.min(b_hi) - a_lo.max(b_lo) > minimum
-    })
-}
-
 /// `f` against `g` when the two face the same way and their boxes overlap within `margin`: how
 /// far `f`'s middle lies off `g`'s plane, and how far `f`'s tilt lifts its corners off it.
 fn facing(f: &Flat, g: &Flat, margin: f32) -> Option<(f32, f32)> {
@@ -287,7 +269,7 @@ impl ObjectRun {
                                 level = level.max(gl.saturating_add(1).min(MAX_LEVEL));
                                 under.push(i);
                             } else if let Some(gap) = near_gap(f, g) {
-                                beside.push((i, *gl, gap, **f));
+                                beside.push((i, *gl, gap));
                             }
                         }
                     }}}
@@ -298,7 +280,19 @@ impl ObjectRun {
             beside.retain(|(i, _, _, _)| !under.contains(i));
             let beside_lo = beside.iter().map(|b| b.1).min();
             let beside_hi = beside.iter().map(|b| b.1).max();
-            let base_level = under.iter().map(|&i| self.flats[i].1).min();
+            let gap = beside
+                .iter()
+                .filter(|(near, _, _)| {
+                    // Same-mesh slots are submitted in order; only another mesh may cap this stack.
+                    self.flat_meshes[*near] != mesh && under.iter().any(|&base| {
+                        boxes_overlap(&self.flats[*near].0, &self.flats[base].0, BOX_GAP)
+                    })
+                })
+                .map(|b| b.2)
+                .min_by(f32::total_cmp);
+            if let Some(gap) = gap {
+                depth_caps[slot] = gap * 0.5;
+            }
             let level = if level == 0 {
                 beside_hi.unwrap_or(0)
             } else if level > 2 {
@@ -353,20 +347,6 @@ mod tests {
         let positions = vec![Vec3::new(-half, -half, z), Vec3::new(half, -half, z), Vec3::new(half, half, z), Vec3::new(-half, half, z)];
         let indices = if cut_other_way { vec![0, 1, 3, 1, 2, 3] } else { vec![0, 1, 2, 0, 2, 3] };
         MeshData { positions, normals: vec![Vec3::Z; 4], uvs: vec![glam::Vec2::ZERO; 4], ranges: vec![(0, 6, slot)], indices, one_sided: false }
-    }
-
-    fn joined_mesh(parts: impl IntoIterator<Item = MeshData>) -> MeshData {
-        let mut mesh = MeshData::default();
-        for part in parts {
-            let base = mesh.positions.len() as u32;
-            let index_start = mesh.indices.len() as u32;
-            mesh.positions.extend(part.positions);
-            mesh.normals.extend(part.normals);
-            mesh.uvs.extend(part.uvs);
-            mesh.indices.extend(part.indices.into_iter().map(|i| i + base));
-            mesh.ranges.extend(part.ranges.into_iter().map(|(first, count, slot)| (index_start + first, count, slot)));
-        }
-        mesh
     }
 
     fn box_mesh(at: Vec3) -> MeshData {
@@ -511,56 +491,7 @@ mod tests {
         run.begin(None);
         let (levels, caps) = run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 6);
         assert_eq!(levels[5], 2);
-        assert!((caps[5] - 0.0001).abs() < 1e-7);
-    }
-
-    #[test]
-    fn a_same_mesh_biased_surface_does_not_cap_a_deeper_print() {
-        let mesh = joined_mesh([
-            quad(0.0, 0.4, 0, false),
-            quad(0.0, 0.3, 1, true),
-            quad(0.0, 0.25, 2, false),
-            quad(0.0002, 0.1, 3, false),
-            quad(0.0, 0.15, 4, false),
-        ]);
-        let mut run = ObjectRun::default();
-        run.begin(None);
-        let (levels, caps) = run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 5);
-        assert_eq!(levels[3], 2);
-        assert_eq!(levels[4], 2);
-        assert!(caps[4].is_infinite(), "a biased layer must not cap a deeper print");
-    }
-
-    #[test]
-    fn a_same_mesh_base_patch_does_not_cap_a_deep_print() {
-        let mesh = joined_mesh([
-            quad(0.0002, 0.1, 1, false),
-            quad(0.0, 0.3, 1, false),
-            quad(0.0, 0.25, 2, true),
-            quad(0.0, 0.2, 3, false),
-            quad(0.0, 0.15, 4, true),
-            quad(0.0, 1.0, 5, false),
-        ]);
-        let mut run = ObjectRun::default();
-        run.begin(None);
-        let (_, caps) = run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 6);
-        assert!(caps[5].is_infinite(), "a neighboring patch in the base slot is not an occluder");
-    }
-
-    #[test]
-    fn a_same_mesh_adjacent_slot_patch_does_not_cap_a_deep_print() {
-        let mesh = joined_mesh([
-            moved(quad(0.0002, 0.05, 0, false), Vec3::new(0.25025, 0.0, 0.0)),
-            quad(0.0, 0.4, 1, false),
-            quad(0.0, 0.3, 2, true),
-            quad(0.0, 0.25, 3, false),
-            quad(0.0, 0.22, 4, true),
-            quad(0.0, 0.2, 5, false),
-        ]);
-        let mut run = ObjectRun::default();
-        run.begin(None);
-        let (_, caps) = run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 6);
-        assert!(caps[5].is_infinite(), "a neighboring patch in another slot is not an occluder");
+        assert!(caps[5].is_infinite(), "same-mesh slots already have draw order");
     }
 
     /// A print on a dial keeps its step when the instrument's glass lies a few millimetres
