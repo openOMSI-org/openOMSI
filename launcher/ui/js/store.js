@@ -30,6 +30,11 @@ export const S = {
   changelog: false,
   errors: {},
   cache: {},
+  // (the cache keys being read again: the page says so instead of showing the old answer as
+  // if it were the new one, #4016)
+  reading: {},
+  // (install jobs done whose mod the next mods_status has yet to list, #4016)
+  settling: [],
 };
 
 const subs = new Set();

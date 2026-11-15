@@ -455,12 +455,32 @@ export async function loadSituations() {
 /** Page data kept between visits: answered at once from what was read last, read again
  * behind it (`fresh` = the command's answer is set into `S.cache[key]`). */
 export function cached(key, cmd, args) {
-  const before = S.cache[key];
+  const had = S.cache[key];
+  const p = reread(key, cmd, args);
+  return had !== undefined ? Promise.resolve(had) : p;
+}
+
+const asked = {};
+const latest = {};
+
+/** Read `key` again and wait for the new answer (`S.reading[key]` while it comes). The last
+ *  read asked for wins: an earlier one answering later is dropped, a later one is never
+ *  dropped for an earlier one (#4016). The promise resolves once the cache holds an answer
+ *  read after this call (a newer read's, when one was asked meanwhile). */
+export function reread(key, cmd, args) {
+  const n = (asked[key] = (asked[key] || 0) + 1);
+  if (!S.reading[key]) set({ reading: { ...S.reading, [key]: true } });
+  const keep = (v, ok) => {
+    if (asked[key] !== n) return latest[key];
+    set({ cache: { ...S.cache, [key]: v }, reading: { ...S.reading, [key]: false } });
+    return ok ? v : null;
+  };
   const p = call(cmd, args).then(
-    (v) => (S.cache[key] === before && set({ cache: { ...S.cache, [key]: v } }), v),
-    (e) => (S.cache[key] === before && set({ cache: { ...S.cache, [key]: { error: e.message } } }), null),
+    (v) => keep(v, true),
+    (e) => keep({ error: e.message }, false),
   );
-  return S.cache[key] !== undefined ? Promise.resolve(S.cache[key]) : p;
+  latest[key] = p;
+  return p;
 }
 
 /** What the pages show, read ahead while the launcher starts. */
@@ -651,7 +671,12 @@ export async function pollNow() {
     }
     if (changed || finished.length) {
       loadContent();
-      cached('mods', 'mods_status');
+      // (a mod just installed keeps its row on the Mods page until the list read after it
+      // has it: the read takes seconds on a big content folder, #4016)
+      const done = finished.filter((j) => j.state === 'done').map((j) => j.id);
+      if (done.length) set({ settling: [...S.settling, ...done] });
+      const settled = () => done.length && set({ settling: S.settling.filter((id) => !done.includes(id)) });
+      reread('mods', 'mods_status').then(settled, settled);
     }
   } catch {
     /* the next look */
