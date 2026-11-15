@@ -41,7 +41,6 @@ pub(crate) fn bus_under_cursor(app: &crate::App) -> Option<u64> {
     best.map(|b| b.0)
 }
 
-/// The distance along the ray (`o` + t `d`) to an upright box turned to its heading.
 fn ray_box(b: &omsi_sim::collision::Obb, o: glam::DVec3, d: glam::DVec3) -> Option<f64> {
     let (sh, ch) = (b.heading.sin(), b.heading.cos());
     // into the box's frame: x across (right), y along the heading
@@ -92,7 +91,6 @@ pub(crate) fn ask(app: &mut crate::App, id: u64) -> bool {
     true
 }
 
-/// The bus's name for the question.
 pub(crate) fn name_of(app: &crate::App, id: u64) -> Option<String> {
     let c = app
         .session
@@ -227,7 +225,6 @@ fn take(app: &mut crate::App, id: u64) -> anyhow::Result<()> {
     );
     app.session.placed.push(q);
     app.take_placed(app.session.placed.len() - 1);
-    // start_duty_at shows the duty (or why there is none)
     let Some((line, tour, trip)) = tour else {
         app.service_msg = Some((omsi_ui::tr("You have control of the bus").into_owned(), 4.0));
         return Ok(());
