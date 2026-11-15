@@ -33,5 +33,5 @@ fn deforming_a_mesh_does_not_encode_unused_depth_normals() {
     positions[2].z = 0.2;
     renderer.update_mesh(&mut scene, mesh, &positions, &data.normals, &data.uvs);
     renderer.prepare(&mut scene);
-    assert_eq!([scene.cpu_models[0][1][3], scene.cpu_models[0][2][3]], crate::scene::depth_plane::NO_PLANE);
+    assert_eq!([scene.cpu_models[0][1][3], scene.cpu_models[0][2][3]], [0.0, 0.0]);
 }
