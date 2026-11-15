@@ -264,9 +264,7 @@ fn test_stop(name: &str, alias: &str) -> PaxStop {
     }
 }
 
-/// The player's bus on a duty takes the people its trip takes where they are going,
-/// whatever its depot file calls the terminus; in free drive, or with no destination
-/// shown, nobody; a bus whose terminus is on their line record comes first.
+/// The duty fallback tolerates different HOF and timetable terminus spellings.
 #[test]
 fn who_boards_the_players_bus() {
     // line 76 from Bauernhof (stop 10) by Kirche to Endstation; the depot file calls the
@@ -656,4 +654,9 @@ fn the_people_waiting_keep_the_floor_of_their_place() {
     assert!(near(floor(&mut h, Task::WalkingToBusstop, Some(1)), 10.15), "walking back to it");
     assert!(near(floor(&mut h, Task::WaitingForBus, None), 10.0), "the stop's own height");
     assert_eq!(floor(&mut h, Task::ToBus, None), None, "off to a bus: the ground");
+    // (a seat keeps its bench's floor: the pavement beside it lifts only a standing place)
+    h.people = vec![person(Task::WaitingForBus, Some(1))];
+    assert!(h.waits_seated(0));
+    h.people = vec![person(Task::WaitingForBus, Some(0))];
+    assert!(!h.waits_seated(0));
 }

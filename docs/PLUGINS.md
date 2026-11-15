@@ -650,6 +650,7 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 
 | Function | Returns | What it does | Since |
 | --- | --- | --- | --- |
+| `omsi.body_frame([section])` | x, y, z, rx, ry, rz, fx, fy, fz, ux, uy, uz | The bus's body now, as the last simulation step left it: its origin (map metres) and its model's axes in the world - right, forward and up, each a unit vector - with the heading, the climb and the lean on the springs in them. A point of the model at (mx, my, mz) is at origin + mx·right + my·forward + mz·up. `section` 1, 2, ... is a section coupled behind (an articulated bus's rear one). Nothing on foot. | 0.2.22 |
 | `omsi.bus.acceleration()` | across, along, up | Its acceleration in its own frame, m/s² without gravity: to the right, forwards, up. | 0.2.22 |
 | `omsi.bus.action(name, [down])` | boolean | A key action of the vehicles (`[vehicles]` of keyboard.cfg: `horn`, `parking_brake_toggle`, `kw_scheinwerfer_toggle`, `blinker_left_set`, `ticket_give`, ...): pressed and let go, or held (`down` true) and let go (`false`). `true` when the bus knows it. *Permission: `vehicle_write`.* | 0.2.22 |
 | `omsi.bus.controls()` | throttle, brake, clutch, steering | What the bus drives with now: the pedals (0 to 1) and the steering (-1 left to 1 right), from the keys, the mouse or a controller. | 0.2.22 |
@@ -708,6 +709,7 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | `omsi.bus.wheels()` | list of tables | Each wheel: `{axle, side, rpm, radius, suspension, driven}` (`side` 0 left, 1 right; `suspension` the spring's travel). | 0.2.22 |
 | `omsi.distance(x, y)` | number or nil | Metres from the bus to a map point, or `nil` on foot. | 0.1.10 |
 | `omsi.has_vehicle()` | boolean | `true` while the player drives a vehicle. | 0.1.5 |
+| `omsi.mesh_point(mesh, x, y, z, [section])` | x, y, z | Where a point of one of the bus's meshes is now, in map metres: `mesh` names the mesh's file (`"sht_bashmak.o3d"`, or a part of its path), `x, y, z` is the point in the model's frame (x right, y forward, z up) as the mesh stands at rest; its animations and the body's lean move it. `section` (0, the default) looks in a section coupled behind instead (1, 2, ...: an articulated bus's rear part), its point in that section's model frame. For a plugin that lines a part of the bus up with something outside it. Nothing when the bus or the section has no such mesh, or `mesh` is empty. | 0.2.22 |
 | `omsi.position()` | x, y, z, heading | Where the bus is: map metres (x east, y north, z up) and its heading in degrees clockwise from north; nothing on foot. | 0.1.10 |
 | `omsi.press(name)` | nil | Holds a key of the bus down: fires the trigger `name` (let it go with `release`). *Permission: `vehicle_write`.* | 0.1.5 |
 | `omsi.release(name)` | nil | Lets a key go: fires `<name>_off`. *Permission: `vehicle_write`.* | 0.1.5 |
@@ -806,6 +808,8 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 
 | Function | Returns | What it does | Since |
 | --- | --- | --- | --- |
+| `omsi.other_body_frame(id, [section])` | x, y, z, rx, ry, rz, fx, fy, fz, ux, uy, uz | `body_frame` of one of `others`: its body now, origin and axes. | 0.2.22 |
+| `omsi.other_mesh_point(id, mesh, x, y, z, [section])` | x, y, z | `mesh_point` of one of `others`: where a point of one of its meshes (or, with `section`, of one of its coupled sections') is now. | 0.2.22 |
 | `omsi.other_var(id, name)` | number or nil | A script variable of one of `others`, or `nil`. | 0.2.21 |
 | `omsi.others([radius])` | list of tables | The other vehicles within `radius` m of the bus (default 300): each `{id, kind, name, x, y, z, heading}`, `kind` being `"ai"` (the traffic) or `"player"` (another player's bus in a LAN game); empty on foot. | 0.2.21 |
 | `omsi.set_other_var(id, name, value)` | boolean | Sets a script variable of one of `others`; `true` when that vehicle has it. An AI vehicle keeps it until its scripts write it again; another player's bus takes its values from the network again. *Permission: `traffic_write`.* | 0.2.21 |
@@ -815,7 +819,7 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | `omsi.traffic.density()` | cars, share | How many cars the traffic keeps around the camera, and the share of them that do not run to a timetable (0 to 1). | 0.2.22 |
 | `omsi.traffic.get(id)` | table or nil | One AI vehicle by its id, as `traffic.list` gives them. | 0.2.22 |
 | `omsi.traffic.light_ahead([reach])` | table or nil | The traffic light the player's bus comes to within `reach` m (default 80): `{aspect, change_in, distance}` - `aspect` `"red"`, `"red_yellow"`, `"green"`, `"green_yellow"`, `"yellow"` or `"dark"`, `change_in` the seconds to its next change. | 0.2.22 |
-| `omsi.traffic.list([radius])` | list of tables | The AI vehicles (within `radius` m of the player's bus, when given): `{id, kind, name, x, y, z, heading, speed, max_speed, waiting_for, standing, braking, blinker, line, distance}`. `kind`: `"car"`, `"taxi"`, `"bus"`, `"truck"`, `"timetable_bus"`, `"tram"`, `"bicycle"`; `waiting_for` why it waits or slows (`"lead"`, `"light"`, `"yield"`, `"people"`, ...); `standing` the seconds it has stood. | 0.2.22 |
+| `omsi.traffic.list([radius])` | list of tables | The AI vehicles (within `radius` m of the player's bus, when given): `{id, kind, name, x, y, z, heading, speed, max_speed, waiting_for, standing, braking, blinker, line, bounding_box, distance}`. `kind`: `"car"`, `"taxi"`, `"bus"`, `"truck"`, `"timetable_bus"`, `"tram"`, `"bicycle"`; `waiting_for` why it waits or slows (`"lead"`, `"light"`, `"yield"`, `"people"`, ...); `standing` the seconds it has stood; `bounding_box` the body's `[boundingbox]` as `{width, length, height, cx, cy, cz, heading, default}` (metres, the .bus/.ovh order; `cx`/`cy`/`cz` the box centre's offset from the vehicle's x, y, z along the body's right, forward and up, which follow `heading`; `default` when the file gives no box and the collision code's 2.5 x 12 x 3 m is used). | 0.2.22 |
 | `omsi.traffic.nearest([kind])` | table or nil | The AI vehicle nearest to the player's bus (of that `kind`, when given), with its `distance`. | 0.2.22 |
 | `omsi.traffic.remove(id)` | boolean | Takes an AI vehicle off the road (a timetable bus too: its timetable forgets it); its passengers get out. *Permission: `traffic_write`.* | 0.2.22 |
 | `omsi.traffic.set_density(cars, [share])` | boolean | Changes the traffic's amount (as the game menu's slider: 0 to 500 cars) and, when given, the share not running to a timetable; it fills up or thins out over the next seconds. *Permission: `traffic_write`.* | 0.2.22 |

@@ -274,6 +274,9 @@ pub struct DriverFigure {
     base_lean: f32,
     /// Whether hands/arms should remain visible in cab (first-person) view behind settings.
     pub show_hands_in_cab: bool,
+    /// Sits back on the seat with the hands off the wheel, as the driver of OMSI 2 does
+    /// (see `DriverFigure::set_original_pose`).
+    original_pose: bool,
     shown: bool,
     /// Posed at least once (the first pose is settled, not eased in from standing).
     settled: bool,
@@ -382,6 +385,25 @@ struct Targets {
 }
 
 impl DriverFigure {
+    /// Sit back on the seat with the hands off the wheel (OMSI 2's driver) or lean to hold it
+    /// (openOMSI's); the figure is seated again when this changes.
+    pub fn set_original_pose(&mut self, on: bool) {
+        if self.original_pose == on {
+            return;
+        }
+        self.original_pose = on;
+        self.grip_fix = [Vec3::ZERO; 2];
+        self.pose = Pose::new(0x5eed_d71e);
+        self.settled = false;
+        self.slide = 0.0;
+        self.lean = 0.0;
+        self.base_lean = 0.0;
+        self.hands_placed = false;
+        self.elbows = None;
+        self.frames = [None; 2];
+        self.rolls = [None; 2];
+    }
+
     /// The driver for the player's bus, when it has a `[drivpos]` and a driver figure is
     /// installed.
     /// `pick` chooses among the map's drivers (`drivers.txt`): 0 for the player, a vehicle's
@@ -513,6 +535,7 @@ impl DriverFigure {
             lean: 0.0,
             base_lean: 0.0,
             show_hands_in_cab: false,
+            original_pose: false,
             shown: false,
             settled: false,
             slide: 0.0,
@@ -641,10 +664,11 @@ impl DriverFigure {
         if !show {
             return;
         }
-        if self.settled {
+        // (hands resting in the lap do not regrip or work the gear lever)
+        if self.settled && !self.original_pose {
             self.update_shift(v, dt);
         }
-        if let Some(theta) = self.wheel_angle(v) {
+        if let Some(theta) = self.wheel_angle(v).filter(|_| !self.original_pose) {
             self.steer_hands(theta, if self.settled { dt } else { 0.0 });
         }
         // the person's own frame: feet at `floor` (slid forward by `slide`), facing `heading`
@@ -996,6 +1020,9 @@ impl DriverFigure {
     /// lifted off the rim towards the driver.
     /// `dt` eases each hand's frame towards the one its hold asks for (0 takes it at once).
     fn hand_targets(&mut self, v: &impl DriverCar, dt: f32) -> Option<Targets> {
+        if self.original_pose {
+            return None;
+        }
         let w = self.wheel.as_ref()?;
         let (_, centre, axis, up, right) = Self::wheel_frame(w, v);
         let h = self.heading.to_radians();

@@ -8,6 +8,21 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **mX Graphics (Experimental)** on a Mac: Settings → Graphics → Display → *mX Graphics (Experimental)* draws the game on Metal with [mX](https://github.com/openOMSI-org/mX), openOMSI's own graphics library, instead of wgpu, from the next start. The picture is meant to be the same. It is an early step: the game's shaders do not use mX's bindless textures yet, and in the tests so far it spent less processor time on a frame than wgpu and the same time on the graphics chip. Ray tracing and frame generation stay off with it; where mX cannot open the graphics chip, the game draws with wgpu as before. Off by default. mX's Direct3D 12 and Vulkan have not drawn the game on a real graphics card yet, so Windows and Linux do not offer the switch; `OMSI_MX=on` tries them for one run (without DLSS, FSR 3 and VR), and `OMSI_MX=off` turns mX off for a run on a Mac.
+- **Plugins see the AI vehicles' size**: `omsi.traffic.list()`, `get`, `nearest` and `ahead`
+  give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,
+  the .bus/.ovh `[boundingbox]`), so a blind-spot or distance plugin knows where a truck's or an
+  articulated bus's body really is, not only its origin (#3936).
+- **Frame generation on a Mac**: with Apple MetalFX upscaling on, Settings → Graphics → *Frame generation* shows a generated frame between every two drawn ones (Apple's MetalFX frame interpolator; a Mac with Apple silicon on macOS 26 or newer), for smoother motion at the price of a little more input lag. Where fewer than 30 frames a second are drawn with it (Apple's advice), it is turned off for the drive, as SSAO and the shadows are. The frame rate's corner then reads e.g. `90 fps (45 + FG)`. Off by default, experimental.
+- **Apple MetalFX upscaling on a Mac**: Settings → Graphics → Upscaling offers *Apple MetalFX* on a Mac with Apple silicon (macOS 13 or newer), with the same quality levels as NVIDIA DLSS and AMD FSR 3 on Windows: the picture is drawn smaller and brought up to the window with the help of the last frames, in place of the anti-aliasing and the render scale, from the next start. It is part of macOS, so there is nothing to install. Where the Mac's graphics chip scales up less than Ultra performance asks for, the picture is drawn at the smallest size it takes.
+- **Rename a save**: the pencil beside a save slot in the launcher's *Continue* list gives it a name of your own, without editing its `.osn` file in the map's `Saves` folder. Saving over that slot in the game keeps the name (#3849).
+- **AI reaction time**: the new `ai_reaction` setting (25 to 200 %, default 100 %, a slider in the launcher's Traffic settings) scales how long the AI drivers wait before moving off, so a queue at a light pulls away closer together at a lower value. It never goes under 0.4 s, the shortest reaction the junction code is built for (#3793).
+- **Force feedback sliders in the game's options**: a device's Force feedback tab in the game's controller settings now shows steering force, vibration, self-centring, damping, parking resistance, minimum force and smoothing as sliders like the launcher's, which you can drag as well as step with Left and Right.
+- **What's new in the launcher**: after an update the launcher shows the notes of every
+  version since the one last seen, opened, and the others folded below them; *What's new*
+  beside *Check now* (Settings) opens them at any time, and the offer of an update shows that
+  version's notes before it is installed. The notes come from the releases on GitHub; links in
+  them open in the browser, and only https ones.
 - **Remote cockpit on a phone or tablet**: the game serves a page on your home network
   (Options > Interface > Remote cockpit, off until switched on); scan the QR code or type the
   address and the 6-digit code, and the phone or tablet shows a dashboard with the map and the
@@ -586,9 +601,47 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   50 km/h, understeers a little at 80 km/h (yaw rate 0.92-0.98 of the geometry's), loses its hold
   across on a locked or spinning wheel. `cargo run -p omsi-sim --example handling -- <file.bus>...
   --kmh 50 [--realistic]` compares the two models; `OMSI_REALISTIC_ROAD=1` turns it on for one run.
+- **The driver can sit as in OMSI 2**: Settings → Camera → Driver's view (and the options menu in the game) has *Driver sits as in OMSI 2*, off by default. On, the driver sits back on his seat with his hands off the wheel, as in OMSI 2; off, he moves up and leans forward to hold the wheel, as before. It can be switched while driving.
 
 ### Fixes
 
+- **Pixel XC list rows no longer cut off**: on the MZKP SOR NBG 12, the direction and line lists
+  of the Pixel XC display showed each row's text sliced along its middle. The text strip of
+  every row is skewed a tenth of a millimetre over its tile, and was not taken as printed on
+  it, so its upper half lost the depth test; such a strip is now recognised.
+- **People waiting at a stop no longer sink into the pavement**: a waiting place that the map
+  puts below the footpath (the standing people of MZKP Strzelce's "Starostwo Powiatowe" are at
+  z 0, the pavement is 23 cm up) now has its person lifted onto the pavement, up to a step above
+  the place; the floor is never lowered, and somebody on a seat keeps its bench's height.
+- **A sharper picture with Apple MetalFX upscaling**: the textures are read one level sharper
+  and the picture is sharpened a little more, so bark, grass and the numbers of the gauges come
+  closer to the picture drawn at the window's size, without halos around the lamp posts at night.
+- **Vehicle-actuated traffic lights wait before the stop, not in the yellow**: a stop whose
+  request is present now holds the clock at the phase before it, so a queue can no longer
+  leave a light stuck on yellow; an exact stop time still holds, and a jump at the same time
+  is taken first. This fixes the traffic light at Ahlheim V5's Eichenhöhe Bahnhof
+  ([#2947](https://github.com/openOMSI-org/openOMSI/issues/2947)).
+- **The outside view (F3) starts straight behind the bus**, a little above it, as in OMSI 2,
+  instead of three quarters from the side. It still keeps the angle you leave it at, and Space
+  puts it back behind the bus.
+- **No more slivers of sky at crossings of raised roads** (Nova Friburgo, since 0.3.42): where
+  the ground cannot be fitted to roads it should follow, only the roads the ground covers (a
+  ditch) are cut out of it, not those lying on it.
+- **Window films and tinted glass of Brazilian buses show again**: a number written in an
+  `[alphascale]` in place of a variable's name (`[alphascale] 0.9`, as the LFD Caio Apache
+  Vip V's window film, its outer and its frosted glass have it) is that opacity, as a number
+  already is for lamps and interior lights. Read as a variable that does not exist it was 0,
+  and those panes were not drawn at all. Panes named in Portuguese (`vidro`, `janela`,
+  `parabrisa`) are now known as glass, as those named in the other languages.
+- **A junction left deep under the ground no longer digs a pit**: a `[terrainhole]` cutter that lies
+  wholly more than ten metres under the ground cuts nothing now. Berlin-Spandau has a stray
+  copy of `Einm_Poststr_Poststr` at height zero in the corner of a tile near Falkensee Bahnhof;
+  its cutter opened a pit thirty metres deep in the field, walled with tall strips of ground.
+  Tunnels and underpasses, whose cutters reach the ground or lie a few metres under it, cut as before.
+- **No more towers of ground at the end of a road**: where the ground is fitted to a road, the side of a
+  kerb - a nearly vertical face - gave the blend a slope of tens of thousands, and the ground rose
+  more than a kilometre in thin strips at the end of the road (Berlin-Spandau, Hansastrasse near
+  Falkensee Bahnhof). The slope a rim hands to the ground is now limited to about 72 degrees.
 - **A key or a wheel's button can recentre head tracking**: *Head tracking: centre again* takes
   where your head is now as the middle (opentrack, native TrackIR and a Tobii eye tracker), without
   putting the view straight as F1 does. It is on the keys list without a key; a button that already
@@ -1040,6 +1093,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   objects run, and fade out over the last part instead of stopping dead at 300 m ([#2534](https://github.com/openOMSI-org/openOMSI/issues/2534)).
 - Shader tests cover OpenGL ES 3.1/3.2 per entry point and catch the nested constant-array
   lookups the Adreno 710 refused ([#2009](https://github.com/openOMSI-org/openOMSI/issues/2009)).
+- **Static buses of Praha 200 no longer lose their outer skin**: a mesh from the Blender exporter was turned round as a mirrored one when its matrix (the quarter turn about x that thousands of ordinary meshes carry) was positive and its normals faced against its faces, so the IVECO buses at Letnany station showed their inside; Omsi.exe draws such a mesh as wound.
 ### Multiplayer
 
 - **The map's timetable buses show their fleet number, plate and the right destination for

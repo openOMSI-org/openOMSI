@@ -4,6 +4,7 @@ import { t } from './i18n.js';
 import { call, on, onPhone } from './api.js';
 import { Button, Dialog, Toggle } from './ui.js';
 import { saveSettings } from './data.js';
+import { Notes, openChangelog } from './changelog.js';
 
 const BUSY = ['checking', 'downloading', 'installing', 'installer', 'restarting'];
 const mb = (n) => `${((n || 0) / 1000000).toFixed(1)} MB`;
@@ -52,7 +53,10 @@ async function dismissUpdate() {
 }
 
 export function startUpdates() {
-  if (S.boot?.updated) toast(t('Updated to openOMSI {version}', { version: S.boot.updated }), 'ok');
+  if (S.boot?.updated) {
+    toast(t('Updated to openOMSI {version}', { version: S.boot.updated }), 'ok');
+    if (S.boot.versions) openChangelog();
+  }
   refresh();
   setTimeout(() => looking() && checkUpdates(), 1000);
   setInterval(() => {
@@ -68,7 +72,7 @@ export function startUpdates() {
 export function UpdateDialog() {
   const s = useStore();
   const u = s.update;
-  if (!u || playing()) return null;
+  if (!u || playing() || s.changelog) return null;
   const r = u.release;
   const shown = u.state === 'available' ? !putAside(u) : u.state === 'failed' ? s.updateAsked && !u.dismissed : BUSY.includes(u.state) && u.state !== 'checking';
   if (!shown) return null;
@@ -79,7 +83,7 @@ export function UpdateDialog() {
     : u.state === 'failed' ? t('Not updated')
     : t('Installing openOMSI {version}', { version: r.version });
   const footer = u.state === 'available'
-    ? html`<${Button} kind="ghost" icon="external" label="What's new" onClick=${() => open(r.page)} />
+    ? html`<${Button} kind="ghost" icon="external" label="Open on GitHub" onClick=${() => open(r.page)} />
         <${Button} label="Not now" onClick=${dismissUpdate} />
         <${Button} kind="primary" icon="download" label="Update now" onClick=${installUpdate} />`
     : u.state === 'failed'
@@ -93,6 +97,7 @@ export function UpdateDialog() {
         <p class="dim">${t(onPhone
           ? 'You have {current}. The launcher downloads the new version ({size}) from GitHub and Android installs it; openOMSI then starts again. Your mods and settings stay as they are.'
           : 'You have {current}. The launcher downloads the new version ({size}) from GitHub, puts it in place of this one and starts again. Your mods and settings stay as they are.', { current: u.current, size: mb(r.size) })}</p>
+        ${r.notes && html`<div class="update-notes"><${Notes} text=${r.notes} version=${r.version} /></div>`}
         <${Toggle} checked=${!!s.settings?.update_auto} label="Install updates without asking from now on" onChange=${(v) => saveSettings({ update_auto: v })} />`}
       ${u.state === 'downloading' && html`
         <p class="dim">${t('{done} of {total} from GitHub', { done: mb(u.done), total: mb(u.total) })}</p>
@@ -123,6 +128,7 @@ export function UpdateRow() {
       ${u.state === 'available'
         ? html`<${Button} small kind="primary" icon="download" label="Update now" disabled=${playing()} onClick=${installUpdate} />`
         : html`<${Button} small icon="refresh" label="Check now" disabled=${BUSY.includes(u.state)} onClick=${() => checkUpdates(true)} />`}
+      ${S.boot?.versions && html`<${Button} small kind="ghost" icon="history" label="What's new" onClick=${openChangelog} />`}
     </div>
   </div>`;
 }

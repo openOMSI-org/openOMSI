@@ -46,17 +46,30 @@ const STRONG: &[&str] = &[
     "shifter",
     "gearstick",
     "gear_stick",
+    "gearselector",
     "schalthebel",
     "schaltknueppel",
+    "schaltknauf",
+    "schaltstock",
     "schaltung",
+    "ganghebel",
+    "gang_hebel",
+    "gangknueppel",
+    "gang_knueppel",
+    "gangwahlhebel",
     "antriebshebel",
     "antriebhebel",
     "antrieb_hebel",
 ];
 // "Antrieb" is what OMSI models usually call the gearbox / its lever.
-const WEAK: &[&str] = &["antrieb", "gear", "shift", "schalt", "getriebe", "transmission", "кпп"];
-const NOT: &[&str] = &["light", "lamp", "display", "indic", "sound", "retard", "park", "door", "wiper", "wisch", "blink", "drehschalt", "kippschalt", "text", "warn", "oil", "temp", "rpm", "tacho", "taster", "button", "btn"];
+const WEAK: &[&str] = &["antrieb", "gear", "shift", "schalt", "getriebe", "transmission", "gear_selector", "кпп"];
+const NOT: &[&str] = &["light", "lamp", "display", "indic", "anzeige", "sound", "retard", "park", "door", "wiper", "wisch", "blink", "drehschalt", "kippschalt", "text", "warn", "oil", "temp", "rpm", "tacho", "taster", "button", "btn"];
 const BY_FILE: &[&str] = &["antrieb", "transmission", "кпп"];
+
+fn has_weak_gang_hint(name: &str) -> bool {
+    name.split(|c: char| !c.is_ascii_alphanumeric())
+        .any(|segment| segment.starts_with("gang"))
+}
 
 fn lever_file(path: &std::path::Path, forced: Option<&str>) -> bool {
     let file = path.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
@@ -75,7 +88,7 @@ fn grade(name: &str, forced: Option<&str>) -> u8 {
         0
     } else if STRONG.iter().any(|w| n.contains(w)) {
         2
-    } else if WEAK.iter().any(|w| n.contains(w)) {
+    } else if WEAK.iter().any(|w| n.contains(w)) || has_weak_gang_hint(&n) {
         1
     } else {
         0
@@ -271,10 +284,22 @@ mod grade_tests {
         assert_eq!(grade("cockpit_blinker_schalter", None), 0);
         assert_eq!(grade("рычаг_КПП", None), 1);
         assert_eq!(grade("transmission_lever", None), 1);
+        assert_eq!(grade("Gang", None), 1);
+        assert_eq!(grade("Gang_Display", None), 0);
+        assert_eq!(grade("Gear_Button", None), 0);
         assert_eq!(grade("Schalthebel_x", None), 2);
+        assert_eq!(grade("Ganghebel", None), 2);
+        assert_eq!(grade("gear_selector", None), 1);
+        assert_eq!(grade("cockpit.gang_1", None), 1);
+        assert_eq!(grade("Ausgang", None), 0);
+        assert_eq!(grade("Eingang", None), 0);
+        assert_eq!(grade("Mittelgang", None), 0);
+        assert_eq!(grade("Durchgang", None), 0);
+        assert_eq!(grade("Ganganzeige", None), 0);
         assert_eq!(grade("my_lever", Some("my_lever")), 3);
         assert!(lever_file(Path::new("model/рычаг_КПП.o3d"), None));
         assert!(lever_file(Path::new("model/Transmission_lever.o3d"), None));
+        assert!(lever_file(Path::new("model/ganghebel.o3d"), None));
         assert!(!lever_file(Path::new("Vehicles/Bus_КПП/model/wiper.o3d"), None));
         assert!(lever_file(Path::new("model/x_hebel.o3d"), Some("x_hebel")));
     }

@@ -78,6 +78,7 @@ pub struct Joint {
     pub name: String,
     pub parent: Option<usize>,
     pub position: Vec3,
+    pub rotation: glam::Quat,
 }
 
 /// A blend shape: what it moves and how far at full weight, in the mesh frame.

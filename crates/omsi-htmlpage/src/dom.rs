@@ -355,17 +355,6 @@ impl Dom {
         }
     }
 
-    /// `parent.appendChild(child)`; moving an element into itself or its own subtree is ignored.
-    pub(crate) fn append(&mut self, parent: usize, child: usize) {
-        if child == 0 || self.is_inside(parent, child) {
-            return;
-        }
-        self.detach(child);
-        self.nodes[child].parent = Some(parent);
-        self.nodes[parent].kids.push(child);
-        self.generation += 1;
-    }
-
     pub(crate) fn copy_from(&mut self, src: &Dom, s: usize, parent: usize) {
         let mut n = src.nodes[s].clone();
         n.parent = Some(parent);
@@ -655,16 +644,6 @@ impl Dom {
             }
         }
     }
-
-    pub(crate) fn query(&self, sel: &str) -> Option<usize> {
-        let chains = parse_selector_list(sel);
-        (0..self.nodes.len()).find(|&i| chains.iter().any(|c| self.matches(i, c)))
-    }
-
-    pub(crate) fn query_all(&self, sel: &str) -> Vec<usize> {
-        let chains = parse_selector_list(sel);
-        (0..self.nodes.len()).filter(|&i| chains.iter().any(|c| self.matches(i, c))).collect()
-    }
 }
 
 /// An inline style as the `style` attribute writes it.
@@ -876,7 +855,7 @@ pub(crate) fn parse_chain(sel: &str) -> Chain {
     let mut pending: Option<Comb> = None;
     let mut depth = 0i32;
     let mut quote: Option<char> = None;
-    let mut flush = |cur: &mut String, comb: &mut Comb, pending: &mut Option<Comb>, out: &mut Chain| {
+    let flush = |cur: &mut String, comb: &mut Comb, pending: &mut Option<Comb>, out: &mut Chain| {
         if !cur.is_empty() {
             out.push((*comb, parse_simple(cur)));
             cur.clear();

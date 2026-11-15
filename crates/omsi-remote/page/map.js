@@ -43,6 +43,48 @@ const MapView = {
     canvas.addEventListener("wheel", (e) => { e.preventDefault(); this.zoomBy(Math.exp(-e.deltaY / 400)); }, { passive: false });
   },
 
+  picture(data) {
+    createImageBitmap(new Blob([data], { type: "image/jpeg" })).then((b) => {
+      if (this.bitmap) this.bitmap.close();
+      this.bitmap = b;
+      this.version = (this.version || 0) + 1;
+      this.wake();
+    }, () => {});
+  },
+
+  ask() {
+    const now = performance.now();
+    const gone = this.asking && ![...this.views].some((v) => v.dataset.look === "game" && v.offsetParent);
+    if (!gone && now - (this.askedAt || 0) < 1000) return;
+    this.askedAt = now;
+    const dpr = Math.min(3, devicePixelRatio || 1);
+    let w = 0, h = 0;
+    for (const v of this.views) {
+      if (v.dataset.look !== "game" || !v.offsetParent) continue;
+      w = Math.max(w, Math.round(v.clientWidth * dpr));
+      h = Math.max(h, Math.round(v.clientHeight * dpr));
+    }
+    if (w || h || this.asking) App.send({ t: "map.view", w, h });
+    this.asking = !!(w && h);
+    if (!this.asking) this.askedAt = 0;
+  },
+
+  drawPicture(view) {
+    const canvas = view.querySelector("canvas");
+    const box = { width: canvas.clientWidth, height: canvas.clientHeight };
+    const key = [this.version, box.width, box.height].join("|");
+    if (view.drawn === key) return;
+    view.drawn = key;
+    const b = this.bitmap;
+    view.classList.toggle("empty", !b);
+    if (!b) return;
+    const dpr = Math.min(3, devicePixelRatio || 1);
+    const W = Math.max(1, Math.round(box.width * dpr)), H = Math.max(1, Math.round(box.height * dpr));
+    if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+    const k = Math.max(W / b.width, H / b.height);
+    canvas.getContext("2d").drawImage(b, (W - b.width * k) / 2, (H - b.height * k) / 2, b.width * k, b.height * k);
+  },
+
   take(m) {
     if (m.t === "roads") this.roads = m;
     if (m.t === "nav") this.nav = m;
@@ -55,8 +97,9 @@ const MapView = {
     this.running = true;
     const tick = () => {
       for (const v of this.views) if (!v.isConnected) this.views.delete(v);
+      this.ask();
       if (!this.views.size) { this.running = false; return; }
-      for (const v of this.views) this.draw(v);
+      for (const v of this.views) if (v.dataset.look === "game") this.drawPicture(v); else this.draw(v);
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);

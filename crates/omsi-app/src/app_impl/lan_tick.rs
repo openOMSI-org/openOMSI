@@ -14,6 +14,7 @@ impl App {
         }
         let walker = self.walker_pose();
         let radio_keyed = self.voice_radio_keyed();
+        self.tell_took_parked(dt);
         let Some(lan) = self.net.lan.as_mut() else {
             self.gfx.sim_view.lan.stop_freetex();
             // (the session is over: voice chat with it)
@@ -30,6 +31,7 @@ impl App {
             return;
         };
         if lan.role == omsi_net::Role::Client {
+            lan.set_parked_drawn(crate::on_foot::parked_drawn(self.settings.parked_buses_drawn, self.world.as_ref().map(|w| w.texture_budget_bytes()).unwrap_or(0)));
             if !lan.connected {
                 self.net.speed_limit_welcome = None;
                 self.net.dedicated_teleport = None;
@@ -164,6 +166,9 @@ impl App {
         }
         // Player-hosted sessions do not advertise dedicated-server capabilities.
         if text == "tp-policy?" { return; }
+        if from == 1 && self.parked_answer(text) {
+            return;
+        }
         if from == 1 {
             if let Some(policy) = text.strip_prefix("tp-policy ") {
                 self.net.dedicated_teleport = match policy.trim() {

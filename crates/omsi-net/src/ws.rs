@@ -151,6 +151,9 @@ pub struct PlayerInfo {
     pub destination: String,
     /// The timetable tour, `<line>/<tour>` (empty for none).
     pub tour: String,
+    /// The paint scheme (empty: the default one, or on foot); no player, a bus standing free (`omsi_lan::parked`).
+    pub paint: String,
+    pub parked: bool,
     /// World metres (x east, y north) and heading (degrees, clockwise from north): the bus
     /// driven, or the player on foot, or the bus the player sits in.
     pub x: f64,
@@ -172,13 +175,14 @@ impl PlayerInfo {
             None => ("null".into(), "null".into()),
         };
         format!(
-            "{{\"id\":{},\"name\":{},\"bus\":{},\"line\":{},\"destination\":{},\"tour\":{},\"x\":{},\"y\":{},\"heading\":{},\"speed_kmh\":{},\"on_foot\":{},\"aboard\":{},\"lat\":{},\"lon\":{}}}",
+            "{{\"id\":{},\"name\":{},\"bus\":{},\"line\":{},\"destination\":{},\"tour\":{},\"paint\":{},\"parked\":{},\"x\":{},\"y\":{},\"heading\":{},\"speed_kmh\":{},\"on_foot\":{},\"aboard\":{},\"lat\":{},\"lon\":{}}}",
             self.id,
             json_str(&self.name),
             json_str(&self.bus),
             json_str(&self.line),
             json_str(&self.destination),
             json_str(&self.tour),
+            json_str(&self.paint), self.parked,
             num(self.x, 1),
             num(self.y, 1),
             num(self.heading as f64, 1),
@@ -441,7 +445,7 @@ struct Place<'a>(&'a AtomicUsize);
 impl Places {
     /// A place, when fewer than `max` are taken.
     fn take(&self, max: usize) -> Option<Place<'_>> {
-        self.0.fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| (n < max).then_some(n + 1)).ok().map(|_| Place(&self.0))
+        self.0.try_update(Ordering::AcqRel, Ordering::Acquire, |n| (n < max).then_some(n + 1)).ok().map(|_| Place(&self.0))
     }
 }
 
@@ -1298,20 +1302,19 @@ mod tests {
         assert_eq!(client.reconnects(), 1);
     }
 
-    /// UDP and TCP reserve ports independently: a random UDP port may already be
-    /// occupied on TCP when tests run concurrently. Windows can report an
-    /// excluded TCP port as PermissionDenied (10013), rather than AddrInUse.
     fn session_and_mod_listener() -> (UdpSocket, TcpListener) {
-        for _ in 0..32 {
-            let session = UdpSocket::bind("127.0.0.1:0").unwrap();
-            let target = session.local_addr().unwrap();
-            match TcpListener::bind(("127.0.0.1", target.port())) {
-                Ok(mods) => return (session, mods),
-                Err(e) if matches!(e.kind(), ErrorKind::AddrInUse | ErrorKind::PermissionDenied) => continue,
-                Err(e) => panic!("cannot bind mods listener at {target}: {e}"),
+        use std::hash::BuildHasher;
+        let seed = std::collections::hash_map::RandomState::new().hash_one(0u8) as u16;
+        for i in 0..256u16 {
+            let port = 49152 + seed.wrapping_add(i.wrapping_mul(997)) % 16384;
+            if let (Ok(session), Ok(mods)) = (
+                UdpSocket::bind(("127.0.0.1", port)),
+                TcpListener::bind(("127.0.0.1", port)),
+            ) {
+                return (session, mods);
             }
         }
-        panic!("could not reserve an available UDP/TCP test port after 32 attempts");
+        panic!("could not reserve an available UDP/TCP test port");
     }
 
     /// Mod streams up to `MAX_TUNNELS`; one more is told `ERR busy` (and its game asks again),

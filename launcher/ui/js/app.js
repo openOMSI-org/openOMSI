@@ -22,6 +22,7 @@ import { SetupPage } from './pages/setup.js';
 import { MobileApp } from './mobile/mobile.js';
 import { GameEndDialogs, watchGameEnds } from './crash.js';
 import { UpdateDialog, startUpdates } from './updates.js';
+import { ChangelogDialog } from './changelog.js';
 import { onPhone, onDrop } from './api.js';
 
 // (the phone app, or `?phone` for a look at it in a browser)
@@ -108,6 +109,7 @@ function App() {
     </main>
     <${GameEndDialogs} />
     <${UpdateDialog} />
+    <${ChangelogDialog} />
     <${Toasts} />
   </div>`;
 }

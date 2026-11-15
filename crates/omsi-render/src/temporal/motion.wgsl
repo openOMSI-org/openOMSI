@@ -25,6 +25,7 @@ struct MotionOut {
     @location(3) @interpolate(flat) params: vec4<f32>,
     @location(5) cur: vec4<f32>,
     @location(6) prev: vec4<f32>,
+    @location(7) world: vec3<f32>,
 };
 // (the fragment side of MotionOut, without the invariant: see DepthIn)
 struct MotionIn {
@@ -33,6 +34,7 @@ struct MotionIn {
     @location(3) @interpolate(flat) params: vec4<f32>,
     @location(5) cur: vec4<f32>,
     @location(6) prev: vec4<f32>,
+    @location(7) world: vec3<f32>,
 };
 
 @vertex
@@ -42,15 +44,17 @@ fn vs_motion(in: VsIn) -> MotionOut {
     let local = vec4<f32>(in.pos, 1.0);
     let wp = m * local;
     var out: MotionOut;
-    out.clip = scene_clip(e, wp + vec4<f32>(tree_sway(in.pos, m), 0.0), (m * vec4<f32>(in.normal, 0.0)).xyz);
+    let swayed = wp + vec4<f32>(tree_sway(in.pos, m), 0.0);
+    out.clip = scene_clip(e, swayed, (m * vec4<f32>(in.normal, 0.0)).xyz);
+    out.world = swayed.xyz;
     let pr = inst_params[e * 2u];
     out.uv = in.uv + pr.zw;
     out.params = pr;
     out.cur = motion.vp * wp;
     if (motion.params.z > 0.5 && f32(e) < motion.params.w) {
         let k = e * 4u;
-        // (x's w carries the slot's draw order level, not the matrix: `model_matrix` drops it)
-        let pm = mat4x4<f32>(vec4<f32>(prev_models[k].xyz, 0.0), prev_models[k + 1u], prev_models[k + 2u], prev_models[k + 3u]);
+        // Drop the affine row's draw-order and depth-normal metadata, as model_matrix does.
+        let pm = mat4x4<f32>(vec4<f32>(prev_models[k].xyz, 0.0), vec4<f32>(prev_models[k + 1u].xyz, 0.0), vec4<f32>(prev_models[k + 2u].xyz, 0.0), prev_models[k + 3u]);
         // (an entry handed over to another object since: its old matrix is not this one's)
         let jump = pm[3].xyz + motion.origin_delta.xyz - m[3].xyz;
         if (dot(jump, jump) <= motion.origin_delta.w * motion.origin_delta.w) {
@@ -83,7 +87,7 @@ fn fs_motion(in: MotionIn) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_motion_test(in: MotionIn) -> @location(0) vec4<f32> {
-    cutout_coverage(in.uv, in.params, camera.lod.x);
+    cutout_coverage(in.uv, in.params, camera.lod.x, tree_card_fade(in.world));
     return motion_pixels(in.cur, in.prev);
 }
 

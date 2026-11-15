@@ -302,6 +302,7 @@ pub struct HumanType {
     pub(super) extra_dirs: Vec<PathBuf>,
     /// An imported avatar's face: which blend shape of `meshes[0]` makes which expression.
     pub face: Option<super::face::FaceRig>,
+    pub biped: Option<Box<super::clips::Biped>>,
 }
 
 impl HumanType {
@@ -411,6 +412,7 @@ impl HumanType {
             variants,
             extra_dirs,
             face: None,
+            biped: None,
         })
     }
 

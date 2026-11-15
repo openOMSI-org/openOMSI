@@ -33,6 +33,7 @@ mod support;
 mod contact_tests;
 
 pub mod avatar;
+pub mod clips;
 mod bones;
 mod gesture;
 mod hail_look;

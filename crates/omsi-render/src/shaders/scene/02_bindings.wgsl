@@ -7,6 +7,7 @@
 override ALPHA_TEST: bool = true;
 // Multisampled cutout pipelines can turn filtered alpha directly into sample coverage.
 override ALPHA_TO_COVERAGE: bool = false;
+override DETAILED_TREES: bool = false;
 @group(0) @binding(5) var t_shadow: texture_depth_2d;
 @group(0) @binding(6) var s_shadow: sampler_comparison;
 @group(0) @binding(7) var t_shadow_far: texture_depth_2d;
@@ -203,11 +204,11 @@ fn light_map_mapped(m: vec4<f32>) -> bool {
 // (the model matrices as their columns, four vec4 each: some phone GPUs (Mali, Adreno) read an
 // array of matrices from a storage buffer wrongly, and every mesh came out flat and far away)
 @group(0) @binding(1) var<storage, read> models: array<vec4<f32>>;
-// (the first column's w, 0 in an affine matrix, carries the draw's order level: see
-// `draw_order_level` and `scene_clip`)
+// The affine row carries the draw order level and its octahedral geometric normal.
+// Neither belongs to the transform used by shading, shadows or motion vectors.
 fn model_matrix(e: u32) -> mat4x4<f32> {
     let k = e * 4u;
-    return mat4x4<f32>(vec4<f32>(models[k].xyz, 0.0), models[k + 1u], models[k + 2u], models[k + 3u]);
+    return mat4x4<f32>(vec4<f32>(models[k].xyz, 0.0), vec4<f32>(models[k + 1u].xyz, 0.0), vec4<f32>(models[k + 2u].xyz, 0.0), models[k + 3u]);
 }
 // x: alpha multiplier, y: visible (0/1), zw: uv offset
 @group(0) @binding(2) var<storage, read> inst_params: array<vec4<f32>>;

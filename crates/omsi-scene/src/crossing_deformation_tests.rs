@@ -147,7 +147,7 @@ fn aligned_ditch_preparation_keeps_a_solid_floor_without_an_alpha_hole() {
                 build_terrain_mesh(&q.base_terrain).positions
             );
             assert_eq!(rims.len(), q.hole_rims.len());
-            assert_eq!(rims[0][0], q.hole_rims[0][0] - origin);
+            assert_eq!(rims[0][0], q.hole_rims[0].0[0] - origin);
             if key == (0, 0) {
                 assert!(
                     ts.cut_at(44.23, 50.0, 0.0, 0.03),
@@ -625,4 +625,45 @@ fn aligned_spline_drawn_with_alpha_textures_keeps_its_hole() {
     let p = &prepared[0];
     assert!(!p.splines.is_empty());
     assert!(p.cut.is_some(), "an aligned box cut drawn with alpha textures still cuts the ground");
+}
+
+#[test]
+fn a_failed_fit_cuts_holes_only_where_the_ground_covers_the_spline() {
+    let fixture = Fixture::new();
+    fixture.write("global.cfg", "[name]\nAligned\n[map]\n0\n0\ntile_0_0.map\n");
+    fixture.write(
+        "ditch.sli",
+        "[heightprofile]\n2.92\n5.35\n0.10\n0.04\n[texture]\ngras1.bmp\n[profile]\n0\n\
+         [profilepnt]\n2.92\n0.10\n0.7\n0.167\n[profilepnt]\n4.23\n-0.47\n0.7\n0.167\n\
+         [profilepnt]\n5.35\n0.04\n0.2\n0.167\n",
+    );
+    for (height, cut) in [(0.0, true), (1.0, false)] {
+        fixture.write(
+            "tile_0_0.map",
+            &format!(
+                "[version]\n14\n[spline]\n0\nditch.sli\n1\n0\n0\n40\n{height}\n40\n0\n20\n\
+                 0\n0\n0\n0\n0\n0\n0\n0\n\n[spline_terrain_align_2]\n4\n"
+            ),
+        );
+        let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+        let _ = world.prepare_tiles(&[(0, 0, fixture.0.join("tile_0_0.map"))]);
+        let cache = world.staged.lock();
+        let q = cache.get(&(0, 0)).unwrap();
+        assert!(!q.hole_rims.is_empty() && !q.splines.is_empty());
+        let mut ts = TileSurface::new(512);
+        for sp in &q.splines {
+            ts.rasterize(&sp.shape, &glam::Mat4::IDENTITY, q.origin, 0, 0);
+        }
+        let mut rims = Vec::new();
+        let _ = crate::cut_terrain::finish_spline_fit(
+            Err("injected"),
+            &q.base_terrain,
+            &mut ts,
+            &mut rims,
+            &[q],
+            (0, 0),
+            DVec3::ZERO,
+        );
+        assert_eq!(!rims.is_empty(), cut, "spline {height} m over the ground");
+    }
 }

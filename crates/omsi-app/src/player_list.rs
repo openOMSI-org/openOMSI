@@ -12,6 +12,7 @@
 use crate::game_lists::ListKind;
 use crate::App;
 use omsi_admin::{BanView, Player, PlayerState, Role, Target};
+use omsi_multiplayer_ui::vehicle_name;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The reasons a player sent away or banned can be given (the first: none).
@@ -37,7 +38,7 @@ pub(crate) fn rights(app: &App) -> Option<Role> {
 
 /// The players as this game knows them: a server's admin gets the server's own list, anybody
 /// else the session's.
-fn players(app: &App) -> Vec<Player> {
+pub(crate) fn players(app: &App) -> Vec<Player> {
     let Some(lan) = app.net.lan.as_ref() else { return Vec::new() };
     if crate::admin_panel::remote(app) && !app.net.admin_panel.players.is_empty() {
         return app.net.admin_panel.players.clone();
@@ -51,10 +52,8 @@ fn players(app: &App) -> Vec<Player> {
     v
 }
 
-fn vehicle_name(file: &str) -> String {
-    let f = file.replace('\\', "/");
-    let n = f.rsplit('/').next().unwrap_or(&f);
-    n.rsplit_once('.').map(|(a, _)| a).unwrap_or(n).to_string()
+pub(crate) fn count(app: &App) -> usize {
+    players(app).len()
 }
 
 fn describe(p: &Player, tr: &dyn Fn(&str) -> String) -> String {
@@ -94,8 +93,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
     let my_id = app.net.lan.as_ref().map(|l| l.my_id).unwrap_or(0);
     match kind {
         ListKind::PlayerList => {
-            let mut out = vec![noop(format!("{} ({})", tr("Players in this session"), list.len()))];
-            out.push((format!("{}: {}", tr("Voice chat of everybody else"), if app.settings.voice_all_off { tr("off") } else { tr("on") }), "vall".into()));
+            let mut out = vec![(format!("{}: {}", tr("Voice chat of everybody else"), if app.settings.voice_all_off { tr("off") } else { tr("on") }), "vall".into())];
             for p in &list {
                 let you = if p.id == my_id { format!(" ({})", tr("you")) } else { String::new() };
                 let silenced = if p.id != my_id && app.sound.voice_mutes.is_muted(&p.name) { format!(" [{}]", tr("muted")) } else { String::new() };
@@ -134,6 +132,9 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             // (an admin's: silencing a player's voice for the whole session, or taking them away)
             let acts = rights.is_some() && !(rights == Some(Role::Moderator) && p.admin == Some(Role::Admin));
             if acts {
+                for (label, command) in [("go to", "goto"), ("bring here", "bring"), ("repair and refuel their bus", "service repair"), ("put their bus back on its wheels", "unstick")] {
+                    out.push((tr(label), format!("run {command} {}", tag(app, *t))));
+                }
                 out.push((tr("Silence their voice chat for everybody"), format!("run vmute {}", tag(app, *t))));
                 out.push((tr("Allow their voice chat again"), format!("run vunmute {}", tag(app, *t))));
                 out.push((tr("Send away..."), format!("do kick {}", t.tag())));
@@ -195,7 +196,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
 }
 
 /// The bans that hold: the host's own lists, or what the server last told its admin.
-fn bans(app: &App) -> Vec<BanView> {
+pub(crate) fn bans(app: &App) -> Vec<BanView> {
     if crate::admin_panel::remote(app) {
         app.net.admin_panel.bans.clone()
     } else {

@@ -46,13 +46,14 @@ fn nested_view<'a>(rail: &'a [MenuLine], rows: &'a [(&'static str, String)], wor
         rail,
         rail_sel: Some(1),
         disabled: &[],
-        rail_open: Some(if world { "world" } else { "vehicle" }),
         kbd: true,
         keys: true,
         summary: Summary { bus: "Test vehicle".into(), driver: "Driver".into() },
+        online: Default::default(),
         list: Some(ListView {
             kind: MenuKind::Options,
             head: Some((omsi_ui::tr(if world { "World options..." } else { "Vehicle options..." }).into_owned(), String::new())),
+            badge: None,
             tabs: Some((titles, usize::from(world))),
             items: rows.iter().map(|(id, label)| (*id, label.as_str())).collect(),
             sel: 1,
@@ -269,6 +270,8 @@ fn pause_section_markers_write_preview() {
     for (name, value) in [
         ("Clock -1 hour", "-1 h"),
         ("Clock -10 minutes", "-10 min"),
+        ("Clock -1 minute", "-1 min"),
+        ("Clock +1 minute", "+1 min"),
         ("Clock +10 minutes", "+10 min"),
         ("Clock +1 hour", "+1 h"),
     ] {

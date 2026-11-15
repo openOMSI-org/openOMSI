@@ -4,6 +4,7 @@ use super::*;
 mod bus_info;
 mod freetex;
 mod join_queue;
+mod parked;
 
 fn pose(x: f64) -> Pose {
     Pose {

@@ -80,7 +80,7 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<T
                 module: &shader,
                 entry_point: Some(fragment),
                 targets: &motion_target,
-                compilation_options: Default::default(),
+                compilation_options: wgpu::PipelineCompilationOptions { constants: scene.trees, ..Default::default() },
             }),
             multiview_mask: None,
             cache: crate::pipeline_cache::get(device).as_ref(),

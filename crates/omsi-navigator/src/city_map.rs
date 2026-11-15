@@ -54,6 +54,7 @@ pub struct CityMap {
     /// The turn of the view (radians): the map direction that points up on the screen lies this far clockwise from the
     /// map's up. Eased.
     pub(super) phi: f64,
+    closed_at: Option<std::time::Instant>,
 }
 
 /// A city map ground being built: what for.
@@ -88,7 +89,7 @@ fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
 }
 
 impl Navigator {
-    /// Where OMSI 2's dynamic route arrows stand on the route ahead (the `nav_arrows`
+    /// Where OMSI 2's dynamic route arrows stand on the route ahead (the `nav_dynamic_arrows`
     /// setting): every junction lane of the next `reach` metres with the way through it
     /// (`L`, `R`, or `dn` for straight on), and the stops of the trip ahead with their
     /// names (`busstop`). Each: a key that stays the same while it is ahead, the place,
@@ -597,6 +598,31 @@ impl Navigator {
         Some(p)
     }
 
+    pub(super) fn release_closed_city(&mut self, renderer: &Renderer, scene: &mut Scene) {
+        if self.city.open {
+            self.city.closed_at = None;
+            return;
+        }
+        if self.city.closed_at.get_or_insert_with(std::time::Instant::now).elapsed() < std::time::Duration::from_secs(10) {
+            return;
+        }
+        if self.city.ground.is_none() && self.city.target.is_none() && self.city_job.is_none() {
+            return;
+        }
+        self.city_job = None;
+        self.city.ground = None;
+        if let Some((t, _, _)) = self.city.target.take() {
+            renderer.free_texture(scene, t);
+            scene.premultiplied.remove(&t);
+        }
+        if let Some(gpu) = self.gpu.as_mut() {
+            for id in [7, 14, 10, 15] {
+                gpu.drop_vertices(id);
+            }
+            gpu.drop_targets();
+        }
+    }
+
     pub(super) fn city(&mut self, renderer: &Renderer, scene: &mut Scene, f: &NavFrame) {
         self.atlas.begin_frame();
         let pal = *style::palette(self.light);
@@ -605,9 +631,7 @@ impl Navigator {
         let (x0, y0) = (((sw - w) * 0.5).round(), ((sh - h) * 0.5).round());
         self.city.rect = [x0, y0, x0 + w, y0 + h];
         let (tw, th) = (w as u32, h as u32);
-        if self.gpu.is_none() {
-            self.gpu = Some(Gpu::with_depth(&renderer.device, renderer.format(), map_samples(renderer.format()), self.atlas.size));
-        }
+        self.ensure_gpu(renderer);
         if self.city.target.map(|t| (t.1, t.2) != (tw, th)).unwrap_or(true) {
             if let Some((t, _, _)) = self.city.target.take() {
                 renderer.free_texture(scene, t);

@@ -580,7 +580,7 @@ impl App {
                     &self.settings.navigator_corner,
                 ));
                 if let Some(n) = self.menus.navigator.as_mut() {
-                    n.arrows = self.settings.nav_arrows;
+                    n.arrows = self.settings.nav_dynamic_arrows;
                     n.show_ai = self.settings.nav_ai;
                     n.show_cars = self.settings.nav_ai_cars;
                     n.show_surface = self.settings.nav_surface;

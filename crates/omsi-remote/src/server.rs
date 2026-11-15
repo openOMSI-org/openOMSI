@@ -17,7 +17,7 @@ const HEAD_WITHIN: Duration = Duration::from_secs(5);
 const MAX_HEAD: usize = 8192;
 fn csp(host: &str) -> String {
     let host: String = host.chars().filter(|c| c.is_ascii_alphanumeric() || ".:-[]".contains(*c)).collect();
-    format!("default-src 'self'; connect-src 'self' ws://{host}; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'")
+    format!("default-src 'self'; connect-src 'self' ws://{host}; img-src 'self' data:; media-src data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'")
 }
 
 static FILES: &[(&str, &str, &str)] = &[

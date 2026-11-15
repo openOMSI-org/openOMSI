@@ -163,7 +163,7 @@ pub fn parse_glb_or_gltf(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
     let skin_joints: Vec<usize> = gltf.skins().flat_map(|s| s.joints().map(|j| j.index()).collect::<Vec<_>>()).collect();
     for n in gltf.nodes().filter(|n| skin_joints.contains(&n.index())) {
         let position = joint_rest.get(&n.index()).copied().or_else(|| world.get(&n.index()).map(|w| w.w_axis.truncate())).unwrap_or(Vec3::ZERO);
-        b.mesh.joints.push(Joint { name: n.name().map(str::to_string).unwrap_or_else(|| format!("joint{}", n.index())), parent: None, position: from_rh(position) });
+        b.mesh.joints.push(Joint { name: n.name().map(str::to_string).unwrap_or_else(|| format!("joint{}", n.index())), parent: None, position: from_rh(position), rotation: glam::Quat::IDENTITY });
     }
     let index_of: HashMap<usize, usize> = gltf.nodes().filter(|n| skin_joints.contains(&n.index())).enumerate().map(|(k, n)| (n.index(), k)).collect();
     for (k, n) in gltf.nodes().filter(|n| skin_joints.contains(&n.index())).enumerate() {

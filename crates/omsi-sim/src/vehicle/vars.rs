@@ -117,13 +117,8 @@ impl VehicleInstance {
 
     pub fn trigger(&mut self, name: &str) -> bool {
         let p = self.ty.program.clone();
-        let rear_target_was_open = self.var("doorTarget_23").is_some_and(|target| target > 0.0);
-        let rear_force_close_was_active = self.var("bdoor_embtn_cls").is_some_and(|close| close > 0.5);
-        let rear_was_open = self.var("doorTarget_23").is_some_and(|target| target > 0.0)
-            || self.var("door_2").is_some_and(|door| door > 0.05)
-            || self.var("door_3").is_some_and(|door| door > 0.05);
         let coins_before = self.host.change_coins.len();
-        let mut fired = self
+        let fired = self
             .vm
             .run_trigger(&p, name, &mut self.state, &mut self.host);
         if let Some(value) = changer_value(name) {
@@ -132,32 +127,6 @@ impl VehicleInstance {
             for coin in given {
                 coin.1 = each;
             }
-        }
-        // Several Volvo Wright door scripts expose the actual force-close operation as
-        // `bus_dooraft1_external_CL`, while the dashboard `bus_dooraftclose` trigger only
-        // sounds the button when its handbrake guard rejects the request.  Use that explicit
-        // close path when the dashboard request left the rear door open.  Other buses are
-        // unaffected because the fallback trigger is only present in those scripts.
-        // A toggle pressed while the leaves are already closing is an open request.  The
-        // fallback must not immediately undo that request just because the leaves are still
-        // physically open for a few frames.
-        let toggle_is_reopen_request = name.eq_ignore_ascii_case("bus_dooraft")
-            && !rear_target_was_open
-            && (rear_force_close_was_active || self.var("doorTarget_23").is_some_and(|target| target > 0.0));
-        if (name.eq_ignore_ascii_case("bus_dooraftclose")
-            || (name.eq_ignore_ascii_case("bus_dooraft") && !toggle_is_reopen_request))
-            && rear_was_open
-            && (self.var("doorTarget_23").is_some_and(|target| target > 0.0)
-                || self.var("door_2").is_some_and(|door| door > 0.05)
-                || self.var("door_3").is_some_and(|door| door > 0.05))
-            && p.trigger("bus_dooraft1_external_CL").is_some()
-        {
-            fired |= self.vm.run_trigger(
-                &p,
-                "bus_dooraft1_external_CL",
-                &mut self.state,
-                &mut self.host,
-            );
         }
         fired
     }

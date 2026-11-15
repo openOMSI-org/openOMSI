@@ -46,6 +46,7 @@ omsi-script = { path = "../omsi-script" }
 omsi-audio = { path = "../omsi-audio" }
 omsi-voice = { path = "../omsi-voice" }
 wgpu.workspace = true
+wgpu-mx.workspace = true
 winit.workspace = true
 glam.workspace = true
 pollster.workspace = true
@@ -70,6 +71,7 @@ omsi-world = { path = "../omsi-world" }
 omsi-scene = { path = "../omsi-scene" }
 omsi-ui = { path = "../omsi-ui" }
 omsi-settings-ui = { path = "../omsi-settings-ui" }
+omsi-multiplayer-ui = { path = "../omsi-multiplayer-ui" }
 omsi-launcher-core = { path = "../omsi-launcher-core" }
 omsi-launcher-api = { path = "../omsi-launcher-api" }
 omsi-launcher-model = { path = "../omsi-launcher-model" }

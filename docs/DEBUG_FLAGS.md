@@ -107,6 +107,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_DUMP_SCENERY_TEXT` | text | - | use | scene | Directory: write the scenery objects' text textures as drawn. |
 | `OMSI_DUMP_SCRIPTTEX` | text | - | use | app | Directory: write the player's bus's script (display) textures. |
 | `OMSI_ENV_PHOTO` | num | 1 | use | render | 0 leaves the environment photo out of the debug views. |
+| `OMSI_FG_SHOW` | text | - | use | render | Frame generation: generated or drawn - the window shows only that kind of frame, to look at it alone. |
 | `OMSI_FORCE_LOD` | bool | off | use | scene | Draw the lower levels of detail of the AI vehicles at any size (to look at them). |
 | `OMSI_FRAME_ORDER` | bool | off | once | app | Log the window's frame and the offscreen run's step as their ordered stages (phase, what each reads and writes, its profile key), once at start. |
 | `OMSI_GPU_TIMERS` | bool | off | use | app, render | Measure GPU time per pass with timestamp queries. |
@@ -235,6 +236,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_SKIP_PIPE` | text | - | frame | render | Pipeline kinds to leave out of the main pass (comma-separated numbers). |
 | `OMSI_SPOT_SELECT` | num | - | use | scene | Turn on spotlight n (headlight pictures). |
 | `OMSI_TEST_AVATAR` | text | - | test | sim | Test only: an avatar FBX for the avatar loading test (`cargo test -p omsi-sim a_rocketbox_avatar_loads -- --ignored`). |
+| `OMSI_TEST_CLIPS` | text | - | test | sim | Test only: a folder of Rocketbox motion clips (`f_walk_neutral_01.fbx`, ...) for the clip test (`cargo test -p omsi-sim rocketbox_clips -- --ignored`, with OMSI_TEST_AVATAR). |
 | `OMSI_TEST_CONTENT` | text | - | test | o3d, scene | Content root for tests that need real OMSI content. |
 | `OMSI_TEST_LEGACY_TROLLEY_DRIVE` | bool | off | test | sim | Test only: set by the trolley test on the child process it starts to run itself with the realistic physics on. |
 | `OMSI_TEST_PACKAGE_MAP` | text | - | test | launcher-model | Test only: the global.cfg of a map that carries a package, for the launcher route map test (`cargo test -p omsi-launcher-model the_package_of_a_real_map_is_exported -- --ignored`). |
@@ -413,6 +415,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_INSTANCE` | text | - | use | app, lan, launcher-core | The id of a game instance started by the launcher (set for the child process). |
 | `OMSI_LAN_IP` | text | - | use | net | a.b.c.d[,e.f.g.h]: LAN addresses to offer first (when the detection gets them wrong). |
 | `OMSI_LAUNCHER` | text | - | use | app, guard | Program a plain start opens as the launcher instead of the desktop launcher (openomsi-launcher-app) beside the game. |
+| `OMSI_MX` | text | settings | use | app | on or off: draw with mX, openOMSI's own graphics library, through wgpu (mX Graphics, experimental), or with wgpu's own backends (overrides the setting, which a Mac only reads; elsewhere the way to try mX). |
 | `OMSI_OFFICIAL_KEY` | text | - | use | lan | File of the official server's signing key. |
 | `OMSI_PLUGIN_HOST32` | text | beside the game | use | plugin | Path of omsi-plugin-host32.exe. |
 | `OMSI_PLUGIN_PROCESS_ALLOW` | text | none | use | plugin | Optional native process preapproval: absolute path to a JSON manifest binding plugin content and in-folder helpers to SHA256 hashes. The interactive game otherwise asks the player. Changes revoke consent; packages must declare process. Approved programs run with the game account permissions. |

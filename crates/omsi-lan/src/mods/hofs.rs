@@ -199,7 +199,7 @@ mod tests {
         use std::cell::Cell;
         let mut cache = hashbrown::HashMap::new();
         let (asked, here) = (Cell::new(0), Cell::new(false));
-        let mut look = |cache: &mut hashbrown::HashMap<_, _>| {
+        let look = |cache: &mut hashbrown::HashMap<_, _>| {
             cached_with(cache, ("bus", "town"), Some("Town"), |_| here.get().then(|| PathBuf::from("Town.hof")), |_| here.get(), |_| Some(99), || {
                 asked.set(asked.get() + 1);
                 7

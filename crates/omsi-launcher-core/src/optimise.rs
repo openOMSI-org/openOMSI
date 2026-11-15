@@ -97,10 +97,10 @@ fn distance(s: &Value, key: &str, auto: f64) -> f64 {
     }
 }
 
-/// DLSS or FSR 3 at work: the MSAA and the render scale are not in use, nothing to gain there.
+/// DLSS, FSR 3 or MetalFX at work: the MSAA and the render scale are not in use, nothing to gain there.
 fn upscaler_takes_over(s: &Value) -> bool {
     let word = text(s, "upscaler", "default");
-    (word == "dlss" || word == "fsr3") && s.get("temporal_upscalers").and_then(Value::as_array).is_none_or(|list| list.iter().any(|u| u.as_str() == Some(&*word)))
+    (word == "dlss" || word == "fsr3" || word == "metalfx") && s.get("temporal_upscalers").and_then(Value::as_array).is_none_or(|list| list.iter().any(|u| u.as_str() == Some(&*word)))
 }
 
 fn scale(s: &Value) -> f64 {

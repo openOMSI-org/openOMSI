@@ -13,15 +13,30 @@ use std::path::Path;
 /// The game's side of a frame.
 pub trait PluginIo {
     /// Snapshot of every parsed field of the player's currently loaded HOF.
-    fn hof_data(&self) -> Option<Value> { None }
+    fn hof_data(&self) -> Option<Value> {
+        None
+    }
     /// First exact identifier match; indices follow the zero-based game getters.
-    fn hof_terminus(&self, _identifier: &str) -> Option<Value> { None }
-    fn hof_busstop(&self, _identifier: &str) -> Option<Value> { None }
-    fn duty_tour(&self) -> Option<Value> { None }
-    fn timetable_tour(&self, _line: &str, _tour: &str) -> Result<Value, String> { Err("timetable unavailable".into()) }
+    fn hof_terminus(&self, _identifier: &str) -> Option<Value> {
+        None
+    }
+    fn hof_busstop(&self, _identifier: &str) -> Option<Value> {
+        None
+    }
+    fn duty_tour(&self) -> Option<Value> {
+        None
+    }
+    fn timetable_tour(&self, _line: &str, _tour: &str) -> Result<Value, String> {
+        Err("timetable unavailable".into())
+    }
 
     /// Read game data directly; never invoke the script VM or its callbacks.
-    fn data_query(&mut self, _query: crate::data::DataQuery, _args: &[crate::data::QueryValue], _object: Option<i64>) -> Result<Vec<crate::data::QueryValue>, String> {
+    fn data_query(
+        &mut self,
+        _query: crate::data::DataQuery,
+        _args: &[crate::data::QueryValue],
+        _object: Option<i64>,
+    ) -> Result<Vec<crate::data::QueryValue>, String> {
         Err("game data queries unavailable".into())
     }
     fn system(&mut self, name: &str) -> Option<f32>;
@@ -42,7 +57,13 @@ pub trait PluginIo {
     /// A picture a plugin drew for that texture: `width` x `height` RGBA, top row first,
     /// straight (not premultiplied) alpha. False when it was not taken (no such texture,
     /// or it has another size by now).
-    fn set_script_texture(&mut self, _index: usize, _width: u32, _height: u32, _rgba: &[u8]) -> bool {
+    fn set_script_texture(
+        &mut self,
+        _index: usize,
+        _width: u32,
+        _height: u32,
+        _rgba: &[u8],
+    ) -> bool {
         false
     }
     /// Seconds of game time since the last frame (timers).
@@ -62,6 +83,33 @@ pub trait PluginIo {
     fn position(&self) -> Option<[f64; 4]> {
         None
     }
+    /// The body of the bus (`section` 0) or of a section coupled behind it (1, 2, ...) as
+    /// the last simulation step left it: its origin and its model's axes in the world (right,
+    /// forward, up), with the heading, the climb and the lean on the springs in them.
+    fn body_frame(&self, _section: usize) -> Option<[f64; 12]> {
+        None
+    }
+    /// Where a point of one of the meshes of the bus (`section` 0) or of a section coupled
+    /// behind it (1, 2, ...) is now (map metres): `mesh` is the mesh's file (`sht_bashmak.o3d`,
+    /// or a part of its path), the point in that section's model frame as the mesh stands at
+    /// rest; the mesh's animations and the section's pose move it.
+    fn mesh_point(&self, _mesh: &str, _point: [f32; 3], _section: usize) -> Option<[f64; 3]> {
+        None
+    }
+    /// `body_frame` of one of `others`.
+    fn other_body_frame(&mut self, _id: u64, _section: usize) -> Option<[f64; 12]> {
+        None
+    }
+    /// `mesh_point` of one of `others`.
+    fn other_mesh_point(
+        &mut self,
+        _id: u64,
+        _mesh: &str,
+        _point: [f32; 3],
+        _section: usize,
+    ) -> Option<[f64; 3]> {
+        None
+    }
     /// A line of text on the screen for `seconds`.
     fn message(&mut self, _text: &str, _seconds: f32) {}
     /// What the game is doing, as (key, value) pairs for `omsi.info()`: the map, the clock,
@@ -71,7 +119,10 @@ pub trait PluginIo {
     }
     /// One value of [`PluginIo::info`] (a game keeps the frame's table and reads it there).
     fn info_value(&self, key: &str) -> Option<InfoValue> {
-        self.info().into_iter().find(|(k, _)| *k == key).map(|(_, v)| v)
+        self.info()
+            .into_iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, v)| v)
     }
     /// A game action by its game-menu id (`refuel`, `shot`, ...), run after the frame.
     /// False when the game does not know it.
@@ -304,7 +355,12 @@ pub trait PluginIo {
     }
     /// Change a passenger's ticket (`by`: the plugin's name); the reason when nothing was
     /// changed.
-    fn people_set_ticket(&mut self, _id: u32, _change: &TicketChange, _by: &str) -> Result<(), String> {
+    fn people_set_ticket(
+        &mut self,
+        _id: u32,
+        _change: &TicketChange,
+        _by: &str,
+    ) -> Result<(), String> {
         Err("the game has no passengers".into())
     }
 
@@ -326,7 +382,13 @@ pub trait PluginIo {
     }
     /// Take a duty: a line, a tour, its trip (from 0 in departure order) and the stop to
     /// start at (from 0 among the stops it calls at).
-    fn duty_start(&mut self, _line: &str, _tour: &str, _trip: usize, _stop: usize) -> Result<(), String> {
+    fn duty_start(
+        &mut self,
+        _line: &str,
+        _tour: &str,
+        _trip: usize,
+        _stop: usize,
+    ) -> Result<(), String> {
         Err("the game has no timetable".into())
     }
     fn duty_end(&mut self) -> bool {
@@ -352,7 +414,12 @@ pub trait PluginIo {
     }
     /// The stops of a tour's trips, or of one trip (from 0 in departure order): (trip,
     /// station, name, departure).
-    fn timetable_stops(&self, _line: &str, _tour: &str, _trip: Option<usize>) -> Vec<(usize, usize, String, f64)> {
+    fn timetable_stops(
+        &self,
+        _line: &str,
+        _tour: &str,
+        _trip: Option<usize>,
+    ) -> Vec<(usize, usize, String, f64)> {
         Vec::new()
     }
     /// The timetable's stops: (map object id, name).
@@ -669,6 +736,15 @@ pub struct AiCar {
     pub blinker: u8,
     /// The line of a timetable bus.
     pub line: Option<String>,
+    /// Its `[boundingbox]`: width, length, height and the box centre's offset from the
+    /// vehicle's origin (x right, y forward, z up), in metres, as the .bus/.ovh gives it, or
+    /// the collision code's default when it gives none.
+    pub bounding_box: [f32; 6],
+    /// The box comes from the default, not the vehicle's file.
+    pub box_default: bool,
+    /// The heading the box's axes follow (the body's; the path's `heading` + 180 for a
+    /// vehicle driven backwards along its file's axis).
+    pub box_heading: f64,
 }
 
 /// A timetable bus on the road.
@@ -752,7 +828,9 @@ impl TicketKind {
     }
 
     pub fn parse(s: &str) -> Option<TicketKind> {
-        [TicketKind::None, TicketKind::Stamp, TicketKind::Buy].into_iter().find(|k| k.as_str().eq_ignore_ascii_case(s.trim()))
+        [TicketKind::None, TicketKind::Stamp, TicketKind::Buy]
+            .into_iter()
+            .find(|k| k.as_str().eq_ignore_ascii_case(s.trim()))
     }
 
     /// `AccessTicketRequest`'s `kind`: 0 nothing, 1 stamp, 2 buy.
@@ -761,7 +839,9 @@ impl TicketKind {
     }
 
     pub fn from_code(c: i32) -> Option<TicketKind> {
-        [TicketKind::None, TicketKind::Stamp, TicketKind::Buy].get(usize::try_from(c).ok()?).copied()
+        [TicketKind::None, TicketKind::Stamp, TicketKind::Buy]
+            .get(usize::try_from(c).ok()?)
+            .copied()
     }
 }
 
@@ -1061,7 +1141,14 @@ pub struct Sound {
 
 impl Default for Sound {
     fn default() -> Sound {
-        Sound { volume: 1.0, pitch: 1.0, looping: false, at: None, on_bus: false, range: 5.0 }
+        Sound {
+            volume: 1.0,
+            pitch: 1.0,
+            looping: false,
+            at: None,
+            on_bus: false,
+            range: 5.0,
+        }
     }
 }
 

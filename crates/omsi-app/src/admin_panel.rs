@@ -62,7 +62,7 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
 /// Each frame: while one of the server menu's pages is open, ask what it shows (the panel
 /// keeps the pace: every 3 s at most, one question at a time).
 pub(crate) fn tick(app: &mut App) {
-    if !remote(app) || !admin_kind(app.menus.list_kind.as_ref()) {
+    if !remote(app) || !(admin_kind(app.menus.list_kind.as_ref()) || (app.menus.game_menu.is_some() && app.shell.pause_category == crate::shell::pause::navigation::Category::Online)) {
         return;
     }
     let now = Instant::now();

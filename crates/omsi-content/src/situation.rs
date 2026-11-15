@@ -20,6 +20,7 @@ pub struct SituationVehicle {
     pub vars: Vec<(String, f64)>,
     pub string_vars: Vec<(String, String)>,
     pub timetable: Vec<String>,
+    pub riders: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -27,6 +28,7 @@ pub struct Situation {
     pub path: PathBuf,
     pub name: String,
     pub description: String,
+    pub name_chosen: bool,
     pub map: String,
     pub weather: Option<String>,
     /// year, day of year, hour, minute, second
@@ -40,11 +42,16 @@ pub struct Situation {
     pub vehicles: Vec<SituationVehicle>,
 }
 
+pub const NAME_CHOSEN: &str = "[openomsi_name_chosen]";
+
 impl Situation {
     /// Write the situation the way OMSI does (UTF-16 LE with a BOM, CR LF).
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let mut t = String::new();
         t.push_str(&format!("[name]\r\n{}\r\n", self.name));
+        if self.name_chosen {
+            t.push_str(&format!("{NAME_CHOSEN}\r\n"));
+        }
         t.push_str(&format!("[description]\r\n{}\r\n[end]\r\n\r\n", self.description));
         t.push_str(&format!("[map]\r\n{}\r\n\r\n", self.map));
         if let Some(w) = &self.weather {
@@ -84,6 +91,9 @@ impl Situation {
             if v.is_my_vehicle {
                 t.push_str("\r\n[ismyVehicle]\r\n");
             }
+            if v.riders > 0 {
+                t.push_str(&format!("\r\n[openOMSI_riders]\r\n{}\r\n", v.riders));
+            }
             t.push_str(&format!("\r\n[vars]\r\n{}\r\n", v.vars.len()));
             for (n, x) in &v.vars {
                 t.push_str(&format!("{n}\r\n{x:.6}\r\n"));
@@ -114,6 +124,7 @@ impl Situation {
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
                 "name" => s.name = r.str().to_string(),
+                "openomsi_name_chosen" => s.name_chosen = true,
                 "description" => s.description = r.until("[end]").join("\n"),
                 "map" => s.map = r.str().to_string(),
                 "actuweather" => s.weather = Some(r.str().to_string()),
@@ -147,6 +158,12 @@ impl Situation {
                 "ismyvehicle" => {
                     if let Some(veh) = s.vehicles.last_mut() {
                         veh.is_my_vehicle = true;
+                    }
+                }
+                "openomsi_riders" => {
+                    let n = r.usize();
+                    if let Some(veh) = s.vehicles.last_mut() {
+                        veh.riders = n;
                     }
                 }
                 "vars" => {
@@ -191,7 +208,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn situation_round_trips_padded_device_strings_and_duty_identity() {
+    fn situation_round_trips_padded_device_strings_duty_identity_and_riders() {
         let path =
             std::env::temp_dir().join(format!("omsi_situation_strings_{}.osn", std::process::id()));
         let sit = Situation {
@@ -207,13 +224,17 @@ mod tests {
                 timetable: ["109", "65104", "16", "7", "0", "0"]
                     .map(String::from)
                     .to_vec(),
+                riders: 23,
                 ..Default::default()
             }],
+            name: "Slot 3: Depot run, 09:00".into(),
+            name_chosen: true,
             ..Default::default()
         };
         sit.save(&path).unwrap();
         let loaded = Situation::load(&path).unwrap();
         std::fs::remove_file(path).unwrap();
         assert_eq!(loaded.vehicles, sit.vehicles);
+        assert_eq!((loaded.name.as_str(), loaded.name_chosen), ("Slot 3: Depot run, 09:00", true));
     }
 }

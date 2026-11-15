@@ -2,6 +2,43 @@ use super::*;
 use super::planning::lane_open_to;
 
 #[cfg(test)]
+mod reaction_factor_tests {
+    use super::model::scale_reaction;
+
+    #[test]
+    fn factor_one_leaves_the_drawn_reaction_untouched() {
+        for r in [0.2_f32, 0.3, 0.8, 1.1] {
+            assert_eq!(scale_reaction(r, 1.0), r);
+        }
+    }
+
+    #[test]
+    fn a_smaller_factor_shortens_it_down_to_the_pull_out_wait() {
+        assert!((scale_reaction(0.8, 0.5) - 0.4).abs() < 1e-6);
+        // (0.6 x 0.5 = 0.3 would be under the floor: held at it)
+        assert!((scale_reaction(0.6, 0.5) - crate::ai_motion::PULL_OUT_WAIT).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_reaction_drawn_under_the_floor_is_never_raised() {
+        assert!((scale_reaction(0.3, 0.5) - 0.3).abs() < 1e-6);
+        assert!((scale_reaction(0.3, 0.75) - 0.3).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_larger_factor_lengthens_it() {
+        assert!((scale_reaction(0.8, 2.0) - 1.6).abs() < 1e-6);
+        assert!((scale_reaction(0.3, 2.0) - 0.6).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_factor_that_is_not_a_number_changes_nothing() {
+        assert_eq!(scale_reaction(0.8, f32::NAN), 0.8);
+        assert_eq!(scale_reaction(0.8, f32::INFINITY), 0.8);
+    }
+}
+
+#[cfg(test)]
 mod parked_lane_tests {
     use super::*;
     use super::control::impact_zones;

@@ -253,14 +253,12 @@ fn a_blended_print_behind_a_pane_added_first_stays_over_its_base() {
     }
 }
 
-/// A label a fraction of a millimetre in front of a glass three steps up - a windscreen's
-/// fleet number and its prints on the pane, each its own subset, the pane's own patches piling
-/// steps on each other (#2790) - stays seen at every distance: a stack of steps takes no more
-/// than the surface in front of it, so its lift cannot carry it past that surface.
+/// A label 0.2 mm ahead of a three-step glass surface remains visible at distance.
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_label_a_fraction_of_a_millimetre_in_front_of_a_stack_of_steps_stays_seen() {
     let mut renderer = renderer();
+    eprintln!("GPU adapter: {:?}", *crate::gpu::ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()));
     let mut scene = renderer.new_scene();
     let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
     let green = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 1.0, 0.0, 1.0], true);
@@ -284,14 +282,81 @@ fn a_label_a_fraction_of_a_millimetre_in_front_of_a_stack_of_steps_stays_seen() 
     renderer.add_instance(&mut scene, glass, DVec3::ZERO, Mat4::IDENTITY, vec![blue, blue, blue, red]);
     let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
     for d in [2.0, 7.0, 15.0, 30.0] {
-        for pitch in [-90.0f64, -45.0] {
+        for (pitch, label_side) in [(-90.0f64, true), (-45.0, true), (45.0, false), (90.0, false)] {
             let (s, c) = pitch.to_radians().sin_cos();
             let camera = Camera { position: DVec3::new(0.0, -d * c, -d * s), yaw: 0.0, pitch: pitch as f32, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 3000.0 };
             scene.dirty = true;
             let rgba = renderer.render_to_image(&mut scene, 256, 256, &camera, &lighting).unwrap();
             let green = rgba.chunks(4).filter(|p| p[1] > 150 && p[0] < 60 && p[2] < 60).count();
             let red = rgba.chunks(4).filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60).count();
-            assert!(green * 4 > red, "at {d} m, pitch {pitch}: {green} pixels of the label, {red} of the glass");
+            if label_side {
+                assert!(green * 4 > red, "at {d} m, pitch {pitch}: {green} pixels of the label, {red} of the glass");
+            } else {
+                assert!(red * 4 > green, "at {d} m, pitch {pitch}: {red} pixels of the glass, {green} of the label");
+            }
         }
+    }
+}
+
+/// A nearby patch must not expose the base under a broad print.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_print_covering_a_deep_stack_and_a_nearby_patch_hides_its_base() {
+    let mut renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
+    let green = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 1.0, 0.0, 1.0], true);
+    let mesh = renderer.add_mesh(&mut scene, &slotted(vec![
+        grid(0.8, 0.0, 0.0002, 0.1, 1, 0.0, false),
+        grid(0.0, 0.0, 0.0, 0.3, 1, 0.0, false),
+        grid(0.0, 0.0, 0.0, 0.25, 1, 0.0, true),
+        grid(0.0, 0.0, 0.0, 0.2, 1, 0.0, false),
+        grid(0.0, 0.0, 0.0, 0.15, 1, 0.0, true),
+        grid(0.0, 0.0, 0.000025, 1.0, 1, 0.0, false),
+    ]));
+    renderer.begin_object(&mut scene);
+    // The nearby patch and final print share green; none of the red stack should show.
+    renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![green, red, red, red, red, green]);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    for d in [1.0, 3.0] {
+        for pitch in [-90.0f64, -45.0] {
+            let (s, c) = pitch.to_radians().sin_cos();
+            let camera = Camera { position: DVec3::new(0.0, -d * c, -d * s), yaw: 0.0, pitch: pitch as f32, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 3000.0 };
+            scene.dirty = true;
+            let rgba = renderer.render_to_image(&mut scene, 256, 256, &camera, &lighting).unwrap();
+            let red = rgba.chunks_exact(4).filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60).count();
+            let green = rgba.chunks_exact(4).filter(|p| p[1] > 150 && p[0] < 60 && p[2] < 60).count();
+            assert!(red == 0 && green > 0, "at {d} m, pitch {pitch}: {red} base pixels, {green} print pixels");
+        }
+    }
+}
+
+/// Shading normals may be authored independently of a display's flat geometry.
+/// They must not bend the depth offset and lift an earlier layer through its print.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn shading_normals_do_not_bend_a_flat_layers_depth() {
+    let mut renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
+    let green = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 1.0, 0.0, 1.0], true);
+    let mut layer = grid(0.0, 0.0, 0.0, 0.3, 1, 0.0, true);
+    layer.normals[0] = Vec3::new(1.0, 0.0, -0.3).normalize();
+    let mesh = renderer.add_mesh(&mut scene, &slotted(vec![
+        grid(0.0, 0.0, 0.0, 0.4, 1, 0.0, false),
+        layer,
+        grid(0.0, 0.0, 0.000025, 0.5, 1, 0.0, false),
+    ]));
+    renderer.begin_object(&mut scene);
+    renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![red, red, green]);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    for pitch in [-90.0f64, -45.0, -15.0] {
+        let (s, c) = pitch.to_radians().sin_cos();
+        let camera = Camera { position: DVec3::new(0.0, -c, -s), yaw: 0.0, pitch: pitch as f32, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 3000.0 };
+        scene.dirty = true;
+        let rgba = renderer.render_to_image(&mut scene, 256, 256, &camera, &lighting).unwrap();
+        let red = rgba.chunks_exact(4).filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60).count();
+        let green = rgba.chunks_exact(4).filter(|p| p[1] > 150 && p[0] < 60 && p[2] < 60).count();
+        assert!(red == 0 && green > 0, "pitch {pitch}: {red} base pixels, {green} print pixels");
     }
 }

@@ -139,7 +139,9 @@ impl Traffic {
         let random = RandomTypes { types, groups, group_curves, group_uvg, uvg_defaults };
         let mut sim = TrafficSim::assemble(root, net, random, lights, controller_of_object, (parked_cars, lane_tiles), density_curve, (unsched_factor, max_scheduled), target);
         // (#1773: off, an early timetable bus waits at every stop, as in OMSI)
-        sim.timed_waits_only = crate::settings::Settings::load().ai_wait_timed_stops_only;
+        let settings = crate::settings::Settings::load();
+        sim.timed_waits_only = settings.ai_wait_timed_stops_only;
+        sim.reaction_factor = settings.ai_reaction;
         Ok(Traffic::with_sim(sim, root))
     }
 

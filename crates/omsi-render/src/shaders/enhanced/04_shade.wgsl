@@ -97,7 +97,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         let nuv = select(buv, vec2<f32>(in.uv.x, 1.0 - in.uv.y), terrain);
         night_sample = sample_nightmap(nuv);
     }
-    tex.a = night_coverage(tex.a, night_sample.a);
+    tex.a = night_coverage(tex.a, night_sample.a) * tree_card_fade(in.world);
     let mode = material.params.x;
     // Keep the filtered fractional coverage, but tighten its transition around the cutout
     // edge before MSAA turns it into sample coverage. The MSAA depth prepass skips these

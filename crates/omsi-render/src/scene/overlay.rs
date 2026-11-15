@@ -36,6 +36,9 @@ pub(crate) struct Flat {
     pub(crate) offset: f32,
     pub(crate) lo: Vec3,
     pub(crate) hi: Vec3,
+    /// An in-plane direction and the half extents along it and across it (the tilt is measured over these).
+    pub(crate) axis: Vec3,
+    pub(crate) half: [f32; 2],
 }
 
 /// The normal with the sign that makes its largest component positive, and the offset to
@@ -54,7 +57,8 @@ pub(crate) fn mesh_flats(data: &MeshData) -> Vec<Flat> {
         // (plane key -> flat, area)
         // (a hashbrown map sized ahead, no list per triangle: a GPM street lamp of 150 000 triangles took 23 ms)
         let end = (first + count).min(data.indices.len() as u32);
-        let mut planes: hashbrown::HashMap<(i32, i32, i32, i32), (Flat, f32)> = hashbrown::HashMap::with_capacity((end.saturating_sub(first) / 3) as usize);
+        // (the last: the surface's extent along its axis and across it, low and high)
+        let mut planes: hashbrown::HashMap<(i32, i32, i32, i32), (Flat, f32, [f32; 4])> = hashbrown::HashMap::with_capacity((end.saturating_sub(first) / 3) as usize);
         let mut k = first as usize;
         let at = |i: u32| data.positions.get(i as usize).copied();
         while k + 2 < end as usize {
@@ -70,12 +74,31 @@ pub(crate) fn mesh_flats(data: &MeshData) -> Vec<Flat> {
             let (n, offset) = canonical(cross / (2.0 * area), (cross / (2.0 * area)).dot(p[0]));
             let key = ((n.x * 1000.0).round() as i32, (n.y * 1000.0).round() as i32, (n.z * 1000.0).round() as i32, (offset / PLANE_GAP).round() as i32);
             let (lo, hi) = (p[0].min(p[1]).min(p[2]), p[0].max(p[1]).max(p[2]));
-            let e = planes.entry(key).or_insert((Flat { slot, normal: n, offset, lo, hi }, 0.0));
+            let e = planes.entry(key).or_insert_with(|| {
+                // (the axis: the middle edge of the plane's first triangle - a leg of the right
+                // triangle a rectangle is cut into, not its diagonal)
+                let mut edges = [p[1] - p[0], p[2] - p[1], p[0] - p[2]];
+                edges.sort_by(|a, b| a.length_squared().total_cmp(&b.length_squared()));
+                let edge = edges[1];
+                let axis = (edge - n * n.dot(edge)).try_normalize().unwrap_or_else(|| n.any_orthonormal_vector());
+                (Flat { slot, normal: n, offset, lo, hi, axis, half: [0.0; 2] }, 0.0, [f32::MAX, f32::MIN, f32::MAX, f32::MIN])
+            });
             e.0.lo = e.0.lo.min(lo);
             e.0.hi = e.0.hi.max(hi);
             e.1 += area;
+            let across = n.cross(e.0.axis);
+            for q in p {
+                let (u, v) = (q.dot(e.0.axis), q.dot(across));
+                e.2 = [e.2[0].min(u), e.2[1].max(u), e.2[2].min(v), e.2[3].max(v)];
+            }
         }
-        let mut flats: Vec<(Flat, f32)> = planes.into_values().collect();
+        let mut flats: Vec<(Flat, f32)> = planes
+            .into_values()
+            .map(|(mut f, area, r)| {
+                f.half = [(r[1] - r[0]) * 0.5, (r[3] - r[2]) * 0.5];
+                (f, area)
+            })
+            .collect();
         // (the largest picked out before they are sorted: a curved mesh has a plane per triangle)
         if flats.len() > FLATS_PER_SLOT {
             flats.select_nth_unstable_by(FLATS_PER_SLOT, |a, b| b.1.total_cmp(&a.1));
@@ -101,38 +124,56 @@ pub(crate) struct ObjectRun {
     by_normal: HashMap<(i32, i32, i32), Vec<usize>>,
     model: Option<u64>,
     added: usize,
-    models: HashMap<u64, Vec<(usize, Vec<u8>)>>,
+    models: HashMap<u64, Vec<(usize, Vec<u8>, Vec<f32>)>>,
 }
 
+/// Cells of 1/30, so that the next cell holds every normal `facing` takes for the same way.
 fn normal_key(n: Vec3) -> (i32, i32, i32) {
-    ((n.x * 100.0).round() as i32, (n.y * 100.0).round() as i32, (n.z * 100.0).round() as i32)
+    ((n.x * 30.0).round() as i32, (n.y * 30.0).round() as i32, (n.z * 30.0).round() as i32)
+}
+
+fn boxes_overlap(a: &Flat, b: &Flat, margin: f32) -> bool {
+    (a.lo - Vec3::splat(margin)).cmple(b.hi).all()
+        && (b.lo - Vec3::splat(margin)).cmple(a.hi).all()
 }
 
 /// `f` against `g` when the two face the same way and their boxes overlap within `margin`: how
 /// far `f`'s middle lies off `g`'s plane, and how far `f`'s tilt lifts its corners off it.
 fn facing(f: &Flat, g: &Flat, margin: f32) -> Option<(f32, f32)> {
-    let overlap = (f.lo - Vec3::splat(margin)).cmple(g.hi).all() && (g.lo - Vec3::splat(margin)).cmple(f.hi).all();
-    if !overlap || f.normal.dot(g.normal).abs() <= 0.9995 {
+    if !boxes_overlap(f, g, margin) || f.normal.dot(g.normal).abs() <= 0.9995 {
         return None;
     }
     let c = (f.lo + f.hi) * 0.5;
     let c = c - f.normal * (f.normal.dot(c) - f.offset);
-    let tilt = f.normal.cross(g.normal).length() * (f.hi - f.lo).length() * 0.5;
+    // (the tilt over the surface's own extent, not its box's diagonal)
+    let axis = f.normal.cross(g.normal);
+    let sin = axis.length();
+    let tilt = match axis.try_normalize() {
+        Some(a) => {
+            let up = f.normal.cross(a);
+            let across = f.normal.cross(f.axis);
+            sin * (up.dot(f.axis).abs() * f.half[0] + up.dot(across).abs() * f.half[1])
+        }
+        None => 0.0,
+    };
     Some(((g.normal.dot(c) - g.offset).abs(), tilt))
 }
 
 /// Whether `f` lies on `g`: its middle within `CENTRE_GAP` of `g`'s plane, its tilt against
 /// it lifting no edge further than `PLANE_GAP`, and their boxes overlapping.
 fn lies_on(f: &Flat, g: &Flat) -> bool {
-    facing(f, g, BOX_GAP).is_some_and(|(gap, tilt)| gap < CENTRE_GAP && tilt < PLANE_GAP)
+    // (a tilted surface may stand off by what its tilt lifts its edge)
+    facing(f, g, BOX_GAP).is_some_and(|(gap, tilt)| gap < CENTRE_GAP + tilt && tilt < PLANE_GAP)
 }
 
 /// Whether `f` lies just off `g`'s plane, further than `CENTRE_GAP` but nearer than
 /// `NEAR_GAP`: a surface the step of `f` would pass far off, though they are really apart.
 /// (Their tilt is not asked here: a flat seen nearly edge-on lifts its own edge over a small
 /// angle by more than the gap, and it is the middle distance that the step's lift reaches.)
-fn near_on(f: &Flat, g: &Flat) -> bool {
-    facing(f, g, NEAR_GAP).is_some_and(|(gap, _)| (CENTRE_GAP..NEAR_GAP).contains(&gap))
+fn near_gap(f: &Flat, g: &Flat) -> Option<f32> {
+    facing(f, g, NEAR_GAP)
+        .map(|(gap, _)| gap)
+        .filter(|gap| (CENTRE_GAP..NEAR_GAP).contains(gap))
 }
 
 impl ObjectRun {
@@ -155,11 +196,24 @@ impl ObjectRun {
     /// with `transform` at `origin` (its key) as instance number `draw_order`: a slot lying
     /// on an earlier surface of the same object (`lies_on`) takes one step more than the
     /// highest of those, at most `MAX_LEVEL`; a slot with another surface of the object lying
-    /// just off, but not in, its plane (`near_on`) takes no step beyond that surface's, so
-    /// that the step's lift never carries it past a surface that is really apart from it.
+    /// just off, but not in, its plane (`near_gap`) may cap the extra step, but never
+    /// lowers the slot below an earlier surface it covers.
     /// Any other slot 0. Outside an object begun with `begin` every slot is 0, and a mesh
     /// that is not the next one of the object (another place, a gap in the order) ends it.
+    #[cfg(test)]
     pub(crate) fn levels(&mut self, origin: [u64; 3], draw_order: u64, mesh: usize, transform: Mat4, flats: &[Flat], slots: usize) -> Vec<u8> {
+        self.levels_with_caps(origin, draw_order, mesh, transform, flats, slots).0
+    }
+
+    pub(crate) fn levels_with_caps(
+        &mut self,
+        origin: [u64; 3],
+        draw_order: u64,
+        mesh: usize,
+        transform: Mat4,
+        flats: &[Flat],
+        slots: usize,
+    ) -> (Vec<u8>, Vec<f32>) {
         if !self.fresh && (origin != self.origin || draw_order != self.next) {
             self.open = false;
             self.model = None;
@@ -170,9 +224,9 @@ impl ObjectRun {
         self.origin = origin;
         self.next = draw_order + 1;
         if !self.open {
-            return vec![0; slots];
+            return (vec![0; slots], vec![f32::INFINITY; slots]);
         }
-        let known = self.model.and_then(|m| self.models.get(&m)).and_then(|l| l.get(self.added)).filter(|(id, l)| *id == mesh && l.len() == slots).map(|(_, l)| l.clone());
+        let known = self.model.and_then(|m| self.models.get(&m)).and_then(|l| l.get(self.added)).filter(|(id, l, _)| *id == mesh && l.len() == slots).map(|(_, l, c)| (l.clone(), c.clone()));
         self.added += 1;
         if let Some(levels) = known {
             return levels;
@@ -189,16 +243,19 @@ impl ObjectRun {
                     transform.transform_point3(Vec3::new(pick(1, f.lo.x, f.hi.x), pick(2, f.lo.y, f.hi.y), pick(4, f.lo.z, f.hi.z)))
                 });
                 let (lo, hi) = corners.fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(lo, hi), c| (lo.min(c), hi.max(c)));
-                Some(Flat { slot: f.slot, normal, offset, lo, hi })
+                let (axis, across) = (transform.transform_vector3(f.axis), transform.transform_vector3(f.normal.cross(f.axis)));
+                let half = [f.half[0] * axis.length(), f.half[1] * across.length()];
+                Some(Flat { slot: f.slot, normal, offset, lo, hi, axis: axis.try_normalize().unwrap_or(f.axis), half })
             })
             .collect();
         let mut levels = vec![0u8; slots];
+        let mut depth_caps = vec![f32::INFINITY; slots];
         for slot in 0..slots {
             let mine: Vec<&Flat> = placed.iter().filter(|f| f.slot as usize == slot).collect();
             let mut level = 0u8;
             let mut under: Vec<usize> = Vec::new();
             // (the surfaces lying just off this slot's plane, with their steps)
-            let mut beside: Vec<(usize, u8)> = Vec::new();
+            let mut beside: Vec<(usize, u8, f32)> = Vec::new();
             for f in &mine {
                 for (kx, ky, kz) in [normal_key(f.normal), normal_key(-f.normal)] {
                     for dx in -1..=1 { for dy in -1..=1 { for dz in -1..=1 {
@@ -208,8 +265,8 @@ impl ObjectRun {
                             if lies_on(f, g) {
                                 level = level.max(gl.saturating_add(1).min(MAX_LEVEL));
                                 under.push(i);
-                            } else if near_on(f, g) {
-                                beside.push((i, *gl));
+                            } else if let Some(gap) = near_gap(f, g) {
+                                beside.push((i, *gl, gap));
                             }
                         }
                     }}}
@@ -217,24 +274,32 @@ impl ObjectRun {
             }
             // (a surface of the base this slot is printed on is that base: a neighbouring patch
             // of it lying a little off the plane is no reason to drop the step over it)
-            beside.retain(|(i, _)| !under.contains(i));
+            beside.retain(|(i, _, _)| !under.contains(i));
             let beside_lo = beside.iter().map(|b| b.1).min();
             let beside_hi = beside.iter().map(|b| b.1).max();
-            // (a slot more than two steps above its base is a stack - a windscreen's own patches
-            // lying on each other, a lens on a display on a panel - and its lift outgrows what
-            // the step is for: it takes no more than the lowest step of the surfaces lying just
-            // off its plane, so that it cannot carry itself past one of them, but never less than
-            // two. A slot one or two steps above its base keeps its step, which is what orders
-            // a print over its base and a second print over the first, even with a pane just in
-            // front; a slot on nothing takes the highest step beside it, so the step does not
-            // decide that pair either.)
+            let gap = beside
+                .iter()
+                .filter(|(near, _, _)| {
+                    under.iter().any(|&base| {
+                        boxes_overlap(&self.flats[*near].0, &self.flats[base].0, BOX_GAP)
+                    })
+                })
+                .map(|b| b.2)
+                .min_by(f32::total_cmp);
+            if let Some(gap) = gap {
+                depth_caps[slot] = gap * 0.5;
+            }
             let level = if level == 0 {
                 beside_hi.unwrap_or(0)
             } else if level > 2 {
+                // Limit deep stacks so nearby surfaces are not overtaken.
                 level.min(beside_lo.unwrap_or(MAX_LEVEL).max(2))
             } else {
                 level
             };
+            // Do not cap below surfaces already underneath this slot.
+            let floor = under.iter().map(|&i| self.flats[i].1).max().unwrap_or(0);
+            let level = level.max(floor);
             levels[slot] = level;
             for f in mine {
                 self.by_normal.entry(normal_key(f.normal)).or_default().push(self.flats.len());
@@ -244,10 +309,10 @@ impl ObjectRun {
         if let Some(m) = self.model {
             let list = self.models.entry(m).or_default();
             if list.len() + 1 == self.added {
-                list.push((mesh, levels.clone()));
+                list.push((mesh, levels.clone(), depth_caps.clone()));
             }
         }
-        levels
+        (levels, depth_caps)
     }
 }
 
@@ -371,10 +436,19 @@ mod tests {
         run.begin(None);
         let label = quad(0.0002, 0.2, 0, false);
         assert_eq!(run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&label), 1), vec![0]);
+        let mut final_cap = f32::INFINITY;
         for (k, m) in [deep(0.0, 1.0, false, 0), deep(0.0, 0.5, true, 0), deep(0.0, 0.3, false, 0), deep(0.0, 0.2, true, 0)].iter().enumerate() {
-            run.levels([0; 3], k as u64 + 1, 0, Mat4::IDENTITY, &mesh_flats(m), 1);
+            let (levels, caps) = run.levels_with_caps([0; 3], k as u64 + 1, 0, Mat4::IDENTITY, &mesh_flats(m), 1);
+            assert_eq!(levels, vec![[0, 1, 2, 2][k]]);
+            if k == 0 {
+                assert!(caps[0].is_infinite());
+            } else {
+                assert!((caps[0] - 0.0001).abs() < 1e-7);
+            }
+            final_cap = caps[0];
         }
         assert!(run.flats.iter().all(|f| f.1 <= 2), "the stack is cut back to two steps");
+        assert!((final_cap - 0.0001).abs() < 1e-7, "bias is capped below the 0.2 mm label gap: {final_cap}");
         // (a millimetre is past what the step's lift reaches: nothing is cut back)
         let past = quad(-0.001, 0.2, 0, false);
         assert_eq!(levels_of(&[past, base, glass]), vec![0, 0, 1]);
@@ -479,6 +553,23 @@ mod tests {
         assert_eq!(levels_of(&[tilted(at, 0.3, 44.999), tilted(at, 0.05, 45.001)]), vec![0, 1]);
     }
 
+    /// A neighbouring patch may cap a new step, but must not put a later print
+    /// below the stack it covers. The patch need not overlap that earlier stack.
+    #[test]
+    fn a_later_print_never_drops_below_its_existing_stack() {
+        let patch = moved(quad(0.0002, 0.1, 0, false), Vec3::new(0.8, 0.0, 0.0));
+        let levels = levels_of(&[
+            patch,
+            quad(0.0, 0.3, 0, false),
+            quad(0.0, 0.25, 0, true),
+            quad(0.0, 0.2, 0, false),
+            quad(0.0, 0.15, 0, true),
+            quad(0.0, 1.0, 0, false),
+        ]);
+        assert_eq!(&levels[..5], &[0, 0, 1, 2, 3]);
+        assert_eq!(levels[5], 3, "a nearby patch cannot lower the print below its base");
+    }
+
     #[test]
     fn slightly_separated_display_layers_keep_their_draw_order() {
         for gap in [-4e-5, -2.5e-5, 2.5e-5, 4e-5] {
@@ -493,6 +584,74 @@ mod tests {
             run.begin(None);
             let levels = run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 2);
             assert_eq!(levels, vec![0, 1], "display layer gap {gap}");
+        }
+    }
+
+    /// The Pixel XC's list rows (MZKP SOR NBG 12): a display tile and, in the second slot of
+    /// its mesh, the strip its text is drawn on - rooted on the tile's plane at its lower edge
+    /// and 0.14 mm up at the upper one, laid across a tile that is slanted in the mesh's frame.
+    /// With no step the strip's upper half lost the depth test to the tile and each row read
+    /// as cut off along its middle.
+    #[test]
+    fn a_text_strip_rooted_on_its_tile_and_raised_a_tenth_of_a_millimetre_at_one_edge_takes_a_step() {
+        let slant = Mat4::from_translation(Vec3::new(0.06, 1.49, 5.3)) * Mat4::from_rotation_z(-0.9) * Mat4::from_rotation_x(0.3);
+        let plane = |lift_top: f32| -> MeshData {
+            // tile 0.2 x 0.014, strip 0.2 x 0.0074 inside it
+            let mut mesh = quad(0.0, 0.1, 0, false);
+            for p in &mut mesh.positions {
+                p.y *= 0.07;
+            }
+            let strip = [Vec3::new(-0.1, -0.0037, 0.0), Vec3::new(0.1, -0.0037, 0.0), Vec3::new(0.1, 0.0037, lift_top), Vec3::new(-0.1, 0.0037, lift_top)];
+            let base = mesh.positions.len() as u32;
+            mesh.positions.extend(strip);
+            mesh.normals.extend([Vec3::Z; 4]);
+            mesh.uvs.extend([glam::Vec2::ZERO; 4]);
+            mesh.indices.extend([0, 1, 2, 0, 2, 3].map(|i| i + base));
+            mesh.ranges = vec![(0, 6, 0), (6, 6, 1)];
+            for p in &mut mesh.positions {
+                *p = slant.transform_point3(*p);
+            }
+            mesh
+        };
+        let levels = |mesh: &MeshData| {
+            let mut run = ObjectRun::default();
+            run.begin(None);
+            run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(mesh), 2)
+        };
+        assert_eq!(levels(&plane(1.4e-4)), vec![0, 1]);
+        // (the same strip standing a tenth of a millimetre off all along is apart from the tile)
+        let apart = plane(0.0);
+        let mut off = apart.clone();
+        let n = slant.transform_vector3(Vec3::Z);
+        for p in &mut off.positions[4..] {
+            *p += n * 1.0e-4;
+        }
+        assert_eq!(levels(&off), vec![0, 0]);
+    }
+
+    /// A print tilted a little and standing 0.1 mm off its base at its nearest edge is apart
+    /// from it: `near_on` caps its step, `lies_on` would give it a full one, which far off
+    /// carries it past what lies in front of it.
+    #[test]
+    fn a_slightly_tilted_surface_a_tenth_of_a_millimetre_off_at_its_nearest_edge_is_not_on_the_base() {
+        for lift in [1.0e-4_f32, -1.0e-4] {
+            let mut mesh = quad(1.0, 0.2, 0, false);
+            let mut over = quad(1.0, 0.1, 1, true);
+            // (tilted by a degree across its width, its nearest edge `lift` off the base's plane)
+            let slope = 0.2 * 1.0_f32.to_radians();
+            over.positions[0].z += lift;
+            over.positions[3].z += lift;
+            over.positions[1].z += lift + slope;
+            over.positions[2].z += lift + slope;
+            mesh.positions.extend(&over.positions);
+            mesh.normals.extend(&over.normals);
+            mesh.uvs.extend(&over.uvs);
+            mesh.indices.extend(over.indices.iter().map(|i| i + 4));
+            mesh.ranges = vec![(0, 6, 0), (6, 6, 1)];
+            let mut run = ObjectRun::default();
+            run.begin(None);
+            let levels = run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 2);
+            assert_eq!(levels, vec![0, 0], "lift {lift}");
         }
     }
 

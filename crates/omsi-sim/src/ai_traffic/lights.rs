@@ -17,7 +17,7 @@ impl TrafficSim {
             let Some(ctl) = self.lights.get(c) else {
                 continue;
             };
-            if !matches!(TrafficLightController::aspect(ctl.state(li)), Aspect::Green | Aspect::Dark) {
+            if !TrafficLightController::allows_go(ctl.state(li)) {
                 return Some(d - st.front);
             }
         }
@@ -102,7 +102,7 @@ impl TrafficSim {
             let possible = v * v / (2.0 * MAX_BRAKE * 0.8);
             let on_its_way = amber_holds(v, gap) || (started && amber == Some((c, li)) && v > 0.3);
             let go = match TrafficLightController::aspect(ctl.state(li)) {
-                Aspect::Green | Aspect::Dark => {
+                Aspect::Green | Aspect::GreenYellow | Aspect::Dark => {
                     // at the line when it showed green: that car goes, whatever comes next
                     // (a light that is green for a second a cycle - Westcountry's lights on
                     // its invisible lanes - let nobody through: the first car was still
@@ -115,7 +115,7 @@ impl TrafficSim {
                     }
                     true
                 }
-                Aspect::Yellow | Aspect::GreenYellow => {
+                Aspect::Yellow => {
                     if on_its_way && ((amber == Some((c, li)) || gap < comfortable) || ad < amber_factor) {
                         amber = Some((c, li));
                         true
@@ -128,8 +128,7 @@ impl TrafficSim {
                 // stays where it is)
                 Aspect::Red | Aspect::RedYellow => {
                     let go = (amber == Some((c, li)) && on_its_way && gap < comfortable)
-                        || (v > 1.0 && gap < possible - 0.5)
-                        || (amber_holds(v, gap) && ad < amber_factor * amber_factor);
+                        || (v > 1.0 && gap < possible - 0.5);
                     if !go && amber == Some((c, li)) {
                         amber = None;
                         started = false;

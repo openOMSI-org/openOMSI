@@ -219,15 +219,29 @@ impl PeopleSim {
                 // empties the bus whatever the duty)
                 None => self.duty.as_ref().map(|(trip, _, _)| trip.terminus.clone()),
             };
-            // On a duty the people its trip takes where they are going get on. In free drive
-            // the bus takes whom its destination display takes, as Omsi.exe's buses do
-            // (sub_61c33c): those whose line record lists the terminus shown, and those
-            // without one. (Nobody got on in free drive since 0.2.0, #1627: the bus stood at
-            // Grundorf's and Spandau's stops with its line set and its doors open.)
+            // Free drive still boards by the displayed terminus (Omsi.exe's sub_61c33c);
+            // requiring a duty left everyone waiting with the doors open (#1627).
             let takes = match &self.duty {
-                Some((trip, next, done)) => Takes::Duty { trip: trip.clone(), next: *next, done: *done },
+                Some((trip, next, done)) => Takes::Duty {
+                    trip: trip.clone(),
+                    next: *next,
+                    done: *done,
+                },
                 None => Takes::Terminus,
             };
+            // Changing only the sign can leave IBIS_RouteIndex on the old service.
+            // Its alternate termini and final stop must not override the new display.
+            let route = b
+                .route
+                .as_ref()
+                .filter(|route| match &b.terminus {
+                    None => true,
+                    Some(shown) => shown.as_ref().is_some_and(|shown| {
+                        route.same_service.iter().any(|name| name.trim() == shown.trim())
+                    }),
+                })
+                .cloned()
+                .map(Arc::new);
             out.push(BusNow {
                 terminus,
                 takes,
@@ -239,7 +253,7 @@ impl PeopleSim {
                 walk_open: None,
                 places_off: cv.places_off.clone(),
                 served: None,
-                route: b.route.clone().map(Arc::new),
+                route,
                 cabin,
                 pos: b.position,
                 rot: b.rot,

@@ -782,11 +782,6 @@ impl<'a> Layouter<'a> {
         b
     }
 
-    /// `force` fixes the content width (the row layout of inline blocks uses it).
-    pub(crate) fn build_w(&self, idx: usize, ps: &Style, x0: f32, y0: f32, avail: f32, pct_h: f32, force: Option<f32>) -> LBox {
-        self.build_x(idx, ps, x0, y0, avail, pct_h, force, None)
-    }
-
     /// Lay out the absolutely positioned boxes waiting in `b` against the containing block `cb`
     /// (x, y, width, height of its padding box) and put them in front of or behind its content
     /// by their `z-index`. `root`: the viewport is the block, so fixed boxes land here too.

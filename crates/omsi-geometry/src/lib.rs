@@ -590,8 +590,18 @@ pub fn spline_hole_outlines(def: &Spline, curve: &SplineCurve, mirror: bool, mod
 /// The same boundary as [`spline_hole_outlines`], retaining each profile point's height
 /// (including gradient, cant and skew) for the ground's connection to the spline.
 pub fn spline_hole_rims(def: &Spline, curve: &SplineCurve, mirror: bool, mode: u8) -> Vec<Vec<DVec3>> {
+    spline_hole_rims_with_stations(def, curve, mirror, mode).0
+}
+
+/// The rims and the number of segments along each rim's two sides.
+pub fn spline_hole_rims_with_stations(
+    def: &Spline,
+    curve: &SplineCurve,
+    mirror: bool,
+    mode: u8,
+) -> (Vec<Vec<DVec3>>, usize) {
     if mode == 0 || curve.length <= 0.0 {
-        return Vec::new();
+        return (Vec::new(), 0);
     }
     let mut n = spline_station_count(def, curve);
     let _ = patchwork(def, curve, &mut n);
@@ -599,7 +609,7 @@ pub fn spline_hole_rims(def: &Spline, curve: &SplineCurve, mirror: bool, mode: u
     let l = curve.length;
     let curve = &curve.with_sli(def);
     let at = |q: &[f32; 3], s: f64| skewed_point(curve, s, q[0] as f64, q[1] as f64).0;
-    terrain_hole_profiles(def)
+    let rims = terrain_hole_profiles(def)
         .into_iter()
         .filter(|p| !p.is_empty())
         .map(|p| {
@@ -620,7 +630,8 @@ pub fn spline_hole_rims(def: &Spline, curve: &SplineCurve, mirror: bool, mode: u
             }
             ring
         })
-        .collect()
+        .collect();
+    (rims, n)
 }
 
 /// The solid ground backing of an aligned spline. Unlike a projected hole, this
@@ -1083,8 +1094,13 @@ pub fn turns_round(m: &omsi_o3d::Mesh) -> bool {
         let z = linear.z_axis.normalize_or_zero();
         x.dot(Vec3::X) > 0.9 && y.dot(Vec3::Y) > 0.9 && z.dot(Vec3::Z) > 0.9
     };
-    let mirrored =
-        m.has_transform && !identity && !axis_aligned && m.transform.determinant() > 0.0;
+    // (every ordinary mesh of the Blender exporter carries this quarter turn about x: no mirror)
+    let export_turn = linear.abs_diff_eq(glam::Mat3::from_cols(Vec3::X, -Vec3::Z, Vec3::Y), 1e-4);
+    let mirrored = m.has_transform
+        && !identity
+        && !axis_aligned
+        && !export_turn
+        && m.transform.determinant() > 0.0;
     let explained = against_turned * 10 <= counted;
     mirrored && !explained && counted >= 2 && against * 10 >= counted * 9
 }

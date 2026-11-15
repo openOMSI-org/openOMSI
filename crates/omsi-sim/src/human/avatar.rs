@@ -105,6 +105,7 @@ impl HumanType {
         };
         let mut data = mesh_from_o3d(&m);
         // --- A-pose to T-pose: each arm turned about its shoulder until it points sideways
+        let mut arm_t = [Quat::IDENTITY; 2];
         let mut joints_t: Vec<(String, Vec3)> = m.joints.iter().map(|j| (j.name.to_ascii_lowercase().replace("bip001", "bip01"), swap(j.position))).collect();
         for (side, sign) in [('l', -1.0f32), ('r', 1.0)] {
             let (Some(sh), Some(hand)) = (joint(&format!("bip01 {side} upperarm")), joint(&format!("bip01 {side} hand"))) else { continue };
@@ -113,6 +114,7 @@ impl HumanType {
                 continue;
             }
             let q = Quat::from_rotation_arc(dir, Vec3::X * sign);
+            arm_t[(side == 'r') as usize] = q;
             let mut w = vec![0.0f32; data.positions.len()];
             for b in m.bones.iter().filter(|b| in_arm(&b.name, side)) {
                 for bw in &b.weights {
@@ -247,6 +249,7 @@ impl HumanType {
             variants: Vec::new(),
             extra_dirs: vec![model_dir],
             face,
+            biped: path.extension().is_some_and(|e| e.eq_ignore_ascii_case("fbx")).then(|| super::clips::Biped::from_joints(&m.joints, arm_t)).flatten().map(Box::new),
         })
     }
 

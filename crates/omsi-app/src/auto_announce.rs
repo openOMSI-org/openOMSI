@@ -186,6 +186,10 @@ impl AutoAnnounce {
             return;
         }
         let Some(stop) = d.trips.get(d.trip_index).and_then(|t| t.stops.get(d.next_stop)) else { return };
+        if !stop.stops {
+            self.announced = Some(d.next_stop);
+            return;
+        }
         let (Some(hof), Some(route)) = (bus.host.hof.clone(), route(bus)) else { return };
         let Some(entry) = announce::arrival_entry(&hof, route, &stop.name, d.next_stop) else {
             // (the depot file keeps no pair of recordings that this stop could be: said

@@ -120,6 +120,14 @@ struct Tex {
 
 pub struct Vertices(Option<wgpu::Buffer>, u64);
 
+/// For a second target a `Gpu` draws into beside its main one: kept by whoever draws it, so
+/// that neither replaces the other's at every switch of size, and freed with its holder.
+#[derive(Default)]
+pub struct Attachments {
+    msaa: Option<(wgpu::TextureView, u32, u32)>,
+    depth: Option<(wgpu::TextureView, u32, u32)>,
+}
+
 pub struct Gpu {
     pipeline: wgpu::RenderPipeline,
     /// With a depth buffer: the pipeline of the depth-tested layers, and the buffer.
@@ -394,6 +402,17 @@ impl Gpu {
         Vertices(buf, bytes)
     }
 
+    pub fn drop_vertices(&mut self, id: usize) {
+        if let Some(b) = self.buffers.get_mut(id) {
+            *b = (None, 0);
+        }
+    }
+
+    pub fn drop_targets(&mut self) {
+        self.msaa = None;
+        self.depth = None;
+    }
+
     pub fn put(&mut self, id: usize, v: Vertices) {
         while self.buffers.len() <= id {
             self.buffers.push((None, 0));
@@ -448,6 +467,16 @@ impl Gpu {
                 None
             }
         }
+    }
+
+    /// [`Self::render`] through `attachments` instead of the `Gpu`'s own.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_with(&mut self, attachments: &mut Attachments, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32), clear: Option<wgpu::Color>, layers: &[Layer], draws: &[Draw]) {
+        std::mem::swap(&mut self.msaa, &mut attachments.msaa);
+        std::mem::swap(&mut self.depth, &mut attachments.depth);
+        self.render(device, queue, encoder, target, size, clear, layers, draws);
+        std::mem::swap(&mut self.msaa, &mut attachments.msaa);
+        std::mem::swap(&mut self.depth, &mut attachments.depth);
     }
 
     /// Draw into `target` (`size` pixels): cleared to `clear` first when given.
@@ -619,5 +648,40 @@ mod tests {
         assert!(gpu.msaa.is_some());
         queue.submit([encoder.finish()]);
         assert!(pollster::block_on(scope.pop()).is_none());
+    }
+
+    #[test]
+    fn a_second_target_keeps_its_attachments_apart_from_the_gpus_own() {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let Ok(adapter) = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())) else {
+            eprintln!("no graphics adapter: skipped");
+            return;
+        };
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let mut gpu = super::Gpu::with_depth(&device, format, 4, 256);
+        let target = |side: u32| {
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: wgpu::Extent3d { width: side, height: side, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            })
+            .create_view(&Default::default())
+        };
+        let (panel, screen) = (target(64), target(32));
+        let mut screens = super::Attachments::default();
+        let mut encoder = device.create_command_encoder(&Default::default());
+        gpu.render(&device, &queue, &mut encoder, &panel, (64, 64), None, &[], &[]);
+        gpu.render_with(&mut screens, &device, &queue, &mut encoder, &screen, (32, 32), None, &[], &[]);
+        assert_eq!(gpu.msaa.as_ref().map(|m| (m.1, m.2)), Some((64, 64)), "the panel's stay");
+        assert_eq!(gpu.depth.as_ref().map(|d| (d.1, d.2)), Some((64, 64)));
+        assert_eq!(screens.msaa.as_ref().map(|m| (m.1, m.2)), Some((32, 32)), "the screen's are its holder's");
+        assert_eq!(screens.depth.as_ref().map(|d| (d.1, d.2)), Some((32, 32)));
+        queue.submit([encoder.finish()]);
     }
 }

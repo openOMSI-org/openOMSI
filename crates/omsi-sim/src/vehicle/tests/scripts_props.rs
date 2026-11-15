@@ -3,6 +3,39 @@
 use super::*;
 
 #[test]
+#[ignore = "needs OMSI_ROOT with Volvo_Wright_Family"]
+fn stock_volvo_wright_close_buzzes_before_moving() {
+    let root = original_root();
+    let bus = root.join("Vehicles/Volvo_Wright_Family/AVBWU563.bus");
+    require_content(&[&bus]);
+    let ty = Arc::new(VehicleType::load(&root, &bus).expect("AVBWU563"));
+    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
+    for (name, value) in [
+        ("elec_real_main", 1.0),
+        ("elec_busbar_main", 1.0),
+        ("elec_busbar_avail", 1.0),
+        ("cockpit_button_ignition", 1.0),
+        ("bremse_feststell_sw", 1.0),
+        ("cockpit_button_smallhb", 0.0),
+        ("door_2", 1.0),
+        ("door_3", 1.0),
+        ("doorTarget_23", 1.0),
+    ] {
+        assert!(v.set_var(name, value), "missing {name}");
+    }
+    assert!(v.trigger("bus_dooraftclose"));
+    assert_eq!(v.var("doorTarget_23"), Some(0.0));
+    assert_eq!(v.var("backdoor_buzzer"), Some(0.0));
+    v.update(1.0 / 30.0);
+    assert_eq!(v.var("backdoor_buzzer"), Some(1.0));
+    assert_eq!(v.var("door_2"), Some(1.0));
+    for _ in 0..25 {
+        v.update(1.0 / 30.0);
+    }
+    assert!(v.var("door_2").is_some_and(|door| door < 1.0));
+}
+
+#[test]
 fn script_speed_reports_tiny_resting_motion_as_stopped() {
     assert_eq!(script_speed(0.000251), 0.0);
     assert_eq!(script_speed(-0.000251), 0.0);
@@ -106,186 +139,6 @@ fn stores_and_reads_bits_match_the_scan_for_stock_scripts() {
             read += r as usize;
         }
         assert!(stored > 0 && read > 0, "{}", bus.display());
-    }
-}
-
-/// Volvo Wright's dashboard rear-close trigger falls back to its explicit external-close
-/// path when the handbrake guard only produced the button sound.
-#[test]
-#[ignore = "needs OMSI_ROOT with Volvo_Wright_Family (not part of the stock install)"]
-fn volvo_wright_rear_close_fallback_moves_a_partly_open_door() {
-    let root = original_root();
-    let bus = root.join("Vehicles/Volvo_Wright_Family/AVBWS1.bus");
-    require_content(&[&bus]);
-    let ty = Arc::new(VehicleType::load(&root, &bus).expect("AVBWS1"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
-    for (name, value) in [
-        ("elec_real_main", 1.0),
-        ("elec_busbar_main", 1.0),
-        ("elec_busbar_avail", 1.0),
-        ("cockpit_button_ignition", 1.0),
-        ("bremse_feststell_sw", 0.0),
-        ("cockpit_button_smallhb", 0.0),
-        ("door_2", 0.5),
-        ("door_3", 0.5),
-        ("doorTarget_23", 1.0),
-    ] {
-        assert!(v.set_var(name, value), "missing {name}");
-    }
-    assert!(v.trigger("bus_dooraftclose"));
-    assert_eq!(v.var("doorTarget_23"), Some(0.0));
-}
-
-#[test]
-#[ignore = "needs OMSI_ROOT with Volvo_Wright_Family (not part of the stock install)"]
-fn volvo_wright_rear_toggle_falls_back_to_external_close() {
-    let root = original_root();
-    let bus = root.join("Vehicles/Volvo_Wright_Family/AVBWS1.bus");
-    require_content(&[&bus]);
-    let ty = Arc::new(VehicleType::load(&root, &bus).expect("AVBWS1"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
-    for (name, value) in [
-        ("elec_real_main", 1.0),
-        ("elec_busbar_main", 1.0),
-        ("elec_busbar_avail", 1.0),
-        ("cockpit_button_ignition", 1.0),
-        ("bremse_feststell_sw", 0.0),
-        ("cockpit_button_smallhb", 0.0),
-        ("door_2", 0.5),
-        ("door_3", 0.5),
-        ("doorTarget_23", 1.0),
-    ] {
-        assert!(v.set_var(name, value), "missing {name}");
-    }
-    assert!(v.trigger("bus_dooraft"));
-    assert_eq!(v.var("doorTarget_23"), Some(0.0));
-    assert_eq!(v.var("bdoor_embtn_cls"), Some(1.0));
-}
-
-#[test]
-#[ignore = "needs OMSI_ROOT with Volvo_Wright_Family (not part of the stock install)"]
-fn volvo_wright_rear_toggle_closes_open_leaves_even_with_zero_target() {
-    let root = original_root();
-    let bus = root.join("Vehicles/Volvo_Wright_Family/AVBWS1.bus");
-    require_content(&[&bus]);
-    let ty = Arc::new(VehicleType::load(&root, &bus).expect("AVBWS1"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
-    for (name, value) in [
-        ("elec_real_main", 1.0),
-        ("elec_busbar_main", 1.0),
-        ("elec_busbar_avail", 1.0),
-        ("cockpit_button_ignition", 1.0),
-        ("bremse_feststell_sw", 0.0),
-        ("cockpit_button_smallhb", 0.0),
-        ("door_2", 0.5),
-        ("door_3", 0.5),
-        ("doorTarget_23", 0.0),
-    ] {
-        assert!(v.set_var(name, value), "missing {name}");
-    }
-    assert!(v.trigger("bus_dooraft"));
-    assert_eq!(v.var("doorTarget_23"), Some(0.0));
-}
-
-#[test]
-#[ignore = "needs OMSI_ROOT with Volvo_Wright_Family (not part of the stock install)"]
-fn volvo_wright_rear_toggle_reopens_during_forced_close() {
-    let root = original_root();
-    let bus = root.join("Vehicles/Volvo_Wright_Family/AVBWS1.bus");
-    require_content(&[&bus]);
-    let ty = Arc::new(VehicleType::load(&root, &bus).expect("AVBWS1"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
-    for (name, value) in [
-        ("elec_real_main", 1.0),
-        ("elec_busbar_main", 1.0),
-        ("elec_busbar_avail", 1.0),
-        ("cockpit_button_ignition", 1.0),
-        ("bremse_feststell_sw", 1.0),
-        ("cockpit_button_smallhb", 0.0),
-        ("door_2", 0.5),
-        ("door_3", 0.5),
-        ("doorTarget_23", 0.0),
-        ("bdoor_embtn_cls", 1.0),
-    ] {
-        assert!(v.set_var(name, value), "missing {name}");
-    }
-    assert!(v.trigger("bus_dooraft"));
-    assert_eq!(v.var("doorTarget_23"), Some(1.0));
-    assert_eq!(v.var("bdoor_embtn_cls"), Some(0.0));
-}
-
-#[test]
-#[ignore = "needs OMSI_ROOT with Volvo_Wright_Family (not part of the stock install)"]
-fn volvo_wright_rear_toggle_keeps_close_target_through_frames() {
-    let root = original_root();
-    let bus = root.join("Vehicles/Volvo_Wright_Family/AVBWS1.bus");
-    require_content(&[&bus]);
-    let ty = Arc::new(VehicleType::load(&root, &bus).expect("AVBWS1"));
-    let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
-    for (name, value) in [
-        ("elec_real_main", 1.0),
-        ("elec_busbar_main", 1.0),
-        ("elec_busbar_avail", 1.0),
-        ("cockpit_button_ignition", 1.0),
-        ("bremse_feststell_sw", 0.0),
-        ("cockpit_button_smallhb", 0.0),
-        ("bremse_p_Tank04", 800000.0),
-        ("door_2", 1.0),
-        ("door_3", 1.0),
-        ("doorTarget_23", 1.0),
-        ("bdoor_sound_played", 1.0),
-    ] {
-        assert!(v.set_var(name, value), "missing {name}");
-    }
-    assert!(v.trigger("bus_dooraft"));
-    v.update(1.0 / 30.0);
-    assert_eq!(v.var("backdoor_buzzer"), Some(1.0));
-    for _ in 1..120 {
-        v.update(1.0 / 30.0);
-    }
-    assert_eq!(v.var("doorTarget_23"), Some(0.0));
-    assert!(v.var("door_2").unwrap_or(1.0) < 0.1);
-    assert!(v.var("door_3").unwrap_or(1.0) < 0.1);
-    assert!(v.host.fired_triggers.iter().any(|name| name == "ev_doortriggerclose_2"));
-}
-
-#[test]
-#[ignore = "needs OMSI_ROOT with Volvo_Wright_Family (not part of the stock install)"]
-fn volvo_wright_family_rear_toggle_closes_every_bus_variant() {
-    let root = original_root();
-    let dir = root.join("Vehicles/Volvo_Wright_Family");
-    require_content(&[&dir]);
-    let mut buses: Vec<_> = std::fs::read_dir(&dir)
-        .expect("Volvo Wright directory")
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("bus")))
-        .collect();
-    buses.sort();
-    assert!(buses.len() >= 20, "unexpectedly few Volvo Wright buses: {}", buses.len());
-    for bus in buses {
-        let name = bus.file_name().unwrap().to_string_lossy().into_owned();
-        let ty = Arc::new(VehicleType::load(&root, &bus).unwrap_or_else(|e| panic!("{name}: {e}")));
-        let mut v = VehicleInstance::new(ty, VehicleHost::new(crate::SimClock::default()));
-        for (var, value) in [
-            ("elec_real_main", 1.0),
-            ("elec_busbar_main", 1.0),
-            ("elec_busbar_avail", 1.0),
-            ("cockpit_button_ignition", 1.0),
-            ("bremse_feststell_sw", 0.0),
-            ("cockpit_button_smallhb", 0.0),
-            ("door_2", 0.5),
-            ("door_3", 0.5),
-            ("doorTarget_23", 1.0),
-        ] {
-            if v.var(var).is_some() {
-                assert!(v.set_var(var, value), "{name}: missing {var}");
-            }
-        }
-        assert!(v.trigger("bus_dooraft"), "{name}: missing bus_dooraft");
-        let target = v.var("doorTarget_23").unwrap_or(0.0);
-        let request = v.var("door_back_close_request").unwrap_or(0.0);
-        assert!(target == 0.0 || request > 0.0, "{name}: rear door stayed open (target={target}, request={request})");
     }
 }
 
@@ -456,6 +309,54 @@ fn synthetic_material_plan_preserves_lightmap_thresholds_and_alpha_slots() {
     plan.refresh(ty, &index);
     plan.apply(&[0.5, 0.0, 0.0, 0.0], &mut got);
     assert_eq!(got[0].slot_light, vec![1.0, 1.0]);
+}
+
+#[test]
+fn a_number_in_alphascale_is_the_scale_itself() {
+    let cfg = "[mesh]\nwindows.o3d\n\
+        [matl]\nfilm.png\n0\n[matl_alpha]\n2\n[alphascale]\n0.9\n\
+        [matl]\nfrost.tga\n0\n[matl_alpha]\n2\n[alphascale]\n0.2\n\
+        [matl]\npane.tga\n0\n[matl_alpha]\n2\n[alphascale]\nno_such_var\n\
+        [matl]\ntint.tga\n0\n[matl_alpha]\n2\n[alphascale]\nenvir_brightness\n";
+    let mut ty = coupling_test_type(None);
+    let ty = Arc::get_mut(&mut ty).unwrap();
+    ty.model = Model::parse(&omsi_cfg::CfgFile::from_str("glass.cfg", cfg));
+    ty.meshes.push(VehicleMesh {
+        def_index: 0,
+        data: MeshData::default(),
+        file: PathBuf::new(),
+        materials: ["film.png", "frost.tga", "pane.tga", "tint.tga"]
+            .into_iter()
+            .map(|texture| omsi_o3d::Material {
+                texture: texture.into(),
+                ..Default::default()
+            })
+            .collect(),
+        overrides: Vec::new(),
+        pivot: Mat4::IDENTITY,
+        viewpoint: 0,
+        skin: Vec::new(),
+        keep_winding: false,
+    });
+    let index: HashMap<String, omsi_script::VarId> =
+        [("envir_brightness".to_string(), 0)].into_iter().collect();
+    let mut plan = PropsPlan::default();
+    plan.refresh(ty, &index);
+    let mut got = Vec::new();
+    for light in [0.0, 0.4, 1.0] {
+        let vars = [light];
+        plan.apply(&vars, &mut got);
+        assert_eq!(
+            got[0].slot_alpha,
+            vec![0.9, 0.2, 0.0, light],
+            "brightness {light}"
+        );
+        let want = compute_mesh_props(ty, &|name| index.get(name).map(|&i| vars[i as usize]));
+        assert_eq!(
+            got[0].slot_alpha, want[0].slot_alpha,
+            "the plan and the direct way agree"
+        );
+    }
 }
 
 /// A `[matl_lightmap]` whose variable the bus does not have is always on (Omsi.exe's

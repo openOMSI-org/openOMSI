@@ -93,6 +93,7 @@ fn restore_runtime_graphics(target: &mut crate::settings::Settings, source: &cra
     target.render_scale = source.render_scale.clone();
     target.upscaler = source.upscaler.clone();
     target.upscale_quality = source.upscale_quality.clone();
+    target.frame_generation = source.frame_generation.clone();
     target.fsr_quality = source.fsr_quality.clone();
     target.fsr_sharpness = source.fsr_sharpness.clone();
     target.anisotropy = source.anisotropy.clone();
@@ -116,6 +117,7 @@ fn restore_runtime_graphics(target: &mut crate::settings::Settings, source: &cra
     target.vehicle_smoke = source.vehicle_smoke.clone();
     target.puddles = source.puddles.clone();
     target.windy_trees = source.windy_trees.clone();
+    target.detailed_trees = source.detailed_trees;
     target.road_snow = source.road_snow.clone();
     target.ray_tracing_on = source.ray_tracing_on.clone();
     target.light_shadows = source.light_shadows.clone();

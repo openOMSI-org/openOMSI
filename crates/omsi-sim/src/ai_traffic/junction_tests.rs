@@ -195,17 +195,21 @@ fn amber_decision_holds() {
 }
 
 #[test]
-fn amber_decision_holds_on_red() {
+fn an_ai_driver_that_can_stop_respects_red() {
     let f = Fixture::new();
-    let mut t = with_lights(&f, signalled(false, false), 1);
-    show(&mut t, 0, 0);
-    let id = car(&mut t, &f, 0, 100.0, 0x39, 15.0);
-    ticks(&mut t, 1.0);
-    t.cars.iter_mut().find(|c| c.id == id).unwrap().amber_decision = 0.0;
-    ticks(&mut t, 15.0);
-    let c = get(&t, id);
-    assert_eq!(c.amber_decision, 0.0, "amber decision of car was not overridden, {} != 0", c.amber_decision);
-    assert!(over_line(&t, id) > 10.0, "car did not pass the red light");
+    for phase in [0, 3] {
+        let mut t = with_lights(&f, signalled(false, false), 1);
+        show(&mut t, 0, phase);
+        let id = car(&mut t, &f, 0, 100.0, 0x39, 15.0);
+        ticks(&mut t, 1.0);
+        t.cars.iter_mut().find(|c| c.id == id).unwrap().amber_decision = 0.0;
+        ticks(&mut t, 15.0);
+        let c = get(&t, id);
+        assert_eq!(c.amber_decision, 0.0);
+        assert_eq!(c.state.lane, 0, "car crossed on phase {phase}");
+        assert!(c.state.speed < 0.1);
+        assert!(over_line(&t, id) < 0.3);
+    }
 }
 
 #[test]

@@ -33,7 +33,6 @@ use omsi_sim::ai_traffic::model::*;
 use omsi_sim::ai_traffic::viewer::*;
 use omsi_sim::view_events::TrafficEvent;
 
-pub use omsi_sim::ai_traffic::AI_SCHEMES;
 pub(crate) use omsi_sim::ai_traffic::model::{vehicle_bodies, AiCar, BusSetup, ParkPlan, PlayerBox};
 pub(crate) use setup::warm_up;
 pub(crate) use omsi_sim::ai_traffic::viewer::Viewer;

@@ -28,6 +28,7 @@ members = [
     "crates/omsi-plugin/demo",
     "crates/omsi-ui",
     "crates/omsi-settings-ui",
+    "crates/omsi-multiplayer-ui",
     "crates/omsi-launcher-core",
     "crates/omsi-launcher-api",
     "crates/omsi-launcher-model",
@@ -82,6 +83,7 @@ wgpu = { version = "29", default-features = false, features = ["std", "parking_l
 # match wgpu's (Dependabot's `wgpu` group updates the three together)
 wgpu-hal = "29"
 naga = "29"
+wgpu-mx = { git = "https://github.com/openOMSI-org/mX", rev = "a5185eb9288f0d7e56c3d18658df69dc928c7ca0", features = ["custom"] }
 winit = "0.30"
 bytemuck = { version = "1", features = ["derive"] }
 memmap2 = "0.9"

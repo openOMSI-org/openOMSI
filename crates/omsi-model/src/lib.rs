@@ -12,6 +12,8 @@ pub use extensions::SpotlightCookie;
 #[cfg(test)]
 mod extension_tests;
 mod pages;
+mod screens;
+pub use screens::NavigatorTextureDef;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AnimOrigin {
@@ -507,6 +509,7 @@ pub struct Model {
     pub ctc_textures: Vec<(String, String)>,
     pub script_textures: Vec<(i32, i32)>,
     pub html_textures: Vec<HtmlTextureDef>,
+    pub navigator_textures: Vec<NavigatorTextureDef>,
     pub text_textures: Vec<TextTexture>,
     /// `[texttexture_enh]` raw parameter lines.
     pub text_textures_enh: Vec<Vec<String>>,
@@ -740,10 +743,10 @@ impl Model {
                 let height = r.i32();
                 let path = r.str().to_string();
                 let lit = Self::take_lit_flag(r);
-                let script_index = self.script_textures.len();
-                self.script_textures.push((width, height));
+                let script_index = self.reserve_script_texture(width, height);
                 self.html_textures.push(HtmlTextureDef { script_index, width, height, path, lit });
             }
+            "navigatortexture" => self.parse_navigator_texture(r),
             "texttexture" => {
                 let variable = r.str().to_string();
                 let font = r.str().to_string();
@@ -1076,15 +1079,10 @@ impl Model {
                 }
             }
             "usehtmltexture" => {
-                let v = r.i32();
-                let index = usize::try_from(v)
-                    .ok()
-                    .and_then(|n| self.html_textures.get(n))
-                    .map(|d| d.script_index as i32);
-                if let (Some(m), Some(i)) = (self.cur_matl(), index) {
-                    m.use_script_texture = Some(i);
-                }
+                let index = usize::try_from(r.i32()).ok().and_then(|n| self.html_textures.get(n)).map(|d| d.script_index);
+                self.bind_script_texture(index);
             }
+            "usenavigatortexture" => self.parse_use_navigator_texture(r),
             "usetexttexture" => {
                 let v = r.i32();
                 if let Some(m) = self.cur_matl() {

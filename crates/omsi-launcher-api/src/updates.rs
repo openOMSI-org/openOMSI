@@ -14,7 +14,7 @@ pub fn allowed() -> bool {
 }
 
 fn release_json(r: &Release) -> Value {
-    json!({ "version": r.version, "page": r.page, "size": r.size })
+    json!({ "version": r.version, "page": r.page, "size": r.size, "notes": r.notes })
 }
 
 pub fn status() -> Value {

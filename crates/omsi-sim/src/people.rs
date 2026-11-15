@@ -91,6 +91,8 @@ mod ticket_hook_tests;
 mod bad_driving_tests;
 #[cfg(test)]
 mod desk_ticket_tests;
+#[cfg(test)]
+mod destination_tests;
 
 use avatar::*;
 use cabin::*;

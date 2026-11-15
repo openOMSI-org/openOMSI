@@ -161,7 +161,7 @@ mod weather_tomorrow;
 use omsi_weather::{weather_cycle, weather_model};
 mod world_load;
 
-// the interface's translations (locales/app.yml; the English text is the key)
+// the interface's translations (locales/app.yml and app.<language>.yml; the English text is the key)
 rust_i18n::i18n!("locales");
 // (the tables are read when this crate compiles: this makes cargo compile it again when they
 // change - the macro alone left the old texts in the program)
@@ -634,7 +634,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     } else {
         crate::steam::Steam::start()
     };
-    let instance = graphics_instance();
+    let instance = game_graphics_instance(settings.mx_graphics);
     let vr_nav_profiles = crate::vr_navigator::Profiles::load(crate::vr_navigator::profiles_path().as_deref());
     let ui = ui::Ui::new();
     let rain = rain::Rain::new();
@@ -735,6 +735,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             list_dirty: false,
             graphics_before: None,
             page_titles: Default::default(),
+            online_weather: Default::default(),
             chooser: None,
             editor: None,
             vehicle_list: Vec::new(),
@@ -783,6 +784,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             menu_search: String::new(),
             swap_pending: false,
             swapped_in: None,
+            parked_transfer: None,
             pending_placement: None,
             menu_drag: None,
             menu_kbd: true,
@@ -891,7 +893,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             plugin_command: false,
             plugin_panels: Default::default(),
             discord: None,
-            discord_t: 0.0,
+            discord_t: 0.0, discord_max: Default::default(),
             #[cfg(steam)]
             steam,
             update_watch,

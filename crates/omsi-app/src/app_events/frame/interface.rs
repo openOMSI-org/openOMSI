@@ -265,6 +265,7 @@ impl App {
             if nav_hidden {
                 nav.enabled = false;
             }
+            nav.set_screen(p.and_then(|p| navigator::Screen::of_vehicle(&p.vehicle, &p.render)));
             if let Some(w) = self.world.as_ref() {
                 nav.start_map(w.clone());
             }
@@ -276,6 +277,9 @@ impl App {
                 }
             }
             let (line, terminus, stops, trip) = navigator::duty_parts(self.session.duty.as_ref());
+            if nav.screen_wants_history() {
+                nav.set_completed_stops(self.session.duty.as_ref());
+            }
             match (trip, self.session.schedule.as_ref(), self.session.traffic.as_ref(), self.world.as_ref()) {
                 (Some((key, name)), Some(sch), _, _) if nav.map_net().is_some() => {
                     if nav.wants_route(&key, 0) {
@@ -441,7 +445,8 @@ impl App {
             let scale = self.window.as_ref().map(|w| w.scale_factor() as f32).unwrap_or(1.0);
             let (w, h) = (hud[2], hud[3]);
             self.net.remotes.chat.disabled = !self.settings.chat;
-            let chat = (self.net.lan.is_some() && self.settings.chat).then(|| ui::ChatView {
+            // The pause menu owns this area; a hovered chat field must not show through it.
+            let chat = (self.net.lan.is_some() && self.settings.chat && !shell_menu).then(|| ui::ChatView {
                 lines: &self.net.remotes.chat.lines,
                 typing: self.net.remotes.chat.typing.as_deref(),
                 error: self.net.remotes.chat.error(),
@@ -563,6 +568,7 @@ impl App {
                 // once they stood on the timetable's line)
                 notes: if !map_open && self.menus.game_menu.is_none() { notes } else { &[] },
                 fps: self.settings.show_fps.then_some(self.perf.fps),
+                fps_generated: self.perf.generated.1,
                 perf: self.settings.perf_overlay_on().then_some(&self.perf.overlay),
                 perf_detailed: self.settings.perf_overlay == "detailed",
                 perf_touch: self.input.touch.enabled.then(|| self.input.touch.top_gap.map(|g| g[2])),

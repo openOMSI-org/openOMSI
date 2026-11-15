@@ -21,7 +21,10 @@ impl Target {
     /// `<id>#<conn>`, as the game's Administration menu sends it.
     pub fn parse_tag(s: &str) -> Option<Target> {
         let (id, conn) = s.trim().split_once('#')?;
-        Some(Target { id: id.parse().ok()?, conn: conn.parse().ok()? })
+        Some(Target {
+            id: id.parse().ok()?,
+            conn: conn.parse().ok()?,
+        })
     }
 
     pub fn tag(&self) -> String {
@@ -78,19 +81,33 @@ pub enum TrafficOp {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     /// The player sent away, with what they read.
-    Kick { target: Target, reason: Option<String> },
+    Kick {
+        target: Target,
+        reason: Option<String>,
+    },
     /// Sent away and kept out for the rest of this server run (by the game's nonce and the
     /// address it came from: no identity that outlives the run, see SERVER.md).
-    Ban { target: Target, reason: Option<String> },
+    Ban {
+        target: Target,
+        reason: Option<String>,
+    },
     /// The player's machine kept out of this session or of all the owner's sessions, for
     /// `hours` (None: until lifted); the player is sent away at once.
-    HwBan { target: Target, reason: Option<String>, scope: BanScope, hours: Option<u32> },
+    HwBan {
+        target: Target,
+        reason: Option<String>,
+        scope: BanScope,
+        hours: Option<u32>,
+    },
     /// A hardware ban lifted (its id from the bans' list).
     Unban(String),
     /// A chat line to everybody.
     Say(String),
     /// A word for one player only.
-    Tell { target: Target, text: String },
+    Tell {
+        target: Target,
+        text: String,
+    },
     /// The clock set to this time of day (s, 0 .. 86400).
     Clock(f64),
     /// The clock moved (s, at most a day either way).
@@ -115,7 +132,12 @@ pub const PASSENGER_DENSITY_MAX: f32 = 3.0;
 /// `PASSENGER_DENSITY_MAX`. Anything else is refused with the reason, never bent into range:
 /// a typo should not quietly fill the map or empty it.
 pub fn passenger_density(text: &str) -> Result<f32, String> {
-    let v = text.trim().parse::<f32>().map_err(|_| format!("'{}' is not a number", text.trim().chars().take(20).collect::<String>()))?;
+    let v = text.trim().parse::<f32>().map_err(|_| {
+        format!(
+            "'{}' is not a number",
+            text.trim().chars().take(20).collect::<String>()
+        )
+    })?;
     density_ok(v)
 }
 
@@ -135,14 +157,28 @@ fn density_ok(v: f32) -> Result<f32, String> {
 /// A weather file an admin may choose: a `Weather/….owt` path, nothing above it.
 pub fn weather_file_ok(file: &str) -> bool {
     let f = file.replace('\\', "/").to_ascii_lowercase();
-    f.starts_with("weather/") && f.ends_with(".owt") && !f.contains("..") && f.matches('/').count() == 1
+    f.starts_with("weather/")
+        && f.ends_with(".owt")
+        && !f.contains("..")
+        && f.matches('/').count() == 1
 }
 
 /// A text as an operation keeps it: no control characters (a line break is no second
 /// command, a tab no column), runs of spaces as one, at most `max` characters.
 pub fn clean(text: &str, max: usize) -> String {
-    let spaced: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
-    spaced.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(max).collect::<String>().trim_end().to_string()
+    let spaced: String = text
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    spaced
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(max)
+        .collect::<String>()
+        .trim_end()
+        .to_string()
 }
 
 impl Op {
@@ -150,9 +186,20 @@ impl Op {
     pub fn perm(&self) -> Perm {
         match self {
             // (the owner's list is the owner's: an admin's; a moderator bans for the session)
-            Op::HwBan { scope: BanScope::Owner, .. } | Op::Unban(_) => Perm::World,
-            Op::Kick { .. } | Op::Ban { .. } | Op::HwBan { .. } | Op::Say(_) | Op::Tell { .. } => Perm::Moderate,
-            Op::Clock(_) | Op::Shift(_) | Op::Speed(_) | Op::Weather(_) | Op::Traffic(_) | Op::PassengerDensity(_) => Perm::World,
+            Op::HwBan {
+                scope: BanScope::Owner,
+                ..
+            }
+            | Op::Unban(_) => Perm::World,
+            Op::Kick { .. } | Op::Ban { .. } | Op::HwBan { .. } | Op::Say(_) | Op::Tell { .. } => {
+                Perm::Moderate
+            }
+            Op::Clock(_)
+            | Op::Shift(_)
+            | Op::Speed(_)
+            | Op::Weather(_)
+            | Op::Traffic(_)
+            | Op::PassengerDensity(_) => Perm::World,
         }
     }
 
@@ -176,7 +223,10 @@ impl Op {
 
     pub fn target(&self) -> Option<Target> {
         match self {
-            Op::Kick { target, .. } | Op::Ban { target, .. } | Op::HwBan { target, .. } | Op::Tell { target, .. } => Some(*target),
+            Op::Kick { target, .. }
+            | Op::Ban { target, .. }
+            | Op::HwBan { target, .. }
+            | Op::Tell { target, .. } => Some(*target),
             _ => None,
         }
     }
@@ -186,12 +236,33 @@ impl Op {
         let why = |r: &Option<String>| r.as_deref().map(|r| format!(": {r}")).unwrap_or_default();
         match self {
             Op::Kick { target, reason } => format!("send away player {}{}", target.id, why(reason)),
-            Op::Ban { target, reason } => format!("send away player {} for this run{}", target.id, why(reason)),
-            Op::HwBan { target, reason, scope, hours } => format!("ban player {}'s machine ({}{}){}", target.id, if *scope == BanScope::Owner { "all sessions" } else { "this session" }, hours.map(|h| format!(", {h} h")).unwrap_or_default(), why(reason)),
+            Op::Ban { target, reason } => {
+                format!("send away player {} for this run{}", target.id, why(reason))
+            }
+            Op::HwBan {
+                target,
+                reason,
+                scope,
+                hours,
+            } => format!(
+                "ban player {}'s machine ({}{}){}",
+                target.id,
+                if *scope == BanScope::Owner {
+                    "all sessions"
+                } else {
+                    "this session"
+                },
+                hours.map(|h| format!(", {h} h")).unwrap_or_default(),
+                why(reason)
+            ),
             Op::Unban(id) => format!("lift ban {id}"),
             Op::Say(t) => format!("say: {t}"),
             Op::Tell { target, text } => format!("tell player {}: {text}", target.id),
-            Op::Clock(s) => format!("clock {:02}:{:02}", (*s as i64) / 3600, (*s as i64) / 60 % 60),
+            Op::Clock(s) => format!(
+                "clock {:02}:{:02}",
+                (*s as i64) / 3600,
+                (*s as i64) / 60 % 60
+            ),
             Op::Shift(s) => format!("clock {:+.0} min", s / 60.0),
             Op::Speed(f) => format!("time speed x{f}"),
             Op::Weather(WeatherOp::Next) => "next weather".into(),
@@ -208,19 +279,38 @@ impl Op {
     pub fn from_json(v: &Value, traffic_max: usize) -> Result<Op, String> {
         let verb = v.get("op").and_then(Value::as_str).ok_or("no \"op\"")?;
         let num = |k: &str| -> Result<f64, String> {
-            let x = v.get(k).and_then(Value::as_f64).ok_or_else(|| format!("\"{k}\": a number is needed"))?;
+            let x = v
+                .get(k)
+                .and_then(Value::as_f64)
+                .ok_or_else(|| format!("\"{k}\": a number is needed"))?;
             if x.is_finite() {
                 Ok(x)
             } else {
                 Err(format!("\"{k}\": not a finite number"))
             }
         };
-        let text = |k: &str, max: usize| -> Option<String> { v.get(k).and_then(Value::as_str).map(|t| clean(t, max)).filter(|t| !t.is_empty()) };
+        let text = |k: &str, max: usize| -> Option<String> {
+            v.get(k)
+                .and_then(Value::as_str)
+                .map(|t| clean(t, max))
+                .filter(|t| !t.is_empty())
+        };
         let target = || -> Result<Target, String> {
-            let t = v.get("target").ok_or("\"target\": the player ({\"id\", \"conn\"}) is needed")?;
-            let id = t.get("id").and_then(Value::as_u64).filter(|id| *id <= u32::MAX as u64).ok_or("\"target.id\": a player number is needed")?;
-            let conn = t.get("conn").and_then(Value::as_u64).ok_or("\"target.conn\": the player's connection is needed (from the players' list)")?;
-            Ok(Target { id: id as u32, conn })
+            let t = v
+                .get("target")
+                .ok_or("\"target\": the player ({\"id\", \"conn\"}) is needed")?;
+            let id = t
+                .get("id")
+                .and_then(Value::as_u64)
+                .filter(|id| *id <= u32::MAX as u64)
+                .ok_or("\"target.id\": a player number is needed")?;
+            let conn = t.get("conn").and_then(Value::as_u64).ok_or(
+                "\"target.conn\": the player's connection is needed (from the players' list)",
+            )?;
+            Ok(Target {
+                id: id as u32,
+                conn,
+            })
         };
         let in_range = |k: &str, lo: f64, hi: f64| -> Result<f64, String> {
             let x = num(k)?;
@@ -231,8 +321,14 @@ impl Op {
             }
         };
         Ok(match verb {
-            "kick" => Op::Kick { target: target()?, reason: text("reason", MAX_REASON) },
-            "ban" => Op::Ban { target: target()?, reason: text("reason", MAX_REASON) },
+            "kick" => Op::Kick {
+                target: target()?,
+                reason: text("reason", MAX_REASON),
+            },
+            "ban" => Op::Ban {
+                target: target()?,
+                reason: text("reason", MAX_REASON),
+            },
             "hwban" => {
                 let scope = match v.get("scope").and_then(Value::as_str) {
                     None => BanScope::Session,
@@ -240,13 +336,34 @@ impl Op {
                 };
                 let hours = match v.get("hours") {
                     None | Some(Value::Null) => None,
-                    Some(h) => Some(h.as_u64().filter(|h| (1..=MAX_BAN_HOURS as u64).contains(h)).ok_or_else(|| format!("\"hours\": from 1 to {MAX_BAN_HOURS}"))? as u32),
+                    Some(h) => Some(
+                        h.as_u64()
+                            .filter(|h| (1..=MAX_BAN_HOURS as u64).contains(h))
+                            .ok_or_else(|| format!("\"hours\": from 1 to {MAX_BAN_HOURS}"))?
+                            as u32,
+                    ),
                 };
-                Op::HwBan { target: target()?, reason: text("reason", MAX_REASON), scope, hours }
+                Op::HwBan {
+                    target: target()?,
+                    reason: text("reason", MAX_REASON),
+                    scope,
+                    hours,
+                }
             }
-            "unban" => Op::Unban(v.get("id").and_then(Value::as_str).map(|i| i.trim().to_string()).filter(|i| !i.is_empty() && i.len() <= 16 && i.bytes().all(|b| b.is_ascii_hexdigit())).ok_or("\"id\": the ban's id (from the bans' list)")?),
+            "unban" => Op::Unban(
+                v.get("id")
+                    .and_then(Value::as_str)
+                    .map(|i| i.trim().to_string())
+                    .filter(|i| {
+                        !i.is_empty() && i.len() <= 16 && i.bytes().all(|b| b.is_ascii_hexdigit())
+                    })
+                    .ok_or("\"id\": the ban's id (from the bans' list)")?,
+            ),
             "say" => Op::Say(text("text", MAX_TEXT).ok_or("\"text\": nothing to say")?),
-            "tell" => Op::Tell { target: target()?, text: text("text", MAX_TEXT).ok_or("\"text\": nothing to say")? },
+            "tell" => Op::Tell {
+                target: target()?,
+                text: text("text", MAX_TEXT).ok_or("\"text\": nothing to say")?,
+            },
             "clock" => {
                 let s = in_range("seconds", 0.0, 86_400.0)?;
                 Op::Clock(s % 86_400.0)
@@ -256,7 +373,9 @@ impl Op {
             "weather" => match v.get("file").and_then(Value::as_str) {
                 Some(f) if weather_file_ok(f) => Op::Weather(WeatherOp::Set(f.replace('\\', "/"))),
                 Some(_) => return Err("\"file\": a Weather/….owt file".into()),
-                None if v.get("next").and_then(Value::as_bool) == Some(true) => Op::Weather(WeatherOp::Next),
+                None if v.get("next").and_then(Value::as_bool) == Some(true) => {
+                    Op::Weather(WeatherOp::Next)
+                }
                 None => return Err("\"file\" or \"next\": true is needed".into()),
             },
             "traffic" => {
@@ -270,7 +389,9 @@ impl Op {
                     Op::Traffic(TrafficOp::Density(n as usize))
                 }
             }
-            "passenger_density" => Op::PassengerDensity(density_ok(num("value")? as f32).map_err(|e| format!("\"value\": {e}"))?),
+            "passenger_density" => Op::PassengerDensity(
+                density_ok(num("value")? as f32).map_err(|e| format!("\"value\": {e}"))?,
+            ),
             other => return Err(format!("unknown operation '{}'", clean(other, 32))),
         })
     }
@@ -287,7 +408,9 @@ mod tests {
         assert_eq!(passenger_density(" 0.5 "), Ok(0.5));
         assert_eq!(passenger_density("0"), Ok(0.0));
         assert_eq!(passenger_density("3"), Ok(PASSENGER_DENSITY_MAX));
-        for bad in ["", "abc", "-0.1", "3.01", "50", "NaN", "inf", "-inf", "1e40", "1;say hi"] {
+        for bad in [
+            "", "abc", "-0.1", "3.01", "50", "NaN", "inf", "-inf", "1e40", "1;say hi",
+        ] {
             assert!(passenger_density(bad).is_err(), "{bad}");
         }
     }
@@ -308,7 +431,10 @@ mod tests {
     fn a_text_is_one_clean_value() {
         assert_eq!(clean("spam\nkick 3\r\n", 120), "spam kick 3");
         assert_eq!(clean("  a \t b  ", 120), "a b");
-        assert_eq!(clean("<script>alert(1)</script>", 120), "<script>alert(1)</script>");
+        assert_eq!(
+            clean("<script>alert(1)</script>", 120),
+            "<script>alert(1)</script>"
+        );
         assert_eq!(clean(&"x".repeat(500), 120).len(), 120);
         assert_eq!(clean("\u{7}\u{1b}[31m", 120), "[31m");
     }
@@ -326,17 +452,56 @@ mod tests {
     fn a_request_reads_as_its_operation() {
         let t = Target { id: 3, conn: 17 };
         let op = |v: Value| Op::from_json(&v, 120);
-        assert_eq!(op(json!({"op": "kick", "target": {"id": 3, "conn": 17}, "reason": " spam\nkick 4 "})), Ok(Op::Kick { target: t, reason: Some("spam kick 4".into()) }));
-        assert_eq!(op(json!({"op": "kick", "target": {"id": 3, "conn": 17}})), Ok(Op::Kick { target: t, reason: None }));
-        assert_eq!(op(json!({"op": "ban", "target": {"id": 3, "conn": 17}, "reason": ""})), Ok(Op::Ban { target: t, reason: None }));
-        assert_eq!(op(json!({"op": "say", "text": "hello"})), Ok(Op::Say("hello".into())));
-        assert_eq!(op(json!({"op": "clock", "seconds": 30600})), Ok(Op::Clock(30600.0)));
+        assert_eq!(
+            op(json!({"op": "kick", "target": {"id": 3, "conn": 17}, "reason": " spam\nkick 4 "})),
+            Ok(Op::Kick {
+                target: t,
+                reason: Some("spam kick 4".into())
+            })
+        );
+        assert_eq!(
+            op(json!({"op": "kick", "target": {"id": 3, "conn": 17}})),
+            Ok(Op::Kick {
+                target: t,
+                reason: None
+            })
+        );
+        assert_eq!(
+            op(json!({"op": "ban", "target": {"id": 3, "conn": 17}, "reason": ""})),
+            Ok(Op::Ban {
+                target: t,
+                reason: None
+            })
+        );
+        assert_eq!(
+            op(json!({"op": "say", "text": "hello"})),
+            Ok(Op::Say("hello".into()))
+        );
+        assert_eq!(
+            op(json!({"op": "clock", "seconds": 30600})),
+            Ok(Op::Clock(30600.0))
+        );
         assert_eq!(op(json!({"op": "speed", "factor": 2})), Ok(Op::Speed(2.0)));
-        assert_eq!(op(json!({"op": "weather", "file": "Weather/#CAVOK.owt"})), Ok(Op::Weather(WeatherOp::Set("Weather/#CAVOK.owt".into()))));
-        assert_eq!(op(json!({"op": "weather", "next": true})), Ok(Op::Weather(WeatherOp::Next)));
-        assert_eq!(op(json!({"op": "traffic", "density": 40})), Ok(Op::Traffic(TrafficOp::Density(40))));
-        assert_eq!(op(json!({"op": "traffic", "clear": true})), Ok(Op::Traffic(TrafficOp::Clear)));
-        assert_eq!(op(json!({"op": "passenger_density", "value": 1.5})), Ok(Op::PassengerDensity(1.5)));
+        assert_eq!(
+            op(json!({"op": "weather", "file": "Weather/#CAVOK.owt"})),
+            Ok(Op::Weather(WeatherOp::Set("Weather/#CAVOK.owt".into())))
+        );
+        assert_eq!(
+            op(json!({"op": "weather", "next": true})),
+            Ok(Op::Weather(WeatherOp::Next))
+        );
+        assert_eq!(
+            op(json!({"op": "traffic", "density": 40})),
+            Ok(Op::Traffic(TrafficOp::Density(40)))
+        );
+        assert_eq!(
+            op(json!({"op": "traffic", "clear": true})),
+            Ok(Op::Traffic(TrafficOp::Clear))
+        );
+        assert_eq!(
+            op(json!({"op": "passenger_density", "value": 1.5})),
+            Ok(Op::PassengerDensity(1.5))
+        );
         // what is refused, with the reason
         for bad in [
             json!({"op": "kick", "target": {"id": 3}}),
@@ -366,14 +531,40 @@ mod tests {
         let t = Target { id: 3, conn: 17 };
         let op = |v: Value| Op::from_json(&v, 120);
         let ban = op(json!({"op": "hwban", "target": {"id": 3, "conn": 17}, "reason": "spam", "scope": "all", "hours": 24})).unwrap();
-        assert_eq!(ban, Op::HwBan { target: t, reason: Some("spam".into()), scope: BanScope::Owner, hours: Some(24) });
+        assert_eq!(
+            ban,
+            Op::HwBan {
+                target: t,
+                reason: Some("spam".into()),
+                scope: BanScope::Owner,
+                hours: Some(24)
+            }
+        );
         assert_eq!(ban.perm(), Perm::World);
         let mine = op(json!({"op": "hwban", "target": {"id": 3, "conn": 17}})).unwrap();
-        assert_eq!(mine, Op::HwBan { target: t, reason: None, scope: BanScope::Session, hours: None });
+        assert_eq!(
+            mine,
+            Op::HwBan {
+                target: t,
+                reason: None,
+                scope: BanScope::Session,
+                hours: None
+            }
+        );
         assert_eq!(mine.perm(), Perm::Moderate);
-        assert_eq!(op(json!({"op": "unban", "id": "0badf00d"})), Ok(Op::Unban("0badf00d".into())));
+        assert_eq!(
+            op(json!({"op": "unban", "id": "0badf00d"})),
+            Ok(Op::Unban("0badf00d".into()))
+        );
         assert_eq!(Op::Unban("0badf00d".into()).perm(), Perm::World);
-        for bad in [json!({"op": "unban"}), json!({"op": "unban", "id": "x y"}), json!({"op": "unban", "id": "; kick 3"}), json!({"op": "hwban", "target": {"id": 3, "conn": 1}, "scope": "world"}), json!({"op": "hwban", "target": {"id": 3, "conn": 1}, "hours": 0}), json!({"op": "hwban", "target": {"id": 3, "conn": 1}, "hours": 99999})] {
+        for bad in [
+            json!({"op": "unban"}),
+            json!({"op": "unban", "id": "x y"}),
+            json!({"op": "unban", "id": "; kick 3"}),
+            json!({"op": "hwban", "target": {"id": 3, "conn": 1}, "scope": "world"}),
+            json!({"op": "hwban", "target": {"id": 3, "conn": 1}, "hours": 0}),
+            json!({"op": "hwban", "target": {"id": 3, "conn": 1}, "hours": 99999}),
+        ] {
             assert!(op(bad.clone()).is_err(), "{bad}");
         }
     }
@@ -381,7 +572,14 @@ mod tests {
     #[test]
     fn each_operation_needs_its_permission() {
         let t = Target { id: 1, conn: 1 };
-        assert_eq!(Op::Kick { target: t, reason: None }.perm(), Perm::Moderate);
+        assert_eq!(
+            Op::Kick {
+                target: t,
+                reason: None
+            }
+            .perm(),
+            Perm::Moderate
+        );
         assert_eq!(Op::Say("x".into()).perm(), Perm::Moderate);
         assert_eq!(Op::PassengerDensity(1.0).perm(), Perm::World);
         assert_eq!(Op::Weather(WeatherOp::Next).perm(), Perm::World);

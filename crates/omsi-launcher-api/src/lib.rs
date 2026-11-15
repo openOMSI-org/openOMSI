@@ -213,6 +213,10 @@ fn delete_situation(map: String, file: String) -> Answer {
     Ok(json!(core::delete_situation(&map, Path::new(&file)).map_err(err)?))
 }
 
+fn rename_situation(map: String, file: String, name: String) -> Answer {
+    Ok(json!(core::rename_situation(&map, Path::new(&file), &name).map_err(err)?))
+}
+
 /// A season and its phase chosen: the date the game will have (none: by date), and the word
 /// the game's `--season` takes.
 fn season_date(season: String, phase: String, date: String, map: String, keep: bool) -> Answer {
@@ -380,6 +384,10 @@ fn mod_set_enabled(id: String, on: bool) -> Answer {
 
 fn mod_remove(id: String) -> Answer {
     Ok(json!(core::mod_remove(&id).map_err(err)?))
+}
+
+fn mod_remove_preview(id: String) -> Answer {
+    to_json(core::mod_remove_preview(&id).map_err(err)?)
 }
 
 /// What installing `path` would take (size, room, whether it can be used in place).
@@ -835,6 +843,7 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "default_hof" => default_hof(arg::<Value>(args, "map")?, arg::<Value>(args, "bus")?, arg::<String>(args, "date")?, arg::<Option<String>>(args, "line")?),
         "saved_situations" => saved_situations(arg::<String>(args, "map")?),
         "delete_situation" => delete_situation(arg::<String>(args, "map")?, arg::<String>(args, "file")?),
+        "rename_situation" => rename_situation(arg::<String>(args, "map")?, arg::<String>(args, "file")?, arg::<String>(args, "name")?),
         "season_date" => season_date(arg::<String>(args, "season")?, arg::<String>(args, "phase")?, arg::<String>(args, "date")?, arg::<String>(args, "map")?, arg::<bool>(args, "keep")?),
         "tutorials" => tutorials(),
         "ai_vehicles" => to_json(core::ai_lists::vehicles(arg::<Option<bool>>(args, "refresh")?.unwrap_or(false)).map_err(err)?),
@@ -843,10 +852,10 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "ai_lists_save" => core::ai_lists::save(&arg::<String>(args, "map")?, &arg::<String>(args, "date")?, &arg::<Vec<core::ai_lists::GroupJson>>(args, "groups")?, &arg::<Vec<core::ai_lists::RuleJson>>(args, "rules")?).map_err(err),
         "ai_lists_reset" => core::ai_lists::reset(&arg::<String>(args, "map")?).map(|_| json!({})).map_err(err),
         "addons" => addons::list(),
-        "timetable" => timetable::load(arg::<String>(args, "map")?),
-        "timetable_save" => timetable::save(arg::<String>(args, "map")?, arg::<Vec<timetable::LineEdit>>(args, "lines")?),
+        "timetable" => timetable::load(arg::<String>(args, "map")?, arg::<Option<String>>(args, "date")?),
+        "timetable_save" => timetable::save(arg::<String>(args, "map")?, arg::<Vec<timetable::LineEdit>>(args, "lines")?, arg::<Option<String>>(args, "date")?),
         "timetable_reset" => timetable::reset(arg::<String>(args, "map")?),
-        "timetable_trip_save" => timetable::save_trip(arg::<String>(args, "map")?, arg::<timetable::TripNew>(args, "trip")?),
+        "timetable_trip_save" => timetable::save_trip(arg::<String>(args, "map")?, arg::<timetable::TripNew>(args, "trip")?, arg::<Option<String>>(args, "date")?),
         "profiles" => profiles(),
         "profile" => profile(arg::<String>(args, "name")?),
         "profile_create" => profile_create(arg::<String>(args, "name")?, arg::<String>(args, "sex")?),
@@ -883,6 +892,7 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "share_map_hofs" => share_map_hofs(arg::<String>(args, "map")?),
         "mod_set_enabled" => mod_set_enabled(arg::<String>(args, "id")?, arg::<bool>(args, "on")?),
         "mod_remove" => mod_remove(arg::<String>(args, "id")?),
+        "mod_remove_preview" => mod_remove_preview(arg::<String>(args, "id")?),
         "mod_inspect" => mod_inspect(arg::<String>(args, "path")?),
         "mod_install" => mod_install(arg::<String>(args, "path")?, arg::<String>(args, "mode")?),
         "mod_cancel" => Ok(json!(core::install::cancel(arg::<u64>(args, "id")?))),

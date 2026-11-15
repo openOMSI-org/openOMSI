@@ -306,8 +306,7 @@ pub(super) fn scripted(cx: ScriptedCx, dt: f32, daylight: omsi_sim::Daylight) {
             &*cx.clock.clock,
         );
         cx.perf.profile.add(crate::profile_keys::ProfKey::ScriptedBoards, __tb.elapsed().as_secs_f64());
-        // the map's own route arrows, with OMSI 2's route arrows
-        w.show_help_arrows(r, scene, cx.common.settings.nav_arrows);
+        w.show_help_arrows(r, scene, cx.common.settings.nav_map_arrows);
         let mut times = omsi_scene::ScriptedTimes::default();
         // (OMSI_SIM_THREAD: what the scripts made during the last picture is shown now,
         // and their next step is made with this one's, see `sim_thread`)

@@ -488,6 +488,17 @@ impl TileSurface {
         self.covered(i).then(|| self.height(i))
     }
 
+    /// The raster height and the tile-local coordinates where it was measured.
+    pub fn sample_at_texel_center(&self, x: f32, y: f32) -> Option<(f32, f32, f32)> {
+        let i = self.texel(x, y);
+        self.covered(i).then(|| {
+            let cell = tile_size() as f32 / self.size as f32;
+            let x = ((i % self.size) as f32 + 0.5) * cell;
+            let y = ((i / self.size) as f32 + 0.5) * cell;
+            (x, y, self.height(i))
+        })
+    }
+
     /// Height of the drivable surface here, if any: what the wheels stand on.
     pub fn sample_road(&self, x: f32, y: f32) -> Option<f32> {
         let i = self.texel(x, y);

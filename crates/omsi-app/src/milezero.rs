@@ -175,7 +175,7 @@ impl Milezero {
 
     /// Every frame: starts and stops the poller and the stream with the setting and the
     /// play button, and moves between the streams as the connection allows.
-    pub fn update(&mut self, audio: &AudioEngine, enabled: bool, volume: f32) {
+    pub fn update(&mut self, audio: &AudioEngine, enabled: bool) {
         let dt = self.last.elapsed().as_secs_f32().min(0.5);
         self.last = Instant::now();
         if enabled && !self.polling {
@@ -193,7 +193,7 @@ impl Milezero {
             return;
         }
         if self.playing.is_none() {
-            self.start(audio, self.level, volume);
+            self.start(audio, self.level);
         }
         let Some(p) = self.playing.as_mut() else { return };
         audio.set_params(p.voice, VoiceParams { gain: 1.0, ..Default::default() });
@@ -215,10 +215,10 @@ impl Milezero {
         if p.bad > DOWN_AFTER && level + 1 < STREAMS.len() {
             self.up_after = (self.up_after * 2.0).min(600.0);
             self.level = level + 1;
-            self.restart(audio, volume);
+            self.restart(audio);
         } else if p.good > self.up_after && level > 0 {
             self.level = level - 1;
-            self.restart(audio, volume);
+            self.restart(audio);
         }
     }
 
@@ -234,15 +234,15 @@ impl Milezero {
         self.stop.store(true, Ordering::Relaxed);
     }
 
-    fn restart(&mut self, audio: &AudioEngine, volume: f32) {
+    fn restart(&mut self, audio: &AudioEngine) {
         if let Some(p) = self.playing.take() {
             p.buf.close();
             audio.stop(p.voice);
         }
-        self.start(audio, self.level, volume);
+        self.start(audio, self.level);
     }
 
-    fn start(&mut self, audio: &AudioEngine, level: usize, volume: f32) {
+    fn start(&mut self, audio: &AudioEngine, level: usize) {
         log::info!("milezero: stream {}", STREAMS[level].0);
         let buf = omsi_audio::radio::open(STREAMS[level].1);
         let voice = audio.play_stream(buf.clone(), VoiceParams { gain: 1.0, ..Default::default() });

@@ -244,9 +244,9 @@ impl Renderer {
             self.options.msaa,
             self.adapter_name
         );
-        if let Some(c) = CEILING.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            c.msaa = 1;
-        }
+        update_ceiling(|ceiling| {
+            if let Some(c) = ceiling.as_mut() { c.msaa = 1; }
+        });
         let options = RenderOptions {
             msaa: 1,
             ..self.options
@@ -277,6 +277,11 @@ impl Renderer {
     fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
         // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
         // without one in the new options it is dropped here, with its context and textures)
+        // (frame generation reads the depth, the motion and the pictures before the HUD at the
+        // window's present, after wgpu is done with them: its work is waited for before they go)
+        if let Some(g) = &self.frame_generation {
+            g.wait();
+        }
         let upscaler = self.temporal_runtime().or_else(|| self.temporal_kept.take()).filter(|_| options.temporal.is_some());
         // Release render targets before building their replacements. Keeping the old
         // targets alive while the new renderer is built can turn a recoverable OOM into
@@ -290,8 +295,8 @@ impl Renderer {
         self.targets.triple_targets = None;
         self.targets.glass_picture = None;
         self.targets.target_use.clear();
-        let mesh_pages = self.mesh_pages;
-        *self = Renderer { mesh_pages, temporal_kept: upscaler, ..self.rebuilt(options) };
+        let (mesh_pages, frame_generation) = (self.mesh_pages, self.frame_generation.take());
+        *self = Renderer { mesh_pages, temporal_kept: upscaler, frame_generation, ..self.rebuilt(options) };
         scene.dirty = true;
         scene.model_buf = None;
         scene.params_buf = None;
@@ -694,7 +699,10 @@ impl Renderer {
         second_eye: bool,
     ) {
         // the frame's switches from the environment, each read once
-        let env = FrameEnv::read();
+        let mut env = FrameEnv::read();
+        // (wgpu 29 cannot finish a render bundle on a custom backend, and mX Graphics is one:
+        // there the main pass is recorded directly)
+        env.no_bundles |= wgpu_mx::custom::is_mx(&self.device);
         if !self.frame_hooks(scene, &env, with_overlays) {
             return;
         }

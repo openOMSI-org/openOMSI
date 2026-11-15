@@ -44,7 +44,7 @@ pub(crate) fn load(args: &crate::Args, world: &omsi_scene::World, splines: bool)
 }
 
 fn read(args: &crate::Args, world: &omsi_scene::World, splines: bool) -> Option<Arc<WireNet>> {
-    let (net, path) = match candidates(args).into_iter().find(|p| p.is_file()) {
+    let (mut net, path) = match candidates(args).into_iter().find(|p| p.is_file()) {
         Some(path) => {
             let bytes = std::fs::read(&path).map_err(|e| log::warn!("{}: {e}", path.display())).ok()?;
             let mut net = WireNet::parse(&omsi_cfg::decode_text(&bytes));
@@ -61,6 +61,9 @@ fn read(args: &crate::Args, world: &omsi_scene::World, splines: bool) -> Option<
     if net.is_empty() {
         log::warn!("{}: no overhead wire in it", path.display());
         return None;
+    }
+    if !args.online() {
+        net.draw_random_switches();
     }
     if let Some(dead) = omsi_cfg::flags::OMSI_TROLLEY_DEAD.var() {
         for id in dead.split(',').filter_map(|s| s.trim().parse::<i32>().ok()) {

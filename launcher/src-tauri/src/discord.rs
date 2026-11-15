@@ -28,7 +28,8 @@ fn keep(discord: &mut Option<Discord>, next_try: &mut Instant) {
     let game_running = games.iter().any(|g| g.running);
     // (a game just started that has not told the registry it runs yet)
     let launching = games.iter().any(|g| !g.running && g.stopping.is_none() && now.saturating_sub(g.started) < 15);
-    let presence = Presence::for_launcher(enabled, launching, game_running);
+    let buttons = settings.get("discord_buttons").and_then(|v| v.as_bool()).unwrap_or(true);
+    let presence = Presence::for_launcher(enabled, launching, game_running, buttons);
     if presence.is_none() {
         if let Some(d) = discord.as_ref() {
             d.stop();

@@ -16,6 +16,14 @@ pub(crate) fn preview_weather() {
     omsi_sim::host::set_ambient_weather(PREVIEW_TEMPERATURE, PREVIEW_ABS_HUMIDITY);
 }
 
+/// Studio weather belongs to this host, not the ambient weather of a running game.
+pub(crate) fn preview_host(clock: omsi_sim::SimClock) -> omsi_sim::VehicleHost {
+    let mut host = omsi_sim::VehicleHost::new(clock);
+    host.temperature = PREVIEW_TEMPERATURE;
+    host.abs_humidity = PREVIEW_ABS_HUMIDITY;
+    host
+}
+
 /// `--export-glb`: the vehicle alone, no map, written as glTF.
 pub(crate) fn run_export(args: &Args, out: &PathBuf) -> Result<()> {
     let bus = args

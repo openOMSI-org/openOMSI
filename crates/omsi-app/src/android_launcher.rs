@@ -17,12 +17,22 @@ use std::time::Duration;
 /// class by name: the system's class loader does not know them).
 static BRIDGE: OnceLock<GlobalRef> = OnceLock::new();
 
+static SERVICE: OnceLock<super::launcher::InProcess> = OnceLock::new();
+
 fn service() -> &'static super::launcher::InProcess {
-    static S: OnceLock<super::launcher::InProcess> = OnceLock::new();
-    S.get_or_init(|| {
+    SERVICE.get_or_init(|| {
         super::launcher::install();
         super::launcher::InProcess::start()
     })
+}
+
+/// Wakes before the page is told the session ended, so its next `frame` finds the preview awake.
+pub(crate) fn preview_rests(rests: bool) {
+    let Some(service) = SERVICE.get() else { return };
+    let cmd = if rests { "rest" } else { "wake" };
+    if let Err(e) = service.ask(serde_json::json!({ "cmd": cmd }), Duration::from_secs(10)) {
+        log::warn!("bus preview: {cmd}: {e}");
+    }
 }
 
 /// Call a static `void name(String...)` of `LauncherBridge` from any thread.

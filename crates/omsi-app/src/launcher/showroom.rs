@@ -21,6 +21,8 @@ pub struct Look {
     pub map: String,
     pub bus: String,
     pub paint: String,
+    /// An exact scheme chosen from the driven vehicle, before any name lookup.
+    pub paint_index: Option<usize>,
     pub weather: String,
     /// Minutes of the day, and the date.
     pub time: i32,
@@ -107,6 +109,7 @@ impl Shown {
 
 pub struct Showroom {
     shown: Option<Shown>,
+    loaders: Vec<std::thread::JoinHandle<()>>,
     wanted: Option<Look>,
     /// The last look that could not be shown (not read again until something changes).
     failed: Option<Look>,
@@ -140,6 +143,8 @@ pub struct Showroom {
     pub drawn: u64,
     fresh_light: bool,
 }
+
+const REST_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Names the bus whose preview is being read and placed, until it is in the picture.
 fn placing_mark() -> PathBuf {
@@ -199,9 +204,58 @@ impl Drop for Showroom {
 }
 
 impl Showroom {
+    /// Join loaders before the in-game worker releases its renderer.
+    /// Launcher shutdown uses nonblocking `Drop` instead.
+    pub fn close(mut self) {
+        // Disconnect before joining: a loader may be waiting for GPU prefetch.
+        self.opening = None;
+        self.loading = None;
+        for loader in self.loaders.drain(..) {
+            if loader.join().is_err() {
+                log::warn!("showroom: loader panicked during shutdown");
+            }
+        }
+        let owners = self.shown.as_ref().and_then(|shown| shown.world.as_ref())
+            .map(|world| (Arc::downgrade(world), Arc::downgrade(&world.textures)));
+        self.shown = None;
+        self.target = None;
+        if let Some((world, textures)) = owners {
+            log::debug!("showroom: closed; remaining world owners={}, texture-cache owners={}",
+                world.strong_count(), textures.strong_count());
+        }
+    }
+
+    /// Keeps what is wanted for the next `update`. A loader stuck on slow storage must not hold the service's thread.
+    pub fn rest(&mut self) {
+        self.forget();
+        let until = std::time::Instant::now() + REST_WAIT;
+        while self.loaders.iter().any(|l| !l.is_finished()) && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let (done, running): (Vec<_>, Vec<_>) = self.loaders.drain(..).partition(|l| l.is_finished());
+        for loader in done {
+            if loader.join().is_err() {
+                log::warn!("showroom: loader panicked while the preview went to rest");
+            }
+        }
+        self.loaders = running;
+        if self.loaders.is_empty() {
+            clear_placing_mark();
+        } else {
+            log::warn!("showroom: {} loader(s) still reading a bus as the game starts", self.loaders.len());
+        }
+    }
+
+    /// The game started and ended beside any loader left reading: its bus took nothing down.
+    pub fn wake(&mut self) {
+        self.loaders.retain(|loader| !loader.is_finished());
+        clear_placing_mark();
+    }
+
     pub fn new() -> Showroom {
         Showroom {
             shown: None,
+            loaders: Vec::new(),
             wanted: None,
             failed: None,
             loading: None,
@@ -340,7 +394,7 @@ impl Showroom {
             let loading = self.loading.as_ref().map(|l| &l.0);
             if shown != Some(&w) && loading != Some(&w) && self.loading.is_none() && self.failed.as_ref() != Some(&w) {
                 // only the time or weather changed: the preview does not show them
-                let same_bus = shown.map(|s| s.bus == w.bus && s.paint == w.paint && s.map == w.map && s.root == w.root).unwrap_or(false);
+                let same_bus = shown.map(|s| s.bus == w.bus && s.paint == w.paint && s.paint_index == w.paint_index && s.map == w.map && s.root == w.root).unwrap_or(false);
                 if same_bus {
                     if let Some(s) = self.shown.as_mut() {
                         s.look = w.clone();
@@ -386,7 +440,7 @@ impl Showroom {
         let (world_tx, world_rx) = channel();
         let (prefetch_tx, prefetch_rx) = channel::<scene::VehiclePrefetch>();
         let l2 = look.clone();
-        std::thread::spawn(move || {
+        let loader = std::thread::spawn(move || {
             let r = (|| -> Result<Ready> {
                 let t0 = std::time::Instant::now();
                 let world = Arc::new(scene::World::open(&root, &map_cfg, date)?);
@@ -400,14 +454,16 @@ impl Showroom {
                 }
                 let path = player_bus_path(&root, &l2.bus)?;
                 let vt = Arc::new(omsi_sim::VehicleType::load(&root, &path)?);
-                let scheme = paint_scheme(&vt, Some(l2.paint.as_str()).filter(|p| !p.is_empty()));
-                // (on a mild day, not at the 0 °C of no weather: see `preview_weather`)
-                crate::services::preview_weather();
+                let scheme = match l2.paint_index {
+                    Some(index) if index < vt.paint_schemes.len() => Some(index),
+                    Some(index) => return Err(anyhow!("preview paint scheme {index} no longer exists")),
+                    None => paint_scheme(&vt, Some(l2.paint.as_str()).filter(|p| !p.is_empty())),
+                };
                 // (the scheme on the host, as the game and `--export-glb` give it: its
                 // [setvar]s are set again after the scripts every frame, which a script that
                 // writes them itself would overwrite - the Kajosoft Jelcz's glazed doors
                 // showed white in the preview, as they did in the game before #3183)
-                let mut host = omsi_sim::VehicleHost::new(start_clock(&args));
+                let mut host = crate::services::preview_host(start_clock(&args));
                 host.paint_scheme = Some(scheme);
                 let mut vehicle = omsi_sim::VehicleInstance::new(vt.clone(), host);
                 vehicle.apply_paint_vars(scheme);
@@ -423,6 +479,8 @@ impl Showroom {
             })();
             let _ = tx.send(r.map_err(|e| format!("{e:#}")));
         });
+        self.loaders.retain(|loader| !loader.is_finished());
+        self.loaders.push(loader);
         self.opening = Some((world_rx, prefetch_tx));
         self.loading = Some((look, rx));
     }
@@ -599,6 +657,10 @@ impl Showroom {
 
     pub fn renderer_changed(&mut self) {
         let _ = std::fs::remove_file(placing_mark());
+        self.forget();
+    }
+
+    fn forget(&mut self) {
         self.shown = None;
         self.target = None;
         self.loading = None;
@@ -654,6 +716,85 @@ impl Quality {
 mod tests {
     use super::*;
     use std::mem::ManuallyDrop;
+
+    #[test]
+    fn showroom_drop_does_not_wait_for_a_stalled_loader() {
+        let mut showroom = Showroom::new();
+        let (release, stalled) = channel();
+        let (exited, finished) = channel();
+        showroom.loaders.push(std::thread::spawn(move || {
+            let _ = stalled.recv();
+            exited.send(()).unwrap();
+        }));
+        let (dropped, done) = channel();
+        let dropper = std::thread::spawn(move || {
+            drop(showroom);
+            dropped.send(()).unwrap();
+        });
+        let returned = done.recv_timeout(std::time::Duration::from_secs(2));
+        release.send(()).unwrap();
+        dropper.join().unwrap();
+        finished.recv_timeout(std::time::Duration::from_secs(2)).unwrap();
+        assert!(returned.is_ok(), "launcher drop must not wait for asset loading");
+    }
+
+    #[test]
+    fn showroom_close_joins_a_loader_waiting_for_prefetch() {
+        let mut showroom = Showroom::new();
+        let (world_tx, world_rx) = channel();
+        let (prefetch_tx, prefetch_rx) = channel::<scene::VehiclePrefetch>();
+        showroom.opening = Some((world_rx, prefetch_tx));
+        let owner = Arc::new(());
+        let weak = Arc::downgrade(&owner);
+        showroom.loaders.push(std::thread::spawn(move || {
+            let _worlds = world_tx;
+            let _owner = owner;
+            assert!(prefetch_rx.recv().is_err());
+        }));
+        showroom.close();
+        assert!(weak.upgrade().is_none(), "the loader must exit before explicit close returns");
+    }
+
+    #[test]
+    fn showroom_at_rest_holds_no_loader_and_still_knows_what_is_wanted() {
+        let mut showroom = Showroom::new();
+        let look = Look { bus: "Vehicles/a/a.bus".into(), ..Default::default() };
+        showroom.want(look.clone());
+        let (world_tx, world_rx) = channel();
+        let (prefetch_tx, prefetch_rx) = channel::<scene::VehiclePrefetch>();
+        showroom.opening = Some((world_rx, prefetch_tx));
+        let owner = Arc::new(());
+        let weak = Arc::downgrade(&owner);
+        showroom.loaders.push(std::thread::spawn(move || {
+            let _worlds = world_tx;
+            let _owner = owner;
+            assert!(prefetch_rx.recv().is_err());
+        }));
+        showroom.rest();
+        assert!(weak.upgrade().is_none(), "the loader must exit before the rest returns");
+        assert!(showroom.loaders.is_empty() && !showroom.has_picture());
+        assert_eq!(showroom.wanted, Some(look));
+    }
+
+    #[test]
+    fn a_loader_stuck_reading_does_not_hold_the_rest_and_goes_at_the_wake() {
+        let mut showroom = Showroom::new();
+        let (release, stuck) = channel::<()>();
+        showroom.loaders.push(std::thread::spawn(move || {
+            let _ = stuck.recv();
+        }));
+        let t0 = std::time::Instant::now();
+        showroom.rest();
+        assert!(t0.elapsed() < REST_WAIT + std::time::Duration::from_secs(1));
+        assert_eq!(showroom.loaders.len(), 1);
+        drop(release);
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while !showroom.loaders[0].is_finished() && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        showroom.wake();
+        assert!(showroom.loaders.is_empty());
+    }
 
     #[test]
     fn the_cove_rises_from_the_floor_to_its_wall() {

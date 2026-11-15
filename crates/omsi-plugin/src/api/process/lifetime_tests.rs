@@ -1,7 +1,8 @@
 use super::Processes;
+#[cfg(any(windows, target_os = "linux"))]
+use std::process::Command;
 use std::{
     path::Path,
-    process::Command,
     time::{Duration, Instant},
 };
 

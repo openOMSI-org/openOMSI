@@ -35,6 +35,7 @@ impl App {
             if let Some(n) = self.menus.navigator.as_mut() {
                 n.remote = false;
                 n.forget_remote_area();
+                n.want_remote_picture(None);
             }
         }
         match wanted {
@@ -141,6 +142,10 @@ impl App {
         let watched = server.clients() > 0;
         if let Some(n) = self.menus.navigator.as_mut() {
             n.remote = watched;
+            n.want_remote_picture(server.map_wanted().filter(|_| watched));
+            if let Some(p) = n.take_remote_picture() {
+                server.set_map_picture(p.width, p.height, p.row, p.bgra, p.data);
+            }
         }
         if !watched {
             return;

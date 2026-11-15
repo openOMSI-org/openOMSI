@@ -394,8 +394,9 @@ const KINDS = {
   map: {
     name: "Map",
     size: [8, 5],
-    make() {
+    make(w) {
       const v = R.el("div", "mapview");
+      v.dataset.look = w.look === "game" ? "game" : "simple";
       v.innerHTML = '<canvas></canvas><div class="turn" hidden><div class="ic"></div><div><div class="dist"></div><div class="street"></div></div></div><div class="here" hidden></div><div class="spd"><span class="v">0</span><span class="u">km/h</span><span class="lim" hidden></span></div><div class="stopbar" hidden><span class="pin"></span><span class="name"></span><span class="dist"></span><span class="time"></span></div><div class="zoom"><button class="in">+</button><button class="out">−</button></div><div class="nomap"></div>';
       v.querySelector(".zoom .in").setAttribute("aria-label", R.T("Zoom in"));
       v.querySelector(".zoom .out").setAttribute("aria-label", R.T("Zoom out"));

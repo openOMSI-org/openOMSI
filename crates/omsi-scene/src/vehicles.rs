@@ -57,6 +57,7 @@ impl World {
         VehiclePrefetch {
             root: self.root.clone(),
             textures: self.textures.clone(),
+            alpha_masks: self.alpha_masks.clone(),
             on_gpu: self.vehicle_textures.clone(),
             meshes_on_gpu: self.vehicle_meshes.clone(),
             ready: self.vehicle_ready.clone(),
@@ -410,7 +411,7 @@ impl World {
         let img = if worth {
             Arc::new(omsi_texture::gpu::halved_for_now(Arc::try_unwrap(img).unwrap_or_else(|a| (*a).clone())))
         } else {
-            img
+            omsi_texture::gpu::halved_plain(&img).map(Arc::new).unwrap_or(img)
         };
         let id = {
             let mut gpu = self.gpu.lock();
@@ -589,9 +590,6 @@ impl World {
         lod: bool,
     ) -> VehicleRender {
         let mut gpu = self.gpu.lock();
-        let blank = |gpu: &mut GpuCache, scene: &mut Scene, w: i32, h: i32| {
-            Some(gpu.add_blank(renderer, scene, w.max(1) as u32, h.max(1) as u32))
-        };
         let blank_text = |gpu: &mut GpuCache, scene: &mut Scene, w: i32, h: i32| {
             Some(gpu.add_blank_mips(renderer, scene, w.max(1) as u32, h.max(1) as u32))
         };
@@ -607,11 +605,8 @@ impl World {
             .collect();
         let script_textures: Vec<Option<TextureId>> = match shared_script {
             Some(s) => s.to_vec(),
-            None => vt
-                .model
-                .script_textures
-                .iter()
-                .map(|(w, h)| blank(&mut gpu, scene, *w, *h))
+            None => (0..vt.model.script_textures.len())
+                .map(|i| Some(gpu.add_script_slot(renderer, scene, &vt.model, i)))
                 .collect(),
         };
         let mut instances = Vec::new();
@@ -1048,7 +1043,7 @@ impl World {
             let has_alpha = self.textures.has_alpha(&t, dirs_ref).unwrap_or(false);
             Some((id, has_alpha))
         });
-        let cx = SlotCx { vt, mesh_index, vm, def, slot, m, dirs_ref, subst: &subst, settings: &self.settings };
+        let cx = SlotCx { vt, mesh_index, vm, def, slot, m, dirs_ref, subst: &subst, settings: &self.settings, alpha_masks: &self.alpha_masks };
         let sa = slot_alpha(&cx, &ov, tex, transmap);
         let SlotAlpha { alpha, repair_body_depth, .. } = sa;
         // (a night or light map named as a [CTCTexture] is the paint scheme's
@@ -1277,6 +1272,7 @@ pub(crate) fn shadow_blob(is_shadow: bool, positions: &[glam::Vec3]) -> bool {
 /// One material slot of a vehicle mesh being uploaded (see [`World::vehicle_slot_material`]).
 #[derive(Clone, Copy)]
 struct SlotCx<'s> {
+    alpha_masks: &'s crate::vehicle_materials::AlphaMasks,
     vt: &'s omsi_sim::VehicleType,
     mesh_index: usize,
     vm: &'s omsi_sim::vehicle::VehicleMesh,
@@ -1361,7 +1357,7 @@ fn slot_alpha(cx: &SlotCx, ov: &[&MaterialDef], tex: Option<TextureId>, transmap
     // wheel arches, far wheels and interior drawn after it showed through the
     // paint (#928, #932).
     let coverage_tex = subst(coverage_texture(ov.iter().find_map(|o| o.transmap.as_deref()), &m.texture));
-    let coverage = omsi_texture::find_texture(&coverage_tex, dirs_ref).and_then(|p| alpha_mask(&p));
+    let coverage = omsi_texture::find_texture(&coverage_tex, dirs_ref).and_then(|p| cx.alpha_masks.get(&p));
     // (an invisible cover: clear all over and writing its depth - no pane, it is
     // there to hide what comes after it, see `texture_is_clear`)
     let cover = declared_alpha == AlphaMode::Blend

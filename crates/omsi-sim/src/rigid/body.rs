@@ -517,19 +517,17 @@ impl RigidBody {
     /// rolling downhill without its brakes ran on to any speed, and no gale ever moved one.
     fn air_and_road(&mut self, rot: Quat, h: f32) -> (Vec3, Vec3) {
         let inv = rot.inverse();
-        let (mut force, mut torque) = (Vec3::ZERO, Vec3::ZERO);
-        if self.realistic {
+        let (force, torque) = if self.realistic {
             // (every OMSI 2 bus already has its still-air drag in its brake script - bremse.osc
             // adds 9.5 m2 x cw 0.8 x 0.6 v2 to every wheel's brake force - so only what the weather
             // changes is added here: the wind and an air that is not 1.2 kg/m3)
             let (f, t) = realism::wind_force(&self.aero, self.air_density, inv.mul_vec3(self.velocity), inv.mul_vec3(self.wind));
-            force = rot.mul_vec3(f);
-            torque = t;
+            (rot.mul_vec3(f), t)
         } else {
             let v = self.velocity;
             let area = (self.mass / 2200.0).clamp(2.0, 8.5);
-            force = -v * v.length() * (0.5 * 1.2 * 0.6 * area);
-        }
+            (-v * v.length() * (0.5 * 1.2 * 0.6 * area), Vec3::ZERO)
+        };
         // where on the road's unevenness the body stands (a reversing bus retraces it)
         let ds = self.velocity.dot(rot.mul_vec3(Vec3::Y)) as f64 * h as f64;
         self.road_s += ds;

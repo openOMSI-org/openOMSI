@@ -189,7 +189,13 @@ pub(super) fn page(sh: &mut Shell, v: &PauseView, page: Rect, compact: bool) {
         top = compact_categories(sh, &ids, Rect::new(x, top, width, nav_h), v.kbd);
     }
     let area = Rect::new(x, top, width, (page.h - top - footer_h).max(0.0));
-    if sh.quick_edit { super::quick_actions_ui::editor(sh, v, area); } else { cards(sh, v, category, area); }
+    if sh.quick_edit {
+        super::quick_actions_ui::editor(sh, v, area);
+    } else if category == Category::Online && v.rail.iter().any(|line| line.0 == "players") {
+        super::online_ui::page(sh, v, area);
+    } else {
+        cards(sh, v, category, area);
+    }
     if compact {
         session_action(sh, v, "quit", Rect::new(x, page.h - 84.0, width, 54.0), ButtonKind::Danger);
     }
@@ -318,7 +324,7 @@ fn action_card(ui: &mut Ui, v: &PauseView, index: usize, rect: Rect, keyboard: b
         .and_then(|i| omsi_ui::icons::names().find(|n| *n == i.trim()))
         .unwrap_or_else(|| if *id == "plugin" { "extension" } else { rail_icon(id) });
     ui.icon(icon, tile.center(), 27.0, icon_c);
-    let label = if *id == "plugin" { label.clone() } else { omsi_ui::tr(label) };
+    let label = if *id == "multiplayer" { omsi_ui::tr(super::navigation::Category::Online.title()) } else if *id == "plugin" { label.clone() } else { omsi_ui::tr(label) };
     let text = plain(&label).0;
     let content = Rect::new(rect.x + 80.0, rect.y + 26.0, (rect.w - 112.0).max(0.0), 29.0);
     ui.text_in(text, content, 18.0, Weight::Bold, ink, Align::Left);
@@ -330,6 +336,7 @@ fn action_card(ui: &mut Ui, v: &PauseView, index: usize, rect: Rect, keyboard: b
 
 fn action_hint(id: &str) -> &'static str {
     match id {
+        "multiplayer" => super::navigation::Category::Online.hint(),
         "camera" => "Seat position, field of view and head movement",
         "map" => "View the city and your position",
         "streets" => "Look a street up by its name on the city map",

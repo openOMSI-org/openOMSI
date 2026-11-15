@@ -34,7 +34,8 @@ change behaviour is checked is in [REFACTOR_CHECKS.md](REFACTOR_CHECKS.md).
 ## Crates
 
 The workspace is layered; `scripts/arch-guard.sh` (rules in `scripts/arch-rules.txt`, run on
-every pull request) keeps each crate off the layers above it, and `omsi-app` may only shrink.
+every pull request) keeps each crate off the layers above it, and no pull request may grow
+`omsi-app` by more than a few hundred lines.
 Bottom up:
 
 | Layer | Crates | What they hold |
