@@ -40,11 +40,13 @@ fn ring_queue_blocks(
     distance: f32,
     inside: bool,
     long_waiter: bool,
+    waiting_short: bool,
 ) -> bool {
     ring_lane
         && !approach_ring
         && speed < 0.3
         && distance < 10.0
+        && !waiting_short
         && !long_waiter_may_be_let_in(long_waiter, true, inside)
 }
 
@@ -91,17 +93,22 @@ mod long_waiter_tests {
 
     #[test]
     fn stopped_ring_queue_keeps_priority_at_the_entry() {
-        assert!(ring_queue_blocks(true, false, 0.0, 5.0, false, true));
+        assert!(ring_queue_blocks(true, false, 0.0, 5.0, false, true, false));
     }
 
     #[test]
     fn stopped_ring_queue_does_not_trap_a_long_waiter_already_inside() {
-        assert!(!ring_queue_blocks(true, false, 0.0, 5.0, true, true));
+        assert!(!ring_queue_blocks(true, false, 0.0, 5.0, true, true, false));
     }
 
     #[test]
     fn moving_ring_traffic_is_still_judged_by_the_gap_rules() {
-        assert!(!ring_queue_blocks(true, false, 2.0, 5.0, true, true));
+        assert!(!ring_queue_blocks(true, false, 2.0, 5.0, true, true, false));
+    }
+
+    #[test]
+    fn a_ring_vehicle_waiting_short_of_this_crossing_does_not_block_it() {
+        assert!(!ring_queue_blocks(true, false, 0.0, 5.0, false, false, true));
     }
 }
 
@@ -1349,7 +1356,7 @@ impl TrafficSim {
                     // the meeting place as well: it does not squeeze in ahead of a ring that
                     // queues (one standing farther back is a stalled queue it may go past),
                     // and its long wait does not outrank a ring car briefly stopped.
-                    let ring_queue = ring_queue_blocks(self.net.lanes[m].ring, self.net.lanes[l].ring, o.state.speed, theirs, jn.inside, long_waiter);
+                    let ring_queue = ring_queue_blocks(self.net.lanes[m].ring, self.net.lanes[l].ring, o.state.speed, theirs, jn.inside, long_waiter, waits_short);
                     // the gap a driver takes in the main road's traffic: the critical gap of
                     // 5 to 7.5 s (by driver), and time enough to be through
                     // (where the two run into one lane the other only has to be able to
