@@ -43,6 +43,10 @@ impl Traffic {
             log::info!("traffic: the map drives on the left");
         }
         net.link(1.5);
+        let by_shape = net.infer_turns(0);
+        if by_shape > 0 {
+            log::info!("traffic: {by_shape} junction paths marked as turns by their shape");
+        }
         // which rail lane is tram track, railway or metro, and how fast its curves allow
         let rail_lanes = omsi_sim::rail::classify(&mut net, &{
             let mut cfg = omsi_sim::rail::RailMapConfig::load(&world.map_dir);
@@ -206,6 +210,7 @@ impl Traffic {
         let mut added = self.sim.net.lanes.len()..self.sim.net.lanes.len();
         if n > 0 {
             added = self.sim.net.extend(new, omsi_sim::traffic::LINK_TOLERANCE);
+            self.sim.net.infer_turns(added.start);
             self.sim.set_spawn_densities(added.clone());
             self.sim.street_weight += self.sim.net.lanes[added.clone()]
                 .iter()

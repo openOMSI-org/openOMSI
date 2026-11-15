@@ -707,8 +707,7 @@ impl TrafficSim {
         if self.open_road_ahead(st, need) < need {
             return None;
         }
-        let turn = st.planned_next.map(|n| self.net.lanes[n].turn).unwrap_or(0);
-        if lane.length() - st.s < TURN_LANE_LOOK && turn != 0 {
+        if st.turn_ahead(&self.net, TURN_LANE_LOOK).is_some() {
             return None;
         }
         let limit = (lane.speed_limit_kmh * st.desire).min(st.max_speed_kmh) / 3.6;

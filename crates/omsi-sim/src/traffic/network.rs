@@ -3,6 +3,11 @@
 
 use super::*;
 
+/// A lane at most this long (m) that bends by `TURN_MIN` degrees is a junction path that turns.
+const TURN_PATH_MAX: f32 = 40.0;
+/// The bend (degrees) from which a short lane at a junction counts as a turn.
+const TURN_MIN: f32 = 35.0;
+
 impl Network {
     /// The sign of a lateral offset (positive to the right) towards the oncoming lane:
     /// -1 on the right-hand side of the road, +1 on a left-hand-traffic map.
@@ -666,6 +671,38 @@ impl Network {
         self.compute_reach();
     }
 
+    /// Mark the junction paths from lane `first` on that turn (`Lane::turn`, 1 left and 2 right)
+    /// where the map does not: only a scenery object's `[path]` can carry the mark, so the
+    /// junctions built from splines have none and their cars neither signal nor take the turn
+    /// lane. A short street lane that bends by `TURN_MIN` degrees or more, is no part of a ring
+    /// and leaves a fork or runs into a merge is taken for a turn. Returns how many it marked.
+    pub fn infer_turns(&mut self, first: usize) -> usize {
+        let mut marked = 0;
+        for i in first..self.lanes.len() {
+            let l = &self.lanes[i];
+            if l.turn != 0 || l.ring || l.kind != LaneKind::Street || l.length() > TURN_PATH_MAX {
+                continue;
+            }
+            let bend: f32 = l.headings.windows(2).map(|w| wrap_deg(w[1] - w[0])).sum();
+            if bend.abs() < TURN_MIN {
+                continue;
+            }
+            let forks = self
+                .prev
+                .get(i)
+                .is_some_and(|p| p.iter().any(|&p| self.lanes[p].next.len() > 1));
+            let merges = l
+                .next
+                .iter()
+                .any(|&n| self.prev.get(n).is_some_and(|p| p.len() > 1));
+            if forks || merges {
+                self.lanes[i].turn = if bend < 0.0 { 1 } else { 2 };
+                marked += 1;
+            }
+        }
+        marked
+    }
+
     /// `reach` of every lane: its length plus the best reach of the lanes after it. The lanes
     /// are settled from the dead ends backwards (a lane once all the lanes after it are); a
     /// lane that never settles has a loop ahead of it and can be driven on for ever.
@@ -879,5 +916,86 @@ impl Network {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod turn_tests {
+    use super::*;
+
+    fn fork(radius: f64, len: f64) -> Network {
+        let a = LaneBuilder::arc(DVec3::ZERO, 0.0, 20.0, 0.0, 0.0, LaneKind::Street, 3.0);
+        let straight = LaneBuilder::arc(a.end(), 0.0, 30.0, 0.0, 0.0, LaneKind::Street, 3.0);
+        let turn = LaneBuilder::arc(a.end(), 0.0, len, radius, 0.0, LaneKind::Street, 3.0);
+        let mut net = Network {
+            lanes: vec![a, straight, turn],
+            ..Default::default()
+        };
+        net.link(1.5);
+        net
+    }
+
+    #[test]
+    fn a_short_bend_after_a_fork_is_taken_for_a_turn() {
+        for (radius, want) in [(10.0, 2), (-10.0, 1)] {
+            let mut net = fork(radius, 10.0 * std::f64::consts::FRAC_PI_2);
+            assert_eq!(net.lanes[0].next.len(), 2);
+            assert_eq!(net.infer_turns(0), 1);
+            assert_eq!(
+                (net.lanes[0].turn, net.lanes[1].turn, net.lanes[2].turn),
+                (0, 0, want)
+            );
+            assert_eq!(net.infer_turns(0), 0, "a lane that is marked is left alone");
+        }
+    }
+
+    #[test]
+    fn a_bend_of_a_plain_road_a_long_curve_and_a_ring_are_no_turns() {
+        let a = LaneBuilder::arc(DVec3::ZERO, 0.0, 60.0, 0.0, 0.0, LaneKind::Street, 3.0);
+        let bend = LaneBuilder::arc(
+            a.end(),
+            0.0,
+            14.0 * 60f64.to_radians(),
+            14.0,
+            0.0,
+            LaneKind::Street,
+            3.0,
+        );
+        let c = LaneBuilder::arc(bend.end(), 60.0, 80.0, 0.0, 0.0, LaneKind::Street, 3.0);
+        let mut road = Network {
+            lanes: vec![a, bend, c],
+            ..Default::default()
+        };
+        road.link(1.5);
+        assert_eq!(road.infer_turns(0), 0);
+        assert_eq!(road.lanes[1].turn, 0);
+        let mut long = fork(38.0, 38.0 * std::f64::consts::FRAC_PI_2);
+        assert_eq!(long.infer_turns(0), 0);
+        let mut ring = fork(10.0, 10.0 * std::f64::consts::FRAC_PI_2);
+        ring.lanes[2].ring = true;
+        assert_eq!(ring.infer_turns(0), 0);
+    }
+
+    #[test]
+    fn the_turn_after_a_stop_lane_before_a_fork_is_found() {
+        let a = LaneBuilder::arc(DVec3::ZERO, 0.0, 20.0, 0.0, 0.0, LaneKind::Street, 3.0);
+        let stop = LaneBuilder::arc(a.end(), 0.0, 3.0, 0.0, 0.0, LaneKind::Street, 3.0);
+        let straight = LaneBuilder::arc(stop.end(), 0.0, 30.0, 0.0, 0.0, LaneKind::Street, 3.0);
+        let turn = LaneBuilder::arc(
+            stop.end(),
+            0.0,
+            10.0 * std::f64::consts::FRAC_PI_2,
+            10.0,
+            0.0,
+            LaneKind::Street,
+            3.0,
+        );
+        let mut net = Network {
+            lanes: vec![a, stop, straight, turn],
+            ..Default::default()
+        };
+        net.link(1.5);
+        assert_eq!(net.infer_turns(0), 1);
+        assert_eq!(net.lanes[3].turn, 2);
     }
 }
