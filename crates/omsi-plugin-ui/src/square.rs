@@ -6,9 +6,9 @@ use super::{color, Hit, HitKind, Item, Layout, INK};
 use omsi_plugin::ui::Element;
 use omsi_ui::{Color, Rect};
 
-/// How wide the square is; the icon is half of it.
+/// How wide the square is; the icon is nearly two thirds of it.
 pub(crate) const SQUARE: f32 = 84.0;
-const SQUARE_R: f32 = 10.0;
+const SQUARE_R: f32 = 2.0;
 const RING: f32 = 2.0;
 // (solid greys: see-through ink blends in linear light and stays bright)
 const OFF_INK: Color = Color::rgba(84, 86, 92, 1.0);
@@ -43,7 +43,7 @@ impl Layout<'_> {
         self.out.items.push(Item::Icon {
             name: icon.to_string(),
             center: b.center(),
-            size: (side * 0.5).round(),
+            size: (side * 0.62).round(),
             color: ink,
         });
     }

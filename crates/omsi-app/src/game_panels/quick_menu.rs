@@ -22,42 +22,42 @@ use omsi_ui::tr;
 const LIT: Rgba = Rgba([138, 72, 26, 255]);
 pub(crate) const COLUMNS: usize = 5;
 pub(crate) const PER_PAGE: usize = 15;
-/// Five tiles of 84 and four gaps of 8, with the card's padding round them.
-const WIDTH: f32 = 5.0 * 84.0 + 4.0 * 8.0 + 2.0 * 14.0;
+/// Five tiles of 84 and four gaps of 4, with the card's padding round them.
+const WIDTH: f32 = 5.0 * 84.0 + 4.0 * 4.0 + 2.0 * 10.0;
 
 /// The tiles: id, label, icon - in OMSI's order, five to a row, fifteen to a page.
 pub(crate) const TILES: [(&str, &str, &str); 30] = [
-    ("place", "Place a vehicle", "add"),
-    ("switch", "Change vehicle", "sync_alt"),
-    ("remove", "Remove vehicle", "delete"),
-    ("reset", "Reset vehicle", "restart_alt"),
-    ("map", "City map", "map"),
-    ("duty", "Timetable", "departure_board"),
-    ("dest", "Destination", "directions_bus"),
-    ("repair", "Repair", "construction"),
-    ("refuel", "Refuel", "local_gas_station"),
-    ("wash", "Wash", "local_car_wash"),
-    ("arrows", "Dynamic route arrows", "navigation"),
-    ("time", "Time", "schedule"),
-    ("weather", "Weather", "partly_cloudy_day"),
-    ("controls", "Controls", "sports_esports"),
-    ("stats", "Statistics", "receipt_long"),
+    ("place", "Place a vehicle", "omsi_place"),
+    ("switch", "Change vehicle", "omsi_switch"),
+    ("remove", "Remove vehicle", "omsi_remove"),
+    ("reset", "Reset vehicle", "omsi_reset"),
+    ("map", "City map", "omsi_map"),
+    ("duty", "Timetable", "omsi_duty"),
+    ("dest", "Destination", "omsi_dest"),
+    ("repair", "Repair", "omsi_repair"),
+    ("refuel", "Refuel", "omsi_refuel"),
+    ("wash", "Wash", "omsi_wash"),
+    ("arrows", "Map-placed route arrows", "omsi_arrows"),
+    ("time", "Time", "omsi_time"),
+    ("weather", "Weather", "omsi_weather"),
+    ("controls", "Controls", "omsi_controls"),
+    ("stats", "Statistics", "omsi_stats"),
     // the second page: the game menu's lines
-    ("camera", "Camera", "videocam"),
-    ("view_editor", "Seat, view and mirrors", "airline_seat_recline_normal"),
-    ("vehicle", "Vehicle options...", "tune"),
-    ("world", "World options...", "public"),
-    ("options", "Options", "settings"),
-    ("tobus", "Back to my bus", "directions_walk"),
-    ("save", "Save the situation", "save"),
-    ("saveslot", "Save to a slot...", "sd_card"),
-    ("shot", "Screenshot", "photo_camera"),
-    ("photo", "Photo mode", "visibility"),
-    ("skipstop", "Skip the next stop", "stop_request"),
-    ("endduty", "End the tour", "sports_score"),
-    ("players", "Player list", "group"),
-    ("admin", "Administration", "dns"),
-    ("radio", "Radio", "radio"),
+    ("camera", "Camera", "omsi_camera"),
+    ("view_editor", "Seat, view and mirrors", "omsi_view_editor"),
+    ("vehicle", "Vehicle options...", "omsi_vehicle"),
+    ("world", "World options...", "omsi_world"),
+    ("options", "Options", "omsi_options"),
+    ("tobus", "Back to my bus", "omsi_tobus"),
+    ("save", "Save the situation", "omsi_save"),
+    ("saveslot", "Save to a slot...", "omsi_saveslot"),
+    ("shot", "Screenshot", "omsi_shot"),
+    ("photo", "Photo mode", "omsi_photo"),
+    ("skipstop", "Skip the next stop", "omsi_skipstop"),
+    ("endduty", "End the tour", "omsi_endduty"),
+    ("players", "Player list", "omsi_players"),
+    ("admin", "Administration", "omsi_admin"),
+    ("radio", "Radio", "omsi_radio"),
 ];
 
 /// The tiles that are the game menu's lines, offered only when it offers them now.
@@ -102,7 +102,7 @@ impl TileState {
         let offered: Vec<&'static str> = app.game_menu_items().iter().map(|l| l.0).collect();
         let mut off: Vec<&'static str> = MENU_LINES.iter().copied().filter(|id| !offered.contains(id)).collect();
         let mut lit = Vec::new();
-        if app.settings.nav_dynamic_arrows {
+        if app.settings.nav_map_arrows {
             lit.push("arrows");
         }
         if app.session.duty.is_some() {
@@ -144,7 +144,7 @@ impl QuickMenu {
                         Element { color: (!off && state.lit.contains(id)).then_some(LIT), ..el(Some(id), kind) }
                     })
                     .collect();
-                el(None, Kind::Row { children: row, gap: 8.0, align: RowAlign::Start })
+                el(None, Kind::Row { children: row, gap: 4.0, align: RowAlign::Start })
             })
             .collect();
         let (caption, off) = match tiles.get(self.focus) {
@@ -163,7 +163,7 @@ impl QuickMenu {
         }
         children.push(el(None, Kind::Row { children: foot, gap: 10.0, align: RowAlign::Start }));
         children.push(note(&tr("Alt or Esc closes the menu; the game goes on."), pal));
-        Panel { padding: 14.0, gap: 8.0, ..card(Anchor::BottomRight, 32.0, 32.0, WIDTH, 215, pal, children) }
+        Panel { padding: 10.0, gap: 4.0, radius: 3.0, ..card(Anchor::BottomRight, 32.0, 32.0, WIDTH, 230, pal, children) }
     }
 
     /// The next page (after the last, the first), its first tile chosen.
@@ -265,7 +265,7 @@ fn start(app: &mut crate::App, id: &str, mouse: bool) {
         "arrows" => {
             crate::game_lists::option_do(
                 app,
-                "nav_dynamic_arrows",
+                "nav_map_arrows",
                 "",
                 crate::game_lists::Move::Next,
             );
@@ -310,7 +310,7 @@ mod tests {
     #[test]
     fn the_tiles_have_icons_and_omsis_first_page() {
         for (id, _, icon) in TILES {
-            assert!(omsi_ui::icons::svg(icon).is_some(), "{id}: no icon {icon}");
+            assert!(omsi_ui::icons::rasterize(icon, 48).is_some_and(|px| px.iter().any(|a| *a > 0)), "{id}: no drawable icon {icon}");
         }
         let ids: std::collections::HashSet<_> = TILES.iter().map(|t| t.0).collect();
         assert_eq!(ids.len(), TILES.len());
@@ -447,8 +447,8 @@ mod tests {
         click(&mut app, "next");
         click(&mut app, "arrows");
         assert!(app.menus.game_panels.quick.as_ref().is_some_and(|q| q.page == 1), "the menu stays, as in OMSI 2");
-        assert!(app.settings.nav_dynamic_arrows);
-        assert!(!app.settings.nav_map_arrows);
+        assert!(app.settings.nav_map_arrows);
+        assert!(!app.settings.nav_dynamic_arrows, "the dynamic arrows are another setting");
         click(&mut app, "time");
         assert!(app.menus.game_panels.quick.is_none(), "a list takes over");
     }
