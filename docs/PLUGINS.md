@@ -83,8 +83,9 @@ The launcher's **Plugins** page lists every plugin of the `plugins` folders (Lua
 `.opl`). Players switch each on or off there without moving its files, see what the last game
 made of it, and change the settings it declared with `plugin.settings`:
 
-* The names switched off are in `~/.openomsi/plugins-off.txt`, one a line (a `.lua`'s file name
-  without `.lua`, a folder plugin's folder name, a `.oop`'s or `.opl`'s name, in lower case).
+* The names switched off are in `~/.openomsi/plugins-off.txt`, one a line, in lower case: a
+  `.lua`'s file name without `.lua`, a folder plugin's folder stem (`my.plugin/main.lua` is
+  `my`), a `.oop`'s stem, and an `.opl`'s path under `plugins` (`pablo/mbas.opl`).
   The game reads it before it loads the plugins and leaves those out.
 * After loading, the game writes `~/.openomsi/plugins-status.json`: every plugin with its
   `state` (`loaded`, `off`, `failed` with the load error, e.g. a syntax error) and, when one is

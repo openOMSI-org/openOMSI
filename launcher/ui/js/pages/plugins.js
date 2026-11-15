@@ -1,8 +1,4 @@
-// Plugins (#3919): the Lua, compiled (.oop) and OMSI (.opl) plugins of the game's plugins
-// folders. Each is switched on or off for the next game without moving its files (the game
-// reads ~/.openomsi/plugins-off.txt), shows what the last game made of it (loaded, a syntax
-// error, stopped after its errors), and the settings it declared with `plugin.settings` can be
-// changed here as well as in the game.
+// Plugins (#3919): switch the game's plugins on and off, see their last load, edit their settings.
 
 import { html, useState, useEffect } from '../../vendor/preact-htm.js';
 import { useStore, toast } from '../store.js';
