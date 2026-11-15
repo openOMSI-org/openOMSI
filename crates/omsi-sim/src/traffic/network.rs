@@ -7,18 +7,18 @@ impl Network {
     /// The sign of a lateral offset (positive to the right) towards the oncoming lane:
     /// -1 on the right-hand side of the road, +1 on a left-hand-traffic map.
     pub fn oncoming_sign(&self) -> f32 {
-        if self.left_hand {
-            1.0
-        } else {
-            -1.0
-        }
+        if self.left_hand { 1.0 } else { -1.0 }
     }
 
     /// Lane with the given key, preferring the direction flag.
     pub fn find(&self, key: LaneKey, reversed: Option<bool>) -> Option<usize> {
         let list = self.by_key.get(&key)?;
         match reversed {
-            Some(r) => list.iter().copied().find(|&i| self.lanes[i].reversed == r).or_else(|| list.first().copied()),
+            Some(r) => list
+                .iter()
+                .copied()
+                .find(|&i| self.lanes[i].reversed == r)
+                .or_else(|| list.first().copied()),
             None => list.first().copied(),
         }
     }
@@ -36,7 +36,9 @@ impl Network {
     /// link reaches the stop on the through lane, the next one leaves from the stop lane
     /// beside it). Driven one after the other the bus jumped up to 58 m back.
     pub fn parallel(&self, a: usize, b: usize) -> bool {
-        let (Some(la), Some(lb)) = (self.lanes.get(a), self.lanes.get(b)) else { return false };
+        let (Some(la), Some(lb)) = (self.lanes.get(a), self.lanes.get(b)) else {
+            return false;
+        };
         if a == b || la.next.contains(&b) {
             return false;
         }
@@ -44,7 +46,11 @@ impl Network {
             (Some(x), Some(y)) => x.tile == y.tile && x.id == y.id && x.path != y.path,
             _ => false,
         };
-        if same && (lb.start() - la.start()).truncate().length() < 8.0 && (lb.start().z - la.start().z).abs() < 1.0 && wrap_deg(lb.start_heading() - la.start_heading()).abs() < 45.0 {
+        if same
+            && (lb.start() - la.start()).truncate().length() < 8.0
+            && (lb.start().z - la.start().z).abs() < 1.0
+            && wrap_deg(lb.start_heading() - la.start_heading()).abs() < 45.0
+        {
             return true;
         }
         // (a lane of another spline beside it counts as well: mod maps lay a bus lane or a
@@ -70,7 +76,8 @@ impl Network {
                 return false;
             };
             let (q, hb) = lb.at(sb);
-            if distance > 5.5 || (p.z - q.z).abs() > 1.0
+            if distance > 5.5
+                || (p.z - q.z).abs() > 1.0
                 || wrap_deg(hb - h).abs() > 30.0
                 || sb >= lb.length() - 1.0
             {
@@ -103,7 +110,9 @@ impl Network {
         for i in 0..=n {
             let s = la.length() * i as f32 / n as f32;
             let (p, h) = la.at(s);
-            let Some((sb, d)) = lb.nearest_point(p) else { continue };
+            let Some((sb, d)) = lb.nearest_point(p) else {
+                continue;
+            };
             let inside = sb > 0.5 && sb < lb.length() - 0.5;
             // (on the same level: a track or road under a bridge lies a few metres off in 3D
             // too, and a train "changed lanes" down onto the line under its viaduct)
@@ -139,13 +148,17 @@ impl Network {
         }
         match la.nearest_point(lb.start()) {
             Some((sa, _)) if sa > 0.5 => -sa,
-            _ => lb.nearest_point(la.start()).map(|(sb, _)| sb).unwrap_or(0.0),
+            _ => lb
+                .nearest_point(la.start())
+                .map(|(sb, _)| sb)
+                .unwrap_or(0.0),
         }
     }
 
     /// Point on a lane sequence closest to `p`: (index into `route`, distance along that lane).
     pub fn project_on_route(&self, route: &[usize], p: DVec3) -> Option<(usize, f32)> {
-        self.project_on_route_lateral(route, p).map(|(ri, s, _)| (ri, s))
+        self.project_on_route_lateral(route, p)
+            .map(|(ri, s, _)| (ri, s))
     }
 
     /// Like `project_on_route`, plus the lateral offset of `p` from the lane (m, right of
@@ -166,7 +179,12 @@ impl Network {
                     let rel = (p - q).truncate();
                     // right vector of (dir.x, dir.y) is (dir.y, -dir.x)
                     let lateral = (rel.x * dir.y - rel.y * dir.x) as f32;
-                    best = Some((ri, l.dist[k] + (l.dist[k + 1] - l.dist[k]) * t as f32, d, lateral));
+                    best = Some((
+                        ri,
+                        l.dist[k] + (l.dist[k + 1] - l.dist[k]) * t as f32,
+                        d,
+                        lateral,
+                    ));
                 }
             }
         }
@@ -179,13 +197,26 @@ impl Network {
     /// goes before a nearer one with the stop across it - a route back along the same
     /// street passes each stop twice, once from the other side, and the bus stopped at the
     /// stop across the road on its way out. Falls back to the nearest point.
-    pub fn project_stop_on_route(&self, route: &[usize], p: DVec3, reach: Option<f64>, from: usize) -> Option<(usize, f32, f32)> {
+    pub fn project_stop_on_route(
+        &self,
+        route: &[usize],
+        p: DVec3,
+        reach: Option<f64>,
+        from: usize,
+    ) -> Option<(usize, f32, f32)> {
         self.project_stop_on_route_side(route, p, reach, from, 0)
     }
 
     /// The same for a platform opposite the usual kerb (1), or either side (2).
     /// The side is the stop object's OMSI value, relative to the map's traffic hand.
-    pub fn project_stop_on_route_side(&self, route: &[usize], p: DVec3, reach: Option<f64>, from: usize, side: u8) -> Option<(usize, f32, f32)> {
+    pub fn project_stop_on_route_side(
+        &self,
+        route: &[usize],
+        p: DVec3,
+        reach: Option<f64>,
+        from: usize,
+        side: u8,
+    ) -> Option<(usize, f32, f32)> {
         // (index, s, distance, lateral) of the best on the platform side, and of any
         let mut kerb: Option<(usize, f32, f64, f32)> = None;
         let mut any: Option<(usize, f32, f64, f32)> = None;
@@ -204,7 +235,12 @@ impl Network {
                 let dir = ab.truncate().normalize_or_zero();
                 let rel = (p - q).truncate();
                 let lateral = (rel.x * dir.y - rel.y * dir.x) as f32;
-                let cand = (ri, l.dist[k] + (l.dist[k + 1] - l.dist[k]) * t as f32, d, lateral);
+                let cand = (
+                    ri,
+                    l.dist[k] + (l.dist[k + 1] - l.dist[k]) * t as f32,
+                    d,
+                    lateral,
+                );
                 let left = self.left_hand != (side == 1);
                 let kerb_side = side == 2 || if left { lateral < -0.3 } else { lateral > 0.3 };
                 if kerb_side && kerb.map(|b| d < b.2).unwrap_or(true) {
@@ -230,7 +266,9 @@ impl Network {
         self.crossings = vec![Vec::new(); self.lanes.len()];
         self.walks = vec![Vec::new(); self.lanes.len()];
         let (n, walks) = self.conflicts_from(0);
-        log::info!("path network: {n} conflicting lane pairs at crossings, {walks} footpath crossings");
+        log::info!(
+            "path network: {n} conflicting lane pairs at crossings, {walks} footpath crossings"
+        );
     }
 
     /// `conflicts`, `crossings` and `walks` of the junction objects whose lanes start at
@@ -250,7 +288,9 @@ impl Network {
             let Some(k) = l.key else { continue };
             match l.kind {
                 // a level crossing is a junction of a road and a railway
-                LaneKind::Street | LaneKind::Rail => by_object.entry((k.tile, k.id)).or_default().push(i),
+                LaneKind::Street | LaneKind::Rail => {
+                    by_object.entry((k.tile, k.id)).or_default().push(i)
+                }
                 LaneKind::Sidewalk => walks_by_object.entry((k.tile, k.id)).or_default().push(i),
                 LaneKind::Air => {}
             }
@@ -267,15 +307,28 @@ impl Network {
                     // one runs into the other: the same end, or ends a car's width apart that
                     // lead into the same lane (two turns converging on one exit)
                     let ends = (a.end() - b.end()).truncate().length();
-                    let joint = ends < 1.5 || (ends < MEET_DIST && a.next.iter().any(|n| b.next.contains(n)));
+                    let joint = ends < 1.5
+                        || (ends < MEET_DIST && a.next.iter().any(|n| b.next.contains(n)));
                     let merge = joint && (a.start() - b.start()).truncate().length() > 3.0;
-                    let place = if merge { Some((a.length(), b.length())) } else { polyline_crossing(a, b).or_else(|| near_pass(a, b)) };
+                    let place = if merge {
+                        Some((a.length(), b.length()))
+                    } else {
+                        polyline_crossing(a, b).or_else(|| near_pass(a, b))
+                    };
                     // (`[blockpath]` adds no meeting place: it never had an effect in Omsi.exe,
                     // see `Lane::blocks`)
                     if let Some((sa, sb)) = place {
                         // (after a joint the two are in one lane, and follow each other)
-                        let (mut ab, mut aa) = if merge { (meeting_extent(a, sa, b).0, 0.5) } else { meeting_extent(a, sa, b) };
-                        let (mut bb, mut ba) = if merge { (meeting_extent(b, sb, a).0, 0.5) } else { meeting_extent(b, sb, a) };
+                        let (mut ab, mut aa) = if merge {
+                            (meeting_extent(a, sa, b).0, 0.5)
+                        } else {
+                            meeting_extent(a, sa, b)
+                        };
+                        let (mut bb, mut ba) = if merge {
+                            (meeting_extent(b, sb, a).0, 0.5)
+                        } else {
+                            meeting_extent(b, sb, a)
+                        };
                         if a.crossing_problem || b.crossing_problem {
                             // the meeting place is the whole of both lanes: a vehicle on
                             // either holds the other until its tail has left its lane
@@ -283,14 +336,35 @@ impl Network {
                         }
                         self.conflicts[i].push(j);
                         self.conflicts[j].push(i);
-                        self.crossings[i].push(Crossing { other: j, at: sa, other_at: sb, merge, before: ab, after: aa, other_before: bb, other_after: ba });
-                        self.crossings[j].push(Crossing { other: i, at: sb, other_at: sa, merge, before: bb, after: ba, other_before: ab, other_after: aa });
+                        self.crossings[i].push(Crossing {
+                            other: j,
+                            at: sa,
+                            other_at: sb,
+                            merge,
+                            before: ab,
+                            after: aa,
+                            other_before: bb,
+                            other_after: ba,
+                        });
+                        self.crossings[j].push(Crossing {
+                            other: i,
+                            at: sb,
+                            other_at: sa,
+                            merge,
+                            before: bb,
+                            after: ba,
+                            other_before: ab,
+                            other_after: aa,
+                        });
                         n += 1;
                     }
                 }
             }
             if let Some(walks) = walks_by_object.get(key) {
-                for &i in lanes.iter().filter(|&&i| self.lanes[i].kind == LaneKind::Street) {
+                for &i in lanes
+                    .iter()
+                    .filter(|&&i| self.lanes[i].kind == LaneKind::Street)
+                {
                     for &w in walks {
                         if let Some((sa, sw)) = polyline_crossing(&self.lanes[i], &self.lanes[w]) {
                             self.walks[i].push((w, sa, sw));
@@ -369,7 +443,12 @@ impl Network {
         let mut seen: Vec<usize> = Vec::new();
         for dx in -1..=1 {
             for dy in -1..=1 {
-                for &i in self.grid.get(&(cx + dx, cy + dy)).map(|v| v.as_slice()).unwrap_or(&[]) {
+                for &i in self
+                    .grid
+                    .get(&(cx + dx, cy + dy))
+                    .map(|v| v.as_slice())
+                    .unwrap_or(&[])
+                {
                     if i == lane || seen.contains(&i) {
                         continue;
                     }
@@ -378,7 +457,9 @@ impl Network {
                     if o.kind != LaneKind::Street || o.no_cars {
                         continue;
                     }
-                    let Some((os, d)) = o.nearest_point(p) else { continue };
+                    let Some((os, d)) = o.nearest_point(p) else {
+                        continue;
+                    };
                     if d > 7.0 || d < 1.5 {
                         continue;
                     }
@@ -402,14 +483,23 @@ impl Network {
     /// `x + offset` in `lane`'s own distances (negative before its start); the first entry
     /// is `lane` itself with offset 0. Where several ways lead to one lane, the shortest
     /// counts. At most `max` lanes.
-    pub fn upstream(&self, lane: usize, s: f32, within: f32, max: usize) -> Vec<(usize, f32, Option<usize>)> {
+    pub fn upstream(
+        &self,
+        lane: usize,
+        s: f32,
+        within: f32,
+        max: usize,
+    ) -> Vec<(usize, f32, Option<usize>)> {
         let mut out: Vec<(usize, f32, Option<usize>)> = vec![(lane, 0.0, None)];
         if lane >= self.lanes.len() {
             return out;
         }
         // nearest first (a junction's lanes can be reached two ways)
         let mut done = vec![false];
-        while let Some(k) = (0..out.len()).filter(|&k| !done[k]).max_by(|&a, &b| out[a].1.total_cmp(&out[b].1)) {
+        while let Some(k) = (0..out.len())
+            .filter(|&k| !done[k])
+            .max_by(|&a, &b| out[a].1.total_cmp(&out[b].1))
+        {
             done[k] = true;
             let (l, off, _) = out[k];
             // this lane starts `s - off` metres before the place: nothing before it is in reach
@@ -453,7 +543,10 @@ impl Network {
         for (i, l) in self.lanes.iter().enumerate() {
             if let Some(k) = l.key {
                 if l.source == 1 && matches!(l.kind, LaneKind::Street) {
-                    by_spline.entry((k.tile, k.id as i64, l.reversed)).or_default().push(i);
+                    by_spline
+                        .entry((k.tile, k.id as i64, l.reversed))
+                        .or_default()
+                        .push(i);
                 }
             }
         }
@@ -467,7 +560,12 @@ impl Network {
                     // b lies at the larger offset: to the right when driving along the spline
                     if neighbours == 0 {
                         let p = self.lanes[a].start();
-                        log::info!("first neighbouring lane pair at ({:.1}, {:.1}), heading {:.0}", p.x, p.y, self.lanes[a].start_heading());
+                        log::info!(
+                            "first neighbouring lane pair at ({:.1}, {:.1}), heading {:.0}",
+                            p.x,
+                            p.y,
+                            self.lanes[a].start_heading()
+                        );
                     }
                     neighbours += 1;
                     let reversed = self.lanes[a].reversed;
@@ -481,12 +579,17 @@ impl Network {
                 }
             }
         }
-        log::info!("lanes: {} neighbouring lane pairs (lane changes)", neighbours);
+        log::info!(
+            "lanes: {} neighbouring lane pairs (lane changes)",
+            neighbours
+        );
         let cell = 4.0;
         let mut grid: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
         for (i, l) in self.lanes.iter().enumerate() {
             let s = l.start();
-            grid.entry(((s.x / cell).floor() as i64, (s.y / cell).floor() as i64)).or_default().push(i);
+            grid.entry(((s.x / cell).floor() as i64, (s.y / cell).floor() as i64))
+                .or_default()
+                .push(i);
         }
         let mut links = 0;
         for i in 0..self.lanes.len() {
@@ -520,13 +623,27 @@ impl Network {
                 // a lane end with a start of its kind near it that was not taken
                 for dx in -1..=1 {
                     for dy in -1..=1 {
-                        for &j in grid.get(&(cx + dx, cy + dy)).map(|v| v.as_slice()).unwrap_or(&[]) {
+                        for &j in grid
+                            .get(&(cx + dx, cy + dy))
+                            .map(|v| v.as_slice())
+                            .unwrap_or(&[])
+                        {
                             let l = &self.lanes[j];
                             if j != i && l.kind == kind {
                                 let d = (l.start() - e).truncate().length();
                                 let dh = wrap_deg(l.start_heading() - eh).abs();
                                 if d < 4.0 && dh < 40.0 {
-                                    log::info!("unlinked: lane {i} {:?} end ({:.2}, {:.2}, {:.2}) -> lane {j} {:?} start {:.2} m away, dz {:.2}, dh {:.1}", self.lanes[i].key, e.x, e.y, e.z, l.key, d, l.start().z - e.z, dh);
+                                    log::info!(
+                                        "unlinked: lane {i} {:?} end ({:.2}, {:.2}, {:.2}) -> lane {j} {:?} start {:.2} m away, dz {:.2}, dh {:.1}",
+                                        self.lanes[i].key,
+                                        e.x,
+                                        e.y,
+                                        e.z,
+                                        l.key,
+                                        d,
+                                        l.start().z - e.z,
+                                        dh
+                                    );
                                 }
                             }
                         }
@@ -563,13 +680,20 @@ impl Network {
         let n = self.lanes.len();
         // a lane closed to cars is no way on for one that is open
         let counts = |i: usize, j: usize| !self.lanes[j].no_cars || self.lanes[i].no_cars;
-        let mut waiting: Vec<usize> = (0..n).map(|i| self.lanes[i].next.iter().filter(|&&j| counts(i, j)).count()).collect();
+        let mut waiting: Vec<usize> = (0..n)
+            .map(|i| self.lanes[i].next.iter().filter(|&&j| counts(i, j)).count())
+            .collect();
         let mut reach = vec![REACH_MAX; n];
         let mut settled = vec![false; n];
         let mut ready: Vec<usize> = (0..n).filter(|&i| waiting[i] == 0).collect();
         while let Some(j) = ready.pop() {
             let l = &self.lanes[j];
-            let best = l.next.iter().filter(|&&k| counts(j, k)).map(|&k| reach[k]).fold(0.0f32, f32::max);
+            let best = l
+                .next
+                .iter()
+                .filter(|&&k| counts(j, k))
+                .map(|&k| reach[k])
+                .fold(0.0f32, f32::max);
             reach[j] = (l.length() + best).min(REACH_MAX);
             settled[j] = true;
             for &p in self.prev.get(j).map(|v| v.as_slice()).unwrap_or(&[]) {
@@ -581,7 +705,12 @@ impl Network {
                 }
             }
         }
-        let dead = self.lanes.iter().zip(&reach).filter(|(l, r)| l.kind == LaneKind::Street && **r < DEAD_END).count();
+        let dead = self
+            .lanes
+            .iter()
+            .zip(&reach)
+            .filter(|(l, r)| l.kind == LaneKind::Street && **r < DEAD_END)
+            .count();
         self.reach = reach;
         dead
     }
@@ -592,21 +721,32 @@ impl Network {
         self.grid.clear();
         self.start_grid.clear();
         for (i, l) in self.lanes.iter().enumerate() {
-            self.start_grid.entry(Self::grid_cell(l.start())).or_default().push(i);
+            self.start_grid
+                .entry(Self::grid_cell(l.start()))
+                .or_default()
+                .push(i);
             let mut cells: Vec<(i32, i32)> = Vec::new();
             for w in l.points.windows(2) {
                 // every cell along the segment, sampled finer than a cell
-                let n = ((w[1] - w[0]).truncate().length() / (GRID_CELL * 0.5)).ceil().max(1.0) as usize;
+                let n = ((w[1] - w[0]).truncate().length() / (GRID_CELL * 0.5))
+                    .ceil()
+                    .max(1.0) as usize;
                 for k in 0..=n {
                     let q = w[0].lerp(w[1], k as f64 / n as f64);
-                    let c = ((q.x / GRID_CELL).floor() as i32, (q.y / GRID_CELL).floor() as i32);
+                    let c = (
+                        (q.x / GRID_CELL).floor() as i32,
+                        (q.y / GRID_CELL).floor() as i32,
+                    );
                     if !cells.contains(&c) {
                         cells.push(c);
                     }
                 }
             }
             if l.points.len() == 1 {
-                cells.push(((l.points[0].x / GRID_CELL).floor() as i32, (l.points[0].y / GRID_CELL).floor() as i32));
+                cells.push((
+                    (l.points[0].x / GRID_CELL).floor() as i32,
+                    (l.points[0].y / GRID_CELL).floor() as i32,
+                ));
             }
             for c in cells {
                 self.grid.entry(c).or_default().push(i);
@@ -701,7 +841,10 @@ impl Network {
         let mut heap = BinaryHeap::new();
 
         dist[start] = 0.0;
-        heap.push(State { cost: 0.0, position: start });
+        heap.push(State {
+            cost: 0.0,
+            position: start,
+        });
 
         while let Some(State { cost, position }) = heap.pop() {
             if position == target {
@@ -728,7 +871,10 @@ impl Network {
                 if next_cost < dist[next_idx] {
                     dist[next_idx] = next_cost;
                     parent[next_idx] = Some(position);
-                    heap.push(State { cost: next_cost, position: next_idx });
+                    heap.push(State {
+                        cost: next_cost,
+                        position: next_idx,
+                    });
                 }
             }
         }
