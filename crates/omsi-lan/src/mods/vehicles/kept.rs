@@ -26,13 +26,6 @@ fn locally_shareable(m: &VehicleManifest, roots: &[PathBuf], markers: &mut Marke
 }
 
 impl Vehicles {
-    pub(super) fn shareable_size(&self, sha: &str) -> Option<u64> {
-        if self.policy_generation != omsi_cfg::content_generation() {
-            return None;
-        }
-        self.shareable.get(sha).copied()
-    }
-
     pub(super) fn reindex_shareable(&mut self) {
         self.shareable.clear();
         for (fp, m) in &self.manifests {
@@ -64,9 +57,9 @@ pub(in crate::mods) fn refresh_shareable() {
 }
 
 pub(in crate::mods) fn shareable_manifest_for_serving(fp: &str) -> Option<VehicleManifest> {
-    let g = buses().lock();
+    let g = buses().lock_with_current_policy();
     let v = g.as_ref()?;
-    if v.policy_generation != omsi_cfg::content_generation() || !v.shareable_manifests.contains(fp) {
+    if !v.shareable_manifests.contains(fp) {
         return None;
     }
     v.manifests.iter().find(|(f, _)| f == fp).map(|(_, m)| m.clone())
@@ -183,7 +176,23 @@ pub(super) const SERVED_BYTES: usize = 512 << 20;
 pub(super) const ANNOUNCE_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 
 impl Buses {
+    /// Revalidate an invalidated policy before committing or serving. Filesystem checks
+    /// run with the store unlocked, and a concurrent change can invalidate the scan.
+    pub(super) fn lock_with_current_policy(&self) -> std::sync::MutexGuard<'_, Option<Vehicles>> {
+        loop {
+            let g = self.lock();
+            if g.as_ref()
+                .is_none_or(|v| v.policy_generation == omsi_cfg::content_generation())
+            {
+                return g;
+            }
+            drop(g);
+            self.refresh_shareable(false);
+        }
+    }
+
     pub(super) fn refresh_shareable(&self, force: bool) {
+        let _scan = self.policy_refresh.lock().unwrap_or_else(|e| e.into_inner());
         let generation = omsi_cfg::content_generation();
         let (revision, manifests, sizes, withheld) = {
             let g = self.lock();
@@ -381,9 +390,9 @@ impl Buses {
     pub(super) fn blob(&self, sha: &str) -> Option<Vec<u8>> {
         let sha = sha.to_ascii_lowercase();
         let (store, size) = {
-            let g = self.lock();
+            let g = self.lock_with_current_policy();
             let v = g.as_ref()?;
-            (v.store.clone(), v.shareable_size(&sha)?)
+            (v.store.clone(), *v.shareable.get(&sha)?)
         };
         store.read(&Entry { path: String::new(), size, sha256: sha }).ok()
     }
@@ -392,9 +401,10 @@ impl Buses {
     /// one of them.
     pub(super) fn served(&self, sha: &str) -> Option<Arc<Vec<u8>>> {
         let sha = sha.to_ascii_lowercase();
-        self.lock().as_ref()?.shareable_size(&sha)?;
         let last = || self.served_last.lock().unwrap_or_else(|e| e.into_inner());
         {
+            let g = self.lock_with_current_policy();
+            g.as_ref()?.shareable.get(&sha)?;
             let mut c = last();
             if let Some(k) = c.iter().position(|(s, _)| *s == sha) {
                 let hit = c.remove(k)?;
@@ -406,8 +416,12 @@ impl Buses {
         // (one file opened at a time: asked for a hundred times at once, each a GB, they were
         // all read into memory together)
         let _one = self.opening.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some((_, d)) = last().iter().find(|(s, _)| *s == sha) {
-            return Some(d.clone());
+        {
+            let g = self.lock_with_current_policy();
+            g.as_ref()?.shareable.get(&sha)?;
+            if let Some((_, d)) = last().iter().find(|(s, _)| *s == sha) {
+                return Some(d.clone());
+            }
         }
         let data = Arc::new(self.blob(&sha)?);
         let mut c = last();
@@ -516,15 +530,20 @@ impl Buses {
     pub(super) fn commit(&self, m: VehicleManifest) -> Result<(String, bool), String> {
         let m = m.validated()?;
         let fp = m.fingerprint();
-        let policy_generation = omsi_cfg::content_generation();
-        if !locally_shareable(&m, &omsi_cfg::content_roots(), &mut MarkerScan::default()) {
-            return Err("this vehicle contains files in a private directory".into());
-        }
-        let mut g = self.lock();
+        let mut g = loop {
+            let generation = omsi_cfg::content_generation();
+            let allowed =
+                locally_shareable(&m, &omsi_cfg::content_roots(), &mut MarkerScan::default());
+            let g = self.lock_with_current_policy();
+            if generation != omsi_cfg::content_generation() {
+                continue;
+            }
+            if !allowed {
+                return Err("this vehicle contains files in a private directory".into());
+            }
+            break g;
+        };
         let v = g.as_mut().ok_or("no store")?;
-        if policy_generation != omsi_cfg::content_generation() {
-            return Err("content roots changed while checking transfer permissions".into());
-        }
         if v.manifests.iter().any(|(f, _)| *f == fp) {
             return Ok((fp, false));
         }
@@ -559,9 +578,7 @@ impl Buses {
             }
         }
         v.shareable_manifests.insert(fp.clone());
-        if v.policy_generation == policy_generation {
-            add_shareable(&mut v.shareable, &v.sizes, &m, v.withheld_of.get(&fp).map(Vec::as_slice));
-        }
+        add_shareable(&mut v.shareable, &v.sizes, &m, v.withheld_of.get(&fp).map(Vec::as_slice));
         v.manifests.push((fp.clone(), m));
         v.policy_revision = Arc::new(());
         write_cache_pins(v);

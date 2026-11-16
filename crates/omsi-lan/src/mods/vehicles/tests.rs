@@ -24,8 +24,12 @@ fn an_unapproved_upload_cannot_be_downloaded_by_guessing_its_hash() {
     kept.put(&entry, bus).unwrap();
     assert!(kept.blob(&entry.sha256).is_none(), "uploaded bytes without an approved manifest must not be served");
     let list = VehicleManifest { bus: entry.path.clone(), entries: vec![entry.clone()] }.validated().unwrap();
+    omsi_cfg::content_changed();
     kept.commit(list).unwrap();
     assert_eq!(kept.blob(&entry.sha256).unwrap(), bus);
+    assert_eq!(kept.served(&entry.sha256).unwrap().as_slice(), bus);
+    omsi_cfg::content_changed();
+    assert_eq!(kept.served(&entry.sha256).unwrap().as_slice(), bus);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -46,9 +50,16 @@ fn a_private_marker_revokes_cached_vehicle_blobs_before_and_after_restart() {
     let m = VehicleManifest { bus: descriptor.path.clone(), entries: vec![descriptor.clone()] };
     let (fp, _) = kept.commit(m).unwrap();
     assert!(kept.served(&descriptor.sha256).is_some());
-    std::fs::write(folder.join(".openomsi-no-share"), "").unwrap();
-    kept.refresh_shareable(true);
+    let marker = folder.join(".openomsi-no-share");
+    std::fs::write(&marker, "").unwrap();
+    omsi_cfg::content_changed();
     assert!(kept.blob(&descriptor.sha256).is_none());
+    assert!(kept.served(&descriptor.sha256).is_none());
+    std::fs::remove_file(&marker).unwrap();
+    kept.refresh_shareable(true);
+    assert!(kept.served(&descriptor.sha256).is_some());
+    std::fs::write(&marker, "").unwrap();
+    kept.refresh_shareable(true);
     assert!(kept.served(&descriptor.sha256).is_none());
     kept.open_in(&store).unwrap();
     assert!(kept.manifest(&fp).is_none());

@@ -63,6 +63,8 @@ struct HeldBack {
 pub(in crate::mods) struct Buses {
     /// None before the store is opened (`open`).
     kept: Mutex<Option<Vehicles>>,
+    /// Serializes policy scans while leaving the store available during filesystem checks.
+    policy_refresh: Mutex<()>,
     /// The files served last, unsealed (`served`): a file asked for piece by piece is opened
     /// once, not once a piece. At most `SERVED_BYTES` of them.
     served_last: Mutex<VecDeque<(String, Arc<Vec<u8>>)>>,
@@ -91,6 +93,7 @@ impl Default for Buses {
     fn default() -> Self {
         Buses {
             kept: Mutex::default(),
+            policy_refresh: Mutex::default(),
             served_last: Mutex::default(),
             opening: Mutex::default(),
             finishing: Mutex::default(),
