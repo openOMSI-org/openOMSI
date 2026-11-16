@@ -794,6 +794,7 @@ fn new_player(
         ibis_background: false,
         arm: Default::default(),
         blinker_key_state: 0,
+        hazard_watch: Default::default(),
         blinker_cancel: crate::settings::Settings::load().blinker_cancel,
         trolley_view: None,
         panto_fx: Default::default(),

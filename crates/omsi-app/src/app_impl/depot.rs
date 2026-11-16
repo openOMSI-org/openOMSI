@@ -72,7 +72,7 @@ impl App {
             self.service_msg = Some(("No accident to report".into(), 4.0));
             return;
         }
-        if !police_may_be_called(&p.vehicle) {
+        if !police_may_be_called(&p.vehicle, &p.hazard_watch) {
             self.service_msg = Some(("Stop and switch on the hazard lights first".into(), 6.0));
             return;
         }
@@ -149,11 +149,12 @@ fn service_event(plugin_events: &mut Vec<omsi_plugin::GameEvent>, kind: &'static
 }
 
 /// The bus stands (below 1 km/h) with its hazard lights on: the switch where its script has
-/// one, else both indicator lamps.
-pub(crate) fn police_may_be_called(v: &omsi_sim::VehicleInstance) -> bool {
-    let hazards = match v.var("lights_sw_warnblinker") {
-        Some(s) => s > 0.5,
-        None => omsi_lan::game::indicator(v) == 3,
-    };
-    hazards && v.physics.velocity_kmh().abs() < 1.0
+/// one, else both indicator lamps flashing together, through their dark phase
+/// (`crate::hazard`).
+pub(crate) fn police_may_be_called(
+    v: &omsi_sim::VehicleInstance,
+    watch: &crate::hazard::HazardWatch,
+) -> bool {
+    crate::hazard::hazards_on(v.var("lights_sw_warnblinker"), watch)
+        && v.physics.velocity_kmh().abs() < 1.0
 }

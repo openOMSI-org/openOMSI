@@ -293,6 +293,9 @@ pub(crate) struct Player {
     /// (real OMSI's Z/X/C and Shift+numpad 4/6/5 are toggles, not one-shot "set" buttons):
     /// 0 = nothing, 1 = left, 2 = right, 3 = hazard.
     pub(crate) blinker_key_state: u8,
+    /// Whether the bus's hazard lights flash, held through the lamps' dark phase (for "Call
+    /// the police" on a bus whose script has no hazard switch, see `hazard`).
+    pub(crate) hazard_watch: crate::hazard::HazardWatch,
     /// The settings' "Indicators cancel themselves" (`blinker_cancel`): off, the script's
     /// own cancelling after a turn is undone (#451).
     pub(crate) blinker_cancel: bool,
