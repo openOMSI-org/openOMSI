@@ -62,7 +62,10 @@ editor and texture-cache restrictions.
 Publishers issue signed offline entitlements for an exact manifest and expiry. Entitlements
 contain a pack key and must be delivered confidentially. Runtime storage uses macOS Keychain
 or Windows user-scoped DPAPI, without a plaintext fallback, so encrypted packs only play on
-Windows and macOS. Linux, Android and iOS have no key store yet and load unencrypted packs only. A new version or changed manifest
+Windows and macOS. As with DPAPI, any program of the user may read the Keychain item, so the
+signed game, its launcher and their updates read it without a prompt; macOS still asks when a
+build is unsigned or signed without a team (local and CI builds). Linux, Android and iOS have
+no key store yet and load unencrypted packs only. A new version or changed manifest
 requires a corresponding entitlement. Copying application settings is not a supported key
 backup; obtain another entitlement from the publisher when native storage cannot be restored.
 

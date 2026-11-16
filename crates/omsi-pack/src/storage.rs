@@ -8,6 +8,9 @@ use sha2::{Digest, Sha256};
 use std::{fs, io, path::PathBuf};
 
 #[cfg(target_os = "macos")]
+mod keychain;
+
+#[cfg(target_os = "macos")]
 const SERVICE: &str = "org.openomsi.protected-pack";
 
 pub trait KeyStore {
@@ -44,8 +47,7 @@ fn validate_scope(scope: &str) -> Result<()> {
 #[cfg(target_os = "macos")]
 fn native_store(scope: &str, secret: &[u8]) -> Result<()> {
     validate_scope(scope)?;
-    security_framework::passwords::set_generic_password(SERVICE, scope, secret)
-        .map_err(|e| PackError::SecureStorage(e.to_string()))
+    keychain::store(SERVICE, scope, secret)
 }
 
 #[cfg(target_os = "macos")]

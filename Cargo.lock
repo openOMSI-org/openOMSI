@@ -4362,6 +4362,7 @@ dependencies = [
 name = "omsi-pack"
 version = "0.1.0"
 dependencies = [
+ "core-foundation 0.10.1",
  "libc",
  "rayon",
  "ring",
