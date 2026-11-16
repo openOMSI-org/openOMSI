@@ -767,10 +767,11 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // nearby street lighting used by envmap/glass reflections, so only skip it when
     // neither its direct result nor its reflection contribution can be observed.
     let skip_map_lamps = material.params.y > 0.2 && material.params.y < 0.3;
+    let needs_lamp_reflection = (reflective_env || glass) && !traced;
     var lamps = vec3<f32>(0.0);
-    if (!skip_map_lamps || ((reflective_env || glass) && !traced)) {
+    if (!skip_map_lamps || needs_lamp_reflection) {
         let direct_lamps = lamp_light(in.world, n, v, sf_lit, thin, !capture, film, dot(geo_n, v) < 0.0 && !is_water);
-        if (!skip_map_lamps {
+        if (!skip_map_lamps) {
             lamps = direct_lamps;
         }
     } else {
@@ -792,7 +793,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // walls: a bus's windows and paint under a street lamp show the lit street, the ones on
     // an unlit road stay dark. (Not through the photo's structure: its bright rows are the
     // day's sky, which the lamps do not light.)
-    if ((reflective_env || glass) && !traced) {
+    if (needs_lamp_reflection) {
         let lit_round = lamp_ground * (1.0 - open);
         reflection = reflection + lit_round * refl_f * (1.0 - cab_view);
     }
