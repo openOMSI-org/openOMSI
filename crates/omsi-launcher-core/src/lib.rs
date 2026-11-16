@@ -3263,10 +3263,8 @@ pub fn launch(d: &Duty) -> Result<Launched> {
     let game = find_game(&c.game).context("the game binary was not found (set it under Setup)")?;
     let args = duty_args(d)?;
     let profile = d.profile.clone().filter(|p| !p.trim().is_empty()).unwrap_or(c.profile);
-    match input_profiles::for_bus(&d.bus) {
-        Ok(Some(p)) => log_to_file(&format!("controls profile {p} for {}", d.bus)),
-        Err(e) => log_to_file(&format!("controls profile for {}: {e:#}", d.bus)),
-        Ok(None) => {}
+    if let Some(p) = input_profiles::for_bus(&d.bus).context("the controls profile could not be switched")? {
+        log_to_file(&format!("controls profile {p} for {}", d.bus));
     }
     let s = instances::start(&game, &args, d, &profile)?;
     Ok(Launched { pid: s.pid, log: s.log.to_string_lossy().to_string(), command: s.command, others: s.others })

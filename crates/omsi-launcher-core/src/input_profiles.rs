@@ -5,11 +5,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-/// The files a profile holds (`omsi_cfg`'s own inputs).
 const FILES: [&str; 2] = ["keyboard.cfg", "gamectrler.cfg"];
 const INDEX: &str = "profiles.json";
 const DIR: &str = "profiles";
-/// The profile made of the files in use when the first other one is made.
 pub const FIRST: &str = "Default";
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -18,7 +16,6 @@ struct Index {
     active: Option<String>,
     #[serde(default)]
     default: Option<String>,
-    /// bus (as the launcher names it, see [`bus_key`]) → profile
     #[serde(default)]
     buses: BTreeMap<String, String>,
 }
@@ -75,26 +72,72 @@ fn names(inputs: &Path) -> Vec<String> {
 }
 
 // (a file the source lacks is written as the game's default: without one, the content
-// folder's copy would be the one in use)
+// folder's copy would be the one in use; all files are staged first, so a failure leaves the
+// ones in use as they were)
 fn copy_files(from: &Path, to: &Path, rival: Option<&Path>) -> Result<()> {
     std::fs::create_dir_all(to)?;
+    let mut staged = Vec::new();
+    let result = stage(from, to, rival, &mut staged).and_then(|_| put(to, &staged));
+    for (tmp, _) in &staged {
+        let _ = std::fs::remove_file(tmp);
+    }
+    result
+}
+
+fn stage(
+    from: &Path,
+    to: &Path,
+    rival: Option<&Path>,
+    staged: &mut Vec<(PathBuf, &'static str)>,
+) -> Result<()> {
     for f in FILES {
-        let (a, b) = (from.join(f), to.join(f));
+        let a = from.join(f);
         let tmp = to.join(format!("{f}.tmp"));
         if a.is_file() {
             std::fs::copy(&a, &tmp)?;
         } else if let Some(bytes) = default_file(f) {
             std::fs::write(&tmp, bytes)?;
         } else {
-            if b.is_file() {
-                std::fs::remove_file(&b)?;
-            }
             continue;
         }
+        staged.push((tmp.clone(), f));
         stamp(&tmp, rival.map(|r| r.join(f)).as_deref())?;
-        std::fs::rename(&tmp, &b)?;
     }
     Ok(())
+}
+
+fn put(to: &Path, staged: &[(PathBuf, &'static str)]) -> Result<()> {
+    let bak = |f: &str| to.join(format!("{f}.bak"));
+    let mut moved = Vec::new();
+    let result = (|| -> Result<()> {
+        for f in FILES {
+            let b = to.join(f);
+            if b.is_file() {
+                std::fs::rename(&b, bak(f))?;
+                moved.push(f);
+            }
+        }
+        for (tmp, f) in staged {
+            std::fs::rename(tmp, to.join(f))?;
+        }
+        Ok(())
+    })();
+    match &result {
+        Ok(()) => {
+            for f in &moved {
+                let _ = std::fs::remove_file(bak(*f));
+            }
+        }
+        Err(_) => {
+            for (_, f) in staged.iter().filter(|(_, f)| !moved.contains(f)) {
+                let _ = std::fs::remove_file(to.join(f));
+            }
+            for f in &moved {
+                let _ = std::fs::rename(bak(*f), to.join(f));
+            }
+        }
+    }
+    result
 }
 
 // (`omsi_cfg::input_in_use` takes the newest of the own and the content folder's file, and a
@@ -112,7 +155,6 @@ fn stamp(file: &Path, rival: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-// (no gamectrler.cfg: no device set up; no keyboard.cfg: OMSI 2's own)
 fn default_file(name: &str) -> Option<Vec<u8>> {
     match name {
         "gamectrler.cfg" => Some(Vec::new()),
@@ -294,9 +336,14 @@ pub fn set_default(name: Option<&str>) -> Result<()> {
 pub fn assign(bus: &str, name: Option<&str>) -> Result<()> {
     assign_in(&dir()?, bus, name)
 }
+/// `Ok(None)` while a game runs: the new one shares the files in use.
 pub fn for_bus(bus: &str) -> Result<Option<String>> {
-    no_game_running()?;
-    for_bus_in(&dir()?, rival().as_deref(), bus)
+    if let Err(e) = no_game_running() {
+        crate::log_to_file(&format!("controls profile for {bus}: {e:#}"));
+        return Ok(None);
+    }
+    let Ok(d) = dir() else { return Ok(None) };
+    for_bus_in(&d, rival().as_deref(), bus)
 }
 
 #[cfg(test)]
@@ -416,6 +463,43 @@ mod tests {
         }
         assert!(d.join(DIR).join("Wheel").is_dir() && d.join("keyboard.cfg").is_file());
         assert_eq!(list_in(&d)["buses"], json!({}));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_failed_switch_leaves_the_files_in_use_as_they_were() {
+        let d = std::env::temp_dir().join(format!("input-profiles-fail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("keyboard.cfg"), "original").unwrap();
+        std::fs::write(d.join("gamectrler.cfg"), "pad").unwrap();
+        create_in(&d, "Wheel").unwrap();
+        std::fs::write(d.join("keyboard.cfg"), "wheel keys").unwrap();
+        std::fs::write(d.join("gamectrler.cfg"), "wheel pad").unwrap();
+        switch_in(&d, None, "Default").unwrap();
+        assign_in(&d, "Bus/A.bus", Some("Wheel")).unwrap();
+
+        // the second file cannot be staged: a folder stands where its temporary file goes
+        std::fs::create_dir_all(d.join("gamectrler.cfg.tmp")).unwrap();
+        assert!(for_bus_in(&d, None, "Bus/A.bus").is_err());
+        assert_eq!(kb(&d), "original");
+        assert_eq!(
+            std::fs::read_to_string(d.join("gamectrler.cfg")).unwrap(),
+            "pad"
+        );
+        assert!(!d.join("keyboard.cfg.tmp").exists() && !d.join("keyboard.cfg.bak").exists());
+        assert_eq!(list_in(&d)["active"], "Default");
+
+        std::fs::remove_dir_all(d.join("gamectrler.cfg.tmp")).unwrap();
+        assert_eq!(
+            for_bus_in(&d, None, "Bus/A.bus").unwrap().as_deref(),
+            Some("Wheel")
+        );
+        assert_eq!(kb(&d), "wheel keys");
+        assert_eq!(
+            std::fs::read_to_string(d.join("gamectrler.cfg")).unwrap(),
+            "wheel pad"
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 }
