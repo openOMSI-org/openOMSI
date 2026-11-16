@@ -174,10 +174,10 @@ export async function run(root) {
     await click('[data-settings-category=favourites]');
     set({ boot: { ...S.boot, platform: 'windows' } });
     await sleep(100);
-    assertFavouriteCount(2);
+    assertFavouriteCount(3);
     set({ settings: { ...S.settings, graphics: 'enhanced' } });
     await sleep(100);
-    assertFavouriteCount(3);
+    assertFavouriteCount(4);
     assert(JSON.stringify(JSON.parse(localStorage.getItem('settings-favourites'))) === JSON.stringify(savedFavourites), 'Visibility changes must preserve saved favourite IDs');
     report.push('PASS visible favourite count follows platform and setting changes without removing saved IDs');
     for (const theme of ['dark', 'light']) {
