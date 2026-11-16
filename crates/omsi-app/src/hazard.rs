@@ -1,23 +1,15 @@
-//! Whether the hazard lights of the player's bus are on, for OMSI 2's "Call the police".
-//!
-//! A bus whose script has the hazard switch (`lights_sw_warnblinker`) says so itself. A bus
-//! without it only shows its lamps, and they are dark half of the time: read at one frame,
-//! hazards that are on looked off in every dark phase. `HazardWatch` holds the state through
-//! the dark phase: the hazards count as on while both lamps were lit together within the
-//! last `HOLD` seconds.
+//! A bus without a hazard switch only shows its lamps, dark half of the time: read at one
+//! frame, hazards that are on looked off in every dark phase.
 
-/// Longer than the dark phase of an indicator's flash (about half a second in the stock
-/// scripts), so the hazards stay on between two flashes.
+/// Longer than an indicator's dark phase (about half a second in the stock scripts).
 pub(crate) const HOLD: f32 = 1.5;
 
-/// Seconds since both indicator lamps were last lit together, while that is under `HOLD`.
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct HazardWatch {
     since_both: Option<f32>,
 }
 
 impl HazardWatch {
-    /// One frame of `dt` seconds: whether both indicator lamps are lit now.
     pub(crate) fn step(&mut self, dt: f32, both_lit: bool) {
         self.since_both = if both_lit {
             Some(0.0)
@@ -28,14 +20,11 @@ impl HazardWatch {
         };
     }
 
-    /// Both lamps have flashed together within the last `HOLD` seconds.
     pub(crate) fn flashing(&self) -> bool {
         self.since_both.is_some()
     }
 }
 
-/// The hazard lights are on: the script's hazard switch (`switch`) where it has one, else
-/// the lamps flashing together (`watch`).
 pub(crate) fn hazards_on(switch: Option<f32>, watch: &HazardWatch) -> bool {
     match switch {
         Some(s) => s > 0.5,

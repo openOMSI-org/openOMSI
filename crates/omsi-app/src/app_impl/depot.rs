@@ -56,11 +56,11 @@ impl App {
         }
     }
 
-    /// OMSI 2's "Call the police" (manual 2.11, "First Aid"): after a collision with
-    /// another vehicle the driver stops, switches the hazard lights on and calls the police,
-    /// who take up the accident - the vehicles knocked off their route go back onto it and
-    /// drive on. Not called, the player is charged with leaving the scene once those
-    /// vehicles' tile goes (`Traffic::take_fled`).
+    pub(crate) fn accident_open(&self) -> bool {
+        self.session.traffic.as_ref().is_some_and(|t| t.accident_open())
+    }
+
+    /// OMSI 2's "Call the police" (manual 2.11).
     pub(crate) fn call_police(&mut self) {
         let Some(p) = self.player.as_ref() else {
             return;
@@ -72,12 +72,11 @@ impl App {
             self.service_msg = Some(("No accident to report".into(), 4.0));
             return;
         }
-        if !police_may_be_called(&p.vehicle, &p.hazard_watch) {
+        if !police_may_be_called(&p.vehicle, &self.menus.game_panels.hazard_watch) {
             self.service_msg = Some(("Stop and switch on the hazard lights first".into(), 6.0));
             return;
         }
         let n = t.clear_accidents();
-        self.menus.accident_open = false;
         log::info!("the police took up the accident: {n} vehicles back on their way");
         self.service_msg = Some(("The police have taken up the accident".into(), 6.0));
     }
@@ -148,9 +147,6 @@ fn service_event(plugin_events: &mut Vec<omsi_plugin::GameEvent>, kind: &'static
     crate::plugins::queue_event(plugin_events, "service", args);
 }
 
-/// The bus stands (below 1 km/h) with its hazard lights on: the switch where its script has
-/// one, else both indicator lamps flashing together, through their dark phase
-/// (`crate::hazard`).
 pub(crate) fn police_may_be_called(
     v: &omsi_sim::VehicleInstance,
     watch: &crate::hazard::HazardWatch,

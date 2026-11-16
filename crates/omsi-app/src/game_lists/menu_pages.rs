@@ -333,7 +333,7 @@ pub(super) fn vehicle_pages(app: &App) -> Vec<Page> {
         service.push(button("Refuel", "Refuel", "Fills the tank of the current vehicle", "refuel"));
         service.push(button("Wash", "Wash", "Cleans the current vehicle", "wash"));
         service.push(button("Repair", "Repair", "Repairs the current vehicle", "repair"));
-        if app.menus.accident_open {
+        if app.accident_open() {
             service.push(button(
                 "Call the police",
                 "Call the police",

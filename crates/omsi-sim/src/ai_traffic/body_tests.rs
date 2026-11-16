@@ -311,9 +311,7 @@ fn a_stop_request_fires_the_trigger_on_the_timetable_bus_only() {
     assert_ne!(car(&t, other).vehicle.var("stop_seen"), Some(1.0), "another car's script does not");
 }
 
-/// OMSI 2's accident (manual 2.11): the player's bus knocks a car off its route; it stands
-/// where the blow left it, braked, hazard lights on, until the police are called - then it
-/// goes back onto its way and drives on.
+/// OMSI 2's accident (manual 2.11).
 #[test]
 fn a_car_the_player_hits_stands_with_its_hazards_on_until_the_police_come() {
     let f = Fixture::new();
