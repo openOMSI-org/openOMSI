@@ -25,10 +25,14 @@ fn point_lights(p: vec3<f32>, n: vec3<f32>, map_k: f32) -> vec3<f32> {
             }
             let l = lights[li];
             let d = l.pos.xyz - p;
-            let dist = length(d);
-            if (dist >= l.pos.w) {
+            let dist2 = dot(d, d);
+            // Mirrored Enhanced frames carry light records with zero/negative
+            // classic radius. Check that before squaring it, and avoid a sqrt for
+            // light-grid candidates that cannot reach this pixel.
+            if (l.pos.w <= 0.0 || dist2 >= l.pos.w * l.pos.w) {
                 continue;
             }
+            let dist = sqrt(dist2);
             if (!(l.dir.w < -1.5 && l.dir.z < -0.5) && own_vehicle_blocks(p, l.pos.xyz)) {
                 continue;
             }

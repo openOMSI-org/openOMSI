@@ -763,7 +763,22 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     if ((terrain || material.params2.z > 0.0) && !is_water) {
         sf_lit.f0 = sf_lit.f0 * camera.lod.z;
     }
-    let lamps = lamp_light(in.world, n, v, sf_lit, thin, !capture, film, dot(geo_n, v) < 0.0 && !is_water) * select(1.0, 0.0, material.params.y > 0.2 && material.params.y < 0.3);
+    // Some materials explicitly ignore map lamps. Their lamp loop also writes the
+    // nearby street lighting used by envmap/glass reflections, so only skip it when
+    // neither its direct result nor its reflection contribution can be observed.
+    let skip_map_lamps = material.params.y > 0.2 && material.params.y < 0.3;
+    var lamps = vec3<f32>(0.0);
+    if (!skip_map_lamps || ((reflective_env || glass) && !traced)) {
+        let direct_lamps = lamp_light(in.world, n, v, sf_lit, thin, !capture, film, dot(geo_n, v) < 0.0 && !is_water);
+        if (!skip_map_lamps {
+            lamps = direct_lamps;
+        }
+    } else {
+        // No light is received or reflected by this material: don't evaluate the
+        // per-pixel light grid, its BRDFs and shadow lookups.
+        lamp_ground = vec3<f32>(0.0);
+        own_shadow = -1.0;
+    }
     // [interiorlight]: OMSI adds its lamps' light to the lit meshes whatever the daylight,
     // so a switched-on saloon is brighter by day as well and only stands out more at night.
     // Taken as a lamp against the daylight exposure it vanished by day altogether.
