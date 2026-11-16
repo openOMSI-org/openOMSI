@@ -204,8 +204,9 @@ pub fn install(plugins: &Path, e: &Entry, fetch: &dyn Fn(&str) -> Result<Vec<u8>
     result
 }
 
-/// Put `new` in place of `target` and move the old folder's `data/` over. The old folder waits
-/// at `old` until then, so on an error the plugin and its data are put back.
+/// Put `new` in place of `target` and move the old folder's data over (`data/` and the copies
+/// `recover` kept beside it). The old folder waits at `old` until then, so on an error the
+/// plugin and its data are put back.
 fn replace(
     new: &Path,
     target: &Path,
@@ -221,15 +222,17 @@ fn replace(
         let _ = rename(old, target);
         return Err(e.into());
     }
-    let data = old.join("data");
-    let moved = if data.is_dir() {
-        rename(data.as_path(), target.join("data").as_path())
-    } else {
-        Ok(())
-    };
-    if let Err(e) = moved {
-        let _ = rename(target, new).and_then(|_| rename(old, target));
-        return Err(e.into());
+    let mut moved: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for name in data_folders(old) {
+        let (from, to) = (old.join(&name), free_name(target, &name));
+        if let Err(e) = rename(from.as_path(), to.as_path()) {
+            for (from, to) in moved.iter().rev() {
+                let _ = rename(to.as_path(), from.as_path());
+            }
+            let _ = rename(target, new).and_then(|_| rename(old, target));
+            return Err(e.into());
+        }
+        moved.push((from, to));
     }
     // (what is left there is the old version's code: a leftover is cleared by `recover`)
     let _ = std::fs::remove_dir_all(old);
@@ -246,17 +249,9 @@ fn recover(target: &Path, old: &Path) -> Result<()> {
         std::fs::rename(old, target)?;
         return Ok(());
     }
-    if old.join("data").is_dir() {
-        // (a game started in between may have made a new `data/`: the old one is kept beside it)
-        let to = (0..)
-            .map(|n| match n {
-                0 => target.join("data"),
-                1 => target.join("data.before-update"),
-                n => target.join(format!("data.before-update-{n}")),
-            })
-            .find(|p| !p.exists())
-            .unwrap_or_else(|| target.join("data.before-update"));
-        std::fs::rename(old.join("data"), to)?;
+    // (a game started in between may have made a new `data/`: the old one is kept beside it)
+    for name in data_folders(old) {
+        std::fs::rename(old.join(&name), free_name(target, &name))?;
     }
     std::fs::remove_dir_all(old).with_context(|| {
         format!(
@@ -264,6 +259,32 @@ fn recover(target: &Path, old: &Path) -> Result<()> {
             old.display()
         )
     })
+}
+
+/// `data` and the `data.before-update…` copies in a plugin's folder, `data` first.
+fn data_folders(dir: &Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.path().is_dir())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|n| n == "data" || n.starts_with("data.before-update"))
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort_by_key(|n| (n != "data", n.clone()));
+    v
+}
+
+/// `name` in `dir`, or the first free `data.before-update`, `data.before-update-2`… when taken.
+fn free_name(dir: &Path, name: &str) -> PathBuf {
+    std::iter::once(dir.join(name))
+        .chain((1..).map(|n| match n {
+            1 => dir.join("data.before-update"),
+            n => dir.join(format!("data.before-update-{n}")),
+        }))
+        .find(|p| !p.exists())
+        .unwrap_or_else(|| dir.join(name))
 }
 
 /// Remove a plugin the catalog installed, its settings and data with it.
@@ -438,6 +459,55 @@ mod tests {
             "{\"old\":1}"
         );
         assert!(!old.exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn data_kept_by_a_recovery_survives_the_install_that_follows() {
+        let root =
+            std::env::temp_dir().join(format!("plugin-catalog-recover-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let plugins = root.join("plugins");
+        let (target, old) = (
+            plugins.join("speed-warning"),
+            root.join(".plugin-old-speed-warning"),
+        );
+        install(&plugins, &entry("1.0.0", b"-- one"), &|_| {
+            Ok(b"-- one".to_vec())
+        })
+        .unwrap();
+        std::fs::create_dir_all(target.join("data")).unwrap();
+        std::fs::write(target.join("data/settings.json"), "old").unwrap();
+
+        // an update to 1.1.0 cut short after the new version went in (the old folder still
+        // aside with its data), and a game run since then made a new `data/`
+        std::fs::rename(&target, &old).unwrap();
+        std::fs::create_dir_all(target.join("data")).unwrap();
+        std::fs::write(target.join("main.lua"), "-- two").unwrap();
+        std::fs::write(
+            target.join(MARK),
+            r#"{"id": "speed-warning", "version": "1.1.0"}"#,
+        )
+        .unwrap();
+        std::fs::write(target.join("data/settings.json"), "new").unwrap();
+
+        install(&plugins, &entry("1.2.0", b"-- three"), &|_| {
+            Ok(b"-- three".to_vec())
+        })
+        .unwrap();
+        let read = |p: &str| std::fs::read_to_string(target.join(p)).unwrap();
+        assert_eq!(read("main.lua"), "-- three");
+        assert_eq!(read("data/settings.json"), "new");
+        assert_eq!(read("data.before-update/settings.json"), "old");
+        assert!(!old.exists());
+
+        // and the update after that keeps both again
+        install(&plugins, &entry("1.3.0", b"-- four"), &|_| {
+            Ok(b"-- four".to_vec())
+        })
+        .unwrap();
+        assert_eq!(read("data/settings.json"), "new");
+        assert_eq!(read("data.before-update/settings.json"), "old");
         let _ = std::fs::remove_dir_all(&root);
     }
 }
