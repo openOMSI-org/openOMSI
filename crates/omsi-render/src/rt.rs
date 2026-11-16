@@ -69,8 +69,23 @@ impl hashbrown::Equivalent<BlasKey> for BlasKeyRef<'_> {
     fn equivalent(&self, k: &BlasKey) -> bool {
         *self.vb == k.vb
             && *self.ib == k.ib
-            && (self.generation, self.first_vertex, self.first_index, self.vertex_count, self.solid, self.cut, self.glass)
-                == (k.generation, k.first_vertex, k.first_index, k.vertex_count, k.solid, k.cut, k.glass)
+            && (
+                self.generation,
+                self.first_vertex,
+                self.first_index,
+                self.vertex_count,
+                self.solid,
+                self.cut,
+                self.glass,
+            ) == (
+                k.generation,
+                k.first_vertex,
+                k.first_index,
+                k.vertex_count,
+                k.solid,
+                k.cut,
+                k.glass,
+            )
     }
 }
 
@@ -202,7 +217,11 @@ pub(super) struct RayTracer {
 
 /// One reflection ray per this many pixels each way (OMSI_RT_REFL_HALF=1: per 2 x 2).
 fn refl_div() -> u32 {
-    if omsi_cfg::flags::OMSI_RT_REFL_HALF.is_set() { 2 } else { 1 }
+    if omsi_cfg::flags::OMSI_RT_REFL_HALF.is_set() {
+        2
+    } else {
+        1
+    }
 }
 
 /// The traced lighting's shader: the shared ray tracing and its own.
@@ -217,8 +236,15 @@ pub(super) const PARAMS_SIZE: usize = std::mem::size_of::<Params>();
 /// The reflections' shader: the shared ray tracing, the enhanced uniform's layout, its own.
 pub(super) fn reflect_source() -> String {
     let common = include_str!("enhanced_common.wgsl");
-    let enh = &common[..common.find("@group(0) @binding(11)").expect("Enhanced struct")];
-    [include_str!("rt_common.wgsl"), enh, include_str!("rt_reflect.wgsl")].join("\n")
+    let enh = &common[..common
+        .find("@group(0) @binding(11)")
+        .expect("Enhanced struct")];
+    [
+        include_str!("rt_common.wgsl"),
+        enh,
+        include_str!("rt_reflect.wgsl"),
+    ]
+    .join("\n")
 }
 
 fn storage_texture(binding: u32) -> wgpu::BindGroupLayoutEntry {
@@ -238,16 +264,29 @@ fn texture_entry(binding: u32, sample_type: wgpu::TextureSampleType) -> wgpu::Bi
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,
-        ty: wgpu::BindingType::Texture { sample_type, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+        ty: wgpu::BindingType::Texture {
+            sample_type,
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
         count: None,
     }
 }
 
-fn storage_buffer(binding: u32, read_only: bool, dynamic: bool, min: u64) -> wgpu::BindGroupLayoutEntry {
+fn storage_buffer(
+    binding: u32,
+    read_only: bool,
+    dynamic: bool,
+    min: u64,
+) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,
-        ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only }, has_dynamic_offset: dynamic, min_binding_size: wgpu::BufferSize::new(min) },
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only },
+            has_dynamic_offset: dynamic,
+            min_binding_size: wgpu::BufferSize::new(min),
+        },
         count: None,
     }
 }
@@ -260,13 +299,21 @@ impl RayTracer {
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<Params>() as u64) },
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(
+                            std::mem::size_of::<Params>() as u64
+                        ),
+                    },
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::AccelerationStructure { vertex_return: false },
+                    ty: wgpu::BindingType::AccelerationStructure {
+                        vertex_return: false,
+                    },
                     count: None,
                 },
                 texture_entry(2, wgpu::TextureSampleType::Depth),
@@ -283,8 +330,15 @@ impl RayTracer {
                 },
             ],
         });
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("ray tracing"), source: wgpu::ShaderSource::Wgsl(lighting_source().into()) });
-        let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("ray tracing"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("ray tracing"),
+            source: wgpu::ShaderSource::Wgsl(lighting_source().into()),
+        });
+        let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("ray tracing"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
         let pipeline = |entry: &str, step: Option<f64>| {
             let constants: Vec<(&str, f64)> = step.map(|s| vec![("STEP", s)]).unwrap_or_default();
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -292,7 +346,10 @@ impl RayTracer {
                 layout: Some(&pl),
                 module: &module,
                 entry_point: Some(entry),
-                compilation_options: wgpu::PipelineCompilationOptions { constants: &constants, ..Default::default() },
+                compilation_options: wgpu::PipelineCompilationOptions {
+                    constants: &constants,
+                    ..Default::default()
+                },
                 cache: crate::pipeline_cache::get(device).as_ref(),
             })
         };
@@ -304,14 +361,26 @@ impl RayTracer {
             label: Some("texture means"),
             entries: &[
                 texture_entry(0, wgpu::TextureSampleType::Float { filterable: true }),
-                wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
                 storage_buffer(2, false, true, 32),
                 atlas_entries[0],
                 atlas_entries[1],
             ],
         });
-        let avg_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("texture means"), source: wgpu::ShaderSource::Wgsl(include_str!("rt_avg.wgsl").into()) });
-        let avg_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("texture means"), bind_group_layouts: &[Some(&avg_layout)], immediate_size: 0 });
+        let avg_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("texture means"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("rt_avg.wgsl").into()),
+        });
+        let avg_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("texture means"),
+            bind_group_layouts: &[Some(&avg_layout)],
+            immediate_size: 0,
+        });
         let avg_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("texture means"),
             layout: Some(&avg_pl),
@@ -324,7 +393,11 @@ impl RayTracer {
         let tex = |binding, sample_type, view_dimension, visibility| wgpu::BindGroupLayoutEntry {
             binding,
             visibility,
-            ty: wgpu::BindingType::Texture { sample_type, view_dimension, multisampled: false },
+            ty: wgpu::BindingType::Texture {
+                sample_type,
+                view_dimension,
+                multisampled: false,
+            },
             count: None,
         };
         let unfilt = wgpu::TextureSampleType::Float { filterable: false };
@@ -336,23 +409,45 @@ impl RayTracer {
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: vis,
-                    ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<Params>() as u64) },
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(
+                            std::mem::size_of::<Params>() as u64
+                        ),
+                    },
                     count: None,
                 },
-                wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::AccelerationStructure { vertex_return: false }, count: None },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::AccelerationStructure {
+                        vertex_return: false,
+                    },
+                    count: None,
+                },
                 tex(2, wgpu::TextureSampleType::Depth, d2, vis),
                 storage_buffer(3, true, false, 48),
                 storage_buffer(4, true, false, 256),
                 tex(5, unfilt, d2, vis),
                 tex(6, unfilt, d2, vis),
                 storage_texture(7),
-                wgpu::BindGroupLayoutEntry { binding: 8, visibility: vis, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 8,
+                    visibility: vis,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
                 tex(9, filt, d2, wgpu::ShaderStages::COMPUTE),
                 tex(10, filt, wgpu::TextureViewDimension::Cube, vis),
                 wgpu::BindGroupLayoutEntry {
                     binding: 11,
                     visibility: vis,
-                    ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None },
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
                     count: None,
                 },
                 tex(12, unfilt, d2, vis),
@@ -360,8 +455,15 @@ impl RayTracer {
                 tex(14, filt, d2, wgpu::ShaderStages::COMPUTE),
             ],
         });
-        let refl_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("ray-traced reflections"), source: wgpu::ShaderSource::Wgsl(reflect_source().into()) });
-        let refl_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("ray-traced reflections"), bind_group_layouts: &[Some(&refl_layout)], immediate_size: 0 });
+        let refl_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("ray-traced reflections"),
+            source: wgpu::ShaderSource::Wgsl(reflect_source().into()),
+        });
+        let refl_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("ray-traced reflections"),
+            bind_group_layouts: &[Some(&refl_layout)],
+            immediate_size: 0,
+        });
         let div = [("REFL_DIV", refl_div() as f64)];
         let refl_compute = |entry: &str| {
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -369,24 +471,49 @@ impl RayTracer {
                 layout: Some(&refl_pl),
                 module: &refl_module,
                 entry_point: Some(entry),
-                compilation_options: wgpu::PipelineCompilationOptions { constants: &div, ..Default::default() },
+                compilation_options: wgpu::PipelineCompilationOptions {
+                    constants: &div,
+                    ..Default::default()
+                },
                 cache: crate::pipeline_cache::get(device).as_ref(),
             })
         };
         let reflect = refl_compute("cs_reflect");
-        let add = wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add };
+        let add = wgpu::BlendComponent {
+            src_factor: wgpu::BlendFactor::One,
+            dst_factor: wgpu::BlendFactor::One,
+            operation: wgpu::BlendOperation::Add,
+        };
         let composite = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("reflections composite"),
             layout: Some(&refl_pl),
-            vertex: wgpu::VertexState { module: &refl_module, entry_point: Some("vs_full"), buffers: &[], compilation_options: Default::default() },
-            primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
+            vertex: wgpu::VertexState {
+                module: &refl_module,
+                entry_point: Some("vs_full"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            primitive: wgpu::PrimitiveState {
+                cull_mode: None,
+                ..Default::default()
+            },
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &refl_module,
                 entry_point: Some("fs_composite"),
-                targets: &[Some(wgpu::ColorTargetState { format: HDR_FORMAT, blend: Some(wgpu::BlendState { color: add, alpha: add }), write_mask: wgpu::ColorWrites::COLOR })],
-                compilation_options: wgpu::PipelineCompilationOptions { constants: &div, ..Default::default() },
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: HDR_FORMAT,
+                    blend: Some(wgpu::BlendState {
+                        color: add,
+                        alpha: add,
+                    }),
+                    write_mask: wgpu::ColorWrites::COLOR,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions {
+                    constants: &div,
+                    ..Default::default()
+                },
             }),
             multiview_mask: None,
             cache: crate::pipeline_cache::get(device).as_ref(),
@@ -415,7 +542,12 @@ impl RayTracer {
             layout,
             trace,
             temporal,
-            params: device.create_buffer(&wgpu::BufferDescriptor { label: Some("ray tracing params"), size: std::mem::size_of::<Params>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false }),
+            params: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("ray tracing params"),
+                size: std::mem::size_of::<Params>() as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
             targets: None,
             frame: 0,
             prev: None,
@@ -428,7 +560,11 @@ impl RayTracer {
             spare: device
                 .create_texture(&wgpu::TextureDescriptor {
                     label: Some("rt spare"),
-                    size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+                    size: wgpu::Extent3d {
+                        width: 1,
+                        height: 1,
+                        depth_or_array_layers: 1,
+                    },
                     mip_level_count: 1,
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
@@ -450,11 +586,23 @@ impl RayTracer {
     }
 
     fn make_records(device: &wgpu::Device, n: u64) -> wgpu::Buffer {
-        device.create_buffer(&wgpu::BufferDescriptor { label: Some("ray tracing records"), size: n * std::mem::size_of::<Record>() as u64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false })
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("ray tracing records"),
+            size: n * std::mem::size_of::<Record>() as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
     }
 
     fn make_avg(device: &wgpu::Device, n: u64, stride: u64) -> wgpu::Buffer {
-        device.create_buffer(&wgpu::BufferDescriptor { label: Some("texture means"), size: n * stride, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false })
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("texture means"),
+            size: n * stride,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        })
     }
 
     /// The vertices of these meshes changed: their structures are built again.
@@ -472,17 +620,29 @@ impl RayTracer {
             device
                 .create_texture(&wgpu::TextureDescriptor {
                     label: Some(label),
-                    size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                    size: wgpu::Extent3d {
+                        width: w,
+                        height: h,
+                        depth_or_array_layers: 1,
+                    },
                     mip_level_count: 1,
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
                     format: wgpu::TextureFormat::Rgba16Float,
-                    usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
+                    usage: wgpu::TextureUsages::STORAGE_BINDING
+                        | wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::COPY_SRC
+                        | wgpu::TextureUsages::COPY_DST,
                     view_formats: &[],
                 })
                 .create_view(&Default::default())
         };
-        self.targets = Some(Targets { size: (w, h), raw: mk("rt rays"), tmp: mk("rt filter"), out: mk("rt lighting") });
+        self.targets = Some(Targets {
+            size: (w, h),
+            raw: mk("rt rays"),
+            tmp: mk("rt filter"),
+            out: mk("rt lighting"),
+        });
         self.prev = None;
         true
     }
@@ -498,8 +658,19 @@ impl Renderer {
             if *count < 3 {
                 continue;
             }
-            let Some(mat) = inst.materials.get(*slot as usize).and_then(|&id| scene.materials.get(id)) else { continue };
-            if mat.no_z_check || inst.slot_alpha.get(*slot as usize).is_some_and(|a| *a < 0.01) {
+            let Some(mat) = inst
+                .materials
+                .get(*slot as usize)
+                .and_then(|&id| scene.materials.get(id))
+            else {
+                continue;
+            };
+            if mat.no_z_check
+                || inst
+                    .slot_alpha
+                    .get(*slot as usize)
+                    .is_some_and(|a| *a < 0.01)
+            {
                 continue;
             }
             match mat.alpha {
@@ -518,8 +689,20 @@ impl Renderer {
     /// (made for meshes met for the first time) and the records of their geometries, and the
     /// shaders' parameters. False when there is nothing to trace with.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn prepare_ray_tracing(&mut self, scene: &Scene, camera: &Camera, lighting: &Lighting, view_proj: Mat4, proj: Mat4, w: u32, h: u32, dt: f32) -> bool {
-        let Some(rt) = self.rt.as_mut() else { return false };
+    pub(super) fn prepare_ray_tracing(
+        &mut self,
+        scene: &Scene,
+        camera: &Camera,
+        lighting: &Lighting,
+        view_proj: Mat4,
+        proj: Mat4,
+        w: u32,
+        h: u32,
+        dt: f32,
+    ) -> bool {
+        let Some(rt) = self.rt.as_mut() else {
+            return false;
+        };
         rt.frame += 1;
         let frame = rt.frame;
         let ro = scene.render_origin;
@@ -541,7 +724,11 @@ impl Renderer {
         // block's sphere holds each of its instances' spheres; a metre to spare for the
         // rounding): the whole map's instances were measured one by one every frame.
         let far: Vec<bool> = Self::cull_blocks(scene)
-            .map(|b| b.iter().map(|&(c, r)| (c - cam).length() - r > RT_RANGE + 1.0).collect())
+            .map(|b| {
+                b.iter()
+                    .map(|&(c, r)| (c - cam).length() - r > RT_RANGE + 1.0)
+                    .collect()
+            })
             .unwrap_or_default();
         for (k, inst) in scene.instances.iter().enumerate() {
             if far.get(k / CULL_BLOCK).copied().unwrap_or(false) {
@@ -550,7 +737,8 @@ impl Renderer {
             // (a decal - a surface object lying on the road - is no geometry for the rays,
             // but what such an object raises and casts a shadow from is: the Spandau depot's
             // halls, one object with its yard, lost their shadow close up in Enhanced+, #1783)
-            if !inst.visible || inst.blob || (inst.decal && !inst.casts_shadow) || inst.ground_layer {
+            if !inst.visible || inst.blob || (inst.decal && !inst.casts_shadow) || inst.ground_layer
+            {
                 continue;
             }
             let m = &scene.meshes[inst.mesh];
@@ -558,7 +746,11 @@ impl Renderer {
                 continue;
             }
             if let Some([x0, y0, x1, y1]) = inst.near_only {
-                if camera.position.x < x0 || camera.position.x > x1 || camera.position.y < y0 || camera.position.y > y1 {
+                if camera.position.x < x0
+                    || camera.position.x > x1
+                    || camera.position.y < y0
+                    || camera.position.y > y1
+                {
                     continue;
                 }
             }
@@ -570,7 +762,11 @@ impl Renderer {
             // the level of detail the picture shows
             if inst.lod.0 > 0.0 || inst.lod.1 < f32::MAX {
                 let scale = Self::instance_scale(scene, inst);
-                let radius = if inst.object_radius > 0.0 { inst.object_radius } else { m.bounds_radius } * scale;
+                let radius = if inst.object_radius > 0.0 {
+                    inst.object_radius
+                } else {
+                    m.bounds_radius
+                } * scale;
                 let distance = ((inst.origin - ro).as_vec3() - cam).length();
                 let size = object_screen_size(radius, distance, lod_fov);
                 if size < inst.lod.0 || (inst.lod.1 < f32::MAX && size >= inst.lod.1) {
@@ -581,12 +777,15 @@ impl Renderer {
             if solid | cut | glass == 0 {
                 continue;
             }
-            let caster = inst.casts_shadow && !(self.options.omsi_shadow_casters && !inst.omsi_caster);
+            let caster =
+                inst.casts_shadow && !(self.options.omsi_shadow_casters && !inst.omsi_caster);
             let seen = !inst.mirror_only;
             let t = Mat4::from_translation((inst.origin - ro).as_vec3()) * inst.transform;
             let c = t.to_cols_array();
             // (3 x 4, rows first)
-            let rows = [c[0], c[4], c[8], c[12], c[1], c[5], c[9], c[13], c[2], c[6], c[10], c[14]];
+            let rows = [
+                c[0], c[4], c[8], c[12], c[1], c[5], c[9], c[13], c[2], c[6], c[10], c[14],
+            ];
             // the solid ranges and the cut-out ones as two instances: the shadow rays take the
             // first hit of the solid ones alone, the others stop at the nearest of either
             for (bits, kind) in [(solid, 0), (cut, 1), (glass, 2)] {
@@ -636,10 +835,23 @@ impl Renderer {
                             spans.push((*first, count));
                         }
                         let blas = self.device.create_blas(
-                            &wgpu::CreateBlasDescriptor { label: None, flags: wgpu::AccelerationStructureFlags::PREFER_FAST_TRACE, update_mode: wgpu::AccelerationStructureUpdateMode::Build },
-                            wgpu::BlasGeometrySizeDescriptors::Triangles { descriptors: sizes.clone() },
+                            &wgpu::CreateBlasDescriptor {
+                                label: None,
+                                flags: wgpu::AccelerationStructureFlags::PREFER_FAST_TRACE,
+                                update_mode: wgpu::AccelerationStructureUpdateMode::Build,
+                            },
+                            wgpu::BlasGeometrySizeDescriptors::Triangles {
+                                descriptors: sizes.clone(),
+                            },
                         );
-                        rt.blas.entry(key.to_key()).or_insert(BlasEntry { blas, sizes, spans, mesh: inst.mesh, built: false, used: frame })
+                        rt.blas.entry(key.to_key()).or_insert(BlasEntry {
+                            blas,
+                            sizes,
+                            spans,
+                            mesh: inst.mesh,
+                            built: false,
+                            used: frame,
+                        })
                     }
                 };
                 entry.used = frame;
@@ -660,7 +872,18 @@ impl Renderer {
                     if bits & (1 << ri) == 0 {
                         continue;
                     }
-                    let mat = &scene.materials[inst.materials[*slot as usize]];
+                    let Some(mat) = inst
+                        .materials
+                        .get(*slot as usize)
+                        .and_then(|&id| scene.materials.get(id))
+                    else {
+                        crate::passes::batch::warn_invalid_material(
+                            inst.mesh,
+                            *slot,
+                            inst.materials.get(*slot as usize).copied().unwrap_or(0),
+                        );
+                        continue;
+                    };
                     let tex = mat.texture.map_or(NO_TEX, |t| t as u32);
                     let (trans, from_trans) = match mat.transmap {
                         Some((t, true)) => (t as u32, true),
@@ -687,10 +910,27 @@ impl Renderer {
                     }
                     // (a range's triangles are the mesh's from its first on: a range that
                     // starts within a triangle has none)
-                    let uvs = uvs.filter(|_| first % 3 == 0).map_or(rt_tex::NO_UV, |b| b + first / 3);
-                    let off = inst.slot_uv.get(*slot as usize).copied().unwrap_or([0.0; 2]);
-                    let repeat = if mat.uniform.extra[0] > 0.5 { mat.uniform.extra[2] } else { 1.0 };
-                    rt.records.push(Record { tex, trans, flags, uvs, color: mat.color, uvt: [repeat, off[0], off[1], 0.0] });
+                    let uvs = uvs
+                        .filter(|_| first % 3 == 0)
+                        .map_or(rt_tex::NO_UV, |b| b + first / 3);
+                    let off = inst
+                        .slot_uv
+                        .get(*slot as usize)
+                        .copied()
+                        .unwrap_or([0.0; 2]);
+                    let repeat = if mat.uniform.extra[0] > 0.5 {
+                        mat.uniform.extra[2]
+                    } else {
+                        1.0
+                    };
+                    rt.records.push(Record {
+                        tex,
+                        trans,
+                        flags,
+                        uvs,
+                        color: mat.color,
+                        uvt: [repeat, off[0], off[1], 0.0],
+                    });
                 }
                 chosen.push((entry.blas.clone(), rows, base, mask));
             }
@@ -705,7 +945,9 @@ impl Renderer {
         }
         // (the same instances where they were, and no structure built again: the top level
         // is kept - a bus standing at a stop with the traffic parked round it)
-        let same = |a: &TlasItem, b: &TlasItem| a.0 == b.0 && a.1.map(f32::to_bits) == b.1.map(f32::to_bits) && a.2 == b.2 && a.3 == b.3;
+        let same = |a: &TlasItem, b: &TlasItem| {
+            a.0 == b.0 && a.1.map(f32::to_bits) == b.1.map(f32::to_bits) && a.2 == b.2 && a.3 == b.3
+        };
         let unchanged = rt.tlas_built
             && rt.to_build.is_empty()
             && chosen.len() == rt.tlas_last.len()
@@ -728,15 +970,29 @@ impl Renderer {
         // the records, in a buffer grown as needed; only from the first that changed to the last
         let bytes: &[u8] = bytemuck::cast_slice(&rt.records);
         if bytes.len() as u64 > rt.records_buf.size() {
-            rt.records_buf = RayTracer::make_records(&self.device, (rt.records.len() as u64).next_power_of_two());
+            rt.records_buf = RayTracer::make_records(
+                &self.device,
+                (rt.records.len() as u64).next_power_of_two(),
+            );
             rt.records_sent.clear();
             rt.bind_gen += 1;
         }
-        let differs = |k: &usize| rt.records_sent.get(*k).is_none_or(|r| bytemuck::bytes_of(r) != bytemuck::bytes_of(&rt.records[*k]));
+        let differs = |k: &usize| {
+            rt.records_sent
+                .get(*k)
+                .is_none_or(|r| bytemuck::bytes_of(r) != bytemuck::bytes_of(&rt.records[*k]))
+        };
         if let Some(first) = (0..rt.records.len()).find(differs) {
-            let last = (first..rt.records.len()).rev().find(differs).unwrap_or(first);
+            let last = (first..rt.records.len())
+                .rev()
+                .find(differs)
+                .unwrap_or(first);
             let unit = std::mem::size_of::<Record>();
-            self.queue.write_buffer(&rt.records_buf, (first * unit) as u64, &bytes[first * unit..(last + 1) * unit]);
+            self.queue.write_buffer(
+                &rt.records_buf,
+                (first * unit) as u64,
+                &bytes[first * unit..(last + 1) * unit],
+            );
         }
         rt.records_sent.clone_from(&rt.records);
         // structures nobody used for a while are let go
@@ -745,26 +1001,36 @@ impl Renderer {
             rt.tex.retain(frame);
         }
         if omsi_cfg::flags::OMSI_DEBUG_RT.is_set() && frame % 30 == 1 {
-            log::info!("ray tracing: {} instances, {} geometries, {} structures ({} built this frame)", rt.instances, rt.records.len(), rt.blas.len(), rt.to_build.len());
+            log::info!(
+                "ray tracing: {} instances, {} geometries, {} structures ({} built this frame)",
+                rt.instances,
+                rt.records.len(),
+                rt.blas.len(),
+                rt.to_build.len()
+            );
         }
         // --- the parameters
         let sun = lighting.sun_dir.normalize_or_zero();
         let sun_on = lighting.casts_sun_shadows();
         let vehicle = lighting.inside.map(|(o, h, _)| (o, h));
         let (prev_vp, history) = match rt.prev {
-            Some((vp, prev_ro, _)) => (vp * Mat4::from_translation((ro - prev_ro).as_vec3()), dt < 3.0),
+            Some((vp, prev_ro, _)) => (
+                vp * Mat4::from_translation((ro - prev_ro).as_vec3()),
+                dt < 3.0,
+            ),
             None => (view_proj, false),
         };
         let vrel = |o: DVec3| (o - ro).as_vec3();
-        let (vehicle_now, vehicle_prev, vehicle_box, vehicle_centre) = match (lighting.inside, rt.prev.and_then(|p| p.2)) {
-            (Some((o, hdg, bb)), Some((po, ph))) => (
-                vrel(o).extend((hdg as f32).to_radians()).to_array(),
-                vrel(po).extend((ph as f32).to_radians()).to_array(),
-                [bb[0] * 0.5, bb[1] * 0.5, bb[2] * 0.5, 1.0],
-                [bb[3], bb[4], bb[5], 0.0],
-            ),
-            _ => ([0.0; 4], [0.0; 4], [0.0; 4], [0.0; 4]),
-        };
+        let (vehicle_now, vehicle_prev, vehicle_box, vehicle_centre) =
+            match (lighting.inside, rt.prev.and_then(|p| p.2)) {
+                (Some((o, hdg, bb)), Some((po, ph))) => (
+                    vrel(o).extend((hdg as f32).to_radians()).to_array(),
+                    vrel(po).extend((ph as f32).to_radians()).to_array(),
+                    [bb[0] * 0.5, bb[1] * 0.5, bb[2] * 0.5, 1.0],
+                    [bb[3], bb[4], bb[5], 0.0],
+                ),
+                _ => ([0.0; 4], [0.0; 4], [0.0; 4], [0.0; 4]),
+            };
         let debug = omsi_cfg::flags::OMSI_DEBUG_RT.parse::<f32>().unwrap_or(0.0);
         let p = Params {
             inv_view_proj: view_proj.inverse().to_cols_array_2d(),
@@ -772,7 +1038,12 @@ impl Renderer {
             prev_view_proj: prev_vp.to_cols_array_2d(),
             eye: cam.extend((frame % 4096) as f32).to_array(),
             sun: sun.extend(if sun_on { SUN_CONE } else { 0.0 }).to_array(),
-            size: [w as f32, h as f32, 1.0 / w.max(1) as f32, 1.0 / h.max(1) as f32],
+            size: [
+                w as f32,
+                h as f32,
+                1.0 / w.max(1) as f32,
+                1.0 / h.max(1) as f32,
+            ],
             proj: [proj.z_axis.z, proj.w_axis.z, RT_RANGE, AO_RADIUS],
             temporal: [history as u8 as f32, 0.06, debug, HISTORY],
             vehicle_now,
@@ -782,7 +1053,8 @@ impl Renderer {
             sky: [0.0; 4],
             sun_light: [0.0; 4],
         };
-        self.queue.write_buffer(&rt.params, 0, bytemuck::bytes_of(&p));
+        self.queue
+            .write_buffer(&rt.params, 0, bytemuck::bytes_of(&p));
         rt.prev = Some((view_proj, ro, vehicle));
         true
     }
@@ -796,7 +1068,11 @@ impl Renderer {
         let need = (scene.textures.len() as u64) * rt.avg_stride;
         if need > rt.tex_avg.size() {
             // (grown: the means made so far are copied over)
-            let bigger = RayTracer::make_avg(&self.device, (scene.textures.len() as u64).next_power_of_two(), rt.avg_stride);
+            let bigger = RayTracer::make_avg(
+                &self.device,
+                (scene.textures.len() as u64).next_power_of_two(),
+                rt.avg_stride,
+            );
             encoder.copy_buffer_to_buffer(&rt.tex_avg, 0, &bigger, 0, rt.tex_avg.size());
             rt.tex_avg = bigger;
             rt.bind_gen += 1;
@@ -808,7 +1084,10 @@ impl Renderer {
                     continue;
                 }
                 let t = t as usize;
-                if t < scene.textures.len() && rt.tex_gen[t] != scene.textures[t].generation && !wanted.contains(&t) {
+                if t < scene.textures.len()
+                    && rt.tex_gen[t] != scene.textures[t].generation
+                    && !wanted.contains(&t)
+                {
                     wanted.push(t);
                     if wanted.len() >= AVG_BUDGET {
                         break;
@@ -834,9 +1113,22 @@ impl Renderer {
                     label: Some("texture mean"),
                     layout: &rt.avg_layout,
                     entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&scene.textures[t].view) },
-                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler) },
-                        wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &rt.tex_avg, offset: 0, size: wgpu::BufferSize::new(32) }) },
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&scene.textures[t].view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: &rt.tex_avg,
+                                offset: 0,
+                                size: wgpu::BufferSize::new(32),
+                            }),
+                        },
                         atlas,
                         tile,
                     ],
@@ -844,10 +1136,17 @@ impl Renderer {
             })
             .collect();
         {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("texture means"), timestamp_writes: None });
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("texture means"),
+                timestamp_writes: None,
+            });
             pass.set_pipeline(&rt.avg_pipeline);
             for (k, (&t, bg)) in wanted.iter().zip(&groups).enumerate() {
-                pass.set_bind_group(0, bg, &[(t as u64 * rt.avg_stride) as u32, rt.tex.tile_offset(k)]);
+                pass.set_bind_group(
+                    0,
+                    bg,
+                    &[(t as u64 * rt.avg_stride) as u32, rt.tex.tile_offset(k)],
+                );
                 pass.dispatch_workgroups(1, 1, 1);
             }
         }
@@ -858,11 +1157,19 @@ impl Renderer {
 
     /// Build this frame's structures and trace the lighting into `Targets::out`, after the
     /// depth prepass.
-    pub(super) fn encode_ray_tracing(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, queries: Option<&wgpu::QuerySet>, timed: &mut Vec<&'static str>) {
+    pub(super) fn encode_ray_tracing(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        scene: &Scene,
+        queries: Option<&wgpu::QuerySet>,
+        timed: &mut Vec<&'static str>,
+    ) {
         self.encode_texture_means(encoder, scene);
         let Some(rt) = self.rt.as_mut() else { return };
         rt.tex.encode_uvs(&self.device, &self.queue, encoder);
-        let Some(depth) = self.targets.ao.as_ref().map(|a| &a.depth_view) else { return };
+        let Some(depth) = self.targets.ao.as_ref().map(|a| &a.depth_view) else {
+            return;
+        };
         let Some(t) = rt.targets.as_ref() else { return };
         if !rt.to_build.is_empty() || !rt.tlas_built {
             let entries: Vec<wgpu::BlasBuildEntry> = rt
@@ -899,32 +1206,70 @@ impl Renderer {
                 label: Some("ray tracing"),
                 layout: &rt.layout,
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: rt.params.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: rt.tlas.as_binding() },
-                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(depth) },
-                    wgpu::BindGroupEntry { binding: 3, resource: rt.records_buf.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 4, resource: rt.tex_avg.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(inp) },
-                    wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(raw) },
-                    wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(out) },
-                    wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler) },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: rt.params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: rt.tlas.as_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(depth),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: rt.records_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: rt.tex_avg.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::TextureView(inp),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: wgpu::BindingResource::TextureView(raw),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 7,
+                        resource: wgpu::BindingResource::TextureView(out),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 8,
+                        resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler),
+                    },
                 ],
             })
         };
         // (each pass's input never is its output)
-        let key: RtBindKey = (rt.bind_gen, vec![depth.clone(), t.tmp.clone(), t.raw.clone(), t.out.clone()]);
+        let key: RtBindKey = (
+            rt.bind_gen,
+            vec![depth.clone(), t.tmp.clone(), t.raw.clone(), t.out.clone()],
+        );
         if rt.trace_groups.as_ref().is_none_or(|g| g.0 != key) {
-            rt.trace_groups = Some((key, [group(&t.tmp, &t.tmp, &t.raw), group(&t.raw, &t.tmp, &t.out)]));
+            rt.trace_groups = Some((
+                key,
+                [group(&t.tmp, &t.tmp, &t.raw), group(&t.raw, &t.tmp, &t.out)],
+            ));
         }
         let [trace_bg, denoise_bg] = &rt.trace_groups.as_ref().expect("made above").1;
         let (gx, gy) = (t.size.0.div_ceil(8), t.size.1.div_ceil(8));
-        for (label, pipe, bg) in [("rt trace", &rt.trace, trace_bg), ("rt denoise", &rt.temporal, denoise_bg)] {
+        for (label, pipe, bg) in [
+            ("rt trace", &rt.trace, trace_bg),
+            ("rt denoise", &rt.temporal, denoise_bg),
+        ] {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some(label),
-                timestamp_writes: pass_timer(queries, timed, label).map(|t| wgpu::ComputePassTimestampWrites {
-                    query_set: t.query_set,
-                    beginning_of_pass_write_index: t.beginning_of_pass_write_index,
-                    end_of_pass_write_index: t.end_of_pass_write_index,
+                timestamp_writes: pass_timer(queries, timed, label).map(|t| {
+                    wgpu::ComputePassTimestampWrites {
+                        query_set: t.query_set,
+                        beginning_of_pass_write_index: t.beginning_of_pass_write_index,
+                        end_of_pass_write_index: t.end_of_pass_write_index,
+                    }
                 }),
             });
             pass.set_pipeline(pipe);
@@ -937,21 +1282,42 @@ impl Renderer {
 impl Renderer {
     /// The ray-traced reflections of the window's picture, added to `HdrTargets::view` after
     /// the main pass (and before the rain on the glass, which looks through it).
-    pub(super) fn encode_rt_reflections(&mut self, encoder: &mut wgpu::CommandEncoder, w: u32, h: u32, queries: Option<&wgpu::QuerySet>, timed: &mut Vec<&'static str>) {
-        let (Some(rt), Some(hdr), Some(ao), Some(probe)) = (self.rt.as_mut(), self.targets.hdr_targets.get(&(w, h)), self.targets.ao.as_ref(), self.tone.probe.as_ref()) else { return };
-        let Some(gbuf) = hdr.gbuf.as_ref() else { return };
+    pub(super) fn encode_rt_reflections(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        w: u32,
+        h: u32,
+        queries: Option<&wgpu::QuerySet>,
+        timed: &mut Vec<&'static str>,
+    ) {
+        let (Some(rt), Some(hdr), Some(ao), Some(probe)) = (
+            self.rt.as_mut(),
+            self.targets.hdr_targets.get(&(w, h)),
+            self.targets.ao.as_ref(),
+            self.tone.probe.as_ref(),
+        ) else {
+            return;
+        };
+        let Some(gbuf) = hdr.gbuf.as_ref() else {
+            return;
+        };
         let half = (w.div_ceil(refl_div()), h.div_ceil(refl_div()));
         if rt.refl.as_ref().is_none_or(|r| r.0 != half) {
             let mk = |label: &str| {
                 self.device
                     .create_texture(&wgpu::TextureDescriptor {
                         label: Some(label),
-                        size: wgpu::Extent3d { width: half.0, height: half.1, depth_or_array_layers: 1 },
+                        size: wgpu::Extent3d {
+                            width: half.0,
+                            height: half.1,
+                            depth_or_array_layers: 1,
+                        },
                         mip_level_count: 1,
                         sample_count: 1,
                         dimension: wgpu::TextureDimension::D2,
                         format: wgpu::TextureFormat::Rgba16Float,
-                        usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+                        usage: wgpu::TextureUsages::STORAGE_BINDING
+                            | wgpu::TextureUsages::TEXTURE_BINDING,
                         view_formats: &[],
                     })
                     .create_view(&Default::default())
@@ -960,42 +1326,104 @@ impl Renderer {
         }
         let (_, raw) = rt.refl.as_ref().unwrap();
         let dummy = &self.black_texture.view;
-        let group = |out: &wgpu::TextureView, scene: &wgpu::TextureView, h12: &wgpu::TextureView| {
-            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("ray-traced reflections"),
-                layout: &rt.refl_layout,
-                entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: rt.params.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: rt.tlas.as_binding() },
-                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&ao.depth_view) },
-                    wgpu::BindGroupEntry { binding: 3, resource: rt.records_buf.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 4, resource: rt.tex_avg.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&gbuf[0].1) },
-                    wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(&gbuf[1].1) },
-                    wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(out) },
-                    wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler) },
-                    wgpu::BindGroupEntry { binding: 9, resource: wgpu::BindingResource::TextureView(scene) },
-                    wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::TextureView(&probe.view) },
-                    wgpu::BindGroupEntry { binding: 11, resource: self.tone.enh_buf.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 12, resource: wgpu::BindingResource::TextureView(h12) },
-                    wgpu::BindGroupEntry { binding: 13, resource: rt.tex.uvs.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 14, resource: wgpu::BindingResource::TextureView(&rt.tex.atlas_view) },
-                ],
-            })
-        };
+        let group =
+            |out: &wgpu::TextureView, scene: &wgpu::TextureView, h12: &wgpu::TextureView| {
+                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("ray-traced reflections"),
+                    layout: &rt.refl_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: rt.params.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: rt.tlas.as_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::TextureView(&ao.depth_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: rt.records_buf.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: rt.tex_avg.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 5,
+                            resource: wgpu::BindingResource::TextureView(&gbuf[0].1),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 6,
+                            resource: wgpu::BindingResource::TextureView(&gbuf[1].1),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 7,
+                            resource: wgpu::BindingResource::TextureView(out),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 8,
+                            resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 9,
+                            resource: wgpu::BindingResource::TextureView(scene),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 10,
+                            resource: wgpu::BindingResource::TextureView(&probe.view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 11,
+                            resource: self.tone.enh_buf.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 12,
+                            resource: wgpu::BindingResource::TextureView(h12),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 13,
+                            resource: rt.tex.uvs.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 14,
+                            resource: wgpu::BindingResource::TextureView(&rt.tex.atlas_view),
+                        },
+                    ],
+                })
+            };
         // (no pass's output is among its inputs)
-        let key: RtBindKey = (rt.bind_gen, vec![ao.depth_view.clone(), gbuf[0].1.clone(), gbuf[1].1.clone(), raw.clone(), hdr.view.clone(), probe.view.clone(), dummy.clone()]);
+        let key: RtBindKey = (
+            rt.bind_gen,
+            vec![
+                ao.depth_view.clone(),
+                gbuf[0].1.clone(),
+                gbuf[1].1.clone(),
+                raw.clone(),
+                hdr.view.clone(),
+                probe.view.clone(),
+                dummy.clone(),
+            ],
+        );
         if rt.refl_groups.as_ref().is_none_or(|g| g.0 != key) {
-            rt.refl_groups = Some((key, [group(raw, &hdr.view, dummy), group(&rt.spare, dummy, raw)]));
+            rt.refl_groups = Some((
+                key,
+                [group(raw, &hdr.view, dummy), group(&rt.spare, dummy, raw)],
+            ));
         }
         let [trace_bg, composite_bg] = &rt.refl_groups.as_ref().expect("made above").1;
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("rt reflections"),
-                timestamp_writes: pass_timer(queries, timed, "rt reflections").map(|t| wgpu::ComputePassTimestampWrites {
-                    query_set: t.query_set,
-                    beginning_of_pass_write_index: t.beginning_of_pass_write_index,
-                    end_of_pass_write_index: t.end_of_pass_write_index,
+                timestamp_writes: pass_timer(queries, timed, "rt reflections").map(|t| {
+                    wgpu::ComputePassTimestampWrites {
+                        query_set: t.query_set,
+                        beginning_of_pass_write_index: t.beginning_of_pass_write_index,
+                        end_of_pass_write_index: t.end_of_pass_write_index,
+                    }
                 }),
             });
             let (gx, gy) = (half.0.div_ceil(8), half.1.div_ceil(8));
@@ -1009,7 +1437,10 @@ impl Renderer {
                 view: &hdr.view,
                 depth_slice: None,
                 resolve_target: None,
-                ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
             })],
             depth_stencil_attachment: None,
             timestamp_writes: pass_timer(queries, timed, "rt composite"),
@@ -1033,12 +1464,26 @@ mod spv_dump {
         let modules = [
             ("lighting", super::lighting_source()),
             ("reflect", super::reflect_source()),
-            ("scene_plus", super::super::scene_shader_source(false).replace("//RT ", "")),
+            (
+                "scene_plus",
+                super::super::scene_shader_source(false).replace("//RT ", ""),
+            ),
         ];
         for (name, src) in &modules {
             let module = naga::front::wgsl::parse_str(src).unwrap();
-            let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module).unwrap();
-            let (module, info) = naga::back::pipeline_constants::process_overrides(&module, &info, None, &Default::default()).unwrap();
+            let info = naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::all(),
+            )
+            .validate(&module)
+            .unwrap();
+            let (module, info) = naga::back::pipeline_constants::process_overrides(
+                &module,
+                &info,
+                None,
+                &Default::default(),
+            )
+            .unwrap();
             let opts = naga::back::spv::Options {
                 lang_version: (1, 5),
                 flags: naga::back::spv::WriterFlags::empty(),
@@ -1047,19 +1492,28 @@ mod spv_dump {
                 ..Default::default()
             };
             for entry in &module.entry_points {
-                let pipeline = naga::back::spv::PipelineOptions { shader_stage: entry.stage, entry_point: entry.name.clone() };
-                let words = naga::back::spv::write_vec(&module, &info, &opts, Some(&pipeline)).unwrap();
+                let pipeline = naga::back::spv::PipelineOptions {
+                    shader_stage: entry.stage,
+                    entry_point: entry.name.clone(),
+                };
+                let words =
+                    naga::back::spv::write_vec(&module, &info, &opts, Some(&pipeline)).unwrap();
                 let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
                 std::fs::write(dir.join(format!("{name}_{}.spv", entry.name)), bytes).unwrap();
             }
             // and the HLSL wgpu's Direct3D 12 backend hands DXC (shader model 6.5)
-            let hopts = naga::back::hlsl::Options { shader_model: naga::back::hlsl::ShaderModel::V6_5, ..Default::default() };
+            let hopts = naga::back::hlsl::Options {
+                shader_model: naga::back::hlsl::ShaderModel::V6_5,
+                ..Default::default()
+            };
             let mut out = String::new();
             let popts = Default::default();
             let mut w = naga::back::hlsl::Writer::new(&mut out, &hopts, &popts);
             match w.write(&module, &info, None) {
                 Ok(_) => std::fs::write(dir.join(format!("{name}.hlsl")), &out).unwrap(),
-                Err(e) => std::fs::write(dir.join(format!("{name}.hlsl.err")), format!("{e:?}")).unwrap(),
+                Err(e) => {
+                    std::fs::write(dir.join(format!("{name}.hlsl.err")), format!("{e:?}")).unwrap()
+                }
             }
         }
     }
