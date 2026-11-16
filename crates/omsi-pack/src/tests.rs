@@ -508,6 +508,61 @@ fn a_same_size_change_with_the_old_modified_time_is_rejected_when_opened_again()
 }
 
 #[test]
+fn a_linked_folder_or_file_in_a_pack_is_rejected_on_every_scan() {
+    #[cfg(unix)]
+    use std::os::unix::fs::{symlink as link_dir, symlink as link_file};
+    #[cfg(windows)]
+    use std::os::windows::fs::{symlink_dir as link_dir, symlink_file as link_file};
+    let root = licence_scratch("linked-entry");
+    let signer = SigningKey::generate(&SystemRandom::new()).unwrap();
+    let mut metadata = licence_metadata(&[0; 32]);
+    metadata.key_id = None;
+    let pack = root.join("plain.oopp");
+    let manifest = create_pack(
+        &pack,
+        metadata,
+        &licence_input(),
+        &signer,
+        None,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    let trusted = licence_trust(&signer);
+    let first = VerifiedPack::open_for_authoring(&pack, &trusted, None).unwrap();
+    let folder = pack.join(format!(
+        "assets/{}",
+        sha256_hex(manifest.assets[0].id.as_bytes())
+    ));
+    let moved = root.join("moved");
+    fs::rename(&folder, &moved).unwrap();
+    if let Err(error) = link_dir(&moved, &folder) {
+        // (Windows without Developer Mode cannot create links)
+        eprintln!("skipped: {error}");
+        return fs::remove_dir_all(root).unwrap();
+    }
+    assert!(
+        first.verify_all().is_err(),
+        "a linked chunk folder passed a later scan"
+    );
+    assert!(first.read("maps/Fixture/global.cfg").is_err());
+    assert!(VerifiedPack::open_for_authoring(&pack, &trusted, None).is_err());
+    fs::remove_dir(&folder)
+        .or_else(|_| fs::remove_file(&folder))
+        .unwrap();
+    fs::create_dir(&folder).unwrap();
+    link_file(moved.join("plain.bin"), folder.join("plain.bin")).unwrap();
+    assert!(
+        first.verify_all().is_err(),
+        "a linked chunk file passed a later scan"
+    );
+    assert!(VerifiedPack::open_for_authoring(&pack, &trusted, None).is_err());
+    fs::remove_file(folder.join("plain.bin")).unwrap();
+    fs::copy(moved.join("plain.bin"), folder.join("plain.bin")).unwrap();
+    assert!(first.verify_all().is_ok());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn a_largest_pack_manifest_fits() {
     // 4096 assets with the longest id and path; together 1 GiB in 64 KiB chunks, plus one
     // partial chunk per asset.

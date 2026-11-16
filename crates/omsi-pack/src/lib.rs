@@ -12,7 +12,7 @@ use ring::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     path::{Path, PathBuf},
@@ -744,6 +744,11 @@ impl VerifiedPack {
         let asset = self
             .asset_by_path(path)
             .ok_or(PackError::Invalid("asset is not in the signed manifest"))?;
+        self.read_asset(asset, &mut HashSet::new())
+    }
+
+    /// `read` for an asset of this pack; `dirs` holds the folders this scan already found free of links.
+    fn read_asset(&self, asset: &Asset, dirs: &mut HashSet<PathBuf>) -> Result<Vec<u8>> {
         if asset.size > MAX_ASSET_SIZE {
             return Err(PackError::Invalid("asset exceeds 64 MiB"));
         }
@@ -753,7 +758,7 @@ impl VerifiedPack {
                 UnboundKey::new(&AES_256_GCM, key).map_err(|_| PackError::WrongKey)?,
             );
             for (index, chunk) in asset.chunks.iter().enumerate() {
-                let blob = self.read_chunk(chunk)?;
+                let blob = self.read_chunk(chunk, dirs)?;
                 let nonce = Nonce::try_assume_unique_for_key(&blob[..NONCE_LEN])
                     .map_err(|_| PackError::Invalid("invalid chunk nonce"))?;
                 let mut body = blob[NONCE_LEN..].to_vec();
@@ -776,9 +781,10 @@ impl VerifiedPack {
             }
         } else {
             let opaque = sha256_hex(asset.id.as_bytes());
-            out = read_bounded_file(
+            out = read_bounded_file_in(
                 &self.root.join(format!("assets/{opaque}/plain.bin")),
                 MAX_ASSET_SIZE as usize,
+                dirs,
             )?;
         }
         if out.len() as u64 != asset.size || sha256_hex(&out) != asset.output_sha256 {
@@ -791,6 +797,7 @@ impl VerifiedPack {
 
     /// Check every signed blob while keeping memory to one authenticated chunk at a time.
     pub fn verify_all(&self) -> Result<()> {
+        let mut dirs = HashSet::new();
         for asset in &self.manifest.assets {
             if let Some(key) = &self.content_key {
                 let cipher = LessSafeKey::new(
@@ -799,7 +806,7 @@ impl VerifiedPack {
                 let mut digest = Sha256::new();
                 let mut size = 0u64;
                 for (index, chunk) in asset.chunks.iter().enumerate() {
-                    let blob = self.read_chunk(chunk)?;
+                    let blob = self.read_chunk(chunk, &mut dirs)?;
                     let nonce = Nonce::try_assume_unique_for_key(&blob[..NONCE_LEN])
                         .map_err(|_| PackError::Invalid("invalid chunk nonce"))?;
                     let mut body = blob[NONCE_LEN..].to_vec();
@@ -829,16 +836,16 @@ impl VerifiedPack {
                     ));
                 }
             } else {
-                let bytes = self.read(&asset.path)?;
+                let bytes = self.read_asset(asset, &mut dirs)?;
                 drop(bytes);
             }
         }
         Ok(())
     }
 
-    fn read_chunk(&self, chunk: &Chunk) -> Result<Vec<u8>> {
+    fn read_chunk(&self, chunk: &Chunk, dirs: &mut HashSet<PathBuf>) -> Result<Vec<u8>> {
         let path = self.root.join(&chunk.file);
-        let blob = read_bounded_file(&path, CHUNK_SIZE + NONCE_LEN + TAG_SIZE)?;
+        let blob = read_bounded_file_in(&path, CHUNK_SIZE + NONCE_LEN + TAG_SIZE, dirs)?;
         if blob.len() < NONCE_LEN + TAG_SIZE || sha256_hex(&blob) != chunk.ciphertext_sha256 {
             return Err(PackError::Invalid(
                 "chunk is missing, truncated, or changed",
@@ -1192,8 +1199,12 @@ fn random_nonce(used: &mut BTreeSet<[u8; NONCE_LEN]>) -> Result<[u8; NONCE_LEN]>
 }
 
 pub(crate) fn read_bounded_file(path: &Path, max: usize) -> Result<Vec<u8>> {
-    ensure_regular_file(path)?;
-    let metadata = fs::symlink_metadata(path)?;
+    read_bounded_file_in(path, max, &mut HashSet::new())
+}
+
+/// `read_bounded_file` that checks only the folders not yet in `dirs`, and adds them.
+fn read_bounded_file_in(path: &Path, max: usize, dirs: &mut HashSet<PathBuf>) -> Result<Vec<u8>> {
+    let metadata = ensure_regular_file(path, dirs)?;
     if metadata.len() > max as u64 {
         return Err(PackError::Invalid("file exceeds its size limit"));
     }
@@ -1206,22 +1217,34 @@ pub(crate) fn read_bounded_file(path: &Path, max: usize) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-fn ensure_regular_file(path: &Path) -> Result<()> {
-    for component in path.ancestors().take_while(|p| !p.as_os_str().is_empty()) {
-        if !component.exists() {
-            return Err(PackError::Invalid("pack path does not exist"));
-        }
-        let metadata = fs::symlink_metadata(component)?;
-        if metadata.file_type().is_symlink() {
-            return Err(PackError::Invalid(
-                "symbolic links are not allowed in a pack",
-            ));
-        }
+/// Metadata of a regular file with no link anywhere in its path; skips the folders this scan already checked in `dirs`.
+fn ensure_regular_file(path: &Path, dirs: &mut HashSet<PathBuf>) -> Result<fs::Metadata> {
+    let metadata = not_a_link(path)?;
+    let unchecked: Vec<&Path> = path
+        .ancestors()
+        .skip(1)
+        .take_while(|dir| !dir.as_os_str().is_empty() && !dirs.contains(*dir))
+        .collect();
+    for dir in &unchecked {
+        not_a_link(dir)?;
     }
-    if !fs::symlink_metadata(path)?.is_file() {
+    dirs.extend(unchecked.into_iter().map(Path::to_path_buf));
+    if !metadata.is_file() {
         return Err(PackError::Invalid("pack entry is not a regular file"));
     }
-    Ok(())
+    Ok(metadata)
+}
+
+/// Metadata of `path` itself, rejecting a missing path and a symbolic link or junction.
+fn not_a_link(path: &Path) -> Result<fs::Metadata> {
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| PackError::Invalid("pack path does not exist"))?;
+    if metadata.file_type().is_symlink() {
+        return Err(PackError::Invalid(
+            "symbolic links are not allowed in a pack",
+        ));
+    }
+    Ok(metadata)
 }
 
 fn write_pack_file(root: &Path, relative: &str, bytes: &[u8]) -> Result<()> {
