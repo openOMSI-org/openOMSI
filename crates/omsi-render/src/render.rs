@@ -699,7 +699,10 @@ impl Renderer {
         second_eye: bool,
     ) {
         // the frame's switches from the environment, each read once
-        let env = FrameEnv::read();
+        let mut env = FrameEnv::read();
+        // (wgpu 29 cannot finish a render bundle on a custom backend, and mX Graphics is one:
+        // there the main pass is recorded directly)
+        env.no_bundles |= wgpu_mx::custom::is_mx(&self.device);
         if !self.frame_hooks(scene, &env, with_overlays) {
             return;
         }

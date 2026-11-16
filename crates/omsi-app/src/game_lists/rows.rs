@@ -132,11 +132,12 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "hour" => (0..24).map(|v| v as f32).collect(),
         "minute" => (0..60).map(|v| v as f32).collect(),
         // the weather, made by hand
-        // (visibility goes by a few percent at a time from 100 m to 50 km, on whole tens of metres)
+        // (visibility goes by a few percent at a time from 50 m, as low as Omsi.exe's weather
+        // dialog goes, to 50 km, on whole tens of metres)
         "visibility" => {
-            let mut v: Vec<f32> = (0..=120)
+            let mut v: Vec<f32> = (0..=133)
                 .map(|i| {
-                    let x = 100.0 * 500f32.powf(i as f32 / 120.0);
+                    let x = 50.0 * 1000f32.powf(i as f32 / 133.0);
                     let step = if x < 1000.0 { 10.0 } else if x < 10000.0 { 100.0 } else { 500.0 };
                     (x / step).round() * step
                 })
