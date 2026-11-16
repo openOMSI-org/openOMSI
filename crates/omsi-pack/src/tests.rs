@@ -1,10 +1,6 @@
 use crate::*;
 use ring::rand::SystemRandom;
-use std::{
-    fs,
-    sync::atomic::AtomicBool,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, sync::atomic::AtomicBool};
 #[test]
 fn digest_format_is_lowercase_and_stable() {
     assert_eq!(

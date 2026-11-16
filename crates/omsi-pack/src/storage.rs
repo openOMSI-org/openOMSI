@@ -1,8 +1,13 @@
 //! Native storage for signed offline publisher entitlements.
-use crate::{read_bounded_file, PackError, Result, ENTITLEMENT_LIMIT};
+#[cfg(windows)]
+use crate::{ENTITLEMENT_LIMIT, read_bounded_file};
+use crate::{PackError, Result};
+#[cfg(windows)]
 use sha2::{Digest, Sha256};
+#[cfg(windows)]
 use std::{fs, io, path::PathBuf};
 
+#[cfg(target_os = "macos")]
 const SERVICE: &str = "org.openomsi.protected-pack";
 
 pub trait KeyStore {
@@ -27,6 +32,7 @@ impl KeyStore for SystemKeyStore {
     }
 }
 
+#[cfg(any(target_os = "macos", windows))]
 fn validate_scope(scope: &str) -> Result<()> {
     if crate::is_sha256(scope) {
         Ok(())
