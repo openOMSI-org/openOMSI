@@ -193,6 +193,8 @@ impl App {
                 ));
             }
         }
+        self.menus.game_panels.accident_open =
+            self.session.traffic.as_ref().is_some_and(|t| t.accident_open());
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
