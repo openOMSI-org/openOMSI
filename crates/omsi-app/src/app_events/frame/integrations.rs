@@ -172,6 +172,13 @@ impl App {
                 crate::plugins::queue_event(&mut self.integrations.plugin_events, "pedestrian", vec![omsi_plugin::InfoValue::Num(hurt as f64)]);
             }
         }
+        // the hazard lights as "Call the police" asks for them, held through the lamps' dark
+        // phase (`hazard`)
+        if let Some(p) = self.player.as_mut() {
+            let lit = |n: &str| p.vehicle.var(n).is_some_and(|v| v > 0.5);
+            let both = lit("lights_blinker_l") && lit("lights_blinker_r");
+            p.hazard_watch.step(dt, both);
+        }
         // OMSI 2's accident with an AI vehicle (manual 2.11): stop, hazard lights, police; and
         // the charge of leaving the scene when the vehicles knocked off their route go with
         // their tile, the police never called (the personnel file's third `[crashs]` count)
