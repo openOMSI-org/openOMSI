@@ -247,7 +247,7 @@ export function useConfirm() {
   const node = q && html`<${Dialog} title=${q.title} onClose=${() => (q.resolve(false), setQ(null))} footer=${html`
       <${Button} label="Cancel" onClick=${() => (q.resolve(false), setQ(null))} />
       <${Button} kind=${q.danger ? 'danger' : 'primary'} label=${q.yes || 'OK'} onClick=${() => (q.resolve(true), setQ(null))} />`}>
-    <p class="dim">${t(q.text)}</p>
+    ${[].concat(q.text).map((x) => html`<p class="dim">${t(x)}</p>`)}
   </${Dialog}>`;
   return [ask, node];
 }

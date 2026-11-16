@@ -42,8 +42,14 @@ Thanks for helping! A few rules keep the project healthy:
 ## Translations
 
 The interface texts are in [`crates/omsi-app/locales/app.yml`](crates/omsi-app/locales/app.yml),
-with the English text as the key. A pull request that changes it is checked automatically:
+the English reference, with the English text as the key. Each language has its own file beside
+it, `app.<language>.yml` (`app.de.yml`, `app.pt-pt.yml`, ...), one line `"English": "translation"`
+per text. A new text goes into app.yml and into every language's file; texts a language lacked
+before may stay missing for now (`cargo test -p omsi-launcher-core --test translations -- --ignored`
+lists them). `cargo test -p omsi-launcher-core --test translations` fails on a translation of a text
+app.yml does not have. A pull request that changes the translations is checked automatically:
 
+* a new text in app.yml must be translated in every `app.<language>.yml`;
 * add or correct texts of your language; keep the placeholders (`%{packs}`, `{}`) of the key;
 * do not remove a key or reword the English one - the code looks texts up by it;
 * changing another contributor's existing translation is fine when it is a correction - say

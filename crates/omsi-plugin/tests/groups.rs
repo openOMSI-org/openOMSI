@@ -2,12 +2,14 @@
 //! what it asks the game to do.
 mod common;
 
-use common::{run, Game};
+use common::{Game, run};
 use omsi_plugin::{AiCar, InfoValue, Light, TicketAsk, TicketKind};
 
 /// Run `body` (Lua) in a plugin's first frame; it reports with `omsi.message`.
 fn check(tag: &str, body: &str, g: &mut Game) -> Vec<String> {
-    let src = format!("local done = false\nfunction on_frame()\nif done then return end\ndone = true\n{body}\nend");
+    let src = format!(
+        "local done = false\nfunction on_frame()\nif done then return end\ndone = true\n{body}\nend"
+    );
     run(tag, &src, g, 1);
     std::mem::take(&mut g.messages)
 }
@@ -102,10 +104,26 @@ fn duty_and_timetable() {
     );
     assert_eq!(out, ["ok"]);
     assert!(g.log.borrow().iter().any(|l| l == "duty 136/3 1 0"));
-    assert!(g.log.borrow().windows(2).any(|w| w[0] == "auto ibis false" && w[1] == "type ibis"));
-    assert!(g.log.borrow().iter().any(|l| l == "closed Rathaus via via Ring"));
+    assert!(
+        g.log
+            .borrow()
+            .windows(2)
+            .any(|w| w[0] == "auto ibis false" && w[1] == "type ibis")
+    );
+    assert!(
+        g.log
+            .borrow()
+            .iter()
+            .any(|l| l == "closed Rathaus via via Ring")
+    );
     // (the way round: one line, clipped to a text's length)
-    assert!(g.log.borrow().iter().any(|l| l.starts_with("closed Rathaus via viaRingxxx") && l.chars().count() == "closed Rathaus via ".len() + omsi_plugin::ui::MAX_TEXT));
+    assert!(
+        g.log
+            .borrow()
+            .iter()
+            .any(|l| l.starts_with("closed Rathaus via viaRingxxx")
+                && l.chars().count() == "closed Rathaus via ".len() + omsi_plugin::ui::MAX_TEXT)
+    );
 }
 
 #[test]
@@ -143,6 +161,8 @@ fn traffic_and_people() {
         assert(omsi.traffic.get(9).kind == "timetable_bus" and omsi.traffic.get(1) == nil)
         assert(omsi.traffic.nearest().id == 7 and omsi.traffic.nearest("timetable_bus").id == 9)
         assert(omsi.traffic.ahead(100).id == 7)
+        local b = omsi.traffic.get(7).bounding_box
+        assert(math.abs(b.width - 1.8) < 1e-6 and math.abs(b.length - 4.4) < 1e-6 and math.abs(b.cy + 0.6) < 1e-6 and b.heading == 90 and b.default == false)
         local driving, buses = omsi.traffic.counts(); assert(driving == 2 and buses == 1)
         assert(omsi.traffic.density() == 30 and omsi.traffic.set_density(50, 0.5))
         assert(omsi.traffic.remove(7) and not omsi.traffic.remove(7) and omsi.traffic.clear() == 1)
@@ -157,7 +177,12 @@ fn traffic_and_people() {
         &mut g,
     );
     assert_eq!(out, ["ok"]);
-    assert!(g.log.borrow().iter().any(|l| l == "density Some(50) Some(0.5)"));
+    assert!(
+        g.log
+            .borrow()
+            .iter()
+            .any(|l| l == "density Some(50) Some(0.5)")
+    );
 }
 
 #[test]
@@ -243,7 +268,9 @@ fn camera_input_and_sound() {
     assert_eq!(out, ["ok", "hotkey KeyH"]);
     let sounds = g.sounds.borrow();
     assert_eq!(sounds.len(), 1);
-    assert!(sounds[0].0.ends_with("media/ding.wav") && sounds[0].1.on_bus && sounds[0].1.volume == 0.5);
+    assert!(
+        sounds[0].0.ends_with("media/ding.wav") && sounds[0].1.on_bus && sounds[0].1.volume == 0.5
+    );
 }
 
 #[test]
@@ -285,7 +312,13 @@ fn the_game_lan_and_panels() {
         &mut g,
     );
     assert_eq!(out, ["ok"]);
-    assert_eq!(g.lan_sent, [("game".to_string(), 2, "hello".to_string()), ("game".into(), 2, "all".into())]);
+    assert_eq!(
+        g.lan_sent,
+        [
+            ("game".to_string(), 2, "hello".to_string()),
+            ("game".into(), 2, "all".into())
+        ]
+    );
     assert!(g.log.borrow().iter().any(|l| l == "notify 1 Hello"));
 }
 
@@ -343,7 +376,11 @@ fn derived_events() {
     g.duty.as_mut().unwrap().at_stop = true;
     g.clock.time += 60.0;
     g.weather.precip_kind = 1;
-    g.light = Some(Light { aspect: "red", change_in: 10.0, distance: 8.0 });
+    g.light = Some(Light {
+        aspect: "red",
+        change_in: 10.0,
+        distance: 8.0,
+    });
     g.vars.insert("Velocity".into(), 30.0);
     g.events_ex = vec![("resume", Vec::new())];
     p.frame(&mut g);
@@ -355,7 +392,10 @@ fn derived_events() {
     g.duty.as_mut().unwrap().current.name = "Back".into();
     p.frame(&mut g);
     g.duty = None;
-    g.cars.push(AiCar { id: 1, ..Default::default() });
+    g.cars.push(AiCar {
+        id: 1,
+        ..Default::default()
+    });
     for _ in 0..3 {
         p.frame(&mut g);
     }
@@ -387,7 +427,19 @@ fn derived_events() {
 #[test]
 fn passengers_tickets() {
     let mut g = Game::new();
-    g.ticket_asks = vec![TicketAsk { person: 1, age: 40.0, kind: TicketKind::Buy, ticket: 1, name: "Full fare".into(), price: 2.0, stop: Some(12), stop_name: Some("Markt".into()), destination: Some("Rathaus".into()), stop_index: Some(1), destination_index: Some(2) }];
+    g.ticket_asks = vec![TicketAsk {
+        person: 1,
+        age: 40.0,
+        kind: TicketKind::Buy,
+        ticket: 1,
+        name: "Full fare".into(),
+        price: 2.0,
+        stop: Some(12),
+        stop_name: Some("Markt".into()),
+        destination: Some("Rathaus".into()),
+        stop_index: Some(1),
+        destination_index: Some(2),
+    }];
     run(
         "tickets",
         r##"
@@ -409,7 +461,12 @@ fn passengers_tickets() {
         1,
     );
     assert_eq!(g.messages, ["heard 1"]);
-    assert_eq!(*g.log.borrow(), ["ticket 1 None None Some(\"Zone 1\") Some(30.0) Some(\"Zone_1\") Some(\"zones\") by tickets"]);
+    assert_eq!(
+        *g.log.borrow(),
+        [
+            "ticket 1 None None Some(\"Zone 1\") Some(30.0) Some(\"Zone_1\") Some(\"zones\") by tickets"
+        ]
+    );
 }
 
 /// A plugin that left the IBIS to the driver gives it back to the game when it goes:
@@ -417,29 +474,61 @@ fn passengers_tickets() {
 #[test]
 fn the_ibis_is_given_back_when_its_plugin_goes() {
     // (a plugin's calls in its first frame, where it has the game)
-    let once = |body: &str| format!("local done = false
+    let once = |body: &str| {
+        format!(
+            "local done = false
 function on_frame()
 if done then return end
 done = true
 {body}
-end");
+end"
+        )
+    };
     // stopped (loaded again after a change, say)
     let mut g = Game::new();
-    let mut p = run("ibisstop", &once("assert(omsi.duty.set_auto_ibis(false))"), &mut g, 1);
+    let mut p = run(
+        "ibisstop",
+        &once("assert(omsi.duty.set_auto_ibis(false))"),
+        &mut g,
+        1,
+    );
     assert_eq!(g.log.borrow().as_slice(), ["auto ibis false"]);
     p.lua[0].stop(&mut g);
-    assert_eq!(g.log.borrow().as_slice(), ["auto ibis false", "auto ibis true"]);
+    assert_eq!(
+        g.log.borrow().as_slice(),
+        ["auto ibis false", "auto ibis true"]
+    );
     // switched off
     let mut g = Game::new();
-    run("ibisoff", &once("assert(omsi.duty.set_auto_ibis(false))
-omsi.plugin.disable('done')"), &mut g, 2);
-    assert_eq!(g.log.borrow().as_slice(), ["auto ibis false", "auto ibis true"]);
+    run(
+        "ibisoff",
+        &once(
+            "assert(omsi.duty.set_auto_ibis(false))
+omsi.plugin.disable('done')",
+        ),
+        &mut g,
+        2,
+    );
+    assert_eq!(
+        g.log.borrow().as_slice(),
+        ["auto ibis false", "auto ibis true"]
+    );
     // (one that turned it on again has nothing to give back)
     let mut g = Game::new();
-    let mut p = run("ibisagain", &once("omsi.duty.set_auto_ibis(false)
-omsi.duty.set_auto_ibis(true)"), &mut g, 1);
+    let mut p = run(
+        "ibisagain",
+        &once(
+            "omsi.duty.set_auto_ibis(false)
+omsi.duty.set_auto_ibis(true)",
+        ),
+        &mut g,
+        1,
+    );
     p.lua[0].stop(&mut g);
-    assert_eq!(g.log.borrow().as_slice(), ["auto ibis false", "auto ibis true"]);
+    assert_eq!(
+        g.log.borrow().as_slice(),
+        ["auto ibis false", "auto ibis true"]
+    );
 }
 
 /// Two plugins that both leave the IBIS to the driver: the one that goes lets go of its own
@@ -461,7 +550,8 @@ end";
     assert_eq!(p.lua.len(), 2, "{:?}", g.messages);
     p.frame(&mut g);
     assert_eq!(g.ibis_holds.len(), 2);
-    let at = |p: &omsi_plugin::Plugins, name: &str| p.lua.iter().position(|l| l.name == name).unwrap();
+    let at =
+        |p: &omsi_plugin::Plugins, name: &str| p.lua.iter().position(|l| l.name == name).unwrap();
     let (a, b) = (at(&p, "ibis_a"), at(&p, "ibis_b"));
     let b_owner = p.lua[b].state().owner;
     // A stops: B still leaves the IBIS to the driver

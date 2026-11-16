@@ -1,6 +1,6 @@
 const groups = {
   graphics: [
-    ['display', 'Display', 'fullscreen resolution vsync max_fps graphics_api sim_thread'],
+    ['display', 'Display', 'fullscreen resolution vsync max_fps graphics_api mx_graphics sim_thread'],
     ['quality', 'Quality', 'graphics @preset msaa upscaler @nvidia_dlss_install upscale_quality fsr_quality fsr_sharpness render_scale anisotropy detail_textures led_glow led_mips'],
     ['lighting', 'Lighting', 'ray_tracing shadow_size ssao shadows shadow_casters night_brightness shadow_blobs reflections road_glare traffic_headlights street_light light_shadows light_glow puddles'],
     ['weather', 'Weather & effects', 'clouds cloud_quality cloud_shadows rain_quality vehicle_smoke windy_trees detailed_trees road_snow'],

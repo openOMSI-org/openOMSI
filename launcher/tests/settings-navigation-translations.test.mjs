@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../../crates/omsi-app/locales/app.yml', import.meta.url), 'utf8');
+const englishSource = source.replace(/\r\n/g, '\n');
 const layout = readFileSync(new URL('../ui/js/pages/settings-layout.js', import.meta.url), 'utf8');
 const customLabels = [...layout.match(/const customLabels = \{([^}]+)\};/)[1].matchAll(/:\s*'([^']+)'/g)].map((match) => match[1]);
 const required = [
@@ -36,31 +37,24 @@ const required = [
 ];
 const languages = ['es', 'zh-tw', 'pt', 'ca', 'fr', 'sr', 'ru', 'de', 'pt-pt', 'ka', 'sv', 'uk', 'be', 'kk', 'pl', 'cs', 'hu', 'it', 'nl', 'tr', 'ja', 'zh', 'hi', 'ko', 'th', 'vi', 'id', 'ms', 'tl'];
 const catalogue = new Map();
-let current;
-for (const line of source.split(/\r?\n/)) {
-  if (/^\S/.test(line)) {
-    current = undefined;
-    if (line.startsWith('"') && line.endsWith(':')) {
-      const key = JSON.parse(line.slice(0, -1));
-      if (required.includes(key)) {
-        assert(!catalogue.has(key), 'Duplicate key: ' + key);
-        current = new Map();
-        catalogue.set(key, current);
-      }
-    }
-  } else if (current && line.trim()) {
-    const match = /^  ([a-z-]+): (".*")$/.exec(line);
-    assert(match, 'Invalid translation line: ' + line);
-    const [, language, value] = match;
-    assert(!current.has(language), 'Duplicate language: ' + language);
-    current.set(language, JSON.parse(value));
+for (const language of languages) {
+  const file = readFileSync(new URL(`../../crates/omsi-app/locales/app.${language}.yml`, import.meta.url), 'utf8');
+  const translations = new Map();
+  for (const line of file.split(/\r?\n/)) {
+    if (!line.trim() || line.startsWith('#')) continue;
+    const match = /^("(?:[^"\\]|\\.)*"): (".*")$/.exec(line);
+    assert(match, `Invalid translation line in app.${language}.yml: ${line}`);
+    const key = JSON.parse(match[1]);
+    assert(!translations.has(key), `Duplicate key in app.${language}.yml: ${key}`);
+    translations.set(key, JSON.parse(match[2]));
   }
+  catalogue.set(language, translations);
 }
 const placeholders = value => [...value.matchAll(/%\{\w+\}|(?<!%)\{[^{}]*\}/g)].map(m => m[0]).sort();
 for (const language of languages) {
   test('settings navigation translations are complete: ' + language, () => {
     for (const key of required) {
-      const value = catalogue.get(key)?.get(language);
+      const value = catalogue.get(language).get(key);
       assert.equal(typeof value, 'string', language + ' missing: ' + key);
       assert(value.trim(), language + ' empty: ' + key);
       assert.deepEqual(placeholders(value), placeholders(key), language + ' placeholders: ' + key);
@@ -69,13 +63,10 @@ for (const language of languages) {
   });
 }
 
-test('settings navigation entries cover exactly the supported locales', () => {
-  assert.equal(catalogue.size, required.length);
-  for (const key of required) {
-    assert.deepEqual([...catalogue.get(key).keys()].sort(), [...languages].sort(), key);
-  }
+test('every settings navigation label has an English reference', () => {
+  for (const key of required) assert(englishSource.includes(`${JSON.stringify(key)}:\n  en: ${JSON.stringify(key)}`), 'Missing English key: ' + key);
 });
 
 test('every custom setting label has a catalogue key', () => {
-  for (const label of customLabels) assert(source.includes(JSON.stringify(label) + ':'), 'Missing custom label: ' + label);
+  for (const label of customLabels) assert(englishSource.includes(`${JSON.stringify(label)}:\n  en: ${JSON.stringify(label)}`), 'Missing custom label: ' + label);
 });

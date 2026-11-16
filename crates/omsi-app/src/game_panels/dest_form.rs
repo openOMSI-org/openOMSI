@@ -105,8 +105,21 @@ pub(crate) fn click(app: &mut crate::App, id: &str) {
 
 /// Set the bus's displays to `form` (or empty them); what was done, in words.
 fn set(app: &mut crate::App, form: &DestForm, clear: bool) -> String {
-    if !clear && !form.route.trim().is_empty() {
-        crate::game_lists::set_route_by_hand(app, &form.route);
+    let lines = if clear { [String::new(), String::new()] } else { form.lines.clone() };
+    let route = form.route.trim();
+    if !clear && lines.iter().all(|l| l.trim().is_empty()) {
+        if !route.is_empty() {
+            crate::game_lists::set_route_by_hand(app, route);
+        }
+        // (the same messages as with destination lines when there is no bus or depot file)
+        return match app.player.as_ref() {
+            None => String::new(),
+            Some(p) if p.vehicle.host.hof.is_none() => omsi_ui::tr("This bus has no depot file (.hof) with destinations").into_owned(),
+            Some(_) => omsi_ui::tr("Route number set").into_owned(),
+        };
+    }
+    if !clear && !route.is_empty() && crate::game_lists::numeric_ibis_line(route) {
+        crate::game_lists::set_route_by_hand(app, route);
     }
     let Some(p) = app.player.as_mut() else { return String::new() };
     if clear {
@@ -121,28 +134,27 @@ fn set(app: &mut crate::App, form: &DestForm, clear: bool) -> String {
         return omsi_ui::tr("This bus has no depot file (.hof) with destinations").into_owned();
     };
     let line = crate::game_lists::destination_line(&p.vehicle);
-    let lines = if clear { [String::new(), String::new()] } else { form.lines.clone() };
-    if !clear && lines.iter().all(|l| l.trim().is_empty()) {
-        return omsi_ui::tr("Route number set").into_owned();
-    }
-    let message = match named(&hof, &lines) {
+    let non_ibis = !clear && !route.is_empty() && !crate::game_lists::numeric_ibis_line(route);
+    let display = (non_ibis && crate::game_lists::display_route_line(route)).then_some(route);
+    let keep = !clear && crate::game_lists::route_keeps_blind(&form.route);
+    let (ti, msg) = match named(&hof, &lines) {
         Some(ti) => {
-            p.set_destination_by_hand(&hof, &line, ti, !clear && crate::game_lists::route_keeps_blind(&form.route));
-            format!("{} {}", omsi_ui::tr("Destination:"), hof.termini[ti].menu_name())
+            p.set_destination_by_hand_with_display(&hof, &line, display, ti, keep);
+            (ti, format!("{} {}", omsi_ui::tr("Destination:"), hof.termini[ti].menu_name()))
         }
         None => {
             let (free, ti) = hof.with_free_text([&lines[0], &lines[1]]);
             let free = std::sync::Arc::new(free);
             p.vehicle.host.hof = Some(free.clone());
-            p.set_destination_by_hand(&free, &line, ti, !clear && crate::game_lists::route_keeps_blind(&form.route));
+            p.set_destination_by_hand_with_display(&free, &line, display, ti, keep);
             log::info!("destination display set to free text: {:?} / {:?}", lines[0], lines[1]);
-            if clear { omsi_ui::tr("Display cleared").into_owned() } else { omsi_ui::tr("Destination set as typed").into_owned() }
+            (ti, if clear { omsi_ui::tr("Display cleared").into_owned() } else { omsi_ui::tr("Destination set as typed").into_owned() })
         }
     };
-    if !clear && !form.route.trim().is_empty() && !crate::game_lists::numeric_ibis_line(&form.route) {
-        crate::game_lists::set_route_by_hand(app, &form.route);
+    if non_ibis && display.is_none() {
+        crate::game_lists::set_symbol_route(p, Some(ti), route);
     }
-    message
+    msg
 }
 
 #[cfg(test)]
@@ -172,5 +184,65 @@ mod tests {
                 assert!(panel.contains(text), "destination form is missing translated text: {text}");
             }
         });
+    }
+
+    #[test]
+    fn form_preserves_ibis_line_while_passing_lettered_route_to_display_trigger() {
+        let mut app = crate::assemble_app(
+            <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]),
+            Default::default(),
+        );
+        let mut v = crate::schedule::tests::script_test_vehicle(
+            "{trigger:ai_scheduled_settarget}\n(L.$.SetLineTo) (S.$.shown)\n0 (S.L.IBIS_LinieKurs)\n(L.L.triggers) 1 + (S.L.triggers)\n{end}\n",
+            "IBIS_LinieKurs\nIBIS_TerminusCode\nAI_target_index\nMatrix_ziel_animationtimer\ntriggers\n",
+            "SetLineTo\nMatrix_Nr\nLinie\nshown\n",
+        );
+        v.set_var("IBIS_LinieKurs", 56.0);
+        v.host.hof = Some(std::sync::Arc::new(Hof {
+            termini: vec![Terminus { code: 211, texture_id: "Rathaus".into(), strings: vec!["RATHAUS".into()], ..Default::default() }],
+            ..Default::default()
+        }));
+        app.player = Some(crate::spawn::test_player(v, vec![]));
+
+        let form = DestForm { route: "R56".into(), lines: ["Rathaus".into(), String::new()], said: None };
+        let msg = set(&mut app, &form, false);
+        assert!(msg.contains("Rathaus"));
+        let p = app.player.as_ref().unwrap();
+        assert_eq!(p.vehicle.var("IBIS_LinieKurs"), Some(56.0));
+        assert_eq!(p.vehicle.var("triggers"), Some(1.0));
+        assert_eq!(p.vehicle.str_var("shown"), "R56");
+        assert_eq!(p.vehicle.str_var("SetLineTo"), "R56");
+        assert_eq!(p.vehicle.str_var("Matrix_Nr"), "R56");
+
+        crate::game_lists::set_route_by_hand(&mut app, "SB15");
+        let p = app.player.as_ref().unwrap();
+        assert_eq!(p.vehicle.var("IBIS_LinieKurs"), Some(56.0));
+        assert_eq!(p.vehicle.var("triggers"), Some(2.0));
+        assert_eq!(p.vehicle.str_var("shown"), "SB15");
+        assert_eq!(p.vehicle.str_var("SetLineTo"), "SB15");
+        assert_eq!(p.vehicle.str_var("Matrix_Nr"), "SB15");
+
+        let v2 = app.player.as_mut().unwrap();
+        v2.vehicle.set_var("Matrix_ziel_animationtimer", 1.0);
+        let form2 = DestForm { route: "CE19".into(), lines: ["Rathaus".into(), String::new()], said: None };
+        set(&mut app, &form2, false);
+        let v3 = &mut app.player.as_mut().unwrap().vehicle;
+        assert_eq!(v3.str_var("Matrix_Nr"), "SB15");
+        assert_eq!(v3.str_var("Linie"), "SB15");
+        v3.set_var("Matrix_ziel_animationtimer", 0.0);
+        v3.update(0.016);
+        assert_eq!(v3.str_var("shown"), "CE19");
+        assert_eq!(v3.str_var("Matrix_Nr"), "CE19");
+        assert_eq!(v3.str_var("Linie"), "CE19");
+        assert_eq!(v3.var("IBIS_LinieKurs"), Some(56.0));
+
+        let sym = DestForm { route: "-10".into(), lines: ["Rathaus".into(), String::new()], said: None };
+        set(&mut app, &sym, false);
+        let p = app.player.as_ref().unwrap();
+        assert_eq!(p.vehicle.str_var("shown"), "56");
+        assert_eq!(p.vehicle.str_var("SetLineTo"), "-10");
+        assert_eq!(p.vehicle.str_var("Matrix_Nr"), "-10");
+        assert_eq!(p.vehicle.str_var("Linie"), "-10");
+        assert_eq!(p.vehicle.var("IBIS_LinieKurs"), Some(56.0));
     }
 }
