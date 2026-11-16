@@ -5,7 +5,7 @@
 //! bounded asset to the caller and never writes its plaintext to the pack directory.
 
 use ring::{
-    aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM, NONCE_LEN},
+    aead::{AES_256_GCM, Aad, LessSafeKey, NONCE_LEN, Nonce, UnboundKey},
     rand::{SecureRandom, SystemRandom},
     signature::{self, Ed25519KeyPair, KeyPair, UnparsedPublicKey},
 };
@@ -21,15 +21,15 @@ use std::{
 };
 use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
-pub mod storage;
 #[cfg(windows)]
 mod change_marker;
 mod entitlement;
+pub mod storage;
 mod verify;
-pub use entitlement::{forget_unlock, issue_entitlement, unlock, Entitlement};
-use entitlement::{entitlement_scope, verify_entitlement};
 #[cfg(test)]
 use entitlement::SignedEntitlement;
+pub use entitlement::{Entitlement, forget_unlock, issue_entitlement, unlock};
+use entitlement::{entitlement_scope, verify_entitlement};
 
 const FORMAT_VERSION: u32 = 1;
 /// Room for the largest manifest the other limits allow (`a_largest_pack_manifest_fits`):
@@ -661,9 +661,25 @@ impl VerifiedPack {
     }
 
     fn new(root: &Path, manifest: Manifest, content_key: Option<[u8; 32]>) -> Result<Self> {
-        let by_path = manifest.assets.iter().enumerate().map(|(i, a)| (a.path.to_ascii_lowercase(), i)).collect();
-        let by_id = manifest.assets.iter().enumerate().map(|(i, a)| (a.id.clone(), i)).collect();
-        Ok(Self { root: root.canonicalize()?, manifest, content_key, by_path, by_id })
+        let by_path = manifest
+            .assets
+            .iter()
+            .enumerate()
+            .map(|(i, a)| (a.path.to_ascii_lowercase(), i))
+            .collect();
+        let by_id = manifest
+            .assets
+            .iter()
+            .enumerate()
+            .map(|(i, a)| (a.id.clone(), i))
+            .collect();
+        Ok(Self {
+            root: root.canonicalize()?,
+            manifest,
+            content_key,
+            by_path,
+            by_id,
+        })
     }
 
     pub fn manifest(&self) -> &Manifest {
@@ -674,7 +690,9 @@ impl VerifiedPack {
     }
     /// The asset stored at `path` (ASCII case-insensitive), without scanning the manifest.
     pub fn asset_by_path(&self, path: &str) -> Option<&Asset> {
-        self.by_path.get(&path.to_ascii_lowercase()).map(|&i| &self.manifest.assets[i])
+        self.by_path
+            .get(&path.to_ascii_lowercase())
+            .map(|&i| &self.manifest.assets[i])
     }
     /// The asset with the publisher identity `id`.
     pub fn asset_by_id(&self, id: &str) -> Option<&Asset> {
@@ -1184,7 +1202,7 @@ fn write_atomic_after_check(
         Ok(_) => {
             return Err(
                 io::Error::new(io::ErrorKind::AlreadyExists, "output already exists").into(),
-            )
+            );
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error.into()),
@@ -1318,8 +1336,8 @@ fn publish_pack_no_replace(staging: &Path, destination: &Path) -> Result<()> {
     {
         use std::os::windows::ffi::OsStrExt;
         use windows::{
+            Win32::Storage::FileSystem::{MOVEFILE_WRITE_THROUGH, MoveFileExW},
             core::PCWSTR,
-            Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_WRITE_THROUGH},
         };
         let from: Vec<u16> = staging.as_os_str().encode_wide().chain([0]).collect();
         let to: Vec<u16> = destination.as_os_str().encode_wide().chain([0]).collect();

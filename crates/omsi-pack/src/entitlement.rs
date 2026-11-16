@@ -1,8 +1,8 @@
 //! Publisher-signed offline entitlements: the licences that unlock protected packs.
 
 use crate::{
-    load_manifest, now_unix, sha256_hex, KeyStore, Manifest, PackError, Result, SigningKey,
-    TrustedPublishers, ENTITLEMENT_LIMIT, FORMAT_VERSION,
+    ENTITLEMENT_LIMIT, FORMAT_VERSION, KeyStore, Manifest, PackError, Result, SigningKey,
+    TrustedPublishers, load_manifest, now_unix, sha256_hex,
 };
 use ring::signature::{self, UnparsedPublicKey};
 use serde::{Deserialize, Serialize};

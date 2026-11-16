@@ -8,8 +8,8 @@ use std::{
 };
 
 use omsi_pack::{
-    issue_entitlement, load_manifest_signed_by, unlock, SigningKey, SystemKeyStore,
-    TrustedPublishers, VerifiedPack,
+    SigningKey, SystemKeyStore, TrustedPublishers, VerifiedPack, issue_entitlement,
+    load_manifest_signed_by, unlock,
 };
 use zeroize::Zeroizing;
 
@@ -95,10 +95,10 @@ fn issue(
             return Err(
                 "this pack was built for a licence ID; pass the same --licence-id to issue it"
                     .into(),
-            )
+            );
         }
         (None, Some(_)) => {
-            return Err("this pack has no licence ID; issue it without --licence-id".into())
+            return Err("this pack has no licence ID; issue it without --licence-id".into());
         }
     }
     let entitlement =

@@ -5,11 +5,11 @@ use std::{
 };
 
 use omsi_pack::{
-    create_licensed_pack, create_pack, random_content_key, AssetInput, Dependency, PackMetadata,
-    SigningKey,
+    AssetInput, Dependency, PackMetadata, SigningKey, create_licensed_pack, create_pack,
+    random_content_key,
 };
 #[cfg(any(target_os = "macos", windows))]
-use omsi_pack::{forget_unlock, SystemKeyStore, TrustedPublishers};
+use omsi_pack::{SystemKeyStore, TrustedPublishers, forget_unlock};
 use sha2::Digest;
 
 fn hash(bytes: &[u8]) -> String {
@@ -257,8 +257,10 @@ fn command_line_issue_names_the_licence_id_the_pack_was_built_for() {
         bounded_cli_error(&result.stderr, &key)
     );
     assert!(String::from_utf8_lossy(&result.stdout).contains("lic-0001"));
-    assert!(String::from_utf8_lossy(&std::fs::read(output).unwrap())
-        .contains("\"licence_id\":\"lic-0001\""));
+    assert!(
+        String::from_utf8_lossy(&std::fs::read(output).unwrap())
+            .contains("\"licence_id\":\"lic-0001\"")
+    );
     let (result, _) = issue(&shared, "shared.json", &[]);
     assert!(result.status.success(), "issuer failed for a shared pack");
     std::fs::remove_dir_all(root).unwrap();

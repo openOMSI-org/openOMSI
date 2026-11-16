@@ -70,16 +70,15 @@ fn native_load(scope: &str) -> Result<Vec<u8>> {
 #[cfg(target_os = "macos")]
 fn native_delete(scope: &str) -> Result<()> {
     validate_scope(scope)?;
-    security_framework::passwords::delete_generic_password(SERVICE, scope)
-        .map_err(keychain_error)
+    security_framework::passwords::delete_generic_password(SERVICE, scope).map_err(keychain_error)
 }
 
 #[cfg(windows)]
 fn native_store(scope: &str, secret: &[u8]) -> Result<()> {
     use std::ffi::c_void;
     use windows::Win32::{
-        Foundation::{LocalFree, HLOCAL},
-        Security::Cryptography::{CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB},
+        Foundation::{HLOCAL, LocalFree},
+        Security::Cryptography::{CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData},
     };
     validate_scope(scope)?;
     let input = CRYPT_INTEGER_BLOB {
@@ -116,9 +115,9 @@ fn native_store(scope: &str, secret: &[u8]) -> Result<()> {
 fn native_load(scope: &str) -> Result<Vec<u8>> {
     use std::ffi::c_void;
     use windows::Win32::{
-        Foundation::{LocalFree, HLOCAL},
+        Foundation::{HLOCAL, LocalFree},
         Security::Cryptography::{
-            CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+            CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptUnprotectData,
         },
     };
     validate_scope(scope)?;
@@ -126,16 +125,17 @@ fn native_load(scope: &str) -> Result<Vec<u8>> {
     // The bounded reader reports a missing file as an invalid path, not as NotFound.
     match fs::symlink_metadata(&path) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            return Err(PackError::KeyNotFound)
+            return Err(PackError::KeyNotFound);
         }
         _ => {}
     }
-    let encrypted = read_bounded_file(&path, ENTITLEMENT_LIMIT + 4096).map_err(|error| {
-        match error {
-            PackError::Io(error) if error.kind() == io::ErrorKind::NotFound => PackError::KeyNotFound,
+    let encrypted =
+        read_bounded_file(&path, ENTITLEMENT_LIMIT + 4096).map_err(|error| match error {
+            PackError::Io(error) if error.kind() == io::ErrorKind::NotFound => {
+                PackError::KeyNotFound
+            }
             error => error,
-        }
-    })?;
+        })?;
     let input = CRYPT_INTEGER_BLOB {
         cbData: encrypted.len() as u32,
         pbData: encrypted.as_ptr() as *mut u8,
@@ -224,10 +224,10 @@ fn windows_key_path(scope: &str) -> Result<PathBuf> {
 fn write_windows_key(scope: &str, value: &[u8]) -> Result<()> {
     use std::{io::Write as _, os::windows::ffi::OsStrExt};
     use windows::{
-        core::PCWSTR,
         Win32::Storage::FileSystem::{
-            MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+            MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
         },
+        core::PCWSTR,
     };
     let path = windows_key_path(scope)?;
     let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
@@ -273,7 +273,13 @@ mod tests {
 
     #[test]
     fn keychain_access_errors_are_not_reported_as_absent_grants() {
-        assert!(matches!(keychain_error(security_framework::base::Error::from_code(-25300)), PackError::KeyNotFound));
-        assert!(matches!(keychain_error(security_framework::base::Error::from_code(-25293)), PackError::SecureStorage(_)));
+        assert!(matches!(
+            keychain_error(security_framework::base::Error::from_code(-25300)),
+            PackError::KeyNotFound
+        ));
+        assert!(matches!(
+            keychain_error(security_framework::base::Error::from_code(-25293)),
+            PackError::SecureStorage(_)
+        ));
     }
 }

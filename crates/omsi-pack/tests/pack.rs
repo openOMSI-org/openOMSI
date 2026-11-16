@@ -1,16 +1,16 @@
 use std::{
     collections::BTreeMap,
     sync::{
-        atomic::{AtomicBool, AtomicU64},
         Mutex,
+        atomic::{AtomicBool, AtomicU64},
     },
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use omsi_pack::{
-    create_pack, forget_unlock, issue_entitlement, load_manifest, random_content_key, unlock,
     AssetInput, Dependency, KeyStore, PackError, PackMetadata, Result, SigningKey,
-    TrustedPublishers, VerifiedPack,
+    TrustedPublishers, VerifiedPack, create_pack, forget_unlock, issue_entitlement, load_manifest,
+    random_content_key, unlock,
 };
 use ring::rand::SystemRandom;
 
@@ -136,10 +136,12 @@ fn trusted_signed_encrypted_pack_round_trips_bounded_assets() {
     )
     .unwrap();
     assert_eq!(manifest.dependencies[0].version, "2.1.0");
-    assert!(!std::fs::read(out.join("manifest.json"))
-        .unwrap()
-        .windows(bytes.len())
-        .any(|w| w == bytes));
+    assert!(
+        !std::fs::read(out.join("manifest.json"))
+            .unwrap()
+            .windows(bytes.len())
+            .any(|w| w == bytes)
+    );
 
     let keys = MemoryKeys::default();
     let expires = SystemTime::now()
@@ -210,20 +212,22 @@ fn unknown_signer_wrong_key_tampering_and_traversal_fail_closed() {
 
     let bad = root.join("traversal.oopp");
     let plain_metadata = metadata(None);
-    assert!(create_pack(
-        &bad,
-        plain_metadata,
-        &[AssetInput {
-            id: "escape".into(),
-            path: "../escape.txt".into(),
-            source_sha256: "00".repeat(32),
-            bytes: b"x".to_vec()
-        }],
-        &signer,
-        None,
-        &AtomicBool::new(false),
-    )
-    .is_err());
+    assert!(
+        create_pack(
+            &bad,
+            plain_metadata,
+            &[AssetInput {
+                id: "escape".into(),
+                path: "../escape.txt".into(),
+                source_sha256: "00".repeat(32),
+                bytes: b"x".to_vec()
+            }],
+            &signer,
+            None,
+            &AtomicBool::new(false),
+        )
+        .is_err()
+    );
     assert!(!bad.exists());
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -354,28 +358,30 @@ fn file_directory_prefix_collision_is_rejected_before_output() {
     let signer = SigningKey::generate(&SystemRandom::new()).unwrap();
     let key = random_content_key().unwrap();
     let meta = metadata(Some(hash(&key)));
-    assert!(create_pack(
-        &out,
-        meta,
-        &[
-            AssetInput {
-                id: "file".into(),
-                path: "Sceneryobjects/Pack/model".into(),
-                source_sha256: hash(b"a"),
-                bytes: b"a".to_vec()
-            },
-            AssetInput {
-                id: "child".into(),
-                path: "Sceneryobjects/Pack/model/mesh.x".into(),
-                source_sha256: hash(b"b"),
-                bytes: b"b".to_vec()
-            },
-        ],
-        &signer,
-        Some(&key),
-        &AtomicBool::new(false),
-    )
-    .is_err());
+    assert!(
+        create_pack(
+            &out,
+            meta,
+            &[
+                AssetInput {
+                    id: "file".into(),
+                    path: "Sceneryobjects/Pack/model".into(),
+                    source_sha256: hash(b"a"),
+                    bytes: b"a".to_vec()
+                },
+                AssetInput {
+                    id: "child".into(),
+                    path: "Sceneryobjects/Pack/model/mesh.x".into(),
+                    source_sha256: hash(b"b"),
+                    bytes: b"b".to_vec()
+                },
+            ],
+            &signer,
+            Some(&key),
+            &AtomicBool::new(false),
+        )
+        .is_err()
+    );
     assert!(!out.exists());
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -387,28 +393,30 @@ fn unicode_normalized_file_directory_prefix_collision_is_rejected_before_output(
     let out = root.join("unicode-collision.oopp");
     let signer = SigningKey::generate(&SystemRandom::new()).unwrap();
     let key = random_content_key().unwrap();
-    assert!(create_pack(
-        &out,
-        metadata(Some(hash(&key))),
-        &[
-            AssetInput {
-                id: "file".into(),
-                path: "maps/Café".into(),
-                source_sha256: hash(b"a"),
-                bytes: b"a".to_vec()
-            },
-            AssetInput {
-                id: "child".into(),
-                path: "maps/Cafe\u{301}/child".into(),
-                source_sha256: hash(b"b"),
-                bytes: b"b".to_vec()
-            },
-        ],
-        &signer,
-        Some(&key),
-        &AtomicBool::new(false),
-    )
-    .is_err());
+    assert!(
+        create_pack(
+            &out,
+            metadata(Some(hash(&key))),
+            &[
+                AssetInput {
+                    id: "file".into(),
+                    path: "maps/Café".into(),
+                    source_sha256: hash(b"a"),
+                    bytes: b"a".to_vec()
+                },
+                AssetInput {
+                    id: "child".into(),
+                    path: "maps/Cafe\u{301}/child".into(),
+                    source_sha256: hash(b"b"),
+                    bytes: b"b".to_vec()
+                },
+            ],
+            &signer,
+            Some(&key),
+            &AtomicBool::new(false),
+        )
+        .is_err()
+    );
     assert!(!out.exists());
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -423,20 +431,22 @@ fn cancellation_truncation_reordering_and_storage_failure_fail_closed() {
     let cancelled_path = root.join("cancelled.oopp");
     let meta = metadata(Some(hash(&key)));
     let cancelled = AtomicBool::new(true);
-    assert!(create_pack(
-        &cancelled_path,
-        meta,
-        &[AssetInput {
-            id: "asset".into(),
-            path: "maps/Test/asset.bin".into(),
-            source_sha256: hash(b"source"),
-            bytes: source.clone()
-        }],
-        &signer,
-        Some(&key),
-        &cancelled,
-    )
-    .is_err());
+    assert!(
+        create_pack(
+            &cancelled_path,
+            meta,
+            &[AssetInput {
+                id: "asset".into(),
+                path: "maps/Test/asset.bin".into(),
+                source_sha256: hash(b"source"),
+                bytes: source.clone()
+            }],
+            &signer,
+            Some(&key),
+            &cancelled,
+        )
+        .is_err()
+    );
     assert!(!cancelled_path.exists());
     assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
 
@@ -483,7 +493,10 @@ fn cancellation_truncation_reordering_and_storage_failure_fail_closed() {
     let manifest = load_manifest(&healthy, &trust).unwrap();
     let grant = issue_entitlement(&manifest, key, expires, &signer).unwrap();
     assert!(unlock(&healthy, &grant, &trust, &BrokenStore).is_err());
-    assert!(matches!(VerifiedPack::open_unlocked(&healthy, &trust, &BrokenStore), Err(PackError::MissingKey)));
+    assert!(matches!(
+        VerifiedPack::open_unlocked(&healthy, &trust, &BrokenStore),
+        Err(PackError::MissingKey)
+    ));
     forget_unlock(&healthy, &trust, &BrokenStore).unwrap();
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -499,7 +512,10 @@ fn native_absent_entitlement_has_an_exact_error_and_forget_is_idempotent() {
     std::fs::create_dir_all(&root).unwrap();
     let key = random_content_key().unwrap();
     let (out, _, trust) = make_pack(&root, "absent.oopp", &key, b"owned fixture");
-    assert!(matches!(VerifiedPack::open_unlocked(&out, &trust, &store), Err(PackError::MissingKey)));
+    assert!(matches!(
+        VerifiedPack::open_unlocked(&out, &trust, &store),
+        Err(PackError::MissingKey)
+    ));
     forget_unlock(&out, &trust, &store).unwrap();
     forget_unlock(&out, &trust, &store).unwrap();
     std::fs::remove_dir_all(root).unwrap();

@@ -395,16 +395,18 @@ fn malformed_licence_ids_and_unprotected_licensed_manifests_are_rejected() {
     .enumerate()
     {
         let pack = root.join(format!("bad-{index}.oopp"));
-        assert!(create_licensed_pack(
-            &pack,
-            licence_metadata(&key),
-            bad,
-            &licence_input(),
-            &signer,
-            &key,
-            &AtomicBool::new(false),
-        )
-        .is_err());
+        assert!(
+            create_licensed_pack(
+                &pack,
+                licence_metadata(&key),
+                bad,
+                &licence_input(),
+                &signer,
+                &key,
+                &AtomicBool::new(false),
+            )
+            .is_err()
+        );
         assert!(!pack.exists());
     }
     let longest = "x".repeat(128);
@@ -453,20 +455,43 @@ fn a_pack_changed_on_disk_after_the_first_scan_is_rejected_when_opened_again() {
     let mut metadata = licence_metadata(&[0; 32]);
     metadata.key_id = None;
     let pack = root.join("plain.oopp");
-    let manifest = create_pack(&pack, metadata, &licence_input(), &signer, None, &AtomicBool::new(false)).unwrap();
+    let manifest = create_pack(
+        &pack,
+        metadata,
+        &licence_input(),
+        &signer,
+        None,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
     let trusted = licence_trust(&signer);
     let keys = MemoryKeys::default();
     let first = VerifiedPack::open_unlocked(&pack, &trusted, &keys).unwrap();
-    assert_eq!(first.read("maps/Fixture/global.cfg").unwrap(), b"owned synthetic fixture");
+    assert_eq!(
+        first.read("maps/Fixture/global.cfg").unwrap(),
+        b"owned synthetic fixture"
+    );
     // (an unchanged pack opens again from the cached scan)
     assert!(VerifiedPack::open_unlocked(&pack, &trusted, &keys).is_ok());
 
-    let asset = pack.join(format!("assets/{}/plain.bin", sha256_hex(manifest.assets[0].id.as_bytes())));
+    let asset = pack.join(format!(
+        "assets/{}/plain.bin",
+        sha256_hex(manifest.assets[0].id.as_bytes())
+    ));
     fs::write(&asset, b"changed after the first scan").unwrap();
-    assert!(VerifiedPack::open_unlocked(&pack, &trusted, &keys).is_err(), "a changed pack file was accepted at open");
-    assert!(first.read("maps/Fixture/global.cfg").is_err(), "a changed asset was returned");
+    assert!(
+        VerifiedPack::open_unlocked(&pack, &trusted, &keys).is_err(),
+        "a changed pack file was accepted at open"
+    );
+    assert!(
+        first.read("maps/Fixture/global.cfg").is_err(),
+        "a changed asset was returned"
+    );
     fs::remove_file(&asset).unwrap();
-    assert!(VerifiedPack::open_unlocked(&pack, &trusted, &keys).is_err(), "a removed pack file was accepted at open");
+    assert!(
+        VerifiedPack::open_unlocked(&pack, &trusted, &keys).is_err(),
+        "a removed pack file was accepted at open"
+    );
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -478,23 +503,41 @@ fn a_same_size_change_with_the_old_modified_time_is_rejected_when_opened_again()
     let mut metadata = licence_metadata(&[0; 32]);
     metadata.key_id = None;
     let pack = root.join("plain.oopp");
-    let manifest = create_pack(&pack, metadata, &licence_input(), &signer, None, &AtomicBool::new(false)).unwrap();
+    let manifest = create_pack(
+        &pack,
+        metadata,
+        &licence_input(),
+        &signer,
+        None,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
     let trusted = licence_trust(&signer);
     let keys = MemoryKeys::default();
     let first = VerifiedPack::open_unlocked(&pack, &trusted, &keys).unwrap();
-    assert_eq!(first.read("maps/Fixture/global.cfg").unwrap(), b"owned synthetic fixture");
+    assert_eq!(
+        first.read("maps/Fixture/global.cfg").unwrap(),
+        b"owned synthetic fixture"
+    );
 
-    let asset = pack.join(format!("assets/{}/plain.bin", sha256_hex(manifest.assets[0].id.as_bytes())));
+    let asset = pack.join(format!(
+        "assets/{}/plain.bin",
+        sha256_hex(manifest.assets[0].id.as_bytes())
+    ));
     let original = fs::read(&asset).unwrap();
     let modified = fs::metadata(&asset).unwrap().modified().unwrap();
     // past the file system's clock tick, so the change time can move
     std::thread::sleep(std::time::Duration::from_millis(100));
     let mut file = fs::OpenOptions::new().write(true).open(&asset).unwrap();
-    file.write_all(&original.iter().map(|byte| byte ^ 1).collect::<Vec<u8>>()).unwrap();
+    file.write_all(&original.iter().map(|byte| byte ^ 1).collect::<Vec<u8>>())
+        .unwrap();
     file.set_modified(modified).unwrap();
     drop(file);
     let meta = fs::metadata(&asset).unwrap();
-    assert_eq!((meta.len(), meta.modified().unwrap()), (original.len() as u64, modified));
+    assert_eq!(
+        (meta.len(), meta.modified().unwrap()),
+        (original.len() as u64, modified)
+    );
     assert!(
         VerifiedPack::open_unlocked(&pack, &trusted, &keys).is_err(),
         "a same-size change with the old modified time was accepted at open"
@@ -564,7 +607,11 @@ fn a_largest_pack_manifest_fits() {
     // partial chunk per asset.
     let chunks_per_asset = (MAX_PACK_SIZE as usize / CHUNK_SIZE).div_ceil(MAX_ASSETS) + 1;
     let hash = "0".repeat(64);
-    let chunk = |i: usize| Chunk { file: format!("assets/{hash}/{i:08}.bin"), plaintext_size: CHUNK_SIZE as u32, ciphertext_sha256: hash.clone() };
+    let chunk = |i: usize| Chunk {
+        file: format!("assets/{hash}/{i:08}.bin"),
+        plaintext_size: CHUNK_SIZE as u32,
+        ciphertext_sha256: hash.clone(),
+    };
     let assets = (0..MAX_ASSETS)
         .map(|n| Asset {
             id: format!("{n:0>256}"),
@@ -587,7 +634,13 @@ fn a_largest_pack_manifest_fits() {
         signing_key_id: hash.clone(),
         key_id: Some(hash.clone()),
         licence_id: Some(id.clone()),
-        dependencies: (0..MAX_DEPENDENCIES).map(|_| Dependency { publisher_id: id.clone(), pack_id: id.clone(), version: id.clone() }).collect(),
+        dependencies: (0..MAX_DEPENDENCIES)
+            .map(|_| Dependency {
+                publisher_id: id.clone(),
+                pack_id: id.clone(),
+                version: id.clone(),
+            })
+            .collect(),
         assets,
     };
     let size = serde_json::to_vec(&manifest).unwrap().len();
