@@ -502,10 +502,13 @@ fn portuguese_panes_are_glass() {
 }
 
 #[test]
-fn reflective_car_body_stays_solid_while_unnamed_pane_is_see_through() {
+fn reflective_car_body_stays_solid_while_unnamed_pane_on_non_body_mesh_is_see_through() {
     use crate::vehicles::is_reflective_body;
+    // An envmapped reflective car body with volume is treated as solid paint:
     assert!(is_reflective_body(true, false, false, true, true));
+    // An unnamed envmapped pane with volume on a mesh NOT named body stays see-through:
     assert!(!is_reflective_body(false, false, false, true, true));
+    // A named pane or a slot with a transmap is never classified as reflective bodywork:
     assert!(!is_reflective_body(true, true, false, true, true));
     assert!(!is_reflective_body(true, false, true, true, true));
 }

@@ -1,7 +1,6 @@
 //! The vehicle upload: a vehicle type's meshes and materials made into render instances.
 use super::*;
 
-#[rustfmt::skip]
 pub(crate) mod lods;
 mod night_coverage;
 use night_coverage::{load_night, night_coverage, static_diffuse};
