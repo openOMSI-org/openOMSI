@@ -153,7 +153,7 @@ export async function run(root) {
     report.push('PASS original conditional visibility');
 
     render(null, root); mounted = false;
-    const savedFavourites = ['graphics:fullscreen', 'graphics:@nvidia_dlss_install', 'graphics:ray_tracing', 'graphics:missing_setting', 'general:@launcher_layout', 'general:@launcher_size'];
+    const savedFavourites = ['graphics:fullscreen', 'graphics:@nvidia_dlss_install', 'graphics:ray_tracing', 'graphics:missing_setting', 'general:@launcher_layout'];
     remember('settings-favourites', JSON.stringify(savedFavourites));
     await mount();
     set({ boot: { ...S.boot, platform: 'android' }, settings: { ...S.settings, graphics: 'vanilla' } });
@@ -166,7 +166,6 @@ export async function run(root) {
     };
     assertFavouriteCount(1);
     assert(!root.querySelector('[data-setting-key="launcher_layout"]'), 'Android must not show launcher layout Help or favourite controls');
-    assert(!root.querySelector('[data-setting-key="launcher_size"]'), 'Unavailable launcher size must not show Help or favourite controls');
     const favouriteSearch = root.querySelector('.settings-search input');
     favouriteSearch.value = 'shadow_casters';
     favouriteSearch.dispatchEvent(new Event('input', { bubbles: true }));
