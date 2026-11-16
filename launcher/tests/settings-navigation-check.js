@@ -1,5 +1,6 @@
 import { html, render } from '../ui/vendor/preact-htm.js';
 import { S, set, remember } from '../ui/js/store.js';
+import { isSettingVisible } from '../ui/js/pages/settings-layout.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const assert = (ok, message) => { if (!ok) throw new Error(message); };
@@ -35,6 +36,11 @@ export async function run(root) {
     remember('settings-section-graphics', 'display');
     const { SettingsPage } = await import('../ui/js/pages/settings.js');
     const { SETTINGS_TABS } = await import('../ui/js/pages/settings-schema.js');
+    const layoutRow = { type: 'custom', id: 'launcher_layout' };
+    const sizeRow = { type: 'custom', id: 'launcher_size' };
+    assert(!isSettingVisible(layoutRow, saved, 'android', { onPhone: true, inTauri: true }), 'Launcher layout must be unavailable on phones');
+    assert(!isSettingVisible(sizeRow, saved, 'windows', { onPhone: false, inTauri: false }), 'Launcher size must be unavailable outside Tauri');
+    report.push('PASS launcher-specific controls follow phone and Tauri availability');
     const mount = async () => {
       set({ boot: { platform: 'windows', version: 'test' }, settings: { ...saved }, config: {}, page: 'settings' });
       render(html`<div class="shell settings-test-shell"><main class="main"><div class="page page-settings"><${SettingsPage} /></div></main></div>`, root);
@@ -147,7 +153,7 @@ export async function run(root) {
     report.push('PASS original conditional visibility');
 
     render(null, root); mounted = false;
-    const savedFavourites = ['graphics:fullscreen', 'graphics:@nvidia_dlss_install', 'graphics:ray_tracing', 'graphics:missing_setting'];
+    const savedFavourites = ['graphics:fullscreen', 'graphics:@nvidia_dlss_install', 'graphics:ray_tracing', 'graphics:missing_setting', 'general:@launcher_layout', 'general:@launcher_size'];
     remember('settings-favourites', JSON.stringify(savedFavourites));
     await mount();
     set({ boot: { ...S.boot, platform: 'android' }, settings: { ...S.settings, graphics: 'vanilla' } });
@@ -159,6 +165,8 @@ export async function run(root) {
       assert(root.querySelectorAll('.settings-entry.control').length === expected, 'Favourite count must match the displayed controls');
     };
     assertFavouriteCount(1);
+    assert(!root.querySelector('[data-setting-key="launcher_layout"]'), 'Android must not show launcher layout Help or favourite controls');
+    assert(!root.querySelector('[data-setting-key="launcher_size"]'), 'Unavailable launcher size must not show Help or favourite controls');
     const favouriteSearch = root.querySelector('.settings-search input');
     favouriteSearch.value = 'shadow_casters';
     favouriteSearch.dispatchEvent(new Event('input', { bubbles: true }));

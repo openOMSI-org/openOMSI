@@ -51,7 +51,11 @@ const customLabels = { profiles: 'Profiles', preset: 'Quality preset', optimise:
 export const settingToken = (row) => typeof row.key === 'string' ? row.key : row.id ? '@' + row.id : row.type === 'section' ? '#' + row.title.replaceAll(' ', '_') : row.label || row.text;
 export const settingLabel = (row) => row.label || customLabels[row.id] || row.title || '';
 export const settingId = (tab, row) => tab.id + ':' + settingToken(row);
-export const isSettingVisible = (row, settings, platform) => !row.when || row.when(settings, platform);
+export const isSettingVisible = (row, settings, platform, { onPhone = platform === 'android', inTauri = true } = {}) => {
+  if (row.id === 'launcher_layout' && onPhone) return false;
+  if (row.id === 'launcher_size' && !inTauri) return false;
+  return !row.when || row.when(settings, platform);
+};
 export const isSettingControl = (row) => !['section', 'note'].includes(row.type);
 
 export function settingsGroups(tab) {

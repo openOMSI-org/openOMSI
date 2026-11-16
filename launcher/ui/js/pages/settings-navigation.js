@@ -4,6 +4,7 @@ import { t } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Search, useConfirm } from '../ui.js';
 import { SETTINGS_TABS } from './settings-schema.js';
+import { inTauri, onPhone } from '../api.js';
 import { settingsGroups, settingId, settingLabel, isSettingVisible, isSettingControl, readFavourites } from './settings-layout.js';
 import { AiListsPage } from './ai-lists.js';
 
@@ -47,7 +48,7 @@ export function SettingsNavigation({ Row }) {
   useEffect(() => { if (scroll.current) scroll.current.scrollTop = 0; }, [category, sections, query]);
   if (!s.settings) return null;
   const platform = s.boot?.platform || '';
-  const visible = (row) => isSettingVisible(row, s.settings, platform);
+  const visible = (row) => isSettingVisible(row, s.settings, platform, { onPhone: onPhone || platform === 'android', inTauri });
   const tabs = SETTINGS_TABS.filter(visible);
   const favouritesPage = category === 'favourites';
   const current = tabs.find((tab) => tab.id === category) || tabs[0];
