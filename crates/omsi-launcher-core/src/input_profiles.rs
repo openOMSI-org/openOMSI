@@ -250,7 +250,9 @@ pub fn rename_in(inputs: &Path, old: &str, new: &str) -> Result<()> {
             *p = new.to_string();
         }
     }
-    write(inputs, &ix)
+    write(inputs, &ix).inspect_err(|_| {
+        let _ = std::fs::rename(folder(inputs, new), folder(inputs, old));
+    })
 }
 
 pub fn delete_in(inputs: &Path, name: &str) -> Result<()> {
@@ -262,12 +264,20 @@ pub fn delete_in(inputs: &Path, name: &str) -> Result<()> {
     if !name_ok(name) || !folder(inputs, name).is_dir() {
         bail!("no profile {name}");
     }
-    std::fs::remove_dir_all(folder(inputs, name))?;
+    // (set aside first: an index that cannot be written puts it back)
+    let aside = inputs.join(format!(".{name}.deleted"));
+    let _ = std::fs::remove_dir_all(&aside);
+    std::fs::rename(folder(inputs, name), &aside)?;
     if ix.default.as_deref() == Some(name) {
         ix.default = None;
     }
     ix.buses.retain(|_, p| p != name);
-    write(inputs, &ix)
+    if let Err(e) = write(inputs, &ix) {
+        let _ = std::fs::rename(&aside, folder(inputs, name));
+        return Err(e);
+    }
+    let _ = std::fs::remove_dir_all(&aside);
+    Ok(())
 }
 
 pub fn set_default_in(inputs: &Path, name: Option<&str>) -> Result<()> {
@@ -573,6 +583,37 @@ mod tests {
         assert_eq!(
             (kb(&d), pad(&d)),
             (String::from("original"), String::from("pad"))
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_rename_or_delete_whose_index_cannot_be_written_changes_nothing() {
+        let d = two_profiles("rename");
+        assign_in(&d, "Bus/A.bus", Some("Wheel")).unwrap();
+        set_default_in(&d, Some("Wheel")).unwrap();
+        let before = list_in(&d);
+        std::fs::create_dir_all(d.join(format!("{INDEX}.tmp"))).unwrap();
+
+        assert!(rename_in(&d, "Wheel", "Pad").is_err());
+        assert!(folder(&d, "Wheel").is_dir() && !folder(&d, "Pad").exists());
+        assert!(delete_in(&d, "Wheel").is_err());
+        assert_eq!(
+            std::fs::read_to_string(folder(&d, "Wheel").join("keyboard.cfg")).unwrap(),
+            "wheel keys"
+        );
+        assert_eq!(list_in(&d), before);
+
+        std::fs::remove_dir_all(d.join(format!("{INDEX}.tmp"))).unwrap();
+        rename_in(&d, "Wheel", "Pad").unwrap();
+        assert_eq!(list_in(&d)["buses"]["bus/a.bus"], "Pad");
+        delete_in(&d, "Pad").unwrap();
+        assert_eq!(list_in(&d)["profiles"], json!(["Default"]));
+        assert!(
+            std::fs::read_dir(&d)
+                .unwrap()
+                .flatten()
+                .all(|e| !e.file_name().to_string_lossy().ends_with(".deleted"))
         );
         let _ = std::fs::remove_dir_all(&d);
     }
