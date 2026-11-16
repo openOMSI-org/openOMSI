@@ -72,6 +72,8 @@ Bottom up:
 * AI vehicle scripts run in parallel (rayon `par_iter_mut` over the cars' `VehicleInstance`s
   after the sequential lane/obstacle planning of a frame); a lane grid (50 m cells,
   `Network::grid`) answers nearest-lane queries without scanning the whole network.
+* Publisher packs are checked on the rayon pool, one asset per task (`omsi_pack::VerifiedPack::
+  verify_all` and the open-time change markers), each task holding one 64 KiB chunk at a time.
 * The renderer rewrites only the per-draw entries of instances that changed since the last
   frame (`Scene::changed`); a full rebuild happens only when instances are added or the
   render origin moves. Together these took Spandau with traffic from ~34 to ~240 fps. It

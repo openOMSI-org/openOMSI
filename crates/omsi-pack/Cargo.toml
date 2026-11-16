@@ -6,6 +6,7 @@ license.workspace = true
 description = "Signed and optionally encrypted openOMSI publisher packs"
 
 [dependencies]
+rayon.workspace = true
 ring.workspace = true
 serde.workspace = true
 serde_json.workspace = true

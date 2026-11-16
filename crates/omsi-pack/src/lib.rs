@@ -25,6 +25,7 @@ pub mod storage;
 #[cfg(windows)]
 mod change_marker;
 mod entitlement;
+mod verify;
 pub use entitlement::{forget_unlock, issue_entitlement, unlock, Entitlement};
 use entitlement::{entitlement_scope, verify_entitlement};
 #[cfg(test)]
@@ -665,65 +666,6 @@ impl VerifiedPack {
         Ok(Self { root: root.canonicalize()?, manifest, content_key, by_path, by_id })
     }
 
-    /// `verify_all` once per pack revision (manifest, key and the markers of every pack file) in this process.
-    fn verify_once(&self) -> Result<()> {
-        static VERIFIED: std::sync::Mutex<BTreeSet<(PathBuf, String, String, String)>> = std::sync::Mutex::new(BTreeSet::new());
-        let Some(files) = self.files_fingerprint()? else {
-            return self.verify_all();
-        };
-        let revision = (
-            self.root.clone(),
-            sha256_hex(&serde_json::to_vec(&self.manifest)?),
-            self.content_key.as_ref().map(|key| sha256_hex(key)).unwrap_or_default(),
-            files,
-        );
-        if VERIFIED.lock().unwrap_or_else(|e| e.into_inner()).contains(&revision) {
-            return Ok(());
-        }
-        self.verify_all()?;
-        VERIFIED.lock().unwrap_or_else(|e| e.into_inner()).insert(revision);
-        Ok(())
-    }
-
-    /// Size, modification time and change marker of every pack file; `None` when one has no change time or cannot be listed.
-    fn files_fingerprint(&self) -> Result<Option<String>> {
-        let mut digest = Sha256::new();
-        #[cfg(windows)]
-        let mut folders = HashMap::new();
-        for asset in &self.manifest.assets {
-            let plain = [format!("assets/{}/plain.bin", sha256_hex(asset.id.as_bytes()))];
-            let files: Vec<&str> = if self.content_key.is_some() {
-                asset.chunks.iter().map(|c| c.file.as_str()).collect()
-            } else {
-                plain.iter().map(String::as_str).collect()
-            };
-            for file in files {
-                digest.update(file.as_bytes());
-                #[cfg(windows)]
-                {
-                    let Some(marker) = change_marker::file_marker(&self.root, file, &mut folders)? else { return Ok(None) };
-                    digest.update(marker);
-                }
-                #[cfg(not(windows))]
-                {
-                    let meta = fs::metadata(self.root.join(file))
-                        .map_err(|_| PackError::Invalid("chunk is missing, truncated, or changed"))?;
-                    let modified = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).unwrap_or_default();
-                    digest.update(meta.len().to_le_bytes());
-                    digest.update(modified.as_nanos().to_le_bytes());
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::fs::MetadataExt as _;
-                        digest.update(meta.ino().to_le_bytes());
-                        digest.update(meta.ctime().to_le_bytes());
-                        digest.update(meta.ctime_nsec().to_le_bytes());
-                    }
-                }
-            }
-        }
-        Ok(Some(hex_digest(digest.finalize().as_slice())))
-    }
-
     pub fn manifest(&self) -> &Manifest {
         &self.manifest
     }
@@ -744,21 +686,17 @@ impl VerifiedPack {
         let asset = self
             .asset_by_path(path)
             .ok_or(PackError::Invalid("asset is not in the signed manifest"))?;
-        self.read_asset(asset, &mut HashSet::new())
-    }
-
-    /// `read` for an asset of this pack; `dirs` holds the folders this scan already found free of links.
-    fn read_asset(&self, asset: &Asset, dirs: &mut HashSet<PathBuf>) -> Result<Vec<u8>> {
         if asset.size > MAX_ASSET_SIZE {
             return Err(PackError::Invalid("asset exceeds 64 MiB"));
         }
         let mut out = Vec::with_capacity(asset.size as usize);
+        let mut dirs = HashSet::new();
         if let Some(key) = &self.content_key {
             let cipher = LessSafeKey::new(
                 UnboundKey::new(&AES_256_GCM, key).map_err(|_| PackError::WrongKey)?,
             );
             for (index, chunk) in asset.chunks.iter().enumerate() {
-                let blob = self.read_chunk(chunk, dirs)?;
+                let blob = self.read_chunk(chunk, &mut dirs)?;
                 let nonce = Nonce::try_assume_unique_for_key(&blob[..NONCE_LEN])
                     .map_err(|_| PackError::Invalid("invalid chunk nonce"))?;
                 let mut body = blob[NONCE_LEN..].to_vec();
@@ -784,7 +722,7 @@ impl VerifiedPack {
             out = read_bounded_file_in(
                 &self.root.join(format!("assets/{opaque}/plain.bin")),
                 MAX_ASSET_SIZE as usize,
-                dirs,
+                &mut dirs,
             )?;
         }
         if out.len() as u64 != asset.size || sha256_hex(&out) != asset.output_sha256 {
@@ -793,54 +731,6 @@ impl VerifiedPack {
             ));
         }
         Ok(out)
-    }
-
-    /// Check every signed blob while keeping memory to one authenticated chunk at a time.
-    pub fn verify_all(&self) -> Result<()> {
-        let mut dirs = HashSet::new();
-        for asset in &self.manifest.assets {
-            if let Some(key) = &self.content_key {
-                let cipher = LessSafeKey::new(
-                    UnboundKey::new(&AES_256_GCM, key).map_err(|_| PackError::WrongKey)?,
-                );
-                let mut digest = Sha256::new();
-                let mut size = 0u64;
-                for (index, chunk) in asset.chunks.iter().enumerate() {
-                    let blob = self.read_chunk(chunk, &mut dirs)?;
-                    let nonce = Nonce::try_assume_unique_for_key(&blob[..NONCE_LEN])
-                        .map_err(|_| PackError::Invalid("invalid chunk nonce"))?;
-                    let mut body = blob[NONCE_LEN..].to_vec();
-                    let aad = chunk_aad(
-                        &self.manifest,
-                        asset,
-                        index as u32,
-                        asset.chunks.len() as u32,
-                    );
-                    let plain = cipher
-                        .open_in_place(nonce, Aad::from(aad.as_slice()), &mut body)
-                        .map_err(|_| PackError::WrongKey)?;
-                    if plain.len() != chunk.plaintext_size as usize {
-                        return Err(PackError::Invalid(
-                            "authenticated chunk size does not match manifest",
-                        ));
-                    }
-                    size += plain.len() as u64;
-                    digest.update(&*plain);
-                    body.zeroize();
-                }
-                if size != asset.size
-                    || hex_digest(digest.finalize().as_slice()) != asset.output_sha256
-                {
-                    return Err(PackError::Invalid(
-                        "asset bytes do not match the signed output hash",
-                    ));
-                }
-            } else {
-                let bytes = self.read_asset(asset, &mut dirs)?;
-                drop(bytes);
-            }
-        }
-        Ok(())
     }
 
     fn read_chunk(&self, chunk: &Chunk, dirs: &mut HashSet<PathBuf>) -> Result<Vec<u8>> {
