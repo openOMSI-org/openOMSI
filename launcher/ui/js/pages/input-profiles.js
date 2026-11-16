@@ -38,8 +38,19 @@ export function InputProfiles() {
   const bus = s.choice?.bus || '';
   const own = p.buses?.[norm(bus)];
   const assigned = Object.entries(p.buses || {});
+  // (the profile in use cannot be deleted: the default one, or another, takes its place first)
   const remove = async () => {
-    if (await ask({ title: 'Delete this profile?', text: [active], yes: 'Delete', danger: true })) run('input_profile_delete', { name: active });
+    if (!(await ask({ title: 'Delete this profile?', text: [active], yes: 'Delete', danger: true }))) return;
+    const next = p.default && p.default !== active ? p.default : p.profiles.find((n) => n !== active);
+    try {
+      await call('input_profile_switch', { name: next });
+      await call('input_profile_delete', { name: active });
+      toast(t('Profile {name} in use', { name: next }), 'ok');
+    } catch (e) {
+      toast(t(e.message), 'error');
+    }
+    reload();
+    await read();
   };
   return html`
     ${naming && html`<${NameDialog} title=${naming.title} label="Profile name" placeholder="" value=${naming.value} onClose=${() => setNaming(null)} onSave=${(name) => {

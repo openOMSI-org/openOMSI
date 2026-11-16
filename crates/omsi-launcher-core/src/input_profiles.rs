@@ -71,23 +71,37 @@ fn names(inputs: &Path) -> Vec<String> {
     v
 }
 
-// (a file the source lacks is written as the game's default: without one, the content
-// folder's copy would be the one in use; all files are staged first, so a failure leaves the
-// ones in use as they were)
-fn copy_files(from: &Path, to: &Path, rival: Option<&Path>) -> Result<()> {
-    copy_files_then(from, to, rival, || Ok(()))
+// (the game takes the newer of each own file and the content folder's, `omsi_cfg::input_in_use`)
+fn save_in_use(inputs: &Path, rival: Option<&Path>, to: &Path) -> Result<()> {
+    copy_files_then(inputs, rival, to, None, || Ok(()))
 }
 
-/// `copy_files`, and `then` with the files in place: when it fails, the old files go back.
+fn in_use(own: PathBuf, other: Option<PathBuf>) -> PathBuf {
+    let modified = |p: &Path| {
+        std::fs::metadata(p)
+            .ok()
+            .filter(|m| m.is_file())
+            .and_then(|m| m.modified().ok())
+    };
+    match (other, modified(&own)) {
+        (Some(o), mine) if modified(&o).is_some_and(|t| mine.is_none_or(|m| t > m)) => o,
+        _ => own,
+    }
+}
+
+// (a file the source lacks is written as the game's default: without one, the content
+// folder's copy would be the one in use; all files are staged first, and when `then` fails
+// with them in place the old ones go back)
 fn copy_files_then(
     from: &Path,
+    alt: Option<&Path>,
     to: &Path,
     rival: Option<&Path>,
     then: impl FnOnce() -> Result<()>,
 ) -> Result<()> {
     std::fs::create_dir_all(to)?;
     let mut staged = Vec::new();
-    let result = stage(from, to, rival, &mut staged).and_then(|_| put(to, &staged, then));
+    let result = stage(from, alt, to, rival, &mut staged).and_then(|_| put(to, &staged, then));
     for (tmp, _) in &staged {
         let _ = std::fs::remove_file(tmp);
     }
@@ -96,12 +110,13 @@ fn copy_files_then(
 
 fn stage(
     from: &Path,
+    alt: Option<&Path>,
     to: &Path,
     rival: Option<&Path>,
     staged: &mut Vec<(PathBuf, &'static str)>,
 ) -> Result<()> {
     for f in FILES {
-        let a = from.join(f);
+        let a = in_use(from.join(f), alt.map(|d| d.join(f)));
         let tmp = to.join(format!("{f}.tmp"));
         if a.is_file() {
             std::fs::copy(&a, &tmp)?;
@@ -185,7 +200,7 @@ pub fn list_in(inputs: &Path) -> Value {
     json!({ "active": ix.active, "default": ix.default, "profiles": names(inputs), "buses": ix.buses })
 }
 
-pub fn create_in(inputs: &Path, name: &str) -> Result<()> {
+pub fn create_in(inputs: &Path, rival: Option<&Path>, name: &str) -> Result<()> {
     if !name_ok(name) {
         bail!("a profile's name: up to 40 characters, none of / \\ : * ? \" < > |");
     }
@@ -195,14 +210,14 @@ pub fn create_in(inputs: &Path, name: &str) -> Result<()> {
     }
     let mut ix = read(inputs);
     match ix.active.clone() {
-        Some(a) => copy_files(inputs, &folder(inputs, &a), None)?,
+        Some(a) => save_in_use(inputs, rival, &folder(inputs, &a))?,
         None if !name.eq_ignore_ascii_case(FIRST) && !folder(inputs, FIRST).exists() => {
-            copy_files(inputs, &folder(inputs, FIRST), None)?;
+            save_in_use(inputs, rival, &folder(inputs, FIRST))?;
             ix.default.get_or_insert_with(|| FIRST.to_string());
         }
         None => {}
     }
-    copy_files(inputs, &folder(inputs, name), None)?;
+    save_in_use(inputs, rival, &folder(inputs, name))?;
     ix.active = Some(name.to_string());
     write(inputs, &ix)
 }
@@ -217,10 +232,10 @@ pub fn switch_in(inputs: &Path, rival: Option<&Path>, name: &str) -> Result<()> 
         return Ok(());
     }
     if let Some(a) = ix.active.as_deref().filter(|a| folder(inputs, a).is_dir()) {
-        copy_files(inputs, &folder(inputs, a), None)?;
+        save_in_use(inputs, rival, &folder(inputs, a))?;
     }
     ix.active = Some(name.trim().to_string());
-    copy_files_then(&target, inputs, rival, || write(inputs, &ix))
+    copy_files_then(&target, None, inputs, rival, || write(inputs, &ix))
 }
 
 pub fn rename_in(inputs: &Path, old: &str, new: &str) -> Result<()> {
@@ -343,7 +358,7 @@ pub fn list() -> Value {
         .unwrap_or_else(|_| json!({ "active": null, "default": null, "profiles": [], "buses": {} }))
 }
 pub fn create(name: &str) -> Result<()> {
-    create_in(&dir()?, name)
+    create_in(&dir()?, rival().as_deref(), name)
 }
 pub fn switch(name: &str) -> Result<()> {
     no_game_running()?;
@@ -386,7 +401,7 @@ mod tests {
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("keyboard.cfg"), "original").unwrap();
 
-        create_in(&d, "Wheel").unwrap();
+        create_in(&d, None, "Wheel").unwrap();
         assert_eq!(list_in(&d)["profiles"], json!(["Default", "Wheel"]));
         assert_eq!(list_in(&d)["default"], "Default");
         assert_eq!(list_in(&d)["active"], "Wheel");
@@ -402,7 +417,7 @@ mod tests {
         );
         switch_in(&d, None, "Wheel").unwrap();
         assert_eq!(kb(&d), "wheel keys");
-        assert!(create_in(&d, "wheel").is_err() && create_in(&d, "a/b").is_err());
+        assert!(create_in(&d, None, "wheel").is_err() && create_in(&d, None, "a/b").is_err());
 
         // a bus with its own, another with the default
         assign_in(&d, "Vehicles\\MAN_NL202\\NL202.bus", Some("Wheel")).unwrap();
@@ -447,8 +462,8 @@ mod tests {
         };
         let mtime = |p: &Path| std::fs::metadata(p).unwrap().modified().unwrap();
         std::fs::write(d.join("keyboard.cfg"), "first").unwrap();
-        create_in(&d, "Old").unwrap();
-        create_in(&d, "New").unwrap();
+        create_in(&d, None, "Old").unwrap();
+        create_in(&d, None, "New").unwrap();
         std::fs::write(d.join("keyboard.cfg"), "second").unwrap();
         let old_kb = folder(&d, "Old").join("keyboard.cfg");
         at(
@@ -475,7 +490,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("keyboard.cfg"), "keys").unwrap();
-        create_in(&d, "Wheel").unwrap();
+        create_in(&d, None, "Wheel").unwrap();
         for bad in ["..", ".", "", "a/b", "../Wheel"] {
             assert!(rename_in(&d, bad, "Other").is_err(), "{bad:?}");
             assert!(set_default_in(&d, Some(bad)).is_err(), "{bad:?}");
@@ -498,7 +513,7 @@ mod tests {
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("keyboard.cfg"), "original").unwrap();
         std::fs::write(d.join("gamectrler.cfg"), "pad").unwrap();
-        create_in(&d, "Wheel").unwrap();
+        create_in(&d, None, "Wheel").unwrap();
         std::fs::write(d.join("keyboard.cfg"), "wheel keys").unwrap();
         std::fs::write(d.join("gamectrler.cfg"), "wheel pad").unwrap();
         switch_in(&d, None, "Default").unwrap();
@@ -536,7 +551,7 @@ mod tests {
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("keyboard.cfg"), "original").unwrap();
         std::fs::write(d.join("gamectrler.cfg"), "pad").unwrap();
-        create_in(&d, "Wheel").unwrap();
+        create_in(&d, None, "Wheel").unwrap();
         std::fs::write(d.join("keyboard.cfg"), "wheel keys").unwrap();
         std::fs::write(d.join("gamectrler.cfg"), "wheel pad").unwrap();
         switch_in(&d, None, "Default").unwrap();
@@ -615,6 +630,44 @@ mod tests {
                 .flatten()
                 .all(|e| !e.file_name().to_string_lossy().ends_with(".deleted"))
         );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_new_profile_keeps_the_controls_in_use_from_the_content_folder() {
+        let d = std::env::temp_dir().join(format!("input-profiles-rival-{}", std::process::id()));
+        let content = d.join("content/Inputs");
+        let inputs = d.join("own");
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&content).unwrap();
+        std::fs::create_dir_all(&inputs).unwrap();
+        let at = |p: &Path, secs: u64| {
+            std::fs::File::options()
+                .write(true)
+                .open(p)
+                .unwrap()
+                .set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(secs))
+                .unwrap();
+        };
+        // the game uses the content folder's newer keys and the own, newer controller file
+        std::fs::write(inputs.join("keyboard.cfg"), "own keys").unwrap();
+        at(&inputs.join("keyboard.cfg"), 1_000);
+        std::fs::write(content.join("keyboard.cfg"), "content keys").unwrap();
+        at(&content.join("keyboard.cfg"), 2_000);
+        std::fs::write(inputs.join("gamectrler.cfg"), "own pad").unwrap();
+        at(&inputs.join("gamectrler.cfg"), 3_000);
+        std::fs::write(content.join("gamectrler.cfg"), "content pad").unwrap();
+        at(&content.join("gamectrler.cfg"), 2_000);
+
+        create_in(&inputs, Some(&content), "Wheel").unwrap();
+        for p in ["Default", "Wheel"] {
+            assert_eq!(kb(&folder(&inputs, p)), "content keys", "{p}");
+            assert_eq!(
+                std::fs::read_to_string(folder(&inputs, p).join("gamectrler.cfg")).unwrap(),
+                "own pad",
+                "{p}"
+            );
+        }
         let _ = std::fs::remove_dir_all(&d);
     }
 }
