@@ -69,7 +69,7 @@ fn fit(kind: &SettingKind, v: &Value) -> Option<Value> {
             if *step > 0.0 {
                 n = *min as f64 + ((n - *min as f64) / *step as f64).round() * *step as f64;
             }
-            Value::Num(n)
+            Value::Num(n.clamp(*min as f64, *max as f64))
         }),
         SettingKind::Text => v
             .to_text()

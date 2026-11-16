@@ -352,6 +352,28 @@ fn settings_make_a_panel_and_tell_their_changes() {
 }
 
 #[test]
+fn a_value_the_launcher_saved_stays_in_range_in_the_game() {
+    let d = dir("step");
+    std::fs::write(
+        d.join("step.lua"),
+        r#"
+        local s = omsi.plugin.settings({
+          { key = "n", type = "number", default = 0, min = 0, max = 10, step = 4 },
+        })
+        omsi.message(tostring(s.n))
+    "#,
+    )
+    .unwrap();
+    // as the launcher writes it: 10 is in range, but the nearest step (12) is not
+    std::fs::create_dir_all(d.join("step.data")).unwrap();
+    std::fs::write(d.join("step.data/settings.json"), r#"{ "n": 10 }"#).unwrap();
+    let mut p = Plugins::load(std::slice::from_ref(&d), &HostConfig::default());
+    let mut g = Game::new();
+    p.frame(&mut g);
+    assert_eq!(g.messages, ["10.0"]);
+}
+
+#[test]
 fn a_line_in_the_pause_menu_is_heard_when_chosen() {
     let mut g = Game::new();
     let src = r#"
