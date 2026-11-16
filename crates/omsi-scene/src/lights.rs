@@ -154,6 +154,7 @@ pub fn vehicle_lights(
             None => v.body_rotation(),
         }
     };
+    let first_corona = coronas.len();
     crate::model_lights_extend(&ty.model, &mesh_xf, v.position, &value_of, &v.light_fade, coronas);
     // An articulated vehicle is one visual bus, but its rear section has its own
     // `[light_enh_2]`/corona declarations and animated meshes.  The old collector only
@@ -170,6 +171,9 @@ pub fn vehicle_lights(
         };
         let car_value = |name: &str| -> f32 { t.run_var(name.trim()).unwrap_or_else(|| value_of(name)) };
         crate::model_lights_extend(&t.ty.model, &part_mesh_xf, t.position, &car_value, &t.light_fade, coronas);
+    }
+    for corona in &mut coronas[first_corona..] {
+        corona.vehicle_lamp = true;
     }
     let body = v.body_rotation();
     // headlights: the spotlight selected by Spot_Select

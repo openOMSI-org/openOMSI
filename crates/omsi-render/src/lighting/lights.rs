@@ -25,9 +25,12 @@ pub(crate) struct GpuCorona {
     pub(crate) dir: [f32; 4],
     /// xyz: the up axis; w: rotating mode
     pub(crate) up: [f32; 4],
-    /// x: inner cone cosine, y: z offset, z: flags
+    /// x: inner cone cosine, y: z offset, z: flags (bit 16 marks a vehicle lamp)
     pub(crate) extra: [f32; 4],
 }
+
+// Internal sprite flag, above the model's effects and the generated star flag.
+const VEHICLE_LAMP: u8 = 16;
 
 /// A point light in world space (`[maplight]`, `[interiorlight]`, headlights).
 #[derive(Debug, Clone, Copy)]
@@ -231,6 +234,8 @@ pub struct Corona {
     /// towards the viewer, seen from in front of the light; the angles and the visibility
     /// travel as for a cone.
     pub halo: bool,
+    /// Authored vehicle lamp sprite, including its legacy fog effect sprites.
+    pub vehicle_lamp: bool,
 }
 
 impl Default for Corona {
@@ -251,6 +256,7 @@ impl Default for Corona {
             beam: false,
             beam_width: 0.0,
             halo: false,
+            vehicle_lamp: false,
         }
     }
 }
@@ -928,13 +934,14 @@ impl Renderer {
                     // brightness (the shader takes the viewing angle and clamps it to 1)
                     c.brightness * (night * night + 0.8) * 0.6
                 };
+                let flags = c.flags | if c.vehicle_lamp { VEHICLE_LAMP } else { 0 };
                 GpuCorona {
                     pos: p.to_array(),
                     size: c.size,
                     color: [c.color[0], c.color[1], c.color[2], b],
                     dir: [c.direction.x, c.direction.y, c.direction.z, c.cone_cos],
                     up: [c.up.x, c.up.y, c.up.z, c.rotating as f32],
-                    extra: [c.inner_cos, if c.beam || c.halo { c.beam_width } else { c.z_offset }, c.flags as f32, if c.beam { 1.0 } else if c.halo { 2.0 } else { 0.0 }],
+                    extra: [c.inner_cos, if c.beam || c.halo { c.beam_width } else { c.z_offset }, flags as f32, if c.beam { 1.0 } else if c.halo { 2.0 } else { 0.0 }],
                 }
             })
             .collect();
