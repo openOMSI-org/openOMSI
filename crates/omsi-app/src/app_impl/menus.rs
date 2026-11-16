@@ -552,9 +552,7 @@ impl crate::App {
             v.insert(at, ("tobus", "Back to my bus".into(), None));
             at += 1;
         }
-        // OMSI 2's "Call the police" (manual 2.11), while an AI vehicle the bus knocked off
-        // its route still stands where it was left
-        if self.player.is_some() && self.menus.accident_open {
+        if self.player.is_some() && self.accident_open() {
             v.insert(at, ("police", "Call the police".into(), None));
             at += 1;
         }

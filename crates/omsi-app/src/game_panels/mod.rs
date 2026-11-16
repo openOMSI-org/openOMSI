@@ -32,6 +32,7 @@ const GAME: u64 = 1;
 #[derive(Default)]
 pub(crate) struct GamePanels {
     pub(crate) laid_out: Option<([f32; 4], f32)>,
+    pub(crate) hazard_watch: crate::hazard::HazardWatch,
     ui: UiState,
     draw: crate::plugin_ui::PluginPanels,
     /// A slider the left button holds: its panel, id and track on the window (physical
