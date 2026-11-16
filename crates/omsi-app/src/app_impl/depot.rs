@@ -56,10 +56,6 @@ impl App {
         }
     }
 
-    pub(crate) fn accident_open(&self) -> bool {
-        self.session.traffic.as_ref().is_some_and(|t| t.accident_open())
-    }
-
     /// OMSI 2's "Call the police" (manual 2.11).
     pub(crate) fn call_police(&mut self) {
         let Some(p) = self.player.as_ref() else {
@@ -77,6 +73,7 @@ impl App {
             return;
         }
         let n = t.clear_accidents();
+        self.menus.game_panels.accident_open = false;
         log::info!("the police took up the accident: {n} vehicles back on their way");
         self.service_msg = Some(("The police have taken up the accident".into(), 6.0));
     }
