@@ -144,12 +144,10 @@ pub const AI_RAY_UP: f64 = 3.0;
 /// over on its spring rather than drops onto (the lane stays its height there).
 const AI_DROP: f64 = 0.3;
 
-/// A loose AI vehicle (knocked off its route): the friction of its locked wheels (m/s²,
-/// about 0.7 g), and how fast its turn dies away (deg/s²).
+/// m/s² (about 0.7 g on locked wheels) and deg/s².
 const LOOSE_FRICTION: f64 = 7.0;
 const LOOSE_YAW_FRICTION: f64 = 120.0;
-/// The most a blow gives a loose vehicle (m/s, deg/s) and how far it may slide from its
-/// way (m): a bus at speed sends a car flying, but not out of the loaded world.
+/// m/s, deg/s, m: a bus at speed sends a car flying, but not out of the loaded world.
 const LOOSE_MAX_SPEED: f64 = 25.0;
 const LOOSE_MAX_YAW_RATE: f64 = 120.0;
 const LOOSE_MAX_OFFSET: f64 = 60.0;
@@ -207,9 +205,7 @@ pub struct AiBody {
     pub position: DVec3,
     impact_offset: DVec2,
     impact_velocity: DVec2,
-    /// Knocked off its route by the player's vehicle (OMSI 2's accident): the blow's offset
-    /// is no longer drawn back to the way, the body slides on, fully braked, and turns with
-    /// the blow (`impact_yaw`, deg, and its rate in deg/s) until the accident is cleared.
+    /// Knocked off its route by the player (OMSI 2's accident); yaw in deg and deg/s.
     loose: bool,
     impact_yaw: f64,
     impact_yaw_rate: f64,
@@ -425,11 +421,8 @@ impl AiBody {
         recoil_speed
     }
 
-    /// The turn a blow off the body's centre gives it: `lever` from the vehicle's origin
-    /// to where it was hit (world, m), the blow's `direction` and the change of speed it
-    /// made (`collision_impulse`). A plate of the body's length and width turns by
-    /// 12 (r × n) Δv / (L² + W²) rad/s. Only a loose body turns: on its route the driver
-    /// holds the heading.
+    /// A plate of the body's length and width turns by 12 (r × n) Δv / (L² + W²) rad/s. Only
+    /// a loose body turns: on its route the driver holds the heading.
     pub fn collision_spin(&mut self, lever: DVec2, direction: DVec2, delta_v: f32, width: f32) {
         if !self.loose || !lever.is_finite() || !direction.is_finite() || !delta_v.is_finite() {
             return;
@@ -437,15 +430,13 @@ impl AiBody {
         let n = direction.normalize_or_zero();
         let length = (self.front_long - self.rear_long).abs().max(1.0) as f64 + 1.5;
         let width = width.max(1.0) as f64;
-        // counter-clockwise positive (x east, y north); the heading turns clockwise
+        // (counter-clockwise positive, while the heading turns clockwise)
         let omega = 12.0 * (lever.x * n.y - lever.y * n.x) * delta_v as f64
             / (length * length + width * width);
         self.impact_yaw_rate = (self.impact_yaw_rate - omega.to_degrees())
             .clamp(-LOOSE_MAX_YAW_RATE, LOOSE_MAX_YAW_RATE);
     }
 
-    /// Knocked off its route (`true`) or put back on it (`false`): back on the route the
-    /// body stands where its driver left the way, straight, as the accident is cleared.
     pub fn set_loose(&mut self, loose: bool) {
         if self.loose && !loose {
             self.impact_offset = DVec2::ZERO;
@@ -471,8 +462,6 @@ impl AiBody {
         let steps = (dt / 0.015).ceil().clamp(1.0, 20.0) as usize;
         let step = (dt / steps as f32).min(0.25) as f64;
         if self.loose {
-            // off its route: nothing draws it back, it slides on its locked wheels until
-            // the friction has taken its speed and its turn
             for _ in 0..steps {
                 let v = self.impact_velocity.length();
                 let dv = (LOOSE_FRICTION * step).min(v);
@@ -835,8 +824,7 @@ impl AiBody {
         self.steer_cmd = steer_cmd;
         self.look_scale = look_scale;
         self.moved = 0.0;
-        // a loose car that slid into something stops at it (it is not pushed back out to
-        // slide into it again every step)
+        // (pushed back out, it would slide into it again every step)
         if self.loose {
             self.impact_velocity = DVec2::ZERO;
             self.impact_yaw_rate = 0.0;
@@ -911,9 +899,6 @@ mod tests {
         assert!((heavy - 1.2 * 12.0 / 13.0 * 3.0).abs() < 1e-3, "{heavy}");
     }
 
-    /// OMSI 2's accident: a car knocked off its route slides off with the blow, turns
-    /// with a blow off its centre, stops on its locked wheels and stays there - until it
-    /// is put back on its way.
     #[test]
     fn a_loose_car_slides_off_its_path_and_stays_there() {
         let mut body = AiBody::new(&golf(), MotionKind::Road);

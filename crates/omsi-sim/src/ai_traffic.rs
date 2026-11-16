@@ -329,9 +329,6 @@ pub struct TrafficSim {
     /// Cars the last `tick` took off the road (their ids): their sounds and pictures are
     /// for the game to let go (see omsi-app's `Traffic::tick`).
     pub retired: Vec<u64>,
-    /// AI vehicles the player knocked off their route since `take_accidents` (OMSI 2's
-    /// accident), and those of them that went with their tile, the police never called
-    /// (`take_fled`).
     pub accidents: u32,
     pub fled: u32,
     /// The cars that honked since the game last asked (`horn`): id and whether it is a heavy

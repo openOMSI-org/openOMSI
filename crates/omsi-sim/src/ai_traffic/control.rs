@@ -253,9 +253,6 @@ impl TrafficSim {
             let Some(car) = self.cars.iter_mut().find(|car| car.id == id) else {
                 continue;
             };
-            // OMSI 2: the player's vehicle knocks an AI vehicle off its route (unless its
-            // type is `[fixed]`); it stays where the blow left it, braked, hazards on,
-            // until the police are called or its tile goes (`Traffic` in omsi-app)
             if !car.vehicle.ty.def.fixed
                 && car.body.kind == crate::ai_motion::MotionKind::Road
                 && !car.body.is_loose()

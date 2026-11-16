@@ -254,8 +254,6 @@ impl Traffic {
             // a random car still on its way that goes out of range sleeps instead (see
             // `DormantCar`); only one whose trip is over leaves the map
             let sleeps_instead = random && !c.gone && !c.is_bus() && self.sim.net.lanes.get(c.state.lane).map(|l| l.kind == LaneKind::Street).unwrap_or(false);
-            // knocked off its route by the player (OMSI 2's accident): it stays where it lies
-            // until the police are called, or goes with its tile - the player left the scene
             let loose = c.body.is_loose();
             let remove = if unloaded {
                 true
