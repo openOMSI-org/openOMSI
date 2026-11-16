@@ -308,21 +308,6 @@ fn same(a: &Dependency, b: &Dependency) -> bool {
     a.publisher_id == b.publisher_id && a.pack_id == b.pack_id && a.version == b.version
 }
 
-fn installed(content: &Path, trust: &TrustedPublishers) -> io::Result<Vec<(PathBuf, Manifest)>> {
-    let mut result: Vec<(PathBuf, Manifest)> = Vec::new();
-    for path in folders(&content.join("Packs"))? {
-        let manifest = omsi_pack::load_manifest(&path, trust).map_err(invalid)?;
-        if result
-            .iter()
-            .any(|(_, m)| same(&dependency(m), &dependency(&manifest)))
-        {
-            return Err(invalid("duplicate installed publisher pack identity"));
-        }
-        result.push((path, manifest));
-    }
-    Ok(result)
-}
-
 type PackKey = (String, String, String);
 
 fn pack_key(d: &Dependency) -> PackKey {
@@ -735,7 +720,7 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
     }
     let mut packs = Vec::new();
     for key in &selected {
-        let (path, manifest) = available
+        let (path, _) = available
             .get(key)
             .ok_or_else(|| invalid("publisher dependency disappeared"))?;
         let trusted = roots
