@@ -246,8 +246,17 @@ fn recover(target: &Path, old: &Path) -> Result<()> {
         std::fs::rename(old, target)?;
         return Ok(());
     }
-    if old.join("data").is_dir() && !target.join("data").exists() {
-        std::fs::rename(old.join("data"), target.join("data"))?;
+    if old.join("data").is_dir() {
+        // (a game started in between may have made a new `data/`: the old one is kept beside it)
+        let to = (0..)
+            .map(|n| match n {
+                0 => target.join("data"),
+                1 => target.join("data.before-update"),
+                n => target.join(format!("data.before-update-{n}")),
+            })
+            .find(|p| !p.exists())
+            .unwrap_or_else(|| target.join("data.before-update"));
+        std::fs::rename(old.join("data"), to)?;
     }
     std::fs::remove_dir_all(old).with_context(|| {
         format!(
@@ -416,6 +425,19 @@ mod tests {
         std::fs::rename(&target, &old).unwrap();
         recover(&target, &old).unwrap();
         assert!(target.join("data/settings.json").is_file() && !old.exists());
+
+        // stopped after the new folder went in, and a game run since made a new `data/`:
+        // both copies stay
+        std::fs::create_dir_all(old.join("data")).unwrap();
+        std::fs::write(old.join("data/settings.json"), "{\"old\":1}").unwrap();
+        std::fs::write(target.join("data/settings.json"), "{\"new\":1}").unwrap();
+        recover(&target, &old).unwrap();
+        assert_eq!(read(&target.join("data/settings.json")), "{\"new\":1}");
+        assert_eq!(
+            read(&target.join("data.before-update/settings.json")),
+            "{\"old\":1}"
+        );
+        assert!(!old.exists());
         let _ = std::fs::remove_dir_all(&root);
     }
 }
