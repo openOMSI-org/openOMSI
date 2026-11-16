@@ -3074,6 +3074,7 @@ name = "omsi-pack"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "rayon",
  "ring",
  "security-framework",
  "serde",
