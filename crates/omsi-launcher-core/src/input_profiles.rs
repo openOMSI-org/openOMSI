@@ -75,9 +75,19 @@ fn names(inputs: &Path) -> Vec<String> {
 // folder's copy would be the one in use; all files are staged first, so a failure leaves the
 // ones in use as they were)
 fn copy_files(from: &Path, to: &Path, rival: Option<&Path>) -> Result<()> {
+    copy_files_then(from, to, rival, || Ok(()))
+}
+
+/// `copy_files`, and `then` with the files in place: when it fails, the old files go back.
+fn copy_files_then(
+    from: &Path,
+    to: &Path,
+    rival: Option<&Path>,
+    then: impl FnOnce() -> Result<()>,
+) -> Result<()> {
     std::fs::create_dir_all(to)?;
     let mut staged = Vec::new();
-    let result = stage(from, to, rival, &mut staged).and_then(|_| put(to, &staged));
+    let result = stage(from, to, rival, &mut staged).and_then(|_| put(to, &staged, then));
     for (tmp, _) in &staged {
         let _ = std::fs::remove_file(tmp);
     }
@@ -106,9 +116,14 @@ fn stage(
     Ok(())
 }
 
-fn put(to: &Path, staged: &[(PathBuf, &'static str)]) -> Result<()> {
+fn put(
+    to: &Path,
+    staged: &[(PathBuf, &'static str)],
+    then: impl FnOnce() -> Result<()>,
+) -> Result<()> {
     let bak = |f: &str| to.join(format!("{f}.bak"));
     let mut moved = Vec::new();
+    let mut installed = Vec::new();
     let result = (|| -> Result<()> {
         for f in FILES {
             let b = to.join(f);
@@ -119,8 +134,9 @@ fn put(to: &Path, staged: &[(PathBuf, &'static str)]) -> Result<()> {
         }
         for (tmp, f) in staged {
             std::fs::rename(tmp, to.join(f))?;
+            installed.push(*f);
         }
-        Ok(())
+        then()
     })();
     match &result {
         Ok(()) => {
@@ -129,7 +145,7 @@ fn put(to: &Path, staged: &[(PathBuf, &'static str)]) -> Result<()> {
             }
         }
         Err(_) => {
-            for (_, f) in staged.iter().filter(|(_, f)| !moved.contains(f)) {
+            for f in installed.iter().filter(|f| !moved.contains(*f)) {
                 let _ = std::fs::remove_file(to.join(f));
             }
             for f in &moved {
@@ -203,9 +219,8 @@ pub fn switch_in(inputs: &Path, rival: Option<&Path>, name: &str) -> Result<()> 
     if let Some(a) = ix.active.as_deref().filter(|a| folder(inputs, a).is_dir()) {
         copy_files(inputs, &folder(inputs, a), None)?;
     }
-    copy_files(&target, inputs, rival)?;
     ix.active = Some(name.trim().to_string());
-    write(inputs, &ix)
+    copy_files_then(&target, inputs, rival, || write(inputs, &ix))
 }
 
 pub fn rename_in(inputs: &Path, old: &str, new: &str) -> Result<()> {
@@ -499,6 +514,65 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(d.join("gamectrler.cfg")).unwrap(),
             "wheel pad"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// Profiles `Default` (keys "original", pad "pad") and `Wheel` (keys "wheel keys", pad
+    /// "wheel pad"), with `Default` in use.
+    fn two_profiles(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("input-profiles-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("keyboard.cfg"), "original").unwrap();
+        std::fs::write(d.join("gamectrler.cfg"), "pad").unwrap();
+        create_in(&d, "Wheel").unwrap();
+        std::fs::write(d.join("keyboard.cfg"), "wheel keys").unwrap();
+        std::fs::write(d.join("gamectrler.cfg"), "wheel pad").unwrap();
+        switch_in(&d, None, "Default").unwrap();
+        d
+    }
+
+    fn pad(d: &Path) -> String {
+        std::fs::read_to_string(d.join("gamectrler.cfg")).unwrap_or_default()
+    }
+
+    #[test]
+    fn a_file_that_cannot_be_set_aside_leaves_every_file_in_use() {
+        let d = two_profiles("backup");
+        // a folder stands where the second file is set aside
+        std::fs::create_dir_all(d.join("gamectrler.cfg.bak")).unwrap();
+        assert!(switch_in(&d, None, "Wheel").is_err());
+        assert_eq!(
+            (kb(&d), pad(&d)),
+            (String::from("original"), String::from("pad"))
+        );
+        assert_eq!(list_in(&d)["active"], "Default");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn an_index_that_cannot_be_written_puts_the_files_back() {
+        let d = two_profiles("index");
+        // a folder stands where profiles.json is written first
+        std::fs::create_dir_all(d.join(format!("{INDEX}.tmp"))).unwrap();
+        assert!(switch_in(&d, None, "Wheel").is_err());
+        assert_eq!(
+            (kb(&d), pad(&d)),
+            (String::from("original"), String::from("pad"))
+        );
+        assert_eq!(list_in(&d)["active"], "Default");
+
+        std::fs::remove_dir_all(d.join(format!("{INDEX}.tmp"))).unwrap();
+        switch_in(&d, None, "Wheel").unwrap();
+        assert_eq!(
+            (kb(&d), pad(&d)),
+            (String::from("wheel keys"), String::from("wheel pad"))
+        );
+        switch_in(&d, None, "Default").unwrap();
+        assert_eq!(
+            (kb(&d), pad(&d)),
+            (String::from("original"), String::from("pad"))
         );
         let _ = std::fs::remove_dir_all(&d);
     }
