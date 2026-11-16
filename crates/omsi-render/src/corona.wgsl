@@ -71,9 +71,9 @@ fn vs_main(in: CoronaIn) -> CoronaOut {
 @vertex
 fn vs_enhanced(in: CoronaIn) -> CoronaOut {
     let vehicle = (u32(in.extra.z + 0.5) & VEHICLE_LAMP) != 0u;
-    if (vehicle && in.extra.w > 0.5) {
-        // The volumetric pass uses actual vehicle spotlights. The legacy fog sprites
-        // would add camera-facing halos or decorative cones to position and tail lamps.
+    if (vehicle && in.extra.w > 1.5 && in.extra.w < 2.5) {
+        // Drop the round fog billboard. Keep directional cones, including on targets
+        // where the volumetric spotlight pass is unavailable.
         var hidden: CoronaOut;
         hidden.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
         return hidden;
@@ -403,14 +403,12 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         // light, as the sprite's distance floor keeps it on the screen)
         let lit = textureSampleLevel(t_corona, s_corona, vec2<f32>(0.5, 0.5), 0.0).rgb;
         let w = max(0.1, px * 1.5);
-        let core = exp(-r * r / (w * w)) * max(lit, shape);
         if (vehicle) {
-            // A compact lamp face remains visible at a distance. Its peak is kept
-            // below the bloom threshold so it cannot turn back into a ball of light.
-            shape = core;
+            // Keep the vehicle's visible lamp face inside its compact core.
+            shape = exp(-r * r / (w * w)) * max(lit, shape);
         } else {
-            let shoulder = exp(-r * 9.0) * 0.35 * max(lit, shape) + shape * 0.22;
-            shape = mix(core * 3.0 + shoulder, shape, wet);
+            let core = exp(-r * r / (w * w)) * 3.0 + exp(-r * 9.0) * 0.35;
+            shape = mix(core * max(lit, shape) + shape * 0.22, shape, wet);
         }
         // (round, inside the circle the sprite holds: a far lamp's sprite is a few pixels,
         // the core spans it, and brighter than white even in its corners it showed the
