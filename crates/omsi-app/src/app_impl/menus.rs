@@ -552,7 +552,7 @@ impl crate::App {
             v.insert(at, ("tobus", "Back to my bus".into(), None));
             at += 1;
         }
-        if self.player.is_some() && self.accident_open() {
+        if self.player.is_some() && self.menus.game_panels.accident_open {
             v.insert(at, ("police", "Call the police".into(), None));
             at += 1;
         }
