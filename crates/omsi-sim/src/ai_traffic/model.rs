@@ -563,8 +563,8 @@ pub fn personality(state: &mut AiState, seed: u64, heavy: bool, rowdy_factor: Op
             1.10 + r * 0.21
         };
         if heavy {
-            // A lorry or a bus keeps a slower cruise and caps at the speed limit (1.0).
-            (0.93 + (base - 1.10) + 0.02 * rg(3)).clamp(0.5, 1.0)
+            // A lorry or a bus keeps a slower cruise, with floor at 0.80 to hold timetable, capped at 1.0.
+            (0.93 + (base - 1.10) + 0.02 * rg(3)).clamp(0.80, 1.0)
         } else {
             (base + 0.02 * rg(3)).clamp(0.5, 2.0)
         }
@@ -715,6 +715,14 @@ mod personality_tests {
             heavy_fast.desire <= 1.0,
             "heavy desire {:.3} should not exceed limit",
             heavy_fast.desire
+        );
+
+        let mut heavy_slow = AiState::new(0, 0.0, 12345);
+        personality(&mut heavy_slow, 12345, true, Some((-1.0, -1.0)));
+        assert!(
+            heavy_slow.desire >= 0.80,
+            "heavy desire {:.3} should stay at or above 0.80 to hold timetable",
+            heavy_slow.desire
         );
     }
 }
