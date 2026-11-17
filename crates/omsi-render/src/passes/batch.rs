@@ -44,14 +44,31 @@ impl DrawPlan {
     pub(crate) fn msaa_prepass(&self, renderer: &Renderer, f: &FrameCtx) -> bool {
         // Excavation covers have already been drawn when prefilling begins. They
         // must not opt an otherwise opaque Apple view out of native surface removal.
-        let remaining = if self.has_presurface { &self.main_batches[self.presurface_batch_end..] } else { &self.main_batches };
-        let needs = !cfg!(target_vendor = "apple") || remaining.iter().chain(&self.cab_batches)
-            .any(|b| matches!(b.pipe / 4, PIPE_ALPHA_TEST | PIPE_BLEND | PIPE_BLEND_NO_WRITE));
+        let remaining = if self.has_presurface {
+            &self.main_batches[self.presurface_batch_end..]
+        } else {
+            &self.main_batches
+        };
+        let needs = !cfg!(target_vendor = "apple")
+            || remaining.iter().chain(&self.cab_batches).any(|b| {
+                matches!(
+                    b.pipe / 4,
+                    PIPE_ALPHA_TEST | PIPE_BLEND | PIPE_BLEND_NO_WRITE
+                )
+            });
         let single = renderer.options.msaa <= 1;
         renderer.prepass_msaa_pipelines.is_some()
-            && f.enhanced && (f.with_overlays || f.xr_view) && (!single || (self.has_presurface && cfg!(target_vendor = "apple")))
-            && (!self.has_presurface || self.msaa_safe_batches.iter().any(|b| single || b.pipe / 2 != PIPE_ALPHA_TEST))
-            && f.prepass_on && needs && !f.env.no_msaa_prepass
+            && f.enhanced
+            && (f.with_overlays || f.xr_view)
+            && (!single || (self.has_presurface && cfg!(target_vendor = "apple")))
+            && (!self.has_presurface
+                || self
+                    .msaa_safe_batches
+                    .iter()
+                    .any(|b| single || b.pipe / 2 != PIPE_ALPHA_TEST))
+            && f.prepass_on
+            && needs
+            && !f.env.no_msaa_prepass
     }
 
     pub(crate) fn presurface_prefill(&self, renderer: &Renderer, f: &FrameCtx) -> bool {
@@ -61,20 +78,51 @@ impl DrawPlan {
     /// the rain films out of the main pass: they are drawn after copying the clean picture
     pub(crate) fn split_rain(&mut self, scene: &Scene, glass_on: bool) {
         if glass_on {
-            let is_rain = |b: &Batch| scene.materials[b.material as usize].uniform.emissive[3] > 1.5;
-            self.presurface_batch_end = self.main_batches[..self.presurface_batch_end].iter().filter(|b| !is_rain(b)).count();
-            let (rain, main): (Vec<_>, Vec<_>) = std::mem::take(&mut self.main_batches).into_iter().partition(is_rain);
+            let is_rain = |b: &Batch| {
+                scene
+                    .materials
+                    .get(b.material as usize)
+                    .is_some_and(|m| m.uniform.emissive[3] > 1.5)
+            };
+            self.presurface_batch_end = self.main_batches[..self.presurface_batch_end]
+                .iter()
+                .filter(|b| !is_rain(b))
+                .count();
+            let (rain, main): (Vec<_>, Vec<_>) = std::mem::take(&mut self.main_batches)
+                .into_iter()
+                .partition(is_rain);
             self.rain_batches = rain;
             self.main_batches = main;
         }
     }
 }
 
+pub(crate) fn warn_invalid_material(mesh: usize, slot: u32, mat_id: usize) {
+    static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        log::warn!(
+            "render: mesh {mesh} slot {slot} has out-of-bounds material id {mat_id}; skipping slot"
+        );
+    }
+}
+
 // the depth prepass: opaque and alpha-tested, single-sampled
 type MaskedPrefill = Option<(Vec<Batch>, Vec<Batch>)>;
-type PrepassPlan = (Vec<u32>, Vec<Batch>, Option<Vec<Batch>>, Vec<Batch>, MaskedPrefill);
+type PrepassPlan = (
+    Vec<u32>,
+    Vec<Batch>,
+    Option<Vec<Batch>>,
+    Vec<Batch>,
+    MaskedPrefill,
+);
 
-fn prepass_items(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: &[(usize, f32, bool)], deferred: bool, reach: f32) -> PrepassPlan {
+fn prepass_items(
+    pool: Option<&rayon::ThreadPool>,
+    scene: &Scene,
+    visible: &[(usize, f32, bool)],
+    deferred: bool,
+    reach: f32,
+) -> PrepassPlan {
     let mut items: Vec<DrawItem> = Vec::new();
     let mut kept: Vec<DrawItem> = Vec::new();
     let mut cut_items: Vec<DrawItem> = Vec::new();
@@ -85,12 +133,21 @@ fn prepass_items(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: &[(us
     let any_ordered = !first_panes.is_empty();
     for &(i, z, _) in visible {
         let inst = &scene.instances[i];
-        let far = z > reach && !inst.surface && !inst.presurface && z - Renderer::bounding_sphere(scene, inst).1 > reach;
-        let mut cut = inst.ordered && first_panes.get(&origin_key(inst.origin)).is_some_and(|&o| inst.draw_order > o);
+        let far = z > reach
+            && !inst.surface
+            && !inst.presurface
+            && z - Renderer::bounding_sphere(scene, inst).1 > reach;
+        let mut cut = inst.ordered
+            && first_panes
+                .get(&origin_key(inst.origin))
+                .is_some_and(|&o| inst.draw_order > o);
         let cull = culls_back_faces(scene, inst);
         for (ri, (_, _, slot)) in scene.meshes[inst.mesh].ranges.iter().enumerate() {
             let mat_id = inst.materials.get(*slot as usize).copied().unwrap_or(0);
-            let mat = &scene.materials[mat_id];
+            let Some(mat) = scene.materials.get(mat_id) else {
+                warn_invalid_material(inst.mesh, *slot, mat_id);
+                continue;
+            };
             let kind = kind_of(mat.alpha);
             // A model drawn in its own order: an opaque part that a depth-writing pane
             // before it hides (a scroll box's line under its invisible cover) put its depth
@@ -103,9 +160,19 @@ fn prepass_items(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: &[(us
             if inst.ordered && blend_writes_depth(mat) {
                 cut = true;
             }
-            if any_ordered && blend_writes_depth(mat) && !(world_surface_phase(effective_render_phase(inst)) && !inst.presurface) {
+            if any_ordered
+                && blend_writes_depth(mat)
+                && !(world_surface_phase(effective_render_phase(inst)) && !inst.presurface)
+            {
                 let biased = instance_depth_bias(inst, mat) as u8;
-                pane_items.push(DrawItem { pipe: cull as u8 + 2 * biased, mesh: inst.mesh as u32, range: ri as u32, material: 0, look: 0, entry: inst.base + *slot });
+                pane_items.push(DrawItem {
+                    pipe: cull as u8 + 2 * biased,
+                    mesh: inst.mesh as u32,
+                    range: ri as u32,
+                    material: 0,
+                    look: 0,
+                    entry: inst.base + *slot,
+                });
             }
             // Ground blends compose before they may occlude later scenery.
             // The transmap body prepass is for ordinary meshes, not these
@@ -129,7 +196,10 @@ fn prepass_items(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: &[(us
                     entry: inst.base + *slot,
                 };
                 // Ground must finish composing before its coverage can occlude later layers.
-                if !cut && deferred && effective_render_phase(inst) as u8 >= RenderPhase::BeforeNormal as u8 {
+                if !cut
+                    && deferred
+                    && effective_render_phase(inst) as u8 >= RenderPhase::BeforeNormal as u8
+                {
                     safe_items.push(item);
                 }
                 if cut {
@@ -151,7 +221,8 @@ fn prepass_items(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: &[(us
         (list, batches)
     };
     let sort = &sort;
-    let (mut all, mut kept_sorted, mut safe_sorted) = ((Vec::new(), Vec::new()), None, (Vec::new(), Vec::new()));
+    let (mut all, mut kept_sorted, mut safe_sorted) =
+        ((Vec::new(), Vec::new()), None, (Vec::new(), Vec::new()));
     let (mut panes_sorted, mut cut_sorted) = (None, None);
     in_scope(pool, |s| {
         if any_cut {
@@ -177,7 +248,9 @@ fn prepass_items(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: &[(us
     };
     let prefill = kept_sorted.map(&mut append);
     let safe_batches = append(safe_sorted);
-    let masked = panes_sorted.zip(cut_sorted).map(|(p, c)| (append(p), append(c)));
+    let masked = panes_sorted
+        .zip(cut_sorted)
+        .map(|(p, c)| (append(p), append(c)));
     (list, batches, prefill, safe_batches, masked)
 }
 
@@ -193,29 +266,52 @@ fn first_depth_panes(scene: &Scene, visible: &[(usize, f32, bool)]) -> HashMap<[
             continue;
         }
         let pane = scene.meshes[inst.mesh].ranges.iter().any(|(_, _, slot)| {
-            blend_writes_depth(&scene.materials[inst.materials.get(*slot as usize).copied().unwrap_or(0)])
+            inst.materials
+                .get(*slot as usize)
+                .copied()
+                .and_then(|id| scene.materials.get(id))
+                .is_some_and(blend_writes_depth)
         });
         if pane {
-            first.entry(origin_key(inst.origin)).and_modify(|o| *o = (*o).min(inst.draw_order)).or_insert(inst.draw_order);
+            first
+                .entry(origin_key(inst.origin))
+                .and_modify(|o| *o = (*o).min(inst.draw_order))
+                .or_insert(inst.draw_order);
         }
     }
     first
 }
 
 /// The surfaces' covered ground pixels committed to depth, before the normal phase.
-fn surface_depth_items(scene: &Scene, visible: &[(usize, f32, bool)], exclude_texture: Option<TextureId>, items: &mut Vec<DrawItem>) {
+fn surface_depth_items(
+    scene: &Scene,
+    visible: &[(usize, f32, bool)],
+    exclude_texture: Option<TextureId>,
+    items: &mut Vec<DrawItem>,
+) {
     for &(i, _, _) in visible {
         let inst = &scene.instances[i];
         for (ri, (_, _, slot)) in scene.meshes[inst.mesh].ranges.iter().enumerate() {
             let mat_id = inst.materials.get(*slot as usize).copied().unwrap_or(0);
-            let mat = &scene.materials[mat_id];
-            if !surface_depth_coverage(effective_render_phase(inst), mat.alpha, mat.transmap.is_some(), mat.no_z_check)
-                || exclude_texture.is_some_and(|t| mat.uses_texture(t))
+            let Some(mat) = scene.materials.get(mat_id) else {
+                warn_invalid_material(inst.mesh, *slot, mat_id);
+                continue;
+            };
+            if !surface_depth_coverage(
+                effective_render_phase(inst),
+                mat.alpha,
+                mat.transmap.is_some(),
+                mat.no_z_check,
+            ) || exclude_texture.is_some_and(|t| mat.uses_texture(t))
             {
                 continue;
             }
             items.push(DrawItem {
-                pipe: pipe_code(PIPE_SURFACE_DEPTH, culls_back_faces(scene, inst), instance_depth_bias(inst, mat)),
+                pipe: pipe_code(
+                    PIPE_SURFACE_DEPTH,
+                    culls_back_faces(scene, inst),
+                    instance_depth_bias(inst, mat),
+                ),
                 mesh: inst.mesh as u32,
                 range: ri as u32,
                 material: mat_id as u32,
@@ -228,7 +324,13 @@ fn surface_depth_items(scene: &Scene, visible: &[(usize, f32, bool)], exclude_te
 
 /// A phase's opaque and cut-out draws into `items`; the instances with blended slots
 /// (or drawn in model order) into `blended`.
-fn opaque_items(scene: &Scene, visible: &[(usize, f32, bool)], exclude_texture: Option<TextureId>, items: &mut Vec<DrawItem>, blended: &mut Vec<usize>) {
+fn opaque_items(
+    scene: &Scene,
+    visible: &[(usize, f32, bool)],
+    exclude_texture: Option<TextureId>,
+    items: &mut Vec<DrawItem>,
+    blended: &mut Vec<usize>,
+) {
     for &(i, _, _) in visible {
         let inst = &scene.instances[i];
         if inst.ordered {
@@ -239,7 +341,10 @@ fn opaque_items(scene: &Scene, visible: &[(usize, f32, bool)], exclude_texture: 
         let cull = culls_back_faces(scene, inst);
         for (ri, (_, _, slot)) in scene.meshes[inst.mesh].ranges.iter().enumerate() {
             let mat_id = inst.materials.get(*slot as usize).copied().unwrap_or(0);
-            let mat = &scene.materials[mat_id];
+            let Some(mat) = scene.materials.get(mat_id) else {
+                warn_invalid_material(inst.mesh, *slot, mat_id);
+                continue;
+            };
             let kind = kind_of(mat.alpha);
             if kind == PIPE_BLEND || mat.no_z_check {
                 has_blend = true;
@@ -250,11 +355,7 @@ fn opaque_items(scene: &Scene, visible: &[(usize, f32, bool)], exclude_texture: 
                 continue;
             }
             items.push(DrawItem {
-                pipe: pipe_code(
-                    kind,
-                    cull,
-                    instance_depth_bias(inst, mat),
-                ),
+                pipe: pipe_code(kind, cull, instance_depth_bias(inst, mat)),
                 mesh: inst.mesh as u32,
                 range: ri as u32,
                 material: mat_id as u32,
@@ -265,12 +366,18 @@ fn opaque_items(scene: &Scene, visible: &[(usize, f32, bool)], exclude_texture: 
         if has_blend {
             blended.push(i);
         }
-
     }
 }
 
 /// `opaque_items` over blocks of a long phase on the pool, joined in order: the same lists.
-fn opaque_items_parts(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: &[(usize, f32, bool)], exclude_texture: Option<TextureId>, items: &mut Vec<DrawItem>, blended: &mut Vec<usize>) {
+fn opaque_items_parts(
+    pool: Option<&rayon::ThreadPool>,
+    scene: &Scene,
+    visible: &[(usize, f32, bool)],
+    exclude_texture: Option<TextureId>,
+    items: &mut Vec<DrawItem>,
+    blended: &mut Vec<usize>,
+) {
     let parts = match pool {
         Some(p) if visible.len() >= 4096 => (visible.len() / 1024).min(p.current_num_threads() * 2),
         _ => 1,
@@ -281,7 +388,13 @@ fn opaque_items_parts(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: 
     let chunk = visible.len().div_ceil(parts);
     for (i, b) in run_parts(pool, parts, |k| {
         let (mut i, mut b) = (Vec::new(), Vec::new());
-        opaque_items(scene, &visible[(k * chunk).min(visible.len())..((k + 1) * chunk).min(visible.len())], exclude_texture, &mut i, &mut b);
+        opaque_items(
+            scene,
+            &visible[(k * chunk).min(visible.len())..((k + 1) * chunk).min(visible.len())],
+            exclude_texture,
+            &mut i,
+            &mut b,
+        );
         (i, b)
     }) {
         items.extend(i);
@@ -291,13 +404,22 @@ fn opaque_items_parts(pool: Option<&rayon::ThreadPool>, scene: &Scene, visible: 
 
 /// A phase's blended draws, in the order of `blended_order`, into `items`; the vehicle
 /// the camera is in into `cab_items`.
-fn blended_items(scene: &Scene, keyed: Vec<(u8, f32, usize)>, exclude_texture: Option<TextureId>, items: &mut Vec<DrawItem>, cab_items: &mut Vec<DrawItem>) {
+fn blended_items(
+    scene: &Scene,
+    keyed: Vec<(u8, f32, usize)>,
+    exclude_texture: Option<TextureId>,
+    items: &mut Vec<DrawItem>,
+    cab_items: &mut Vec<DrawItem>,
+) {
     for (rank, _, i) in keyed {
         let inst = &scene.instances[i];
         let cull = culls_back_faces(scene, inst);
         for (ri, (_, _, slot)) in scene.meshes[inst.mesh].ranges.iter().enumerate() {
             let mat_id = inst.materials.get(*slot as usize).copied().unwrap_or(0);
-            let mat = &scene.materials[mat_id];
+            let Some(mat) = scene.materials.get(mat_id) else {
+                warn_invalid_material(inst.mesh, *slot, mat_id);
+                continue;
+            };
             if (mat.alpha != AlphaMode::Blend && !mat.no_z_check && !inst.ordered)
                 || exclude_texture.is_some_and(|t| mat.uses_texture(t))
             {
@@ -308,7 +430,12 @@ fn blended_items(scene: &Scene, keyed: Vec<(u8, f32, usize)>, exclude_texture: O
             // original, whose blend takes it out whole; drawn anyway it ran the full
             // shading over the whole windscreen for nothing - a bus's cab view had
             // three or four such screen-sized layers.
-            if mat.alpha == AlphaMode::Blend && inst.slot_alpha.get(*slot as usize).is_some_and(|a| *a < 1.0 / 512.0) {
+            if mat.alpha == AlphaMode::Blend
+                && inst
+                    .slot_alpha
+                    .get(*slot as usize)
+                    .is_some_and(|a| *a < 1.0 / 512.0)
+            {
                 continue;
             }
             // Ground blends use the C++ handler's no-write composition;
@@ -324,7 +451,10 @@ fn blended_items(scene: &Scene, keyed: Vec<(u8, f32, usize)>, exclude_texture: O
             let kind = if mat.alpha != AlphaMode::Blend && !mat.no_z_check {
                 // (a model drawn in order: its opaque and cut-out slots too)
                 kind_of(mat.alpha)
-            } else if (mat.no_z_write && !mat.writes_depth) || mat.no_z_check || (world_surface_phase(inst.render_phase) && !inst.presurface) {
+            } else if (mat.no_z_write && !mat.writes_depth)
+                || mat.no_z_check
+                || (world_surface_phase(inst.render_phase) && !inst.presurface)
+            {
                 PIPE_BLEND_NO_WRITE
             } else {
                 PIPE_BLEND
@@ -343,11 +473,7 @@ fn blended_items(scene: &Scene, keyed: Vec<(u8, f32, usize)>, exclude_texture: O
                 kind
             };
             let item = DrawItem {
-                pipe: pipe_code(
-                    kind,
-                    cull,
-                    instance_depth_bias(inst, mat),
-                ),
+                pipe: pipe_code(kind, cull, instance_depth_bias(inst, mat)),
                 mesh: inst.mesh as u32,
                 range: ri as u32,
                 material: mat_id as u32,
@@ -366,18 +492,26 @@ fn blended_items(scene: &Scene, keyed: Vec<(u8, f32, usize)>, exclude_texture: O
 
 impl Renderer {
     /// The batches of the depth prepass and of the main pass, appended to the draw list.
-    pub(crate) fn batch_draws(&self, scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], mut draw_list: Vec<u32>) -> DrawPlan {
+    pub(crate) fn batch_draws(
+        &self,
+        scene: &Scene,
+        f: &FrameCtx,
+        visible: &[(usize, f32, bool)],
+        mut draw_list: Vec<u32>,
+    ) -> DrawPlan {
         let list = &mut draw_list;
         let (exclude_texture, prepass_on) = (f.exclude_texture, f.prepass_on);
         let mut items: Vec<DrawItem> = Vec::new();
-        let has_presurface = visible.iter().any(|&(i, _, _)| scene.instances[i].presurface);
+        let has_presurface = visible
+            .iter()
+            .any(|&(i, _, _)| scene.instances[i].presurface);
         let mut prepass_batches: Vec<Batch> = Vec::new();
         let mut prefill = None;
         let mut masked = None;
         let mut msaa_safe_batches = Vec::new();
         let deferred = has_presurface && f.enhanced;
         let pool = self.encoding_pool.as_ref();
-        let prepass_job = || { prepass_items(pool, scene, visible, deferred, f.prepass_reach) };
+        let prepass_job = || prepass_items(pool, scene, visible, deferred, f.prepass_reach);
         // The main pass follows the authored world phases. Each phase keeps its
         // opaque/cutout draws followed by its blended draws, far to near. Transparent
         // ground layers never write depth while composing: an alpha-zero junction
@@ -426,11 +560,14 @@ impl Renderer {
             // drawn after the bus failed the depth test behind its windows - and with the
             // depth prefilled, the houses behind the shelter were already gone, so the
             // windows showed the sky's colour in its shape, white (Aachen, Grundorf: #2852).
-            let late_blend = |p: RenderPhase| matches!(p, RenderPhase::Normal | RenderPhase::AfterNormal);
+            let late_blend =
+                |p: RenderPhase| matches!(p, RenderPhase::Normal | RenderPhase::AfterNormal);
             let mut late_visible: Vec<(usize, f32, bool)> = Vec::new();
             let mut late_blended: Vec<usize> = Vec::new();
             for phase in RenderPhase::DRAW_ORDER {
-                if phase == RenderPhase::Terrain { presurface_batch_end = main_batches.len(); }
+                if phase == RenderPhase::Terrain {
+                    presurface_batch_end = main_batches.len();
+                }
                 // Finish surface composition before committing the fully covered ground
                 // pixels to depth. Doing this in the global prepass (or while blending
                 // each spline) would reject authored road overlaps and on-surface rails.
@@ -446,7 +583,14 @@ impl Renderer {
                 let visible = &by_phase[phase as usize];
                 items.clear();
                 let mut blended: Vec<usize> = Vec::new();
-                opaque_items_parts(pool, scene, visible, exclude_texture, &mut items, &mut blended);
+                opaque_items_parts(
+                    pool,
+                    scene,
+                    visible,
+                    exclude_texture,
+                    &mut items,
+                    &mut blended,
+                );
                 main_draws[0] += items.len();
                 batch_items(scene, &mut items, true, list, &mut main_batches);
                 let blends_from = main_batches.len();
@@ -460,7 +604,11 @@ impl Renderer {
                     late_blended.append(&mut blended);
                     blended = std::mem::take(&mut late_blended);
                 }
-                let visible = if phase == RenderPhase::AfterVehicles { &late_visible[..] } else { &visible[..] };
+                let visible = if phase == RenderPhase::AfterVehicles {
+                    &late_visible[..]
+                } else {
+                    &visible[..]
+                };
                 let keyed = self.blended_order(scene, f, visible, &blended);
                 items.clear();
                 blended_items(scene, keyed, exclude_texture, &mut items, &mut cab_items);
@@ -480,10 +628,26 @@ impl Renderer {
             batch_items(scene, &mut cab_items, false, list, &mut cab_batches);
             take_prepass();
         });
-        if let Some((pre_list, mut pre_batches, mut pre_prefill, mut safe_batches, mut pre_masked)) = prepass_found.into_inner().unwrap_or_else(|e| e.into_inner()) {
+        if let Some((
+            pre_list,
+            mut pre_batches,
+            mut pre_prefill,
+            mut safe_batches,
+            mut pre_masked,
+        )) = prepass_found
+            .into_inner()
+            .unwrap_or_else(|e| e.into_inner())
+        {
             let offset = list.len() as u32;
-            let masked_batches = pre_masked.iter_mut().flat_map(|(p, c)| p.iter_mut().chain(c.iter_mut()));
-            for b in pre_batches.iter_mut().chain(pre_prefill.iter_mut().flatten()).chain(&mut safe_batches).chain(masked_batches) {
+            let masked_batches = pre_masked
+                .iter_mut()
+                .flat_map(|(p, c)| p.iter_mut().chain(c.iter_mut()));
+            for b in pre_batches
+                .iter_mut()
+                .chain(pre_prefill.iter_mut().flatten())
+                .chain(&mut safe_batches)
+                .chain(masked_batches)
+            {
                 b.instances = b.instances.start + offset..b.instances.end + offset;
             }
             list.extend(pre_list);
@@ -497,28 +661,64 @@ impl Renderer {
         // paint; 3 includes its specialized terrain variant) - with
         // OMSI_GPU_TIMERS_RAW, what each kind costs the GPU
         if let Some(skip) = f.env.skip_pipe {
-            let skip: Vec<u8> = skip.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+            let skip: Vec<u8> = skip
+                .split(',')
+                .filter_map(|x| x.trim().parse().ok())
+                .collect();
             let include = |b: &Batch| {
                 let kind = b.pipe / 4;
                 !skip.contains(&kind)
                     && !(kind == PIPE_TERRAIN_PAINT && skip.contains(&PIPE_BLEND_NO_WRITE))
             };
-            presurface_batch_end = main_batches[..presurface_batch_end].iter().filter(|b| include(b)).count();
+            presurface_batch_end = main_batches[..presurface_batch_end]
+                .iter()
+                .filter(|b| include(b))
+                .count();
             main_batches.retain(include);
             cab_batches.retain(include);
         }
         if f.env.debug_draws {
-            log::info!("  main pass: {} opaque/alpha-tested and {} blended draws in {} batches; prepass {} batches; draw list {} entries", main_draws[0], main_draws[1], main_batches.len(), prepass_batches.len(), list.len());
+            log::info!(
+                "  main pass: {} opaque/alpha-tested and {} blended draws in {} batches; prepass {} batches; draw list {} entries",
+                main_draws[0],
+                main_draws[1],
+                main_batches.len(),
+                prepass_batches.len(),
+                list.len()
+            );
         }
         // (the terrain's paint into one picture: not with an excavation, nor with draws left out
         // by a debug switch, which would move the places `terrain_blends` keeps)
-        let ground = if has_presurface || f.env.skip_pipe.is_some() { GroundPlan::default() } else { self.plan_ground(scene, f, &mut main_batches, terrain_blends) };
-        DrawPlan { list: draw_list, main_batches, cab_batches, prepass_batches, prefill, masked, msaa_safe_batches, presurface_batch_end, rain_batches: Vec::new(), main_draws, has_presurface, ground }
+        let ground = if has_presurface || f.env.skip_pipe.is_some() {
+            GroundPlan::default()
+        } else {
+            self.plan_ground(scene, f, &mut main_batches, terrain_blends)
+        };
+        DrawPlan {
+            list: draw_list,
+            main_batches,
+            cab_batches,
+            prepass_batches,
+            prefill,
+            masked,
+            msaa_safe_batches,
+            presurface_batch_end,
+            rain_batches: Vec::new(),
+            main_draws,
+            has_presurface,
+            ground,
+        }
     }
 
     /// The order a phase's blended draws are drawn in: (rank, distance, instance), far
     /// to near within a rank.
-    fn blended_order(&self, scene: &Scene, f: &FrameCtx, visible: &[(usize, f32, bool)], blended: &[usize]) -> Vec<(u8, f32, usize)> {
+    fn blended_order(
+        &self,
+        scene: &Scene,
+        f: &FrameCtx,
+        visible: &[(usize, f32, bool)],
+        blended: &[usize],
+    ) -> Vec<(u8, f32, usize)> {
         let (camera, lighting, ro, cam_rel) = (f.camera, f.lighting, f.ro, f.cam_rel);
         // Blended draws: objects far to near by the distance of their nearest blended
         // mesh (see `near_by_origin` below - not the single local origin all of an
@@ -614,7 +814,7 @@ impl Renderer {
                     // Spline surfaces use the C++ handler's placement-origin distance
                     // in the horizontal plane (Rust's world axes are x/y horizontal,
                     // z vertical).
-                horizontal_sort_distance(sort_origin, ro, cam_rel)
+                    horizontal_sort_distance(sort_origin, ro, cam_rel)
                 } else if self.blend_by_origin || inst.surface {
                     ((inst.origin - ro).as_vec3() - cam_rel).length()
                 } else {
@@ -636,10 +836,21 @@ impl Renderer {
     }
 
     /// OMSI_PROFILE: the frame's counts, and every ten seconds what each asset costs.
-    pub(crate) fn count_draws(&mut self, scene: &Scene, with_overlays: bool, visible: &[(usize, f32, bool)], plan: &DrawPlan, shadow_batches: &[Vec<Batch>; SHADOW_LISTS],
+    pub(crate) fn count_draws(
+        &mut self,
+        scene: &Scene,
+        with_overlays: bool,
+        visible: &[(usize, f32, bool)],
+        plan: &DrawPlan,
+        shadow_batches: &[Vec<Batch>; SHADOW_LISTS],
         timer_view: usize,
     ) {
-        let DrawPlan { main_batches, prepass_batches, main_draws, .. } = plan;
+        let DrawPlan {
+            main_batches,
+            prepass_batches,
+            main_draws,
+            ..
+        } = plan;
         let visible_count = visible.len();
         if self.profiling && timer_view >= 2 {
             let keys = if timer_view == 2 {
@@ -681,7 +892,9 @@ impl Renderer {
             }
         }
         if with_overlays {
-            self.frame_draws.0 += main_batches.len() + prepass_batches.len() + shadow_batches.iter().map(Vec::len).sum::<usize>();
+            self.frame_draws.0 += main_batches.len()
+                + prepass_batches.len()
+                + shadow_batches.iter().map(Vec::len).sum::<usize>();
             self.frame_draws.1 += visible_count;
         }
         if self.profiling && timer_view == 0 {
@@ -699,10 +912,14 @@ impl Renderer {
             *c.entry("blended draws").or_default() += main_draws[1] as f64;
             *c.entry("main batches").or_default() += main_batches.len() as f64;
             *c.entry("presurface views").or_default() += plan.has_presurface as u8 as f64;
-            *c.entry("terrain paint batches").or_default() += main_batches.iter().filter(|b| b.pipe / 4 == PIPE_TERRAIN_PAINT).count() as f64;
+            *c.entry("terrain paint batches").or_default() += main_batches
+                .iter()
+                .filter(|b| b.pipe / 4 == PIPE_TERRAIN_PAINT)
+                .count() as f64;
             // the state the main pass's bundles set (each part starts afresh), and what an
             // order by material within the opaque runs would set instead
-            let (pipes, binds) = state_changes(&bundle_chunks(self.encoding_pool.as_ref(), main_batches));
+            let (pipes, binds) =
+                state_changes(&bundle_chunks(self.encoding_pool.as_ref(), main_batches));
             *c.entry("main pipeline switches").or_default() += pipes as f64;
             *c.entry("main material binds").or_default() += binds as f64;
             let (pipes_m, binds_m) = state_changes_by_material(main_batches);
@@ -712,7 +929,12 @@ impl Renderer {
             *c.entry("shadow batches").or_default() +=
                 (shadow_batches[0].len() + shadow_batches[1].len()) as f64;
             // triangles each pass draws (thousands), the geometry the GPU goes through
-            let tris = |bs: &[Batch]| bs.iter().map(|b| b.count as f64 / 3.0 * b.instances.len() as f64).sum::<f64>() / 1000.0;
+            let tris = |bs: &[Batch]| {
+                bs.iter()
+                    .map(|b| b.count as f64 / 3.0 * b.instances.len() as f64)
+                    .sum::<f64>()
+                    / 1000.0
+            };
             *c.entry("ktris main").or_default() += tris(main_batches);
             *c.entry("ktris prepass").or_default() += tris(prepass_batches);
             *c.entry("ktris shadow near").or_default() += tris(&shadow_batches[0]);
@@ -725,7 +947,10 @@ impl Renderer {
             // goes through
             let mut assets: HashMap<&str, (usize, usize, u64)> = HashMap::new();
             for b in main_batches {
-                let source = scene.meshes[b.mesh as usize].source.as_deref().unwrap_or("procedural / vehicle");
+                let source = scene.meshes[b.mesh as usize]
+                    .source
+                    .as_deref()
+                    .unwrap_or("procedural / vehicle");
                 let cost = assets.entry(source).or_default();
                 cost.0 += 1;
                 cost.1 += b.instances.len();
@@ -734,26 +959,43 @@ impl Renderer {
             let mut assets: Vec<_> = assets.into_iter().collect();
             assets.sort_unstable_by(|a, b| b.1.0.cmp(&a.1.0).then(a.0.cmp(b.0)));
             for (source, (batches, draws, tris)) in assets.iter().take(12) {
-                log::info!("draw audit: {batches} batches, {draws} draws, {tris} triangles: {source}");
+                log::info!(
+                    "draw audit: {batches} batches, {draws} draws, {tris} triangles: {source}"
+                );
             }
             assets.sort_unstable_by(|a, b| b.1.2.cmp(&a.1.2).then(a.0.cmp(b.0)));
             for (source, (batches, draws, tris)) in assets.iter().take(12) {
-                log::info!("triangle audit: {tris} triangles in {draws} draws ({batches} batches): {source}");
+                log::info!(
+                    "triangle audit: {tris} triangles in {draws} draws ({batches} batches): {source}"
+                );
             }
         }
     }
 
     /// The main pass's batches recorded as render bundles on several threads (none with
     /// OMSI_NO_BUNDLES).
-    pub(crate) fn record_main_bundles(&self, scene: &Scene, f: &FrameCtx, plan: &DrawPlan) -> Vec<wgpu::RenderBundle> {
+    pub(crate) fn record_main_bundles(
+        &self,
+        scene: &Scene,
+        f: &FrameCtx,
+        plan: &DrawPlan,
+    ) -> Vec<wgpu::RenderBundle> {
         // OMSI_NO_BUNDLES=1 records the main pass directly, for comparison. (Splitting the
         // pass in two to finish the halves side by side was tried as well: the second half
         // has to load the first one's targets back into the GPU's tile memory, which cost
         // more GPU time than it saved on the CPU.)
         if !f.env.no_bundles {
             let pp = self.main_pass(f.enhanced, f.reflection_frame, f.eye_color);
-            let format = if f.masked_frame { HDR_FORMAT } else { self.format };
-            let batches = if plan.presurface_prefill(self, f) { &plan.main_batches[plan.presurface_batch_end..] } else { &plan.main_batches };
+            let format = if f.masked_frame {
+                HDR_FORMAT
+            } else {
+                self.format
+            };
+            let batches = if plan.presurface_prefill(self, f) {
+                &plan.main_batches[plan.presurface_batch_end..]
+            } else {
+                &plan.main_batches
+            };
             let camera = scene.camera_bind_group.as_ref().expect("camera bind group");
             // The window's bundles of the last frame are drawn again where this frame's
             // batches are the same and name the same buffers and bind groups: a bundle holds
@@ -765,8 +1007,15 @@ impl Renderer {
             // The mirrors' the same, each its own (by its picture's texture): two or three
             // mirror pictures a frame recorded some 1.5 ms of bundles each.
             let kept = f.with_overlays && f.projection.is_none() && !f.second_eye;
-            let mirror = (!f.with_overlays && !f.second_eye).then_some(f.exclude_texture).flatten();
-            let mode = (f.enhanced, f.reflection_frame, format, self.options.msaa, rt_gbuf() && !f.eye_color,
+            let mirror = (!f.with_overlays && !f.second_eye)
+                .then_some(f.exclude_texture)
+                .flatten();
+            let mode = (
+                f.enhanced,
+                f.reflection_frame,
+                format,
+                self.options.msaa,
+                rt_gbuf() && !f.eye_color,
             );
             let chunks = bundle_chunks(self.encoding_pool.as_ref(), batches);
             let mut reuse: Vec<Option<wgpu::RenderBundle>> = vec![None; chunks.len()];
@@ -782,7 +1031,9 @@ impl Renderer {
                 if let Some(c) = last {
                     if c.mode == mode && c.camera == *camera {
                         for (k, chunk) in chunks.iter().enumerate() {
-                            if let Some((_, r, bundle)) = c.parts.get(k).filter(|(b, ..)| *b == **chunk) {
+                            if let Some((_, r, bundle)) =
+                                c.parts.get(k).filter(|(b, ..)| *b == **chunk)
+                            {
                                 repeated[k] = true;
                                 if r.as_ref().is_some_and(|r| same_resources(scene, chunk, r)) {
                                     reuse[k] = Some(bundle.clone());
@@ -800,9 +1051,20 @@ impl Renderer {
             }
             let kept_parts = reuse.iter().filter(|b| b.is_some()).count();
             if f.with_overlays {
-                self.history.bundle_stats.set((chunks.len() - kept_parts, kept_parts));
+                self.history
+                    .bundle_stats
+                    .set((chunks.len() - kept_parts, kept_parts));
             }
-            let bundles = record_bundles(&self.device, self.encoding_pool.as_ref(), scene, &chunks, &reuse, pp, camera, format, self.options.msaa,
+            let bundles = record_bundles(
+                &self.device,
+                self.encoding_pool.as_ref(),
+                scene,
+                &chunks,
+                &reuse,
+                pp,
+                camera,
+                format,
+                self.options.msaa,
                 rt_gbuf() && !f.eye_color,
             );
             // (not when a part could not be recorded: it would be left out frame after frame;
@@ -817,7 +1079,13 @@ impl Renderer {
                     .iter()
                     .zip(&bundles)
                     .zip(&repeated)
-                    .map(|((chunk, b), &again)| (chunk.to_vec(), again.then(|| batch_resources(scene, chunk)), b.clone().expect("whole")))
+                    .map(|((chunk, b), &again)| {
+                        (
+                            chunk.to_vec(),
+                            again.then(|| batch_resources(scene, chunk)),
+                            b.clone().expect("whole"),
+                        )
+                    })
                     .collect(),
             };
             if kept {
@@ -854,9 +1122,25 @@ pub(crate) struct MainBundles {
 #[derive(PartialEq)]
 struct BatchResources(wgpu::Buffer, wgpu::Buffer, i32, u32, wgpu::BindGroup);
 
-fn batch_resource<'s>(scene: &'s Scene, b: &Batch) -> (&'s wgpu::Buffer, &'s wgpu::Buffer, i32, u32, &'s wgpu::BindGroup) {
+fn batch_resource<'s>(
+    scene: &'s Scene,
+    b: &Batch,
+) -> (
+    &'s wgpu::Buffer,
+    &'s wgpu::Buffer,
+    i32,
+    u32,
+    &'s wgpu::BindGroup,
+) {
     let m = &scene.meshes[b.mesh as usize];
-    (&m.vertex_buf, &m.index_buf, m.base_vertex, m.first_index, &scene.materials[b.material as usize].bind_group)
+    let bg = &scene.materials[b.material as usize].bind_group;
+    (
+        &m.vertex_buf,
+        &m.index_buf,
+        m.base_vertex,
+        m.first_index,
+        bg,
+    )
 }
 
 fn batch_resources(scene: &Scene, batches: &[Batch]) -> Vec<BatchResources> {
@@ -885,8 +1169,15 @@ mod tests {
 
     #[test]
     fn state_changes_count_what_the_encoder_sets() {
-        use crate::frame_plan::{state_changes, state_changes_by_material, Batch};
-        let b = |pipe: u8, material: u32| Batch { pipe, mesh: 0, first: 0, count: 3, material, instances: 0..1 };
+        use crate::frame_plan::{Batch, state_changes, state_changes_by_material};
+        let b = |pipe: u8, material: u32| Batch {
+            pipe,
+            mesh: 0,
+            first: 0,
+            count: 3,
+            material,
+            instances: 0..1,
+        };
         // opaque culled (pipe 2) and not culled (pipe 0) of two looks, then a blended one
         let batches = [b(0, 1), b(0, 2), b(2, 1), b(2, 2), b(8, 1)];
         assert_eq!(state_changes(&[&batches]), (3, 5));
@@ -897,13 +1188,66 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+    fn invalid_material_id_in_instance_does_not_panic() {
+        let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let renderer = pollster::block_on(Renderer::new_with(
+            &adapter,
+            None,
+            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            RenderOptions {
+                msaa: 1,
+                shadow_size: 1024,
+                ..Default::default()
+            },
+        ))
+        .expect("test renderer");
+        let mut scene = renderer.new_scene();
+        let data = MeshData {
+            positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
+            normals: vec![Vec3::Z; 3],
+            uvs: vec![glam::Vec2::ZERO; 3],
+            indices: vec![0, 1, 2],
+            ranges: vec![(0, 3, 0)],
+            ..Default::default()
+        };
+        let mesh = renderer.add_mesh(&mut scene, &data);
+        let inst = renderer.add_instance(
+            &mut scene,
+            mesh,
+            DVec3::ZERO,
+            Mat4::IDENTITY,
+            vec![1_144_318_424],
+        );
+        let mut items = Vec::new();
+        let mut blended = Vec::new();
+        super::opaque_items(
+            &scene,
+            &[(inst, 10.0, false)],
+            None,
+            &mut items,
+            &mut blended,
+        );
+        assert!(items.is_empty());
+    }
+
+    #[test]
     fn recycled_display_layers_keep_model_order_after_distance_and_camera_rank() {
         // Glass (three material slots) reused id 1; the text rows (one slot each)
         // reused ids 0 and 2. Slot order would tint only the upper row.
         let order = [11, 10, 12, 13, 14];
-        let mut draws = vec![(0, 5.0, 2), (2, 20.0, 4), (0, 5.0, 0), (0, 9.0, 3), (0, 5.0, 1)];
+        let mut draws = vec![
+            (0, 5.0, 2),
+            (2, 20.0, 4),
+            (0, 5.0, 0),
+            (0, 9.0, 3),
+            (0, 5.0, 1),
+        ];
         sort_blended_draws(&mut draws, |i| order[i]);
-        assert_eq!(draws.iter().map(|d| d.2).collect::<Vec<_>>(), vec![3, 1, 0, 2, 4]);
+        assert_eq!(
+            draws.iter().map(|d| d.2).collect::<Vec<_>>(),
+            vec![3, 1, 0, 2, 4]
+        );
     }
 
     #[test]
@@ -911,32 +1255,73 @@ mod tests {
     fn recycled_instances_sort_by_new_model_creation_order() {
         let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let renderer = pollster::block_on(Renderer::new_with(
-            &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-            RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
-        )).expect("test renderer");
+            &adapter,
+            None,
+            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            RenderOptions {
+                msaa: 1,
+                shadow_size: 1024,
+                ..Default::default()
+            },
+        ))
+        .expect("test renderer");
         let mut scene = renderer.new_scene();
         let material = renderer.add_material(&mut scene, None, AlphaMode::Blend, [1.0; 4], true);
         let data = MeshData {
             positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
-            normals: vec![Vec3::Z; 3], uvs: vec![glam::Vec2::ZERO; 3],
-            indices: vec![0, 1, 2], ranges: vec![(0, 3, 0)], ..Default::default()
+            normals: vec![Vec3::Z; 3],
+            uvs: vec![glam::Vec2::ZERO; 3],
+            indices: vec![0, 1, 2],
+            ranges: vec![(0, 3, 0)],
+            ..Default::default()
         };
         let text = renderer.add_mesh(&mut scene, &data);
-        let glass = renderer.add_mesh(&mut scene, &MeshData {
-            ranges: vec![(0, 3, 0), (0, 3, 1), (0, 3, 2)], ..data
-        });
-        let upper = renderer.add_instance(&mut scene, text, DVec3::ZERO, Mat4::IDENTITY, vec![material]);
-        let pane = renderer.add_instance(&mut scene, glass, DVec3::ZERO, Mat4::IDENTITY, vec![material; 3]);
-        let lower = renderer.add_instance(&mut scene, text, DVec3::ZERO, Mat4::IDENTITY, vec![material]);
+        let glass = renderer.add_mesh(
+            &mut scene,
+            &MeshData {
+                ranges: vec![(0, 3, 0), (0, 3, 1), (0, 3, 2)],
+                ..data
+            },
+        );
+        let upper = renderer.add_instance(
+            &mut scene,
+            text,
+            DVec3::ZERO,
+            Mat4::IDENTITY,
+            vec![material],
+        );
+        let pane = renderer.add_instance(
+            &mut scene,
+            glass,
+            DVec3::ZERO,
+            Mat4::IDENTITY,
+            vec![material; 3],
+        );
+        let lower = renderer.add_instance(
+            &mut scene,
+            text,
+            DVec3::ZERO,
+            Mat4::IDENTITY,
+            vec![material],
+        );
         // A new bus creates its glass first, then its two rows, in different slot pools.
         for (mesh, slots, into) in [(glass, 3, pane), (text, 1, upper), (text, 1, lower)] {
             renderer.remove_instance(&mut scene, into);
-            let new = renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![material; slots]);
+            let new = renderer.add_instance(
+                &mut scene,
+                mesh,
+                DVec3::ZERO,
+                Mat4::IDENTITY,
+                vec![material; slots],
+            );
             assert_eq!(renderer.recycle_instance(&mut scene, new, into), into);
         }
         let mut draws = vec![(0, 5.0, upper), (0, 5.0, pane), (0, 5.0, lower)];
         sort_blended_draws(&mut draws, |i| scene.instances[i].draw_order);
-        assert_eq!(draws.iter().map(|d| d.2).collect::<Vec<_>>(), vec![pane, upper, lower]);
+        assert_eq!(
+            draws.iter().map(|d| d.2).collect::<Vec<_>>(),
+            vec![pane, upper, lower]
+        );
     }
 
     #[test]
@@ -944,20 +1329,32 @@ mod tests {
     fn a_part_after_a_depth_writing_pane_goes_to_the_masked_prefill() {
         let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let renderer = pollster::block_on(Renderer::new_with(
-            &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-            RenderOptions { msaa: 4, shadow_size: 1024, ..Default::default() },
-        )).expect("test renderer");
+            &adapter,
+            None,
+            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            RenderOptions {
+                msaa: 4,
+                shadow_size: 1024,
+                ..Default::default()
+            },
+        ))
+        .expect("test renderer");
         let mut scene = renderer.new_scene();
         let pane = renderer.add_material(&mut scene, None, AlphaMode::Blend, [1.0; 4], true);
         let body = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0; 4], true);
         let data = MeshData {
             positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
-            normals: vec![Vec3::Z; 3], uvs: vec![glam::Vec2::ZERO; 3],
-            indices: vec![0, 1, 2], ranges: vec![(0, 3, 0)], ..Default::default()
+            normals: vec![Vec3::Z; 3],
+            uvs: vec![glam::Vec2::ZERO; 3],
+            indices: vec![0, 1, 2],
+            ranges: vec![(0, 3, 0)],
+            ..Default::default()
         };
         let mesh = renderer.add_mesh(&mut scene, &data);
-        let first = renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![pane]);
-        let later = renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![body]);
+        let first =
+            renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![pane]);
+        let later =
+            renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![body]);
         let visible = [(first, 1.0, false), (later, 1.0, false)];
         let (_, _, _, _, masked) = super::prepass_items(None, &scene, &visible, false, 1e9);
         assert!(masked.is_none());
@@ -966,7 +1363,10 @@ mod tests {
         }
         let (_, all, prefill, _, masked) = super::prepass_items(None, &scene, &visible, false, 1e9);
         let (panes, cut) = masked.expect("masked prefill");
-        assert_eq!((all.len(), prefill.map(|p| p.len()), panes.len(), cut.len()), (1, Some(0), 1, 1));
+        assert_eq!(
+            (all.len(), prefill.map(|p| p.len()), panes.len(), cut.len()),
+            (1, Some(0), 1, 1)
+        );
     }
 
     /// The lists planned on the pool are the ones planned in a row: blocks joined in order.
@@ -975,29 +1375,61 @@ mod tests {
     fn draw_lists_on_the_pool_are_the_same() {
         let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let renderer = pollster::block_on(Renderer::new_with(
-            &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-            RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
-        )).expect("test renderer");
+            &adapter,
+            None,
+            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            RenderOptions {
+                msaa: 1,
+                shadow_size: 1024,
+                ..Default::default()
+            },
+        ))
+        .expect("test renderer");
         let mut scene = renderer.new_scene();
-        let materials = [AlphaMode::Opaque, AlphaMode::Test, AlphaMode::Blend].map(|a| renderer.add_material(&mut scene, None, a, [1.0; 4], true));
+        let materials = [AlphaMode::Opaque, AlphaMode::Test, AlphaMode::Blend]
+            .map(|a| renderer.add_material(&mut scene, None, a, [1.0; 4], true));
         let data = MeshData {
             positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
-            normals: vec![Vec3::Z; 3], uvs: vec![glam::Vec2::ZERO; 3],
-            indices: vec![0, 1, 2], ranges: vec![(0, 3, 0), (0, 3, 1)], ..Default::default()
+            normals: vec![Vec3::Z; 3],
+            uvs: vec![glam::Vec2::ZERO; 3],
+            indices: vec![0, 1, 2],
+            ranges: vec![(0, 3, 0), (0, 3, 1)],
+            ..Default::default()
         };
-        let meshes: Vec<_> = (0..7).map(|_| renderer.add_mesh(&mut scene, &data)).collect();
+        let meshes: Vec<_> = (0..7)
+            .map(|_| renderer.add_mesh(&mut scene, &data))
+            .collect();
         let visible: Vec<(usize, f32, bool)> = (0..5000)
             .map(|k| {
                 let m = vec![materials[k % 3], materials[(k / 3) % 3]];
-                (renderer.add_instance(&mut scene, meshes[k % 7], DVec3::new(k as f64, 0.0, 0.0), Mat4::IDENTITY, m), k as f32, false)
+                (
+                    renderer.add_instance(
+                        &mut scene,
+                        meshes[k % 7],
+                        DVec3::new(k as f64, 0.0, 0.0),
+                        Mat4::IDENTITY,
+                        m,
+                    ),
+                    k as f32,
+                    false,
+                )
             })
             .collect();
-        let pool = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap();
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .unwrap();
         let key = |d: &super::DrawItem| (d.pipe, d.mesh, d.range, d.material, d.look, d.entry);
         let (mut a, mut ab, mut b, mut bb) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         super::opaque_items(&scene, &visible, None, &mut a, &mut ab);
         super::opaque_items_parts(Some(&pool), &scene, &visible, None, &mut b, &mut bb);
-        assert_eq!((a.iter().map(key).collect::<Vec<_>>(), ab), (b.iter().map(key).collect::<Vec<_>>(), bb));
-        assert!(super::prepass_items(None, &scene, &visible, true, 1e9) == super::prepass_items(Some(&pool), &scene, &visible, true, 1e9));
+        assert_eq!(
+            (a.iter().map(key).collect::<Vec<_>>(), ab),
+            (b.iter().map(key).collect::<Vec<_>>(), bb)
+        );
+        assert!(
+            super::prepass_items(None, &scene, &visible, true, 1e9)
+                == super::prepass_items(Some(&pool), &scene, &visible, true, 1e9)
+        );
     }
 }
