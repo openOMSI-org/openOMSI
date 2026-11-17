@@ -125,7 +125,7 @@ pub(super) fn height(terrain: &Terrain, p: DVec2, side: f64) -> f64 {
     }
 }
 
-fn triangle(mesh: &mut MeshData, mut p: [DVec3; 3], inward: DVec2, side: f64) {
+fn triangle(mesh: &mut MeshData, mut p: [DVec3; 3], inward: DVec2, side: f64, terrain: &Terrain) {
     let cross = (p[1] - p[0]).cross(p[2] - p[0]);
     if cross.length_squared() < EPS * EPS {
         return;
@@ -147,7 +147,10 @@ fn triangle(mesh: &mut MeshData, mut p: [DVec3; 3], inward: DVec2, side: f64) {
     for v in p {
         mesh.positions.push(v.as_vec3());
         mesh.normals.push(normal);
-        mesh.uvs.push((v.truncate() / side).as_vec2());
+        // (unfolded: by x and y alone a plumb wall took the colour of its top edge, in streaks)
+        let plan = v.truncate();
+        let depth = (height(terrain, plan, side) - v.z).max(0.0);
+        mesh.uvs.push(((plan + inward * depth) / side).as_vec2());
     }
     mesh.indices.extend([first, first + 1, first + 2]);
 }
@@ -164,16 +167,20 @@ fn triangle(mesh: &mut MeshData, mut p: [DVec3; 3], inward: DVec2, side: f64) {
 /// Keep a terrain cut open where a road continues across its rim. A tunnel's cutter
 /// can end at road height even though the terrain above it reaches the tunnel roof;
 /// connecting those two heights would put a grass curtain across the carriageway.
+///
+/// `open`: outlines (tile-local) no wall may stand in, the mouths of tunnels
+/// (`portal_clearing`).
 pub fn terrain_hole_walls_with_roads(
     rims: &[Vec<DVec3>],
     terrain: &Terrain,
     roads: &DriveGrid,
+    open: &[Vec<DVec2>],
 ) -> MeshData {
-    build_walls(rims, terrain, Some(roads))
+    build_walls(rims, terrain, Some(roads), open)
 }
 
 pub fn terrain_hole_walls(rims: &[Vec<DVec3>], terrain: &Terrain) -> MeshData {
-    build_walls(rims, terrain, None)
+    build_walls(rims, terrain, None, &[])
 }
 
 /// Split at road triangle edges as well as terrain edges: a narrow entrance need
@@ -229,7 +236,25 @@ fn road_crosses_rim(roads: &DriveGrid, at: DVec3, normal: DVec2) -> bool {
     road_at(at.truncate() - step) && road_at(at.truncate() + step)
 }
 
-fn build_walls(rims: &[Vec<DVec3>], terrain: &Terrain, roads: Option<&DriveGrid>) -> MeshData {
+fn build_walls(
+    rims: &[Vec<DVec3>],
+    terrain: &Terrain,
+    roads: Option<&DriveGrid>,
+    open: &[Vec<DVec2>],
+) -> MeshData {
+    let in_open = |p: DVec2| {
+        open.iter().any(|ring| {
+            let mut inside = false;
+            for i in 0..ring.len() {
+                let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) * (b.x - a.x) / (b.y - a.y)
+                {
+                    inside = !inside;
+                }
+            }
+            inside
+        })
+    };
     let mut mesh = MeshData::default();
     let side = tile_size();
     let samples = terrain.cells.checked_add(1).and_then(|n| n.checked_mul(n));
@@ -370,7 +395,9 @@ fn build_walls(rims: &[Vec<DVec3>], terrain: &Terrain, roads: Option<&DriveGrid>
                 continue;
             }
             let inward = if inside_left { left } else { -left };
-            if roads.is_some_and(|roads| road_crosses_rim(roads, middle, inward)) {
+            if roads.is_some_and(|roads| road_crosses_rim(roads, middle, inward))
+                || in_open(middle.truncate())
+            {
                 continue;
             }
             let top_a = a.truncate().extend(height(terrain, a.truncate(), side));
@@ -380,11 +407,11 @@ fn build_walls(rims: &[Vec<DVec3>], terrain: &Terrain, roads: Option<&DriveGrid>
                 // The rim crosses the ground. Two triangular ends, never a twisted quad.
                 let at = da / (da - db);
                 let join = a.lerp(b, at);
-                triangle(&mut mesh, [top_a, a, join], inward, side);
-                triangle(&mut mesh, [join, b, top_b], inward, side);
+                triangle(&mut mesh, [top_a, a, join], inward, side, terrain);
+                triangle(&mut mesh, [join, b, top_b], inward, side, terrain);
             } else {
-                triangle(&mut mesh, [top_a, a, top_b], inward, side);
-                triangle(&mut mesh, [top_b, a, b], inward, side);
+                triangle(&mut mesh, [top_a, a, top_b], inward, side, terrain);
+                triangle(&mut mesh, [top_b, a, b], inward, side, terrain);
             }
         }
     }
@@ -457,7 +484,7 @@ mod tests {
         // Even a narrow road within one coarse terrain cell must get an opening.
         for width in [1.0f32, 10.0] {
             let roads = road(30.0 - width / 2.0, 10.0, 30.0 + width / 2.0, 50.0, 0.1);
-            let mesh = terrain_hole_walls_with_roads(&rims, &t, &roads);
+            let mesh = terrain_hole_walls_with_roads(&rims, &t, &roads, &[]);
             valid(&mesh);
             let expected = (80.0 - 2.0 * width as f64) * 9.9;
             assert!(
@@ -477,7 +504,7 @@ mod tests {
             road(25.0, 10.0, 35.0, 20.0, 0.1),
             road(25.0, 10.0, 35.0, 50.0, 5.0),
         ] {
-            let mesh = terrain_hole_walls_with_roads(&rims, &t, &roads);
+            let mesh = terrain_hole_walls_with_roads(&rims, &t, &roads, &[]);
             valid(&mesh);
             assert!(
                 (area(&mesh) - expected).abs() < 0.01,
