@@ -113,7 +113,7 @@ impl World {
         let key = (p.tx, p.ty);
         let (tx, ty) = key;
         let (x0, y0) = (tx as f64 * tile_size(), ty as f64 * tile_size());
-        let (mut ts, mut hole_rims, wheel_meshes) =
+        let (mut ts, mut hole_rims, openings, wheel_meshes) =
             self.tile_surface(p, staged, layout, debug_raster);
         // (before the paint is cut: under a road the ground's layer is never asked for)
         ts.sound = self.ground_sound(p, staged.get(&key).map(|q| q.as_ref()), &ts.drive);
@@ -233,7 +233,9 @@ impl World {
         p.hole_walls = tile_terrain
             .as_ref()
             .map(|terrain| {
-                omsi_geometry::terrain_hole_walls_with_roads(&hole_rims, terrain, &ts.drive)
+                omsi_geometry::terrain_hole_walls_with_roads(
+                    &hole_rims, terrain, &ts.drive, &openings,
+                )
             })
             .unwrap_or_default();
         // How much of the ground the old cut rule ("anything below the terrain takes
@@ -286,7 +288,7 @@ impl World {
         staged: &HashMap<(i32, i32), Arc<StagedTile>>,
         layout: &TileLayout,
         debug_raster: Option<(f64, f64)>,
-    ) -> (TileSurface, Vec<Vec<DVec3>>, usize) {
+    ) -> (TileSurface, Vec<Vec<DVec3>>, Vec<Vec<DVec2>>, usize) {
         let key = (p.tx, p.ty);
         let (tx, ty) = key;
         let (x0, y0) = (tx as f64 * tile_size(), ty as f64 * tile_size());
@@ -297,6 +299,7 @@ impl World {
         order.sort_by_key(|q| (q.tx, q.ty));
         let mut ts = TileSurface::new(SURFACE_RASTER);
         let mut hole_rims = Vec::new();
+        let mut openings: Vec<Vec<DVec2>> = Vec::new();
         // meshes the wheels stand on, and of them low objects they climb
         let mut wheel_meshes = 0usize;
         let report =
@@ -365,6 +368,38 @@ impl World {
                     continue;
                 }
                 for h in &ot.holes {
+                    // (a tunnel mouth's cut can reach a tile the sheet itself is not on)
+                    if let Some(portal) = omsi_geometry::hole_portal(h, &pose.rot, pose.pos) {
+                        let data = self.data.peek();
+                        let dz = p.origin.z;
+                        let ground = |q: DVec2| {
+                            let k = (
+                                (q.x / tile_size()).floor() as i32,
+                                (q.y / tile_size()).floor() as i32,
+                            );
+                            let t = data.ground.terrains.get(&k)?;
+                            Some(
+                                t.sample(
+                                    (q.x - k.0 as f64 * tile_size()) as f32,
+                                    (q.y - k.1 as f64 * tile_size()) as f32,
+                                ) as f64
+                                    + dz,
+                            )
+                        };
+                        if omsi_geometry::portal_is_buried(&portal, &ground) {
+                            continue;
+                        }
+                        let outline = omsi_geometry::portal_outline(&portal, &ground);
+                        ts.add_outline(&outline, tx, ty);
+                        let local = p.origin.truncate();
+                        openings.push(
+                            omsi_geometry::portal_clearing(&outline)
+                                .into_iter()
+                                .map(|q| q - local)
+                                .collect(),
+                        );
+                        continue;
+                    }
                     if !outside(&mesh_bounds(h, &pose.rot, pose.pos)) {
                         // (a stray junction left at height zero dug a 30 m pit: Spandau, tile 2382/11287)
                         if hole_is_buried(h, &pose.rot, pose.pos, &|x, y| {
@@ -457,7 +492,7 @@ impl World {
             }
         }
         ts.finish();
-        (ts, hole_rims, wheel_meshes)
+        (ts, hole_rims, openings, wheel_meshes)
     }
 
     // The textures of object types, splines and trees that are not on the GPU yet are
