@@ -37,7 +37,7 @@ pub(crate) const TILES: [(&str, &str, &str); 30] = [
     ("repair", "Repair", "omsi_repair"),
     ("refuel", "Refuel", "omsi_refuel"),
     ("wash", "Wash", "omsi_wash"),
-    ("arrows", "Map-placed route arrows", "omsi_arrows"),
+    ("arrows", "Dynamic route arrows", "omsi_arrows"),
     ("time", "Time", "omsi_time"),
     ("weather", "Weather", "omsi_weather"),
     ("controls", "Controls", "omsi_controls"),
@@ -102,7 +102,7 @@ impl TileState {
         let offered: Vec<&'static str> = app.game_menu_items().iter().map(|l| l.0).collect();
         let mut off: Vec<&'static str> = MENU_LINES.iter().copied().filter(|id| !offered.contains(id)).collect();
         let mut lit = Vec::new();
-        if app.settings.nav_map_arrows {
+        if app.settings.nav_dynamic_arrows {
             lit.push("arrows");
         }
         if app.session.duty.is_some() {
@@ -265,7 +265,7 @@ fn start(app: &mut crate::App, id: &str, mouse: bool) {
         "arrows" => {
             crate::game_lists::option_do(
                 app,
-                "nav_map_arrows",
+                "nav_dynamic_arrows",
                 "",
                 crate::game_lists::Move::Next,
             );
@@ -310,7 +310,11 @@ mod tests {
     #[test]
     fn the_tiles_have_icons_and_omsis_first_page() {
         for (id, _, icon) in TILES {
-            assert!(omsi_ui::icons::rasterize(icon, 48).is_some_and(|px| px.iter().any(|a| *a > 0)), "{id}: no drawable icon {icon}");
+            let pixels = omsi_ui::icons::rasterize(icon, 48);
+            assert!(
+                pixels.is_some_and(|pixels| pixels.iter().any(|alpha| *alpha > 0)),
+                "{id}: no drawable icon {icon}"
+            );
         }
         let ids: std::collections::HashSet<_> = TILES.iter().map(|t| t.0).collect();
         assert_eq!(ids.len(), TILES.len());
@@ -447,8 +451,8 @@ mod tests {
         click(&mut app, "next");
         click(&mut app, "arrows");
         assert!(app.menus.game_panels.quick.as_ref().is_some_and(|q| q.page == 1), "the menu stays, as in OMSI 2");
-        assert!(app.settings.nav_map_arrows);
-        assert!(!app.settings.nav_dynamic_arrows, "the dynamic arrows are another setting");
+        assert!(app.settings.nav_dynamic_arrows);
+        assert!(!app.settings.nav_map_arrows);
         click(&mut app, "time");
         assert!(app.menus.game_panels.quick.is_none(), "a list takes over");
     }
