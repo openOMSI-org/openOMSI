@@ -151,7 +151,7 @@ export function ModsPage() {
     <${PageHead} title="Mods" text="A bus, a map, scenery, a whole OMSI folder - as a folder or a .zip, .7z or .rar. The original OMSI 2 folder is never written to." />
     <div class="drive" style="grid-template-columns:minmax(0,1fr) 360px">
       <div class="stack">
-        ${status?.error && html`<${Notice} kind="danger">${status.error}</${Notice}>`}
+        ${(s.readError.mods || status?.error) && html`<${Notice} kind="danger">${s.readError.mods || status.error}</${Notice}>`}
         <${Card} title="Installed mods" actions=${html`<div class="row wrap" style="gap:8px;justify-content:flex-end">
             ${status?.content_dir && html`<${Button} small icon="folder" label="Content folder" onClick=${() => call('open_path', { path: status.content_dir }).catch((e) => toast(t(e.message), 'error'))} />`}
             <div style="width:220px;max-width:100%"><${Search} value=${q} onInput=${setQ} placeholder="Search mods..." /></div>

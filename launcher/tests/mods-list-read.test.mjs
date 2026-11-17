@@ -41,7 +41,10 @@ async function setup() {
   async function module(url) {
     if (!modules.has(url.href)) {
       const code = url.pathname.endsWith('/vendor/preact-htm.js')
-        ? 'export const useEffect = () => {}; export const useState = () => {};'
+        ? // (a page drawn once: `html` keeps the template and its values, the hooks their first value)
+          'export const useEffect = () => {}; export const useRef = (v) => ({ current: v });' +
+            ' export const useState = (v) => [typeof v === "function" ? v() : v, () => {}];' +
+            ' export const html = (strings, ...vals) => ({ strings: [...strings], vals });'
         : await readFile(url, 'utf8');
       modules.set(url.href, new vm.SourceTextModule(code, { context, identifier: url.href }));
     }
@@ -52,6 +55,13 @@ async function setup() {
   await entry.evaluate();
   const state = (await module(new URL('../ui/js/store.js', import.meta.url))).namespace.S;
   const data = entry.namespace;
+  const mods = await module(new URL('../ui/js/pages/mods.js', import.meta.url));
+  await mods.link((path, parent) => module(new URL(path, parent.identifier)));
+  await mods.evaluate();
+  // the text the Mods page shows as it is drawn now
+  const text = (v) => (v == null || v === false || typeof v === 'function' ? '' : Array.isArray(v) ? v.map(text).join('')
+    : typeof v === 'object' && v.strings ? v.strings.map((x, i) => x + text(v.vals[i])).join('') : String(v));
+  const page = () => text(mods.namespace.ModsPage());
   const flush = () => new Promise((r) => setImmediate(r));
   // runs the waits `rereadUntil` asked for (not the toasts' own timers)
   const retry = async () => {
@@ -59,7 +69,7 @@ async function setup() {
     for (const x of waits) x.f();
     await flush();
   };
-  return { state, data, reads, timers, flush, retry, setPoll: (p) => { poll = p; } };
+  return { state, data, page, reads, timers, flush, retry, setPoll: (p) => { poll = p; } };
 }
 
 const list = (...ids) => ({ installed: ids.map((id) => ({ id, name: id, enabled: true })) });
@@ -115,8 +125,40 @@ test('a later read failing rejects, and an earlier caller sees that failure too'
   reads[1].fail('content folder unreadable');
   await failed;
   await flush();
-  assert.deepEqual({ ...state.cache.mods }, { error: 'content folder unreadable' }, 'the page shows the error');
+  assert.deepEqual(state.cache.mods, list('a'), 'the last good list stays');
+  assert.equal(state.readError.mods, 'content folder unreadable');
   assert.equal(state.reading.mods, false);
+});
+
+test('a failed first read leaves the error in the cache, the next good one clears it', async () => {
+  const { state, data, reads } = await setup();
+  const failed = assert.rejects(data.reread('mods', 'mods_status'));
+  reads[0].fail('content folder unreadable');
+  await failed;
+  assert.deepEqual({ ...state.cache.mods }, { error: 'content folder unreadable' }, 'nothing to keep: the page shows the error');
+  const good = data.reread('mods', 'mods_status');
+  reads[1].answer(list('a'));
+  await good;
+  assert.deepEqual(state.cache.mods, list('a'));
+  assert.equal(state.readError.mods, null);
+});
+
+test('the Mods page keeps its rows and shows the error through a failed refresh (#4016, #4017)', async () => {
+  const { state, data, page, reads, flush, retry } = await setup();
+  Object.assign(state, { cache: { mods: list('Bus A', 'Map B') }, poll: { stamp: '1', jobs: [], instances: [] } });
+  assert.match(page(), /Bus A/);
+  const confirmed = data.rereadUntil('mods', 'mods_status');
+  reads[0].fail('content folder unreadable');
+  await flush();
+  const shown = page();
+  assert.match(shown, /Bus A/, 'the installed rows (their switches, a deleted one busy) stay during the retry');
+  assert.match(shown, /Map B/);
+  assert.match(shown, /content folder unreadable/, 'the failure is shown above the list');
+  await retry();
+  reads[1].answer(list('Bus A'));
+  await confirmed;
+  assert.doesNotMatch(page(), /content folder unreadable/, 'the error goes once a read answers');
+  assert.doesNotMatch(page(), /Map B/, 'the new list is shown');
 });
 
 test('an earlier read failing does not matter once a later one answers', async () => {
