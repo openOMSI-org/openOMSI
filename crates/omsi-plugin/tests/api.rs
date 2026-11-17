@@ -360,7 +360,10 @@ fn a_value_the_launcher_saved_stays_in_range_in_the_game() {
         local s = omsi.plugin.settings({
           { key = "n", type = "number", default = 0, min = 0, max = 10, step = 4 },
         })
-        omsi.message(tostring(s.n))
+        local n = s.n
+        function on_frame()
+          if n then omsi.message(tostring(n)); n = nil end
+        end
     "#,
     )
     .unwrap();
@@ -368,6 +371,7 @@ fn a_value_the_launcher_saved_stays_in_range_in_the_game() {
     std::fs::create_dir_all(d.join("step.data")).unwrap();
     std::fs::write(d.join("step.data/settings.json"), r#"{ "n": 10 }"#).unwrap();
     let mut p = Plugins::load(std::slice::from_ref(&d), &HostConfig::default());
+    assert_eq!(p.lua.len(), 1, "the plugin did not load");
     let mut g = Game::new();
     p.frame(&mut g);
     assert_eq!(g.messages, ["10.0"]);
