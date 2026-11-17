@@ -8,6 +8,14 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Third rail and curve squeal on trams and trains**: `[contact_shoe]`s read the `[third_rail]`
+  under them (`contactshoe_N_volt_rail` and the rest, which the NF6D's PZB takes its codes from),
+  and every car's bogies report the curve under them and when the wheels reach the flange
+  (`boogie_N_invradius`, `boogie_N_wheel_at_limit`), which is what starts the curve squeal. A
+  rail's curve is the map's own, not worked out of the path's samples.
+- **`GetHeightAbovePoint` as in Omsi.exe**: the ray starts 3 m over the point, meets a wire or a
+  wall top on a narrow height profile, and reads 1000 with nothing below it (it read 0, which held
+  the Zweiachser tram's pantograph at the top of its travel).
 - **Drive a tram from either cab**: in a train with a cab at each end (the NF6D) walk
   to the other cab and take its wheel (G), or switch driving ends from the outside view with the
   interior-camera keys. That cab's own scripts then take the keys, the switches and the indicator,

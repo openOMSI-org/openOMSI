@@ -113,6 +113,9 @@ pub struct TrailerPart {
     /// The track under its turning axle, when it runs on rails (`VehicleInstance::retrail`):
     /// it stands at the track's height, not on whatever the ground probe finds there.
     pub(super) track: Option<DVec3>,
+    /// How far behind the leading vehicle's origin its bogies 0 and 1 stand on the track (m,
+    /// `VehicleInstance::retrail`).
+    pub(super) rail_bogies: Option<[f64; 2]>,
     /// Mesh property sources, resolved against the leading vehicle's variables.
     pub(super) props_plan: PropsPlan,
     /// The meshes' transforms in the modelled pose, for `[smoothskin]` (made when needed).
@@ -396,6 +399,7 @@ impl TrailerPart {
             bank: 0.0,
             axle_z: None,
             axle_vz: 0.0,
+            rail_bogies: None,
             track: None,
             v_alpha: program.var(&format!("articulation_{joint}_alpha")),
             v_beta: program.var(&format!("articulation_{joint}_beta")),

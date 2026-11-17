@@ -74,6 +74,51 @@ fn switched_on(rear: bool) -> VehicleInstance {
     v
 }
 
+/// A bogie frame in a bend squeals by its own `boogie_N_*`, while the one behind it still
+/// runs straight; the cab reads the code of the third rail under it.
+#[test]
+#[ignore = "needs an OMSI 2 install with the NF6D add-on (OMSI_ROOT)"]
+fn each_bogie_feels_its_own_track() {
+    let mut v = nf6d();
+    frames(&mut v, 10);
+    let rails = [[0.0, 0.535, 3.0, 9001.0, 0.0, 0.051]];
+    let bend = BogieGround::new(1.0 / 25.0, &[], true);
+    let straight = BogieGround::new(0.0, &[], true);
+    v.feel_track(&[BogieGround::new(0.0, &rails, true), straight]);
+    let frame = |name: &str| {
+        v.trailers
+            .iter()
+            .position(|t| t.ty.def.path.to_string_lossy().contains(name))
+            .unwrap()
+    };
+    let (front, rear) = (frame("DrehgestellV"), frame("DrehgestellH"));
+    assert!(
+        v.trailers[front].run.is_some(),
+        "the frame has scripts of its own"
+    );
+    v.trailers[front].feel_track(&[bend, bend]);
+    v.trailers[rear].feel_track(&[straight, straight]);
+    frames(&mut v, 100);
+    assert_eq!(
+        v.var("contactshoe_0_volt_rail"),
+        Some(9001.0),
+        "the rail's code in the head cab"
+    );
+    assert!(
+        v.trailers[front]
+            .run_var("rad_am_limit_traege")
+            .unwrap_or(0.0)
+            > 0.5,
+        "the frame in the bend: {:?}",
+        v.trailers[front].run_var("rad_am_limit_traege")
+    );
+    assert_eq!(
+        v.trailers[rear].run_var("rad_am_limit_traege"),
+        Some(0.0),
+        "the frame on the straight"
+    );
+}
+
 /// A destination picked from openOMSI's list (as `game_lists` does it) reaches both cabs'
 /// matrices: the head cab's own (its rear cab used to zero the cable it reads in its
 /// {init}) and the rear cab's, line number included.

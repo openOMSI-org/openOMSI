@@ -73,7 +73,10 @@ pub struct RailEnh {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ThirdRail {
+    /// x across the path, z, a type, voltage, frequency, resistance.
     pub values: [f32; 6],
+    /// The `[path]` it belongs to: the one before it in the file (Omsi.exe 0x7b7c72).
+    pub path: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -201,9 +204,12 @@ impl Spline {
                 "rail_enh" => s.rail_enh.push(RailEnh {
                     values: r.f32s::<8>(),
                 }),
-                "third_rail" => s.third_rail.push(ThirdRail {
-                    values: r.f32s::<6>(),
-                }),
+                "third_rail" => {
+                    let values = r.f32s::<6>();
+                    if let Some(path) = s.paths.len().checked_sub(1) {
+                        s.third_rail.push(ThirdRail { values, path });
+                    }
+                }
                 "halfcantwidth" => s.half_cant_width = Some(r.f32()),
                 "onlyeditor" => s.only_editor = true,
                 // (a point goes to the last profile begun, Omsi.exe 0x5ad923: none begun, it
