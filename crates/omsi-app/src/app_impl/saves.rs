@@ -64,15 +64,21 @@ impl App {
     /// The quicksave, where there is one: the newer of the content folder's and the fallback
     /// folder's (see `save_or_fallback`).
     pub(crate) fn quicksave_file(&self) -> Option<PathBuf> {
-        let dir = crate::startup::content_dir().unwrap_or_else(|| self.args.root.clone()).join("Situations");
-        let mut file = dir.join("quicksave.osn");
-        if let Some(f) = crate::startup::save_fallback_dir().map(|f| f.join("Situations").join("quicksave.osn")) {
-            let age = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-            if f.exists() && (!file.exists() || age(&f) > age(&file)) {
-                file = f;
-            }
+        let file = crate::startup::content_dir().unwrap_or_else(|| self.args.root.clone()).join("Situations").join("quicksave.osn");
+        newer_quicksave(file, crate::startup::save_fallback_dir().map(|f| f.join("Situations").join("quicksave.osn")))
+    }
+
+    /// "Load a situation..." (#3975): the list of saves; with the plugin command on,
+    /// `omsi.command('load')` loads `quicksave` straight away, as it did before the list.
+    pub(crate) fn choose_load(&mut self, quicksave: Option<PathBuf>) {
+        if !self.integrations.plugin_command {
+            return self.open_list(crate::game_lists::ListKind::LoadSaves);
         }
-        file.exists().then_some(file)
+        self.close_game_menu();
+        match quicksave {
+            Some(file) => self.menus.load_request = Some(file),
+            None => self.service_msg = Some(("No quicksave yet (Ctrl+S saves one)".into(), 4.0)),
+        }
     }
 
     /// Start the game again on the situation `file` (a fresh process, as OMSI loads a
@@ -274,24 +280,9 @@ impl App {
         // (the slots of the fallback folder count too: a number is never given twice)
         let rel_dir = std::path::Path::new(&self.args.map.replace('\\', "/")).parent().map(|d| d.join(SAVES)).unwrap_or_default();
         let fallback = crate::startup::save_fallback_dir().map(|f| f.join(&rel_dir));
-        let taken = |n: usize| dir.join(format!("Slot {n}.osn")).exists() || fallback.as_ref().is_some_and(|f| f.join(format!("Slot {n}.osn")).exists());
-        // (a slot saved over keeps its number: "Slot 3" stays the third; only one of this
-        // map's own slots is ever written over)
+        // (only one of this map's own slots is ever written over)
         let over = over.and_then(|f| self.save_slots().into_iter().find(|s| s.file == f));
-        let typed = typed.map(|t| t.trim().chars().filter(|c| !c.is_control()).take(NAME_MAX).collect::<String>()).filter(|t| !t.is_empty());
-        let named = typed.or_else(|| over.as_ref().filter(|s| s.chosen).map(|s| s.name.clone()));
-        let over = over.map(|s| s.file);
-        let number_of = |f: &std::path::Path| f.file_stem().and_then(|s| s.to_string_lossy().strip_prefix("Slot ").and_then(|n| n.trim().parse::<usize>().ok()));
-        let (n, out) = match over {
-            Some(f) => match number_of(&f) {
-                Some(n) => (n.to_string(), f),
-                None => (f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(), f),
-            },
-            None => {
-                let Some(n) = (1..10_000).find(|n| !taken(*n)) else { return };
-                (n.to_string(), dir.join(format!("Slot {n}.osn")))
-            }
-        };
+        let Some((n, out, named)) = slot_target(&dir, fallback.as_deref(), over, typed) else { return };
         let bus = self.player.as_ref().map(|p| {
             let d = &p.vehicle.ty.def;
             if d.type_name.trim().is_empty() { d.path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default() } else { d.type_name.trim().to_string() }
@@ -333,6 +324,39 @@ pub(crate) const SAVES: &str = "Saves";
 /// The longest name a save is given in the game's menu.
 pub(crate) const NAME_MAX: usize = 60;
 
+/// The newer of the content folder's quicksave `main` and the fallback folder's, where
+/// there is one.
+pub(crate) fn newer_quicksave(main: PathBuf, fallback: Option<PathBuf>) -> Option<PathBuf> {
+    let age = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    let file = match fallback {
+        Some(f) if f.exists() && (!main.exists() || age(&f) > age(&main)) => f,
+        _ => main,
+    };
+    file.exists().then_some(file)
+}
+
+/// Where a slot save goes: the slot's number (or name), its file and the name chosen for it.
+/// `over` is saved over in place and keeps its number ("Slot 3" stays the third) and a name
+/// chosen for it, unless one is `typed`; else the first number free in `dir` and `fallback`
+/// (a number is never given twice).
+pub(crate) fn slot_target(dir: &Path, fallback: Option<&Path>, over: Option<omsi_launcher_lib::SavedSituation>, typed: Option<String>) -> Option<(String, PathBuf, Option<String>)> {
+    let typed = typed.map(|t| t.trim().chars().filter(|c| !c.is_control()).take(NAME_MAX).collect::<String>()).filter(|t| !t.is_empty());
+    let named = typed.or_else(|| over.as_ref().filter(|s| s.chosen).map(|s| s.name.clone()));
+    let number_of = |f: &Path| f.file_stem().and_then(|s| s.to_string_lossy().strip_prefix("Slot ").and_then(|n| n.trim().parse::<usize>().ok()));
+    let taken = |n: usize| dir.join(format!("Slot {n}.osn")).exists() || fallback.is_some_and(|f| f.join(format!("Slot {n}.osn")).exists());
+    let (n, out) = match over.map(|s| s.file) {
+        Some(f) => match number_of(&f) {
+            Some(n) => (n.to_string(), f),
+            None => (f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(), f),
+        },
+        None => {
+            let n = (1..10_000).find(|n| !taken(*n))?;
+            (n.to_string(), dir.join(format!("Slot {n}.osn")))
+        }
+    };
+    Some((n, out, named))
+}
+
 /// Save `sit` to `out`; where that folder takes no file, to `rel` under the fallback folder
 /// (`startup::save_fallback_dir`) instead (#1673). The file written.
 fn save_or_fallback(sit: &omsi_content::situation::Situation, out: &Path, rel: &Path) -> std::io::Result<PathBuf> {
@@ -353,3 +377,7 @@ fn save_or_fallback(sit: &omsi_content::situation::Situation, out: &Path, rel: &
 /// Held while the last situation is written: an autosave on its thread and a save on the
 /// frame's thread never write the same files at once.
 static SAVING: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+
+#[cfg(test)]
+#[path = "saves_tests.rs"]
+mod tests;

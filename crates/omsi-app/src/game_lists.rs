@@ -648,17 +648,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 out.push((format!("{} {}", tr("Save over:"), slot.name), format!("over {}", slot.file.to_string_lossy())));
             }
         }
-        ListKind::LoadSaves => {
-            if let Some(q) = app.quicksave_file() {
-                out.push((tr("Quicksave"), format!("load {}", q.to_string_lossy())));
-            }
-            for slot in app.save_slots() {
-                out.push((slot.name.clone(), format!("load {}", slot.file.to_string_lossy())));
-            }
-            if out.is_empty() {
-                out.push((tr("No saved situation of this map yet"), "back".into()));
-            }
-        }
+        ListKind::LoadSaves => out = load_rows(app.quicksave_file(), app.save_slots()),
         ListKind::Hofs => {
             if let Some(p) = app.player.as_ref() {
                 let now = p.vehicle.host.hof.as_ref().map(|h| h.path.clone());
@@ -948,6 +938,12 @@ pub(crate) fn menu_extras(
 /// Do a line of the list; returns the list to show next (None: back to the menu).
 pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKind> {
     run_move(app, kind, action, Move::Next)
+}
+
+/// The lines of "Load a situation..." (#3975): the quicksave, then the map's saves by name.
+pub(crate) fn load_rows(quicksave: Option<std::path::PathBuf>, slots: Vec<omsi_launcher_lib::SavedSituation>) -> Vec<(String, String)> {
+    let out: Vec<(String, String)> = quicksave.map(|q| (omsi_ui::tr("Quicksave").into_owned(), q)).into_iter().chain(slots.into_iter().map(|s| (s.name, s.file))).map(|(name, f)| (name, format!("load {}", f.to_string_lossy()))).collect();
+    if out.is_empty() { vec![(omsi_ui::tr("No saved situation of this map yet").into_owned(), "back".into())] } else { out }
 }
 
 /// A line of "Save to a slot..." or "Load a situation..." (#2556, #3975).

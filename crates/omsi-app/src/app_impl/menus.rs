@@ -262,14 +262,10 @@ impl App {
         }
         let Some(id) = self.game_menu_items().get(k).map(|m| m.0) else { return };
         match id {
-            "load" if self.integrations.plugin_command => {
-                self.close_game_menu();
-                match self.quicksave_file() {
-                    Some(file) => self.menus.load_request = Some(file),
-                    None => self.service_msg = Some(("No quicksave yet (Ctrl+S saves one)".into(), 4.0)),
-                }
+            "load" => {
+                let quicksave = self.integrations.plugin_command.then(|| self.quicksave_file()).flatten();
+                self.choose_load(quicksave);
             }
-            "load" => self.open_list(crate::game_lists::ListKind::LoadSaves),
             "quit" => {
                 self.menus.game_menu = None;
                 self.finish_session();
