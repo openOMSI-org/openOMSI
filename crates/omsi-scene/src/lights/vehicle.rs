@@ -51,8 +51,7 @@ pub fn vehicle_lights(
             None => v.body_rotation(),
         }
     };
-    let first_corona = coronas.len();
-    crate::model_lights_extend(
+    crate::vehicle_model_lights_extend(
         &ty.model,
         &mesh_xf,
         v.position,
@@ -75,7 +74,7 @@ pub fn vehicle_lights(
         };
         let car_value =
             |name: &str| -> f32 { t.run_var(name.trim()).unwrap_or_else(|| value_of(name)) };
-        crate::model_lights_extend(
+        crate::vehicle_model_lights_extend(
             &t.ty.model,
             &part_mesh_xf,
             t.position,
@@ -83,9 +82,6 @@ pub fn vehicle_lights(
             &t.light_fade,
             coronas,
         );
-    }
-    for corona in &mut coronas[first_corona..] {
-        corona.vehicle_lamp = true;
     }
     let body = v.body_rotation();
     // headlights: the spotlight selected by Spot_Select

@@ -58,9 +58,13 @@ const VEHICLE_LAMP: u32 = 16u;
 
 // How many times its sprite a lamp's quad is drawn: `GLARE_K` with *Glow of lights* on (enh.led.z),
 // and in mist, fog and rain (which have a halo of their own, in the bitmap) only the sprite.
-fn glare_scale(vehicle: bool) -> f32 {
+fn glare_scale(compact: bool) -> f32 {
     let wet = clamp(enh.fog.x * 400.0 + enh.weather.z * 0.7, 0.0, 1.0);
-    return select(1.0, GLARE_K, !vehicle && enh.led.z > 0.5 && wet < 1.0);
+    return select(1.0, GLARE_K, !compact && enh.led.z > 0.5 && wet < 1.0);
+}
+
+fn compact_vehicle_lamp(flags: u32) -> bool {
+    return (flags & VEHICLE_LAMP) != 0u && enh.led.z > 0.5;
 }
 
 @vertex
@@ -70,15 +74,15 @@ fn vs_main(in: CoronaIn) -> CoronaOut {
 
 @vertex
 fn vs_enhanced(in: CoronaIn) -> CoronaOut {
-    let vehicle = (u32(in.extra.z + 0.5) & VEHICLE_LAMP) != 0u;
-    if (vehicle && in.extra.w > 1.5 && in.extra.w < 2.5) {
+    let compact = compact_vehicle_lamp(u32(in.extra.z + 0.5));
+    if (compact && in.extra.w > 1.5 && in.extra.w < 2.5) {
         // Drop the round fog billboard. Keep directional cones, including on targets
         // where the volumetric spotlight pass is unavailable.
         var hidden: CoronaOut;
         hidden.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
         return hidden;
     }
-    return corona_vertex(in, glare_scale(vehicle));
+    return corona_vertex(in, glare_scale(compact));
 }
 
 fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
@@ -372,8 +376,8 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
     // (a lamp's quad is `GLARE_K` times its sprite: the sprite's own coordinates are these
     // stretched out from the middle, and the rest of the quad holds the glare)
     let lamp = in.kind < 0.5 && in.beam < 0.5;
-    let vehicle = in.vehicle_lamp != 0u;
-    let glare = glare_scale(vehicle);
+    let compact = compact_vehicle_lamp(in.vehicle_lamp);
+    let glare = glare_scale(compact);
     var qin = in;
     if (lamp) {
         qin.uv = (in.uv - vec2<f32>(0.5)) * glare + vec2<f32>(0.5);
@@ -403,7 +407,7 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         // light, as the sprite's distance floor keeps it on the screen)
         let lit = textureSampleLevel(t_corona, s_corona, vec2<f32>(0.5, 0.5), 0.0).rgb;
         let w = max(0.1, px * 1.5);
-        if (vehicle) {
+        if (compact) {
             // Keep the vehicle's visible lamp face inside its compact core.
             shape = exp(-r * r / (w * w)) * max(lit, shape);
         } else {
@@ -417,7 +421,7 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         shape = shape + vec3<f32>(tail) * max(lit, vec3<f32>(0.25));
     }
     var light = in.color.rgb * shape * in.color.a * scale;
-    if (lamp && vehicle) {
+    if (lamp && compact) {
         let peak = max(light.r, max(light.g, light.b));
         light *= 0.45 / max(peak, 0.45);
     }

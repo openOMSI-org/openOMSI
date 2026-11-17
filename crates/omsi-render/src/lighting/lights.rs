@@ -245,7 +245,7 @@ pub struct Corona {
     /// towards the viewer, seen from in front of the light; the angles and the visibility
     /// travel as for a cone.
     pub halo: bool,
-    /// Authored vehicle lamp sprite, including its legacy fog effect sprites.
+    /// Exterior vehicle lamp sprite eligible for compact glow.
     pub vehicle_lamp: bool,
 }
 
