@@ -388,6 +388,83 @@ fn crossings_of_a_pavement_path_are_found() {
 /// exits and a seat) become one network through the joint, numbered front first, and a
 /// walk through the bent joint moves on without a jump.
 #[test]
+fn a_car_coupled_turned_round_takes_passengers_at_its_own_doors() {
+    // two of one tram coupled back to back: the second car hangs on reversed
+    let dir = std::env::temp_dir().join(format!("omsi-humans-turned-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let write = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
+    // a door at the front right, an aisle, a seat behind
+    write(
+        "paths.cfg",
+        "[pathpnt]\n1.2\n3\n0.4\n[pathpnt]\n0\n3\n0.5\n[pathpnt]\n0\n-3\n0.5\n[pathlink]\n0\n1\n[pathlink]\n1\n2\n",
+    );
+    write(
+        "cabin.cfg",
+        "[entry]\n0\n[exit]\n0\n[passpos]\n-0.5\n-2\n1.0\n0.45\n0\n",
+    );
+    let car = omsi_vehicle::Vehicle {
+        path: dir.join("tram.bus"),
+        passenger_cabin: Some("cabin.cfg".into()),
+        paths: Some("paths.cfg".into()),
+        bounding_box: Some([2.4, 14.0, 3.0, 0.0, 0.0, 1.5]),
+        ..Default::default()
+    };
+    // both cars' back couplings at y -7.5 meet: the turned car's origin 15 m behind
+    let back = Vec3::new(0.0, -7.5, 0.3);
+    let origin = back - crate::people::cabin::turn_point(back, true);
+    assert!((origin - Vec3::new(0.0, -15.0, 0.0)).length() < 1e-5);
+    let cabin = Cabin::load_train(&[
+        (&car, Vec3::ZERO, f32::INFINITY, false),
+        (&car, origin, back.y, true),
+    ])
+    .expect("cabin");
+    std::fs::remove_dir_all(&dir).ok();
+    assert_eq!(cabin.parts.len(), 2);
+    assert!(cabin.parts[1].turned);
+    assert_eq!(
+        (cabin.entries.len(), cabin.exits.len(), cabin.seats.len()),
+        (2, 2, 2)
+    );
+    // the second car's door is at its own front, the far end of the train, on the
+    // train's left
+    let door = &cabin.entries[1];
+    assert!(
+        (door.inside - Vec3::new(-1.2, -18.0, 0.4)).length() < 1e-4,
+        "{:?}",
+        door.inside
+    );
+    assert_eq!(door.side, -1.0);
+    assert_eq!(door.part, (1, 0));
+    // it opens by the second car's own PAX_Entry0_Open, and people ride in that car (no
+    // way through the two cabs between them)
+    assert_eq!(cabin.groups, 2);
+    assert_eq!(door.group, 1);
+    let seat = &cabin.seats[1];
+    assert!(
+        (seat.pos - Vec3::new(0.5, -13.0, 1.0)).length() < 1e-4,
+        "{:?}",
+        seat.pos
+    );
+    assert!((seat.rot - 180.0).abs() < 1e-4);
+    // a point of the cabin there lands where the car's own model puts it: the car turned
+    // round in the world, its frame turned back for the cabin
+    let rot = Mat4::from_rotation_z(std::f32::consts::PI); // (its body_rotation, straight on)
+    let pos = DVec3::new(0.0, -15.0, 0.0);
+    let frame = PartFrame {
+        pos,
+        rot: rot * Mat4::from_rotation_z(std::f32::consts::PI),
+        heading: 0.0,
+        offset: cabin.parts[1].offset,
+        joint_y: cabin.parts[1].joint_y,
+        half: DVec2::new(1.2, 7.0),
+        centre: DVec2::ZERO,
+    };
+    let world = train_point(DVec3::ZERO, &Mat4::IDENTITY, &[frame], door.inside);
+    let model = pos + rot.transform_point3(Vec3::new(1.2, 3.0, 0.4)).as_dvec3();
+    assert!((world - model).length() < 1e-4, "{world:?} {model:?}");
+}
+
+#[test]
 fn articulated_cabins_are_joined_through_the_bellows() {
     let dir = std::env::temp_dir().join(format!("omsi-humans-test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -424,8 +501,11 @@ fn articulated_cabins_are_joined_through_the_bellows() {
     // couplings: the front's at y -4.3, the rear's own at y 4.0
     let (back, own) = (Vec3::new(0.0, -4.3, 0.3), Vec3::new(0.0, 4.0, 0.3));
     let offset = back - own;
-    let cabin = Cabin::load_train(&[(&front, Vec3::ZERO, f32::INFINITY), (&rear, offset, back.y)])
-        .expect("cabin");
+    let cabin = Cabin::load_train(&[
+        (&front, Vec3::ZERO, f32::INFINITY, false),
+        (&rear, offset, back.y, false),
+    ])
+    .expect("cabin");
     std::fs::remove_dir_all(&dir).ok();
     assert_eq!(cabin.parts.len(), 2);
     assert_eq!(cabin.graph.points.len(), 9);
@@ -552,7 +632,7 @@ fn footsteps_come_from_the_links_step_sound_pack() {
         return;
     }
     let def = omsi_vehicle::Vehicle::load(&bus).expect("SD200");
-    let cabin = Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin");
+    let cabin = Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).expect("cabin");
     // the link nearest the point, and its pack
     let first = |p: Vec3| {
         let pts = &cabin.graph.points;
@@ -597,7 +677,7 @@ fn double_decker_exits_are_reached_down_the_stairs() {
         return;
     }
     let def = omsi_vehicle::Vehicle::load(&bus).expect("SD202");
-    let cabin = Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin");
+    let cabin = Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).expect("cabin");
     assert_eq!(cabin.exits.len(), 2);
     let exit = &cabin.exits[1];
     assert!(
@@ -817,8 +897,11 @@ fn a_trailer_nobody_walks_into_is_boarded_by_its_own_doors() {
     let offset = Vec3::new(0.0, -10.0, 0.0);
     let cabin_of = |cabin: &str, kind: Option<f32>| {
         let trail = def(cabin, "paths_trail.cfg", kind);
-        Cabin::load_train(&[(&bus, Vec3::ZERO, f32::INFINITY), (&trail, offset, -5.0)])
-            .expect("cabin")
+        Cabin::load_train(&[
+            (&bus, Vec3::ZERO, f32::INFINITY, false),
+            (&trail, offset, -5.0, false),
+        ])
+        .expect("cabin")
     };
     let hitched = cabin_of("cabin_trail.cfg", Some(0.0));
     let jointed = cabin_of("cabin_trail.cfg", Some(1.0));
@@ -960,7 +1043,7 @@ fn passengers_stamp_at_the_validator_nearest_their_door() {
     )
     .unwrap();
     let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
-    let cabin = Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin");
+    let cabin = Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).expect("cabin");
     std::fs::remove_dir_all(&dir).ok();
     assert_eq!(cabin.stampers.len(), 2);
     assert_eq!(cabin.stampers[1], (Some(2), Vec3::new(0.5, -3.0, 1.5)));
@@ -1082,7 +1165,7 @@ fn places_follow_their_own_variables() {
     .unwrap();
     let ty = std::sync::Arc::new(crate::VehicleType::load(&dir, &dir.join("test.bus")).unwrap());
     let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
-    let cabin = Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin");
+    let cabin = Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).expect("cabin");
     std::fs::remove_dir_all(&dir).ok();
     let mut v = VehicleInstance::new(ty, crate::VehicleHost::new(Default::default()));
     v.set_var("layout_long", 0.0);
@@ -1284,7 +1367,8 @@ fn riders_get_off_at_a_timetable_stop_the_nearby_stops_do_not_have() {
     )
     .unwrap();
     let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
-    let cabin = Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin"));
+    let cabin =
+        Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).expect("cabin"));
     std::fs::remove_dir_all(&dir).ok();
     let bus = |served| BusNow {
         id: BusId::Ai(5),
@@ -1337,7 +1421,7 @@ fn a_doorway_is_busy_while_somebody_stands_in_it() {
     )
     .unwrap();
     let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
-    let cabin = Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin");
+    let cabin = Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).expect("cabin");
     let door = &cabin.entries[0];
     assert!(
         door.in_doorway(Vec3::new(1.1, 4.0, 0.4)),
@@ -1532,8 +1616,9 @@ fn walking_can_find_a_biarticulated_bus_at_its_last_section() {
     std::fs::write(dir.join("paths.cfg"), "[pathpnt]\n0\n0\n0.5\n").unwrap();
     std::fs::write(dir.join("cabin.cfg"), "[entry]\n0\n").unwrap();
     let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
-    let cabin =
-        std::sync::Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).unwrap());
+    let cabin = std::sync::Arc::new(
+        Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).unwrap(),
+    );
     std::fs::remove_dir_all(&dir).ok();
     let part = |pos, offset, joint_y| PartFrame {
         pos,
@@ -1603,7 +1688,8 @@ fn riders_are_drawn_on_the_bus_where_it_is_drawn() {
     .unwrap();
     std::fs::write(dir.join("cabin.cfg"), "[entry]\n0\n\n[exit]\n1\n").unwrap();
     let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
-    let cabin = Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin"));
+    let cabin =
+        Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).expect("cabin"));
     std::fs::remove_dir_all(&dir).ok();
     let pose = |pos: DVec3, heading: f64| {
         (
@@ -1760,7 +1846,7 @@ fn a_shut_button_door_draws_nobody_while_another_door_is_open() {
         bounding_box: Some([2.5, 9.0, 3.0, 0.0, 0.0, 1.5]),
         ..Default::default()
     };
-    let cabin = Cabin::load_train(&[(&bus, Vec3::ZERO, f32::INFINITY)]).expect("cabin");
+    let cabin = Cabin::load_train(&[(&bus, Vec3::ZERO, f32::INFINITY, false)]).expect("cabin");
     std::fs::remove_dir_all(&dir).ok();
     let entries = cabin.entry_points();
     assert_eq!(entries, [Some(0), Some(2)]);

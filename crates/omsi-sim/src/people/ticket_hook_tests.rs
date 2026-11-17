@@ -240,7 +240,8 @@ pub(super) fn player_bus(tag: &str) -> BusNow {
     std::fs::write(dir.join("paths.cfg"), "[pathpnt]\n1.1\n4\n0.4\n\n[pathpnt]\n0\n4\n0.5\n\n[pathpnt]\n0\n-3\n0.5\n\n[pathpnt]\n1.1\n-3\n0.4\n\n[pathlink]\n0\n1\n\n[pathlink]\n1\n2\n\n[pathlink]\n2\n3\n").unwrap();
     std::fs::write(dir.join("cabin.cfg"), "[entry]\n0\n\n[exit]\n3\n\n[ticket_sale]\n1\n0\n4\n1\n\n[passpos]\n-0.5\n0\n0.9\n0.45\n0\n").unwrap();
     let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
-    let cabin = Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin"));
+    let cabin =
+        Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).expect("cabin"));
     std::fs::remove_dir_all(&dir).ok();
     assert!(cabin.sale.is_some(), "the cabin has its cash desk");
     BusNow {

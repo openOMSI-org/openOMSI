@@ -54,6 +54,34 @@ impl PeopleSim {
         }
     }
 
+    /// [`Self::write_door_requests`], and for the doors of `cabin` in a section that runs its
+    /// own scripts (see [`Self::doors_open_cabin`]) into that car's own `PAX_Entry<n>_Req` /
+    /// `_Busy`, by its own count of its doors.
+    pub fn write_door_requests_cabin(v: &mut VehicleInstance, doors: &DoorWants, cabin: &Cabin) {
+        Self::write_door_requests(v, doors);
+        for (kind, list, flags, what) in [
+            ("Entry", &cabin.entries, &doors.entry_req, "Req"),
+            ("Exit", &cabin.exits, &doors.exit_req, "Req"),
+            ("Entry", &cabin.entries, &doors.entry_busy, "Busy"),
+            ("Exit", &cabin.exits, &doors.exit_busy, "Busy"),
+        ] {
+            for (door, on) in list.iter().zip(flags) {
+                let (part, n) = door.part;
+                let Some(run) = part
+                    .checked_sub(1)
+                    .and_then(|k| v.trailers.get_mut(k))
+                    .and_then(|t| t.run.as_deref_mut())
+                else {
+                    continue;
+                };
+                run.set_own(
+                    &format!("PAX_{kind}{n}_{what}"),
+                    if *on { 1.0 } else { 0.0 },
+                );
+            }
+        }
+    }
+
     /// Whether the bus says when its doors are open: any `PAX_Entry<i>_Open` /
     /// `PAX_Exit<i>_Open` its script reports, or any `door_<i>` / `door<i>` animation of an
     /// entry or exit, including buses whose front door is not an entry. Only an AI bus that
@@ -104,6 +132,32 @@ impl PeopleSim {
             let k = exit_door_base + i;
             door_val(if k > 7 && !has_door(k) { 7 } else { k })
         });
+        (entry, exit)
+    }
+
+    /// [`Self::doors_open`] for the doors of `cabin`: one in a section that runs its own
+    /// scripts (a train car, the NF6D's middle part) is open by that car's own
+    /// `PAX_Entry<n>_Open` / `PAX_Exit<n>_Open` (else its `door_<n>`), counted among its own
+    /// doors.
+    pub fn doors_open_cabin(v: &VehicleInstance, cabin: &Cabin) -> (Vec<bool>, Vec<bool>) {
+        let (mut entry, mut exit) = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
+        let own = |door: &Door, kind: &str| -> Option<bool> {
+            let (part, n) = door.part;
+            let run = v.trailers.get(part.checked_sub(1)?)?.run.as_deref()?;
+            run.own(&format!("PAX_{kind}{n}_Open"))
+                .or_else(|| run.own(&format!("door_{n}")))
+                .map(|x| x > 0.5)
+        };
+        for (open, door) in entry.iter_mut().zip(&cabin.entries) {
+            if let Some(o) = own(door, "Entry") {
+                *open = o;
+            }
+        }
+        for (open, door) in exit.iter_mut().zip(&cabin.exits) {
+            if let Some(o) = own(door, "Exit") {
+                *open = o;
+            }
+        }
         (entry, exit)
     }
 
@@ -374,8 +428,7 @@ impl PeopleSim {
                 );
                 if open {
                     if Self::reports_doors(&c.vehicle, cabin.entries.len(), cabin.exits.len()) {
-                        let (e, x) =
-                            Self::doors_open(&c.vehicle, cabin.entries.len(), cabin.exits.len());
+                        let (e, x) = Self::doors_open_cabin(&c.vehicle, &cabin);
                         entry_open = e;
                         exit_open = x;
                     } else if since > 2.5 {
@@ -386,8 +439,7 @@ impl PeopleSim {
                             .for_each(|o| *o = true);
                     }
                 }
-                let walk_open = (!c.is_bus())
-                    .then(|| Self::doors_open(&c.vehicle, cabin.entries.len(), cabin.exits.len()));
+                let walk_open = (!c.is_bus()).then(|| Self::doors_open_cabin(&c.vehicle, &cabin));
                 self.seats
                     .entry(BusId::Ai(c.id))
                     .or_insert_with(|| vec![false; cabin.seats.len()]);
@@ -489,7 +541,7 @@ impl PeopleSim {
                 .bounding_box
                 .unwrap_or([2.5, 11.0, 3.0, 0.0, 0.0, 1.5]);
         let trailers = part_frames(v, &cabin);
-        let walk_open = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
+        let walk_open = Self::doors_open_cabin(v, &cabin);
         Some(BusNow {
             terminus: None,
             takes: Takes::Nobody,
@@ -612,7 +664,7 @@ impl PeopleSim {
             let trailers = part_frames(v, &cabin);
             // (their doors as their game has them: a walker gets in only where one is open;
             // the passengers here never board it - that bus's own game boards them)
-            let walk_open = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
+            let walk_open = Self::doors_open_cabin(v, &cabin);
             out.push(BusNow {
                 terminus: None,
                 takes: Takes::Nobody,

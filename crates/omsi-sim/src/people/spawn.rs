@@ -407,6 +407,13 @@ impl PeopleSim {
         }
     }
 
+    /// [`Self::cabin_for`] where it was made already (None also where it is not yet).
+    pub fn cabin_made(&self, v: &VehicleInstance) -> Option<Arc<Cabin>> {
+        let parts = train_parts(v);
+        let paths: Vec<&Path> = parts.iter().map(|p| p.0.path.as_path()).collect();
+        self.cabins.get(&CabinKey(&paths)).cloned().flatten()
+    }
+
     /// The cabin of a vehicle with the parts coupled behind it.
     pub fn cabin_for(&mut self, v: &VehicleInstance) -> Option<Arc<Cabin>> {
         let parts = train_parts(v);
