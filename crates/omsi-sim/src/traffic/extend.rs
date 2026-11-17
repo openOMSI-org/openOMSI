@@ -27,7 +27,10 @@ impl Network {
             if let Some(k) = self.lanes[i].key {
                 self.by_key.entry(k).or_default().push(i);
             }
-            self.start_grid.entry(Self::grid_cell(self.lanes[i].start())).or_default().push(i);
+            self.start_grid
+                .entry(Self::grid_cell(self.lanes[i].start()))
+                .or_default()
+                .push(i);
             for c in Self::lane_cells(&self.lanes[i]) {
                 self.grid.entry(c).or_default().push(i);
             }
@@ -37,7 +40,10 @@ impl Network {
         for i in first..end {
             let l = &self.lanes[i];
             if let (Some(k), 1, LaneKind::Street) = (l.key, l.source, l.kind) {
-                by_spline.entry((k.tile, k.id, l.reversed)).or_default().push(i);
+                by_spline
+                    .entry((k.tile, k.id, l.reversed))
+                    .or_default()
+                    .push(i);
             }
         }
         for (_, mut list) in by_spline {
@@ -56,18 +62,13 @@ impl Network {
                 }
             }
         }
-        // links: ends of new lanes to any start, ends of old lanes to new starts
-        let joins = |net: &Network, from: usize, to: usize| -> bool {
-            let (a, b) = (&net.lanes[from], &net.lanes[to]);
-            if from == to || a.kind != b.kind {
-                return false;
-            }
-            let (e, s) = (a.end(), b.start());
-            let dh = ((b.start_heading() - a.end_heading() + 540.0) % 360.0 - 180.0).abs();
-            (s - e).truncate().length() <= tol && dh < 40.0 && (s.z - e.z).abs() < 3.0
-        };
+        // Find possible predecessors as well as successors so a streamed signal
+        // lane can replace a direct link that was made before it was loaded.
         let near = |net: &Network, p: DVec3| -> Vec<usize> {
-            let c = ((p.x / GRID_CELL).floor() as i32, (p.y / GRID_CELL).floor() as i32);
+            let c = (
+                (p.x / GRID_CELL).floor() as i32,
+                (p.y / GRID_CELL).floor() as i32,
+            );
             let mut out: Vec<usize> = Vec::new();
             for dx in -1..=1 {
                 for dy in -1..=1 {
@@ -80,26 +81,29 @@ impl Network {
             out.dedup();
             out
         };
-        let mut added: Vec<(usize, usize)> = Vec::new();
-        for i in first..end {
-            let e = self.lanes[i].end();
-            let found: Vec<usize> = near(self, e).into_iter().filter(|&j| joins(self, i, j)).collect();
-            for &j in &found {
-                added.push((i, j));
-            }
-            self.lanes[i].next = found;
-            let s = self.lanes[i].start();
-            for j in near(self, s) {
-                if j < first && joins(self, j, i) && !self.lanes[j].next.contains(&i) {
-                    self.lanes[j].next.push(i);
-                    added.push((j, i));
+        let mut sources: Vec<usize> = (first..end).collect();
+        for to in first..end {
+            for from in near(self, self.lanes[to].start()) {
+                if from < first && self.can_link(from, to, tol) {
+                    sources.push(from);
                 }
             }
         }
+        sources.sort_unstable();
+        sources.dedup();
+
         self.prev.resize(end, Vec::new());
-        for (from, to) in added {
-            if !self.prev[to].contains(&from) {
-                self.prev[to].push(from);
+        for from in sources {
+            let candidates = near(self, self.lanes[from].end());
+            let next = self.link_targets(from, candidates, tol);
+            let previous = std::mem::replace(&mut self.lanes[from].next, next.clone());
+            for to in previous.iter().copied().filter(|to| !next.contains(to)) {
+                self.prev[to].retain(|&source| source != from);
+            }
+            for to in next.iter().copied().filter(|to| !previous.contains(to)) {
+                if !self.prev[to].contains(&from) {
+                    self.prev[to].push(from);
+                }
             }
         }
         // meeting places and footpath crossings inside the new junction objects, and how far
@@ -134,16 +138,34 @@ impl Network {
         }
         self.reach.resize(self.lanes.len(), REACH_MAX);
         let counts = |i: usize, j: usize| !self.lanes[j].no_cars || self.lanes[i].no_cars;
-        let mut waiting: HashMap<usize, usize> = affected.iter().map(|&i| {
-            (i, self.lanes[i].next.iter().filter(|&&j| affected.contains(&j) && counts(i, j)).count())
-        }).collect();
-        let mut ready: Vec<usize> = waiting.iter().filter_map(|(&i, &n)| (n == 0).then_some(i)).collect();
+        let mut waiting: HashMap<usize, usize> = affected
+            .iter()
+            .map(|&i| {
+                (
+                    i,
+                    self.lanes[i]
+                        .next
+                        .iter()
+                        .filter(|&&j| affected.contains(&j) && counts(i, j))
+                        .count(),
+                )
+            })
+            .collect();
+        let mut ready: Vec<usize> = waiting
+            .iter()
+            .filter_map(|(&i, &n)| (n == 0).then_some(i))
+            .collect();
         for &i in &affected {
             self.reach[i] = REACH_MAX;
         }
         while let Some(i) = ready.pop() {
             let l = &self.lanes[i];
-            let best = l.next.iter().filter(|&&j| counts(i, j)).map(|&j| self.reach[j]).fold(0.0f32, f32::max);
+            let best = l
+                .next
+                .iter()
+                .filter(|&&j| counts(i, j))
+                .map(|&j| self.reach[j])
+                .fold(0.0f32, f32::max);
             self.reach[i] = (l.length() + best).min(REACH_MAX);
             for &p in &self.prev[i] {
                 if counts(p, i) {
@@ -167,7 +189,9 @@ impl Network {
         let mut seen: Vec<usize> = Vec::new();
         for dx in -1..=1 {
             for dy in -1..=1 {
-                let Some(list) = self.grid.get(&(cx + dx, cy + dy)) else { continue };
+                let Some(list) = self.grid.get(&(cx + dx, cy + dy)) else {
+                    continue;
+                };
                 for &i in list {
                     if seen.contains(&i) {
                         continue;
@@ -191,13 +215,22 @@ impl Network {
     /// The nearest lane of `kind` within `max_dist` of `p` that runs within `max_turn`
     /// degrees of `heading` there (a vehicle's own lane, not the one beside it going the
     /// other way): (lane, distance along it, distance to it).
-    pub fn lane_along(&self, p: DVec3, heading: f64, kind: LaneKind, max_dist: f64, max_turn: f64) -> Option<(usize, f32, f64)> {
+    pub fn lane_along(
+        &self,
+        p: DVec3,
+        heading: f64,
+        kind: LaneKind,
+        max_dist: f64,
+        max_turn: f64,
+    ) -> Option<(usize, f32, f64)> {
         let (cx, cy) = Self::grid_cell(p);
         let mut best: Option<(usize, f32, f64)> = None;
         let mut seen: Vec<usize> = Vec::new();
         for dx in -1..=1 {
             for dy in -1..=1 {
-                let Some(list) = self.grid.get(&(cx + dx, cy + dy)) else { continue };
+                let Some(list) = self.grid.get(&(cx + dx, cy + dy)) else {
+                    continue;
+                };
                 for &i in list {
                     if seen.contains(&i) {
                         continue;
@@ -207,7 +240,9 @@ impl Network {
                     if l.kind != kind {
                         continue;
                     }
-                    let Some((s, d)) = l.nearest_point(p) else { continue };
+                    let Some((s, d)) = l.nearest_point(p) else {
+                        continue;
+                    };
                     if d > max_dist || best.map(|b| d >= b.2).unwrap_or(false) {
                         continue;
                     }
@@ -223,7 +258,10 @@ impl Network {
 
     /// The grid cell `p` lies in.
     pub fn grid_cell(p: DVec3) -> (i32, i32) {
-        ((p.x / GRID_CELL).floor() as i32, (p.y / GRID_CELL).floor() as i32)
+        (
+            (p.x / GRID_CELL).floor() as i32,
+            (p.y / GRID_CELL).floor() as i32,
+        )
     }
 
     /// The grid cells a lane's points touch (see [`Network::build_grid`]).
@@ -232,17 +270,25 @@ impl Network {
         // (a set beside the list: GPM's TCSP8.sco has a path 968 km long, 19 613 cells searched one by one)
         let mut seen: hashbrown::HashSet<(i32, i32)> = hashbrown::HashSet::new();
         for w in l.points.windows(2) {
-            let n = ((w[1] - w[0]).truncate().length() / (GRID_CELL * 0.5)).ceil().max(1.0) as usize;
+            let n = ((w[1] - w[0]).truncate().length() / (GRID_CELL * 0.5))
+                .ceil()
+                .max(1.0) as usize;
             for k in 0..=n {
                 let q = w[0].lerp(w[1], k as f64 / n as f64);
-                let c = ((q.x / GRID_CELL).floor() as i32, (q.y / GRID_CELL).floor() as i32);
+                let c = (
+                    (q.x / GRID_CELL).floor() as i32,
+                    (q.y / GRID_CELL).floor() as i32,
+                );
                 if seen.insert(c) {
                     cells.push(c);
                 }
             }
         }
         if l.points.len() == 1 {
-            cells.push(((l.points[0].x / GRID_CELL).floor() as i32, (l.points[0].y / GRID_CELL).floor() as i32));
+            cells.push((
+                (l.points[0].x / GRID_CELL).floor() as i32,
+                (l.points[0].y / GRID_CELL).floor() as i32,
+            ));
         }
         cells
     }
@@ -254,15 +300,61 @@ mod tests {
 
     #[test]
     fn the_lane_along_a_heading_is_the_one_going_that_way() {
-        let north = LaneBuilder::arc(DVec3::new(0.0, 0.0, 0.0), 0.0, 100.0, 0.0, 0.0, LaneKind::Street, 3.0);
-        let south = LaneBuilder::arc(DVec3::new(3.5, 100.0, 0.0), 180.0, 100.0, 0.0, 0.0, LaneKind::Street, 3.0);
-        let mut net = Network { lanes: vec![north, south], ..Default::default() };
+        let north = LaneBuilder::arc(
+            DVec3::new(0.0, 0.0, 0.0),
+            0.0,
+            100.0,
+            0.0,
+            0.0,
+            LaneKind::Street,
+            3.0,
+        );
+        let south = LaneBuilder::arc(
+            DVec3::new(3.5, 100.0, 0.0),
+            180.0,
+            100.0,
+            0.0,
+            0.0,
+            LaneKind::Street,
+            3.0,
+        );
+        let mut net = Network {
+            lanes: vec![north, south],
+            ..Default::default()
+        };
         net.build_grid();
         let p = DVec3::new(3.0, 50.0, 0.0);
-        assert_eq!(net.nearest_lane(p, LaneKind::Street).map(|f| f.0), Some(1), "the nearest is the southbound");
-        assert_eq!(net.lane_along(p, 0.0, LaneKind::Street, 25.0, 75.0).map(|f| f.0), Some(0), "dragged north: the northbound");
-        assert_eq!(net.lane_along(p, 180.0, LaneKind::Street, 25.0, 75.0).map(|f| f.0), Some(1));
-        assert_eq!(net.lane_along(p, 90.0, LaneKind::Street, 25.0, 75.0), None, "across the road: none");
-        assert_eq!(net.lane_along(DVec3::new(60.0, 50.0, 0.0), 0.0, LaneKind::Street, 25.0, 75.0), None, "too far");
+        assert_eq!(
+            net.nearest_lane(p, LaneKind::Street).map(|f| f.0),
+            Some(1),
+            "the nearest is the southbound"
+        );
+        assert_eq!(
+            net.lane_along(p, 0.0, LaneKind::Street, 25.0, 75.0)
+                .map(|f| f.0),
+            Some(0),
+            "dragged north: the northbound"
+        );
+        assert_eq!(
+            net.lane_along(p, 180.0, LaneKind::Street, 25.0, 75.0)
+                .map(|f| f.0),
+            Some(1)
+        );
+        assert_eq!(
+            net.lane_along(p, 90.0, LaneKind::Street, 25.0, 75.0),
+            None,
+            "across the road: none"
+        );
+        assert_eq!(
+            net.lane_along(
+                DVec3::new(60.0, 50.0, 0.0),
+                0.0,
+                LaneKind::Street,
+                25.0,
+                75.0
+            ),
+            None,
+            "too far"
+        );
     }
 }

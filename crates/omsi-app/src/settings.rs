@@ -123,6 +123,11 @@ pub struct Settings {
     /// no more (0x709274, "Create Humans") - everybody waiting, walking and riding comes out
     /// of them, and at most half walk the pavements (0x62463c).
     pub ai_max_humans: u32,
+    /// The parked buses of a server drawn at most, the nearest (`omsi_net::parked`): each
+    /// costs what another player's bus does, and the server's owner chose their number.
+    /// -1 (the default): as many as the machine's textures have room for
+    /// (`on_foot::parked_drawn`). Other players' buses are never among them.
+    pub parked_buses_drawn: i32,
     /// An early timetable bus waits for its departure only at the stops the timetable times
     /// itself (#1773); off (the default) it waits at every stop it serves, as in OMSI.
     pub ai_wait_timed_stops_only: bool,
@@ -141,6 +146,9 @@ pub struct Settings {
     pub driverview_smooth: bool,
     /// The driver's hands on the wheel in the cab view (the rest of the figure left out).
     pub hands_in_cab: bool,
+    /// The driver sits back on the seat with his hands off the wheel, as in OMSI 2, instead of
+    /// leaning forward to hold it.
+    pub driver_like_omsi: bool,
     /// OMSI's `[altView]` (options.cfg): the right mouse button turns the view and
     /// Shift+right zooms. Off, the right button zooms and the middle one turns the view
     /// (TForm_main.Panel1MouseMove 0x82c5f8) - OMSI's default, but on here by default: a
@@ -161,8 +169,9 @@ pub struct Settings {
     pub upscaler: String,
     /// How much DLSS, AMD FSR 3 or Apple MetalFX scale up (`temporal::TemporalQuality`).
     pub upscale_quality: String,
-    /// Frame generation on DirectX 12 (`omsi_cfg::upscaler_files::frame_generation_word`):
-    /// `fsr3` with DLSS or FSR 3 on, `dlss2x` to `dlss4x` with DLSS on; else `off`.
+    /// Frame generation (`omsi_cfg::upscaler_files::frame_generation_word`): on Windows (DirectX
+    /// 12) `fsr3` with DLSS or FSR 3 on, `dlss2x` to `dlss4x` with DLSS on; on a Mac `metalfx`
+    /// with Apple MetalFX upscaling on; else `off`.
     pub frame_generation: String,
     /// FSR1 internal resolution preset, or custom to use render_scale.
     pub fsr_quality: String,
@@ -420,6 +429,10 @@ pub struct Settings {
     /// `dx12`, `gl` or `angle` (OpenGL ES on ANGLE over DirectX 11, Windows; see
     /// `startup::backend_order`).
     pub graphics_api: String,
+    /// mX Graphics (Experimental, read on a Mac only): the game drawn by mX, openOMSI's own
+    /// graphics library, through wgpu; where mX cannot open a device, wgpu's own backends take
+    /// over (`startup::game_graphics_instance`; `OMSI_MX` overrides it on every system).
+    pub mx_graphics: bool,
     /// Default motor polarity for wheels without a saved per-device direction.
     pub ff_invert: bool,
     /// Force feedback and rumble at all (off: the controller neither pushes nor shakes).
@@ -593,7 +606,7 @@ impl Settings {
     }
     /// The defaults of a computer.
     fn desktop() -> Self {
-        Self { msaa: 4, anisotropy: 8, ssao: true, shadows: true, shadow_size: 2048, shadow_blobs: true, lamp_shadows: true, navigator: true, ui_opacity: 0.85, ui_theme: "dark".into(), notes: true, notes_driving: true, notes_script: true, notes_trip: true, notes_tickets: true, ui_scale: 1.0, pause_quick_actions: "default".into(), ui_theme_pack: String::new(), ui_scale_window: true, navigator_corner: "bottom-left".into(), boarding: "auto".into(), passenger_animation: "original".into(), passenger_hailing: false, passenger_full_bus_reaction: false, pax_short_rides_stand: false, passenger_connections: false, passenger_transfer_percent: 20.0, units: "metric".into(), photo_mode: "simple".into(), character_models: "original".into(), standing_chance: 0.05, ambient: true, vol_ambient: 0.8, radio_fx: Default::default(), detail_textures: true, exact_fare: true, pax_bad_driving: true, auto_announce: false, enhanced: false, graphics: "vanilla_plus".into(), triple: Default::default(), triple_span: true, triple_hud_center: true, vr: false, vr_scale: 0.65, vr_head_smoothing_ms: 0.0, vr_mirror_rate: 16.0, vr_desktop_mirror: true, fullscreen: false, vsync: true, volume: 0.6, drive_keys: "simple".into(), touch_door_mode: "standard".into(), touch_pedal_length: 1.0, touch_pedal_deadzone: 0.15, post_aa: "fxaa".into(), render_scale: 0.0, upscaler: "default".into(), upscale_quality: "quality".into(), frame_generation: "off".into(), fsr_quality: "quality".into(), fsr_sharpness: 0.8, language: "ENG".into(), pax_voices: "all".into(), nav_dynamic_arrows: false, nav_map_arrows: false, nav_ai: true, nav_ai_cars: true, nav_surface: true, nav_light: false, nav_3d: true, nav_classic_2d: false, nav_widget: true, milezero: false, nav_size: 1.0, get_up: false, trip_summary: true, full_tank: true, sim_thread: false, texture_compression: true, gpu_texture_compression: true, video_memory: 0, auto_clutch: true, momentary_gears: false, auto_shift: false, min_obj_size: 0.013, max_obj_dist: -1.0, max_fps: 0, chat: true, chat_size: 1.0, tooltips: true, name_tags: true, show_fps: false, perf_overlay: "off".into(), clouds: true, cloud_quality: "high".into(), street_light: "off".into(), ray_tracing_on: false, light_shadows: "off".into(), cloud_shadows: false, light_glow: false, rain_quality: "high".into(), vehicle_smoke: "all".into(), puddles: "high".into(), windy_trees: true, detailed_trees: true, road_snow: false, pax_density: 1.0, vol_ai: 1.0, vol_scenery: 1.0, mirror_size: 256, mirror_hud: 0, mirror_hud_every_frame: false, mirror_refresh: "full".into(), mirror_quality: "standard".into(), mirror_shadows: false, mirror_particles: false, doppler: true, driver: true, maintenance: 0, ai_unsched_factor: 1.0, ai_reaction: 1.0, ai_max_scheduled: 0, ai_max_parked: 0, ai_max_humans: 200, ai_wait_timed_stops_only: false, collision_vehicles: true, collision_objects: true, collision_pedestrians: true, realistic_road_physics: false, head_movement: true, driverview_smooth: true, hands_in_cab: false, alt_view: true, precision_zoom: false, zoom_hold_amount: 0.5, zoom_hold_latch: false, flashlight_cursor: false, time_speed: 1.0, time_sync: false, metar_sync: false, metar_station: String::new(), machine_translation: false, shadow_casters: "all".into(), ctrl_deadzone: 0.0, right_stick_look: true, ctrl_background: false, pad_steer_smooth: 120.0, pad_steer_linear: false, pad_steer_speed: 2.0, pad_deadzone: 0.08, pad_type: "auto".into(), pad_buttons: true, arrows_switch_cams: true, ctrl_off: String::new(), steering_linear: false, old_steering: false, red_steer_spd: false, reflections: 1.0, road_glare: 1.0, traffic_headlights: 1.0, led_glow: 6, led_mips: 1.3, night_brightness: 0.0, mouse_sens: 1.0, mouse_pedal_strength: 1.0, graphics_api: "auto".into(), ff_invert: false, ff_enabled: true, ff_road_vib: 1.0, ff_engine_vib: 1.0, ff_fade: 0.28, brake_hold: true, mouse_steering: false, mouse_right_off: false, mouse_smooth: true, mouse_hold: true, mouse_pedals: true, key_pedal_speed: 1.0, look_sens: 1.0, look_smoothing_ms: 0.0, blinker_cancel: true, wheel_range: 900.0, wheel_lock: 0.0, cab_wheel_rotation: 0, fov: 0.0, camera_collision: true, steer_look: false, steer_look_angle: 30.0, steer_look_response: 0.25, head_idle: 0.0, head_idle_pace: 1.0, pedal_throttle: 1.0, pedal_brake: 1.0, seat: [0.0; 3], seat_pitch_deg: 0.0, head_tracking: false, head_tracking_port: 4242, head_tracking_invert: String::new(), head_tracking_yaw_sens: 100.0, head_tracking_pitch_sens: 100.0, head_tracking_roll_sens: 100.0, head_tracking_x_sens: 100.0, head_tracking_y_sens: 100.0, head_tracking_z_sens: 100.0, head_tracking_invert_yaw: false, head_tracking_invert_pitch: false, head_tracking_invert_roll: false, head_tracking_invert_x: false, head_tracking_invert_y: false, head_tracking_invert_z: false, head_tracking_source: "auto".into(), tobii_edges: false, head_tracking_smoothing: 0.5, head_tracking_dead_zone: 0.1, discord_status: false, discord_app_id: String::new(), discord_show: Default::default(), voice_enabled: false, voice_mode: "ptt".into(), voice_mic_gain: 1.0, voice_threshold_db: -45.0, voice_input_device: String::new(), voice_volume: 1.0, voice_volume_nearby: 1.0, voice_volume_radio: 1.0, voice_range: 75.0, voice_talker_list: true, voice_all_off: false, info_bar: false, hud_sizes: [1.0; 3], remote_cockpit: false, remote_cockpit_port: 8642 }
+        Self { msaa: 4, anisotropy: 8, ssao: true, shadows: true, shadow_size: 2048, shadow_blobs: true, lamp_shadows: true, navigator: true, ui_opacity: 0.85, ui_theme: "dark".into(), notes: true, notes_driving: true, notes_script: true, notes_trip: true, notes_tickets: true, ui_scale: 1.0, pause_quick_actions: "default".into(), ui_theme_pack: String::new(), ui_scale_window: true, navigator_corner: "bottom-left".into(), boarding: "auto".into(), passenger_animation: "original".into(), passenger_hailing: false, passenger_full_bus_reaction: false, pax_short_rides_stand: false, passenger_connections: false, passenger_transfer_percent: 20.0, units: "metric".into(), photo_mode: "simple".into(), character_models: "original".into(), standing_chance: 0.05, ambient: true, vol_ambient: 0.8, radio_fx: Default::default(), detail_textures: true, exact_fare: true, pax_bad_driving: true, auto_announce: false, enhanced: false, graphics: "vanilla_plus".into(), triple: Default::default(), triple_span: true, triple_hud_center: true, vr: false, vr_scale: 0.65, vr_head_smoothing_ms: 0.0, vr_mirror_rate: 16.0, vr_desktop_mirror: true, fullscreen: false, vsync: true, volume: 0.6, drive_keys: "simple".into(), touch_door_mode: "standard".into(), touch_pedal_length: 1.0, touch_pedal_deadzone: 0.15, post_aa: "fxaa".into(), render_scale: 0.0, upscaler: "default".into(), upscale_quality: "quality".into(), frame_generation: "off".into(), fsr_quality: "quality".into(), fsr_sharpness: 0.8, language: "ENG".into(), pax_voices: "all".into(), nav_dynamic_arrows: false, nav_map_arrows: false, nav_ai: true, nav_ai_cars: true, nav_surface: true, nav_light: false, nav_3d: true, nav_classic_2d: false, nav_widget: true, milezero: false, nav_size: 1.0, get_up: false, trip_summary: true, full_tank: true, sim_thread: false, texture_compression: true, gpu_texture_compression: true, video_memory: 0, auto_clutch: true, momentary_gears: false, auto_shift: false, min_obj_size: 0.013, max_obj_dist: -1.0, max_fps: 0, chat: true, chat_size: 1.0, tooltips: true, name_tags: true, show_fps: false, perf_overlay: "off".into(), clouds: true, cloud_quality: "high".into(), street_light: "off".into(), ray_tracing_on: false, light_shadows: "off".into(), cloud_shadows: false, light_glow: false, rain_quality: "high".into(), vehicle_smoke: "all".into(), puddles: "high".into(), windy_trees: true, detailed_trees: true, road_snow: false, pax_density: 1.0, vol_ai: 1.0, vol_scenery: 1.0, mirror_size: 256, mirror_hud: 0, mirror_hud_every_frame: false, mirror_refresh: "full".into(), mirror_quality: "standard".into(), mirror_shadows: false, mirror_particles: false, doppler: true, driver: true, maintenance: 0, ai_unsched_factor: 1.0, ai_reaction: 1.0, ai_max_scheduled: 0, ai_max_parked: 0, ai_max_humans: 200, parked_buses_drawn: -1, ai_wait_timed_stops_only: false, collision_vehicles: true, collision_objects: true, collision_pedestrians: true, realistic_road_physics: false, head_movement: true, driverview_smooth: true, hands_in_cab: false, driver_like_omsi: false, alt_view: true, precision_zoom: false, zoom_hold_amount: 0.5, zoom_hold_latch: false, flashlight_cursor: false, time_speed: 1.0, time_sync: false, metar_sync: false, metar_station: String::new(), machine_translation: false, shadow_casters: "all".into(), ctrl_deadzone: 0.0, right_stick_look: true, ctrl_background: false, pad_steer_smooth: 120.0, pad_steer_linear: false, pad_steer_speed: 2.0, pad_deadzone: 0.08, pad_type: "auto".into(), pad_buttons: true, arrows_switch_cams: true, ctrl_off: String::new(), steering_linear: false, old_steering: false, red_steer_spd: false, reflections: 1.0, road_glare: 1.0, traffic_headlights: 1.0, led_glow: 6, led_mips: 1.3, night_brightness: 0.0, mouse_sens: 1.0, mouse_pedal_strength: 1.0, graphics_api: "auto".into(), mx_graphics: false, ff_invert: false, ff_enabled: true, ff_road_vib: 1.0, ff_engine_vib: 1.0, ff_fade: 0.28, brake_hold: true, mouse_steering: false, mouse_right_off: false, mouse_smooth: true, mouse_hold: true, mouse_pedals: true, key_pedal_speed: 1.0, look_sens: 1.0, look_smoothing_ms: 0.0, blinker_cancel: true, wheel_range: 900.0, wheel_lock: 0.0, cab_wheel_rotation: 0, fov: 0.0, camera_collision: true, steer_look: false, steer_look_angle: 30.0, steer_look_response: 0.25, head_idle: 0.0, head_idle_pace: 1.0, pedal_throttle: 1.0, pedal_brake: 1.0, seat: [0.0; 3], seat_pitch_deg: 0.0, head_tracking: false, head_tracking_port: 4242, head_tracking_invert: String::new(), head_tracking_yaw_sens: 100.0, head_tracking_pitch_sens: 100.0, head_tracking_roll_sens: 100.0, head_tracking_x_sens: 100.0, head_tracking_y_sens: 100.0, head_tracking_z_sens: 100.0, head_tracking_invert_yaw: false, head_tracking_invert_pitch: false, head_tracking_invert_roll: false, head_tracking_invert_x: false, head_tracking_invert_y: false, head_tracking_invert_z: false, head_tracking_source: "auto".into(), tobii_edges: false, head_tracking_smoothing: 0.5, head_tracking_dead_zone: 0.1, discord_status: false, discord_app_id: String::new(), discord_show: Default::default(), voice_enabled: false, voice_mode: "ptt".into(), voice_mic_gain: 1.0, voice_threshold_db: -45.0, voice_input_device: String::new(), voice_volume: 1.0, voice_volume_nearby: 1.0, voice_volume_radio: 1.0, voice_range: 75.0, voice_talker_list: true, voice_all_off: false, info_bar: false, hud_sizes: [1.0; 3], remote_cockpit: false, remote_cockpit_port: 8642 }
     }
 }
 
@@ -692,11 +705,26 @@ impl Settings {
         match k {
             "upscaler" => self.upscaler = omsi_launcher_lib::upscaler_word(v).into(),
             "upscale_quality" => self.upscale_quality = omsi_render::TemporalQuality::parse(v).as_str().into(),
+            "frame_generation" => self.frame_generation = omsi_cfg::upscaler_files::frame_generation_word(v).into(),
             "fsr_quality" => self.fsr_quality = match v.to_ascii_lowercase().as_str() {
                 "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
                 "custom" => "custom", "auto" => "auto", _ => "quality",
             }.into(),
             _ => self.fsr_sharpness = v.parse::<f32>().ok().filter(|n| n.is_finite()).map(|n| n.clamp(0.0, 1.0)).unwrap_or(0.8),
+        }
+    }
+
+    /// The lit LEDs' glow and mipmaps, the night's brightness and the graphics interface
+    /// (`from_text`): an unreadable number keeps the default.
+    fn read_graphics(&mut self, k: &str, v: &str) {
+        let v = v.trim();
+        match k {
+            "led_glow" => self.led_glow = v.parse::<i32>().map(|x| x.clamp(0, 15) as u8).unwrap_or(self.led_glow),
+            "night_brightness" => self.night_brightness = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 3.0)).unwrap_or(self.night_brightness),
+            "led_mips" => self.led_mips = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(self.led_mips),
+            "graphics_api" => self.graphics_api = v.to_ascii_lowercase(),
+            "mx_graphics" => self.mx_graphics = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
+            _ => {}
         }
     }
 
@@ -797,8 +825,7 @@ impl Settings {
                 "fullscreen" => s.fullscreen = b(v),
                 "vsync" => s.vsync = b(v),
                 "volume" => s.volume = v.parse().unwrap_or(s.volume),
-                "upscaler" | "upscale_quality" | "fsr_quality" | "fsr_sharpness" => s.read_upscaler(&k, v),
-                "frame_generation" => s.frame_generation = omsi_cfg::upscaler_files::frame_generation_word(v).into(),
+                "upscaler" | "upscale_quality" | "frame_generation" | "fsr_quality" | "fsr_sharpness" => s.read_upscaler(&k, v),
                 // "auto", a fraction (0.75) or a percentage (75)
                 "render_scale" => {
                     s.render_scale = if v.eq_ignore_ascii_case("auto") {
@@ -875,6 +902,7 @@ impl Settings {
                 "ai_reaction" => s.ai_reaction = v.trim_end_matches('%').parse::<f32>().map(|x| (x / 100.0).clamp(0.25, 2.0)).unwrap_or(s.ai_reaction),
                 "ai_max_scheduled" | "aimaxcountscheduled" => s.ai_max_scheduled = v.parse().unwrap_or(s.ai_max_scheduled),
                 "ai_max_humans" | "aimaxhumans" => s.ai_max_humans = v.parse::<u32>().map(|x| x.max(1)).unwrap_or(s.ai_max_humans),
+                "parked_buses_drawn" => s.parked_buses_drawn = v.parse::<i32>().map(|x| x.max(-1)).unwrap_or(s.parked_buses_drawn),
                 "ai_wait_timed_stops_only" => s.ai_wait_timed_stops_only = b(v),
                 "ai_max_parked" | "aimaxcountparked" => s.ai_max_parked = v.parse::<i32>().map(|x| x.max(-1)).unwrap_or(s.ai_max_parked),
                 "collision_vehicles" => s.collision_vehicles = b(v),
@@ -884,6 +912,7 @@ impl Settings {
                 "head_movement" | "driverview_moving" => s.head_movement = b(v),
                 "driverview_smooth" => s.driverview_smooth = b(v),
                 "hands_in_cab" => s.hands_in_cab = b(v),
+                "driver_like_omsi" => s.driver_like_omsi = b(v),
                 "alt_view" => s.alt_view = b(v),
                 "precision_zoom" => s.precision_zoom = b(v),
                 "time_speed" => s.time_speed = v.trim_start_matches(['x', 'X']).parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(1.0, 30.0)).unwrap_or(s.time_speed),
@@ -904,10 +933,7 @@ impl Settings {
                 "reflections" | "envmap" => s.reflections = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map_or_else(|| if b(v) { 1.0 } else { 0.0 }, |x| x.clamp(0.0, 1.0)),
                 "road_glare" => s.road_glare = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 2.0)).unwrap_or(1.0),
                 "traffic_headlights" => s.traffic_headlights = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 2.0)).unwrap_or(1.0),
-                "led_glow" => s.led_glow = v.trim().parse::<i32>().map(|x| x.clamp(0, 15) as u8).unwrap_or(s.led_glow),
-                "night_brightness" => s.night_brightness = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 3.0)).unwrap_or(s.night_brightness),
-                "led_mips" => s.led_mips = v.trim().parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(s.led_mips),
-                "graphics_api" => s.graphics_api = v.trim().to_ascii_lowercase(),
+                "led_glow" | "night_brightness" | "led_mips" | "graphics_api" | "mx_graphics" => s.read_graphics(&k, v),
                 "ctrl_off" => s.ctrl_off = v.trim().to_string(),
                 "steering_linear" => s.steering_linear = b(v),
                 "old_steering" => s.old_steering = b(v),
@@ -1086,6 +1112,7 @@ impl Settings {
         text.push_str(&self.discord_show.to_text());
         text.push_str(&format!("auto_shift={}\n", self.auto_shift as u8));
         text.push_str(&format!("sim_thread={}\n", self.sim_thread as u8));
+        text.push_str(&format!("mx_graphics={}\n", self.mx_graphics as u8));
         text.push_str(&format!("vehicle_smoke={}\n", self.vehicle_smoke));
         text.push_str(&format!("touch_door_mode={}\n", self.touch_door_mode));
         text.push_str(&format!("touch_pedal_length={}\ntouch_pedal_deadzone={}\n", self.touch_pedal_length, self.touch_pedal_deadzone));
@@ -1177,6 +1204,7 @@ impl Settings {
         if omsi_render::TemporalUpscaler::parse(&self.upscaler).is_some() {
             self.upscaler = "default".into();
         }
+        self.frame_generation = "off".into();
         self.shadow_size = self.shadow_size.min(2048);
         self.mirror_size = self.mirror_size.min(256);
         // (the Enhanced extras are what the driver gave up on in the reports of 0.3.42: they
@@ -1227,9 +1255,18 @@ impl Settings {
         files.contains(&upscaler.as_str()).then(|| omsi_render::Temporal { upscaler, quality: omsi_render::TemporalQuality::parse(&self.upscale_quality) })
     }
 
-    /// Read when the window is made and when the graphics menu applies.
+    /// Windows' frame generation where it can run: read when the window is made and when the
+    /// graphics menu applies.
     pub fn frame_generation_kind(&self) -> Option<omsi_render::FrameGenerationKind> {
         omsi_render::FrameGenerationKind::runnable(&self.frame_generation, self.temporal_upscaling(), &self.graphics_api)
+    }
+
+    /// Frame generation as asked for, with the upscaler it works with chosen (asked every frame:
+    /// no file is looked at; whether the Mac can run it is found when it starts).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub fn frame_generation(&self) -> bool {
+        let upscaler = omsi_render::TemporalUpscaler::parse(&self.upscaler).filter(|_| !self.vr_requested() && !self.triple.enabled);
+        omsi_render::FrameGenerationKind::parse(&self.frame_generation).is_some_and(|k| upscaler.is_some_and(|u| k.takes(u)))
     }
 
     pub fn render_options(&self) -> omsi_render::RenderOptions {

@@ -435,6 +435,7 @@ impl World {
                         return Some((path, t.clone(), false));
                     }
                     let (img, _) = omsi_texture::gpu::load_gpu(&path).ok()?;
+                    let img = omsi_texture::gpu::halved_plain(&img).unwrap_or(img);
                     Some((path, Arc::new(img), true))
                 })
                 .collect();

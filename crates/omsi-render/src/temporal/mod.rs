@@ -20,6 +20,8 @@ mod framegen;
 mod frame;
 #[cfg(target_os = "macos")]
 mod metalfx;
+#[cfg(target_os = "macos")]
+pub(crate) mod metalfx_frames;
 #[cfg(windows)]
 mod streamline;
 #[cfg(windows)]
@@ -30,31 +32,8 @@ mod tests;
 pub(crate) use frame::*;
 #[cfg(windows)]
 pub use framegen::{FrameGeneration, OwnSwapChain};
-
-/// Frame generation is Windows-only (DirectX 12): never made elsewhere.
-#[cfg(not(windows))]
-#[derive(Clone)]
-pub enum FrameGeneration {}
-
-#[cfg(not(windows))]
-impl FrameGeneration {
-    pub(crate) fn prepare(&self, _: &wgpu::Texture, _: &wgpu::Texture, _: &wgpu::Texture, _: (u32, u32), _: &FrameConstants) {
-        match *self {}
-    }
-
-    pub(crate) fn generated(&self) -> u64 {
-        match *self {}
-    }
-    pub(crate) fn pause(&self) {
-        match *self {}
-    }
-    pub(crate) fn hold(&self, _: Vec<wgpu::Texture>) {
-        match *self {}
-    }
-    pub(crate) fn working(&self) -> bool {
-        match *self {}
-    }
-}
+#[cfg(target_os = "macos")]
+pub use metalfx_frames::{FrameGeneration, GenerationWindow};
 
 #[cfg(not(windows))]
 pub enum OwnSwapChain {}
@@ -85,11 +64,12 @@ impl OwnSwapChain {
 }
 
 /// What makes the in-between frames (the `frame_generation` setting): AMD FSR 3, or NVIDIA DLSS
-/// with this many frames on screen per drawn one (2 to 4).
+/// with this many frames on screen per drawn one (2 to 4), on Windows; Apple MetalFX on a Mac.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrameGenerationKind {
     Fsr3,
     Dlss(u32),
+    MetalFx,
 }
 
 impl FrameGenerationKind {
@@ -99,6 +79,7 @@ impl FrameGenerationKind {
             "dlss2x" => Some(FrameGenerationKind::Dlss(2)),
             "dlss3x" => Some(FrameGenerationKind::Dlss(3)),
             "dlss4x" => Some(FrameGenerationKind::Dlss(4)),
+            "metalfx" => Some(FrameGenerationKind::MetalFx),
             _ => None,
         }
     }
@@ -120,9 +101,93 @@ impl FrameGenerationKind {
                 temporal.upscaler == TemporalUpscaler::Dlss
                     && files::dlss_frame_generation_available(&dir)
             }
+            // (a Mac's: `SurfaceState::set_frame_generation`)
+            FrameGenerationKind::MetalFx => false,
         };
         (runs && files::first_api(graphics_api, temporal.upscaler.as_str(), &dir) == "dx12")
             .then_some(kind)
+    }
+
+    /// Whether it runs with this upscaler, whose depth and motion vectors it takes: AMD's with
+    /// DLSS or FSR 3, NVIDIA's with DLSS, Apple's with MetalFX.
+    pub fn takes(self, upscaler: TemporalUpscaler) -> bool {
+        match self {
+            FrameGenerationKind::Fsr3 => matches!(upscaler, TemporalUpscaler::Dlss | TemporalUpscaler::Fsr3),
+            FrameGenerationKind::Dlss(_) => upscaler == TemporalUpscaler::Dlss,
+            FrameGenerationKind::MetalFx => upscaler == TemporalUpscaler::MetalFx,
+        }
+    }
+}
+
+/// An upscaled frame as a Mac's frame generation takes it at the window's present.
+#[cfg(target_os = "macos")]
+pub(crate) struct GenerationInputs {
+    /// The window's picture before the HUD: this frame's, and the last frame's (None: there is
+    /// none of this size to go from).
+    pub picture: wgpu::Texture,
+    pub last_picture: Option<wgpu::Texture>,
+    /// The upscaler's own, at the size the scene was drawn.
+    pub depth: wgpu::Texture,
+    pub motion: wgpu::Texture,
+    pub render_size: (u32, u32),
+    pub output_size: (u32, u32),
+    pub jitter: [f32; 2],
+    pub near: f32,
+    pub far: f32,
+    /// Vertical, in radians.
+    pub fov: f32,
+    pub aspect: f32,
+    /// Since the last frame.
+    pub seconds: f32,
+    /// The camera jumped: nothing lies between the last frame and this one.
+    pub cut: bool,
+    pub scaler: Option<metalfx::RawScaler>,
+}
+
+/// Frame generation runs on Windows (`framegen`) and on a Mac (`metalfx_frames`): never made
+/// elsewhere.
+#[cfg(not(any(windows, target_os = "macos")))]
+#[derive(Clone)]
+pub enum FrameGeneration {}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+impl FrameGeneration {
+    pub(crate) fn working(&self) -> bool {
+        match *self {}
+    }
+    pub(crate) fn generated(&self) -> u64 {
+        match *self {}
+    }
+    pub(crate) fn wait(&self) {
+        match *self {}
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub enum GenerationWindow {}
+
+#[cfg(not(target_os = "macos"))]
+impl GenerationWindow {
+    pub(crate) fn new(_: &wgpu::Device, _: &wgpu::Queue, _: wgpu::TextureFormat, _: (u32, u32)) -> anyhow::Result<GenerationWindow> {
+        anyhow::bail!("frame generation is Apple MetalFX's (macOS 26 and newer)")
+    }
+    pub(crate) fn handle(&self) -> FrameGeneration {
+        match *self {}
+    }
+    pub(crate) fn working(&self) -> bool {
+        match *self {}
+    }
+    pub(crate) fn resize(&mut self, _: &wgpu::Device, _: &wgpu::Queue, _: (u32, u32)) {
+        match *self {}
+    }
+    pub(crate) fn view(&self) -> wgpu::TextureView {
+        match *self {}
+    }
+    pub(crate) fn texture(&self) -> wgpu::Texture {
+        match *self {}
+    }
+    pub(crate) fn present(&self, _: &wgpu::Surface<'_>, _: &wgpu::Device, _: &wgpu::Queue, _: wgpu::SurfaceTexture) {
+        match *self {}
     }
 }
 

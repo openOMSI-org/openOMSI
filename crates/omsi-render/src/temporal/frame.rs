@@ -4,6 +4,8 @@
 //! wgpu's queue, then the HUD at full size.
 
 use super::{fallback_render_size, fidelityfx, metalfx, streamline, FrameConstants, Inputs, TemporalQuality, TemporalUpscaler};
+#[cfg(target_os = "macos")]
+use super::GenerationInputs;
 use crate::passes::FrameCtx;
 use crate::pipelines::common::uniform_buffer;
 use crate::*;
@@ -22,9 +24,20 @@ pub(crate) const TEMPORAL_MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat
 /// bits of picture over the scene. 8 m is about 290 km/h at 10 fps.
 const MAX_FRAME_JUMP: f32 = 8.0;
 
-/// How much `upscale.wgsl` sharpens DLSS's and MetalFX's result: DLSS no longer sharpens and
-/// MetalFX never did, FSR 3 does.
+/// How much `upscale.wgsl` sharpens DLSS's result: DLSS no longer sharpens itself, FSR 3 does.
 const DLSS_SHARPEN: f32 = 0.25;
+
+/// How much `upscale.wgsl` sharpens MetalFX's result, which MetalFX never sharpens itself. Chosen
+/// on St-Servan's pictures with `METALFX_MIP_BIAS`: 0.6 brought the gauges' numbers and the bark
+/// closest to the picture drawn at the window's size, but the foliage shimmered more while the
+/// view turned; no value up to 0.6 drew halos around the lamp posts against the sky.
+const METALFX_SHARPEN: f32 = 0.4;
+
+/// MetalFX's textures one mip level sharper than the render scale alone gives, as Apple advises
+/// for its temporal scaler (log2(render / output) - 1, WWDC22 "Boost performance with MetalFX
+/// Upscaling"): -1.58 at Quality. Without it the result was softer than the picture drawn at
+/// the window's size (bark, the gauges' numbers, grass).
+const METALFX_MIP_BIAS: f32 = -1.0;
 
 pub(crate) struct TemporalPipelines {
     pub(crate) prepass: [wgpu::RenderPipeline; 6],
@@ -80,9 +93,12 @@ pub(crate) struct TemporalState {
     prev_entries: u32,
     prev: Option<TemporalPrev>,
     frame: u64,
-    /// For frame generation: the window's picture before the HUD, two in turn (the swap chain
-    /// may still read the last one while the next is drawn).
+    /// For frame generation: the window's picture before the HUD, two in turn (on Windows the
+    /// swap chain may still read the last one while the next is drawn; on a Mac they are this
+    /// frame's and the last one's), and the frame the newest was drawn in (a Mac's).
     hudless: Vec<(wgpu::Texture, wgpu::TextureView)>,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    hudless_frame: Option<u64>,
 }
 
 pub(crate) struct TemporalFrame {
@@ -125,16 +141,17 @@ pub(crate) fn window_fits(full: (u32, u32)) -> bool {
 }
 
 /// The textures' mip bias of an upscaled frame: log2(render width / window width), -0.79 at
-/// Balanced. Without it the textures are sampled for the small picture and the cab goes soft.
-pub(crate) fn temporal_mip_bias(render_w: u32, full_w: u32) -> f32 {
-    (render_w.max(1) as f32 / full_w.max(1) as f32).log2().clamp(-3.0, 0.0)
+/// Balanced, plus the upscaler's own `extra`. Without it the textures are sampled for the small
+/// picture and the cab goes soft.
+pub(crate) fn temporal_mip_bias(render_w: u32, full_w: u32, extra: f32) -> f32 {
+    ((render_w.max(1) as f32 / full_w.max(1) as f32).log2() + extra).clamp(-3.0, 0.0)
 }
 
-/// A picture the size of the window in the swap chain's own format, drawn through the
-/// renderer's (sRGB) view.
+/// A picture of the window's size and format for frame generation: a plain UNORM resource (the
+/// sRGB-encoded numbers, as the upscaler's input), drawn through the renderer's sRGB view.
 fn hudless_target(device: &wgpu::Device, (width, height): (u32, u32), format: wgpu::TextureFormat) -> (wgpu::Texture, wgpu::TextureView) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("frame generation hudless"),
+        label: Some("frame generation: the picture before the HUD"),
         size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
         mip_level_count: 1,
         sample_count: 1,
@@ -148,6 +165,15 @@ fn hudless_target(device: &wgpu::Device, (width, height): (u32, u32), format: wg
 }
 
 impl Renderer {
+    /// This upscaled frame's mip bias (`temporal_mip_bias`): MetalFX's one level sharper.
+    pub(crate) fn temporal_textures_bias(&self, render_w: u32, full_w: u32) -> f32 {
+        let extra = match self.temporal.as_ref().map(|d| &d.runtime) {
+            Some(Runtime::MetalFx(_)) => METALFX_MIP_BIAS,
+            _ => 0.0,
+        };
+        temporal_mip_bias(render_w, full_w, extra)
+    }
+
     /// Whether a window of this size can be upscaled at all. A minimised one is 1x1: asked for
     /// that, NGX refuses (0xbad00005) and DLSS would be gone for the session. Its history does
     /// not outlive the gap.
@@ -168,6 +194,7 @@ impl Renderer {
 
     /// What frame generation reads of the upscaler's frames: the inputs of the last ones and the
     /// pictures before the HUD.
+    #[cfg(windows)]
     pub(crate) fn temporal_generation_inputs(&self) -> Vec<wgpu::Texture> {
         self.temporal.as_ref().map_or_else(Vec::new, |d| d.keep.iter().flatten().cloned().chain(d.hudless.iter().map(|(h, _)| h.clone())).collect())
     }
@@ -244,6 +271,7 @@ impl Renderer {
                     prev: None,
                     frame: 0,
                     hudless: Vec::new(),
+                    hudless_frame: None,
                 });
                 log::info!("{} upscaling ({}) running on {}", asked.upscaler.as_str(), asked.quality.as_str(), self.adapter_name);
                 true
@@ -455,14 +483,19 @@ impl Renderer {
             reset: frame.reset,
             frame_ms: frame.dt * 1000.0,
         };
+        // (Windows' frame generation: the picture before the HUD is made before the upscaler
+        // runs, which hands it to NVIDIA's too; a Mac's is made after it, below)
+        #[cfg(windows)]
         let generate = self.frame_generation.clone().filter(|g| g.working());
-        let format = target.texture().format();
+        #[cfg(windows)]
         let hudless = generate.as_ref().map(|_| {
             if d.hudless.first().is_none_or(|(h, _)| (h.width(), h.height()) != full) {
-                d.hudless = (0..2).map(|_| hudless_target(&self.device, full, format)).collect();
+                d.hudless = (0..2).map(|_| hudless_target(&self.device, full, target.texture().format())).collect();
             }
             d.hudless[(d.frame % 2) as usize].clone()
         });
+        #[cfg(not(windows))]
+        let hudless: Option<(wgpu::Texture, wgpu::TextureView)> = None;
         let inputs = Inputs { color: &t.color, depth: &ao.depth_tex, motion: &t.motion, mask: &t.mask, output: &t.output_tex, hudless: hudless.as_ref().map(|(h, _)| h), render_size: render, output_size: full, views: [&t.color_raw_view, &ao.depth_view, &t.motion_view, &t.mask_view, &t.output_view] };
         let clock = std::time::Instant::now();
         let result = match &mut d.runtime {
@@ -485,7 +518,11 @@ impl Renderer {
         d.prev = Some(TemporalPrev { camera: *camera, aspect: frame.aspect, origin: ro, render, output: full });
         // (`upscale.wgsl`'s third mode: the upscalers return the sRGB-encoded numbers they were
         // given, and writing them to the sRGB window unconverted would encode them twice)
-        let sharpen = if matches!(d.runtime, Runtime::Dlss(_) | Runtime::MetalFx(_)) { DLSS_SHARPEN } else { 0.0 };
+        let sharpen = match d.runtime {
+            Runtime::Dlss(_) => DLSS_SHARPEN,
+            Runtime::MetalFx(_) => METALFX_SHARPEN,
+            Runtime::Fsr3(_) => 0.0,
+        };
         self.queue.write_buffer(&d.blit_buf, 0, bytemuck::cast_slice(&[full.0 as f32, full.1 as f32, sharpen, 2.0]));
         let bg = if ok { &t.output_bg } else { &t.color_bg };
         if !ok {
@@ -493,9 +530,27 @@ impl Renderer {
             self.queue.write_buffer(&self.scale.upscale_buf, 0, bytemuck::cast_slice(&[render.0 as f32, render.1 as f32, 0.0, 0.0]));
         }
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("temporal hud") });
-        if let Some((_, view)) = hudless.as_ref().filter(|_| ok) {
-            // (the same picture as the window's below the HUD, to the bit: frame generation
-            // tells the HUD apart by the difference)
+        // Frame generation: the same picture as the window's below the HUD, to the bit - it
+        // tells the interface apart by what differs between the two. On Windows it was made
+        // before the upscaler ran (NVIDIA's reads it there too); a Mac's is MetalFX's, which
+        // takes the scaler's depth and motion, with this frame's picture and the last one's.
+        #[cfg(not(target_os = "macos"))]
+        let hud_view = hudless.as_ref().filter(|_| ok).map(|(_, view)| view);
+        #[cfg(target_os = "macos")]
+        let generation = self.frame_generation.clone().filter(|g| ok && g.working() && matches!(d.runtime, Runtime::MetalFx(_)));
+        #[cfg(target_os = "macos")]
+        let hudless = generation.as_ref().map(|_| {
+            if d.hudless.first().is_none_or(|(h, _)| (h.width(), h.height()) != full) {
+                d.hudless = (0..2).map(|_| hudless_target(&self.device, full, self.format)).collect();
+                d.hudless_frame = None;
+            }
+            let last = d.hudless_frame.filter(|at| at + 1 == d.frame).map(|_| d.hudless[((d.frame + 1) % 2) as usize].0.clone());
+            d.hudless_frame = Some(d.frame);
+            (d.hudless[(d.frame % 2) as usize].clone(), last)
+        });
+        #[cfg(target_os = "macos")]
+        let hud_view = hudless.as_ref().map(|((_, view), _)| view);
+        if let Some(view) = hud_view {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("frame generation hudless"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -542,8 +597,32 @@ impl Renderer {
         }
         self.queue.submit(Some(encoder.finish()));
         let hud_done = clock.elapsed();
+        #[cfg(windows)]
         if let (Some(g), Some((h, _))) = (generate.filter(|_| ok), hudless.as_ref()) {
             g.prepare(&ao.depth_tex, &t.motion, h, render, &constants);
+        }
+        #[cfg(target_os = "macos")]
+        if let (Some(g), Some(((picture, _), last_picture))) = (generation, hudless) {
+            let scaler = match &d.runtime {
+                Runtime::MetalFx(r) => r.scaler(),
+                _ => None,
+            };
+            g.prepare(GenerationInputs {
+                picture,
+                last_picture,
+                depth: ao.depth_tex.clone(),
+                motion: t.motion.clone(),
+                render_size: render,
+                output_size: full,
+                jitter: frame.jitter,
+                near: camera.near,
+                far: camera.depth_far(),
+                fov,
+                aspect: frame.aspect,
+                seconds: frame.dt,
+                cut: frame.reset,
+                scaler,
+            });
         }
         if self.profiling {
             let mut stats = self.stats.borrow_mut();

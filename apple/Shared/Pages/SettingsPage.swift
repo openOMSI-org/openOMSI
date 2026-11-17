@@ -103,6 +103,8 @@ struct SettingsPage: View {
         // on a Mac; one at work takes the place of the anti-aliasing and the render scale)
         let temporal = Choices.temporal(store.setting("temporal_upscalers"))
         let temporalOn = temporal.contains { $0.0 == store.setting("upscaler")?.string } && !store.flag("triple_screen")
+        let generators = Choices.temporal(store.setting("frame_generation_choices"))
+        let generationOn = temporalOn && generators.contains { $0.0 == store.setting("upscaler")?.string }
         return Card("Graphics") {
             SettingSelect(label: "Graphics", key: "graphics", options: [("vanilla", "Vanilla (as OMSI 2)"), ("vanilla_plus", "Vanilla+"), ("enhanced", "Enhanced")])
             if enhanced {
@@ -116,6 +118,9 @@ struct SettingsPage: View {
             SettingSelect(label: "Upscaling", key: "upscaler", options: [("default", "Standard (Catmull-Rom)"), ("fsr1", "AMD FSR 1 (experimental)")] + temporal, help: temporal.isEmpty ? nil : "Standard Catmull-Rom or AMD FSR 1 change at once; Apple MetalFX takes the place of the anti-aliasing and the render scale, from the next start")
             if temporalOn {
                 SettingSelect(label: "Upscaling quality", key: "upscale_quality", options: Choices.upscaleQuality, help: "Native keeps the window's resolution and only smooths the edges; the lower the quality, the smaller the picture is drawn and the higher the frame rate", fallback: "quality")
+            }
+            if generationOn {
+                SettingSelect(label: "Frame generation", key: "frame_generation", options: [("off", "Off")] + generators, help: "Shows a generated frame between every two drawn ones: smoother motion for a little more input lag. Needs Apple MetalFX upscaling and works best from 30 drawn frames a second; with V-sync the game draws half the display's rate", fallback: "off")
             }
             if store.setting("upscaler")?.string == "fsr1" {
                 SettingSelect(label: "FSR quality", key: "fsr_quality", options: [("ultra", "Ultra Quality (77%)"), ("quality", "Quality (67%)"), ("balanced", "Balanced (59%)"), ("performance", "Performance (50%)"), ("auto", "Automatic (keeps the frame rate)"), ("custom", "Use render scale")])
@@ -176,6 +181,9 @@ struct SettingsPage: View {
                 SettingToggle(label: "V-sync", key: "vsync", fallback: true)
             }
             SettingToggle(label: "Simulation on its own thread", key: "sim_thread")
+            #if os(macOS)
+            SettingToggle(label: "mX Graphics (Experimental)", key: "mx_graphics", help: "Draws the game with mX, openOMSI's own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before.")
+            #endif
             SettingSelect(label: "Frame limit", key: "max_fps", options: phone ? [("0", "Screen refresh rate"), ("30", "30 fps"), ("45", "45 fps"), ("60", "60 fps"), ("120", "120 fps (ProMotion)")] : Choices.maxFps)
             SectionTitle("World & memory").padding(.top, 8)
             SettingSelect(label: "View distance", key: "view_distance", options: Choices.viewDistance, heavy: { (Double($0) ?? 0) >= 2000 })
@@ -288,6 +296,7 @@ struct SettingsPage: View {
             SettingToggle(label: "Head moves with the bus", key: "head_movement", fallback: true)
             SettingToggle(label: "Camera glides between viewpoints", key: "driverview_smooth", fallback: true)
             SettingToggle(label: "Driver's hands in the cab view", key: "hands_in_cab")
+            SettingToggle(label: "Driver sits as in OMSI 2", key: "driver_like_omsi")
             if !phone {
                 SettingToggle(label: "Right mouse button turns the view, Shift+right zooms (off: right zooms as in OMSI, the wheel button turns)", key: "alt_view", fallback: true)
             }

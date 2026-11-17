@@ -20,22 +20,25 @@ const FRAMEWORK: &CStr = c"/System/Library/Frameworks/MetalFX.framework/MetalFX"
 /// The largest scale of a Mac whose MetalFX does not tell (macOS 13).
 const MAX_SCALE_UNKNOWN: f32 = 2.0;
 
-type Texture = Retained<ProtocolObject<dyn MTLTexture>>;
+pub(super) type Texture = Retained<ProtocolObject<dyn MTLTexture>>;
+/// Apple's temporal scaler itself, for frame generation's descriptor (`metalfx_frames`).
+pub(crate) type RawScaler = Retained<AnyObject>;
 
-fn descriptor_class() -> Result<&'static AnyClass> {
-    static CLASS: OnceLock<Option<&'static AnyClass>> = OnceLock::new();
-    CLASS
-        .get_or_init(|| {
-            let opened = unsafe { libc::dlopen(FRAMEWORK.as_ptr(), libc::RTLD_LAZY | libc::RTLD_GLOBAL) };
-            if opened.is_null() {
-                return None;
-            }
-            AnyClass::get(c"MTLFXTemporalScalerDescriptor")
-        })
-        .ok_or_else(|| anyhow!("this macOS has no MetalFX (it comes with macOS 13 and newer)"))
+/// MetalFX's class of this name, the framework opened first; None on a macOS without it.
+pub(super) fn class(name: &CStr) -> Option<&'static AnyClass> {
+    static OPENED: OnceLock<bool> = OnceLock::new();
+    let opened = *OPENED.get_or_init(|| !unsafe { libc::dlopen(FRAMEWORK.as_ptr(), libc::RTLD_LAZY | libc::RTLD_GLOBAL) }.is_null());
+    opened.then(|| AnyClass::get(name)).flatten()
 }
 
-fn texture(t: &wgpu::Texture, what: &str) -> Result<Texture> {
+fn descriptor_class() -> Result<&'static AnyClass> {
+    class(c"MTLFXTemporalScalerDescriptor").ok_or_else(|| anyhow!("this macOS has no MetalFX (it comes with macOS 13 and newer)"))
+}
+
+pub(super) fn texture(t: &wgpu::Texture, what: &str) -> Result<Texture> {
+    if let Some(m) = wgpu_mx::custom::texture(t) {
+        return Ok(m.raw().retain());
+    }
     let hal = unsafe { t.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("no Metal texture under MetalFX's {what}"))?;
     Ok(hal.raw_handle().retain())
 }
@@ -93,10 +96,19 @@ impl Upscaler {
         }
     }
 
+    /// The scaler of the last upscaled frame.
+    pub(crate) fn scaler(&self) -> Option<RawScaler> {
+        self.scaler.as_ref().map(|s| s.raw.clone())
+    }
+
     pub fn load(device: &wgpu::Device) -> Result<Upscaler> {
-        let hal = unsafe { device.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("the game is not running on Metal"))?;
-        let raw = hal.raw_device().clone();
-        drop(hal);
+        let raw = match wgpu_mx::custom::device(device) {
+            Some(d) => d.raw().retain(),
+            None => {
+                let hal = unsafe { device.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("the game is not running on Metal"))?;
+                hal.raw_device().clone()
+            }
+        };
         let class = descriptor_class()?;
         let supported: bool = unsafe { msg_send![class, supportsDevice: &*raw] };
         if !supported {
@@ -188,9 +200,14 @@ impl Upscaler {
     pub fn upscale(&mut self, queue: &wgpu::Queue, inputs: &Inputs, c: &FrameConstants) -> Result<()> {
         autoreleasepool(|_| {
             let frame = Frame::of(inputs)?;
-            let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("no Metal queue under wgpu's"))?;
-            let buffer = queue_hal.as_raw().commandBuffer().ok_or_else(|| anyhow!("Metal gave no command buffer for MetalFX"))?;
-            drop(queue_hal);
+            let buffer = match wgpu_mx::custom::queue(queue) {
+                Some(q) => q.raw().commandBuffer(),
+                None => {
+                    let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("no Metal queue under wgpu's"))?;
+                    queue_hal.as_raw().commandBuffer()
+                }
+            }
+            .ok_or_else(|| anyhow!("Metal gave no command buffer for MetalFX"))?;
             let scaler = self.scaler_for(&frame, inputs.render_size, inputs.output_size)?;
             let none: Option<&ProtocolObject<dyn MTLTexture>> = None;
             unsafe {

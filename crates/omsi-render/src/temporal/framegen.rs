@@ -469,6 +469,11 @@ impl FrameGeneration {
         }
     }
 
+    /// Its work done, as a Mac's `wait` (paused: [`Self::pause`]).
+    pub(crate) fn wait(&self) {
+        self.pause();
+    }
+
     /// The vendor's own queues, which `wait_gpu` does not cover, may still read `textures`: waited
     /// for first, or the textures are kept until the window's swap chain is gone.
     pub(crate) fn hold(&self, textures: Vec<wgpu::Texture>) {
@@ -724,6 +729,8 @@ impl OwnSwapChain {
                     }
                 }
             }
+            // (a Mac's: `runnable` never asks for it here)
+            FrameGenerationKind::MetalFx => bail!("Apple MetalFX's frame generation runs on a Mac"),
         };
         // (winit does the full screen; DXGI's Alt+Enter would fight it)
         let _ = unsafe {

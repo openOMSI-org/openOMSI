@@ -307,7 +307,7 @@ impl GpuCache {
                             // cards with little memory ran out while the game was loading)
                             Arc::new(omsi_texture::gpu::halved_for_now(i))
                         } else {
-                            Arc::new(i)
+                            Arc::new(omsi_texture::gpu::halved_plain(&i).unwrap_or(i))
                         }
                     }
                     Err(e) => {

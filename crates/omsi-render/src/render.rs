@@ -275,13 +275,18 @@ impl Renderer {
     }
 
     fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
-        // (frame generation reads the depth, the motion and the picture before the HUD when the
-        // window presents, on the vendor's queues, after wgpu is done with them: they are waited
-        // for before these go)
+        // (frame generation reads the depth, the motion and the pictures before the HUD at the
+        // window's present, after wgpu is done with them - on Windows on the vendor's queues:
+        // its work is waited for before they go)
         if let Some(g) = &self.frame_generation {
-            g.pause();
-            g.hold(self.temporal_generation_inputs());
-            let _ = crate::wait_gpu(&self.device, None);
+            #[cfg(windows)]
+            {
+                g.pause();
+                g.hold(self.temporal_generation_inputs());
+                let _ = crate::wait_gpu(&self.device, None);
+            }
+            #[cfg(not(windows))]
+            g.wait();
         }
         // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
         // without one in the new options it is dropped here, with its context and textures)
@@ -323,12 +328,6 @@ impl Renderer {
             self.history.triple_culling = Default::default();
         }
         self.render_inner(scene, target, width, height, camera, lighting, true, None, None, false);
-    }
-
-    /// The window's frame generation (`SurfaceState::frame_generation`): upscaled frames hand it
-    /// what it makes the in-between frames from.
-    pub fn set_frame_generation(&mut self, frame_generation: Option<temporal::FrameGeneration>) {
-        self.frame_generation = frame_generation;
     }
 
     /// `render` for the window's own picture, the only one temporal upscaling draws: a photo or
@@ -708,7 +707,10 @@ impl Renderer {
         second_eye: bool,
     ) {
         // the frame's switches from the environment, each read once
-        let env = FrameEnv::read();
+        let mut env = FrameEnv::read();
+        // (wgpu 29 cannot finish a render bundle on a custom backend, and mX Graphics is one:
+        // there the main pass is recorded directly)
+        env.no_bundles |= wgpu_mx::custom::is_mx(&self.device);
         if !self.frame_hooks(scene, &env, with_overlays) {
             return;
         }

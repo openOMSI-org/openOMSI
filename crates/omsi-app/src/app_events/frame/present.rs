@@ -47,8 +47,23 @@ impl App {
         let mut finish = false;
         let mut reconfigure = false;
         crate::themes::sync(&self.settings.ui_theme_pack, self.settings.is_light_theme());
-        if let (Some(s), Some(r)) = (self.gfx.surface.as_mut(), self.renderer.as_ref()) {
+        if let (Some(s), Some(r)) = (self.gfx.surface.as_mut(), self.renderer.as_mut()) {
             s.set_glass(r, omsi_ui::theme::th().glass.is_some());
+            // A Mac's frame generation (MetalFX), asked every frame: off for this drive once the
+            // frame rate check found it too slow, `frame_time`; switched off and on in the menu,
+            // it is tried again. (Windows' comes with the window's swap chain:
+            // `game_lists::graphics::switch_frame_generation`.)
+            #[cfg(target_os = "macos")]
+            {
+                let asked = self.settings.frame_generation();
+                if !asked {
+                    self.perf.generation_too_slow = 0;
+                }
+                let generation = s.set_frame_generation(r, asked && self.perf.generation_too_slow < GENERATION_SLOW_READINGS);
+                r.set_frame_generation(generation);
+                let making = r.frames_generated().is_some_and(|n| n > 0);
+                self.perf.generation_since = if making { self.perf.generation_since.or_else(|| Some(Instant::now())) } else { None };
+            }
         }
         let shot = self.perf.shot.take();
         if let Some(s) = self.gfx.surface.as_ref() {
@@ -674,11 +689,12 @@ impl App {
         }
         self.perf.total_frames += 1;
         if self.perf.fps_t.elapsed().as_secs_f32() >= 1.0 {
-            let generated = r.frames_generated();
-            self.perf.generated = generated.map(|n| n.saturating_sub(std::mem::replace(&mut self.perf.generated_mark, n)) as f32);
+            // (frame generation's count now, and the frames it made in this second)
+            let made = r.frames_generated();
+            self.perf.generated = (made.unwrap_or(0), made.map_or(0.0, |m| m.saturating_sub(self.perf.generated.0) as f32));
             if omsi_cfg::flags::OMSI_PROFILE.is_set() {
                 let secs = self.perf.fps_t.elapsed().as_secs_f32();
-                let made = self.perf.generated.map(|g| format!(", {:.1} more made by frame generation", g / secs)).unwrap_or_default();
+                let made = made.map(|_| format!(", {:.1} more made by frame generation", self.perf.generated.1 / secs)).unwrap_or_default();
                 log::info!("profile interval: {:.1} fps over {secs:.2} s{made}", self.perf.frames as f32 / secs);
             }
             let speed = self

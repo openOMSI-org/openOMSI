@@ -151,6 +151,9 @@ pub struct PlayerInfo {
     pub destination: String,
     /// The timetable tour, `<line>/<tour>` (empty for none).
     pub tour: String,
+    /// The paint scheme (empty: the default one, or on foot); no player, a bus standing free (`omsi_lan::parked`).
+    pub paint: String,
+    pub parked: bool,
     /// World metres (x east, y north) and heading (degrees, clockwise from north): the bus
     /// driven, or the player on foot, or the bus the player sits in.
     pub x: f64,
@@ -172,13 +175,14 @@ impl PlayerInfo {
             None => ("null".into(), "null".into()),
         };
         format!(
-            "{{\"id\":{},\"name\":{},\"bus\":{},\"line\":{},\"destination\":{},\"tour\":{},\"x\":{},\"y\":{},\"heading\":{},\"speed_kmh\":{},\"on_foot\":{},\"aboard\":{},\"lat\":{},\"lon\":{}}}",
+            "{{\"id\":{},\"name\":{},\"bus\":{},\"line\":{},\"destination\":{},\"tour\":{},\"paint\":{},\"parked\":{},\"x\":{},\"y\":{},\"heading\":{},\"speed_kmh\":{},\"on_foot\":{},\"aboard\":{},\"lat\":{},\"lon\":{}}}",
             self.id,
             json_str(&self.name),
             json_str(&self.bus),
             json_str(&self.line),
             json_str(&self.destination),
             json_str(&self.tour),
+            json_str(&self.paint), self.parked,
             num(self.x, 1),
             num(self.y, 1),
             num(self.heading as f64, 1),

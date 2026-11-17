@@ -37,7 +37,10 @@ impl Role {
     /// What the role may do, for the panels (which hide what is not allowed - the server
     /// checks every operation all the same).
     pub fn perms(self) -> Vec<Perm> {
-        [Perm::View, Perm::Moderate, Perm::World].into_iter().filter(|p| self.allows(*p)).collect()
+        [Perm::View, Perm::Moderate, Perm::World]
+            .into_iter()
+            .filter(|p| self.allows(*p))
+            .collect()
     }
 
     pub fn name(self) -> &'static str {
@@ -62,7 +65,11 @@ mod tests {
 
     #[test]
     fn a_moderator_leaves_the_world_alone() {
-        assert!(Role::Admin.allows(Perm::World) && Role::Admin.allows(Perm::Moderate) && Role::Admin.allows(Perm::View));
+        assert!(
+            Role::Admin.allows(Perm::World)
+                && Role::Admin.allows(Perm::Moderate)
+                && Role::Admin.allows(Perm::View)
+        );
         assert!(Role::Moderator.allows(Perm::View) && Role::Moderator.allows(Perm::Moderate));
         assert!(!Role::Moderator.allows(Perm::World));
         assert_eq!(Role::Moderator.perms(), vec![Perm::View, Perm::Moderate]);

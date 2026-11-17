@@ -281,6 +281,7 @@ flags! {
     OMSI_ENHANCED_PLUS: Bool, Tuning, Use, "settings", "Enhanced+ (ray traced) graphics for this run.";
     OMSI_ENV_PHOTO: Num, Debug, Use, "1", "0 leaves the environment photo out of the debug views.";
     OMSI_FAKE_GPU_ERROR: Text, Test, Frame, "-", "Fault injection: open, open-panic, pipeline, lost-build, build, lost, frame, mesh - the GPU error to simulate. Only in builds with omsi-render's `test-hooks` feature (on by default).";
+    OMSI_FG_SHOW: Text, Debug, Use, "-", "Frame generation: generated or drawn - the window shows only that kind of frame, to look at it alone.";
     OMSI_FIXED_SCALE: Bool, Switch, Use, "off", "Keep the render scale fixed (no dynamic resolution).";
     OMSI_FLASHLIGHT: Bool, Test, Use, "off", "Offscreen: the player's flashlight is on (in the window it is Alt+F).";
     OMSI_FLEET_AHEAD: Num, Test, Use, "FLEET_AHEAD", "Minutes ahead the timetable fleet is planned (for tests).";
@@ -343,6 +344,7 @@ flags! {
     OMSI_MIRROR_HUD: Num, Tuning, Use, "settings", "Mirror HUD mode (number).";
     OMSI_MOBILE: Bool, Test, Use, "off", "The phone layout on a computer (screen cut-outs).";
     OMSI_MUTE: Bool, Test, Use, "off", "Mix everything as usual but play nothing.";
+    OMSI_MX: Text, Setup, Use, "settings", "on or off: draw with mX, openOMSI's own graphics library, through wgpu (mX Graphics, experimental), or with wgpu's own backends (overrides the setting, which a Mac only reads; elsewhere the way to try mX).";
     OMSI_NAV_2D: Bool, Test, Use, "off", "Navigator pictures with flat houses (the nav_3d setting off).";
     OMSI_NAV_CONTOURS: Bool, Test, Use, "off", "Offscreen: the city map in its terrain view (contour lines and their heights, when the map's package has them).";
     OMSI_NAV_LINES: Text, Test, Use, "-", "Offscreen: open the city map's lines panel on the line with this number (a route, then a departure time, after semicolons: 5;1 or 5;1;14:07, which opens its timetable).";

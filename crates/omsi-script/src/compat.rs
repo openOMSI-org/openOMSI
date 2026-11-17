@@ -49,78 +49,6 @@ fn four_char_matrix(lines: &mut [String]) -> bool {
     changed
 }
 
-/// Volvo Wright door scripts gate the rear close macro on the parking brake and on both rear door
-/// leaves already being exactly `1`.  Their working outside-CL button bypasses those guards and
-/// writes the close target directly.  Make the shared macro do the same while keeping the patch
-/// specific to this known script shape.
-fn volvo_rear_door_close(lines: &mut [String]) -> bool {
-    let mut ranges = Vec::new();
-    let mut start = None;
-    for (i, line) in lines.iter().enumerate() {
-        let text = line.trim();
-        if text == "{macro:trg_bus_dooraftclose}" {
-            start = Some(i + 1);
-        } else if text == "{end}" {
-            if let Some(begin) = start.take() {
-                ranges.push((begin, i));
-            }
-        }
-    }
-    let mut changed = false;
-    let mut recognised = false;
-    for (start, end) in ranges {
-        let body = &lines[start..end];
-        let has = |needle: &str| body.iter().any(|line| line.trim() == needle);
-        if !(has("(L.L.bremse_feststell_sw) 1 =")
-            && has("(L.L.cockpit_button_smallhb) 1 = ||")
-            && has("(L.L.door_2) 1 = &&")
-            && has("(L.L.door_3) 1 = &&")
-            && body.iter().any(|line| line.contains("S.L.doorTarget_23")))
-        {
-            continue;
-        }
-        recognised = true;
-        for line in &mut lines[start..end] {
-            if matches!(
-                line.trim(),
-                "(L.L.bremse_feststell_sw) 1 ="
-                    | "(L.L.cockpit_button_smallhb) 1 = ||"
-                    | "(L.L.door_2) 1 = &&"
-                    | "(L.L.door_3) 1 = &&"
-            ) {
-                line.clear();
-            }
-        }
-        lines[start] = "0 (S.L.bdoor_sound_played)".to_string();
-        // The close animation emits ev_doortriggerclose_2 only when this latch is clear.
-        // Some variants leave it set after the previous cycle, silencing the warning on the
-        // next forced close.
-        if start + 1 < end {
-            lines[start + 1] = "1".to_string();
-        }
-        changed = true;
-    }
-    if recognised {
-        // The forced-close button sets bdoor_embtn_cls while the leaves move.  The stock
-        // warning-lamp condition unnecessarily excludes that state, so backdoor_buzzer never
-        // reaches the model's mdoor_warn material on these variants.
-        for i in 0..lines.len() {
-            if lines[i].trim() != "1 (S.L.backdoor_buzzer)" {
-                continue;
-            }
-            let begin = i.saturating_sub(12);
-            if let Some(j) = (begin..i)
-                .rev()
-                .find(|&j| lines[j].trim() == "(L.L.bdoor_embtn_cls) 0 = &&")
-            {
-                lines[j].clear();
-                changed = true;
-            }
-        }
-    }
-    changed
-}
-
 /// `"E" (L.$.Matrix_NewNr) 2 $SetLengthR " " $+ $+` or `" D" (L.$.Matrix_NewNr) 1
 /// $SetLengthR " " $+ $+`: the letter written in front of the number.
 fn letter_in_front(line: &str) -> Option<char> {
@@ -655,9 +583,6 @@ pub fn patch(lines: &mut Vec<String>) -> Vec<&'static str> {
     if four_char_matrix(lines) {
         applied.push("4-character line matrix: number padded to three digits");
     }
-    if volvo_rear_door_close(lines) {
-        applied.push("Volvo rear door closes while the leaves are moving");
-    }
     if aachen_ibox_route_pad(lines) {
         applied.push("Aachen ibox: digit buffer for PIN/line/route; typed leading zero; max 4 chars");
     }
@@ -687,34 +612,6 @@ mod tests {
         assert_eq!(lines[4], "\t\t(L.$.Matrix_NewNr) 3 $SetLengthR \"D\" $+");
         assert_eq!(lines[5], "(L.$.Matrix_NewNr) 3 $SetLengthR \"E\" $+");
         assert_eq!(lines[6], "\"BVG \"");
-    }
-
-    #[test]
-    fn volvo_rear_door_close_does_not_wait_for_both_leaves() {
-        let src = "{macro:trg_bus_dooraftclose}\n(L.L.bremse_feststell_sw) 1 =\n(L.L.cockpit_button_smallhb) 1 = ||\n(L.L.door_2) 1 = &&\n(L.L.door_3) 1 = &&\n{if}\n0 (S.L.doorTarget_23)\n{endif}\n{end}\n{macro:other}\n(L.L.door_2) 1 = &&";
-        let mut lines: Vec<String> = src.lines().map(String::from).collect();
-        let applied = patch(&mut lines);
-        assert!(applied.iter().any(|name| name.starts_with("Volvo rear door")));
-        assert_eq!(lines[1], "0 (S.L.bdoor_sound_played)");
-        assert_eq!(lines[2], "1");
-        assert!(lines[3..5].iter().all(String::is_empty));
-        assert_eq!(lines[10], "(L.L.door_2) 1 = &&");
-    }
-
-    #[test]
-    fn volvo_rear_door_fix_requires_the_known_guard_shape() {
-        let src = "{macro:trg_bus_dooraftclose}\n(L.L.door_2) 1 = &&\n(L.L.door_3) 1 = &&\n{end}";
-        let mut lines: Vec<String> = src.lines().map(String::from).collect();
-        assert!(patch(&mut lines).is_empty());
-        assert_eq!(lines[1], "(L.L.door_2) 1 = &&");
-    }
-
-    #[test]
-    fn volvo_rear_door_warning_allows_forced_close_state() {
-        let src = "{macro:trg_bus_dooraftclose}\n(L.L.bremse_feststell_sw) 1 =\n(L.L.cockpit_button_smallhb) 1 = ||\n(L.L.door_2) 1 = &&\n(L.L.door_3) 1 = &&\n{if}\n0 (S.L.doorTarget_23)\n{endif}\n{end}\n(L.L.door_2) 0.1 >\n(L.L.doorTarget_23) 0 = &&\n(L.L.bdoor_embtn_cls) 0 = &&\n(L.L.doorbuzzer_timer) 0 >\n(L.L.doorbuzzer_timer) 1.3 < && ||\n{if}\n1 (S.L.backdoor_buzzer)\n{endif}";
-        let mut lines: Vec<String> = src.lines().map(String::from).collect();
-        assert_eq!(patch(&mut lines).len(), 1);
-        assert!(!lines.iter().any(|line| line.trim() == "(L.L.bdoor_embtn_cls) 0 = &&"));
     }
 
     #[test]

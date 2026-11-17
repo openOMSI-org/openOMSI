@@ -7,7 +7,7 @@
 //! Vorbis, FLAC, MP3 / MP2, AAC and ALAC in MP4 / M4A, AIFF, CAF and Matroska audio.
 //! More than two channels are mixed down to stereo as the standard downmix does.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 pub struct WavData {
     pub sample_rate: u32,
@@ -43,7 +43,9 @@ fn mulaw(v: u8) -> i16 {
 
 /// Whether the bytes are a WAV file this reader is meant for (RIFF/RIFX/RF64/BW64 WAVE).
 pub fn is_wav(bytes: &[u8]) -> bool {
-    bytes.len() >= 12 && matches!(&bytes[0..4], b"RIFF" | b"RF64" | b"BW64") && &bytes[8..12] == b"WAVE"
+    bytes.len() >= 12
+        && matches!(&bytes[0..4], b"RIFF" | b"RF64" | b"BW64")
+        && &bytes[8..12] == b"WAVE"
 }
 
 pub fn parse_wav(bytes: &[u8]) -> Result<WavData> {
@@ -85,7 +87,9 @@ pub fn parse_wav(bytes: &[u8]) -> Result<WavData> {
                 }
                 fmt = Some((tag, ch, rate, bits, align));
             }
-            b"ds64" if body.len() >= 16 => ds64_data = Some(u64::from_le_bytes(body[8..16].try_into().unwrap())),
+            b"ds64" if body.len() >= 16 => {
+                ds64_data = Some(u64::from_le_bytes(body[8..16].try_into().unwrap()))
+            }
             b"data" => {
                 // (the first data chunk; a second one is a tool's leftover)
                 if data.is_none() {
@@ -100,7 +104,8 @@ pub fn parse_wav(bytes: &[u8]) -> Result<WavData> {
             None => break,
         };
     }
-    let (tag, channels, sample_rate, bits, align) = fmt.ok_or_else(|| anyhow!("missing fmt chunk"))?;
+    let (tag, channels, sample_rate, bits, align) =
+        fmt.ok_or_else(|| anyhow!("missing fmt chunk"))?;
     let data = data.ok_or_else(|| anyhow!("missing data chunk"))?;
     let channels = channels.max(1);
     if sample_rate == 0 {
@@ -114,17 +119,39 @@ pub fn parse_wav(bytes: &[u8]) -> Result<WavData> {
     };
     let samples: Vec<i16> = match (tag, width) {
         (1, 1) => data.iter().map(|b| ((*b as i16) - 128) << 8).collect(),
-        (1, 2) => data.chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]])).collect(),
-        (1, 3) => data.chunks_exact(3).map(|c| i16::from_le_bytes([c[1], c[2]])).collect(),
-        (1, 4) => data.chunks_exact(4).map(|c| i16::from_le_bytes([c[2], c[3]])).collect(),
-        (3, 4) => data.chunks_exact(4).map(|c| quantize(f32::from_le_bytes(c.try_into().unwrap()))).collect(),
-        (3, 8) => data.chunks_exact(8).map(|c| quantize(f64::from_le_bytes(c.try_into().unwrap()) as f32)).collect(),
+        (1, 2) => data
+            .chunks_exact(2)
+            .map(|c| i16::from_le_bytes([c[0], c[1]]))
+            .collect(),
+        (1, 3) => data
+            .chunks_exact(3)
+            .map(|c| i16::from_le_bytes([c[1], c[2]]))
+            .collect(),
+        (1, 4) => data
+            .chunks_exact(4)
+            .map(|c| i16::from_le_bytes([c[2], c[3]]))
+            .collect(),
+        (3, 4) => data
+            .chunks_exact(4)
+            .map(|c| quantize(f32::from_le_bytes(c.try_into().unwrap())))
+            .collect(),
+        (3, 8) => data
+            .chunks_exact(8)
+            .map(|c| quantize(f64::from_le_bytes(c.try_into().unwrap()) as f32))
+            .collect(),
         (6, 1) => data.iter().map(|b| alaw(*b)).collect(),
         (7, 1) => data.iter().map(|b| mulaw(*b)).collect(),
         // ADPCM and the rest: symphonia's decoders
-        _ => return parse_compressed(bytes).map_err(|e| anyhow!("WAV format tag {tag} / {bits} bit: {e}")),
+        _ => {
+            return parse_compressed(bytes)
+                .map_err(|e| anyhow!("WAV format tag {tag} / {bits} bit: {e}"));
+        }
     };
-    Ok(to_stereo(WavData { sample_rate, channels, samples }))
+    Ok(to_stereo(WavData {
+        sample_rate,
+        channels,
+        samples,
+    }))
 }
 
 /// More than two channels mixed down to two (ITU: the centre and the surrounds at -3 dB, the
@@ -157,7 +184,11 @@ pub fn to_stereo(w: WavData) -> WavData {
         out.push((l * norm).round().clamp(-32768.0, 32767.0) as i16);
         out.push((r * norm).round().clamp(-32768.0, 32767.0) as i16);
     }
-    WavData { sample_rate: w.sample_rate, channels: 2, samples: out }
+    WavData {
+        sample_rate: w.sample_rate,
+        channels: 2,
+        samples: out,
+    }
 }
 
 #[cfg(test)]
@@ -197,7 +228,9 @@ mod tests {
         b.extend_from_slice(&22u16.to_le_bytes());
         b.extend_from_slice(&32u16.to_le_bytes());
         b.extend_from_slice(&4u32.to_le_bytes());
-        b.extend_from_slice(&[3, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71]);
+        b.extend_from_slice(&[
+            3, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71,
+        ]);
         b.extend_from_slice(b"data");
         // -1: to the end of the file
         b.extend_from_slice(&u32::MAX.to_le_bytes());
@@ -205,11 +238,23 @@ mod tests {
         b.extend_from_slice(&(-0.25f32).to_le_bytes());
         assert_eq!(parse_wav(&b).unwrap().samples, vec![16384, -8192]);
         // 64-bit float
-        let d: Vec<u8> = [0.5f64, -1.0].iter().flat_map(|x| x.to_le_bytes()).collect();
-        assert_eq!(parse_wav(&wav(3, 64, &d)).unwrap().samples, vec![16384, -32768]);
+        let d: Vec<u8> = [0.5f64, -1.0]
+            .iter()
+            .flat_map(|x| x.to_le_bytes())
+            .collect();
+        assert_eq!(
+            parse_wav(&wav(3, 64, &d)).unwrap().samples,
+            vec![16384, -32768]
+        );
         // A-law and mu-law silence and peaks
-        assert_eq!(parse_wav(&wav(7, 8, &[0xFF, 0x80, 0x00])).unwrap().samples, vec![0, 32124, -32124]);
-        assert_eq!(parse_wav(&wav(6, 8, &[0xD5, 0xAA])).unwrap().samples, vec![8, 32256]);
+        assert_eq!(
+            parse_wav(&wav(7, 8, &[0xFF, 0x80, 0x00])).unwrap().samples,
+            vec![0, 32124, -32124]
+        );
+        assert_eq!(
+            parse_wav(&wav(6, 8, &[0xD5, 0xAA])).unwrap().samples,
+            vec![8, 32256]
+        );
         // a data size past the end of the file (a truncated download)
         let mut t = wav(1, 16, &[1, 0, 2, 0]);
         let n = t.len();
@@ -220,10 +265,18 @@ mod tests {
     #[test]
     fn surround_is_mixed_down_to_stereo() {
         // 5.1: FL FR FC LFE BL BR - a centre alone is heard equally on both sides
-        let w = to_stereo(WavData { sample_rate: 48000, channels: 6, samples: vec![0, 0, 10000, 30000, 0, 0] });
+        let w = to_stereo(WavData {
+            sample_rate: 48000,
+            channels: 6,
+            samples: vec![0, 0, 10000, 30000, 0, 0],
+        });
         assert_eq!(w.channels, 2);
         assert_eq!(w.samples[0], w.samples[1]);
-        assert!(w.samples[0] > 2000 && w.samples[0] < 10000, "{:?}", w.samples);
+        assert!(
+            w.samples[0] > 2000 && w.samples[0] < 10000,
+            "{:?}",
+            w.samples
+        );
     }
 
     #[test]
@@ -254,26 +307,90 @@ mod tests {
 
     #[test]
     fn an_empty_sound_file_is_refused_without_probing() {
-        assert!(parse_any(&[]).err().is_some_and(|e| e.to_string().contains("empty")));
+        assert!(
+            parse_any(&[])
+                .err()
+                .is_some_and(|e| e.to_string().contains("empty"))
+        );
         assert!(parse_any(&[0, 1]).is_err());
+    }
+
+    #[test]
+    fn a_file_of_no_sound_format_names_its_size() {
+        let junk: Vec<u8> = b"<html>not a sound</html>"
+            .iter()
+            .copied()
+            .cycle()
+            .take(189_140)
+            .collect();
+        let e = parse_any(&junk).err().expect("refused").to_string();
+        assert!(
+            e.contains("no sound could be read") && e.contains("189140 bytes"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn a_sound_after_leading_junk_is_still_found() {
+        let mut wav = b"RIFF".to_vec();
+        let samples: Vec<u8> = (0..400i16).flat_map(|i| (i * 50).to_le_bytes()).collect();
+        wav.extend((36 + samples.len() as u32).to_le_bytes());
+        wav.extend(b"WAVEfmt ");
+        wav.extend(16u32.to_le_bytes());
+        wav.extend(1u16.to_le_bytes()); // PCM
+        wav.extend(1u16.to_le_bytes()); // mono
+        wav.extend(22050u32.to_le_bytes());
+        wav.extend(44100u32.to_le_bytes());
+        wav.extend(2u16.to_le_bytes());
+        wav.extend(16u16.to_le_bytes());
+        wav.extend(b"data");
+        wav.extend((samples.len() as u32).to_le_bytes());
+        wav.extend(samples);
+        let mut junk = vec![0x55u8; 300];
+        junk.extend(wav);
+        assert!(sniff(&junk).is_none());
+        parse_compressed(&junk).expect("found past the junk");
     }
 
     #[test]
     fn every_format_becomes_16_bit() {
         // 8-bit is unsigned around 128
-        assert_eq!(parse_wav(&wav(1, 8, &[0, 128, 255])).unwrap().samples, vec![-32768, 0, 32512]);
-        assert_eq!(parse_wav(&wav(1, 16, &[0x00, 0x80, 0xff, 0x7f])).unwrap().samples, vec![-32768, 32767]);
+        assert_eq!(
+            parse_wav(&wav(1, 8, &[0, 128, 255])).unwrap().samples,
+            vec![-32768, 0, 32512]
+        );
+        assert_eq!(
+            parse_wav(&wav(1, 16, &[0x00, 0x80, 0xff, 0x7f]))
+                .unwrap()
+                .samples,
+            vec![-32768, 32767]
+        );
         // 24 and 32 bit keep their top 16 bits
-        assert_eq!(parse_wav(&wav(1, 24, &[0x11, 0x00, 0x40])).unwrap().samples, vec![0x4000]);
-        assert_eq!(parse_wav(&wav(1, 32, &[0x11, 0x22, 0x00, 0xc0])).unwrap().samples, vec![-0x4000]);
-        let f: Vec<u8> = [0.5f32, -1.0, 2.0].iter().flat_map(|x| x.to_le_bytes()).collect();
-        assert_eq!(parse_wav(&wav(3, 32, &f)).unwrap().samples, vec![16384, -32768, 32767]);
+        assert_eq!(
+            parse_wav(&wav(1, 24, &[0x11, 0x00, 0x40])).unwrap().samples,
+            vec![0x4000]
+        );
+        assert_eq!(
+            parse_wav(&wav(1, 32, &[0x11, 0x22, 0x00, 0xc0]))
+                .unwrap()
+                .samples,
+            vec![-0x4000]
+        );
+        let f: Vec<u8> = [0.5f32, -1.0, 2.0]
+            .iter()
+            .flat_map(|x| x.to_le_bytes())
+            .collect();
+        assert_eq!(
+            parse_wav(&wav(3, 32, &f)).unwrap().samples,
+            vec![16384, -32768, 32767]
+        );
     }
 }
 
 /// An MP3 file: an ID3 tag first, or an MPEG audio frame's sync word (11 bits set).
 pub fn is_mp3(bytes: &[u8]) -> bool {
-    bytes.starts_with(b"ID3") || (bytes.len() > 2 && bytes[0] == 0xFF && bytes[1] & 0xE0 == 0xE0 && bytes[1] & 0x06 != 0)
+    bytes.starts_with(b"ID3")
+        || (bytes.len() > 2 && bytes[0] == 0xFF && bytes[1] & 0xE0 == 0xE0 && bytes[1] & 0x06 != 0)
 }
 
 /// The container a sound file is by its signature, as symphonia's hint names it.
@@ -313,20 +430,52 @@ pub fn parse_compressed(bytes: &[u8]) -> Result<WavData> {
     if bytes.len() < 4 {
         return Err(anyhow!("the sound file is empty ({} bytes)", bytes.len()));
     }
-    let mss = MediaSourceStream::new(Box::new(std::io::Cursor::new(bytes.to_vec())), Default::default());
+    let mss = MediaSourceStream::new(
+        Box::new(std::io::Cursor::new(bytes.to_vec())),
+        Default::default(),
+    );
     let mut hint = Hint::new();
     hint.with_extension(sniff(bytes).unwrap_or("ogg"));
-    let mut format = symphonia::default::get_probe().format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())?.format;
-    let track = format.default_track().ok_or_else(|| anyhow!("no audio track"))?.clone();
-    let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
+    let probed = symphonia::default::get_probe().format(
+        &hint,
+        mss,
+        &FormatOptions::default(),
+        &MetadataOptions::default(),
+    );
+    let mut format = match probed {
+        Ok(p) => p.format,
+        // symphonia's own error names no file; the size and first bytes say what it was
+        Err(e) => {
+            let head: Vec<String> = bytes.iter().take(8).map(|b| format!("{b:02X}")).collect();
+            return Err(anyhow!(
+                "no sound could be read ({} bytes, starting {}): {e}",
+                bytes.len(),
+                head.join(" ")
+            ));
+        }
+    };
+    let track = format
+        .default_track()
+        .ok_or_else(|| anyhow!("no audio track"))?
+        .clone();
+    let mut decoder =
+        symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
     let mut rate = track.codec_params.sample_rate.unwrap_or(0);
-    let mut channels = track.codec_params.channels.map(|c| c.count() as u16).unwrap_or(0);
+    let mut channels = track
+        .codec_params
+        .channels
+        .map(|c| c.count() as u16)
+        .unwrap_or(0);
     let mut samples = Vec::new();
     let mut buf: Option<SampleBuffer<f32>> = None;
     loop {
         let packet = match format.next_packet() {
             Ok(p) => p,
-            Err(symphonia::core::errors::Error::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(symphonia::core::errors::Error::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break;
+            }
             Err(e) => return Err(e.into()),
         };
         if packet.track_id() != track.id {
@@ -350,7 +499,11 @@ pub fn parse_compressed(bytes: &[u8]) -> Result<WavData> {
     if rate == 0 || channels == 0 {
         return Err(anyhow!("no sound in the file"));
     }
-    Ok(to_stereo(WavData { sample_rate: rate, channels, samples }))
+    Ok(to_stereo(WavData {
+        sample_rate: rate,
+        channels,
+        samples,
+    }))
 }
 
 /// Decode a sound file of any supported format (by its content).

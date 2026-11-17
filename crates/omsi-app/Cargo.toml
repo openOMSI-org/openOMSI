@@ -46,6 +46,7 @@ omsi-script = { path = "../omsi-script" }
 omsi-audio = { path = "../omsi-audio" }
 omsi-voice = { path = "../omsi-voice" }
 wgpu.workspace = true
+wgpu-mx.workspace = true
 winit.workspace = true
 glam.workspace = true
 pollster.workspace = true

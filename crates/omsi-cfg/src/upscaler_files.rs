@@ -14,6 +14,8 @@ const FRAME_GENERATION: [&str; 2] = ["amd_fidelityfx_loader_dx12.dll", "amd_fide
 pub const DLSS_FRAME_GENERATION: [&str; 4] = ["sl.dlss_g.dll", "nvngx_dlssg.dll", "sl.reflex.dll", "sl.pcl.dll"];
 /// Where macOS 13 and newer have MetalFX (the folder is there, its code is in the system's cache).
 const METALFX: &str = "/System/Library/Frameworks/MetalFX.framework";
+/// Where macOS tells its version.
+const SYSTEM_VERSION: &str = "/System/Library/CoreServices/SystemVersion.plist";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Api {
@@ -119,39 +121,6 @@ fn dlss_frame_generation_files(dir: &Path) -> bool {
     cfg!(windows) && DLSS.iter().chain(&DLSS_FRAME_GENERATION).all(|f| dir.join(f).is_file())
 }
 
-/// The `frame_generation` setting's word: `fsr3` (AMD FSR 3), `dlss2x`, `dlss3x` or `dlss4x`
-/// (NVIDIA DLSS, that many frames on screen per drawn one), anything else `off`.
-pub fn frame_generation_word(s: &str) -> &'static str {
-    match s.trim().to_ascii_lowercase().as_str() {
-        "fsr3" => "fsr3",
-        "dlss" | "dlss2x" => "dlss2x",
-        "dlss3x" => "dlss3x",
-        "dlss4x" => "dlss4x",
-        _ => "off",
-    }
-}
-
-/// The frame generation that can run from `dir`, as the menus offer it: `fsr3` and `dlss`.
-pub fn frame_generation_choices(dir: &Path) -> Vec<&'static str> {
-    choices(frame_generation_available(dir), dlss_frame_generation_available(dir))
-}
-
-fn choices(amd: bool, nvidia: bool) -> Vec<&'static str> {
-    [("fsr3", amd), ("dlss", nvidia)].into_iter().filter(|(_, ok)| *ok).map(|(k, _)| k).collect()
-}
-
-/// The frame generation choices of a menu, from `frame_generation_choices`.
-pub fn frame_generation_menu(choices: &[&str]) -> Vec<(&'static str, &'static str)> {
-    let mut menu = vec![("off", "Off")];
-    if choices.contains(&"fsr3") {
-        menu.push(("fsr3", "AMD FSR 3"));
-    }
-    if choices.contains(&"dlss") {
-        menu.extend([("dlss2x", "NVIDIA DLSS 2x"), ("dlss3x", "NVIDIA DLSS 3x (RTX 50)"), ("dlss4x", "NVIDIA DLSS 4x (RTX 50)")]);
-    }
-    menu
-}
-
 pub fn quality_word(s: &str) -> &'static str {
     match s.trim().to_ascii_lowercase().as_str() {
         "native" => "native",
@@ -182,6 +151,68 @@ pub fn menu_help(offered: bool) -> &'static str {
         "Standard Catmull-Rom or AMD FSR 1 change at once; Apple MetalFX takes the place of the anti-aliasing and the render scale, from the next start"
     } else {
         "Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start"
+    }
+}
+
+/// The `frame_generation` setting's word: `metalfx` (Apple MetalFX); `fsr3` and `dlss2x` to
+/// `dlss4x` too, the Windows words of #3763, so that a Mac build saving the settings file does
+/// not turn a Windows choice into `off` (where the game cannot run one, it simply does not);
+/// anything else `off`.
+pub fn frame_generation_word(s: &str) -> &'static str {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "metalfx" => "metalfx",
+        "fsr3" => "fsr3",
+        "dlss" | "dlss2x" => "dlss2x",
+        "dlss3x" => "dlss3x",
+        "dlss4x" => "dlss4x",
+        _ => "off",
+    }
+}
+
+/// macOS's major version, out of its `SystemVersion.plist`.
+fn macos_major(plist: &str) -> Option<u32> {
+    let version = plist.split("<key>ProductVersion</key>").nth(1)?.split("<string>").nth(1)?.split("</string>").next()?;
+    version.trim().split('.').next()?.parse().ok()
+}
+
+/// Apple's MetalFX frame interpolator: MetalFX on macOS 26 or newer. A candidate, as
+/// `metalfx_present` is: the interpolator itself is asked when the game starts it.
+pub fn metalfx_frames_present() -> bool {
+    static PRESENT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PRESENT.get_or_init(|| metalfx_present() && std::fs::read_to_string(SYSTEM_VERSION).ok().and_then(|p| macos_major(&p)).is_some_and(|v| v >= 26))
+}
+
+/// The frame generation that can run, as the menus offer it: `fsr3` and `dlss` from the
+/// vendors' DLLs in `dir` on Windows, `metalfx` on a Mac (part of macOS, no file).
+pub fn frame_generation_choices(dir: &Path) -> Vec<&'static str> {
+    choices(frame_generation_available(dir), dlss_frame_generation_available(dir), metalfx_frames_present())
+}
+
+fn choices(amd: bool, nvidia: bool, metalfx: bool) -> Vec<&'static str> {
+    [("fsr3", amd), ("dlss", nvidia), ("metalfx", metalfx)].into_iter().filter(|(_, ok)| *ok).map(|(k, _)| k).collect()
+}
+
+/// The frame generation choices of a menu, from `frame_generation_choices`.
+pub fn frame_generation_menu(choices: &[&str]) -> Vec<(&'static str, &'static str)> {
+    let mut menu = vec![("off", "Off")];
+    if choices.contains(&"fsr3") {
+        menu.push(("fsr3", "AMD FSR 3"));
+    }
+    if choices.contains(&"dlss") {
+        menu.extend([("dlss2x", "NVIDIA DLSS 2x"), ("dlss3x", "NVIDIA DLSS 3x (RTX 50)"), ("dlss4x", "NVIDIA DLSS 4x (RTX 50)")]);
+    }
+    if choices.contains(&"metalfx") {
+        menu.push(("metalfx", label("metalfx")));
+    }
+    menu
+}
+
+/// The Frame generation row's help text, as the in-game menu shows it.
+pub fn frame_generation_help() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Shows a generated frame between every two drawn ones: smoother motion for a little more input lag. Needs Apple MetalFX upscaling and works best from 30 drawn frames a second; with V-sync the game draws half the display's rate"
+    } else {
+        "AMD FSR 3 (any card) or NVIDIA DLSS (with DLSS upscaling; 3x and 4x on an RTX 50) adds generated frames between the drawn ones: smoother motion, slightly more input lag; DirectX 12 only"
     }
 }
 
@@ -278,15 +309,7 @@ mod tests {
     }
 
     #[test]
-    fn frame_generation_words_and_choices() {
-        assert_eq!(frame_generation_word(" FSR3 "), "fsr3");
-        assert_eq!(frame_generation_word("dlss"), "dlss2x");
-        assert_eq!(frame_generation_word("DLSS4X"), "dlss4x");
-        assert_eq!(frame_generation_word("dlss8x"), "off");
-        assert_eq!(choices(true, true), ["fsr3", "dlss"]);
-        assert!(choices(false, false).is_empty());
-        assert_eq!(frame_generation_menu(&["fsr3"]).len(), 2);
-        assert_eq!(frame_generation_menu(&["dlss"]).iter().map(|c| c.0).collect::<Vec<_>>(), ["off", "dlss2x", "dlss3x", "dlss4x"]);
+    fn dlss_frame_generation_needs_its_files() {
         let dir = scratch("dlssg");
         for f in DLSS {
             std::fs::write(dir.join(f), b"").unwrap();
@@ -310,5 +333,36 @@ mod tests {
         assert!(!rtx_candidate(0x1002, "NVIDIA GeForce RTX 4060"));
         assert!(!rtx_candidate(0x8086, "Intel Arc A770"));
         assert!(!rtx_candidate(0, "Microsoft Basic Render Driver"));
+    }
+
+    #[test]
+    fn frame_generation_words_and_choices() {
+        assert_eq!(frame_generation_word(" MetalFX "), "metalfx");
+        for word in ["off", "", "on", "dlss8x"] {
+            assert_eq!(frame_generation_word(word), "off");
+        }
+        // (the Windows words of #3763 are kept, not turned into `off` by a Mac build)
+        assert_eq!([frame_generation_word("FSR3"), frame_generation_word("dlss"), frame_generation_word("DLSS4X")], ["fsr3", "dlss2x", "dlss4x"]);
+        assert_eq!(choices(true, true, false), ["fsr3", "dlss"]);
+        assert_eq!(choices(false, false, true), ["metalfx"]);
+        assert!(choices(false, false, false).is_empty());
+        assert_eq!(frame_generation_menu(&[]), [("off", "Off")]);
+        assert_eq!(frame_generation_menu(&["fsr3"]).len(), 2);
+        assert_eq!(frame_generation_menu(&["dlss"]).iter().map(|c| c.0).collect::<Vec<_>>(), ["off", "dlss2x", "dlss3x", "dlss4x"]);
+        assert_eq!(frame_generation_menu(&["metalfx"]), [("off", "Off"), ("metalfx", "Apple MetalFX (experimental)")]);
+        // (never where MetalFX itself is not: Windows, Linux, a Mac with an Intel chip)
+        assert!(!metalfx_frames_present() || metalfx_present());
+        let none = std::path::Path::new("");
+        assert_eq!(frame_generation_choices(none).contains(&"metalfx"), metalfx_frames_present());
+    }
+
+    #[test]
+    fn frame_generation_needs_macos_26() {
+        let plist = |v: &str| format!("<dict>\n\t<key>ProductName</key>\n\t<string>macOS</string>\n\t<key>ProductVersion</key>\n\t<string>{v}</string>\n</dict>");
+        assert_eq!(macos_major(&plist("15.6.1")), Some(15));
+        assert_eq!(macos_major(&plist("26.0")), Some(26));
+        assert_eq!(macos_major(&plist("27.2.1")), Some(27));
+        assert_eq!(macos_major("<dict/>"), None);
+        assert_eq!(macos_major(&plist("")), None);
     }
 }

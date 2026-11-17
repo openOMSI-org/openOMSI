@@ -211,7 +211,7 @@ impl crate::App {
             seen.riders = None;
         }
         if plugins.hears("lan_join") || plugins.hears("lan_leave") {
-            let now: hashbrown::HashMap<u32, String> = self.net.lan.as_ref().map(|l| l.peers().filter(|p| p.has_info).map(|p| (p.pose.id, p.pose.name.clone())).collect()).unwrap_or_default();
+            let now: hashbrown::HashMap<u32, String> = self.net.lan.as_ref().map(|l| l.peers().filter(|p| p.has_info && !omsi_net::is_parked(p.pose.id)).map(|p| (p.pose.id, p.pose.name.clone())).collect()).unwrap_or_default();
             if let Some(before) = seen.players.as_ref() {
                 for (id, name) in &now {
                     if !before.contains_key(id) {

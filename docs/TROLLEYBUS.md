@@ -102,6 +102,33 @@ the constants are in the vehicle's file, not in the game.
   For manual-only radio control, keep the route code at `0` and use a momentary toggle
   button. The driver reads the actual position from the roadside switch display. Range is
   configurable reception coverage, not a model of antenna propagation or a safety interlock.
+* **A shoe going through a frog.** A bus's script can react to a pole crossing a frog: the
+  crossing fires the script's triggers `Trolley_Pole<k>_Frog` (that pole's own),
+  `Trolley_Frog` (that frog, whichever pole crossed it) and, when the map gave the frog a name,
+  `Trolley_Frog_<name>` (that frog, its spaces written as underscores). The frog's own two
+  are fired once for each frog crossed, even when both poles crossed it: the poles are apart,
+  so they cross a frog in steps of their own. The trigger
+  runs before the step's `{frame}`, so what it writes is read in the same frame:
+
+  ```
+  {trigger:Trolley_Frog_Junction}
+  (L.L.crossed) 1 + (S.L.crossed)
+  {end}
+  ```
+* **A shoe going over a crossing.** Where two wires cross without joining (an overhead
+  crossing with insulated sections) the shoe goes over it: the crossing fires the script's
+  triggers `Trolley_Pole<k>_Joint` (that pole's own) and `Trolley_Joint` (a crossing,
+  whichever pole). This includes the inner conductor crossing between a frog's straight and
+  branch legs, even though those spans join at the frog. The joined endpoints themselves do
+  not fire joint triggers; `Trolley_Frog` reports passage through the frog separately.
+  Each conductor intersection fires both triggers once. At a perpendicular
+  crossing, each of the two conductors on one span crosses both conductors on the other span,
+  resulting in four conductor intersections. Consequently, `Trolley_Joint` fires **four times** and
+  the corresponding pole-specific trigger each fire **two times** for one physical crossing.
+  `Trolley_Crossing` fires once for that physical crossing, regardless of which pole crosses it;
+  use it when the script should react once instead of once per conductor intersection.
+  Either side can trigger independently; polarity is not required. A wire that passes above
+  another flies over it and is not fired.
 * **Arcs and sound.** Where current is broken - the shoe leaving the wire, a pole coming off,
   an insulator or a frog crossed under power - an arc burns `L I^2 / 2` of the motor circuit's
   inductance (12 mH): the game draws a flash with sparks, lights the wire and the roof and
@@ -531,8 +558,9 @@ the whole gear are in `crates/omsi-trolley`.
 ## Limits
 
 * Only the player's bus has gear simulated; AI vehicles do not run on the wire.
-* Crossings of two wires (an overhead crossing with insulated sections) are not modelled apart
-  from the geometry; a shoe never jumps from one wire to the other.
+* Crossings of two wires (an overhead crossing with insulated sections) are found from the
+  geometry, so that a script can react to a shoe going over one; nothing else of them is
+  modelled, and a shoe never jumps from one wire to the other.
 * The poles are drawn as plain booms with a rope, not as the model of any bus; a model that
   has its own sets `visible 0` and follows the variables.
 * Wire and gear are not sent over LAN yet; another player sees a trolleybus as an ordinary bus.

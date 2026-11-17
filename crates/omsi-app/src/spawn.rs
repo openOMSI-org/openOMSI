@@ -120,6 +120,8 @@ pub(crate) struct PreparedPlayer {
     pub(crate) ty: Arc<omsi_sim::VehicleType>,
     parts: Vec<(Arc<omsi_sim::VehicleType>, bool)>,
     staged: Option<scene::VehiclePrefetch>,
+    /// A bus read from the files a server keeps writes its displays with its own fonts.
+    fonts: Option<omsi_lan::mods::vehicles::SharedFonts>,
 }
 
 impl PreparedPlayer {
@@ -129,7 +131,12 @@ impl PreparedPlayer {
         let path = player_bus_path(&args.root, bus)?;
         let ty = Arc::new(omsi_sim::VehicleType::load(&args.root, &path)?);
         let parts = load_coupled_types(&args.root, ty.clone());
-        Ok(Self { ty, parts, staged: None })
+        Ok(Self { ty, parts, staged: None, fonts: None })
+    }
+
+    pub(crate) fn of_type(root: &Path, ty: Arc<omsi_sim::VehicleType>, fonts: Option<omsi_lan::mods::vehicles::SharedFonts>) -> Self {
+        let parts = load_coupled_types(root, ty.clone());
+        Self { ty, parts, staged: None, fonts }
     }
 
     /// Make its meshes and textures in paint `paint` with `prefetch` (a placement's own,
@@ -157,6 +164,8 @@ pub(crate) struct PendingPlacement {
     /// The driven vehicle read again from its files (the menu's reload).
     pub(crate) reload: bool,
     pub(crate) heading: f64,
+    /// A server's parked bus taken over (`on_foot::parked`): its number.
+    pub(crate) taken: Option<u32>,
 }
 
 /// Choose the player's fleet number and registration before the script VM runs `{init}`.
@@ -243,6 +252,7 @@ pub(crate) fn spawn_player_prepared(
     if let Some(staged) = prepared.staged.take() {
         world.accept_placement_prefetch(staged);
     }
+    let fonts = prepared.fonts.take().unwrap_or_else(|| world.fonts.clone());
     let vt = prepared.ty;
     if let omsi_cfg::transport::Admission::Refused(why) = omsi_sim::transport::admission(world.global.transport, &vt.def) {
         if omsi_cfg::flags::OMSI_IGNORE_TRANSPORT.is_set() {
@@ -264,7 +274,9 @@ pub(crate) fn spawn_player_prepared(
         let keys: Vec<String> = doors.iter().enumerate().map(|(i, g)| format!("Shift+{} = {}", i + 1, g.join(" + "))).collect();
         log::info!("door keys: {}", keys.join(", "));
     }
-    let host = vehicle_host(args, world, &vt);
+    let mut host = vehicle_host(args, world, &vt);
+    // (before the scripts' {init}, which asks for its fonts: one not found then stays not found)
+    host.font_lib = Some(fonts.clone());
     let mut vehicle = omsi_sim::VehicleInstance::new(vt.clone(), host);
     // place at the entry point
     place_at_entry_point(args, world, &mut vehicle);
@@ -319,13 +331,13 @@ pub(crate) fn spawn_player_prepared(
         })
         .collect();
     // fonts for [texttexture]
-    vehicle.init_text_textures(&mut world.fonts.lock(), &|p| {
+    vehicle.init_text_textures(&mut fonts.lock(), &|p| {
         omsi_texture::decode_file(p)
             .ok()
             .map(|i| (i.width, i.height, i.rgba))
     });
     for t in vehicle.trailers.iter_mut() {
-        t.init_text_textures(&mut world.fonts.lock(), &|p| {
+        t.init_text_textures(&mut fonts.lock(), &|p| {
             omsi_texture::decode_file(p)
                 .ok()
                 .map(|i| (i.width, i.height, i.rgba))

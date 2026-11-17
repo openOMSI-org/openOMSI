@@ -471,3 +471,64 @@ fn metalfx_settles_on_the_full_sized_picture() {
     // of the wrong sign on one axis 0.39 or 0.57, on both 0.62)
     assert!(settled < 0.55 * plain, "MetalFX's picture ({settled}) is not much nearer the full-sized one than the stretched picture ({plain})");
 }
+
+/// MetalFX's frame interpolator (macOS 26 and newer) makes the picture between two frames of a
+/// camera that moves: nearer to each of them than they are to each other. What lies over the
+/// scene only in the finished picture (the HUD) stays where it is.
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn metalfx_makes_the_frame_between_two() {
+    let (w, h) = (384u32, 256u32);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let mut r = upscaled_renderer();
+    let generation = match crate::temporal::FrameGeneration::load(&r.device) {
+        Ok(g) => g,
+        Err(e) => return eprintln!("skipped: {e:#}"),
+    };
+    r.set_frame_generation(Some(generation.clone()));
+    let mut scene = rails_scene(&mut r);
+    let srgb = wgpu::TextureFormat::Rgba8UnormSrgb;
+    let (drawn, view) = crate::temporal::metalfx_frames::window_picture(&r.device, &r.queue, "drawn", srgb, (w, h));
+    let (made, _) = crate::temporal::metalfx_frames::window_picture(&r.device, &r.queue, "made", srgb, (w, h));
+    let mut cam = camera();
+    for _ in 0..32 {
+        r.render_window(&mut scene, &view, w, h, &cam, &lighting);
+    }
+    // a "HUD": a yellow block over the finished picture only
+    let (hud_x, hud_y, hud_w, hud_h) = (24u32, 200u32, 48u32, 24u32);
+    let yellow = [255u8, 220, 0, 255].repeat((hud_w * hud_h) as usize);
+    let in_hud = |i: usize| {
+        let (x, y) = (i as u32 % w, i as u32 / w);
+        (hud_x + 4..hud_x + hud_w - 4).contains(&x) && (hud_y + 4..hud_y + hud_h - 4).contains(&y)
+    };
+    // (MetalFX's first two pictures after a gap are the frame's own: its history starts there)
+    let mut pictures = Vec::new();
+    for _ in 0..4 {
+        cam.position.x += 0.5;
+        r.render_window(&mut scene, &view, w, h, &cam, &lighting);
+        r.queue.write_texture(
+            wgpu::TexelCopyTextureInfo { texture: &drawn, mip_level: 0, origin: wgpu::Origin3d { x: hud_x, y: hud_y, z: 0 }, aspect: wgpu::TextureAspect::All },
+            &yellow,
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(4 * hud_w), rows_per_image: None },
+            wgpu::Extent3d { width: hud_w, height: hud_h, depth_or_array_layers: 1 },
+        );
+        r.queue.submit(None);
+        let inputs = generation.take().expect("the upscaled frame handed to frame generation");
+        assert!(inputs.last_picture.is_some() && !inputs.cut, "a frame to go from");
+        assert!(generation.generate(&r.queue, &inputs, &drawn, &made).unwrap(), "a picture made");
+        // (read back behind MetalFX's work: the queue runs its buffers in order)
+        pictures.push((r.read_texture(&drawn, wgpu::TextureAspect::All).unwrap(), r.read_texture(&made, wgpu::TextureAspect::All).unwrap()));
+    }
+    assert!(difference(&pictures[0].0, &pictures[0].1) < 0.01, "without history, the frame itself");
+    let (before, after, between) = (&pictures[2].0, &pictures[3].0, &pictures[3].1);
+    let (apart, to_before, to_after) = (difference(before, after), difference(before, between), difference(between, after));
+    eprintln!("the two frames {apart:.2} apart; the generated one {to_before:.2} from the first, {to_after:.2} from the second");
+    assert!(apart > 1.0, "the camera's move shows ({apart})");
+    assert!(to_before < apart && to_after < apart && to_after > 0.5, "the generated frame ({to_before} and {to_after}) lies between the two ({apart})");
+    let hud: Vec<&[u8]> = between.chunks(4).enumerate().filter(|(i, _)| in_hud(*i)).map(|(_, p)| p).collect();
+    let off = hud.iter().filter(|p| p[0] < 240 || p[1].abs_diff(220) > 12 || p[2] > 24).count();
+    eprintln!("the HUD block in the generated frame: {off} of {} pixels off", hud.len());
+    assert!(off * 50 < hud.len(), "the HUD stays where it is in the generated frame ({off} of {} pixels off)", hud.len());
+    assert_eq!(r.frames_generated(), Some(4));
+}
