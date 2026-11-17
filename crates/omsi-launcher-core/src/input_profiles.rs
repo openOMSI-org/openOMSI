@@ -209,17 +209,31 @@ pub fn create_in(inputs: &Path, rival: Option<&Path>, name: &str) -> Result<()> 
         bail!("there is a profile {name} already");
     }
     let mut ix = read(inputs);
-    match ix.active.clone() {
-        Some(a) => save_in_use(inputs, rival, &folder(inputs, &a))?,
-        None if !name.eq_ignore_ascii_case(FIRST) && !folder(inputs, FIRST).exists() => {
-            save_in_use(inputs, rival, &folder(inputs, FIRST))?;
-            ix.default.get_or_insert_with(|| FIRST.to_string());
+    let new = folder(inputs, name);
+    // (the folders this call makes go again when a later step fails: a retry finds the name free)
+    let mut made = vec![new.clone()];
+    let result = (|| -> Result<()> {
+        match ix.active.clone() {
+            Some(a) => save_in_use(inputs, rival, &folder(inputs, &a))?,
+            None if !name.eq_ignore_ascii_case(FIRST) && !folder(inputs, FIRST).exists() => {
+                made.push(folder(inputs, FIRST));
+                save_in_use(inputs, rival, &folder(inputs, FIRST))?;
+                ix.default.get_or_insert_with(|| FIRST.to_string());
+            }
+            None if name.eq_ignore_ascii_case(FIRST) => {
+                ix.default.get_or_insert_with(|| name.to_string());
+            }
+            None => {}
         }
-        None => {}
+        ix.active = Some(name.to_string());
+        copy_files_then(inputs, rival, &new, None, || write(inputs, &ix))
+    })();
+    if result.is_err() {
+        for d in &made {
+            let _ = std::fs::remove_dir_all(d);
+        }
     }
-    save_in_use(inputs, rival, &folder(inputs, name))?;
-    ix.active = Some(name.to_string());
-    write(inputs, &ix)
+    result
 }
 
 pub fn switch_in(inputs: &Path, rival: Option<&Path>, name: &str) -> Result<()> {
@@ -668,6 +682,59 @@ mod tests {
                 "{p}"
             );
         }
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_first_profile_named_default_is_the_default() {
+        let d = std::env::temp_dir().join(format!("input-profiles-first-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("keyboard.cfg"), "original").unwrap();
+        create_in(&d, None, FIRST).unwrap();
+        assert_eq!(list_in(&d)["default"], FIRST);
+        create_in(&d, None, "Wheel").unwrap();
+        std::fs::write(d.join("keyboard.cfg"), "wheel keys").unwrap();
+        assert_eq!(
+            for_bus_in(&d, None, "Vehicles/Other/Other.bus")
+                .unwrap()
+                .as_deref(),
+            Some(FIRST)
+        );
+        assert_eq!(kb(&d), "original");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_create_whose_index_cannot_be_written_leaves_no_folder() {
+        let d = std::env::temp_dir().join(format!("input-profiles-create-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("keyboard.cfg"), "keys").unwrap();
+        let tmp = d.join(format!("{INDEX}.tmp"));
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // the first one, which also makes Default
+        assert!(create_in(&d, None, "Wheel").is_err());
+        assert!(!folder(&d, "Wheel").exists() && !folder(&d, FIRST).exists());
+        assert_eq!(list_in(&d)["profiles"], json!([]));
+        assert_eq!(list_in(&d)["active"], Value::Null);
+
+        std::fs::remove_dir_all(&tmp).unwrap();
+        create_in(&d, None, "Wheel").unwrap();
+        let before = list_in(&d);
+
+        // a later one
+        std::fs::create_dir_all(&tmp).unwrap();
+        assert!(create_in(&d, None, "Pad").is_err());
+        assert!(!folder(&d, "Pad").exists());
+        assert_eq!(list_in(&d), before);
+        assert_eq!(kb(&d), "keys");
+
+        std::fs::remove_dir_all(&tmp).unwrap();
+        create_in(&d, None, "Pad").unwrap();
+        assert_eq!(list_in(&d)["profiles"], json!(["Default", "Pad", "Wheel"]));
+        assert_eq!(list_in(&d)["active"], "Pad");
         let _ = std::fs::remove_dir_all(&d);
     }
 }
