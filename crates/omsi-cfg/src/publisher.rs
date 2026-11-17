@@ -674,7 +674,7 @@ pub fn mount_packs(content: &Path) -> io::Result<Vec<PathBuf>> {
         let mount = path.join(".mount");
         match crate::vfs::mount_publisher(&mount, pack, BTreeMap::new()) {
             Ok(_) => {
-                crate::add_content_root(mount.clone());
+                crate::add_pack_content_root(mount.clone());
                 mounts.push(mount);
             }
             Err(error) => log::warn!(

@@ -414,3 +414,48 @@ fn retained_index_history_and_unfinished_snapshots_keep_installed_provenance() {
     installed_only("more than 128 retained snapshots");
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn an_installed_pack_does_not_replace_an_original_file_for_an_ordinary_map() {
+    let _guard = TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let base = std::env::temp_dir().join(format!("omsi-publisher-collision-{}", std::process::id()));
+    let (content, install) = (base.join("content"), base.join("install"));
+    let original = install.join("Sceneryobjects/Fixture/scenery.sco");
+    std::fs::create_dir_all(original.parent().unwrap()).unwrap();
+    std::fs::write(&original, b"original").unwrap();
+    std::fs::create_dir_all(content.join("Packs")).unwrap();
+    let signer = SigningKey::generate(&ring::rand::SystemRandom::new()).unwrap();
+    let mut trust = TrustedPublishers::default();
+    trust.insert("fixture", signer.key_id(), signer.public_key());
+    trust.save_file(&content.join("Publishers.json")).unwrap();
+    fixture_pack(&content, &signer, "scenery", vec![]);
+    // the game's order: content folder, then the packs, then the installation
+    omsi_cfg::add_content_root(content.clone());
+    let mounts = omsi_cfg::publisher::mount_packs(&content).unwrap();
+    omsi_cfg::add_content_root(install.clone());
+    // (a map's objects are resolved against the installation, as `World` does)
+    let file = omsi_cfg::resolve_path(&install, "Sceneryobjects/Fixture/scenery.sco");
+    assert_eq!(omsi_cfg::vfs::read(&file).unwrap(), b"original");
+    let declaring = install.join("maps/Declaring");
+    std::fs::create_dir_all(&declaring).unwrap();
+    std::fs::write(declaring.join("dependencies.json"), serde_json::json!({
+        "format_version": 1,
+        "dependencies": [{"publisher_id":"fixture","pack_id":"scenery","version":"1.0.0"}],
+        "assets": []
+    }).to_string()).unwrap();
+    {
+        let scoped = omsi_cfg::publisher::validate_map(&declaring).unwrap();
+        let file = scoped.resolve_map_alias(&declaring, "Sceneryobjects/Fixture/scenery.sco").unwrap();
+        assert_eq!(omsi_cfg::vfs::read(&file).unwrap(), b"fixture");
+    }
+    for root in [&content, &install] {
+        omsi_cfg::remove_content_root(root);
+    }
+    for mount in mounts {
+        omsi_cfg::vfs::unmount_sealed(&mount);
+        omsi_cfg::remove_content_root(&mount);
+    }
+    std::fs::remove_dir_all(base).unwrap();
+}
