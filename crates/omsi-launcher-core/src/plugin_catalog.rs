@@ -77,6 +77,7 @@ fn path_ok(p: &str) -> bool {
         && p.rsplit_once('.')
             .is_some_and(|(_, e)| EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
         && !p.eq_ignore_ascii_case(MARK)
+        && !(!p.contains('/') && is_saved(&p.to_ascii_lowercase(), false))
         && !p
             .split('/')
             .next()
@@ -154,7 +155,7 @@ pub fn installed(plugins: &Path, id: &str) -> Option<String> {
         .flatten()
 }
 
-/// Nothing changes when a file does not match; an update keeps `data/`.
+/// Nothing changes when a file does not match; an update keeps what the plugin saved.
 pub fn install(plugins: &Path, e: &Entry, fetch: &dyn Fn(&str) -> Result<Vec<u8>>) -> Result<()> {
     if let Some(why) = problem(e) {
         bail!("{} is not a plugin of the catalog ({why})", e.id);
@@ -204,9 +205,8 @@ pub fn install(plugins: &Path, e: &Entry, fetch: &dyn Fn(&str) -> Result<Vec<u8>
     result
 }
 
-/// Put `new` in place of `target` and move the old folder's data over (`data/` and the copies
-/// `recover` kept beside it). The old folder waits at `old` until then, so on an error the
-/// plugin and its data are put back.
+/// Put `new` in place of `target` and move what the plugin saved over (`saved`). The old
+/// folder waits at `old` until then, so on an error the plugin and its data are put back.
 fn replace(
     new: &Path,
     target: &Path,
@@ -223,7 +223,7 @@ fn replace(
         return Err(e.into());
     }
     let mut moved: Vec<(PathBuf, PathBuf)> = Vec::new();
-    for name in data_folders(old) {
+    for name in saved(old) {
         let (from, to) = (old.join(&name), free_name(target, &name));
         if let Err(e) = rename(from.as_path(), to.as_path()) {
             for (from, to) in moved.iter().rev() {
@@ -240,7 +240,7 @@ fn replace(
 }
 
 /// An update cut short (the launcher closed, a failed rollback) left the old folder at `old`:
-/// put it back, or move its `data/` into the new one.
+/// put it back, or move what the plugin saved into the new one.
 fn recover(target: &Path, old: &Path) -> Result<()> {
     if !old.exists() {
         return Ok(());
@@ -249,8 +249,8 @@ fn recover(target: &Path, old: &Path) -> Result<()> {
         std::fs::rename(old, target)?;
         return Ok(());
     }
-    // (a game started in between may have made a new `data/`: the old one is kept beside it)
-    for name in data_folders(old) {
+    // (a game started in between may have saved anew: the old copy is kept beside it)
+    for name in saved(old) {
         std::fs::rename(old.join(&name), free_name(target, &name))?;
     }
     std::fs::remove_dir_all(old).with_context(|| {
@@ -261,27 +261,44 @@ fn recover(target: &Path, old: &Path) -> Result<()> {
     })
 }
 
-/// `data` and the `data.before-update…` copies in a plugin's folder, `data` first.
-fn data_folders(dir: &Path) -> Vec<String> {
+/// How the file a Lua plugin keeps `omsi.data` in ends (`LuaSpec::disk` in omsi-plugin).
+const SAVE: &str = ".save.lua";
+const KEPT: &str = "data.before-update";
+
+/// Whether `name` is what a plugin saved (`data/`, `data.save.lua`) or a copy of it an update
+/// kept (`data.before-update…/`, `data.before-update….save.lua`).
+fn is_saved(name: &str, dir: bool) -> bool {
+    match name.strip_suffix(SAVE) {
+        Some(stem) => !dir && (stem == "data" || stem.starts_with(KEPT)),
+        None => dir && (name == "data" || name.starts_with(KEPT)),
+    }
+}
+
+/// What the plugin saved in its folder and the copies kept beside it, `data` and
+/// `data.save.lua` first.
+fn saved(dir: &Path) -> Vec<String> {
     let mut v: Vec<String> = std::fs::read_dir(dir)
         .map(|rd| {
             rd.flatten()
-                .filter(|e| e.path().is_dir())
-                .map(|e| e.file_name().to_string_lossy().into_owned())
-                .filter(|n| n == "data" || n.starts_with("data.before-update"))
+                .filter_map(|e| {
+                    let n = e.file_name().to_string_lossy().into_owned();
+                    is_saved(&n, e.path().is_dir()).then_some(n)
+                })
                 .collect()
         })
         .unwrap_or_default();
-    v.sort_by_key(|n| (n != "data", n.clone()));
+    v.sort_by_key(|n| (!matches!(n.as_str(), "data" | "data.save.lua"), n.clone()));
     v
 }
 
-/// `name` in `dir`, or the first free `data.before-update`, `data.before-update-2`… when taken.
+/// `name` in `dir`, or the first free `data.before-update`, `data.before-update-2`… (with
+/// `.save.lua` for the saved file) when taken.
 fn free_name(dir: &Path, name: &str) -> PathBuf {
+    let suffix = if name.ends_with(SAVE) { SAVE } else { "" };
     std::iter::once(dir.join(name))
         .chain((1..).map(|n| match n {
-            1 => dir.join("data.before-update"),
-            n => dir.join(format!("data.before-update-{n}")),
+            1 => dir.join(format!("{KEPT}{suffix}")),
+            n => dir.join(format!("{KEPT}-{n}{suffix}")),
         }))
         .find(|p| !p.exists())
         .unwrap_or_else(|| dir.join(name))
@@ -353,6 +370,7 @@ mod tests {
         );
         assert!(parse(r#"{"version": 2, "plugins": []}"#).is_err());
         assert!(!path_ok("data/settings.json") && path_ok("data.lua") && !path_ok(".catalog.json"));
+        assert!(!path_ok("data.save.lua") && path_ok("lib/data.save.lua"));
         assert!(version("1.2.3") > version("1.2.0") && version("1.2").is_none());
     }
 
@@ -508,6 +526,82 @@ mod tests {
         .unwrap();
         assert_eq!(read("data/settings.json"), "new");
         assert_eq!(read("data.before-update/settings.json"), "old");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn omsi_data_survives_updates_and_recovery() {
+        let root = std::env::temp_dir().join(format!("plugin-catalog-save-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let plugins = root.join("plugins");
+        let (target, old) = (
+            plugins.join("speed-warning"),
+            root.join(".plugin-old-speed-warning"),
+        );
+        let read = |p: &str| std::fs::read_to_string(target.join(p)).unwrap();
+        install(&plugins, &entry("1.0.0", b"-- one"), &|_| {
+            Ok(b"-- one".to_vec())
+        })
+        .unwrap();
+        // what the game writes for `omsi.data` and `storage.*`
+        std::fs::write(target.join("data.save.lua"), "return { trips = 3 }").unwrap();
+        std::fs::create_dir_all(target.join("data")).unwrap();
+        std::fs::write(target.join("data/storage.json"), "{\"km\":12}").unwrap();
+
+        install(&plugins, &entry("1.1.0", b"-- two"), &|_| {
+            Ok(b"-- two".to_vec())
+        })
+        .unwrap();
+        assert_eq!(read("main.lua"), "-- two");
+        assert_eq!(read("data.save.lua"), "return { trips = 3 }");
+        assert_eq!(read("data/storage.json"), "{\"km\":12}");
+
+        // the saved file cannot be moved over: the old version and its state are back
+        let new = root.join("new");
+        std::fs::create_dir_all(&new).unwrap();
+        std::fs::write(new.join("main.lua"), "-- three").unwrap();
+        let fails = old.join("data.save.lua");
+        let r = replace(&new, &target, &old, &|a, b| {
+            if a == fails.as_path() {
+                Err(std::io::Error::other("held open"))
+            } else {
+                std::fs::rename(a, b)
+            }
+        });
+        assert!(r.is_err() && !old.exists());
+        assert_eq!(read("main.lua"), "-- two");
+        assert_eq!(read("data.save.lua"), "return { trips = 3 }");
+
+        // an update cut short after the new version went in, and a game run since saved anew:
+        // the next install keeps both copies, and the one after that too
+        std::fs::rename(&target, &old).unwrap();
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::write(target.join("main.lua"), "-- three").unwrap();
+        std::fs::write(
+            target.join(MARK),
+            r#"{"id": "speed-warning", "version": "1.2.0"}"#,
+        )
+        .unwrap();
+        std::fs::write(target.join("data.save.lua"), "return { trips = 1 }").unwrap();
+        for v in ["1.3.0", "1.4.0"] {
+            install(
+                &plugins,
+                &entry(v, b"-- four"),
+                &|_| Ok(b"-- four".to_vec()),
+            )
+            .unwrap();
+            assert_eq!(read("main.lua"), "-- four");
+            assert_eq!(read("data.save.lua"), "return { trips = 1 }");
+            assert_eq!(read("data.before-update.save.lua"), "return { trips = 3 }");
+            assert_eq!(read("data/storage.json"), "{\"km\":12}");
+            assert!(!old.exists());
+        }
+
+        // stopped with the old folder aside and nothing in its place: it is put back whole
+        std::fs::rename(&target, &old).unwrap();
+        recover(&target, &old).unwrap();
+        assert_eq!(read("data.save.lua"), "return { trips = 1 }");
+        assert!(!old.exists());
         let _ = std::fs::remove_dir_all(&root);
     }
 }
