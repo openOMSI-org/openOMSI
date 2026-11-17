@@ -29,9 +29,9 @@ pub(crate) fn setup(name: &str, trailer: Option<f32>) -> (PeopleSim, BusNow) {
         coupling_front_character: trailer.map(|kind| [30.0, -10.0, 10.0, kind]),
         ..def.clone()
     };
-    let mut parts = vec![(&def, Vec3::ZERO, f32::INFINITY)];
+    let mut parts = vec![(&def, Vec3::ZERO, f32::INFINITY, false)];
     if trailer.is_some() {
-        parts.push((&rear, Vec3::new(0.0, -10.0, 0.0), -5.0));
+        parts.push((&rear, Vec3::new(0.0, -10.0, 0.0), -5.0, false));
     }
     let cabin = Arc::new(Cabin::load_train(&parts).unwrap());
     let ty = Arc::new(HumanType::load(&dir.join("person.hum")).unwrap());
