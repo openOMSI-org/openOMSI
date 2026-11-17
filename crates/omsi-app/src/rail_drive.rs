@@ -348,7 +348,6 @@ impl RailDrive {
         v.set_controls(c);
         // the trail, and the coupled parts on it: store the rail centerline position at u,
         // so that trailing cars and bogies are placed on the track and not chord-inset
-        self.u += ds as f64;
         if self.trail.back().map(|b| (self.u - b.0).abs() > 0.1).unwrap_or(true) {
             // (backing up takes the trail back with it)
             while self.trail.back().is_some_and(|b| b.0 > self.u) {
@@ -397,6 +396,7 @@ impl RailDrive {
                     None => {
                         // the end of the track: the vehicle stops at its buffer
                         self.s = len;
+                        self.travel(ds, t - len);
                         return false;
                     }
                 }
@@ -411,15 +411,25 @@ impl RailDrive {
                     }
                     None => {
                         self.s = 0.0;
+                        self.travel(ds, t);
                         return false;
                     }
                 }
             } else {
                 self.s = t;
+                d = 0.0;
                 break;
             }
         }
+        self.travel(ds, d);
         true
+    }
+
+    /// Counts what was moved of `ds` (the vehicle's forward) into the distance travelled: all
+    /// of it but the `short` metres along the lane it did not get.
+    fn travel(&mut self, ds: f32, short: f32) {
+        let short = if self.along { short } else { -short };
+        self.u += (ds - short) as f64;
     }
 
     /// What the track under the vehicle is like for its dynamics: the grade in the direction
@@ -600,6 +610,53 @@ mod tests {
         assert!((point_at(&trail, head, 5.0).unwrap().x - 5.0).abs() < 1e-6);
         // without a head the newest sample is the end
         assert_eq!(point_at(&trail, None, 10.05).unwrap().x, 10.0);
+    }
+
+    #[test]
+    fn travelled_counts_only_the_movement_made_up_to_a_buffer() {
+        use omsi_sim::traffic::LaneBuilder;
+        let lane = LaneBuilder::polyline(
+            vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, 100.0, 0.0)],
+            LaneKind::Rail,
+            1.435,
+        );
+        let net = Network {
+            lanes: vec![lane],
+            ..Default::default()
+        };
+        let len = net.lanes[0].length();
+        let at = |s: f32, along: bool| RailDrive {
+            lane: 0,
+            s,
+            along,
+            trail: Default::default(),
+            u: 0.0,
+            body: Default::default(),
+            last_heading: None,
+        };
+
+        // 2 m short of the buffer, asked for 5: it gets 2
+        let mut r = at(len - 2.0, true);
+        assert!(!r.step(&net, None, 5.0, 0));
+        assert_eq!(r.s, len);
+        assert!((r.travelled() - 2.0).abs() < 1e-3, "{}", r.travelled());
+        // standing at the buffer, pushed on: it stays put and so does the distance
+        for _ in 0..10 {
+            assert!(!r.step(&net, None, 5.0, 0));
+        }
+        assert_eq!(r.s, len);
+        assert!((r.travelled() - 2.0).abs() < 1e-3, "{}", r.travelled());
+        // backing away from it counts in full
+        assert!(r.step(&net, None, -10.0, 0));
+        assert!((r.travelled() + 8.0).abs() < 1e-3, "{}", r.travelled());
+
+        // facing against the lane, the buffer ahead is at its start
+        let mut r = at(1.0, false);
+        assert!(!r.step(&net, None, 3.0, 0));
+        assert_eq!(r.s, 0.0);
+        assert!((r.travelled() - 1.0).abs() < 1e-3, "{}", r.travelled());
+        assert!(!r.step(&net, None, 3.0, 0));
+        assert!((r.travelled() - 1.0).abs() < 1e-3, "{}", r.travelled());
     }
 
     #[test]
