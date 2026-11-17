@@ -187,6 +187,7 @@ impl crate::App {
                 }
             }
         }
+        take_control::forget_gone(self);
         let panels: Vec<(&str, Option<Panel>)> = vec![
             ("view", self.menus.game_panels.view.as_ref().map(|v| v.panel(self, pal))),
             ("trip", self.menus.game_panels.trip.as_ref().map(|t| t.panel(pal))),

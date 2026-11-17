@@ -98,7 +98,7 @@ pub(crate) fn name_of(app: &crate::App, id: u64) -> Option<String> {
         .as_ref()?
         .cars
         .iter()
-        .find(|c| c.id == id)?;
+        .find(|c| c.id == id && !c.gone)?;
     let d = &c.vehicle.ty.def;
     let line = c.vehicle.host.tt_line.trim();
     let name = format!("{} {}", d.manufacturer.trim(), d.type_name.trim());
@@ -107,6 +107,19 @@ pub(crate) fn name_of(app: &crate::App, id: u64) -> Option<String> {
     } else {
         format!("{} - {} {line}", name.trim(), omsi_ui::tr("Line"))
     })
+}
+
+/// Drops the question once its bus has left the traffic: no panel shows it then, yet it would
+/// still hold the mouse and keys.
+pub(crate) fn forget_gone(app: &mut crate::App) {
+    if app
+        .menus
+        .game_panels
+        .take
+        .is_some_and(|id| name_of(app, id).is_none())
+    {
+        app.menus.game_panels.take = None;
+    }
 }
 
 pub(crate) fn click(app: &mut crate::App, el: &str) {
@@ -253,25 +266,5 @@ fn take(app: &mut crate::App, id: u64) -> anyhow::Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::ray_box;
-    use glam::DVec3;
-
-    #[test]
-    fn the_map_cameras_ray_meets_a_turned_bus_box() {
-        // a 12 m bus at (100, 50) heading east (90°): long along x
-        let b = omsi_sim::collision::Obb::from_box(
-            [2.5, 12.0, 3.0, 0.0, 0.0, 1.5],
-            DVec3::new(100.0, 50.0, 0.0),
-            90.0,
-        );
-        let down = DVec3::new(0.0, 0.0, -1.0);
-        // from above, 5 m along its length: a hit at the roof (3 m up, from 30 m)
-        let t = ray_box(&b, DVec3::new(105.0, 50.0, 30.0), down).expect("hit");
-        assert!((t - 27.0).abs() < 1e-6, "{t}");
-        // 5 m beside it: across, only 1.25 m wide
-        assert!(ray_box(&b, DVec3::new(100.0, 55.0, 30.0), down).is_none());
-        // looking away from it
-        assert!(ray_box(&b, DVec3::new(105.0, 50.0, 30.0), -down).is_none());
-    }
-}
+#[path = "take_control_tests.rs"]
+mod tests;
