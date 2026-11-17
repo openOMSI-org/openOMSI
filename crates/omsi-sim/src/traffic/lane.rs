@@ -303,6 +303,21 @@ impl Lane {
         self.curvature[i] + (self.curvature[i + 1] - self.curvature[i]) * t
     }
 
+    /// How sharply the lane bends over `span` metres about `s` (1/m, unsigned), as a train's
+    /// bogies feel it: taken at a point, the kink where a switch's lanes meet read as the
+    /// sharpest curve there is. A lane shorter than that: its curvature at `s`.
+    pub fn curve_over(&self, s: f32, span: f32) -> f32 {
+        let (c0, c1) = (
+            (s - span * 0.5).max(0.0),
+            (s + span * 0.5).min(self.length()),
+        );
+        if c1 - c0 > 2.0 {
+            wrap_deg(self.at(c1).1 - self.at(c0).1).abs().to_radians() / (c1 - c0)
+        } else {
+            self.curvature_at(s).abs()
+        }
+    }
+
     pub fn start(&self) -> DVec3 {
         self.points[0]
     }

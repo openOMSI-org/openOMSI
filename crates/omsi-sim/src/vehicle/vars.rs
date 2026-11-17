@@ -4,6 +4,17 @@
 use super::*;
 
 impl VehicleInstance {
+    /// How many of the train's `[add_camera_reflexion]` cameras come before part `part`'s.
+    pub fn mirror_base(&self, part: usize) -> usize {
+        self.ty.def.cameras_reflexion.len()
+            + self
+                .trailers
+                .iter()
+                .take(part)
+                .map(|t| t.ty.def.cameras_reflexion.len())
+                .sum::<usize>()
+    }
+
     pub(super) fn get(&self, id: Option<omsi_script::VarId>) -> f32 {
         id.map(|i| self.state.vars[i as usize]).unwrap_or(0.0)
     }

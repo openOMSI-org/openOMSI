@@ -373,13 +373,15 @@ pub(crate) fn spawn_player_prepared(
     let trailer_renders: Vec<scene::VehicleRender> =
         attach_coupled_types(&mut vehicle, prepared.parts)
             .iter()
-            .map(|t| {
+            .enumerate()
+            .map(|(k, t)| {
                 world.add_vehicle_part(
                     renderer,
                     scene,
                     t,
                     scheme.filter(|i| *i < t.paint_schemes.len()),
                     &render,
+                    vehicle.mirror_base(k),
                 )
             })
             .collect();

@@ -482,7 +482,9 @@ impl Vehicle {
         {
             return Some(m);
         }
-        if !self.contact_shoes.is_empty() {
+        // (a car with a pantograph takes its current from the wire: the NF6D's shoe is no
+        // third-rail collector)
+        if !self.contact_shoes.is_empty() && self.pantograph_var.is_none() {
             return Some(TransportMode::Metro);
         }
         let heavy = self.mass_kg() > 45_000.0;
