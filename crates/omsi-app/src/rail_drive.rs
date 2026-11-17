@@ -571,7 +571,7 @@ impl RailDrive {
         } else {
             -along_slope
         };
-        let k = lane.curvature_at(self.s).abs();
+        let k = lane.curve_over(self.s, 12.0);
         let name = lane.name.to_ascii_lowercase();
         omsi_sim::vehicle::RailEnv {
             grade: grade.clamp(-0.2, 0.2),

@@ -594,13 +594,15 @@ impl Showroom {
         let trailers: Vec<scene::VehicleRender> = vehicle
             .trailers
             .iter()
-            .map(|t| {
+            .enumerate()
+            .map(|(k, t)| {
                 world.add_vehicle_part(
                     renderer,
                     &mut scene,
                     &t.ty,
                     r.scheme.filter(|i| *i < t.ty.paint_schemes.len()),
                     &render,
+                    vehicle.mirror_base(k),
                 )
             })
             .collect();

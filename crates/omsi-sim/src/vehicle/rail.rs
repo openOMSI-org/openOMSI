@@ -26,7 +26,11 @@ impl VehicleInstance {
         use omsi_vehicle::rail_spec::PowerKind;
         let d = &self.ty.def;
         match d.rail_power {
-            PowerKind::Auto if !d.contact_shoes.is_empty() => PowerKind::ThirdRail,
+            // (a car with a pantograph takes its current from the wire: the NF6D's shoe is no
+            // collector)
+            PowerKind::Auto if !d.contact_shoes.is_empty() && d.pantograph_var.is_none() => {
+                PowerKind::ThirdRail
+            }
             PowerKind::Auto if pantograph_binds(d) => PowerKind::Catenary,
             PowerKind::Auto => PowerKind::OnBoard,
             k => k,

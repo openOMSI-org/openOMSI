@@ -27,7 +27,31 @@ pub(super) fn driven_wheels_speed(wheels: impl Iterator<Item = (f32, f32, bool)>
     (n > 0).then(|| sum / n as f32)
 }
 
+/// How far either side of the track's middle a rail vehicle meets scenery (m): just over the gauge.
+const RAIL_STRIP: f64 = 0.7;
+
 impl VehicleInstance {
+    /// The body's collision box (`bb`, its `[boundingbox]`) standing at `pos` facing `heading`.
+    /// Against `scenery` on the rails, only the strip over the track: the body's one flat box
+    /// swings its ends in a bend into platforms and tunnel walls that clear the real car.
+    /// Against other vehicles always the whole body, so a car side-on to a tram hits it.
+    fn collision_box(
+        &self,
+        bb: [f32; 6],
+        pos: DVec3,
+        heading: f64,
+        scenery: bool,
+    ) -> crate::collision::Obb {
+        let b = crate::collision::Obb::from_box(bb, pos, heading);
+        match scenery && self.rail_env.is_some() {
+            true => crate::collision::Obb {
+                half: glam::DVec2::new(b.half.x.min(RAIL_STRIP), b.half.y),
+                ..b
+            },
+            false => b,
+        }
+    }
+
     pub fn set_controls(&mut self, c: Controls) {
         self.physics.controls = c;
     }
@@ -138,37 +162,45 @@ impl VehicleInstance {
         self.heading = (self.heading + dheading as f64).rem_euclid(360.0);
         // collisions: back out of obstacles and stop
         if let Some(bb) = self.ty.def.bounding_box {
-            let obb = crate::collision::Obb::from_box(bb, self.position, self.body_heading());
-            // an obstacle we were already inside before this step (spawned on it, pushed into
-            // it) never blocks: only entering an obstacle does
-            let prev_obb = crate::collision::Obb::from_box(
-                bb,
-                prev.0,
+            let (now, before) = (
+                self.body_heading(),
                 body_heading(&self.ty.def, prev.1, false),
             );
+            // [against other vehicles, against scenery]
+            let boxes = [false, true].map(|s| self.collision_box(bb, self.position, now, s));
+            // an obstacle we were already inside before this step (spawned on it, pushed into
+            // it) never blocks: only entering an obstacle does
+            let prev_boxes = [false, true].map(|s| self.collision_box(bb, prev.0, before, s));
             let mut obstacles = self
                 .collision
                 .as_ref()
-                .map(|cw| cw.obstacles_near(&obb))
+                .map(|cw| cw.obstacles_near(&boxes[1]))
                 .unwrap_or_default();
+            let scenery = obstacles.len();
             obstacles.extend(self.dynamic_boxes.iter().copied());
-            let hit = obstacles.iter().copied().find_map(|obstacle| {
-                let was_overlapping = if obstacle.mass > 0.0 {
-                    let mut previous = obstacle;
-                    previous.center -= obstacle.velocity * dt as f64;
-                    previous.overlaps(&prev_obb)
-                } else {
-                    obstacle.overlaps(&prev_obb)
-                };
-                if !obstacle.overlaps(&obb)
-                    || (was_overlapping && obstacle.mass <= 0.0)
-                    || (obstacle.id >= 0 && self.knocked.contains(&obstacle.id))
-                {
-                    return None;
-                }
-                obb.contact(&obstacle)
-                    .map(|contact| (obstacle, contact, was_overlapping))
-            });
+            let hit = obstacles
+                .iter()
+                .copied()
+                .enumerate()
+                .find_map(|(i, obstacle)| {
+                    let k = usize::from(i < scenery);
+                    let (obb, prev_obb) = (&boxes[k], &prev_boxes[k]);
+                    let was_overlapping = if obstacle.mass > 0.0 {
+                        let mut previous = obstacle;
+                        previous.center -= obstacle.velocity * dt as f64;
+                        previous.overlaps(prev_obb)
+                    } else {
+                        obstacle.overlaps(prev_obb)
+                    };
+                    if !obstacle.overlaps(obb)
+                        || (was_overlapping && obstacle.mass <= 0.0)
+                        || (obstacle.id >= 0 && self.knocked.contains(&obstacle.id))
+                    {
+                        return None;
+                    }
+                    obb.contact(&obstacle)
+                        .map(|contact| (obstacle, contact, was_overlapping))
+                });
             if let Some((hit, contact, was_overlapping)) = hit {
                 let body_h = body_heading(&self.ty.def, prev.1, false).to_radians();
                 let own_velocity =
