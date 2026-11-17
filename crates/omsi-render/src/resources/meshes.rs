@@ -225,7 +225,6 @@ impl MeshPage {
             queue.write_buffer(&self.index, at.1, ib);
         }
         let (center, radius) = mesh_bounds(data);
-        let flats = crate::scene::overlay::mesh_flats(data);
         GpuMesh {
             vertex_buf: self.vertex.clone(),
             index_buf: self.index.clone(),
@@ -242,7 +241,7 @@ impl MeshPage {
             bounds_radius: radius,
             one_sided: data.one_sided,
             source: None,
-            flats,
+            flats: crate::scene::overlay::mesh_flats(data),
         }
     }
 }
