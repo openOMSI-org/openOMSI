@@ -608,33 +608,10 @@ fn find_in_dir(dir: &Path, name: &str) -> Option<std::ffi::OsString> {
 /// been copied into the original installation.
 static CONTENT_ROOTS: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
 
-/// Publisher pack mounts: always searched after every other root, so an installed pack never
-/// replaces an original file. A map that declares the pack reaches its files through its own
-/// dependency scope (`publisher::validate_map`).
-static PACK_ROOTS: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
-
-/// Where a root that is not a pack goes: in front of the first pack root.
-fn before_packs(roots: &[PathBuf]) -> usize {
-    let packs = PACK_ROOTS.lock().unwrap();
-    roots.iter().position(|x| packs.contains(x)).unwrap_or(roots.len())
-}
-
-/// Register a content root. Roots are searched in the order they were added, pack roots last.
+/// Register a content root. Roots are searched in the order they were added.
 pub fn add_content_root(root: PathBuf) {
     let mut r = CONTENT_ROOTS.lock().unwrap();
     if !r.iter().any(|x| x == &root) {
-        let at = before_packs(&r);
-        r.insert(at, root);
-        drop(r);
-        content_changed();
-    }
-}
-
-/// Register a publisher pack's mount, searched after every other root (see `PACK_ROOTS`).
-pub fn add_pack_content_root(root: PathBuf) {
-    let mut r = CONTENT_ROOTS.lock().unwrap();
-    if !r.iter().any(|x| x == &root) {
-        PACK_ROOTS.lock().unwrap().push(root.clone());
         r.push(root);
         drop(r);
         content_changed();
@@ -651,10 +628,7 @@ pub fn add_content_root_before(root: PathBuf, before: &Path) {
     }
     match r.iter().position(|x| x == before) {
         Some(i) => r.insert(i, root),
-        None => {
-            let at = before_packs(&r);
-            r.insert(at, root)
-        }
+        None => r.push(root),
     }
     drop(r);
     content_changed();
@@ -673,7 +647,6 @@ pub fn add_content_root_first(root: PathBuf) {
 /// Take a content root away again (a LAN session's content, when the session ends).
 pub fn remove_content_root(root: &Path) {
     CONTENT_ROOTS.lock().unwrap().retain(|x| x != root);
-    PACK_ROOTS.lock().unwrap().retain(|x| x != root);
     content_changed();
 }
 

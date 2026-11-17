@@ -520,3 +520,57 @@ fn an_installed_pack_does_not_replace_an_original_file_for_an_ordinary_map() {
     }
     std::fs::remove_dir_all(base).unwrap();
 }
+
+#[test]
+fn an_installed_pack_does_not_supply_a_file_an_ordinary_map_is_missing() {
+    let _guard = TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let base = std::env::temp_dir().join(format!("omsi-publisher-missing-{}", std::process::id()));
+    let (content, install) = (base.join("content"), base.join("install"));
+    // the ordinary map's object is in no root but the pack
+    std::fs::create_dir_all(install.join("Sceneryobjects")).unwrap();
+    std::fs::create_dir_all(content.join("Packs")).unwrap();
+    let signer = SigningKey::generate(&ring::rand::SystemRandom::new()).unwrap();
+    let mut trust = TrustedPublishers::default();
+    trust.insert("fixture", signer.key_id(), signer.public_key());
+    trust.save_file(&content.join("Publishers.json")).unwrap();
+    fixture_pack(&content, &signer, "packonly", vec![]);
+    // the game's order: content folder, then the packs, then the installation
+    omsi_cfg::add_content_root(content.clone());
+    let mounts = omsi_cfg::publisher::mount_packs(&content).unwrap();
+    assert_eq!(mounts.len(), 1, "the fixture pack was not mounted");
+    omsi_cfg::add_content_root(install.clone());
+    let rel = "Sceneryobjects/Fixture/packonly.sco";
+    let file = omsi_cfg::resolve_path(&install, rel);
+    assert!(
+        !omsi_cfg::vfs::exists(&file),
+        "an ordinary map found {} in an undeclared pack",
+        file.display()
+    );
+    assert!(omsi_cfg::find_in_roots(rel).is_none());
+    let declaring = install.join("maps/Declaring");
+    std::fs::create_dir_all(&declaring).unwrap();
+    std::fs::write(
+        declaring.join("dependencies.json"),
+        serde_json::json!({
+            "format_version": 1,
+            "dependencies": [{"publisher_id":"fixture","pack_id":"packonly","version":"1.0.0"}],
+            "assets": []
+        })
+        .to_string(),
+    )
+    .unwrap();
+    {
+        let scoped = omsi_cfg::publisher::validate_map(&declaring).unwrap();
+        let file = scoped.resolve_map_alias(&declaring, rel).unwrap();
+        assert_eq!(omsi_cfg::vfs::read(&file).unwrap(), b"fixture");
+    }
+    for root in [&content, &install] {
+        omsi_cfg::remove_content_root(root);
+    }
+    for mount in mounts {
+        omsi_cfg::vfs::unmount_sealed(&mount);
+    }
+    std::fs::remove_dir_all(base).unwrap();
+}

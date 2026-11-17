@@ -30,9 +30,9 @@ loader errors. A rights declaration in an editor export does not create a decryp
 make a signature valid. Map references are editable map data, not authenticated publisher
 instructions; their aliases are limited to compatible game data paths and never confer code trust.
 
-An installed pack is searched after every other content root, so it never replaces an original
-or a mod's file. A pack's copy of a file that exists elsewhere is used only by maps that declare
-the pack in `dependencies.json`.
+An installed pack is not a content root. Its files are used only by maps that declare the pack in
+`dependencies.json`. Other maps never see them: a pack neither replaces an original or a mod's
+file nor supplies a file that such a map is missing.
 
 ## Public hash list
 

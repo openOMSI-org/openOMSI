@@ -695,10 +695,9 @@ pub fn mount_packs(content: &Path) -> io::Result<Vec<PathBuf>> {
     for (path, _, pack) in opened {
         let mount = path.join(".mount");
         match crate::vfs::mount_publisher(&mount, pack, BTreeMap::new()) {
-            Ok(_) => {
-                crate::add_pack_content_root(mount.clone());
-                mounts.push(mount);
-            }
+            // (not a content root: an ordinary lookup never reaches a pack's files, only the
+            // scope `validate_map` gives a map that declares the pack)
+            Ok(_) => mounts.push(mount),
             Err(error) => log::warn!(
                 "publisher pack {} could not be mounted: {error}",
                 path.display()

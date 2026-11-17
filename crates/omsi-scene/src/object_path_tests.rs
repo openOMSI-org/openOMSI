@@ -556,8 +556,8 @@ fn an_ordinary_map_keeps_its_mapgen_cache_after_a_protected_pack_is_mounted() {
 
 #[cfg(any(target_os = "macos", windows))]
 #[test]
-fn a_legacy_map_using_global_sealed_assets_does_not_write_a_mapgen_cache() {
-    if ran_in_fresh_process("object_path_tests::a_legacy_map_using_global_sealed_assets_does_not_write_a_mapgen_cache") {
+fn a_map_without_dependencies_does_not_read_an_installed_packs_assets() {
+    if ran_in_fresh_process("object_path_tests::a_map_without_dependencies_does_not_read_an_installed_packs_assets") {
         return;
     }
     let _guard = PUBLISHER_WORLD_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -573,15 +573,18 @@ fn a_legacy_map_using_global_sealed_assets_does_not_write_a_mapgen_cache() {
     let mounts = omsi_cfg::publisher::mount_packs(&fixture.root).unwrap();
     let cache = omsi_map::layers::cache_path(&name).unwrap();
     assert!(!cache.exists(), "owned synthetic cache name collided");
+    let reads = omsi_cfg::vfs::protected_reads();
     let world = World::open(&fixture.root, &map.join("global.cfg"), 20261001).unwrap();
-    assert_eq!(world.spline_type("Splines/Fixture/original.sli").unwrap().def.length, 22.0);
+    // the spline exists only in the installed pack, which this map does not declare
+    let spline = world.spline_type("Splines/Fixture/original.sli");
     let _layers = world.map_layers();
-    let wrote_cache = cache.exists();
-    if wrote_cache { std::fs::remove_file(&cache).unwrap(); }
+    let read_protected = omsi_cfg::vfs::protected_reads() != reads;
+    if cache.exists() { std::fs::remove_file(&cache).unwrap(); }
     drop(world);
     for mount in mounts {
         omsi_cfg::vfs::unmount_sealed(&mount);
         omsi_cfg::remove_content_root(&mount);
     }
-    assert!(!wrote_cache, "mapgen persisted a cache while global sealed assets could be used");
+    assert!(spline.is_none(), "a map without dependencies.json read a spline from an installed pack");
+    assert!(!read_protected, "a map without dependencies.json read protected pack content");
 }
