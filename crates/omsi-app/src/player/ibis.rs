@@ -235,9 +235,13 @@ impl Player {
     /// list, a bus page): on the IBIS now, on a roller blind once it can be turned
     /// (`schedule::turn_roller_blind`).
     pub(crate) fn set_destination_by_hand(&mut self, hof: &omsi_vehicle::hof::Hof, line: &str, ti: usize, keep_shown: bool) {
+        self.set_destination_by_hand_with_display(hof, line, None, ti, keep_shown);
+    }
+
+    pub(crate) fn set_destination_by_hand_with_display(&mut self, hof: &omsi_vehicle::hof::Hof, line: &str, display: Option<&str>, ti: usize, keep_shown: bool) {
         let blind = self.blind_pick.as_ref().map(|p| p.line.clone()).unwrap_or_else(|| self.vehicle.str_var("SetLineTo"));
-        let shown = crate::game_lists::kept_blind_line(&blind, keep_shown);
-        self.blind_pick = schedule::set_player_destination_at(&mut self.vehicle, hof, line, ti, &[]);
+        let shown = display.map(str::to_string).or_else(|| crate::game_lists::kept_blind_line(&blind, keep_shown));
+        self.blind_pick = schedule::set_player_destination_with_display(&mut self.vehicle, hof, line, display, ti, &[]);
         if let (Some(p), Some(shown)) = (self.blind_pick.as_mut(), shown) {
             p.line = shown;
         }
