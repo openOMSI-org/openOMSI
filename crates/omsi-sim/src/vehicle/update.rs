@@ -322,11 +322,20 @@ impl VehicleInstance {
         let contact = self.contact.clone();
         Some(std::sync::Arc::new(move |x, y, z| {
             let w = pos + rot.transform_point3(glam::Vec3::new(x, y, z)).as_dvec3();
+            let top = w.z + HEIGHT_RAY_START;
             let h = match &contact {
-                Some(c) => c.probe(w.x, w.y, w.z + 0.5).below,
-                None => g.as_ref().and_then(|g| g(w.x, w.y)),
+                Some(c) => {
+                    let p = c.probe(w.x, w.y, top);
+                    // (a narrow height profile high on a spline - a wall's top, a wire - is
+                    // no road, and the wheels' probe lists it over the road: a ray meets it)
+                    match p.above.filter(|a| *a <= top) {
+                        Some(a) => Some(p.below.map_or(a, |b| b.max(a))),
+                        None => p.below,
+                    }
+                }
+                None => g.as_ref().and_then(|g| g(w.x, w.y)).filter(|h| *h <= top),
             };
-            h.map_or(0.0, |h| (w.z - h) as f32)
+            h.map_or(NO_FACE_BELOW, |h| (w.z - h) as f32)
         }))
     }
 
@@ -626,6 +635,13 @@ impl VehicleInstance {
                 let turned = body_reversed(&t.ty.def, t.reversed);
                 let origin = joint + travel(turned, t.coupling_front.y);
                 let (y_front, y_rear) = t.rail_ends();
+                // (bogie 0 is the one at the model's front: the rear one of a part turned round)
+                let (y0, y1) = if turned {
+                    (y_rear, y_front)
+                } else {
+                    (y_front, y_rear)
+                };
+                t.rail_bogies = Some([origin - y0 as f64, origin - y1 as f64]);
                 if omsi_cfg::flags::OMSI_DEBUG_TRAILERS.is_set() {
                     static SHOWN: std::sync::atomic::AtomicU32 =
                         std::sync::atomic::AtomicU32::new(0);
@@ -678,6 +694,11 @@ impl VehicleInstance {
         self.trailers = trailers;
     }
 }
+
+/// How far over the point `GetHeightAbovePoint`'s ray starts (m, Omsi.exe 0x7a0a88).
+const HEIGHT_RAY_START: f64 = 3.0;
+/// What `GetHeightAbovePoint` answers with no face under the point (Omsi.exe 0x7a086c).
+pub(crate) const NO_FACE_BELOW: f32 = 1000.0;
 
 /// OMSI's frames, a thirtieth of a second (`[maxFPS]` 30 in its options.cfg and every option
 /// preset but one): `A_Trans_*` is the body's velocity change over one of them (0x7d5124),
