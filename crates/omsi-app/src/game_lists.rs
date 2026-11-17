@@ -715,17 +715,8 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                     (name, ty, v.3.clone())
                 })
                 .collect();
-            for f in place_names::families(&mine) {
-                if f.versions.len() > 1 {
-                    out.push((f.name.clone(), HEADING.into()));
-                    for (label, bus) in f.versions {
-                        out.push((label, format!("bus {bus}")));
-                    }
-                } else if let Some((_, bus)) = f.versions.into_iter().next() {
-                    out.push((bus_label(&f.name), format!("bus {bus}")));
-                }
-            }
-            place_names::tell_apart(&mut out);
+            let query = search_query(app);
+            out.extend(place_names::rows(place_names::families(&mine), |label, action| search_matches(label, action, query)));
         }
         ListKind::PlaceLivery(bus) => {
             out.push((tr("Random livery"), "livery ".into()));
@@ -800,7 +791,10 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
     }
     if searchable(kind) {
         let query = search_query(app);
-        out.retain(|(label, action)| search_matches(label, if matches!(kind, ListKind::Streets) { "" } else { action }, query));
+        // (a model's versions are searched together with its name, `place_names::rows`)
+        if !matches!(kind, ListKind::PlaceType(_)) {
+            out.retain(|(label, action)| search_matches(label, if matches!(kind, ListKind::Streets) { "" } else { action }, query));
+        }
         let label = if app.menus.menu_edit_search {
             format!("{}: {query}_  ({})", tr("Search..."), tr("Enter sets it, Esc cancels"))
         } else if query.is_empty() {
