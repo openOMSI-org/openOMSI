@@ -108,7 +108,9 @@ fn signed_dependency_reads_through_the_real_vfs_and_cached_provenance_survives_m
         let mounts = omsi_cfg::publisher::validate_map(&map).unwrap();
         let second = omsi_cfg::publisher::validate_map(&map).unwrap();
         assert_eq!(omsi_cfg::content_roots(), before);
-        let renamed = mounts.resolve_map_alias(&map, "Sceneryobjects/Fixture/renamed.sco").unwrap();
+        let renamed = mounts
+            .resolve_map_alias(&map, "Sceneryobjects/Fixture/renamed.sco")
+            .unwrap();
         assert_eq!(
             omsi_cfg::CfgFile::read(&renamed).unwrap().lines[1],
             "model/sign.x"
@@ -323,37 +325,72 @@ fn one_locked_optional_pack_does_not_hide_other_installed_maps() {
 
 #[test]
 fn reopened_map_keeps_the_complete_signed_pack_revision_for_each_live_lease() {
-    let _guard = TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let root = std::env::temp_dir().join(format!("omsi-scope-revision-{}", std::process::id()));
     std::fs::create_dir_all(root.join("Packs")).unwrap();
     let signer = SigningKey::generate(&ring::rand::SystemRandom::new()).unwrap();
     let mut trust = TrustedPublishers::default();
     trust.insert("fixture", signer.key_id(), signer.public_key());
     trust.save_file(&root.join("Publishers.json")).unwrap();
-    for (version, bytes) in [("1.0.0", b"first".as_slice()), ("2.0.0", b"second".as_slice())] {
-        omsi_pack::create_pack(&root.join(format!("Packs/{version}.oopp")), PackMetadata {
-            publisher_id: "fixture".into(), author: "Fixture".into(), pack_id: "revision".into(),
-            version: version.into(), license: "CC0-1.0".into(), redistribution: true,
-            key_id: None, dependencies: vec![],
-        }, &[AssetInput { id: "object".into(), path: "Sceneryobjects/Fixture/revision.sco".into(),
-            source_sha256: omsi_pack::sha256_hex(bytes), bytes: bytes.to_vec() }],
-            &signer, None, &AtomicBool::new(false)).unwrap();
+    for (version, bytes) in [
+        ("1.0.0", b"first".as_slice()),
+        ("2.0.0", b"second".as_slice()),
+    ] {
+        omsi_pack::create_pack(
+            &root.join(format!("Packs/{version}.oopp")),
+            PackMetadata {
+                publisher_id: "fixture".into(),
+                author: "Fixture".into(),
+                pack_id: "revision".into(),
+                version: version.into(),
+                license: "CC0-1.0".into(),
+                redistribution: true,
+                key_id: None,
+                dependencies: vec![],
+            },
+            &[AssetInput {
+                id: "object".into(),
+                path: "Sceneryobjects/Fixture/revision.sco".into(),
+                source_sha256: omsi_pack::sha256_hex(bytes),
+                bytes: bytes.to_vec(),
+            }],
+            &signer,
+            None,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
     }
     let map = root.join("maps/Fixture");
     std::fs::create_dir_all(&map).unwrap();
-    let write_refs = |version: &str| std::fs::write(map.join("dependencies.json"),
-        serde_json::json!({"format_version":1,"dependencies":[{"publisher_id":"fixture","pack_id":"revision","version":version}],"assets":[]}).to_string()).unwrap();
+    let write_refs = |version: &str| {
+        std::fs::write(map.join("dependencies.json"),
+        serde_json::json!({"format_version":1,"dependencies":[{"publisher_id":"fixture","pack_id":"revision","version":version}],"assets":[]}).to_string()).unwrap()
+    };
     omsi_cfg::add_content_root(root.clone());
     write_refs("1.0.0");
     let first = omsi_cfg::publisher::validate_map(&map).unwrap();
     write_refs("2.0.0");
     let second = omsi_cfg::publisher::validate_map(&map).unwrap();
     let alias = "Sceneryobjects/Fixture/revision.sco";
-    assert_eq!(omsi_cfg::vfs::read(&second.resolve_map_alias(&map, alias).unwrap()).unwrap(), b"second");
-    assert_eq!(omsi_cfg::vfs::read(&first.resolve_map_alias(&map, alias).unwrap()).unwrap(), b"first");
-    assert!(omsi_cfg::vfs::read(&omsi_cfg::resolve_path(&map, alias)).is_err(), "unleased lookup chose a conflicting pack revision");
+    assert_eq!(
+        omsi_cfg::vfs::read(&second.resolve_map_alias(&map, alias).unwrap()).unwrap(),
+        b"second"
+    );
+    assert_eq!(
+        omsi_cfg::vfs::read(&first.resolve_map_alias(&map, alias).unwrap()).unwrap(),
+        b"first"
+    );
+    assert!(
+        omsi_cfg::vfs::read(&omsi_cfg::resolve_path(&map, alias)).is_err(),
+        "unleased lookup chose a conflicting pack revision"
+    );
     drop(first);
-    assert_eq!(omsi_cfg::vfs::read(&second.resolve_map_alias(&map, alias).unwrap()).unwrap(), b"second");
+    assert_eq!(
+        omsi_cfg::vfs::read(&second.resolve_map_alias(&map, alias).unwrap()).unwrap(),
+        b"second"
+    );
     drop(second);
     omsi_cfg::remove_content_root(&root);
     std::fs::remove_dir_all(root).unwrap();
@@ -361,7 +398,9 @@ fn reopened_map_keeps_the_complete_signed_pack_revision_for_each_live_lease() {
 
 #[test]
 fn unrelated_untrusted_catalog_entries_do_not_disable_trusted_provenance() {
-    let _guard = TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let root = std::env::temp_dir().join(format!("omsi-catalog-isolation-{}", std::process::id()));
     std::fs::create_dir_all(root.join("Packs")).unwrap();
     let signer = SigningKey::generate(&ring::rand::SystemRandom::new()).unwrap();
@@ -375,14 +414,24 @@ fn unrelated_untrusted_catalog_entries_do_not_disable_trusted_provenance() {
     assert_eq!(catalog.entries.len(), 1);
     assert_eq!(catalog.entries[0].dependency.pack_id, "trusted");
     std::fs::remove_file(root.join("Publishers.json")).unwrap();
-    TrustedPublishers::default().save_file(&root.join("Publishers.json")).unwrap();
-    assert!(omsi_cfg::publisher::Catalog::load(&root).unwrap().entries.is_empty(), "revoked signer still supplied trusted claims");
+    TrustedPublishers::default()
+        .save_file(&root.join("Publishers.json"))
+        .unwrap();
+    assert!(
+        omsi_cfg::publisher::Catalog::load(&root)
+            .unwrap()
+            .entries
+            .is_empty(),
+        "revoked signer still supplied trusted claims"
+    );
     std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn retained_index_history_and_unfinished_snapshots_keep_installed_provenance() {
-    let _guard = TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let root = std::env::temp_dir().join(format!("omsi-catalog-history-{}", std::process::id()));
     std::fs::create_dir_all(root.join("Packs")).unwrap();
     let signer = SigningKey::generate(&ring::rand::SystemRandom::new()).unwrap();
@@ -391,9 +440,13 @@ fn retained_index_history_and_unfinished_snapshots_keep_installed_provenance() {
     trust.save_file(&root.join("Publishers.json")).unwrap();
     fixture_pack(&root, &signer, "installed", vec![]);
     let installed_only = |label: &str| {
-        let catalog = omsi_cfg::publisher::Catalog::load(&root).unwrap_or_else(|error| panic!("{label}: {error}"));
+        let catalog = omsi_cfg::publisher::Catalog::load(&root)
+            .unwrap_or_else(|error| panic!("{label}: {error}"));
         assert_eq!(catalog.entries.len(), 1, "{label}");
-        assert_eq!(catalog.entries[0].dependency.pack_id, "installed", "{label}");
+        assert_eq!(
+            catalog.entries[0].dependency.pack_id, "installed",
+            "{label}"
+        );
     };
     installed_only("fresh index");
     let index = root.join("PackIndex");
@@ -420,7 +473,8 @@ fn an_installed_pack_does_not_replace_an_original_file_for_an_ordinary_map() {
     let _guard = TEST_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let base = std::env::temp_dir().join(format!("omsi-publisher-collision-{}", std::process::id()));
+    let base =
+        std::env::temp_dir().join(format!("omsi-publisher-collision-{}", std::process::id()));
     let (content, install) = (base.join("content"), base.join("install"));
     let original = install.join("Sceneryobjects/Fixture/scenery.sco");
     std::fs::create_dir_all(original.parent().unwrap()).unwrap();
@@ -440,14 +494,21 @@ fn an_installed_pack_does_not_replace_an_original_file_for_an_ordinary_map() {
     assert_eq!(omsi_cfg::vfs::read(&file).unwrap(), b"original");
     let declaring = install.join("maps/Declaring");
     std::fs::create_dir_all(&declaring).unwrap();
-    std::fs::write(declaring.join("dependencies.json"), serde_json::json!({
-        "format_version": 1,
-        "dependencies": [{"publisher_id":"fixture","pack_id":"scenery","version":"1.0.0"}],
-        "assets": []
-    }).to_string()).unwrap();
+    std::fs::write(
+        declaring.join("dependencies.json"),
+        serde_json::json!({
+            "format_version": 1,
+            "dependencies": [{"publisher_id":"fixture","pack_id":"scenery","version":"1.0.0"}],
+            "assets": []
+        })
+        .to_string(),
+    )
+    .unwrap();
     {
         let scoped = omsi_cfg::publisher::validate_map(&declaring).unwrap();
-        let file = scoped.resolve_map_alias(&declaring, "Sceneryobjects/Fixture/scenery.sco").unwrap();
+        let file = scoped
+            .resolve_map_alias(&declaring, "Sceneryobjects/Fixture/scenery.sco")
+            .unwrap();
         assert_eq!(omsi_cfg::vfs::read(&file).unwrap(), b"fixture");
     }
     for root in [&content, &install] {

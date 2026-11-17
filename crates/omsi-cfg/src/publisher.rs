@@ -141,7 +141,10 @@ fn dependency(m: &Manifest) -> Dependency {
 
 /// Keep a snapshot of an installed manifest in `PackIndex`; returns its snapshot name.
 fn cache_manifest(content: &Path, pack: &Path) -> io::Result<String> {
-    let bytes = bounded_read(&pack.join("manifest.json"), omsi_pack::MANIFEST_LIMIT as u64)?;
+    let bytes = bounded_read(
+        &pack.join("manifest.json"),
+        omsi_pack::MANIFEST_LIMIT as u64,
+    )?;
     let sig = bounded_read(&pack.join("manifest.sig"), 1024)?;
     let root = content.join("PackIndex");
     if root.exists() && std::fs::symlink_metadata(&root)?.file_type().is_symlink() {
@@ -182,7 +185,10 @@ fn snapshots(root: &Path, installed: &BTreeSet<String>) -> io::Result<Vec<(bool,
     for entry in std::fs::read_dir(root)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        if entry.file_type()?.is_dir() && name.len() == 64 && name.bytes().all(|b| b.is_ascii_hexdigit()) {
+        if entry.file_type()?.is_dir()
+            && name.len() == 64
+            && name.bytes().all(|b| b.is_ascii_hexdigit())
+        {
             result.push((installed.contains(&name), entry.path()));
         }
     }
@@ -202,10 +208,16 @@ fn over_index_budget(installed: bool, limit: &'static str) -> io::Result<()> {
 fn catalog_manifest(path: &Path, trusted: &TrustedPublishers) -> io::Result<Option<Manifest>> {
     match omsi_pack::load_manifest(path, trusted) {
         Ok(manifest) => Ok(Some(manifest)),
-        Err(omsi_pack::PackError::Io(error)) if error.kind() != io::ErrorKind::NotFound => Err(error),
-        Err(error @ (omsi_pack::PackError::UntrustedPublisher
-            | omsi_pack::PackError::InvalidSignature | omsi_pack::PackError::Invalid(_)
-            | omsi_pack::PackError::Json(_) | omsi_pack::PackError::Io(_))) => {
+        Err(omsi_pack::PackError::Io(error)) if error.kind() != io::ErrorKind::NotFound => {
+            Err(error)
+        }
+        Err(
+            error @ (omsi_pack::PackError::UntrustedPublisher
+            | omsi_pack::PackError::InvalidSignature
+            | omsi_pack::PackError::Invalid(_)
+            | omsi_pack::PackError::Json(_)
+            | omsi_pack::PackError::Io(_)),
+        ) => {
             log::warn!("publisher catalog skipped {}: {error}", path.display());
             Ok(None)
         }
@@ -225,7 +237,10 @@ impl Catalog {
         let mut catalog = Self::default();
         let (mut total, mut read) = (0, 0);
         for (current, path) in snapshots(&content.join("PackIndex"), &installed)? {
-            let bytes = match bounded_read(&path.join("manifest.json"), omsi_pack::MANIFEST_LIMIT as u64) {
+            let bytes = match bounded_read(
+                &path.join("manifest.json"),
+                omsi_pack::MANIFEST_LIMIT as u64,
+            ) {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
                 bytes => bytes?,
             };
@@ -235,7 +250,9 @@ impl Catalog {
                 over_index_budget(current, "publisher index exceeds its size limit")?;
                 break;
             }
-            let Some(manifest) = catalog_manifest(&path, &trust)? else { continue };
+            let Some(manifest) = catalog_manifest(&path, &trust)? else {
+                continue;
+            };
             if catalog.entries.len() + manifest.assets.len() > 32768 {
                 over_index_budget(current, "too many indexed publisher assets")?;
                 break;
@@ -350,7 +367,9 @@ impl DependencyMounts {
         let id = self.alias_scope?;
         let map = map_scope_path(map_dir).ok()?;
         let scopes = MAP_ALIASES.read().unwrap_or_else(|e| e.into_inner());
-        let scope = scopes.iter().find(|scope| scope.id == id && scope.map == map)?;
+        let scope = scopes
+            .iter()
+            .find(|scope| scope.id == id && scope.map == map)?;
         resolve_alias_in_scope(scope, &map, rel)
     }
 
@@ -516,10 +535,9 @@ fn register_aliases(
     }
     let map = map_scope_path(map_dir)?;
     let mut scopes = MAP_ALIASES.write().unwrap_or_else(|e| e.into_inner());
-    if let Some(existing) = scopes
-        .iter_mut()
-        .find(|s| s.map == map && s.declarations == declarations && s.pack_revisions == pack_revisions)
-    {
+    if let Some(existing) = scopes.iter_mut().find(|s| {
+        s.map == map && s.declarations == declarations && s.pack_revisions == pack_revisions
+    }) {
         existing.leases = existing
             .leases
             .checked_add(1)
@@ -652,13 +670,17 @@ pub fn mount_packs(content: &Path) -> io::Result<Vec<PathBuf>> {
             .map(|(_, manifest, _)| pack_key(&dependency(manifest)))
             .collect();
         opened.retain(|(path, manifest, _)| {
-            let missing = manifest.dependencies.iter().find(|required| {
-                !available.contains(&pack_key(required))
-            });
+            let missing = manifest
+                .dependencies
+                .iter()
+                .find(|required| !available.contains(&pack_key(required)));
             if let Some(required) = missing {
                 log::warn!(
                     "publisher pack {} is unavailable because dependency {}/{}/{} is not mounted",
-                    path.display(), required.publisher_id, required.pack_id, required.version
+                    path.display(),
+                    required.publisher_id,
+                    required.pack_id,
+                    required.version
                 );
                 false
             } else {
@@ -778,18 +800,16 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
             reference.path.clone(),
             format!(
                 "{}\0{}\0{}\0{}\0{}",
-                dep.0,
-                dep.1,
-                dep.2,
-                digests[index],
-                asset.path
+                dep.0, dep.1, dep.2, digests[index], asset.path
             ),
         );
     }
     check_aliases(&aliases)?;
-    let pack_revisions = packs.iter().zip(&digests).map(|((path, _), digest)| {
-        Ok((std::fs::canonicalize(path)?, digest.clone()))
-    }).collect::<io::Result<Vec<_>>>()?;
+    let pack_revisions = packs
+        .iter()
+        .zip(&digests)
+        .map(|((path, _), digest)| Ok((std::fs::canonicalize(path)?, digest.clone())))
+        .collect::<io::Result<Vec<_>>>()?;
     let mut roots_added = BTreeMap::new();
     let mut virtual_mounts: Vec<PathBuf> = Vec::new();
     for (index, (_, pack)) in packs.into_iter().enumerate() {
@@ -818,7 +838,10 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
         for alias in pack_aliases.keys() {
             let key = path_key(alias);
             let target = mount.join(alias);
-            if roots_added.insert(key, target.clone()).is_some_and(|prior| prior != target) {
+            if roots_added
+                .insert(key, target.clone())
+                .is_some_and(|prior| prior != target)
+            {
                 for root in virtual_mounts.drain(..).rev() {
                     crate::vfs::unmount_sealed(&root);
                 }
@@ -833,16 +856,21 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
         }
         virtual_mounts.push(mount);
     }
-    let (alias_scope, shared_scope) =
-        match register_aliases(map_dir, declarations, pack_revisions, roots_added, &mut virtual_mounts) {
-            Ok(id) => id,
-            Err(error) => {
-                for root in virtual_mounts.drain(..).rev() {
-                    crate::vfs::unmount_sealed(&root);
-                }
-                return Err(error);
+    let (alias_scope, shared_scope) = match register_aliases(
+        map_dir,
+        declarations,
+        pack_revisions,
+        roots_added,
+        &mut virtual_mounts,
+    ) {
+        Ok(id) => id,
+        Err(error) => {
+            for root in virtual_mounts.drain(..).rev() {
+                crate::vfs::unmount_sealed(&root);
             }
-        };
+            return Err(error);
+        }
+    };
     if shared_scope {
         for root in virtual_mounts.drain(..).rev() {
             crate::vfs::unmount_sealed(&root);
