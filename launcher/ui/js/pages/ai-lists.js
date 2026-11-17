@@ -75,7 +75,7 @@ const modified = (g) => {
 const resetGroup = (g) => {
   const was = ai().data?.defaults.find((d) => key(d) === key(g));
   if (!was) return;
-  change({ groups: ai().groups.map((x) => (key(x) === key(g) ? clone(was) : x)) });
+  change({ groups: ai().groups.map((x) => (key(x) === key(g) ? clone(was) : x)), ticked: null });
 };
 
 /** The next fleet number of a depot: one above the largest number there. */
@@ -419,7 +419,7 @@ export function AiListsPage() {
     ${d && a.tab === 'depot' && html`<${DepotTab} />`}
     ${d && a.tab === 'lines' && html`<${LinesTab} />`}
     ${changed && html`<div class="ail-save"><span>${t('You have unsaved changes.')}</span>
-      <${Button} label="Discard" onClick=${() => change({ groups: clone(a.saved), rules: clone(a.savedRules) })} />
+      <${Button} label="Discard" onClick=${() => change({ groups: clone(a.saved), rules: clone(a.savedRules), ticked: null })} />
       <${Button} kind="primary" icon="save" label="Save" disabled=${a.busy} onClick=${save} /></div>`}
     ${pk && html`<${Picker}
       title=${pk.kind === 'replace' ? 'Replace with' : pk.kind === 'rule' ? 'Add a type to the line' : pk.kind === 'add' ? 'Add a vehicle' : pk.kind === 'type' ? 'Replace the type with' : 'Add a type to the depot'}

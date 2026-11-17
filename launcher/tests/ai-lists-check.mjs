@@ -137,4 +137,51 @@ function page(answers) {
   assert.equal(entries[0].paint, '', "back to the bus's own paint");
 }
 
+// 8. The ticks are cleared, not only hidden, by an edit of the rows and by reading the lists
+//    again: a bus removed and another added, or a type replaced and put back, must not tick
+//    the rows again (#4021 review).
+{
+  const depot = (file, n) => [{ name: 'D', depot: true, vehicles: [], typgroups: [{ file, entries: [...Array(n)].map((_, i) => ({ number: String(i + 1), registration: '', paint: '' })) }] }];
+  const A = 'map|d:D|0|vehicles\\man\\a.bus';
+  const p = page((cmd) => (cmd === 'ai_lists' ? { groups: depot('Vehicles\\MAN\\a.bus', 3), lines: [] } : { groups: 1, rules: 0 }));
+  const reading = p.model.read('map', 'd');
+  p.held.shift().resolve();
+  await reading;
+  const fresh = () => (p.state.ticked = tickRow(tickRow(null, A, 3, 0), A, 3, 2));
+
+  fresh();
+  p.model.change({ groups: depot('Vehicles\\MAN\\a.bus', 2) }); // a bus removed
+  assert.equal(p.state.ticked, null, 'a bus removed clears the ticks');
+  p.model.change({ groups: depot('Vehicles\\MAN\\a.bus', 3) }); // another added
+  assert.deepEqual(tickedRows(p.state.ticked, A, 3), [], 'they do not come back on the new rows');
+
+  fresh();
+  p.model.change({ groups: depot('Vehicles\\MAN\\b.bus', 3) }); // the type replaced
+  p.model.change({ groups: depot('Vehicles\\MAN\\a.bus', 3) }); // and put back
+  assert.deepEqual(tickedRows(p.state.ticked, A, 3), [], 'a type replaced and put back has no ticks');
+
+  fresh();
+  const painted = depot('Vehicles\\MAN\\a.bus', 3);
+  paintRows(painted[0].typgroups[0].entries, [0, 2], 'red');
+  painted[0].typgroups[0].entries[1].number = '42';
+  p.model.change({ groups: painted });
+  assert.deepEqual(tickedRows(p.state.ticked, A, 3), [0, 2], 'a paint or a number changed keeps the ticks');
+
+  const again = p.model.read('map', 'd');
+  assert.equal(p.state.ticked, null, 'reading the lists again (reload, save, reset) clears the ticks');
+  fresh();
+  p.held.shift().resolve();
+  await again;
+  assert.equal(p.state.ticked, null, 'ticks made while they were read are cleared with the new lists');
+
+  fresh();
+  const resetting = p.model.reset();
+  await p.tick();
+  p.held.shift().resolve(); // the reset
+  await p.tick();
+  p.held.shift().resolve(); // the read after it
+  await resetting;
+  assert.equal(p.state.ticked, null, 'a reset clears the ticks');
+}
+
 console.log('ai-lists-check: ok');

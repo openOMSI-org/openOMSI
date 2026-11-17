@@ -40,6 +40,10 @@ export function sharedPaint(entries, rows) {
   return paints.size === 1 ? [...paints][0] : null;
 }
 
+/** The depots' types and how many buses each has: what the ticked rows stand on. */
+const shape = (groups) =>
+  JSON.stringify((groups || []).map((g) => [g.name, g.depot, (g.typgroups || []).map((tg) => [String(tg.file || '').replace(/\\/g, '/').toLowerCase(), tg.entries?.length || 0])]));
+
 /** Give the ticked `rows` of `entries` the paint `paint` ('' is the bus's own). */
 export function paintRows(entries, rows, paint) {
   for (const i of rows) if (entries[i]) entries[i].paint = paint;
@@ -53,13 +57,14 @@ export function listsModel({ call, get, up, toast, t }) {
   async function read(map, date) {
     const mine = ++latest;
     const key = `${map}|${date}`;
-    up({ map, loaded: null, loading: key, data: null, error: null });
+    // (the lists read again - another map or date, a save, a reset - are not the rows ticked)
+    up({ map, loaded: null, loading: key, data: null, error: null, ticked: null });
     try {
       const data = await call('ai_lists', { map, date });
       if (mine !== latest) return;
       const groups = data.groups.map(({ random, modified, ...g }) => g);
       const rules = data.lines.filter((l) => l.rule).map((l) => l.rule);
-      up({ loaded: key, loading: null, data, groups: clone(groups), saved: clone(groups), rules: clone(rules), savedRules: clone(rules), pick: null });
+      up({ loaded: key, loading: null, data, groups: clone(groups), saved: clone(groups), rules: clone(rules), savedRules: clone(rules), pick: null, ticked: null });
     } catch (e) {
       if (mine !== latest) return;
       up({ loaded: key, loading: null, error: String(e.message || e) });
@@ -90,10 +95,14 @@ export function listsModel({ call, get, up, toast, t }) {
 
   const reset = () => work('ai_lists_reset', (a) => ({ map: a.map }), () => t('The map has its own lists again.'));
 
-  /** A change made by the player: refused while a save or a reset is under way. */
+  /** A change made by the player: refused while a save or a reset is under way. A type
+   *  replaced, added or removed or a bus added or removed clears the ticks: the rows ticked
+   *  would no longer be the buses ticked, even once the count is the same again. */
   const change = (patch) => {
-    if (get().busy) return false;
-    up(typeof patch === 'function' ? patch(get()) : patch);
+    const a = get();
+    if (a.busy) return false;
+    const p = typeof patch === 'function' ? patch(a) : patch;
+    up(p.groups && a.ticked && shape(p.groups) !== shape(a.groups) ? { ...p, ticked: null } : p);
     return true;
   };
 
