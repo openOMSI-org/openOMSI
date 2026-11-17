@@ -7,7 +7,6 @@ mod instances;
 pub(crate) mod depth_plane;
 pub(crate) mod overlay;
 mod upload;
-mod lod;
 pub(crate) use lod::object_screen_size;
 
 #[derive(Clone, Copy, Default)]
@@ -32,9 +31,13 @@ pub(crate) const CULL_BLOCK: usize = 128;
 pub(crate) const CULL_BLOCK_REBUILDS: usize = 8;
 
 pub(crate) fn transform_scale(transform: Mat4) -> f32 {
-    transform.x_axis.truncate().length_squared()
+    transform
+        .x_axis
+        .truncate()
+        .length_squared()
         .max(transform.y_axis.truncate().length_squared())
-        .max(transform.z_axis.truncate().length_squared()).sqrt()
+        .max(transform.z_axis.truncate().length_squared())
+        .sqrt()
 }
 
 /// The ordered world passes used by OMSI for ground and scenery geometry.
@@ -403,10 +406,18 @@ impl Scene {
 
     /// Bytes the meshes' pages take on the GPU, each page once, whatever share of it is in use.
     pub fn mesh_page_bytes(&self) -> u64 {
-        let shared: u64 = self.mesh_pages.iter().map(|p| p.vertex_cap + p.index_cap).sum();
+        let shared: u64 = self
+            .mesh_pages
+            .iter()
+            .map(|p| p.vertex_cap + p.index_cap)
+            .sum();
         // (a set: without base vertices every mesh has buffers of its own, thousands of them)
         let mut own: std::collections::HashSet<&wgpu::Buffer> = std::collections::HashSet::new();
-        for m in self.meshes.iter().filter(|m| m.page == u32::MAX && !m.ranges.is_empty()) {
+        for m in self
+            .meshes
+            .iter()
+            .filter(|m| m.page == u32::MAX && !m.ranges.is_empty())
+        {
             if own.insert(&m.vertex_buf) {
                 own.insert(&m.index_buf);
             }
@@ -419,11 +430,17 @@ impl Scene {
     pub fn gpu_bytes(&self) -> (u64, u64, u64) {
         let tex = self.textures.iter().map(|t| t.bytes).sum();
         let mesh = self.mesh_page_bytes();
-        let other = [&self.model_buf, &self.params_buf, &self.light_buf, &self.grid_buf, &self.draw_buf]
-            .iter()
-            .filter_map(|b| b.as_ref())
-            .map(|b| b.gpu_bytes())
-            .sum::<u64>()
+        let other = [
+            &self.model_buf,
+            &self.params_buf,
+            &self.light_buf,
+            &self.grid_buf,
+            &self.draw_buf,
+        ]
+        .iter()
+        .filter_map(|b| b.as_ref())
+        .map(|b| b.gpu_bytes())
+        .sum::<u64>()
             + self.corona_buf.as_ref().map_or(0, |b| b.size());
         (tex, mesh, other)
     }
