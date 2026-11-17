@@ -16,6 +16,10 @@ use super::class::RailClass;
 
 const G: f32 = 9.81;
 
+/// How much of the worked-out roll a car shows: the full lean, as true to the springs as it is,
+/// looked too much on the screen.
+pub const ROLL_SHOWN: f32 = 0.5;
+
 /// What a class of car is like on its springs.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BodyParams {
@@ -33,6 +37,10 @@ pub struct BodyParams {
     /// Radii of gyration for pitch and roll (m).
     pub r_pitch: f32,
     pub r_roll: f32,
+    /// How much the sideways acceleration turns the body (rad/s² per m/s²; Omsi.exe's lever
+    /// `wagenkasten_hebelarm_Z`) and the damping ratio of the roll alone.
+    pub roll_arm: f32,
+    pub roll_damping: f32,
     /// How uneven the rails are, 1 for track in good order, 2 and more for old street track.
     pub quality: f32,
     /// Track in a bend is canted (a railway's outer rail is raised; street track is flat).
@@ -42,49 +50,45 @@ pub struct BodyParams {
 impl BodyParams {
     pub fn of(class: RailClass, bogie_span: f32) -> BodyParams {
         let span = bogie_span.clamp(4.0, 24.0);
-        match class {
-            // rubber-spring bogies, hydraulic dampers, the rails of a street
-            RailClass::Tram => BodyParams {
-                h_cg: 0.95,
-                bogie_span: span,
-                spring_gauge: 1.5,
-                heave_hz: 1.25,
-                pitch_hz: 1.45,
-                roll_hz: 1.15,
-                damping: 0.3,
-                r_pitch: span * 0.35,
-                r_roll: 1.0,
-                quality: 1.8,
-                canted: false,
-            },
-            RailClass::Metro => BodyParams {
-                h_cg: 1.1,
-                bogie_span: span,
-                spring_gauge: 1.9,
-                heave_hz: 1.0,
-                pitch_hz: 1.15,
-                roll_hz: 0.95,
-                damping: 0.3,
-                r_pitch: span * 0.35,
-                r_roll: 1.1,
-                quality: 1.0,
-                canted: true,
-            },
-            // air or coil springs, a long soft ride, anti-roll bars stiffen the roll
-            RailClass::Train => BodyParams {
-                h_cg: 1.5,
-                bogie_span: span,
-                spring_gauge: 2.0,
-                heave_hz: 0.9,
-                pitch_hz: 1.0,
-                roll_hz: 1.0,
-                damping: 0.35,
-                r_pitch: span * 0.35,
-                r_roll: 1.2,
-                quality: 1.0,
-                canted: true,
-            },
+        let (h_cg, spring_gauge, heave_hz, pitch_hz, roll_hz, damping, r_roll, quality, canted) =
+            match class {
+                // rubber-spring bogies, hydraulic dampers, the rails of a street
+                RailClass::Tram => (0.95, 1.5, 1.25, 1.45, 1.15, 0.3, 1.0, 1.8, false),
+                RailClass::Metro => (1.1, 1.9, 1.0, 1.15, 0.95, 0.3, 1.1, 1.0, true),
+                // air or coil springs, a long soft ride, anti-roll bars stiffen the roll
+                RailClass::Train => (1.5, 2.0, 0.9, 1.0, 1.0, 0.35, 1.2, 1.0, true),
+            };
+        BodyParams {
+            h_cg,
+            bogie_span: span,
+            spring_gauge,
+            heave_hz,
+            pitch_hz,
+            roll_hz,
+            damping,
+            r_pitch: span * 0.35,
+            r_roll,
+            roll_arm: h_cg / (r_roll * r_roll),
+            roll_damping: damping,
+            quality,
+            canted,
         }
+    }
+
+    /// The class's car with the roll its file gives: `[rail_body_osc]` is the lever, then the
+    /// roll's angular frequency (rad/s) and its decay `d` (a swing dies as e^(-d t / 2),
+    /// Omsi.exe 0x7f2a18). Many files switch it off (the NF6D's `0 1 10000`: no lever, gone
+    /// at once): those cars ride on the class's springs.
+    pub fn for_car(def: &omsi_vehicle::Vehicle, class: RailClass, bogie_span: f32) -> BodyParams {
+        let mut p = BodyParams::of(class, bogie_span);
+        if let Some([arm, omega, d, ..]) = def.rail_body_osc {
+            if arm > 0.0 && omega > 0.0 && d >= 0.0 && d < 4.0 * omega {
+                p.roll_arm = arm;
+                p.roll_hz = omega / std::f32::consts::TAU;
+                p.roll_damping = d / (2.0 * omega);
+            }
+        }
+        p
     }
 }
 
@@ -223,8 +227,9 @@ impl Body {
             let ath = -2.0 * zeta * wt * (self.thv - du[1]) - wt * wt * (self.th - u[1]) + m_pitch;
             // roll: leans away from the bend's centre (bank positive to the right, so a bend to
             // the right, a_side > 0, leans left)
-            let m_roll = -a_side * p.h_cg / (p.r_roll * p.r_roll);
-            let aph = -2.0 * zeta * wr * (self.phv - du[2]) - wr * wr * (self.ph - u[2]) + m_roll;
+            let m_roll = -a_side * p.roll_arm;
+            let aph = -2.0 * p.roll_damping * wr * (self.phv - du[2]) - wr * wr * (self.ph - u[2])
+                + m_roll;
             self.zv += az * h;
             self.z += self.zv * h;
             self.thv += ath * h;
@@ -387,6 +392,46 @@ mod tests {
             "settled on its springs: {}",
             out.a_vert
         );
+    }
+
+    #[test]
+    fn a_cars_file_sets_its_roll_unless_it_switches_it_off() {
+        let car = |osc| omsi_vehicle::Vehicle {
+            rail_body_osc: Some(osc),
+            ..Default::default()
+        };
+        // the two-axle tram's: a stiff old car, a tenth of the lever
+        let own = BodyParams::for_car(
+            &car([0.1, 6.0, 6.0, 15.0, 15.0, 8.0, 4.0]),
+            RailClass::Tram,
+            8.0,
+        );
+        assert_eq!(own.roll_arm, 0.1);
+        assert!((own.roll_hz - 0.955).abs() < 0.01 && (own.roll_damping - 0.5).abs() < 1e-6);
+        // the NF6D's rides on the class's springs
+        let off = BodyParams::for_car(
+            &car([0.0, 1.0, 10000.0, 1.0, 10000.0, 1.0, 10000.0]),
+            RailClass::Tram,
+            8.0,
+        );
+        assert_eq!(off, BodyParams::of(RailClass::Tram, 8.0));
+        // both lean, and the street tram of the class by what a real one does: 0.1 to 0.3 of
+        // a radian per g
+        let lean = |p: BodyParams| {
+            settle(
+                &mut Body::new(1),
+                &BodyParams { quality: 0.0, ..p },
+                10.0,
+                8.0,
+                0.0,
+                8.0 / 50.0,
+            )
+            .roll_deg
+            .abs()
+        };
+        assert!(lean(own) > 0.1 && lean(own) < lean(off));
+        let per_g = lean(off).to_radians() / (1.28 / G);
+        assert!((0.1..=0.3).contains(&per_g), "{per_g}");
     }
 
     #[test]

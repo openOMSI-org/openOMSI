@@ -16,6 +16,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **`GetHeightAbovePoint` as in Omsi.exe**: the ray starts 3 m over the point, meets a wire or a
   wall top on a narrow height profile, and reads 1000 with nothing below it (it read 0, which held
   the Zweiachser tram's pantograph at the top of its travel).
+- **Every car of a train rocks on its own springs**: each car's body leans out of bends by the force
+  on it and rocks on the rails, with `[rail_body_osc]`'s lever, frequency and decay where the file
+  gives them and the class's springs where it switches them off. Joints go with the cars around
+  them; bogies, couplings and wheel sets stay level. **This changes the default**: the lean is now
+  always on, also without the realistic rail physics (which still add the dip under braking and
+  the bounce), and a car shows half of the lean its springs work out (`ROLL_SHOWN`).
 - **Drive a tram from either cab**: in a train with a cab at each end (the NF6D) walk
   to the other cab and take its wheel (G), or switch driving ends from the outside view with the
   interior-camera keys. That cab's own scripts then take the keys, the switches and the indicator,

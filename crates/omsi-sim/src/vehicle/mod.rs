@@ -36,6 +36,7 @@ mod program_ids;
 mod props;
 mod radio;
 mod rail;
+mod sway;
 mod track_feel;
 mod trailer;
 mod trolley;
@@ -54,6 +55,7 @@ pub use panto::{Catenary, PantoGear};
 pub use pose::*;
 pub use props::*;
 pub use rail::RailEnv;
+pub use sway::SwayRole;
 pub use track_feel::BogieGround;
 pub use trailer::*;
 pub use trolley::{ROPE_RATE, TrolleyGear};
@@ -265,6 +267,9 @@ pub struct VehicleInstance {
     /// The train is driven from a cab turned round in it: `train_me_reverse` of every car
     /// is as seen from that end.
     pub(super) turned: bool,
+    /// The train is on the rails under the player: each of its cars rocks on its own springs
+    /// (see `sway`).
+    pub rail_sway: bool,
     /// The coupled part (its index in `trailers`) whose driver's cab the player sits in, the
     /// NF6D's rear cab: the keys and switches go to that part's own scripts (see `trigger`).
     /// None in the leading vehicle's cab.

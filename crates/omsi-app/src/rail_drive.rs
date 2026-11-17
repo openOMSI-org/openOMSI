@@ -486,30 +486,30 @@ impl RailDrive {
         v.heading = heading;
         v.pitch = pitch;
         v.bank = 0.0;
-        // the body rides on its springs: it leans out of bends, dips under braking and feels the
-        // rails' unevenness, instead of being nailed to the line between the bogies
-        if let (Some(class), true) = (
-            omsi_sim::rail::RailClass::of(&v.ty.def),
-            dt > 0.0 && omsi_sim::rail::realistic(),
-        ) {
+        // the body rides on its springs: it leans out of bends, as every car does in Omsi.exe;
+        // with the realistic physics it also dips under braking and bounces
+        v.rail_sway = true;
+        if let (Some(class), true) = (omsi_sim::rail::RailClass::of(&v.ty.def), dt > 0.0) {
             let span = bogie_dist.map_or(8.0, |l| l * 2.0);
             let yaw = self
                 .last_heading
                 .map_or(0.0, |h| angle_diff(heading, h).to_radians() / dt as f64)
                 as f32;
             let a_long = v.rail_outcome().map_or(0.0, |o| o.accel);
-            let params = omsi_sim::rail::BodyParams::of(class, span);
+            let params = omsi_sim::rail::BodyParams::for_car(&v.ty.def, class, span);
             let out = self
                 .body
                 .step(&params, dt, v.physics.speed, a_long, yaw.clamp(-1.0, 1.0));
-            v.pitch += out.pitch_deg;
-            v.bank = out.roll_deg;
-            v.position.z += out.heave as f64;
-            v.set_engine_var("rail_body_roll", out.roll_deg);
-            v.set_engine_var("rail_body_pitch", out.pitch_deg);
-            v.set_engine_var("rail_body_heave", out.heave);
-            v.set_engine_var("rail_accel_side", out.a_side);
-            v.set_engine_var("rail_accel_vert", out.a_vert);
+            v.bank = out.roll_deg * omsi_sim::rail::ROLL_SHOWN;
+            if omsi_sim::rail::realistic() {
+                v.pitch += out.pitch_deg;
+                v.position.z += out.heave as f64;
+                v.set_engine_var("rail_body_roll", out.roll_deg);
+                v.set_engine_var("rail_body_pitch", out.pitch_deg);
+                v.set_engine_var("rail_body_heave", out.heave);
+                v.set_engine_var("rail_accel_side", out.a_side);
+                v.set_engine_var("rail_accel_vert", out.a_vert);
+            }
         }
         self.last_heading = Some(heading);
         // the track steers: the wheel stays straight

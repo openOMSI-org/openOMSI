@@ -628,6 +628,12 @@ impl VehicleInstance {
                 body_reversed(&self.ty.def, false),
                 trailers[0].coupling_back.y,
             );
+            let rolls: Vec<Option<f32>> = if self.rail_sway {
+                trailers.iter_mut().map(|t| t.body_roll()).collect()
+            } else {
+                Vec::new()
+            };
+            let mut cars = vec![(0.0f64, self.bank)];
             for i in 0..trailers.len() {
                 // (the part's rear coupling is the one the next part hangs on, in this part's frame)
                 let rear = trailers.get(i + 1).map(|n| n.coupling_back.y);
@@ -657,14 +663,38 @@ impl VehicleInstance {
                         );
                     }
                 }
+                let sway = self.rail_sway.then(|| {
+                    let before = rolls[..i]
+                        .iter()
+                        .rev()
+                        .flatten()
+                        .next()
+                        .copied()
+                        .unwrap_or(self.bank);
+                    let after = rolls[i + 1..]
+                        .iter()
+                        .flatten()
+                        .next()
+                        .copied()
+                        .unwrap_or(before);
+                    (
+                        cars.iter()
+                            .find(|c| super::sway::same_car(c.0, origin))
+                            .map(|c| c.1),
+                        (before + after) * 0.5,
+                    )
+                });
                 match (
                     at_behind(origin - y_front as f64),
                     at_behind(origin - y_rear as f64),
                 ) {
                     (Some(front), Some(back)) => {
-                        t.place_on_rails(self, dt, lead, (front, y_front), (back, y_rear))
+                        t.place_on_rails(self, dt, lead, (front, y_front), (back, y_rear), sway)
                     }
                     _ => t.update(self, dt, lead),
+                }
+                if self.rail_sway && t.body_roll().is_some() {
+                    cars.push((origin, t.bank));
                 }
                 if let Some(y) = rear {
                     joint = origin - travel(turned, y);
