@@ -181,8 +181,7 @@ impl App {
             "flashlight" => self.toggle_flashlight(),
             "cruise_control" => {
                 if let Some(p) = self.player.as_mut() {
-                    let msg = p.toggle_cruise();
-                    self.service_msg = Some((omsi_ui::tr(&msg).into_owned(), 2.5));
+                    self.service_msg = Some((p.toggle_cruise(), 2.5));
                 }
             }
             "clean_screen" => self.toggle_clean_screen(),

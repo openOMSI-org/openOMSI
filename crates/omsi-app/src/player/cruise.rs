@@ -44,19 +44,28 @@ impl Cruise {
     }
 }
 
+/// The text for switching it on at `kmh`, or for refusing below [`MIN_KMH`]: the template is
+/// translated by `tr` first, as a key with the number in it is in no table.
+pub(crate) fn on_text(kmh: f32, tr: impl Fn(&str) -> String) -> String {
+    let (key, n) = if kmh < MIN_KMH {
+        ("Cruise control works above {} km/h", MIN_KMH)
+    } else {
+        ("Cruise control: {} km/h", kmh.round())
+    };
+    tr(key).replace("{}", &(n as i32).to_string())
+}
+
 impl super::Player {
     /// Cruise control on at the speed driven now, or off (Num0). The text for the screen.
     pub(crate) fn toggle_cruise(&mut self) -> String {
         if self.cruise.take().is_some() {
-            return "Cruise control off".into();
+            return omsi_ui::tr("Cruise control off").into_owned();
         }
         let kmh = self.vehicle.physics.velocity_kmh();
-        if kmh < MIN_KMH {
-            return format!("Cruise control works above {} km/h", MIN_KMH as i32);
+        if kmh >= MIN_KMH {
+            self.cruise = Some(Cruise::new(kmh.round()));
         }
-        let kmh = kmh.round();
-        self.cruise = Some(Cruise::new(kmh));
-        format!("Cruise control: {} km/h", kmh as i32)
+        on_text(kmh, |key| omsi_ui::tr(key).into_owned())
     }
 
     /// The pedals with the cruise control's foot on them: the brake switches it off, a
@@ -155,6 +164,24 @@ mod tests {
         let (t, b) = c.with_driver(47.0, 0.016, 0.0, 0.0, false).unwrap();
         assert_eq!(auto_shift_gear(2, 5, 2.8, 0.0, 0.0, 0.0, 47.0), 2);
         assert_eq!(auto_shift_gear(2, 5, 2.8, 0.0, t, b, 47.0), 3);
+    }
+
+    #[test]
+    fn its_messages_are_translated_with_the_speed_in_them() {
+        let ru = |key: &str| {
+            crate::_rust_i18n_try_translate("ru", key)
+                .map(|t| t.into_owned())
+                .unwrap_or_else(|| key.to_string())
+        };
+        assert_eq!(on_text(49.6, ru), "Круиз-контроль: 50 км/ч");
+        assert_eq!(
+            on_text(3.0, ru),
+            "Круиз-контроль работает на скорости выше 5 км/ч"
+        );
+        assert_eq!(
+            on_text(49.6, |key: &str| key.to_string()),
+            "Cruise control: 50 km/h"
+        );
     }
 
     #[test]
