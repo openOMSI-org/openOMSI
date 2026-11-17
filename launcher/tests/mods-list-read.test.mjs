@@ -10,6 +10,7 @@ async function setup() {
   // every mods_status read waits here until the test answers it
   const reads = [];
   let poll = null;
+  let vehicles = null;
   const timers = [];
   const context = vm.createContext({
     window: {
@@ -22,6 +23,7 @@ async function setup() {
             return p;
           }
           if (cmd === 'poll') return poll;
+          if (cmd === 'vehicles' && vehicles) return vehicles;
           if (cmd === 'maps' || cmd === 'weather') return [];
           // (the rest of loadContent is not what these tests look at)
           return new Promise(() => {});
@@ -42,7 +44,7 @@ async function setup() {
     if (!modules.has(url.href)) {
       const code = url.pathname.endsWith('/vendor/preact-htm.js')
         ? // (a page drawn once: `html` keeps the template and its values, the hooks their first value)
-          'export const useEffect = () => {}; export const useRef = (v) => ({ current: v });' +
+          'export const useEffect = () => {}; export const useRef = (v) => ({ current: v }); export const useMemo = (f) => f();' +
             ' export const useState = (v) => [typeof v === "function" ? v() : v, () => {}];' +
             ' export const html = (strings, ...vals) => ({ strings: [...strings], vals });'
         : await readFile(url, 'utf8');
@@ -69,7 +71,21 @@ async function setup() {
     for (const x of waits) x.f();
     await flush();
   };
-  return { state, data, page, reads, timers, flush, retry, setPoll: (p) => { poll = p; } };
+  // the Troubleshoot page's "Scan again", as the page has it
+  const scanButton = async () => {
+    const tr = await module(new URL('../ui/js/pages/troubleshoot.js', import.meta.url));
+    await tr.link((path, parent) => module(new URL(path, parent.identifier)));
+    await tr.evaluate();
+    const find = (v, ok) => {
+      if (typeof v === 'function') return ok(v) ? v : null;
+      if (Array.isArray(v)) return v.reduce((r, x) => r || find(x, ok), null);
+      if (v && typeof v === 'object') return find(v.vals ?? Object.values(v), ok);
+      return null;
+    };
+    const overview = find(tr.namespace.TroubleshootPage(), (f) => f.name === 'Overview');
+    return find(overview({}), (f) => f.name === 'scan');
+  };
+  return { state, data, page, reads, timers, flush, retry, scanButton, setPoll: (p) => { poll = p; }, setVehicles: (v) => { vehicles = v; } };
 }
 
 const list = (...ids) => ({ installed: ids.map((id) => ({ id, name: id, enabled: true })) });
@@ -232,4 +248,26 @@ test('an installed mod keeps its row through a failed list read (#4016)', async 
   await flush();
   assert.deepEqual([...state.settling], [], 'the row goes once a read has answered');
   assert.deepEqual(state.cache.mods, list('a', 'New bus'));
+});
+
+test('a Troubleshoot scan asked before a switch does not confirm it when the switch\'s read fails', async () => {
+  const { state, data, reads, flush, retry, scanButton, setVehicles } = await setup();
+  Object.assign(state, { cache: { mods: list('a') }, poll: { jobs: [] }, vehicles: [] });
+  setVehicles([]);
+  const scan = await scanButton();
+  scan();
+  await flush();
+  assert.equal(reads.length, 1, 'the scan reads the list');
+  // (the switch is set meanwhile and asks for the list read after it)
+  const p = data.rereadUntil('mods', 'mods_status');
+  await flush();
+  reads[0].answer(list('a'));
+  await flush();
+  reads[1].fail('content folder unreadable');
+  await flush();
+  assert.equal(await settledState(p, flush), 'pending', 'the older scan\'s answer must not end the switch\'s wait');
+  await retry();
+  reads.at(-1).answer(list('a', 'b'));
+  assert.deepEqual(await p, list('a', 'b'));
+  assert.deepEqual(state.cache.mods, list('a', 'b'));
 });
