@@ -178,6 +178,18 @@ fn tree_sway(local: vec3<f32>, m: mat4x4<f32>) -> vec3<f32> {
 // Where a scene vertex lands on the screen: the main pass's and the depth passes' vertex
 // shaders (`vs_main`, `vs_depth`) both take it from here, so that their depths agree to the
 // last bit (the main pass tests against the depth the prepass left).
+fn depth_plane_normal(e: u32, fallback: vec3<f32>) -> vec3<f32> {
+    let encoded = vec2<f32>(models[e * 4u + 1u].w, models[e * 4u + 2u].w);
+    if (any(abs(encoded) > vec2<f32>(1.0))) {
+        return safe_normal(fallback);
+    }
+    var n = vec3<f32>(encoded, 1.0 - abs(encoded.x) - abs(encoded.y));
+    let fold = clamp(-n.z, 0.0, 1.0);
+    n.x += select(fold, -fold, n.x >= 0.0);
+    n.y += select(fold, -fold, n.y >= 0.0);
+    return normalize(n);
+}
+
 fn scene_clip(e: u32, wp: vec4<f32>, nw: vec3<f32>) -> vec4<f32> {
     // Road surfaces (splines, the objects lying on them, a shadow blob) are pulled towards
     // the eye along the line of sight - the picture does not move, only the depth - so that
@@ -239,13 +251,25 @@ fn scene_clip(e: u32, wp: vec4<f32>, nw: vec3<f32>) -> vec4<f32> {
     // (The plane's distance is at least 5 % of the vertex's own: the edge of a curved mesh,
     // whose tangent plane runs through the eye, is not pulled metres forward.)
     let clip = camera.view_proj * vec4<f32>(cp, 1.0);
-    let level = models[e * 4u].w;
+    let level_code = u32(round(models[e * 4u].w));
+    var level = f32(level_code & 3u);
     if (level <= 0.0) {
         return clip;
     }
+    if ((level_code & 4096u) != 0u) {
+        let cap = f32((level_code >> 2u) & 1023u) * 1e-6;
+        let distance = length(cp - camera.cam_pos.xyz);
+        level = min(level, cap / max(3e-5 * distance, 1e-9));
+        let stack_floor = select(0.0, 2.0, (level_code & 3u) >= 2u);
+        level = max(level, stack_floor);
+        if (level <= 0.0) {
+            return clip;
+        }
+    }
     // (the depth of the eye's own point: n f / (f - n), about the near plane)
     let at_eye = (camera.view_proj * vec4<f32>(camera.cam_pos.xyz, 1.0)).z;
-    let plane = max(abs(dot(safe_normal(nw), cp - camera.cam_pos.xyz)), 0.05 * length(cp - camera.cam_pos.xyz));
+    let plane_normal = depth_plane_normal(e, nw);
+    let plane = max(abs(dot(plane_normal, cp - camera.cam_pos.xyz)), 0.05 * length(cp - camera.cam_pos.xyz));
     let slant = level * 2e-5 * at_eye * clip.w / plane;
     return vec4<f32>(clip.x, clip.y, clip.z * (1.0 + level * 1e-5) + slant, clip.w);
 }

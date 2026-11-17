@@ -30,6 +30,7 @@ pub struct GpuMesh {
     /// Its flat surfaces by material slot, for the draw order's depth step of a surface
     /// lying on another of its object (`scene::overlay`).
     pub(crate) flats: Vec<crate::scene::overlay::Flat>,
+    pub(crate) depth_normals: Vec<Vec3>,
 }
 
 /// A buffer holding `contents` - what `create_buffer_init` makes, but written through the
@@ -242,6 +243,7 @@ impl MeshPage {
             one_sided: data.one_sided,
             source: None,
             flats: crate::scene::overlay::mesh_flats(data),
+            depth_normals: crate::scene::depth_plane::normals(data),
         }
     }
 }
@@ -265,6 +267,7 @@ impl GpuMesh {
             one_sided: false,
             source: None,
             flats: Vec::new(),
+            depth_normals: Vec::new(),
         }
     }
 }
@@ -378,6 +381,8 @@ impl Renderer {
             return;
         }
         m.pose = m.pose.wrapping_add(1);
+        let had_depth_planes = m.depth_normals.iter().any(|normal| *normal != Vec3::ZERO);
+        m.depth_normals.clear();
         {
             // (a newer pose of the same mesh replaces one still waiting)
             let mut pending = self.pending_meshes.borrow_mut();
@@ -395,6 +400,13 @@ impl Renderer {
             m.bounds_center = (lo + hi) * 0.5;
             m.bounds_radius = (hi - m.bounds_center).length();
             Self::mesh_bounds_changed(scene, id);
+        }
+        if had_depth_planes && !scene.dirty {
+            for instance in 0..scene.uploaded_instances {
+                if scene.instances[instance].mesh == id {
+                    Self::mark_changed(scene, instance);
+                }
+            }
         }
     }
 

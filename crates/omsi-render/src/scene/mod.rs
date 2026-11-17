@@ -4,6 +4,7 @@
 use crate::*;
 
 mod instances;
+pub(crate) mod depth_plane;
 pub(crate) mod overlay;
 mod upload;
 mod lod;
@@ -176,6 +177,8 @@ pub struct Instance {
     /// The draw order's depth step of each material slot (see `draw_order_level`): above 0
     /// only for a slot lying on an earlier surface of the same object (`overlay`).
     pub(crate) slot_levels: Vec<u8>,
+    pub(crate) slot_depth_caps: Vec<f32>,
+    pub(crate) slot_screens: Vec<bool>,
 }
 
 /// The rain the renderer draws round the camera (rain.wgsl): every drop is worked out on

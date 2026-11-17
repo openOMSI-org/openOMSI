@@ -211,9 +211,11 @@ fn a_print_behind_a_pane_added_first_stays_over_its_base() {
             let rgba = renderer.render_to_image(&mut scene, 256, 256, &camera, &lighting).unwrap();
             let green = rgba.chunks(4).filter(|p| p[1] > 150 && p[0] < 60 && p[2] < 60).count();
             let red = rgba.chunks(4).filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60).count();
+            let blue = rgba.chunks(4).filter(|p| p[2] > 150 && p[0] < 60 && p[1] < 60).count();
             // (the print covers its base whole where the pane does not: the base shows through
             // it nowhere)
             assert!(red == 0 && green > 0, "at {d} m, pitch {pitch}: {green} pixels of the print, {red} of the base through it");
+            assert!(blue > 0, "at {d} m, pitch {pitch}: the print passed the pane completely");
         }
     }
 }
@@ -246,9 +248,11 @@ fn a_blended_print_behind_a_pane_added_first_stays_over_its_base() {
             let rgba = renderer.render_to_image(&mut scene, 256, 256, &camera, &lighting).unwrap();
             let green = rgba.chunks(4).filter(|p| p[1] > 150 && p[0] < 60 && p[2] < 60).count();
             let red = rgba.chunks(4).filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60).count();
+            let blue = rgba.chunks(4).filter(|p| p[2] > 150 && p[0] < 60 && p[1] < 60).count();
             // (the print covers its base whole where the pane does not: the base shows through
             // it nowhere)
             assert!(red == 0 && green > 0, "at {d} m, pitch {pitch}: {green} pixels of the print, {red} of the base through it");
+            assert!(blue > 0, "at {d} m, pitch {pitch}: the print passed the pane completely");
         }
     }
 }
@@ -293,5 +297,35 @@ fn a_label_a_fraction_of_a_millimetre_in_front_of_a_stack_of_steps_stays_seen() 
             let red = rgba.chunks(4).filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60).count();
             assert!(green * 4 > red, "at {d} m, pitch {pitch}: {green} pixels of the label, {red} of the glass");
         }
+    }
+}
+
+/// Shading normals may be authored independently of a display's flat geometry.
+/// They must not bend the depth offset and lift an earlier layer through its print.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn shading_normals_do_not_bend_a_flat_layers_depth() {
+    let mut renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
+    let green = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 1.0, 0.0, 1.0], true);
+    let mut layer = grid(0.0, 0.0, 0.0, 0.3, 1, 0.0, true);
+    layer.normals[0] = Vec3::new(1.0, 0.0, -0.3).normalize();
+    let mesh = renderer.add_mesh(&mut scene, &slotted(vec![
+        grid(0.0, 0.0, 0.0, 0.4, 1, 0.0, false),
+        layer,
+        grid(0.0, 0.0, 0.000025, 0.5, 1, 0.0, false),
+    ]));
+    renderer.begin_object(&mut scene);
+    renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![red, red, green]);
+    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    for pitch in [-90.0f64, -45.0, -15.0] {
+        let (s, c) = pitch.to_radians().sin_cos();
+        let camera = Camera { position: DVec3::new(0.0, -c, -s), yaw: 0.0, pitch: pitch as f32, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 3000.0 };
+        scene.dirty = true;
+        let rgba = renderer.render_to_image(&mut scene, 256, 256, &camera, &lighting).unwrap();
+        let red = rgba.chunks_exact(4).filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60).count();
+        let green = rgba.chunks_exact(4).filter(|p| p[1] > 150 && p[0] < 60 && p[2] < 60).count();
+        assert!(red == 0 && green > 0, "pitch {pitch}: {red} base pixels, {green} print pixels");
     }
 }

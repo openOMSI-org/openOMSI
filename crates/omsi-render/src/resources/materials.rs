@@ -121,6 +121,10 @@ pub struct Material {
 }
 
 impl Material {
+    pub(crate) fn is_screen(&self) -> bool {
+        self.uniform.flags[0] > 0.5
+    }
+
     /// Whether the material samples texture `id`.
     pub fn uses_texture(&self, id: TextureId) -> bool {
         self.texture == Some(id)
@@ -746,6 +750,10 @@ impl Renderer {
             AlphaMode::Blend if extra.alpha_cut => 3.0,
             AlphaMode::Blend => 2.0,
         };
+        // Screen quads carry sparse text or script pixels. Their transparent area must not
+        // stamp a shared depth value over duplicate display layers.
+        let screen_no_z_write = extra.screen && alpha == AlphaMode::Blend;
+        let no_z_write = extra.no_z_write || screen_no_z_write;
         // a mirror's glass shows a picture this renderer drew (`add_render_texture`): the
         // enhanced shader must not brighten it as it does a display (see enhanced.wgsl)
         let mirror = unlit
@@ -803,7 +811,7 @@ impl Renderer {
             bump: [
                 bump.map(|b| b.1).unwrap_or(0.0),
                 if bump.is_some() { 1.0 } else { 0.0 },
-                if extra.no_z_write { 1.0 } else { 0.0 },
+                if no_z_write { 1.0 } else { 0.0 },
                 if extra.no_z_check { 1.0 } else { 0.0 },
             ],
             pbr: texture.and_then(|t| scene.pbr_maps.get(&t)).map(|m| m.flags).unwrap_or([0.0; 4]),
@@ -880,8 +888,8 @@ impl Renderer {
             alpha,
             color,
             unlit,
-            no_z_write: extra.no_z_write,
-            writes_depth: extra.writes_depth && extra.no_z_write,
+            no_z_write,
+            writes_depth: extra.writes_depth && no_z_write && !screen_no_z_write,
             no_z_check: extra.no_z_check,
             z_bias: extra.z_bias,
             nightmap,

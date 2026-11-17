@@ -121,10 +121,13 @@ impl Renderer {
         let draw_order = scene.next_instance_order;
         scene.next_instance_order += 1;
         let key = crate::frame_plan::origin_key(origin);
-        let slot_levels = scene.object_run.levels(key, draw_order, mesh, transform, &scene.meshes[mesh].flats, slots);
+        let (slot_levels, slot_depth_caps) = scene.object_run.levels_with_caps(key, draw_order, mesh, transform, &scene.meshes[mesh].flats, slots);
+        let slot_screens = materials.iter().map(|&material| scene.materials.get(material).is_some_and(Material::is_screen)).collect();
         scene.instances.push(Instance {
             draw_order,
             slot_levels,
+            slot_depth_caps,
+            slot_screens,
             mesh,
             transform,
             origin,
@@ -183,10 +186,13 @@ impl Renderer {
         let draw_order = scene.next_instance_order;
         scene.next_instance_order += 1;
         let key = crate::frame_plan::origin_key(origin);
-        let slot_levels = scene.object_run.levels(key, draw_order, mesh, transform, &scene.meshes[mesh].flats, slots);
+        let (slot_levels, slot_depth_caps) = scene.object_run.levels_with_caps(key, draw_order, mesh, transform, &scene.meshes[mesh].flats, slots);
+        let slot_screens = materials.iter().map(|&material| scene.materials.get(material).is_some_and(Material::is_screen)).collect();
         scene.instances.push(Instance {
             draw_order,
             slot_levels,
+            slot_depth_caps,
+            slot_screens,
             mesh,
             transform,
             origin,
@@ -330,8 +336,11 @@ impl Renderer {
     pub fn set_spline_layer(&self, scene: &mut Scene, instance: usize, level: u8) {
         if let Some(i) = scene.instances.get_mut(instance) {
             let level = level.min(crate::scene::overlay::MAX_LEVEL);
-            if i.slot_levels.iter().any(|l| *l != level) {
+            if i.slot_levels.iter().any(|l| *l != level)
+                || i.slot_depth_caps.iter().any(|cap| cap.is_finite())
+            {
                 i.slot_levels.iter_mut().for_each(|l| *l = level);
+                i.slot_depth_caps.fill(f32::INFINITY);
                 Self::mark_changed(scene, instance);
             }
         }
