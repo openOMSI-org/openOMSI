@@ -14,7 +14,10 @@ pub(crate) fn encode(normal_matrix: Mat4, normal: Vec3) -> [f32; 2] {
     let n = n / n.abs().element_sum();
     let packed = if n.z < 0.0 {
         (Vec2::ONE - n.truncate().abs().yx())
-            * Vec2::new(if n.x < 0.0 { -1.0 } else { 1.0 }, if n.y < 0.0 { -1.0 } else { 1.0 })
+            * Vec2::new(
+                if n.x < 0.0 { -1.0 } else { 1.0 },
+                if n.y < 0.0 { -1.0 } else { 1.0 },
+            )
     } else {
         n.truncate()
     };
@@ -22,17 +25,26 @@ pub(crate) fn encode(normal_matrix: Mat4, normal: Vec3) -> [f32; 2] {
 }
 
 pub(crate) fn normals(data: &MeshData) -> Vec<Vec3> {
-    let slots = data.ranges.iter().map(|range| range.2 as usize + 1).max().unwrap_or(0);
+    let slots = data
+        .ranges
+        .iter()
+        .map(|range| range.2 as usize + 1)
+        .max()
+        .unwrap_or(0);
     let mut planes = vec![(DVec3::ZERO, DVec3::ZERO, 0.0f64); slots];
     for &(first, count, slot) in &data.ranges {
         let end = first.saturating_add(count).min(data.indices.len() as u32);
-        let Some(indices) = data.indices.get(first as usize..end as usize) else { continue };
+        let Some(indices) = data.indices.get(first as usize..end as usize) else {
+            continue;
+        };
         for triangle in indices.chunks_exact(3) {
             let (Some(a), Some(b), Some(c)) = (
                 data.positions.get(triangle[0] as usize),
                 data.positions.get(triangle[1] as usize),
                 data.positions.get(triangle[2] as usize),
-            ) else { continue };
+            ) else {
+                continue;
+            };
             let cross = (b.as_dvec3() - a.as_dvec3()).cross(c.as_dvec3() - a.as_dvec3());
             let area = cross.length();
             let plane = &mut planes[slot as usize];
@@ -69,9 +81,15 @@ pub(crate) fn normals(data: &MeshData) -> Vec<Vec3> {
         }
     }
 
-    planes.into_iter().zip(valid).map(|((_, normal, _), valid)| {
-        if valid { normal.as_vec3() } else { Vec3::ZERO }
-    }).collect()
+    planes
+        .into_iter()
+        .zip(valid)
+        .map(
+            |((_, normal, _), valid)| {
+                if valid { normal.as_vec3() } else { Vec3::ZERO }
+            },
+        )
+        .collect()
 }
 
 #[cfg(test)]
@@ -89,7 +107,15 @@ mod tests {
 
     #[test]
     fn packed_normals_round_trip_both_hemispheres() {
-        for normal in [Vec3::X, Vec3::Y, Vec3::Z, -Vec3::X, -Vec3::Y, -Vec3::Z, Vec3::new(0.3, -0.7, -0.6).normalize()] {
+        for normal in [
+            Vec3::X,
+            Vec3::Y,
+            Vec3::Z,
+            -Vec3::X,
+            -Vec3::Y,
+            -Vec3::Z,
+            Vec3::new(0.3, -0.7, -0.6).normalize(),
+        ] {
             assert!(decode(encode(Mat4::IDENTITY, normal)).distance(normal) < 1e-6);
         }
         assert_eq!(encode(Mat4::IDENTITY, Vec3::ZERO), NO_PLANE);

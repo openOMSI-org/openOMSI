@@ -23,11 +23,12 @@ impl Renderer {
         let m =
             (Mat4::from_translation((i.origin - ro).as_vec3()) * i.transform).to_cols_array_2d();
         let vis = if i.visible { 1.0 } else { 0.0 };
-        let normal_matrix = if mesh.depth_normals.is_empty() || !i.slot_levels.iter().any(|&level| level > 0) {
-            Mat4::IDENTITY
-        } else {
-            i.transform.inverse().transpose()
-        };
+        let normal_matrix =
+            if mesh.depth_normals.is_empty() || !i.slot_levels.iter().any(|&level| level > 0) {
+                Mat4::IDENTITY
+            } else {
+                i.transform.inverse().transpose()
+            };
         for (k, a) in i.slot_alpha.iter().enumerate() {
             let mut m = m;
             m[0][3] = draw_order_level(i, k);
@@ -250,7 +251,13 @@ impl Renderer {
                         };
                         mats.clear();
                         params.clear();
-                        Self::instance_entries(i, &scene.meshes[i.mesh], ro, &mut mats, &mut params);
+                        Self::instance_entries(
+                            i,
+                            &scene.meshes[i.mesh],
+                            ro,
+                            &mut mats,
+                            &mut params,
+                        );
                         let (b, n) = (i.base as usize, mats.len());
                         if b + n > scene.cpu_models.len() || (b + n) * 2 > scene.cpu_params.len() {
                             continue;
@@ -605,7 +612,12 @@ pub(crate) fn draw_order_level(i: &Instance, slot: usize) -> f32 {
     if mode != 0 || i.slot_screens.get(slot).copied().unwrap_or(false) {
         return level;
     }
-    let Some(cap) = i.slot_depth_caps.get(slot).copied().filter(|cap| cap.is_finite()) else {
+    let Some(cap) = i
+        .slot_depth_caps
+        .get(slot)
+        .copied()
+        .filter(|cap| cap.is_finite())
+    else {
         return level;
     };
     let micrometres = (cap * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;

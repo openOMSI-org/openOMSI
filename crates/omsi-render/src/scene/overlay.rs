@@ -48,7 +48,10 @@ struct DepthCap {
 }
 
 fn push_depth_cap(caps: &mut Vec<DepthCap>, candidate: DepthCap) {
-    if let Some(existing) = caps.iter_mut().find(|cap| cap.occluder == candidate.occluder) {
+    if let Some(existing) = caps
+        .iter_mut()
+        .find(|cap| cap.occluder == candidate.occluder)
+    {
         existing.value = existing.value.min(candidate.value);
     } else {
         caps.push(candidate);
@@ -59,8 +62,18 @@ fn push_depth_cap(caps: &mut Vec<DepthCap>, candidate: DepthCap) {
 /// go with it (a surface and one facing the other way in the same plane are one plane).
 fn canonical(n: Vec3, offset: f32) -> (Vec3, f32) {
     let a = n.abs();
-    let big = if a.x >= a.y && a.x >= a.z { n.x } else if a.y >= a.z { n.y } else { n.z };
-    if big < 0.0 { (-n, -offset) } else { (n, offset) }
+    let big = if a.x >= a.y && a.x >= a.z {
+        n.x
+    } else if a.y >= a.z {
+        n.y
+    } else {
+        n.z
+    };
+    if big < 0.0 {
+        (-n, -offset)
+    } else {
+        (n, offset)
+    }
 }
 
 /// The flat surfaces of `data`, slot by slot: its triangles grouped by plane, the largest
@@ -71,13 +84,16 @@ pub(crate) fn mesh_flats(data: &MeshData) -> Vec<Flat> {
         // (plane key -> flat, area)
         // (a hashbrown map sized ahead, no list per triangle: a GPM street lamp of 150 000 triangles took 23 ms)
         let end = (first + count).min(data.indices.len() as u32);
-        let mut planes: hashbrown::HashMap<(i32, i32, i32, i32), (Flat, f32, [f32; 4])> = hashbrown::HashMap::with_capacity((end.saturating_sub(first) / 3) as usize);
+        let mut planes: hashbrown::HashMap<(i32, i32, i32, i32), (Flat, f32, [f32; 4])> =
+            hashbrown::HashMap::with_capacity((end.saturating_sub(first) / 3) as usize);
         let mut k = first as usize;
         let at = |i: u32| data.positions.get(i as usize).copied();
         while k + 2 < end as usize {
             let idx = [data.indices[k], data.indices[k + 1], data.indices[k + 2]];
             k += 3;
-            let (Some(a), Some(b), Some(c)) = (at(idx[0]), at(idx[1]), at(idx[2])) else { continue };
+            let (Some(a), Some(b), Some(c)) = (at(idx[0]), at(idx[1]), at(idx[2])) else {
+                continue;
+            };
             let p = [a, b, c];
             let cross = (p[1] - p[0]).cross(p[2] - p[0]);
             let area = cross.length() * 0.5;
@@ -85,14 +101,33 @@ pub(crate) fn mesh_flats(data: &MeshData) -> Vec<Flat> {
                 continue;
             }
             let (n, offset) = canonical(cross / (2.0 * area), (cross / (2.0 * area)).dot(p[0]));
-            let key = ((n.x * 1000.0).round() as i32, (n.y * 1000.0).round() as i32, (n.z * 1000.0).round() as i32, (offset / PLANE_GAP).round() as i32);
+            let key = (
+                (n.x * 1000.0).round() as i32,
+                (n.y * 1000.0).round() as i32,
+                (n.z * 1000.0).round() as i32,
+                (offset / PLANE_GAP).round() as i32,
+            );
             let (lo, hi) = (p[0].min(p[1]).min(p[2]), p[0].max(p[1]).max(p[2]));
             let e = planes.entry(key).or_insert_with(|| {
                 let mut edges = [p[1] - p[0], p[2] - p[1], p[0] - p[2]];
                 edges.sort_by(|a, b| a.length_squared().total_cmp(&b.length_squared()));
                 let edge = edges[1];
-                let axis = (edge - n * n.dot(edge)).try_normalize().unwrap_or_else(|| n.any_orthonormal_vector());
-                (Flat { slot, normal: n, offset, lo, hi, axis, half: [0.0; 2] }, 0.0, [f32::MAX, f32::MIN, f32::MAX, f32::MIN])
+                let axis = (edge - n * n.dot(edge))
+                    .try_normalize()
+                    .unwrap_or_else(|| n.any_orthonormal_vector());
+                (
+                    Flat {
+                        slot,
+                        normal: n,
+                        offset,
+                        lo,
+                        hi,
+                        axis,
+                        half: [0.0; 2],
+                    },
+                    0.0,
+                    [f32::MAX, f32::MIN, f32::MAX, f32::MIN],
+                )
             });
             e.0.lo = e.0.lo.min(lo);
             e.0.hi = e.0.hi.max(hi);
@@ -104,10 +139,16 @@ pub(crate) fn mesh_flats(data: &MeshData) -> Vec<Flat> {
                 e.2 = [e.2[0].min(a), e.2[1].max(a), e.2[2].min(b), e.2[3].max(b)];
             }
         }
-        let mut flats: Vec<(Flat, f32)> = planes.into_values().map(|(mut flat, area, extents)| {
-            flat.half = [(extents[1] - extents[0]) * 0.5, (extents[3] - extents[2]) * 0.5];
-            (flat, area)
-        }).collect();
+        let mut flats: Vec<(Flat, f32)> = planes
+            .into_values()
+            .map(|(mut flat, area, extents)| {
+                flat.half = [
+                    (extents[1] - extents[0]) * 0.5,
+                    (extents[3] - extents[2]) * 0.5,
+                ];
+                (flat, area)
+            })
+            .collect();
         // (the largest picked out before they are sorted: a curved mesh has a plane per triangle)
         if flats.len() > FLATS_PER_SLOT {
             flats.select_nth_unstable_by(FLATS_PER_SLOT, |a, b| b.1.total_cmp(&a.1));
@@ -140,12 +181,15 @@ pub(crate) struct ObjectRun {
 
 /// Cells of 1/30, so neighbouring cells cover the normals accepted by `facing`.
 fn normal_key(n: Vec3) -> (i32, i32, i32) {
-    ((n.x * 30.0).round() as i32, (n.y * 30.0).round() as i32, (n.z * 30.0).round() as i32)
+    (
+        (n.x * 30.0).round() as i32,
+        (n.y * 30.0).round() as i32,
+        (n.z * 30.0).round() as i32,
+    )
 }
 
 fn boxes_overlap(a: &Flat, b: &Flat, margin: f32) -> bool {
-    (a.lo - Vec3::splat(margin)).cmple(b.hi).all()
-        && (b.lo - Vec3::splat(margin)).cmple(a.hi).all()
+    (a.lo - Vec3::splat(margin)).cmple(b.hi).all() && (b.lo - Vec3::splat(margin)).cmple(a.hi).all()
 }
 
 fn projected_overlap(a: &Flat, b: &Flat, minimum: f32) -> bool {
@@ -230,8 +274,17 @@ impl ObjectRun {
     /// Any other slot 0. Outside an object begun with `begin` every slot is 0, and a mesh
     /// that is not the next one of the object (another place, a gap in the order) ends it.
     #[cfg(test)]
-    pub(crate) fn levels(&mut self, origin: [u64; 3], draw_order: u64, mesh: usize, transform: Mat4, flats: &[Flat], slots: usize) -> Vec<u8> {
-        self.levels_with_caps(origin, draw_order, mesh, transform, flats, slots).0
+    pub(crate) fn levels(
+        &mut self,
+        origin: [u64; 3],
+        draw_order: u64,
+        mesh: usize,
+        transform: Mat4,
+        flats: &[Flat],
+        slots: usize,
+    ) -> Vec<u8> {
+        self.levels_with_caps(origin, draw_order, mesh, transform, flats, slots)
+            .0
     }
 
     pub(crate) fn levels_with_caps(
@@ -257,7 +310,9 @@ impl ObjectRun {
         if !self.open {
             return (vec![0; slots], vec![f32::INFINITY; slots]);
         }
-        let known = self.model.and_then(|model| self.models.get(&model))
+        let known = self
+            .model
+            .and_then(|model| self.models.get(&model))
             .and_then(|list| list.get(self.added))
             .filter(|(id, levels, _)| *id == mesh && levels.len() == slots)
             .map(|(_, levels, caps)| (levels.clone(), caps.clone()));
@@ -265,12 +320,24 @@ impl ObjectRun {
         if let Some((levels, caps)) = known {
             for flat in flats.iter().filter(|flat| (flat.slot as usize) < slots) {
                 let slot = flat.slot as usize;
-                self.by_normal.entry(normal_key(flat.normal)).or_default().push(self.flats.len());
+                self.by_normal
+                    .entry(normal_key(flat.normal))
+                    .or_default()
+                    .push(self.flats.len());
                 self.flats.push((*flat, levels[slot]));
                 self.flat_caps.push(Arc::clone(&caps[slot]));
                 self.flat_meshes.push(mesh);
             }
-            let values = caps.iter().map(|constraints| constraints.iter().map(|cap| cap.value).min_by(f32::total_cmp).unwrap_or(f32::INFINITY)).collect();
+            let values = caps
+                .iter()
+                .map(|constraints| {
+                    constraints
+                        .iter()
+                        .map(|cap| cap.value)
+                        .min_by(f32::total_cmp)
+                        .unwrap_or(f32::INFINITY)
+                })
+                .collect();
             return (levels, values);
         }
         let normal_m = transform.inverse().transpose();
@@ -282,12 +349,30 @@ impl ObjectRun {
                 let (normal, offset) = canonical(n, n.dot(p));
                 let corners = (0..8).map(|c| {
                     let pick = |bit: usize, lo: f32, hi: f32| if c & bit != 0 { hi } else { lo };
-                    transform.transform_point3(Vec3::new(pick(1, f.lo.x, f.hi.x), pick(2, f.lo.y, f.hi.y), pick(4, f.lo.z, f.hi.z)))
+                    transform.transform_point3(Vec3::new(
+                        pick(1, f.lo.x, f.hi.x),
+                        pick(2, f.lo.y, f.hi.y),
+                        pick(4, f.lo.z, f.hi.z),
+                    ))
                 });
-                let (lo, hi) = corners.fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(lo, hi), c| (lo.min(c), hi.max(c)));
-                let (axis, across) = (transform.transform_vector3(f.axis), transform.transform_vector3(f.normal.cross(f.axis)));
+                let (lo, hi) = corners.fold(
+                    (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+                    |(lo, hi), c| (lo.min(c), hi.max(c)),
+                );
+                let (axis, across) = (
+                    transform.transform_vector3(f.axis),
+                    transform.transform_vector3(f.normal.cross(f.axis)),
+                );
                 let half = [f.half[0] * axis.length(), f.half[1] * across.length()];
-                Some(Flat { slot: f.slot, normal, offset, lo, hi, axis: axis.try_normalize().unwrap_or(f.axis), half })
+                Some(Flat {
+                    slot: f.slot,
+                    normal,
+                    offset,
+                    lo,
+                    hi,
+                    axis: axis.try_normalize().unwrap_or(f.axis),
+                    half,
+                })
             })
             .collect();
         let mut levels = vec![0u8; slots];
@@ -301,18 +386,25 @@ impl ObjectRun {
             let mut beside: Vec<(usize, u8, f32, Flat)> = Vec::new();
             for f in &mine {
                 for (kx, ky, kz) in [normal_key(f.normal), normal_key(-f.normal)] {
-                    for dx in -1..=1 { for dy in -1..=1 { for dz in -1..=1 {
-                        let Some(list) = self.by_normal.get(&(kx + dx, ky + dy, kz + dz)) else { continue };
-                        for &i in list {
-                            let (g, gl) = &self.flats[i];
-                            if lies_on(f, g) {
-                                level = level.max(gl.saturating_add(1).min(MAX_LEVEL));
-                                under.push(i);
-                            } else if let Some(gap) = near_gap(f, g) {
-                                beside.push((i, *gl, gap, **f));
+                    for dx in -1..=1 {
+                        for dy in -1..=1 {
+                            for dz in -1..=1 {
+                                let Some(list) = self.by_normal.get(&(kx + dx, ky + dy, kz + dz))
+                                else {
+                                    continue;
+                                };
+                                for &i in list {
+                                    let (g, gl) = &self.flats[i];
+                                    if lies_on(f, g) {
+                                        level = level.max(gl.saturating_add(1).min(MAX_LEVEL));
+                                        under.push(i);
+                                    } else if let Some(gap) = near_gap(f, g) {
+                                        beside.push((i, *gl, gap, **f));
+                                    }
+                                }
                             }
                         }
-                    }}}
+                    }
                 }
             }
             under.sort_unstable();
@@ -341,29 +433,31 @@ impl ObjectRun {
             let floor = under.iter().map(|&i| self.flats[i].1).max().unwrap_or(0);
             let level = level.max(floor);
             let mut cap_constraints: Vec<DepthCap> = Vec::new();
-            for (near, _, gap, _) in beside
-                .iter()
-                .filter(|(near, near_level, _, target)| {
-                    under.iter().any(|&base| {
-                        let overlaps_base = boxes_overlap(&self.flats[*near].0, &self.flats[base].0, BOX_GAP);
-                        let same_mesh_occluder = *near_level <= 1
-                            && Some(self.flats[base].1) == base_level
-                            && self.flats[*near].0.slot != self.flats[base].0.slot
-                            && projected_overlap(&self.flats[*near].0, target, CENTRE_GAP)
-                            && projected_overlap(&self.flats[*near].0, &self.flats[base].0, CENTRE_GAP);
-                        overlaps_base && (self.flat_meshes[*near] != mesh || same_mesh_occluder)
-                    })
+            for (near, _, gap, _) in beside.iter().filter(|(near, near_level, _, target)| {
+                under.iter().any(|&base| {
+                    let overlaps_base =
+                        boxes_overlap(&self.flats[*near].0, &self.flats[base].0, BOX_GAP);
+                    let same_mesh_occluder = *near_level <= 1
+                        && Some(self.flats[base].1) == base_level
+                        && self.flats[*near].0.slot != self.flats[base].0.slot
+                        && projected_overlap(&self.flats[*near].0, target, CENTRE_GAP)
+                        && projected_overlap(&self.flats[*near].0, &self.flats[base].0, CENTRE_GAP);
+                    overlaps_base && (self.flat_meshes[*near] != mesh || same_mesh_occluder)
                 })
-            {
-                push_depth_cap(&mut cap_constraints, DepthCap {
-                    value: gap * 0.9,
-                    occluder: self.flats[*near].0,
-                });
+            }) {
+                push_depth_cap(
+                    &mut cap_constraints,
+                    DepthCap {
+                        value: gap * 0.9,
+                        occluder: self.flats[*near].0,
+                    },
+                );
             }
             for &base in &under {
                 for inherited in self.flat_caps[base].iter() {
                     let still_near = mine.iter().any(|target| {
-                        facing(target, &inherited.occluder, BOX_GAP).is_some_and(|(gap, _)| gap < NEAR_GAP)
+                        facing(target, &inherited.occluder, BOX_GAP)
+                            .is_some_and(|(gap, _)| gap < NEAR_GAP)
                             && projected_overlap(&inherited.occluder, target, CENTRE_GAP)
                     });
                     if still_near {
@@ -380,7 +474,10 @@ impl ObjectRun {
             slot_caps[slot] = Arc::clone(&cap_constraints);
             levels[slot] = level;
             for f in mine {
-                self.by_normal.entry(normal_key(f.normal)).or_default().push(self.flats.len());
+                self.by_normal
+                    .entry(normal_key(f.normal))
+                    .or_default()
+                    .push(self.flats.len());
                 self.flats.push((*f, level));
                 self.flat_caps.push(Arc::clone(&cap_constraints));
                 self.flat_meshes.push(mesh);
@@ -401,9 +498,25 @@ mod tests {
     use super::*;
 
     fn quad(z: f32, half: f32, slot: u32, cut_other_way: bool) -> MeshData {
-        let positions = vec![Vec3::new(-half, -half, z), Vec3::new(half, -half, z), Vec3::new(half, half, z), Vec3::new(-half, half, z)];
-        let indices = if cut_other_way { vec![0, 1, 3, 1, 2, 3] } else { vec![0, 1, 2, 0, 2, 3] };
-        MeshData { positions, normals: vec![Vec3::Z; 4], uvs: vec![glam::Vec2::ZERO; 4], ranges: vec![(0, 6, slot)], indices, one_sided: false }
+        let positions = vec![
+            Vec3::new(-half, -half, z),
+            Vec3::new(half, -half, z),
+            Vec3::new(half, half, z),
+            Vec3::new(-half, half, z),
+        ];
+        let indices = if cut_other_way {
+            vec![0, 1, 3, 1, 2, 3]
+        } else {
+            vec![0, 1, 2, 0, 2, 3]
+        };
+        MeshData {
+            positions,
+            normals: vec![Vec3::Z; 4],
+            uvs: vec![glam::Vec2::ZERO; 4],
+            ranges: vec![(0, 6, slot)],
+            indices,
+            one_sided: false,
+        }
     }
 
     fn box_mesh(at: Vec3) -> MeshData {
@@ -425,7 +538,10 @@ mod tests {
         assert_eq!(flats.len(), 1);
         let f = flats[0];
         assert_eq!((f.slot, f.normal, f.offset), (2, Vec3::Z, 1.0));
-        assert_eq!((f.lo, f.hi), (Vec3::new(-0.5, -0.5, 1.0), Vec3::new(0.5, 0.5, 1.0)));
+        assert_eq!(
+            (f.lo, f.hi),
+            (Vec3::new(-0.5, -0.5, 1.0), Vec3::new(0.5, 0.5, 1.0))
+        );
     }
 
     /// The bus case (#1488): its meshes all stand at one place, the dashboard and its
@@ -443,19 +559,58 @@ mod tests {
             l[0]
         };
         for k in 0..6 {
-            assert_eq!(add(&mut run, &box_mesh(Vec3::new(10.0 * k as f32, 5.0, 2.0)), Mat4::IDENTITY), 0);
+            assert_eq!(
+                add(
+                    &mut run,
+                    &box_mesh(Vec3::new(10.0 * k as f32, 5.0, 2.0)),
+                    Mat4::IDENTITY
+                ),
+                0
+            );
         }
-        assert_eq!(add(&mut run, &quad(1.0, 0.4, 0, false), Mat4::IDENTITY), 0, "the dashboard");
-        assert_eq!(add(&mut run, &quad(1.0, 0.1, 0, true), Mat4::IDENTITY), 1, "instruments on it");
-        assert_eq!(add(&mut run, &quad(1.0, 0.05, 0, false), Mat4::IDENTITY), 2, "a sticker on those");
+        assert_eq!(
+            add(&mut run, &quad(1.0, 0.4, 0, false), Mat4::IDENTITY),
+            0,
+            "the dashboard"
+        );
+        assert_eq!(
+            add(&mut run, &quad(1.0, 0.1, 0, true), Mat4::IDENTITY),
+            1,
+            "instruments on it"
+        );
+        assert_eq!(
+            add(&mut run, &quad(1.0, 0.05, 0, false), Mat4::IDENTITY),
+            2,
+            "a sticker on those"
+        );
         assert_eq!(add(&mut run, &quad(1.0, 0.02, 0, false), Mat4::IDENTITY), 3);
-        assert_eq!(add(&mut run, &quad(1.0, 0.01, 0, false), Mat4::IDENTITY), MAX_LEVEL);
+        assert_eq!(
+            add(&mut run, &quad(1.0, 0.01, 0, false), Mat4::IDENTITY),
+            MAX_LEVEL
+        );
         // (a millimetre over it is not in its plane: its height decides, as without the step)
-        assert_eq!(add(&mut run, &quad(1.001, 0.1, 0, false), Mat4::IDENTITY), 0);
+        assert_eq!(
+            add(&mut run, &quad(1.001, 0.1, 0, false), Mat4::IDENTITY),
+            0
+        );
         // (in the plane but beside it: no overlap)
-        assert_eq!(add(&mut run, &moved(quad(1.0, 0.1, 0, false), Vec3::new(3.0, 0.0, 0.0)), Mat4::IDENTITY), 0);
+        assert_eq!(
+            add(
+                &mut run,
+                &moved(quad(1.0, 0.1, 0, false), Vec3::new(3.0, 0.0, 0.0)),
+                Mat4::IDENTITY
+            ),
+            0
+        );
         // (placed by its transform onto the dashboard's plane, in a corner of it)
-        assert_eq!(add(&mut run, &quad(0.0, 0.05, 0, false), Mat4::from_translation(Vec3::new(0.3, 0.3, 1.0))), 1);
+        assert_eq!(
+            add(
+                &mut run,
+                &quad(0.0, 0.05, 0, false),
+                Mat4::from_translation(Vec3::new(0.3, 0.3, 1.0))
+            ),
+            1
+        );
     }
 
     /// Slots of one mesh: the later one on the earlier one takes the step.
@@ -470,7 +625,10 @@ mod tests {
         m.ranges = vec![(0, 6, 0), (6, 6, 1)];
         let mut run = ObjectRun::default();
         run.begin(None);
-        assert_eq!(run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&m), 2), vec![0, 1]);
+        assert_eq!(
+            run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&m), 2),
+            vec![0, 1]
+        );
     }
 
     /// A step-by-step stack is where the lift outgrows its purpose: a slot three steps up, on a
@@ -489,16 +647,34 @@ mod tests {
         let pane = quad(0.0002, 0.5, 0, false);
         let base = quad(0.0, 1.0, 0, false);
         let print = quad(0.0, 0.5, 0, true);
-        assert_eq!(levels_of(&[pane, base, print]), vec![0, 0, 1], "the print keeps its step over its base");
+        assert_eq!(
+            levels_of(&[pane, base, print]),
+            vec![0, 0, 1],
+            "the print keeps its step over its base"
+        );
         // (the same pair without the pane, and with the pane 2 mm ahead - past the near window)
-        assert_eq!(levels_of(&[quad(0.0, 1.0, 0, false), quad(0.0, 0.5, 0, true)]), vec![0, 1]);
-        assert_eq!(levels_of(&[quad(0.002, 0.5, 0, false), quad(0.0, 1.0, 0, false), quad(0.0, 0.5, 0, true)]), vec![0, 0, 1]);
+        assert_eq!(
+            levels_of(&[quad(0.0, 1.0, 0, false), quad(0.0, 0.5, 0, true)]),
+            vec![0, 1]
+        );
+        assert_eq!(
+            levels_of(&[
+                quad(0.002, 0.5, 0, false),
+                quad(0.0, 1.0, 0, false),
+                quad(0.0, 0.5, 0, true)
+            ]),
+            vec![0, 0, 1]
+        );
         // (a print over a base of two patches a fraction of a millimetre apart, as a curved
         // panel's: the patch is the base, not a surface to drop the step for)
         let patch = quad(0.0002, 0.5, 0, false);
         let base = quad(0.0, 1.0, 0, false);
         let print = quad(0.0, 0.8, 0, true);
-        assert_eq!(levels_of(&[patch, base, print]), vec![0, 0, 1], "a patch of the base does not strip the step");
+        assert_eq!(
+            levels_of(&[patch, base, print]),
+            vec![0, 0, 1],
+            "a patch of the base does not strip the step"
+        );
     }
 
     /// A stack of steps is cut back to (at least two) the surface lying just off it: a glass three steps up
@@ -509,17 +685,35 @@ mod tests {
         let label = quad(0.0002, 0.2, 0, false);
         let base = quad(0.0, 1.0, 0, false);
         let glass = quad(0.0, 0.5, 0, true);
-        assert_eq!(levels_of(&[label.clone(), base.clone(), glass.clone()]), vec![0, 0, 1], "one step above its base is kept, and the label stays in front by depth");
+        assert_eq!(
+            levels_of(&[label.clone(), base.clone(), glass.clone()]),
+            vec![0, 0, 1],
+            "one step above its base is kept, and the label stays in front by depth"
+        );
         // (a glass three steps up - a windscreen's own patches, a lens on a display on a panel)
         let deep = |z: f32, half: f32, cut: bool, slot: u32| quad(z, half, slot, cut);
         let mut run = ObjectRun::default();
         run.begin(None);
         let label = quad(0.0002, 0.2, 0, false);
-        assert_eq!(run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&label), 1), vec![0]);
-        for (k, m) in [deep(0.0, 1.0, false, 0), deep(0.0, 0.5, true, 0), deep(0.0, 0.3, false, 0), deep(0.0, 0.2, true, 0)].iter().enumerate() {
+        assert_eq!(
+            run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&label), 1),
+            vec![0]
+        );
+        for (k, m) in [
+            deep(0.0, 1.0, false, 0),
+            deep(0.0, 0.5, true, 0),
+            deep(0.0, 0.3, false, 0),
+            deep(0.0, 0.2, true, 0),
+        ]
+        .iter()
+        .enumerate()
+        {
             run.levels([0; 3], k as u64 + 1, 0, Mat4::IDENTITY, &mesh_flats(m), 1);
         }
-        assert!(run.flats.iter().all(|f| f.1 <= 2), "the stack is cut back to two steps");
+        assert!(
+            run.flats.iter().all(|f| f.1 <= 2),
+            "the stack is cut back to two steps"
+        );
         // (a millimetre is past what the step's lift reaches: nothing is cut back)
         let past = quad(-0.001, 0.2, 0, false);
         assert_eq!(levels_of(&[past, base, glass]), vec![0, 0, 1]);
@@ -553,7 +747,10 @@ mod tests {
         let base = quad(0.0, 1.0, 0, false);
         let a = quad(0.0, 0.6, 0, true);
         let b = quad(0.0, 0.3, 0, false);
-        assert_eq!(levels_of(&[pane.clone(), base.clone(), a.clone(), b.clone()]), vec![0, 0, 1, 2]);
+        assert_eq!(
+            levels_of(&[pane.clone(), base.clone(), a.clone(), b.clone()]),
+            vec![0, 0, 1, 2]
+        );
         // (on a base of two patches a fraction of a millimetre apart, as a curved panel's)
         let patch = quad(0.0002, 0.8, 0, false);
         assert_eq!(levels_of(&[patch, base, a, b]), vec![0, 0, 1, 2]);
@@ -565,22 +762,51 @@ mod tests {
     fn another_object_starts_at_zero() {
         let mut run = ObjectRun::default();
         let (a, b) = (quad(0.0, 1.0, 0, false), quad(0.0, 0.5, 0, true));
-        assert_eq!(run.levels([1; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&a), 1), vec![0]);
-        assert_eq!(run.levels([1; 3], 1, 0, Mat4::IDENTITY, &mesh_flats(&b), 1), vec![0], "no object begun");
+        assert_eq!(
+            run.levels([1; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&a), 1),
+            vec![0]
+        );
+        assert_eq!(
+            run.levels([1; 3], 1, 0, Mat4::IDENTITY, &mesh_flats(&b), 1),
+            vec![0],
+            "no object begun"
+        );
         run.begin(None);
-        assert_eq!(run.levels([1; 3], 2, 0, Mat4::IDENTITY, &mesh_flats(&a), 1), vec![0]);
-        assert_eq!(run.levels([2; 3], 3, 0, Mat4::IDENTITY, &mesh_flats(&b), 1), vec![0], "another place");
-        assert_eq!(run.levels([2; 3], 4, 0, Mat4::IDENTITY, &mesh_flats(&b), 1), vec![0], "ended there");
+        assert_eq!(
+            run.levels([1; 3], 2, 0, Mat4::IDENTITY, &mesh_flats(&a), 1),
+            vec![0]
+        );
+        assert_eq!(
+            run.levels([2; 3], 3, 0, Mat4::IDENTITY, &mesh_flats(&b), 1),
+            vec![0],
+            "another place"
+        );
+        assert_eq!(
+            run.levels([2; 3], 4, 0, Mat4::IDENTITY, &mesh_flats(&b), 1),
+            vec![0],
+            "ended there"
+        );
         run.begin(None);
-        assert_eq!(run.levels([2; 3], 5, 0, Mat4::IDENTITY, &mesh_flats(&a), 1), vec![0]);
-        assert_eq!(run.levels([2; 3], 9, 0, Mat4::IDENTITY, &mesh_flats(&b), 1), vec![0], "a gap in the order");
+        assert_eq!(
+            run.levels([2; 3], 5, 0, Mat4::IDENTITY, &mesh_flats(&a), 1),
+            vec![0]
+        );
+        assert_eq!(
+            run.levels([2; 3], 9, 0, Mat4::IDENTITY, &mesh_flats(&b), 1),
+            vec![0],
+            "a gap in the order"
+        );
     }
 
     /// Two vehicles of one model in a row: all their meshes at the origin, created one after
     /// the other with no gap. Each begins its own object and keeps its own steps (#2603).
     #[test]
     fn models_in_a_row_at_one_place_keep_their_own_steps() {
-        let layers = [quad(0.0, 1.0, 0, false), quad(0.0, 0.5, 0, true), quad(0.0, 0.2, 0, false)];
+        let layers = [
+            quad(0.0, 1.0, 0, false),
+            quad(0.0, 0.5, 0, true),
+            quad(0.0, 0.2, 0, false),
+        ];
         let mut run = ObjectRun::default();
         let mut order = 0;
         for vehicle in 0..2 {
@@ -608,20 +834,33 @@ mod tests {
     fn levels_of(meshes: &[MeshData]) -> Vec<u8> {
         let mut run = ObjectRun::default();
         run.begin(None);
-        meshes.iter().enumerate().map(|(k, m)| run.levels([0; 3], k as u64, k, Mat4::IDENTITY, &mesh_flats(m), 1)[0]).collect()
+        meshes
+            .iter()
+            .enumerate()
+            .map(|(k, m)| run.levels([0; 3], k as u64, k, Mat4::IDENTITY, &mesh_flats(m), 1)[0])
+            .collect()
     }
 
     #[test]
     fn a_button_slightly_tilted_on_a_panel_far_from_the_origin_takes_a_step() {
         let at = Vec3::new(0.3, 5.6, 1.4);
-        assert_eq!(levels_of(&[tilted(at, 0.2, 30.0), tilted(at, 0.015, 30.3)]), vec![0, 1]);
+        assert_eq!(
+            levels_of(&[tilted(at, 0.2, 30.0), tilted(at, 0.015, 30.3)]),
+            vec![0, 1]
+        );
     }
 
     #[test]
     fn a_panel_at_45_degrees_keeps_its_overlay() {
         let at = Vec3::new(0.0, 5.5, 1.2);
-        assert_eq!(levels_of(&[tilted(at, 0.3, 45.0), tilted(at, 0.05, 45.0)]), vec![0, 1]);
-        assert_eq!(levels_of(&[tilted(at, 0.3, 44.999), tilted(at, 0.05, 45.001)]), vec![0, 1]);
+        assert_eq!(
+            levels_of(&[tilted(at, 0.3, 45.0), tilted(at, 0.05, 45.0)]),
+            vec![0, 1]
+        );
+        assert_eq!(
+            levels_of(&[tilted(at, 0.3, 44.999), tilted(at, 0.05, 45.001)]),
+            vec![0, 1]
+        );
     }
 
     #[test]
@@ -636,7 +875,10 @@ mod tests {
             quad(0.0, 1.0, 0, false),
         ]);
         assert_eq!(&levels[..5], &[0, 0, 1, 2, 3]);
-        assert_eq!(levels[5], 3, "a nearby patch cannot lower the print below its base");
+        assert_eq!(
+            levels[5], 3,
+            "a nearby patch cannot lower the print below its base"
+        );
     }
 
     #[test]
@@ -659,7 +901,8 @@ mod tests {
             mesh.positions.extend(strip);
             mesh.normals.extend([Vec3::Z; 4]);
             mesh.uvs.extend([glam::Vec2::ZERO; 4]);
-            mesh.indices.extend([0, 1, 2, 0, 2, 3].map(|index| index + base));
+            mesh.indices
+                .extend([0, 1, 2, 0, 2, 3].map(|index| index + base));
             mesh.ranges = vec![(0, 6, 0), (6, 6, 1)];
             for point in &mut mesh.positions {
                 *point = slant.transform_point3(*point);
@@ -700,20 +943,32 @@ mod tests {
 
     #[test]
     fn a_board_drawn_after_the_text_a_tenth_of_a_millimetre_in_front_of_it_takes_no_step() {
-        assert_eq!(levels_of(&[quad(1.0001, 0.2, 0, false), quad(1.0, 0.4, 0, true)]), vec![0, 0]);
-        assert_eq!(levels_of(&[quad(1.0, 0.2, 0, false), quad(1.0001, 0.4, 0, true)]), vec![0, 0]);
+        assert_eq!(
+            levels_of(&[quad(1.0001, 0.2, 0, false), quad(1.0, 0.4, 0, true)]),
+            vec![0, 0]
+        );
+        assert_eq!(
+            levels_of(&[quad(1.0, 0.2, 0, false), quad(1.0001, 0.4, 0, true)]),
+            vec![0, 0]
+        );
     }
 
     #[test]
     fn a_surface_crossing_another_at_an_angle_takes_no_step() {
         let at = Vec3::new(0.0, 5.5, 1.2);
-        assert_eq!(levels_of(&[tilted(at, 0.3, 30.0), tilted(at, 0.05, 32.0)]), vec![0, 0]);
+        assert_eq!(
+            levels_of(&[tilted(at, 0.3, 30.0), tilted(at, 0.05, 32.0)]),
+            vec![0, 0]
+        );
     }
 
     #[test]
     fn copies_of_a_shared_model_take_the_first_copys_steps() {
         let layers = [quad(0.0, 1.0, 0, false), quad(0.0, 0.5, 0, true)];
-        let apart = [quad(0.0, 1.0, 0, false), moved(quad(0.0, 0.5, 0, true), Vec3::new(9.0, 0.0, 0.0))];
+        let apart = [
+            quad(0.0, 1.0, 0, false),
+            moved(quad(0.0, 0.5, 0, true), Vec3::new(9.0, 0.0, 0.0)),
+        ];
         let mut run = ObjectRun::default();
         let mut order = 0;
         let mut copy = |run: &mut ObjectRun, meshes: &[MeshData], model: u64| -> Vec<u8> {
@@ -728,7 +983,11 @@ mod tests {
                 .collect()
         };
         assert_eq!(copy(&mut run, &layers, 7), vec![0, 1]);
-        assert_eq!(copy(&mut run, &apart, 7), vec![0, 1], "taken from the first copy");
+        assert_eq!(
+            copy(&mut run, &apart, 7),
+            vec![0, 1],
+            "taken from the first copy"
+        );
         assert_eq!(copy(&mut run, &apart, 8), vec![0, 0], "another model");
     }
 
@@ -747,7 +1006,8 @@ mod tests {
             mesh.positions.extend(part.positions);
             mesh.normals.extend(part.normals);
             mesh.uvs.extend(part.uvs);
-            mesh.indices.extend(part.indices.into_iter().map(|i| i + base));
+            mesh.indices
+                .extend(part.indices.into_iter().map(|i| i + base));
             mesh.ranges.extend(
                 part.ranges
                     .into_iter()
@@ -768,14 +1028,8 @@ mod tests {
         ]);
         let mut run = ObjectRun::default();
         run.begin(None);
-        let (levels, caps) = run.levels_with_caps(
-            [0; 3],
-            0,
-            0,
-            Mat4::IDENTITY,
-            &mesh_flats(&mesh),
-            5,
-        );
+        let (levels, caps) =
+            run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 5);
         assert_eq!(levels, [0, 1, 1, 2, 2]);
         assert!((caps[4] - 0.00018).abs() < 1e-7);
     }
@@ -821,15 +1075,22 @@ mod tests {
         let support_flats = vec![base; 16];
         let support_start = run.flat_caps.len();
         add(&mut run, 2, &support_flats);
-        assert!(run.flat_caps[support_start..].iter().all(|caps| caps.len() == 1));
+        assert!(
+            run.flat_caps[support_start..]
+                .iter()
+                .all(|caps| caps.len() == 1)
+        );
         assert!((run.flat_caps[support_start][0].value - 0.000063).abs() < 1e-7);
 
         let child_flat = mesh_flats(&quad(0.00004, 0.1, 0, false))[0];
         let child_flats = vec![child_flat; 16];
         let child_start = run.flat_caps.len();
         add(&mut run, 3, &child_flats);
-        assert!(run.flat_caps[child_start..].iter().all(|caps| caps.len() == 1));
+        assert!(
+            run.flat_caps[child_start..]
+                .iter()
+                .all(|caps| caps.len() == 1)
+        );
         assert!((run.flat_caps[child_start][0].value - 0.000063).abs() < 1e-7);
     }
-
 }

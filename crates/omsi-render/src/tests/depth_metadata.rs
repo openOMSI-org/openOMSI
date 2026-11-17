@@ -10,7 +10,12 @@ fn blended_screen_materials_do_not_write_depth() {
         &instance,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, ssao: false, render_scale: 1.0, ..Default::default() },
+        RenderOptions {
+            msaa: 1,
+            ssao: false,
+            render_scale: 1.0,
+            ..Default::default()
+        },
     ))
     .expect("noop renderer");
     let mut scene = renderer.new_scene();
@@ -25,17 +30,22 @@ fn blended_screen_materials_do_not_write_depth() {
         None,
         None,
         [0.0; 3],
-        MaterialExtra { screen: true, ..Default::default() },
+        MaterialExtra {
+            screen: true,
+            ..Default::default()
+        },
     );
 
     assert!(scene.materials[screen].no_z_write);
     assert!(!scene.materials[screen].writes_depth);
-    assert!(crate::frame_plan::depth_prepass_kind(
-        crate::frame_plan::PIPE_BLEND,
-        &scene.materials[screen],
-        false,
-    )
-    .is_none());
+    assert!(
+        crate::frame_plan::depth_prepass_kind(
+            crate::frame_plan::PIPE_BLEND,
+            &scene.materials[screen],
+            false,
+        )
+        .is_none()
+    );
 }
 
 #[test]
@@ -55,8 +65,13 @@ fn uploaded_depth_normal_comes_from_geometry_not_lighting_normals() {
         &adapter,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
-    )).expect("no-op renderer");
+        RenderOptions {
+            msaa: 1,
+            shadow_size: 1024,
+            ..Default::default()
+        },
+    ))
+    .expect("no-op renderer");
     let mut scene = renderer.new_scene();
     let data = MeshData {
         positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
@@ -71,7 +86,10 @@ fn uploaded_depth_normal_comes_from_geometry_not_lighting_normals() {
     renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![0]);
     renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![0]);
     renderer.prepare(&mut scene);
-    assert_eq!([scene.cpu_models[1][1][3], scene.cpu_models[1][2][3]], [0.0, 0.0]);
+    assert_eq!(
+        [scene.cpu_models[1][1][3], scene.cpu_models[1][2][3]],
+        [0.0, 0.0]
+    );
 }
 
 #[test]
@@ -84,8 +102,13 @@ fn deforming_a_mesh_invalidates_its_static_depth_plane_metadata() {
         &adapter,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
-    )).expect("no-op renderer");
+        RenderOptions {
+            msaa: 1,
+            shadow_size: 1024,
+            ..Default::default()
+        },
+    ))
+    .expect("no-op renderer");
     let mut scene = renderer.new_scene();
     let data = MeshData {
         positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
@@ -100,7 +123,10 @@ fn deforming_a_mesh_invalidates_its_static_depth_plane_metadata() {
     renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![0]);
     scene.instances[1].slot_levels[0] = 1;
     renderer.prepare(&mut scene);
-    assert_eq!([scene.cpu_models[1][1][3], scene.cpu_models[1][2][3]], [0.0, 0.0]);
+    assert_eq!(
+        [scene.cpu_models[1][1][3], scene.cpu_models[1][2][3]],
+        [0.0, 0.0]
+    );
 
     let mut positions = data.positions.clone();
     positions[2].z = 0.2;

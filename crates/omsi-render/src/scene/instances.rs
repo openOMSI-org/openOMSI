@@ -122,8 +122,23 @@ impl Renderer {
         let draw_order = scene.next_instance_order;
         scene.next_instance_order += 1;
         let key = crate::frame_plan::origin_key(origin);
-        let (slot_levels, slot_depth_caps) = scene.object_run.levels_with_caps(key, draw_order, mesh, transform, &scene.meshes[mesh].flats, slots);
-        let slot_screens = materials.iter().map(|&material| scene.materials.get(material).is_some_and(Material::is_screen)).collect();
+        let (slot_levels, slot_depth_caps) = scene.object_run.levels_with_caps(
+            key,
+            draw_order,
+            mesh,
+            transform,
+            &scene.meshes[mesh].flats,
+            slots,
+        );
+        let slot_screens = materials
+            .iter()
+            .map(|&material| {
+                scene
+                    .materials
+                    .get(material)
+                    .is_some_and(Material::is_screen)
+            })
+            .collect();
         scene.instances.push(Instance {
             draw_order,
             slot_levels,
@@ -187,8 +202,23 @@ impl Renderer {
         let draw_order = scene.next_instance_order;
         scene.next_instance_order += 1;
         let key = crate::frame_plan::origin_key(origin);
-        let (slot_levels, slot_depth_caps) = scene.object_run.levels_with_caps(key, draw_order, mesh, transform, &scene.meshes[mesh].flats, slots);
-        let slot_screens = materials.iter().map(|&material| scene.materials.get(material).is_some_and(Material::is_screen)).collect();
+        let (slot_levels, slot_depth_caps) = scene.object_run.levels_with_caps(
+            key,
+            draw_order,
+            mesh,
+            transform,
+            &scene.meshes[mesh].flats,
+            slots,
+        );
+        let slot_screens = materials
+            .iter()
+            .map(|&material| {
+                scene
+                    .materials
+                    .get(material)
+                    .is_some_and(Material::is_screen)
+            })
+            .collect();
         scene.instances.push(Instance {
             draw_order,
             slot_levels,
