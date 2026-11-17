@@ -294,8 +294,7 @@ impl Traffic {
                 false
             };
             if remove && loose {
-                let c = self.sim.take_off(i, Removal::Unloaded);
-                self.sim.fled += 1;
+                let c = self.sim.leave_scene(i);
                 self.drop_sounds(c.id);
                 self.events.push(TrafficEvent::Released { id: c.id });
             } else if remove && sleeps_instead && !at_end {

@@ -449,6 +449,7 @@ pub(crate) fn carry_out(app: &mut App, from: u32, command: Command) {
         Command::NotifySeen(id) => log::info!("LAN: player {from} saw notice {id}"),
         // (the session's own: `lan_command`)
         Command::Trigger(_) | Command::SpeedLimitAsked | Command::SpeedLimit(_) | Command::VoiceAsked | Command::Voice(_) | Command::VoiceMuted(_) => {}
+        Command::Crash { .. } | Command::Police | Command::Accident { .. } => {}
     }
 }
 

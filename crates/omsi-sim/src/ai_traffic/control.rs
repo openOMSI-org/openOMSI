@@ -241,6 +241,14 @@ impl TrafficSim {
     /// Deliver the player's moving-vehicle contacts to the AI cars so their collision
     /// scripts and per-instance damage visuals respond to the same impact.
     pub fn player_impacts(&mut self, impacts: Vec<crate::vehicle::DynamicImpact>) {
+        if self.mirror {
+            self.accident.for_host(&impacts);
+        }
+        self.player_impacts_by(impacts, accident::LOCAL);
+    }
+
+    /// The hits of `player` (`accident::LOCAL`, or a LAN client's session id).
+    pub fn player_impacts_by(&mut self, impacts: Vec<crate::vehicle::DynamicImpact>, player: u32) {
         for impact in impacts {
             let Some(id) = impact
                 .obstacle_id
@@ -253,12 +261,13 @@ impl TrafficSim {
             let Some(car) = self.cars.iter_mut().find(|car| car.id == id) else {
                 continue;
             };
-            if !car.vehicle.ty.def.fixed
+            if !self.mirror
+                && !car.vehicle.ty.def.fixed
                 && car.body.kind == crate::ai_motion::MotionKind::Road
                 && !car.body.is_loose()
             {
                 car.body.set_loose(true);
-                self.accidents += 1;
+                self.accident.knock(car.id, player);
             }
             let dv = car.body.collision_impulse(
                 impact.push.truncate(),
