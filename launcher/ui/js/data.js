@@ -456,7 +456,9 @@ export async function loadSituations() {
  * behind it (`fresh` = the command's answer is set into `S.cache[key]`). */
 export function cached(key, cmd, args) {
   const had = S.cache[key];
-  const p = reread(key, cmd, args);
+  // (a failed read leaves `{ error }` in the cache and answers null, as it always did: the
+  // pages show the error from the cache)
+  const p = reread(key, cmd, args).catch(() => null);
   return had !== undefined ? Promise.resolve(had) : p;
 }
 
@@ -466,14 +468,21 @@ const latest = {};
 /** Read `key` again and wait for the new answer (`S.reading[key]` while it comes). The last
  *  read asked for wins: an earlier one answering later is dropped, a later one is never
  *  dropped for an earlier one (#4016). The promise resolves once the cache holds an answer
- *  read after this call (a newer read's, when one was asked meanwhile). */
+ *  read after this call (a newer read's, when one was asked meanwhile), and rejects when that
+ *  read failed (the cache then holds `{ error }`): a failed read confirms nothing. An answer
+ *  written into the cache by a page itself while the read went on (a save, a scan) is newer
+ *  than the read and stays. */
 export function reread(key, cmd, args) {
   const n = (asked[key] = (asked[key] || 0) + 1);
+  const before = S.cache[key];
   if (!S.reading[key]) set({ reading: { ...S.reading, [key]: true } });
   const keep = (v, ok) => {
     if (asked[key] !== n) return latest[key];
-    set({ cache: { ...S.cache, [key]: v }, reading: { ...S.reading, [key]: false } });
-    return ok ? v : null;
+    const written = S.cache[key] !== before;
+    set({ cache: written ? S.cache : { ...S.cache, [key]: v }, reading: { ...S.reading, [key]: false } });
+    if (written) return S.cache[key];
+    if (!ok) throw new Error(v.error);
+    return v;
   };
   const p = call(cmd, args).then(
     (v) => keep(v, true),
@@ -481,6 +490,21 @@ export function reread(key, cmd, args) {
   );
   latest[key] = p;
   return p;
+}
+
+/** `reread` until a read answers: what a page holds until the list says so itself (a mod
+ *  being installed, a switch's new position) is not dropped on a failed read. The first
+ *  failure is told; the read is asked again, less often each time (#4016, #4017). */
+export async function rereadUntil(key, cmd, args) {
+  for (let wait = 1000, told = false; ; wait = Math.min(wait * 2, 30000)) {
+    try {
+      return await reread(key, cmd, args);
+    } catch (e) {
+      if (!told) toast(t(e.message), 'error');
+      told = true;
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
 }
 
 /** What the pages show, read ahead while the launcher starts. */
@@ -675,8 +699,8 @@ export async function pollNow() {
       // has it: the read takes seconds on a big content folder, #4016)
       const done = finished.filter((j) => j.state === 'done').map((j) => j.id);
       if (done.length) set({ settling: [...S.settling, ...done] });
-      const settled = () => done.length && set({ settling: S.settling.filter((id) => !done.includes(id)) });
-      reread('mods', 'mods_status').then(settled, settled);
+      // (only a read that answered settles them: a failed one is asked again)
+      rereadUntil('mods', 'mods_status').then(() => done.length && set({ settling: S.settling.filter((id) => !done.includes(id)) }));
     }
   } catch {
     /* the next look */
