@@ -7,7 +7,7 @@ import { t, bytes, ago } from '../i18n.js';
 import { call, onPhone } from '../api.js';
 import { Icon } from '../icons.js';
 import { Button, Card, Dialog, Empty, PageHead, Search, Select, Spinner, Tag, Toggle, Notice, useConfirm } from '../ui.js';
-import { pollNow, loadContent, cached, reread, installMod, jobRunning } from '../data.js';
+import { pollNow, loadContent, cached, rereadUntil, installMod, jobRunning } from '../data.js';
 
 const KIND = { bus: ['bus', 'Bus'], map: ['map', 'Map'], archive: ['folder', 'Archive'], other: ['puzzle', 'Other'] };
 
@@ -112,7 +112,8 @@ export function ModsPage() {
       await call('mod_set_enabled', { id: m.id, on });
       toast(t(on ? '{name} switched on' : '{name} switched off', { name: m.name }), 'ok');
       loadContent();
-      await reread('mods', 'mods_status');
+      // (the switch keeps its new position until a read answers: a failed one is asked again)
+      await rereadUntil('mods', 'mods_status');
     } catch (e) {
       toast(t(e.message), 'error');
     }
@@ -134,8 +135,8 @@ export function ModsPage() {
         await call('mod_remove', { id: m.id });
         toast(t('{name} deleted', { name: m.name }), 'ok');
         loadContent();
-        // (its row stays, busy, until the list no longer has it)
-        await reread('mods', 'mods_status');
+        // (its row stays, busy, until a list read after it no longer has it)
+        await rereadUntil('mods', 'mods_status');
       } catch (e) {
         toast(t(e.message), 'error');
       }
