@@ -547,6 +547,20 @@ impl Player {
                     } else {
                         log::info!("mouse event {ev}: toggle control, {var} {now:.2} -> {target}");
                         self.vehicle.set_var(&var, target);
+                        // all meshes sharing this control event flip their model-only variables together (#3887)
+                        for m in &ty.model.meshes {
+                            if m.mouse_event.as_deref() == Some(ev.as_str()) {
+                                for a in &m.animations {
+                                    let v_name = a.variable.trim();
+                                    if !v_name.is_empty()
+                                        && v_name.parse::<f32>().is_err()
+                                        && self.vehicle.ty.program.var(v_name).is_none()
+                                    {
+                                        self.vehicle.set_var(v_name, target);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

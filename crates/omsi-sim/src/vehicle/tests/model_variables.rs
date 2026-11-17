@@ -571,3 +571,37 @@ fn animation_only_variable_binds_and_animates_without_script_declaration() {
     v.update_visuals(0.0);
     assert_ne!(v.mesh_transforms[0], glam::Mat4::IDENTITY);
 }
+
+#[test]
+fn multiple_animation_only_variables_bind_and_animate_together() {
+    let seed = crate::timetable_run::tests::script_test_vehicle("", "", "");
+    let mut ty = (*seed.ty).clone();
+    let cfg = "[mesh]\ntimetable_bracket.o3d\n[newanim]\norigin_rot_y\n90\nanim_trans\nsched\n0.1\n\n[mesh]\ntimetable_sheet.o3d\n[newanim]\norigin_rot_x\n45\nanim_rot\nsched1\n90\n";
+    ty.model = Model::parse(&omsi_cfg::CfgFile::from_str("test.cfg", cfg));
+    for (i, name) in ["timetable_bracket.o3d", "timetable_sheet.o3d"].iter().enumerate() {
+        ty.meshes.push(VehicleMesh {
+            def_index: i,
+            data: Default::default(),
+            file: (*name).into(),
+            materials: vec![],
+            overrides: vec![],
+            pivot: glam::Mat4::IDENTITY,
+            viewpoint: 0,
+            skin: vec![],
+            keep_winding: false,
+        });
+    }
+    let mut v = VehicleInstance::new(Arc::new(ty), VehicleHost::new(Default::default()));
+    assert_eq!(v.var("sched"), None);
+    assert_eq!(v.var("sched1"), None);
+    assert_eq!(v.animators[0].anims[0].2.var, None);
+    assert_eq!(v.animators[1].anims[0].2.var, None);
+
+    assert!(v.set_var("sched", 1.0));
+    assert!(v.set_var("sched1", 1.0));
+    assert_ne!(v.animators[0].anims[0].2.var, None);
+    assert_ne!(v.animators[1].anims[0].2.var, None);
+    v.update_visuals(0.0);
+    assert_ne!(v.mesh_transforms[0], glam::Mat4::IDENTITY);
+    assert_ne!(v.mesh_transforms[1], glam::Mat4::IDENTITY);
+}
