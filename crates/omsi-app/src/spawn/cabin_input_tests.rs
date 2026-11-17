@@ -174,12 +174,12 @@ fn vr_menu_release_keeps_a_short_drag_and_stops_automatic_motion() {
 
 #[test]
 fn clicking_control_shared_by_two_meshes_toggles_both_model_only_variables_both_ways() {
-    let mut vehicle = crate::schedule::tests::script_test_vehicle(
+    let seed = crate::schedule::tests::script_test_vehicle(
         "{init}\n0.42 (S.L.script_var)\n{end}\n",
         "script_var\n",
         "",
     );
-    let ty = Arc::make_mut(&mut vehicle.ty);
+    let mut ty = (*seed.ty).clone();
     for var in ["sched", "sched1"] {
         ty.model.meshes.push(omsi_model::MeshDef {
             mouse_event: Some("cp_sched_toggle".into()),
@@ -201,8 +201,10 @@ fn clicking_control_shared_by_two_meshes_toggles_both_model_only_variables_both_
             keep_winding: false,
         });
     }
+    let ty = Arc::new(ty);
+    let mut vehicle =
+        omsi_sim::VehicleInstance::new(ty.clone(), omsi_sim::VehicleHost::new(Default::default()));
     vehicle.mesh_props.resize_with(2, Default::default);
-    let ty = vehicle.ty.clone();
     let render = scene::VehicleRender {
         window_wipers: None,
         instances: vec![],
