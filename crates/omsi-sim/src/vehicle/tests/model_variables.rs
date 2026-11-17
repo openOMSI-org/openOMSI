@@ -578,7 +578,10 @@ fn multiple_animation_only_variables_bind_and_animate_together() {
     let mut ty = (*seed.ty).clone();
     let cfg = "[mesh]\ntimetable_bracket.o3d\n[newanim]\norigin_rot_y\n90\nanim_trans\nsched\n0.1\n\n[mesh]\ntimetable_sheet.o3d\n[newanim]\norigin_rot_x\n45\nanim_rot\nsched1\n90\n";
     ty.model = Model::parse(&omsi_cfg::CfgFile::from_str("test.cfg", cfg));
-    for (i, name) in ["timetable_bracket.o3d", "timetable_sheet.o3d"].iter().enumerate() {
+    for (i, name) in ["timetable_bracket.o3d", "timetable_sheet.o3d"]
+        .iter()
+        .enumerate()
+    {
         ty.meshes.push(VehicleMesh {
             def_index: i,
             data: Default::default(),
