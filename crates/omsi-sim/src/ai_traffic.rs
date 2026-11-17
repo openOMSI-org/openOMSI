@@ -37,6 +37,8 @@ pub mod tick;
 pub mod viewer;
 pub mod waving;
 #[cfg(test)]
+mod accident_tests;
+#[cfg(test)]
 mod body_tests;
 #[cfg(test)]
 mod scenario_tests;
@@ -329,8 +331,7 @@ pub struct TrafficSim {
     /// Cars the last `tick` took off the road (their ids): their sounds and pictures are
     /// for the game to let go (see omsi-app's `Traffic::tick`).
     pub retired: Vec<u64>,
-    pub accidents: u32,
-    pub fled: u32,
+    pub accident: accident::Accidents,
     /// The cars that honked since the game last asked (`horn`): id and whether it is a heavy
     /// vehicle. The stock cars' sounds have nothing on `ev_AI_Horn`, so the game plays
     /// OMSI's own AI horn for them.
