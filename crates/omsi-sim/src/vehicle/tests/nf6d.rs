@@ -119,6 +119,61 @@ fn each_bogie_feels_its_own_track() {
     );
 }
 
+/// Round a bend each car's body leans out on its own springs, the joints go with the cars
+/// around them, the bogies stay on the rails, and the rear car's two files rock as one.
+#[test]
+#[ignore = "needs an OMSI 2 install with the NF6D add-on (OMSI_ROOT)"]
+fn the_cars_rock_and_the_bogies_do_not() {
+    let mut v = nf6d();
+    frames(&mut v, 5);
+    v.rail_sway = true;
+    v.set_speed(8.0);
+    // 50 m to the right, the head at the end of the arc
+    let radius = 50.0f64;
+    let arc = |s: f64| {
+        DVec3::new(
+            radius * (1.0 - (s / radius).cos()),
+            radius * (s / radius).sin(),
+            0.0,
+        )
+    };
+    let mut u = 200.0f64;
+    let mut roll_seen = 0.0f32;
+    for k in 0..800 {
+        u += 8.0 * 0.01;
+        v.retrail(0.01, &|d| Some(arc(u - d)));
+        if k > 300 {
+            roll_seen = roll_seen.min(v.trailers[3].bank);
+        }
+    }
+    let name = |t: &TrailerPart| {
+        t.ty.def
+            .path
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned()
+    };
+    let list: Vec<(String, f32, SwayRole)> = v
+        .trailers
+        .iter_mut()
+        .map(|t| (name(t), t.bank, t.sway_role()))
+        .collect();
+    eprintln!("{list:#?}");
+    let part = |n: &str| list.iter().find(|p| p.0 == n).unwrap();
+    assert_eq!(part("NF6D_C").2, SwayRole::Body);
+    assert!(
+        part("NF6D_C").1 < -0.3 && part("NF6D_C").1 > -1.5,
+        "the middle car leans out, a little: {}",
+        part("NF6D_C").1
+    );
+    assert_eq!(part("NF6D_Gelenk_ACH").2, SwayRole::Joint);
+    assert_eq!(part("NF6D_DrehgestellV").2, SwayRole::Gear);
+    assert_eq!(part("NF6D_DrehgestellV").1, 0.0);
+    assert_eq!(part("NF6D_B").1, part("NF6D_B_User").1, "one car");
+    assert!(roll_seen < 0.0);
+}
+
 /// A destination picked from openOMSI's list (as `game_lists` does it) reaches both cabs'
 /// matrices: the head cab's own (its rear cab used to zero the cable it reads in its
 /// {init}) and the rear cab's, line number included.

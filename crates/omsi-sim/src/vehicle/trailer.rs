@@ -116,6 +116,8 @@ pub struct TrailerPart {
     /// How far behind the leading vehicle's origin its bogies 0 and 1 stand on the track (m,
     /// `VehicleInstance::retrail`).
     pub(super) rail_bogies: Option<[f64; 2]>,
+    /// How the part rocks on the track (see `sway`).
+    pub(super) sway: Option<super::sway::CarSway>,
     /// Mesh property sources, resolved against the leading vehicle's variables.
     pub(super) props_plan: PropsPlan,
     /// The meshes' transforms in the modelled pose, for `[smoothskin]` (made when needed).
@@ -400,6 +402,7 @@ impl TrailerPart {
             axle_z: None,
             axle_vz: 0.0,
             rail_bogies: None,
+            sway: None,
             track: None,
             v_alpha: program.var(&format!("articulation_{joint}_alpha")),
             v_beta: program.var(&format!("articulation_{joint}_beta")),
@@ -704,6 +707,7 @@ impl TrailerPart {
         lead: Option<(DVec3, Mat4, f64)>,
         (front, y_front): (DVec3, f32),
         (back, y_back): (DVec3, f32),
+        sway: Option<(Option<f32>, f32)>,
     ) {
         self.axle_ids
             .refresh(main, self.first_axle, self.axle_count.max(self.rest.len()));
@@ -715,7 +719,10 @@ impl TrailerPart {
         }
         let span = (y_front - y_back).max(0.1) as f64;
         self.position = back + d * ((0.0 - y_back) as f64 / span);
-        self.bank = main.bank;
+        self.bank = match sway {
+            Some((twin, beside)) => self.sway_step(dt, main.physics.speed, twin, beside),
+            None => main.bank,
+        };
         // (its wheels roll as far as its rear end moved)
         if let Some(p) = self.pivot {
             let ds = (back - p).truncate().length() as f32;

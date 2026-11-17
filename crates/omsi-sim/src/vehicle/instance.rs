@@ -320,6 +320,7 @@ impl VehicleInstance {
             engine_ids: std::sync::OnceLock::new(),
             cables: Default::default(),
             turned: false,
+            rail_sway: false,
             active_cab: None,
             program_ids: std::sync::OnceLock::new(),
             trolley,

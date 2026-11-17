@@ -24,7 +24,7 @@ pub fn realistic() -> bool {
     crate::rigid::realistic_default()
 }
 
-pub use body::{Body, BodyOut, BodyParams};
+pub use body::{Body, BodyOut, BodyParams, ROLL_SHOWN};
 pub use class::{RailClass, TrackClass, TrackFacts};
 pub use dynamics::{Conditions, Consist, Forces, Outcome, step};
 pub use track::{RailMapConfig, TrackInfo, TrackRule, classify};
