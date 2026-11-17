@@ -25,6 +25,9 @@ const MAX_OUT: f32 = 2.0;
 /// Speed (m/s) riding the kerb, going over the centre line, and waiting for the oncoming side.
 const CRAWL: f32 = 2.2;
 const SWING: f32 = 3.0;
+/// How far (m) the front must go over the centre line to slow down for it and to hold the
+/// oncoming side back.
+const SWING_WHITE: f32 = 0.5;
 const WAIT: f32 = 0.3;
 /// Seconds it waits for the oncoming side before it goes on, slowly.
 const MAX_WAIT: f32 = 20.0;
@@ -166,6 +169,13 @@ pub struct WideTurn {
     /// The lane and place of the bend's tightest point (the oncoming side is held back there).
     pub lane: usize,
     pub at: f32,
+    /// How far (m) the swung body reaches past that point along the way.
+    pub reach: f32,
+    /// The line is settled (the front is in the bend): it is kept to the end of it.
+    pub blocked: bool,
+    pub gave_up: bool,
+    /// It holds the oncoming side back (only from inside the bend, and not after giving up).
+    pub claim: bool,
     /// The vehicle's dimensions, once looked up (`None` inside: not a long vehicle).
     pub swept: Option<Option<Swept>>,
 }
@@ -179,6 +189,7 @@ struct Bend {
     turn: f32,
     start: f32,
     end: f32,
+    apex: f32,
     lane: usize,
     at: f32,
 }
@@ -212,6 +223,7 @@ impl TrafficSim {
                                     b.radius = 1.0 / k.abs();
                                     b.lane = l;
                                     b.at = u;
+                                    b.apex = dist;
                                 }
                             }
                         }
@@ -222,6 +234,7 @@ impl TrafficSim {
                                 turn: k.signum(),
                                 start: dist,
                                 end: dist,
+                                apex: dist,
                                 lane: l,
                                 at: u,
                             });
@@ -263,7 +276,8 @@ impl TrafficSim {
             .any(|&(centre, h, half_len, _, speed)| {
                 let away = (centre - mid).truncate().length() as f32;
                 wrap_deg(h as f32 - heading).abs() > 100.0
-                    && away < half_len + half_span + speed.abs() * secs + 10.0
+                    && (centre.z - mid.z).abs() < 4.0
+                    && away < half_len + half_span + speed.abs() * secs.min(8.0) + 10.0
             })
     }
 
@@ -287,6 +301,9 @@ impl TrafficSim {
             || car.park.is_some()
             || st.change.is_some()
             || car.pull_out > 0.0
+            || car.make_way.is_some()
+            || st.emergency
+            || st.priority_drive
             || kerb_swerve.is_some();
         let near_stop = car.next_stop().is_some_and(|(ri, ss)| {
             ri >= st.route_index && st.route_distance(&self.net, ri, ss) < 40.0
@@ -297,14 +314,33 @@ impl TrafficSim {
             self.bend_ahead(i, swept.back)
         };
         let mut plan: Option<(Bend, Line, bool, bool)> = None;
+        let mut gave_up = false;
         if let Some(b) = bend.filter(|b| b.start <= APPROACH && b.end >= -swept.back) {
             let half = (self.net.lanes[b.lane].width * 0.5).max(1.2);
             let kerb_inner = (b.turn > 0.0) != self.net.left_hand;
-            let near = self.oncoming_near(i, ts, &b, swept.back);
-            // (after `MAX_WAIT` it stops giving way and goes on, as long as the other is near)
-            let blocked = near && car.wide.waited <= MAX_WAIT;
+            let settled = car.wide.active && b.start <= 0.0;
+            let blocked = if settled {
+                car.wide.blocked
+            } else {
+                // (a median or another lane between the two sides: nothing is known of the
+                // room there, so it keeps to its side; after `MAX_WAIT` it stops giving way and
+                // goes on, as long as the other is near)
+                let apart = self
+                    .net
+                    .opposite(b.lane, b.at)
+                    .is_some_and(|(ol, _, side)| {
+                        side > half + self.net.lanes[ol].width * 0.5 + 1.0
+                    });
+                let near = self.oncoming_near(i, ts, &b, swept.back);
+                (near && car.wide.waited <= MAX_WAIT) || apart
+            };
+            gave_up = if settled {
+                car.wide.gave_up
+            } else {
+                car.wide.waited > MAX_WAIT
+            };
             let line = swept.choose(b.radius, half, kerb_inner, blocked);
-            let waiting = near && line.white > 0.05 && b.start > 0.0;
+            let waiting = !settled && blocked && line.white > 0.05 && b.start > 0.0;
             if line.x.abs() > 0.05 || line.kerb > 0.05 || line.white > 0.05 {
                 plan = Some((b, line, blocked, waiting));
             }
@@ -313,9 +349,14 @@ impl TrafficSim {
         let dt = ts.dt;
         let car = &mut self.cars[i];
         match plan {
-            Some((b, line, _, waiting)) => {
+            Some((b, line, blocked, waiting)) => {
                 let riding = line.kerb > 0.1;
                 let waited = if waiting { car.wide.waited + dt } else { 0.0 };
+                let claim = if car.wide.active && b.start <= 0.0 {
+                    car.wide.claim
+                } else {
+                    b.start <= 0.0 && line.white > SWING_WHITE && !gave_up
+                };
                 car.wide = WideTurn {
                     active: true,
                     offset: line.x * sign,
@@ -323,6 +364,10 @@ impl TrafficSim {
                     waited,
                     lane: b.lane,
                     at: b.at,
+                    reach: (b.end - b.apex).max(0.0),
+                    blocked,
+                    gave_up,
+                    claim,
                     swept: car.wide.swept,
                 };
                 car.state.lateral_target = car.wide.offset;
@@ -330,10 +375,10 @@ impl TrafficSim {
                 let holding = waiting && waited <= MAX_WAIT;
                 car.state.hazard = riding || holding;
                 car.state.wide_cap = if holding {
-                    Some(WAIT)
+                    Some(if b.start < 4.0 { WAIT } else { CRAWL })
                 } else if riding {
                     Some(CRAWL)
-                } else if line.white > 0.3 {
+                } else if line.white > SWING_WHITE {
                     Some(SWING)
                 } else {
                     None
@@ -344,7 +389,8 @@ impl TrafficSim {
                     swept: car.wide.swept,
                     ..Default::default()
                 };
-                car.state.wide_swing = false;
+                car.state.wide_swing = car.state.wide_swing
+                    && (car.state.lateral - car.state.lateral_target).abs() > 0.3;
                 car.state.hazard = false;
                 car.state.wide_cap = None;
             }
@@ -403,9 +449,33 @@ mod tests {
 
     #[test]
     fn the_kerb_side_is_mirrored_for_a_bend_the_other_way() {
+        // (a left bend on a right-hand road: the kerb is on the outside of it)
+        let (kerb, white) = gn92().overshoot(12.0, 0.0, 1.75, true);
+        let (kerb_out, white_in) = gn92().overshoot(12.0, 0.0, 1.75, false);
+        assert!((kerb - white_in).abs() < 1e-4 && (white - kerb_out).abs() < 1e-4);
         let right = gn92().choose(12.0, 1.75, true, false);
         let left = gn92().choose(12.0, 1.75, false, false);
-        // (a left bend on a right-hand road: the kerb is on the outside of it)
-        assert!(left.x != right.x || left.kerb != right.kerb);
+        // (the front swings to the kerb side there, so the line goes the other way, further)
+        assert!(left.x < right.x - 0.5, "{right:?} {left:?}");
+    }
+
+    #[test]
+    fn the_overshoot_at_radius_12_on_the_middle_line() {
+        // (worked out by hand from the formulas: the rear axle on a circle of 11.7 m, the last
+        // axle on one of sqrt(11.7^2 + 1.631^2 - 4.556^2) = 11.3 m, tyres 1.2 m out)
+        let (kerb, white) = gn92().overshoot(12.0, 0.0, 1.75, true);
+        assert!((kerb - 0.55).abs() < 0.02, "{kerb}");
+        assert!((white - 1.66).abs() < 0.02, "{white}");
+    }
+
+    #[test]
+    fn the_chosen_lines_at_radius_12() {
+        let free = gn92().choose(12.0, 1.75, true, false);
+        assert!((free.x + 0.5).abs() < 0.15 && free.kerb < 0.05, "{free:?}");
+        let held = gn92().choose(12.0, 1.75, true, true);
+        assert!(
+            (held.x - 0.2).abs() < 0.15 && held.kerb < KERB_LIMIT,
+            "{held:?}"
+        );
     }
 }

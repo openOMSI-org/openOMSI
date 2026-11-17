@@ -272,11 +272,11 @@ impl TrafficSim {
                     }
                 }
             }
-            if c.wide.active && c.wide.white > 0.3 {
+            if c.wide.active && c.wide.claim {
                 // (a long vehicle swinging over the centre line in a bend: the oncoming side
-                // stops short of it)
+                // stops short of where it begins)
                 if let Some((l, s, _)) = self.net.opposite(c.wide.lane, c.wide.at) {
-                    by_lane.entry(l).or_default().push((i, s, 0.0, true));
+                    by_lane.entry(l).or_default().push((i, (s - c.wide.reach - 2.0).max(0.5), 0.0, true));
                 }
             }
             for (l, d) in self

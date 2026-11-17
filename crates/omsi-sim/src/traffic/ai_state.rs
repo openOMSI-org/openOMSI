@@ -857,7 +857,13 @@ impl AiState {
     /// parked car and back, and a turn at the junction ahead - from about four seconds
     /// before it (at least 25 m, at most 60 m) until the turn is done.
     pub fn update_blinker(&mut self, net: &Network) {
-        self.blinker = if self.hazard {
+        let within = (self.speed * 4.0).clamp(25.0, 60.0);
+        let turn = if self.hazard || !(self.change.is_some() || self.signal != 0 && self.signal_time > 0.0) {
+            self.turn_ahead(net, within).map(|t| t.0)
+        } else {
+            None
+        };
+        self.blinker = if self.hazard && turn.is_none() {
             3
         } else if let Some(c) = self.change {
             c.dir
@@ -866,8 +872,7 @@ impl AiState {
         } else if !self.wide_swing && (self.lateral_target - self.lateral).abs() > 0.3 {
             if self.lateral_target > self.lateral { 2 } else { 1 }
         } else {
-            let within = (self.speed * 4.0).clamp(25.0, 60.0);
-            self.turn_ahead(net, within).map(|t| t.0).unwrap_or(0)
+            turn.unwrap_or(0)
         };
     }
 
