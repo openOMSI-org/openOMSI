@@ -171,3 +171,79 @@ fn vr_menu_release_keeps_a_short_drag_and_stops_automatic_motion() {
     assert!(moving.auto_drag.is_none());
     assert_eq!(moving.vehicle.var("releases"), Some(2.0));
 }
+
+#[test]
+fn clicking_control_shared_by_two_meshes_toggles_both_model_only_variables_both_ways() {
+    let mut vehicle = crate::schedule::tests::script_test_vehicle(
+        "{init}\n0.42 (S.L.script_var)\n{end}\n",
+        "script_var\n",
+        "",
+    );
+    let ty = Arc::make_mut(&mut vehicle.ty);
+    for var in ["sched", "sched1"] {
+        ty.model.meshes.push(omsi_model::MeshDef {
+            mouse_event: Some("cp_sched_toggle".into()),
+            animations: vec![omsi_model::Animation {
+                variable: var.into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        ty.meshes.push(omsi_sim::vehicle::VehicleMesh {
+            def_index: ty.model.meshes.len() - 1,
+            data: Default::default(),
+            file: Default::default(),
+            materials: vec![],
+            overrides: vec![],
+            pivot: glam::Mat4::IDENTITY,
+            viewpoint: 0,
+            skin: vec![],
+            keep_winding: false,
+        });
+    }
+    vehicle.mesh_props.resize_with(2, Default::default);
+    let ty = vehicle.ty.clone();
+    let render = scene::VehicleRender {
+        window_wipers: None,
+        instances: vec![],
+        far: vec![],
+        own_materials: vec![],
+        set: None,
+        variants: vec![],
+        text_textures: vec![],
+        script_textures: vec![],
+        shared_script: false,
+        displays_far: false,
+        display_tick: 0,
+        skinned: vec![],
+        damaged: vec![],
+        glass_cracks: vec![],
+        hidden: false,
+        interior_lamps: Default::default(),
+        interior_blocks: Default::default(),
+        own_set: None,
+    };
+    let mut player = new_player(vehicle, render, vec![], vec![], false, &ty);
+
+    assert_eq!(player.vehicle.var("sched"), None);
+    assert_eq!(player.vehicle.var("sched1"), None);
+    assert_eq!(player.vehicle.var("script_var"), Some(0.42));
+
+    // First click: press mesh 0 and release (0 -> 1)
+    player.pressed_mesh = Some(0);
+    player.press_info = (false, 0.0);
+    player.release();
+
+    assert_eq!(player.vehicle.var("sched"), Some(1.0));
+    assert_eq!(player.vehicle.var("sched1"), Some(1.0));
+    assert_eq!(player.vehicle.var("script_var"), Some(0.42));
+
+    // Second click: press mesh 1 and release (1 -> 0)
+    player.pressed_mesh = Some(1);
+    player.press_info = (false, 0.0);
+    player.release();
+
+    assert_eq!(player.vehicle.var("sched"), Some(0.0));
+    assert_eq!(player.vehicle.var("sched1"), Some(0.0));
+    assert_eq!(player.vehicle.var("script_var"), Some(0.42));
+}
