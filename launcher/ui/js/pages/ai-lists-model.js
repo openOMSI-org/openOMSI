@@ -13,38 +13,27 @@ export const dirty = (a) => JSON.stringify(a.groups) !== JSON.stringify(a.saved)
  * replace them: the lists stay those of the date they were read on, the one a save compares with). */
 export const shouldRead = (a, map, date) => !!map && a.loaded !== `${map}|${date}` && a.loading !== `${map}|${date}` && !a.busy && !dirty(a);
 
-// --- buses ticked in a depot's type, to be given one paint at once ------------------------
-// One type at a time: the buses of a type share its repaints, so the paint chosen exists on
-// every one of them. `at` names the type (its depot, place and file) and `n` its buses then:
-// the ticks lapse when another type is ticked, when the type is replaced or when buses are
-// added or removed (the rows would no longer be the ones ticked).
-
-/** The rows of the type `at` with `n` buses that are ticked, if the ticks still hold. */
+// (one type at a time: its buses share its repaints, so the paint chosen exists on all of them)
 export const tickedRows = (ticked, at, n) => (ticked && ticked.at === at && ticked.n === n ? ticked.rows : []);
 
-/** `ticked` with row `i` of the type `at` (of `n` buses) ticked or unticked. */
 export function tickRow(ticked, at, n, i) {
   const rows = tickedRows(ticked, at, n);
   const next = rows.includes(i) ? rows.filter((r) => r !== i) : [...rows, i].sort((a, b) => a - b);
   return next.length ? { at, n, rows: next } : null;
 }
 
-/** `ticked` with every bus of the type `at` ticked, or none when all of them were. */
 export function tickAll(ticked, at, n) {
   return tickedRows(ticked, at, n).length === n || !n ? null : { at, n, rows: [...Array(n).keys()] };
 }
 
-/** The paint the ticked `rows` of `entries` share, or null when they differ. */
 export function sharedPaint(entries, rows) {
   const paints = new Set(rows.map((i) => entries[i]?.paint || ''));
   return paints.size === 1 ? [...paints][0] : null;
 }
 
-/** The depots' types and how many buses each has: what the ticked rows stand on. */
 const shape = (groups) =>
   JSON.stringify((groups || []).map((g) => [g.name, g.depot, (g.typgroups || []).map((tg) => [String(tg.file || '').replace(/\\/g, '/').toLowerCase(), tg.entries?.length || 0])]));
 
-/** Give the ticked `rows` of `entries` the paint `paint` ('' is the bus's own). */
 export function paintRows(entries, rows, paint) {
   for (const i of rows) if (entries[i]) entries[i].paint = paint;
 }
@@ -57,7 +46,6 @@ export function listsModel({ call, get, up, toast, t }) {
   async function read(map, date) {
     const mine = ++latest;
     const key = `${map}|${date}`;
-    // (the lists read again - another map or date, a save, a reset - are not the rows ticked)
     up({ map, loaded: null, loading: key, data: null, error: null, ticked: null });
     try {
       const data = await call('ai_lists', { map, date });
@@ -95,13 +83,12 @@ export function listsModel({ call, get, up, toast, t }) {
 
   const reset = () => work('ai_lists_reset', (a) => ({ map: a.map }), () => t('The map has its own lists again.'));
 
-  /** A change made by the player: refused while a save or a reset is under way. A type
-   *  replaced, added or removed or a bus added or removed clears the ticks: the rows ticked
-   *  would no longer be the buses ticked, even once the count is the same again. */
+  /** A change made by the player: refused while a save or a reset is under way. */
   const change = (patch) => {
     const a = get();
     if (a.busy) return false;
     const p = typeof patch === 'function' ? patch(a) : patch;
+    // (once the rows change, the rows ticked are no longer the buses ticked)
     up(p.groups && a.ticked && shape(p.groups) !== shape(a.groups) ? { ...p, ticked: null } : p);
     return true;
   };

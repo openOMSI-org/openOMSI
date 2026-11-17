@@ -223,7 +223,6 @@ function PaintSelect({ file, value, onChange }) {
 
 const dateText = (d) => (d ? `${String(d).slice(0, 4)}-${String(d).slice(4, 6)}-${String(d).slice(6, 8)}` : '');
 
-/** A tick box of the depot's buses (the vehicle picker's kind). */
 function Tick({ on, label, title, onClick }) {
   return html`<button type="button" role="checkbox" aria-checked=${on} aria-label=${label} title=${title} class=${'ail-tick' + (on ? ' on' : '')} onClick=${(e) => (e.stopPropagation(), onClick())}>${on && html`<${Icon} name="check" size=${14} />`}</button>`;
 }
