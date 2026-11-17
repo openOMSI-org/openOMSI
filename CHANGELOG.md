@@ -605,6 +605,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The next arrow shows in the pause menu's Line and shift page**: the button beside the start time (and the next arrow of the vehicle pages) was an empty square, as the game had no `arrow_forward` icon to draw on it.
 - **A broken sound file is named in the log**: when no sound can be read from a file under a
   sound's name (a cut-off download, a web page), the warning now gives its path, its size and its
   first bytes. Before, the log only had the line `probe reach EOF at n bytes` with no file name,
