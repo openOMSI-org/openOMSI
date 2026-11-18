@@ -446,7 +446,7 @@ mod queued_exit_vehicle_tests {
         let occupied = [(10, 1.0, 0.0, 2.3, 0.9, 3.5)];
         assert_eq!(
             queued_exit_vehicle(&way, (10, 0.0), 7.0, occupied),
-            Some((1.0, 1.0, 10))
+            Some((1.0, 0.0, 10))
         );
     }
 
@@ -465,7 +465,7 @@ mod queued_exit_vehicle_tests {
         let occupied = [(10, 1.0, 0.0, 0.0, 0.9, 3.5)];
         assert_eq!(
             queued_exit_vehicle(&way, (10, 0.0), 7.0, occupied),
-            Some((1.0, 1.0, 10))
+            Some((1.0, 0.0, 10))
         );
     }
 }
