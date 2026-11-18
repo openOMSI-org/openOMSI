@@ -122,9 +122,7 @@ pub fn find(dir: &Path) -> Vec<Found> {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
         let file = name.to_ascii_lowercase();
-        if file.starts_with('.') {
-            continue;
-        }
+        // (no entry is skipped for a leading dot: `lua::find_lua` loads those too)
         if p.is_dir() {
             if child(&p, "main.lua").is_some_and(|m| m.is_file()) {
                 out.push(Found {
@@ -137,11 +135,18 @@ pub fn find(dir: &Path) -> Vec<Found> {
                 });
             }
         } else if ext(&p, "lua") && !file.ends_with(".save.lua") {
+            // (a `main.lua` loose in the folder is a folder plugin to `LuaSpec::disk`: named
+            // after the folder, its data in `data/` beside it)
+            let main = file == "main.lua";
             out.push(Found {
                 name,
-                stem: stem(&p),
+                stem: if main { stem(dir) } else { stem(&p) },
                 kind: "lua",
-                data_dir: Some(p.with_extension("data")),
+                data_dir: Some(if main {
+                    dir.join("data")
+                } else {
+                    p.with_extension("data")
+                }),
                 path: p,
             });
         } else if ext(&p, "oop") {
@@ -556,5 +561,50 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&data);
         let _ = std::fs::remove_dir_all(&plugins);
+    }
+
+    #[test]
+    fn hidden_plugins_and_a_loose_main_lua_are_found_as_the_game_loads_them() {
+        let data = tmp("hidden-data");
+        let plugins = tmp("hidden");
+        std::fs::write(plugins.join(".quiet.lua"), "").unwrap();
+        std::fs::create_dir_all(plugins.join(".tools")).unwrap();
+        std::fs::write(plugins.join(".tools/main.lua"), "").unwrap();
+        std::fs::write(plugins.join("main.lua"), "").unwrap();
+        std::fs::create_dir_all(plugins.join("data")).unwrap();
+        std::fs::write(
+            plugins.join("data/settings.schema.json"),
+            r#"{"title":"Loose","settings":[{"key":"n","type":"number","min":0,"max":10}]}"#,
+        )
+        .unwrap();
+        std::fs::write(plugins.join("data/settings.json"), r#"{"n":3}"#).unwrap();
+
+        let found = find(&plugins);
+        let names: Vec<&str> = found.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, [".quiet.lua", ".tools/", "main.lua"]);
+        let main = found.iter().find(|f| f.name == "main.lua").unwrap();
+        assert_eq!(
+            main.data_dir.as_deref(),
+            Some(plugins.join("data").as_path())
+        );
+
+        let dirs = vec![plugins.clone()];
+        let list = status_in(&data, &dirs);
+        let row = list["plugins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["name"] == "main.lua")
+            .unwrap()
+            .clone();
+        assert_eq!(row["title"], "Loose");
+        assert_eq!(row["values"]["n"], 3);
+        save_settings_in(&dirs, "main.lua", &json!({"n": 4})).unwrap();
+        assert!(
+            std::fs::read_to_string(plugins.join("data/settings.json"))
+                .unwrap()
+                .contains('4')
+        );
+        assert!(!plugins.join("main.data").exists());
     }
 }
