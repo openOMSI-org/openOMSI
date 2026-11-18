@@ -3224,3 +3224,5 @@
 "Default for every bus": "हर बस के लिए डिफ़ॉल्ट"
 "Use for {bus}": "{bus} के लिए उपयोग करें"
 "Profile {name} in use": "प्रोफ़ाइल {name} उपयोग में है"
+"Driving end {number} of {count}: {name}": "ड्राइविंग केबिन {number} / {count}: {name}"
+"At the wheel in the other cab": "दूसरे केबिन में नियंत्रण पर"

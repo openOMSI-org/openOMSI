@@ -11,6 +11,7 @@
 use crate::player::Player;
 use crate::scene::World;
 use glam::DVec3;
+use omsi_sim::rail::trail::{Spot, Trail};
 use omsi_sim::traffic::{LaneKind, Network};
 
 /// Where on the track the vehicle is.
@@ -20,9 +21,9 @@ pub(crate) struct RailDrive {
     pub s: f32,
     /// The vehicle faces the lane's direction (else it drives it backwards).
     pub along: bool,
-    /// The track the vehicle has come along: (distance travelled, the origin's position),
-    /// oldest first - where its coupled parts are placed (see `VehicleInstance::retrail`).
-    trail: std::collections::VecDeque<(f64, DVec3)>,
+    /// The track the vehicle has come along - where its coupled parts are placed (see
+    /// `VehicleInstance::retrail`), and where it goes back backing (`omsi_sim::rail::Trail`).
+    trail: Trail,
     /// Distance travelled along the track (forward positive).
     u: f64,
     /// The body on its springs (see `omsi_sim::rail::Body`) and the heading of the last frame.
@@ -32,6 +33,9 @@ pub(crate) struct RailDrive {
 
 /// How much trail is kept behind the vehicle (m): a long train's length.
 const TRAIL: f64 = 400.0;
+/// How much of the track ahead of the origin is kept while backing (m): where its front
+/// bogie and the parts hung ahead of it stand.
+const AHEAD: f64 = 30.0;
 
 /// Whether the vehicle the arguments name is bound to rails (it then needs the rail
 /// network the traffic builds, with or without cars).
@@ -82,21 +86,19 @@ pub(crate) fn attach(p: &mut Player, net: &Network, reach: f64) -> Option<RailDr
         last_heading: None,
     };
     // the track behind it, for its coupled parts: walked backwards from where it stands
-    let mut back = r.clone();
+    let mut back = r.probe();
     let mut points = Vec::new();
     let step_dist = 0.5;
     let steps = (TRAIL / step_dist).round() as i32;
     for k in 1..=steps {
         back.step(net, None, -step_dist as f32, 0);
         let (pos, _) = net.lanes[back.lane].at(back.s);
-        points.push((-step_dist * k as f64, pos));
+        points.push((-step_dist * k as f64, pos, back.spot()));
     }
     let (here, _) = net.lanes[lane].at(s);
-    r.trail = points
-        .into_iter()
-        .rev()
-        .chain(std::iter::once((0.0, here)))
-        .collect();
+    points.reverse();
+    points.push((0.0, here, r.spot()));
+    r.trail = Trail::laid(points, 60.0);
     log::info!(
         "rail: {} stands on rail lane {lane} at {s:.1} m ({dist:.1} m away) at ({:.1}, {:.1})",
         p.vehicle.ty.def.path.display(),
@@ -158,43 +160,6 @@ fn nearest_rail(
     best
 }
 
-/// The trail's point at travelled distance `u` (between its samples; None beyond its ends).
-/// `head` is where the vehicle is right now, `(u, position)`: the trail is only sampled every
-/// 10 cm of travel, so its newest sample lags behind the vehicle by up to that much (at a
-/// walking pace most of the time), and a coupled part asked for a place just behind the vehicle
-/// got the stale sample while one asked for a place just ahead got the exact one - the cars
-/// jumped back and forth by a few centimetres as they crossed from one answer to the other.
-pub(crate) fn point_at(
-    trail: &std::collections::VecDeque<(f64, DVec3)>,
-    head: Option<(f64, DVec3)>,
-    u: f64,
-) -> Option<DVec3> {
-    let at = |u: f64| -> Option<DVec3> {
-        if trail.is_empty() {
-            return head.map(|h| h.1);
-        }
-        let newest = *trail.back().unwrap();
-        if let Some((hu, hp)) = head.filter(|h| h.0 > newest.0 + 1e-9 && u > newest.0) {
-            let t = ((u - newest.0) / (hu - newest.0)).clamp(0.0, 1.0);
-            return Some(newest.1 + (hp - newest.1) * t);
-        }
-        if u <= trail.front().unwrap().0 {
-            return Some(trail.front().unwrap().1);
-        }
-        if u >= newest.0 {
-            return Some(newest.1);
-        }
-        let i = trail.iter().position(|(v, _)| *v >= u)?;
-        if i == 0 {
-            return Some(trail[0].1);
-        }
-        let (a, b) = (trail[i - 1], trail[i]);
-        let t = ((u - a.0) / (b.0 - a.0).max(1e-6)).clamp(0.0, 1.0);
-        Some(a.1 + (b.1 - a.1) * t)
-    };
-    at(u)
-}
-
 fn angle_diff(a: f64, b: f64) -> f64 {
     (a - b + 540.0).rem_euclid(360.0) - 180.0
 }
@@ -227,14 +192,120 @@ impl RailDrive {
     /// coupled parts (about 100 KB).
     fn probe(&self) -> RailDrive {
         RailDrive {
-            lane: self.lane,
-            s: self.s,
-            along: self.along,
-            trail: Default::default(),
             u: self.u,
+            ..RailDrive::at(self.spot())
+        }
+    }
+
+    /// Where on the rails it is.
+    fn spot(&self) -> Spot {
+        (self.lane, self.s, self.along)
+    }
+
+    /// A probe standing at `spot`.
+    fn at(spot: Spot) -> RailDrive {
+        RailDrive {
+            lane: spot.0,
+            s: spot.1,
+            along: spot.2,
+            trail: Default::default(),
+            u: 0.0,
             body: omsi_sim::rail::Body::default(),
             last_heading: None,
         }
+    }
+
+    /// Where the rails are `ds` on from `spot`, the switches untouched.
+    fn look(net: &Network, spot: Spot, ds: f32) -> Spot {
+        let mut p = RailDrive::at(spot);
+        p.step(net, None, ds, 0);
+        p.spot()
+    }
+
+    /// Where the vehicle's origin is on the rails at travelled distance `u` of its trail.
+    fn state_at(&self, net: &Network, u: f64) -> Option<Spot> {
+        self.trail
+            .spot_at(u, (self.u, self.spot()), |s, d| RailDrive::look(net, s, d))
+    }
+
+    /// Backing (`ds` < 0): the track beyond the train's rear end is found anew - the switches
+    /// as they are set now (`blinker`: the rear cab's indicator), the points it takes thrown
+    /// - and the vehicle moves back along the trail its train lies on. False at the end of
+    /// the track (it stays where it is).
+    fn reverse(
+        &mut self,
+        net: &Network,
+        mut world: Option<(&World, &mut omsi_sim::scenery::SceneryState)>,
+        ds: f32,
+        blinker: u8,
+    ) -> bool {
+        let target = self.u + ds as f64;
+        let found = self.trail.back_up(self.u, target, |spot, d| {
+            let mut st = RailDrive::at(spot);
+            st.step(net, world.as_mut().map(|(w, s)| (*w, &mut **s)), d, blinker)
+                .then(|| (st.spot(), net.lanes[st.lane].at(st.s).0))
+        });
+        if !found {
+            return false;
+        }
+        match self.state_at(net, target) {
+            Some(spot) => (self.lane, self.s, self.along) = spot,
+            None if !self.step(net, None, ds, 0) => return false,
+            None => {}
+        }
+        self.u = target;
+        true
+    }
+
+    /// Where the track is `rel` metres ahead of the origin (behind: negative) and which way
+    /// it runs there, as the vehicle faces (degrees): on the trail where it reaches, else
+    /// looked for along the rails - ahead of a vehicle driving forward by the switches it
+    /// meets (and thrown), otherwise without touching them.
+    fn track_at(
+        &self,
+        net: &Network,
+        world: &World,
+        scenery: &mut omsi_sim::scenery::SceneryState,
+        rel: f64,
+        blinker: u8,
+        backing: bool,
+    ) -> (DVec3, f64) {
+        let u = self.u + rel;
+        if let Some((p, h)) = self
+            .trail
+            .heading_at((self.u, net.lanes[self.lane].at(self.s).0), u)
+        {
+            if let Some(h) = h {
+                return (p, h);
+            }
+            if let Some((lane, s, along)) = self.state_at(net, u) {
+                let h = net.lanes[lane].at(s).1 as f64;
+                return (
+                    p,
+                    if along {
+                        h
+                    } else {
+                        (h + 180.0).rem_euclid(360.0)
+                    },
+                );
+            }
+        }
+        let mut probe = self.probe();
+        let ahead_driving = rel > 0.0 && !backing;
+        if ahead_driving {
+            probe.step(net, Some((world, &mut *scenery)), rel as f32, blinker);
+        } else {
+            probe.step(net, None, rel as f32, 0);
+        }
+        let (pos, h) = net.lanes[probe.lane].at(probe.s);
+        (
+            pos,
+            if probe.along {
+                h as f64
+            } else {
+                (h as f64 + 180.0).rem_euclid(360.0)
+            },
+        )
     }
 
     /// The contact wire above the track at the pantograph: at the standard height of the
@@ -276,7 +347,9 @@ impl RailDrive {
     }
 
     /// Move `ds` metres (forward along the vehicle, negative backwards) and put the
-    /// vehicle there. `blinker`: 1 left, 2 right (the branch at the next fork).
+    /// vehicle there. `blinker`: 1 left, 2 right (the branch at the next fork); `back_blinker`
+    /// the same for the train's rear end, where it leads backing (the rear cab's indicator).
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn advance(
         &mut self,
         p: &mut Player,
@@ -286,9 +359,26 @@ impl RailDrive {
         dt: f32,
         ds: f32,
         blinker: u8,
+        back_blinker: u8,
     ) {
-        if !self.step(net, Some((world, &mut *scenery)), ds, blinker) {
-            p.vehicle.set_speed(0.0);
+        // Backing, the vehicle follows the trail its train lies on: the rear end chooses at the
+        // points.
+        let backing = ds < 0.0;
+        if backing {
+            if !self.reverse(net, Some((world, &mut *scenery)), ds, back_blinker) {
+                p.vehicle.set_speed(0.0);
+            }
+        } else {
+            if !self.step(net, Some((world, &mut *scenery)), ds, blinker) {
+                p.vehicle.set_speed(0.0);
+            }
+            self.u += ds as f64;
+        }
+        let track_pos = net.lanes[self.lane].at(self.s).0;
+        if backing {
+            self.trail.drop_ahead(self.u + AHEAD);
+        } else {
+            self.trail.record(self.u, track_pos, self.spot(), TRAIL);
         }
         // (`[boogies]` is how far each bogie stands from the origin, not the span between
         // them: the A3's axles at ±2.835 and ±4.735 m are its 3.785. Halved, the bogies ran
@@ -330,13 +420,10 @@ impl RailDrive {
         };
 
         let (pos, heading, pitch) = if let Some(l) = bogie_dist {
-            let mut front_probe = self.clone();
-            front_probe.step(net, Some((world, &mut *scenery)), center_y + l, blinker);
-            let (pos_f, h_f) = net.lanes[front_probe.lane].at(front_probe.s);
-
-            let mut rear_probe = self.clone();
-            rear_probe.step(net, Some((world, &mut *scenery)), center_y - l, blinker);
-            let (pos_r, h_r) = net.lanes[rear_probe.lane].at(rear_probe.s);
+            let (pos_f, h_track_f) =
+                self.track_at(net, world, scenery, (center_y + l) as f64, blinker, backing);
+            let (pos_r, h_track_r) =
+                self.track_at(net, world, scenery, (center_y - l) as f64, blinker, backing);
 
             let diff = pos_f - pos_r;
             let run = diff.truncate().length();
@@ -354,16 +441,6 @@ impl RailDrive {
                 (heading, 0.0)
             };
 
-            let h_track_f = if front_probe.along {
-                h_f as f64
-            } else {
-                (h_f as f64 + 180.0).rem_euclid(360.0)
-            };
-            let h_track_r = if rear_probe.along {
-                h_r as f64
-            } else {
-                (h_r as f64 + 180.0).rem_euclid(360.0)
-            };
             let bogie_0_deg = angle_diff(h_track_f, h) as f32;
             let bogie_1_deg = angle_diff(h_track_r, h) as f32;
             let bogie_0_rad = bogie_0_deg.to_radians();
@@ -404,7 +481,6 @@ impl RailDrive {
             (pos, heading, 0.0)
         };
 
-        let track_pos = net.lanes[self.lane].at(self.s).0;
         let v = &mut p.vehicle;
         v.position = pos;
         v.heading = heading;
@@ -440,28 +516,11 @@ impl RailDrive {
         let mut c = v.physics.controls;
         c.steering = 0.0;
         v.set_controls(c);
-        // the trail, and the coupled parts on it: store the rail centerline position at u,
-        // so that trailing cars and bogies are placed on the track and not chord-inset
-        self.u += ds as f64;
-        if self
-            .trail
-            .back()
-            .map(|b| (self.u - b.0).abs() > 0.1)
-            .unwrap_or(true)
-        {
-            // (backing up takes the trail back with it)
-            while self.trail.back().is_some_and(|b| b.0 > self.u) {
-                self.trail.pop_back();
-            }
-            self.trail.push_back((self.u, track_pos));
-            while self.trail.front().is_some_and(|f| self.u - f.0 > TRAIL) {
-                self.trail.pop_front();
-            }
-        }
+        // the coupled parts on the trail: the rail centerline at their places, not chord-inset
         if !v.trailers.is_empty() {
             let trail = &self.trail;
             let u = self.u;
-            let r_probe = self.clone();
+            let r_probe = self.probe();
             let probe = |d: f64| {
                 let mut probe = r_probe.clone();
                 probe.step(net, None, -d as f32, 0);
@@ -470,13 +529,16 @@ impl RailDrive {
             // (a part may run ahead of the vehicle's origin - a bogie frame under its front
             // end - where the trail, which holds on to its newest point, has nothing yet)
             let head = Some((u, track_pos));
+            let farthest = std::cell::Cell::new(0.0f64);
             v.retrail(dt, &|d| {
-                if d < 0.0 {
-                    probe(d)
+                farthest.set(farthest.get().max(d));
+                if trail.covers(u - d, u) {
+                    trail.point_at(head, u - d).or_else(|| probe(d))
                 } else {
-                    point_at(trail, head, u - d).or_else(|| probe(d))
+                    probe(d)
                 }
             });
+            self.trail.reach_back = farthest.get().max(5.0) + 1.0;
         }
     }
 
@@ -687,7 +749,7 @@ pub(crate) fn frame(
     let Some(net) = net else { return };
     if p.rail.is_none() {
         if let Some(mut r) = attach(p, net, 3000.0) {
-            r.advance(p, net, world, scenery, dt, 0.0, 0);
+            r.advance(p, net, world, scenery, dt, 0.0, 0, 0);
             p.rail = Some(r);
         }
         return;
@@ -722,11 +784,22 @@ pub(crate) fn frame(
     }
     let ds = p.vehicle.physics.speed * dt;
     let blinker = blinker_of(&p.vehicle);
+    let back_blinker = p
+        .vehicle
+        .active_cab
+        .and_then(|k| p.vehicle.trailers.get(k))
+        .and_then(|t| t.run_var("lights_sw_blinker"))
+        .filter(|s| (0.5..2.5).contains(s))
+        .map_or(0, |s| s.round() as u8);
     if let Some(mut r) = p.rail.take() {
-        r.advance(p, net, world, scenery, dt, ds, blinker);
+        r.advance(p, net, world, scenery, dt, ds, blinker, back_blinker);
         p.rail = Some(r);
     }
 }
+
+#[cfg(test)]
+#[path = "rail_drive_tests.rs"]
+mod backing_tests;
 
 #[cfg(test)]
 mod tests {
@@ -763,41 +836,6 @@ mod tests {
         assert!(wire_roughness(1.0, 15.0) > dry);
         assert!(wire_roughness(1.0, -5.0) > wire_roughness(1.0, 15.0));
         assert_eq!(wire_roughness(0.0, -5.0), dry, "dry frost is not ice");
-    }
-
-    #[test]
-    fn point_at_interpolates_properly() {
-        let mut trail = std::collections::VecDeque::new();
-        trail.push_back((0.0, DVec3::new(0.0, 0.0, 0.0)));
-        trail.push_back((10.0, DVec3::new(10.0, 0.0, 0.0)));
-        trail.push_back((20.0, DVec3::new(20.0, 10.0, 5.0)));
-
-        let p0 = point_at(&trail, None, 0.0).unwrap();
-        assert!((p0 - DVec3::new(0.0, 0.0, 0.0)).length() < 1e-4);
-
-        let p5 = point_at(&trail, None, 5.0).unwrap();
-        assert!((p5 - DVec3::new(5.0, 0.0, 0.0)).length() < 1e-4);
-
-        let p15 = point_at(&trail, None, 15.0).unwrap();
-        assert!((p15 - DVec3::new(15.0, 5.0, 2.5)).length() < 1e-4);
-    }
-
-    /// The trail is sampled every 10 cm; a place just behind the vehicle is the same distance
-    /// from where it is whichever way it is asked: a stale newest sample made it jump.
-    #[test]
-    fn the_newest_place_follows_the_vehicle_not_the_last_sample() {
-        let mut trail = std::collections::VecDeque::new();
-        trail.push_back((0.0, DVec3::new(0.0, 0.0, 0.0)));
-        trail.push_back((10.0, DVec3::new(10.0, 0.0, 0.0)));
-        // 7 cm further on, not yet sampled
-        let head = Some((10.07, DVec3::new(10.07, 0.0, 0.0)));
-        let behind = point_at(&trail, head, 10.07 - 0.02).unwrap();
-        assert!((behind.x - 10.05).abs() < 1e-6, "{behind:?}");
-        assert!((point_at(&trail, head, 10.07).unwrap().x - 10.07).abs() < 1e-6);
-        // the samples older than the newest are unchanged
-        assert!((point_at(&trail, head, 5.0).unwrap().x - 5.0).abs() < 1e-6);
-        // without a head the newest sample is the end
-        assert_eq!(point_at(&trail, None, 10.05).unwrap().x, 10.0);
     }
 
     #[test]

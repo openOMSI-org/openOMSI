@@ -4383,3 +4383,5 @@
 "Default for every bus": "По умолчанию для всех автобусов"
 "Use for {bus}": "Использовать для {bus}"
 "Profile {name} in use": "Используется профиль {name}"
+"Driving end {number} of {count}: {name}": "Кабина {number} из {count}: {name}"
+"At the wheel in the other cab": "За контроллером в другой кабине"

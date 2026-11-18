@@ -3596,3 +3596,5 @@
 "Default for every bus": "Standaard voor elke bus"
 "Use for {bus}": "Gebruiken voor {bus}"
 "Profile {name} in use": "Profiel {name} in gebruik"
+"Driving end {number} of {count}: {name}": "Stuurpost {number} van {count}: {name}"
+"At the wheel in the other cab": "Aan de knoppen in de andere cabine"

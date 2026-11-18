@@ -47,7 +47,7 @@ use std::sync::Arc;
 
 mod car;
 mod rig;
-pub use car::{DriverCar, SnapshotBus};
+pub use car::{DriverCar, PartCar, SnapshotBus};
 
 use rig::*;
 
@@ -279,6 +279,9 @@ pub struct DriverFigure {
     /// Sits back on the seat with the hands off the wheel, as the driver of OMSI 2 does
     /// (see `DriverFigure::set_original_pose`).
     original_pose: bool,
+    /// The coupled part whose cab the figure sits in (the NF6D's rear cab, see
+    /// `VehicleInstance::active_cab`); None at the leading vehicle's wheel.
+    pub cab: Option<usize>,
     shown: bool,
     /// Posed at least once (the first pose is settled, not eased in from standing).
     settled: bool,
@@ -574,6 +577,7 @@ impl DriverFigure {
             blend: Default::default(),
             shifter: None,
             shift: ShiftState::default(),
+            cab: None,
         };
         f.seat_in(v, seat);
         Some(f)
@@ -1612,35 +1616,12 @@ fn frame_quat(d: Vec3, p: Vec3) -> glam::Quat {
     glam::Quat::from_mat3(&glam::Mat3::from_cols(d, p, d.cross(p))).normalize()
 }
 
-/// The vehicle's first `[drivpos]`.
-
+/// The vehicle's first `[drivpos]` (as the vehicle gives it, see `DriverCar::driver_seat`).
 fn seat_of(v: &impl DriverCar) -> Option<omsi_vehicle::cabin::PassPos> {
-    cabin_of(&v.ty().def)?.driver_positions.first().cloned()
+    v.driver_seat()
 }
 
-/// A vehicle type's passenger cabin, read once per type.
-pub fn cabin_of(def: &omsi_vehicle::Vehicle) -> Option<Arc<omsi_vehicle::PassengerCabin>> {
-    static CABINS: std::sync::Mutex<
-        Option<
-            std::collections::HashMap<
-                std::path::PathBuf,
-                Option<Arc<omsi_vehicle::PassengerCabin>>,
-            >,
-        >,
-    > = std::sync::Mutex::new(None);
-    let mut cabins = CABINS.lock().unwrap_or_else(|e| e.into_inner());
-    cabins
-        .get_or_insert_with(Default::default)
-        .entry(def.path.clone())
-        .or_insert_with(|| {
-            let rel = def.passenger_cabin.as_ref()?;
-            omsi_vehicle::PassengerCabin::load(&omsi_cfg::resolve_path(def.dir(), rel))
-                .map_err(|e| log::warn!("driver: {e}"))
-                .ok()
-                .map(Arc::new)
-        })
-        .clone()
-}
+pub use omsi_sim::vehicle::{cabin_of, part_cab_seat};
 
 /// `a` turned towards `b` by `max` radians at most (both unit vectors).
 fn turn_towards(a: Vec3, b: Vec3, max: f32) -> Vec3 {

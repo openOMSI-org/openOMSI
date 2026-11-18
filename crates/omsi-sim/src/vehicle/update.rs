@@ -245,22 +245,41 @@ impl VehicleInstance {
     }
 
     pub(super) fn run_control_cables(&mut self) {
-        for &(write, read) in &self.v_cables {
-            self.state.vars[read as usize] = self.state.vars[write as usize];
+        // (the largest of what is on the wire, see `car_run::Cables`)
+        for &(_, read) in &self.v_cables {
+            self.state.vars[read as usize] = 0.0;
         }
-        super::car_run::read_back_bus(self);
+        for &(write, read) in &self.v_cables {
+            let value = self.state.vars[write as usize];
+            let v = &mut self.state.vars[read as usize];
+            *v = v.max(value);
+        }
+        super::car_run::apply_lead_cables(self);
     }
 
-    /// Run the scripts' frame once with no time passing (no physics, no clock): what a
-    /// switch just pressed makes of the variables the scripts derive from it.
+    /// Run the scripts' frame once with no time passing (no physics, no clock): what a switch
+    /// just pressed makes of the variables the scripts derive from it. Every car of a train
+    /// runs it, the wires first as in a whole frame, so that a one-frame pulse a button sets in
+    /// the head car reaches the others.
     pub fn update_scripts_only(&mut self, _dt: f32) {
         crate::timetable_run::apply_pending_destination(self);
         let p = self.ty.program.clone();
         let gap = self.host.clock.timegap;
         self.host.clock.timegap = 0.0;
+        let mut trailers = std::mem::take(&mut self.trailers);
+        if !trailers.is_empty() {
+            super::car_run::run_cables(self, &mut trailers);
+        }
         self.run_control_cables();
         self.vm.run_frame(&p, &mut self.state, &mut self.host);
         self.apply_scheme_vars_each_frame();
+        if !trailers.is_empty() {
+            for t in &mut trailers {
+                t.run_scripts_only(self);
+            }
+            super::car_run::run_cables(self, &mut trailers);
+        }
+        self.trailers = trailers;
         self.host.clock.timegap = gap;
     }
 
@@ -272,12 +291,16 @@ impl VehicleInstance {
     /// bellows only above that, and the NL/NG lift may drop by what it reads (up to
     /// 0.3 m). Read the other way round (ground minus point) the sensor sat at 0, the
     /// right-hand bellows of an Urbino never let their air out and the bus leant 1.7° to
-    /// the left all the way. The ground is what lies under the point (with the world's
-    /// faces, looked for from half a metre above it, so a kerb a little higher still
-    /// counts): the plain sampler gives the highest face there, which under a petrol
-    /// station's canopy is its roof - the point stood metres "under the ground", the NL/NG
-    /// lift could not go down at all and the arcsine of the ramp's angle turned it on its
-    /// side and then away (#2205).
+    /// the left all the way.
+    ///
+    /// As Omsi.exe has it (0x7d35d0, 0x7aec3c, 0x7a0814, 0x7c40c8): the ray starts 3 m over the
+    /// point and comes down on the first face (so it may read down to -3, a face just above the
+    /// point), of the terrain, a spline or an object alike; with nothing under it the answer is
+    /// 1000. The plain sampler gives the highest face there, which under a petrol station's
+    /// canopy is its roof - the point stood metres "under the ground", the NL/NG lift could not
+    /// go down at all and the arcsine of the ramp's angle turned it on its side and then away
+    /// (#2205). The Zweiachser tram's pantograph rests on what this reads from 6 m up
+    /// (`6 - height`, and under 1000 it takes 5 m).
     pub(super) fn update_ground_probe(&mut self) {
         if self.ground.is_none() && self.contact.is_none() {
             return;
@@ -313,7 +336,7 @@ impl VehicleInstance {
             Ev::TrainBackCoupling,
             if self.trailers.is_empty() { 0.0 } else { 1.0 },
         );
-        self.set_engine_ev(Ev::TrainMeReverse, 0.0);
+        self.set_engine_ev(Ev::TrainMeReverse, if self.turned { 1.0 } else { 0.0 });
     }
 
     /// One frame of an AI-controlled vehicle: the pose is set by the traffic system
@@ -531,10 +554,12 @@ impl VehicleInstance {
         if self.ty.def.is_rail() && self.trailers.iter().any(|t| t.track.is_some()) {
             return;
         }
+        self.turned = self
+            .active_cab
+            .and_then(|k| self.trailers.get(k))
+            .is_some_and(|t| t.reversed);
         let mut trailers = std::mem::take(&mut self.trailers);
         super::car_run::set_couplings(&mut trailers);
-        super::car_run::start_bus(self);
-        super::car_run::start_back_bus(self, &mut trailers);
         let mut lead: Option<(DVec3, Mat4, f64)> = None;
         let mut turn = self.turning();
         for t in &mut trailers {
@@ -543,6 +568,7 @@ impl VehicleInstance {
             lead = Some((t.position, t.body_rotation(), t.heading));
             turn = (t.kappa, t.axle_long);
         }
+        super::car_run::run_cables(self, &mut trailers);
         self.trailers = trailers;
     }
 
@@ -565,10 +591,12 @@ impl VehicleInstance {
         if self.trailers.is_empty() {
             return;
         }
+        self.turned = self
+            .active_cab
+            .and_then(|k| self.trailers.get(k))
+            .is_some_and(|t| t.reversed);
         let mut trailers = std::mem::take(&mut self.trailers);
         super::car_run::set_couplings(&mut trailers);
-        super::car_run::start_bus(self);
-        super::car_run::start_back_bus(self, &mut trailers);
         let mut lead: Option<(DVec3, Mat4, f64)> = None;
         let mut turn = self.turning();
         if self.ty.def.is_rail() {
@@ -646,6 +674,7 @@ impl VehicleInstance {
                 turn = (t.kappa, t.axle_long);
             }
         }
+        super::car_run::run_cables(self, &mut trailers);
         self.trailers = trailers;
     }
 }
