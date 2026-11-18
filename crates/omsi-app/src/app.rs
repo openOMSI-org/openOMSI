@@ -12,7 +12,7 @@ const SLOW_UPLOAD_MB_S: f64 = 300.0;
 /// The loading screen's colour (the sky of its blank camera, see `drive_start`): what the
 /// game's window shows before its renderer is there - the loading screen's own #121212 (in
 /// linear light), so the window does not show a blue-grey before it.
-const LOADING_BACKGROUND: wgpu::Color = wgpu::Color { r: 0.0060, g: 0.0060, b: 0.0060, a: 1.0 };
+const LOADING_BACKGROUND: mx::Color = mx::Color { r: 0.0060, g: 0.0060, b: 0.0060, a: 1.0 };
 
 /// The game window's start while its renderer is being built (see `App::create_window`).
 pub(crate) struct WindowStart {
@@ -318,7 +318,7 @@ impl App {
 
     /// The rest of the window's start, with its renderer: the surface, the scene, then the
     /// menu or, when the session is given, the world (`world`: its map opened meanwhile).
-    fn window_ready(&mut self, event_loop: &ActiveEventLoop, mut renderer: Renderer, device: &wgpu::Device, world: Option<Result<(World, Camera, DVec3)>>, show: bool, had_surface: bool) {
+    fn window_ready(&mut self, event_loop: &ActiveEventLoop, mut renderer: Renderer, device: &mx::Device, world: Option<Result<(World, Camera, DVec3)>>, show: bool, had_surface: bool) {
         let Some(window) = self.window.clone() else { return };
         #[cfg(windows)]
         if self.settings.vr_requested() {
@@ -863,9 +863,9 @@ impl App {
             // to full screen, without a resize event) is made again, as the game's own
             // frames do: left as it was, every later frame of the loading screen failed
             // the same way and its picture stood still until the map was there (#776)
-            reconfigure = matches!(acquired, wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost);
-            if let wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) = acquired
+            reconfigure = matches!(acquired, mx::CurrentSurfaceTexture::Outdated | mx::CurrentSurfaceTexture::Lost);
+            if let mx::CurrentSurfaceTexture::Success(frame)
+            | mx::CurrentSurfaceTexture::Suboptimal(frame) = acquired
             {
                 let view = s.view(&renderer.device, &frame);
                 // the tiles loaded so far stay out of the picture: the camera looks at nothing

@@ -46,11 +46,11 @@ fn a_clear_lamp_uses_its_active_night_maps_coverage_at_4x_msaa() {
 
 fn check_night_coverage(samples: u32) {
     let _ = env_logger::try_init();
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions {
             msaa: samples,
             ssao: false,
@@ -61,12 +61,8 @@ fn check_night_coverage(samples: u32) {
         },
     ))
     .expect("test renderer");
-    let info = renderer
-        .adapter
-        .as_ref()
-        .expect("hardware adapter")
-        .get_info();
-    assert_ne!(info.backend, wgpu::Backend::Noop);
+    let info = renderer.adapter.as_ref().expect("hardware adapter").info();
+    assert_ne!(info.backend, mx::Backend::Noop);
     assert_eq!(renderer.options.msaa, samples, "MSAA fallback: {info:?}");
     eprintln!(
         "night coverage: {} {:?}, requested/actual {samples}x MSAA",

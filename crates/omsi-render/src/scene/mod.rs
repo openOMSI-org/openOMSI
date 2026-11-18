@@ -223,7 +223,7 @@ pub struct Scene {
     pub rainfall: Rainfall,
     /// Smoke particles for the next frame (set by the app every frame).
     pub smoke: Vec<SmokeParticle>,
-    pub(crate) smoke_buf: Option<wgpu::Buffer>,
+    pub(crate) smoke_buf: Option<mx::Buffer>,
     pub(crate) smoke_count: u32,
     /// What `smoke_buf` holds (the bytes last written), as `corona_sent` for the coronas.
     pub(crate) smoke_sent: Vec<u8>,
@@ -237,23 +237,23 @@ pub struct Scene {
     pub(crate) params_buf: Option<GpuArray>,
     pub(crate) light_buf: Option<GpuArray>,
     pub(crate) grid_buf: Option<GpuArray>,
-    pub(crate) corona_buf: Option<wgpu::Buffer>,
+    pub(crate) corona_buf: Option<mx::Buffer>,
     pub(crate) corona_count: u32,
     /// What `corona_buf` holds (the bytes last written): the window's picture and its
     /// mirrors send the same coronas in a frame, and it is written once.
     pub(crate) corona_sent: Vec<u8>,
     /// The frame's draw list (see `Batch`), shared by the shadow, prepass and main passes.
     pub(crate) draw_buf: Option<GpuArray>,
-    pub(crate) camera_bind_group: Option<wgpu::BindGroup>,
+    pub(crate) camera_bind_group: Option<mx::BindGroup>,
     /// Which snow track field `camera_bind_group` binds (see `LightRes::snow_track_made`).
     pub(crate) snow_track_seen: u32,
     /// The same with slot 8 not the ground albedo picture, for the pass that draws into it
     /// (a texture is not read and drawn into at once).
-    pub(crate) ground_camera_bind_group: Option<wgpu::BindGroup>,
-    pub(crate) shadow_bind_group: Option<wgpu::BindGroup>,
+    pub(crate) ground_camera_bind_group: Option<mx::BindGroup>,
+    pub(crate) shadow_bind_group: Option<mx::BindGroup>,
     /// As `shadow_bind_group`, with the precipitation roof map's camera.
-    pub(crate) precip_bind_group: Option<wgpu::BindGroup>,
-    pub(crate) sky_bind_group: Option<wgpu::BindGroup>,
+    pub(crate) precip_bind_group: Option<mx::BindGroup>,
+    pub(crate) sky_bind_group: Option<mx::BindGroup>,
     /// HUD images drawn after the scene: (texture, rect in pixels x0,y0,x1,y1).
     pub overlays: Vec<(TextureId, [f32; 4])>,
     /// Overlay textures that hold premultiplied alpha (drawn by `omsi-ui`, e.g. the
@@ -264,7 +264,7 @@ pub struct Scene {
     pub transposed: std::collections::HashSet<TextureId>,
     /// Per overlay: the texture its bind group was made for, its rect buffer and the group
     /// (kept between frames; only the rect is rewritten).
-    pub(crate) overlay_res: Vec<(TextureId, wgpu::Buffer, wgpu::BindGroup, [f32; 8])>,
+    pub(crate) overlay_res: Vec<(TextureId, mx::Buffer, mx::BindGroup, [f32; 8])>,
     /// Structural change (render origin moved, buffers too small): everything is rebuilt.
     pub(crate) dirty: bool,
     /// How many instances (and per-draw entries) the buffers hold; instances added since
@@ -332,11 +332,13 @@ pub struct Scene {
     /// its tile (`lamp_tiles`).
     pub(crate) cabin_places: Vec<Vec3>,
     pub(crate) last_lights: Vec<u8>,
-    /// Material bind groups and uniform buffers made since the last `prepare`, by what they
+    /// Material bindings and table rows made since the last `prepare`, by what they
     /// hold: materials made in one go with the same textures and values share them (a C2's
     /// 965 materials need about a tenth as many). Only for a frame, so that nothing keeps a
     /// freed or replaced texture alive.
-    pub(crate) bind_groups: HashMap<BindKey, (wgpu::BindGroup, wgpu::Buffer)>,
+    pub(crate) bind_groups: HashMap<BindKey, MaterialBinding>,
+    /// Every material's values, bound once in the camera groups (see `MaterialTable`).
+    pub(crate) material_table: MaterialTable,
     /// The number of each material look seen so far, by its key's hash (see `Material::look`).
     pub(crate) looks: hashbrown::HashMap<u64, u32>,
     /// The PBR maps of a diffuse texture (register them before making its materials).
@@ -405,7 +407,7 @@ impl Scene {
     pub fn mesh_page_bytes(&self) -> u64 {
         let shared: u64 = self.mesh_pages.iter().map(|p| p.vertex_cap + p.index_cap).sum();
         // (a set: without base vertices every mesh has buffers of its own, thousands of them)
-        let mut own: std::collections::HashSet<&wgpu::Buffer> = std::collections::HashSet::new();
+        let mut own: std::collections::HashSet<&mx::Buffer> = std::collections::HashSet::new();
         for m in self.meshes.iter().filter(|m| m.page == u32::MAX && !m.ranges.is_empty()) {
             if own.insert(&m.vertex_buf) {
                 own.insert(&m.index_buf);

@@ -316,35 +316,35 @@ impl Renderer {
         let snow_field = self.lights.snow_track.borrow();
         scene.snow_track_seen = self.lights.snow_track_made.get();
         let mut entries = vec![
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 0,
                     resource: self.camera_buf.as_entire_binding(),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 1,
                     resource: model_buf.binding(),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 2,
                     resource: params_buf.binding(),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 5,
-                    resource: wgpu::BindingResource::TextureView(&self.shadows.shadow_view),
+                    resource: mx::BindingResource::TextureView(&self.shadows.shadow_view),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 6,
-                    resource: wgpu::BindingResource::Sampler(&self.shadows.shadow_sampler),
+                    resource: mx::BindingResource::Sampler(&self.shadows.shadow_sampler),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 7,
-                    resource: wgpu::BindingResource::TextureView(&self.shadows.shadow_view_far),
+                    resource: mx::BindingResource::TextureView(&self.shadows.shadow_view_far),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 8,
                     // (Enhanced+: the traced lighting, full size, in place of the SSAO)
                     // (while the AO is off the ground albedo picture is bound here, see `ground_should_bind`)
-                    resource: wgpu::BindingResource::TextureView(
+                    resource: mx::BindingResource::TextureView(
                         self.rt
                             .as_ref()
                             .and_then(|r| r.targets.as_ref())
@@ -353,35 +353,35 @@ impl Renderer {
                             .unwrap_or(&self.white_texture.view),
                     ),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 9,
-                    resource: wgpu::BindingResource::Sampler(&self.ao_sampler),
+                    resource: mx::BindingResource::Sampler(&self.ao_sampler),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 10,
                     resource: draw_buf.binding(),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 11,
                     resource: self.tone.enh_buf.as_entire_binding(),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 13,
-                    resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler),
+                    resource: mx::BindingResource::Sampler(&self.tone.lin_sampler),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 18,
-                    resource: wgpu::BindingResource::TextureView(&self.lights.lm_atlas_view),
+                    resource: mx::BindingResource::TextureView(&self.lights.lm_atlas_view),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 19,
                     resource: self.lights.lm_uniform.as_entire_binding(),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 20,
                     resource: snow_field.as_entire_binding(),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 21,
                     resource: self.lights.snow_track_uniform.as_entire_binding(),
                 },
@@ -391,62 +391,59 @@ impl Renderer {
         }
         // (the point lights where the device has storage buffers for them)
         if array_path() != ArrayPath::NoStorage {
-            entries.push(wgpu::BindGroupEntry { binding: 3, resource: light_buf.binding() });
-            entries.push(wgpu::BindGroupEntry { binding: 4, resource: grid_buf.binding() });
+            entries.push(mx::BindGroupEntry { binding: 3, resource: light_buf.binding() });
+            entries.push(mx::BindGroupEntry { binding: 4, resource: grid_buf.binding() });
         }
         // (the enhanced path's textures: not on the sixteen-texture-unit path, nor in the
         // launcher's preview, which has no reflection probe - see `camera_layout_entries`)
         if let (false, Some(probe)) = (sixteen_texture_units(), self.tone.probe.as_ref()) {
             entries.extend([
-                wgpu::BindGroupEntry { binding: 12, resource: wgpu::BindingResource::TextureView(&probe.view) },
-                wgpu::BindGroupEntry { binding: 14, resource: wgpu::BindingResource::TextureView(&self.sky.sky_lut_view) },
-                wgpu::BindGroupEntry { binding: 17, resource: wgpu::BindingResource::TextureView(&probe.cube_view) },
+                mx::BindGroupEntry { binding: 12, resource: mx::BindingResource::TextureView(&probe.view), },
+                mx::BindGroupEntry { binding: 14, resource: mx::BindingResource::TextureView(&self.sky.sky_lut_view), },
+                mx::BindGroupEntry { binding: 17, resource: mx::BindingResource::TextureView(&probe.cube_view), },
             ]);
         }
-        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("camera"),
-            layout: &self.camera_layout,
             entries: &entries,
         });
         scene.ground_camera_bind_group = ground_bound.then(|| {
             let mut other = entries.clone();
             if let Some(e) = other.iter_mut().find(|e| e.binding == 8) {
-                e.resource = wgpu::BindingResource::TextureView(&self.white_texture.view);
+                e.resource = mx::BindingResource::TextureView(&self.white_texture.view);
             }
-            self.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("camera, ground albedo pass"), layout: &self.camera_layout, entries: &other })
+            self.device.create_bind_group(&mx::BindGroupDescriptor { label: Some("camera, ground albedo pass"),  entries: &other })
         });
         scene.camera_bind_group = Some(bg);
-        let sbg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let sbg = self.device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("shadow camera"),
-            layout: &self.shadows.shadow_layout,
             entries: &[
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 0,
                     resource: self.camera_buf.as_entire_binding(),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 1,
                     resource: model_buf.binding(),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 2,
                     resource: params_buf.binding(),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 10,
                     resource: draw_buf.binding(),
                 },
             ],
         });
         scene.shadow_bind_group = Some(sbg);
-        scene.precip_bind_group = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        scene.precip_bind_group = Some(self.device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("precipitation roof camera"),
-            layout: &self.shadows.shadow_layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: self.shadows.precip.camera_buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: model_buf.binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: params_buf.binding() },
-                wgpu::BindGroupEntry { binding: 10, resource: draw_buf.binding() },
+                mx::BindGroupEntry { binding: 0, resource: self.shadows.precip.camera_buf.as_entire_binding() },
+                mx::BindGroupEntry { binding: 1, resource: model_buf.binding() },
+                mx::BindGroupEntry { binding: 2, resource: params_buf.binding() },
+                mx::BindGroupEntry { binding: 10, resource: draw_buf.binding() },
             ],
         }));
     }
@@ -454,6 +451,13 @@ impl Renderer {
     /// Upload the frame's draw list, growing its buffer (and the bind groups that hold it)
     /// when it no longer fits.
     pub(crate) fn upload_draw_list(&self, scene: &mut Scene, list: &[u32]) {
+        // (a picture more: material table rows retired a few pictures ago are free again)
+        scene
+            .material_table
+            .rows
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .frame += 1;
         let bytes: &[u8] = bytemuck::cast_slice(if list.is_empty() { &[0u32] } else { list });
         let fits = scene
             .draw_buf

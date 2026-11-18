@@ -4,13 +4,12 @@
 use crate::*;
 
 /// The placeholders freed scene slots share: an empty vertex and index buffer and a plain
-/// material bind group. Making new ones for every freed slot (two buffers per mesh, a
+/// material binding. Making new ones for every freed slot (two buffers per mesh, a
 /// buffer and a bind group per material) was most of a tile unload's time.
 pub(crate) struct Freed {
-    pub(crate) vertex_buf: wgpu::Buffer,
-    pub(crate) index_buf: wgpu::Buffer,
-    pub(crate) bind_group: wgpu::BindGroup,
-    pub(crate) buf: wgpu::Buffer,
+    pub(crate) vertex_buf: mx::Buffer,
+    pub(crate) index_buf: mx::Buffer,
+    pub(crate) binding: MaterialBinding,
 }
 
 /// Letting go of scene resources again (tile streaming). Ids stay stable: a freed mesh,
@@ -28,24 +27,27 @@ impl Renderer {
             let plain = self.add_material(scene, None, AlphaMode::Opaque, [1.0; 4], false);
             self.address_next.set(address);
             let m = scene.materials.swap_remove(plain);
-            let (bind_group, buf) = (m.bind_group, m.buf);
-            let vertex_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("freed mesh"),
-                size: std::mem::size_of::<Vertex>() as u64,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            let index_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("freed mesh"),
-                size: 4,
-                usage: wgpu::BufferUsages::INDEX,
-                mapped_at_creation: false,
-            });
+            let binding = m.binding;
+            let vertex_buf = self
+                .device
+                .create_buffer(&mx::BufferDescriptor {
+                    label: Some("freed mesh"),
+                    size: std::mem::size_of::<Vertex>() as u64,
+                    usage: mx::BufferUsages::VERTEX | mx::BufferUsages::COPY_DST,
+                })
+                .expect("mX: a buffer");
+            let index_buf = self
+                .device
+                .create_buffer(&mx::BufferDescriptor {
+                    label: Some("freed mesh"),
+                    size: 4,
+                    usage: mx::BufferUsages::INDEX,
+                })
+                .expect("mX: a buffer");
             let _ = self.freed.set(Freed {
                 vertex_buf,
                 index_buf,
-                bind_group,
-                buf,
+                binding,
             });
         }
         self.freed.get().unwrap()
@@ -98,15 +100,12 @@ impl Renderer {
         }
     }
 
-    /// Release a material's bind group (and with it the textures it held).
+    /// Release a material's binding (and with it the textures and the table row it held).
     pub fn free_material(&self, scene: &mut Scene, id: MaterialId) {
         if id >= scene.materials.len() {
             return;
         }
-        let (bind_group, buf) = {
-            let f = self.freed(scene);
-            (f.bind_group.clone(), f.buf.clone())
-        };
+        let binding = self.freed(scene).binding.clone();
         let look = scene.intern_look(0);
         scene.materials[id] = Material {
             texture: None,
@@ -126,8 +125,7 @@ impl Renderer {
             transmap: None,
             address: TexAddressing::Wrap,
             uniform: <MaterialUniform as bytemuck::Zeroable>::zeroed(),
-            buf,
-            bind_group,
+            binding,
             look,
         };
     }

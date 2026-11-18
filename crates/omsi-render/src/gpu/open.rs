@@ -8,47 +8,47 @@ static MSAA_RETRY: super::auxiliary::AdapterBool = super::auxiliary::AdapterBool
 
 impl Renderer {
     /// The adapter used by this renderer. Auxiliary devices must reuse it, not select again.
-    pub fn adapter(&self) -> Option<wgpu::Adapter> {
+    pub fn adapter(&self) -> Option<mx::Adapter> {
         self.adapter.clone()
     }
 
     /// Create a renderer with the default options. `surface` is used to pick a compatible
     /// adapter and format.
     pub async fn new(
-        instance: &wgpu::Instance,
-        surface: Option<&wgpu::Surface<'_>>,
-        format: Option<wgpu::TextureFormat>,
+        instance: &mx::Instance,
+        surface: Option<&mx::Surface<'_>>,
+        format: Option<mx::TextureFormat>,
     ) -> Result<Renderer> {
         Self::new_with(instance, surface, format, RenderOptions::default()).await
     }
 
     /// Create a renderer with the given graphics settings.
     pub async fn new_with(
-        instance: &wgpu::Instance,
-        surface: Option<&wgpu::Surface<'_>>,
-        format: Option<wgpu::TextureFormat>,
+        instance: &mx::Instance,
+        surface: Option<&mx::Surface<'_>>,
+        format: Option<mx::TextureFormat>,
         options: RenderOptions,
     ) -> Result<Renderer> {
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, compatible_surface: surface, force_fallback_adapter: false, ..Default::default() })
-            .await
-            .map_err(|e| anyhow!("no graphics adapter that can draw the game was found (Metal, Vulkan, DirectX 12 or OpenGL 3.3 or later); updating the graphics driver often helps: {e}"))?;
+        let adapter = surface
+            .map(|s| Self::adapters_for(instance, s))
+            .unwrap_or_else(|| instance.enumerate_adapters())
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("no graphics adapter that can draw the game was found (Metal, Vulkan, DirectX 12 or OpenGL 3.3 or later); updating the graphics driver often helps"))?;
         Self::new_on(adapter, surface, format, options).await
     }
 
     /// The adapters of `instance` that can show `surface`, the ones worth trying first first:
     /// a graphics card of its own, then the processor's graphics, then anything else (a
     /// software renderer last).
-    pub fn adapters_for(instance: &wgpu::Instance, surface: &wgpu::Surface<'_>) -> Vec<wgpu::Adapter> {
-        let mut v: Vec<wgpu::Adapter> = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::all()))
-            .into_iter()
-            .filter(|a| a.is_surface_supported(surface))
-            .collect();
-        let rank = |a: &wgpu::Adapter| match a.get_info().device_type {
-            wgpu::DeviceType::DiscreteGpu => 0,
-            wgpu::DeviceType::IntegratedGpu => 1,
-            wgpu::DeviceType::VirtualGpu | wgpu::DeviceType::Other => 2,
-            wgpu::DeviceType::Cpu => 3,
+    pub fn adapters_for(instance: &mx::Instance, surface: &mx::Surface<'_>) -> Vec<mx::Adapter> {
+        let _ = surface;
+        let mut v: Vec<mx::Adapter> = instance.enumerate_adapters();
+        let rank = |a: &mx::Adapter| match a.info().device_type {
+            mx::DeviceType::DiscreteGpu => 0,
+            mx::DeviceType::IntegratedGpu => 1,
+            mx::DeviceType::VirtualGpu | mx::DeviceType::Other => 2,
+            mx::DeviceType::Cpu => 3,
         };
         v.sort_by_key(rank);
         v
@@ -56,9 +56,9 @@ impl Renderer {
 
     /// Create a renderer on this adapter.
     pub async fn new_on(
-        adapter: wgpu::Adapter,
-        surface: Option<&wgpu::Surface<'_>>,
-        format: Option<wgpu::TextureFormat>,
+        adapter: mx::Adapter,
+        surface: Option<&mx::Surface<'_>>,
+        format: Option<mx::TextureFormat>,
         options: RenderOptions,
     ) -> Result<Renderer> {
         Self::open_on(adapter, surface, format, options).await?.finish().await
@@ -67,12 +67,12 @@ impl Renderer {
     /// The graphics device for a renderer on this adapter, its pipelines not built yet: see
     /// [`Opened`].
     pub async fn open_on(
-        adapter: wgpu::Adapter,
-        surface: Option<&wgpu::Surface<'_>>,
-        format: Option<wgpu::TextureFormat>,
+        adapter: mx::Adapter,
+        surface: Option<&mx::Surface<'_>>,
+        format: Option<mx::TextureFormat>,
         options: RenderOptions,
     ) -> Result<Opened> {
-        let info = adapter.get_info();
+        let info = adapter.info();
         let asked_options = options;
         // test hooks for an adapter that cannot be opened: an error, or wgpu going down
         #[cfg(feature = "test-hooks")]
@@ -86,13 +86,13 @@ impl Renderer {
         // targets, the shadow maps) and the driver need; an integrated one shares the
         // system's memory, Apple's generously
         let mem = adapter.memory_info();
-        let vram = adapter_vram_mb(&adapter, &info, mem.as_ref());
+        let vram = adapter_vram_mb(&info, mem.as_ref());
         let guess_mb = gpu_memory::texture_allowance_mb(&info, vram, mem.as_ref());
         let discrete_vram = gpu_memory::own_card_vram_mb(&info, vram);
         log::info!("graphics adapter: {} ({:?}, {:?}{}), texture memory taken for it: {guess_mb} MB", info.name, info.device_type, info.backend, vram.map(|v| format!(", {v} MB of its own")).unwrap_or_default());
         if let Some(m) = mem {
             let mb = |b: Option<u64>| b.map_or_else(|| "-".to_string(), |b| format!("{} MB", b >> 20));
-            log::info!("graphics memory as {:?} reports it: {} MB its own, {} MB shared, budget {}, in use {}", info.backend, m.dedicated_bytes >> 20, m.shared_bytes >> 20, mb(m.budget_bytes), mb(m.usage_bytes));
+            log::info!("graphics memory as {:?} reports it: {} MB its own, budget {}", info.backend, m.dedicated_bytes >> 20, mb(m.budget_bytes));
         }
         // The legacy Intel Windows Vulkan branch has repeatedly crashed inside igvk64.dll
         // while compiling the larger multisampled/SSAO pipeline set. This is a driver access
@@ -100,7 +100,7 @@ impl Renderer {
         // with the conservative feature set instead. OMSI_INTEL_FULL_GPU=1 is useful for
         // retesting after a driver update without rebuilding the game.
         let intel_vulkan_safe = cfg!(windows)
-            && info.backend == wgpu::Backend::Vulkan
+            && info.backend == mx::Backend::Vulkan
             && info.vendor == 0x8086
             && !omsi_cfg::flags::OMSI_INTEL_FULL_GPU.is_set();
         let options = if intel_vulkan_safe {
@@ -119,9 +119,10 @@ impl Renderer {
             options
         };
         // a small or shared graphics chip gets a lighter picture (see `lighter_picture`)
-        GL_BACKEND.store(info.backend == wgpu::Backend::Gl, std::sync::atomic::Ordering::Relaxed);
-        AMD_VULKAN.store(info.backend == wgpu::Backend::Vulkan && info.vendor == 0x1002, std::sync::atomic::Ordering::Relaxed);
-        MULTISAMPLED_SHADING.store(!cfg!(any(target_os = "android", target_vendor = "apple")) && info.backend != wgpu::Backend::Gl && adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::MULTISAMPLED_SHADING), std::sync::atomic::Ordering::Relaxed);
+        GL_BACKEND.store(info.backend == mx::Backend::Gl, std::sync::atomic::Ordering::Relaxed);
+        AMD_VULKAN.store(info.backend == mx::Backend::Vulkan && info.vendor == 0x1002, std::sync::atomic::Ordering::Relaxed);
+        // (per-sample shading: every bindless backend of mX has it)
+        MULTISAMPLED_SHADING.store(!cfg!(any(target_os = "android", target_vendor = "apple")) && info.backend != mx::Backend::Gl, std::sync::atomic::Ordering::Relaxed);
         let options = gpu_memory::lighter_picture(&info, vram, options);
         // Temporal upscaling (DirectX 12 or Vulkan, DLSS an NVIDIA RTX card too; MetalFX on
         // Metal) replaces the MSAA. DLSS on Vulkan starts Streamline now: the device is made with its extensions.
@@ -136,33 +137,16 @@ impl Renderer {
         let shadow_size = options
             .shadow_size
             .clamp(512, if intel_vulkan_safe { 2048 } else { 8192 });
-        let mut limits = wgpu::Limits::default().using_resolution(adapter.limits());
-        if intel_vulkan_safe {
-            // Do not request every large limit the Intel driver advertises. In particular,
-            // asking for its maximum storage-buffer and buffer sizes makes 31.0.101.2141
-            // crash in vkCreateDevice instead of returning a VkResult. The WebGPU defaults
-            // are ample for the renderer and stay on the driver's well-tested path.
-            limits = wgpu::Limits::default().using_resolution(adapter.limits());
-        } else {
-            limits.max_storage_buffer_binding_size =
-                adapter.limits().max_storage_buffer_binding_size;
-            limits.max_buffer_size = adapter.limits().max_buffer_size;
-            limits.max_sampled_textures_per_shader_stage =
-                limits.max_sampled_textures_per_shader_stage.max(adapter.limits().max_sampled_textures_per_shader_stage.min(crate::pipelines::scene::PANE_MASK_TEXTURES));
-        }
-        // an older or smaller graphics chip (an OpenGL one, a GT 530) does not reach the
-        // WebGPU defaults: asked for them anyway, the device was never opened
-        if !limits.check_limits(&adapter.limits()) {
-            log::warn!("{}: below the standard limits; using what it has", info.name);
-            limits = adapter.limits();
-        }
-        // OMSI_GPU_LIMITS=default|downlevel: the WebGPU defaults (or the downlevel ones) and
-        // nothing more, whatever this machine could do - to find what a stricter driver refuses
-        match omsi_cfg::flags::OMSI_GPU_LIMITS.var() {
-            Some("default") => limits = wgpu::Limits::default(),
-            Some("downlevel") => limits = wgpu::Limits::downlevel_defaults(),
-            _ => {}
-        }
+        // (mX opens every device with all it has: no limits or features to ask for)
+        // OMSI_GPU_LIMITS=default|downlevel: the device keeps to the common limits (or an older
+        // chip's) and nothing more, whatever this machine could do - to find what a stricter
+        // driver refuses
+        let cap = match omsi_cfg::flags::OMSI_GPU_LIMITS.var() {
+            Some("default") => Some(mx::Limits::default()),
+            Some("downlevel") => Some(mx::Limits::downlevel()),
+            _ => None,
+        };
+        let limits = adapter.limits().capped(cap.as_ref());
         // the shadow atlas is two maps wide: no wider than the card draws
         let shadow_size = shadow_size.min(limits.max_texture_dimension_2d / 2).max(256);
         let format = format
@@ -179,64 +163,25 @@ impl Renderer {
                     formats[0]
                 })
             })
-            .unwrap_or(wgpu::TextureFormat::Rgba8UnormSrgb);
+            .unwrap_or(mx::TextureFormat::Rgba8UnormSrgb);
         // Every target the scene is drawn into with multisampling (the swap chain or mirror
         // format, the HDR target of the enhanced path and its screen mask, the depth buffer)
-        // must take the sample count, and the colour targets must resolve. A device judges
-        // that by the WebGPU table, which promises only 1x and 4x, unless it was asked for
-        // the adapter's own table: the launcher's "2x MSAA" (which Apple GPUs do support)
-        // was a fatal validation error before the first frame because the adapter's table
-        // said yes and the device's said no. So the adapter's table is asked for when the
-        // wanted count needs it (2x, 8x), and the count is checked against the table the
-        // device will use.
+        // must take the sample count, and the colour targets must resolve.
         let wanted = match options.msaa {
             1 | 2 | 4 | 8 => options.msaa,
             _ => MSAA,
         };
-        let targets = [format, wgpu::TextureFormat::Rgba16Float, DEPTH_FORMAT, MASK_FORMAT];
-        let takes = |flags: wgpu::TextureFormatFeatureFlags, f: wgpu::TextureFormat, n: u32| {
-            flags.sample_count_supported(n)
-                && (n == 1
-                    || f.is_depth_stencil_format()
-                    || flags.contains(wgpu::TextureFormatFeatureFlags::MULTISAMPLE_RESOLVE))
-        };
-        let adapter_table_needed = !targets.iter().all(|&f| {
-            takes(
-                f.guaranteed_format_features(wgpu::Features::empty()).flags,
-                f,
-                wanted,
-            )
-        });
-        let mut required_features = if adapter_table_needed && info.backend != wgpu::Backend::Noop {
-            adapter.features() & wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
-        } else {
-            wgpu::Features::empty()
-        };
-        if omsi_cfg::flags::OMSI_GPU_TIMERS.is_set() {
-            required_features |= adapter.features() & wgpu::Features::TIMESTAMP_QUERY;
-        }
-        // (FSR 3 on Vulkan picks its 16 bit shaders by what the card has, not what the device enabled)
-        if info.backend == wgpu::Backend::Vulkan && options.temporal.is_some_and(|t| t.upscaler == crate::temporal::TemporalUpscaler::Fsr3) {
-            required_features |= adapter.features() & wgpu::Features::SHADER_F16;
-        }
+        let targets = [format, mx::TextureFormat::Rgba16Float, DEPTH_FORMAT, MASK_FORMAT];
+        let supported = |n: u32| targets.iter().all(|&f| adapter.supports_msaa(f, n));
         // DXT textures stay compressed on the GPU where it takes them (Apple silicon does);
         // OMSI_NO_BC=1 uploads everything as RGBA (the old way, for comparisons), and so does
-        // the settings' `gpu_texture_compression` off
-        if !omsi_cfg::flags::OMSI_NO_BC.is_set() && options.gpu_texture_compression {
-            required_features |= adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC;
-        } else if !options.gpu_texture_compression {
+        // the settings' `gpu_texture_compression` off; the Intel Vulkan profile decodes them
+        let bc = adapter.supports_bc()
+            && !omsi_cfg::flags::OMSI_NO_BC.is_set()
+            && options.gpu_texture_compression
+            && !intel_vulkan_safe;
+        if !options.gpu_texture_compression {
             log::info!("GPU texture compression off in the settings: DXT/BC textures are decoded to RGBA");
-        }
-        if intel_vulkan_safe {
-            // Keep vkCreateDevice entirely free of optional extensions. Compressed source
-            // textures are decoded to RGBA by upload_texture on this device.
-            required_features = wgpu::Features::empty();
-        }
-        // the driver's compiled pipelines kept for the next start (Vulkan, OpenGL)
-        if !intel_vulkan_safe {
-            required_features |= pipeline_cache::wanted(&adapter);
-            // (the vehicles' blank display textures cleared on the GPU, `add_blank_texture`)
-            required_features |= adapter.features() & wgpu::Features::CLEAR_TEXTURE;
         }
         // Enhanced+: hardware ray queries where the device has them (Apple silicon from the
         // M3/A17 on, RTX and RDNA 2 cards and newer through Vulkan and Direct3D 12 - with DXC,
@@ -244,73 +189,29 @@ impl Renderer {
         // the device refuse its work all the same, it falls back to Enhanced (`rt_error`).
         let ray_query = options.ray_tracing
             && !intel_vulkan_safe
-            && info.backend != wgpu::Backend::Noop
-            && adapter.features().contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
+            && adapter.supports_ray_query()
             && !omsi_cfg::flags::OMSI_NO_RT.is_set();
-        if ray_query {
-            required_features |= wgpu::Features::EXPERIMENTAL_RAY_QUERY;
-            limits = limits.using_acceleration_structure_values(adapter.limits());
-        } else if options.ray_tracing {
+        if options.ray_tracing && !ray_query {
             log::warn!("{}: no hardware ray queries; Enhanced+ is drawn as Enhanced", info.name);
         }
-        device_selection::select_array_path(&adapter, &limits, &info);
-        log::info!("opening graphics device: {} ({:?}, vendor {:#06x}, device {:#06x}), features {:?}, max buffer {} MB, max storage binding {} MB", info.name, info.backend, info.vendor, info.device, required_features, limits.max_buffer_size / 1_000_000, limits.max_storage_buffer_binding_size as u64 / 1_000_000);
-        let desc = wgpu::DeviceDescriptor {
+        device_selection::select_array_path(&adapter, &info);
+        log::info!("opening graphics device: {} ({:?}, vendor {:#06x}, device {:#06x}), BC {bc}, ray queries {ray_query}", info.name, info.backend, info.vendor, info.device);
+        // (DLSS on Vulkan: its device extensions beside mX's own)
+        let vulkan_extensions = dlss_extensions.unwrap_or_default();
+        let (device, queue) = adapter
+            .request_device(&mx::DeviceDescriptor {
                 label: Some("omsi"),
-                required_features,
-                required_limits: limits,
-                // (the allocator's small blocks, 8-64 MB, for every card: a block goes back
-                // to the driver only once it is empty, and with the scenery's thousands of
-                // textures coming and going a 128-256 MB block of the performance hint hardly
-                // ever was. They left hundreds of MB reserved and unused, 2 GB cards lost the
-                // device to "Out of memory" in the first frames with the textures well under
-                // budget, #332, #295, and a 12 GB card held 13 GB in 63 blocks for 8 GB of
-                // textures and buffers and paged, #2295. A few hundred blocks are well under
-                // a driver's allocation limit, NVIDIA's 4096.)
-                memory_hints: wgpu::MemoryHints::MemoryUsage,
-                // (the ray queries are still an experimental feature of wgpu)
-                experimental_features: if ray_query { unsafe { wgpu::ExperimentalFeatures::enabled() } } else { wgpu::ExperimentalFeatures::disabled() },
+                vulkan_extensions: &vulkan_extensions,
+                limits: cap,
                 ..Default::default()
-            };
-        let mut options = options;
-        let made = dlss_extensions.and_then(|extensions| match upscaler_device::open_with(&adapter, &desc, extensions) {
-            Ok(made) => Some(made),
-            Err(e) => {
-                // (the device as wgpu makes it, DLSS off: better than no picture)
-                crate::temporal::dlss_vulkan_abandon();
-                log::warn!("dlss upscaling is off: {e:#}");
-                options.temporal = None;
-                options.msaa = options.msaa_fallback.max(1);
-                None
-            }
-        });
-        let (device, queue) = match made {
-            Some(made) => made,
-            None => adapter.request_device(&desc).await.context("request_device")?,
-        };
+            })
+            .context("opening the graphics device")?;
         log::info!("graphics device opened; compiling renderer pipelines");
         if auxiliary_context().is_none() {
             ADAPTER_TEXTURE_MB.store(guess_mb, std::sync::atomic::Ordering::Relaxed);
             ADAPTER_VRAM_MB.store(discrete_vram, std::sync::atomic::Ordering::Relaxed);
             *ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()) = Some(info.clone());
-            pipeline_cache::open(&device, &info);
         }
-        // the same choice wgpu-core makes when it validates a texture or a pipeline
-        let adapter_table = device
-            .features()
-            .contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES)
-            || !adapter
-                .get_downlevel_capabilities()
-                .flags
-                .contains(wgpu::DownlevelFlags::WEBGPU_TEXTURE_FORMAT_SUPPORT);
-        let flags_of = |f: wgpu::TextureFormat| {
-            if adapter_table {
-                adapter.get_texture_format_features(f).flags
-            } else {
-                f.guaranteed_format_features(device.features()).flags
-            }
-        };
-        let supported = |n: u32| targets.iter().all(|&f| takes(flags_of(f), f, n));
         let wanted = if ray_query && wanted > 4 && !omsi_cfg::flags::OMSI_FULL_GPU.is_set() {
             log::info!("Enhanced+: {wanted}x MSAA drawn at 4x (8x doubles the ray traced passes' cost and their targets' memory)");
             4
@@ -328,7 +229,8 @@ impl Renderer {
             }
         });
         if msaa != wanted {
-            log::warn!("{}x MSAA is not supported by {} (the device takes {:?} samples for {:?}, {:?} for the HDR target, {:?} for depth); using {}x", wanted, info.name, flags_of(format).supported_sample_counts(), format, flags_of(targets[1]).supported_sample_counts(), flags_of(DEPTH_FORMAT).supported_sample_counts(), msaa);
+            log::warn!("{wanted}x MSAA is not supported by {} for {format:?}, the HDR target and depth; using {msaa}x",
+                info.name);
         }
         let options = RenderOptions {
             msaa,
@@ -342,34 +244,23 @@ impl Renderer {
             ..options
         };
         RT_BUFFERS.store(ray_query, std::sync::atomic::Ordering::Relaxed);
-        let bc = device
-            .features()
-            .contains(wgpu::Features::TEXTURE_COMPRESSION_BC);
         let compress =
             bc && options.compress_textures && !omsi_cfg::flags::OMSI_NO_TEXCOMPRESS.is_set();
-        let halve = halves_plain(adapter.features(), &options);
+        let halve = halves_plain(adapter.supports_bc(), &options);
         if auxiliary_context().is_none() {
             omsi_texture::set_gpu_options(omsi_texture::GpuOptions { bc, compress });
             omsi_texture::gpu::set_halve_plain(halve);
         }
-        log::info!("renderer: {} ({:?}), {:?}, {}x MSAA{}, anisotropy {}, shadow map {}, SSAO {}, render scale {}, textures {}", info.name, info.backend, format, options.msaa, if adapter_table { " (adapter format table)" } else { "" }, options.anisotropy, options.shadow_size, options.ssao, if options.render_scale > 0.0 { format!("{:.2}", options.render_scale.clamp(0.5, 1.0)) } else { "auto".to_string() }, match (bc, compress) { (false, _) if halve => "RGBA at half size (no BC on this device)", (false, _) => "RGBA (no BC on this device)", (true, false) => "DXT as blocks, others RGBA", (true, true) => "DXT as blocks, others compressed where close" });
-        // Every pipeline is built under an error scope of every kind and the renderer built
-        // again with less where one fails: without multisampling (a driver whose table
-        // promises more than it takes), then without the pipelines a picture can do without
-        // (`basic_pipelines`), then both. A phone driver whose shader compiler gives up on a
-        // pipeline reports it as an *internal* error, not a validation error: caught as
-        // validation errors only, it went by, the pipeline stayed invalid and the first frame
-        // stopped on "RenderPipeline with 'omsi' label is invalid" (#1663, #1664 - Adreno
-        // 740/830 since 0.2.0), and the retry without multisampling was not checked at all.
-        let mesh_pages = adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::BASE_VERTEX);
+        log::info!("renderer: {} ({:?}), {:?}, {}x MSAA, anisotropy {}, shadow map {}, SSAO {}, render scale {}, textures {}", info.name, info.backend, format, options.msaa,  options.anisotropy, options.shadow_size, options.ssao, if options.render_scale > 0.0 { format!("{:.2}", options.render_scale.clamp(0.5, 1.0)) } else { "auto".to_string() }, match (bc, compress) { (false, _) if halve => "RGBA at half size (no BC on this device)", (false, _) => "RGBA (no BC on this device)", (true, false) => "DXT as blocks, others RGBA", (true, true) => "DXT as blocks, others compressed where close" });
+        let mesh_pages = adapter.supports_base_vertex();
         let name = format!("{} ({:?})", info.name, info.backend);
         Ok(Opened { adapter, info, device, queue, format, options, asked_options, mesh_pages, name })
     }
 }
 
 /// Only a chip with no BC at all (a phone's), not one whose BC a setting turned off.
-fn halves_plain(adapter: wgpu::Features, options: &RenderOptions) -> bool {
-    !adapter.contains(wgpu::Features::TEXTURE_COMPRESSION_BC) && options.compress_textures && !omsi_cfg::flags::OMSI_NO_TEXCOMPRESS.is_set()
+fn halves_plain(adapter_bc: bool, options: &RenderOptions) -> bool {
+    !adapter_bc && options.compress_textures && !omsi_cfg::flags::OMSI_NO_TEXCOMPRESS.is_set()
 }
 
 /// A graphics device opened for a renderer whose pipelines are not built yet
@@ -378,11 +269,11 @@ fn halves_plain(adapter: wgpu::Features, options: &RenderOptions) -> bool {
 /// pipelines took seconds (8 on DirectX 12, which keeps no cache of them for us), and a
 /// window shown meanwhile stood blank, or white where it had been smaller.
 pub struct Opened {
-    pub(crate) adapter: wgpu::Adapter,
-    pub(crate) info: wgpu::AdapterInfo,
-    pub(crate) device: wgpu::Device,
-    pub(crate) queue: wgpu::Queue,
-    pub(crate) format: wgpu::TextureFormat,
+    pub(crate) adapter: mx::Adapter,
+    pub(crate) info: mx::AdapterInfo,
+    pub(crate) device: mx::Device,
+    pub(crate) queue: mx::Queue,
+    pub(crate) format: mx::TextureFormat,
     pub(crate) options: RenderOptions,
     pub(crate) asked_options: RenderOptions,
     pub(crate) mesh_pages: bool,
@@ -390,20 +281,20 @@ pub struct Opened {
 }
 
 impl Opened {
-    pub fn device(&self) -> &wgpu::Device {
+    pub fn device(&self) -> &mx::Device {
         &self.device
     }
 
-    pub fn queue(&self) -> &wgpu::Queue {
+    pub fn queue(&self) -> &mx::Queue {
         &self.queue
     }
 
     /// The format the renderer draws its pictures in (the window's).
-    pub fn format(&self) -> wgpu::TextureFormat {
+    pub fn format(&self) -> mx::TextureFormat {
         self.format
     }
 
-    pub fn adapter_info(&self) -> &wgpu::AdapterInfo {
+    pub fn adapter_info(&self) -> &mx::AdapterInfo {
         &self.info
     }
 
@@ -432,7 +323,6 @@ impl Opened {
         }
         if let Some(why) = made.as_ref().ok().and_then(|r| r.device_lost()) {
             drop(made);
-            pipeline_cache::close(&device);
             // (lost while the chosen MSAA was tried again: what worked before is written down
             // for this version already, and the device opened again keeps to it - not to the
             // basic pipelines at 1x, which it never needed)
@@ -458,11 +348,6 @@ impl Opened {
         }
         // (the retry is over; a device lost later in the run takes the usual way)
         MSAA_RETRY.store(false, std::sync::atomic::Ordering::Relaxed);
-        match &made {
-            Ok(_) if auxiliary_context().is_none() => pipeline_cache::save(),
-            Ok(_) => {}
-            Err(_) => pipeline_cache::close(&device),
-        }
         made
     }
 }
@@ -470,11 +355,11 @@ impl Opened {
 impl Renderer {
     /// Build the renderer on `device`, again with less where a build fails (see `new_on`).
     pub(crate) async fn build_with_fallbacks(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        info: &wgpu::AdapterInfo,
+        device: &mx::Device,
+        queue: &mx::Queue,
+        info: &mx::AdapterInfo,
         name: &str,
-        format: wgpu::TextureFormat,
+        format: mx::TextureFormat,
         options: RenderOptions,
         mesh_pages: bool,
     ) -> Result<Renderer> {
@@ -524,22 +409,24 @@ impl Renderer {
             // are made, on ANGLE the compiler thread - from the calling thread they caught
             // nothing there, and a failed build was taken for a working one)
             let build = || {
-                let internal = device.push_error_scope(wgpu::ErrorFilter::Internal);
-                let memory = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-                let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
-                let (renderer, caught) = pipelines::parallel::catching(|| Self::build(device.clone(), queue.clone(), name.to_string(), format, RenderOptions { msaa, ..options }));
-                // (test hook: OMSI_FAKE_GPU_ERROR=pipeline fails a pipeline until the basic ones)
-                #[cfg(feature = "test-hooks")]
-                if !basic && omsi_cfg::flags::OMSI_FAKE_GPU_ERROR.var() == Some("pipeline") {
-                    let _ = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("test"), source: wgpu::ShaderSource::Wgsl("fn broken( {".into()) });
-                }
-                (renderer, [validation.pop(), memory.pop(), internal.pop()], caught)
+                gpu_attempt(|| {
+                    let renderer = Self::build(device.clone(), queue.clone(), name.to_string(), format, RenderOptions { msaa, ..options });
+                    // (test hook: OMSI_FAKE_GPU_ERROR=pipeline fails a pipeline until the basic ones)
+                    #[cfg(feature = "test-hooks")]
+                    if !basic && omsi_cfg::flags::OMSI_FAKE_GPU_ERROR.var() == Some("pipeline") {
+                        let _ = device
+                            .create_shader_module(&mx::ShaderModuleDescriptor {
+                                label: Some("test"),
+                                source: "fn broken( {",
+                            })
+                            .expect("mX: a shader");
+                    }
+                    renderer
+                })
             };
-            let (renderer, scopes, caught) = if is_angle(info) { angle::compile(device, build) } else { build() };
-            let [validation, memory, internal] = scopes;
-            let errors = [validation.await, memory.await, internal.await];
-            match errors.iter().flatten().chain(&caught).next() {
-                None => {
+            let attempt = if is_angle(info) { angle::compile(device, build) } else { build() };
+            match attempt {
+                Ok(renderer) => {
                     if msaa != options.msaa || basic {
                         log::warn!("{}: drawing with {}x MSAA{}", info.name, msaa, match (basic, rainfall_pipeline()) {
                             (true, true) => ", without the snowfall, the lamps in the fog and the street lamps' shadows",
@@ -555,10 +442,9 @@ impl Renderer {
                     made = Ok(Renderer { mesh_pages, ..renderer });
                     break;
                 }
-                Some(e) => {
-                    log::error!("{}: the renderer's pipelines failed ({}x MSAA{}): {}", info.name, msaa, if basic { ", basic pipelines" } else { "" }, gpu_error_text(e));
-                    made = Err(anyhow!("renderer pipelines: {}", gpu_error_text(e)));
-                    drop(renderer);
+                Err(e) => {
+                    log::error!("{}: the renderer's pipelines failed ({}x MSAA{}): {e}", info.name, msaa, if basic { ", basic pipelines" } else { "" });
+                    made = Err(anyhow!("renderer pipelines: {e}"));
                 }
             }
         }
@@ -567,10 +453,10 @@ impl Renderer {
 
     /// The pipelines, samplers and fixed textures of a renderer whose options are settled.
     pub(crate) fn build(
-        device: wgpu::Device,
-        queue: wgpu::Queue,
+        device: mx::Device,
+        queue: mx::Queue,
         adapter_name: String,
-        format: wgpu::TextureFormat,
+        format: mx::TextureFormat,
         options: RenderOptions,
     ) -> Renderer {
         use pipelines::{coronas, defaults, enhanced, errors, mip, overlays, passes, post, scene, shadows, sky, ssao, upscale};
@@ -582,7 +468,7 @@ impl Renderer {
             log::warn!("renderer: the enhanced graphics take more textures than OpenGL has units for on {adapter_name}; drawing vanilla+");
         }
         let scene = scene::SceneBase::new(&device, leave_out_enhanced, options.detailed_trees);
-        let hdr_format = wgpu::TextureFormat::Rgba16Float;
+        let hdr_format = mx::TextureFormat::Rgba16Float;
         let shadows = shadows::build(&device, &scene, shadow_size, !leave_out_enhanced && !options.no_enhanced, options.light_shadows >= 2);
         if shadows.size < shadow_size {
             update_ceiling(|ceiling| {
@@ -593,10 +479,10 @@ impl Renderer {
         let defaults = defaults::build(&device, &queue, options.anisotropy);
         let (coronas, corona_texture) = coronas::Coronas::new(&device, &queue, &scene);
         let precip = crate::passes::PrecipMap::new(&device);
-        let snow = coronas::Precip::snow(&device, &scene.camera_layout, &precip.view);
-        let rain = coronas::Precip::rain(&device, &scene.camera_layout, &precip.view);
+        let snow = coronas::Precip::snow(&device, &precip.view);
+        let rain = coronas::Precip::rain(&device, &precip.view);
         drop(corona_texture);
-        let sky = sky::SkyBase::new(&device, &queue, &scene.camera_layout, !leave_out_enhanced);
+        let sky = sky::SkyBase::new(&device, &queue, !leave_out_enhanced);
         let sky_pipelines = sky.pipeline_base();
         let kit = passes::PassKit { device: &device, scene: &scene, coronas: &coronas, snow: &snow, rain: &rain, sky: &sky_pipelines, msaa };
         let eye_pipeline_kit = (!leave_out_enhanced && options.ray_tracing).then(|| passes::EyePipelineKit::new(&kit));
@@ -605,7 +491,7 @@ impl Renderer {
         let overlays = overlays::Overlays::new(&device, format, msaa);
         let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
         let ssao = ssao::ssao(&device, gl);
-        let fog_lamps = ssao::fog_lamps(&device, &scene.camera_layout, hdr_format, gl);
+        let fog_lamps = ssao::fog_lamps(&device, hdr_format, gl);
         let prepass = scene::prepass(&device, &scene, msaa, !leave_out_enhanced);
         // (the prepass with motion vectors: only when temporal upscaling is asked for)
         let temporal_pipes = pipelines::temporal::build(&device, &scene, options.temporal.map(|t| t.upscaler));
@@ -623,9 +509,8 @@ impl Renderer {
         let options = RenderOptions { fsr1: (options.fsr1 || crate::fsr1_enabled()) && upscale.fsr.is_some(), ..options };
         let gpu_timers = std::array::from_fn(|_| GpuTimers::new(&device));
         // GLES cannot reliably read the depth buffer (the same limitation as SSAO).
-        let puddles = (!gl && !passes.leave_out_enhanced).then(|| {
-            puddles::Pipelines::new(&device, &scene.shader, &scene.camera_layout, &scene.material_layout)
-        });
+        let puddles = (!gl && !passes.leave_out_enhanced)
+            .then(|| puddles::Pipelines::new(&device, &scene.shader));
         let rt = options.ray_tracing.then(|| rt::RayTracer::new(&device));
         let cookie_atlas = cookies::CookieAtlas::new();
         Renderer {
@@ -651,7 +536,6 @@ impl Renderer {
                 fsr_mip_bias_off: Default::default(),
                 copy_pipeline: upscale.copy_pipeline,
                 panel_pipeline: upscale.panel_pipeline,
-                upscale_layout: upscale.layout,
                 upscale_buf: upscale.buf,
                 dynamic_scale: std::cell::Cell::new(1.0),
             },
@@ -663,7 +547,6 @@ impl Renderer {
                 city_glow: None,
                 sky_job: None,
                 sky_mirror_pipeline: passes.sky_mirror_pipeline,
-                sky_layout: sky.layout,
                 sky_sampler,
                 vanilla_sky_buf: sky.vanilla_buf,
                 cloud_shape_view: sky.cloud_shape_view,
@@ -674,7 +557,8 @@ impl Renderer {
                 sky_mesh,
             },
             lights: LightRes {
-                lm_atlas_view: scene.lm_atlas.create_view(&wgpu::TextureViewDescriptor::default()),
+                lm_atlas_view: scene.lm_atlas.create_view(&mx::TextureViewDescriptor::default())
+                    .expect("mX: a texture view"),
                 lm_atlas: scene.lm_atlas,
                 lm_uniform: scene.lm_uniform,
                 lm_place: std::cell::Cell::new((0.0, 0.0, 0.0)),
@@ -682,7 +566,6 @@ impl Renderer {
                 snow_track_made: std::cell::Cell::new(0),
                 snow_track_uniform: scene.snow_track_uniform,
                 fog_lamps_pipeline: fog_lamps.pipeline,
-                fog_lamps_layout: fog_lamps.layout,
                 fog_lamps_buf: fog_lamps.buf,
                 corona_bind_group: coronas.bind_group,
                 snow_buf: snow.buf,
@@ -693,12 +576,10 @@ impl Renderer {
                 corona_textures: Vec::new(),
                 pictures_taken: (0, 0),
                 cookies: cookie_atlas,
-                corona_layout: scene.corona_layout,
                 corona_sampler: coronas.sampler,
             },
             tone: ToneMapping {
                 post: post.pipelines,
-                post_layout: post.layout,
                 post_buf: post.buf,
                 post_sampler: post.sampler,
                 meter_view: post.meter_view,
@@ -732,7 +613,6 @@ impl Renderer {
                 lamp_atlas: shadows.lamp_atlas,
                 lamp_matrices: std::cell::RefCell::new(vec![Mat4::ZERO; LAMP_SHADOWS]),
                 shadow_sampler: shadows.sampler,
-                shadow_layout: scene.shadow_layout,
                 shadow_pipelines: shadows.pipelines,
             },
             history: ViewHistory {
@@ -751,11 +631,12 @@ impl Renderer {
                 rt_error: errors.rt_error,
                 out_of_memory: errors.out_of_memory,
                 device_lost: errors.device_lost,
+                report: errors.report.clone(),
+                log: errors.log.clone(),
             },
-            _device_poller: DevicePoller::start(&device),
+            _device_poller: DevicePoller::start(&device, errors.report.clone()),
             mip_pipeline: mip.pipeline,
             mip_text_pipeline: mip.text_pipeline,
-            mip_layout: mip.layout,
             mip_sampler: mip.sampler,
             clamp_sampler: defaults.clamp_sampler,
             mirror_sampler: defaults.mirror_sampler,
@@ -777,7 +658,6 @@ impl Renderer {
                 .unwrap_or_else(std::time::Instant::now),
             tree_gust_drift: std::cell::Cell::new((glam::DVec2::ZERO, 0.0)),
             ao_sampler: ssao.sampler,
-            ao_layout: ssao.layout,
             ao_buf: ssao.buf,
             prepass_pipelines: prepass.pipelines,
             temporal_pipes,
@@ -800,15 +680,12 @@ impl Renderer {
             device,
             queue,
             adapter_name,
-            camera_layout: scene.camera_layout,
-            material_layout: scene.material_layout,
             pass: passes.pass,
             hdr_pass: passes.hdr_pass,
             hdr_eye_pass: passes.hdr_eye_pass,
             eye_pipeline_kit,
             reflection_pass: passes.reflection_pass,
             overlay_pipeline: overlays.pipeline,
-            overlay_layout: overlays.layout,
             sampler: defaults.sampler,
             camera_buf: defaults.camera_buf,
             white_texture: defaults.white_texture,

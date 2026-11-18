@@ -511,7 +511,7 @@ impl Navigator {
 
     /// The city map's ground and houses around the view, built on a worker when the view left
     /// what was built (the picture keeps the old part meanwhile): what has just arrived.
-    fn city_ground(&mut self, device: &wgpu::Device, net: Option<&Network>, w: f32, h: f32, pal: &Palette) -> Option<super::build::Built> {
+    fn city_ground(&mut self, device: &mx::Device, net: Option<&Network>, w: f32, h: f32, pal: &Palette) -> Option<super::build::Built> {
         let mpp = self.city.mpp;
         let tilt = self.city.tilt;
         let centre = self.city.center;
@@ -914,8 +914,8 @@ impl Navigator {
             Draw { buffer: 17, range: 0..icon_n, layer: 0, texture: icon_tex },
             Draw { buffer: 5, range: n_ui..all.len() as u32, layer: 0, texture: 0 },
         ];
-        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("city map") });
-        gpu.render(device, queue, &mut enc, &view, (tw, th), Some(wgpu::Color::TRANSPARENT), &layers, &draws);
+        let mut enc = device.create_command_encoder(Some("city map"));
+        gpu.render(device, queue, &mut enc, &view, (tw, th), Some(mx::Color::TRANSPARENT), &layers, &draws);
         renderer.submit_with_frame(enc.finish());
         scene.overlays.push((tex, [x0, y0, x0 + w, y0 + h]));
     }

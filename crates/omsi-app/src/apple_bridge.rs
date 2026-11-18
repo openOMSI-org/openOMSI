@@ -671,7 +671,7 @@ fn preview_thread(rx: std::sync::mpsc::Receiver<PreviewMsg>) {
                 asked = Instant::now();
                 if renderer.is_none() && !failed {
                     let instance = crate::startup::graphics_instance();
-                    match pollster::block_on(omsi_render::Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), quality.options)) {
+                    match pollster::block_on(omsi_render::Renderer::new_with(&instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb), quality.options)) {
                         Ok(r) => renderer = Some(r),
                         Err(e) => {
                             log::warn!("launcher preview: no renderer: {e:#}");

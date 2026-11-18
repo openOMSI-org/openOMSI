@@ -20,17 +20,16 @@ pub(crate) fn view_index(with_overlays: bool, projection: bool, second_eye: bool
 /// untimed passes are in the next timed one's figure and the figures add up to
 /// "(all passes)".
 pub(crate) struct GpuTimers {
-    pub(crate) set: wgpu::QuerySet,
-    pub(crate) resolve: wgpu::Buffer,
-    pub(crate) read: wgpu::Buffer,
+    pub(crate) set: mx::QuerySet,
+    pub(crate) resolve: mx::Buffer,
+    pub(crate) read: mx::Buffer,
     /// The passes of the frame being read back, in query order.
     pub(crate) pending: Vec<&'static str>,
     /// The frame's passes are timed, their stamps not yet resolved (see `collect_gpu_timers`).
     pub(crate) unresolved: bool,
     pub(crate) waiting: bool,
-    pub(crate) ready: Arc<std::sync::atomic::AtomicBool>,
-    /// The readback's mapping failed: the timers start over rather than wait for it forever.
-    pub(crate) failed: Arc<std::sync::atomic::AtomicBool>,
+    /// The submission that copies the stamps to `read`: read once it is done.
+    pub(crate) read_submission: Option<mx::SubmissionIndex>,
     /// pass → (seconds, frames)
     pub(crate) totals: std::collections::BTreeMap<&'static str, (f64, u32)>,
     pub(crate) intervals: std::collections::BTreeMap<&'static str, (f64, u32)>,
@@ -39,31 +38,33 @@ pub(crate) struct GpuTimers {
 pub(crate) const GPU_TIMER_PASSES: u32 = 16;
 
 impl GpuTimers {
-    pub(crate) fn new(device: &wgpu::Device) -> Option<GpuTimers> {
-        if !omsi_cfg::flags::OMSI_GPU_TIMERS.is_set()
-            || !device.features().contains(wgpu::Features::TIMESTAMP_QUERY)
-        {
+    pub(crate) fn new(device: &mx::Device) -> Option<GpuTimers> {
+        if !omsi_cfg::flags::OMSI_GPU_TIMERS.is_set() || !device.supports_timestamps() {
             return None;
         }
-        let set = device.create_query_set(&wgpu::QuerySetDescriptor {
-            label: Some("pass timers"),
-            ty: wgpu::QueryType::Timestamp,
-            count: GPU_TIMER_PASSES * 2,
-        });
-        let size = (GPU_TIMER_PASSES as u64 * 16).div_ceil(wgpu::QUERY_RESOLVE_BUFFER_ALIGNMENT)
-            * wgpu::QUERY_RESOLVE_BUFFER_ALIGNMENT;
-        let resolve = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("pass timers"),
-            size,
-            usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
-        let read = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("pass timers read"),
-            size,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let set = device
+            .create_query_set(&mx::QuerySetDescriptor {
+                label: Some("pass timers"),
+                ty: mx::QueryType::Timestamp,
+                count: GPU_TIMER_PASSES * 2,
+            })
+            .expect("mX: a query set");
+        let size = (GPU_TIMER_PASSES as u64 * 16).div_ceil(mx::QUERY_RESOLVE_BUFFER_ALIGNMENT)
+            * mx::QUERY_RESOLVE_BUFFER_ALIGNMENT;
+        let resolve = device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("pass timers"),
+                size,
+                usage: mx::BufferUsages::QUERY_RESOLVE | mx::BufferUsages::COPY_SRC,
+            })
+            .expect("mX: a buffer");
+        let read = device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("pass timers read"),
+                size,
+                usage: mx::BufferUsages::MAP_READ | mx::BufferUsages::COPY_DST,
+            })
+            .expect("mX: a buffer");
         Some(GpuTimers {
             set,
             resolve,
@@ -71,8 +72,7 @@ impl GpuTimers {
             pending: Vec::new(),
             unresolved: false,
             waiting: false,
-            ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            failed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            read_submission: None,
             totals: Default::default(),
             intervals: Default::default(),
         })
@@ -81,17 +81,17 @@ impl GpuTimers {
 
 /// The timestamp writes of the next timed pass (none when this frame is not timed).
 pub(crate) fn pass_timer<'a>(
-    set: Option<&'a wgpu::QuerySet>,
+    set: Option<&'a mx::QuerySet>,
     timed: &mut Vec<&'static str>,
     label: &'static str,
-) -> Option<wgpu::RenderPassTimestampWrites<'a>> {
+) -> Option<mx::PassTimestampWrites<'a>> {
     let set = set?;
     if timed.len() as u32 >= GPU_TIMER_PASSES {
         return None;
     }
     let i = timed.len() as u32 * 2;
     timed.push(label);
-    Some(wgpu::RenderPassTimestampWrites {
+    Some(mx::PassTimestampWrites {
         query_set: set,
         beginning_of_pass_write_index: Some(i),
         end_of_pass_write_index: Some(i + 1),
@@ -104,7 +104,10 @@ pub(crate) struct DevicePoller {
 }
 
 impl DevicePoller {
-    pub(crate) fn start(device: &wgpu::Device) -> Option<Self> {
+    pub(crate) fn start(
+        device: &mx::Device,
+        report: crate::pipelines::errors::Report,
+    ) -> Option<Self> {
         // Not on OpenGL: there every poll takes the one GL context, and whenever the thread
         // drawing held it for more than a second (a big shader linked while the world
         // loads, a slow chip's frame) this thread gave up with wgpu-hal's panic "Could not
@@ -124,7 +127,9 @@ impl DevicePoller {
                 // for the queue's lock - a third of its time was spent spinning on it)
                 let pause = std::time::Duration::from_millis(4);
                 while !flag.load(std::sync::atomic::Ordering::Relaxed) {
-                    let _ = device.poll(wgpu::PollType::Poll);
+                    if let Err(e) = device.poll() {
+                        report(&e);
+                    }
                     std::thread::sleep(pause);
                 }
             })
@@ -194,19 +199,14 @@ pub(crate) fn run_parts<T: Send>(pool: Option<&rayon::ThreadPool>, parts: usize,
 
 impl GpuTimers {
     /// Take in the pass times of the last timed frame once its readback has arrived.
-    pub(crate) fn collect(&mut self, period: f64) {
+    pub(crate) fn collect(&mut self, device: &mx::Device, period: f64) {
         let t = self;
-        if t.waiting && t.failed.swap(false, std::sync::atomic::Ordering::Relaxed) {
-            // (nothing mapped to read: the next timed frame asks again)
-            t.waiting = false;
-            return;
-        }
-        if !t.waiting || !t.ready.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        if !t.waiting || !t.read_submission.is_some_and(|i| device.is_done(i)) {
             return;
         }
         let n = t.pending.len() * 2;
-        {
-            let view = t.read.slice(0..n as u64 * 8).get_mapped_range();
+        let read = t.read.clone();
+        let done = read.map_read_now(0..n as u64 * 8, |view| {
             let stamps: &[u64] = bytemuck::cast_slice(&view[..n * 8]);
             // The passes in the order the GPU finished them, each counted from where the one
             // before it ended (the untimed passes in between go to the next timed one). A
@@ -246,8 +246,13 @@ impl GpuTimers {
                 e.0 += ticks as f64 * period * 1e-9;
                 e.1 += 1;
             }
+        });
+        if let Err(e) = done {
+            log::warn!(
+                "pass timers: the stamps were not read ({e}); the next timed frame asks again"
+            );
         }
-        t.read.unmap();
+        t.read_submission = None;
         t.waiting = false;
     }
 }
@@ -284,27 +289,19 @@ impl Renderer {
     /// Take in the pass times of the last timed frame once its readback has arrived.
     pub(crate) fn collect_gpu_timers(&mut self) {
         let period = self.queue.get_timestamp_period() as f64;
+        let _ = self.device.poll();
         for t in self.gpu_timers.iter_mut().flatten() {
-            t.collect(period);
+            t.collect(&self.device, period);
             // The last frame's stamps are read in a command buffer of their own, submitted
             // after that frame's: resolved in the frame's own buffer, the end stamp of its
             // last pass was often not written yet (Metal) and read as a stale number.
             if t.unresolved {
                 t.unresolved = false;
                 let n = t.pending.len() as u32 * 2;
-                let mut enc = self
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("pass timers"),
-                    });
+                let mut enc = self.device.create_command_encoder(Some("pass timers"));
                 enc.resolve_query_set(&t.set, 0..n, &t.resolve, 0);
                 enc.copy_buffer_to_buffer(&t.resolve, 0, &t.read, 0, n as u64 * 8);
-                self.queue.submit([enc.finish()]);
-                let (ready, failed) = (t.ready.clone(), t.failed.clone());
-                t.read.map_async(wgpu::MapMode::Read, .., move |r| {
-                    let flag = if r.is_ok() { &ready } else { &failed };
-                    flag.store(true, std::sync::atomic::Ordering::Relaxed)
-                });
+                t.read_submission = Some(self.queue.submit([enc.finish()]));
                 t.waiting = true;
             }
         }

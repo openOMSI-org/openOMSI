@@ -26,7 +26,6 @@ mod passes;
 mod device_selection;
 use passes::{Encoders, FrameArgs, FrameEnv, PassTimers, StageClock};
 use gpu_memory::adapter_vram_mb;
-pub mod pipeline_cache;
 mod pipelines;
 mod puddles;
 mod rt;
@@ -92,66 +91,62 @@ pub(crate) fn fsr1_enabled() -> bool {
 
 /// The enhanced path's post pipelines (post.wgsl).
 struct PostPipelines {
-    down_first: wgpu::RenderPipeline,
-    down: wgpu::RenderPipeline,
-    up: wgpu::RenderPipeline,
-    meter: wgpu::RenderPipeline,
-    adapt: wgpu::RenderPipeline,
+    down_first: mx::RenderPipeline,
+    down: mx::RenderPipeline,
+    up: mx::RenderPipeline,
+    meter: mx::RenderPipeline,
+    adapt: mx::RenderPipeline,
     /// Straight into the target, or gamma-encoded for FXAA.
-    tonemap: wgpu::RenderPipeline,
-    tonemap_encoded: wgpu::RenderPipeline,
-    fxaa: wgpu::RenderPipeline,
+    tonemap: mx::RenderPipeline,
+    tonemap_encoded: mx::RenderPipeline,
+    fxaa: mx::RenderPipeline,
     /// The picture as absolute radiance at half size, for the next frame's bounced light.
-    history: wgpu::RenderPipeline,
+    history: mx::RenderPipeline,
 }
 
 /// The pipelines of the main pass for one colour target format: the swap chain's, and
 /// the high-range one of the enhanced path.
 struct PassPipelines {
     /// Single-sampled films, drawn after resolving the scene and its reflections.
-    rain_pipelines: Vec<wgpu::RenderPipeline>,
+    rain_pipelines: Vec<mx::RenderPipeline>,
     /// Indexed by `pipe_code`: 4 depth/blend kinds x culled x depth-biased.
-    pipelines: Vec<wgpu::RenderPipeline>,
-    corona_pipeline: wgpu::RenderPipeline,
+    pipelines: Vec<mx::RenderPipeline>,
+    corona_pipeline: mx::RenderPipeline,
     /// Smoke particles (`[smoke]`): the corona sprite alpha-blended with the smoke texture.
-    smoke_pipeline: wgpu::RenderPipeline,
+    smoke_pipeline: mx::RenderPipeline,
     /// The snowfall (snow.wgsl), opaque over the scene (premultiplied); none with
     /// `basic_pipelines`.
-    snow_pipeline: Option<wgpu::RenderPipeline>,
+    snow_pipeline: Option<mx::RenderPipeline>,
     /// The rainfall (rain.wgsl), as the snowfall; with `basic_pipelines` on computers too.
-    rain_fall_pipeline: Option<wgpu::RenderPipeline>,
-    sky_pipeline: wgpu::RenderPipeline,
+    rain_fall_pipeline: Option<mx::RenderPipeline>,
+    sky_pipeline: mx::RenderPipeline,
 }
 
 pub struct Renderer {
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
+    pub device: mx::Device,
+    pub queue: mx::Queue,
     pub adapter_name: String,
-    camera_layout: wgpu::BindGroupLayout,
-    material_layout: wgpu::BindGroupLayout,
     pass: PassPipelines,
     hdr_pass: Option<PassPipelines>,
     /// Enhanced colour/mask without desktop ray-reflection surface attachments.
     hdr_eye_pass: Option<PassPipelines>,
     eye_pipeline_kit: Option<pipelines::passes::EyePipelineKit>,
     reflection_pass: Option<PassPipelines>,
-    overlay_pipeline: wgpu::RenderPipeline,
-    overlay_layout: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
-    camera_buf: wgpu::Buffer,
+    overlay_pipeline: mx::RenderPipeline,
+    sampler: mx::Sampler,
+    camera_buf: mx::Buffer,
     white_texture: GpuTexture,
     black_texture: GpuTexture,
     /// A tangent-space normal pointing straight out (the PBR normal map's stand-in).
     flat_normal_texture: GpuTexture,
-    format: wgpu::TextureFormat,
-    ao_sampler: wgpu::Sampler,
-    ao_layout: wgpu::BindGroupLayout,
-    ao_buf: wgpu::Buffer,
+    format: mx::TextureFormat,
+    ao_sampler: mx::Sampler,
+    ao_buf: mx::Buffer,
     /// Depth prepass pipelines (plain, alpha-tested; each two-sided and culled),
     /// single-sampled, camera projection.
     /// Plain opaque, alpha-tested, and the opaque portions of blended transmap materials;
     /// each has a two-sided and a culled variant.
-    prepass_pipelines: [wgpu::RenderPipeline; 6],
+    prepass_pipelines: [mx::RenderPipeline; 6],
     /// Temporal upscaling: the prepass with motion vectors (made when it is asked for), the
     /// upscaler and its targets once the first frame started it, whether it could not, and
     /// whether the picture being drawn is the window's own (`render`: the one it is for).
@@ -167,23 +162,23 @@ pub struct Renderer {
     /// The same, at the main pass's sample count (colour writes off):
     /// its own depth laid first (see `encode_prefill`), so that its costly shading runs
     /// once per visible surface.
-    prepass_msaa_pipelines: Option<[wgpu::RenderPipeline; 6]>,
-    prepass_eye_pipelines: Option<[wgpu::RenderPipeline; 6]>,
+    prepass_msaa_pipelines: Option<[mx::RenderPipeline; 6]>,
+    prepass_eye_pipelines: Option<[mx::RenderPipeline; 6]>,
     pane_mask: Option<pipelines::scene::PaneMaskPipelines>,
-    pane_depth: Option<((u32, u32), wgpu::TextureView, wgpu::BindGroup)>,
+    pane_depth: Option<((u32, u32), mx::TextureView, mx::BindGroup)>,
     /// The ground albedo pass's pipelines (see `SceneBase::ground_pipeline_at`); none where
     /// the enhanced path is left out or on OpenGL.
-    ground_pipelines: Option<[wgpu::RenderPipeline; 8]>,
+    ground_pipelines: Option<[mx::RenderPipeline; 8]>,
     /// Whether the camera group's slot 8 (the AO's picture) holds the ground albedo picture
     /// instead - while the ambient occlusion is off, see `ground_should_bind`.
     ground_bound: std::cell::Cell<bool>,
     /// Ambient occlusion and its blur; none on OpenGL (GLES), whose shading language cannot
     /// read a depth texture texel by texel - the pipelines failed there, AO off or not (#422).
-    ssao_pipeline: Option<wgpu::RenderPipeline>,
-    blur_pipeline: Option<wgpu::RenderPipeline>,
+    ssao_pipeline: Option<mx::RenderPipeline>,
+    blur_pipeline: Option<mx::RenderPipeline>,
     /// (into two-channel targets: see `pipelines::ssao::Ssao`)
-    plain_ssao_pipeline: Option<wgpu::RenderPipeline>,
-    plain_blur_pipeline: Option<wgpu::RenderPipeline>,
+    plain_ssao_pipeline: Option<mx::RenderPipeline>,
+    plain_blur_pipeline: Option<mx::RenderPipeline>,
     /// The settings this renderer was built with.
     pub options: RenderOptions,
     puddles: Option<puddles::Pipelines>,
@@ -193,7 +188,7 @@ pub struct Renderer {
     last_frame: Option<std::time::Instant>,
     /// The adapter the device was opened on, and what its driver last said the game holds
     /// on the card (see `gpu_memory`).
-    adapter: Option<wgpu::Adapter>,
+    adapter: Option<mx::Adapter>,
     gpu_memory_seen: std::cell::RefCell<gpu_memory::Seen>,
     /// The next frame stands alone (an offscreen picture): the exposure is there at once.
     pub instant_exposure: bool,
@@ -201,25 +196,24 @@ pub struct Renderer {
     /// depth prepass runs whatever else it would.
     pub(crate) depth_readback: bool,
     /// Overlay pipeline without multisampling, for drawing the HUD after the post pass.
-    overlay_pipeline_1x: wgpu::RenderPipeline,
-    xr_ui_pipeline: wgpu::RenderPipeline,
+    overlay_pipeline_1x: mx::RenderPipeline,
+    xr_ui_pipeline: mx::RenderPipeline,
     started: std::time::Instant,
     /// Windy trees: how far the wind has carried its gusts (m, modulo 1000) and when.
     tree_gust_drift: std::cell::Cell<(glam::DVec2, f64)>,
     /// `[matl_texadress_clamp]` (and border, mirror-once) and `[matl_texadress_mirror]`.
-    clamp_sampler: wgpu::Sampler,
-    mirror_sampler: wgpu::Sampler,
+    clamp_sampler: mx::Sampler,
+    mirror_sampler: mx::Sampler,
     /// The addressing of the next material's textures (`[matl_texadress_*]`).
     pub address_next: std::cell::Cell<TexAddressing>,
     /// The next material is lit at night by the tile light maps (`[LightMapMapping]`, the
     /// splines) instead of the map's lamps.
     pub light_map_next: std::cell::Cell<bool>,
     /// Mipmap generation on the GPU (a blit per level).
-    mip_pipeline: wgpu::RenderPipeline,
+    mip_pipeline: mx::RenderPipeline,
     /// The same for text and script textures (`MipAverage::Independent`).
-    mip_text_pipeline: wgpu::RenderPipeline,
-    mip_layout: wgpu::BindGroupLayout,
-    mip_sampler: wgpu::Sampler,
+    mip_text_pipeline: mx::RenderPipeline,
+    mip_sampler: mx::Sampler,
     /// The headset's pictures: the heading (degrees) the `[matl_envmap]` sphere maps are
     /// laid out by instead of each eye's view (see `set_env_heading`).
     env_heading: std::cell::Cell<Option<f32>>,
@@ -239,7 +233,7 @@ pub struct Renderer {
     /// What the window's pictures drew since start, summed (OMSI_PROFILE): instances that
     /// passed the culling and draws per pass.
     pub counts: std::cell::RefCell<std::collections::BTreeMap<&'static str, f64>>,
-    deferred: std::cell::RefCell<Vec<wgpu::CommandBuffer>>,
+    deferred: std::cell::RefCell<Vec<mx::CommandBuffer>>,
     pub frame_draws: (usize, usize),
     profiling: bool,
     draw_audit_at: std::time::Instant,
@@ -276,7 +270,7 @@ pub struct Renderer {
     errors: GpuErrors,
 }
 
-pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+pub const DEPTH_FORMAT: mx::TextureFormat = mx::TextureFormat::Depth32Float;
 /// Samples per pixel of the scene passes when nothing else is asked for (the shadow maps
 /// stay single-sampled). Four samples take the staircase off every edge; the multisampled
 /// colour target resolves into the window or the mirror texture at the end of the main pass.
@@ -442,44 +436,55 @@ pub const LAMP_CODE_STRIDE: u32 = 64;
 /// glow's source keeps and multiplies up (see `post.wgsl`). b carries the puddle's
 /// reflected-light weight; a is blend coverage. Sharing this attachment avoids another
 /// geometry pass or a full normal/material buffer just for water.
-const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+const MASK_FORMAT: mx::TextureFormat = mx::TextureFormat::Rgba8Unorm;
 /// Enhanced+: the enhanced pass's third and fourth targets, what the ray-traced reflections
 /// start from (rt.wgsl): the surface's normal (xyz) and how much it reflects (w), and its
 /// view depth and roughness (rg) - all weighted by that reflection (premultiplied), so that
 /// a pane blended over a wet road leaves the stronger reflection's surface in them.
-const GBUF_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
-const AUX_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
+const GBUF_FORMAT: mx::TextureFormat = mx::TextureFormat::Rgba16Float;
+const AUX_FORMAT: mx::TextureFormat = mx::TextureFormat::Rg16Float;
 /// The renderer is built for Enhanced+: its HDR pipelines and targets have the two above.
 static RT_GBUF: crate::AdapterBool = crate::AdapterBool::new(6);
 fn rt_gbuf() -> bool {
     RT_GBUF.load(std::sync::atomic::Ordering::Relaxed)
 }
-const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+const HDR_FORMAT: mx::TextureFormat = mx::TextureFormat::Rgba16Float;
 
 /// The colour targets of a pipeline drawing into `format`: Enhanced and classic puddle
 /// shading draw into `HDR_FORMAT` with the screen mask beside it,
 /// written by the scene's own shader only (`mask`), coverage-blended where the colour is.
-fn color_targets_for(format: wgpu::TextureFormat, blend: Option<wgpu::BlendState>, write: wgpu::ColorWrites, mask: bool, gbuf: bool,
-    surfaces: bool) -> Vec<Option<wgpu::ColorTargetState>> {
-    let mut v = vec![Some(wgpu::ColorTargetState { format, blend, write_mask: write })];
+fn color_targets_for(format: mx::TextureFormat,
+    blend: Option<mx::BlendState>,
+    write: mx::ColorWrites, mask: bool, gbuf: bool,
+    surfaces: bool) -> Vec<Option<mx::ColorTargetState>> {
+    let mut v = vec![Some(mx::ColorTargetState { format, blend, write_mask: write })];
     if format == HDR_FORMAT {
-        v.push(Some(wgpu::ColorTargetState {
+        v.push(Some(mx::ColorTargetState {
             format: MASK_FORMAT,
-            blend: blend.map(|_| wgpu::BlendState {
-                color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::SrcAlpha, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
-                alpha: wgpu::BlendComponent::REPLACE,
+            blend: blend.map(|_| mx::BlendState {
+                color: mx::BlendComponent {
+                    src_factor: mx::BlendFactor::SrcAlpha,
+                    dst_factor: mx::BlendFactor::OneMinusSrcAlpha,
+                    operation: mx::BlendOperation::Add, },
+                alpha: mx::BlendComponent::REPLACE,
             }),
-            write_mask: if mask { wgpu::ColorWrites::ALL } else { wgpu::ColorWrites::empty() },
+            write_mask: if mask { mx::ColorWrites::ALL } else { mx::ColorWrites::empty() },
         }));
         if surfaces {
             // (premultiplied by the reflection's weight, the shader's alpha)
-            let over = blend.map(|_| wgpu::BlendState {
-                color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
-                alpha: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
+            let over = blend.map(|_| mx::BlendState {
+                color: mx::BlendComponent {
+                    src_factor: mx::BlendFactor::One,
+                    dst_factor: mx::BlendFactor::OneMinusSrcAlpha,
+                    operation: mx::BlendOperation::Add, },
+                alpha: mx::BlendComponent {
+                    src_factor: mx::BlendFactor::One,
+                    dst_factor: mx::BlendFactor::OneMinusSrcAlpha,
+                    operation: mx::BlendOperation::Add, },
             });
-            let write = if gbuf { wgpu::ColorWrites::ALL } else { wgpu::ColorWrites::empty() };
-            v.push(Some(wgpu::ColorTargetState { format: GBUF_FORMAT, blend: over, write_mask: write }));
-            v.push(Some(wgpu::ColorTargetState { format: AUX_FORMAT, blend: over, write_mask: write }));
+            let write = if gbuf { mx::ColorWrites::ALL } else { mx::ColorWrites::empty() };
+            v.push(Some(mx::ColorTargetState { format: GBUF_FORMAT, blend: over, write_mask: write }));
+            v.push(Some(mx::ColorTargetState { format: AUX_FORMAT, blend: over, write_mask: write }));
         }
     }
     v
@@ -499,7 +504,7 @@ pub const SHADOW_RANGE_CLOSE: f32 = 32.0;
 const SHADOW_CLOSE_MAX: u32 = 2048;
 
 impl Renderer {
-    pub fn submit_with_frame(&self, commands: wgpu::CommandBuffer) {
+    pub fn submit_with_frame(&self, commands: mx::CommandBuffer) {
         let mut deferred = self.deferred.borrow_mut();
         deferred.push(commands);
         if deferred.len() >= 4 {
@@ -507,7 +512,7 @@ impl Renderer {
         }
     }
 
-    pub fn take_deferred_commands(&self) -> Vec<wgpu::CommandBuffer> {
+    pub fn take_deferred_commands(&self) -> Vec<mx::CommandBuffer> {
         self.deferred.take()
     }
 
@@ -533,7 +538,7 @@ impl Renderer {
         }
     }
 
-    fn prefill_pipelines(&self, eye_color: bool) -> Option<&[wgpu::RenderPipeline; 6]> {
+    fn prefill_pipelines(&self, eye_color: bool) -> Option<&[mx::RenderPipeline; 6]> {
         if eye_color {
             self.prepass_eye_pipelines
                 .as_ref()
@@ -543,7 +548,7 @@ impl Renderer {
         }
     }
 
-    pub fn format(&self) -> wgpu::TextureFormat {
+    pub fn format(&self) -> mx::TextureFormat {
         self.format
     }
 
@@ -585,7 +590,7 @@ impl Renderer {
         self.options.render_scale = render_scale;
         let mut refused_now = false;
         if fsr1 && self.scale.fsr.is_none() && !self.scale.fsr_refused {
-            match pipelines::upscale::build_fsr(&self.device, self.format, &self.scale.upscale_layout) {
+            match pipelines::upscale::build_fsr(&self.device, self.format) {
                 Some(p) => self.scale.fsr = Some(p),
                 None => (self.scale.fsr_refused, refused_now) = (true, true),
             }

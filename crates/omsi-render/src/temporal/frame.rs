@@ -1,20 +1,20 @@
 //! A frame with temporal upscaling: `begin_frame` draws the picture small into the upscaler's
 //! input, `temporal_jitter` shifts it by a sub-pixel amount every frame, the depth prepass
 //! writes each pixel's motion (`motion.wgsl`), and `temporal_present` runs the upscaler on
-//! wgpu's queue, then the HUD at full size.
+//! mX's queue (`mx-upscale`), then the HUD at full size.
 
-use super::{fallback_render_size, fidelityfx, metalfx, streamline, FrameConstants, GenerationInputs, Inputs, TemporalQuality, TemporalUpscaler};
+use super::{FrameConstants, Inputs, TemporalQuality, fallback_render_size, upscale_options};
 use crate::passes::FrameCtx;
 use crate::pipelines::common::uniform_buffer;
 use crate::*;
 
-pub(crate) const TEMPORAL_MOTION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
+pub(crate) const TEMPORAL_MOTION_FORMAT: mx::TextureFormat = mx::TextureFormat::Rg16Float;
 /// The window-sized result: a storage texture, and those can't be sRGB. It only ever holds the
 /// sRGB-encoded numbers of the 8 bit picture the upscaler was given.
-const TEMPORAL_OUTPUT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+const TEMPORAL_OUTPUT_FORMAT: mx::TextureFormat = mx::TextureFormat::Rgba8Unorm;
 /// Where glass, its reflections and the rain on it lie (see `vs_mask`). Not R8: Streamline's
 /// Vulkan layer cannot read VK_FORMAT_R8_UNORM back (`getFormat`), and logged four errors a frame.
-pub(crate) const TEMPORAL_MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
+pub(crate) const TEMPORAL_MASK_FORMAT: mx::TextureFormat = mx::TextureFormat::R16Float;
 
 /// An object moved further than this in one frame (m) gets no motion of its own. The engine hands
 /// a freed entry to the next object loaded (`recycle_instance`), so for one frame the "last
@@ -38,29 +38,26 @@ const METALFX_SHARPEN: f32 = 0.4;
 const METALFX_MIP_BIAS: f32 = -1.0;
 
 pub(crate) struct TemporalPipelines {
-    pub(crate) prepass: [wgpu::RenderPipeline; 6],
-    pub(crate) late_motion: [wgpu::RenderPipeline; 6],
-    pub(crate) sky: wgpu::RenderPipeline,
-    pub(crate) motion_layout: wgpu::BindGroupLayout,
-    pub(crate) glass_mask: [wgpu::RenderPipeline; 2],
-    pub(crate) rain_mask: [wgpu::RenderPipeline; 2],
-    pub(crate) screen_mask: [wgpu::RenderPipeline; 2],
+    pub(crate) prepass: [mx::RenderPipeline; 6],
+    pub(crate) late_motion: [mx::RenderPipeline; 6],
+    pub(crate) sky: mx::RenderPipeline,
+    pub(crate) glass_mask: [mx::RenderPipeline; 2],
+    pub(crate) rain_mask: [mx::RenderPipeline; 2],
+    pub(crate) screen_mask: [mx::RenderPipeline; 2],
 }
 
 pub(crate) struct TemporalTargets {
     render: (u32, u32),
     output: (u32, u32),
-    color: wgpu::Texture,
-    pub(crate) color_view: wgpu::TextureView,
-    color_raw_view: wgpu::TextureView,
-    pub(crate) color_bg: wgpu::BindGroup,
-    motion: wgpu::Texture,
-    pub(crate) motion_view: wgpu::TextureView,
-    mask: wgpu::Texture,
-    pub(crate) mask_view: wgpu::TextureView,
-    output_tex: wgpu::Texture,
-    output_view: wgpu::TextureView,
-    output_bg: wgpu::BindGroup,
+    color: mx::Texture,
+    pub(crate) color_view: mx::TextureView,
+    pub(crate) color_bg: mx::BindGroup,
+    motion: mx::Texture,
+    pub(crate) motion_view: mx::TextureView,
+    mask: mx::Texture,
+    pub(crate) mask_view: mx::TextureView,
+    output_tex: mx::Texture,
+    output_bg: mx::BindGroup,
 }
 
 #[derive(Clone, Copy)]
@@ -72,28 +69,25 @@ struct TemporalPrev {
     output: (u32, u32),
 }
 
-pub(crate) enum Runtime {
-    Dlss(streamline::Runtime),
-    Fsr3(fidelityfx::Upscaler),
-    MetalFx(metalfx::Upscaler),
-}
+/// The vendor's upscaler (`mx-upscale`).
+pub(crate) type Runtime = mx_upscale::Upscaler;
 
 pub(crate) struct TemporalState {
     runtime: Runtime,
     pub(crate) targets: Option<TemporalTargets>,
     /// The textures of the last few frames, held a little longer: our D3D12 list runs after
     /// wgpu's submit, and wgpu would otherwise free a texture it thinks nobody needs.
-    keep: std::collections::VecDeque<Vec<wgpu::Texture>>,
-    motion_buf: wgpu::Buffer,
-    blit_buf: wgpu::Buffer,
-    pub(crate) prev_models: Option<(wgpu::Buffer, wgpu::BindGroup)>,
+    keep: std::collections::VecDeque<Vec<mx::Texture>>,
+    motion_buf: mx::Buffer,
+    blit_buf: mx::Buffer,
+    pub(crate) prev_models: Option<(mx::Buffer, mx::BindGroup)>,
     prev_epoch: u64,
     prev_entries: u32,
     prev: Option<TemporalPrev>,
     frame: u64,
     /// For frame generation: the window's picture before the HUD, two in turn (this frame's and
     /// the last one's), and the frame the newest was drawn in.
-    hudless: Vec<(wgpu::Texture, wgpu::TextureView)>,
+    hudless: Vec<(mx::Texture, mx::TextureView)>,
     hudless_frame: Option<u64>,
 }
 
@@ -145,18 +139,30 @@ pub(crate) fn temporal_mip_bias(render_w: u32, full_w: u32, extra: f32) -> f32 {
 
 /// A picture of the window's size and format for frame generation: a plain UNORM resource (the
 /// sRGB-encoded numbers, as the upscaler's input), drawn through the renderer's sRGB view.
-fn hudless_target(device: &wgpu::Device, (width, height): (u32, u32), format: wgpu::TextureFormat) -> (wgpu::Texture, wgpu::TextureView) {
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("frame generation: the picture before the HUD"),
-        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: format.remove_srgb_suffix(),
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[format],
-    });
-    let view = texture.create_view(&wgpu::TextureViewDescriptor { format: Some(format), ..Default::default() });
+fn hudless_target(device: &mx::Device, (width, height): (u32, u32), format: mx::TextureFormat,
+) -> (mx::Texture, mx::TextureView) {
+    let texture = device
+        .create_texture(&mx::TextureDescriptor {
+            label: Some("frame generation: the picture before the HUD"),
+            size: mx::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: mx::TextureDimension::D2,
+            format: format.remove_srgb_suffix(),
+            usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[format],
+        })
+        .expect("mX: a texture");
+    let view = texture
+        .create_view(&mx::TextureViewDescriptor {
+            format: Some(format),
+            ..Default::default()
+        })
+        .expect("mX: a texture view");
     (texture, view)
 }
 
@@ -164,7 +170,7 @@ impl Renderer {
     /// This upscaled frame's mip bias (`temporal_mip_bias`): MetalFX's one level sharper.
     pub(crate) fn temporal_textures_bias(&self, render_w: u32, full_w: u32) -> f32 {
         let extra = match self.temporal.as_ref().map(|d| &d.runtime) {
-            Some(Runtime::MetalFx(_)) => METALFX_MIP_BIAS,
+            Some(r) if r.method() == mx_upscale::Method::MetalFxTemporal => METALFX_MIP_BIAS,
             _ => 0.0,
         };
         temporal_mip_bias(render_w, full_w, extra)
@@ -191,11 +197,7 @@ impl Renderer {
     /// The running upscaler, its GPU work done, to go on in a renderer rebuilt on this device.
     pub(crate) fn temporal_runtime(&mut self) -> Option<Runtime> {
         let mut d = self.temporal.take()?;
-        match &mut d.runtime {
-            Runtime::Dlss(r) => r.wait(),
-            Runtime::Fsr3(r) => r.wait(),
-            Runtime::MetalFx(r) => r.wait(),
-        }
+        d.runtime.wait();
         Some(d.runtime)
     }
 
@@ -211,11 +213,10 @@ impl Renderer {
             return true;
         }
         let Some(asked) = self.options.temporal.filter(|_| self.temporal_pipes.is_some()) else { return false };
-        let loaded = match (asked.upscaler, self.temporal_kept.take()) {
-            (TemporalUpscaler::Dlss, Some(r @ Runtime::Dlss(_))) | (TemporalUpscaler::Fsr3, Some(r @ Runtime::Fsr3(_))) | (TemporalUpscaler::MetalFx, Some(r @ Runtime::MetalFx(_))) => Ok(r),
-            (TemporalUpscaler::Dlss, _) => streamline::Runtime::load(&self.device).map(Runtime::Dlss),
-            (TemporalUpscaler::Fsr3, _) => fidelityfx::Upscaler::load(&self.device).map(Runtime::Fsr3),
-            (TemporalUpscaler::MetalFx, _) => metalfx::Upscaler::load(&self.device).map(Runtime::MetalFx),
+        let method = asked.upscaler.method();
+        let loaded = match self.temporal_kept.take() {
+            Some(r) if r.method() == method => Ok(r),
+            _ => Runtime::new(&self.device, method, &upscale_options()),
         };
         match loaded {
             Ok(runtime) => {
@@ -252,7 +253,7 @@ impl Renderer {
         }
         let d = self.temporal.as_ref().filter(|d| d.prev.is_some())?;
         let t = d.targets.as_ref().filter(|t| t.output == (width, height))?;
-        Some(self.read_texture(&t.output_tex, wgpu::TextureAspect::All).map(opaque))
+        Some(self.read_texture(&t.output_tex, mx::TextureAspect::All).map(opaque))
     }
 
     fn temporal_quality(&self) -> TemporalQuality {
@@ -262,9 +263,8 @@ impl Renderer {
     pub(crate) fn temporal_render_size(&mut self, full: (u32, u32)) -> (u32, u32) {
         let quality = self.temporal_quality();
         match self.temporal.as_mut().map(|t| &mut t.runtime) {
-            Some(Runtime::Dlss(r)) => r.render_size(quality, full),
-            Some(Runtime::MetalFx(r)) => r.render_size(quality, full),
-            _ => fallback_render_size(quality, full),
+            Some(r) => r.render_size(quality.mx(), full),
+            None => fallback_render_size(quality, full),
         }
     }
 
@@ -272,47 +272,68 @@ impl Renderer {
         let Some(blit_buf) = self.temporal.as_ref().filter(|d| !d.targets.as_ref().is_some_and(|t| t.render == render && t.output == output)).map(|d| d.blit_buf.clone()) else {
             return;
         };
-        let tex = |label: &str, (w, h): (u32, u32), format: wgpu::TextureFormat, usage: wgpu::TextureUsages| {
-            self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some(label),
-                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format,
-                usage,
-                view_formats: &[],
-            })
+        let tex = |label: &str, (w, h): (u32, u32), format: mx::TextureFormat,
+                   usage: mx::TextureUsages| {
+            self.device
+                .create_texture(&mx::TextureDescriptor {
+                    label: Some(label),
+                    size: mx::Extent3d {
+                        width: w,
+                        height: h,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: mx::TextureDimension::D2,
+                    format,
+                    usage,
+                    view_formats: &[],
+                })
+                .expect("mX: a texture")
         };
-        let targets = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
+        let targets = mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::TEXTURE_BINDING;
         // The resource is plain UNORM, drawn through an sRGB view: cards that cast fully typed formats
         // would make an sRGB resource sRGB-typed, and FSR would read linear numbers, too dark.
-        let color = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("temporal scene"),
-            size: wgpu::Extent3d { width: render.0, height: render.1, depth_or_array_layers: 1 },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: self.format.remove_srgb_suffix(),
-            usage: targets | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[self.format],
-        });
+        let color = self
+            .device
+            .create_texture(&mx::TextureDescriptor {
+                label: Some("temporal scene"),
+                size: mx::Extent3d {
+                    width: render.0,
+                    height: render.1, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format: self.format.remove_srgb_suffix(),
+                usage: targets | mx::TextureUsages::COPY_SRC,
+                view_formats: &[self.format],
+            })
+        .expect("mX: a texture");
         let motion = tex("temporal motion vectors", render, TEMPORAL_MOTION_FORMAT, targets);
         let mask = tex("temporal transparency mask", render, TEMPORAL_MASK_FORMAT, targets);
-        let output_tex = tex("temporal output", output, TEMPORAL_OUTPUT_FORMAT, targets | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC);
-        let color_view = color.create_view(&wgpu::TextureViewDescriptor { format: Some(self.format), ..Default::default() });
-        let motion_view = motion.create_view(&Default::default());
-        let mask_view = mask.create_view(&Default::default());
-        let output_view = output_tex.create_view(&Default::default());
-        let color_raw_view = color.create_view(&Default::default());
+        let output_tex = tex("temporal output", output, TEMPORAL_OUTPUT_FORMAT, targets | mx::TextureUsages::STORAGE_BINDING | mx::TextureUsages::COPY_SRC,);
+        let color_view = color
+            .create_view(&mx::TextureViewDescriptor {
+                format: Some(self.format),
+                ..Default::default()
+            })
+            .expect("mX: a texture view");
+        let motion_view = motion
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
+        let mask_view = mask
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
+        let output_view = output_tex
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
         let color_bg = self.picture_group(&color_view);
-        let output_bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let output_bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("temporal output"),
-            layout: &self.scale.upscale_layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: blit_buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&output_view) },
-                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.tone.post_sampler) },
+                mx::BindGroupEntry { binding: 0, resource: blit_buf.as_entire_binding() },
+                mx::BindGroupEntry { binding: 1, resource: mx::BindingResource::TextureView(&output_view), },
+                mx::BindGroupEntry { binding: 2, resource: mx::BindingResource::Sampler(&self.tone.post_sampler), },
             ],
         });
         let d = self.temporal.as_mut().expect("temporal state");
@@ -320,12 +341,12 @@ impl Renderer {
             d.keep.push_back(vec![old.color, old.motion, old.mask, old.output_tex]);
         }
         d.prev = None;
-        d.targets = Some(TemporalTargets { render, output, color, color_view, color_raw_view, color_bg, motion, motion_view, mask, mask_view, output_tex, output_view, output_bg });
+        d.targets = Some(TemporalTargets { render, output, color, color_view,  color_bg, motion, motion_view, mask, mask_view, output_tex,  output_bg });
     }
 
     pub(crate) fn temporal_jitter(&mut self, scene: &Scene, f: &FrameCtx, vp_plain: Mat4) -> Mat4 {
         let (width, height, full_w, full_h, camera, ro) = (f.width, f.height, f.full_w, f.target.texture().height(), f.camera, f.ro);
-        let Some(pipes) = self.temporal_pipes.as_ref() else { return vp_plain };
+        if self.temporal_pipes.is_none() { return vp_plain }
         let Some(d) = self.temporal.as_mut() else { return vp_plain };
         d.frame += 1;
         let i = (d.frame % jitter_phases(width, full_w) as u64) as u32 + 1;
@@ -340,18 +361,19 @@ impl Renderer {
         let origin_delta = prev.map_or(Vec3::ZERO, |p| (p.origin - ro).as_vec3());
         if let Some(GpuArray::Buffer(models)) = scene.model_buf.as_ref() {
             if d.prev_models.as_ref().is_none_or(|(b, _)| b.size() < models.size()) {
-                let buf = self.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("temporal last models"),
-                    size: models.size(),
-                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
-                let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                let buf = self
+                    .device
+                    .create_buffer(&mx::BufferDescriptor {
+                        label: Some("temporal last models"),
+                        size: models.size(),
+                        usage: mx::BufferUsages::STORAGE | mx::BufferUsages::COPY_DST,
+                    })
+                    .expect("mX: a buffer");
+                let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
                     label: Some("temporal motion"),
-                    layout: &pipes.motion_layout,
                     entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: d.motion_buf.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: buf.as_entire_binding() },
+                        mx::BindGroupEntry { binding: 0, resource: d.motion_buf.as_entire_binding() },
+                        mx::BindGroupEntry { binding: 1, resource: buf.as_entire_binding() },
                     ],
                 });
                 d.prev_models = Some((buf, bg));
@@ -367,15 +389,15 @@ impl Renderer {
             params: [width as f32, height as f32, if models_ok { 1.0 } else { 0.0 }, d.prev_entries as f32],
             origin_delta: [origin_delta.x, origin_delta.y, origin_delta.z, MAX_FRAME_JUMP],
         };
-        self.queue.write_buffer(&d.motion_buf, 0, bytemuck::bytes_of(&mu));
+        self.queue.write_buffer(&d.motion_buf, 0, bytemuck::bytes_of(&mu))
+            .expect("mX: a queue write");
         self.temporal_pending = Some(TemporalFrame { vp: vp_plain, vp_prev_here, jitter, reset: prev.is_none() || jumped, aspect: f.aspect, dt: f.dt });
         shift * vp_plain
     }
 
     /// Last commands of the scene encoder in an upscaled frame: the model matrices copied for the
-    /// next frame's motion, and two empty passes so that the upscalers find their textures in the
-    /// states they are told (render target, depth write).
-    pub(crate) fn temporal_end_of_scene(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene) {
+    /// next frame's motion.
+    pub(crate) fn temporal_end_of_scene(&mut self, encoder: &mut mx::CommandEncoder, scene: &Scene) {
         let Some(d) = self.temporal.as_mut() else { return };
         if let (Some(GpuArray::Buffer(models)), Some((prev, _))) = (scene.model_buf.as_ref(), d.prev_models.as_ref()) {
             let bytes = (scene.uploaded_entries as u64 * 64).min(models.size()).min(prev.size());
@@ -385,35 +407,8 @@ impl Renderer {
             d.prev_epoch = scene.model_epoch;
             d.prev_entries = (bytes / 64) as u32;
         }
-        let (Some(t), Some(ao)) = (d.targets.as_ref(), self.targets.ao.as_ref()) else { return };
-        let keep = |view| {
-            Some(wgpu::RenderPassColorAttachment {
-                view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
-            })
-        };
-        drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("temporal inputs"),
-            color_attachments: &[keep(&t.color_view), keep(&t.motion_view), keep(&t.mask_view)],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &ao.depth_view,
-                depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }),
-                stencil_ops: None,
-            }),
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        }));
-        drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("temporal output"),
-            color_attachments: &[keep(&t.output_view)],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        }));
+        // (the upscalers find the inputs in the states mX leaves every texture in between its
+        // commands: no pass is needed to put them in one, as wgpu's last-use states needed)
     }
 
     pub(crate) fn temporal_present(&mut self, scene: &Scene, f: &FrameCtx, frame: TemporalFrame) {
@@ -426,6 +421,11 @@ impl Renderer {
         let Some(t) = d.targets.as_ref() else { return };
         let fov = camera.fov_deg.to_radians();
         let proj = Mat4::perspective_rh(fov, frame.aspect, camera.depth_far(), camera.near);
+        let view = Mat4::look_to_rh(
+            (camera.position - ro).as_vec3(),
+            camera.forward(),
+            camera.up(),
+        );
         let constants = FrameConstants {
             view_to_clip: sl_matrix(proj),
             clip_to_view: sl_matrix(proj.inverse()),
@@ -442,14 +442,17 @@ impl Renderer {
             aspect: frame.aspect,
             reset: frame.reset,
             frame_ms: frame.dt * 1000.0,
+            world_to_view: sl_matrix(view),
+            view_to_world: sl_matrix(view.inverse()),
+            ..Default::default()
         };
-        let inputs = Inputs { color: &t.color, depth: &ao.depth_tex, motion: &t.motion, mask: &t.mask, output: &t.output_tex, render_size: render, output_size: full, views: [&t.color_raw_view, &ao.depth_view, &t.motion_view, &t.mask_view, &t.output_view] };
+        let inputs = Inputs { color: &t.color, depth: Some(&ao.depth_tex),
+            motion: Some(&t.motion),
+            mask: Some(&t.mask), output: &t.output_tex, render_size: render, output_size: full, guides: None, };
         let clock = std::time::Instant::now();
-        let result = match &mut d.runtime {
-            Runtime::Dlss(r) => r.evaluate(&self.queue, quality, &inputs, &constants),
-            Runtime::Fsr3(r) => r.upscale(&self.queue, &inputs, &constants),
-            Runtime::MetalFx(r) => r.upscale(&self.queue, &inputs, &constants),
-        };
+        let result = d
+            .runtime
+            .upscale(&self.queue, quality.mx(), &inputs, &constants);
         let upscaled = clock.elapsed();
         let ok = match result {
             Ok(()) => true,
@@ -465,22 +468,36 @@ impl Renderer {
         d.prev = Some(TemporalPrev { camera: *camera, aspect: frame.aspect, origin: ro, render, output: full });
         // (`upscale.wgsl`'s third mode: the upscalers return the sRGB-encoded numbers they were
         // given, and writing them to the sRGB window unconverted would encode them twice)
-        let sharpen = match d.runtime {
-            Runtime::Dlss(_) => DLSS_SHARPEN,
-            Runtime::MetalFx(_) => METALFX_SHARPEN,
-            Runtime::Fsr3(_) => 0.0,
+        let sharpen = match d.runtime.method() {
+            mx_upscale::Method::Dlss | mx_upscale::Method::DlssRayReconstruction => DLSS_SHARPEN,
+            mx_upscale::Method::MetalFxTemporal | mx_upscale::Method::MetalFxSpatial => {
+                METALFX_SHARPEN
+            }
+            mx_upscale::Method::Fsr3 | mx_upscale::Method::Xess => 0.0,
         };
-        self.queue.write_buffer(&d.blit_buf, 0, bytemuck::cast_slice(&[full.0 as f32, full.1 as f32, sharpen, 2.0]));
+        self.queue
+            .write_buffer(
+                &d.blit_buf,
+                0,
+                bytemuck::cast_slice(&[full.0 as f32, full.1 as f32, sharpen, 2.0]),
+            )
+            .expect("mX: a queue write");
         let bg = if ok { &t.output_bg } else { &t.color_bg };
         if !ok {
             // (the plain picture's bind group reads this buffer, which no upscaled frame writes)
-            self.queue.write_buffer(&self.scale.upscale_buf, 0, bytemuck::cast_slice(&[render.0 as f32, render.1 as f32, 0.0, 0.0]));
+            self.queue
+                .write_buffer(
+                    &self.scale.upscale_buf,
+                    0,
+                    bytemuck::cast_slice(&[render.0 as f32, render.1 as f32, 0.0, 0.0]),
+                )
+                .expect("mX: a queue write");
         }
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("temporal hud") });
-        // Frame generation (MetalFX's, which takes the scaler's depth and motion): the same
-        // picture as the window's below the HUD, to the bit - it tells the interface apart
-        // by what differs between the two.
-        let generation = self.frame_generation.clone().filter(|g| ok && g.working() && matches!(d.runtime, Runtime::MetalFx(_)));
+        let mut encoder = self.device.create_command_encoder(Some("temporal hud"));
+        // Frame generation (which takes the scaler's depth and motion): the same picture as the
+        // window's below the HUD, to the bit - it tells the interface apart by what differs
+        // between the two.
+        let generation = self.frame_generation.clone().filter(|g| ok && g.working());
         let hudless = generation.as_ref().map(|_| {
             if d.hudless.first().is_none_or(|(h, _)| (h.width(), h.height()) != full) {
                 d.hudless = (0..2).map(|_| hudless_target(&self.device, full, self.format)).collect();
@@ -491,45 +508,45 @@ impl Renderer {
             (d.hudless[(d.frame % 2) as usize].clone(), last)
         });
         if let Some(((_, view), _)) = hudless.as_ref() {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("frame generation hudless"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
                     view,
-                    depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                        store: mx::StoreOp::Store, },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
             pass.set_pipeline(&self.scale.upscale_pipeline);
-            pass.set_bind_group(0, bg, &[]);
+            pass.set_bind_group(0, bg);
             pass.draw(0..3, 0..1);
         }
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("temporal hud"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
                     view: target,
-                    depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                        store: mx::StoreOp::Store, },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
             pass.set_pipeline(&self.scale.upscale_pipeline);
-            pass.set_bind_group(0, bg, &[]);
+            pass.set_bind_group(0, bg);
             pass.draw(0..3, 0..1);
             if overlays > 0 {
                 pass.set_pipeline(&self.overlay_pipeline_1x);
                 for k in 0..overlays {
                     if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                        pass.set_bind_group(0, bg, &[]);
+                        pass.set_bind_group(0, bg);
                         pass.draw(0..6, 0..1);
                     }
                 }
@@ -537,26 +554,17 @@ impl Renderer {
         }
         self.queue.submit(Some(encoder.finish()));
         if let (Some(g), Some(((picture, _), last_picture))) = (generation, hudless) {
-            let scaler = match &d.runtime {
-                Runtime::MetalFx(r) => r.scaler(),
-                _ => None,
-            };
-            g.prepare(GenerationInputs {
+            let mut inputs = mx_upscale::FrameInputs::new(
                 picture,
-                last_picture,
-                depth: ao.depth_tex.clone(),
-                motion: t.motion.clone(),
-                render_size: render,
-                output_size: full,
-                jitter: frame.jitter,
-                near: camera.near,
-                far: camera.depth_far(),
-                fov,
-                aspect: frame.aspect,
-                seconds: frame.dt,
-                cut: frame.reset,
-                scaler,
-            });
+                ao.depth_tex.clone(),
+                t.motion.clone(),
+                render,
+                full,
+                constants,
+            )
+            .with_upscaler(Some(&d.runtime));
+            inputs.last_hudless = last_picture.filter(|_| g.wants_last_picture());
+            g.prepare(&self.queue, inputs);
         }
         if self.profiling {
             let mut stats = self.stats.borrow_mut();

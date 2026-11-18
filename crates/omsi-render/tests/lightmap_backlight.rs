@@ -8,11 +8,11 @@ use omsi_render::{AlphaMode, Camera, Lighting, RenderOptions, Renderer};
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn an_enabled_lightmap_keeps_its_texture_readable_at_night() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions {
             msaa: 1,
             ssao: false,

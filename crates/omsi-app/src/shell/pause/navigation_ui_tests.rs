@@ -118,8 +118,8 @@ fn pause_navigation_write_preview() {
     omsi_ui::i18n::set_language("en");
     let out = std::path::PathBuf::from(std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set OPENOMSI_PAUSE_PREVIEW"));
     std::fs::create_dir_all(&out).unwrap();
-    let instance = wgpu::Instance::default();
-    let renderer = pollster::block_on(omsi_render::Renderer::new(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb))).unwrap();
+    let instance = mx::Instance::default();
+    let renderer = pollster::block_on(omsi_render::Renderer::new(&instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb),)).unwrap();
     let mut rail = menu();
     for (id, label) in [
         ("vehicle", "Vehicle options..."),

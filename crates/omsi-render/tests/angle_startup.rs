@@ -56,27 +56,27 @@ fn run_case(basic: bool, no_enhanced: bool) {
     for dll in ["libEGL.dll", "libGLESv2.dll"] {
         assert!(directory.join(dll).is_file(), "missing {dll}");
     }
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::GL;
-    descriptor.backend_options.gl.angle.device_type = wgpu::AngleDeviceType::Warp;
-    descriptor.backend_options.gl.angle.library_directory =
-        Some(directory.to_string_lossy().into_owned());
-    descriptor.backend_options.gl.context_lock_timeout = Some(std::time::Duration::from_secs(30));
-    let instance = omsi_render::angle::instance(descriptor);
-    let adapters = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::GL));
+    // ANGLE's libEGL from that folder, on WARP (mX's GL reads both from the environment)
+    // SAFETY: set before mX loads EGL, on the test's own thread
+    unsafe {
+        std::env::set_var("MX_EGL_LIBRARY", directory.join("libEGL.dll"));
+        std::env::set_var("MX_ANGLE_DEVICE", "warp");
+    }
+    let instance = omsi_render::angle::instance();
+    let adapters = instance.enumerate_adapters();
     assert!(!adapters.is_empty(), "ANGLE/WARP did not expose an adapter");
     for adapter in &adapters {
-        let info = adapter.get_info();
+        let info = adapter.info();
         eprintln!("ANGLE WARP adapter: {info:?}");
-        assert_eq!(info.backend, wgpu::Backend::Gl);
+        assert_eq!(info.backend, mx::Backend::Gl);
         assert!(info.name.contains("ANGLE"), "expected ANGLE: {info:?}");
-        assert_eq!(info.device_type, wgpu::DeviceType::Cpu, "expected WARP");
+        assert_eq!(info.device_type, mx::DeviceType::Cpu, "expected WARP");
     }
     eprintln!("ANGLE WARP: basic={basic}, no_enhanced={no_enhanced}");
     let mut renderer = pollster::block_on(omsi_render::Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         omsi_render::RenderOptions {
             msaa: 1,
             shadow_size: 256,
@@ -91,9 +91,7 @@ fn run_case(basic: bool, no_enhanced: bool) {
             "full pipeline set silently fell back to basic"
         );
     }
-    let scope = renderer
-        .device
-        .push_error_scope(wgpu::ErrorFilter::Validation);
+    let scope = renderer.watch_errors();
     let mut scene = renderer.new_scene();
     let camera = omsi_render::Camera {
         position: glam::DVec3::new(0.0, -35.0, 30.0),
@@ -114,6 +112,6 @@ fn run_case(basic: bool, no_enhanced: bool) {
         )
         .expect("ANGLE first frame and readback");
     assert_eq!(pixels.len(), 16 * 16 * 4);
-    assert!(pollster::block_on(scope.pop()).is_none());
+    assert!(scope.pop().is_none());
     assert!(renderer.device_lost().is_none());
 }

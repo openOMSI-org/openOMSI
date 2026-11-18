@@ -40,7 +40,7 @@ pub(crate) const ENHANCED: &str = concat!(
 /// FSR 1's passes for a picture of `format`: on an sRGB one they take its texels to gamma
 /// and back (`SRGB_TARGET` in `fsr1.wgsl`), on another they read its values as they are.
 /// With `raw_input` (`fsr1_raw_input`) they read an sRGB scene's stored values as they are.
-pub(crate) fn fsr1_source_for(format: wgpu::TextureFormat, raw_input: bool) -> String {
+pub(crate) fn fsr1_source_for(format: mx::TextureFormat, raw_input: bool) -> String {
     let source = include_str!("fsr1.wgsl");
     let source = if format.is_srgb() {
         source.to_string()
@@ -56,7 +56,7 @@ pub(crate) fn fsr1_source_for(format: wgpu::TextureFormat, raw_input: bool) -> S
 
 /// OMSI_FSR_RAW_INPUT on a device that can read a texture through a view of another format
 /// (not OpenGL): FSR 1 reads the scene's sRGB values without decoding them.
-pub(crate) fn fsr1_raw_input(format: wgpu::TextureFormat) -> bool {
+pub(crate) fn fsr1_raw_input(format: mx::TextureFormat) -> bool {
     format.is_srgb() && !crate::gl_backend() && omsi_cfg::flags::OMSI_FSR_RAW_INPUT.is_set()
 }
 
@@ -66,10 +66,12 @@ mod tests {
     fn fsr1_shader_parses_and_validates() {
         // No GPU or OMSI installation required. Run even though FSR is off by default.
         // Both variants: an sRGB window (gamma 2.0 in and out) and one that is not.
-        for format in [wgpu::TextureFormat::Bgra8UnormSrgb, wgpu::TextureFormat::Rgba8Unorm] {
+        for format in [mx::TextureFormat::Bgra8UnormSrgb,
+            mx::TextureFormat::Rgba8Unorm,] {
             let source = super::fsr1_source_for(format, false);
             assert_eq!(source.contains("const SRGB_TARGET: bool = true;"), format.is_srgb(), "{format:?}");
-            let module = naga::front::wgsl::parse_str(&source).expect("FSR1 WGSL must parse");
+            let module = naga::front::wgsl::parse_str(&crate::shaders::with_heap(&source))
+                .expect("FSR1 WGSL must parse");
             naga::valid::Validator::new(
                 naga::valid::ValidationFlags::all(),
                 naga::valid::Capabilities::all(),
@@ -102,13 +104,19 @@ mod tests {
             !shader.contains("spec = spec * camera.lod.y;"),
             "multiplying by the ground flag corrupts road glare"
         );
+        // (whatever the line breaks rustfmt gives the array)
+        let squeezed: String = setup.chars().filter(|c| !c.is_whitespace()).collect();
         assert!(
-            setup.contains("lod: [self.fsr_mip_bias(f), 0.0, lighting.road_glare.clamp(0.0, 2.0), 0.0]"),
+            squeezed
+                .contains("lod:[self.fsr_mip_bias(f),0.0,lighting.road_glare.clamp(0.0,2.0),0.0"),
             "camera uniform must initialize the ground-pass flag to zero and glare in z"
         );
-        let render = include_str!("render.rs");
+        let render: String = include_str!("render.rs")
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
         assert!(
-            render.contains("(std::mem::offset_of!(CameraUniform, lod) + 4) as u64, bytemuck::bytes_of(&flag)"),
+            render.contains("(std::mem::offset_of!(CameraUniform,lod)+4)asu64,bytemuck::bytes_of(&flag)"),
             "the ground pass must set lod.y alone and keep the glare in lod.z"
         );
     }

@@ -17,8 +17,8 @@ pub(crate) struct RgbaRef<'a> {
 
 pub struct GpuTexture {
     #[allow(dead_code)]
-    pub(crate) texture: wgpu::Texture,
-    pub(crate) view: wgpu::TextureView,
+    pub(crate) texture: mx::Texture,
+    pub(crate) view: mx::TextureView,
     pub(crate) size: (u32, u32),
     /// Bytes the texture takes on the GPU, all levels (0 for a freed slot's placeholder).
     pub(crate) bytes: u64,
@@ -36,12 +36,15 @@ pub(crate) fn next_gen() -> u64 {
 impl GpuTexture {
     /// A slot showing `view` (a picture the renderer draws: the one behind the rain on the
     /// glass), with `texture` a small stand-in the slot's bookkeeping asks about.
-    pub(crate) fn showing(texture: wgpu::Texture, view: wgpu::TextureView, size: (u32, u32)) -> GpuTexture {
+    pub(crate) fn showing(texture: mx::Texture,
+        view: mx::TextureView, size: (u32, u32)) -> GpuTexture {
         GpuTexture { texture, view, size, bytes: 0, generation: next_gen() }
     }
 
-    pub(crate) fn new(texture: wgpu::Texture, size: (u32, u32), bytes: u64) -> GpuTexture {
-        let view = texture.create_view(&Default::default());
+    pub(crate) fn new(texture: mx::Texture, size: (u32, u32), bytes: u64) -> GpuTexture {
+        let view = texture
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
         GpuTexture {
             texture,
             view,
@@ -106,7 +109,9 @@ fn first_short_mip(data: &omsi_texture::TextureData) -> Option<(usize, usize, us
 /// main pass among them: a black picture for the rest of the session while the sounds and
 /// the menus went on (#2472). A texture that cannot be made is drawn as a plain stand-in
 /// instead, and when memory ran short the game keeps fewer textures from then on.
-pub(crate) fn try_create_texture(device: &wgpu::Device, desc: &wgpu::TextureDescriptor) -> Option<wgpu::Texture> {
+pub(crate) fn try_create_texture(device: &mx::Device,
+    desc: &mx::TextureDescriptor,
+) -> Option<mx::Texture> {
     create_texture_checked(device, desc).ok()
 }
 
@@ -121,7 +126,9 @@ thread_local! {
     static TEXTURE_TEST_MAX_BYTES: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
 }
 
-fn create_texture_checked(device: &wgpu::Device, desc: &wgpu::TextureDescriptor) -> Result<wgpu::Texture, TextureCreationError> {
+fn create_texture_checked(device: &mx::Device,
+    desc: &mx::TextureDescriptor,
+) -> Result<mx::Texture, TextureCreationError> {
     if desc.size.width == 0 || desc.size.height == 0 {
         log::warn!("texture {}x{}: drawn plain instead", desc.size.width, desc.size.height);
         return Err(TextureCreationError::Invalid);
@@ -130,17 +137,15 @@ fn create_texture_checked(device: &wgpu::Device, desc: &wgpu::TextureDescriptor)
     if TEXTURE_TEST_MAX_BYTES.get().is_some_and(|max| texture_bytes(desc.format, desc.size.width, desc.size.height, desc.mip_level_count) > max) {
         return Err(TextureCreationError::OutOfMemory);
     }
-    let memory = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-    let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let texture = device.create_texture(desc);
-    let invalid = pollster::block_on(validation.pop());
-    let out_of_memory = pollster::block_on(memory.pop());
-    if out_of_memory.is_some() {
+    let e = match device.create_texture(desc) {
+        Ok(texture) => return Ok(texture),
+        Err(e) => e,
+    };
+    let out_of_memory = matches!(e, mx::Error::OutOfMemory(_));
+    if out_of_memory {
         TEXTURE_OUT_OF_MEMORY.store(true, std::sync::atomic::Ordering::Relaxed);
     }
-    let reason = if out_of_memory.is_some() { TextureCreationError::OutOfMemory } else { TextureCreationError::Invalid };
-    let Some(e) = out_of_memory.or(invalid) else {
-        return Ok(texture);
+    let reason = if out_of_memory { TextureCreationError::OutOfMemory } else { TextureCreationError::Invalid 
     };
     let n = FAILED_TEXTURE_CREATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if n < 5 || n % 1000 == 0 {
@@ -182,30 +187,51 @@ fn smaller_upload(data: &omsi_texture::TextureData) -> Option<omsi_texture::Text
 
 /// A texture that could not be made, drawn as one plain grey texel (its slot counts no
 /// bytes; the next upload of that picture tries again).
-pub(crate) fn stand_in_texture(device: &wgpu::Device, queue: &wgpu::Queue) -> GpuTexture {
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("stand-in"),
-        size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-        &[128, 128, 128, 255],
-        wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(4), rows_per_image: Some(1) },
-        wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
-    );
+pub(crate) fn stand_in_texture(device: &mx::Device, queue: &mx::Queue) -> GpuTexture {
+    let texture = device
+        .create_texture(&mx::TextureDescriptor {
+            label: Some("stand-in"),
+            size: mx::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: mx::TextureDimension::D2,
+            format: mx::TextureFormat::Rgba8UnormSrgb,
+            usage: mx::TextureUsages::TEXTURE_BINDING | mx::TextureUsages::COPY_DST,
+            view_formats: &[],
+        })
+        .expect("mX: a texture");
+    queue
+        .write_texture(
+            mx::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: mx::Origin3d::ZERO,
+                aspect: mx::TextureAspect::All,
+            },
+            &[128, 128, 128, 255],
+            mx::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4),
+                rows_per_image: Some(1),
+            },
+            mx::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        )
+        .expect("mX: a queue write");
     GpuTexture::new(texture, (1, 1), 0)
 }
 
 /// Bytes of a texture of `format` with `levels` mip levels.
-pub(crate) fn texture_bytes(format: wgpu::TextureFormat, w: u32, h: u32, levels: u32) -> u64 {
+pub(crate) fn texture_bytes(format: mx::TextureFormat, w: u32, h: u32, levels: u32) -> u64 {
     let (bw, bh) = format.block_dimensions();
-    let block = format.block_copy_size(None).unwrap_or(4) as u64;
+    let block = format.block_copy_size().unwrap_or(4) as u64;
     (0..levels)
         .map(|l| ((w >> l).max(1).div_ceil(bw) * (h >> l).max(1).div_ceil(bh)) as u64 * block)
         .sum()
@@ -225,8 +251,8 @@ impl PreparedTexture {
 /// any thread; None for anything else (an RGBA picture whose chain the GPU makes, a block
 /// format the device does not take).
 pub fn prepare_texture(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
+    device: &mx::Device,
+    queue: &mx::Queue,
     data: &omsi_texture::TextureData,
 ) -> Option<PreparedTexture> {
     if let Some(small) = fit_texture(data, device.limits().max_texture_dimension_2d) {
@@ -235,11 +261,11 @@ pub fn prepare_texture(
     let _turn = gl_worker_turn();
     use omsi_texture::PixelFormat;
     let format = match data.format {
-        PixelFormat::Rgba8 => wgpu::TextureFormat::Rgba8UnormSrgb,
-        PixelFormat::Bc1 => wgpu::TextureFormat::Bc1RgbaUnormSrgb,
-        PixelFormat::Bc2 => wgpu::TextureFormat::Bc2RgbaUnormSrgb,
-        PixelFormat::Bc3 => wgpu::TextureFormat::Bc3RgbaUnormSrgb,
-        PixelFormat::Bc7 => wgpu::TextureFormat::Bc7RgbaUnormSrgb,
+        PixelFormat::Rgba8 => mx::TextureFormat::Rgba8UnormSrgb,
+        PixelFormat::Bc1 => mx::TextureFormat::Bc1RgbaUnormSrgb,
+        PixelFormat::Bc2 => mx::TextureFormat::Bc2RgbaUnormSrgb,
+        PixelFormat::Bc3 => mx::TextureFormat::Bc3RgbaUnormSrgb,
+        PixelFormat::Bc7 => mx::TextureFormat::Bc7RgbaUnormSrgb,
     };
     let (w, h) = (data.width.max(1), data.height.max(1));
     if data.levels.is_empty()
@@ -251,13 +277,7 @@ pub fn prepare_texture(
     {
         return None;
     }
-    if data.format.is_compressed()
-        && (!device
-            .features()
-            .contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
-            || w % 4 != 0
-            || h % 4 != 0)
-    {
+    if data.format.is_compressed() && (!device.supports_bc() || w % 4 != 0 || h % 4 != 0) {
         return None;
     }
     if let Some((level, have, need)) = first_short_mip(data) {
@@ -265,21 +285,21 @@ pub fn prepare_texture(
         return Some(PreparedTexture(stand_in_texture(device, queue)));
     }
     let levels = data.levels.len() as u32;
-    let size = wgpu::Extent3d {
+    let size = mx::Extent3d {
         width: w,
         height: h,
         depth_or_array_layers: 1,
     };
-    let made = create_texture_checked(device, &wgpu::TextureDescriptor {
+    let made = create_texture_checked(device, &mx::TextureDescriptor {
         label: None,
         size,
         mip_level_count: levels,
         sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
+        dimension: mx::TextureDimension::D2,
         format,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::COPY_DST
-            | wgpu::TextureUsages::COPY_SRC,
+        usage: mx::TextureUsages::TEXTURE_BINDING
+                | mx::TextureUsages::COPY_DST
+                | mx::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
     let texture = match made {
@@ -293,31 +313,33 @@ pub fn prepare_texture(
         Err(TextureCreationError::Invalid) => return Some(PreparedTexture(stand_in_texture(device, queue))),
     };
     let (bw, bh) = format.block_dimensions();
-    let block = format.block_copy_size(None).unwrap_or(4);
+    let block = format.block_copy_size().unwrap_or(4);
     for (l, bytes) in data.levels.iter().enumerate() {
         let (lw, lh) = ((w >> l).max(1), (h >> l).max(1));
         // compressed levels are written whole blocks at a time, also below 4x4
-        let phys = wgpu::Extent3d {
+        let phys = mx::Extent3d {
             width: lw.div_ceil(bw) * bw,
             height: lh.div_ceil(bh) * bh,
             depth_or_array_layers: 1,
         };
         let need = ((phys.width / bw) * (phys.height / bh) * block) as usize;
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: l as u32,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &bytes[..need],
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some((phys.width / bw) * block),
-                rows_per_image: Some(phys.height / bh),
-            },
-            phys,
-        );
+        queue
+            .write_texture(
+                mx::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: l as u32,
+                    origin: mx::Origin3d::ZERO,
+                    aspect: mx::TextureAspect::All,
+                },
+                &bytes[..need],
+                mx::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some((phys.width / bw) * block),
+                    rows_per_image: Some(phys.height / bh),
+                },
+                phys,
+            )
+            .expect("mX: a queue write");
     }
     Some(PreparedTexture(GpuTexture::new(
         texture,
@@ -327,39 +349,39 @@ pub fn prepare_texture(
 }
 
 pub(crate) fn upload_texture(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
+    device: &mx::Device,
+    queue: &mx::Queue,
     img: &omsi_texture::Image,
     mipmaps: bool,
 ) -> GpuTexture {
-    upload_texture_format(device, queue, img, mipmaps, wgpu::TextureFormat::Rgba8UnormSrgb)
+    upload_texture_format(device, queue, img, mipmaps, mx::TextureFormat::Rgba8UnormSrgb,)
 }
 
 pub(crate) fn upload_texture_format(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
+    device: &mx::Device,
+    queue: &mx::Queue,
     img: &omsi_texture::Image,
     mipmaps: bool,
-    format: wgpu::TextureFormat,
+    format: mx::TextureFormat,
 ) -> GpuTexture {
     let mip_count = if mipmaps {
         (32 - img.width.max(img.height).leading_zeros()).max(1)
     } else {
         1
     };
-    let size = wgpu::Extent3d {
+    let size = mx::Extent3d {
         width: img.width,
         height: img.height,
         depth_or_array_layers: 1,
     };
-    let Some(texture) = try_create_texture(device, &wgpu::TextureDescriptor {
+    let Some(texture) = try_create_texture(device, &mx::TextureDescriptor {
         label: None,
         size,
         mip_level_count: mip_count,
         sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
+        dimension: mx::TextureDimension::D2,
         format,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        usage: mx::TextureUsages::TEXTURE_BINDING | mx::TextureUsages::COPY_DST,
         view_formats: &[],
     }) else {
         return stand_in_texture(device, queue);
@@ -368,25 +390,27 @@ pub(crate) fn upload_texture_format(
     let mut level: Vec<u8> = img.rgba.clone();
     let (mut w, mut h) = (img.width, img.height);
     for mip in 0..mip_count {
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: mip,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &level,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(w * 4),
-                rows_per_image: Some(h),
-            },
-            wgpu::Extent3d {
-                width: w,
-                height: h,
-                depth_or_array_layers: 1,
-            },
-        );
+        queue
+            .write_texture(
+                mx::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: mip,
+                    origin: mx::Origin3d::ZERO,
+                    aspect: mx::TextureAspect::All,
+                },
+                &level,
+                mx::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(w * 4),
+                    rows_per_image: Some(h),
+                },
+                mx::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+            )
+            .expect("mX: a queue write");
         if mip + 1 == mip_count {
             break;
         }
@@ -419,7 +443,9 @@ pub(crate) fn upload_texture_format(
         w = nw;
         h = nh;
     }
-    let view = texture.create_view(&Default::default());
+    let view = texture
+        .create_view(&Default::default())
+        .expect("mX: a texture view");
     GpuTexture {
         texture,
         view,
@@ -543,7 +569,7 @@ impl Renderer {
 
     /// Unconverted RGBA channels for dynamic masks and other data rather than colour.
     pub fn add_data_texture(&self, scene: &mut Scene, img: &omsi_texture::Image) -> TextureId {
-        let texture = upload_texture_format(&self.device, &self.queue, img, false, wgpu::TextureFormat::Rgba8Unorm);
+        let texture = upload_texture_format(&self.device, &self.queue, img, false, mx::TextureFormat::Rgba8Unorm,);
         scene.textures.push(texture);
         scene.textures.len() - 1
     }
@@ -556,7 +582,7 @@ impl Renderer {
         // sampled before their first `STUnlock`, so initialise them as transparent rather
         // than briefly showing arbitrary solid pixels on new or AI vehicles.
         // (cleared on the GPU where it can: uploading the zeros was 10-35 ms per articulated AI bus)
-        let texture = if self.device.features().contains(wgpu::Features::CLEAR_TEXTURE) {
+        let texture = if true {
             self.cleared_texture(width, height, mipmaps)
         } else {
             let image = omsi_texture::Image { width, height, rgba: vec![0; (width * height * 4) as usize], has_alpha: true };
@@ -570,17 +596,20 @@ impl Renderer {
     fn cleared_texture(&self, width: u32, height: u32, mipmaps: bool) -> GpuTexture {
         let mip_count = if mipmaps { (32 - width.max(height).leading_zeros()).max(1) } else { 1 };
         let usage = if mipmaps {
-            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT
+            mx::TextureUsages::TEXTURE_BINDING
+                | mx::TextureUsages::COPY_DST
+                | mx::TextureUsages::COPY_SRC
+                | mx::TextureUsages::RENDER_ATTACHMENT
         } else {
-            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST
+            mx::TextureUsages::TEXTURE_BINDING | mx::TextureUsages::COPY_DST
         };
-        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-        let Some(texture) = try_create_texture(&self.device, &wgpu::TextureDescriptor {
+        let format = mx::TextureFormat::Rgba8UnormSrgb;
+        let Some(texture) = try_create_texture(&self.device, &mx::TextureDescriptor {
             label: None,
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: mx::Extent3d { width, height, depth_or_array_layers: 1 },
             mip_level_count: mip_count,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
+            dimension: mx::TextureDimension::D2,
             format,
             usage,
             view_formats: &[],
@@ -588,10 +617,12 @@ impl Renderer {
             return stand_in_texture(&self.device, &self.queue);
         };
         // (submitted now: a script's first picture, written after, then comes after the clear)
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("blank texture") });
-        encoder.clear_texture(&texture, &wgpu::ImageSubresourceRange::default());
+        let mut encoder = self.device.create_command_encoder(Some("blank texture"));
+        encoder.clear_texture(&texture, &mx::ImageSubresourceRange::default());
         self.queue.submit([encoder.finish()]);
-        let view = texture.create_view(&Default::default());
+        let view = texture
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
         GpuTexture { texture, view, size: (width, height), bytes: texture_bytes(format, width, height, mip_count), generation: next_gen() }
     }
 
@@ -618,9 +649,7 @@ impl Renderer {
 
     /// The device takes BC1-3 (DXT) textures.
     pub fn supports_bc(&self) -> bool {
-        self.device
-            .features()
-            .contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
+        self.device.supports_bc()
     }
 
     /// Upload a texture prepared by `omsi_texture::gpu` (blocks with their levels, or RGBA
@@ -707,22 +736,22 @@ impl Renderer {
             rgba,
         };
         let mip_count = (32 - img.width.max(img.height).leading_zeros()).max(1);
-        let size = wgpu::Extent3d {
+        let size = mx::Extent3d {
             width: img.width,
             height: img.height,
             depth_or_array_layers: 1,
         };
-        let made = create_texture_checked(&self.device, &wgpu::TextureDescriptor {
+        let made = create_texture_checked(&self.device, &mx::TextureDescriptor {
             label: None,
             size,
             mip_level_count: mip_count,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            dimension: mx::TextureDimension::D2,
+                format: mx::TextureFormat::Rgba8UnormSrgb,
+                usage: mx::TextureUsages::TEXTURE_BINDING
+                    | mx::TextureUsages::COPY_DST
+                    | mx::TextureUsages::COPY_SRC
+                    | mx::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });
         let texture = match made {
@@ -733,29 +762,33 @@ impl Renderer {
             }
             Err(_) => return stand_in_texture(&self.device, &self.queue),
         };
-        self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            img.rgba,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(img.width * 4),
-                rows_per_image: Some(img.height),
-            },
-            size,
-        );
+        self.queue
+            .write_texture(
+                mx::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: mx::Origin3d::ZERO,
+                    aspect: mx::TextureAspect::All,
+                },
+                img.rgba,
+                mx::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(img.width * 4),
+                    rows_per_image: Some(img.height),
+                },
+                size,
+            )
+            .expect("mX: a queue write");
         self.generate_mip_chain(&texture, mip_count, average);
-        let view = texture.create_view(&Default::default());
+        let view = texture
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
         GpuTexture {
             texture,
             view,
             size: (img.width, img.height),
             bytes: texture_bytes(
-                wgpu::TextureFormat::Rgba8UnormSrgb,
+                mx::TextureFormat::Rgba8UnormSrgb,
                 img.width,
                 img.height,
                 mip_count,
@@ -767,85 +800,82 @@ impl Renderer {
     /// Build all lower levels of `texture` by rendering each level from the last. The
     /// texture has already received its level-zero pixels and was created with render-attach
     /// usage by [`upload_rgba_gpu_mips`].
-    pub(crate) fn generate_mip_chain(&self, texture: &wgpu::Texture, mip_count: u32, average: MipAverage) {
+    pub(crate) fn generate_mip_chain(&self, texture: &mx::Texture, mip_count: u32, average: MipAverage) {
         let pipeline = if average == MipAverage::Independent { &self.mip_text_pipeline } else { &self.mip_pipeline };
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("mips"),
-            });
+        let mut encoder = self.device.create_command_encoder(Some("mips"));
         for level in 1..mip_count {
-            let src = texture.create_view(&wgpu::TextureViewDescriptor {
-                base_mip_level: level - 1,
-                mip_level_count: Some(1),
-                ..Default::default()
-            });
-            let dst = texture.create_view(&wgpu::TextureViewDescriptor {
-                base_mip_level: level,
-                mip_level_count: Some(1),
-                ..Default::default()
-            });
-            let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            let src = texture
+                .create_view(&mx::TextureViewDescriptor {
+                    base_mip_level: level - 1,
+                    mip_level_count: Some(1),
+                    ..Default::default()
+                })
+                .expect("mX: a texture view");
+            let dst = texture
+                .create_view(&mx::TextureViewDescriptor {
+                    base_mip_level: level,
+                    mip_level_count: Some(1),
+                    ..Default::default()
+                })
+                .expect("mX: a texture view");
+            let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
                 label: Some("mip"),
-                layout: &self.mip_layout,
                 entries: &[
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&src),
+                        resource: mx::BindingResource::TextureView(&src),
                     },
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&self.mip_sampler),
+                        resource: mx::BindingResource::Sampler(&self.mip_sampler),
                     },
                 ],
             });
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("mip"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
                     view: &dst,
-                    depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                        store: mx::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
             pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &bg, &[]);
+            pass.set_bind_group(0, &bg);
             pass.draw(0..3, 0..1);
         }
         self.queue.submit([encoder.finish()]);
     }
 
     /// The view of a texture of the scene (to draw into it with another pipeline).
-    pub fn texture_view(&self, scene: &Scene, id: TextureId) -> Option<wgpu::TextureView> {
+    pub fn texture_view(&self, scene: &Scene, id: TextureId) -> Option<mx::TextureView> {
         scene.textures.get(id).map(|t| t.view.clone())
     }
 
     /// False when `id` is no texture that can be drawn into.
-    pub fn clear_texture(&self, scene: &Scene, id: TextureId, color: wgpu::Color) -> bool {
+    pub fn clear_texture(&self, scene: &Scene, id: TextureId, color: mx::Color) -> bool {
         // A view of a whole mip chain is no colour attachment.
-        let Some(t) = scene.textures.get(id).filter(|t| t.texture.usage().contains(wgpu::TextureUsages::RENDER_ATTACHMENT) && t.texture.mip_level_count() == 1) else {
+        let Some(t) = scene.textures.get(id).filter(|t| t.texture.usage().contains(mx::TextureUsages::RENDER_ATTACHMENT) && t.texture.mip_level_count() == 1) else {
             return false;
         };
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("clear texture") });
-        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut encoder = self.device.create_command_encoder(Some("clear texture"));
+        encoder.begin_render_pass(&mx::RenderPassDescriptor {
             label: Some("clear texture"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(mx::RenderPassColorAttachment {
                 view: &t.view,
-                depth_slice: None,
                 resolve_target: None,
-                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(color), store: wgpu::StoreOp::Store },
+                ops: mx::Operations {
+                    load: mx::LoadOp::Clear(color),
+                    store: mx::StoreOp::Store, },
             })],
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
-            multiview_mask: None,
         });
         self.queue.submit([encoder.finish()]);
         true
@@ -853,53 +883,71 @@ impl Renderer {
 
     pub fn upload_speed_mb_s(&self) -> f64 {
         let n = 1024u32;
-        let size = wgpu::Extent3d { width: n, height: n, depth_or_array_layers: 1 };
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("upload check"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+        let size = mx::Extent3d { width: n, height: n, depth_or_array_layers: 1 };
+        let texture = self
+            .device
+            .create_texture(&mx::TextureDescriptor {
+                label: Some("upload check"),
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format: mx::TextureFormat::Rgba8Unorm,
+                usage: mx::TextureUsages::COPY_DST,
+                view_formats: &[],
+            })
+            .expect("mX: a texture");
         let data = vec![0u8; (n * n * 4) as usize];
         let rounds = 4;
         let t = std::time::Instant::now();
         for _ in 0..rounds {
-            self.queue.write_texture(
-                wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-                &data,
-                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(n * 4), rows_per_image: Some(n) },
-                size,
-            );
+            self.queue
+                .write_texture(
+                    mx::TexelCopyTextureInfo {
+                        texture: &texture,
+                        mip_level: 0,
+                        origin: mx::Origin3d::ZERO,
+                        aspect: mx::TextureAspect::All,
+                    },
+                    &data,
+                    mx::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(n * 4),
+                        rows_per_image: Some(n),
+                    },
+                    size,
+                )
+                .expect("mX: a queue write");
         }
         let secs = t.elapsed().as_secs_f64().max(1e-6);
         self.queue.submit([]);
-        texture.destroy();
         (data.len() * rounds) as f64 / 1e6 / secs
     }
 
     /// A texture the scene can be rendered into (`render_to_texture`), e.g. a rear-view mirror.
     pub fn add_render_texture(&self, scene: &mut Scene, width: u32, height: u32) -> TextureId {
         let (width, height) = fit_size(width.max(1), height.max(1), self.device.limits().max_texture_dimension_2d);
-        let size = wgpu::Extent3d {
+        let size = mx::Extent3d {
             width,
             height,
             depth_or_array_layers: 1,
         };
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("render target"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: self.format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let view = texture.create_view(&Default::default());
+        let texture = self
+            .device
+            .create_texture(&mx::TextureDescriptor {
+                label: Some("render target"),
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format: self.format,
+                usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .expect("mX: a texture");
+        let view = texture
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
         // (its depth buffer is the pass's own, see `msaa_targets`)
         let bytes = texture_bytes(self.format, width, height, 1);
         scene.textures.push(GpuTexture {
@@ -944,25 +992,27 @@ impl Renderer {
             return;
         }
         let t = &gt.texture;
-        self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: t,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &img.rgba,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(img.width * 4),
-                rows_per_image: Some(img.height),
-            },
-            wgpu::Extent3d {
-                width: img.width,
-                height: img.height,
-                depth_or_array_layers: 1,
-            },
-        );
+        self.queue
+            .write_texture(
+                mx::TexelCopyTextureInfo {
+                    texture: t,
+                    mip_level: 0,
+                    origin: mx::Origin3d::ZERO,
+                    aspect: mx::TextureAspect::All,
+                },
+                &img.rgba,
+                mx::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(img.width * 4),
+                    rows_per_image: Some(img.height),
+                },
+                mx::Extent3d {
+                    width: img.width,
+                    height: img.height,
+                    depth_or_array_layers: 1,
+                },
+            )
+            .expect("mX: a queue write");
     }
 
     pub fn update_texture_rect(&self, scene: &Scene, id: TextureId, img: &omsi_texture::Image, [x, y, w, h]: [u32; 4]) {
@@ -970,25 +1020,27 @@ impl Renderer {
         if (img.width, img.height) != gt.size || x + w > img.width || y + h > img.height || img.rgba.len() < (img.width * img.height * 4) as usize {
             return;
         }
-        self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &gt.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d { x, y, z: 0 },
-                aspect: wgpu::TextureAspect::All,
-            },
-            &img.rgba[((y * img.width + x) * 4) as usize..],
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(img.width * 4),
-                rows_per_image: Some(h),
-            },
-            wgpu::Extent3d {
-                width: w,
-                height: h,
-                depth_or_array_layers: 1,
-            },
-        );
+        self.queue
+            .write_texture(
+                mx::TexelCopyTextureInfo {
+                    texture: &gt.texture,
+                    mip_level: 0,
+                    origin: mx::Origin3d { x, y, z: 0 },
+                    aspect: mx::TextureAspect::All,
+                },
+                &img.rgba[((y * img.width + x) * 4) as usize..],
+                mx::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(img.width * 4),
+                    rows_per_image: Some(h),
+                },
+                mx::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+            )
+            .expect("mX: a queue write");
     }
 
     /// Replace the top pixels of a dynamic texture and rebuild its mip chain. Returns true
@@ -1055,11 +1107,11 @@ impl Renderer {
         };
         use omsi_texture::PixelFormat;
         let format = match data.format {
-            PixelFormat::Rgba8 => wgpu::TextureFormat::Rgba8UnormSrgb,
-            PixelFormat::Bc1 => wgpu::TextureFormat::Bc1RgbaUnormSrgb,
-            PixelFormat::Bc2 => wgpu::TextureFormat::Bc2RgbaUnormSrgb,
-            PixelFormat::Bc3 => wgpu::TextureFormat::Bc3RgbaUnormSrgb,
-            PixelFormat::Bc7 => wgpu::TextureFormat::Bc7RgbaUnormSrgb,
+            PixelFormat::Rgba8 => mx::TextureFormat::Rgba8UnormSrgb,
+            PixelFormat::Bc1 => mx::TextureFormat::Bc1RgbaUnormSrgb,
+            PixelFormat::Bc2 => mx::TextureFormat::Bc2RgbaUnormSrgb,
+            PixelFormat::Bc3 => mx::TextureFormat::Bc3RgbaUnormSrgb,
+            PixelFormat::Bc7 => mx::TextureFormat::Bc7RgbaUnormSrgb,
         };
         let generate = data.format == PixelFormat::Rgba8
             && data.levels.len() == 1
@@ -1079,29 +1131,31 @@ impl Renderer {
             return self.replace_texture(scene, id, data);
         }
         let (bw, bh) = format.block_dimensions();
-        let block = format.block_copy_size(None).unwrap_or(4);
+        let block = format.block_copy_size().unwrap_or(4);
         for (level, bytes) in data.levels.iter().enumerate() {
             let width = (data.width >> level).max(1).div_ceil(bw) * bw;
             let height = (data.height >> level).max(1).div_ceil(bh) * bh;
-            self.queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &old.texture,
-                    mip_level: level as u32,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                bytes,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(width / bw * block),
-                    rows_per_image: Some(height / bh),
-                },
-                wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-            );
+            self.queue
+                .write_texture(
+                    mx::TexelCopyTextureInfo {
+                        texture: &old.texture,
+                        mip_level: level as u32,
+                        origin: mx::Origin3d::ZERO,
+                        aspect: mx::TextureAspect::All,
+                    },
+                    bytes,
+                    mx::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(width / bw * block),
+                        rows_per_image: Some(height / bh),
+                    },
+                    mx::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                )
+                .expect("mX: a queue write");
         }
         if generate && levels > 1 {
             self.generate_mip_chain(&old.texture, levels, MipAverage::ByCoverage);
@@ -1144,7 +1198,7 @@ impl Renderer {
         let (w, h) = t.size;
         let levels = t.texture.mip_level_count();
         let format = t.texture.format();
-        if n == 0 || n >= levels || !t.texture.usage().contains(wgpu::TextureUsages::COPY_SRC) {
+        if n == 0 || n >= levels || !t.texture.usage().contains(mx::TextureUsages::COPY_SRC) {
             return false;
         }
         let (nw, nh) = ((w >> n).max(1), (h >> n).max(1));
@@ -1154,49 +1208,46 @@ impl Renderer {
         }
         let new_levels = levels - n;
         // (no memory for the smaller copy: the texture stays as it is)
-        let Some(texture) = try_create_texture(&self.device, &wgpu::TextureDescriptor {
+        let Some(texture) = try_create_texture(&self.device, &mx::TextureDescriptor {
             label: None,
-            size: wgpu::Extent3d {
+            size: mx::Extent3d {
                 width: nw,
                 height: nh,
                 depth_or_array_layers: 1,
             },
             mip_level_count: new_levels,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
+            dimension: mx::TextureDimension::D2,
             format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC,
+            usage: mx::TextureUsages::TEXTURE_BINDING
+                    | mx::TextureUsages::COPY_DST
+                    | mx::TextureUsages::COPY_SRC,
             view_formats: &[],
         }) else {
             return false;
         };
-        let encoder = drops.encoder.get_or_insert_with(|| {
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("drop levels"),
-                })
-        });
+        let encoder = drops
+            .encoder
+            .get_or_insert_with(|| self.device.create_command_encoder(Some("drop levels")));
         for l in 0..new_levels {
             let (lw, lh) = ((nw >> l).max(1), (nh >> l).max(1));
-            let size = wgpu::Extent3d {
+            let size = mx::Extent3d {
                 width: lw.div_ceil(bw) * bw,
                 height: lh.div_ceil(bh) * bh,
                 depth_or_array_layers: 1,
             };
             encoder.copy_texture_to_texture(
-                wgpu::TexelCopyTextureInfo {
+                mx::TexelCopyTextureInfo {
                     texture: &t.texture,
                     mip_level: l + n,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
+                    origin: mx::Origin3d::ZERO,
+                    aspect: mx::TextureAspect::All,
                 },
-                wgpu::TexelCopyTextureInfo {
+                mx::TexelCopyTextureInfo {
                     texture: &texture,
                     mip_level: l,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
+                    origin: mx::Origin3d::ZERO,
+                    aspect: mx::TextureAspect::All,
                 },
                 size,
             );
@@ -1250,7 +1301,7 @@ impl Renderer {
             if !uses {
                 continue;
             }
-            m.bind_group = self.material_bind_group(
+            m.binding = self.material_binding(
                 textures,
                 MaterialMaps {
                     texture: m.texture,
@@ -1263,7 +1314,7 @@ impl Renderer {
                     pbr: m.texture.and_then(|t| pbr_maps.get(&t)).copied(),
                 },
                 m.address,
-                &m.buf,
+                m.binding.row.clone(),
             );
             n += 1;
         }
@@ -1273,7 +1324,7 @@ impl Renderer {
 
 /// Textures being shrunk together (see [`Renderer::begin_level_drops`]).
 pub struct LevelDrops {
-    encoder: Option<wgpu::CommandEncoder>,
+    encoder: Option<mx::CommandEncoder>,
     count: usize,
 }
 

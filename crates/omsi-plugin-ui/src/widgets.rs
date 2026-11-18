@@ -232,7 +232,8 @@ pub struct Images {
 
 impl Images {
     /// The picture's texture, read from its file the first time (None: it cannot be read).
-    pub fn get(&mut self, gpu: &mut Gpu, device: &wgpu::Device, queue: &wgpu::Queue, path: &Path) -> Option<usize> {
+    pub fn get(&mut self, gpu: &mut Gpu, device: &mx::Device,
+        queue: &mx::Queue, path: &Path) -> Option<usize> {
         if let Some(t) = self.loaded.get(path) {
             return *t;
         }
@@ -353,21 +354,31 @@ mod tests {
     #[ignore]
     fn preview_controls() {
         let (w, h, k) = (800u32, 620u32, 1.0f32);
-        let instance = wgpu::Instance::default();
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).expect("adapter");
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).expect("device");
-        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-        let target = device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
-            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let view = target.create_view(&Default::default());
+        let instance = mx::Instance::default();
+        let adapter = instance.default_adapter().expect("adapter");
+        let (device, queue) = adapter
+            .request_device(&mx::DeviceDescriptor::default())
+            .expect("device");
+        let format = mx::TextureFormat::Rgba8UnormSrgb;
+        let target = device
+            .create_texture(&mx::TextureDescriptor {
+                label: None,
+                size: mx::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format,
+                usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            })
+            .expect("mX: a texture");
+        let view = target
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
         let mut gpu = Gpu::new(&device, format, 1, 1024);
         let fonts = Fonts::new();
         let mut atlas = Atlas::new(1024);

@@ -254,9 +254,8 @@ impl App {
                 self.window.as_ref(),
             ) {
                 hud.update(r, scene, &lines);
-                if let wgpu::CurrentSurfaceTexture::Success(frame)
-                | wgpu::CurrentSurfaceTexture::Suboptimal(frame) =
-                    s.acquire()
+                if let mx::CurrentSurfaceTexture::Success(frame)
+                | mx::CurrentSurfaceTexture::Suboptimal(frame) = s.acquire()
                 {
                     let view = s.view(&r.device, &frame);
                     let cam = Camera {

@@ -5,13 +5,32 @@ use omsi_ui::{paint::Align, Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect
 
 fn main() {
     let out = std::env::args().nth(1).unwrap_or("headless.png".into());
-    let instance = wgpu::Instance::default();
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).expect("adapter");
-    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).expect("device");
+    let instance = mx::Instance::default();
+    let adapter = instance.default_adapter().expect("adapter");
+    let (device, queue) = adapter
+        .request_device(&mx::DeviceDescriptor::default())
+        .expect("device");
     let (w, h) = (460u32, 368u32);
-    let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-    let target = device.create_texture(&wgpu::TextureDescriptor { label: None, size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC, view_formats: &[] });
-    let view = target.create_view(&Default::default());
+    let format = mx::TextureFormat::Rgba8UnormSrgb;
+    let target = device
+        .create_texture(&mx::TextureDescriptor {
+            label: None,
+            size: mx::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: mx::TextureDimension::D2,
+            format,
+            usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        })
+        .expect("mX: a texture");
+    let view = target
+        .create_view(&Default::default())
+        .expect("mX: a texture view");
     let mut gpu = Gpu::new(&device, format, 4, 512);
     let fonts = Fonts::new();
     let mut atlas = Atlas::new(512);
@@ -52,22 +71,35 @@ fn main() {
         Draw { buffer: 1, range: 0..route.len(), layer: 1, texture: 0 },
         Draw { buffer: 2, range: n_bg..ui.len(), layer: 0, texture: 0 },
     ];
-    let mut enc = device.create_command_encoder(&Default::default());
-    gpu.render(&device, &queue, &mut enc, &view, (w, h), Some(wgpu::Color::TRANSPARENT), &layers, &draws);
+    let mut enc = device.create_command_encoder(None);
+    gpu.render(&device, &queue, &mut enc, &view, (w, h), Some(mx::Color::TRANSPARENT), &layers, &draws);
     let stride = (w * 4).div_ceil(256) * 256;
-    let buf = device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (stride * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-    enc.copy_texture_to_buffer(target.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
-    queue.submit([enc.finish()]);
-    buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-    device.poll(wgpu::PollType::wait_indefinitely()).ok();
-    let data = buf.slice(..).get_mapped_range();
-    let mut img = image::RgbaImage::new(w, h);
-    for y in 0..h {
-        for x in 0..w {
-            let i = (y * stride + x * 4) as usize;
-            img.put_pixel(x, y, image::Rgba([data[i], data[i + 1], data[i + 2], data[i + 3]]));
-        }
-    }
+    let buf = device
+        .create_buffer(&mx::BufferDescriptor {
+            label: None,
+            size: (stride * h) as u64,
+            usage: mx::BufferUsages::COPY_DST | mx::BufferUsages::MAP_READ,
+        })
+        .expect("mX: a buffer");
+    enc.copy_texture_to_buffer(target.as_image_copy(), mx::TexelCopyBufferInfo { buffer: &buf, layout: mx::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } }, mx::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
+    let copied = queue.submit([enc.finish()]);
+    device.wait(copied).expect("the picture drawn");
+    let img = buf
+        .map_read_now(0..buf.size(), |data| {
+            let mut img = image::RgbaImage::new(w, h);
+            for y in 0..h {
+                for x in 0..w {
+                    let i = (y * stride + x * 4) as usize;
+                    img.put_pixel(
+                        x,
+                        y,
+                        image::Rgba([data[i], data[i + 1], data[i + 2], data[i + 3]]),
+                    );
+                }
+            }
+            img
+        })
+        .expect("the picture read");
     img.save(&out).unwrap();
     println!("wrote {out}");
 }

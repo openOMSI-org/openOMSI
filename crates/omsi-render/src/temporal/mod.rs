@@ -1,44 +1,65 @@
-//! Temporal upscaling: NVIDIA DLSS, AMD FSR 3 or Apple MetalFX draw the picture smaller, take
-//! the last frames' pixels along by each pixel's motion and bring it up to the window. DLSS and
-//! FSR 3 on Windows, on DirectX 12 or Vulkan; MetalFX on a Mac with Apple silicon, on Metal.
+//! Temporal upscaling: NVIDIA DLSS, AMD FSR 3, Intel XeSS or Apple MetalFX draw the picture
+//! smaller, take the last frames' pixels along by each pixel's motion and bring it up to the
+//! window; frame generation adds pictures between the drawn ones. The vendors' code is driven by
+//! mX's `mx-upscale` on mX's own device, queue and textures; this module holds the game's side:
+//! the settings' words, the jitter, the motion vectors, the textures and the HUD
+//! (`frame.rs`).
+//!
 //! (The `upscaler` setting's other choices, Catmull-Rom and FSR 1, work on one frame and need
 //! none of this: `encode_upscale`.)
 //!
 //! No vendor's code is linked or in the repository. The Windows x64 package carries AMD's
-//! DLLs; NVIDIA's come from the launcher's optional installer; MetalFX is part of macOS 13 and
-//! newer. Without them the game neither offers the choice nor changes anything
+//! DLLs; NVIDIA's and Intel's come from the launcher's optional installer; MetalFX is part of
+//! macOS 13 and newer. Without them the game neither offers the choice nor changes anything
 //! (`omsi_cfg::upscaler_files`).
 
-#[cfg(windows)]
-mod d3d12;
-#[cfg(windows)]
-mod fidelityfx;
 mod frame;
-#[cfg(target_os = "macos")]
-mod metalfx;
-#[cfg(target_os = "macos")]
-pub(crate) mod metalfx_frames;
-#[cfg(windows)]
-mod streamline;
-#[cfg(windows)]
-mod vulkan;
 #[cfg(test)]
 mod tests;
 
 pub(crate) use frame::*;
-#[cfg(target_os = "macos")]
-pub use metalfx_frames::{FrameGeneration, GenerationWindow};
+pub(crate) use mx_upscale::{Constants as FrameConstants, Inputs};
 
-/// What makes the in-between frames (the `frame_generation` setting): Apple MetalFX, on a Mac.
+/// How the game runs the vendors: their libraries from the game's folder.
+pub(crate) fn upscale_options() -> mx_upscale::Options {
+    let show = match omsi_cfg::flags::OMSI_FG_SHOW
+        .var()
+        .map(|v| v.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("generated") => mx_upscale::Show::Generated,
+        Some("drawn") => mx_upscale::Show::Drawn,
+        _ => mx_upscale::Show::Both,
+    };
+    mx_upscale::Options {
+        library_dir: omsi_cfg::upscaler_files::program_dir(),
+        show,
+        ..Default::default()
+    }
+}
+
+/// What makes the in-between frames (the `frame_generation` setting).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrameGenerationKind {
+    /// Apple MetalFX, on a Mac.
     MetalFx,
+    /// NVIDIA DLSS Frame Generation: 1 to 3 pictures between two drawn ones.
+    Dlss(u32),
+    /// AMD FSR 3.
+    Fsr3,
+    /// Intel XeSS (DirectX 12).
+    Xess,
 }
 
 impl FrameGenerationKind {
     pub fn parse(s: &str) -> Option<FrameGenerationKind> {
         match omsi_cfg::upscaler_files::frame_generation_word(s) {
             "metalfx" => Some(FrameGenerationKind::MetalFx),
+            "dlss2x" => Some(FrameGenerationKind::Dlss(1)),
+            "dlss3x" => Some(FrameGenerationKind::Dlss(2)),
+            "dlss4x" => Some(FrameGenerationKind::Dlss(3)),
+            "fsr3" => Some(FrameGenerationKind::Fsr3),
+            "xess" => Some(FrameGenerationKind::Xess),
             _ => None,
         }
     }
@@ -47,80 +68,204 @@ impl FrameGenerationKind {
     pub fn upscaler(self) -> TemporalUpscaler {
         match self {
             FrameGenerationKind::MetalFx => TemporalUpscaler::MetalFx,
+            FrameGenerationKind::Dlss(_) => TemporalUpscaler::Dlss,
+            FrameGenerationKind::Fsr3 => TemporalUpscaler::Fsr3,
+            FrameGenerationKind::Xess => TemporalUpscaler::Xess,
+        }
+    }
+
+    pub(crate) fn method(self) -> mx_upscale::FrameGenMethod {
+        match self {
+            FrameGenerationKind::MetalFx => mx_upscale::FrameGenMethod::MetalFx,
+            FrameGenerationKind::Dlss(generated) => mx_upscale::FrameGenMethod::Dlss { generated },
+            FrameGenerationKind::Fsr3 => mx_upscale::FrameGenMethod::Fsr3,
+            FrameGenerationKind::Xess => mx_upscale::FrameGenMethod::Xess,
         }
     }
 }
 
-/// An upscaled frame as frame generation takes it at the window's present.
-pub(crate) struct GenerationInputs {
-    /// The window's picture before the HUD: this frame's, and the last frame's (None: there is
-    /// none of this size to go from).
-    pub picture: wgpu::Texture,
-    pub last_picture: Option<wgpu::Texture>,
-    /// The upscaler's own, at the size the scene was drawn.
-    pub depth: wgpu::Texture,
-    pub motion: wgpu::Texture,
-    pub render_size: (u32, u32),
-    pub output_size: (u32, u32),
-    pub jitter: [f32; 2],
-    pub near: f32,
-    pub far: f32,
-    /// Vertical, in radians.
-    pub fov: f32,
-    pub aspect: f32,
-    /// Since the last frame.
-    pub seconds: f32,
-    /// The camera jumped: nothing lies between the last frame and this one.
-    pub cut: bool,
-    pub scaler: Option<metalfx::RawScaler>,
-}
-
-/// Frame generation is MetalFX's, on a Mac: never made elsewhere.
-#[cfg(not(target_os = "macos"))]
+/// Frame generation's handle: the renderer hands it each upscaled frame, the window's present
+/// takes it from there.
 #[derive(Clone)]
-pub enum FrameGeneration {}
+pub struct FrameGeneration(Handle);
 
-#[cfg(not(target_os = "macos"))]
+#[derive(Clone)]
+enum Handle {
+    Generator(std::sync::Arc<std::sync::Mutex<Generation>>),
+    /// Apple's interpolator alone, which the program drives by hand (tests).
+    #[cfg(target_os = "macos")]
+    Interpolator(mx_upscale::MetalFxInterpolator),
+}
+
+pub(crate) struct Generation {
+    generator: mx_upscale::FrameGenerator,
+    /// A frame was handed over since the last present.
+    prepared: bool,
+}
+
 impl FrameGeneration {
+    /// Apple's interpolator, frames handed to it and taken from it by hand.
+    #[cfg(target_os = "macos")]
+    pub fn interpolator(i: mx_upscale::MetalFxInterpolator) -> FrameGeneration {
+        FrameGeneration(Handle::Interpolator(i))
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Generation> {
+        match &self.0 {
+            Handle::Generator(g) => g.lock().unwrap_or_else(|e| e.into_inner()),
+            #[cfg(target_os = "macos")]
+            Handle::Interpolator(_) => unreachable!("a window's frame generation is a generator"),
+        }
+    }
+
+    /// False once it gave up: the window then draws without it.
     pub(crate) fn working(&self) -> bool {
-        match *self {}
+        match &self.0 {
+            Handle::Generator(_) => self.lock().generator.working(),
+            #[cfg(target_os = "macos")]
+            Handle::Interpolator(i) => i.working(),
+        }
     }
+
+    /// The in-between frames made so far.
     pub(crate) fn generated(&self) -> u64 {
-        match *self {}
+        match &self.0 {
+            Handle::Generator(_) => self.lock().generator.generated(),
+            #[cfg(target_os = "macos")]
+            Handle::Interpolator(i) => i.generated(),
+        }
     }
-    pub(crate) fn prepare(&self, _: GenerationInputs) {
-        match *self {}
+
+    /// An upscaled frame, for the window's present of it.
+    pub(crate) fn prepare(&self, queue: &mx::Queue, inputs: mx_upscale::FrameInputs) {
+        match &self.0 {
+            Handle::Generator(_) => {
+                let mut g = self.lock();
+                if let Err(e) = g.generator.prepare(queue, inputs) {
+                    log::debug!("frame generation: {e:#}");
+                }
+                g.prepared = true;
+            }
+            #[cfg(target_os = "macos")]
+            Handle::Interpolator(i) => i.prepare(inputs),
+        }
     }
+
+    /// The GPU done with the frames handed over: before the textures they read are let go of.
     pub(crate) fn wait(&self) {
-        match *self {}
+        match &self.0 {
+            Handle::Generator(_) => self.lock().generator.wait(),
+            #[cfg(target_os = "macos")]
+            Handle::Interpolator(i) => i.wait(),
+        }
+    }
+
+    /// Whether the vendor takes the last frame's picture too (MetalFX's interpolator).
+    pub(crate) fn wants_last_picture(&self) -> bool {
+        match &self.0 {
+            Handle::Generator(_) => {
+                self.lock().generator.method() == mx_upscale::FrameGenMethod::MetalFx
+            }
+            #[cfg(target_os = "macos")]
+            Handle::Interpolator(_) => true,
+        }
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-pub enum GenerationWindow {}
+/// The window's side of frame generation.
+pub struct GenerationWindow {
+    handle: FrameGeneration,
+}
 
-#[cfg(not(target_os = "macos"))]
 impl GenerationWindow {
-    pub(crate) fn new(_: &wgpu::Device, _: &wgpu::Queue, _: wgpu::TextureFormat, _: (u32, u32)) -> anyhow::Result<GenerationWindow> {
-        anyhow::bail!("frame generation is Apple MetalFX's (macOS 26 and newer)")
+    /// For a window of this format and size, on the renderer's device. A vendor that makes the
+    /// window's swapchain needs the surface configured again (`SurfaceState` does).
+    pub(crate) fn new(
+        device: &mx::Device,
+        queue: &mx::Queue,
+        surface: &mx::Surface<'_>,
+        kind: FrameGenerationKind,
+        format: mx::TextureFormat,
+        size: (u32, u32),
+    ) -> anyhow::Result<GenerationWindow> {
+        let generator = mx_upscale::FrameGenerator::new(
+            device,
+            queue,
+            surface,
+            kind.method(),
+            format,
+            size,
+            &upscale_options(),
+        )?;
+        Ok(GenerationWindow {
+            handle: FrameGeneration(Handle::Generator(std::sync::Arc::new(
+                std::sync::Mutex::new(Generation {
+                    generator,
+                    prepared: false,
+                }),
+            ))),
+        })
     }
+
     pub(crate) fn handle(&self) -> FrameGeneration {
-        match *self {}
+        self.handle.clone()
     }
+
     pub(crate) fn working(&self) -> bool {
-        match *self {}
+        self.handle.working()
     }
-    pub(crate) fn resize(&mut self, _: &wgpu::Device, _: &wgpu::Queue, _: (u32, u32)) {
-        match *self {}
+
+    /// Whether the vendor made the window's swapchain (the surface is configured again when it
+    /// starts and stops).
+    pub(crate) fn owns_swapchain(&self) -> bool {
+        self.handle.lock().generator.method().owns_swapchain()
     }
-    pub(crate) fn view(&self) -> wgpu::TextureView {
-        match *self {}
+
+    /// The window changed its size.
+    pub(crate) fn resize(&mut self, device: &mx::Device, queue: &mx::Queue, size: (u32, u32)) {
+        self.handle.lock().generator.resize(device, queue, size);
     }
-    pub(crate) fn texture(&self) -> wgpu::Texture {
-        match *self {}
+
+    /// What the game draws the window's picture into (MetalFX); None: the window itself.
+    pub(crate) fn view(&self) -> Option<mx::TextureView> {
+        self.handle.lock().generator.window_view()
     }
-    pub(crate) fn present(&self, _: &wgpu::Surface<'_>, _: &wgpu::Device, _: &wgpu::Queue, _: wgpu::SurfaceTexture) {
-        match *self {}
+
+    /// The same, to be copied from.
+    pub(crate) fn texture(&self) -> Option<mx::Texture> {
+        self.handle.lock().generator.window_texture()
+    }
+
+    /// Shows the frame: with the made pictures before it, or alone where none was handed over
+    /// (a menu, the loading screen).
+    pub(crate) fn present(
+        &self,
+        surface: &mx::Surface<'_>,
+        device: &mx::Device,
+        queue: &mx::Queue,
+        frame: mx::SurfaceTexture,
+    ) {
+        let mut g = self.handle.lock();
+        if !std::mem::take(&mut g.prepared) {
+            g.generator.skip();
+        }
+        g.generator.present(surface, device, queue, frame);
+    }
+
+    /// Turned off: the window's own swapchain again where the vendor made it.
+    pub(crate) fn stop(self, surface: &mx::Surface<'_>) {
+        self.handle.wait();
+        let Handle::Generator(g) = self.handle.0 else {
+            return;
+        };
+        match std::sync::Arc::try_unwrap(g) {
+            Ok(g) => g
+                .into_inner()
+                .unwrap_or_else(|e| e.into_inner())
+                .generator
+                .stop(surface),
+            Err(_) => log::warn!("frame generation: still held by the renderer as it stops"),
+        }
     }
 }
 
@@ -129,6 +274,7 @@ pub enum TemporalUpscaler {
     Dlss,
     Fsr3,
     MetalFx,
+    Xess,
 }
 
 impl TemporalUpscaler {
@@ -137,6 +283,7 @@ impl TemporalUpscaler {
             "dlss" => Some(TemporalUpscaler::Dlss),
             "fsr3" => Some(TemporalUpscaler::Fsr3),
             "metalfx" => Some(TemporalUpscaler::MetalFx),
+            "xess" => Some(TemporalUpscaler::Xess),
             _ => None,
         }
     }
@@ -146,15 +293,27 @@ impl TemporalUpscaler {
             TemporalUpscaler::Dlss => "dlss",
             TemporalUpscaler::Fsr3 => "fsr3",
             TemporalUpscaler::MetalFx => "metalfx",
+            TemporalUpscaler::Xess => "xess",
+        }
+    }
+
+    pub(crate) fn method(self) -> mx_upscale::Method {
+        match self {
+            TemporalUpscaler::Dlss => mx_upscale::Method::Dlss,
+            TemporalUpscaler::Fsr3 => mx_upscale::Method::Fsr3,
+            TemporalUpscaler::MetalFx => mx_upscale::Method::MetalFxTemporal,
+            TemporalUpscaler::Xess => mx_upscale::Method::Xess,
         }
     }
 
     /// FSR 3 gives up the history faster than DLSS for the same mask: its panes take a weaker one.
-    /// MetalFX reads its mask as FSR 3 does (1 is "no history at all"), and takes FSR 3's.
+    /// MetalFX and XeSS read their masks as FSR 3 does (1 is "no history at all"), and take FSR 3's.
     pub(crate) fn glass_mask_entry(self) -> &'static str {
         match self {
             TemporalUpscaler::Dlss => "fs_glass_mask",
-            TemporalUpscaler::Fsr3 | TemporalUpscaler::MetalFx => "fs_glass_mask_fsr",
+            TemporalUpscaler::Fsr3 | TemporalUpscaler::MetalFx | TemporalUpscaler::Xess => {
+                "fs_glass_mask_fsr"
+            }
         }
     }
 
@@ -195,30 +354,30 @@ impl TemporalQuality {
         }
     }
 
-    pub fn scale(self) -> f32 {
+    pub(crate) fn mx(self) -> mx_upscale::Quality {
         match self {
-            TemporalQuality::Native => 1.0,
-            TemporalQuality::Quality => 0.667,
-            TemporalQuality::Balanced => 0.58,
-            TemporalQuality::Performance => 0.5,
-            TemporalQuality::UltraPerformance => 0.333,
+            TemporalQuality::Native => mx_upscale::Quality::Native,
+            TemporalQuality::Quality => mx_upscale::Quality::Quality,
+            TemporalQuality::Balanced => mx_upscale::Quality::Balanced,
+            TemporalQuality::Performance => mx_upscale::Quality::Performance,
+            TemporalQuality::UltraPerformance => mx_upscale::Quality::UltraPerformance,
         }
+    }
+
+    pub fn scale(self) -> f32 {
+        self.mx().scale()
     }
 }
 
-pub fn fallback_render_size(quality: TemporalQuality, (w, h): (u32, u32)) -> (u32, u32) {
-    let s = quality.scale();
-    (((w as f32 * s).round() as u32).max(1), ((h as f32 * s).round() as u32).max(1))
+pub fn fallback_render_size(quality: TemporalQuality, out: (u32, u32)) -> (u32, u32) {
+    mx_upscale::render_size(quality.mx(), out)
 }
 
 /// The size MetalFX draws at, and whether it is larger than the quality asked for: Apple's
 /// scaler goes up to `max_scale` times a side (`supportedInputContentMaxScaleForDevice`), which
 /// is less than Ultra performance's three on most Macs.
 pub fn metalfx_render_size(quality: TemporalQuality, out: (u32, u32), max_scale: f32) -> ((u32, u32), bool) {
-    let asked = fallback_render_size(quality, out);
-    let least = |side: u32| ((side as f32 / max_scale.max(1.0)).ceil() as u32).clamp(1, side.max(1));
-    let size = (asked.0.max(least(out.0)), asked.1.max(least(out.1)));
-    (size, size != asked)
+    mx_upscale::metalfx_render_size(quality.mx(), out, max_scale)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -227,119 +386,12 @@ pub struct Temporal {
     pub quality: TemporalQuality,
 }
 
-pub struct Inputs<'a> {
-    pub color: &'a wgpu::Texture,
-    /// Its depth from the prepass, reversed Z (1 near, 0 far).
-    pub depth: &'a wgpu::Texture,
-    pub motion: &'a wgpu::Texture,
-    pub mask: &'a wgpu::Texture,
-    pub output: &'a wgpu::Texture,
-    pub render_size: (u32, u32),
-    pub output_size: (u32, u32),
-    /// Views of `color` (its plain UNORM one: the sRGB-encoded numbers), `depth`, `motion`, `mask` and
-    /// `output`, in that order: Streamline on Vulkan is handed an image view with each image.
-    pub views: [&'a wgpu::TextureView; 5],
-}
-
-/// This frame's camera as the upscalers want it. The matrices are unjittered and stored column
-/// by column, which is exactly how Streamline (row vectors) reads its rows.
-pub struct FrameConstants {
-    pub view_to_clip: [[f32; 4]; 4],
-    pub clip_to_view: [[f32; 4]; 4],
-    pub clip_to_prev_clip: [[f32; 4]; 4],
-    pub prev_clip_to_clip: [[f32; 4]; 4],
-    pub jitter: [f32; 2],
-    pub camera_pos: [f32; 3],
-    pub camera_up: [f32; 3],
-    pub camera_right: [f32; 3],
-    pub camera_fwd: [f32; 3],
-    pub near: f32,
-    pub far: f32,
-    pub fov: f32,
-    pub aspect: f32,
-    pub reset: bool,
-    pub frame_ms: f32,
-}
-
-#[cfg(windows)]
+/// The device extensions DLSS needs of a Vulkan device (Streamline started for it, before the
+/// device is made).
 pub(crate) fn dlss_vulkan_extensions() -> anyhow::Result<Vec<&'static std::ffi::CStr>> {
-    streamline::vulkan_extensions()
+    mx_upscale::Upscaler::dlss_vulkan_extensions(&upscale_options())
 }
 
-#[cfg(windows)]
 pub(crate) fn dlss_vulkan_abandon() {
-    streamline::vulkan_abandon()
-}
-
-#[cfg(not(windows))]
-pub(crate) fn dlss_vulkan_extensions() -> anyhow::Result<Vec<&'static std::ffi::CStr>> {
-    anyhow::bail!("DLSS is Windows-only")
-}
-
-#[cfg(not(windows))]
-pub(crate) fn dlss_vulkan_abandon() {}
-
-#[cfg(not(windows))]
-mod streamline {
-    use super::{fallback_render_size, FrameConstants, Inputs, TemporalQuality};
-    use anyhow::Result;
-
-    pub struct Runtime;
-
-    impl Runtime {
-        pub(crate) fn wait(&mut self) {}
-        pub fn load(_device: &wgpu::Device) -> Result<Runtime> {
-            anyhow::bail!("DLSS is Windows-only (DirectX 12)")
-        }
-        pub fn render_size(&mut self, quality: TemporalQuality, out: (u32, u32)) -> (u32, u32) {
-            fallback_render_size(quality, out)
-        }
-        pub fn evaluate(&mut self, _queue: &wgpu::Queue, _quality: TemporalQuality, _inputs: &Inputs, _c: &FrameConstants) -> Result<()> {
-            anyhow::bail!("DLSS is Windows-only (DirectX 12)")
-        }
-    }
-}
-
-#[cfg(not(windows))]
-mod fidelityfx {
-    use super::{FrameConstants, Inputs};
-    use anyhow::Result;
-
-    pub struct Upscaler;
-
-    impl Upscaler {
-        pub(crate) fn wait(&mut self) {}
-        pub fn load(_device: &wgpu::Device) -> Result<Upscaler> {
-            anyhow::bail!("FSR 3 upscaling is Windows-only (DirectX 12)")
-        }
-        pub fn upscale(&mut self, _queue: &wgpu::Queue, _inputs: &Inputs, _c: &FrameConstants) -> Result<()> {
-            anyhow::bail!("FSR 3 upscaling is Windows-only (DirectX 12)")
-        }
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-mod metalfx {
-    use super::{fallback_render_size, FrameConstants, Inputs, TemporalQuality};
-    use anyhow::Result;
-
-    pub struct Upscaler;
-    /// (never made: there is no scaler off a Mac)
-    pub(crate) type RawScaler = std::convert::Infallible;
-
-    impl Upscaler {
-        pub(crate) fn wait(&mut self) {}
-        pub(crate) fn scaler(&self) -> Option<RawScaler> {
-            None
-        }
-        pub fn load(_device: &wgpu::Device) -> Result<Upscaler> {
-            anyhow::bail!("MetalFX upscaling is macOS-only (Metal)")
-        }
-        pub fn render_size(&mut self, quality: TemporalQuality, out: (u32, u32)) -> (u32, u32) {
-            fallback_render_size(quality, out)
-        }
-        pub fn upscale(&mut self, _queue: &wgpu::Queue, _inputs: &Inputs, _c: &FrameConstants) -> Result<()> {
-            anyhow::bail!("MetalFX upscaling is macOS-only (Metal)")
-        }
-    }
+    mx_upscale::Upscaler::dlss_vulkan_abandon()
 }

@@ -591,25 +591,27 @@ impl Renderer {
                 bytes.extend_from_slice(&atmosphere::f16_bits(*v).to_le_bytes());
             }
         }
-        self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &self.sky.sky_lut,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &bytes,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(atmosphere::SKY_LUT_W * 8),
-                rows_per_image: Some(atmosphere::SKY_LUT_H),
-            },
-            wgpu::Extent3d {
-                width: atmosphere::SKY_LUT_W,
-                height: atmosphere::SKY_LUT_H,
-                depth_or_array_layers: 1,
-            },
-        );
+        self.queue
+            .write_texture(
+                mx::TexelCopyTextureInfo {
+                    texture: &self.sky.sky_lut,
+                    mip_level: 0,
+                    origin: mx::Origin3d::ZERO,
+                    aspect: mx::TextureAspect::All,
+                },
+                &bytes,
+                mx::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(atmosphere::SKY_LUT_W * 8),
+                    rows_per_image: Some(atmosphere::SKY_LUT_H),
+                },
+                mx::Extent3d {
+                    width: atmosphere::SKY_LUT_W,
+                    height: atmosphere::SKY_LUT_H,
+                    depth_or_array_layers: 1,
+                },
+            )
+            .expect("mX: a queue write");
         if omsi_cfg::flags::OMSI_DEBUG_SKY.is_set() {
             log::info!("sky: sun {:?} (altitude {:.1}°) sky {:?} ground {:?} exposure {:.3} table scale {:.4} haze {:.2} overcast {:.2} rain {:.2} sun visibility {:.2} moon {:?} (altitude {:.1}°, lit {:.2}) city glow {:.2}", st.sun, st.input.sun_dir.z.asin().to_degrees(), st.sky_horizontal, st.ground, st.exposure, st.lut_scale, st.input.haze, st.input.overcast, st.input.rain, st.input.sun_visibility, st.moon_light, st.input.moon_dir.normalize_or_zero().z.asin().to_degrees(), st.input.moon_illum, st.input.city_glow);
         }
@@ -874,7 +876,8 @@ impl Renderer {
             moon_disc: st.moon_disc.extend((1.0 - 0.18 * (st.input.haze - 1.0).max(0.0)).clamp(0.2, 1.0) * 0.55).to_array(),
         };
         self.queue
-            .write_buffer(&self.tone.enh_buf, 0, bytemuck::bytes_of(&u));
+            .write_buffer(&self.tone.enh_buf, 0, bytemuck::bytes_of(&u))
+            .expect("mX: a queue write");
         self.tone.enh_last = u;
         redraw
     }

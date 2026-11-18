@@ -30,11 +30,11 @@ fn rails_scene(renderer: &mut Renderer) -> Scene {
 }
 
 fn renderer(render_scale: f32, fsr1: bool) -> Renderer {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale, fsr1, ..Default::default() },
     ))
     .expect("test renderer")
@@ -123,10 +123,10 @@ fn a_triple_screen_turned_on_with_an_upscaler_is_not_drawn_at_its_size() {
     let mut plain = renderer(1.0, false);
     let mut scene = rails_scene(&mut plain);
     let a = plain.render_triple_to_image(&mut scene, w, h, &camera(), &lighting, &rig).unwrap();
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let temporal = Some(Temporal { upscaler: UPSCALER, quality: TemporalQuality::Performance });
     let options = RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, temporal, ..Default::default() };
-    let mut upscaled = pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), options)).expect("test renderer");
+    let mut upscaled = pollster::block_on(Renderer::new_with(&instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb), options)).expect("test renderer");
     let mut scene = rails_scene(&mut upscaled);
     let b = upscaled.render_triple_to_image(&mut scene, w, h, &camera(), &lighting, &rig).unwrap();
     let d = difference(&a, &b);
@@ -141,10 +141,10 @@ fn upscaled_renderer() -> Renderer {
 }
 
 fn upscaled_renderer_at(render_scale: f32) -> Renderer {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let temporal = Some(Temporal { upscaler: UPSCALER, quality: TemporalQuality::Performance });
     let options = RenderOptions { msaa: 4, ssao: false, shadow_size: 1024, fxaa: false, render_scale, temporal, ..Default::default() };
-    pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), options)).expect("test renderer")
+    pollster::block_on(Renderer::new_with(&instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb), options)).expect("test renderer")
 }
 
 /// A photo is no upscaler's picture: it is drawn at its own size, and the upscaler neither starts
@@ -182,17 +182,26 @@ fn the_msaa_comes_back_only_when_the_upscaler_gives_up() {
     let options = RenderOptions { msaa: 4, shadow_size: 512, ..r.options };
     assert!(r.rebuild_with(&mut scene, options));
     assert_eq!((r.options.msaa, r.options.msaa_fallback, r.options.shadow_size), (1, 4, 512));
-    let tex = r.device.create_texture(&wgpu::TextureDescriptor {
-        label: None,
-        size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
-    let view = tex.create_view(&Default::default());
+    let tex = r
+        .device
+        .create_texture(&mx::TextureDescriptor {
+            label: None,
+            size: mx::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: mx::TextureDimension::D2,
+            format: mx::TextureFormat::Rgba8UnormSrgb,
+            usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        })
+        .expect("mX: a texture");
+    let view = tex
+        .create_view(&Default::default())
+        .expect("mX: a texture view");
     for _ in 0..2 {
         r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
     }
@@ -212,17 +221,26 @@ fn a_rebuild_without_the_upscaler_frees_it() {
     let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
     let mut r = upscaled_renderer();
     let mut scene = rails_scene(&mut r);
-    let tex = r.device.create_texture(&wgpu::TextureDescriptor {
-        label: None,
-        size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        view_formats: &[],
-    });
-    let view = tex.create_view(&Default::default());
+    let tex = r
+        .device
+        .create_texture(&mx::TextureDescriptor {
+            label: None,
+            size: mx::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: mx::TextureDimension::D2,
+            format: mx::TextureFormat::Rgba8UnormSrgb,
+            usage: mx::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        })
+        .expect("mX: a texture");
+    let view = tex
+        .create_view(&Default::default())
+        .expect("mX: a texture view");
     r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
     if r.temporal.is_none() {
         return;
@@ -248,18 +266,29 @@ fn a_vr_eye_with_fsr1_is_drawn_smaller_and_scaled_up() {
     let projection = Mat4::perspective_rh(cam.fov_deg.to_radians(), w as f32 / h as f32, cam.far, cam.near);
     let eye = |r: &mut Renderer| {
         let mut scene = rails_scene(r);
-        let texture = r.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("test eye"),
-            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: r.format(),
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        r.render_xr_eye(&mut scene, &texture.create_view(&Default::default()), w, h, &cam, &lighting, projection, false);
-        r.read_texture(&texture, wgpu::TextureAspect::All).unwrap()
+        let texture = r
+            .device
+            .create_texture(&mx::TextureDescriptor {
+                label: Some("test eye"),
+                size: mx::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format: r.format(),
+                usage: mx::TextureUsages::RENDER_ATTACHMENT
+                    | mx::TextureUsages::COPY_SRC
+                    | mx::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .expect("mX: a texture");
+        r.render_xr_eye(&mut scene, &texture
+                .create_view(&Default::default())
+                .expect("mX: a texture view"), w, h, &cam, &lighting, projection, false);
+        r.read_texture(&texture, mx::TextureAspect::All).unwrap()
     };
     let mut plain = renderer(1.0, false);
     assert_eq!(plain.start_xr(0.65), 0.65, "without FSR 1 the headset image is the eye resolution");
@@ -343,14 +372,16 @@ fn fsr1_sharpening_slider_maps_onto_the_clean_range() {
 /// kept to `textureLoad` and plain arithmetic for the old GL drivers it is meant for.
 #[test]
 fn fsr1_translates_to_glsl() {
-    use wgpu::naga;
-    use wgpu::naga::back::glsl;
+    use naga;
+    use naga::back::glsl;
     // (and the raw-input variant, OMSI_FSR_RAW_INPUT: not used on OpenGL, but it must make
     // the other backends' code, which the same translation checks)
-    for (format, raw) in [(wgpu::TextureFormat::Bgra8UnormSrgb, false), (wgpu::TextureFormat::Rgba8Unorm, false), (wgpu::TextureFormat::Bgra8UnormSrgb, true)] {
+    for (format, raw) in [(mx::TextureFormat::Bgra8UnormSrgb, false),
+        (mx::TextureFormat::Rgba8Unorm, false),
+        (mx::TextureFormat::Bgra8UnormSrgb, true),] {
         let src = crate::shaders::fsr1_source_for(format, raw);
         assert_eq!(src.contains("const RAW_INPUT: bool = true;"), raw);
-        let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
+        let module = naga::front::wgsl::parse_str(&crate::shaders::with_heap(&src)).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
         let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
             .validate(&module)
             .expect("validate");
@@ -447,17 +478,26 @@ fn metalfx_settles_on_the_full_sized_picture() {
     let mut r = upscaled_renderer();
     assert_eq!(r.options.temporal.map(|t| t.upscaler), Some(TemporalUpscaler::MetalFx), "MetalFX is not offered on this Mac's Metal");
     let mut scene = rails_scene(&mut r);
-    let tex = r.device.create_texture(&wgpu::TextureDescriptor {
-        label: None,
-        size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
-    let view = tex.create_view(&Default::default());
+    let tex = r
+        .device
+        .create_texture(&mx::TextureDescriptor {
+            label: None,
+            size: mx::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: mx::TextureDimension::D2,
+            format: mx::TextureFormat::Rgba8UnormSrgb,
+            usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        })
+        .expect("mX: a texture");
+    let view = tex
+        .create_view(&Default::default())
+        .expect("mX: a texture view");
     // (two jitter cycles of a picture scaled up twice: 32 frames each)
     for _ in 0..64 {
         r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
@@ -482,15 +522,18 @@ fn metalfx_makes_the_frame_between_two() {
     let (w, h) = (384u32, 256u32);
     let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
     let mut r = upscaled_renderer();
-    let generation = match crate::temporal::FrameGeneration::load(&r.device) {
+    // (Apple's interpolator itself: the test presents nothing, it makes the pictures by hand)
+    let generation = match mx_upscale::MetalFxInterpolator::load(&r.device) {
         Ok(g) => g,
         Err(e) => return eprintln!("skipped: {e:#}"),
     };
-    r.set_frame_generation(Some(generation.clone()));
+    r.set_frame_generation(Some(crate::temporal::FrameGeneration::interpolator(
+        generation.clone(),
+    )));
     let mut scene = rails_scene(&mut r);
-    let srgb = wgpu::TextureFormat::Rgba8UnormSrgb;
-    let (drawn, view) = crate::temporal::metalfx_frames::window_picture(&r.device, &r.queue, "drawn", srgb, (w, h));
-    let (made, _) = crate::temporal::metalfx_frames::window_picture(&r.device, &r.queue, "made", srgb, (w, h));
+    let srgb = mx::TextureFormat::Rgba8UnormSrgb;
+    let (drawn, view) = mx_upscale::window_picture(&r.device, &r.queue, "drawn", srgb, (w, h));
+    let (made, _) = mx_upscale::window_picture(&r.device, &r.queue, "made", srgb, (w, h));
     let mut cam = camera();
     for _ in 0..32 {
         r.render_window(&mut scene, &view, w, h, &cam, &lighting);
@@ -507,18 +550,36 @@ fn metalfx_makes_the_frame_between_two() {
     for _ in 0..4 {
         cam.position.x += 0.5;
         r.render_window(&mut scene, &view, w, h, &cam, &lighting);
-        r.queue.write_texture(
-            wgpu::TexelCopyTextureInfo { texture: &drawn, mip_level: 0, origin: wgpu::Origin3d { x: hud_x, y: hud_y, z: 0 }, aspect: wgpu::TextureAspect::All },
-            &yellow,
-            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(4 * hud_w), rows_per_image: None },
-            wgpu::Extent3d { width: hud_w, height: hud_h, depth_or_array_layers: 1 },
-        );
+        r.queue
+            .write_texture(
+                mx::TexelCopyTextureInfo {
+                    texture: &drawn,
+                    mip_level: 0,
+                    origin: mx::Origin3d {
+                        x: hud_x,
+                        y: hud_y,
+                        z: 0,
+                    },
+                    aspect: mx::TextureAspect::All, }, &yellow,
+                mx::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(4 * hud_w),
+                    rows_per_image: None,
+                },
+                mx::Extent3d {
+                    width: hud_w,
+                    height: hud_h,
+                    depth_or_array_layers: 1,
+                },
+            )
+            .expect("mX: a queue write");
         r.queue.submit(None);
         let inputs = generation.take().expect("the upscaled frame handed to frame generation");
-        assert!(inputs.last_picture.is_some() && !inputs.cut, "a frame to go from");
+        assert!(inputs.last_hudless.is_some() && !inputs.constants.reset, "a frame to go from");
         assert!(generation.generate(&r.queue, &inputs, &drawn, &made).unwrap(), "a picture made");
         // (read back behind MetalFX's work: the queue runs its buffers in order)
-        pictures.push((r.read_texture(&drawn, wgpu::TextureAspect::All).unwrap(), r.read_texture(&made, wgpu::TextureAspect::All).unwrap()));
+        pictures.push((r.read_texture(&drawn, mx::TextureAspect::All).unwrap(),
+            r.read_texture(&made, mx::TextureAspect::All).unwrap(),));
     }
     assert!(difference(&pictures[0].0, &pictures[0].1) < 0.01, "without history, the frame itself");
     let (before, after, between) = (&pictures[2].0, &pictures[3].0, &pictures[3].1);

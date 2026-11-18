@@ -8,17 +8,17 @@ const DISTANCE: f64 = 10.9;
 struct EyeTargetsScene {
     renderer: Renderer,
     scene: Scene,
-    target: wgpu::TextureView,
+    target: mx::TextureView,
     lighting: Lighting,
 }
 
 impl EyeTargetsScene {
     fn with_options(msaa: u32, ray_tracing: bool) -> Self {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance = mx::Instance::new();
         let renderer = pollster::block_on(Renderer::new_with(
             &instance,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             RenderOptions {
                 msaa,
                 ray_tracing,
@@ -153,24 +153,28 @@ fn xr_enhanced_plus_omits_unused_ray_surfaces_and_preserves_pixels() {
             vec![glass],
         );
         let textures = std::array::from_fn::<_, 2, _>(|_| {
-            s.renderer.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("enhanced XR attachment regression"),
-                size: wgpu::Extent3d {
-                    width: SIZE,
-                    height: SIZE,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: s.renderer.format(),
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[],
-            })
+            s.renderer
+                .device
+                .create_texture(&mx::TextureDescriptor {
+                    label: Some("enhanced XR attachment regression"),
+                    size: mx::Extent3d {
+                        width: SIZE,
+                        height: SIZE,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: mx::TextureDimension::D2,
+                    format: s.renderer.format(),
+                    usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                })
+                .expect("mX: a texture")
         });
-        let targets = textures
-            .each_ref()
-            .map(|t| t.create_view(&Default::default()));
+        let targets = textures.each_ref().map(|t| {
+            t.create_view(&Default::default())
+                .expect("mX: a texture view")
+        });
         let cameras = [
             Camera {
                 yaw: -90.0,
@@ -196,11 +200,9 @@ fn xr_enhanced_plus_omits_unused_ray_surfaces_and_preserves_pixels() {
                     eye == 1,
                 );
             }
-            textures.each_ref().map(|t| {
-                s.renderer
-                    .read_texture(t, wgpu::TextureAspect::All)
-                    .unwrap()
-            })
+            textures
+                .each_ref()
+                .map(|t| s.renderer.read_texture(t, mx::TextureAspect::All).unwrap())
         };
         for _ in 0..3 {
             draw(&mut s);
@@ -289,16 +291,13 @@ fn xr_enhanced_plus_omits_unused_ray_surfaces_and_preserves_pixels() {
 
 fn check_rain_eye(
     s: &mut EyeTargetsScene,
-    target: &wgpu::TextureView,
+    target: &mx::TextureView,
     camera: &Camera,
     projection: Mat4,
     second_eye: bool,
 ) {
     use crate::passes::{FrameArgs, FrameEnv, StageClock};
-    let error_scope = s
-        .renderer
-        .device
-        .push_error_scope(wgpu::ErrorFilter::Validation);
+    let error_scope = s.renderer.watch_errors();
     let mut clock = StageClock::new(false);
     let args = FrameArgs {
         target,
@@ -330,21 +329,12 @@ fn check_rain_eye(
         "regression must draw a rain-film batch"
     );
     s.renderer.upload_draw_list(&mut s.scene, &plan.list);
-    let mut encoder = s
-        .renderer
-        .device
-        .create_command_encoder(&Default::default());
+    let mut encoder = s.renderer.device.create_command_encoder(None);
     s.renderer
         .encode_rain_film(&mut encoder, &s.scene, &frame, &plan.rain_batches, false);
     s.renderer.queue.submit([encoder.finish()]);
-    s.renderer
-        .device
-        .poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        })
-        .unwrap();
-    let error = pollster::block_on(error_scope.pop());
+    s.renderer.device.wait_idle().unwrap();
+    let error = error_scope.pop();
     assert!(
         error.is_none(),
         "rain-film eye attachment validation: {error:?}"
@@ -380,10 +370,7 @@ fn xr_enhanced_plus_targets_work_with_upstream_fsr1() {
         let mut s = EyeTargetsScene::with_options(msaa, true);
         assert!(s.renderer.set_upscaler(true, 0.5, 1.0));
         assert_eq!(s.renderer.start_xr(0.75), 1.0);
-        let scope = s
-            .renderer
-            .device
-            .push_error_scope(wgpu::ErrorFilter::Validation);
+        let scope = s.renderer.watch_errors();
         s.renderer.prepare_xr_eye_pipelines();
         s.lighting.enhanced = true;
         let draw = |s: &mut EyeTargetsScene| {
@@ -426,14 +413,8 @@ fn xr_enhanced_plus_targets_work_with_upstream_fsr1() {
                 .is_some()
         );
         draw(&mut s);
-        s.renderer
-            .device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: None,
-            })
-            .unwrap();
-        assert!(pollster::block_on(scope.pop()).is_none());
+        s.renderer.device.wait_idle().unwrap();
+        assert!(scope.pop().is_none());
         assert!(s.renderer.device_lost().is_none());
     }
 }

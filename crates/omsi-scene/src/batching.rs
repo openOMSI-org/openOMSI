@@ -200,7 +200,7 @@ impl GpuCache {
     pub(super) fn add_screen(&mut self, renderer: &Renderer, scene: &mut Scene, width: u32, height: u32) -> TextureId {
         let id = renderer.add_render_texture(scene, width, height);
         let id = self.take_texture_slot(renderer, scene, id);
-        renderer.clear_texture(scene, id, wgpu::Color::BLACK);
+        renderer.clear_texture(scene, id, mx::Color::BLACK);
         id
     }
 

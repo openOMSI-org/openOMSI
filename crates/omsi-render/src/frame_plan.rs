@@ -147,26 +147,28 @@ pub(crate) fn depth_only_material(kind: u8, material: MaterialId, look: u32) -> 
 
 /// Record batches into a pass or a bundle, setting pipeline, buffers and material only
 /// when they change.
-pub(crate) fn encode_batches<'a, E: wgpu::util::RenderEncoder<'a>>(
+pub(crate) fn encode_batches<'a, E: mx::RenderEncoder>(
     pass: &mut E,
     scene: &'a Scene,
     batches: &[Batch],
-    pipeline: impl Fn(u8) -> &'a wgpu::RenderPipeline,
+    pipeline: impl Fn(u8) -> &'a mx::RenderPipeline,
 ) {
     encode_batches_filtered(pass, scene, batches, |_| true, pipeline);
 }
 
 /// Record the batches accepted by `include`, setting pipeline, buffers and material only
 /// when they change.
-pub(crate) fn encode_batches_filtered<'a, E: wgpu::util::RenderEncoder<'a>>(
+pub(crate) fn encode_batches_filtered<'a, E: mx::RenderEncoder>(
     pass: &mut E,
     scene: &'a Scene,
     batches: &[Batch],
     include: impl Fn(&Batch) -> bool,
-    pipeline: impl Fn(u8) -> &'a wgpu::RenderPipeline,
+    pipeline: impl Fn(u8) -> &'a mx::RenderPipeline,
 ) {
     let (mut pipe, mut mesh, mut material) = (u8::MAX, u32::MAX, u32::MAX);
-    let mut page: Option<(&wgpu::Buffer, &wgpu::Buffer)> = None;
+    // (the materials' values: the scene's table, its rows at each draw's offset)
+    pass.set_bind_group(1, &scene.material_table.group);
+    let mut page: Option<(&mx::Buffer, &mx::Buffer)> = None;
     let (mut base_vertex, mut first_index) = (0i32, 0u32);
     for b in batches {
         if !include(b) {
@@ -179,19 +181,18 @@ pub(crate) fn encode_batches_filtered<'a, E: wgpu::util::RenderEncoder<'a>>(
         if b.mesh != mesh {
             let m = &scene.meshes[b.mesh as usize];
             if page.is_none_or(|(v, i)| *v != m.vertex_buf || *i != m.index_buf) {
-                pass.set_vertex_buffer(0, m.vertex_buf.slice(..));
-                pass.set_index_buffer(m.index_buf.slice(..), wgpu::IndexFormat::Uint32);
+                pass.set_vertex_buffer(0, &m.vertex_buf, 0);
+                pass.set_index_buffer(&m.index_buf, 0, mx::IndexFormat::Uint32);
                 page = Some((&m.vertex_buf, &m.index_buf));
             }
             (base_vertex, first_index) = (m.base_vertex, m.first_index);
             mesh = b.mesh;
         }
         if b.material != material {
-            pass.set_bind_group(
-                1,
-                Some(&scene.materials[b.material as usize].bind_group),
-                &[],
-            );
+            // (the material by its table row and heap places: no bind group per material)
+            let binding = &scene.materials[b.material as usize].binding;
+            pass.set_buffer_offset(1, 2, MaterialTable::offset(binding.row.index));
+            pass.set_immediates(0, binding.immediates());
             material = b.material;
         }
         pass.draw_indexed(first_index + b.first..first_index + b.first + b.count, base_vertex, b.instances.clone());
@@ -339,7 +340,7 @@ pub(crate) fn pipe_code(kind: u8, cull: bool, surface: bool) -> u8 {
 }
 
 /// The pipeline of a main-pass batch (`DrawItem::pipe`).
-pub(crate) fn main_pipeline(pp: &PassPipelines, pipe: u8) -> &wgpu::RenderPipeline {
+pub(crate) fn main_pipeline(pp: &PassPipelines, pipe: u8) -> &mx::RenderPipeline {
     &pp.pipelines[pipe as usize]
 }
 
@@ -351,11 +352,11 @@ pub(crate) fn main_pipeline(pp: &PassPipelines, pipe: u8) -> &wgpu::RenderPipeli
 /// other side by default, and models rely on it: the SD202's front flap click spot is an
 /// inside-out shell over the right headlight, invisible from outside, and windows are
 /// modelled twice, once per side, with different glass.
-pub(crate) fn one_sided_primitive(cull: bool) -> wgpu::PrimitiveState {
-    wgpu::PrimitiveState {
-        topology: wgpu::PrimitiveTopology::TriangleList,
-        cull_mode: cull.then_some(wgpu::Face::Back),
-        front_face: wgpu::FrontFace::Cw,
+pub(crate) fn one_sided_primitive(cull: bool) -> mx::PrimitiveState {
+    mx::PrimitiveState {
+        topology: mx::PrimitiveTopology::TriangleList,
+        cull_mode: cull.then_some(mx::Face::Back),
+        front_face: mx::FrontFace::Cw,
         ..Default::default()
     }
 }
@@ -393,41 +394,43 @@ pub(crate) fn bundle_chunks<'b>(pool: Option<&rayon::ThreadPool>, batches: &'b [
 /// same batches recorded before) is not recorded again; None where a part could not be
 /// recorded.
 pub(crate) fn record_bundles(
-    device: &wgpu::Device,
+    device: &mx::Device,
     pool: Option<&rayon::ThreadPool>,
     scene: &Scene,
     chunks: &[&[Batch]],
-    reuse: &[Option<wgpu::RenderBundle>],
+    reuse: &[Option<mx::RenderBundle>],
     pp: &PassPipelines,
-    camera: &wgpu::BindGroup,
-    format: wgpu::TextureFormat,
+    camera: &mx::BindGroup,
+    format: mx::TextureFormat,
     samples: u32,
     surfaces: bool,
-) -> Vec<Option<wgpu::RenderBundle>> {
+) -> Vec<Option<mx::RenderBundle>> {
     let color_formats = [Some(format), Some(MASK_FORMAT), Some(GBUF_FORMAT), Some(AUX_FORMAT)];
-    let record = |chunk: &[Batch]| -> wgpu::RenderBundle {
-        let mut bundle =
-            device.create_render_bundle_encoder(&wgpu::RenderBundleEncoderDescriptor {
-                label: Some("main pass part"),
-                color_formats: &color_formats[..if format != HDR_FORMAT { 1 } else if surfaces { 4 } else { 2 }],
-                depth_stencil: Some(wgpu::RenderBundleDepthStencil {
-                    format: DEPTH_FORMAT,
-                    depth_read_only: false,
-                    stencil_read_only: true,
-                }),
-                sample_count: samples,
-                multiview: None,
-            });
-        bundle.set_bind_group(0, camera, &[]);
-        encode_batches(&mut bundle, scene, chunk, |pipe| main_pipeline(pp, pipe));
-        bundle.finish(&wgpu::RenderBundleDescriptor {
+    let record = |chunk: &[Batch]| -> mx::RenderBundle {
+        let mut bundle = device.create_render_bundle_encoder(&mx::RenderBundleEncoderDescriptor {
             label: Some("main pass part"),
-        })
+            color_formats: &color_formats[..if format != HDR_FORMAT {
+                1
+            } else if surfaces {
+                4
+            } else {
+                2
+            }],
+            depth_stencil: Some(mx::RenderBundleDepthStencil {
+                format: DEPTH_FORMAT,
+                depth_read_only: false,
+                stencil_read_only: true,
+            }),
+            sample_count: samples,
+        });
+        bundle.set_bind_group(0, camera);
+        encode_batches(&mut bundle, scene, chunk, |pipe| main_pipeline(pp, pipe));
+        bundle.finish(Some("main pass part"))
     };
     // a bundle wgpu refuses (a buffer it names could not be made: the card ran out of
     // memory) panics in `finish`: that part of the picture is left out for the frame and
     // the game goes on - it ended the game on Windows right after an "Out of memory"
-    let record = |chunk: &[Batch]| -> Option<wgpu::RenderBundle> {
+    let record = |chunk: &[Batch]| -> Option<mx::RenderBundle> {
         let r = catch(|| record(chunk)).ok_or(());
         match r {
             Ok(b) => Some(b),
@@ -449,13 +452,12 @@ pub(crate) fn record_bundles(
 
 /// The sun's and the lamps' shadow maps, their pipelines, and the cascades as last drawn.
 pub(crate) struct ShadowRes {
-    pub(crate) shadow_view: wgpu::TextureView,
-    pub(crate) shadow_view_far: wgpu::TextureView,
-    pub(crate) shadow_sampler: wgpu::Sampler,
-    pub(crate) shadow_layout: wgpu::BindGroupLayout,
+    pub(crate) shadow_view: mx::TextureView,
+    pub(crate) shadow_view_far: mx::TextureView,
+    pub(crate) shadow_sampler: mx::Sampler,
     /// [near opaque, near alpha-tested, far opaque, far alpha-tested, close opaque, close
     /// alpha-tested], then the lamps' (6 + kind; not with `basic_pipelines`)
-    pub(crate) shadow_pipelines: Vec<wgpu::RenderPipeline>,
+    pub(crate) shadow_pipelines: Vec<mx::RenderPipeline>,
     /// Where the lamps' tiles lie under the far cascade (the shaders read it from the
     /// camera uniform).
     pub(crate) lamp_atlas: LampAtlas,
@@ -476,7 +478,7 @@ pub(crate) struct ShadowRes {
     pub(crate) xr_shadow_cache: std::cell::Cell<Option<(DVec3, Vec3, Mat4, Mat4, Mat4)>>,
     /// Depth-only pipeline that fills its viewport with the far depth: clears the close
     /// cascade's part of the atlas when the near part is kept from the frame before.
-    pub(crate) shadow_clear_pipeline: wgpu::RenderPipeline,
+    pub(crate) shadow_clear_pipeline: mx::RenderPipeline,
     /// What the street lamps' shadow tiles hold, kept while nothing in them changes.
     pub(crate) lamp_tiles: std::cell::Cell<passes::LampTiles>,
     /// Which parts of the player's vehicle stand still in it (the saloon's lamp tiles hold those).

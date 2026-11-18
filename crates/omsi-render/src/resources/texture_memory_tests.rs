@@ -16,16 +16,15 @@ impl Drop for AllocationLimit {
 }
 
 fn renderer(noop: bool) -> Renderer {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    if noop {
-        descriptor.backends = wgpu::Backends::NOOP;
-        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    }
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = if noop {
+        mx::Instance::with_backends(mx::Backends::NOOP)
+    } else {
+        mx::Instance::new()
+    };
     pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions {
             msaa: if noop { 1 } else { 4 },
             ssao: false,
@@ -110,7 +109,7 @@ fn memory_pressure_uses_authored_bc_levels_and_handles_the_smallest_blocks() {
     assert!(prepared.bytes() > 0 && prepared.bytes() <= 120);
     assert_eq!(
         prepared.0.texture.format(),
-        wgpu::TextureFormat::Bc1RgbaUnormSrgb
+        mx::TextureFormat::Bc1RgbaUnormSrgb
     );
     TEXTURE_TEST_MAX_BYTES.set(Some(4));
     let last = prepare_texture(&renderer.device, &renderer.queue, &data).unwrap();

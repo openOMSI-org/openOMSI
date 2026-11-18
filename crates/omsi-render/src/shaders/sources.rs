@@ -13,20 +13,58 @@ pub(crate) fn scene_shader_source(gl: bool) -> String {
     scene_shader_for(gl, array_path())
 }
 
+/// The scene shader with `extra` after it (a module of its own that reads the scene's
+/// material, as `temporal/motion.wgsl`): the material read from the heap in both parts.
+pub(crate) fn scene_shader_with(gl: bool, extra: &str) -> String {
+    let joined = format!(
+        "{}\n{extra}",
+        scene_shader_bound_forms(
+            gl,
+            AMD_VULKAN.load(std::sync::atomic::Ordering::Relaxed),
+            MULTISAMPLED_SHADING.load(std::sync::atomic::Ordering::Relaxed),
+        )
+    );
+    let path = array_path();
+    let src = arrays_as_textures(&materials_from_heap(&joined), path);
+    if gl && path.no_storage() {
+        compares_without_gather(&src)
+    } else {
+        src
+    }
+}
+
 pub(crate) fn scene_shader_for(gl: bool, path: ArrayPath) -> String {
     let src = arrays_as_textures(&scene_shader_text(gl), path);
-    if gl && path.no_storage() { compares_without_gather(&src) } else { src }
+    if gl && path.no_storage() {
+        compares_without_gather(&src)
+    } else {
+        src
+    }
 }
 
 fn without_tree_fade(src: &str) -> String {
     let src = stub_fn(src, "fn tree_card_fade(world: vec3<f32>) -> f32 {", "1.0");
-    stub_fn(&src, "fn tree_crown_normal(local: vec3<f32>, m: mat4x4<f32>, up: vec3<f32>) -> vec3<f32> {", "up")
+    stub_fn(
+        &src,
+        "fn tree_crown_normal(local: vec3<f32>, m: mat4x4<f32>, up: vec3<f32>) -> vec3<f32> {",
+        "up",
+    )
 }
 
 fn stub_fn(src: &str, head: &str, value: &str) -> String {
-    let start = src.find(head).unwrap_or_else(|| panic!("scene shader: {head} not found"));
-    let close = start + src[start..].find("\n}").unwrap_or_else(|| panic!("scene shader: {head} has no end")) + 2;
-    format!("{}{head}\n    return {value};\n}}{}", &src[..start], &src[close..])
+    let start = src
+        .find(head)
+        .unwrap_or_else(|| panic!("scene shader: {head} not found"));
+    let close = start
+        + src[start..]
+            .find("\n}")
+            .unwrap_or_else(|| panic!("scene shader: {head} has no end"))
+        + 2;
+    format!(
+        "{}{head}\n    return {value};\n}}{}",
+        &src[..start],
+        &src[close..]
+    )
 }
 
 /// The sun's shadow tent with each gather of four depth comparisons taken as four single
@@ -37,11 +75,21 @@ fn stub_fn(src: &str, head: &str, value: &str) -> String {
 pub(crate) fn compares_without_gather(src: &str) -> String {
     let mut out = src.to_string();
     for t in ["t_shadow", "t_shadow_far"] {
-        let at = |x: f32, y: f32| format!("textureSampleCompareLevel({t}, s_shadow, a + vec2<f32>({x:?}, {y:?}) / dims, zr)");
+        let at = |x: f32, y: f32| {
+            format!(
+                "textureSampleCompareLevel({t}, s_shadow, a + vec2<f32>({x:?}, {y:?}) / dims, zr)"
+            )
+        };
         let gather = format!("textureGatherCompare({t}, s_shadow, a, zr)");
         assert!(out.contains(&gather), "scene shader: {gather} not found");
         // (in the gather's order: (0, 1), (1, 1), (1, 0), (0, 0) of the quad around `a`)
-        let four = format!("vec4<f32>({}, {}, {}, {})", at(-0.5, 0.5), at(0.5, 0.5), at(0.5, -0.5), at(-0.5, -0.5));
+        let four = format!(
+            "vec4<f32>({}, {}, {}, {})",
+            at(-0.5, 0.5),
+            at(0.5, 0.5),
+            at(0.5, -0.5),
+            at(-0.5, -0.5)
+        );
         out = out.replace(&gather, &four);
     }
     out
@@ -64,18 +112,48 @@ pub(crate) fn arrays_as_textures(src: &str, path: ArrayPath) -> String {
     let load = |name: &str, ty: &str, pick: &str| {
         format!(
             "var {name}_tex: texture_2d<{ty}>;\nfn {name}_at(i: u32) -> {} {{ return textureLoad({name}_tex, vec2<u32>(i % {w}u, i / {w}u), 0){pick}; }}",
-            if pick.is_empty() { format!("vec4<{ty}>") } else { ty.to_string() }
+            if pick.is_empty() {
+                format!("vec4<{ty}>")
+            } else {
+                ty.to_string()
+            }
         )
     };
-    swap("var<storage, read> models: array<vec4<f32>>;", load("models", "f32", ""), "models", "models_at");
-    swap("var<storage, read> inst_params: array<vec4<f32>>;", load("inst_params", "f32", ""), "inst_params", "inst_params_at");
-    swap("var<storage, read> draw_list: array<u32>;", load("draw_list", "u32", ".x"), "draw_list", "draw_list_at");
+    swap(
+        "var<storage, read> models: array<vec4<f32>>;",
+        load("models", "f32", ""),
+        "models",
+        "models_at",
+    );
+    swap(
+        "var<storage, read> inst_params: array<vec4<f32>>;",
+        load("inst_params", "f32", ""),
+        "inst_params",
+        "inst_params_at",
+    );
+    swap(
+        "var<storage, read> draw_list: array<u32>;",
+        load("draw_list", "u32", ".x"),
+        "draw_list",
+        "draw_list_at",
+    );
+
     if path == ArrayPath::LightTextures {
         let lights = format!(
             "var lights_tex: texture_2d<f32>;\nfn lights_texel(t: u32) -> vec4<f32> {{ return textureLoad(lights_tex, vec2<u32>(t % {w}u, t / {w}u), 0); }}\nfn lights_at(i: u32) -> PointLight {{ return PointLight(lights_texel(i * 4u), lights_texel(i * 4u + 1u), lights_texel(i * 4u + 2u), lights_texel(i * 4u + 3u)); }}"
         );
-        swap("var<storage, read> lights: array<PointLight>;", lights, "lights", "lights_at");
-        swap("var<storage, read> grid: array<u32>;", load("grid", "u32", ".x"), "grid", "grid_at");
+        swap(
+            "var<storage, read> lights: array<PointLight>;",
+            lights,
+            "lights",
+            "lights_at",
+        );
+        swap(
+            "var<storage, read> grid: array<u32>;",
+            load("grid", "u32", ".x"),
+            "grid",
+            "grid_at",
+        );
     }
     if path == ArrayPath::NoStorage {
         swap(
@@ -84,7 +162,12 @@ pub(crate) fn arrays_as_textures(src: &str, path: ArrayPath) -> String {
             "lights",
             "lights_at",
         );
-        swap("@group(0) @binding(4) var<storage, read> grid: array<u32>;", "fn grid_at(i: u32) -> u32 { return 0xffffffffu; }".to_string(), "grid", "grid_at");
+        swap(
+            "@group(0) @binding(4) var<storage, read> grid: array<u32>;",
+            "fn grid_at(i: u32) -> u32 { return 0xffffffffu; }".to_string(),
+            "grid",
+            "grid_at",
+        );
     }
     out
 }
@@ -128,20 +211,183 @@ pub(crate) fn indexing_as_calls(src: &str, name: &str, call: &str) -> String {
     out
 }
 
-pub(crate) fn backend_forms(src: String, gl: bool, amd_vulkan: bool, multisampled_shading: bool) -> String {
-    let src = if !gl && amd_vulkan { src.replace("//VK ", "") } else { src.replace("//DX ", "") };
-    if !gl && multisampled_shading { src.replace("//MS ", "") } else { src }
+pub(crate) fn backend_forms(
+    src: String,
+    gl: bool,
+    amd_vulkan: bool,
+    multisampled_shading: bool,
+) -> String {
+    let src = if !gl && amd_vulkan {
+        src.replace("//VK ", "")
+    } else {
+        src.replace("//DX ", "")
+    };
+    if !gl && multisampled_shading {
+        src.replace("//MS ", "")
+    } else {
+        src
+    }
 }
 
 pub(crate) fn scene_shader_text(gl: bool) -> String {
-    scene_shader_forms(gl, AMD_VULKAN.load(std::sync::atomic::Ordering::Relaxed), MULTISAMPLED_SHADING.load(std::sync::atomic::Ordering::Relaxed))
+    scene_shader_forms(
+        gl,
+        AMD_VULKAN.load(std::sync::atomic::Ordering::Relaxed),
+        MULTISAMPLED_SHADING.load(std::sync::atomic::Ordering::Relaxed),
+    )
 }
 
 pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shading: bool) -> String {
+    materials_from_heap(&scene_shader_bound_forms(
+        gl,
+        amd_vulkan,
+        multisampled_shading,
+    ))
+}
+
+/// The scene shader's material as mX reads it: no bind group per material. Its values are a
+/// uniform still - the scene's material table, bound once, each draw reading its own row at
+/// its own offset (`RenderPass::set_buffer_offset`, see `MaterialTable`): a uniform stays in
+/// the GPU's constant memory, a storage table read per field was a fifth slower on Apple's
+/// GPUs. Its textures and samplers come from the heap, their places in the draw's immediates
+/// (`mx_mat`, see `MaterialBinding`).
+/// (The last step of the scene shader's forms: the others match the bound names.)
+pub(crate) fn materials_from_heap(src: &str) -> String {
+    const BOUND: [(&str, &str); 11] = [
+        ("t_diffuse", "mx_tex2d[mx_mat.diffuse]"),
+        ("s_diffuse", "mx_samplers[mx_mat.sampler]"),
+        ("t_trans", "mx_tex2d[mx_mat.trans]"),
+        ("t_night", "mx_tex2d[mx_mat.night]"),
+        ("t_light", "mx_tex2d[mx_mat.light]"),
+        ("t_env", "mx_tex2d[mx_mat.env]"),
+        ("t_envmask", "mx_tex2d[mx_mat.envmask]"),
+        ("t_bump", "mx_tex2d[mx_mat.bump]"),
+        ("t_pbr_normal", "mx_tex2d[mx_mat.pbr_normal]"),
+        ("t_pbr_orm", "mx_tex2d[mx_mat.pbr_orm]"),
+        ("s_tile", "mx_samplers[mx_mat.tile_sampler]"),
+    ];
+    let mut out = src.to_string();
+    // the bound declarations go
+    for (k, (name, _)) in BOUND.iter().enumerate() {
+        let ty = if name.starts_with("s_") {
+            "sampler"
+        } else {
+            "texture_2d<f32>"
+        };
+        let binding = [0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11][k];
+        let decl = format!("@group(1) @binding({binding}) var {name}: {ty};\n");
+        assert!(out.contains(&decl), "scene shader: {decl} not found");
+        out = out.replace(&decl, "");
+    }
+    // the values stay a uniform (a draw's row of the material table, by its offset - see
+    // `MaterialTable`); the draw's heap places beside it
+    let decl = "@group(1) @binding(2) var<uniform> material: MaterialParams;";
+    assert!(out.contains(decl), "scene shader: {decl} not found");
+    out = out.replace(
+        decl,
+        &format!(
+            "{decl}
+// (the material's textures and samplers by their places in the heap, see `materials_from_heap`)
+struct MxMaterial {{ row: u32, diffuse: u32, sampler: u32, trans: u32, night: u32, light: u32, env: u32, envmask: u32, bump: u32, pbr_normal: u32, pbr_orm: u32, tile_sampler: u32 }};
+var<immediate> mx_mat: MxMaterial;"
+        ),
+    );
+    // the textures and samplers: the heap's, at the draw's places
+    for (name, heap) in BOUND {
+        out = replace_word(&out, name, heap);
+    }
+    out
+}
+
+/// `src` as naga alone reads it: with mX's heap prelude, when it uses the heap (mX adds the
+/// same to every module it makes). For checks that parse the scene shader without mX.
+pub(crate) fn with_heap(src: &str) -> String {
+    if src.contains("mx_") {
+        format!("enable wgpu_binding_array; {src}\n{}", mx::PRELUDE)
+    } else {
+        src.to_string()
+    }
+}
+
+/// One entry point of `src` in GLSL as mX's OpenGL backend writes it: the heap lowered to
+/// bindings, the immediates as uniforms (naga's GLSL writer alone takes no binding arrays).
+#[cfg(test)]
+pub(crate) fn glsl_through_mx(
+    src: &str,
+    stage: naga::ShaderStage,
+    entry: &str,
+    constants: &[(&str, f64)],
+    version: naga::back::glsl::Version,
+) -> Result<String, String> {
+    use mx::mx_shader::{Module, glsl};
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    static PARSED: std::sync::Mutex<Vec<(u64, std::sync::Arc<Module>)>> =
+        std::sync::Mutex::new(Vec::new());
+    let key = {
+        let mut h = DefaultHasher::new();
+        src.hash(&mut h);
+        h.finish()
+    };
+    let found = PARSED
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, m)| m.clone());
+    let m = match found {
+        Some(m) => m,
+        None => {
+            let m = std::sync::Arc::new(Module::from_wgsl("test", src).map_err(|e| e.to_string())?);
+            PARSED.lock().unwrap().push((key, m.clone()));
+            m
+        }
+    };
+    let s = glsl::stage(&m, stage, Some(entry), constants).map_err(|e| e.to_string())?;
+    let layout = glsl::Layout::for_pipeline(&[&s])?;
+    let options = glsl::Options {
+        version,
+        texture_shadow_lod: false,
+        draw_parameters: false,
+    };
+    Ok(glsl::write(&m, &s, 0, &layout, &options)
+        .map_err(|e| e.to_string())?
+        .source)
+}
+
+/// `src` with every whole word `word` (not part of a longer name) replaced by `with`.
+fn replace_word(src: &str, word: &str, with: &str) -> String {
+    let is_name = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut out = String::with_capacity(src.len());
+    let mut rest = src;
+    while let Some(k) = rest.find(word) {
+        let before = rest[..k].chars().next_back();
+        let after = rest[k + word.len()..].chars().next();
+        out.push_str(&rest[..k]);
+        if before.is_some_and(is_name) || after.is_some_and(is_name) {
+            out.push_str(word);
+        } else {
+            out.push_str(with);
+        }
+        rest = &rest[k + word.len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn scene_shader_bound_forms(gl: bool, amd_vulkan: bool, multisampled_shading: bool) -> String {
     let src = [
         include_str!("../colour.wgsl"),
         shaders::SCENE,
-        if road_snow_supported_on(gl, omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set(), array_path()) { include_str!("../road_snow.wgsl") } else { include_str!("../road_snow_off.wgsl") },
+        if road_snow_supported_on(
+            gl,
+            omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set(),
+            array_path(),
+        ) {
+            include_str!("../road_snow.wgsl")
+        } else {
+            include_str!("../road_snow_off.wgsl")
+        },
         include_str!("../enhanced_common.wgsl"),
         include_str!("../puddle_common.wgsl"),
         include_str!("../beam_shadow_none.wgsl"),
@@ -150,8 +396,16 @@ pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shadin
     ]
     .join("\n");
     // Enhanced+: the enhanced pass writes the reflections' surfaces as well (`GBUF_FORMAT`)
-    let src = if rt_gbuf() { src.replace("//RT ", "") } else { src };
-    let src = if basic_pipelines() { lean_scene(src) } else { src };
+    let src = if rt_gbuf() {
+        src.replace("//RT ", "")
+    } else {
+        src
+    };
+    let src = if basic_pipelines() {
+        lean_scene(src)
+    } else {
+        src
+    };
     let src = backend_forms(src, gl, amd_vulkan, multisampled_shading);
     if !gl {
         return src;
@@ -167,13 +421,27 @@ pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shadin
     // D3D compiler under ANGLE (fxc) recursed without end in CProgram::CheckAssertion_Group
     // and the game closed before its first frame (#197).
     let out = without_tree_fade(&src)
-        .replace("textureSampleBias(t_trans, s_tile, uv, bias)", &clamped("t_trans", "bias"))
-        .replace("textureSampleBias(t_night, s_tile, uv, camera.lod.x)", &clamped("t_night", "camera.lod.x"))
+        .replace(
+            "textureSampleBias(t_trans, s_tile, uv, bias)",
+            &clamped("t_trans", "bias"),
+        )
+        .replace(
+            "textureSampleBias(t_night, s_tile, uv, camera.lod.x)",
+            &clamped("t_night", "camera.lod.x"),
+        )
         .replace("ao = ao_at(in.clip.xy, in.world);", "ao = 1.0;")
-        .replace("let ag = ao_gi_at(in.clip.xy, in.world, surface_rt);", "let ag = vec4<f32>(1.0, 0.0, 0.0, 0.0);")
-        .replace("rt_at(in.clip.xy, in.world)", "vec4<f32>(1.0, 0.0, -1.0, 0.0)");
+        .replace(
+            "let ag = ao_gi_at(in.clip.xy, in.world, surface_rt);",
+            "let ag = vec4<f32>(1.0, 0.0, 0.0, 0.0);",
+        )
+        .replace(
+            "rt_at(in.clip.xy, in.world)",
+            "vec4<f32>(1.0, 0.0, -1.0, 0.0)",
+        );
     debug_assert!(!out.contains("s_tile, uv)") && !out.contains("s_tile, uv, "));
-    debug_assert!(!out.contains("ao_at(in.") && !out.contains("ao_gi_at(in.") && !out.contains("rt_at(in."));
+    debug_assert!(
+        !out.contains("ao_at(in.") && !out.contains("ao_gi_at(in.") && !out.contains("rt_at(in.")
+    );
     out
 }
 
@@ -186,9 +454,15 @@ pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shadin
 pub(crate) fn lean_scene(src: String) -> String {
     let out = src
         .replace("irr = irr * lamp_shadow_at(li, p, n, thin);", "")
-        .replace("seen_light = seen_light + share * lamp_shadow_at(li, p, n, false);", "seen_light = seen_light + share;")
+        .replace(
+            "seen_light = seen_light + share * lamp_shadow_at(li, p, n, false);",
+            "seen_light = seen_light + share;",
+        )
         .replace("ms = sun_shadow_soft(in.world, n, thin);", "ms = 1.0;")
-        .replace("let sm = sun_shadow_soft(in.world, n, thin);", "let sm = 1.0;");
+        .replace(
+            "let sm = sun_shadow_soft(in.world, n, thin);",
+            "let sm = 1.0;",
+        );
     debug_assert_eq!(out.matches("sun_shadow_soft(in.world").count(), 1);
     debug_assert!(!out.contains("* lamp_shadow_at("));
     out
@@ -214,7 +488,11 @@ pub(crate) fn snow_shader_source() -> String {
 /// The rainfall (rain.wgsl), as the snowfall.
 pub(crate) fn rain_shader_source() -> String {
     let src = precip_shader_source(include_str!("../rain.wgsl"));
-    if basic_pipelines() { lean_rain(src) } else { src }
+    if basic_pipelines() {
+        lean_rain(src)
+    } else {
+        src
+    }
 }
 
 pub(crate) fn lean_rain(src: String) -> String {
@@ -226,8 +504,12 @@ pub(crate) fn lean_rain(src: String) -> String {
 pub(crate) fn roof_as_float(src: String) -> String {
     const DECL: &str = "var roof_map: texture_depth_2d;";
     const LOAD: &str = "return textureLoad(roof_map, t, 0); }";
-    debug_assert_eq!((src.matches(DECL).count(), src.matches(LOAD).count()), (1, 1));
-    src.replace(DECL, "var roof_map: texture_2d<f32>;").replace(LOAD, "return textureLoad(roof_map, t, 0).x; }")
+    debug_assert_eq!(
+        (src.matches(DECL).count(), src.matches(LOAD).count()),
+        (1, 1)
+    );
+    src.replace(DECL, "var roof_map: texture_2d<f32>;")
+        .replace(LOAD, "return textureLoad(roof_map, t, 0).x; }")
 }
 
 pub(crate) fn precip_shader_source(own: &str) -> String {
@@ -240,12 +522,20 @@ pub(crate) fn precip_shader_source(own: &str) -> String {
         include_str!("../lamp_air.wgsl"),
     ]
     .join("\n");
-    let src = if gl_backend() { roof_as_float(src) } else { src };
+    let src = if gl_backend() {
+        roof_as_float(src)
+    } else {
+        src
+    };
     if array_path().no_storage() {
         let src = src
             .replace("@group(0) @binding(3) var<storage, read> lights: array<PointLight>;", "fn lights_at(i: u32) -> PointLight { return PointLight(vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0)); }")
             .replace("@group(0) @binding(4) var<storage, read> grid: array<u32>;", "fn grid_at(i: u32) -> u32 { return 0xffffffffu; }");
-        return indexing_as_calls(&indexing_as_calls(&src, "lights", "lights_at"), "grid", "grid_at");
+        return indexing_as_calls(
+            &indexing_as_calls(&src, "lights", "lights_at"),
+            "grid",
+            "grid_at",
+        );
     }
     src
 }
@@ -266,7 +556,14 @@ pub(crate) struct SnowUniform {
 /// crystals of a millimetre, a heavy one aggregates of several.
 pub(crate) fn snowfall_flakes(s: f32) -> ([u32; 3], f32) {
     let k = 0.08 + 0.92 * s.clamp(0.0, 1.0);
-    ([(70000.0 * k) as u32, (55000.0 * k) as u32, (25000.0 * k) as u32], 0.0006 + 0.0034 * s * s)
+    (
+        [
+            (70000.0 * k) as u32,
+            (55000.0 * k) as u32,
+            (25000.0 * k) as u32,
+        ],
+        0.0006 + 0.0034 * s * s,
+    )
 }
 
 #[repr(C)]
@@ -288,7 +585,12 @@ pub(crate) struct RainUniform {
 /// on each square metre at a time in a downpour, close by.
 pub(crate) fn rainfall_drops(r: f32, quality: u8) -> [u32; 4] {
     let k = (0.12 + 0.88 * r.clamp(0.0, 1.0)) * [0.3, 0.6, 1.0][quality.min(2) as usize];
-    [(90000.0 * k) as u32, (110000.0 * k) as u32, (60000.0 * k) as u32, (25000.0 * k) as u32]
+    [
+        (90000.0 * k) as u32,
+        (110000.0 * k) as u32,
+        (60000.0 * k) as u32,
+        (25000.0 * k) as u32,
+    ]
 }
 
 /// Enhanced: the lamps' light in the fog over the drawn picture (`fog_lamps.wgsl`; not
@@ -298,7 +600,11 @@ pub(crate) fn fog_lamps_shader_source() -> String {
         include_str!("../fog_lamps.wgsl"),
         include_str!("../enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
-        if omsi_cfg::flags::OMSI_NO_BEAM_SHADOWS.is_set() { include_str!("../beam_shadow_none.wgsl") } else { include_str!("../beam_shadow.wgsl") },
+        if omsi_cfg::flags::OMSI_NO_BEAM_SHADOWS.is_set() {
+            include_str!("../beam_shadow_none.wgsl")
+        } else {
+            include_str!("../beam_shadow.wgsl")
+        },
         include_str!("../lamp_air.wgsl"),
     ]
     .join("\n")
@@ -330,7 +636,10 @@ pub(crate) fn corona_shader_source() -> String {
     // (the basic set lights rain by the sky alone: the loop over the lamps is one more
     // thing a phone's compiler can fail on, see `lean_scene`)
     let src = if basic_pipelines() {
-        src.replace("let l = precip_light(in.wpos.xyz, to_eye, in.wpos.w > 1.5);", "let l = sh_irradiance(vec3<f32>(0.0, 0.0, 1.0)) / PI;")
+        src.replace(
+            "let l = precip_light(in.wpos.xyz, to_eye, in.wpos.w > 1.5);",
+            "let l = sh_irradiance(vec3<f32>(0.0, 0.0, 1.0)) / PI;",
+        )
     } else {
         src
     };
@@ -339,7 +648,11 @@ pub(crate) fn corona_shader_source() -> String {
         let src = src
             .replace("@group(0) @binding(3) var<storage, read> lights: array<PointLight>;", "fn lights_at(i: u32) -> PointLight { return PointLight(vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0)); }")
             .replace("@group(0) @binding(4) var<storage, read> grid: array<u32>;", "fn grid_at(i: u32) -> u32 { return 0xffffffffu; }");
-        return indexing_as_calls(&indexing_as_calls(&src, "lights", "lights_at"), "grid", "grid_at");
+        return indexing_as_calls(
+            &indexing_as_calls(&src, "lights", "lights_at"),
+            "grid",
+            "grid_at",
+        );
     }
     src
 }
@@ -348,10 +661,17 @@ pub(crate) fn corona_shader_source() -> String {
 mod tree_detail_tests {
     #[test]
     fn opengl_leaves_the_tree_detail_out_with_either_line_end() {
-        for src in [super::shaders::SCENE.to_string(), super::shaders::SCENE.replace('\n', "\r\n")] {
+        for src in [
+            super::shaders::SCENE.to_string(),
+            super::shaders::SCENE.replace('\n', "\r\n"),
+        ] {
             let out = super::without_tree_fade(&src);
-            assert!(!out.contains("cross(dpdx(world), dpdy(world))") && !out.contains("0.65 * crown"));
-            assert!(out.contains("fn tree_card_fade(world: vec3<f32>) -> f32 {\n    return 1.0;\n}"));
+            assert!(
+                !out.contains("cross(dpdx(world), dpdy(world))") && !out.contains("0.65 * crown")
+            );
+            assert!(
+                out.contains("fn tree_card_fade(world: vec3<f32>) -> f32 {\n    return 1.0;\n}")
+            );
             assert!(out.contains("-> vec3<f32> {\n    return up;\n}"));
             assert_eq!(out.matches("fn ").count(), src.matches("fn ").count());
         }

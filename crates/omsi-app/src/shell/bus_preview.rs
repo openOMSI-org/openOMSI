@@ -169,7 +169,7 @@ impl State {
         false
     }
 
-    pub fn update(&mut self, options: RenderOptions, adapter: Option<wgpu::Adapter>) {
+    pub fn update(&mut self, options: RenderOptions, adapter: Option<mx::Adapter>) {
         // Keep the text chooser usable while the previous renderer finishes teardown.
         if self.shutdown_pending() {
             return;
@@ -178,7 +178,7 @@ impl State {
             return;
         };
         if self.worker.is_none() {
-            let Some(adapter) = adapter.filter(|a| a.get_info().backend != wgpu::Backend::Gl) else {
+            let Some(adapter) = adapter.filter(|a| a.info().backend != mx::Backend::Gl) else {
                 self.busy = false;
                 return;
             };
@@ -256,14 +256,14 @@ impl super::Shell {
     }
 }
 
-fn run(requests: Receiver<Request>, answers: SyncSender<Reply>, options: RenderOptions, adapter: wgpu::Adapter) {
+fn run(requests: Receiver<Request>, answers: SyncSender<Reply>, options: RenderOptions, adapter: mx::Adapter,) {
     let Ok(mut request) = requests.recv() else {
         return;
     };
     let mut renderer = match pollster::block_on(Renderer::new_on(
         adapter,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         options,
     )) {
         Ok(renderer) => renderer,

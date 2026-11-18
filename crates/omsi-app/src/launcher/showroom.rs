@@ -135,7 +135,7 @@ pub struct Showroom {
     focus_now: f32,
     pub busy: bool,
     /// The picture: its texture and size, and whether it must be drawn again.
-    target: Option<(wgpu::Texture, wgpu::TextureView, u32, u32)>,
+    target: Option<(mx::Texture, mx::TextureView, u32, u32)>,
     dirty: bool,
     /// Bumped whenever `target` was made anew (the interface binds it again).
     pub generation: u64,
@@ -523,21 +523,32 @@ impl Showroom {
     }
 
     /// The picture of the bus at `w` x `h` pixels, drawn again when something changed.
-    pub fn preview(&mut self, renderer: &mut Renderer, w: u32, h: u32) -> Option<wgpu::TextureView> {
+    pub fn preview(&mut self, renderer: &mut Renderer, w: u32, h: u32) -> Option<mx::TextureView> {
         self.shown.as_ref()?;
         let (w, h) = (w.max(16), h.max(16));
         if self.target.as_ref().map(|t| (t.2, t.3) != (w, h)).unwrap_or(true) {
-            let tex = renderer.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("bus preview"),
-                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: renderer.format(),
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[],
-            });
-            let view = tex.create_view(&Default::default());
+            let tex = renderer
+                .device
+                .create_texture(&mx::TextureDescriptor {
+                    label: Some("bus preview"),
+                    size: mx::Extent3d {
+                        width: w,
+                        height: h,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: mx::TextureDimension::D2,
+                    format: renderer.format(),
+                    usage: mx::TextureUsages::RENDER_ATTACHMENT
+                        | mx::TextureUsages::TEXTURE_BINDING
+                        | mx::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                })
+                .expect("mX: a texture");
+            let view = tex
+                .create_view(&Default::default())
+                .expect("mX: a texture view");
             self.target = Some((tex, view, w, h));
             self.generation += 1;
             self.dirty = true;
@@ -553,7 +564,7 @@ impl Showroom {
         self.target.as_ref().map(|t| t.1.clone())
     }
 
-    fn render(&mut self, renderer: &mut Renderer, target: &wgpu::TextureView, w: u32, h: u32) {
+    fn render(&mut self, renderer: &mut Renderer, target: &mx::TextureView, w: u32, h: u32) {
         let (yaw, pitch, zoom, focus) = (self.yaw, self.pitch, self.zoom, self.focus_now);
         let Some(s) = self.shown.as_mut() else { return };
         if let (Some(v), Some(r)) = (s.vehicle.as_mut(), s.render.as_mut()) {
@@ -597,7 +608,7 @@ impl Showroom {
     }
 
     /// The picture's texture as last drawn (the desktop launcher's service reads it back).
-    pub fn picture(&self) -> Option<&wgpu::Texture> {
+    pub fn picture(&self) -> Option<&mx::Texture> {
         self.target.as_ref().map(|t| &t.0)
     }
 
@@ -617,36 +628,39 @@ impl Showroom {
         let row = w * 4;
         let padded = row.div_ceil(256) * 256;
         let device = &renderer.device;
-        let buffer = device.create_buffer(&wgpu::BufferDescriptor { label: Some("bus preview read-back"), size: (padded * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("bus preview read-back") });
+        let buffer = device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("bus preview read-back"),
+                size: (padded * h) as u64,
+                usage: mx::BufferUsages::COPY_DST | mx::BufferUsages::MAP_READ,
+            })
+            .expect("mX: a buffer");
+        let mut enc = device.create_command_encoder(Some("bus preview read-back"));
         enc.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo { texture: tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-            wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded), rows_per_image: Some(h) } },
-            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            mx::TexelCopyTextureInfo { texture: tex, mip_level: 0, origin: mx::Origin3d::ZERO,
+                aspect: mx::TextureAspect::All, },
+            mx::TexelCopyBufferInfo { buffer: &buffer, layout: mx::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded), rows_per_image: Some(h) } },
+            mx::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
         );
-        renderer.queue.submit([enc.finish()]);
-        let slice = buffer.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
-        });
-        let _ = device.poll(wgpu::PollType::wait_indefinitely());
-        rx.recv().ok()?.ok()?;
-        let data = slice.get_mapped_range();
-        let bgra = matches!(renderer.format(), wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb);
-        let mut out = Vec::with_capacity((row * h) as usize);
-        for y in 0..h as usize {
-            let line = &data[y * padded as usize..y * padded as usize + row as usize];
-            if bgra {
-                for p in line.chunks_exact(4) {
-                    out.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
+        let copied = renderer.queue.submit([enc.finish()]);
+        omsi_render::wait_gpu(device, Some(copied)).ok()?;
+        let bgra = matches!(renderer.format(), mx::TextureFormat::Bgra8Unorm | mx::TextureFormat::Bgra8UnormSrgb);
+        let out = buffer
+            .map_read_now(0..buffer.size(), |data| {
+                let mut out = Vec::with_capacity((row * h) as usize);
+                for y in 0..h as usize {
+                    let line = &data[y * padded as usize..y * padded as usize + row as usize];
+                    if bgra {
+                        for p in line.chunks_exact(4) {
+                            out.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
+                        }
+                    } else {
+                        out.extend_from_slice(line);
+                    }
                 }
-            } else {
-                out.extend_from_slice(line);
-            }
-        }
-        drop(data);
-        buffer.unmap();
+            out
+            })
+            .ok()?;
         Some((w, h, out))
     }
 

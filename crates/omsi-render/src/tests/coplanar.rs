@@ -6,11 +6,11 @@ use super::*;
 // pixel, about half of each.
 
 fn renderer() -> Renderer {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     ))
     .expect("test renderer")

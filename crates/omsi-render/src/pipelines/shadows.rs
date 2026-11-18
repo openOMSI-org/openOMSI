@@ -6,13 +6,13 @@ use crate::*;
 
 pub(crate) struct Shadows {
     pub size: u32,
-    pub view: wgpu::TextureView,
-    pub view_far: wgpu::TextureView,
+    pub view: mx::TextureView,
+    pub view_far: mx::TextureView,
     /// Where the lamps' tiles lie under the far cascade.
     pub lamp_atlas: LampAtlas,
-    pub sampler: wgpu::Sampler,
-    pub clear_pipeline: wgpu::RenderPipeline,
-    pub pipelines: Vec<wgpu::RenderPipeline>,
+    pub sampler: mx::Sampler,
+    pub clear_pipeline: mx::RenderPipeline,
+    pub pipelines: Vec<mx::RenderPipeline>,
 }
 
 /// The next size tried when the graphics card has no memory left for shadow maps of `size`
@@ -23,18 +23,24 @@ fn smaller_shadow_size(size: u32) -> Option<u32> {
 
 /// `lamps`: the picture is an Enhanced one, which looks the lamps' shadows up (the plain ones
 /// have no tiles under the far map, nor pipelines to draw them).
-pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, lamps: bool, cube: bool) -> Shadows {
+pub(crate) fn build(device: &mx::Device, scene: &SceneBase, shadow_size: u32, lamps: bool, cube: bool) -> Shadows {
     let depth_map = |label: &str, width: u32, height: u32| {
-        device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(label),
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        })
+        device
+            .create_texture(&mx::TextureDescriptor {
+                label: Some(label),
+                size: mx::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format: DEPTH_FORMAT,
+                usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .expect("mX: a texture")
     };
     let mut size = shadow_size;
     let (lamp_atlas, shadow_tex, shadow_tex_far) = loop {
@@ -44,43 +50,54 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, 
         // the renderer's build in the caller's scope - see `build_with_fallbacks` - instead of
         // drawing every frame with invalid shadow maps)
         let smaller = smaller_shadow_size(size);
-        let scope = smaller.map(|_| device.push_error_scope(wgpu::ErrorFilter::OutOfMemory));
-        // near cascade on the left, close cascade on the right
-        let near = depth_map("shadow map", size * 2, size);
-        // (and the lamps' tiles under it, see `LampAtlas`)
-        let far = depth_map("shadow map far", size, lamp_atlas.height());
-        match (scope.map(|scope| pollster::block_on(scope.pop())), smaller) {
-            (Some(Some(_)), Some(smaller)) => {
-                log::warn!("renderer: no graphics memory left for a shadow map of {size} texels: trying {smaller}");
-                size = smaller;
+        // near cascade on the left, close cascade on the right; the lamps' tiles under the far
+        // one (see `LampAtlas`)
+        let maps = || {
+            (
+                depth_map("shadow map", size * 2, size),
+                depth_map("shadow map far", size, lamp_atlas.height()),
+            )
+        };
+        match smaller {
+            Some(smaller) => match crate::gpu_attempt(maps) {
+                Ok((near, far)) => break (lamp_atlas, near, far),
+                Err(e) => {
+                    log::warn!(
+                        "renderer: no graphics memory left for a shadow map of {size} texels ({e}): trying {smaller}"
+                    );
+                    size = smaller;
+                }
+            },
+            None => {
+                let (near, far) = maps();
+                break (lamp_atlas, near, far);
             }
-            _ => break (lamp_atlas, near, far),
         }
     };
     if lamp_atlas.rows == 0 && lamps && !basic_pipelines() {
         log::warn!("renderer: no room for the lamps' shadow tiles under a far shadow map of {size} texels: the lamps cast no shadows");
     }
-    let shadow_view = shadow_tex.create_view(&Default::default());
-    let shadow_view_far = shadow_tex_far.create_view(&Default::default());
-    let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        compare: Some(wgpu::CompareFunction::LessEqual),
-        ..Default::default()
-    });
-    let shadow_pipeline_layout =
-        device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("shadow"),
-            bind_group_layouts: &[Some(&scene.shadow_layout), Some(&scene.material_layout)],
-            immediate_size: 0,
-        });
+    let shadow_view = shadow_tex
+        .create_view(&Default::default())
+        .expect("mX: a texture view");
+    let shadow_view_far = shadow_tex_far
+        .create_view(&Default::default())
+        .expect("mX: a texture view");
+    let shadow_sampler = device
+        .create_sampler(&mx::SamplerDescriptor {
+            address_mode_u: mx::AddressMode::ClampToEdge,
+            address_mode_v: mx::AddressMode::ClampToEdge,
+            mag_filter: mx::FilterMode::Linear,
+            min_filter: mx::FilterMode::Linear,
+            compare: Some(mx::CompareFunction::LessEqual),
+            ..Default::default()
+        })
+        .expect("mX: a sampler");
     let make_shadow = |kind: u8, cascade: u8| {
-        compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
+        compile_pipeline(device, &mx::RenderPipelineDescriptor {
             label: Some("shadow"),
-            layout: Some(&shadow_pipeline_layout),
-            vertex: wgpu::VertexState {
+            vertex: mx::VertexState {
+                    constants: &[],
                 module: &scene.shader,
                 entry_point: Some(match cascade {
                     0 => "vs_shadow",
@@ -89,34 +106,31 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, 
                     _ => "vs_shadow_lamp",
                 }),
                 buffers: &[scene.vertex_layout.clone()],
-                compilation_options: Default::default(),
             },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
+            primitive: mx::PrimitiveState {
+                    topology: mx::PrimitiveTopology::TriangleList,
                 cull_mode: None,
-                front_face: wgpu::FrontFace::Cw,
+                front_face: mx::FrontFace::Cw,
                 ..Default::default()
             },
-            depth_stencil: Some(wgpu::DepthStencilState {
+            depth_stencil: Some(mx::DepthStencilState {
                 format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                depth_write_enabled: true,
+                    depth_compare: mx::CompareFunction::LessEqual,
                 stencil: Default::default(),
-                bias: wgpu::DepthBiasState {
+                bias: mx::DepthBiasState {
                     constant: 4,
                     slope_scale: 3.0,
                     clamp: 0.0,
                 },
             }),
             multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
+            fragment: Some(mx::FragmentState {
+                    constants: &[],
                 module: &scene.shader,
                 entry_point: Some(if kind == PIPE_ALPHA_TEST { "fs_shadow_test" } else { "fs_shadow" }),
                 targets: &[],
-                compilation_options: Default::default(),
             }),
-            multiview_mask: None,
-            cache: crate::pipeline_cache::get(device).as_ref(),
         })
     };
     let shadow_clear_pipeline = clear_pipeline(device);
@@ -150,45 +164,35 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, 
     }
 }
 
-fn clear_pipeline(device: &wgpu::Device) -> wgpu::RenderPipeline {
+fn clear_pipeline(device: &mx::Device) -> mx::RenderPipeline {
     log::info!("renderer: compiling the shadow clear shader");
-    let module = compile_shader(device, wgpu::ShaderModuleDescriptor {
+    let module = compile_shader(device, mx::ShaderModuleDescriptor {
         label: Some("shadow clear"),
-        source: wgpu::ShaderSource::Wgsl(
-            "@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+        source:
+                &*("@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
                         let x = f32(i32(i & 1u) * 4 - 1);
                         let y = f32(i32(i >> 1u) * 4 - 1);
                         return vec4<f32>(x, y, 1.0, 1.0);
-                    }"
-            .into(),
-        ),
+                    }"),
     });
-    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+    compile_pipeline(device, &mx::RenderPipelineDescriptor {
         label: Some("shadow clear"),
-        bind_group_layouts: &[],
-        immediate_size: 0,
-    });
-    compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
-        label: Some("shadow clear"),
-        layout: Some(&layout),
-        vertex: wgpu::VertexState {
+        vertex: mx::VertexState {
+                constants: &[],
             module: &module,
             entry_point: Some("vs"),
             buffers: &[],
-            compilation_options: Default::default(),
         },
-        primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: Some(wgpu::DepthStencilState {
+        primitive: mx::PrimitiveState::default(),
+            depth_stencil: Some(mx::DepthStencilState {
             format: DEPTH_FORMAT,
-            depth_write_enabled: Some(true),
-            depth_compare: Some(wgpu::CompareFunction::Always),
+            depth_write_enabled: true,
+                depth_compare: mx::CompareFunction::Always,
             stencil: Default::default(),
             bias: Default::default(),
         }),
         multisample: Default::default(),
         fragment: None,
-        multiview_mask: None,
-        cache: crate::pipeline_cache::get(device).as_ref(),
     })
 }
 

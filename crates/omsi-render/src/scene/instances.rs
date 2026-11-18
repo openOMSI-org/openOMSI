@@ -80,6 +80,7 @@ impl Renderer {
             cabin_places: Vec::new(),
             last_lights: Vec::new(),
             bind_groups: HashMap::new(),
+            material_table: MaterialTable::new(&self.device, 1024),
             looks: hashbrown::HashMap::new(),
             pbr_maps: HashMap::new(),
             snow_textures: Default::default(),

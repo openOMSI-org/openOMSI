@@ -76,7 +76,7 @@ impl Navigator {
     pub(super) fn frame_screen(&mut self, renderer: &Renderer, scene: &Scene, f: &NavFrame) {
         let Some(screen) = self.screen.filter(|s| s.on) else {
             if let Some(off) = self.screen.filter(|_| self.screen != self.screen_state.shown) {
-                renderer.clear_texture(scene, off.texture, wgpu::Color::BLACK);
+                renderer.clear_texture(scene, off.texture, mx::Color::BLACK);
             }
             self.screen_state = ScreenState { shown: self.screen, ..ScreenState::default() };
             return;

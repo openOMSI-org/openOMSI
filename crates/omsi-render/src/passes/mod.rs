@@ -121,7 +121,7 @@ impl FrameEnv {
 
 /// What `render_inner` was asked to draw.
 pub(crate) struct FrameArgs<'a> {
-    pub target: &'a wgpu::TextureView,
+    pub target: &'a mx::TextureView,
     pub width: u32,
     pub height: u32,
     pub camera: &'a Camera,
@@ -136,7 +136,7 @@ pub(crate) struct FrameArgs<'a> {
 /// targets (see `Renderer::begin_frame`).
 pub(crate) struct FrameCtx<'a> {
     pub env: FrameEnv,
-    pub target: &'a wgpu::TextureView,
+    pub target: &'a mx::TextureView,
     pub camera: &'a Camera,
     pub lighting: &'a Lighting,
     pub with_overlays: bool,
@@ -155,7 +155,7 @@ pub(crate) struct FrameCtx<'a> {
     pub vanilla_fxaa: bool,
     pub glass_on: bool,
     pub scaled: bool,
-    pub scene_target: Option<(wgpu::TextureView, wgpu::BindGroup)>,
+    pub scene_target: Option<(mx::TextureView, mx::BindGroup)>,
     pub aspect: f32,
     pub cam_rel: Vec3,
     pub xr_view: bool,
@@ -180,7 +180,7 @@ pub(crate) struct FrameCtx<'a> {
 
 impl FrameCtx<'_> {
     /// where the 3D picture is drawn: the scaled target, or the window's own
-    pub(crate) fn scene_view(&self) -> &wgpu::TextureView {
+    pub(crate) fn scene_view(&self) -> &mx::TextureView {
         self.scene_target.as_ref().map(|t| &t.0).unwrap_or(self.target)
     }
 }
@@ -189,7 +189,7 @@ impl FrameCtx<'_> {
 /// so far.
 pub(crate) struct PassTimers {
     pub view: usize,
-    pub set: Option<wgpu::QuerySet>,
+    pub set: Option<mx::QuerySet>,
     pub timed: Vec<&'static str>,
 }
 
@@ -228,7 +228,7 @@ pub(crate) fn kind_of(alpha: AlphaMode) -> u8 {
 /// the three command encoders of a frame, finished side by side (see `finish_and_submit`):
 /// the shadow maps, the depth prepass with the ambient occlusion, and the picture itself
 pub(crate) struct Encoders {
-    pub shadow: wgpu::CommandEncoder,
-    pub prepass: wgpu::CommandEncoder,
-    pub picture: wgpu::CommandEncoder,
+    pub shadow: mx::CommandEncoder,
+    pub prepass: mx::CommandEncoder,
+    pub picture: mx::CommandEncoder,
 }

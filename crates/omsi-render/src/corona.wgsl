@@ -273,6 +273,19 @@ fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
     let pull = select(min(size * 0.5, 0.5), in.extra.y, in.extra.y >= 0.0);
     let wp = in.pos + (right * c.x * stretch.x + upv * c.y * stretch.y) * size + select(view_dir * min(pull, dist * 0.9), vec3<f32>(0.0), streak);
     out.clip = camera.view_proj * vec4<f32>(wp, 1.0);
+    // A lamp's glare quad (Enhanced, *Glow of lights*) is `GLARE_K` times its sprite and flat,
+    // facing the eye. Left at the lamp's own depth it cuts into whatever stands within its
+    // reach - the bumper, the road in front of the bus, the lens itself - along a straight
+    // line, and fights with the lens's own depth: a bright plane standing in the air, seen
+    // the plainer the lower the camera. A glare is the eye's and the lens's, not a thing in
+    // the world: it is moved towards the eye in depth only (as a smoke puff is, above; its
+    // size on the screen stays) by the quad's own radius, so that only what truly stands
+    // between the eye and the lamp, further out than that, covers it.
+    if (!streak && !flake && glare > 1.0) {
+        let push = min(size, dist * 0.9);
+        let nearer = camera.view_proj * vec4<f32>(wp + view_dir * push, 1.0);
+        out.clip.z = nearer.z / nearer.w * out.clip.w;
+    }
     out.uv = c * 0.5 + 0.5;
     out.color = vec4<f32>(in.color.rgb, brightness);
     out.kind = select(0.0, 1.0, streak);
@@ -402,7 +415,13 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         // the core spans it, and brighter than white even in its corners it showed the
         // whole quad - a square blot of light for every distant headlamp)
         shape = shape * (1.0 - smoothstep(1.0 - px, 1.0, r));
-        shape = shape + vec3<f32>(tail) * max(lit, vec3<f32>(0.25));
+        // (the tail is added after the core is scaled, and soft-limited just under white:
+        // pre-exposed at night it clipped to a flat white disc as wide as the sprite - a
+        // plane of light - where it should fall off smoothly into the dark; the glow filter
+        // takes the core's HDR peak for the halo)
+        let halo = vec3<f32>(tail) * max(lit, vec3<f32>(0.25)) * in.color.a * scale;
+        let soft = vec3<f32>(0.9) * (vec3<f32>(1.0) - exp(-halo / vec3<f32>(0.9)));
+        return vec4<f32>(in.color.rgb * (shape * in.color.a * scale + soft), 1.0);
     }
     return vec4<f32>(in.color.rgb * shape * in.color.a * scale, 1.0);
 }

@@ -77,14 +77,17 @@ parking_lot = "0.13"
 # (the world snapshot the simulation reads without a lock: `omsi-sim::world_data`)
 arc-swap = "1.7"
 rand = "0.10"
-wgpu = { version = "29", default-features = false, features = ["std", "parking_lot", "metal", "vulkan", "dx12", "gles", "wgsl", "noop"] }
-# wgpu's parts that are used directly: always wgpu's own version, or their types do not
-# match wgpu's (Dependabot's `wgpu` group updates the three together)
-wgpu-hal = "29"
-naga = "29"
-wgpu-mx = { git = "https://github.com/openOMSI-org/mX", rev = "a5185eb9288f0d7e56c3d18658df69dc928c7ca0", features = ["custom"] }
+# naga, the shader translator mX is built on (its version: mX's shaders and the tests' checks of
+# them must agree; patched below with mX's own fixes)
+naga = "30"
+# mX, the renderer's graphics library (every backend of the platform; the graphics API setting
+# picks one at run time). Pinned to an mX commit; to work on both, point these and the naga
+# patch below at a checkout next to this one (`path = "../mX/crates/mx"` and so on).
+mx = { git = "https://github.com/openOMSI-org/mX", rev = "d317cc5c4ec26098dd8ad5498292984fced4cf2f" }
+# (the vendors' upscalers and frame generators on mX: DLSS, FSR 3, XeSS, MetalFX)
+mx-upscale = { git = "https://github.com/openOMSI-org/mX", rev = "d317cc5c4ec26098dd8ad5498292984fced4cf2f" }
 winit = "0.30"
-bytemuck = { version = "1", features = ["derive"] }
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 memmap2 = "0.9"
 pollster = "1.0"
 # (every picture format a mod or a photo may come in; DDS and TGA have readers of our own)
@@ -128,17 +131,7 @@ strip = "debuginfo"
 # the Security audit workflow fails when Cargo.lock lists one as unused)
 [patch.crates-io]
 gpu-allocator = { git = "https://github.com/openOMSI-Project/gpu-allocator", rev = "6ad8a7eeb9c3e1dcd65656f718c593a0a1a3915d" }
-# wgpu from the org's fork (upstream v29.0.4 plus fixes): GL texture units sized from the driver,
-# the GL context released while a thread waits for the GPU, errors instead of panics on driver
-# failures, Adapter::memory_info, GLES over ANGLE (Direct3D 11) on Windows, and fixes backported from
-# v30 (Vulkan acquire fence, out-of-memory checks, DX12 textureNumLevels, 3D texture init); every crate of the
-# fork that Cargo.lock lists is patched, or the fork's and crates.io's halves would not match
-wgpu = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06e5bf8062be2978d93e95556a4dd83f1d3b8" }
-wgpu-core = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06e5bf8062be2978d93e95556a4dd83f1d3b8" }
-wgpu-core-deps-apple = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06e5bf8062be2978d93e95556a4dd83f1d3b8" }
-wgpu-core-deps-emscripten = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06e5bf8062be2978d93e95556a4dd83f1d3b8" }
-wgpu-core-deps-windows-linux-android = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06e5bf8062be2978d93e95556a4dd83f1d3b8" }
-wgpu-hal = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06e5bf8062be2978d93e95556a4dd83f1d3b8" }
-wgpu-types = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06e5bf8062be2978d93e95556a4dd83f1d3b8" }
-wgpu-naga-bridge = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06e5bf8062be2978d93e95556a4dd83f1d3b8" }
-naga = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06e5bf8062be2978d93e95556a4dd83f1d3b8" }
+# naga with mX's fixes (storage-buffer binding arrays in its HLSL writer: the buffer heap on
+# Direct3D 12; see mX's vendor/naga/MX_PATCHES.md). mX's own workspace patches it the same way;
+# a dependency's patches do not reach this workspace, so it is repeated here.
+naga = { git = "https://github.com/openOMSI-org/mX", rev = "d317cc5c4ec26098dd8ad5498292984fced4cf2f" }

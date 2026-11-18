@@ -4,8 +4,8 @@
 use crate::*;
 
 pub struct GpuMesh {
-    pub(crate) vertex_buf: wgpu::Buffer,
-    pub(crate) index_buf: wgpu::Buffer,
+    pub(crate) vertex_buf: mx::Buffer,
+    pub(crate) index_buf: mx::Buffer,
     /// Where the mesh lies in its page's buffers (pages hold many meshes); `page` is its
     /// page in the scene's list, `u32::MAX` for a page of its own.
     pub(crate) page: u32,
@@ -38,17 +38,29 @@ pub struct GpuMesh {
 /// integrated chip that shares a small heap: "Out of Memory"), the buffer is invalid, and
 /// mapping it ended the game - "Error in Buffer::get_mapped_range: Validation Error"
 /// (#107, #109) - where writing to it is an error that is logged and the game goes on from.
-pub(crate) fn buffer_init(device: &wgpu::Device, queue: &wgpu::Queue, label: Option<&str>, contents: &[u8], usage: wgpu::BufferUsages) -> wgpu::Buffer {
-    let align = wgpu::COPY_BUFFER_ALIGNMENT as usize;
+pub(crate) fn buffer_init(device: &mx::Device,
+    queue: &mx::Queue, label: Option<&str>, contents: &[u8], usage: mx::BufferUsages,
+) -> mx::Buffer {
+    let align = mx::COPY_BUFFER_ALIGNMENT as usize;
     let size = contents.len().next_multiple_of(align).max(align);
-    let buf = device.create_buffer(&wgpu::BufferDescriptor { label, size: size as u64, usage: usage | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+    let buf = device
+        .create_buffer(&mx::BufferDescriptor {
+            label,
+            size: size as u64,
+            usage: usage | mx::BufferUsages::COPY_DST,
+        })
+        .expect("mX: a buffer");
     if !contents.is_empty() {
         if contents.len() == size {
-            queue.write_buffer(&buf, 0, contents);
+            queue
+                .write_buffer(&buf, 0, contents)
+                .expect("mX: a queue write");
         } else {
             let mut padded = contents.to_vec();
             padded.resize(size, 0);
-            queue.write_buffer(&buf, 0, &padded);
+            queue
+                .write_buffer(&buf, 0, &padded)
+                .expect("mX: a queue write");
         }
     }
     buf
@@ -58,19 +70,19 @@ pub(crate) fn buffer_init(device: &wgpu::Device, queue: &wgpu::Queue, label: Opt
 /// device with ray queries: their buffers are its geometry input).
 pub(crate) static RT_BUFFERS: crate::AdapterBool = crate::AdapterBool::new(7);
 
-/// Is `device` wgpu's no-op device (a dedicated server, which draws nothing)? Meshes take
+/// Is `device` a no-op device (tests without a GPU, which draw nothing)? Meshes take
 /// their place in the pages there, but their bytes are not written: that device keeps every
 /// buffer in memory, a second copy of every mesh of the map that nothing ever reads (about
 /// 430 MB of a dedicated server on Brasil Viagem Xtreme).
-pub(crate) fn no_device(device: &wgpu::Device) -> bool {
-    device.adapter_info().backend == wgpu::Backend::Noop
+pub(crate) fn no_device(device: &mx::Device) -> bool {
+    device.info().backend == mx::Backend::Noop
 }
 
 /// Vertex and index buffers holding several meshes; the space a freed mesh leaves is
 /// handed to the next that fits.
 pub(crate) struct MeshPage {
-    pub(crate) vertex: wgpu::Buffer,
-    pub(crate) index: wgpu::Buffer,
+    pub(crate) vertex: mx::Buffer,
+    pub(crate) index: mx::Buffer,
     /// The pages' room (their buffers' sizes, but on no device: those are a token there).
     pub(crate) vertex_cap: u64,
     pub(crate) index_cap: u64,
@@ -130,18 +142,16 @@ pub(crate) fn page_give(free: &mut Vec<(u64, u64)>, top: &mut u64, at: u64, len:
 
 pub(crate) static MESH_OUT_OF_MEMORY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-pub(crate) fn try_create_buffer(device: &wgpu::Device, desc: &wgpu::BufferDescriptor) -> Option<wgpu::Buffer> {
-    let memory = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-    let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let buffer = device.create_buffer(desc);
-    let invalid = pollster::block_on(validation.pop());
-    let out_of_memory = pollster::block_on(memory.pop());
-    if out_of_memory.is_some() {
+pub(crate) fn try_create_buffer(device: &mx::Device,
+    desc: &mx::BufferDescriptor,
+) -> Option<mx::Buffer> {
+    let e = match device.create_buffer(desc) {
+        Ok(buffer) => return Some(buffer),
+        Err(e) => e,
+    };
+    if matches!(e, mx::Error::OutOfMemory(_)) {
         MESH_OUT_OF_MEMORY.store(true, std::sync::atomic::Ordering::Relaxed);
     }
-    let Some(e) = out_of_memory.or(invalid) else {
-        return Some(buffer);
-    };
     static FAILED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = FAILED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if n < 5 || n.is_multiple_of(1000) {
@@ -168,26 +178,24 @@ fn page_refused(real: bool, bytes: u64) -> bool {
     false
 }
 
-pub(crate) fn mesh_blas_usage(features: wgpu::Features) -> wgpu::BufferUsages {
-    if RT_BUFFERS.load(std::sync::atomic::Ordering::Relaxed)
-        && features.contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
-    {
-        wgpu::BufferUsages::BLAS_INPUT | wgpu::BufferUsages::STORAGE
+pub(crate) fn mesh_blas_usage() -> mx::BufferUsages {
+    if RT_BUFFERS.load(std::sync::atomic::Ordering::Relaxed) {
+        mx::BufferUsages::BLAS_INPUT | mx::BufferUsages::STORAGE
     } else {
-        wgpu::BufferUsages::empty()
+        mx::BufferUsages::empty()
     }
 }
 
 impl MeshPage {
-    pub(crate) fn new(device: &wgpu::Device, vertex_bytes: u64, index_bytes: u64) -> Option<MeshPage> {
+    pub(crate) fn new(device: &mx::Device, vertex_bytes: u64, index_bytes: u64) -> Option<MeshPage> {
         // The device guards auxiliary uploads; the flag also honors runtime RT fallback.
-        let blas = mesh_blas_usage(device.features());
+        let blas = mesh_blas_usage();
         let real = !no_device(device);
-        let size = |bytes: u64| if page_refused(real, bytes) { device.limits().max_buffer_size + wgpu::COPY_BUFFER_ALIGNMENT } else if real { bytes.max(32) } else { 32 };
-        let buffer = |bytes: u64, usage| try_create_buffer(device, &wgpu::BufferDescriptor { label: Some("mesh page"), size: size(bytes), usage: usage | wgpu::BufferUsages::COPY_DST | blas, mapped_at_creation: false });
+        let size = |bytes: u64| if page_refused(real, bytes) { device.limits().max_buffer_size + mx::COPY_BUFFER_ALIGNMENT } else if real { bytes.max(32) } else { 32 };
+        let buffer = |bytes: u64, usage| try_create_buffer(device, &mx::BufferDescriptor { label: Some("mesh page"), size: size(bytes), usage: usage | mx::BufferUsages::COPY_DST | blas, });
         Some(MeshPage {
-            vertex: buffer(vertex_bytes, wgpu::BufferUsages::VERTEX)?,
-            index: buffer(index_bytes, wgpu::BufferUsages::INDEX)?,
+            vertex: buffer(vertex_bytes, mx::BufferUsages::VERTEX)?,
+            index: buffer(index_bytes, mx::BufferUsages::INDEX)?,
             vertex_cap: vertex_bytes.max(32),
             index_cap: index_bytes.max(32),
             real,
@@ -216,14 +224,18 @@ impl MeshPage {
     }
 
     /// Write the mesh at these offsets.
-    pub(crate) fn place(&self, queue: &wgpu::Queue, data: &MeshData, page: u32, at: (u64, u64)) -> GpuMesh {
+    pub(crate) fn place(&self, queue: &mx::Queue, data: &MeshData, page: u32, at: (u64, u64)) -> GpuMesh {
         let verts = mesh_vertices(data);
         let (vb, ib): (&[u8], &[u8]) = (bytemuck::cast_slice(&verts), bytemuck::cast_slice(&data.indices));
         if !vb.is_empty() && self.real {
-            queue.write_buffer(&self.vertex, at.0, vb);
+            queue
+                .write_buffer(&self.vertex, at.0, vb)
+                .expect("mX: a queue write");
         }
         if !ib.is_empty() && self.real {
-            queue.write_buffer(&self.index, at.1, ib);
+            queue
+                .write_buffer(&self.index, at.1, ib)
+                .expect("mX: a queue write");
         }
         let (center, radius) = mesh_bounds(data);
         let flats = crate::scene::overlay::mesh_flats(data);
@@ -251,7 +263,7 @@ impl MeshPage {
 }
 
 impl GpuMesh {
-    pub(crate) fn left_out(vertex_buf: wgpu::Buffer, index_buf: wgpu::Buffer) -> GpuMesh {
+    pub(crate) fn left_out(vertex_buf: mx::Buffer, index_buf: mx::Buffer) -> GpuMesh {
         GpuMesh {
             vertex_buf,
             index_buf,
@@ -308,7 +320,8 @@ pub(crate) fn mesh_bounds(data: &MeshData) -> (Vec3, f32) {
 
 /// The meshes in one page of their own, sized to them (each in a page of its own where the
 /// adapter cannot draw with a base vertex: `paged` false).
-pub(crate) fn make_meshes(device: &wgpu::Device, queue: &wgpu::Queue, data: &[&MeshData], paged: bool) -> Vec<GpuMesh> {
+pub(crate) fn make_meshes(device: &mx::Device,
+    queue: &mx::Queue, data: &[&MeshData], paged: bool) -> Vec<GpuMesh> {
     if data.is_empty() {
         return Vec::new();
     }
@@ -320,7 +333,13 @@ pub(crate) fn make_meshes(device: &wgpu::Device, queue: &wgpu::Queue, data: &[&M
         if data.len() > 1 {
             return data.iter().map(|d| make_meshes(device, queue, &[d], true).pop().expect("one mesh")).collect();
         }
-        let stand_in = device.create_buffer(&wgpu::BufferDescriptor { label: Some("left out mesh"), size: 32, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::INDEX, mapped_at_creation: false });
+        let stand_in = device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("left out mesh"),
+                size: 32,
+                usage: mx::BufferUsages::VERTEX | mx::BufferUsages::INDEX,
+            })
+            .expect("mX: a buffer");
         return vec![GpuMesh::left_out(stand_in.clone(), stand_in)];
     };
     let mut at = (0, 0);
@@ -336,13 +355,14 @@ pub(crate) fn make_meshes(device: &wgpu::Device, queue: &wgpu::Queue, data: &[&M
 pub struct PreparedMesh(GpuMesh);
 
 /// Make a mesh's GPU buffers on any thread (the device takes calls from all of them).
-pub fn prepare_mesh(device: &wgpu::Device, queue: &wgpu::Queue, data: &MeshData) -> PreparedMesh {
+pub fn prepare_mesh(device: &mx::Device, queue: &mx::Queue, data: &MeshData) -> PreparedMesh {
     prepare_meshes(device, queue, &[data], false).pop().expect("one mesh")
 }
 
 /// [`prepare_mesh`] for several meshes at once, which share one page of buffers.
 /// `paged`: [`Renderer::mesh_pages`] of the renderer the meshes are for.
-pub fn prepare_meshes(device: &wgpu::Device, queue: &wgpu::Queue, data: &[&MeshData], paged: bool) -> Vec<PreparedMesh> {
+pub fn prepare_meshes(device: &mx::Device,
+    queue: &mx::Queue, data: &[&MeshData], paged: bool) -> Vec<PreparedMesh> {
     let _turn = gl_worker_turn();
     make_meshes(device, queue, data, paged).into_iter().map(PreparedMesh).collect()
 }
@@ -417,7 +437,7 @@ impl Renderer {
     /// queue, mesh by mesh (the writes land before the frame's commands run): one staging
     /// buffer for the whole frame outgrew the device's buffer limit on big maps, its
     /// creation failed validation and mapping it panicked (Windows, Vulkan).
-    pub(crate) fn flush_pending_meshes(&self, scene: &Scene, _encoder: &mut wgpu::CommandEncoder) {
+    pub(crate) fn flush_pending_meshes(&self, scene: &Scene, _encoder: &mut mx::CommandEncoder) {
         let pending = std::mem::take(&mut *self.pending_meshes.borrow_mut());
         if pending.is_empty() || no_device(&self.device) {
             return;
@@ -431,7 +451,8 @@ impl Renderer {
             if len == 0 || m.vertex_bytes < len {
                 continue;
             }
-            self.queue.write_buffer(&m.vertex_buf, m.vertex_offset, &b[..len as usize]);
+            self.queue.write_buffer(&m.vertex_buf, m.vertex_offset, &b[..len as usize])
+                .expect("mX: a queue write");
         }
     }
 

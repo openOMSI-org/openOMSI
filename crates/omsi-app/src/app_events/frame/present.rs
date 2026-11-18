@@ -55,7 +55,9 @@ impl App {
             if !asked {
                 self.perf.generation_too_slow = 0;
             }
-            let generation = s.set_frame_generation(r, asked && self.perf.generation_too_slow < GENERATION_SLOW_READINGS);
+            let generation = s.set_frame_generation(r, self.settings
+                    .frame_generation_kind()
+                    .filter(|_| self.perf.generation_too_slow < GENERATION_SLOW_READINGS),);
             r.set_frame_generation(generation);
             let making = r.frames_generated().is_some_and(|n| n > 0);
             self.perf.generation_since = if making { self.perf.generation_since.or_else(|| Some(Instant::now())) } else { None };
@@ -184,7 +186,7 @@ impl App {
 
     /// The window's picture to draw into (none: the window is hidden; `reconfigure`: the
     /// drawable went away), and whether nothing is shown this frame.
-    fn frame_acquire(&mut self, reconfigure: &mut bool) -> (Option<wgpu::SurfaceTexture>, Option<wgpu::TextureView>, bool) {
+    fn frame_acquire(&mut self, reconfigure: &mut bool) -> (Option<mx::SurfaceTexture>, Option<mx::TextureView>, bool) {
         let (Some(s), Some(r)) = (self.gfx.surface.as_ref(), self.renderer.as_ref()) else {
             return (None, None, true);
         };
@@ -204,18 +206,17 @@ impl App {
             .map(|(a, b)| (a..b).contains(&self.started.elapsed().as_secs_f32()))
             .unwrap_or(false);
         let acquired = match s.acquire() {
-            wgpu::CurrentSurfaceTexture::Success(_)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(_)
+            mx::CurrentSurfaceTexture::Success(_) | mx::CurrentSurfaceTexture::Suboptimal(_)
             if hidden_now =>
                 {
-                    wgpu::CurrentSurfaceTexture::Occluded
+                    mx::CurrentSurfaceTexture::Occluded
                 }
             other => other,
         };
         let (frame, stand_in) = match acquired {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (Some(frame), None),
-            wgpu::CurrentSurfaceTexture::Occluded
+            mx::CurrentSurfaceTexture::Success(frame)
+            | mx::CurrentSurfaceTexture::Suboptimal(frame) => (Some(frame), None),
+            mx::CurrentSurfaceTexture::Occluded
             if omsi_cfg::flags::OMSI_RENDER_OCCLUDED.is_set() || omsi_cfg::flags::OMSI_HIDDEN_WINDOW.is_set() =>
                 {
                     let (w, h) = (s.config.width, s.config.height);
@@ -225,31 +226,34 @@ impl App {
                         .map(|t| (t.width(), t.height()) != (w, h))
                         .unwrap_or(true)
                     {
-                        self.gfx.stand_in =
-                            Some(r.device.create_texture(&wgpu::TextureDescriptor {
+                        self.gfx.stand_in = Some(
+                        r.device
+                            .create_texture(&mx::TextureDescriptor {
                                 label: Some("hidden window"),
-                                size: wgpu::Extent3d {
+                                size: mx::Extent3d {
                                     width: w,
                                     height: h,
                                     depth_or_array_layers: 1,
                                 },
                                 mip_level_count: 1,
                                 sample_count: 1,
-                                dimension: wgpu::TextureDimension::D2,
+                                dimension: mx::TextureDimension::D2,
                                 format: r.format(),
-                                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                                usage: mx::TextureUsages::RENDER_ATTACHMENT,
                                 view_formats: &[],
-                            }));
+                            })
+                            .expect("mX: a texture"),
+                    );
                     }
                     (
                         None,
-                        self.gfx.stand_in
-                            .as_ref()
-                            .map(|t| t.create_view(&Default::default())),
+                        self.gfx.stand_in.as_ref().map(|t| {
+                        t.create_view(&Default::default())
+                            .expect("mX: a texture view")
+                    }),
                     )
                 }
-            wgpu::CurrentSurfaceTexture::Outdated
-            | wgpu::CurrentSurfaceTexture::Lost => {
+            mx::CurrentSurfaceTexture::Outdated | mx::CurrentSurfaceTexture::Lost => {
                 *reconfigure = true;
                 (None, None)
             }
@@ -274,8 +278,8 @@ impl App {
         raw_dt: f32,
         lighting: &omsi_render::Lighting,
         vr_nav_display: Option<crate::vr_navigator::Display>,
-        frame: Option<wgpu::SurfaceTexture>,
-        view: wgpu::TextureView,
+        frame: Option<mx::SurfaceTexture>,
+        view: mx::TextureView,
     ) {
         #[cfg(not(windows))]
         let _ = vr_nav_display;
@@ -576,7 +580,7 @@ impl App {
         // window on Ahlheim grew by 100 MB a second (5.6 GB after 55 s).
         let __t = Instant::now();
         r.queue.submit(r.take_deferred_commands());
-        let _ = r.device.poll(wgpu::PollType::Poll);
+        let _ = r.device.poll();
         self.perf.profile.add(crate::profile_keys::ProfKey::Present, __t.elapsed().as_secs_f64());
         if let Some(rest) =
             std::time::Duration::from_millis(16).checked_sub(now.elapsed())
@@ -628,7 +632,9 @@ impl App {
         // frame slept past one and waited for the next, two refreshes for one frame.
         let vsync_paces = presented
             && asked == 0
-            && self.gfx.surface.as_ref().is_some_and(|s| matches!(s.config.present_mode, wgpu::PresentMode::Fifo | wgpu::PresentMode::FifoRelaxed | wgpu::PresentMode::AutoVsync));
+            && self.gfx.surface.as_ref().is_some_and(|s| matches!(s.config.present_mode, mx::PresentMode::Fifo
+                        | mx::PresentMode::FifoRelaxed
+                        | mx::PresentMode::AutoVsync));
         if max_fps > 0 && !vr_active && !vsync_paces {
             let __t = Instant::now();
             pace_until(now, std::time::Duration::from_secs_f64(1.0 / max_fps as f64));

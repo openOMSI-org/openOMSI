@@ -979,7 +979,7 @@ impl Renderer {
         scene: &Scene,
         f: &FrameCtx,
         plan: &DrawPlan,
-    ) -> Vec<wgpu::RenderBundle> {
+    ) -> Vec<mx::RenderBundle> {
         // OMSI_NO_BUNDLES=1 records the main pass directly, for comparison. (Splitting the
         // pass in two to finish the halves side by side was tried as well: the second half
         // has to load the first one's targets back into the GPU's tile memory, which cost
@@ -1018,7 +1018,7 @@ impl Renderer {
                 rt_gbuf() && !f.eye_color,
             );
             let chunks = bundle_chunks(self.encoding_pool.as_ref(), batches);
-            let mut reuse: Vec<Option<wgpu::RenderBundle>> = vec![None; chunks.len()];
+            let mut reuse: Vec<Option<mx::RenderBundle>> = vec![None; chunks.len()];
             // (what a part binds is kept once its batches repeat: while driving they change every frame)
             let mut repeated = vec![false; chunks.len()];
             let mirrors = self.history.mirror_bundles.borrow();
@@ -1111,29 +1111,29 @@ impl Renderer {
 
 /// The window's main-pass bundles as last recorded and what they were recorded from.
 pub(crate) struct MainBundles {
-    mode: (bool, bool, wgpu::TextureFormat, u32, bool),
-    camera: wgpu::BindGroup,
+    mode: (bool, bool, mx::TextureFormat, u32, bool),
+    camera: mx::BindGroup,
     /// each bundle with the batches it was recorded from and what they bound (once they repeat)
-    parts: Vec<(Vec<Batch>, Option<Vec<BatchResources>>, wgpu::RenderBundle)>,
+    parts: Vec<(Vec<Batch>, Option<Vec<BatchResources>>, mx::RenderBundle)>,
 }
 
 /// What a recorded batch binds: its mesh's buffers and place in them, and its material's
-/// bind group (a mesh or material slot can be given to another since).
+/// binding (a mesh or material slot can be given to another since).
 #[derive(PartialEq)]
-struct BatchResources(wgpu::Buffer, wgpu::Buffer, i32, u32, wgpu::BindGroup);
+struct BatchResources(mx::Buffer, mx::Buffer, i32, u32, MaterialBinding);
 
 fn batch_resource<'s>(
     scene: &'s Scene,
     b: &Batch,
 ) -> (
-    &'s wgpu::Buffer,
-    &'s wgpu::Buffer,
+    &'s mx::Buffer,
+    &'s mx::Buffer,
     i32,
     u32,
-    &'s wgpu::BindGroup,
+    &'s MaterialBinding,
 ) {
     let m = &scene.meshes[b.mesh as usize];
-    let bg = &scene.materials[b.material as usize].bind_group;
+    let bg = &scene.materials[b.material as usize].binding;
     (
         &m.vertex_buf,
         &m.index_buf,
@@ -1190,11 +1190,11 @@ mod tests {
     #[test]
     #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
     fn invalid_material_id_in_instance_does_not_panic() {
-        let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let adapter = mx::Instance::new();
         let renderer = pollster::block_on(Renderer::new_with(
             &adapter,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             RenderOptions {
                 msaa: 1,
                 shadow_size: 1024,
@@ -1253,11 +1253,11 @@ mod tests {
     #[test]
     #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
     fn recycled_instances_sort_by_new_model_creation_order() {
-        let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let adapter = mx::Instance::new();
         let renderer = pollster::block_on(Renderer::new_with(
             &adapter,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             RenderOptions {
                 msaa: 1,
                 shadow_size: 1024,
@@ -1327,11 +1327,11 @@ mod tests {
     #[test]
     #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
     fn a_part_after_a_depth_writing_pane_goes_to_the_masked_prefill() {
-        let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let adapter = mx::Instance::new();
         let renderer = pollster::block_on(Renderer::new_with(
             &adapter,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             RenderOptions {
                 msaa: 4,
                 shadow_size: 1024,
@@ -1373,11 +1373,11 @@ mod tests {
     #[test]
     #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
     fn draw_lists_on_the_pool_are_the_same() {
-        let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let adapter = mx::Instance::new();
         let renderer = pollster::block_on(Renderer::new_with(
             &adapter,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             RenderOptions {
                 msaa: 1,
                 shadow_size: 1024,

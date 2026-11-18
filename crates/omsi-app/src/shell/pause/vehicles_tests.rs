@@ -128,7 +128,7 @@ fn in_game_bus_preview_render_real_vehicle() {
     let renderer = pollster::block_on(omsi_render::Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         options,
     ))
     .unwrap();
@@ -214,22 +214,32 @@ fn in_game_bus_preview_render_real_vehicle() {
             super::super::draw(&mut sh, &v);
         }
         sh.finish();
-        let target = renderer.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("bus chooser test"),
-            size: wgpu::Extent3d {
-                width: w,
-                height: h,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: renderer.format(),
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        sh.render(&renderer, &target.create_view(&Default::default()), w, h);
-        let encoder = renderer.device.create_command_encoder(&Default::default());
+        let target = renderer
+            .device
+            .create_texture(&mx::TextureDescriptor {
+                label: Some("bus chooser test"),
+                size: mx::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format: renderer.format(),
+                usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            })
+            .expect("mX: a texture");
+        sh.render(
+            &renderer,
+            &target
+                .create_view(&Default::default())
+                .expect("mX: a texture view"),
+            w,
+            h,
+        );
+        let encoder = renderer.device.create_command_encoder(None);
         let pixels = crate::shell::read_back(&renderer, encoder, &target, w, h);
         image::save_buffer(
             out.join(format!("{name}.png")),

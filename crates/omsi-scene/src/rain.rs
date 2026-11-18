@@ -239,14 +239,11 @@ mod tests {
     fn snow_on_glass_has_mip_levels_and_stays_white() {
         let img = super::snow_on_glass(std::path::Path::new("/nonexistent"));
         assert!(img.rgba.chunks_exact(4).all(|p| p[..3].iter().all(|c| *c >= 224)));
-        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        descriptor.backends = wgpu::Backends::NOOP;
-        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-        let instance = wgpu::Instance::new(descriptor);
+        let instance = mx::Instance::with_backends(mx::Backends::NOOP);
         let renderer = pollster::block_on(omsi_render::Renderer::new_with(
             &instance,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             omsi_render::RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
         ))
         .expect("noop renderer");
@@ -259,14 +256,11 @@ mod tests {
     /// against it), no rain in a dry or a snow weather, and no speed of a jump of the camera.
     #[test]
     fn the_rainfall_follows_the_eye_and_the_weather() {
-        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        descriptor.backends = wgpu::Backends::NOOP;
-        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-        let instance = wgpu::Instance::new(descriptor);
+        let instance = mx::Instance::with_backends(mx::Backends::NOOP);
         let renderer = pollster::block_on(omsi_render::Renderer::new_with(
             &instance,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             omsi_render::RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
         ))
         .expect("noop renderer");

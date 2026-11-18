@@ -9,17 +9,17 @@ const DISTANCE: f64 = 10.9;
 struct StereoScene {
     renderer: Renderer,
     scene: Scene,
-    target: wgpu::TextureView,
+    target: mx::TextureView,
     lighting: Lighting,
 }
 
 impl StereoScene {
     fn new() -> Self {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance = mx::Instance::new();
         let renderer = pollster::block_on(Renderer::new_with(
             &instance,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             RenderOptions {
                 msaa: 1,
                 ssao: false,

@@ -10,7 +10,7 @@ omsi-cfg = { path = "../omsi-cfg" }
 omsi-plugin = { path = "../omsi-plugin" }
 omsi-render = { path = "../omsi-render" }
 omsi-ui = { path = "../omsi-ui" }
-wgpu.workspace = true
+mx.workspace = true
 glam.workspace = true
 hashbrown.workspace = true
 image.workspace = true

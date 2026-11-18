@@ -2,12 +2,9 @@ use super::*;
 
 #[test]
 fn deforming_a_mesh_invalidates_and_reuploads_its_static_depth_plane() {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let adapter = wgpu::Instance::new(descriptor);
+    let adapter = mx::Instance::with_backends(mx::Backends::NOOP);
     let renderer = pollster::block_on(Renderer::new_with(
-        &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &adapter, None, Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
     )).expect("no-op renderer");
     let mut scene = renderer.new_scene();

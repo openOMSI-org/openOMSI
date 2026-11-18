@@ -198,90 +198,47 @@ pub(crate) fn find_root() -> Option<PathBuf> {
     omsi_cfg::find_original_install(&first)
 }
 
-/// mX Graphics (Experimental): the game's instance is mX's, openOMSI's own graphics library
-/// behind wgpu's API, instead of one of wgpu's own backends. Set from the settings before the
-/// game makes its instance (`game_graphics_instance`); the launcher's previews stay on wgpu.
-static MX_GRAPHICS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// The game's instance: mX's when `setting` says so (`mx_graphics`, read on a Mac only: mX has
-/// drawn the game on Metal, not yet on Direct3D 12 or Vulkan) or `OMSI_MX=on` does, else
-/// `graphics_instance`'s.
-pub(crate) fn game_graphics_instance(setting: bool) -> wgpu::Instance {
-    let on = match omsi_cfg::flags::OMSI_MX.var() {
-        Some(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "on" | "true" | "yes"),
-        None => setting && cfg!(target_os = "macos"),
-    };
-    MX_GRAPHICS.store(on, std::sync::atomic::Ordering::Relaxed);
-    if on {
-        log::info!("graphics: mX Graphics (experimental) asked for");
-    }
+/// The game's instance. `setting` (the old "mX Graphics (Experimental)" switch) is kept in
+/// the settings file but no longer read: mX is the game's only graphics library, on the
+/// interface the settings choose (`graphics_instance`).
+pub(crate) fn game_graphics_instance(_setting: bool) -> mx::Instance {
     graphics_instance()
 }
 
-/// mX's instance, when mX Graphics is on and mX finds a device it can draw on (Metal 3 on a
-/// Mac, Vulkan 1.2 with descriptor indexing, Direct3D 12): else none, and wgpu's own backends
-/// draw as usual. A device mX lists but cannot open is passed over the same way, by `Opener`.
-fn mx_instance() -> Option<wgpu::Instance> {
-    if !MX_GRAPHICS.load(std::sync::atomic::Ordering::Relaxed) {
-        return None;
-    }
-    let instance = wgpu_mx::custom::instance();
-    let adapters = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::all()));
-    match adapters.first() {
-        Some(a) => {
-            log::info!("graphics: mX Graphics (experimental) on {}", a.get_info().name);
-            Some(instance)
-        }
-        None => {
-            log::warn!("graphics: mX Graphics found no graphics chip it can draw on; wgpu draws instead");
-            None
-        }
-    }
-}
-
-/// Use the native supported API for both windowed and offscreen rendering.
-pub(crate) fn graphics_instance() -> wgpu::Instance {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+/// mX's instance on the first graphics interface of `backend_order` with an adapter that is
+/// not a software renderer (one with only a software renderer, or none, when nothing better is
+/// there); the dedicated server's draws nothing.
+pub(crate) fn graphics_instance() -> mx::Instance {
     if crate::server::SERVER_MODE.load(std::sync::atomic::Ordering::Relaxed) {
-        // the dedicated server draws nothing: wgpu's no-op device takes every call
-        descriptor.backends = wgpu::Backends::NOOP;
-        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-        return wgpu::Instance::new(descriptor);
+        // the dedicated server draws nothing: mX's no-op device takes every call
+        return mx::Instance::with_backends(mx::Backends::NOOP);
     }
-    if let Some(instance) = mx_instance() {
-        return instance;
-    }
-    descriptor.backend_options.gl.context_lock_timeout = Some(GL_CONTEXT_LOCK_TIMEOUT);
     // (an interface whose only adapter is a software renderer - DirectX 12's "Microsoft
     // Basic Render Driver" on a chip without a DirectX 12 driver - comes after the others)
     let (mut software, mut last) = (None, None);
     for b in backend_order() {
         let instance = backend_instance(b);
-        let adapters = pollster::block_on(instance.enumerate_adapters(b.backends()));
-        if adapters.iter().any(|a| !is_software(&a.get_info())) {
-            log::info!("graphics: {:?} ({})", b, adapters.iter().map(|a| a.get_info().name).collect::<Vec<_>>().join(", "));
+        let adapters = instance.enumerate_adapters();
+        if adapters.iter().any(|a| !is_software(&a.info())) {
+            log::info!(
+                "graphics: mX on {:?} ({})", b, adapters.iter().map(|a| a.info().name).collect::<Vec<_>>().join(", "));
             return instance;
         }
         if adapters.is_empty() {
             log::info!("graphics: no {b:?} adapter here");
             last = Some(instance);
         } else {
-            log::info!("graphics: {b:?} has only a software renderer ({})", adapters.iter().map(|a| a.get_info().name).collect::<Vec<_>>().join(", "));
+            log::info!("graphics: {b:?} has only a software renderer ({})", adapters.iter().map(|a| a.info().name).collect::<Vec<_>>().join(", "));
             software.get_or_insert(instance);
         }
     }
-    software.or(last).unwrap_or_else(|| wgpu::Instance::new(descriptor))
+    software.or(last).unwrap_or_else(mx::Instance::new)
 }
 
-/// How long a thread waits for the shared OpenGL context before wgpu gives up on it (its own
-/// default is a second with WGL, six with EGL): one waiting for the GPU no longer holds the
-/// context, but a long upload or shader compile on another thread still can.
-const GL_CONTEXT_LOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
-
-/// A graphics interface to try: one of wgpu's backends, or its OpenGL ES backend on ANGLE.
+/// A graphics interface to try: one of mX's backends, or its OpenGL ES one on ANGLE.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GraphicsApi {
-    Native(wgpu::Backends),
+    Native(mx::Backends),
     /// OpenGL ES on ANGLE's Direct3D 11 renderer (Windows only), for a chip whose OpenGL,
     /// Vulkan and DirectX 12 drivers are missing or broken (Intel HD Graphics 2000-4000, AMD
     /// Radeon HD 5000/6000): its DirectX 11 driver draws
@@ -289,11 +246,11 @@ pub(crate) enum GraphicsApi {
 }
 
 impl GraphicsApi {
-    /// wgpu's backend it draws on (ANGLE: the OpenGL one)
-    fn backends(self) -> wgpu::Backends {
+    /// mX's backend it draws on (ANGLE: the OpenGL one)
+    fn backends(self) -> mx::Backends {
         match self {
             GraphicsApi::Native(b) => b,
-            GraphicsApi::Angle => wgpu::Backends::GL,
+            GraphicsApi::Angle => mx::Backends::GL,
         }
     }
 }
@@ -337,7 +294,7 @@ fn angle_available() -> bool {
 /// got round.
 pub(crate) fn backend_order() -> Vec<GraphicsApi> {
     if cfg!(any(target_os = "macos", target_os = "ios")) {
-        return vec![GraphicsApi::Native(wgpu::Backends::METAL)];
+        return vec![GraphicsApi::Native(mx::Backends::METAL)];
     }
     let settings = crate::settings::Settings::load();
     let chosen = omsi_cfg::flags::OMSI_BACKEND.var().map(str::to_string).unwrap_or(settings.graphics_api.clone());
@@ -348,22 +305,30 @@ pub(crate) fn backend_order() -> Vec<GraphicsApi> {
     } else {
         chosen
     };
+    // (mX's OpenGL on Windows is OpenGL ES on ANGLE: `GraphicsApi::Angle`, after the others)
+    // (Direct3D 11 after both: mX's bound tier, for a chip whose DirectX 12 and Vulkan drivers
+    // are missing or broken; ANGLE, OpenGL ES over the same driver, after it)
     let native = if cfg!(windows) && vulkan_first(&wanted) {
-        vec![wgpu::Backends::VULKAN, wgpu::Backends::DX12, wgpu::Backends::GL]
+        vec![mx::Backends::VULKAN, mx::Backends::DX12, mx::Backends::DX11]
     } else if cfg!(windows) {
-        vec![wgpu::Backends::DX12, wgpu::Backends::VULKAN, wgpu::Backends::GL]
+        vec![mx::Backends::DX12, mx::Backends::VULKAN, mx::Backends::DX11]
     } else {
-        vec![wgpu::Backends::VULKAN, wgpu::Backends::GL]
+        vec![mx::Backends::VULKAN, mx::Backends::GL]
     };
     let mut all: Vec<GraphicsApi> = native.into_iter().map(GraphicsApi::Native).collect();
     if cfg!(windows) && angle_available() {
         all.push(GraphicsApi::Angle);
     }
     let first = match wanted.trim().to_ascii_lowercase().as_str() {
-        "vulkan" => Some(GraphicsApi::Native(wgpu::Backends::VULKAN)),
-        "dx12" | "directx" | "d3d12" if cfg!(windows) => Some(GraphicsApi::Native(wgpu::Backends::DX12)),
-        "gl" | "opengl" | "gles" => Some(GraphicsApi::Native(wgpu::Backends::GL)),
-        "angle" | "dx11" | "d3d11" if all.contains(&GraphicsApi::Angle) => Some(GraphicsApi::Angle),
+        "vulkan" => Some(GraphicsApi::Native(mx::Backends::VULKAN)),
+        "dx12" | "directx" | "d3d12" if cfg!(windows) => {
+            Some(GraphicsApi::Native(mx::Backends::DX12))
+        }
+        "dx11" | "d3d11" if cfg!(windows) => Some(GraphicsApi::Native(mx::Backends::DX11)),
+        "gl" | "opengl" | "gles" | "angle" if cfg!(windows) => all
+            .contains(&GraphicsApi::Angle)
+            .then_some(GraphicsApi::Angle),
+        "gl" | "opengl" | "gles" => Some(GraphicsApi::Native(mx::Backends::GL)),
         _ => None,
     };
     // (the one asked for first, the others after it: a machine without it still starts)
@@ -378,10 +343,11 @@ fn vulkan_first(wanted: &str) -> bool {
             if !auto_api(wanted) {
                 return None;
             }
-            let dx12 = GraphicsApi::Native(wgpu::Backends::DX12);
-            let adapters: Vec<_> = pollster::block_on(backend_instance(dx12).enumerate_adapters(dx12.backends()))
+            let dx12 = GraphicsApi::Native(mx::Backends::DX12);
+            let adapters: Vec<_> = backend_instance(dx12)
+                .enumerate_adapters()
                 .iter()
-                .map(|a| a.get_info())
+                .map(|a| a.info())
                 .map(|i| (i.device_type, i.vendor, i.device))
                 .collect();
             let mark = vulkan_lost_path().and_then(|p| std::fs::read_to_string(p).ok());
@@ -398,8 +364,8 @@ fn auto_api(wanted: &str) -> bool {
     matches!(wanted.trim().to_ascii_lowercase().as_str(), "" | "auto")
 }
 
-fn vulkan_adapter(wanted: &str, lost_mark: Option<&str>, adapters: &[(wgpu::DeviceType, u32, u32)]) -> Option<(u32, u32)> {
-    let (_, vendor, device) = *adapters.iter().find(|a| a.0 == wgpu::DeviceType::DiscreteGpu)?;
+fn vulkan_adapter(wanted: &str, lost_mark: Option<&str>, adapters: &[(mx::DeviceType, u32, u32)],) -> Option<(u32, u32)> {
+    let (_, vendor, device) = *adapters.iter().find(|a| a.0 == mx::DeviceType::DiscreteGpu)?;
     let lost = lost_mark.is_some_and(|m| m.trim() == vulkan_lost_mark(vendor, device));
     (auto_api(wanted) && vendor == 0x1002 && !lost).then_some((vendor, device))
 }
@@ -417,11 +383,11 @@ pub(crate) fn mark_vulkan_lost() {
 }
 
 fn vulkan_pin_after(pin: Option<(u32, u32)>, mut made: impl Iterator<Item = Option<GraphicsApi>>) -> Option<(u32, u32)> {
-    pin.filter(|_| !made.any(|b| b == Some(GraphicsApi::Native(wgpu::Backends::DX12))))
+    pin.filter(|_| !made.any(|b| b == Some(GraphicsApi::Native(mx::Backends::DX12))))
 }
 
-fn vulkan_passed_over(pin: Option<(u32, u32)>, backend: wgpu::Backend, vendor: u32, device: u32) -> bool {
-    backend == wgpu::Backend::Vulkan && pin.is_some_and(|p| p != (vendor, device))
+fn vulkan_passed_over(pin: Option<(u32, u32)>, backend: mx::Backend, vendor: u32, device: u32) -> bool {
+    backend == mx::Backend::Vulkan && pin.is_some_and(|p| p != (vendor, device))
 }
 
 fn vulkan_lost_path() -> Option<PathBuf> {
@@ -431,25 +397,19 @@ fn vulkan_lost_path() -> Option<PathBuf> {
 
 /// A renderer in software on the processor (wgpu calls it a CPU adapter: WARP, llvmpipe,
 /// SwiftShader).
-fn is_software(info: &wgpu::AdapterInfo) -> bool {
+fn is_software(info: &mx::AdapterInfo) -> bool {
     software_adapter(&info.name, info.device_type)
 }
 
-fn software_adapter(name: &str, device_type: wgpu::DeviceType) -> bool {
-    device_type == wgpu::DeviceType::Cpu || name.contains("Microsoft Basic Render Driver") || name.contains("llvmpipe")
+fn software_adapter(name: &str, device_type: mx::DeviceType) -> bool {
+    device_type == mx::DeviceType::Cpu || name.contains("Microsoft Basic Render Driver") || name.contains("llvmpipe")
 }
 
-fn backend_instance(api: GraphicsApi) -> wgpu::Instance {
-    let mut d = wgpu::InstanceDescriptor::new_without_display_handle();
-    d.backend_options.gl.context_lock_timeout = Some(GL_CONTEXT_LOCK_TIMEOUT);
-    d.backends = api.backends();
-    if d.backends == wgpu::Backends::GL {
-        d.flags.remove(wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL);
-    }
+fn backend_instance(api: GraphicsApi) -> mx::Instance {
     if api == GraphicsApi::Angle {
-        return omsi_render::angle::instance(d);
+        return omsi_render::angle::instance();
     }
-    wgpu::Instance::new(d)
+    mx::Instance::with_backends(api.backends())
 }
 
 /// The adapters a window's renderer is tried on, in turn: on `instance` if it can, else on
@@ -475,7 +435,7 @@ struct Opener {
     // when no graphics chip opens on any interface: an Intel HD 2500 has no DirectX 12
     // driver, DirectX 12 listed that renderer alone, and the game "started" on it at a
     // frame every few seconds instead of on the chip's OpenGL (#770).
-    made: Vec<(Option<GraphicsApi>, wgpu::Instance)>,
+    made: Vec<(Option<GraphicsApi>, mx::Instance)>,
     order: std::vec::IntoIter<GraphicsApi>,
     no_surface: Vec<usize>,
     /// The round (graphics chips, then software renderers) and the instance in it.
@@ -487,7 +447,7 @@ struct Opener {
 }
 
 impl Opener {
-    fn new(instance: &wgpu::Instance, window: &std::sync::Arc<winit::window::Window>, options: omsi_render::RenderOptions) -> Opener {
+    fn new(instance: &mx::Instance, window: &std::sync::Arc<winit::window::Window>, options: omsi_render::RenderOptions) -> Opener {
         Opener {
             window: window.clone(),
             options,
@@ -502,7 +462,7 @@ impl Opener {
     }
 
     /// The next adapter whose graphics device opens, the device, its name and its instance.
-    fn next(&mut self) -> Option<(omsi_render::Opened, String, wgpu::Instance)> {
+    fn next(&mut self) -> Option<(omsi_render::Opened, String, mx::Instance)> {
         loop {
             if self.k == self.made.len() {
                 let pin = vulkan_pin_after(self.vulkan_pin, self.made.iter().map(|m| m.0));
@@ -539,7 +499,7 @@ impl Opener {
                 }
             };
             for adapter in Renderer::adapters_for(&inst, &surface) {
-                let info = adapter.get_info();
+                let info = adapter.info();
                 if is_software(&info) != self.software_round {
                     continue;
                 }
@@ -583,9 +543,9 @@ impl Opener {
 /// blank: white where Windows had made it smaller first, a phone's wallpaper behind it.
 pub(crate) struct RendererStart {
     /// What the window is drawn with meanwhile: the device, its queue, the renderer's format.
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-    pub format: wgpu::TextureFormat,
+    pub device: mx::Device,
+    pub queue: mx::Queue,
+    pub format: mx::TextureFormat,
     building: Option<std::thread::JoinHandle<Option<Result<Renderer>>>>,
     built: Option<Result<Renderer>>,
     what: String,
@@ -618,7 +578,7 @@ impl RendererStart {
     /// The graphics device for `window`, on `instance` or the next interface and adapter that
     /// can (`instance` then becomes that one's, see `Opener`); its pipelines are
     /// being built from here on.
-    pub(crate) fn begin(instance: &mut wgpu::Instance, window: &std::sync::Arc<winit::window::Window>, options: omsi_render::RenderOptions) -> Result<RendererStart> {
+    pub(crate) fn begin(instance: &mut mx::Instance, window: &std::sync::Arc<winit::window::Window>, options: omsi_render::RenderOptions) -> Result<RendererStart> {
         let mut opener = Opener::new(instance, window, options);
         let Some((opened, what, inst)) = opener.next() else { return Err(opener.give_up()) };
         *instance = inst;
@@ -626,7 +586,7 @@ impl RendererStart {
         let mut start = RendererStart { device, queue, format, building: None, built: None, what, opener };
         // ANGLE's window takes its sRGB pictures encoded by the renderer (`SrgbEncode`), and
         // its pipelines are compiled on a thread of its own already: built on the spot.
-        let angle = opened.adapter_info().backend == wgpu::Backend::Gl && opened.adapter_info().name.contains("ANGLE");
+        let angle = opened.adapter_info().backend == mx::Backend::Gl && opened.adapter_info().name.contains("ANGLE");
         if angle {
             start.built = Some(omsi_render::catch(|| pollster::block_on(opened.finish())).unwrap_or_else(|| Err(anyhow!("failed while its pipelines were built"))));
             return Ok(start);
@@ -656,7 +616,7 @@ impl RendererStart {
     /// next adapter and interface, as before (on this thread: the
     /// window keeps the picture it has meanwhile); its renderer is then on another device
     /// than `device`.
-    pub(crate) fn wait(mut self, instance: &mut wgpu::Instance) -> Result<Renderer> {
+    pub(crate) fn wait(mut self, instance: &mut mx::Instance) -> Result<Renderer> {
         let mut built = match (self.built.take(), self.building.take()) {
             (Some(b), _) => b,
             (None, Some(h)) => h.join().ok().flatten().unwrap_or_else(|| Err(anyhow!("failed while its pipelines were built"))),
@@ -685,21 +645,33 @@ impl RendererStart {
 
 /// A picture of `color` alone into `surface`, shown (no pipeline needed: a clear). False when
 /// the window gave no picture to draw into (hidden, covered, being resized).
-pub(crate) fn present_clear(surface: &mut SurfaceState<'_>, device: &wgpu::Device, queue: &wgpu::Queue, window: &winit::window::Window, color: wgpu::Color) -> bool {
+pub(crate) fn present_clear(surface: &mut SurfaceState<'_>, device: &mx::Device,
+    queue: &mx::Queue,
+    window: &winit::window::Window,
+    color: mx::Color,
+) -> bool {
     let frame = match surface.acquire() {
-        wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
-        wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+        mx::CurrentSurfaceTexture::Success(f) | mx::CurrentSurfaceTexture::Suboptimal(f) => f,
+        mx::CurrentSurfaceTexture::Outdated | mx::CurrentSurfaceTexture::Lost => {
             let size = crate::platform::surface_size(window);
             surface.resize_on(device, size.width, size.height);
             return false;
         }
         _ => return false,
     };
-    let view = frame.texture.create_view(&Default::default());
-    let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("first picture") });
-    drop(enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+    let view = frame
+        .texture
+        .create_view(&Default::default())
+        .expect("mX: a texture view");
+    let mut enc = device.create_command_encoder(Some("first picture"));
+    drop(enc.begin_render_pass(&mx::RenderPassDescriptor {
         label: Some("first picture"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &view, depth_slice: None, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(color), store: wgpu::StoreOp::Store } })],
+        color_attachments: &[Some(mx::RenderPassColorAttachment {
+            view: &view,
+            resolve_target: None,
+            ops: mx::Operations {
+                load: mx::LoadOp::Clear(color),
+                store: mx::StoreOp::Store, } })],
         ..Default::default()
     }));
     queue.submit([enc.finish()]);
@@ -981,7 +953,7 @@ mod window_tests {
     /// The software renderers come after every graphics chip (#770).
     #[test]
     fn software_renderers_are_told_from_chips() {
-        use wgpu::DeviceType::*;
+        use mx::DeviceType::*;
         assert!(software_adapter("Microsoft Basic Render Driver", Cpu));
         assert!(software_adapter("Microsoft Basic Render Driver", Other));
         assert!(software_adapter("llvmpipe (LLVM 15.0.7, 256 bits)", Cpu));
@@ -991,7 +963,7 @@ mod window_tests {
 
     #[test]
     fn auto_opens_vulkan_only_on_a_discrete_amd_radeon() {
-        use wgpu::DeviceType::{DiscreteGpu, IntegratedGpu};
+        use mx::DeviceType::{DiscreteGpu, IntegratedGpu};
         let amd = (DiscreteGpu, 0x1002, 0x744c);
         let apu = (IntegratedGpu, 0x1002, 0x164e);
         let nvidia = (DiscreteGpu, 0x10de, 0x2684);
@@ -1012,9 +984,10 @@ mod window_tests {
     #[test]
     fn the_other_vulkan_adapters_are_tried_once_directx_12_could_not_draw() {
         use super::{vulkan_passed_over, vulkan_pin_after, GraphicsApi};
-        use wgpu::Backend::{Dx12, Vulkan};
+        use mx::Backend::{Dx12, Vulkan};
         let (radeon, apu) = ((0x1002, 0x744c), (0x1002, 0x164e));
-        let [vulkan, dx12, gl] = [wgpu::Backends::VULKAN, wgpu::Backends::DX12, wgpu::Backends::GL].map(|b| Some(GraphicsApi::Native(b)));
+        let [vulkan, dx12, gl] = [mx::Backends::VULKAN, mx::Backends::DX12, mx::Backends::GL]
+            .map(|b| Some(GraphicsApi::Native(b)));
         let skipped = |pin, backend, (vendor, device)| vulkan_passed_over(pin, backend, vendor, device);
         let pin = vulkan_pin_after(Some(radeon), [None, vulkan].into_iter());
         assert_eq!(pin, Some(radeon));

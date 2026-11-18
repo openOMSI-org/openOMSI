@@ -1257,8 +1257,13 @@ impl Settings {
     /// Frame generation as asked for, with the upscaler it works with chosen (asked every frame:
     /// no file is looked at; whether the Mac can run it is found when it starts).
     pub fn frame_generation(&self) -> bool {
+        self.frame_generation_kind().is_some()
+    }
+
+    /// The frame generation asked for, where its upscaler is the one chosen.
+    pub fn frame_generation_kind(&self) -> Option<omsi_render::FrameGenerationKind> {
         let upscaler = omsi_render::TemporalUpscaler::parse(&self.upscaler).filter(|_| !self.vr_requested() && !self.triple.enabled);
-        omsi_render::FrameGenerationKind::parse(&self.frame_generation).is_some_and(|k| upscaler == Some(k.upscaler()))
+        omsi_render::FrameGenerationKind::parse(&self.frame_generation).filter(|k| upscaler == Some(k.upscaler()))
     }
 
     pub fn render_options(&self) -> omsi_render::RenderOptions {

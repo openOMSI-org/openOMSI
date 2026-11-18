@@ -377,7 +377,7 @@ impl Showroom {
 /// The preview's renderer: no window, the launcher window's own options.
 fn open_renderer(options: omsi_render::RenderOptions) -> anyhow::Result<Renderer> {
     let instance = crate::graphics_instance();
-    let r = pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), options))?;
+    let r = pollster::block_on(Renderer::new_with(&instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb), options))?;
     log::info!("launcher service: renderer on {}", r.adapter_name);
     Ok(r)
 }
@@ -400,28 +400,41 @@ struct Encode {
 }
 
 /// The picture's pixels read back from the graphics card (rows without the copy's padding).
-fn read_pixels(r: &Renderer, tex: &wgpu::Texture) -> Option<Picture> {
+fn read_pixels(r: &Renderer, tex: &mx::Texture) -> Option<Picture> {
     let (w, h) = (tex.width(), tex.height());
     let row = (w * 4).div_ceil(256) * 256;
-    let buf = r.device.create_buffer(&wgpu::BufferDescriptor { label: Some("preview readback"), size: (row * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-    let mut enc = r.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("preview readback") });
+    let buf = r
+        .device
+        .create_buffer(&mx::BufferDescriptor {
+            label: Some("preview readback"),
+            size: (row * h) as u64,
+            usage: mx::BufferUsages::COPY_DST | mx::BufferUsages::MAP_READ,
+        })
+        .expect("mX: a buffer");
+    let mut enc = r.device.create_command_encoder(Some("preview readback"));
     enc.copy_texture_to_buffer(
         tex.as_image_copy(),
-        wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(h) } },
-        wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        mx::TexelCopyBufferInfo {
+            buffer: &buf,
+            layout: mx::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(h) } },
+        mx::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
     );
-    r.queue.submit([enc.finish()]);
-    let slice = buf.slice(..);
-    slice.map_async(wgpu::MapMode::Read, |_| {});
-    omsi_render::wait_gpu(&r.device, None).ok()?;
-    let data = slice.get_mapped_range();
-    let bgra = matches!(tex.format(), wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb);
-    let mut pixels = Vec::with_capacity((w * h * 4) as usize);
-    for y in 0..h as usize {
-        pixels.extend_from_slice(&data[y * row as usize..y * row as usize + w as usize * 4]);
-    }
-    drop(data);
-    buf.unmap();
+    let copied = r.queue.submit([enc.finish()]);
+    omsi_render::wait_gpu(&r.device, Some(copied)).ok()?;
+    let bgra = matches!(
+        tex.format(),
+        mx::TextureFormat::Bgra8Unorm | mx::TextureFormat::Bgra8UnormSrgb
+    );
+    let pixels = buf
+        .map_read_now(0..buf.size(), |data| {
+            let mut pixels = Vec::with_capacity((w * h * 4) as usize);
+            for y in 0..h as usize {
+                pixels
+                    .extend_from_slice(&data[y * row as usize..y * row as usize + w as usize * 4]);
+            }
+            pixels
+        })
+        .ok()?;
     Some(Picture { w, h, bgra, pixels })
 }
 

@@ -36,8 +36,8 @@ const NO_TEX: u32 = u32::MAX;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct BlasKey {
-    vb: wgpu::Buffer,
-    ib: wgpu::Buffer,
+    vb: mx::Buffer,
+    ib: mx::Buffer,
     /// The mesh (its `generation`) and where it lies in its page's buffers.
     generation: u64,
     first_vertex: u32,
@@ -54,8 +54,8 @@ struct BlasKey {
 /// same: the same fields in the same order).
 #[derive(Hash)]
 struct BlasKeyRef<'a> {
-    vb: &'a wgpu::Buffer,
-    ib: &'a wgpu::Buffer,
+    vb: &'a mx::Buffer,
+    ib: &'a mx::Buffer,
     generation: u64,
     first_vertex: u32,
     first_index: u32,
@@ -106,14 +106,14 @@ impl BlasKeyRef<'_> {
 }
 
 /// What a kept bind group was made with: `RayTracer::bind_gen` and the textures it names.
-type RtBindKey = (u64, Vec<wgpu::TextureView>);
+type RtBindKey = (u64, Vec<mx::TextureView>);
 
 /// A top-level instance as last built: its structure, transform, record base and mask.
-type TlasItem = (wgpu::Blas, [f32; 12], u32, u8);
+type TlasItem = (mx::Blas, [f32; 12], u32, u8);
 
 struct BlasEntry {
-    blas: wgpu::Blas,
-    sizes: Vec<wgpu::BlasTriangleGeometrySizeDescriptor>,
+    blas: mx::Blas,
+    sizes: Vec<mx::BlasTriangleGeometrySizeDescriptor>,
     /// (first index, index count) of each geometry, in the order of `ranges`.
     spans: Vec<(u32, u32)>,
     mesh: MeshId,
@@ -161,17 +161,17 @@ struct Params {
 /// a the frames accumulated).
 pub(super) struct Targets {
     pub(super) size: (u32, u32),
-    raw: wgpu::TextureView,
-    tmp: wgpu::TextureView,
+    raw: mx::TextureView,
+    tmp: mx::TextureView,
     /// What the main pass reads (camera bind group binding 8 in place of the SSAO).
-    pub(super) out: wgpu::TextureView,
+    pub(super) out: mx::TextureView,
 }
 
 pub(super) struct RayTracer {
     blas: hashbrown::HashMap<BlasKey, BlasEntry>,
     /// Meshes whose vertices changed (skinned people): their structures are built again.
     dirty: std::cell::RefCell<std::collections::HashSet<MeshId>>,
-    tlas: wgpu::Tlas,
+    tlas: mx::Tlas,
     tlas_cap: u32,
     tlas_used: usize,
     /// The instances the top level was last built with (`tlas_built`): a frame with the same
@@ -183,21 +183,19 @@ pub(super) struct RayTracer {
     /// Bumped whenever a buffer or the top level the bind groups name is made anew; the
     /// lighting's and the reflections' bind groups are kept while it and their textures stay.
     bind_gen: u64,
-    trace_groups: Option<(RtBindKey, [wgpu::BindGroup; 2])>,
-    refl_groups: Option<(RtBindKey, [wgpu::BindGroup; 2])>,
+    trace_groups: Option<(RtBindKey, [mx::BindGroup; 2])>,
+    refl_groups: Option<(RtBindKey, [mx::BindGroup; 2])>,
     records: Vec<Record>,
-    records_buf: wgpu::Buffer,
-    tex_avg: wgpu::Buffer,
+    records_buf: mx::Buffer,
+    tex_avg: mx::Buffer,
     tex_gen: Vec<u64>,
     /// The textures' small copies and the meshes' texture coordinates, for the reflections.
     tex: rt_tex::TexStore,
     avg_stride: u64,
-    avg_layout: wgpu::BindGroupLayout,
-    avg_pipeline: wgpu::ComputePipeline,
-    layout: wgpu::BindGroupLayout,
-    trace: wgpu::ComputePipeline,
-    temporal: wgpu::ComputePipeline,
-    params: wgpu::Buffer,
+    avg_pipeline: mx::ComputePipeline,
+    trace: mx::ComputePipeline,
+    temporal: mx::ComputePipeline,
+    params: mx::Buffer,
     pub(super) targets: Option<Targets>,
     frame: u64,
     /// Last frame's view-projection, render origin and player vehicle (origin, heading deg).
@@ -206,13 +204,12 @@ pub(super) struct RayTracer {
     to_build: Vec<BlasKey>,
     pub(super) instances: usize,
     /// The reflections: their layout, the rays, their history and the composite.
-    refl_layout: wgpu::BindGroupLayout,
-    reflect: wgpu::ComputePipeline,
-    composite: wgpu::RenderPipeline,
+    reflect: mx::ComputePipeline,
+    composite: mx::RenderPipeline,
     /// The reflections' rays (one per `refl_div()` x `refl_div()` pixels).
-    refl: Option<((u32, u32), wgpu::TextureView)>,
+    refl: Option<((u32, u32), mx::TextureView)>,
     /// A 1 x 1 storage texture for the composite's unused output binding.
-    spare: wgpu::TextureView,
+    spare: mx::TextureView,
 }
 
 /// One reflection ray per this many pixels each way (OMSI_RT_REFL_HALF=1: per 2 x 2).
@@ -247,277 +244,96 @@ pub(super) fn reflect_source() -> String {
     .join("\n")
 }
 
-fn storage_texture(binding: u32) -> wgpu::BindGroupLayoutEntry {
-    wgpu::BindGroupLayoutEntry {
-        binding,
-        visibility: wgpu::ShaderStages::COMPUTE,
-        ty: wgpu::BindingType::StorageTexture {
-            access: wgpu::StorageTextureAccess::WriteOnly,
-            format: wgpu::TextureFormat::Rgba16Float,
-            view_dimension: wgpu::TextureViewDimension::D2,
-        },
-        count: None,
-    }
-}
-
-fn texture_entry(binding: u32, sample_type: wgpu::TextureSampleType) -> wgpu::BindGroupLayoutEntry {
-    wgpu::BindGroupLayoutEntry {
-        binding,
-        visibility: wgpu::ShaderStages::COMPUTE,
-        ty: wgpu::BindingType::Texture {
-            sample_type,
-            view_dimension: wgpu::TextureViewDimension::D2,
-            multisampled: false,
-        },
-        count: None,
-    }
-}
-
-fn storage_buffer(
-    binding: u32,
-    read_only: bool,
-    dynamic: bool,
-    min: u64,
-) -> wgpu::BindGroupLayoutEntry {
-    wgpu::BindGroupLayoutEntry {
-        binding,
-        visibility: wgpu::ShaderStages::COMPUTE,
-        ty: wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Storage { read_only },
-            has_dynamic_offset: dynamic,
-            min_binding_size: wgpu::BufferSize::new(min),
-        },
-        count: None,
-    }
-}
 
 impl RayTracer {
-    pub(super) fn new(device: &wgpu::Device) -> RayTracer {
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("ray tracing"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(
-                            std::mem::size_of::<Params>() as u64
-                        ),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::AccelerationStructure {
-                        vertex_return: false,
-                    },
-                    count: None,
-                },
-                texture_entry(2, wgpu::TextureSampleType::Depth),
-                storage_buffer(3, true, false, 48),
-                storage_buffer(4, true, false, 256),
-                texture_entry(5, wgpu::TextureSampleType::Float { filterable: false }),
-                texture_entry(6, wgpu::TextureSampleType::Float { filterable: false }),
-                storage_texture(7),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 8,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("ray tracing"),
-            source: wgpu::ShaderSource::Wgsl(lighting_source().into()),
-        });
-        let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("ray tracing"),
-            bind_group_layouts: &[Some(&layout)],
-            immediate_size: 0,
-        });
+    pub(super) fn new(device: &mx::Device) -> RayTracer {
+        let module = device
+            .create_shader_module(&mx::ShaderModuleDescriptor {
+                label: Some("ray tracing"),
+                source: &*(lighting_source()),
+            })
+            .expect("mX: a shader");
         let pipeline = |entry: &str, step: Option<f64>| {
             let constants: Vec<(&str, f64)> = step.map(|s| vec![("STEP", s)]).unwrap_or_default();
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(entry),
-                layout: Some(&pl),
-                module: &module,
-                entry_point: Some(entry),
-                compilation_options: wgpu::PipelineCompilationOptions {
+            device
+                .create_compute_pipeline(&mx::ComputePipelineDescriptor {
+                    label: Some(entry),
+                    module: &module,
+                    entry_point: Some(entry),
                     constants: &constants,
-                    ..Default::default()
-                },
-                cache: crate::pipeline_cache::get(device).as_ref(),
-            })
+                    })
+                .expect("mX: a compute pipeline")
         };
         let trace = pipeline("cs_trace", None);
         let temporal = pipeline("cs_denoise", None);
         let avg_stride = (device.limits().min_storage_buffer_offset_alignment as u64).max(256);
-        let atlas_entries = rt_tex::TexStore::avg_entries();
-        let avg_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("texture means"),
-            entries: &[
-                texture_entry(0, wgpu::TextureSampleType::Float { filterable: true }),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                storage_buffer(2, false, true, 32),
-                atlas_entries[0],
-                atlas_entries[1],
-            ],
-        });
-        let avg_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("texture means"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("rt_avg.wgsl").into()),
-        });
-        let avg_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("texture means"),
-            bind_group_layouts: &[Some(&avg_layout)],
-            immediate_size: 0,
-        });
-        let avg_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("texture means"),
-            layout: Some(&avg_pl),
-            module: &avg_module,
-            entry_point: Some("cs_tex_avg"),
-            compilation_options: Default::default(),
-            cache: crate::pipeline_cache::get(device).as_ref(),
-        });
-        let vis = wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT;
-        let tex = |binding, sample_type, view_dimension, visibility| wgpu::BindGroupLayoutEntry {
-            binding,
-            visibility,
-            ty: wgpu::BindingType::Texture {
-                sample_type,
-                view_dimension,
-                multisampled: false,
-            },
-            count: None,
-        };
-        let unfilt = wgpu::TextureSampleType::Float { filterable: false };
-        let filt = wgpu::TextureSampleType::Float { filterable: true };
-        let d2 = wgpu::TextureViewDimension::D2;
-        let refl_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("ray-traced reflections"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: vis,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(
-                            std::mem::size_of::<Params>() as u64
-                        ),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::AccelerationStructure {
-                        vertex_return: false,
-                    },
-                    count: None,
-                },
-                tex(2, wgpu::TextureSampleType::Depth, d2, vis),
-                storage_buffer(3, true, false, 48),
-                storage_buffer(4, true, false, 256),
-                tex(5, unfilt, d2, vis),
-                tex(6, unfilt, d2, vis),
-                storage_texture(7),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 8,
-                    visibility: vis,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                tex(9, filt, d2, wgpu::ShaderStages::COMPUTE),
-                tex(10, filt, wgpu::TextureViewDimension::Cube, vis),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 11,
-                    visibility: vis,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                tex(12, unfilt, d2, vis),
-                storage_buffer(13, true, false, 16),
-                tex(14, filt, d2, wgpu::ShaderStages::COMPUTE),
-            ],
-        });
-        let refl_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("ray-traced reflections"),
-            source: wgpu::ShaderSource::Wgsl(reflect_source().into()),
-        });
-        let refl_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("ray-traced reflections"),
-            bind_group_layouts: &[Some(&refl_layout)],
-            immediate_size: 0,
-        });
+        let avg_module = device
+            .create_shader_module(&mx::ShaderModuleDescriptor {
+                label: Some("texture means"),
+                source: &*(include_str!("rt_avg.wgsl")),
+            })
+            .expect("mX: a shader");
+        let avg_pipeline = device
+            .create_compute_pipeline(&mx::ComputePipelineDescriptor {
+                label: Some("texture means"),
+                module: &avg_module,
+                entry_point: Some("cs_tex_avg"),
+                constants: &[],
+            })
+            .expect("mX: a compute pipeline");
+        let refl_module = device
+            .create_shader_module(&mx::ShaderModuleDescriptor {
+                label: Some("ray-traced reflections"),
+                source: &*(reflect_source()),
+            })
+            .expect("mX: a shader");
         let div = [("REFL_DIV", refl_div() as f64)];
         let refl_compute = |entry: &str| {
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(entry),
-                layout: Some(&refl_pl),
-                module: &refl_module,
-                entry_point: Some(entry),
-                compilation_options: wgpu::PipelineCompilationOptions {
+            device
+                .create_compute_pipeline(&mx::ComputePipelineDescriptor {
+                    label: Some(entry),
+                    module: &refl_module,
+                    entry_point: Some(entry),
                     constants: &div,
-                    ..Default::default()
-                },
-                cache: crate::pipeline_cache::get(device).as_ref(),
-            })
+                })
+                .expect("mX: a compute pipeline")
         };
         let reflect = refl_compute("cs_reflect");
-        let add = wgpu::BlendComponent {
-            src_factor: wgpu::BlendFactor::One,
-            dst_factor: wgpu::BlendFactor::One,
-            operation: wgpu::BlendOperation::Add,
+        let add = mx::BlendComponent {
+            src_factor: mx::BlendFactor::One,
+            dst_factor: mx::BlendFactor::One,
+            operation: mx::BlendOperation::Add,
         };
-        let composite = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("reflections composite"),
-            layout: Some(&refl_pl),
-            vertex: wgpu::VertexState {
-                module: &refl_module,
-                entry_point: Some("vs_full"),
-                buffers: &[],
-                compilation_options: Default::default(),
-            },
-            primitive: wgpu::PrimitiveState {
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &refl_module,
-                entry_point: Some("fs_composite"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: HDR_FORMAT,
-                    blend: Some(wgpu::BlendState {
-                        color: add,
-                        alpha: add,
-                    }),
-                    write_mask: wgpu::ColorWrites::COLOR,
-                })],
-                compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: &div,
+        let composite = device
+            .create_render_pipeline(&mx::RenderPipelineDescriptor {
+                label: Some("reflections composite"),
+                vertex: mx::VertexState {
+                    constants: &[],
+                    module: &refl_module,
+                    entry_point: Some("vs_full"),
+                    buffers: &[],
+                },
+                primitive: mx::PrimitiveState {
+                    cull_mode: None,
                     ..Default::default()
                 },
-            }),
-            multiview_mask: None,
-            cache: crate::pipeline_cache::get(device).as_ref(),
-        });
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(mx::FragmentState {
+                    module: &refl_module,
+                    entry_point: Some("fs_composite"),
+                    targets: &[Some(mx::ColorTargetState {
+                        format: HDR_FORMAT,
+                        blend: Some(mx::BlendState {
+                            color: add,
+                            alpha: add,
+                        }),
+                        write_mask: mx::ColorWrites::COLOR,
+                    })],
+                    constants: &div,
+                }),
+            })
+        .expect("mX: a render pipeline");
         let tlas_cap = 8192;
         RayTracer {
             blas: hashbrown::HashMap::new(),
@@ -537,72 +353,76 @@ impl RayTracer {
             tex_gen: Vec::new(),
             tex: rt_tex::TexStore::new(device),
             avg_stride,
-            avg_layout,
             avg_pipeline,
-            layout,
             trace,
             temporal,
-            params: device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("ray tracing params"),
-                size: std::mem::size_of::<Params>() as u64,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }),
+            params: device
+                .create_buffer(&mx::BufferDescriptor {
+                    label: Some("ray tracing params"),
+                    size: std::mem::size_of::<Params>() as u64,
+                    usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+                })
+                .expect("mX: a buffer"),
             targets: None,
             frame: 0,
             prev: None,
             to_build: Vec::new(),
             instances: 0,
-            refl_layout,
             reflect,
             composite,
             refl: None,
             spare: device
-                .create_texture(&wgpu::TextureDescriptor {
+                .create_texture(&mx::TextureDescriptor {
                     label: Some("rt spare"),
-                    size: wgpu::Extent3d {
+                    size: mx::Extent3d {
                         width: 1,
                         height: 1,
                         depth_or_array_layers: 1,
                     },
                     mip_level_count: 1,
                     sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba16Float,
-                    usage: wgpu::TextureUsages::STORAGE_BINDING,
+                    dimension: mx::TextureDimension::D2,
+                    format: mx::TextureFormat::Rgba16Float,
+                    usage: mx::TextureUsages::STORAGE_BINDING,
                     view_formats: &[],
                 })
-                .create_view(&Default::default()),
+                .expect("mX: a texture")
+                .create_view(&Default::default())
+                .expect("mX: a texture view"),
         }
     }
 
-    fn make_tlas(device: &wgpu::Device, cap: u32) -> wgpu::Tlas {
-        device.create_tlas(&wgpu::CreateTlasDescriptor {
-            label: Some("ray tracing instances"),
-            max_instances: cap,
-            flags: wgpu::AccelerationStructureFlags::PREFER_FAST_BUILD,
-            update_mode: wgpu::AccelerationStructureUpdateMode::Build,
-        })
+    fn make_tlas(device: &mx::Device, cap: u32) -> mx::Tlas {
+        device
+            .create_tlas(&mx::CreateTlasDescriptor {
+                label: Some("ray tracing instances"),
+                max_instances: cap,
+                flags: mx::AccelerationStructureFlags::PREFER_FAST_BUILD,
+                update_mode: mx::AccelerationStructureUpdateMode::Build,
+            })
+            .expect("mX: an acceleration structure")
     }
 
-    fn make_records(device: &wgpu::Device, n: u64) -> wgpu::Buffer {
-        device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ray tracing records"),
-            size: n * std::mem::size_of::<Record>() as u64,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        })
+    fn make_records(device: &mx::Device, n: u64) -> mx::Buffer {
+        device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("ray tracing records"),
+                size: n * std::mem::size_of::<Record>() as u64,
+                usage: mx::BufferUsages::STORAGE | mx::BufferUsages::COPY_DST,
+            })
+            .expect("mX: a buffer")
     }
 
-    fn make_avg(device: &wgpu::Device, n: u64, stride: u64) -> wgpu::Buffer {
-        device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("texture means"),
-            size: n * stride,
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        })
+    fn make_avg(device: &mx::Device, n: u64, stride: u64) -> mx::Buffer {
+        device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("texture means"),
+                size: n * stride,
+                usage: mx::BufferUsages::STORAGE
+                    | mx::BufferUsages::COPY_DST
+                    | mx::BufferUsages::COPY_SRC,
+            })
+            .expect("mX: a buffer")
     }
 
     /// The vertices of these meshes changed: their structures are built again.
@@ -612,30 +432,32 @@ impl RayTracer {
 
     /// The traced lighting's textures for this size; true when they were made anew (the
     /// camera bind group must then point at the new one).
-    pub(super) fn ensure_targets(&mut self, device: &wgpu::Device, w: u32, h: u32) -> bool {
+    pub(super) fn ensure_targets(&mut self, device: &mx::Device, w: u32, h: u32) -> bool {
         if self.targets.as_ref().is_some_and(|t| t.size == (w, h)) {
             return false;
         }
         let mk = |label: &str| {
             device
-                .create_texture(&wgpu::TextureDescriptor {
+                .create_texture(&mx::TextureDescriptor {
                     label: Some(label),
-                    size: wgpu::Extent3d {
+                    size: mx::Extent3d {
                         width: w,
                         height: h,
                         depth_or_array_layers: 1,
                     },
                     mip_level_count: 1,
                     sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba16Float,
-                    usage: wgpu::TextureUsages::STORAGE_BINDING
-                        | wgpu::TextureUsages::TEXTURE_BINDING
-                        | wgpu::TextureUsages::COPY_SRC
-                        | wgpu::TextureUsages::COPY_DST,
+                    dimension: mx::TextureDimension::D2,
+                    format: mx::TextureFormat::Rgba16Float,
+                    usage: mx::TextureUsages::STORAGE_BINDING
+                        | mx::TextureUsages::TEXTURE_BINDING
+                        | mx::TextureUsages::COPY_SRC
+                        | mx::TextureUsages::COPY_DST,
                     view_formats: &[],
                 })
+                .expect("mX: a texture")
                 .create_view(&Default::default())
+                .expect("mX: a texture view")
         };
         self.targets = Some(Targets {
             size: (w, h),
@@ -825,25 +647,26 @@ impl Renderer {
                                 continue;
                             }
                             let count = count / 3 * 3;
-                            sizes.push(wgpu::BlasTriangleGeometrySizeDescriptor {
-                                vertex_format: wgpu::VertexFormat::Float32x3,
+                            sizes.push(mx::BlasTriangleGeometrySizeDescriptor {
+                                vertex_format: mx::VertexFormat::Float32x3,
                                 vertex_count,
-                                index_format: Some(wgpu::IndexFormat::Uint32),
+                                index_format: Some(mx::IndexFormat::Uint32),
                                 index_count: Some(count),
-                                flags: wgpu::AccelerationStructureGeometryFlags::OPAQUE,
+                                flags: mx::AccelerationStructureGeometryFlags::OPAQUE,
                             });
                             spans.push((*first, count));
                         }
-                        let blas = self.device.create_blas(
-                            &wgpu::CreateBlasDescriptor {
-                                label: None,
-                                flags: wgpu::AccelerationStructureFlags::PREFER_FAST_TRACE,
-                                update_mode: wgpu::AccelerationStructureUpdateMode::Build,
-                            },
-                            wgpu::BlasGeometrySizeDescriptors::Triangles {
-                                descriptors: sizes.clone(),
-                            },
-                        );
+                        let blas = self
+                            .device
+                            .create_blas(
+                                &mx::CreateBlasDescriptor {
+                                    label: None,
+                                    flags: mx::AccelerationStructureFlags::PREFER_FAST_TRACE,
+                                    update_mode: mx::AccelerationStructureUpdateMode::Build,
+                                },
+                                &sizes,
+                            )
+                            .expect("mX: an acceleration structure");
                         rt.blas.entry(key.to_key()).or_insert(BlasEntry {
                             blas,
                             sizes,
@@ -954,7 +777,7 @@ impl Renderer {
             && chosen.iter().zip(&rt.tlas_last).all(|(a, b)| same(a, b));
         if !unchanged {
             for (i, (blas, rows, base, mask)) in chosen.iter().enumerate() {
-                rt.tlas[i] = Some(wgpu::TlasInstance::new(blas, *rows, *base, *mask));
+                rt.tlas[i] = Some(mx::TlasInstance::new(blas.clone(), *rows, *base, *mask));
             }
             for i in chosen.len()..rt.tlas_used {
                 rt.tlas[i] = None;
@@ -988,11 +811,13 @@ impl Renderer {
                 .find(differs)
                 .unwrap_or(first);
             let unit = std::mem::size_of::<Record>();
-            self.queue.write_buffer(
-                &rt.records_buf,
-                (first * unit) as u64,
-                &bytes[first * unit..(last + 1) * unit],
-            );
+            self.queue
+                .write_buffer(
+                    &rt.records_buf,
+                    (first * unit) as u64,
+                    &bytes[first * unit..(last + 1) * unit],
+                )
+                .expect("mX: a queue write");
         }
         rt.records_sent.clone_from(&rt.records);
         // structures nobody used for a while are let go
@@ -1054,13 +879,14 @@ impl Renderer {
             sun_light: [0.0; 4],
         };
         self.queue
-            .write_buffer(&rt.params, 0, bytemuck::bytes_of(&p));
+            .write_buffer(&rt.params, 0, bytemuck::bytes_of(&p))
+            .expect("mX: a queue write");
         rt.prev = Some((view_proj, ro, vehicle));
         true
     }
 
     /// The mean colours of the textures the records name that have none yet (or were replaced).
-    fn encode_texture_means(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene) {
+    fn encode_texture_means(&mut self, encoder: &mut mx::CommandEncoder, scene: &Scene) {
         let Some(rt) = self.rt.as_mut() else { return };
         if scene.textures.len() > rt.tex_gen.len() {
             rt.tex_gen.resize(scene.textures.len(), 0);
@@ -1105,28 +931,28 @@ impl Renderer {
             rt.bind_gen += 1;
         }
         rt.tex.write_tiles(&self.queue, &wanted);
-        let groups: Vec<wgpu::BindGroup> = wanted
+        let groups: Vec<mx::BindGroup> = wanted
             .iter()
-            .map(|&t| {
-                let [atlas, tile] = rt.tex.avg_bindings();
-                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            .enumerate()
+            .map(|(k, &t)| {
+                let [atlas, tile] = rt.tex.avg_bindings(k);
+                self.device.create_bind_group(&mx::BindGroupDescriptor {
                     label: Some("texture mean"),
-                    layout: &rt.avg_layout,
                     entries: &[
-                        wgpu::BindGroupEntry {
+                        mx::BindGroupEntry {
                             binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&scene.textures[t].view),
+                            resource: mx::BindingResource::TextureView(&scene.textures[t].view),
                         },
-                        wgpu::BindGroupEntry {
+                        mx::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler),
+                            resource: mx::BindingResource::Sampler(&self.tone.lin_sampler),
                         },
-                        wgpu::BindGroupEntry {
+                        mx::BindGroupEntry {
                             binding: 2,
-                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            resource: mx::BindingResource::Buffer(mx::BufferBinding {
                                 buffer: &rt.tex_avg,
-                                offset: 0,
-                                size: wgpu::BufferSize::new(32),
+                                offset: t as u64 * rt.avg_stride,
+                                size: Some(32),
                             }),
                         },
                         atlas,
@@ -1136,17 +962,13 @@ impl Renderer {
             })
             .collect();
         {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            let mut pass = encoder.begin_compute_pass(&mx::ComputePassDescriptor {
                 label: Some("texture means"),
                 timestamp_writes: None,
             });
             pass.set_pipeline(&rt.avg_pipeline);
-            for (k, (&t, bg)) in wanted.iter().zip(&groups).enumerate() {
-                pass.set_bind_group(
-                    0,
-                    bg,
-                    &[(t as u64 * rt.avg_stride) as u32, rt.tex.tile_offset(k)],
-                );
+            for bg in &groups {
+                pass.set_bind_group(0, bg);
                 pass.dispatch_workgroups(1, 1, 1);
             }
         }
@@ -1159,9 +981,9 @@ impl Renderer {
     /// depth prepass.
     pub(super) fn encode_ray_tracing(
         &mut self,
-        encoder: &mut wgpu::CommandEncoder,
+        encoder: &mut mx::CommandEncoder,
         scene: &Scene,
-        queries: Option<&wgpu::QuerySet>,
+        queries: Option<&mx::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) {
         self.encode_texture_means(encoder, scene);
@@ -1172,75 +994,71 @@ impl Renderer {
         };
         let Some(t) = rt.targets.as_ref() else { return };
         if !rt.to_build.is_empty() || !rt.tlas_built {
-            let entries: Vec<wgpu::BlasBuildEntry> = rt
+            let entries: Vec<mx::BlasBuildEntry> = rt
                 .to_build
                 .iter()
                 .map(|k| {
                     let e = &rt.blas[k];
-                    wgpu::BlasBuildEntry {
+                    mx::BlasBuildEntry {
                         blas: &e.blas,
-                        geometry: wgpu::BlasGeometries::TriangleGeometries(
-                            e.sizes
-                                .iter()
-                                .zip(&e.spans)
-                                .map(|(size, (first, _))| wgpu::BlasTriangleGeometry {
-                                    size,
-                                    vertex_buffer: &k.vb,
-                                    first_vertex: k.first_vertex,
-                                    vertex_stride: std::mem::size_of::<Vertex>() as u64,
-                                    index_buffer: Some(&k.ib),
-                                    first_index: Some(k.first_index + *first),
-                                    transform_buffer: None,
-                                    transform_buffer_offset: None,
-                                })
-                                .collect(),
-                        ),
+                        geometry: e
+                            .sizes
+                            .iter()
+                            .zip(&e.spans)
+                            .map(|(size, (first, _))| mx::BlasTriangleGeometry {
+                                size,
+                                vertex_buffer: &k.vb,
+                                first_vertex: k.first_vertex,
+                                vertex_stride: std::mem::size_of::<Vertex>() as u64,
+                                index_buffer: Some(&k.ib),
+                                first_index: Some(k.first_index + *first),
+                            })
+                            .collect(),
                     }
                 })
                 .collect();
             encoder.build_acceleration_structures(entries.iter(), std::iter::once(&rt.tlas));
             rt.tlas_built = true;
         }
-        let group = |inp: &wgpu::TextureView, raw: &wgpu::TextureView, out: &wgpu::TextureView| {
-            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let group = |inp: &mx::TextureView, raw: &mx::TextureView, out: &mx::TextureView| {
+            self.device.create_bind_group(&mx::BindGroupDescriptor {
                 label: Some("ray tracing"),
-                layout: &rt.layout,
                 entries: &[
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 0,
                         resource: rt.params.as_entire_binding(),
                     },
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 1,
-                        resource: rt.tlas.as_binding(),
+                        resource: mx::BindingResource::AccelerationStructure(&rt.tlas),
                     },
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::TextureView(depth),
+                        resource: mx::BindingResource::TextureView(depth),
                     },
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 3,
                         resource: rt.records_buf.as_entire_binding(),
                     },
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 4,
                         resource: rt.tex_avg.as_entire_binding(),
                     },
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 5,
-                        resource: wgpu::BindingResource::TextureView(inp),
+                        resource: mx::BindingResource::TextureView(inp),
                     },
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 6,
-                        resource: wgpu::BindingResource::TextureView(raw),
+                        resource: mx::BindingResource::TextureView(raw),
                     },
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 7,
-                        resource: wgpu::BindingResource::TextureView(out),
+                        resource: mx::BindingResource::TextureView(out),
                     },
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 8,
-                        resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler),
+                        resource: mx::BindingResource::Sampler(&self.tone.lin_sampler),
                     },
                 ],
             })
@@ -1262,10 +1080,10 @@ impl Renderer {
             ("rt trace", &rt.trace, trace_bg),
             ("rt denoise", &rt.temporal, denoise_bg),
         ] {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            let mut pass = encoder.begin_compute_pass(&mx::ComputePassDescriptor {
                 label: Some(label),
                 timestamp_writes: pass_timer(queries, timed, label).map(|t| {
-                    wgpu::ComputePassTimestampWrites {
+                    mx::PassTimestampWrites {
                         query_set: t.query_set,
                         beginning_of_pass_write_index: t.beginning_of_pass_write_index,
                         end_of_pass_write_index: t.end_of_pass_write_index,
@@ -1273,7 +1091,7 @@ impl Renderer {
                 }),
             });
             pass.set_pipeline(pipe);
-            pass.set_bind_group(0, bg, &[]);
+            pass.set_bind_group(0, bg);
             pass.dispatch_workgroups(gx, gy, 1);
         }
     }
@@ -1284,10 +1102,10 @@ impl Renderer {
     /// the main pass (and before the rain on the glass, which looks through it).
     pub(super) fn encode_rt_reflections(
         &mut self,
-        encoder: &mut wgpu::CommandEncoder,
+        encoder: &mut mx::CommandEncoder,
         w: u32,
         h: u32,
-        queries: Option<&wgpu::QuerySet>,
+        queries: Option<&mx::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) {
         let (Some(rt), Some(hdr), Some(ao), Some(probe)) = (
@@ -1305,96 +1123,96 @@ impl Renderer {
         if rt.refl.as_ref().is_none_or(|r| r.0 != half) {
             let mk = |label: &str| {
                 self.device
-                    .create_texture(&wgpu::TextureDescriptor {
+                    .create_texture(&mx::TextureDescriptor {
                         label: Some(label),
-                        size: wgpu::Extent3d {
+                        size: mx::Extent3d {
                             width: half.0,
                             height: half.1,
                             depth_or_array_layers: 1,
                         },
                         mip_level_count: 1,
                         sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Rgba16Float,
-                        usage: wgpu::TextureUsages::STORAGE_BINDING
-                            | wgpu::TextureUsages::TEXTURE_BINDING,
+                        dimension: mx::TextureDimension::D2,
+                        format: mx::TextureFormat::Rgba16Float,
+                        usage: mx::TextureUsages::STORAGE_BINDING
+                            | mx::TextureUsages::TEXTURE_BINDING,
                         view_formats: &[],
                     })
+                    .expect("mX: a texture")
                     .create_view(&Default::default())
+                    .expect("mX: a texture view")
             };
             rt.refl = Some((half, mk("rt reflection rays")));
         }
         let (_, raw) = rt.refl.as_ref().unwrap();
         let dummy = &self.black_texture.view;
-        let group =
-            |out: &wgpu::TextureView, scene: &wgpu::TextureView, h12: &wgpu::TextureView| {
-                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("ray-traced reflections"),
-                    layout: &rt.refl_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: rt.params.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: rt.tlas.as_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::TextureView(&ao.depth_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: rt.records_buf.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 4,
-                            resource: rt.tex_avg.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 5,
-                            resource: wgpu::BindingResource::TextureView(&gbuf[0].1),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 6,
-                            resource: wgpu::BindingResource::TextureView(&gbuf[1].1),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 7,
-                            resource: wgpu::BindingResource::TextureView(out),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 8,
-                            resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 9,
-                            resource: wgpu::BindingResource::TextureView(scene),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 10,
-                            resource: wgpu::BindingResource::TextureView(&probe.view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 11,
-                            resource: self.tone.enh_buf.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 12,
-                            resource: wgpu::BindingResource::TextureView(h12),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 13,
-                            resource: rt.tex.uvs.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 14,
-                            resource: wgpu::BindingResource::TextureView(&rt.tex.atlas_view),
-                        },
-                    ],
-                })
-            };
+        let group = |out: &mx::TextureView, scene: &mx::TextureView, h12: &mx::TextureView| {
+            self.device.create_bind_group(&mx::BindGroupDescriptor {
+                label: Some("ray-traced reflections"),
+                entries: &[
+                    mx::BindGroupEntry {
+                        binding: 0,
+                        resource: rt.params.as_entire_binding(),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 1,
+                        resource: mx::BindingResource::AccelerationStructure(&rt.tlas),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 2,
+                        resource: mx::BindingResource::TextureView(&ao.depth_view),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 3,
+                        resource: rt.records_buf.as_entire_binding(),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 4,
+                        resource: rt.tex_avg.as_entire_binding(),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 5,
+                        resource: mx::BindingResource::TextureView(&gbuf[0].1),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 6,
+                        resource: mx::BindingResource::TextureView(&gbuf[1].1),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 7,
+                        resource: mx::BindingResource::TextureView(out),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 8,
+                        resource: mx::BindingResource::Sampler(&self.tone.lin_sampler),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 9,
+                        resource: mx::BindingResource::TextureView(scene),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 10,
+                        resource: mx::BindingResource::TextureView(&probe.view),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 11,
+                        resource: self.tone.enh_buf.as_entire_binding(),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 12,
+                        resource: mx::BindingResource::TextureView(h12),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 13,
+                        resource: rt.tex.uvs.as_entire_binding(),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 14,
+                        resource: mx::BindingResource::TextureView(&rt.tex.atlas_view),
+                    },
+                ],
+            })
+        };
         // (no pass's output is among its inputs)
         let key: RtBindKey = (
             rt.bind_gen,
@@ -1416,10 +1234,10 @@ impl Renderer {
         }
         let [trace_bg, composite_bg] = &rt.refl_groups.as_ref().expect("made above").1;
         {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            let mut pass = encoder.begin_compute_pass(&mx::ComputePassDescriptor {
                 label: Some("rt reflections"),
                 timestamp_writes: pass_timer(queries, timed, "rt reflections").map(|t| {
-                    wgpu::ComputePassTimestampWrites {
+                    mx::PassTimestampWrites {
                         query_set: t.query_set,
                         beginning_of_pass_write_index: t.beginning_of_pass_write_index,
                         end_of_pass_write_index: t.end_of_pass_write_index,
@@ -1428,27 +1246,25 @@ impl Renderer {
             });
             let (gx, gy) = (half.0.div_ceil(8), half.1.div_ceil(8));
             pass.set_pipeline(&rt.reflect);
-            pass.set_bind_group(0, trace_bg, &[]);
+            pass.set_bind_group(0, trace_bg);
             pass.dispatch_workgroups(gx, gy, 1);
         }
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
             label: Some("rt reflections composite"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(mx::RenderPassColorAttachment {
                 view: &hdr.view,
-                depth_slice: None,
                 resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
+                ops: mx::Operations {
+                    load: mx::LoadOp::Load,
+                    store: mx::StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
             timestamp_writes: pass_timer(queries, timed, "rt composite"),
             occlusion_query_set: None,
-            multiview_mask: None,
         });
         pass.set_pipeline(&rt.composite);
-        pass.set_bind_group(0, composite_bg, &[]);
+        pass.set_bind_group(0, composite_bg);
         pass.draw(0..3, 0..1);
     }
 }
@@ -1470,7 +1286,7 @@ mod spv_dump {
             ),
         ];
         for (name, src) in &modules {
-            let module = naga::front::wgsl::parse_str(src).unwrap();
+            let module = naga::front::wgsl::parse_str(&crate::shaders::with_heap(src)).unwrap();
             let info = naga::valid::Validator::new(
                 naga::valid::ValidationFlags::all(),
                 naga::valid::Capabilities::all(),

@@ -7,15 +7,12 @@
 #[test]
 fn pictures_larger_than_the_chip_takes_are_made_to_fit() {
     unsafe { std::env::set_var("OMSI_GPU_LIMITS", "downlevel") };
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
-    let renderer = pollster::block_on(omsi_render::Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), Default::default()))
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
+    let renderer = pollster::block_on(omsi_render::Renderer::new_with(&instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb), Default::default()))
         .expect("renderer on the no-op device");
     assert_eq!(renderer.device.limits().max_texture_dimension_2d, 2048);
     let mut scene = renderer.new_scene();
-    let scope = renderer.device.push_error_scope(wgpu::ErrorFilter::Validation);
+    let scope = renderer.watch_errors();
     let big = omsi_texture::Image { width: 4096, height: 64, rgba: vec![200; 4096 * 64 * 4], has_alpha: true };
     let a = renderer.add_texture(&mut scene, &big, false);
     let b = renderer.add_texture(&mut scene, &big, true);
@@ -30,6 +27,6 @@ fn pictures_larger_than_the_chip_takes_are_made_to_fit() {
         assert!(w <= 2048 && h <= 2048, "{w}x{h}");
     }
     assert_eq!(scene.texture_size_of(a), Some((2048, 32)));
-    let error = pollster::block_on(scope.pop());
+    let error = scope.pop();
     assert!(error.is_none(), "{error:?}");
 }

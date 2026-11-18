@@ -103,11 +103,11 @@ fn mapped_splines_and_objects_use_uncut_base_while_ground_keeps_paint() {
             ..Default::default()
         },
     });
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         omsi_render::RenderOptions {
             msaa: 1,
             shadow_size: 1024,
@@ -245,11 +245,11 @@ fn a_maps_own_route_arrow_shows_only_with_the_route_arrows() {
     let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
     let object = world.object_type("arrow.sco").expect("synthetic route arrow must load");
     assert!(object.sco.is_help_arrow);
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         omsi_render::RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
     ))
     .expect("test renderer");

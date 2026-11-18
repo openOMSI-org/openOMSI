@@ -4,12 +4,9 @@ use super::*;
 /// snow first sends it rows, made once then, and bound by a scene from its next frame.
 #[test]
 fn the_snow_track_field_is_made_only_when_the_roads_snow_first_needs_it() {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let mut renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), RenderOptions::default(),
+        &instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb), RenderOptions::default(),
     )).expect("noop renderer");
     let mut scene = renderer.new_scene();
     let material = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0; 4], true);

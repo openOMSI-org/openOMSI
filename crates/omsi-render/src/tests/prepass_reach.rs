@@ -11,12 +11,9 @@ fn quad(renderer: &mut Renderer, scene: &mut Scene, y: f32, half: f32) -> MeshId
 }
 
 fn batches(far_at: f32) -> (f64, f64) {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let mut renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 4, ssao: true, render_scale: 1.0, ..Default::default() },
     )).expect("noop renderer");
     renderer.profiling = true;

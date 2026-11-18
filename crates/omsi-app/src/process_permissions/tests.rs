@@ -105,11 +105,11 @@ fn export_process_permission_dialog() {
         crate::_rust_i18n_try_translate(language, key).map(|v| v.into_owned())
     });
     omsi_ui::i18n::set_language("hu");
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let renderer = pollster::block_on(omsi_render::Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         omsi_render::RenderOptions {
             msaa: 1,
             ssao: false,

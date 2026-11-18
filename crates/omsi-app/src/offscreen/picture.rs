@@ -431,39 +431,50 @@ impl Offscreen<'_> {
         // for the GPU - medians shrug off what else the machine is doing
         if let Some(n) = omsi_cfg::flags::OMSI_BENCH.parse::<usize>()
         {
-            let target = renderer.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("bench"),
-                size: wgpu::Extent3d {
-                    width: w,
-                    height: h,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: renderer.format(),
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
-            let view = target.create_view(&Default::default());
-            let stereo = omsi_cfg::flags::OMSI_BENCH_STEREO.is_set();
-            let right = stereo.then(|| {
-                renderer.device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("stereo bench right"),
-                    size: wgpu::Extent3d {
+            let target = renderer
+                .device
+                .create_texture(&mx::TextureDescriptor {
+                    label: Some("bench"),
+                    size: mx::Extent3d {
                         width: w,
                         height: h,
                         depth_or_array_layers: 1,
                     },
                     mip_level_count: 1,
                     sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
+                    dimension: mx::TextureDimension::D2,
                     format: renderer.format(),
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    usage: mx::TextureUsages::RENDER_ATTACHMENT,
                     view_formats: &[],
                 })
+                .expect("mX: a texture");
+            let view = target
+                .create_view(&Default::default())
+                .expect("mX: a texture view");
+            let stereo = omsi_cfg::flags::OMSI_BENCH_STEREO.is_set();
+            let right = stereo.then(|| {
+                renderer
+                    .device
+                    .create_texture(&mx::TextureDescriptor {
+                        label: Some("stereo bench right"),
+                        size: mx::Extent3d {
+                            width: w,
+                            height: h,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: mx::TextureDimension::D2,
+                        format: renderer.format(),
+                        usage: mx::TextureUsages::RENDER_ATTACHMENT,
+                        view_formats: &[],
+                    })
+                    .expect("mX: a texture")
             });
-            let right_view = right.as_ref().map(|t| t.create_view(&Default::default()));
+            let right_view = right.as_ref().map(|t| {
+                t.create_view(&Default::default())
+                    .expect("mX: a texture view")
+            });
             let mut cameras = [camera.clone(), camera.clone()];
             for (eye, offset) in cameras.iter_mut().zip([-0.032, 0.032]) {
                 eye.position += camera.right().as_dvec3() * offset;

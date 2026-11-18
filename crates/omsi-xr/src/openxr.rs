@@ -23,8 +23,7 @@ pub struct Vr {
     frame_stream: xr::FrameStream<xr::D3D12>,
     space: xr::Space,
     swapchain: xr::Swapchain<xr::D3D12>,
-    images: Vec<wgpu::Texture>,
-    resources: Vec<ID3D12Resource>,
+    images: Vec<mx::Texture>,
     width: u32,
     height: u32,
     blend: xr::EnvironmentBlendMode,
@@ -67,10 +66,9 @@ impl Drop for Vr {
 }
 
 struct Mirror {
-    pipeline: wgpu::RenderPipeline,
-    layout: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
-    params: wgpu::Buffer,
+    pipeline: mx::RenderPipeline,
+    sampler: mx::Sampler,
+    params: mx::Buffer,
 }
 
 /// A flat UI surface fixed in the world after it is placed.
@@ -173,20 +171,24 @@ impl Vr {
         let requirements = instance.graphics_requirements::<xr::D3D12>(system)?;
 
         // OpenXR must receive the exact device and command queue used for the
-        // textures submitted by wgpu. A second D3D12 device cannot present them.
-        let device = unsafe { renderer.device.as_hal::<wgpu_hal::api::Dx12>() }
+        // textures mX draws. A second D3D12 device cannot present them.
+        let device = renderer
+            .device
+            .as_dx12()
             .ok_or_else(|| anyhow!("OpenXR PCVR requires the DX12 graphics backend"))?;
-        let queue = unsafe { renderer.queue.as_hal::<wgpu_hal::api::Dx12>() }
-            .ok_or_else(|| anyhow!("wgpu did not expose its DX12 queue"))?;
-        let luid = unsafe { device.raw_device().GetAdapterLuid() };
+        let queue = renderer
+            .queue
+            .as_dx12()
+            .ok_or_else(|| anyhow!("mX did not expose its DX12 queue"))?;
+        let luid = unsafe { device.raw().GetAdapterLuid() };
         if luid.LowPart != requirements.adapter_luid.LowPart
             || luid.HighPart != requirements.adapter_luid.HighPart
         {
             bail!("the OpenXR headset and openOMSI are using different graphics adapters");
         }
         let binding = xr::d3d::SessionCreateInfoD3D12 {
-            device: device.raw_device().as_raw().cast(),
-            queue: queue.as_raw().as_raw().cast(),
+            device: device.raw().as_raw().cast(),
+            queue: queue.raw().as_raw().cast(),
         };
         let (session, frame_waiter, frame_stream) =
             unsafe { instance.create_session::<xr::D3D12>(system, &binding) }
@@ -213,20 +215,20 @@ impl Vr {
         let width = ((recommended_width as f32 * scale).round() as u32).max(1);
         let height = ((recommended_height as f32 * scale).round() as u32).max(1);
         let (format, dxgi_format) = match renderer.format() {
-            wgpu::TextureFormat::Bgra8UnormSrgb => (
-                wgpu::TextureFormat::Bgra8UnormSrgb,
+            mx::TextureFormat::Bgra8UnormSrgb => (
+                mx::TextureFormat::Bgra8UnormSrgb,
                 DXGI_FORMAT_B8G8R8A8_UNORM_SRGB.0 as u32,
             ),
-            wgpu::TextureFormat::Bgra8Unorm => (
-                wgpu::TextureFormat::Bgra8Unorm,
+            mx::TextureFormat::Bgra8Unorm => (
+                mx::TextureFormat::Bgra8Unorm,
                 DXGI_FORMAT_B8G8R8A8_UNORM.0 as u32,
             ),
-            wgpu::TextureFormat::Rgba8UnormSrgb => (
-                wgpu::TextureFormat::Rgba8UnormSrgb,
+            mx::TextureFormat::Rgba8UnormSrgb => (
+                mx::TextureFormat::Rgba8UnormSrgb,
                 DXGI_FORMAT_R8G8B8A8_UNORM_SRGB.0 as u32,
             ),
-            wgpu::TextureFormat::Rgba8Unorm => (
-                wgpu::TextureFormat::Rgba8Unorm,
+            mx::TextureFormat::Rgba8Unorm => (
+                mx::TextureFormat::Rgba8Unorm,
                 DXGI_FORMAT_R8G8B8A8_UNORM.0 as u32,
             ),
             other => bail!("OpenXR cannot use renderer format {other:?}"),
@@ -264,23 +266,23 @@ impl Vr {
                 )
             }
         };
-        let size = wgpu::Extent3d {
+        let size = mx::Extent3d {
             width,
             height,
             depth_or_array_layers: 2,
         };
-        let desc = wgpu::TextureDescriptor {
+        let desc = mx::TextureDescriptor {
             label: Some("OpenXR stereo swapchain"),
             size,
             mip_level_count: 1,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
+            dimension: mx::TextureDimension::D2,
             format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            usage: mx::TextureUsages::RENDER_ATTACHMENT
                 | if sampled {
-                    wgpu::TextureUsages::TEXTURE_BINDING
+                    mx::TextureUsages::TEXTURE_BINDING
                 } else {
-                    wgpu::TextureUsages::empty()
+                    mx::TextureUsages::empty()
                 },
             view_formats: &[],
         };
@@ -288,7 +290,7 @@ impl Vr {
             .enumerate_images()?
             .into_iter()
             .map(|image| {
-                // OpenXR retains ownership; cloning the COM interface gives wgpu a
+                // OpenXR retains ownership; cloning the COM interface gives mX a
                 // separate reference for the lifetime of the imported texture.
                 let raw = image.cast();
                 let resource = unsafe {
@@ -296,25 +298,14 @@ impl Vr {
                 }
                 .ok_or_else(|| anyhow!("OpenXR returned a null swapchain image"))?
                 .clone();
-                let hal_texture = unsafe {
-                    wgpu_hal::dx12::Device::texture_from_raw(
-                        resource.clone(),
-                        format,
-                        wgpu::TextureDimension::D2,
-                        size,
-                        1,
-                        1,
-                    )
-                };
-                let texture = unsafe {
-                    renderer
-                        .device
-                        .create_texture_from_hal::<wgpu_hal::api::Dx12>(hal_texture, &desc)
-                };
-                Ok((texture, resource))
+                // SAFETY: the swapchain's image, of this device, described as it is; it
+                // rests in mX's home state between mX's commands (see `sync`)
+                Ok(mx::Texture::Dx12(unsafe {
+                    device.texture_from_raw(resource, &desc)
+                }))
             })
             .collect::<Result<Vec<_>>>()?;
-        let (images, resources): (Vec<_>, Vec<_>) = imported.into_iter().unzip();
+        let images = imported;
         let blend = instance
             .enumerate_environment_blend_modes(system, view_type)?
             .into_iter()
@@ -333,9 +324,6 @@ impl Vr {
         if let Some(rate) = omsi_cfg::flags::OMSI_OPENXR_MIRROR_RATE.var() {
             log::info!("OpenXR bus mirror rate override: {rate} pictures/s (-1: every mirror each game frame)");
         }
-        // Release the HAL guards before asking wgpu to compile more pipelines.
-        drop(queue);
-        drop(device);
         renderer.prepare_xr_eye_pipelines();
         Ok(Self {
             sync: SwapchainSync::new(&renderer.device, &renderer.queue, images.len()),
@@ -346,7 +334,6 @@ impl Vr {
             space,
             swapchain,
             images,
-            resources,
             width,
             height,
             blend,
@@ -520,7 +507,7 @@ impl Vr {
         scene: &mut Scene,
         base: &Camera,
         lighting: &Lighting,
-        desktop: &wgpu::TextureView,
+        desktop: &mx::TextureView,
         desktop_size: (u32, u32),
         menu_range: std::ops::Range<usize>,
         cursor_overlay: Option<usize>,
@@ -630,12 +617,9 @@ impl Vr {
         self.swapchain.wait_image(xr::Duration::INFINITE)?;
         self.stats_image_wait += image_wait_start.elapsed();
         let render_start = Instant::now();
-        // OpenXR promises RENDER_TARGET on wait, while wgpu 29 initializes an
-        // imported texture's tracker to COMMON. On each image's first use,
-        // transition the actual resource to COMMON before wgpu's first barrier.
-        // Later acquisitions need no fix: wgpu leaves both layers in
-        // RENDER_TARGET, which is also the state OpenXR requires on release.
-        self.sync.prepare_image(index, &self.resources[index])?;
+        // OpenXR hands the image over in RENDER_TARGET; mX's commands find it in
+        // its home state (see `sync`).
+        self.sync.prepare_image(index, &self.images[index])?;
         let mut vr_base = *base;
         vr_base.roll = 0.0;
         // Driver cameras may look down at the dashboard by default. In VR the
@@ -643,13 +627,15 @@ impl Vr {
         vr_base.pitch = 0.0;
         let zoom = self.animated_zoom(zoom_active);
         let targets = [0, 1].map(|eye| {
-            self.images[index].create_view(&wgpu::TextureViewDescriptor {
-                label: Some("OpenXR eye"),
-                dimension: Some(wgpu::TextureViewDimension::D2),
-                base_array_layer: eye as u32,
-                array_layer_count: Some(1),
-                ..Default::default()
-            })
+            self.images[index]
+                .create_view(&mx::TextureViewDescriptor {
+                    label: Some("OpenXR eye"),
+                    dimension: Some(mx::TextureViewDimension::D2),
+                    base_array_layer: eye as u32,
+                    array_layer_count: Some(1),
+                    ..Default::default()
+                })
+                .expect("mX: a texture view")
         });
         renderer.set_env_heading(Some(vr_base.yaw));
         let mut eye_cameras = [vr_base; 2];
@@ -735,10 +721,10 @@ impl Vr {
         );
         self.draw_desktop(renderer, index, desktop, desktop_size);
         // All eye/UI/mirror commands have been submitted on the exact queue bound
-        // to OpenXR, with both layers restored to RENDER_TARGET. The D3D12 OpenXR
-        // contract orders runtime access on that queue; CPU completion is needed
-        // at swapchain destruction, not at release. Keep native first-use command
-        // objects alive in `sync` until that shutdown wait.
+        // to OpenXR; the image goes back to RENDER_TARGET after them on that queue.
+        // The D3D12 OpenXR contract orders runtime access on that queue; CPU
+        // completion is needed at swapchain destruction, not at release.
+        self.sync.release_image(index)?;
         self.swapchain.release_image()?;
         let rect = xr::Rect2Di {
             offset: xr::Offset2Di { x: 0, y: 0 },
@@ -825,16 +811,18 @@ impl Vr {
 
     /// The desktop window while the headset shows the game: the left eye's picture when the
     /// desktop mirror is on, else black.
-    fn draw_desktop(&mut self, renderer: &Renderer, index: usize, desktop: &wgpu::TextureView, desktop_size: (u32, u32)) {
+    fn draw_desktop(&mut self, renderer: &Renderer, index: usize, desktop: &mx::TextureView, desktop_size: (u32, u32)) {
         if let Some(mirror) = self.mirror.as_ref().filter(|_| self.desktop_mirror) {
             let mirror_start = Instant::now();
-            let left_eye = self.images[index].create_view(&wgpu::TextureViewDescriptor {
-                label: Some("OpenXR desktop mirror source"),
-                dimension: Some(wgpu::TextureViewDimension::D2),
-                base_array_layer: 0,
-                array_layer_count: Some(1),
-                ..Default::default()
-            });
+            let left_eye = self.images[index]
+                .create_view(&mx::TextureViewDescriptor {
+                    label: Some("OpenXR desktop mirror source"),
+                    dimension: Some(mx::TextureViewDimension::D2),
+                    base_array_layer: 0,
+                    array_layer_count: Some(1),
+                    ..Default::default()
+                })
+                .expect("mX: a texture view");
             mirror.draw(
                 renderer,
                 &left_eye,
@@ -844,27 +832,22 @@ impl Vr {
             );
             self.stats_desktop_mirror += mirror_start.elapsed();
         } else {
-            let mut encoder =
-                renderer
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("OpenXR blank desktop"),
-                    });
-            drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut encoder = renderer
+                .device
+                .create_command_encoder(Some("OpenXR blank desktop"));
+            drop(encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("OpenXR blank desktop"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
                     view: desktop,
-                    depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                        store: mx::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
-                multiview_mask: None,
             }));
             renderer.queue.submit(Some(encoder.finish()));
         }
@@ -929,86 +912,53 @@ impl Vr {
 impl Mirror {
     fn new(renderer: &Renderer) -> Self {
         let device = &renderer.device;
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("OpenXR desktop mirror"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("xr_mirror.wgsl").into()),
-        });
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("OpenXR desktop mirror"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
+        let shader = device
+            .create_shader_module(&mx::ShaderModuleDescriptor {
+                label: Some("OpenXR desktop mirror"),
+                source: &*(include_str!("xr_mirror.wgsl")),
+            })
+            .expect("mX: a shader");
+        let pipeline = device
+            .create_render_pipeline(&mx::RenderPipelineDescriptor {
+                label: Some("OpenXR desktop mirror"),
+                vertex: mx::VertexState {
+                    constants: &[],
+                    module: &shader,
+                    entry_point: Some("vertex_main"),
+                    buffers: &[],
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("OpenXR desktop mirror"),
-            bind_group_layouts: &[Some(&layout)],
-            immediate_size: 0,
-        });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("OpenXR desktop mirror"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vertex_main"),
-                buffers: &[],
-                compilation_options: Default::default(),
-            },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fragment_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: renderer.format(),
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("OpenXR desktop mirror"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
-        let params = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("OpenXR desktop mirror crop"),
-            size: 16,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+                primitive: mx::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(mx::FragmentState {
+                    constants: &[],
+                    module: &shader,
+                    entry_point: Some("fragment_main"),
+                    targets: &[Some(mx::ColorTargetState {
+                        format: renderer.format(),
+                        blend: None,
+                        write_mask: mx::ColorWrites::ALL,
+                    })],
+                }),
+            })
+            .expect("mX: a render pipeline");
+        let sampler = device
+            .create_sampler(&mx::SamplerDescriptor {
+                label: Some("OpenXR desktop mirror"),
+                mag_filter: mx::FilterMode::Linear,
+                min_filter: mx::FilterMode::Linear,
+                ..Default::default()
+            })
+            .expect("mX: a sampler");
+        let params = device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("OpenXR desktop mirror crop"),
+                size: 16,
+                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+            })
+            .expect("mX: a buffer");
         Self {
             pipeline,
-            layout,
             sampler,
             params,
         }
@@ -1017,8 +967,8 @@ impl Mirror {
     fn draw(
         &self,
         renderer: &Renderer,
-        eye: &wgpu::TextureView,
-        desktop: &wgpu::TextureView,
+        eye: &mx::TextureView,
+        desktop: &mx::TextureView,
         source_size: (u32, u32),
         desktop_size: (u32, u32),
     ) {
@@ -1032,70 +982,64 @@ impl Mirror {
         let mut params = [0u8; 16];
         params[0..4].copy_from_slice(&crop[0].to_ne_bytes());
         params[4..8].copy_from_slice(&crop[1].to_ne_bytes());
-        renderer.queue.write_buffer(&self.params, 0, &params);
-        let bind_group = renderer
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("OpenXR desktop mirror"),
-                layout: &self.layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.params.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(eye),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.sampler),
-                    },
-                ],
-            });
+        renderer
+            .queue
+            .write_buffer(&self.params, 0, &params)
+            .expect("mX: a queue write");
+        let bind_group = renderer.device.create_bind_group(&mx::BindGroupDescriptor {
+            label: Some("OpenXR desktop mirror"),
+            entries: &[
+                mx::BindGroupEntry {
+                    binding: 0,
+                    resource: self.params.as_entire_binding(),
+                },
+                mx::BindGroupEntry {
+                    binding: 1,
+                    resource: mx::BindingResource::TextureView(eye),
+                },
+                mx::BindGroupEntry {
+                    binding: 2,
+                    resource: mx::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
         let mut encoder = renderer
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("OpenXR desktop mirror"),
-            });
+            .create_command_encoder(Some("OpenXR desktop mirror"));
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("OpenXR desktop mirror"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(mx::RenderPassColorAttachment {
                     view: desktop,
-                    depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                        store: mx::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
             pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
+            pass.set_bind_group(0, &bind_group);
             pass.draw(0..3, 0..1);
         }
         // Sampling changed the XR image to a shader resource. OpenXR requires
         // RENDER_TARGET again when we release it, and the load preserves pixels.
-        drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        drop(encoder.begin_render_pass(&mx::RenderPassDescriptor {
             label: Some("OpenXR return to render target"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(mx::RenderPassColorAttachment {
                 view: eye,
-                depth_slice: None,
                 resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
+                ops: mx::Operations {
+                    load: mx::LoadOp::Load,
+                    store: mx::StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
-            multiview_mask: None,
         }));
         renderer.queue.submit(Some(encoder.finish()));
     }

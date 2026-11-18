@@ -9,11 +9,11 @@ use super::*;
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_spline_a_millimetre_over_a_road_stays_over_it_near_the_eye() {
     let camera = Camera { position: DVec3::new(0.0, 0.0, 2.5), yaw: 0.0, pitch: -25.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 200.0 };
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     ))
     .expect("test renderer");
@@ -55,11 +55,11 @@ fn a_spline_a_millimetre_over_a_road_stays_over_it_near_the_eye() {
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn smoke_puffs_are_drawn() {
     let camera = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 100.0 };
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     ))
     .expect("test renderer");
@@ -75,11 +75,11 @@ fn smoke_puffs_are_drawn() {
 }
 
 fn smoke_test_renderer() -> Renderer {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     ))
     .expect("test renderer")
@@ -178,11 +178,11 @@ fn a_smoke_sprite_carries_its_spin_ground_and_z_offset() {
 /// textures out, and it draws a frame with that group.
 #[test]
 fn launcher_preview_initializes_without_enhanced_or_ray_tracing_resources() {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
-    let mut renderer = pollster::block_on(Renderer::new_with(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb), RenderOptions { msaa: 1, preview_only: true, no_enhanced: true, ray_tracing: false, ..Default::default() })).unwrap();
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
+    let mut renderer = pollster::block_on(Renderer::new_with(
+        &instance,
+        None,
+        Some(mx::TextureFormat::Rgba8UnormSrgb), RenderOptions { msaa: 1, preview_only: true, no_enhanced: true, ray_tracing: false, ..Default::default() })).unwrap();
     assert!(renderer.hdr_pass.is_none());
     assert!(renderer.tone.probe.is_none());
     assert!(renderer.rt.is_none());
@@ -198,14 +198,11 @@ fn launcher_preview_initializes_without_enhanced_or_ray_tracing_resources() {
 
 #[test]
 fn noop_backend_initializes_renderer() {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let res = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions {
             msaa: 2,
             shadow_size: 1024,
@@ -219,14 +216,11 @@ fn noop_backend_initializes_renderer() {
 /// vanilla pipelines. Exercise the full build and a frame, rather than the policy alone.
 #[test]
 fn vanilla_gl_build_omits_unused_enhanced_resources() {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let base = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions {
             msaa: 1,
             shadow_size: 256,
@@ -238,7 +232,7 @@ fn vanilla_gl_build_omits_unused_enhanced_resources() {
         base.device.clone(),
         base.queue.clone(),
         "OpenGL regression adapter".into(),
-        wgpu::TextureFormat::Rgba8UnormSrgb,
+        mx::TextureFormat::Rgba8UnormSrgb,
         RenderOptions {
             msaa: 1,
             shadow_size: 256,
@@ -259,13 +253,11 @@ fn vanilla_gl_build_omits_unused_enhanced_resources() {
         near: 0.1,
         far: 1000.0,
     };
-    let scope = renderer
-        .device
-        .push_error_scope(wgpu::ErrorFilter::Validation);
+    let scope = renderer.watch_errors();
     renderer
         .render_to_image(&mut scene, 16, 16, &camera, &Lighting::default())
         .unwrap();
-    assert!(pollster::block_on(scope.pop()).is_none());
+    assert!(scope.pop().is_none());
     // A desktop's native backend still prepares Enhanced for changing modes in-game.
     assert!(base.hdr_pass.is_some());
     assert!(base.tone.probe.is_some());
@@ -273,12 +265,11 @@ fn vanilla_gl_build_omits_unused_enhanced_resources() {
 
 #[test]
 fn excavation_keeps_ordinary_depth_prefilling_without_a_gpu() {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let mut renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance,
+        None,
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 4, ssao: true, render_scale: 1.0, ..Default::default() },
     )).expect("noop renderer");
     renderer.profiling = true;
@@ -332,12 +323,11 @@ fn excavation_keeps_ordinary_depth_prefilling_without_a_gpu() {
 
 #[test]
 fn an_excavation_is_prefilled_at_1x_only_on_apple_graphics() {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let mut renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance,
+        None,
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: true, render_scale: 1.0, ..Default::default() },
     )).expect("noop renderer");
     renderer.profiling = true;
@@ -366,14 +356,11 @@ fn an_excavation_is_prefilled_at_1x_only_on_apple_graphics() {
 
 #[test]
 fn declared_transmap_ignores_slot_alpha() {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions {
             msaa: 1,
             shadow_size: 1024,
@@ -599,10 +586,16 @@ fn origin_lookup_keeps_float_equality_and_large_coordinates() {
 
 #[test]
 fn every_backend_form_of_the_scene_shader_validates() {
-    use wgpu::naga;
+    use naga;
     for (amd_vulkan, multisampled_shading) in [(false, false), (true, false), (false, true), (true, true)] {
         let src = arrays_as_textures(&crate::shaders::scene_shader_forms(false, amd_vulkan, multisampled_shading), array_path());
-        let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("AMD Vulkan {amd_vulkan}, multisampled shading {multisampled_shading}: {}", e.emit_to_string(&src)));
+        let module =
+            naga::front::wgsl::parse_str(&crate::shaders::with_heap(&src)).unwrap_or_else(|e| {
+                panic!(
+                    "AMD Vulkan {amd_vulkan}, multisampled shading {multisampled_shading}: {}",
+                    e.emit_to_string(&src)
+                )
+            });
         naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
             .validate(&module)
             .unwrap_or_else(|e| panic!("AMD Vulkan {amd_vulkan}, multisampled shading {multisampled_shading}: {e:?}"));
@@ -613,7 +606,7 @@ fn every_backend_form_of_the_scene_shader_validates() {
 /// Metal and Vulkan SPIR-V, and its uniform structs are laid out as the Rust side writes them.
 #[test]
 fn shaders_validate_and_match_the_uniforms() {
-    use wgpu::naga;
+    use naga;
     let modules = [
         ("scene", scene_shader_source(false)),
         ("scene opaque", scene_shader_source(false)),
@@ -637,7 +630,7 @@ fn shaders_validate_and_match_the_uniforms() {
         ("ray-traced reflections", rt::reflect_source()),
         ("texture means", include_str!("../rt_avg.wgsl").to_string()),
         ("rt texture coordinates", include_str!("../rt_uv.wgsl").to_string()),
-        ("temporal motion", format!("{}\n{}", scene_shader_source(false), include_str!("../temporal/motion.wgsl"))),
+        ("temporal motion", scene_shader_with(false, include_str!("../temporal/motion.wgsl")),),
     ];
     let sizes: &[(&str, usize)] = &[
         ("Enhanced", std::mem::size_of::<EnhancedUniform>()),
@@ -657,7 +650,7 @@ fn shaders_validate_and_match_the_uniforms() {
     ];
     let mut checked = std::collections::HashSet::new();
     for (name, src) in &modules {
-        let module = naga::front::wgsl::parse_str(src)
+        let module = naga::front::wgsl::parse_str(&crate::shaders::with_heap(src))
             .unwrap_or_else(|e| panic!("{name}: {}", e.emit_to_string(src)));
         let info = naga::valid::Validator::new(
             naga::valid::ValidationFlags::all(),
@@ -739,15 +732,16 @@ fn shaders_validate_and_match_the_uniforms() {
 /// (#617, #610, #2009).
 #[test]
 fn the_scene_shader_translates_to_glsl() {
-    use wgpu::naga;
-    use wgpu::naga::back::glsl;
-    for (basic, src) in [(false, scene_shader_source(true)), (true, lean_scene(scene_shader_source(true)))] {
-        let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
+    use naga;
+    use naga::back::glsl;
+    for (basic, src) in [
+        (false, scene_shader_source(true)),
+        (true, lean_scene(scene_shader_source(true))),
+    ] {
+        let module = naga::front::wgsl::parse_str(&crate::shaders::with_heap(&src)).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
         let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
             .validate(&module)
             .expect("validate");
-        let constants = [("ALPHA_TEST".into(), 0.0), ("TERRAIN_PAINT".into(), 1.0)]
-            .into_iter().collect();
         let versions = [
             glsl::Version::Embedded { version: 310, is_webgl: false },
             glsl::Version::Embedded { version: 320, is_webgl: false },
@@ -756,20 +750,16 @@ fn the_scene_shader_translates_to_glsl() {
         for version in versions {
             let options = glsl::Options { version, ..Default::default() };
             for entry in &module.entry_points {
-                // (as wgpu's OpenGL backend does it: the module cut down to the one entry point)
-                let (module, info) = naga::back::pipeline_constants::process_overrides(
-                    &module, &info, Some((entry.stage, &entry.name)), &constants,
+                // (as mX's OpenGL backend writes it: the heap lowered, one entry point)
+                let _ = (&options, &info);
+                let out = crate::shaders::glsl_through_mx(
+                    &src,
+                    entry.stage,
+                    &entry.name,
+                    &[("ALPHA_TEST", 0.0), ("TERRAIN_PAINT", 1.0)],
+                    version,
                 )
-                .expect("overrides");
-                let pipeline = glsl::PipelineOptions {
-                    shader_stage: entry.stage,
-                    entry_point: entry.name.clone(),
-                    multiview: None,
-                };
-                let mut out = String::new();
-                glsl::Writer::new(&mut out, &module, &info, &options, &pipeline, Default::default())
-                    .and_then(|mut w| w.write())
-                    .unwrap_or_else(|e| panic!("basic {basic} {version:?} {}: {e:?}", entry.name));
+                .unwrap_or_else(|e| panic!("basic {basic} {version:?} {}: {e}", entry.name));
                 assert!(!out.contains("invariant gl_FragCoord"), "basic {basic} {version:?} {}", entry.name);
                 assert_eq!(const_array_in_const_array(&out), None, "basic {basic} {version:?} {}", entry.name);
             }
@@ -811,10 +801,11 @@ fn const_array_in_const_array(glsl: &str) -> Option<String> {
 /// and GL 3.3, as to GLES 3.1 and GL 4.3.
 #[test]
 fn the_corona_shader_translates_to_glsl() {
-    use wgpu::naga;
-    use wgpu::naga::back::glsl;
+    use naga;
+    use naga::back::glsl;
     let src = corona_shader_source();
-    let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
+    let module = naga::front::wgsl::parse_str(&crate::shaders::with_heap(&src))
+        .unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
     let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
         .validate(&module)
         .expect("validate");
@@ -847,8 +838,8 @@ fn the_corona_shader_translates_to_glsl() {
 /// without), and nothing of it is a storage buffer where it must not be (#770, #316).
 #[test]
 fn the_scene_shader_reads_its_arrays_from_textures_without_vertex_storage() {
-    use wgpu::naga;
-    use wgpu::naga::back::glsl;
+    use naga;
+    use naga::back::glsl;
     for (path, versions) in [
         (ArrayPath::VertexTextures, [glsl::Version::Embedded { version: 310, is_webgl: false }, glsl::Version::Desktop(430)]),
         (ArrayPath::NoStorage, [glsl::Version::Embedded { version: 300, is_webgl: false }, glsl::Version::Desktop(330)]),
@@ -857,7 +848,7 @@ fn the_scene_shader_reads_its_arrays_from_textures_without_vertex_storage() {
         let src = scene_shader_for(true, path);
         assert!(!src.contains("models[") && !src.contains("inst_params[") && !src.contains("draw_list["));
         assert_eq!(src.contains("var<storage"), path == ArrayPath::VertexTextures, "{path:?}");
-        let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{path:?}: {}", e.emit_to_string(&src)));
+        let module = naga::front::wgsl::parse_str(&crate::shaders::with_heap(&src)).unwrap_or_else(|e| panic!("{path:?}: {}", e.emit_to_string(&src)));
         let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
             .validate(&module)
             .unwrap_or_else(|e| panic!("{path:?}: {e:?}"));
@@ -866,11 +857,10 @@ fn the_scene_shader_reads_its_arrays_from_textures_without_vertex_storage() {
         for version in versions {
             let options = glsl::Options { version, ..Default::default() };
             for entry in &module.entry_points {
-                let pipeline = glsl::PipelineOptions { shader_stage: entry.stage, entry_point: entry.name.clone(), multiview: None };
-                let mut out = String::new();
-                glsl::Writer::new(&mut out, &module, &info, &options, &pipeline, Default::default())
-                    .and_then(|mut w| w.write())
-                    .unwrap_or_else(|e| panic!("{path:?} {version:?} {}: {e:?}", entry.name));
+                let _ = (&options, &info);
+                let out =
+                    crate::shaders::glsl_through_mx(&src, entry.stage, &entry.name, &[], version)
+                        .unwrap_or_else(|e| panic!("{path:?} {version:?} {}: {e}", entry.name));
                 let vertex = entry.stage == naga::ShaderStage::Vertex;
                 if vertex || path.no_storage() {
                     assert!(!out.contains(" buffer "), "{path:?} {version:?} {}: a storage block", entry.name);
@@ -892,27 +882,55 @@ fn the_scene_shader_reads_its_arrays_from_textures_without_vertex_storage() {
 /// (#1133, #1154, #1162, #1176).
 #[test]
 fn the_scene_groups_fit_the_sixteen_texture_units_of_opengl() {
-    use wgpu::naga;
-    let textures = |e: &[wgpu::BindGroupLayoutEntry]| e.iter().filter(|e| matches!(e.ty, wgpu::BindingType::Texture { .. })).count();
+    use naga;
+    let textures = |e: &[crate::gpu::schema::BindGroupLayoutEntry]| {
+        e.iter()
+            .filter(|e| matches!(e.ty, crate::gpu::schema::BindingType::Texture { .. }))
+            .count()
+    };
     let material = textures(&material_layout_entries());
+    // (GL's limits are per stage - 16 texture units a stage on GLES 3 - and for the pipeline
+    // together (32); mX's GL gives units to what a pipeline's stages read)
+    let per_stage = |e: &[crate::gpu::schema::BindGroupLayoutEntry],
+                     stage: crate::gpu::schema::ShaderStages| {
+        e.iter()
+            .filter(|e| {
+                matches!(e.ty, crate::gpu::schema::BindingType::Texture { .. })
+                    && e.visibility.contains(stage)
+            })
+            .count()
+    };
     for path in [ArrayPath::Storage, ArrayPath::VertexTextures, ArrayPath::NoStorage] {
         let sixteen = path != ArrayPath::Storage;
-        let n = textures(&camera_layout_entries(path, sixteen)) + material;
-        assert!(n <= 16, "{path:?}: {n} textures");
+        let all = [
+            camera_layout_entries(path, sixteen),
+            material_layout_entries(),
+        ]
+        .concat();
+        let (v, f) = (
+            per_stage(&all, crate::gpu::schema::ShaderStages::VERTEX),
+            per_stage(&all, crate::gpu::schema::ShaderStages::FRAGMENT),
+        );
+        assert!(
+            v <= 16 && f <= 16 && textures(&all) <= 32,
+            "{path:?}: {v} vertex, {f} fragment textures"
+        );
+        assert!(
+            crate::device_selection::lamps_fit((16, 16, 32)) || path != ArrayPath::LightTextures
+        );
     }
     let lamps = textures(&camera_layout_entries(ArrayPath::LightTextures, true)) + material;
     assert_eq!(lamps, 18);
-    let sixteen = wgpu::DownlevelLimits { max_sampled_textures_per_pipeline_layout: 16, ..Default::default() };
-    let angle = wgpu::DownlevelLimits { max_sampled_textures_per_pipeline_layout: 32, ..Default::default() };
-    let gles = wgpu::Limits::downlevel_webgl2_defaults();
-    assert!(!crate::device_selection::lamps_fit(&sixteen, &gles));
-    assert!(crate::device_selection::lamps_fit(&angle, &gles));
+    // (texture units: vertex stage, fragment stage, the pipeline together - GLES 3's 16 each
+    // against ANGLE's 16 / 16 / 32)
+    assert!(!crate::device_selection::lamps_fit((16, 16, 16)));
+    assert!(crate::device_selection::lamps_fit((16, 16, 32)));
     // (and nothing is left out where storage buffers carry the arrays)
     assert_eq!(textures(&camera_layout_entries(ArrayPath::Storage, false)) + material, 16);
     // the entry points that read a texture left out are the enhanced path's, the
     // probe's, the puddles' and the reflection pass's - none made there
     let left_out = |src: &str| -> Vec<String> {
-        let module = naga::front::wgsl::parse_str(src).unwrap();
+        let module = naga::front::wgsl::parse_str(&crate::shaders::with_heap(src)).unwrap();
         let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module).unwrap();
         let mut out = Vec::new();
         for (i, ep) in module.entry_points.iter().enumerate() {
@@ -1117,9 +1135,11 @@ fn opaque_and_transmapped_materials_ignore_dynamic_alpha() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn transparent_led_layer_preserves_the_glow_mask() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance,
+        None,
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -1214,29 +1234,29 @@ fn display_behind_a_pane_keeps_its_pixel_contrast() {
 
 #[test]
 fn a_texture_the_card_refuses_is_drawn_plain_without_cutting_the_texture_budget() {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance,
+        None,
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, render_scale: 1.0, ..Default::default() },
     )).expect("noop renderer");
     let _ = renderer.take_out_of_memory();
     let too_big = renderer.device.limits().max_texture_dimension_2d + 1;
-    let desc = wgpu::TextureDescriptor {
+    let desc = mx::TextureDescriptor {
         label: None,
-        size: wgpu::Extent3d { width: too_big, height: 4, depth_or_array_layers: 1 },
+        size: mx::Extent3d { width: too_big, height: 4, depth_or_array_layers: 1 },
         mip_level_count: 1,
         sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        dimension: mx::TextureDimension::D2,
+        format: mx::TextureFormat::Rgba8UnormSrgb,
+        usage: mx::TextureUsages::TEXTURE_BINDING | mx::TextureUsages::COPY_DST,
         view_formats: &[],
     };
-    let scope = renderer.device.push_error_scope(wgpu::ErrorFilter::Validation);
+    let scope = renderer.watch_errors();
     assert!(crate::resources::try_create_texture(&renderer.device, &desc).is_none());
-    let empty = wgpu::TextureDescriptor { size: wgpu::Extent3d { width: 1, height: 0, depth_or_array_layers: 1 }, ..desc.clone() };
+    let empty = mx::TextureDescriptor {
+        size: mx::Extent3d { width: 1, height: 0, depth_or_array_layers: 1 }, ..desc.clone() };
     assert!(crate::resources::try_create_texture(&renderer.device, &empty).is_none());
     // the stand-in is a valid texture: a material made with it is no device error
     let mut scene = renderer.new_scene();
@@ -1245,7 +1265,7 @@ fn a_texture_the_card_refuses_is_drawn_plain_without_cutting_the_texture_budget(
     scene.textures.push(t);
     let id = scene.textures.len() - 1;
     let _ = renderer.add_material(&mut scene, Some(id), AlphaMode::Opaque, [1.0; 4], true);
-    assert!(pollster::block_on(scope.pop()).is_none(), "nothing invalid reached the device");
+    assert!(scope.pop().is_none(), "nothing invalid reached the device");
     assert!(!renderer.take_out_of_memory(), "a refused texture is no shortage of graphics memory");
 }
 
@@ -1263,21 +1283,27 @@ fn the_lamps_light_the_scene_from_textures_where_storage_buffers_carry_nothing()
     assert_eq!(lamps.matches("lights_at(").count(), none.matches("lights_at(").count());
     assert_eq!(lamps.matches("grid_at(").count(), none.matches("grid_at(").count());
     let entries = camera_layout_entries(ArrayPath::LightTextures, true);
-    for (binding, sample_type) in [(3, wgpu::TextureSampleType::Float { filterable: false }), (4, wgpu::TextureSampleType::Uint)] {
-        let e = entries.iter().find(|e| e.binding == binding).expect("lights binding");
-        assert_eq!(e.visibility, wgpu::ShaderStages::FRAGMENT);
-        assert!(matches!(e.ty, wgpu::BindingType::Texture { sample_type: t, .. } if t == sample_type));
+    for (binding, sample_type) in [(3, mx::TextureSampleType::Float { filterable: false }),
+        (4, mx::TextureSampleType::Uint),
+    ] {
+        let e = entries
+            .iter()
+            .find(|e| e.binding == binding)
+            .expect("lights binding");
+        assert_eq!(e.visibility, crate::gpu::schema::ShaderStages::FRAGMENT);
+        assert!(
+            matches!(e.ty, crate::gpu::schema::BindingType::Texture { sample_type: t, .. } if t == sample_type));
     }
 }
 
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_lamp_behind_a_wall_does_not_dazzle_and_one_in_view_still_does() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     ))
     .expect("test renderer");
@@ -1311,12 +1337,11 @@ fn a_lamp_behind_a_wall_does_not_dazzle_and_one_in_view_still_does() {
 
 #[test]
 fn a_mesh_page_the_card_refuses_is_made_mesh_by_mesh_or_left_out() {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance,
+        None,
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, render_scale: 1.0, ..Default::default() },
     )).expect("noop renderer");
     let mesh = |n: usize| {
@@ -1326,7 +1351,7 @@ fn a_mesh_page_the_card_refuses_is_made_mesh_by_mesh_or_left_out() {
     };
     let _ = renderer.take_out_of_memory();
     let mut scene = renderer.new_scene();
-    let scope = renderer.device.push_error_scope(wgpu::ErrorFilter::Validation);
+    let scope = renderer.watch_errors();
     let one = mesh_page_bytes(&mesh(300)).0;
     crate::resources::REFUSE_MESH_PAGES_OVER.with(|r| r.set(one));
     let alone = renderer.add_mesh(&mut scene, &mesh(300));
@@ -1350,7 +1375,7 @@ fn a_mesh_page_the_card_refuses_is_made_mesh_by_mesh_or_left_out() {
         renderer.add_instance(&mut scene, id, DVec3::ZERO, Mat4::IDENTITY, vec![mat]);
         renderer.free_mesh(&mut scene, id);
     }
-    assert!(pollster::block_on(scope.pop()).is_none(), "nothing invalid reached the device");
+    assert!(scope.pop().is_none(), "nothing invalid reached the device");
     assert!(!renderer.take_out_of_memory(), "a refused buffer is no shortage of graphics memory");
 }
 
@@ -1358,9 +1383,11 @@ fn a_mesh_page_the_card_refuses_is_made_mesh_by_mesh_or_left_out() {
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_mesh_left_out_for_want_of_a_page_draws_nothing_and_the_rest_of_the_picture_is_drawn() {
     let camera = Camera { position: DVec3::new(0.0, 0.0, 5.0), yaw: 0.0, pitch: -90.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 100.0 };
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance,
+        None,
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, fxaa: false, shadow_size: 1024, render_scale: 1.0, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -1381,9 +1408,11 @@ fn a_mesh_left_out_for_want_of_a_page_draws_nothing_and_the_rest_of_the_picture_
     let drawn = renderer.add_mesh(&mut scene, &quad(0.0));
     renderer.add_instance(&mut scene, drawn, DVec3::ZERO, Mat4::IDENTITY, vec![red]);
     let lighting = Lighting { fog_density: 0.0, ..Default::default() };
-    let scope = renderer.device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let image = renderer.render_to_image(&mut scene, 64, 64, &camera, &lighting).unwrap();
-    assert!(pollster::block_on(scope.pop()).is_none(), "the frame reached the device whole");
+    let scope = renderer.watch_errors();
+    let image = renderer
+        .render_to_image(&mut scene, 64, 64, &camera, &lighting)
+        .unwrap();
+    assert!(scope.pop().is_none(), "the frame reached the device whole");
     let centre = (32 * 64 + 32) * 4;
     assert!(image[centre] > 2 * image[centre + 1].max(image[centre + 2]).max(8), "the red quad is drawn, the left out one is not: {:?}", &image[centre..centre + 4]);
 }
@@ -1392,9 +1421,11 @@ fn a_mesh_left_out_for_want_of_a_page_draws_nothing_and_the_rest_of_the_picture_
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn the_reflection_strength_scales_what_an_envmapped_surface_mirrors() {
     let camera = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 100.0 };
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance,
+        None,
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -1430,9 +1461,11 @@ fn the_reflection_strength_scales_what_an_envmapped_surface_mirrors() {
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn envmapped_paint_with_normals_off_its_faces_mirrors_no_more_than_with_sound_ones() {
     let camera = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 100.0 };
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance,
+        None,
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -1461,37 +1494,4 @@ fn envmapped_paint_with_normals_off_its_faces_mirrors_no_more_than_with_sound_on
     let off = mirrored(Vec3::new(1.0, -0.15, 0.0));
     assert!(sound >= 4, "the paint mirrors nothing to compare with: {sound}");
     assert!(off <= 2 * sound + 6, "normals along the face mirrored {off} where sound ones mirror {sound}");
-}
-
-#[test]
-fn the_rain_and_snow_shaders_translate_to_glsl_with_a_float_roof_map() {
-    use wgpu::naga;
-    use wgpu::naga::back::glsl;
-    let glsl_of = |src: &str| -> Result<(), String> {
-        let module = naga::front::wgsl::parse_str(src).map_err(|e| e.emit_to_string(src))?;
-        let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
-            .validate(&module)
-            .map_err(|e| format!("{e:?}"))?;
-        let (module, info) =
-            naga::back::pipeline_constants::process_overrides(&module, &info, None, &Default::default()).map_err(|e| format!("{e:?}"))?;
-        for version in [glsl::Version::Embedded { version: 310, is_webgl: false }, glsl::Version::Desktop(430)] {
-            let options = glsl::Options { version, ..Default::default() };
-            for entry in &module.entry_points {
-                let pipeline = glsl::PipelineOptions { shader_stage: entry.stage, entry_point: entry.name.clone(), multiview: None };
-                let mut out = String::new();
-                glsl::Writer::new(&mut out, &module, &info, &options, &pipeline, Default::default())
-                    .and_then(|mut w| w.write())
-                    .map_err(|e| format!("{version:?} {}: {e:?}", entry.name))?;
-            }
-        }
-        Ok(())
-    };
-    let depth = |src: String| {
-        src.replace("var roof_map: texture_2d<f32>;", "var roof_map: texture_depth_2d;")
-            .replace("return textureLoad(roof_map, t, 0).x; }", "return textureLoad(roof_map, t, 0); }")
-    };
-    for src in [rain_shader_source(), snow_shader_source(), lean_rain(rain_shader_source())].map(depth) {
-        assert!(glsl_of(&src).is_err_and(|e| e.contains("epth")), "{:?}", glsl_of(&src));
-        glsl_of(&roof_as_float(src)).unwrap();
-    }
 }

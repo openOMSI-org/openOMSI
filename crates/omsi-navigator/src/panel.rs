@@ -49,7 +49,7 @@ pub(super) struct PanelLook {
     pub no_nav_ui: bool,
     pub nav_center: bool,
     pub show_history: bool,
-    pub clear: wgpu::Color,
+    pub clear: mx::Color,
 }
 
 impl PanelLook {
@@ -71,7 +71,7 @@ impl PanelLook {
             no_nav_ui: false,
             nav_center: false,
             show_history: false,
-            clear: wgpu::Color::TRANSPARENT,
+            clear: mx::Color::TRANSPARENT,
         }
     }
 
@@ -79,12 +79,12 @@ impl PanelLook {
     /// rather than cards that overlap.
     pub(super) fn screen(size: (u32, u32), points_high: f32) -> PanelLook {
         let scale = (size.0 as f32 / PANEL_POINTS_WIDE).min(size.1 as f32 / points_high);
-        PanelLook { scale, radius: 0.0, fade: 1.0, backdrop: 1.0, grip: false, plugins: false, map_scale: 1.0, fixed_north: false, no_nav_ui: false, nav_center: false, show_history: false, clear: wgpu::Color::BLACK }
+        PanelLook { scale, radius: 0.0, fade: 1.0, backdrop: 1.0, grip: false, plugins: false, map_scale: 1.0, fixed_north: false, no_nav_ui: false, nav_center: false, show_history: false, clear: mx::Color::BLACK, }
     }
 
     pub(super) fn remote(size: (u32, u32)) -> PanelLook {
         let mut look = Self::screen(size, PANEL_POINTS_WIDE / 1.25);
-        look.clear = wgpu::Color::TRANSPARENT;
+        look.clear = mx::Color::TRANSPARENT;
         look
     }
 }
@@ -145,7 +145,7 @@ mod history_tests {
 impl Navigator {
     pub(super) fn ensure_gpu(&mut self, renderer: &Renderer) {
         if self.gpu.is_none() {
-            self.gpu = Some(Gpu::with_depth(&renderer.device, renderer.format(), map_samples(renderer.format()), self.atlas.size));
+            self.gpu = Some(Gpu::with_depth(&renderer.device, renderer.format(), map_samples(renderer, renderer.format()), self.atlas.size));
         }
     }
 
@@ -167,7 +167,7 @@ impl Navigator {
 
     /// Offscreen views keep their own attachments and submit before the HUD rewrites buffers.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn draw(&mut self, renderer: &Renderer, target: &wgpu::TextureView, size: (u32, u32), map_h: f32, look: &PanelLook, beside: Option<&mut omsi_ui::Attachments>, f: &NavFrame) {
+    pub(super) fn draw(&mut self, renderer: &Renderer, target: &mx::TextureView, size: (u32, u32), map_h: f32, look: &PanelLook, beside: Option<&mut omsi_ui::Attachments>, f: &NavFrame) {
         let (pw, ph) = (size.0 as f32, size.1 as f32);
         let remote = self.remote_pic.drawing;
         let s = look.scale;
@@ -444,7 +444,7 @@ impl Navigator {
             Draw { buffer: 16, range: 0..icon_n, layer: 0, texture: icon_tex },
             Draw { buffer: 2, range: n_ui_start..all.len() as u32, layer: 0, texture: 0 },
         ]);
-        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
+        let mut enc = device.create_command_encoder(Some("navigator"));
         let offscreen = beside.is_some();
         match beside {
             Some(attachments) => gpu.render_with(
@@ -477,7 +477,7 @@ impl Navigator {
 
     /// The card alone, under a plugin's panel that fills the frame and has no map: nothing of
     /// the map is built or drawn.
-    fn draw_card_alone(&mut self, renderer: &Renderer, target: &wgpu::TextureView, size: (u32, u32), pal: &Palette, look: &PanelLook) {
+    fn draw_card_alone(&mut self, renderer: &Renderer, target: &mx::TextureView, size: (u32, u32), pal: &Palette, look: &PanelLook) {
         let (pw, ph) = (size.0 as f32, size.1 as f32);
         let radius = look.radius;
         let mut bg = Painter::new();
@@ -495,7 +495,7 @@ impl Navigator {
             l.opacity *= look.fade;
         }
         let draws = [Draw { buffer: 2, range: 0..n_bg, layer: 1, texture: 0 }, Draw { buffer: 2, range: n_bg..all.len() as u32, layer: 0, texture: 0 }];
-        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator") });
+        let mut enc = device.create_command_encoder(Some("navigator"));
         gpu.render(device, queue, &mut enc, target, size, Some(look.clear), &layers, &draws);
         renderer.submit_with_frame(enc.finish());
     }

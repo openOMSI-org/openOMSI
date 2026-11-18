@@ -523,8 +523,10 @@ pub fn placed_at(corner: &str) -> Option<[f32; 2]> {
 }
 
 /// The GPS is a separate render texture composed after the scene's post AA.
-fn map_samples(format: wgpu::TextureFormat) -> u32 {
-    if format.guaranteed_format_features(wgpu::Features::empty()).flags.sample_count_supported(4) { 4 } else { 1 }
+fn map_samples(renderer: &Renderer, format: mx::TextureFormat) -> u32 {
+    if renderer
+        .adapter()
+        .is_some_and(|a| a.supports_msaa(format, 4)) { 4 } else { 1 }
 }
 
 impl Navigator {

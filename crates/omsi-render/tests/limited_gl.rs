@@ -4,14 +4,11 @@
 fn texture_unit_fallback_builds_and_draws_without_enhanced() {
     unsafe { std::env::set_var("OMSI_GPU_ARRAYS", "nostorage") };
     unsafe { std::env::set_var("OMSI_GL_TEXTURE_UNITS", "1") };
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let mut renderer = pollster::block_on(omsi_render::Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         omsi_render::RenderOptions {
             msaa: 1,
             shadow_size: 256,
@@ -30,9 +27,7 @@ fn texture_unit_fallback_builds_and_draws_without_enhanced() {
         near: 0.1,
         far: 1000.0,
     };
-    let scope = renderer
-        .device
-        .push_error_scope(wgpu::ErrorFilter::Validation);
+    let scope = renderer.watch_errors();
     renderer
         .render_to_image(
             &mut scene,
@@ -42,5 +37,5 @@ fn texture_unit_fallback_builds_and_draws_without_enhanced() {
             &omsi_render::Lighting::default(),
         )
         .expect("first frame on the fallback layout");
-    assert!(pollster::block_on(scope.pop()).is_none());
+    assert!(scope.pop().is_none());
 }

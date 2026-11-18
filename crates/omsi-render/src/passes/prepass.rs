@@ -5,7 +5,7 @@ use super::*;
 
 impl Renderer {
     // --- depth prepass + ambient occlusion (single-sampled, camera projection)
-    pub(crate) fn encode_depth_prepass(&self, prepass_encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, prepass_batches: &[Batch], timers: &mut PassTimers) {
+    pub(crate) fn encode_depth_prepass(&self, prepass_encoder: &mut mx::CommandEncoder, scene: &Scene, f: &FrameCtx, prepass_batches: &[Batch], timers: &mut PassTimers) {
         let (camera, aspect, width, height, ao_on) = (f.camera, f.aspect, f.width, f.height, f.ao_on);
         if f.prepass_on {
             let proj = f.projection.unwrap_or_else(|| {
@@ -26,7 +26,8 @@ impl Renderer {
                 history: [if f.lead_view { self.tone.bounce_reproj.1 } else { 0.0 }, 0.0, 0.0, 0.0],
             };
             self.queue
-                .write_buffer(&self.ao_buf, 0, bytemuck::bytes_of(&u));
+                .write_buffer(&self.ao_buf, 0, bytemuck::bytes_of(&u))
+                .expect("mX: a queue write");
             let ao = self.targets.ao.as_ref().unwrap();
             // temporal upscaling: the same depth, and each pixel's motion written beside it
             let motion = if f.temporal_frame {
@@ -34,32 +35,32 @@ impl Renderer {
             } else {
                 None
             };
-            let motion_target = [motion.map(|(_, t, _)| wgpu::RenderPassColorAttachment {
+            let motion_target = [motion.map(|(_, t, _)| mx::RenderPassColorAttachment {
                 view: &t.motion_view,
-                depth_slice: None,
                 resolve_target: None,
-                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store },
+                ops: mx::Operations {
+                    load: mx::LoadOp::Clear(mx::Color::TRANSPARENT),
+                    store: mx::StoreOp::Store, },
             })];
             {
-                let mut pass = prepass_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                let mut pass = prepass_encoder.begin_render_pass(&mx::RenderPassDescriptor {
                     label: Some("depth prepass"),
                     color_attachments: if motion.is_some() { &motion_target[..] } else { &[] },
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    depth_stencil_attachment: Some(mx::RenderPassDepthStencilAttachment {
                         view: &ao.depth_view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(0.0),
-                            store: wgpu::StoreOp::Store,
+                        depth_ops: Some(mx::Operations {
+                            load: mx::LoadOp::Clear(0.0),
+                            store: mx::StoreOp::Store,
                         }),
                         stencil_ops: None,
                     }),
                     timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "depth prepass"),
                     occlusion_query_set: None,
-                    multiview_mask: None,
                 });
-                pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
+                pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
                 if let Some((p, _, bg)) = motion {
                     // (the sky's motion first, where nothing covers it)
-                    pass.set_bind_group(3, bg, &[]);
+                    pass.set_bind_group(3, bg);
                     pass.set_pipeline(&p.sky);
                     pass.draw(0..3, 0..1);
                 }
@@ -75,24 +76,22 @@ impl Renderer {
                 let Some(pipe) = pipe.as_ref().filter(|_| ao_on) else {
                     break;
                 };
-                let mut pass = prepass_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                let mut pass = prepass_encoder.begin_render_pass(&mx::RenderPassDescriptor {
                     label: Some("ssao"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    color_attachments: &[Some(mx::RenderPassColorAttachment {
                         view: target,
-                        depth_slice: None,
                         resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
-                            store: wgpu::StoreOp::Store,
+                        ops: mx::Operations {
+                            load: mx::LoadOp::Clear(mx::Color::WHITE),
+                            store: mx::StoreOp::Store,
                         },
                     })],
                     depth_stencil_attachment: None,
                     timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, pass_label),
                     occlusion_query_set: None,
-                    multiview_mask: None,
                 });
                 pass.set_pipeline(pipe);
-                pass.set_bind_group(0, bg, &[]);
+                pass.set_bind_group(0, bg);
                 pass.draw(0..3, 0..1);
             }
         }
@@ -100,7 +99,7 @@ impl Renderer {
 
     // --- the enhanced sky cube: a slice of a face a frame (all six faces the first time and
     // for a new sky), drawn in the window's frame only (see `SkySched`)
-    pub(crate) fn encode_sky_cube(&mut self, prepass_encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, probe_redraw: bool, timers: &mut PassTimers) {
+    pub(crate) fn encode_sky_cube(&mut self, prepass_encoder: &mut mx::CommandEncoder, scene: &Scene, f: &FrameCtx, probe_redraw: bool, timers: &mut PassTimers) {
         let (enhanced, lead_view) = (f.enhanced, f.lead_view);
         if !(enhanced && (lead_view || probe_redraw)) {
             return;
@@ -123,7 +122,7 @@ impl Renderer {
                     prepass_encoder.copy_texture_to_texture(
                         staging.as_image_copy(),
                         probe.cube_tex.as_image_copy(),
-                        wgpu::Extent3d { width: SKY_CUBE_SIZE, height: SKY_CUBE_SIZE, depth_or_array_layers: 6 },
+                        mx::Extent3d { width: SKY_CUBE_SIZE, height: SKY_CUBE_SIZE, depth_or_array_layers: 6 },
                     );
                 }
             }
@@ -145,26 +144,34 @@ impl Renderer {
         }
         probe.cube_filled = true;
         if draws.iter().any(|d| d.4) && probe.sched.staging.is_none() {
-            let tex = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("sky cube, next eye"),
-                size: wgpu::Extent3d { width: SKY_CUBE_SIZE, height: SKY_CUBE_SIZE, depth_or_array_layers: 6 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: probe.cube_tex.format(),
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[],
-            });
+            let tex = self
+                .device
+                .create_texture(&mx::TextureDescriptor {
+                    label: Some("sky cube, next eye"),
+                    size: mx::Extent3d {
+                        width: SKY_CUBE_SIZE,
+                        height: SKY_CUBE_SIZE,
+                        depth_or_array_layers: 6,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: mx::TextureDimension::D2,
+                    format: probe.cube_tex.format(),
+                    usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                })
+                .expect("mX: a texture");
             let faces = (0..6)
                 .map(|f| {
-                    tex.create_view(&wgpu::TextureViewDescriptor {
+                    tex.create_view(&mx::TextureViewDescriptor {
                         label: Some("sky cube face, next eye"),
-                        dimension: Some(wgpu::TextureViewDimension::D2),
+                        dimension: Some(mx::TextureViewDimension::D2),
                         base_array_layer: f,
                         array_layer_count: Some(1),
                         mip_level_count: Some(1),
                         ..Default::default()
                     })
+                    .expect("mX: a texture view")
                 })
                 .collect();
             probe.sched.staging = Some((tex, faces));
@@ -176,60 +183,57 @@ impl Renderer {
                 (true, Some((_, faces))) => &faces[f as usize],
                 _ => &probe.cube_faces[f as usize],
             };
-            let mut pass = prepass_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = prepass_encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("sky cube"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
                     view,
-                    depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations {
+                    ops: mx::Operations {
                         // (a slice keeps the rest of its face)
-                        load: if history > 0.0 || !whole { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(wgpu::Color::BLACK) },
-                        store: wgpu::StoreOp::Store,
+                        load: if history > 0.0 || !whole { mx::LoadOp::Load } else { mx::LoadOp::Clear(mx::Color::BLACK) },
+                        store: mx::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: if single { pass_timer(timers.set.as_ref(), &mut timers.timed, "sky cube") } else { None },
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
             pass.set_pipeline(&probe.cube_pipeline);
-            pass.set_blend_constant(wgpu::Color { r: history, g: history, b: history, a: history });
+            pass.set_blend_constant(mx::Color { r: history, g: history, b: history, a: history });
             if !whole {
                 pass.set_scissor_rect(0, y0, SKY_CUBE_SIZE, rows);
             }
-            pass.set_bind_group(0, &probe.cube_bind_groups[(f * SKY_CUBE_ROUNDS + round) as usize], &[]);
-            pass.set_bind_group(1, sky_bg, &[]);
+            pass.set_bind_group(0, &probe.cube_bind_groups[(f * SKY_CUBE_ROUNDS + round) as usize], );
+            pass.set_bind_group(1, sky_bg);
             pass.draw(0..3, 0..1);
         }
     }
 
     // --- the reflection probe of the enhanced path: the sky into the six faces, then
     // each blurrier level from the sharper ones (three faces a pass)
-    pub(crate) fn encode_probe(&self, prepass_encoder: &mut wgpu::CommandEncoder, scene: &Scene, probe_redraw: bool, timers: &mut PassTimers) {
+    pub(crate) fn encode_probe(&self, prepass_encoder: &mut mx::CommandEncoder, scene: &Scene, probe_redraw: bool, timers: &mut PassTimers) {
         if probe_redraw {
             if let (Some(probe), Some(sky_bg)) =
                 (self.tone.probe.as_ref(), scene.sky_bind_group.as_ref())
             {
                 for (m, faces) in probe.faces.iter().enumerate() {
                     for (half, bg) in probe.bind_groups[m].iter().enumerate() {
-                        let attachments: Vec<Option<wgpu::RenderPassColorAttachment>> = faces
+                        let attachments: Vec<Option<mx::RenderPassColorAttachment>> = faces
                             [half * 3..half * 3 + 3]
                             .iter()
                             .map(|v| {
-                                Some(wgpu::RenderPassColorAttachment {
+                                Some(mx::RenderPassColorAttachment {
                                     view: v,
-                                    depth_slice: None,
                                     resolve_target: None,
-                                    ops: wgpu::Operations {
-                                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                                        store: wgpu::StoreOp::Store,
+                                    ops: mx::Operations {
+                                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                                        store: mx::StoreOp::Store,
                                     },
                                 })
                             })
                             .collect();
                         let mut pass =
-                            prepass_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            prepass_encoder.begin_render_pass(&mx::RenderPassDescriptor {
                                 label: Some("reflection probe"),
                                 color_attachments: &attachments,
                                 depth_stencil_attachment: None,
@@ -239,15 +243,14 @@ impl Renderer {
                                     None
                                 },
                                 occlusion_query_set: None,
-                                multiview_mask: None,
                             });
                         pass.set_pipeline(if m == 0 {
                             &probe.sky_pipeline
                         } else {
                             &probe.filter_pipeline
                         });
-                        pass.set_bind_group(0, bg, &[]);
-                        pass.set_bind_group(1, sky_bg, &[]);
+                        pass.set_bind_group(0, bg);
+                        pass.set_bind_group(1, sky_bg);
                         pass.draw(0..3, 0..1);
                     }
                 }

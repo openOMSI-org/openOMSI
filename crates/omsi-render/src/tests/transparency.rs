@@ -9,13 +9,13 @@ fn behind_an_invisible_pane(second: impl Fn(&mut Renderer, &mut Scene) -> Materi
 }
 
 fn invisible_pane_scene(second: impl Fn(&mut Renderer, &mut Scene) -> MaterialId, ordered: bool, split: bool, second_in_front: bool) -> Vec<([u8; 3], String)> {
-    let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter = mx::Instance::new();
     let mut out = Vec::new();
     for (msaa, ssao) in [(1, false), (4, false), (1, true), (4, true)] {
         let mut renderer = pollster::block_on(Renderer::new_with(
             &adapter,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             RenderOptions {
                 msaa,
                 ssao,

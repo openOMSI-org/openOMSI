@@ -165,7 +165,7 @@ pub(crate) fn lamp_tile_key(sums: &LampSigs, k: usize, view_proj: Mat4) -> u64 {
 impl Renderer {
     /// The near cascade (with the close one beside it in the atlas) and the far cascade,
     /// each when it is redrawn this frame.
-    pub(crate) fn encode_shadow_maps(&self, shadow_encoder: &mut wgpu::CommandEncoder, scene: &Scene, sh: &ShadowPlan, shadow_batches: &[Vec<Batch>; SHADOW_LISTS], timers: &mut PassTimers) {
+    pub(crate) fn encode_shadow_maps(&self, shadow_encoder: &mut mx::CommandEncoder, scene: &Scene, sh: &ShadowPlan, shadow_batches: &[Vec<Batch>; SHADOW_LISTS], timers: &mut PassTimers) {
         let (draw_shadows, redraw_near, redraw_far) = (sh.draw_shadows, sh.redraw_near, sh.redraw_far);
         for cascade in [0usize, 1] {
             if !draw_shadows || (cascade == 1 && !redraw_far) {
@@ -179,14 +179,14 @@ impl Renderer {
             let keep_near = cascade == 0 && !redraw_near;
             // (the far map keeps the street lamps' tiles under it when they are kept)
             let keep_lamps = cascade == 1 && self.shadows.lamp_tiles.get().drawn.iter().any(|d| d.is_some());
-            let mut pass = shadow_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = shadow_encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("shadow"),
                 color_attachments: &[],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                depth_stencil_attachment: Some(mx::RenderPassDepthStencilAttachment {
                     view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: if keep_near || keep_lamps { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(1.0) },
-                        store: wgpu::StoreOp::Store,
+                    depth_ops: Some(mx::Operations {
+                        load: if keep_near || keep_lamps { mx::LoadOp::Load } else { mx::LoadOp::Clear(1.0) },
+                        store: mx::StoreOp::Store,
                     }),
                     stencil_ops: None,
                 }),
@@ -200,9 +200,8 @@ impl Renderer {
                     },
                 ),
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
-            pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap(), &[]);
+            pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap());
             if cascade == 0 {
                 // the atlas: near cascade on the left half, close cascade on the right
                 let sz = self.options.shadow_size as f32;
@@ -216,7 +215,7 @@ impl Renderer {
                     // (the near half is last frame's: only the close part is cleared)
                     pass.set_pipeline(&self.shadows.shadow_clear_pipeline);
                     pass.draw(0..3, 0..1);
-                    pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap(), &[]);
+                    pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap());
                 }
                 encode_batches(&mut pass, scene, &shadow_batches[2], |pipe| {
                     &self.shadows.shadow_pipelines[4 + pipe as usize]
@@ -227,7 +226,7 @@ impl Renderer {
                 if keep_lamps {
                     pass.set_pipeline(&self.shadows.shadow_clear_pipeline);
                     pass.draw(0..3, 0..1);
-                    pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap(), &[]);
+                    pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap());
                 }
                 encode_batches(&mut pass, scene, &shadow_batches[cascade], |pipe| {
                     &self.shadows.shadow_pipelines[cascade * 2 + pipe as usize]
@@ -238,7 +237,7 @@ impl Renderer {
 
     // the lamps' maps: tiles under the far map (`LampAtlas`), each cleared and drawn when
     // what it shows has changed (see `LampTiles`)
-    pub(crate) fn encode_lamp_shadows(&self, shadow_encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, shadow_batches: &[Vec<Batch>; SHADOW_LISTS], timers: &mut PassTimers) {
+    pub(crate) fn encode_lamp_shadows(&self, shadow_encoder: &mut mx::CommandEncoder, scene: &Scene, f: &FrameCtx, shadow_batches: &[Vec<Batch>; SHADOW_LISTS], timers: &mut PassTimers) {
         let lamp_shadows = &f.lamp_shadows;
         // (the frames that draw the lamps' maps keep the record: a mirror's has none)
         if !f.with_overlays || f.projection.is_some() {
@@ -272,17 +271,18 @@ impl Renderer {
             *self.counts.borrow_mut().entry("lamp shadow tiles drawn").or_default() += redraw.iter().filter(|r| **r).count() as f64;
         }
         if redraw.iter().any(|r| *r) {
-            let mut pass = shadow_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = shadow_encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("lamp shadows"),
                 color_attachments: &[],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                depth_stencil_attachment: Some(mx::RenderPassDepthStencilAttachment {
                     view: &self.shadows.shadow_view_far,
-                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }),
+                    depth_ops: Some(mx::Operations {
+                        load: mx::LoadOp::Load,
+                        store: mx::StoreOp::Store, }),
                     stencil_ops: None,
                 }),
                 timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "lamp shadows"),
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
             let atlas = self.shadows.lamp_atlas;
             let tile = atlas.tile as f32;
@@ -291,7 +291,7 @@ impl Renderer {
                 pass.set_viewport(x as f32, y as f32, tile, tile, 0.0, 1.0);
                 pass.set_pipeline(&self.shadows.shadow_clear_pipeline);
                 pass.draw(0..3, 0..1);
-                pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap(), &[]);
+                pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap());
                 encode_batches(&mut pass, scene, &shadow_batches[3 + k], |pipe| {
                     &self.shadows.shadow_pipelines[6 + pipe as usize]
                 });

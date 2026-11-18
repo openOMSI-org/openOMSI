@@ -316,7 +316,7 @@ mod tests {
     #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
     fn gpu_renders_each_panel_and_composites_hud_with_msaa() {
         use crate::{AlphaMode, Lighting, MaterialExtra, MeshData, RenderOptions, Renderer};
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance = mx::Instance::new();
         let cam = Camera {
             position: DVec3::ZERO,
             yaw: 0.0,
@@ -329,7 +329,7 @@ mod tests {
             let mut renderer = pollster::block_on(Renderer::new_with(
                 &instance,
                 None,
-                Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+                Some(mx::TextureFormat::Rgba8UnormSrgb),
                 RenderOptions {
                     msaa,
                     ssao: true,
@@ -450,7 +450,7 @@ mod tests {
                 // the three panels reuse the same scratch texture dimensions.
                 let behind = renderer.targets.glass_picture.as_ref().unwrap().texture();
                 let data = renderer
-                    .read_texture(behind, wgpu::TextureAspect::All)
+                    .read_texture(&behind, mx::TextureAspect::All)
                     .unwrap();
                 let at = ((behind.height() / 2 * behind.width() + behind.width() / 2)
                     * if enhanced { 8 } else { 4 }) as usize;

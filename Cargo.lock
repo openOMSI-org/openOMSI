@@ -149,15 +149,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "android_system_properties"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae221649c9976a6f6c56ae1facf410f3ddb33cc661c4b7b61020a912d4237fbc"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "annotate-snippets"
 version = "0.12.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -510,15 +501,6 @@ dependencies = [
  "rustc-hash 2.1.3",
  "shlex 1.3.0",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "bit-set"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34ddef2995421ab6a5c779542c81ee77c115206f4ad9d5a8e05f4ff49716a3dd"
-dependencies = [
- "bit-vec",
 ]
 
 [[package]]
@@ -1592,15 +1574,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "780955b8b195a21ab8e4ac6b60dd1dbdcec1dc6c51c0617964b08c81785e12c9"
 
 [[package]]
-name = "document-features"
-version = "0.2.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
-dependencies = [
- "litrs",
-]
-
-[[package]]
 name = "downcast-rs"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2170,17 +2143,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gl_generator"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a95dfc23a2b4a9a2f5ab41d194f8bfda3cabec42af4e39f08c339eb2a0c124d"
-dependencies = [
- "khronos_api",
- "log",
- "xml-rs",
-]
-
-[[package]]
 name = "glam"
 version = "0.30.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2268,45 +2230,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "glutin_wgl_sys"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c4ee00b289aba7a9e5306d57c2d05499b2e5dc427f84ac708bd2c090212cf3e"
-dependencies = [
- "gl_generator",
-]
-
-[[package]]
 name = "gpu-allocator"
 version = "0.28.0"
 source = "git+https://github.com/openOMSI-Project/gpu-allocator?rev=6ad8a7eeb9c3e1dcd65656f718c593a0a1a3915d#6ad8a7eeb9c3e1dcd65656f718c593a0a1a3915d"
 dependencies = [
  "ash",
- "hashbrown 0.16.1",
  "log",
  "presser",
  "thiserror 2.0.21",
- "windows 0.62.2",
-]
-
-[[package]]
-name = "gpu-descriptor"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b89c83349105e3732062a895becfc71a8f921bb71ecbbdd8ff99263e3b53a0ca"
-dependencies = [
- "bitflags 2.13.2",
- "gpu-descriptor-types",
- "hashbrown 0.15.5",
-]
-
-[[package]]
-name = "gpu-descriptor-types"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdf242682df893b86f33a73828fb09ca4b2d3bb6cc95249707fc684d27484b91"
-dependencies = [
- "bitflags 2.13.2",
 ]
 
 [[package]]
@@ -2385,12 +2316,6 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-
-[[package]]
-name = "hexf-parse"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
 name = "hkdf"
@@ -2869,14 +2794,7 @@ checksum = "6aae1df220ece3c0ada96b8153459b67eebe9ae9212258bb0134ae60416fdf76"
 dependencies = [
  "libc",
  "libloading 0.8.9",
- "pkg-config",
 ]
-
-[[package]]
-name = "khronos_api"
-version = "3.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "kurbo"
@@ -2997,12 +2915,6 @@ name = "litemap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
-
-[[package]]
-name = "litrs"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "lock_api"
@@ -3206,19 +3118,25 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 [[package]]
 name = "mx"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
+source = "git+https://github.com/openOMSI-org/mX?rev=d317cc5c4ec26098dd8ad5498292984fced4cf2f#d317cc5c4ec26098dd8ad5498292984fced4cf2f"
 dependencies = [
+ "mx-dx11",
  "mx-dx12",
+ "mx-gl",
  "mx-metal",
+ "mx-noop",
  "mx-shader",
  "mx-types",
  "mx-vulkan",
+ "parking_lot 0.12.5",
+ "raw-window-handle",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
-name = "mx-dx12"
+name = "mx-dx11"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
+source = "git+https://github.com/openOMSI-org/mX?rev=d317cc5c4ec26098dd8ad5498292984fced4cf2f#d317cc5c4ec26098dd8ad5498292984fced4cf2f"
 dependencies = [
  "log",
  "mx-shader",
@@ -3231,9 +3149,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "mx-dx12"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=d317cc5c4ec26098dd8ad5498292984fced4cf2f#d317cc5c4ec26098dd8ad5498292984fced4cf2f"
+dependencies = [
+ "log",
+ "mx-shader",
+ "mx-types",
+ "parking_lot 0.12.5",
+ "raw-window-handle",
+ "thiserror 2.0.21",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+]
+
+[[package]]
+name = "mx-gl"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=d317cc5c4ec26098dd8ad5498292984fced4cf2f#d317cc5c4ec26098dd8ad5498292984fced4cf2f"
+dependencies = [
+ "glow",
+ "khronos-egl",
+ "libloading 0.8.9",
+ "log",
+ "mx-shader",
+ "mx-types",
+ "parking_lot 0.12.5",
+ "raw-window-handle",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "mx-metal"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
+source = "git+https://github.com/openOMSI-org/mX?rev=d317cc5c4ec26098dd8ad5498292984fced4cf2f#d317cc5c4ec26098dd8ad5498292984fced4cf2f"
 dependencies = [
  "log",
  "mx-shader",
@@ -3251,11 +3200,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "mx-noop"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=d317cc5c4ec26098dd8ad5498292984fced4cf2f#d317cc5c4ec26098dd8ad5498292984fced4cf2f"
+dependencies = [
+ "mx-shader",
+ "mx-types",
+ "parking_lot 0.12.5",
+ "raw-window-handle",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "mx-shader"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
+source = "git+https://github.com/openOMSI-org/mX?rev=d317cc5c4ec26098dd8ad5498292984fced4cf2f#d317cc5c4ec26098dd8ad5498292984fced4cf2f"
 dependencies = [
- "naga 30.0.2",
+ "naga",
  "naga-types",
  "thiserror 2.0.21",
 ]
@@ -3263,16 +3224,33 @@ dependencies = [
 [[package]]
 name = "mx-types"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
+source = "git+https://github.com/openOMSI-org/mX?rev=d317cc5c4ec26098dd8ad5498292984fced4cf2f#d317cc5c4ec26098dd8ad5498292984fced4cf2f"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
 ]
 
 [[package]]
+name = "mx-upscale"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=d317cc5c4ec26098dd8ad5498292984fced4cf2f#d317cc5c4ec26098dd8ad5498292984fced4cf2f"
+dependencies = [
+ "anyhow",
+ "ash",
+ "libc",
+ "log",
+ "mx",
+ "objc2 0.6.5",
+ "objc2-metal 0.3.2",
+ "parking_lot 0.12.5",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+]
+
+[[package]]
 name = "mx-vulkan"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
+source = "git+https://github.com/openOMSI-org/mX?rev=d317cc5c4ec26098dd8ad5498292984fced4cf2f#d317cc5c4ec26098dd8ad5498292984fced4cf2f"
 dependencies = [
  "ash",
  "gpu-allocator",
@@ -3290,37 +3268,11 @@ dependencies = [
 
 [[package]]
 name = "naga"
-version = "29.0.4"
-source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
-dependencies = [
- "arrayvec",
- "bit-set 0.9.1",
- "bitflags 2.13.2",
- "cfg-if",
- "cfg_aliases",
- "codespan-reporting",
- "half",
- "hashbrown 0.16.1",
- "hexf-parse",
- "indexmap",
- "libm",
- "log",
- "num-traits",
- "once_cell",
- "rustc-hash 1.1.0",
- "spirv",
- "thiserror 2.0.21",
- "unicode-ident",
-]
-
-[[package]]
-name = "naga"
 version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd0dd362bf26c0ffdd143df6da66a25d287e196eff482f117771010b207ad163"
+source = "git+https://github.com/openOMSI-org/mX?rev=d317cc5c4ec26098dd8ad5498292984fced4cf2f#d317cc5c4ec26098dd8ad5498292984fced4cf2f"
 dependencies = [
  "arrayvec",
- "bit-set 0.10.0",
+ "bit-set",
  "bitflags 2.13.2",
  "cfg-if",
  "cfg_aliases",
@@ -3917,6 +3869,7 @@ dependencies = [
  "libc",
  "log",
  "mimalloc",
+ "mx",
  "ndk-context",
  "objc2 0.6.5",
  "omsi-admin",
@@ -3975,8 +3928,6 @@ dependencies = [
  "serde_json",
  "steamworks",
  "ureq",
- "wgpu",
- "wgpu-mx",
  "windows 0.62.2",
  "winit",
  "winresource",
@@ -4299,6 +4250,7 @@ dependencies = [
  "glam",
  "hashbrown 0.17.1",
  "log",
+ "mx",
  "omsi-cfg",
  "omsi-lan",
  "omsi-map",
@@ -4310,7 +4262,6 @@ dependencies = [
  "omsi-texture",
  "omsi-timetable",
  "omsi-ui",
- "wgpu",
 ]
 
 [[package]]
@@ -4395,12 +4346,12 @@ dependencies = [
  "hashbrown 0.17.1",
  "image",
  "log",
+ "mx",
  "omsi-cfg",
  "omsi-plugin",
  "omsi-render",
  "omsi-ui",
  "pollster 1.0.1",
- "wgpu",
 ]
 
 [[package]]
@@ -4430,26 +4381,21 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ash",
+ "bitflags 2.13.2",
  "bytemuck",
  "env_logger",
  "glam",
- "glow",
  "hashbrown 0.17.1",
- "libc",
  "log",
- "naga 29.0.4",
- "objc2 0.6.5",
- "objc2-metal 0.3.2",
+ "mx",
+ "mx-upscale",
+ "naga",
  "omsi-cfg",
  "omsi-geometry",
  "omsi-texture",
  "pollster 1.0.1",
  "rayon",
- "wgpu",
- "wgpu-hal",
- "wgpu-mx",
  "windows 0.62.2",
- "windows-core 0.62.2",
  "winit",
 ]
 
@@ -4463,6 +4409,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "image",
  "log",
+ "mx",
  "omsi-audio",
  "omsi-cfg",
  "omsi-content",
@@ -4489,7 +4436,6 @@ dependencies = [
  "pollster 1.0.1",
  "rayon",
  "serde_json",
- "wgpu",
  "zip",
 ]
 
@@ -4639,11 +4585,11 @@ dependencies = [
  "hashbrown 0.17.1",
  "image",
  "log",
- "naga 29.0.4",
+ "mx",
+ "naga",
  "omsi-cfg",
  "pollster 1.0.1",
  "resvg",
- "wgpu",
  "winit",
 ]
 
@@ -4706,14 +4652,13 @@ dependencies = [
  "anyhow",
  "glam",
  "log",
+ "mx",
  "omsi-cfg",
  "omsi-render",
  "openxr",
  "pollster 1.0.1",
  "serde",
  "serde_json",
- "wgpu",
- "wgpu-hal",
  "windows 0.62.2",
 ]
 
@@ -4801,15 +4746,6 @@ checksum = "5df339f526ea9a60e371768d50efc2f2508c7203290731565d1f7a6f71d21747"
 dependencies = [
  "libc",
  "libredox",
-]
-
-[[package]]
-name = "ordered-float"
-version = "5.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c7c9e0d9b23589f26070720bac724174bfec1083e82f7854cdd0267518343c0"
-dependencies = [
- "num-traits",
 ]
 
 [[package]]
@@ -5125,12 +5061,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "profiling"
-version = "1.0.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
-
-[[package]]
 name = "pulp"
 version = "0.22.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5257,12 +5187,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
-name = "range-alloc"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca45419789ae5a7899559e9512e58ca889e41f04f1f2445e9f4b290ceccd1d08"
-
-[[package]]
 name = "raw-cpuid"
 version = "11.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5276,18 +5200,6 @@ name = "raw-window-handle"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
-
-[[package]]
-name = "raw-window-metal"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40d213455a5f1dc59214213c7330e074ddf8114c9a42411eb890c767357ce135"
-dependencies = [
- "objc2 0.6.5",
- "objc2-core-foundation",
- "objc2-foundation 0.3.2",
- "objc2-quartz-core 0.3.2",
-]
 
 [[package]]
 name = "rayon"
@@ -5400,12 +5312,6 @@ checksum = "32eef8b209c3c1c15dbad02c1f30f9539f00dc7253e0cbcdaae442a50a09d7c1"
 dependencies = [
  "memchr",
 ]
-
-[[package]]
-name = "renderdoc-sys"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
 name = "resvg"
@@ -7298,180 +7204,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 
 [[package]]
-name = "wgpu"
-version = "29.0.4"
-source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
-dependencies = [
- "arrayvec",
- "bitflags 2.13.2",
- "bytemuck",
- "cfg-if",
- "cfg_aliases",
- "document-features",
- "hashbrown 0.16.1",
- "js-sys",
- "log",
- "parking_lot 0.12.5",
- "portable-atomic",
- "profiling",
- "raw-window-handle",
- "smallvec",
- "static_assertions",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "wgpu-core",
- "wgpu-hal",
- "wgpu-types",
-]
-
-[[package]]
-name = "wgpu-core"
-version = "29.0.4"
-source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
-dependencies = [
- "arrayvec",
- "bit-set 0.9.1",
- "bit-vec",
- "bitflags 2.13.2",
- "bytemuck",
- "cfg_aliases",
- "document-features",
- "hashbrown 0.16.1",
- "indexmap",
- "log",
- "naga 29.0.4",
- "once_cell",
- "parking_lot 0.12.5",
- "portable-atomic",
- "profiling",
- "raw-window-handle",
- "rustc-hash 1.1.0",
- "smallvec",
- "thiserror 2.0.21",
- "wgpu-core-deps-apple",
- "wgpu-core-deps-emscripten",
- "wgpu-core-deps-windows-linux-android",
- "wgpu-hal",
- "wgpu-naga-bridge",
- "wgpu-types",
-]
-
-[[package]]
-name = "wgpu-core-deps-apple"
-version = "29.0.4"
-source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
-dependencies = [
- "wgpu-hal",
-]
-
-[[package]]
-name = "wgpu-core-deps-emscripten"
-version = "29.0.4"
-source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
-dependencies = [
- "wgpu-hal",
-]
-
-[[package]]
-name = "wgpu-core-deps-windows-linux-android"
-version = "29.0.4"
-source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
-dependencies = [
- "wgpu-hal",
-]
-
-[[package]]
-name = "wgpu-hal"
-version = "29.0.4"
-source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
-dependencies = [
- "android_system_properties",
- "arrayvec",
- "ash",
- "bit-set 0.9.1",
- "bitflags 2.13.2",
- "block2 0.6.2",
- "bytemuck",
- "cfg-if",
- "cfg_aliases",
- "glow",
- "glutin_wgl_sys",
- "gpu-allocator",
- "gpu-descriptor",
- "hashbrown 0.16.1",
- "js-sys",
- "khronos-egl",
- "libc",
- "libloading 0.8.9",
- "log",
- "naga 29.0.4",
- "ndk-sys 0.6.0+11769913",
- "objc2 0.6.5",
- "objc2-core-foundation",
- "objc2-foundation 0.3.2",
- "objc2-metal 0.3.2",
- "objc2-quartz-core 0.3.2",
- "once_cell",
- "ordered-float",
- "parking_lot 0.12.5",
- "portable-atomic",
- "portable-atomic-util",
- "profiling",
- "range-alloc",
- "raw-window-handle",
- "raw-window-metal",
- "renderdoc-sys",
- "smallvec",
- "thiserror 2.0.21",
- "wasm-bindgen",
- "wayland-sys",
- "web-sys",
- "wgpu-naga-bridge",
- "wgpu-types",
- "windows 0.62.2",
- "windows-core 0.62.2",
- "windows-result 0.4.1",
-]
-
-[[package]]
-name = "wgpu-mx"
-version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
-dependencies = [
- "log",
- "mx",
- "mx-types",
- "naga 29.0.4",
- "parking_lot 0.12.5",
- "raw-window-handle",
- "wgpu",
- "wgpu-types",
-]
-
-[[package]]
-name = "wgpu-naga-bridge"
-version = "29.0.4"
-source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
-dependencies = [
- "naga 29.0.4",
- "wgpu-types",
-]
-
-[[package]]
-name = "wgpu-types"
-version = "29.0.4"
-source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
-dependencies = [
- "bitflags 2.13.2",
- "bytemuck",
- "js-sys",
- "log",
- "raw-window-handle",
- "web-sys",
-]
-
-[[package]]
 name = "which"
 version = "7.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7948,12 +7680,6 @@ name = "xkeysym"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
-
-[[package]]
-name = "xml-rs"
-version = "0.8.29"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "yoke"

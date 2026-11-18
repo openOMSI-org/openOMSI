@@ -57,16 +57,28 @@ fn auxiliary_adapter_state_is_restored_after_failure() {
 
 #[test]
 fn auxiliary_adapter_state_device_open_does_not_publish_metadata() {
+    // (the options a main renderer of the no-op device publishes, published first: the other
+    // tests' renderers, opened meanwhile on other threads, publish the same, so only the
+    // auxiliary renderer could change them)
+    let main = mx::Instance::with_backends(mx::Backends::NOOP)
+        .default_adapter()
+        .unwrap();
+    drop(
+        pollster::block_on(Renderer::open_on(
+            main,
+            None,
+            None,
+            RenderOptions::default(),
+        ))
+        .unwrap(),
+    );
     let gpu_options = omsi_texture::gpu_options();
     let texture = ADAPTER_TEXTURE_MB.load(Relaxed);
     let vram = ADAPTER_VRAM_MB.load(Relaxed);
     let info = ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()).clone();
     with_auxiliary_renderer(|| {
-        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        descriptor.backends = wgpu::Backends::NOOP;
-        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-        let instance = wgpu::Instance::new(descriptor);
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
+        let instance = mx::Instance::with_backends(mx::Backends::NOOP);
+        let adapter = instance.default_adapter().unwrap();
         let opened = pollster::block_on(Renderer::open_on(adapter, None, None, RenderOptions::default())).unwrap();
         let name = "auxiliary-fallback-must-not-be-written";
         let before = fallback_path().and_then(|p| std::fs::read(p).ok());
@@ -83,7 +95,8 @@ fn auxiliary_adapter_state_device_open_does_not_publish_metadata() {
             .collect();
         assert!(crate::pipelines::parallel::compile_all(opened.device(), jobs).into_iter().all(|local| local));
         let renderer = pollster::block_on(opened.finish()).unwrap();
-        assert_eq!(renderer.adapter().unwrap().get_info().backend, wgpu::Backend::Noop);
+        assert_eq!(renderer.adapter().unwrap().info().backend,
+            mx::Backend::Noop);
         assert_eq!(omsi_texture::gpu_options(), gpu_options);
         assert_eq!(ADAPTER_TEXTURE_MB.load(Relaxed), texture);
     });
@@ -110,12 +123,11 @@ fn auxiliary_adapter_state_preserves_enhanced_plus_parent() {
 #[test]
 fn mesh_pages_use_their_device_not_another_renderers_rt_state() {
     with_auxiliary_renderer(|| {
-        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        descriptor.backends = wgpu::Backends::NOOP;
-        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-        let instance = wgpu::Instance::new(descriptor);
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
-        let (device, _) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+        let instance = mx::Instance::with_backends(mx::Backends::NOOP);
+        let adapter = instance.default_adapter().unwrap();
+        let (device, _) = adapter
+            .request_device(&mx::DeviceDescriptor::default())
+            .unwrap();
         crate::RT_BUFFERS.store(true, Relaxed);
         let context = auxiliary_context();
         std::thread::scope(|scope| {
@@ -128,16 +140,14 @@ fn mesh_pages_use_their_device_not_another_renderers_rt_state() {
 }
 
 #[test]
-fn mesh_blas_usage_respects_fallback_and_device_features() {
+fn mesh_blas_usage_follows_the_ray_tracing_switch() {
+    // (the switch is set only on a device with ray queries, when the renderer opens it)
     with_auxiliary_renderer(|| {
         for enabled in [false, true] {
             crate::RT_BUFFERS.store(enabled, Relaxed);
-            for capable in [false, true] {
-                let features = if capable { wgpu::Features::EXPERIMENTAL_RAY_QUERY } else { wgpu::Features::empty() };
-                let usage = crate::mesh_blas_usage(features);
-                assert_eq!(usage.contains(wgpu::BufferUsages::BLAS_INPUT), enabled && capable);
-                assert_eq!(usage.contains(wgpu::BufferUsages::STORAGE), enabled && capable);
-            }
+            let usage = crate::mesh_blas_usage();
+            assert_eq!(usage.contains(mx::BufferUsages::BLAS_INPUT), enabled);
+            assert_eq!(usage.contains(mx::BufferUsages::STORAGE), enabled);
         }
     });
 }

@@ -93,29 +93,29 @@ impl Renderer {
     }
 
     /// The ground picture, before the main pass: the base, then its layers over it.
-    pub(crate) fn encode_ground(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, plan: &GroundPlan, timers: &mut PassTimers) {
+    pub(crate) fn encode_ground(&self, encoder: &mut mx::CommandEncoder, scene: &Scene, plan: &GroundPlan, timers: &mut PassTimers) {
         let (Some(pipes), Some(ao), Some((_, ground))) = (self.ground_pipelines.as_ref(), self.targets.ao.as_ref(), self.targets.ground.as_ref()) else {
             return;
         };
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
             label: Some("ground albedo"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(mx::RenderPassColorAttachment {
                 view: ground,
-                depth_slice: None,
                 resolve_target: None,
-                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store },
+                ops: mx::Operations {
+                    load: mx::LoadOp::Clear(mx::Color::TRANSPARENT),
+                    store: mx::StoreOp::Store, },
             })],
             // (the prepass's depth, only tested against: what the base and its layers
             // show is what the main pass would have drawn there)
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: &ao.depth_view, depth_ops: None, stencil_ops: None }),
+            depth_stencil_attachment: Some(mx::RenderPassDepthStencilAttachment { view: &ao.depth_view, depth_ops: None, stencil_ops: None }),
             timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "ground albedo"),
             occlusion_query_set: None,
-            multiview_mask: None,
         });
         let Some(camera) = scene.ground_camera_bind_group.as_ref() else {
             return;
         };
-        pass.set_bind_group(0, camera, &[]);
+        pass.set_bind_group(0, camera);
         encode_batches(&mut pass, scene, &plan.base, |pipe| &pipes[(pipe % 4) as usize]);
         encode_batches(&mut pass, scene, &plan.paint, |pipe| &pipes[4 + (pipe % 4) as usize]);
     }

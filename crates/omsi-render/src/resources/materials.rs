@@ -72,6 +72,181 @@ pub enum TexAddressing {
 
 /// What a material's bind group is made of: its textures (slot and generation), the
 /// sampler and the uniform values.
+/// The immediates of a draw with a material (the scene shader's `mx_mat`): its row in the
+/// scene's material table, then its textures' and samplers' places in mX's bindless heap.
+/// No bind group per material: a draw sets these and the shader reads the textures as
+/// `mx_tex2d[..]`, the values from the table.
+pub(crate) const MATERIAL_SLOTS: usize = 12;
+
+/// A material's binding: its row and heap places (`slots`, in the order of the scene shader's
+/// `MxMaterial`), and what keeps them valid - the views (their heap places stay theirs while
+/// they live) and the row (given back to the table when the last material using it goes).
+/// Cheap to clone; equal when it is the same binding.
+#[derive(Clone)]
+pub(crate) struct MaterialBinding {
+    pub(crate) slots: [u32; MATERIAL_SLOTS],
+    pub(crate) row: Arc<MaterialRow>,
+    _views: Arc<Vec<mx::TextureView>>,
+}
+
+impl std::fmt::Debug for MaterialBinding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MaterialBinding(row {}, {:?})",
+            self.row.index,
+            &self.slots[1..]
+        )
+    }
+}
+
+impl PartialEq for MaterialBinding {
+    fn eq(&self, o: &Self) -> bool {
+        Arc::ptr_eq(&self.row, &o.row) && self.slots == o.slots
+    }
+}
+
+impl MaterialBinding {
+    /// The immediates of a draw with it.
+    pub(crate) fn immediates(&self) -> &[u8] {
+        bytemuck::cast_slice(&self.slots)
+    }
+}
+
+/// A row of a scene's material table, given back when dropped.
+pub(crate) struct MaterialRow {
+    pub(crate) index: u32,
+    rows: Arc<std::sync::Mutex<MaterialRows>>,
+}
+
+impl Drop for MaterialRow {
+    fn drop(&mut self) {
+        let mut r = self.rows.lock().unwrap_or_else(|e| e.into_inner());
+        let frame = r.frame;
+        r.retired.push((frame, self.index));
+    }
+}
+
+/// The rows of a scene's material table: handed out, and taken back a few pictures after the
+/// last material using one went (a picture still on the GPU may read it).
+#[derive(Default)]
+pub(crate) struct MaterialRows {
+    next: u32,
+    retired: Vec<(u64, u32)>,
+    /// Pictures uploaded so far (`Renderer::upload_draw_list`).
+    pub(crate) frame: u64,
+}
+
+/// Pictures a retired row waits before it is handed out again.
+const ROW_REUSE_AFTER: u64 = 4;
+
+impl MaterialRows {
+    fn take(&mut self) -> u32 {
+        let frame = self.frame;
+        if let Some(k) = self
+            .retired
+            .iter()
+            .position(|(at, _)| frame >= at + ROW_REUSE_AFTER)
+        {
+            return self.retired.swap_remove(k).1;
+        }
+        self.next += 1;
+        self.next - 1
+    }
+}
+
+/// A scene's material table: every material's `MaterialUniform`, a row of
+/// `MATERIAL_ROW_BYTES` each, in one uniform buffer. Its bind group (the scene shader's
+/// `@group(1)`) is set once a pass; a draw reads its material's row at its own offset
+/// (`RenderPass::set_buffer_offset`). The rows are kept on the CPU too, to fill a larger
+/// table when it grows.
+pub(crate) struct MaterialTable {
+    pub(crate) buffer: mx::Buffer,
+    pub(crate) group: mx::BindGroup,
+    pub(crate) rows: Arc<std::sync::Mutex<MaterialRows>>,
+    data: Vec<u8>,
+}
+
+/// A row of the material table: a `MaterialUniform` at an offset uniform buffers may start at.
+pub(crate) const MATERIAL_ROW_BYTES: u64 = 256;
+
+impl MaterialTable {
+    pub(crate) fn new(device: &mx::Device, rows: u64) -> MaterialTable {
+        assert!(std::mem::size_of::<MaterialUniform>() as u64 <= MATERIAL_ROW_BYTES);
+        let (buffer, group) = Self::make(device, rows * MATERIAL_ROW_BYTES);
+        MaterialTable {
+            buffer,
+            group,
+            rows: Default::default(),
+            data: Vec::new(),
+        }
+    }
+
+    fn make(device: &mx::Device, size: u64) -> (mx::Buffer, mx::BindGroup) {
+        let buffer = device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("material table"),
+                size,
+                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+            })
+            .expect("mX: a buffer");
+        let group = device.create_bind_group(&mx::BindGroupDescriptor {
+            label: Some("materials"),
+            entries: &[mx::BindGroupEntry {
+                binding: 2,
+                resource: mx::BindingResource::Buffer(mx::BufferBinding {
+                    buffer: &buffer,
+                    offset: 0,
+                    size: Some(std::mem::size_of::<MaterialUniform>() as u64),
+                }),
+            }],
+        });
+        (buffer, group)
+    }
+
+    /// A row for a new material.
+    pub(crate) fn take_row(&self) -> Arc<MaterialRow> {
+        let index = self.rows.lock().unwrap_or_else(|e| e.into_inner()).take();
+        Arc::new(MaterialRow {
+            index,
+            rows: self.rows.clone(),
+        })
+    }
+
+    /// Where row `row` starts (the draw's `set_buffer_offset`).
+    pub(crate) fn offset(row: u32) -> u64 {
+        row as u64 * MATERIAL_ROW_BYTES
+    }
+
+    /// Write `uniform` at `row`, growing the table (true: it is a new buffer and bind group).
+    pub(crate) fn write(
+        &mut self,
+        device: &mx::Device,
+        queue: &mx::Queue,
+        row: u32,
+        uniform: &MaterialUniform,
+    ) -> bool {
+        let at = Self::offset(row) as usize;
+        let bytes = bytemuck::bytes_of(uniform);
+        if self.data.len() < at + MATERIAL_ROW_BYTES as usize {
+            self.data.resize(at + MATERIAL_ROW_BYTES as usize, 0);
+        }
+        self.data[at..at + bytes.len()].copy_from_slice(bytes);
+        if self.data.len() as u64 > self.buffer.size() {
+            (self.buffer, self.group) =
+                Self::make(device, (self.data.len() as u64 * 2).max(1 << 18));
+            queue
+                .write_buffer(&self.buffer, 0, &self.data)
+                .expect("mX: a queue write");
+            return true;
+        }
+        queue
+            .write_buffer(&self.buffer, at as u64, bytes)
+            .expect("mX: a queue write");
+        false
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct BindKey {
     pub(crate) textures: [(usize, u64); 7],
@@ -114,8 +289,8 @@ pub struct Material {
     /// Keep the exact material parameters so a CTC texture swap can change only the diffuse
     /// map without losing map lighting, moisture, screen, or other renderer flags.
     pub(crate) uniform: MaterialUniform,
-    pub(crate) buf: wgpu::Buffer,
-    pub(crate) bind_group: wgpu::BindGroup,
+    /// Its row in the material table and its textures' places in the heap.
+    pub(crate) binding: MaterialBinding,
     /// Materials that draw alike (same textures, sampler and values) share this number.
     pub(crate) look: u32,
 }
@@ -527,17 +702,19 @@ impl Renderer {
             uniform: bytemuck::cast(uniform),
         };
         let look = scene.look(&key);
-        let (bind_group, buf) = match scene.bind_groups.get(&key) {
-            Some((bg, b)) => (bg.clone(), b.clone()),
+        let binding = match scene.bind_groups.get(&key) {
+            Some(b) => b.clone(),
             None => {
-                let buf = buffer_init(
-                    &self.device,
-                    &self.queue,
-                    None,
-                    bytemuck::bytes_of(&uniform),
-                    wgpu::BufferUsages::UNIFORM,
-                );
-                let bind_group = self.material_bind_group(
+                let row = scene.material_table.take_row();
+                if scene
+                    .material_table
+                    .write(&self.device, &self.queue, row.index, &uniform)
+                {
+                    // (a larger table is a new bind group: the kept render bundles hold the old
+                    // one, and are recorded again with the camera group made anew)
+                    scene.camera_bind_group = None;
+                }
+                let binding = self.material_binding(
                     &scene.textures,
                     MaterialMaps {
                         texture,
@@ -550,12 +727,10 @@ impl Renderer {
                         pbr: texture.and_then(|id| scene.pbr_maps.get(&id)).copied(),
                     },
                     address,
-                    &buf,
+                    row,
                 );
-                scene
-                    .bind_groups
-                    .insert(key, (bind_group.clone(), buf.clone()));
-                (bind_group, buf)
+                scene.bind_groups.insert(key, binding.clone());
+                binding
             }
         };
         scene.materials.push(Material {
@@ -576,8 +751,7 @@ impl Renderer {
             transmap,
             address,
             uniform,
-            buf,
-            bind_group,
+            binding,
             look,
         });
         Some(scene.materials.len() - 1)
@@ -751,7 +925,7 @@ impl Renderer {
         let mirror = unlit
             && texture
                 .and_then(|t| scene.textures.get(t))
-                .is_some_and(|t| t.texture.usage().contains(wgpu::TextureUsages::RENDER_ATTACHMENT));
+                .is_some_and(|t| t.texture.usage().contains(mx::TextureUsages::RENDER_ATTACHMENT));
         let uniform = MaterialUniform {
             wipe_bounds: [0.0; 4],
             color,
@@ -850,11 +1024,19 @@ impl Renderer {
             uniform: bytemuck::cast(uniform),
         };
         let look = scene.look(&key);
-        let (bind_group, buf) = match scene.bind_groups.get(&key) {
-            Some((bg, b)) => (bg.clone(), b.clone()),
+        let binding = match scene.bind_groups.get(&key) {
+            Some(b) => b.clone(),
             None => {
-                let buf = buffer_init(&self.device, &self.queue, None, bytemuck::bytes_of(&uniform), wgpu::BufferUsages::UNIFORM);
-                let bind_group = self.material_bind_group(
+                let row = scene.material_table.take_row();
+                if scene
+                    .material_table
+                    .write(&self.device, &self.queue, row.index, &uniform)
+                {
+                    // (a larger table is a new bind group: the kept render bundles hold the old
+                    // one, and are recorded again with the camera group made anew)
+                    scene.camera_bind_group = None;
+                }
+                let binding = self.material_binding(
                     &scene.textures,
                     MaterialMaps {
                         texture,
@@ -867,12 +1049,10 @@ impl Renderer {
                         pbr: texture.and_then(|t| scene.pbr_maps.get(&t)).copied(),
                     },
                     address,
-                    &buf,
+                    row,
                 );
-                scene
-                    .bind_groups
-                    .insert(key, (bind_group.clone(), buf.clone()));
-                (bind_group, buf)
+                scene.bind_groups.insert(key, binding.clone());
+                binding
             }
         };
         scene.materials.push(Material {
@@ -893,23 +1073,22 @@ impl Renderer {
             transmap,
             address,
             uniform,
-            buf,
-            bind_group,
+            binding,
             look,
         });
         scene.materials.len() - 1
     }
 
-    /// The bind group of a material: its textures (or the plain white/black ones), its
-    /// sampler and its uniform buffer.
-    pub(crate) fn material_bind_group(
+    /// The binding of a material: its table `row`, and its textures (or the plain white/black
+    /// ones) and samplers by their places in the heap.
+    pub(crate) fn material_binding(
         &self,
         textures: &[GpuTexture],
         maps: MaterialMaps,
         address: TexAddressing,
-        buf: &wgpu::Buffer,
-    ) -> wgpu::BindGroup {
-        let view = |t: Option<TextureId>, or: &'_ GpuTexture| -> wgpu::TextureView {
+        row: Arc<MaterialRow>,
+    ) -> MaterialBinding {
+        let view = |t: Option<TextureId>, or: &'_ GpuTexture| -> mx::TextureView {
             t.and_then(|t| textures.get(t))
                 .map(|t| t.view.clone())
                 .unwrap_or_else(|| or.view.clone())
@@ -931,59 +1110,35 @@ impl Renderer {
             TexAddressing::Mirror => &self.mirror_sampler,
             TexAddressing::Clamp | TexAddressing::MirrorOnce => &self.clamp_sampler,
         };
-        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &self.material_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::TextureView(&trans_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::TextureView(&night_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::TextureView(&light_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: wgpu::BindingResource::TextureView(&env_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 7,
-                    resource: wgpu::BindingResource::TextureView(&mask_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 8,
-                    resource: wgpu::BindingResource::TextureView(&bump_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 9,
-                    resource: wgpu::BindingResource::TextureView(&normal_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 10,
-                    resource: wgpu::BindingResource::TextureView(&orm_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 11,
-                    resource: wgpu::BindingResource::Sampler(&self.clamp_sampler),
-                },
-            ],
-        })
+        // (the order of the scene shader's `MxMaterial`)
+        let slots = [
+            row.index,
+            diffuse_view.index(),
+            sampler.index(),
+            trans_view.index(),
+            night_view.index(),
+            light_view.index(),
+            env_view.index(),
+            mask_view.index(),
+            bump_view.index(),
+            normal_view.index(),
+            orm_view.index(),
+            self.clamp_sampler.index(),
+        ];
+        MaterialBinding {
+            slots,
+            row,
+            _views: Arc::new(vec![
+                diffuse_view,
+                trans_view,
+                night_view,
+                light_view,
+                env_view,
+                mask_view,
+                bump_view,
+                normal_view,
+                orm_view,
+            ]),
+        }
     }
 }

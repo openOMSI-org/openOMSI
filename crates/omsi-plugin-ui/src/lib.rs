@@ -795,11 +795,11 @@ pub fn hit_at(laid: &Laid, p: Vec2) -> Option<usize> {
 #[allow(clippy::too_many_arguments)]
 pub fn draw_card(
     gpu: &mut Gpu,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
+    device: &mx::Device,
+    queue: &mx::Queue,
     atlas: &mut Atlas,
     fonts: &Fonts,
-    target: &wgpu::TextureView,
+    target: &mx::TextureView,
     size: (u32, u32),
     k: f32,
     laid: &Laid,
@@ -925,16 +925,14 @@ pub fn draw_card(
     let verts: Vec<Vertex> = p.verts;
     gpu.upload(device, queue, 0, &verts);
     gpu.upload_atlas(queue, atlas);
-    let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("plugin panel"),
-    });
+    let mut enc = device.create_command_encoder(Some("plugin panel"));
     gpu.render(
         device,
         queue,
         &mut enc,
         target,
         size,
-        clear.then_some(wgpu::Color::TRANSPARENT),
+        clear.then_some(mx::Color::TRANSPARENT),
         &layers,
         &draws,
     );

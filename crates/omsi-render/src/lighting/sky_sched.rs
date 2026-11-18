@@ -55,7 +55,7 @@ pub(crate) struct SkySched {
     /// The filled cube goes over the one in use this frame (its eye is the one in use now).
     pub swap: bool,
     /// The second cube (made when first needed) and its faces.
-    pub staging: Option<(wgpu::Texture, Vec<wgpu::TextureView>)>,
+    pub staging: Option<(mx::Texture, Vec<mx::TextureView>)>,
     /// Seconds since the probe was drawn.
     pub probe_since: f32,
     /// A new sky came in: the probe is redrawn on the next frame (not on the one taking

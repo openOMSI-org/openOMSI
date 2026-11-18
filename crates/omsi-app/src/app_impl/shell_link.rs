@@ -56,7 +56,7 @@ impl App {
         let scale = dpi * ui::size_factor(h, dpi, self.settings.ui_scale, self.settings.ui_scale_window);
         self.fix_pause_focus();
         if self.menus.chooser.is_some() && crate::game_lists::bus_preview::is_vehicle_list(self.menus.list_kind.as_ref())
-            && self.renderer.as_ref().is_some_and(|r| r.device.adapter_info().backend != wgpu::Backend::Gl) {
+            && self.renderer.as_ref().is_some_and(|r| r.device.info().backend != mx::Backend::Gl) {
             let kind = self.menus.list_kind.as_ref().unwrap();
             let index = self.menus.chooser.unwrap();
             let row = self.menus.admin_list.as_ref().and_then(|rows| rows.get(index));

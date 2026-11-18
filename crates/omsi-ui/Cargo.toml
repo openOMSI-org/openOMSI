@@ -7,7 +7,7 @@ description = "Interface drawing shared by the game's navigator and the launcher
 
 [dependencies]
 omsi-cfg = { path = "../omsi-cfg" }
-wgpu.workspace = true
+mx.workspace = true
 bytemuck.workspace = true
 half = "2"
 glam.workspace = true

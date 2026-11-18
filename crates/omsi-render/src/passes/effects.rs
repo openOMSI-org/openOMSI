@@ -7,7 +7,7 @@ use super::*;
 impl Renderer {
     /// The traced reflections (Enhanced+) or the puddles'; true when the puddles' picture
     /// was drawn this frame.
-    pub(crate) fn encode_scene_reflections(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: &DrawPlan, cu: &CameraUniform, timers: &mut PassTimers) -> bool {
+    pub(crate) fn encode_scene_reflections(&mut self, encoder: &mut mx::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: &DrawPlan, cu: &CameraUniform, timers: &mut PassTimers) -> bool {
         let (width, height, camera, lighting, rt_frame) = (f.width, f.height, f.camera, f.lighting, f.rt_frame);
         let (main_batches, cab_batches) = (&plan.main_batches, &plan.cab_batches);
         // Weather alone is insufficient: leave the allocation and reflection passes out when
@@ -38,7 +38,7 @@ impl Renderer {
     // (before the rain on the panes, which writes the prepass depth),
     // over the picture before its glow and metering (the window's picture; the mirrors
     // go without)
-    pub(crate) fn encode_fog_lamps(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, vp_mat: Mat4, puddles_on: bool, timers: &mut PassTimers) {
+    pub(crate) fn encode_fog_lamps(&self, encoder: &mut mx::CommandEncoder, scene: &Scene, f: &FrameCtx, vp_mat: Mat4, puddles_on: bool, timers: &mut PassTimers) {
         let (width, height, lighting) = (f.width, f.height, f.lighting);
         let (enhanced, prepass_on, with_overlays, masked_frame) = (f.enhanced, f.prepass_on, f.with_overlays, f.masked_frame);
         // (and in clear air too, at dusk and by night: the lamps' halos in the ground haze,
@@ -71,28 +71,29 @@ impl Renderer {
                     // row with how much of the sun is seen)
                     let glare_only = !fog_lamps && !shafts;
                     let u = FogLampUniform { inv_view_proj: vp_mat.inverse().to_cols_array_2d(), size: [width as f32, height as f32, if glare_only { 2.0 } else if glare { 1.0 } else { 0.0 }, droplets] };
-                    self.queue.write_buffer(&self.lights.fog_lamps_buf, 0, bytemuck::bytes_of(&u));
+                    self.queue.write_buffer(&self.lights.fog_lamps_buf, 0, bytemuck::bytes_of(&u))
+                        .expect("mX: a queue write");
                     let h = &self.targets.hdr_targets[&(width, height)];
                     let view = h.puddles.as_ref().filter(|_| puddles_on).map_or(&h.view, |p| &p.view);
-                    for (k, (target, load)) in [(&ao.fog_view, wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)), (view, wgpu::LoadOp::Load)].into_iter().enumerate() {
-                        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    for (k, (target, load)) in [(&ao.fog_view, mx::LoadOp::Clear(mx::Color::TRANSPARENT)),
+                        (view, mx::LoadOp::Load),].into_iter().enumerate() {
+                        let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                             label: Some("fog lamps"),
-                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: target, depth_slice: None, resolve_target: None,
-                                ops: wgpu::Operations { load, store: wgpu::StoreOp::Store },
+                            color_attachments: &[Some(mx::RenderPassColorAttachment {
+                                view: target,  resolve_target: None,
+                                ops: mx::Operations { load, store: mx::StoreOp::Store, },
                             })],
                             depth_stencil_attachment: None,
                             timestamp_writes: if k == 1 { pass_timer(timers.set.as_ref(), &mut timers.timed, "fog lamps") } else { None },
                             occlusion_query_set: None,
-                            multiview_mask: None,
                         });
                         if k == 0 && glare_only {
                             let size = ao.fog_view.texture().size();
                             pass.set_scissor_rect(0, size.height - 1, 1, 1);
                         }
                         pass.set_pipeline(&pipes[k]);
-                        pass.set_bind_group(0, cam_bg, &[]);
-                        pass.set_bind_group(1, &fog_bg[k], &[]);
+                        pass.set_bind_group(0, cam_bg);
+                        pass.set_bind_group(1, &fog_bg[k]);
                         pass.draw(0..3, 0..1);
                     }
                 }
@@ -124,7 +125,7 @@ impl Renderer {
     }
 
     /// The rain films on the panes, over a copy of the clean current picture.
-    pub(crate) fn encode_rain_film(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, rain_batches: &[Batch], puddles_on: bool) {
+    pub(crate) fn encode_rain_film(&self, encoder: &mut mx::CommandEncoder, scene: &Scene, f: &FrameCtx, rain_batches: &[Batch], puddles_on: bool) {
         let (width, height, masked_frame) = (f.width, f.height, f.masked_frame);
         let scene_view = f.scene_view();
         if f.glass_on {
@@ -132,69 +133,85 @@ impl Renderer {
             let view = hdr.map_or(scene_view, |h| h.puddles.as_ref().filter(|_| puddles_on).map_or(&h.view, |p| &p.view));
             let behind = self.targets.glass_picture.as_ref().unwrap();
             encoder.copy_texture_to_texture(
-                wgpu::TexelCopyTextureInfo { texture: view.texture(), mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-                wgpu::TexelCopyTextureInfo { texture: behind.texture(), mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-                wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                mx::TexelCopyTextureInfo {
+                    texture: &view.texture(), mip_level: 0, origin: mx::Origin3d::ZERO,
+                    aspect: mx::TextureAspect::All, },
+                mx::TexelCopyTextureInfo {
+                    texture: &behind.texture(), mip_level: 0, origin: mx::Origin3d::ZERO,
+                    aspect: mx::TextureAspect::All, },
+                mx::Extent3d { width, height, depth_or_array_layers: 1 },
             );
             let colours = [
-                Some(wgpu::RenderPassColorAttachment {
-                    view, depth_slice: None, resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                Some(mx::RenderPassColorAttachment {
+                    view,  resolve_target: None,
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Load,
+                        store: mx::StoreOp::Store, },
                 }),
-                hdr.map(|h| wgpu::RenderPassColorAttachment {
-                    view: &h.mask, depth_slice: None, resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                hdr.map(|h| mx::RenderPassColorAttachment {
+                    view: &h.mask,  resolve_target: None,
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Load,
+                        store: mx::StoreOp::Store, },
                 }),
-                hdr.filter(|_| !f.eye_color).and_then(|h| h.gbuf.as_ref()).map(|g| wgpu::RenderPassColorAttachment {
-                    view: &g[0].1, depth_slice: None, resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                hdr.filter(|_| !f.eye_color).and_then(|h| h.gbuf.as_ref()).map(|g| mx::RenderPassColorAttachment {
+                    view: &g[0].1,  resolve_target: None,
+                    ops: mx::Operations {
+                            load: mx::LoadOp::Load,
+                            store: mx::StoreOp::Store, },
                 }),
-                hdr.filter(|_| !f.eye_color).and_then(|h| h.gbuf.as_ref()).map(|g| wgpu::RenderPassColorAttachment {
-                    view: &g[1].1, depth_slice: None, resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                hdr.filter(|_| !f.eye_color).and_then(|h| h.gbuf.as_ref()).map(|g| mx::RenderPassColorAttachment {
+                    view: &g[1].1,  resolve_target: None,
+                    ops: mx::Operations {
+                            load: mx::LoadOp::Load,
+                            store: mx::StoreOp::Store, },
                 }),
             ];
             let pipes = &self.main_pass(f.enhanced, f.reflection_frame, f.eye_color).rain_pipelines;
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("rain on current scene"),
                 color_attachments: &colours[..if colours[2].is_some() { 4 } else if hdr.is_some() { 2 } else { 1 }],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                depth_stencil_attachment: Some(mx::RenderPassDepthStencilAttachment {
                     view: &self.targets.ao.as_ref().unwrap().depth_view,
-                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }),
+                    depth_ops: Some(mx::Operations {
+                        load: mx::LoadOp::Load,
+                        store: mx::StoreOp::Store, }),
                     stencil_ops: None,
                 }),
-                timestamp_writes: None, occlusion_query_set: None, multiview_mask: None,
+                timestamp_writes: None, occlusion_query_set: None, 
             });
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
+            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
             encode_batches(&mut pass, scene, rain_batches, |pipe| &pipes[pipe as usize]);
         }
     }
 
     /// The classic graphics' picture with the puddles' reflections, presented (and the
     /// HUD over it at full size).
-    pub(crate) fn encode_classic_present(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, puddles_on: bool) {
+    pub(crate) fn encode_classic_present(&self, encoder: &mut mx::CommandEncoder, scene: &Scene, f: &FrameCtx, puddles_on: bool) {
         let (width, height) = (f.width, f.height);
         let overlays = &f.overlays;
         if f.reflection_frame {
             let h = &self.targets.hdr_targets[&(width, height)];
             let bg = h.puddles.as_ref().filter(|_| puddles_on).map_or(&h.classic_bg, |p| &p.classic_bg);
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("classic reflections present"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: f.scene_view(), depth_slice: None, resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
+                    view: f.scene_view(),  resolve_target: None,
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                        store: mx::StoreOp::Store, },
                 })],
                 depth_stencil_attachment: None, timestamp_writes: None,
-                occlusion_query_set: None, multiview_mask: None,
+                occlusion_query_set: None, 
             });
             pass.set_pipeline(&self.scale.copy_pipeline);
-            pass.set_bind_group(0, bg, &[]);
+            pass.set_bind_group(0, bg);
             pass.draw(0..3, 0..1);
             if !overlays.is_empty() && !f.scaled {
                 pass.set_pipeline(&self.overlay_pipeline_1x);
                 for (k, _) in overlays.iter().enumerate() {
                     if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                        pass.set_bind_group(0, bg, &[]);
+                        pass.set_bind_group(0, bg);
                         pass.draw(0..6, 0..1);
                     }
                 }

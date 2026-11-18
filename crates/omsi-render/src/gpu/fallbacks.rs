@@ -24,16 +24,12 @@ pub(crate) fn rainfall_pipeline() -> bool {
 /// build's scope instead, the renderer was made again without all three - one failing on
 /// DirectX 12 took the snowfall with it, and the adapter was remembered so for good
 /// (`fallback_load`). A device lost on it is not caught here (see `Renderer::new_on`).
-pub(crate) fn optional_pipeline<T>(device: &wgpu::Device, what: &str, make: impl FnOnce() -> T) -> Option<T> {
-    let internal = device.push_error_scope(wgpu::ErrorFilter::Internal);
-    let memory = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-    let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let made = make();
-    let errors = pollster::block_on(async { [validation.pop().await, memory.pop().await, internal.pop().await] });
-    match errors.iter().flatten().next() {
-        None => Some(made),
-        Some(e) => {
-            log::warn!("renderer: {what} left out - the driver failed on it: {}", gpu_error_text(e));
+pub(crate) fn optional_pipeline<T>(device: &mx::Device, what: &str, make: impl FnOnce() -> T) -> Option<T> {
+    let _ = device;
+    match super::gpu_attempt(make) {
+        Ok(made) => Some(made),
+        Err(e) => {
+            log::warn!("renderer: {what} left out - the driver failed on it: {e}");
             None
         }
     }

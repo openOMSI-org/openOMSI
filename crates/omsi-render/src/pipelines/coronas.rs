@@ -4,49 +4,49 @@ use super::common::*;
 use super::scene::SceneBase;
 use crate::*;
 
-pub(crate) const ADDITIVE: wgpu::BlendState = wgpu::BlendState {
-    color: wgpu::BlendComponent {
-        src_factor: wgpu::BlendFactor::One,
-        dst_factor: wgpu::BlendFactor::One,
-        operation: wgpu::BlendOperation::Add,
+pub(crate) const ADDITIVE: mx::BlendState = mx::BlendState {
+    color: mx::BlendComponent {
+        src_factor: mx::BlendFactor::One,
+        dst_factor: mx::BlendFactor::One,
+        operation: mx::BlendOperation::Add,
     },
-    alpha: wgpu::BlendComponent::REPLACE,
+    alpha: mx::BlendComponent::REPLACE,
 };
 // Omsi's lamp sprites: SRCBLEND ONE, DESTBLEND INVSRCCOLOR (src + dst * (1 - src)),
 // which keeps a coloured sprite's hue over a lit background instead of washing it to white
-pub(crate) const SCREEN: wgpu::BlendState = wgpu::BlendState {
-    color: wgpu::BlendComponent {
-        src_factor: wgpu::BlendFactor::One,
-        dst_factor: wgpu::BlendFactor::OneMinusSrc,
-        operation: wgpu::BlendOperation::Add,
+pub(crate) const SCREEN: mx::BlendState = mx::BlendState {
+    color: mx::BlendComponent {
+        src_factor: mx::BlendFactor::One,
+        dst_factor: mx::BlendFactor::OneMinusSrc,
+        operation: mx::BlendOperation::Add,
     },
-    alpha: wgpu::BlendComponent::REPLACE,
+    alpha: mx::BlendComponent::REPLACE,
 };
-pub(crate) const ALPHA_BLEND: wgpu::BlendState = wgpu::BlendState {
-    color: wgpu::BlendComponent {
-        src_factor: wgpu::BlendFactor::SrcAlpha,
-        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-        operation: wgpu::BlendOperation::Add,
+pub(crate) const ALPHA_BLEND: mx::BlendState = mx::BlendState {
+    color: mx::BlendComponent {
+        src_factor: mx::BlendFactor::SrcAlpha,
+        dst_factor: mx::BlendFactor::OneMinusSrcAlpha,
+        operation: mx::BlendOperation::Add,
     },
-    alpha: wgpu::BlendComponent::REPLACE,
+    alpha: mx::BlendComponent::REPLACE,
 };
 
-const CORONA_ATTRIBUTES: [wgpu::VertexAttribute; 6] =
-    wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Float32x4];
+const CORONA_ATTRIBUTES: [mx::VertexAttribute; 6] = mx::vertex_attr_array![0 => Float32x3, 1 => Float32, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Float32x4];
 
 #[derive(Clone)]
 pub(crate) struct Coronas {
-    pub sampler: wgpu::Sampler,
-    pub bind_group: wgpu::BindGroup,
-    pub smoke_bind_group: wgpu::BindGroup,
-    shader: wgpu::ShaderModule,
-    pl: wgpu::PipelineLayout,
+    pub sampler: mx::Sampler,
+    pub bind_group: mx::BindGroup,
+    pub smoke_bind_group: mx::BindGroup,
+    shader: mx::ShaderModule,
 }
 
 impl Coronas {
     /// The coronas' and the smoke's bind groups and shader, and the corona sprite (its
     /// bind group holds it).
-    pub(crate) fn new(device: &wgpu::Device, queue: &wgpu::Queue, scene: &SceneBase) -> (Coronas, GpuTexture) {
+    pub(crate) fn new(device: &mx::Device,
+        queue: &mx::Queue,
+        _scene: &SceneBase,) -> (Coronas, GpuTexture) {
         // corona sprite: soft radial falloff
         let cs = 64u32;
         let mut corona_img = omsi_texture::Image {
@@ -67,17 +67,16 @@ impl Coronas {
         }
         let corona_texture = upload_texture(device, queue, &corona_img, false);
         let corona_sampler = clamped_linear_sampler(device);
-        let corona_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let corona_bind_group = device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("corona"),
-            layout: &scene.corona_layout,
             entries: &[
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&corona_texture.view),
+                    resource: mx::BindingResource::TextureView(&corona_texture.view),
                 },
-                wgpu::BindGroupEntry {
+                mx::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&corona_sampler),
+                    resource: mx::BindingResource::Sampler(&corona_sampler),
                 },
             ],
         });
@@ -93,74 +92,65 @@ impl Coronas {
             }
         }
         let puff_texture = upload_texture(device, queue, &puff, false);
-        let smoke_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let smoke_bind_group = device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("smoke"),
-            layout: &scene.corona_layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&puff_texture.view) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&corona_sampler) },
+                mx::BindGroupEntry { binding: 0, resource: mx::BindingResource::TextureView(&puff_texture.view), },
+                mx::BindGroupEntry { binding: 1, resource: mx::BindingResource::Sampler(&corona_sampler), },
             ],
         });
         drop(puff_texture);
         log::info!("renderer: compiling the coronas shaders");
-        let corona_shader = compile_shader(device, wgpu::ShaderModuleDescriptor {
+        let corona_shader = compile_shader(device, mx::ShaderModuleDescriptor {
             label: Some("corona"),
-            source: wgpu::ShaderSource::Wgsl(corona_shader_source().into()),
-        });
-        let corona_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("corona"),
-            bind_group_layouts: &[Some(&scene.camera_layout), Some(&scene.corona_layout)],
-            immediate_size: 0,
+            source: &*(corona_shader_source()),
         });
         let coronas = Coronas {
             sampler: corona_sampler,
             bind_group: corona_bind_group,
             smoke_bind_group,
             shader: corona_shader,
-            pl: corona_pl,
         };
         (coronas, corona_texture)
     }
 
-    pub(crate) fn pipeline_for(&self, device: &wgpu::Device, f: wgpu::TextureFormat, fs: &str, blend: wgpu::BlendState, msaa: u32,
+    pub(crate) fn pipeline_for(&self, device: &mx::Device,
+        f: mx::TextureFormat, fs: &str, blend: mx::BlendState, msaa: u32,
         surfaces: bool,
-    ) -> wgpu::RenderPipeline {
-        let corona_vertex = wgpu::VertexBufferLayout {
+    ) -> mx::RenderPipeline {
+        let corona_vertex = mx::VertexBufferLayout {
             array_stride: std::mem::size_of::<GpuCorona>() as u64,
-            step_mode: wgpu::VertexStepMode::Instance,
+            step_mode: mx::VertexStepMode::Instance,
             attributes: &CORONA_ATTRIBUTES,
         };
-        compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
+        compile_pipeline(device, &mx::RenderPipelineDescriptor {
             label: Some("corona"),
-            layout: Some(&self.pl),
-            vertex: wgpu::VertexState {
+            vertex: mx::VertexState {
+                    constants: &[],
                 module: &self.shader,
                 entry_point: Some(if fs == "fs_enhanced" { "vs_enhanced" } else { "vs_main" }),
                 buffers: &[corona_vertex],
-                compilation_options: Default::default(),
             },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
+            primitive: mx::PrimitiveState {
+                    topology: mx::PrimitiveTopology::TriangleList,
                 cull_mode: None,
-                front_face: wgpu::FrontFace::Ccw,
+                front_face: mx::FrontFace::Ccw,
                 ..Default::default()
             },
-            depth_stencil: Some(depth_test(wgpu::CompareFunction::GreaterEqual)),
-            multisample: wgpu::MultisampleState {
+            depth_stencil: Some(depth_test(mx::CompareFunction::GreaterEqual)),
+                multisample: mx::MultisampleState {
                 count: msaa,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            fragment: Some(wgpu::FragmentState {
+            fragment: Some(mx::FragmentState {
+                    constants: &[],
                 module: &self.shader,
                 entry_point: Some(fs),
-                targets: &color_targets_for(f, Some(blend), wgpu::ColorWrites::COLOR, false, false,
+                targets: &color_targets_for(f, Some(blend), mx::ColorWrites::COLOR, false, false,
                         surfaces,
                     ),
-                compilation_options: Default::default(),
             }),
-            multiview_mask: None,
-            cache: crate::pipeline_cache::get(device).as_ref(),
         })
     }
 }
@@ -169,73 +159,59 @@ impl Coronas {
 /// parameters, no vertices.
 #[derive(Clone)]
 pub(crate) struct Precip {
-    shader: wgpu::ShaderModule,
-    pub buf: wgpu::Buffer,
-    pub bind_group: wgpu::BindGroup,
-    pl: wgpu::PipelineLayout,
+    shader: mx::ShaderModule,
+    pub buf: mx::Buffer,
+    pub bind_group: mx::BindGroup,
     label: &'static str,
     vs: &'static str,
     /// Its quads are strips of four vertices (the rain's), not lists of six.
     strip: bool,
 }
 
-const PREMULTIPLIED_SNOW: wgpu::BlendState = wgpu::BlendState {
-    color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
-    alpha: wgpu::BlendComponent::REPLACE,
+const PREMULTIPLIED_SNOW: mx::BlendState = mx::BlendState {
+    color: mx::BlendComponent {
+        src_factor: mx::BlendFactor::One,
+        dst_factor: mx::BlendFactor::OneMinusSrcAlpha,
+        operation: mx::BlendOperation::Add, },
+    alpha: mx::BlendComponent::REPLACE,
 };
 
 impl Precip {
-    pub(crate) fn snow(device: &wgpu::Device, camera_layout: &wgpu::BindGroupLayout, roof: &wgpu::TextureView) -> Precip {
-        Precip::new(device, camera_layout, roof, "snow", "vs_snow", snow_shader_source(), std::mem::size_of::<SnowUniform>(), false)
+    pub(crate) fn snow(device: &mx::Device, roof: &mx::TextureView) -> Precip {
+        Precip::new(device,  roof, "snow", "vs_snow", snow_shader_source(), std::mem::size_of::<SnowUniform>(), false)
     }
 
-    pub(crate) fn rain(device: &wgpu::Device, camera_layout: &wgpu::BindGroupLayout, roof: &wgpu::TextureView) -> Precip {
-        Precip::new(device, camera_layout, roof, "rain", "vs_rain", rain_shader_source(), std::mem::size_of::<RainUniform>(), true)
+    pub(crate) fn rain(device: &mx::Device, roof: &mx::TextureView) -> Precip {
+        Precip::new(device,  roof, "rain", "vs_rain", rain_shader_source(), std::mem::size_of::<RainUniform>(), true)
     }
 
     /// (`roof`: the precipitation's roof map, `passes::precip_map`)
-    fn new(device: &wgpu::Device, camera_layout: &wgpu::BindGroupLayout, roof: &wgpu::TextureView, label: &'static str, vs: &'static str, source: String, size: usize, strip: bool) -> Precip {
-        let shader = compile_shader(device, wgpu::ShaderModuleDescriptor { label: Some(label), source: wgpu::ShaderSource::Wgsl(source.into()) });
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some(label),
-            entries: &[
-                uniform_entry(0, wgpu::ShaderStages::VERTEX),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Texture { sample_type: if crate::gl_backend() { wgpu::TextureSampleType::Float { filterable: false } } else { wgpu::TextureSampleType::Depth }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
-                    count: None,
-                },
-            ],
-        });
+    fn new(device: &mx::Device,
+        roof: &mx::TextureView, label: &'static str, vs: &'static str, source: String, size: usize, strip: bool) -> Precip {
+        let shader = compile_shader(device, mx::ShaderModuleDescriptor { label: Some(label), source: &*source, });
         let buf = uniform_buffer(device, label, size as u64);
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some(label),
-            layout: &layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(roof) },
+                mx::BindGroupEntry { binding: 0, resource: buf.as_entire_binding() },
+                mx::BindGroupEntry { binding: 1, resource: mx::BindingResource::TextureView(roof), },
             ],
         });
-        let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some(label),
-            bind_group_layouts: &[Some(camera_layout), Some(&layout)],
-            immediate_size: 0,
-        });
-        Precip { shader, buf, bind_group, pl, label, vs, strip }
+        Precip { shader, buf, bind_group,  label, vs, strip }
     }
 
-    pub(crate) fn pipeline_for(&self, device: &wgpu::Device, f: wgpu::TextureFormat, fs: &str, msaa: u32,
+    pub(crate) fn pipeline_for(&self, device: &mx::Device,
+        f: mx::TextureFormat, fs: &str, msaa: u32,
         surfaces: bool,
-    ) -> wgpu::RenderPipeline {
+    ) -> mx::RenderPipeline {
         log::info!("renderer: compiling the {} shader ({fs})", self.label);
-        let targets = color_targets_for(f, Some(PREMULTIPLIED_SNOW), wgpu::ColorWrites::COLOR, false, false,
+        let targets = color_targets_for(f, Some(PREMULTIPLIED_SNOW), mx::ColorWrites::COLOR, false, false,
             surfaces,
         );
-        no_vertex_pipeline(self.label, &self.pl, &self.shader, fs, &targets)
+        no_vertex_pipeline(self.label, &self.shader, fs, &targets)
             .vs(self.vs)
             .strip(self.strip)
-            .depth(depth_test(wgpu::CompareFunction::GreaterEqual))
+            .depth(depth_test(mx::CompareFunction::GreaterEqual))
             .samples(msaa)
             .create(device)
     }

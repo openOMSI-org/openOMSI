@@ -38,16 +38,18 @@ fn box_mesh(c: Vec3, h: Vec3) -> MeshData {
 fn ray_traced_frames_raise_no_device_error() {
     let _ = env_logger::builder().is_test(false).filter_level(log::LevelFilter::Warn).try_init();
     println!("creating the renderer");
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: true, shadow_size: 1024, fxaa: true, render_scale: 1.0, ray_tracing: true, no_enhanced: false, ..Default::default() },
     ))
     .expect("renderer");
-    println!("adapter: {} {:?}", renderer.adapter_name, renderer.device.features());
-    let traced = renderer.device.features().contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY) && omsi_cfg::flags::OMSI_NO_RT.live_os().is_none();
+    let ray_query = renderer.adapter().is_some_and(|a| a.supports_ray_query());
+    println!("adapter: {} (ray queries {ray_query})",
+        renderer.adapter_name);
+    let traced = ray_query && omsi_cfg::flags::OMSI_NO_RT.live_os().is_none();
     println!("ray queries: {traced}");
     let mut scene = renderer.new_scene();
     let ground = renderer.add_mesh(&mut scene, &box_mesh(Vec3::new(0.0, 0.0, -0.5), Vec3::new(60.0, 60.0, 0.5)));
@@ -60,11 +62,7 @@ fn ray_traced_frames_raise_no_device_error() {
     renderer.add_instance(&mut scene, pole, DVec3::ZERO, Mat4::IDENTITY, vec![grey]);
     let camera = Camera { position: DVec3::new(0.0, 0.0, 2.0), yaw: 0.0, pitch: -5.0, roll: 0.0, fov_deg: 70.0, near: 0.1, far: 1000.0 };
     let lighting = Lighting { enhanced: true, shadows: true, wetness: 0.6, sun_dir: Vec3::new(0.4, -0.6, 0.7).normalize(), ..Default::default() };
-    let scopes = [
-        renderer.device.push_error_scope(wgpu::ErrorFilter::Validation),
-        renderer.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory),
-        renderer.device.push_error_scope(wgpu::ErrorFilter::Internal),
-    ];
+    let scopes = [renderer.watch_errors()];
     let mut last = Vec::new();
     for frame in 0..6 {
         let t = std::time::Instant::now();
@@ -73,7 +71,7 @@ fn ray_traced_frames_raise_no_device_error() {
     }
     let mut errors = Vec::new();
     for s in scopes.into_iter().rev() {
-        if let Some(e) = pollster::block_on(s.pop()) {
+        if let Some(e) = s.pop() {
             errors.push(e.to_string());
         }
     }
@@ -92,11 +90,11 @@ fn ray_traced_frames_raise_no_device_error() {
 #[ignore = "needs a GPU adapter (rt_check.yml)"]
 fn a_map_sized_scene_traces_without_device_errors() {
     let _ = env_logger::builder().is_test(false).filter_level(log::LevelFilter::Warn).try_init();
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 4, ssao: true, shadow_size: 2048, fxaa: true, render_scale: 1.0, ray_tracing: true, no_enhanced: false, ..Default::default() },
     ))
     .expect("renderer");
@@ -152,11 +150,7 @@ fn a_map_sized_scene_traces_without_device_errors() {
     }
     println!("{count} instances");
     let lighting = Lighting { enhanced: true, shadows: true, wetness: 0.5, sun_dir: Vec3::new(0.4, -0.6, 0.7).normalize(), ..Default::default() };
-    let scopes = [
-        renderer.device.push_error_scope(wgpu::ErrorFilter::Validation),
-        renderer.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory),
-        renderer.device.push_error_scope(wgpu::ErrorFilter::Internal),
-    ];
+    let scopes = [renderer.watch_errors()];
     for frame in 0..8 {
         let camera = Camera { position: DVec3::new(frame as f64 * 20.0, -30.0 + frame as f64 * 5.0, 3.0), yaw: frame as f32 * 20.0, pitch: -5.0, roll: 0.0, fov_deg: 70.0, near: 0.1, far: 1500.0 };
         if frame == 4 {
@@ -169,7 +163,7 @@ fn a_map_sized_scene_traces_without_device_errors() {
     }
     let mut errors = Vec::new();
     for s in scopes.into_iter().rev() {
-        if let Some(e) = pollster::block_on(s.pop()) {
+        if let Some(e) = s.pop() {
             errors.push(e.to_string());
         }
     }

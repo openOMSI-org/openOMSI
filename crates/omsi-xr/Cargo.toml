@@ -16,10 +16,9 @@ serde_json.workspace = true
 [dev-dependencies]
 pollster.workspace = true
 
-# Windows: the OpenXR session on Direct3D 12, sharing wgpu's device (see `openxr`)
+# Windows: the OpenXR session on Direct3D 12, sharing mX's device (see `openxr`)
 [target.'cfg(windows)'.dependencies]
 omsi-cfg = { path = "../omsi-cfg" }
-wgpu.workspace = true
+mx.workspace = true
 windows = { workspace = true, features = ["Win32_Foundation", "Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common"] }
 openxr = { version = "0.22", default-features = false, features = ["static"] }
-wgpu-hal = { workspace = true, features = ["dx12"] }

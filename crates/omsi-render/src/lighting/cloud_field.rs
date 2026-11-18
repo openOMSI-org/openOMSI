@@ -234,17 +234,30 @@ impl Renderer {
     }
 
     fn install_cloud_field(&mut self, field: &[f32]) {
-        self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &self.sky.sky_lut,
-                mip_level: 0,
-                origin: wgpu::Origin3d { x: FIELD_X0, y: 0, z: 0 },
-                aspect: wgpu::TextureAspect::All,
-            },
-            &texels(field),
-            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(FIELD_N * 8), rows_per_image: Some(FIELD_N) },
-            wgpu::Extent3d { width: FIELD_N, height: FIELD_N, depth_or_array_layers: 1 },
-        );
+        self.queue
+            .write_texture(
+                mx::TexelCopyTextureInfo {
+                    texture: &self.sky.sky_lut,
+                    mip_level: 0,
+                    origin: mx::Origin3d {
+                        x: FIELD_X0,
+                        y: 0,
+                        z: 0,
+                    },
+                    aspect: mx::TextureAspect::All, },
+                &texels(field),
+                mx::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(FIELD_N * 8),
+                    rows_per_image: Some(FIELD_N),
+                },
+                mx::Extent3d {
+                    width: FIELD_N,
+                    height: FIELD_N,
+                    depth_or_array_layers: 1,
+                },
+            )
+            .expect("mX: a queue write");
     }
 }
 

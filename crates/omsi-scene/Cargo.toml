@@ -37,7 +37,7 @@ log.workspace = true
 parking_lot.workspace = true
 rayon.workspace = true
 serde_json.workspace = true
-wgpu.workspace = true
+mx.workspace = true
 
 [dev-dependencies]
 pollster.workspace = true

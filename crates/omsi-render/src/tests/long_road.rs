@@ -7,9 +7,9 @@ use super::*;
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_marking_on_a_long_road_stays_seen_at_every_distance() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();

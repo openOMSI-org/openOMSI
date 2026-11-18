@@ -13,32 +13,22 @@ pub(crate) enum MipAverage {
 }
 
 pub(crate) struct Mip {
-    pub pipeline: wgpu::RenderPipeline,
-    pub text_pipeline: wgpu::RenderPipeline,
-    pub layout: wgpu::BindGroupLayout,
-    pub sampler: wgpu::Sampler,
+    pub pipeline: mx::RenderPipeline,
+    pub text_pipeline: mx::RenderPipeline,
+    pub sampler: mx::Sampler,
 }
 
-pub(crate) fn build(device: &wgpu::Device) -> Mip {
+pub(crate) fn build(device: &mx::Device) -> Mip {
     // --- mipmaps on the GPU: the CPU box average took up to a second per bus spawn
     log::info!("renderer: compiling the mip maps shaders");
-    let mip_shader = compile_shader(device, wgpu::ShaderModuleDescriptor {
+    let mip_shader = compile_shader(device, mx::ShaderModuleDescriptor {
         label: Some("mip"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("../mip.wgsl").into()),
+        source: &*(include_str!("../mip.wgsl")),
     });
-    let mip_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("mip"),
-        entries: &[float_texture_entry(0), sampler_entry(1)],
-    });
-    let mip_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("mip"),
-        bind_group_layouts: &[Some(&mip_layout)],
-        immediate_size: 0,
-    });
-    let mip_pipeline = no_vertex_pipeline("mip", &mip_pl, &mip_shader, "fs_main", &[target(wgpu::TextureFormat::Rgba8UnormSrgb, None)]).create(device);
-    let text_pipeline = no_vertex_pipeline("mip text", &mip_pl, &mip_shader, "fs_text", &[target(wgpu::TextureFormat::Rgba8UnormSrgb, None)]).create(device);
+    let mip_pipeline = no_vertex_pipeline("mip",  &mip_shader, "fs_main", &[target(mx::TextureFormat::Rgba8UnormSrgb, None)],).create(device);
+    let text_pipeline = no_vertex_pipeline("mip text",  &mip_shader, "fs_text", &[target(mx::TextureFormat::Rgba8UnormSrgb, None)],).create(device);
     let mip_sampler = clamped_linear_sampler(device);
-    Mip { pipeline: mip_pipeline, text_pipeline, layout: mip_layout, sampler: mip_sampler }
+    Mip { pipeline: mip_pipeline, text_pipeline,  sampler: mip_sampler }
 }
 
 #[cfg(test)]
@@ -144,12 +134,14 @@ mod tests {
     /// average keeps colour and alpha apart, the other weights colour by alpha.
     #[test]
     fn odd_text_textures_go_down_by_their_exact_footprint() {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let Ok(adapter) = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())) else {
+        let instance = mx::Instance::new();
+        let Ok(adapter) = instance.default_adapter() else {
             eprintln!("no graphics adapter: footprint render check skipped");
             return;
         };
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+        let (device, queue) = adapter
+            .request_device(&mx::DeviceDescriptor::default())
+            .unwrap();
         let mip = build(&device);
         let (w, h) = (15u32, 15u32);
         let mut src = vec![0u8; (w * h * 4) as usize];
@@ -165,62 +157,97 @@ mod tests {
             }
         }
         for average in [MipAverage::Independent, MipAverage::ByCoverage] {
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: None,
-                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-                mip_level_count: 2,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-                &src,
-                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(w * 4), rows_per_image: Some(h) },
-                wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-            );
-            let view = |level| texture.create_view(&wgpu::TextureViewDescriptor { base_mip_level: level, mip_level_count: Some(1), ..Default::default() });
+            let texture = device
+                .create_texture(&mx::TextureDescriptor {
+                    label: None,
+                    size: mx::Extent3d {
+                        width: w,
+                        height: h,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 2,
+                    sample_count: 1,
+                    dimension: mx::TextureDimension::D2,
+                    format: mx::TextureFormat::Rgba8UnormSrgb,
+                    usage: mx::TextureUsages::TEXTURE_BINDING
+                        | mx::TextureUsages::COPY_DST
+                        | mx::TextureUsages::COPY_SRC
+                        | mx::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                })
+                .expect("mX: a texture");
+            queue
+                .write_texture(
+                    mx::TexelCopyTextureInfo {
+                        texture: &texture,
+                        mip_level: 0,
+                        origin: mx::Origin3d::ZERO,
+                        aspect: mx::TextureAspect::All,
+                    },
+                    &src,
+                    mx::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(w * 4),
+                        rows_per_image: Some(h),
+                    },
+                    mx::Extent3d {
+                        width: w,
+                        height: h,
+                        depth_or_array_layers: 1,
+                    },
+                )
+                .expect("mX: a queue write");
+            let view = |level| texture
+                    .create_view(&mx::TextureViewDescriptor {
+                        base_mip_level: level,
+                        mip_level_count: Some(1),
+                        ..Default::default()
+                    })
+                    .expect("mX: a texture view");
             let (src_view, dst_view) = (view(0), view(1));
-            let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            let bg = device.create_bind_group(&mx::BindGroupDescriptor {
                 label: None,
-                layout: &mip.layout,
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&src_view) },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&mip.sampler) },
+                    mx::BindGroupEntry { binding: 0, resource: mx::BindingResource::TextureView(&src_view), },
+                    mx::BindGroupEntry { binding: 1, resource: mx::BindingResource::Sampler(&mip.sampler), },
                 ],
             });
             let (dw, dh) = (w / 2, h / 2);
-            let buf = device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (256 * dh) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-            let mut enc = device.create_command_encoder(&Default::default());
-            {
-                let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let buf = device
+                .create_buffer(&mx::BufferDescriptor {
                     label: None,
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    size: (256 * dh) as u64,
+                    usage: mx::BufferUsages::COPY_DST | mx::BufferUsages::MAP_READ,
+                })
+                .expect("mX: a buffer");
+            let mut enc = device.create_command_encoder(None);
+            {
+                let mut pass = enc.begin_render_pass(&mx::RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &[Some(mx::RenderPassColorAttachment {
                         view: &dst_view,
-                        depth_slice: None,
                         resolve_target: None,
-                        ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                        ops: mx::Operations {
+                            load: mx::LoadOp::Clear(mx::Color::BLACK),
+                            store: mx::StoreOp::Store, },
                     })],
                     depth_stencil_attachment: None,
                     timestamp_writes: None,
                     occlusion_query_set: None,
-                    multiview_mask: None,
                 });
                 pass.set_pipeline(if average == MipAverage::Independent { &mip.text_pipeline } else { &mip.pipeline });
-                pass.set_bind_group(0, &bg, &[]);
+                pass.set_bind_group(0, &bg);
                 pass.draw(0..3, 0..1);
             }
             enc.copy_texture_to_buffer(
-                wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: 1, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-                wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(256), rows_per_image: Some(dh) } },
-                wgpu::Extent3d { width: dw, height: dh, depth_or_array_layers: 1 },
+                mx::TexelCopyTextureInfo { texture: &texture, mip_level: 1, origin: mx::Origin3d::ZERO,
+                    aspect: mx::TextureAspect::All, },
+                mx::TexelCopyBufferInfo { buffer: &buf, layout: mx::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(256), rows_per_image: Some(dh) } },
+                mx::Extent3d { width: dw, height: dh, depth_or_array_layers: 1 },
             );
-            queue.submit([enc.finish()]);
-            buf.slice(..).map_async(wgpu::MapMode::Read, |r| r.unwrap());
-            device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
-            let got = buf.slice(..).get_mapped_range().to_vec();
+            let copied = queue.submit([enc.finish()]);
+            device.wait(copied).unwrap();
+            let got = buf.map_read_now(0..buf.size(), |b| b.to_vec()).unwrap();
             let want = reference(&src, (w, h), average);
             for y in 0..dh {
                 for x in 0..dw {

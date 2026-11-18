@@ -4,11 +4,11 @@ use super::*;
 #[test]
 #[ignore = "requires a graphics adapter and OMSI_GPU_TIMERS=1; run with --ignored"]
 fn xr_diagnostics_keep_views_separate_and_collect_each_readback_once() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut r = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions {
             msaa: 1,
             ssao: false,
@@ -82,12 +82,7 @@ fn xr_diagnostics_keep_views_separate_and_collect_each_readback_once() {
     assert_eq!(r.pictures.get(), [1, 1, 1, 1]);
     for _ in 0..3 {
         r.collect_gpu_timers();
-        r.device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: None,
-            })
-            .unwrap();
+        r.device.wait_idle().unwrap();
     }
     r.collect_gpu_timers();
     for (i, timer) in r.gpu_timers.iter().enumerate() {
@@ -125,12 +120,7 @@ fn xr_diagnostics_keep_views_separate_and_collect_each_readback_once() {
     assert_eq!(r.pictures.get(), [1, 1, 2, 1]);
     for _ in 0..3 {
         r.collect_gpu_timers();
-        r.device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: None,
-            })
-            .unwrap();
+        r.device.wait_idle().unwrap();
     }
     r.collect_gpu_timers();
     assert_eq!(

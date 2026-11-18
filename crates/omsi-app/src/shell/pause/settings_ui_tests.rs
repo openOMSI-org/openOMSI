@@ -122,8 +122,8 @@ fn pause_nested_write_preview() {
     omsi_ui::i18n::set_language("zh-tw");
     let out = std::path::PathBuf::from(std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set preview directory"));
     std::fs::create_dir_all(&out).unwrap();
-    let instance = wgpu::Instance::default();
-    let renderer = pollster::block_on(omsi_render::Renderer::new(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb))).unwrap();
+    let instance = mx::Instance::default();
+    let renderer = pollster::block_on(omsi_render::Renderer::new(&instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb),)).unwrap();
     for (name, world, w, h) in [
         ("pause-vehicle-options", false, 1440, 900),
         ("pause-world-options", true, 1440, 900),
@@ -318,11 +318,11 @@ fn pause_section_markers_write_preview() {
         std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set preview directory"),
     );
     std::fs::create_dir_all(&out).unwrap();
-    let instance = wgpu::Instance::default();
+    let instance = mx::Instance::default();
     let renderer = pollster::block_on(omsi_render::Renderer::new(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
     ))
     .unwrap();
     let rail = vec![
@@ -560,8 +560,8 @@ fn render_pause_date_calendar_preview() {
     omsi_ui::i18n::set_language("zh-tw");
     let out = std::path::PathBuf::from(std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set preview directory"));
     std::fs::create_dir_all(&out).unwrap();
-    let instance = wgpu::Instance::default();
-    let renderer = pollster::block_on(omsi_render::Renderer::new(&instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb))).unwrap();
+    let instance = mx::Instance::default();
+    let renderer = pollster::block_on(omsi_render::Renderer::new(&instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb),)).unwrap();
     let rows = vec![
         ("#", "Date\u{1f}i".to_owned()),
         ("date", "Date\u{1f}d\u{1f}2026-11-03\u{1f}The day the timetable, the season and the map's changes follow".to_owned()),

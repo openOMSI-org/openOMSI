@@ -44,11 +44,11 @@ fn the_night_meter_sees_a_lamp_lit_lot_from_above() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn enhanced_respects_material_ambient() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -85,9 +85,9 @@ fn enhanced_respects_material_ambient() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn surface_bias_keeps_raised_floors_visible_at_a_distance() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -125,11 +125,11 @@ fn surface_bias_keeps_raised_floors_visible_at_a_distance() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn enhanced_untextured_keeps_its_colour() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -199,11 +199,11 @@ fn enhanced_sun_does_not_shine_through_overcast_or_dense_fog() {
 #[test]
 #[ignore = "requires a graphics adapter; renders terrain and foliage lighting"]
 fn enhanced_masked_and_uncut_ground_share_lighting() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions {
             msaa: 1,
             ssao: false,
@@ -412,12 +412,9 @@ fn a_mesh_page_hands_freed_space_to_the_next_mesh_and_joins_its_holes() {
 /// pages as on a GPU, with their bounds, but the pages hold no bytes of them.
 #[test]
 fn on_no_device_the_mesh_pages_hold_places_but_no_bytes() {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
     )).expect("no-op renderer");
     let mut scene = renderer.new_scene();
@@ -451,9 +448,9 @@ fn on_no_device_the_mesh_pages_hold_places_but_no_bytes() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn meshes_coming_and_going_tile_by_tile_keep_the_pages_from_growing() {
-    let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter = mx::Instance::new();
     let renderer = pollster::block_on(Renderer::new_with(
-        &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &adapter, None, Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
     )).expect("test renderer");
     if !renderer.mesh_pages() {
@@ -530,11 +527,11 @@ fn msaa_depth_prepass_preserves_layered_surfaces() {
         );
         renderer.add_surface_instance(scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![mat])
     }
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions {
             msaa: 4,
             ssao: true,
@@ -665,9 +662,9 @@ fn msaa_depth_prepass_preserves_layered_surfaces() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_reshaped_mesh_moves_the_bounds_of_every_instance_drawing_it() {
-    let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter = mx::Instance::new();
     let renderer = pollster::block_on(Renderer::new_with(
-        &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &adapter, None, Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -735,11 +732,11 @@ fn terrain_paint_fast_path_preserves_composition() {
         renderer.add_surface_instance(scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![mat])
     }
     for msaa in [1, 4] {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance = mx::Instance::new();
         let mut renderer = pollster::block_on(Renderer::new_with(
             &instance,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             RenderOptions {
                 msaa,
                 ssao: false,
@@ -843,11 +840,12 @@ fn terrain_paint_fast_path_preserves_composition() {
             if water {
                 for &mat in &paint_materials {
                     scene.materials[mat].uniform.ambient[3] = 2.0;
-                    renderer.queue.write_buffer(
-                        &scene.materials[mat].buf,
-                        0,
-                        bytemuck::bytes_of(&scene.materials[mat].uniform),
-                    );
+                    let row = scene.materials[mat].binding.row.index;
+                    let uniform = scene.materials[mat].uniform;
+                    scene
+                        .material_table
+                        .write(&renderer.device, &renderer.queue, row, &uniform);
+                    scene.camera_bind_group = None;
                 }
             }
             let lighting = Lighting {
@@ -900,9 +898,9 @@ fn terrain_paint_fast_path_preserves_composition() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_freed_and_recycled_mesh_slot_is_no_longer_counted_as_reshaped() {
-    let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter = mx::Instance::new();
     let renderer = pollster::block_on(Renderer::new_with(
-        &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &adapter, None, Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -937,9 +935,9 @@ fn a_freed_and_recycled_mesh_slot_is_no_longer_counted_as_reshaped() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn materials_that_look_alike_are_batched_together_whenever_they_were_made() {
-    let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter = mx::Instance::new();
     let renderer = pollster::block_on(Renderer::new_with(
-        &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &adapter, None, Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -952,7 +950,7 @@ fn materials_that_look_alike_are_batched_together_whenever_they_were_made() {
     let other = renderer.add_texture(&mut scene, &image, true);
     let d = renderer.add_material(&mut scene, Some(other), AlphaMode::Opaque, [1.0; 4], false);
     let look = |scene: &Scene, m: MaterialId| scene.materials[m].look;
-    assert_ne!(scene.materials[a].bind_group, scene.materials[b].bind_group);
+    assert_ne!(scene.materials[a].binding, scene.materials[b].binding);
     assert_eq!(look(&scene, a), look(&scene, b));
     assert_ne!(look(&scene, a), look(&scene, c));
     assert_ne!(look(&scene, a), look(&scene, d));
@@ -987,9 +985,9 @@ fn materials_that_look_alike_are_batched_together_whenever_they_were_made() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn cached_bounds_follow_transforms_skinning_and_recycled_resources() {
-    let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter = mx::Instance::new();
     let renderer = pollster::block_on(Renderer::new_with(
-        &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &adapter, None, Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -1078,11 +1076,11 @@ fn presurface_reveals_excavation_before_terrain_is_drawn() {
         (1, true, true),
         (4, true, true),
     ] {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance = mx::Instance::new();
         let mut renderer = pollster::block_on(Renderer::new_with(
             &instance,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             RenderOptions {
                 msaa,
                 ssao,
@@ -1271,11 +1269,11 @@ fn stacked_panes_hide_each_other_in_model_order_where_they_write_depth() {
         near: 0.1,
         far: 100.0,
     };
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     ))
     .expect("test renderer");
@@ -1341,11 +1339,11 @@ fn stacked_panes_hide_each_other_in_model_order_where_they_write_depth() {
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn vanilla_sphere_map_is_read_where_direct3d_generates_it() {
     let camera = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 100.0 };
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     ))
     .expect("test renderer");
@@ -1403,11 +1401,11 @@ fn vanilla_sphere_map_is_read_where_direct3d_generates_it() {
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn flares_show_through_the_glass_of_the_vehicle_the_camera_is_in() {
     let camera = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 90.0, near: 0.1, far: 100.0 };
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     ))
     .expect("test renderer");
@@ -1469,6 +1467,7 @@ mod prepass_reach;
 mod snow_track_field;
 mod transparency;
 mod vanilla_lighting;
+mod weather_glsl;
 
 mod xr_targets;
 mod xr_culling;

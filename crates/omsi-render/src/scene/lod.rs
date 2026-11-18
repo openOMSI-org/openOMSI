@@ -39,11 +39,11 @@ mod tests {
     #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
     fn scenery_lod_uses_projection_with_offset_meshes_and_ordinary_objects() {
         use crate::*;
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance = mx::Instance::new();
         let mut renderer = pollster::block_on(Renderer::new_with(
             &instance,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             RenderOptions {
                 msaa: 1,
                 ssao: false,

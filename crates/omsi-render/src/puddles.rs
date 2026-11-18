@@ -55,195 +55,103 @@ pub(super) fn shader_source() -> String {
 }
 
 pub(super) struct Pipelines {
-    layout: wgpu::BindGroupLayout,
-    params: wgpu::Buffer,
-    trace: wgpu::RenderPipeline,
-    blur_x: wgpu::RenderPipeline,
-    blur_y: wgpu::RenderPipeline,
-    resolve: wgpu::RenderPipeline,
-    glass: [wgpu::RenderPipeline; 2],
-    vehicle: Vec<wgpu::RenderPipeline>,
-    chassis: wgpu::RenderPipeline,
-    vehicle_params: wgpu::Buffer,
-    vehicle_bg: wgpu::BindGroup,
+    params: mx::Buffer,
+    trace: mx::RenderPipeline,
+    blur_x: mx::RenderPipeline,
+    blur_y: mx::RenderPipeline,
+    resolve: mx::RenderPipeline,
+    glass: [mx::RenderPipeline; 2],
+    vehicle: Vec<mx::RenderPipeline>,
+    chassis: mx::RenderPipeline,
+    vehicle_params: mx::Buffer,
+    vehicle_bg: mx::BindGroup,
 }
 
 impl Pipelines {
-    pub(super) fn new(
-        device: &wgpu::Device,
-        scene_shader: &wgpu::ShaderModule,
-        camera_layout: &wgpu::BindGroupLayout,
-        material_layout: &wgpu::BindGroupLayout,
-    ) -> Self {
-        let texture = |binding, sample_type, view_dimension| wgpu::BindGroupLayoutEntry {
-            binding,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Texture {
-                sample_type,
-                view_dimension,
-                multisampled: false,
-            },
-            count: None,
-        };
-        let float = wgpu::TextureSampleType::Float { filterable: true };
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("puddle reflections"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(
-                            std::mem::size_of::<Uniform>() as u64
-                        ),
-                    },
-                    count: None,
-                },
-                texture(1, float, wgpu::TextureViewDimension::D2),
-                texture(2, float, wgpu::TextureViewDimension::D2),
-                texture(
-                    3,
-                    wgpu::TextureSampleType::Depth,
-                    wgpu::TextureViewDimension::D2,
-                ),
-                texture(4, float, wgpu::TextureViewDimension::D2),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 5,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                texture(6, float, wgpu::TextureViewDimension::Cube),
-                texture(
-                    7,
-                    wgpu::TextureSampleType::Depth,
-                    wgpu::TextureViewDimension::D2,
-                ),
-                texture(8, float, wgpu::TextureViewDimension::D2),
-            ],
-        });
-        let params = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("puddle reflection params"),
-            size: std::mem::size_of::<Uniform>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("puddle reflections"),
-            source: wgpu::ShaderSource::Wgsl(shader_source().into()),
-        });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("puddle reflections"),
-            bind_group_layouts: &[Some(&layout)],
-            immediate_size: 0,
-        });
-        let pipeline = |entry| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(entry),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_main"),
-                    buffers: &[],
-                    compilation_options: Default::default(),
-                },
-                primitive: wgpu::PrimitiveState {
-                    cull_mode: None,
-                    ..Default::default()
-                },
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some(entry),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: HDR_FORMAT,
-                        blend: None,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                multiview_mask: None,
-                cache: crate::pipeline_cache::get(device).as_ref(),
+    pub(super) fn new(device: &mx::Device, scene_shader: &mx::ShaderModule) -> Self {
+        let params = device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("puddle reflection params"),
+                size: std::mem::size_of::<Uniform>() as u64,
+                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
             })
+            .expect("mX: a buffer");
+        let shader = device
+            .create_shader_module(&mx::ShaderModuleDescriptor {
+                label: Some("puddle reflections"),
+                source: &*(shader_source()),
+            })
+            .expect("mX: a shader");
+        let pipeline = |entry| {
+            device
+                .create_render_pipeline(&mx::RenderPipelineDescriptor {
+                    label: Some(entry),
+                    vertex: mx::VertexState {
+                        constants: &[],
+                        module: &shader,
+                        entry_point: Some("vs_main"),
+                        buffers: &[],
+                    },
+                    primitive: mx::PrimitiveState {
+                        cull_mode: None,
+                        ..Default::default()
+                    },
+                    depth_stencil: None,
+                    multisample: Default::default(),
+                    fragment: Some(mx::FragmentState {
+                        constants: &[],
+                        module: &shader,
+                        entry_point: Some(entry),
+                        targets: &[Some(mx::ColorTargetState {
+                            format: HDR_FORMAT,
+                            blend: None,
+                            write_mask: mx::ColorWrites::ALL,
+                        })],
+                    }),
+                })
+                .expect("mX: a render pipeline")
         };
-        let glass_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("puddle glass depth"),
-            bind_group_layouts: &[Some(camera_layout), Some(material_layout)],
-            immediate_size: 0,
-        });
         let glass = [false, true].map(|cull| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            device.create_render_pipeline(&mx::RenderPipelineDescriptor {
                 label: Some("puddle glass depth"),
-                layout: Some(&glass_layout),
-                vertex: wgpu::VertexState {
+                vertex: mx::VertexState { constants: &[],
                     module: scene_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[wgpu::VertexBufferLayout {
+                    buffers: &[mx::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as u64,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
+                        step_mode: mx::VertexStepMode::Vertex,
+                        attributes: &mx::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
                     }],
-                    compilation_options: Default::default(),
                 },
                 primitive: one_sided_primitive(cull),
-                depth_stencil: Some(wgpu::DepthStencilState {
+                depth_stencil: Some(mx::DepthStencilState {
                     format: DEPTH_FORMAT,
-                    depth_write_enabled: Some(true),
-                    depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                    depth_write_enabled: true,
+                    depth_compare: mx::CompareFunction::GreaterEqual,
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
                 multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
+                fragment: Some(mx::FragmentState { constants: &[],
                     module: scene_shader,
                     entry_point: Some("fs_puddle_glass_depth"),
                     targets: &[],
-                    compilation_options: Default::default(),
                 }),
-                multiview_mask: None,
-                cache: crate::pipeline_cache::get(device).as_ref(),
+            }).expect("mX: a render pipeline")
+        });
+        let vehicle_params = device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("puddle vehicle plane"),
+                size: std::mem::size_of::<VehicleUniform>() as u64,
+                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
             })
-        });
-        let vehicle_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            .expect("mX: a buffer");
+        let vehicle_bg = device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("puddle vehicle plane"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: wgpu::BufferSize::new(
-                        std::mem::size_of::<VehicleUniform>() as u64
-                    ),
-                },
-                count: None,
-            }],
-        });
-        let vehicle_params = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("puddle vehicle plane"),
-            size: std::mem::size_of::<VehicleUniform>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let vehicle_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("puddle vehicle plane"),
-            layout: &vehicle_layout,
-            entries: &[wgpu::BindGroupEntry {
+            entries: &[mx::BindGroupEntry {
                 binding: 0,
                 resource: vehicle_params.as_entire_binding(),
             }],
-        });
-        let capture_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("puddle vehicle capture"),
-            bind_group_layouts: &[
-                Some(camera_layout),
-                Some(material_layout),
-                Some(&vehicle_layout),
-            ],
-            immediate_size: 0,
         });
         let mut vehicle = Vec::new();
         for kind in 0..PIPE_KINDS {
@@ -251,79 +159,73 @@ impl Pipelines {
                 for _surface in [false, true] {
                     let mut primitive = one_sided_primitive(cull);
                     // Mirroring reverses winding. Keep authored one-sided geometry.
-                    primitive.front_face = wgpu::FrontFace::Ccw;
-                    vehicle.push(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    primitive.front_face = mx::FrontFace::Ccw;
+                    vehicle.push(device.create_render_pipeline(&mx::RenderPipelineDescriptor {
                         label: Some("puddle vehicle capture"),
-                        layout: Some(&capture_layout),
-                        vertex: wgpu::VertexState {
+                        vertex: mx::VertexState { constants: &[],
                             module: scene_shader,
                             entry_point: Some("vs_puddle_vehicle"),
-                            buffers: &[wgpu::VertexBufferLayout {
+                            buffers: &[mx::VertexBufferLayout {
                                 array_stride: std::mem::size_of::<Vertex>() as u64,
-                                step_mode: wgpu::VertexStepMode::Vertex,
-                                attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
+                                step_mode: mx::VertexStepMode::Vertex,
+                                attributes: &mx::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
                             }],
-                            compilation_options: Default::default(),
                         },
                         primitive,
-                        depth_stencil: Some(wgpu::DepthStencilState {
+                        depth_stencil: Some(mx::DepthStencilState {
                             format: DEPTH_FORMAT,
-                            depth_write_enabled: Some(kind != PIPE_BLEND_NO_WRITE),
-                            depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                            depth_write_enabled: kind != PIPE_BLEND_NO_WRITE,
+                            depth_compare: mx::CompareFunction::GreaterEqual,
                             stencil: Default::default(),
                             bias: Default::default(),
                         }),
                         multisample: Default::default(),
-                        fragment: Some(wgpu::FragmentState {
+                        fragment: Some(mx::FragmentState { constants: &[],
                             module: scene_shader,
                             entry_point: Some("fs_puddle_vehicle"),
-                            targets: &[Some(wgpu::ColorTargetState {
+                            targets: &[Some(mx::ColorTargetState {
                                 format: HDR_FORMAT,
-                                blend: (kind == PIPE_BLEND || kind == PIPE_BLEND_NO_WRITE).then_some(wgpu::BlendState::ALPHA_BLENDING),
-                                write_mask: wgpu::ColorWrites::ALL,
+                                blend: (kind == PIPE_BLEND || kind == PIPE_BLEND_NO_WRITE).then_some(mx::BlendState::ALPHA_BLENDING),
+                                write_mask: mx::ColorWrites::ALL,
                             })],
-                            compilation_options: Default::default(),
                         }),
-                        multiview_mask: None,
-                        cache: crate::pipeline_cache::get(device).as_ref(),
-                    }));
+                    }).expect("mX: a render pipeline"));
                 }
             }
         }
-        let chassis = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("puddle closed chassis"),
-            layout: Some(&capture_layout),
-            vertex: wgpu::VertexState {
-                module: scene_shader,
-                entry_point: Some("vs_puddle_chassis"),
-                buffers: &[],
-                compilation_options: Default::default(),
-            },
-            primitive: wgpu::PrimitiveState {
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: scene_shader,
-                entry_point: Some("fs_puddle_chassis"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: HDR_FORMAT,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            multiview_mask: None,
-            cache: crate::pipeline_cache::get(device).as_ref(),
-        });
+        let chassis = device
+            .create_render_pipeline(&mx::RenderPipelineDescriptor {
+                label: Some("puddle closed chassis"),
+                vertex: mx::VertexState {
+                    constants: &[],
+                    module: scene_shader,
+                    entry_point: Some("vs_puddle_chassis"),
+                    buffers: &[],
+                },
+                primitive: mx::PrimitiveState {
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: Some(mx::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: mx::CompareFunction::GreaterEqual,
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: Default::default(),
+                fragment: Some(mx::FragmentState {
+                    constants: &[],
+                    module: scene_shader,
+                    entry_point: Some("fs_puddle_chassis"),
+                    targets: &[Some(mx::ColorTargetState {
+                        format: HDR_FORMAT,
+                        blend: None,
+                        write_mask: mx::ColorWrites::ALL,
+                    })],
+                }),
+            })
+            .expect("mX: a render pipeline");
         Self {
             trace: pipeline("fs_trace"),
             blur_x: pipeline("fs_blur_x"),
@@ -334,7 +236,6 @@ impl Pipelines {
             chassis,
             vehicle_params,
             vehicle_bg,
-            layout,
             params,
         }
     }
@@ -344,22 +245,22 @@ pub(super) struct Targets {
     size: (u32, u32),
     /// Made for the low quality (its quarter-size rays).
     low: bool,
-    source_depth: wgpu::Texture,
-    hit_depth: wgpu::Texture,
-    hit_depth_view: wgpu::TextureView,
-    vehicle_view: wgpu::TextureView,
-    vehicle_depth: wgpu::TextureView,
-    trace: wgpu::TextureView,
-    blur: wgpu::TextureView,
-    filtered: wgpu::TextureView,
-    pub(super) view: wgpu::TextureView,
-    trace_bg: wgpu::BindGroup,
-    blur_x_bg: wgpu::BindGroup,
-    blur_y_bg: wgpu::BindGroup,
-    resolve_bg: wgpu::BindGroup,
-    pub(super) down_bg: wgpu::BindGroup,
-    pub(super) tonemap_bg: [wgpu::BindGroup; 2],
-    pub(super) classic_bg: wgpu::BindGroup,
+    source_depth: mx::Texture,
+    hit_depth: mx::Texture,
+    hit_depth_view: mx::TextureView,
+    vehicle_view: mx::TextureView,
+    vehicle_depth: mx::TextureView,
+    trace: mx::TextureView,
+    blur: mx::TextureView,
+    filtered: mx::TextureView,
+    pub(super) view: mx::TextureView,
+    trace_bg: mx::BindGroup,
+    blur_x_bg: mx::BindGroup,
+    blur_y_bg: mx::BindGroup,
+    resolve_bg: mx::BindGroup,
+    pub(super) down_bg: mx::BindGroup,
+    pub(super) tonemap_bg: [mx::BindGroup; 2],
+    pub(super) classic_bg: mx::BindGroup,
 }
 
 /// How many picture pixels one ray stands for, each way (2 at half size; 4 on Low, or on
@@ -383,76 +284,84 @@ impl Targets {
         let pipelines = r.puddles.as_ref().unwrap();
         let size = trace_size(w, h, low);
         let source_depth = r.targets.ao.as_ref().unwrap().depth_view.texture().clone();
-        let hit_depth = r.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("puddle hit depth including glass"),
-            size: wgpu::Extent3d {
-                width: w,
-                height: h,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let hit_depth_view = hit_depth.create_view(&Default::default());
+        let hit_depth = r
+            .device
+            .create_texture(&mx::TextureDescriptor {
+                label: Some("puddle hit depth including glass"),
+                size: mx::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format: DEPTH_FORMAT,
+                usage: mx::TextureUsages::COPY_DST
+                    | mx::TextureUsages::COPY_SRC
+                    | mx::TextureUsages::RENDER_ATTACHMENT
+                    | mx::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .expect("mX: a texture");
+        let hit_depth_view = hit_depth
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
         let target = |label, (width, height)| {
             r.device
-                .create_texture(&wgpu::TextureDescriptor {
+                .create_texture(&mx::TextureDescriptor {
                     label: Some(label),
-                    size: wgpu::Extent3d {
+                    size: mx::Extent3d {
                         width,
                         height,
                         depth_or_array_layers: 1,
                     },
                     mip_level_count: 1,
                     sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
+                    dimension: mx::TextureDimension::D2,
                     format: HDR_FORMAT,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::TEXTURE_BINDING
-                        | wgpu::TextureUsages::COPY_SRC,
+                    usage: mx::TextureUsages::RENDER_ATTACHMENT
+                        | mx::TextureUsages::TEXTURE_BINDING
+                        | mx::TextureUsages::COPY_SRC,
                     view_formats: &[],
                 })
+                .expect("mX: a texture")
                 .create_view(&Default::default())
+                .expect("mX: a texture view")
         };
         let trace = target("puddle reflection rays", size);
         let vehicle_view = target("puddle player vehicle", size);
         let vehicle_depth = r
             .device
-            .create_texture(&wgpu::TextureDescriptor {
+            .create_texture(&mx::TextureDescriptor {
                 label: Some("puddle player vehicle depth"),
-                size: wgpu::Extent3d {
+                size: mx::Extent3d {
                     width: size.0,
                     height: size.1,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
                 sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
+                dimension: mx::TextureDimension::D2,
                 format: DEPTH_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                usage: mx::TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
             })
-            .create_view(&Default::default());
+            .expect("mX: a texture")
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
         let blur = target("puddle reflection horizontal filter", size);
         let filtered = target("puddle reflection filtered", size);
         let view = target("scene with puddle reflections", (w, h));
-        let binding = |binding, view| wgpu::BindGroupEntry {
+        let binding = |binding, view| mx::BindGroupEntry {
             binding,
-            resource: wgpu::BindingResource::TextureView(view),
+            resource: mx::BindingResource::TextureView(view),
         };
         let group = |ray_view| {
-            r.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            r.device.create_bind_group(&mx::BindGroupDescriptor {
                 label: Some("puddle reflections"),
-                layout: &pipelines.layout,
                 entries: &[
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 0,
                         resource: pipelines.params.as_entire_binding(),
                     },
@@ -460,9 +369,9 @@ impl Targets {
                     binding(2, &hdr.mask),
                     binding(3, &r.targets.ao.as_ref().unwrap().depth_view),
                     binding(4, ray_view),
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 5,
-                        resource: wgpu::BindingResource::Sampler(&r.tone.post_sampler),
+                        resource: mx::BindingResource::Sampler(&r.tone.post_sampler),
                     },
                     binding(6, &r.tone.probe.as_ref().unwrap().view),
                     binding(7, &hit_depth_view),
@@ -476,18 +385,17 @@ impl Targets {
         let blur_y_bg = group(&blur);
         let resolve_bg = group(&filtered);
         let post_group = |base, adapt, screen_mask| {
-            r.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            r.device.create_bind_group(&mx::BindGroupDescriptor {
                 label: Some("post with puddle reflections"),
-                layout: &r.tone.post_layout,
                 entries: &[
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 0,
                         resource: r.tone.post_buf.as_entire_binding(),
                     },
                     binding(1, &view),
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&r.tone.post_sampler),
+                        resource: mx::BindingResource::Sampler(&r.tone.post_sampler),
                     },
                     binding(3, base),
                     binding(4, adapt),
@@ -552,7 +460,7 @@ impl Renderer {
         if hdr
             .puddles
             .as_ref()
-            .is_none_or(|t| t.source_depth != *self.targets.ao.as_ref().unwrap().depth_view.texture() || t.low != low)
+            .is_none_or(|t| t.source_depth != self.targets.ao.as_ref().unwrap().depth_view.texture() || t.low != low)
         {
             let targets = Targets::new(self, hdr, w, h, low);
             log::info!(
@@ -648,22 +556,26 @@ impl Renderer {
                 q
             },
         };
-        self.queue.write_buffer(
-            &self.puddles.as_ref().unwrap().vehicle_params,
-            0,
-            bytemuck::bytes_of(&VehicleUniform { plane, parts }),
-        );
-        self.queue.write_buffer(
-            &self.puddles.as_ref().unwrap().params,
-            0,
-            bytemuck::bytes_of(&u),
-        );
+        self.queue
+            .write_buffer(
+                &self.puddles.as_ref().unwrap().vehicle_params,
+                0,
+                bytemuck::bytes_of(&VehicleUniform { plane, parts }),
+            )
+            .expect("mX: a queue write");
+        self.queue
+            .write_buffer(
+                &self.puddles.as_ref().unwrap().params,
+                0,
+                bytemuck::bytes_of(&u),
+            )
+            .expect("mX: a queue write");
         true
     }
 
     pub(super) fn encode_puddle_reflections(
         &self,
-        encoder: &mut wgpu::CommandEncoder,
+        encoder: &mut mx::CommandEncoder,
         w: u32,
         h: u32,
         scene: &Scene,
@@ -671,7 +583,7 @@ impl Renderer {
         draw_list: &[u32],
         lighting: &Lighting,
         camera: &Camera,
-        queries: Option<&wgpu::QuerySet>,
+        queries: Option<&mx::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) {
         let pipelines = self.puddles.as_ref().unwrap();
@@ -682,38 +594,35 @@ impl Renderer {
         let origins = if lighting.puddles == 1 { Vec::new() } else { vehicle_origins(lighting, camera) };
         let vehicle_batches = player_vehicle_batches(scene, batches, draw_list, &origins);
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("puddle player vehicle"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
                     view: &targets.vehicle_view,
                     resolve_target: None,
-                    depth_slice: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::TRANSPARENT),
+                        store: mx::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                depth_stencil_attachment: Some(mx::RenderPassDepthStencilAttachment {
                     view: &targets.vehicle_depth,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0.0),
-                        store: wgpu::StoreOp::Discard,
+                    depth_ops: Some(mx::Operations {
+                        load: mx::LoadOp::Clear(0.0),
+                        store: mx::StoreOp::Discard,
                     }),
                     stencil_ops: None,
                 }),
                 timestamp_writes: pass_timer(queries, timed, "puddle vehicle"),
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-            pass.set_bind_group(2, &pipelines.vehicle_bg, &[]);
+            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
+            pass.set_bind_group(2, &pipelines.vehicle_bg);
             if !omsi_cfg::flags::OMSI_NO_PUDDLE_VEHICLE.is_set() {
                 if let Some(first) = vehicle_batches.first() {
-                    pass.set_bind_group(
-                        1,
-                        &scene.materials[first.material as usize].bind_group,
-                        &[],
-                    );
+                    let binding = &scene.materials[first.material as usize].binding;
+                    pass.set_bind_group(1, &scene.material_table.group);
+                    pass.set_buffer_offset(1, 2, MaterialTable::offset(binding.row.index));
+                    pass.set_immediates(0, binding.immediates());
                     pass.set_pipeline(&pipelines.chassis);
                     pass.draw(0..6, 0..origins.len() as u32);
                 }
@@ -722,16 +631,16 @@ impl Renderer {
                 });
             }
         }
-        let copy = |texture| wgpu::TexelCopyTextureInfo {
+        let copy = |texture| mx::TexelCopyTextureInfo {
             texture,
             mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::DepthOnly,
+            origin: mx::Origin3d::ZERO,
+            aspect: mx::TextureAspect::DepthOnly,
         };
         encoder.copy_texture_to_texture(
             copy(&targets.source_depth),
             copy(&targets.hit_depth),
-            wgpu::Extent3d {
+            mx::Extent3d {
                 width: w,
                 height: h,
                 depth_or_array_layers: 1,
@@ -742,22 +651,21 @@ impl Renderer {
                 .iter()
                 .any(|b| reflection_glass(&scene.materials[b.material as usize].uniform))
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("puddle glass depth"),
                 color_attachments: &[],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                depth_stencil_attachment: Some(mx::RenderPassDepthStencilAttachment {
                     view: &targets.hit_depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
+                    depth_ops: Some(mx::Operations {
+                        load: mx::LoadOp::Load,
+                        store: mx::StoreOp::Store,
                     }),
                     stencil_ops: None,
                 }),
                 timestamp_writes: pass_timer(queries, timed, "puddle glass"),
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
+            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
             encode_batches_filtered(
                 &mut pass,
                 scene,
@@ -777,20 +685,18 @@ impl Renderer {
         post_pass(
             encoder,
             &targets.blur,
-            filter_timer
-                .as_ref()
-                .map(|t| wgpu::RenderPassTimestampWrites {
-                    query_set: t.query_set,
-                    beginning_of_pass_write_index: t.beginning_of_pass_write_index,
-                    end_of_pass_write_index: None,
-                }),
+            filter_timer.as_ref().map(|t| mx::PassTimestampWrites {
+                query_set: t.query_set,
+                beginning_of_pass_write_index: t.beginning_of_pass_write_index,
+                end_of_pass_write_index: None,
+            }),
             &pipelines.blur_x,
             &targets.blur_x_bg,
         );
         post_pass(
             encoder,
             &targets.filtered,
-            filter_timer.map(|t| wgpu::RenderPassTimestampWrites {
+            filter_timer.map(|t| mx::PassTimestampWrites {
                 query_set: t.query_set,
                 beginning_of_pass_write_index: None,
                 end_of_pass_write_index: t.end_of_pass_write_index,
@@ -982,9 +888,9 @@ mod tests {
             shadows: false,
             ..Default::default()
         };
-        fn depth_at_centre(r: &Renderer, texture: &wgpu::Texture, size: u32) -> f32 {
+        fn depth_at_centre(r: &Renderer, texture: &mx::Texture, size: u32) -> f32 {
             let bytes = r
-                .read_texture(texture, wgpu::TextureAspect::DepthOnly)
+                .read_texture(texture, mx::TextureAspect::DepthOnly)
                 .unwrap();
             let offset = ((size / 2 * size + size / 2) * 4) as usize;
             f32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
@@ -998,7 +904,7 @@ mod tests {
                 let targets = r.targets.hdr_targets[&(size, size)].puddles.as_ref().unwrap();
                 assert_eq!(
                     targets.source_depth,
-                    *r.targets.ao.as_ref().unwrap().depth_view.texture()
+                    r.targets.ao.as_ref().unwrap().depth_view.texture()
                 );
                 // Read both textures below through an immutable renderer borrow.
                 let receiver = depth_at_centre(&r, &targets.source_depth, size);
@@ -1015,11 +921,11 @@ mod tests {
     }
 
     fn test_renderer(msaa: u32) -> Renderer {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance = mx::Instance::new();
         pollster::block_on(Renderer::new_with(
             &instance,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             RenderOptions {
                 msaa,
                 ssao: false,
@@ -1079,7 +985,7 @@ mod tests {
 
     fn refraction_source(r: &Renderer, enhanced: bool) -> Vec<f32> {
         let texture = r.targets.glass_picture.as_ref().unwrap().texture();
-        let bytes = r.read_texture(texture, wgpu::TextureAspect::All).unwrap();
+        let bytes = r.read_texture(&texture, mx::TextureAspect::All).unwrap();
         if texture.format() != HDR_FORMAT {
             return bytes.into_iter().map(|v| v as f32 / 255.0).collect();
         }

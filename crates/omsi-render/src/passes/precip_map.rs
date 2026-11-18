@@ -25,30 +25,39 @@ pub(crate) fn precip_matrix(cam_rel: Vec3) -> Mat4 {
 /// cascade's matrix swapped for the map's, so that the close cascade's pipelines draw it),
 /// and the matrix it was last drawn with (`None` while nothing falls).
 pub(crate) struct PrecipMap {
-    pub(crate) view: wgpu::TextureView,
-    pub(crate) camera_buf: wgpu::Buffer,
+    pub(crate) view: mx::TextureView,
+    pub(crate) camera_buf: mx::Buffer,
     pub(crate) matrix: std::cell::Cell<Option<Mat4>>,
 }
 
 impl PrecipMap {
-    pub(crate) fn new(device: &wgpu::Device) -> PrecipMap {
-        let tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("precipitation roof map"),
-            size: wgpu::Extent3d { width: PRECIP_TEXELS, height: PRECIP_TEXELS, depth_or_array_layers: 1 },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let camera_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("precipitation roof camera"),
-            size: std::mem::size_of::<CameraUniform>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        PrecipMap { view: tex.create_view(&Default::default()), camera_buf, matrix: std::cell::Cell::new(None) }
+    pub(crate) fn new(device: &mx::Device) -> PrecipMap {
+        let tex = device
+            .create_texture(&mx::TextureDescriptor {
+                label: Some("precipitation roof map"),
+                size: mx::Extent3d {
+                    width: PRECIP_TEXELS,
+                    height: PRECIP_TEXELS,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format: DEPTH_FORMAT,
+                usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .expect("mX: a texture");
+        let camera_buf = device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("precipitation roof camera"),
+                size: std::mem::size_of::<CameraUniform>() as u64,
+                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+            })
+            .expect("mX: a buffer");
+        PrecipMap { view: tex
+                .create_view(&Default::default())
+                .expect("mX: a texture view"), camera_buf, matrix: std::cell::Cell::new(None) }
     }
 
     /// What the rain's and the snow's shaders take of it: the matrix (identity) and whether
@@ -68,28 +77,30 @@ impl Renderer {
         let mut c = *cu;
         c.light_view_proj_close = m.to_cols_array_2d();
         c.sun_dir = [0.0; 4];
-        self.queue.write_buffer(&self.shadows.precip.camera_buf, 0, bytemuck::bytes_of(&c));
+        self.queue.write_buffer(&self.shadows.precip.camera_buf, 0, bytemuck::bytes_of(&c))
+            .expect("mX: a queue write");
     }
 
     /// Draw the map (when the frame has one: see `ShadowPlan::precip`).
-    pub(crate) fn encode_precip_map(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, sh: &ShadowPlan, shadow_batches: &[Vec<Batch>; SHADOW_LISTS], timers: &mut PassTimers) {
+    pub(crate) fn encode_precip_map(&self, encoder: &mut mx::CommandEncoder, scene: &Scene, sh: &ShadowPlan, shadow_batches: &[Vec<Batch>; SHADOW_LISTS], timers: &mut PassTimers) {
         let (Some(m), Some(bg)) = (sh.precip, scene.precip_bind_group.as_ref()) else {
             self.shadows.precip.matrix.set(None);
             return;
         };
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
             label: Some("precipitation roof"),
             color_attachments: &[],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            depth_stencil_attachment: Some(mx::RenderPassDepthStencilAttachment {
                 view: &self.shadows.precip.view,
-                depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
+                depth_ops: Some(mx::Operations {
+                    load: mx::LoadOp::Clear(1.0),
+                    store: mx::StoreOp::Store, }),
                 stencil_ops: None,
             }),
             timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "precipitation roof"),
             occlusion_query_set: None,
-            multiview_mask: None,
         });
-        pass.set_bind_group(0, bg, &[]);
+        pass.set_bind_group(0, bg);
         encode_batches(&mut pass, scene, &shadow_batches[PRECIP_LIST], |pipe| &self.shadows.shadow_pipelines[4 + pipe as usize]);
         drop(pass);
         self.shadows.precip.matrix.set(Some(m));

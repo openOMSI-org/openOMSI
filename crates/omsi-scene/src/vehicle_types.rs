@@ -587,7 +587,7 @@ pub struct VehiclePrefetch {
     pub(super) on_gpu: Arc<Mutex<HashMap<PathBuf, (TextureId, usize)>>>,
     pub(super) meshes_on_gpu: Arc<Mutex<HashMap<(PathBuf, usize), (MeshId, usize)>>>,
     pub(super) ready: Arc<Mutex<PreparedVehicles>>,
-    pub(super) gpu: (wgpu::Device, wgpu::Queue),
+    pub(super) gpu: (mx::Device, mx::Queue),
     pub(super) mesh_pages: bool,
 }
 

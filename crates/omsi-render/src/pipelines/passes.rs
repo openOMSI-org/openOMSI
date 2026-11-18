@@ -9,7 +9,7 @@ use crate::*;
 
 /// What the main pass's pipelines are made from.
 pub(crate) struct PassKit<'a> {
-    pub device: &'a wgpu::Device,
+    pub device: &'a mx::Device,
     pub scene: &'a SceneBase,
     pub coronas: &'a Coronas,
     pub snow: &'a Precip,
@@ -23,7 +23,7 @@ pub(crate) struct PassKit<'a> {
 struct PassShaders<'a> {
     scene: &'a str,
     corona: &'a str,
-    corona_blend: wgpu::BlendState,
+    corona_blend: mx::BlendState,
     smoke: &'a str,
     snow: &'a str,
     rain: &'a str,
@@ -34,7 +34,7 @@ pub(crate) struct Passes {
     pub pass: PassPipelines,
     pub hdr_pass: Option<PassPipelines>,
     pub hdr_eye_pass: Option<PassPipelines>,
-    pub sky_mirror_pipeline: Option<wgpu::RenderPipeline>,
+    pub sky_mirror_pipeline: Option<mx::RenderPipeline>,
     pub reflection_pass: Option<PassPipelines>,
     pub leave_out_enhanced: bool,
 }
@@ -51,9 +51,9 @@ pub(crate) fn leave_out_enhanced(options: &RenderOptions, adapter_name: &str) ->
                 || gl_backend()))
 }
 
-type Made = Option<wgpu::RenderPipeline>;
+type Made = Option<mx::RenderPipeline>;
 
-fn one(made: &mut impl Iterator<Item = Made>) -> wgpu::RenderPipeline {
+fn one(made: &mut impl Iterator<Item = Made>) -> mx::RenderPipeline {
     made.next().flatten().expect("a pipeline of the main pass")
 }
 
@@ -70,7 +70,7 @@ fn take(made: &mut impl Iterator<Item = Made>) -> PassPipelines {
 }
 
 impl PassKit<'_> {
-    fn pass<'s>(&'s self, f: wgpu::TextureFormat, fs: PassShaders<'s>,
+    fn pass<'s>(&'s self, f: mx::TextureFormat, fs: PassShaders<'s>,
         surfaces: bool,
         jobs: &mut Vec<Job<'s, Made>>) {
         let device = self.device;
@@ -94,7 +94,8 @@ impl PassKit<'_> {
         take(&mut compile_all(self.device, jobs).into_iter())
     }
 
-    pub(crate) fn build(&self, format: wgpu::TextureFormat, hdr_format: wgpu::TextureFormat, leave_out_enhanced: bool) -> Passes {
+    pub(crate) fn build(&self, format: mx::TextureFormat,
+        hdr_format: mx::TextureFormat, leave_out_enhanced: bool) -> Passes {
         let enhanced = !leave_out_enhanced;
         let reflections = enhanced && !GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
         let mut jobs: Vec<Job<Made>> = Vec::new();
@@ -138,7 +139,7 @@ impl EyePipelineKit {
         Self { scene: kit.scene.clone(), coronas: kit.coronas.clone(), snow: kit.snow.clone(), rain: kit.rain.clone(), sky: kit.sky.clone(), msaa: kit.msaa }
     }
 
-    pub(crate) fn build(self, device: &wgpu::Device) -> (PassPipelines, [wgpu::RenderPipeline; 6]) {
+    pub(crate) fn build(self, device: &mx::Device) -> (PassPipelines, [mx::RenderPipeline; 6]) {
         let pass = PassKit { device, scene: &self.scene, coronas: &self.coronas, snow: &self.snow, rain: &self.rain, sky: &self.sky, msaa: self.msaa }.build_eye();
         let prefill = super::scene::eye_prepass(device, &self.scene, self.msaa);
         (pass, prefill)

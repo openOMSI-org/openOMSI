@@ -7,11 +7,11 @@ use super::*;
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn textures_shrunk_together_keep_their_picture() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -64,11 +64,11 @@ fn textures_shrunk_together_keep_their_picture() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn instances_beyond_the_buffers_room_are_drawn_with_the_old_ones() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     )).expect("test renderer");
     let mut scene = renderer.new_scene();

@@ -6,10 +6,10 @@ use super::*;
 impl Renderer {
     /// Finish the encoders and submit them: the shadow maps, the prepass, the main pass's
     /// parts, then the picture. `big`: finished on helper threads.
-    pub(crate) fn finish_and_submit(&mut self, encoders: Encoders, main_parts: Vec<wgpu::CommandEncoder>, big: bool, with_overlays: bool, clock: &mut StageClock, timers: PassTimers) {
+    pub(crate) fn finish_and_submit(&mut self, encoders: Encoders, main_parts: Vec<mx::CommandEncoder>, big: bool, with_overlays: bool, clock: &mut StageClock, timers: PassTimers) {
         let Encoders { shadow: shadow_encoder, prepass: prepass_encoder, picture: encoder } = encoders;
         let profiling = self.profiling;
-        let finish = |encoder: wgpu::CommandEncoder| {
+        let finish = |encoder: mx::CommandEncoder| {
             let start = profiling.then(std::time::Instant::now);
             let commands = encoder.finish();
             (commands, start.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0))
@@ -19,7 +19,7 @@ impl Renderer {
             // for a helper the system has not run yet to finish the one it was given.
             let caller = std::thread::current().id();
             let parts = main_parts.len();
-            let jobs: Vec<std::sync::Mutex<Option<wgpu::CommandEncoder>>> = [encoder, shadow_encoder, prepass_encoder]
+            let jobs: Vec<std::sync::Mutex<Option<mx::CommandEncoder>>> = [encoder, shadow_encoder, prepass_encoder]
                 .into_iter()
                 .chain(main_parts)
                 .map(|e| std::sync::Mutex::new(Some(e)))
@@ -37,7 +37,7 @@ impl Renderer {
             let (commands, main_secs, _) = done.next().expect("the picture's encoder");
             let (shadow_commands, shadow_secs, _) = done.next().expect("the shadows' encoder");
             let (prepass_commands, prepass_secs, _) = done.next().expect("the prepass's encoder");
-            let (part_commands, part_secs): (Vec<wgpu::CommandBuffer>, Vec<f64>) = done.map(|d| (d.0, d.1)).unzip();
+            let (part_commands, part_secs): (Vec<mx::CommandBuffer>, Vec<f64>) = done.map(|d| (d.0, d.1)).unzip();
             debug_assert_eq!(part_commands.len(), parts);
             (shadow_commands, prepass_commands, part_commands, commands, [shadow_secs, prepass_secs, main_secs, wait, 0.0, part_secs.iter().sum()])
         } else if big {
@@ -81,8 +81,13 @@ impl Renderer {
             }
         }
         clock.stage(self, "finish", "mirror.finish");
-        self.queue
-            .submit(self.take_deferred_commands().into_iter().chain([shadow_commands, prepass_commands]).chain(part_commands).chain([commands]));
+        let submission = self.queue.submit(self.take_deferred_commands().into_iter().chain([shadow_commands, prepass_commands]).chain(part_commands).chain([commands]));
+        if let Some(log) = self.tone.exposure_log.as_mut() {
+            log.submitted(submission);
+        }
+        if let Some(s) = self.tone.lamp_sight.as_mut() {
+            s.submitted(submission);
+        }
         clock.stage(self, "submit", "mirror.submit");
         let timed = timers.timed;
         if let (Some(t), false) = (

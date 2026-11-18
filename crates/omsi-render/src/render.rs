@@ -5,30 +5,28 @@ use crate::*;
 
 /// One single-sampled full-screen pass.
 pub(crate) fn post_pass(
-    encoder: &mut wgpu::CommandEncoder,
-    view: &wgpu::TextureView,
-    timer: Option<wgpu::RenderPassTimestampWrites<'_>>,
-    pipeline: &wgpu::RenderPipeline,
-    bg: &wgpu::BindGroup,
+    encoder: &mut mx::CommandEncoder,
+    view: &mx::TextureView,
+    timer: Option<mx::PassTimestampWrites<'_>>,
+    pipeline: &mx::RenderPipeline,
+    bg: &mx::BindGroup,
 ) {
-    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+    let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
         label: Some("post"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+        color_attachments: &[Some(mx::RenderPassColorAttachment {
             view,
-            depth_slice: None,
             resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                store: wgpu::StoreOp::Store,
+            ops: mx::Operations {
+                load: mx::LoadOp::Clear(mx::Color::BLACK),
+                store: mx::StoreOp::Store,
             },
         })],
         depth_stencil_attachment: None,
         timestamp_writes: timer,
         occlusion_query_set: None,
-        multiview_mask: None,
-    });
+        });
     pass.set_pipeline(pipeline);
-    pass.set_bind_group(0, bg, &[]);
+    pass.set_bind_group(0, bg);
     pass.draw(0..3, 0..1);
 }
 
@@ -36,8 +34,10 @@ pub(crate) fn post_pass(
 /// pre-exposure, the metered picture and the correction the tone mapping applies, logged
 /// about four times a second (the metered value lives on the GPU and is read back).
 pub(crate) struct ExposureLog {
-    pub(crate) buf: wgpu::Buffer,
-    pub(crate) ready: Arc<std::sync::atomic::AtomicBool>,
+    pub(crate) buf: mx::Buffer,
+    pub(crate) device: mx::Device,
+    /// The submission of the frame whose metering is being read back (see `submitted`).
+    pub(crate) submission: Option<mx::SubmissionIndex>,
     pub(crate) waiting: bool,
     pub(crate) frame: u64,
     pub(crate) started: std::time::Instant,
@@ -54,16 +54,18 @@ pub(crate) struct ExposureLog {
 }
 
 impl ExposureLog {
-    pub(crate) fn new(device: &wgpu::Device) -> Option<ExposureLog> {
-        let buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("exposure readback"),
-            size: 256,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+    pub(crate) fn new(device: &mx::Device) -> Option<ExposureLog> {
+        let buf = device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("exposure readback"),
+                size: 256,
+                usage: mx::BufferUsages::COPY_DST | mx::BufferUsages::MAP_READ,
+            })
+            .expect("mX: a buffer");
         Some(ExposureLog {
             buf,
-            ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            device: device.clone(),
+            submission: None,
             waiting: false,
             frame: 0,
             started: std::time::Instant::now(),
@@ -75,15 +77,15 @@ impl ExposureLog {
 
     pub(crate) fn sample(
         &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        adapted: &wgpu::TextureView,
+        encoder: &mut mx::CommandEncoder,
+        adapted: &mx::TextureView,
         pre_log2: f32,
         meter: [f32; 6],
     ) {
         self.frame += 1;
-        if self.waiting && self.ready.swap(false, std::sync::atomic::Ordering::Relaxed) {
-            {
-                let view = self.buf.slice(0..8).get_mapped_range();
+        let _ = self.device.poll();
+        if self.waiting && self.submission.is_some_and(|i| self.device.is_done(i)) {
+            let _ = self.buf.map_read_now(0..8, |view| {
                 let bits = u16::from_le_bytes([view[0], view[1]]);
                 let metered = half_to_f32(bits);
                 let (pre, m) = self.pending;
@@ -93,41 +95,45 @@ impl ExposureLog {
                     self.ev = ev;
                 }
                 if self.log { log::info!("exposure t={:.2}s: light model {:+.2} EV, metered picture log2 {:+.2}, correction {:+.2} EV, total {:+.2} EV", self.started.elapsed().as_secs_f32(), pre, metered, ev, pre + ev); }
-            }
-            self.buf.unmap();
+            });
+            self.submission = None;
             self.waiting = false;
         }
         if self.waiting || self.frame % 8 != 0 {
             return;
         }
         encoder.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo {
-                texture: adapted.texture(),
+            mx::TexelCopyTextureInfo {
+                texture: &adapted.texture(),
                 mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
+                origin: mx::Origin3d::ZERO,
+                aspect: mx::TextureAspect::All,
             },
-            wgpu::TexelCopyBufferInfo {
+            mx::TexelCopyBufferInfo {
                 buffer: &self.buf,
-                layout: wgpu::TexelCopyBufferLayout {
+                layout: mx::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(256),
                     rows_per_image: Some(1),
                 },
             },
-            wgpu::Extent3d {
+            mx::Extent3d {
                 width: 1,
                 height: 1,
                 depth_or_array_layers: 1,
             },
         );
         self.pending = (pre_log2, meter);
-        let ready = self.ready.clone();
-        // mapped once the frame's commands are submitted (see `render_inner`)
+        // read once the frame's submission is done (see `submitted`)
         self.waiting = true;
-        encoder.map_buffer_on_submit(&self.buf, wgpu::MapMode::Read, .., move |r| {
-            ready.store(r.is_ok(), std::sync::atomic::Ordering::Relaxed)
-        });
+        self.submission = None;
+    }
+
+    /// The frame whose commands copied the metering was submitted as `index`.
+    pub(crate) fn submitted(&mut self, index: mx::SubmissionIndex) {
+        if self.waiting && self.submission.is_none() {
+            self.submission = Some(index);
+        }
     }
 }
 
@@ -309,7 +315,7 @@ impl Renderer {
     pub fn render(
         &mut self,
         scene: &mut Scene,
-        target: &wgpu::TextureView,
+        target: &mx::TextureView,
         width: u32,
         height: u32,
         camera: &Camera,
@@ -324,7 +330,7 @@ impl Renderer {
 
     /// `render` for the window's own picture, the only one temporal upscaling draws: a photo or
     /// an off-screen picture would rebuild its targets and lose its history.
-    pub fn render_window(&mut self, scene: &mut Scene, target: &wgpu::TextureView, width: u32, height: u32, camera: &Camera, lighting: &Lighting) {
+    pub fn render_window(&mut self, scene: &mut Scene, target: &mx::TextureView, width: u32, height: u32, camera: &Camera, lighting: &Lighting) {
         self.temporal_window = true;
         self.render(scene, target, width, height, camera, lighting);
         self.temporal_window = false;
@@ -335,7 +341,7 @@ impl Renderer {
     pub fn render_triple(
         &mut self,
         scene: &mut Scene,
-        target: &wgpu::TextureView,
+        target: &mx::TextureView,
         width: u32,
         height: u32,
         camera: &Camera,
@@ -354,22 +360,27 @@ impl Renderer {
                 .iter()
                 .map(|v| {
                     let w = pw;
-                    let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                        label: Some("triple screen panel"),
-                        size: wgpu::Extent3d {
-                            width: w,
-                            height,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: self.format,
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                            | wgpu::TextureUsages::TEXTURE_BINDING,
-                        view_formats: &[],
-                    });
-                    let view = texture.create_view(&Default::default());
+                    let texture = self
+                        .device
+                        .create_texture(&mx::TextureDescriptor {
+                            label: Some("triple screen panel"),
+                            size: mx::Extent3d {
+                                width: w,
+                                height,
+                                depth_or_array_layers: 1,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: mx::TextureDimension::D2,
+                            format: self.format,
+                            usage: mx::TextureUsages::RENDER_ATTACHMENT
+                                | mx::TextureUsages::TEXTURE_BINDING,
+                            view_formats: &[],
+                        })
+                        .expect("mX: a texture");
+                    let view = texture
+                        .create_view(&Default::default())
+                        .expect("mX: a texture view");
                     // (z: where the panel starts in the window, for `fs_panel`)
                     let params = [w as f32, height as f32, v.viewport[0] as f32, 0.0];
                     let buf = buffer_init(
@@ -377,23 +388,22 @@ impl Renderer {
                         &self.queue,
                         Some("triple screen composite"),
                         bytemuck::cast_slice(&params),
-                        wgpu::BufferUsages::UNIFORM,
+                        mx::BufferUsages::UNIFORM,
                     );
-                    let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    let group = self.device.create_bind_group(&mx::BindGroupDescriptor {
                         label: Some("triple screen composite"),
-                        layout: &self.scale.upscale_layout,
                         entries: &[
-                            wgpu::BindGroupEntry {
+                            mx::BindGroupEntry {
                                 binding: 0,
                                 resource: buf.as_entire_binding(),
                             },
-                            wgpu::BindGroupEntry {
+                            mx::BindGroupEntry {
                                 binding: 1,
-                                resource: wgpu::BindingResource::TextureView(&view),
+                                resource: mx::BindingResource::TextureView(&view),
                             },
-                            wgpu::BindGroupEntry {
+                            mx::BindGroupEntry {
                                 binding: 2,
-                                resource: wgpu::BindingResource::Sampler(&self.sky.sky_sampler),
+                                resource: mx::BindingResource::Sampler(&self.sky.sky_sampler),
                             },
                         ],
                     });
@@ -432,38 +442,34 @@ impl Renderer {
         self.prepare_overlays(scene, width, height);
         let mut encoder = self
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("triple screen composite"),
-            });
+            .create_command_encoder(Some("triple screen composite"));
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("triple screen composite"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
                     view: target,
-                    depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                        store: mx::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
             pass.set_pipeline(&self.scale.panel_pipeline);
             for (i, v) in views.iter().enumerate() {
                 // (the right panel loses its last pixel or two at the window's edge)
                 let [x, y, w, h] = v.viewport;
                 pass.set_scissor_rect(x, y, w.min(width - x), h);
-                pass.set_bind_group(0, &self.targets.triple_targets.as_ref().unwrap().1[i].1, &[]);
+                pass.set_bind_group(0, &self.targets.triple_targets.as_ref().unwrap().1[i].1);
                 pass.draw(0..3, 0..1);
             }
             pass.set_scissor_rect(0, 0, width, height);
             pass.set_pipeline(&self.overlay_pipeline_1x);
             for (_, _, group, _) in &scene.overlay_res {
-                pass.set_bind_group(0, group, &[]);
+                pass.set_bind_group(0, group);
                 pass.draw(0..6, 0..1);
             }
         }
@@ -486,7 +492,7 @@ impl Renderer {
     pub fn render_xr_eye(
         &mut self,
         scene: &mut Scene,
-        target: &wgpu::TextureView,
+        target: &mx::TextureView,
         width: u32,
         height: u32,
         camera: &Camera,
@@ -513,7 +519,7 @@ impl Renderer {
     pub fn render_xr_ui(
         &self,
         scene: &Scene,
-        eyes: &[wgpu::TextureView; 2],
+        eyes: &[mx::TextureView; 2],
         desktop_size: (u32, u32),
         eye_size: (u32, u32),
         menu_range: std::ops::Range<usize>,
@@ -536,14 +542,19 @@ impl Renderer {
                 uniform[index * 4..index * 4 + 4].copy_from_slice(&corner.to_array());
             }
             uniform[16] = scene.premultiplied.contains(id) as u8 as f32;
-            let buffer = buffer_init(&self.device, &self.queue, Some("OpenXR menu rectangle"), bytemuck::cast_slice(&uniform), wgpu::BufferUsages::UNIFORM);
-            let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            let buffer = buffer_init(&self.device, &self.queue, Some("OpenXR menu rectangle"), bytemuck::cast_slice(&uniform), mx::BufferUsages::UNIFORM,
+            );
+            let group = self.device.create_bind_group(&mx::BindGroupDescriptor {
                 label: Some("OpenXR menu rectangle"),
-                layout: &self.overlay_layout,
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: buffer.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&texture.view) },
-                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.sky.sky_sampler) },
+                    mx::BindGroupEntry { binding: 0, resource: buffer.as_entire_binding() },
+                    mx::BindGroupEntry {
+                        binding: 1,
+                        resource: mx::BindingResource::TextureView(&texture.view),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 2,
+                        resource: mx::BindingResource::Sampler(&self.sky.sky_sampler), },
                 ],
             });
             Some((buffer, group))
@@ -603,24 +614,24 @@ impl Renderer {
                 }
             }
         }
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("OpenXR menu") });
+        let mut encoder = self.device.create_command_encoder(Some("OpenXR menu"));
         for (eye, target) in eyes.iter().enumerate() {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("OpenXR menu"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
                     view: target,
-                    depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Load,
+                        store: mx::StoreOp::Store, },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
             pass.set_pipeline(&self.xr_ui_pipeline);
             for (_, group) in &prepared[eye] {
-                pass.set_bind_group(0, group, &[]);
+                pass.set_bind_group(0, group);
                 pass.draw(0..6, 0..1);
             }
         }
@@ -646,7 +657,9 @@ impl Renderer {
             ];
             if let Some((_, buf, _, last)) = scene.overlay_res.get_mut(k).filter(|o| o.0 == tex) {
                 if *last != ndc {
-                    self.queue.write_buffer(buf, 0, bytemuck::cast_slice(&ndc));
+                    self.queue
+                        .write_buffer(buf, 0, bytemuck::cast_slice(&ndc))
+                        .expect("mX: a queue write");
                     *last = ndc;
                 }
                 continue;
@@ -656,23 +669,22 @@ impl Renderer {
                 &self.queue,
                 Some("overlay rect"),
                 bytemuck::cast_slice(&ndc),
-                wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
             );
-            let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
                 label: Some("overlay"),
-                layout: &self.overlay_layout,
                 entries: &[
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 0,
                         resource: buf.as_entire_binding(),
                     },
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&scene.textures[tex].view),
+                        resource: mx::BindingResource::TextureView(&scene.textures[tex].view),
                     },
-                    wgpu::BindGroupEntry {
+                    mx::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.sky.sky_sampler),
+                        resource: mx::BindingResource::Sampler(&self.sky.sky_sampler),
                     },
                 ],
             });
@@ -684,11 +696,47 @@ impl Renderer {
         }
     }
 
+    /// One frame; a resource mX could not make for it (the card out of memory, the device
+    /// lost) leaves that frame out and goes to the error report (wgpu made an invalid object
+    /// and reported it, the frame drawing nothing where it was used).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_inner(
         &mut self,
         scene: &mut Scene,
-        target: &wgpu::TextureView,
+        target: &mx::TextureView,
+        width: u32,
+        height: u32,
+        camera: &Camera,
+        lighting: &Lighting,
+        with_overlays: bool,
+        exclude_texture: Option<TextureId>,
+        projection: Option<Mat4>,
+        second_eye: bool,
+    ) {
+        let drawn = gpu_attempt(|| {
+            self.render_frame(
+                scene,
+                target,
+                width,
+                height,
+                camera,
+                lighting,
+                with_overlays,
+                exclude_texture,
+                projection,
+                second_eye,
+            )
+        });
+        if let Err(text) = drawn {
+            (self.errors.report)(&refused_error(text));
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_frame(
+        &mut self,
+        scene: &mut Scene,
+        target: &mx::TextureView,
         width: u32,
         height: u32,
         camera: &Camera,
@@ -699,10 +747,7 @@ impl Renderer {
         second_eye: bool,
     ) {
         // the frame's switches from the environment, each read once
-        let mut env = FrameEnv::read();
-        // (wgpu 29 cannot finish a render bundle on a custom backend, and mX Graphics is one:
-        // there the main pass is recorded directly)
-        env.no_bundles |= wgpu_mx::custom::is_mx(&self.device);
+        let env = FrameEnv::read();
         if !self.frame_hooks(scene, &env, with_overlays) {
             return;
         }
@@ -738,7 +783,13 @@ impl Renderer {
         if plan.ground.active() {
             // (the frame's uniform was written with the flag off: the base is lit from the ground picture)
             let flag = 1.0f32;
-            self.queue.write_buffer(&self.camera_buf, (std::mem::offset_of!(CameraUniform, lod) + 4) as u64, bytemuck::bytes_of(&flag));
+            self.queue
+                .write_buffer(
+                    &self.camera_buf,
+                    (std::mem::offset_of!(CameraUniform, lod) + 4) as u64,
+                    bytemuck::bytes_of(&flag),
+                )
+                .expect("mX: a queue write");
         }
         // (the shadow casters' entries after the passes' own: the main pass's batches keep
         // their places in the list while only the shadows change, and its bundles are kept)
@@ -759,24 +810,12 @@ impl Renderer {
         clock.stage(self, "bundles", "mirror.bundles");
         // three command buffers, finished side by side (see below): the shadow maps, the
         // depth prepass with the ambient occlusion, and the picture itself
-        let mut shadow_encoder =
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("shadow maps"),
-                });
+        let mut shadow_encoder = self.device.create_command_encoder(Some("shadow maps"));
         self.flush_pending_meshes(scene, &mut shadow_encoder);
         let mut enc = Encoders {
             shadow: shadow_encoder,
-            prepass: self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("depth prepass"),
-                }),
-            picture: self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("picture"),
-                }),
+            prepass: self.device.create_command_encoder(Some("depth prepass")),
+            picture: self.device.create_command_encoder(Some("picture")),
         };
         self.encode_shadow_maps(&mut enc.shadow, scene, &sh, &shadow_batches, &mut timers);
         self.encode_lamp_shadows(&mut enc.shadow, scene, &f, &shadow_batches, &mut timers);
@@ -803,7 +842,7 @@ impl Renderer {
         let big =
             shadow_batches.iter().map(|b| b.len()).sum::<usize>() + plan.prepass_batches.len() > 64 || !main_parts.is_empty() || (!cfg!(any(target_os = "macos", target_os = "ios")) && main_bundles.len() >= 2);
         if big && !f.env.no_post_split {
-            let rest = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("after the main pass") });
+            let rest = self.device.create_command_encoder(Some("after the main pass"));
             main_parts.push(std::mem::replace(&mut enc.picture, rest));
         }
         let puddles_on = self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
@@ -846,7 +885,8 @@ impl Renderer {
         camera: &Camera,
         lighting: &Lighting,
     ) -> Result<(Vec<u8>, Option<Vec<f32>>)> {
-        let copies = self.adapter.as_ref().map_or(!gl_backend(), |a| a.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::DEPTH_TEXTURE_AND_BUFFER_COPIES));
+        // (OpenGL ES reads no depth back; mX's GL reads it on desktop GL only)
+        let copies = !gl_backend();
         self.depth_readback = copies;
         let px = self.render_image(scene, width, height, camera, lighting, None);
         self.depth_readback = false;
@@ -855,7 +895,7 @@ impl Renderer {
         let depth = match tex {
             Some(t) => {
                 // (a backend that cannot copy depth back: the picture without it)
-                match self.read_texture(&t, wgpu::TextureAspect::DepthOnly) {
+                match self.read_texture(&t, mx::TextureAspect::DepthOnly) {
                     Ok(raw) => {
                         // reversed depth (1 at the near plane, 0 at the far one) of
                         // `perspective_rh(fov, aspect, far, near)` back to the distance along
@@ -900,21 +940,26 @@ impl Renderer {
         lighting: &Lighting,
         rig: Option<&TripleScreen>,
     ) -> Result<Vec<u8>> {
-        let tex = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("offscreen"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: self.format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let view = tex.create_view(&Default::default());
+        let tex = self
+            .device
+            .create_texture(&mx::TextureDescriptor {
+                label: Some("offscreen"),
+                size: mx::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format: self.format,
+                usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            })
+            .expect("mX: a texture");
+        let view = tex
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
         // a picture on its own: the enhanced exposure is where the light puts it at once
         self.instant_exposure = true;
         let max_scene = self.options.max_scene.take();
@@ -925,11 +970,11 @@ impl Renderer {
         }
         self.options.max_scene = max_scene;
         self.instant_exposure = false;
-        let mut out = self.read_texture(&tex, wgpu::TextureAspect::All)?;
+        let mut out = self.read_texture(&tex, mx::TextureAspect::All)?;
         // BGRA surfaces → swap
         if matches!(
             self.format,
-            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+            mx::TextureFormat::Bgra8Unorm | mx::TextureFormat::Bgra8UnormSrgb
         ) {
             for px in out.chunks_exact_mut(4) {
                 px.swap(0, 2);
@@ -938,56 +983,54 @@ impl Renderer {
         Ok(out)
     }
 
-    pub(crate) fn read_texture(&self, texture: &wgpu::Texture, aspect: wgpu::TextureAspect) -> Result<Vec<u8>> {
+    pub(crate) fn read_texture(&self, texture: &mx::Texture,
+        aspect: mx::TextureAspect,) -> Result<Vec<u8>> {
         let (width, height) = (texture.width(), texture.height());
-        let row_bytes = width * texture.format().block_copy_size(Some(aspect)).context("unsupported readback format")?;
+        let row_bytes = width * texture.format().block_copy_size()
+                .context("unsupported readback format")?;
         let bpr = row_bytes.div_ceil(256) * 256;
-        let buf = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("readback"),
-            size: (bpr * height) as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        let mut enc = self.device.create_command_encoder(&Default::default());
+        let buf = self
+            .device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("readback"),
+                size: (bpr * height) as u64,
+                usage: mx::BufferUsages::COPY_DST | mx::BufferUsages::MAP_READ,
+            })
+            .expect("mX: a buffer");
+        let mut enc = self.device.create_command_encoder(None);
         enc.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo {
+            mx::TexelCopyTextureInfo {
                 texture,
                 mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
+                origin: mx::Origin3d::ZERO,
                 aspect,
             },
-            wgpu::TexelCopyBufferInfo {
+            mx::TexelCopyBufferInfo {
                 buffer: &buf,
-                layout: wgpu::TexelCopyBufferLayout {
+                layout: mx::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(bpr),
                     rows_per_image: Some(height),
                 },
             },
-            wgpu::Extent3d {
+            mx::Extent3d {
                 width,
                 height,
                 depth_or_array_layers: 1,
             },
         );
         let idx = self.queue.submit([enc.finish()]);
-        let slice = buf.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
-        });
-        wait_gpu(&self.device, Some(idx)).map_err(|e| anyhow!("poll: {e:?}"))?;
-        rx.recv()
-            .context("map")?
-            .map_err(|e| anyhow!("map: {e:?}"))?;
-        let data = slice.get_mapped_range();
-        let mut out = Vec::with_capacity((row_bytes * height) as usize);
-        for row in 0..height {
-            let start = (row * bpr) as usize;
-            out.extend_from_slice(&data[start..start + row_bytes as usize]);
-        }
-        drop(data);
-        buf.unmap();
+        wait_gpu(&self.device, Some(idx)).map_err(|e| anyhow!("waiting for the GPU: {e}"))?;
+        let out = buf
+            .map_read_now(0..buf.size(), |data| {
+                let mut out = Vec::with_capacity((row_bytes * height) as usize);
+                for row in 0..height {
+                    let start = (row * bpr) as usize;
+                    out.extend_from_slice(&data[start..start + row_bytes as usize]);
+                }
+                out
+            })
+            .map_err(|e| anyhow!("reading back: {e}"))?;
         Ok(out)
     }
 }
@@ -995,22 +1038,21 @@ impl Renderer {
 /// The enhanced picture's post pass and exposure: pipelines, metering, the eye's adaptation, the lighting uniform and probe.
 pub(crate) struct ToneMapping {
     pub(crate) post: PostPipelines,
-    pub(crate) post_layout: wgpu::BindGroupLayout,
-    pub(crate) post_buf: wgpu::Buffer,
-    pub(crate) post_sampler: wgpu::Sampler,
+    pub(crate) post_buf: mx::Buffer,
+    pub(crate) post_sampler: mx::Sampler,
     /// The metered mean log luminance (1x1), and the adapted value in two textures drawn
     /// into by turns (`adapt_front` is the current one), with their bind groups.
-    pub(crate) meter_view: wgpu::TextureView,
-    pub(crate) adapt_views: [wgpu::TextureView; 2],
-    pub(crate) adapt_bg: [wgpu::BindGroup; 2],
+    pub(crate) meter_view: mx::TextureView,
+    pub(crate) adapt_views: [mx::TextureView; 2],
+    pub(crate) adapt_bg: [mx::BindGroup; 2],
     pub(crate) adapt_front: usize,
     /// OMSI_DEBUG_EXPOSURE: the adapted metering read back now and then, and logged.
     pub(crate) exposure_log: Option<ExposureLog>,
     pub(crate) lamp_sight: Option<LampSight>,
     /// Enhanced lighting: its uniform, the sky table, the sampler both use, the reflection
     /// probe, the sky last computed and the exposure as it follows it.
-    pub(crate) enh_buf: wgpu::Buffer,
-    pub(crate) lin_sampler: wgpu::Sampler,
+    pub(crate) enh_buf: mx::Buffer,
+    pub(crate) lin_sampler: mx::Sampler,
     pub(crate) probe: Option<Probe>,
     /// The lamps' and headlights' light on what the camera looks at (`view_lamp_light`),
     /// which the eye adapts to by night.

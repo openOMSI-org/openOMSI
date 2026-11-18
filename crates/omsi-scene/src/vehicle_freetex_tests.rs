@@ -41,16 +41,15 @@ fn renderer() -> Renderer {
 }
 
 fn renderer_on(gpu: bool) -> Renderer {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    if !gpu {
-        descriptor.backends = wgpu::Backends::NOOP;
-        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    }
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = if gpu {
+        mx::Instance::new()
+    } else {
+        mx::Instance::with_backends(mx::Backends::NOOP)
+    };
     pollster::block_on(Renderer::new_with(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         omsi_render::RenderOptions {
             msaa: if gpu { 4 } else { 1 },
             ssao: false,

@@ -7,9 +7,9 @@ pub(crate) fn choose(app: &mut crate::App) -> Option<&'static str> {
     if cfg!(any(target_os = "android", target_os = "ios")) || !first_start(path.parent()?) || omsi_cfg::flags::OMSI_GRAPHICS.is_set() {
         return None;
     }
-    let adapters = pollster::block_on(app.gfx.instance.enumerate_adapters(wgpu::Backends::all()));
-    let best = adapters.iter().min_by_key(|a| rank(a.get_info().device_type))?;
-    let info = best.get_info();
+    let adapters = app.gfx.instance.enumerate_adapters();
+    let best = adapters.iter().min_by_key(|a| rank(a.info().device_type))?;
+    let info = best.info();
     let preset = pick(info.device_type, omsi_render::card_vram_mb(best), &info.name);
     let (_, values) = omsi_launcher_lib::graphics_presets().into_iter().find(|(n, _)| *n == preset)?;
     let mut v = omsi_launcher_lib::get_settings().ok()?;
@@ -42,22 +42,22 @@ fn take(app: &mut crate::App, settings: crate::settings::Settings) {
     app.session.spray.graphics = app.args.session_settings.graphics();
 }
 
-fn rank(t: wgpu::DeviceType) -> u8 {
+fn rank(t: mx::DeviceType) -> u8 {
     match t {
-        wgpu::DeviceType::DiscreteGpu => 0,
-        wgpu::DeviceType::IntegratedGpu => 1,
-        wgpu::DeviceType::VirtualGpu | wgpu::DeviceType::Other => 2,
-        wgpu::DeviceType::Cpu => 3,
+        mx::DeviceType::DiscreteGpu => 0,
+        mx::DeviceType::IntegratedGpu => 1,
+        mx::DeviceType::VirtualGpu | mx::DeviceType::Other => 2,
+        mx::DeviceType::Cpu => 3,
     }
 }
 
-fn pick(kind: wgpu::DeviceType, vram_mb: Option<u64>, name: &str) -> &'static str {
+fn pick(kind: mx::DeviceType, vram_mb: Option<u64>, name: &str) -> &'static str {
     let name = name.to_ascii_lowercase();
     match kind {
-        wgpu::DeviceType::Cpu | wgpu::DeviceType::VirtualGpu => "Low",
+        mx::DeviceType::Cpu | mx::DeviceType::VirtualGpu => "Low",
         _ if name.contains("apple") => "High",
         _ if name.contains("intel") && (name.contains("hd graphics") || name.contains("uhd")) => "Low",
-        wgpu::DeviceType::IntegratedGpu => "Medium",
+        mx::DeviceType::IntegratedGpu => "Medium",
         _ => match vram_mb {
             Some(m) if m >= 10_000 => "Extra",
             Some(m) if m >= 6_000 => "High",
@@ -71,8 +71,8 @@ fn pick(kind: wgpu::DeviceType, vram_mb: Option<u64>, name: &str) -> &'static st
 mod tests {
     use super::{first_start, merge, pick, take};
     use clap::Parser;
+    use mx::DeviceType as D;
     use serde_json::json;
-    use wgpu::DeviceType as D;
 
     #[test]
     fn the_preset_follows_the_graphics_chip() {

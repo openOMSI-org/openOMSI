@@ -58,13 +58,14 @@ impl Built {
         &self.verts
     }
 
-    pub fn made_on(mut self, device: &wgpu::Device) -> Built {
+    pub fn made_on(mut self, device: &mx::Device) -> Built {
         self.made = Some(self.verts.each_ref().map(|v| omsi_ui::Gpu::vertices(device, v)));
         self.verts = Default::default();
         self
     }
 
-    pub fn put(self, gpu: &mut omsi_ui::Gpu, device: &wgpu::Device, queue: &wgpu::Queue, ids: [usize; 4]) {
+    pub fn put(self, gpu: &mut omsi_ui::Gpu, device: &mx::Device,
+        queue: &mx::Queue, ids: [usize; 4]) {
         match self.made {
             Some(made) => ids.into_iter().zip(made).for_each(|(id, v)| gpu.put(id, v)),
             None => ids.into_iter().zip(&self.verts).for_each(|(id, v)| gpu.upload(device, queue, id, v)),

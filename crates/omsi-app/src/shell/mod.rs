@@ -66,7 +66,7 @@ pub(crate) struct Shell {
     /// No category chosen: the pause menu shows only the rail over the dimmed paused game.
     pub(crate) pause_hidden: bool,
     pub(crate) quick_focus: usize,
-    gpu: Option<(Gpu, wgpu::TextureFormat)>,
+    gpu: Option<(Gpu, mx::TextureFormat)>,
     shot_gpu: Option<Gpu>,
     drawn: Option<Drawn>,
     /// What the clicks of the last frame ask of the game.
@@ -113,9 +113,9 @@ struct Drawn {
 /// and blurred there in three small passes, never read back (`Shell::capture_backdrop`).
 struct GlassPicture {
     /// The copy, and its number among the screens' textures.
-    copy: (wgpu::Texture, usize),
+    copy: (mx::Texture, usize),
     /// Each pass's picture and its number: a quarter of the size, `factor`th, twice that.
-    passes: Vec<(wgpu::Texture, usize)>,
+    passes: Vec<(mx::Texture, usize)>,
     factor: u32,
 }
 
@@ -254,12 +254,12 @@ impl Shell {
         self.glass_taken = None;
     }
 
-    pub(crate) fn capture_backdrop(&mut self, r: &Renderer, src: &wgpu::Texture, blur: f32) {
+    pub(crate) fn capture_backdrop(&mut self, r: &Renderer, src: &mx::Texture, blur: f32) {
         self.glass_taken = Some(std::time::Instant::now());
         self.ensure_gpu(r);
         let Some((gpu, format)) = self.gpu.as_mut() else { return };
         let format = *format;
-        let size = wgpu::Extent3d { depth_or_array_layers: 1, ..src.size() };
+        let size = mx::Extent3d { depth_or_array_layers: 1, ..src.size() };
         let (w, h) = (size.width.max(1), size.height.max(1));
         let factor = ((blur * 0.5).round().max(1.0) as u32).next_power_of_two().clamp(8, 32);
         let stale = self.glass.as_ref().is_none_or(|g| g.copy.0.size() != size || g.copy.0.format() != src.format() || g.factor != factor);
@@ -270,24 +270,51 @@ impl Shell {
                     gpu.free(p.1);
                 }
             }
-            let make = |label: &str, (tw, th): (u32, u32), format: wgpu::TextureFormat, usage: wgpu::TextureUsages| {
-                r.device.create_texture(&wgpu::TextureDescriptor { label: Some(label), size: wgpu::Extent3d { width: tw.max(1), height: th.max(1), depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage, view_formats: &[] })
+            let make = |label: &str, (tw, th): (u32, u32), format: mx::TextureFormat,
+                        usage: mx::TextureUsages| {
+                r.device
+                    .create_texture(&mx::TextureDescriptor {
+                        label: Some(label),
+                        size: mx::Extent3d {
+                            width: tw.max(1),
+                            height: th.max(1),
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: mx::TextureDimension::D2,
+                        format,
+                        usage,
+                        view_formats: &[],
+                    })
+                    .expect("mX: a texture")
             };
-            let copy = make("glass: the picture", (w, h), src.format(), wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING);
-            let copy_id = gpu.add_view(&r.device, &copy.create_view(&Default::default()), (w, h));
+            let copy = make("glass: the picture", (w, h), src.format(), mx::TextureUsages::COPY_DST | mx::TextureUsages::TEXTURE_BINDING,);
+            let copy_id = gpu.add_view(
+                &r.device,
+                &copy
+                    .create_view(&Default::default())
+                    .expect("mX: a texture view"),
+                (w, h),
+            );
             let passes = [4, factor, factor / 2]
                 .into_iter()
                 .map(|k| {
                     let s = ((w / k).max(1), (h / k).max(1));
-                    let t = make("glass: a pass", s, format, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING);
-                    let id = gpu.add_view(&r.device, &t.create_view(&Default::default()), s);
+                    let t = make("glass: a pass", s, format, mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::TEXTURE_BINDING,);
+                    let id = gpu.add_view(
+                        &r.device,
+                        &t.create_view(&Default::default())
+                            .expect("mX: a texture view"),
+                        s,
+                    );
                     (t, id)
                 })
                 .collect();
             self.glass = Some(GlassPicture { copy: (copy, copy_id), passes, factor });
         }
         let Some(g) = self.glass.as_ref() else { return };
-        let mut enc = r.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("glass: copy") });
+        let mut enc = r.device.create_command_encoder(Some("glass: copy"));
         enc.copy_texture_to_texture(src.as_image_copy(), g.copy.0.as_image_copy(), size);
         r.queue.submit([enc.finish()]);
         let mut from = (g.copy.1, w, h);
@@ -304,16 +331,18 @@ impl Shell {
             // (one pass a submission: the layers' uniforms and the vertices are written for it)
             gpu.upload(&r.device, &r.queue, GLASS_BUFFER, &p.verts);
             let layer = Layer::flat([0.0, 0.0, pw as f32, ph as f32], 0.0, 1.0);
-            let view = t.create_view(&Default::default());
-            let mut enc = r.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("glass: a pass") });
-            gpu.render(&r.device, &r.queue, &mut enc, &view, (pw, ph), Some(wgpu::Color::TRANSPARENT), &[layer], &[Draw { buffer: GLASS_BUFFER, range: 0..p.len(), layer: 0, texture: from.0 }]);
+            let view = t
+                .create_view(&Default::default())
+                .expect("mX: a texture view");
+            let mut enc = r.device.create_command_encoder(Some("glass: a pass"));
+            gpu.render(&r.device, &r.queue, &mut enc, &view, (pw, ph), Some(mx::Color::TRANSPARENT), &[layer], &[Draw { buffer: GLASS_BUFFER, range: 0..p.len(), layer: 0, texture: from.0 }]);
             r.queue.submit([enc.finish()]);
             from = (*id, pw, ph);
         }
     }
 
     /// The screens over the window's picture (`view`, `w` x `h` pixels).
-    pub(crate) fn render(&mut self, r: &Renderer, view: &wgpu::TextureView, w: u32, h: u32) {
+    pub(crate) fn render(&mut self, r: &Renderer, view: &mx::TextureView, w: u32, h: u32) {
         if self.drawn.is_none() {
             return;
         }
@@ -349,8 +378,8 @@ impl Shell {
         }
         Self::upload(gpu, r, &mut self.ui, d);
         let draws: Vec<Draw> = d.ranges.iter().enumerate().map(|(k, (range, tex))| Draw { buffer: 0, range: range.clone(), layer: k, texture: *tex }).collect();
-        let mut enc = r.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("game screens") });
-        gpu.render(&r.device, &r.queue, &mut enc, view, (w, h), self.opaque.then_some(wgpu::Color::BLACK), &d.layers, &draws);
+        let mut enc = r.device.create_command_encoder(Some("game screens"));
+        gpu.render(&r.device, &r.queue, &mut enc, view, (w, h), self.opaque.then_some(mx::Color::BLACK), &d.layers, &draws);
         r.queue.submit([enc.finish()]);
     }
 
@@ -358,7 +387,7 @@ impl Shell {
     /// of an input script. The photo under them is left out (the shot has the scene).
     pub(crate) fn picture_for_shot(&mut self, r: &Renderer, w: u32, h: u32) -> Option<Vec<u8>> {
         let d = self.drawn.as_ref()?;
-        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let format = mx::TextureFormat::Rgba8UnormSrgb;
         let size = self.ui.atlas.size;
         if self.shot_gpu.is_none() {
             let mut g = Gpu::new(&r.device, format, 1, size);
@@ -375,10 +404,28 @@ impl Shell {
             let texture = if *tex == 0 { 0 } else if Some(*tex) == logo { shot_logo? } else { return None };
             Some(Draw { buffer: 0, range: range.clone(), layer: k, texture })
         }).collect();
-        let tex = r.device.create_texture(&wgpu::TextureDescriptor { label: Some("screens shot"), size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC, view_formats: &[] });
-        let view = tex.create_view(&Default::default());
-        let mut enc = r.device.create_command_encoder(&Default::default());
-        gpu.render(&r.device, &r.queue, &mut enc, &view, (w, h), Some(wgpu::Color::TRANSPARENT), &d.layers, &draws);
+        let tex = r
+            .device
+            .create_texture(&mx::TextureDescriptor {
+                label: Some("screens shot"),
+                size: mx::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format,
+                usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            })
+            .expect("mX: a texture");
+        let view = tex
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
+        let mut enc = r.device.create_command_encoder(None);
+        gpu.render(&r.device, &r.queue, &mut enc, &view, (w, h), Some(mx::Color::TRANSPARENT), &d.layers, &draws);
         Some(read_back(r, enc, &tex, w, h))
     }
 }
@@ -398,18 +445,27 @@ fn logo_pixels() -> Option<Vec<u8>> {
 }
 
 /// `tex` (RGBA8, `w` x `h`) copied out after the commands of `enc`.
-pub(crate) fn read_back(r: &Renderer, mut enc: wgpu::CommandEncoder, tex: &wgpu::Texture, w: u32, h: u32) -> Vec<u8> {
+pub(crate) fn read_back(r: &Renderer, mut enc: mx::CommandEncoder,
+    tex: &mx::Texture, w: u32, h: u32) -> Vec<u8> {
     let stride = (w * 4).div_ceil(256) * 256;
-    let buf = r.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (stride * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-    enc.copy_texture_to_buffer(tex.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
-    r.queue.submit([enc.finish()]);
-    buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-    omsi_render::wait_gpu(&r.device, None).ok();
-    let data = buf.slice(..).get_mapped_range();
+    let buf = r
+        .device
+        .create_buffer(&mx::BufferDescriptor {
+            label: None,
+            size: (stride * h) as u64,
+            usage: mx::BufferUsages::COPY_DST | mx::BufferUsages::MAP_READ,
+        })
+        .expect("mX: a buffer");
+    enc.copy_texture_to_buffer(tex.as_image_copy(), mx::TexelCopyBufferInfo { buffer: &buf, layout: mx::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } }, mx::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
+    let copied = r.queue.submit([enc.finish()]);
     let mut out = vec![0u8; (w * h * 4) as usize];
-    for y in 0..h as usize {
-        let row = &data[y * stride as usize..y * stride as usize + w as usize * 4];
-        out[y * w as usize * 4..(y + 1) * w as usize * 4].copy_from_slice(row);
+    if omsi_render::wait_gpu(&r.device, Some(copied)).is_ok() {
+        let _ = buf.map_read_now(0..buf.size(), |data| {
+            for y in 0..h as usize {
+                let row = &data[y * stride as usize..y * stride as usize + w as usize * 4];
+                out[y * w as usize * 4..(y + 1) * w as usize * 4].copy_from_slice(row);
+            }
+        });
     }
     out
 }

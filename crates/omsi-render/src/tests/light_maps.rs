@@ -8,11 +8,11 @@ fn display_pixel(night: f32, classic: bool, enhanced: bool) -> [u8; 3] {
 }
 
 fn lit_pixel(night: f32, classic: bool, enhanced: bool, switched_night_map: bool, inside: Option<(DVec3, f64, [f32; 6])>) -> [u8; 3] {
-    let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &adapter,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     ))
     .expect("test renderer");

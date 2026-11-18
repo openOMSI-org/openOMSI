@@ -300,11 +300,11 @@ fn online_write_preview() {
         std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("preview directory"),
     );
     std::fs::create_dir_all(&out).unwrap();
-    let instance = wgpu::Instance::default();
+    let instance = mx::Instance::default();
     let renderer = pollster::block_on(omsi_render::Renderer::new(
         &instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
     ))
     .unwrap();
     let rail = [

@@ -26,7 +26,7 @@ fn serial_compiler_overrides(existing: &str) -> String {
 /// Call during startup, before any ANGLE display is initialized: ANGLE caches these
 /// overrides. Renderer pipeline creation then uses `compile`'s managed stack, rather
 /// than relying on the stack size chosen by ANGLE or the host's entry thread.
-pub fn instance(mut descriptor: wgpu::InstanceDescriptor) -> wgpu::Instance {
+pub fn instance() -> mx::Instance {
     #[cfg(windows)]
     {
         let existing = std::env::var("ANGLE_FEATURE_OVERRIDES_DISABLED").unwrap_or_default();
@@ -38,9 +38,8 @@ pub fn instance(mut descriptor: wgpu::InstanceDescriptor) -> wgpu::Instance {
         }
         log::info!("ANGLE: native shader worker jobs disabled; renderer compilation uses a managed {COMPILER_STACK_MB} MB stack");
     }
-    descriptor.backends = wgpu::Backends::GL;
-    descriptor.backend_options.gl.platform = wgpu::GlPlatform::Angle;
-    wgpu::Instance::new(descriptor)
+    // (on Windows mX's OpenGL is ANGLE's libEGL.dll, shipped beside the game)
+    mx::Instance::with_backends(mx::Backends::GL)
 }
 
 /// The compiler thread's stack. (256 MB overflowed on WARP as fast as 32 MB did, in the
@@ -52,7 +51,7 @@ const COMPILER_STACK_MB: usize = 32;
 /// ANGLE's native jobs disabled, translation and D3D compilation inherit this stack.
 /// Reserving stack address space does not commit it at thread creation: only the pages
 /// the compiler reaches are.
-pub(crate) fn compile<F, T>(device: &wgpu::Device, operation: F) -> T
+pub(crate) fn compile<F, T>(device: &mx::Device, operation: F) -> T
 where
     F: FnOnce() -> T + Send,
     T: Send,
@@ -85,16 +84,21 @@ where
 /// 1 MB stack, where WARP's first scene pipeline overflowed it. No compiler threads at
 /// all puts every compile and link on the calling, managed thread.
 #[cfg(windows)]
-fn no_parallel_compiles(device: &wgpu::Device) {
-    use glow::HasContext;
-    // SAFETY: the context is only locked (made current) to set a piece of its state
-    let Some(hal) = (unsafe { device.as_hal::<wgpu::hal::api::Gles>() }) else { return };
-    let gl = hal.context().lock();
-    if gl.supported_extensions().contains("GL_KHR_parallel_shader_compile") {
-        // SAFETY: the extension is there, so the KHR entry point is loaded
-        unsafe { gl.max_shader_compiler_threads(0) };
-        log::info!("ANGLE: no parallel shader compiler threads (GL_KHR_parallel_shader_compile)");
-    }
+fn no_parallel_compiles(device: &mx::Device) {
+    use mx::mx_gl::glow::HasContext;
+    let Some(device) = device.as_gl() else { return };
+    device.with_gl(|gl| {
+        if gl
+            .supported_extensions()
+            .contains("GL_KHR_parallel_shader_compile")
+        {
+            // SAFETY: the extension is there, so the KHR entry point is loaded
+            unsafe { gl.max_shader_compiler_threads(0) };
+            log::info!(
+                "ANGLE: no parallel shader compiler threads (GL_KHR_parallel_shader_compile)"
+            );
+        }
+    });
 }
 
 #[cfg(test)]

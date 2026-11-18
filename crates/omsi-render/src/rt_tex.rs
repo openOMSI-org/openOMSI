@@ -37,89 +37,105 @@ struct MeshUv {
 
 /// One mesh's copy this frame.
 struct UvJob {
-    vb: wgpu::Buffer,
-    ib: wgpu::Buffer,
+    vb: mx::Buffer,
+    ib: mx::Buffer,
     /// rt_uv.wgsl `Job`: first vertex, first index, triangles, where they go.
     job: [u32; 4],
 }
 
 pub(super) struct TexStore {
-    atlas: wgpu::Texture,
+    atlas: mx::Texture,
     /// The atlas as the reflections sample it (sRGB, filtered in linear light) and as the
     /// texture means write it (the same bytes, encoded there).
-    pub(super) atlas_view: wgpu::TextureView,
-    atlas_store: wgpu::TextureView,
-    pub(super) uvs: wgpu::Buffer,
+    pub(super) atlas_view: mx::TextureView,
+    atlas_store: mx::TextureView,
+    pub(super) uvs: mx::Buffer,
     /// The buffer the coordinates were in before it last grew: copied over at the next encode.
-    uvs_old: Option<wgpu::Buffer>,
+    uvs_old: Option<mx::Buffer>,
     uv_cap: u64,
     uv_top: u64,
     uv_free: Vec<(u64, u64)>,
     meshes: hashbrown::HashMap<MeshId, MeshUv>,
     jobs: Vec<UvJob>,
     /// Uniforms read with dynamic offsets: the copies' jobs and the texture means' tiles.
-    job_buf: wgpu::Buffer,
-    tile_buf: wgpu::Buffer,
+    job_buf: mx::Buffer,
+    tile_buf: mx::Buffer,
     stride: u64,
-    uv_layout: wgpu::BindGroupLayout,
-    uv_pipeline: wgpu::ComputePipeline,
+    uv_pipeline: mx::ComputePipeline,
 }
 
-fn make_atlas(device: &wgpu::Device, h: u32) -> (wgpu::Texture, wgpu::TextureView, wgpu::TextureView) {
-    let t = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("rt texture atlas"),
-        size: wgpu::Extent3d { width: ATLAS_W, height: h, depth_or_array_layers: 1 },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[wgpu::TextureFormat::Rgba8UnormSrgb],
-    });
+fn make_atlas(device: &mx::Device, h: u32) -> (mx::Texture, mx::TextureView, mx::TextureView) {
+    let t = device
+        .create_texture(&mx::TextureDescriptor {
+            label: Some("rt texture atlas"),
+            size: mx::Extent3d {
+                width: ATLAS_W,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: mx::TextureDimension::D2,
+            format: mx::TextureFormat::Rgba8Unorm,
+            usage: mx::TextureUsages::STORAGE_BINDING
+                | mx::TextureUsages::TEXTURE_BINDING
+                | mx::TextureUsages::COPY_SRC
+                | mx::TextureUsages::COPY_DST,
+            view_formats: &[mx::TextureFormat::Rgba8UnormSrgb],
+        })
+        .expect("mX: a texture");
     // (sampled only: an sRGB view cannot be a storage binding)
-    let sampled = t.create_view(&wgpu::TextureViewDescriptor { format: Some(wgpu::TextureFormat::Rgba8UnormSrgb), usage: Some(wgpu::TextureUsages::TEXTURE_BINDING), ..Default::default() });
-    let store = t.create_view(&Default::default());
+    let sampled = t
+        .create_view(&mx::TextureViewDescriptor {
+            format: Some(mx::TextureFormat::Rgba8UnormSrgb),
+            ..Default::default()
+        })
+        .expect("mX: a texture view");
+    let store = t
+        .create_view(&Default::default())
+        .expect("mX: a texture view");
     (t, sampled, store)
 }
 
-fn make_uvs(device: &wgpu::Device, tris: u64) -> wgpu::Buffer {
-    device.create_buffer(&wgpu::BufferDescriptor { label: Some("rt texture coordinates"), size: tris * UV_TRI, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false })
-}
-
-fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
-    wgpu::BindGroupLayoutEntry {
-        binding,
-        visibility: wgpu::ShaderStages::COMPUTE,
-        ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: true, min_binding_size: wgpu::BufferSize::new(16) },
-        count: None,
-    }
+fn make_uvs(device: &mx::Device, tris: u64) -> mx::Buffer {
+    device
+        .create_buffer(&mx::BufferDescriptor {
+            label: Some("rt texture coordinates"),
+            size: tris * UV_TRI,
+            usage: mx::BufferUsages::STORAGE
+                | mx::BufferUsages::COPY_DST
+                | mx::BufferUsages::COPY_SRC,
+        })
+        .expect("mX: a buffer")
 }
 
 impl TexStore {
-    pub(super) fn new(device: &wgpu::Device) -> TexStore {
+    pub(super) fn new(device: &mx::Device) -> TexStore {
         let (atlas, atlas_view, atlas_store) = make_atlas(device, 256);
         let stride = (device.limits().min_uniform_buffer_offset_alignment as u64).max(256);
-        let uniforms = |label: &str, n: usize| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: n as u64 * stride, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-        let read = |binding: u32, read_only: bool| wgpu::BindGroupLayoutEntry {
-            binding,
-            visibility: wgpu::ShaderStages::COMPUTE,
-            ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only }, has_dynamic_offset: false, min_binding_size: None },
-            count: None,
+        let uniforms = |label: &str, n: usize| {
+            device
+                .create_buffer(&mx::BufferDescriptor {
+                    label: Some(label),
+                    size: n as u64 * stride,
+                    usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+                })
+                .expect("mX: a buffer")
         };
-        let uv_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("rt texture coordinates"),
-            entries: &[read(0, true), read(1, true), read(2, false), uniform_entry(3)],
-        });
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("rt texture coordinates"), source: wgpu::ShaderSource::Wgsl(include_str!("rt_uv.wgsl").into()) });
-        let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("rt texture coordinates"), bind_group_layouts: &[Some(&uv_layout)], immediate_size: 0 });
-        let uv_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("rt texture coordinates"),
-            layout: Some(&pl),
-            module: &module,
-            entry_point: Some("cs_tri_uv"),
-            compilation_options: Default::default(),
-            cache: crate::pipeline_cache::get(device).as_ref(),
-        });
+        let module = device
+            .create_shader_module(&mx::ShaderModuleDescriptor {
+                label: Some("rt texture coordinates"),
+                source: &*(include_str!("rt_uv.wgsl")),
+            })
+            .expect("mX: a shader");
+        let uv_pipeline = device
+            .create_compute_pipeline(&mx::ComputePipelineDescriptor {
+                label: Some("rt texture coordinates"),
+                module: &module,
+                entry_point: Some("cs_tri_uv"),
+                constants: &[],
+            })
+            .expect("mX: a compute pipeline");
         let uv_cap = 1 << 18;
         TexStore {
             atlas,
@@ -135,27 +151,13 @@ impl TexStore {
             job_buf: uniforms("rt texture coordinates jobs", UV_BUDGET),
             tile_buf: uniforms("rt texture tiles", AVG_BUDGET),
             stride,
-            uv_layout,
             uv_pipeline,
         }
     }
 
-    /// The avg pass's layout entries for the atlas and its tile (bindings 3 and 4).
-    pub(super) fn avg_entries() -> [wgpu::BindGroupLayoutEntry; 2] {
-        [
-            wgpu::BindGroupLayoutEntry {
-                binding: 3,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba8Unorm, view_dimension: wgpu::TextureViewDimension::D2 },
-                count: None,
-            },
-            uniform_entry(4),
-        ]
-    }
-
     /// Where mesh `id`'s triangles' coordinates are (in triangles), queued for a copy when it
     /// has none yet - at most `UV_BUDGET` a frame; None while it has none.
-    pub(super) fn mesh_uvs(&mut self, device: &wgpu::Device, id: MeshId, m: &GpuMesh, frame: u64) -> Option<u32> {
+    pub(super) fn mesh_uvs(&mut self, device: &mx::Device, id: MeshId, m: &GpuMesh, frame: u64) -> Option<u32> {
         if let Some(e) = self.meshes.get_mut(&id) {
             if e.generation == m.generation {
                 e.used = frame;
@@ -212,7 +214,9 @@ impl TexStore {
     }
 
     /// Copy this frame's meshes' coordinates (and what the buffer held, when it grew).
-    pub(super) fn encode_uvs(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder) {
+    pub(super) fn encode_uvs(&mut self, device: &mx::Device,
+        queue: &mx::Queue,
+        encoder: &mut mx::CommandEncoder,) {
         if let Some(old) = self.uvs_old.take() {
             encoder.copy_buffer_to_buffer(&old, 0, &self.uvs, 0, old.size().min(self.uvs.size()));
         }
@@ -224,27 +228,46 @@ impl TexStore {
             let at = k * self.stride as usize;
             bytes[at..at + 16].copy_from_slice(bytemuck::cast_slice(&j.job));
         }
-        queue.write_buffer(&self.job_buf, 0, &bytes);
-        let groups: Vec<wgpu::BindGroup> = self
+        queue
+            .write_buffer(&self.job_buf, 0, &bytes)
+            .expect("mX: a queue write");
+        let groups: Vec<mx::BindGroup> = self
             .jobs
             .iter()
-            .map(|j| {
-                device.create_bind_group(&wgpu::BindGroupDescriptor {
+            .enumerate()
+            .map(|(k, j)| {
+                device.create_bind_group(&mx::BindGroupDescriptor {
                     label: Some("rt texture coordinates"),
-                    layout: &self.uv_layout,
                     entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: j.vb.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: j.ib.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 2, resource: self.uvs.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &self.job_buf, offset: 0, size: wgpu::BufferSize::new(16) }) },
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: j.vb.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 1,
+                            resource: j.ib.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 2,
+                            resource: self.uvs.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 3,
+                            resource: mx::BindingResource::Buffer(mx::BufferBinding {
+                                buffer: &self.job_buf,
+                                offset: k as u64 * self.stride,
+                                size: Some(16), }) },
                     ],
                 })
             })
             .collect();
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("rt texture coordinates"), timestamp_writes: None });
+        let mut pass = encoder.begin_compute_pass(&mx::ComputePassDescriptor {
+            label: Some("rt texture coordinates"),
+            timestamp_writes: None,
+        });
         pass.set_pipeline(&self.uv_pipeline);
-        for (k, (j, bg)) in self.jobs.iter().zip(&groups).enumerate() {
-            pass.set_bind_group(0, bg, &[(k as u64 * self.stride) as u32]);
+        for (j, bg) in self.jobs.iter().zip(&groups) {
+            pass.set_bind_group(0, bg);
             // (64 triangles a group; rows of 65535 groups for a mesh of more than 4 M)
             let groups = j.job[2].div_ceil(64);
             pass.dispatch_workgroups(groups.min(65535), groups.div_ceil(65535), 1);
@@ -255,7 +278,8 @@ impl TexStore {
 
     /// The atlas tall enough for textures `wanted` (grown: the tiles made so far copied over);
     /// true when it was made anew.
-    pub(super) fn ensure_atlas(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, wanted: &[usize]) -> bool {
+    pub(super) fn ensure_atlas(&mut self, device: &mx::Device,
+        encoder: &mut mx::CommandEncoder, wanted: &[usize]) -> bool {
         let Some(&last) = wanted.iter().filter(|&&t| t < MAX_TILES).max() else { return false };
         let need = ((last as u32 / PER_ROW + 1) * TILE).next_power_of_two().min(ATLAS_W);
         let have = self.atlas.height();
@@ -263,14 +287,14 @@ impl TexStore {
             return false;
         }
         let (atlas, view, store) = make_atlas(device, need);
-        encoder.copy_texture_to_texture(self.atlas.as_image_copy(), atlas.as_image_copy(), wgpu::Extent3d { width: ATLAS_W, height: have, depth_or_array_layers: 1 });
+        encoder.copy_texture_to_texture(self.atlas.as_image_copy(), atlas.as_image_copy(), mx::Extent3d { width: ATLAS_W, height: have, depth_or_array_layers: 1 });
         (self.atlas, self.atlas_view, self.atlas_store) = (atlas, view, store);
         true
     }
 
     /// Write the tiles' corners of textures `wanted` for the texture means (rt_avg.wgsl
     /// `tile`: xy the corner, z 1 where the texture has a tile).
-    pub(super) fn write_tiles(&self, queue: &wgpu::Queue, wanted: &[usize]) {
+    pub(super) fn write_tiles(&self, queue: &mx::Queue, wanted: &[usize]) {
         let mut bytes = vec![0u8; wanted.len() * self.stride as usize];
         for (k, &t) in wanted.iter().enumerate() {
             let tile = if t < MAX_TILES { [(t as u32 % PER_ROW * TILE) as f32, (t as u32 / PER_ROW * TILE) as f32, 1.0, 0.0] } else { [0.0; 4] };
@@ -278,20 +302,28 @@ impl TexStore {
             bytes[at..at + 16].copy_from_slice(bytemuck::cast_slice(&tile));
         }
         if !bytes.is_empty() {
-            queue.write_buffer(&self.tile_buf, 0, &bytes);
+            queue
+                .write_buffer(&self.tile_buf, 0, &bytes)
+                .expect("mX: a queue write");
         }
     }
 
     /// The texture means' bind group entries for the atlas and the `k`-th tile's uniform.
-    pub(super) fn avg_bindings(&self) -> [wgpu::BindGroupEntry<'_>; 2] {
+    pub(super) fn avg_bindings(&self, k: usize) -> [mx::BindGroupEntry<'_>; 2] {
         [
-            wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&self.atlas_store) },
-            wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &self.tile_buf, offset: 0, size: wgpu::BufferSize::new(16) }) },
+            mx::BindGroupEntry {
+                binding: 3,
+                resource: mx::BindingResource::TextureView(&self.atlas_store),
+            },
+            mx::BindGroupEntry {
+                binding: 4,
+                resource: mx::BindingResource::Buffer(mx::BufferBinding {
+                    buffer: &self.tile_buf,
+                    offset: k as u64 * self.stride,
+                    size: Some(16),
+                }),
+            },
         ]
-    }
-
-    pub(super) fn tile_offset(&self, k: usize) -> u32 {
-        (k as u64 * self.stride) as u32
     }
 }
 

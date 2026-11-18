@@ -20,8 +20,10 @@ impl Renderer {
             && self.device_lost().is_none()
         {
             log::error!("the graphics device was lost (test): OMSI_FAKE_GPU_ERROR=lost");
-            self.device.destroy();
             *self.errors.device_lost.lock().unwrap_or_else(|e| e.into_inner()) = Some("test".into());
+        }
+        if let Err(e) = self.device.poll() {
+            (self.errors.report)(&e);
         }
         // the device is gone: nothing can be drawn, and the readbacks (the exposure meter)
         // would find their buffers taken away - "Error in Buffer::get_mapped_range:
@@ -35,20 +37,23 @@ impl Renderer {
             && self.started.elapsed().as_secs_f32() > 3.0
         {
             // test hook for the fallback below
-            let _ = self.device.create_texture(&wgpu::TextureDescriptor {
+            let made = self.device.create_texture(&mx::TextureDescriptor {
                 label: Some("invalid"),
-                size: wgpu::Extent3d {
+                size: mx::Extent3d {
                     width: 4,
                     height: 4,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
                 sample_count: 3,
-                dimension: wgpu::TextureDimension::D2,
+                dimension: mx::TextureDimension::D2,
                 format: self.format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                usage: mx::TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
             });
+            if let Err(e) = made {
+                (self.errors.report)(&e);
+            }
         }
         if self.errors.rt_error.load(std::sync::atomic::Ordering::Relaxed) {
             self.fall_back_without_ray_tracing(scene);
@@ -113,7 +118,7 @@ impl Renderer {
             && (lighting.rain > 0.001 || lighting.wetness > 0.02)
             && !env.no_glass_picture;
         let scaled = (width, height) != (full_w, full_h) || vanilla_fxaa || (glass_on && !enhanced_view) || temporal_frame;
-        let scene_target: Option<(wgpu::TextureView, wgpu::BindGroup)> = if temporal_frame {
+        let scene_target: Option<(mx::TextureView, mx::BindGroup)> = if temporal_frame {
             // (the picture goes into the upscaler's input, not into the render scale's target)
             self.temporal.as_ref().and_then(|d| d.targets.as_ref()).map(|t| (t.color_view.clone(), t.color_bg.clone()))
         } else if scaled {
@@ -305,7 +310,8 @@ impl Renderer {
         {
             let (lx, ly, side) = self.lights.lm_place.get();
             let v: [f32; 4] = [(lx - ro.x) as f32, (ly - ro.y) as f32, side as f32, if side > 0.0 { 1.0 } else { 0.0 }];
-            self.queue.write_buffer(&self.lights.lm_uniform, 0, bytemuck::cast_slice(&v));
+            self.queue.write_buffer(&self.lights.lm_uniform, 0, bytemuck::cast_slice(&v))
+                .expect("mX: a queue write");
         }
         {
             let v = &lighting.vanilla_sky;
@@ -313,7 +319,8 @@ impl Renderer {
                 cloud: [v.cloud_height, v.cloud_size, v.cloud_offset[0], v.cloud_offset[1]],
                 haze: [v.fog_range, v.visibility, if v.overcast { 1.0 } else { 0.0 }, ro.z as f32],
             };
-            self.queue.write_buffer(&self.sky.vanilla_sky_buf, 0, bytemuck::bytes_of(&u));
+            self.queue.write_buffer(&self.sky.vanilla_sky_buf, 0, bytemuck::bytes_of(&u))
+                .expect("mX: a queue write");
         }
         // the snow track field: the render origin modulo its side (it wraps around the
         // world), and how the roads' snow stands (road_snow.wgsl)
@@ -329,7 +336,8 @@ impl Renderer {
                 lighting.snow_ruts.clamp(0.0, 1.0),
                 0.0,
             ];
-            self.queue.write_buffer(&self.lights.snow_track_uniform, 0, bytemuck::cast_slice(&v));
+            self.queue.write_buffer(&self.lights.snow_track_uniform, 0, bytemuck::cast_slice(&v))
+                .expect("mX: a queue write");
         }
         let cu = CameraUniform {
             post: [
@@ -473,7 +481,8 @@ impl Renderer {
             spot: classic_spot(&scene.lights, ro),
         };
         self.queue
-            .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));
+            .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu))
+            .expect("mX: a queue write");
         if let Some(m) = sh.precip {
             self.write_precip_camera(&cu, m);
         }
@@ -488,7 +497,7 @@ impl Renderer {
             let ground = lighting.fog_base.or(lighting.inside.map(|v| v.0.z)).map(|z| (z - scene.render_origin.z) as f32);
             let device_lost = self.device_lost().is_some();
             if let Some(s) = self.tone.lamp_sight.as_mut() {
-                s.take(device_lost);
+                s.take(&self.device, device_lost);
             }
             let sight = self.tone.lamp_sight.as_ref();
             let seen = |at: DVec3| sight.map_or(1.0, |s| s.seen(at));

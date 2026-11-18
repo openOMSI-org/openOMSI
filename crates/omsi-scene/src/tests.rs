@@ -630,9 +630,9 @@ fn painted_spline_stays_above_roads_and_below_raised_surfaces() {
              [profile]\n1\n[profilepnt]\n-0.11\n0.105\n0\n1\n[profilepnt]\n0.11\n0.105\n1\n1\n",
     ));
     for msaa in [1, 4] {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance = mx::Instance::new();
         let mut renderer = pollster::block_on(Renderer::new_with(&instance, None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             omsi_render::RenderOptions { msaa, ssao: false, shadow_size: 1024,
                 fxaa: false, render_scale: 1.0, ..Default::default() },
         )).expect("test renderer");

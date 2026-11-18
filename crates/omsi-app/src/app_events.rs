@@ -99,7 +99,6 @@ impl ApplicationHandler for App {
         self.save_last_situation();
         omsi_platform::diagnostics::save(crate::support_bundle::diagnostics(self));
         // (a phone's app in the background is often ended without `exiting`)
-        omsi_render::pipeline_cache::save();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -491,7 +490,6 @@ impl ApplicationHandler for App {
         self.abort_optimiser();
         self.finish_session();
         // (with the pipelines made since the start: puddles, Enhanced+)
-        omsi_render::pipeline_cache::save();
         // ("playing now" ends with the game)
         self.integrations.presence = None;
         if let Some(lan) = self.net.lan.take() {

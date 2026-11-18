@@ -193,7 +193,7 @@ pub struct Touch {
     /// Physical pixels per point of the layout.
     u: f32,
     size: (f32, f32),
-    gpu: Option<(Gpu, wgpu::TextureFormat)>,
+    gpu: Option<(Gpu, mx::TextureFormat)>,
     shot_gpu: Option<Gpu>,
     fonts: Option<Fonts>,
     atlas: Atlas,
@@ -1249,7 +1249,7 @@ impl App {
 
 impl Touch {
     /// Draw the controls painted last over the frame (`view`, `w` x `h`).
-    pub(crate) fn render(&mut self, r: &Renderer, view: &wgpu::TextureView, w: u32, h: u32) {
+    pub(crate) fn render(&mut self, r: &Renderer, view: &mx::TextureView, w: u32, h: u32) {
         if !self.enabled || self.painter.is_empty() {
             return;
         }
@@ -1263,7 +1263,7 @@ impl Touch {
         gpu.upload_atlas(&r.queue, &mut self.atlas);
         let layers = [Layer::flat([0.0, 0.0, w as f32, h as f32], 0.0, 1.0)];
         let draws = [Draw { buffer: 0, range: 0..self.painter.len(), layer: 0, texture: 0 }];
-        let mut enc = r.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("touch controls") });
+        let mut enc = r.device.create_command_encoder(Some("touch controls"));
         gpu.render(&r.device, &r.queue, &mut enc, view, (w, h), None, &layers, &draws);
         r.queue.submit([enc.finish()]);
     }
@@ -1274,7 +1274,7 @@ impl Touch {
         if !self.enabled || self.painter.is_empty() {
             return None;
         }
-        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let format = mx::TextureFormat::Rgba8UnormSrgb;
         let size = self.atlas.size;
         let gpu = self.shot_gpu.get_or_insert_with(|| Gpu::new(&r.device, format, 1, size));
         gpu.upload(&r.device, &r.queue, 0, &self.painter.verts);
@@ -1282,25 +1282,31 @@ impl Touch {
         gpu.upload_atlas(&r.queue, &mut self.atlas);
         // (the window's pipeline has the atlas sent again next frame)
         self.atlas.mark_all_dirty();
-        let tex = r.device.create_texture(&wgpu::TextureDescriptor { label: Some("touch shot"), size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC, view_formats: &[] });
-        let view = tex.create_view(&Default::default());
+        let tex = r
+            .device
+            .create_texture(&mx::TextureDescriptor {
+                label: Some("touch shot"),
+                size: mx::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format,
+                usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            })
+            .expect("mX: a texture");
+        let view = tex
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
         let layers = [Layer::flat([0.0, 0.0, w as f32, h as f32], 0.0, 1.0)];
         let draws = [Draw { buffer: 0, range: 0..self.painter.len(), layer: 0, texture: 0 }];
-        let mut enc = r.device.create_command_encoder(&Default::default());
-        gpu.render(&r.device, &r.queue, &mut enc, &view, (w, h), Some(wgpu::Color::TRANSPARENT), &layers, &draws);
-        let stride = (w * 4).div_ceil(256) * 256;
-        let buf = r.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (stride * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-        enc.copy_texture_to_buffer(tex.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
-        r.queue.submit([enc.finish()]);
-        buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-        omsi_render::wait_gpu(&r.device, None).ok();
-        let data = buf.slice(..).get_mapped_range();
-        let mut out = vec![0u8; (w * h * 4) as usize];
-        for y in 0..h as usize {
-            let row = &data[y * stride as usize..y * stride as usize + w as usize * 4];
-            out[y * w as usize * 4..(y + 1) * w as usize * 4].copy_from_slice(row);
-        }
-        Some(out)
+        let mut enc = r.device.create_command_encoder(None);
+        gpu.render(&r.device, &r.queue, &mut enc, &view, (w, h), Some(mx::Color::TRANSPARENT), &layers, &draws);
+        Some(crate::shell::read_back(r, enc, &tex, w, h))
     }
 }
 

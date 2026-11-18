@@ -5,7 +5,7 @@ use super::*;
 
 impl Renderer {
     // --- the post passes: glow, metering and adaptation, tone curve, FXAA
-    pub(crate) fn encode_post(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, puddles_on: bool, timers: &mut PassTimers) {
+    pub(crate) fn encode_post(&mut self, encoder: &mut mx::CommandEncoder, scene: &Scene, f: &FrameCtx, puddles_on: bool, timers: &mut PassTimers) {
         let (width, height, lighting, dt) = (f.width, f.height, f.lighting, f.dt);
         let (with_overlays, lead_view, rt_frame) = (f.with_overlays, f.lead_view, f.rt_frame);
         let scene_view = f.scene_view();
@@ -57,7 +57,8 @@ impl Renderer {
             e: [shortfall_gain, 0.0, 0.0, 0.0],
         };
         self.queue
-            .write_buffer(&self.tone.post_buf, 0, bytemuck::bytes_of(&pu));
+            .write_buffer(&self.tone.post_buf, 0, bytemuck::bytes_of(&pu))
+            .expect("mX: a queue write");
         // (a mirror's small picture goes without FXAA)
         // (nor does the picture an upscaler takes: it smooths the edges from its jittered frames)
         let fxaa = with_overlays
@@ -125,56 +126,52 @@ impl Renderer {
             }
             let final_view = if fxaa { &h.ldr } else { scene_view };
             let tonemap_bg = &puddles.map(|p| &p.tonemap_bg).unwrap_or(&h.tonemap_bg)[self.tone.adapt_front];
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("tone map"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
                     view: final_view,
-                    depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                        store: mx::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "tone map"),
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
             pass.set_pipeline(if fxaa {
                 &self.tone.post.tonemap_encoded
             } else {
                 &self.tone.post.tonemap
             });
-            pass.set_bind_group(0, tonemap_bg, &[]);
+            pass.set_bind_group(0, tonemap_bg);
             pass.draw(0..3, 0..1);
             if fxaa {
                 drop(pass);
-                pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                     label: Some("fxaa"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    color_attachments: &[Some(mx::RenderPassColorAttachment {
                         view: scene_view,
-                        depth_slice: None,
                         resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                            store: wgpu::StoreOp::Store,
+                        ops: mx::Operations {
+                            load: mx::LoadOp::Clear(mx::Color::BLACK),
+                            store: mx::StoreOp::Store,
                         },
                     })],
                     depth_stencil_attachment: None,
                     timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "fxaa"),
                     occlusion_query_set: None,
-                    multiview_mask: None,
                 });
                 pass.set_pipeline(&self.tone.post.fxaa);
-                pass.set_bind_group(0, &h.fxaa_bg, &[]);
+                pass.set_bind_group(0, &h.fxaa_bg);
                 pass.draw(0..3, 0..1);
             }
             if !overlays.is_empty() && !f.scaled {
                 pass.set_pipeline(&self.overlay_pipeline_1x);
                 for (k, _) in overlays.iter().enumerate() {
                     if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                        pass.set_bind_group(0, bg, &[]);
+                        pass.set_bind_group(0, bg);
                         pass.draw(0..6, 0..1);
                     }
                 }
@@ -204,7 +201,7 @@ impl Renderer {
 
     // --- the smaller picture scaled up to the window, the HUD on top at full size;
     // the smaller the picture, the more it is sharpened
-    pub(crate) fn encode_upscale(&mut self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, timers: &mut PassTimers) {
+    pub(crate) fn encode_upscale(&mut self, encoder: &mut mx::CommandEncoder, scene: &Scene, f: &FrameCtx, timers: &mut PassTimers) {
         let (width, height, full_w) = (f.width, f.height, f.full_w);
         let overlays = &f.overlays;
         if f.temporal_frame {
@@ -227,11 +224,18 @@ impl Renderer {
             } else {
                 ((1.0 - width as f32 / full_w as f32) * 2.0).clamp(0.0, 0.8)
             };
-            self.queue.write_buffer(
-                &self.scale.upscale_buf,
-                0,
-                bytemuck::cast_slice(&[width as f32, height as f32, sharpen, if f.vanilla_fxaa { 1.0 } else { 0.0 }]),
-            );
+            self.queue
+                .write_buffer(
+                    &self.scale.upscale_buf,
+                    0,
+                    bytemuck::cast_slice(&[
+                        width as f32,
+                        height as f32,
+                        sharpen,
+                        if f.vanilla_fxaa { 1.0 } else { 0.0 },
+                    ]),
+                )
+                .expect("mX: a queue write");
             if fsr {
                 // At sharpness 0 RCAS gives its input back (its lobe is 0): EASU then draws
                 // the window's picture itself - a full-screen pass and its intermediate saved.
@@ -243,19 +247,31 @@ impl Renderer {
                 let now = std::time::Instant::now();
                 cached.retain(|t| t.size == size || now.duration_since(t.used.get()).as_secs_f32() < 2.0);
                 if sharpened && !cached.iter().any(|t| t.size == size) {
-                    let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                        label: Some("FSR1 EASU full-resolution intermediate"),
-                        size: wgpu::Extent3d {
-                            width: full_w, height: full_h, depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: self.scale.fsr.as_ref().map_or(self.format, |p| p.mid_format),
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-                        view_formats: &[],
-                    });
-                    let view = texture.create_view(&Default::default());
+                    let texture = self
+                        .device
+                        .create_texture(&mx::TextureDescriptor {
+                            label: Some("FSR1 EASU full-resolution intermediate"),
+                            size: mx::Extent3d {
+                                width: full_w,
+                                height: full_h,
+                                depth_or_array_layers: 1,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: mx::TextureDimension::D2,
+                            format: self
+                                .scale
+                                .fsr
+                                .as_ref()
+                                .map_or(self.format, |p| p.mid_format),
+                            usage: mx::TextureUsages::RENDER_ATTACHMENT
+                                | mx::TextureUsages::TEXTURE_BINDING,
+                            view_formats: &[],
+                        })
+                        .expect("mX: a texture");
+                    let view = texture
+                        .create_view(&Default::default())
+                        .expect("mX: a texture view");
                     let bind_group = self.picture_group(&view);
                     // (three sizes at most: the window, a VR eye, a panel)
                     if cached.len() >= 3 {
@@ -270,19 +286,25 @@ impl Renderer {
                 // (OMSI_FSR_RAW_INPUT: the scene through a view that is not sRGB)
                 let raw_bg = self.scale.fsr.as_ref().filter(|p| p.raw_input).and_then(|_| f.scene_target.as_ref()).map(|(view, _)| {
                     let mut kept = self.scale.fsr_raw_bg.borrow_mut();
-                    if kept.as_ref().is_none_or(|(t, _)| t != view.texture()) {
-                        let raw = view.texture().create_view(&wgpu::TextureViewDescriptor { format: Some(self.format.remove_srgb_suffix()), ..Default::default() });
-                        *kept = Some((view.texture().clone(), self.picture_group(&raw)));
+                    if kept.as_ref().is_none_or(|(t, _)| *t != view.texture()) {
+                            let raw = view
+                                .texture()
+                                .create_view(&mx::TextureViewDescriptor {
+                                    format: Some(self.format.remove_srgb_suffix()),
+                                    ..Default::default()
+                                })
+                                .expect("mX: a texture view");
+                            *kept = Some((view.texture(), self.picture_group(&raw)));
                     }
                     kept.as_ref().expect("made above").1.clone()
                 });
                 // The HUD is composed on the finished picture, never upscaled or sharpened.
-                let draw_overlays = |pass: &mut wgpu::RenderPass| {
+                let draw_overlays = |pass: &mut mx::RenderPass| {
                     if !overlays.is_empty() {
                         pass.set_pipeline(&self.overlay_pipeline_1x);
                         for (k, _) in overlays.iter().enumerate() {
                             if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                                pass.set_bind_group(0, bg, &[]);
+                                pass.set_bind_group(0, bg);
                                 pass.draw(0..6, 0..1);
                             }
                         }
@@ -290,25 +312,23 @@ impl Renderer {
                 };
                 // EASU reconstructs edges from the low-resolution, tone-mapped image.
                 {
-                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                         label: Some("FSR1 EASU"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        color_attachments: &[Some(mx::RenderPassColorAttachment {
                             view: intermediate.map_or(f.target, |t| &t.view),
-                            depth_slice: None,
                             resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                                store: wgpu::StoreOp::Store,
+                            ops: mx::Operations {
+                                load: mx::LoadOp::Clear(mx::Color::BLACK),
+                                store: mx::StoreOp::Store,
                             },
                         })],
                         depth_stencil_attachment: None,
                         timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "FSR1 EASU"),
                         occlusion_query_set: None,
-                        multiview_mask: None,
                     });
                     let p = self.scale.fsr.as_ref().expect("FSR1 pipelines");
                     pass.set_pipeline(if intermediate.is_some() { &p.easu_mid } else { &p.easu });
-                    pass.set_bind_group(0, raw_bg.as_ref().unwrap_or(bg), &[]);
+                    pass.set_bind_group(0, raw_bg.as_ref().unwrap_or(bg));
                     pass.draw(0..3, 0..1);
                     if intermediate.is_none() {
                         draw_overlays(&mut pass);
@@ -316,53 +336,49 @@ impl Renderer {
                 }
                 // RCAS sharpens the reconstructed full-size picture.
                 if let Some(intermediate) = intermediate {
-                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                         label: Some("FSR1 RCAS"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        color_attachments: &[Some(mx::RenderPassColorAttachment {
                             view: f.target,
-                            depth_slice: None,
                             resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                                store: wgpu::StoreOp::Store,
+                            ops: mx::Operations {
+                                load: mx::LoadOp::Clear(mx::Color::BLACK),
+                                store: mx::StoreOp::Store,
                             },
                         })],
                         depth_stencil_attachment: None,
                         timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "FSR1 RCAS"),
                         occlusion_query_set: None,
-                        multiview_mask: None,
                     });
                     pass.set_pipeline(&self.scale.fsr.as_ref().expect("FSR1 pipelines").rcas);
-                    pass.set_bind_group(0, &intermediate.bind_group, &[]);
+                    pass.set_bind_group(0, &intermediate.bind_group);
                     pass.draw(0..3, 0..1);
                     draw_overlays(&mut pass);
                 }
                 return;
             }
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("upscale"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
                     view: f.target,
-                    depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                        store: mx::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "upscale"),
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
             pass.set_pipeline(&self.scale.upscale_pipeline);
-            pass.set_bind_group(0, bg, &[]);
+            pass.set_bind_group(0, bg);
             pass.draw(0..3, 0..1);
             if !overlays.is_empty() {
                 pass.set_pipeline(&self.overlay_pipeline_1x);
                 for (k, _) in overlays.iter().enumerate() {
                     if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                        pass.set_bind_group(0, bg, &[]);
+                        pass.set_bind_group(0, bg);
                         pass.draw(0..6, 0..1);
                     }
                 }

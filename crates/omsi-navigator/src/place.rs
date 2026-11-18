@@ -130,7 +130,8 @@ impl PlaceView {
     }
 
     /// The sheet as a texture of the navigator's own GPU state (once), and what to draw with it.
-    pub(super) fn upload(&mut self, gpu: &mut Gpu, device: &wgpu::Device, queue: &wgpu::Queue, buffer: usize, verts: &[Vertex]) -> (u32, usize) {
+    pub(super) fn upload(&mut self, gpu: &mut Gpu, device: &mx::Device,
+        queue: &mx::Queue, buffer: usize, verts: &[Vertex]) -> (u32, usize) {
         if self.tex.is_none() {
             if let Some(sheet) = self.sheet.as_ref() {
                 self.tex = Some(gpu.add_image(device, queue, sheet.w, sheet.h, &sheet.rgba));

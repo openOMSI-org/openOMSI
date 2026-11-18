@@ -2,12 +2,9 @@ use super::*;
 
 #[test]
 fn a_light_takes_only_the_grid_cells_its_range_reaches() {
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::NOOP;
-    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-    let instance = wgpu::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        &instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, render_scale: 1.0, ..Default::default() },
     )).expect("noop renderer");
     let mut scene = renderer.new_scene();

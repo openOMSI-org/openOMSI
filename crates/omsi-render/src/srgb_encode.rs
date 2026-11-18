@@ -24,84 +24,79 @@ fn fs(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
 ";
 
 pub(crate) struct SrgbEncode {
-    pipeline: wgpu::RenderPipeline,
-    layout: wgpu::BindGroupLayout,
+    pipeline: mx::RenderPipeline,
     /// The stand-in, its view and the bind group reading it, at the window's size.
-    stand_in: std::cell::RefCell<Option<(wgpu::Texture, wgpu::TextureView, wgpu::BindGroup)>>,
-    format: wgpu::TextureFormat,
+    stand_in: std::cell::RefCell<Option<(mx::Texture, mx::TextureView, mx::BindGroup)>>,
+    format: mx::TextureFormat,
 }
 
 impl SrgbEncode {
     /// For a window of the sRGB `format` on ANGLE, else none.
-    pub(crate) fn wanted(renderer: &crate::Renderer, format: wgpu::TextureFormat) -> Option<Self> {
+    pub(crate) fn wanted(renderer: &crate::Renderer, format: mx::TextureFormat) -> Option<Self> {
         if !(cfg!(windows) && crate::gl_backend() && renderer.adapter_name.contains("ANGLE") && format.is_srgb()) {
             return None;
         }
         let device = &renderer.device;
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("sRGB encode"), source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("sRGB encode"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
+        let module = device
+            .create_shader_module(&mx::ShaderModuleDescriptor {
+                label: Some("sRGB encode"),
+                source: &*SHADER,
+            })
+            .expect("mX: a shader");
+        let pipeline = device
+            .create_render_pipeline(&mx::RenderPipelineDescriptor {
+                label: Some("sRGB encode"),
+                vertex: mx::VertexState {
+                    constants: &[],
+                    module: &module,
+                    entry_point: Some("vs"),
+                    buffers: &[],
                 },
-                count: None,
-            }],
-        });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("sRGB encode"),
-            bind_group_layouts: &[Some(&layout)],
-            immediate_size: 0,
-        });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("sRGB encode"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState { module: &module, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(format.remove_srgb_suffix().into())],
-            }),
-            primitive: Default::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            multiview_mask: None,
-            cache: None,
-        });
+                fragment: Some(mx::FragmentState {
+                    constants: &[],
+                    module: &module,
+                    entry_point: Some("fs"),
+                    targets: &[Some(format.remove_srgb_suffix().into())],
+                }),
+                primitive: Default::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+            })
+            .expect("mX: a render pipeline");
         log::info!("{}: the window keeps no sRGB colour space; each frame is encoded into it", renderer.adapter_name);
-        Some(SrgbEncode { pipeline, layout, stand_in: Default::default(), format })
+        Some(SrgbEncode { pipeline,  stand_in: Default::default(), format })
     }
 
     /// The window's own format: plain RGBA8 where the frame is encoded into it.
-    pub(crate) fn window_format(&self) -> wgpu::TextureFormat {
+    pub(crate) fn window_format(&self) -> mx::TextureFormat {
         self.format.remove_srgb_suffix()
     }
 
     /// The view a frame of `size` is drawn into.
-    pub(crate) fn view(&self, device: &wgpu::Device, size: wgpu::Extent3d) -> wgpu::TextureView {
+    pub(crate) fn view(&self, device: &mx::Device, size: mx::Extent3d) -> mx::TextureView {
         let mut stand_in = self.stand_in.borrow_mut();
         if stand_in.as_ref().is_none_or(|(t, _, _)| t.size() != size) {
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("sRGB stand-in"),
-                size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.format,
-                // (copied from as well: the glass behind the game's screens, see `SurfaceState::picture`)
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[],
-            });
-            let view = texture.create_view(&Default::default());
-            let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            let texture = device
+                .create_texture(&mx::TextureDescriptor {
+                    label: Some("sRGB stand-in"),
+                    size,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: mx::TextureDimension::D2,
+                    format: self.format,
+                    // (copied from as well: the glass behind the game's screens, see `SurfaceState::picture`)
+                    usage: mx::TextureUsages::RENDER_ATTACHMENT
+                        | mx::TextureUsages::TEXTURE_BINDING
+                        | mx::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                })
+                .expect("mX: a texture");
+            let view = texture
+                .create_view(&Default::default())
+                .expect("mX: a texture view");
+            let group = device.create_bind_group(&mx::BindGroupDescriptor {
                 label: Some("sRGB encode"),
-                layout: &self.layout,
-                entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) }],
+                entries: &[mx::BindGroupEntry { binding: 0, resource: mx::BindingResource::TextureView(&view), }],
             });
             *stand_in = Some((texture, view, group));
         }
@@ -109,32 +104,37 @@ impl SrgbEncode {
     }
 
     /// The stand-in the frame is drawn into, when there is one.
-    pub(crate) fn texture(&self) -> Option<wgpu::Texture> {
+    pub(crate) fn texture(&self) -> Option<mx::Texture> {
         self.stand_in.borrow().as_ref().map(|(t, _, _)| t.clone())
     }
 
     /// Encodes the stand-in into the window's `frame`.
-    pub(crate) fn encode(&self, device: &wgpu::Device, queue: &wgpu::Queue, frame: &wgpu::SurfaceTexture) {
+    pub(crate) fn encode(&self, device: &mx::Device,
+        queue: &mx::Queue,
+        frame: &mx::SurfaceTexture,) {
         let stand_in = self.stand_in.borrow();
         let Some((_, _, group)) = stand_in.as_ref() else { return };
-        let target = frame.texture.create_view(&Default::default());
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("sRGB encode") });
+        let target = frame
+            .texture
+            .create_view(&Default::default())
+            .expect("mX: a texture view");
+        let mut encoder = device.create_command_encoder(Some("sRGB encode"));
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("sRGB encode"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
                     view: &target,
-                    depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                        store: mx::StoreOp::Store, },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
-                multiview_mask: None,
             });
             pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, group, &[]);
+            pass.set_bind_group(0, group);
             pass.draw(0..3, 0..1);
         }
         queue.submit([encoder.finish()]);
@@ -146,8 +146,10 @@ mod tests {
     /// The encoding pass is valid WGSL.
     #[test]
     fn the_shader_validates() {
-        let module = wgpu::naga::front::wgsl::parse_str(super::SHADER).expect("parse");
-        wgpu::naga::valid::Validator::new(wgpu::naga::valid::ValidationFlags::all(), wgpu::naga::valid::Capabilities::empty())
+        let module = naga::front::wgsl::parse_str(super::SHADER).expect("parse");
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::empty(),)
             .validate(&module)
             .expect("validate");
     }

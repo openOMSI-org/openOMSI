@@ -27,7 +27,7 @@ impl<'a> Offscreen<'a> {
         let mut renderer = pollster::block_on(Renderer::new_with(
             &instance,
             None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            Some(mx::TextureFormat::Rgba8UnormSrgb),
             args.session_settings.render_options(&settings),
         ))?;
         log::info!("adapter: {}", renderer.adapter_name);

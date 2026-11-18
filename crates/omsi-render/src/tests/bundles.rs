@@ -10,11 +10,11 @@ use super::*;
 const SIDE: usize = 34;
 const SIZE: u32 = 160;
 
-fn renderer(instance: &wgpu::Instance) -> Renderer {
+fn renderer(instance: &mx::Instance) -> Renderer {
     pollster::block_on(Renderer::new_with(
         instance,
         None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
     ))
     .expect("test renderer")
@@ -135,7 +135,7 @@ fn settle(r: &mut Renderer, w: &mut Wall, camera: &Camera, lighting: &Lighting, 
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn kept_bundles_draw_what_a_fresh_recording_draws() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let instance = mx::Instance::new();
     let mut kept = renderer(&instance);
     let mut fresh = renderer(&instance);
     let camera = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 90.0, near: 0.1, far: 200.0 };

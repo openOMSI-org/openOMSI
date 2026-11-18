@@ -762,17 +762,23 @@ impl Renderer {
                 // (compared with what the smoke buffer holds: compared with the coronas'
                 // bytes, which it never equals, it was written again every frame)
                 if scene.smoke_sent != bytes {
-                    self.queue.write_buffer(b, 0, bytes);
+                    self.queue
+                        .write_buffer(b, 0, bytes)
+                        .expect("mX: a queue write");
                 }
             }
             _ => {
-                let b = self.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("smoke"),
-                    size: (bytes.len() * 2) as u64,
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
-                self.queue.write_buffer(&b, 0, bytes);
+                let b = self
+                    .device
+                    .create_buffer(&mx::BufferDescriptor {
+                        label: Some("smoke"),
+                        size: (bytes.len() * 2) as u64,
+                        usage: mx::BufferUsages::VERTEX | mx::BufferUsages::COPY_DST,
+                    })
+                    .expect("mX: a buffer");
+                self.queue
+                    .write_buffer(&b, 0, bytes)
+                    .expect("mX: a queue write");
                 scene.smoke_buf = Some(b);
             }
         }
@@ -795,12 +801,29 @@ impl Renderer {
                 }
             }
         }
-        self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo { texture: &self.lights.lm_atlas, mip_level: 0, origin: wgpu::Origin3d { x: slot.0 * LM_TILE_PX, y: slot.1 * LM_TILE_PX, z: 0 }, aspect: wgpu::TextureAspect::All },
-            &px,
-            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(LM_TILE_PX * 4), rows_per_image: None },
-            wgpu::Extent3d { width: LM_TILE_PX, height: LM_TILE_PX, depth_or_array_layers: 1 },
-        );
+        self.queue
+            .write_texture(
+                mx::TexelCopyTextureInfo {
+                    texture: &self.lights.lm_atlas,
+                    mip_level: 0,
+                    origin: mx::Origin3d {
+                        x: slot.0 * LM_TILE_PX,
+                        y: slot.1 * LM_TILE_PX,
+                        z: 0,
+                    },
+                    aspect: mx::TextureAspect::All, }, &px,
+                mx::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(LM_TILE_PX * 4),
+                    rows_per_image: None,
+                },
+                mx::Extent3d {
+                    width: LM_TILE_PX,
+                    height: LM_TILE_PX,
+                    depth_or_array_layers: 1,
+                },
+            )
+            .expect("mX: a queue write");
     }
 
     /// Write whole rows of a tile of the snow track field (road_snow.wgsl): tile `tile`
@@ -821,15 +844,23 @@ impl Renderer {
         // without snow keeps the token, 16 MB of the card less)
         let full = SNOW_TRACK_TEXELS as u64 * SNOW_TRACK_TEXELS as u64 * 4;
         if self.lights.snow_track.borrow().size() < full {
-            *self.lights.snow_track.borrow_mut() = self.device.create_buffer(&wgpu::BufferDescriptor {
+            *self.lights.snow_track.borrow_mut() = self
+                .device
+                .create_buffer(&mx::BufferDescriptor {
                 label: Some("snow track field"),
                 size: full,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
+                usage: mx::BufferUsages::STORAGE | mx::BufferUsages::COPY_DST,
+                })
+                .expect("mX: a buffer");
             self.lights.snow_track_made.set(self.lights.snow_track_made.get() + 1);
         }
-        self.queue.write_buffer(&self.lights.snow_track.borrow(), offset, &rgba[..rows as usize * row_bytes]);
+        self.queue
+            .write_buffer(
+                &self.lights.snow_track.borrow(),
+                offset,
+                &rgba[..rows as usize * row_bytes],
+            )
+            .expect("mX: a queue write");
     }
 
     /// Where the light map atlas lies: its south-west corner (world x, y) and its side (m).
@@ -841,12 +872,11 @@ impl Renderer {
     /// brightness is the glow's shape.
     pub fn set_corona_texture(&mut self, id: u16, img: &omsi_texture::Image) {
         let t = upload_texture(&self.device, &self.queue, img, true);
-        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("corona picture"),
-            layout: &self.lights.corona_layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&t.view) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.lights.corona_sampler) },
+                mx::BindGroupEntry { binding: 0, resource: mx::BindingResource::TextureView(&t.view), },
+                mx::BindGroupEntry { binding: 1, resource: mx::BindingResource::Sampler(&self.lights.corona_sampler), },
             ],
         });
         let i = id as usize;
@@ -878,12 +908,11 @@ impl Renderer {
     /// for every `[smoke]`), alpha as its mask.
     pub fn set_smoke_texture(&mut self, img: &omsi_texture::Image) {
         let t = upload_texture(&self.device, &self.queue, img, true);
-        self.lights.smoke_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        self.lights.smoke_bind_group = self.device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("smoke"),
-            layout: &self.lights.corona_layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&t.view) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.lights.corona_sampler) },
+                mx::BindGroupEntry { binding: 0, resource: mx::BindingResource::TextureView(&t.view), },
+                mx::BindGroupEntry { binding: 1, resource: mx::BindingResource::Sampler(&self.lights.corona_sampler), },
             ],
         });
     }
@@ -946,17 +975,23 @@ impl Renderer {
         match &scene.corona_buf {
             Some(b) if b.size() as usize >= bytes.len() => {
                 if scene.corona_sent != bytes {
-                    self.queue.write_buffer(b, 0, bytes);
+                    self.queue
+                        .write_buffer(b, 0, bytes)
+                        .expect("mX: a queue write");
                 }
             }
             _ => {
-                let b = self.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("coronas"),
-                    size: (bytes.len() * 2) as u64,
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
-                self.queue.write_buffer(&b, 0, bytes);
+                let b = self
+                    .device
+                    .create_buffer(&mx::BufferDescriptor {
+                        label: Some("coronas"),
+                        size: (bytes.len() * 2) as u64,
+                        usage: mx::BufferUsages::VERTEX | mx::BufferUsages::COPY_DST,
+                    })
+                    .expect("mX: a buffer");
+                self.queue
+                    .write_buffer(&b, 0, bytes)
+                    .expect("mX: a queue write");
                 scene.corona_buf = Some(b);
             }
         }
@@ -967,42 +1002,40 @@ impl Renderer {
 
 /// The lights' resources beside the scene's grid: coronas, smoke, snowfall, cookies, the tile light maps and the lamps in the fog.
 pub(crate) struct LightRes {
-    pub(crate) corona_bind_group: wgpu::BindGroup,
+    pub(crate) corona_bind_group: mx::BindGroup,
     /// The snowfall's parameters (snow.wgsl `SnowParams`) and their bind group.
-    pub(crate) snow_buf: wgpu::Buffer,
-    pub(crate) snow_bind_group: wgpu::BindGroup,
+    pub(crate) snow_buf: mx::Buffer,
+    pub(crate) snow_bind_group: mx::BindGroup,
     /// The rainfall's (rain.wgsl `RainParams`).
-    pub(crate) rain_buf: wgpu::Buffer,
-    pub(crate) rain_bind_group: wgpu::BindGroup,
+    pub(crate) rain_buf: mx::Buffer,
+    pub(crate) rain_bind_group: mx::BindGroup,
     /// The smoke texture (`Texture/rauch.tga`, see [`Renderer::set_smoke_texture`]).
-    pub(crate) smoke_bind_group: wgpu::BindGroup,
+    pub(crate) smoke_bind_group: mx::BindGroup,
     /// The coronas' pictures besides the standard glow (index = `Corona::texture`; entry 0
     /// unused).
-    pub(crate) corona_textures: Vec<Option<wgpu::BindGroup>>,
+    pub(crate) corona_textures: Vec<Option<mx::BindGroup>>,
     /// How far this renderer has come through the numbered corona and cookie pictures its
     /// caller keeps (see [`Renderer::pictures_taken`]).
     pub(crate) pictures_taken: (usize, usize),
     /// The light cookies' pictures and the frame's layers of them.
     pub(crate) cookies: cookies::CookieAtlas,
-    pub(crate) corona_layout: wgpu::BindGroupLayout,
-    pub(crate) corona_sampler: wgpu::Sampler,
+    pub(crate) corona_sampler: mx::Sampler,
     /// Enhanced: the lamps' light the fog scatters, added over the drawn picture (none on
     /// OpenGL and without storage buffers), its bind group layout and parameters.
-    pub(crate) fog_lamps_pipeline: Option<[wgpu::RenderPipeline; 2]>,
-    pub(crate) fog_lamps_layout: wgpu::BindGroupLayout,
-    pub(crate) fog_lamps_buf: wgpu::Buffer,
+    pub(crate) fog_lamps_pipeline: Option<[mx::RenderPipeline; 2]>,
+    pub(crate) fog_lamps_buf: mx::Buffer,
     /// The tile light maps (`.map.LM.bmp`) of the 5x5 tiles around the camera, north up, and
     /// where that square lies (world x, y of its south-west corner, its side in metres).
-    pub(crate) lm_atlas: wgpu::Texture,
-    pub(crate) lm_atlas_view: wgpu::TextureView,
-    pub(crate) lm_uniform: wgpu::Buffer,
+    pub(crate) lm_atlas: mx::Texture,
+    pub(crate) lm_atlas_view: mx::TextureView,
+    pub(crate) lm_uniform: mx::Buffer,
     pub(crate) lm_place: std::cell::Cell<(f64, f64, f64)>,
     /// The snow track field around the camera (road_snow.wgsl) and its place and state: a
     /// token until the roads' snow first sends it rows, the field from then on, and how many
     /// times it was made (a scene's camera bind group is made again when it changes).
-    pub(crate) snow_track: std::cell::RefCell<wgpu::Buffer>,
+    pub(crate) snow_track: std::cell::RefCell<mx::Buffer>,
     pub(crate) snow_track_made: std::cell::Cell<u32>,
-    pub(crate) snow_track_uniform: wgpu::Buffer,
+    pub(crate) snow_track_uniform: mx::Buffer,
 }
 
 #[cfg(test)]

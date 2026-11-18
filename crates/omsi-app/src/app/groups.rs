@@ -219,7 +219,7 @@ impl PerfState {
 /// bus mirrors, the window's visibility and what stands in for it, and the view sync's
 /// state.
 pub(crate) struct GfxState {
-    pub(crate) instance: wgpu::Instance,
+    pub(crate) instance: mx::Instance,
     pub(crate) surface: Option<SurfaceState<'static>>,
     /// Tile streaming around the camera (the window's default).
     pub(crate) streamer: Option<tiles::Streamer>,
@@ -247,7 +247,7 @@ pub(crate) struct GfxState {
     /// Frames the window was hidden for (they are not drawn).
     pub(crate) hidden_frames: u32,
     /// Stand-in for the window's frame while the window is hidden (OMSI_RENDER_OCCLUDED).
-    pub(crate) stand_in: Option<wgpu::Texture>,
+    pub(crate) stand_in: Option<mx::Texture>,
     /// What the renderer shows of the AI traffic and the people (`view_sync`): their
     /// renders, kept apart from `session.traffic` and `session.humans`.
     pub(crate) sim_view: crate::view_sync::SimView,

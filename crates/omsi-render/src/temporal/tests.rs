@@ -101,7 +101,7 @@ fn metalfx_draws_no_smaller_than_it_can_scale_up() {
 /// errors a frame, with `game.log` growing by megabytes a minute.
 #[test]
 fn the_mask_has_a_format_streamline_can_read_back_on_vulkan() {
-    assert_ne!(super::frame::TEMPORAL_MASK_FORMAT, wgpu::TextureFormat::R8Unorm);
+    assert_ne!(super::frame::TEMPORAL_MASK_FORMAT, mx::TextureFormat::R8Unorm);
 }
 
 /// A minimised window is 1x1, and NGX refuses that for good: it must never reach the upscaler.
@@ -112,15 +112,3 @@ fn a_minimised_window_is_not_upscaled() {
     assert!(super::frame::window_fits((640, 360)));
 }
 
-/// Frame generation shows the drawn frame a little under half a frame time after the generated
-/// one, and never holds it back long: below 10 fps there is nothing left to pace.
-#[cfg(target_os = "macos")]
-#[test]
-fn the_drawn_frame_follows_the_generated_one_at_half_a_frame() {
-    use super::metalfx_frames::half_interval;
-    assert!((half_interval(1.0 / 30.0) - 31.0 / 64.0 / 30.0).abs() < 1e-6);
-    assert!(half_interval(1.0 / 30.0) < 1.0 / 60.0);
-    assert_eq!(half_interval(0.5), 0.05);
-    assert_eq!(half_interval(0.0), 0.0);
-    assert_eq!(half_interval(f32::NAN), 0.0);
-}
