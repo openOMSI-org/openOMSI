@@ -49,13 +49,6 @@ fn blended_screen_materials_do_not_write_depth() {
 }
 
 #[test]
-fn stacked_depth_caps_keep_the_two_step_floor() {
-    let shader = include_str!("../shaders/scene/03_vertex.wgsl");
-    assert!(shader.contains("let stack_floor = select(0.0, 2.0, (level_code & 3u) >= 2u);"));
-    assert!(shader.contains("level = max(level, stack_floor);"));
-}
-
-#[test]
 fn uploaded_depth_normal_comes_from_geometry_not_lighting_normals() {
     let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
     descriptor.backends = wgpu::Backends::NOOP;

@@ -260,8 +260,6 @@ fn scene_clip(e: u32, wp: vec4<f32>, nw: vec3<f32>) -> vec4<f32> {
         let cap = f32((level_code >> 2u) & 1023u) * 1e-6;
         let distance = length(cp - camera.cam_pos.xyz);
         level = min(level, cap / max(3e-5 * distance, 1e-9));
-        let stack_floor = select(0.0, 2.0, (level_code & 3u) >= 2u);
-        level = max(level, stack_floor);
         if (level <= 0.0) {
             return clip;
         }
