@@ -701,9 +701,6 @@ impl Runtime {
     }
 
     pub fn load(device: &wgpu::Device) -> Result<Runtime> {
-        if wgpu_mx::custom::is_mx(device) {
-            bail!("the game is drawn by mX Graphics (Experimental), which DLSS does not run on yet");
-        }
         if let Some(hal) = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() } {
             let raw_device = hal.raw_device().clone();
             drop(hal);

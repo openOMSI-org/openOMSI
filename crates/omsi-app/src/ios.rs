@@ -36,11 +36,19 @@ pub(crate) fn wake() {
     }
 }
 
+/// The game runs on mX (mX Graphics): the Swift app's calls go to it.
+static MX: AtomicBool = AtomicBool::new(false);
+
 /// The Swift app's `main`: never returns (UIKit's run loop runs the app from here on).
 #[unsafe(no_mangle)]
 pub extern "C" fn openomsi_ios_main() {
     // HOME is the app's container on iOS: its root may not be written, its Library may
     let container = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+    // mX Graphics on: the game is mX's, wgpu is not touched
+    if crate::startup::mx_graphics_in(&container.join("Library/Application Support/openOMSI")) {
+        MX.store(true, Ordering::Relaxed);
+        return openomsi_game_mx::ios::openomsi_ios_main();
+    }
     unsafe { std::env::set_var("OPENOMSI_CONTAINER", &container) };
     let home = container.join("Library/Application Support/openOMSI");
     let _ = std::fs::create_dir_all(&home);
@@ -106,6 +114,9 @@ pub extern "C" fn openomsi_ios_main() {
 /// The Swift app's scene is connected: windows can be shown on it.
 #[unsafe(no_mangle)]
 pub extern "C" fn openomsi_ios_scene_ready() {
+    if MX.load(Ordering::Relaxed) {
+        return openomsi_game_mx::ios::openomsi_ios_scene_ready();
+    }
     SCENE_READY.store(true, Ordering::Relaxed);
     wake();
 }

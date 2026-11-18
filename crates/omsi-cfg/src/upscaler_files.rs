@@ -9,6 +9,17 @@ use std::path::{Path, PathBuf};
 const DLSS: [&str; 4] = ["sl.interposer.dll", "sl.common.dll", "sl.dlss.dll", "nvngx_dlss.dll"];
 const FSR3_DX12: [&str; 2] = ["amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_upscaler_dx12.dll"];
 const FSR3_VULKAN: [&str; 2] = ["amd_fidelityfx_loader_vk.dll", "amd_fidelityfx_upscaler_vk.dll"];
+const XESS: [&str; 1] = ["libxess.dll"];
+/// Frame generation's, beside its upscaler's (`mx_upscale::FrameGenMethod::files`).
+const DLSS_G: [&str; 4] = [
+    "sl.dlss_g.dll",
+    "sl.reflex.dll",
+    "sl.pcl.dll",
+    "nvngx_dlssg.dll",
+];
+const FSR3_FG_DX12: [&str; 1] = ["amd_fidelityfx_framegeneration_dx12.dll"];
+const FSR3_FG_VULKAN: [&str; 1] = ["amd_fidelityfx_framegeneration_vk.dll"];
+const XESS_FG: [&str; 2] = ["libxess_fg.dll", "libxell.dll"];
 /// Where macOS 13 and newer have MetalFX (the folder is there, its code is in the system's cache).
 const METALFX: &str = "/System/Library/Frameworks/MetalFX.framework";
 /// Where macOS tells its version.
@@ -29,6 +40,7 @@ pub fn files(upscaler: &str, api: Api) -> &'static [&'static str] {
         ("dlss", _) => &DLSS,
         ("fsr3", Api::Dx12) => &FSR3_DX12,
         ("fsr3", Api::Vulkan) => &FSR3_VULKAN,
+        ("xess", _) => &XESS,
         _ => &[],
     }
 }
@@ -84,7 +96,7 @@ pub fn available(dir: &Path) -> Vec<&'static str> {
 }
 
 fn offered(dir: &Path, windows: bool, rtx: bool, metalfx: bool) -> Vec<&'static str> {
-    let files = ["dlss", "fsr3"].into_iter().filter(|u| windows && present(dir, u) && (*u != "dlss" || rtx));
+    let files = ["dlss", "fsr3", "xess"].into_iter().filter(|u| windows && present(dir, u) && (*u != "dlss" || rtx));
     files.chain(metalfx.then_some("metalfx")).collect()
 }
 
@@ -99,6 +111,7 @@ pub fn label(upscaler: &str) -> &'static str {
     match upscaler {
         "dlss" => "NVIDIA DLSS (experimental)",
         "metalfx" => "Apple MetalFX (experimental)",
+        "xess" => "Intel XeSS (experimental)",
         _ => "AMD FSR 3 (experimental)",
     }
 }
@@ -132,7 +145,7 @@ pub fn menu_help(offered: bool) -> &'static str {
     } else if cfg!(target_os = "macos") {
         "Standard Catmull-Rom or AMD FSR 1 change at once; Apple MetalFX takes the place of the anti-aliasing and the render scale, from the next start"
     } else {
-        "Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS or AMD FSR 3 take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start"
+        "Standard Catmull-Rom or AMD FSR 1 change at once; NVIDIA DLSS, AMD FSR 3 or Intel XeSS take the place of the anti-aliasing and the render scale, on DirectX 12 or Vulkan, from the next start"
     }
 }
 
@@ -147,6 +160,7 @@ pub fn frame_generation_word(s: &str) -> &'static str {
         "dlss" | "dlss2x" => "dlss2x",
         "dlss3x" => "dlss3x",
         "dlss4x" => "dlss4x",
+        "xess" => "xess",
         _ => "off",
     }
 }
@@ -164,9 +178,29 @@ pub fn metalfx_frames_present() -> bool {
     *PRESENT.get_or_init(|| metalfx_present() && std::fs::read_to_string(SYSTEM_VERSION).ok().and_then(|p| macos_major(&p)).is_some_and(|v| v >= 26))
 }
 
-/// The frame generation this machine can run, as the menus offer it: `metalfx` on a Mac.
+/// The frame generation this machine can run, as the menus offer it: `metalfx` on a Mac; on
+/// Windows those whose files are beside the game (each with its upscaler's).
 pub fn frame_generation_choices() -> Vec<&'static str> {
-    generators(metalfx_frames_present())
+    let mut choices = generators(metalfx_frames_present());
+    if cfg!(windows) {
+        choices.extend(windows_generators(&program_dir(), rtx_present()));
+    }
+    choices
+}
+
+fn windows_generators(dir: &Path, rtx: bool) -> Vec<&'static str> {
+    let has = |files: &[&str]| files.iter().all(|f| dir.join(f).is_file());
+    let mut out = Vec::new();
+    if rtx && has(&DLSS) && has(&DLSS_G) {
+        out.extend(["dlss2x", "dlss3x", "dlss4x"]);
+    }
+    if (has(&FSR3_DX12) && has(&FSR3_FG_DX12)) || (has(&FSR3_VULKAN) && has(&FSR3_FG_VULKAN)) {
+        out.push("fsr3");
+    }
+    if has(&XESS) && has(&XESS_FG) {
+        out.push("xess");
+    }
+    out
 }
 
 fn generators(metalfx: bool) -> Vec<&'static str> {
@@ -179,12 +213,27 @@ pub fn frame_generation_menu(choices: &[&str]) -> Vec<(&'static str, &'static st
     if choices.contains(&"metalfx") {
         menu.push(("metalfx", label("metalfx")));
     }
+    for (word, name) in [
+        ("dlss2x", "NVIDIA DLSS 2x (experimental)"),
+        ("dlss3x", "NVIDIA DLSS 3x (experimental)"),
+        ("dlss4x", "NVIDIA DLSS 4x (experimental)"),
+        ("fsr3", "AMD FSR 3 (experimental)"),
+        ("xess", "Intel XeSS (experimental)"),
+    ] {
+        if choices.contains(&word) {
+            menu.push((word, name));
+        }
+    }
     menu
 }
 
 /// The Frame generation row's help text, as the in-game menu shows it.
 pub fn frame_generation_help() -> &'static str {
-    "Shows a generated frame between every two drawn ones: smoother motion for a little more input lag. Needs Apple MetalFX upscaling and works best from 30 drawn frames a second; with V-sync the game draws half the display's rate"
+    if cfg!(windows) {
+        "Shows generated frames between the drawn ones: smoother motion for a little more input lag. Needs the same vendor's upscaling (NVIDIA DLSS, AMD FSR 3 or Intel XeSS, which runs on DirectX 12 only) and works best from 40 drawn frames a second"
+    } else {
+        "Shows a generated frame between every two drawn ones: smoother motion for a little more input lag. Needs Apple MetalFX upscaling and works best from 30 drawn frames a second; with V-sync the game draws half the display's rate"
+    }
 }
 
 /// The upscalers that can run from the game's folder, as a menu lists them.

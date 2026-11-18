@@ -1,0 +1,404 @@
+//! The offscreen run: a scripted session rendered to pictures (`--offscreen`). Its start is
+//! in `setup`, its steps in `step` (with the window's own where the two take the same, see
+//! `app_events::steps`), what it says about the run afterwards in `report` and `checks`, and
+//! the picture in `picture`.
+
+use super::*;
+use crate::app_events::steps;
+
+mod checks;
+mod picture;
+mod record;
+mod report;
+mod setup;
+mod stages;
+mod step;
+
+pub(crate) use stages::OFFSCREEN_STEP;
+#[cfg(test)]
+pub(crate) use stages::OffscreenStage;
+
+/// What an offscreen run keeps from its start to its picture (the names are the run's
+/// locals when it was one function).
+struct Offscreen<'a> {
+    args: &'a Args,
+    out: &'a PathBuf,
+    w: u32,
+    h: u32,
+    view_aspect: f32,
+    settings: settings::Settings,
+    renderer: Renderer,
+    scene: Scene,
+    world: World,
+    /// the scenery objects' scripts (see `World::scenery_sync`)
+    scenery: omsi_sim::scenery::SceneryState,
+    camera: Camera,
+    traffic: Option<traffic::Traffic>,
+    schedule: Option<schedule::Schedule>,
+    player: Option<Player>,
+    spawn_z: f64,
+    center: DVec3,
+    duty: Option<schedule::PlayerDuty>,
+    /// why the duty asked for cannot be driven (the picture's HUD says it too)
+    duty_error: Option<String>,
+    journey: Option<crate::journey::Journey>,
+    career: career::Career,
+    humans_off: Option<humans::Humans>,
+    /// what the renderer shows of the traffic and the people (see `view_sync`)
+    sim_view: crate::view_sync::SimView,
+    player_ref: Option<Player>,
+    envir: Option<omsi_content::Envir>,
+    weather: omsi_content::weather::Weather,
+    /// the workshop's waiting time moves the clock on, so the sky has to follow it
+    service_seconds: f64,
+    dt: f32,
+    drive_frames: usize,
+    wheel_worst: Option<(DVec3, f64)>,
+    total_frames: usize,
+    /// a dedicated server runs until it is told to stop (SIGTERM, Ctrl+C)
+    server: bool,
+    timed: Vec<(String, f32)>,
+    snapshot_times: Vec<f32>,
+    drive_start: DVec3,
+    drive_profile: Vec<[f32; 4]>,
+    drive_v0: Option<f32>,
+    physics_log: f32,
+    last_reasons: Vec<String>,
+    lan_audio: Option<omsi_audio::AudioEngine>,
+    lan_off: Option<omsi_net::LanSession>,
+    remotes_off: lan::LanGame,
+    lan_world_off: crate::lan_world::LanWorld,
+    /// the clock of the moment the run has reached (the start, the workshop's wait and the
+    /// seconds run; a dedicated server's own), as the window's goes on
+    run_clock: omsi_sim::SimClock,
+    /// how wet the roads are, rain wetting them and dry weather drying them as in the window
+    wetness: f32,
+    /// the cabin air of the player's bus and the condensation on its glass
+    cabin_air: crate::condensation::CabinAir,
+    /// a dedicated server's administration and clock (see `admin`)
+    srv_admin: crate::admin::ServerAdmin,
+    srv_clock: f64,
+    /// the server's world clock against the wall (see `omsi_sim::world_clock`)
+    srv_wall: omsi_sim::world_clock::WorldClock,
+    srv_metar: Option<String>,
+    srv_metar_due: std::time::Instant,
+    srv_metar_rx: Option<std::sync::mpsc::Receiver<Option<omsi_content::weather::Weather>>>,
+    /// the weather's name on the status page
+    srv_weather_name: String,
+    ground_gap: Option<crate::ground_gap::GroundGap>,
+    spray: puddles::Spray,
+    real_time: RealTime,
+    /// `OMSI_RECORD`: the film being written (see `record`).
+    recorder: Option<record::Recorder>,
+    /// What each stage of the steps took in all (s, see `frame_stages`; logged with
+    /// OMSI_PROFILE).
+    profile: crate::profile_keys::ProfileTimes,
+    /// The worst the bus did on the way, for the drive report.
+    drive_extremes: DriveExtremes,
+    /// The sky's cloud type and the physical weather model (see `weather_setup::SkyState`).
+    sky: crate::weather_setup::SkyState,
+}
+
+pub(crate) fn run_offscreen(
+    args: &Args,
+    out: &PathBuf,
+    mut lan_off: Option<omsi_net::LanSession>,
+    remotes_off: lan::LanGame,
+) -> Result<()> {
+    crate::frame_stages::log_order();
+    // (a dedicated server lets nobody new in before its world is there: see `set_starting`)
+    let server = args.server.is_some();
+    if let Some(l) = lan_off.as_mut().filter(|_| server) {
+        l.set_starting(true);
+    }
+    let mut run = Offscreen::setup(args, out, lan_off, remotes_off)?;
+    if let Some(l) = run.lan_off.as_mut().filter(|_| server) {
+        l.set_starting(false);
+    }
+    let mut steps = 0;
+    // OMSI_PROFILE: the steps that took long (a stutter the window would show), by name
+    let profile = omsi_cfg::flags::OMSI_PROFILE.is_set();
+    let mut slow = 0usize;
+    for i in 0..run.total_frames {
+        steps += 1;
+        let t = std::time::Instant::now();
+        let go_on = run.step(i)?;
+        let ms = t.elapsed().as_secs_f64() * 1000.0;
+        if profile && i > 0 && ms > 50.0 {
+            slow += 1;
+            log::info!("profile: offscreen step {i} took {ms:.0} ms");
+        }
+        if !go_on {
+            break;
+        }
+    }
+    if profile {
+        log::info!("profile: {slow} offscreen steps over 50 ms of {steps}");
+    }
+    run.finish_recording()?;
+    run.log_profile(steps);
+    run.finish()
+}
+
+impl Offscreen<'_> {
+    /// OMSI_PROFILE: what each stage took per step, on average.
+    fn log_profile(&self, steps: usize) {
+        if !omsi_cfg::flags::OMSI_PROFILE.is_set() {
+            return;
+        }
+        let steps = steps.max(1) as f64;
+        let list: Vec<String> = self.profile.iter().map(|(k, v)| format!("{k} {:.2}", v / steps * 1000.0)).collect();
+        log::info!("profile: offscreen stages per step (ms): {}", list.join(", "));
+    }
+
+    /// After the steps: the run's reports, the checks asked for, the picture.
+    fn finish(mut self) -> Result<()> {
+        let args = self.args;
+        let Self { ref mut camera, ref traffic, .. } = self;
+        if let Some(id) = follow_id(args, traffic.as_ref()) {
+            match follow_camera(traffic.as_ref(), id) {
+                Some(c) => {
+                    log::info!(
+                        "following car {id} at ({:.1}, {:.1}) heading {:.0}",
+                        c.position.x,
+                        c.position.y,
+                        c.yaw
+                    );
+                    *camera = c;
+                }
+                None => log::warn!("--follow: car {id} not found"),
+            }
+        }
+        if let Some(g) = self.ground_gap.take() {
+            g.report();
+        }
+        self.traffic_report();
+        if self.server {
+            if let Some(l) = self.lan_off.take() {
+                l.leave();
+            }
+            return Ok(());
+        }
+        self.player_report();
+        self.humans_report();
+        checks::run_checks(&self.world, self.traffic.as_ref());
+        let clock = self.save_run();
+        self.picture(clock)
+    }
+}
+
+/// The camera the run's eye is (for the traffic, the people and the spray): a followed
+/// car's, else the player's view, else the run's camera.
+fn eye_camera(args: &Args, traffic: Option<&traffic::Traffic>, player: Option<&Player>, camera: &Camera) -> Camera {
+    match traffic.and_then(|t| follow_id(args, Some(t)).and_then(|id| follow_camera(Some(t), id))) {
+        Some(c) => c,
+        None => match player {
+            Some(p) if args.cam.is_none() && args.view != "free" && args.follow.is_none() => {
+                p.camera(&args.view, camera)
+            }
+            _ => *camera,
+        },
+    }
+}
+
+/// The player's view from `base` with the head turned as --look says (the outside view
+/// kept clear of the world).
+fn player_view(args: &Args, settings: &settings::Settings, p: &mut Player, base: &Camera, world: &World) -> Camera {
+    let look = crate::player::driver_head_look(
+        look_of(args),
+        &args.view,
+        settings.seat_pitch_deg,
+        false,
+    );
+    let cam = p.camera_look(&args.view, base, look, offscreen_orbit());
+    if args.view == "outside" {
+        p.camera_clipped(cam, world, offscreen_orbit(), 0.0)
+    } else {
+        cam
+    }
+}
+
+/// The player's bus and its driver into the scene, as a picture of them is taken.
+fn pose_player(p: &mut Player, renderer: &Renderer, scene: &mut Scene, args: &Args, settings: &settings::Settings) {
+    p.sync_transforms(
+        renderer,
+        scene,
+        matches!(args.view.as_str(), "driver" | "pax"),
+        crate::rain::quality_of(&settings.rain_quality),
+    );
+    if let Some(tv) = p.trolley_view.as_mut() {
+        tv.update(renderer, scene, 0.0, &mut p.vehicle);
+    }
+    p.panto_fx.update(0.0, &mut p.vehicle);
+    p.finish_window_paints(renderer, scene);
+    crate::scene::sync_vehicle_damage(renderer, scene, &mut p.vehicle, &mut p.render);
+    p.sync_driver_hands(renderer, scene, 1.0 / 30.0, settings.driver, args.view == "driver", false, settings.driver_like_omsi);
+}
+
+/// The lights of a picture: the lamps' cones in this weather, the corona pictures, the
+/// light maps round `eye` and every light that shines there.
+fn world_lights(
+    renderer: &mut Renderer,
+    world: &World,
+    scene: &mut Scene,
+    weather: &omsi_content::weather::Weather,
+    daylight: &omsi_sim::Daylight,
+    eye: DVec3,
+    vehicles: &[&omsi_sim::VehicleInstance],
+    vehicle_smoke: &str,
+    player_first: bool,
+) {
+    lights::upload_corona_textures(renderer);
+    world.update_light_map_atlas(renderer, eye);
+    lights::collect(
+        world, scene, daylight, eye, vehicles,
+        lights::ConeWeather { enhanced: !renderer.options.no_enhanced, ..lights::ConeWeather::of(weather, daylight.night) },
+        lights::VehicleSmoke::from_setting(vehicle_smoke), player_first, 1.0,
+    );
+    // (and the pictures the lights asked for first now: a picture has the one frame)
+    lights::upload_corona_textures(renderer);
+}
+
+/// The run's step: a tick of the simulation's fixed step (`omsi_sim::tick::RATE_HZ`), as
+/// the window's.
+fn run_dt() -> f32 {
+    (1.0 / omsi_sim::tick::RATE_HZ) as f32
+}
+
+/// The run's steps in `secs` seconds (at least one): what happens every second happens every
+/// second.
+fn steps_in(secs: f64) -> usize {
+    (secs * omsi_sim::tick::RATE_HZ).round().max(1.0) as usize
+}
+
+/// The offscreen loop's fixed steps kept to the clock when other games take part (a LAN
+/// session, the dedicated server): a step of `dt` every `dt` on the wall, the step's own work
+/// included. A whole step slept after each frame's work made a dedicated server's frames
+/// 41 ms long on Gladbeck: its world ran at 80 % of the clock while its world frames were
+/// stamped with the clock, so the players saw its cars and people a fifth too slow, mostly
+/// guessed on past the last frame they had, and standing still for a moment again and again
+/// (#660); its clock and timetable fell behind the day as well.
+#[derive(Default)]
+pub(crate) struct RealTime {
+    /// When the last step was to end (its wait ran until then).
+    end: Option<Instant>,
+}
+
+impl RealTime {
+    /// Further behind than this (a stall: a long load, the machine busy), the steps go on
+    /// from now rather than run back to back until they have caught up - the same quarter of
+    /// a second after which the session's stamps take the wall clock again
+    /// (`LanSession::tick`).
+    const BEHIND_MAX: std::time::Duration = std::time::Duration::from_millis(250);
+
+    /// How long to wait at `now`, at the end of a step of `dt` seconds.
+    pub(crate) fn wait(&mut self, now: Instant, dt: f32) -> std::time::Duration {
+        let dt = std::time::Duration::from_secs_f32(dt);
+        let due = self.end.map(|e| e + dt).unwrap_or(now + dt);
+        let due = if now > due + Self::BEHIND_MAX {
+            now
+        } else {
+            due
+        };
+        self.end = Some(due);
+        due.saturating_duration_since(now)
+    }
+}
+
+/// The tyres as they are drawn: the lowest point of each wheel mesh and how far it is over
+/// the road under it (negative: in the asphalt).
+fn tyre_lows(v: &omsi_sim::VehicleInstance, world: &World) -> Vec<(DVec3, f64)> {
+    let mut out = Vec::new();
+    for (i, vm) in v.ty.meshes.iter().enumerate() {
+        let def = &v.ty.model.meshes[vm.def_index];
+        if !v.mesh_props[i].visible || !def.animations.iter().any(|an| an.variable.to_ascii_lowercase().starts_with("wheel_rotation_")) {
+            continue;
+        }
+        let xf = v.mesh_local_transform(i);
+        let Some(q) = vm.data.positions.iter().map(|q| xf.transform_point3(*q)).min_by(|a, b| a.z.total_cmp(&b.z)) else { continue };
+        let w = v.position + q.as_dvec3();
+        if let Some(g) = world.ground_height(w.x, w.y) {
+            out.push((w, w.z - g));
+        }
+    }
+    out
+}
+
+/// The worst pitch and bank of the drive, the origin's highest and lowest over the ground,
+/// and where and when the worst pitch was (`Offscreen::drive_extremes`).
+type DriveExtremes = (f32, f32, f64, f64, (DVec3, f32));
+
+/// Nothing driven yet.
+const NO_EXTREMES: DriveExtremes = (0.0, 0.0, f64::MIN, f64::MAX, (DVec3::ZERO, 0.0));
+
+/// `OMSI_CAM_VEHICLE=x,y,z,yaw,pitch[,fov]`: a camera in the bus's own frame (x right,
+/// y forward, z up; yaw relative to the bus) for close-ups of displays and switches - the
+/// final picture and every `--snapshots` one.
+/// With a triple screen, the frustum around its three panels (see `App::sight_extent`).
+fn triple_extent(settings: &crate::settings::Settings, cam: &Camera, w: u32, h: u32) -> Option<(f64, f64)> {
+    (settings.triple.enabled && !settings.vr_requested()).then(|| {
+        let (x, y) = settings.triple.view_extent(cam, w, h);
+        (x as f64, y as f64)
+    })
+}
+
+fn vehicle_camera(player: &Player, camera: &mut Camera) {
+    let Some(spec) = omsi_cfg::flags::OMSI_CAM_VEHICLE.var() else { return };
+    let v: Vec<f32> = spec
+        .split(',')
+        .filter_map(|s| s.trim().parse().ok())
+        .collect();
+    if v.len() >= 5 {
+        camera.position = player.vehicle.position
+            + player
+            .vehicle
+            .body_rotation()
+            .transform_point3(Vec3::new(v[0], v[1], v[2]))
+            .as_dvec3();
+        camera.yaw = player.vehicle.heading as f32 + v[3];
+        camera.pitch = v[4];
+        camera.near = 0.02;
+        if let Some(f) = v.get(5) {
+            camera.fov_deg = *f;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RealTime;
+    use std::time::{Duration, Instant};
+
+    /// The waits `RealTime` asks for after steps of 1/30 s that take `work` each, and the
+    /// wall time they all took.
+    fn run(work: &[u64]) -> (Vec<Duration>, f64) {
+        let t0 = Instant::now();
+        let (mut now, mut pace, mut waits) = (t0, RealTime::default(), Vec::new());
+        for w in work {
+            now += Duration::from_millis(*w);
+            let wait = pace.wait(now, 1.0 / 30.0);
+            waits.push(wait);
+            now += wait;
+        }
+        (waits, (now - t0).as_secs_f64())
+    }
+
+    #[test]
+    fn a_server_keeps_to_the_clock_whatever_its_steps_take() {
+        // a dedicated server on Gladbeck: 8 ms of work a step; 300 steps (10 s of its world)
+        // took 12.4 s with a whole step slept after each
+        let (_, wall) = run(&[8; 300]);
+        assert!((wall - 10.0).abs() < 0.04, "300 steps in {wall} s");
+        // uneven steps, some longer than a step: made up by the next ones
+        let uneven: Vec<u64> = (0..300).map(|i| [2, 45, 9, 60, 20][i % 5]).collect();
+        let (_, wall) = run(&uneven);
+        assert!((wall - 10.0).abs() < 0.07, "300 uneven steps in {wall} s");
+        // a stall of a second is not made up by thirty steps at once: on from there at the
+        // steps' pace
+        let mut stalled = vec![5; 100];
+        stalled[50] = 1000;
+        let (waits, _) = run(&stalled);
+        let steady = |w: &Duration| (w.as_secs_f64() - 0.0283).abs() < 0.001;
+        assert!(waits[51..].iter().all(steady), "{:?}", &waits[50..60]);
+    }
+}

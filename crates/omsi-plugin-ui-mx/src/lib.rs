@@ -1,0 +1,1440 @@
+//! The Lua plugins' panels and notifications on the screen (`omsi.ui`; the tables, their
+//! owners and the clicks are `omsi_plugin::ui`'s).
+//!
+//! * A panel is laid out in the plugin's logical pixels (a vertical stack; rows side by
+//!   side, a `grow` child taking what the others leave; texts wrapped to their width) and
+//!   drawn with `omsi-ui` into a texture of its own, shown as a premultiplied overlay over
+//!   the picture and under the game's own interface. Only a panel that changed - its
+//!   table, the interface's size, the button under the mouse - is laid out and drawn again;
+//!   every other frame just puts the overlays where they belong.
+//! * Rounded shapes are cut by the pipeline's rounded clip, one layer each, rather than
+//!   smoothed by multisampling: panels come in every size, and a multisampled texture
+//!   would be made anew for each one drawn.
+//! * Notifications are cards of the same kind, top right (under the navigator when it is
+//!   there), newest first; they slide in and out by moving, not by being drawn again.
+//! * While the panels have the mouse (`omsi.ui.focus`), a click is looked up in the
+//!   clickable parts of the panel under it and handed to its plugin (`ui_click`).
+
+use glam::Vec2;
+use hashbrown::HashMap;
+use omsi_plugin::ui::{self as pui, Align, Element, Kind, Panel, Rgba, RowAlign, Toast, UiState};
+use omsi_render::{Renderer, Scene, TextureId};
+use omsi_ui::paint::Align as TextAlign;
+use omsi_ui::theme::Palette;
+use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Vertex, Weight};
+
+pub mod input;
+mod nav;
+pub use nav::{Docked, DockedMap};
+#[cfg(test)]
+mod preview;
+mod square;
+mod widgets;
+mod look;
+use look::*;
+
+
+/// A text line's height, times its size.
+pub const LINE: f32 = 1.3;
+pub const BADGE_H: f32 = 20.0;
+const BADGE_PX: f32 = 12.0;
+const BADGE_PAD: f32 = 8.0;
+pub const BUTTON_H: f32 = 34.0;
+const BUTTON_PX: f32 = 14.0;
+const BUTTON_PAD: f32 = 14.0;
+const BUTTON_ICON: f32 = 18.0;
+const BUTTON_R: f32 = 8.0;
+const TILE_H: f32 = 66.0;
+const TILE_PX: f32 = 11.0;
+const TILE_PX_MIN: f32 = 9.0;
+const TILE_PAD: f32 = 6.0;
+const TILE_ICON: f32 = 22.0;
+const TILE_GAP: f32 = 4.0;
+const TILE_R: f32 = 8.0;
+/// A tile of its icon alone (OMSI 2's quick menu): a square this wide, the icon half of it.
+/// A bar in a row that does not grow.
+const BAR_W: f32 = 60.0;
+const STRIPE: f32 = 4.0;
+/// Room round a card in its texture for the shadow (logical pixels).
+const MARGIN: f32 = 14.0;
+const SHADOW_BLUR: f32 = 12.0;
+/// The pipeline's layers: one goes to the card, one to each rounded shape; past this the
+/// shapes are drawn as triangles.
+const MAX_LAYERS: usize = 250;
+
+const TOAST_W: f32 = 320.0;
+/// Where the notifications start, below the corner's window line (`ui`'s `corner_top`).
+const TOAST_TOP: f32 = 60.0;
+const TOAST_GAP: f32 = 8.0;
+const TOAST_IN: f32 = 0.25;
+const TOAST_OUT: f32 = 0.3;
+
+fn color(c: Rgba) -> Color {
+    Color::rgba(c.0[0], c.0[1], c.0[2], c.0[3] as f32 / 255.0)
+}
+
+fn weight(w: pui::Weight) -> Weight {
+    match w {
+        pui::Weight::Regular => Weight::Regular,
+        pui::Weight::Medium => Weight::Medium,
+        pui::Weight::Bold => Weight::Bold,
+    }
+}
+
+/// A shape under the mouse: lighter, and a see-through one less see-through.
+fn lit(c: Color) -> Color {
+    let l = c.lighten(0.15);
+    Color([l.0[0], l.0[1], l.0[2], (c.0[3] * 1.8).min(1.0)])
+}
+
+/// Dark ink on a light fill, light ink on a dark one.
+fn ink_on(fill: Color, colors: ThemeColors) -> Color {
+    let [r, g, b, _] = fill.0;
+    if 0.299 * r + 0.587 * g + 0.114 * b > 0.6 {
+        colors.dark_ink
+    } else {
+        colors.ink
+    }
+}
+
+// --- layout ------------------------------------------------------------------------------
+
+/// What a card is drawn from, in its own logical pixels (its top left at 0, 0).
+#[derive(Debug, Clone, Default)]
+pub struct Laid {
+    pub w: f32,
+    pub h: f32,
+    pub radius: f32,
+    pub background: Color,
+    pub accent: Option<Color>,
+    pub items: Vec<Item>,
+    /// The clickable parts, in the order they are drawn (the last one under the mouse wins).
+    pub hits: Vec<Hit>,
+    /// Drawn without a shadow round it (a panel in the navigator's board).
+    pub flat: bool,
+    /// Where its first `map` element is, and whether the navigator's cards go over it: the
+    /// navigator draws its map there under a panel that fills its frame.
+    pub map: Option<(Rect, bool)>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Item {
+    /// A box with round corners; `hot`: the hit that lights it under the mouse.
+    Rounded {
+        r: Rect,
+        radius: f32,
+        color: Color,
+        hot: Option<usize>,
+    },
+    Rect {
+        r: Rect,
+        color: Color,
+    },
+    /// A line of text, `at` its baseline's left end.
+    Text {
+        text: String,
+        px: f32,
+        weight: Weight,
+        at: Vec2,
+        color: Color,
+    },
+    Icon {
+        name: String,
+        center: Vec2,
+        size: f32,
+        color: Color,
+    },
+    /// A picture of the plugin's folder (`widgets`).
+    Image { r: Rect, path: std::path::PathBuf },
+    Line { a: Vec2, b: Vec2, w: f32, color: Color },
+    /// A convex shape (a chart's fill).
+    Poly { pts: Vec<Vec2>, color: Color },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Hit {
+    pub r: Rect,
+    /// None: the panel itself.
+    pub element: Option<String>,
+    pub kind: HitKind,
+}
+
+/// What a press on a hit does: a click, or setting a slider or tabs by where it is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HitKind {
+    Click,
+    Slider,
+    Tabs,
+}
+
+struct Layout<'a> {
+    fonts: &'a Fonts,
+    out: Laid,
+    colors: ThemeColors,
+    /// The text field being typed into (it shows the caret).
+    typing: Option<&'a str>,
+}
+
+impl Layout<'_> {
+    fn width(&self, text: &str, px: f32, w: Weight) -> f32 {
+        self.fonts.width_as_is(text, px, w)
+    }
+
+    /// The longest start of `text` that fits `max`, with an ellipsis when cut.
+    fn fit(&self, text: &str, px: f32, w: Weight, max: f32) -> String {
+        if self.width(text, px, w) <= max {
+            return text.to_string();
+        }
+        let chars: Vec<char> = text.chars().collect();
+        let (mut lo, mut hi) = (0usize, chars.len());
+        while lo < hi {
+            let mid = (lo + hi).div_ceil(2);
+            let s: String = chars[..mid]
+                .iter()
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+                + "...";
+            if self.width(&s, px, w) <= max {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        chars[..lo]
+            .iter()
+            .collect::<String>()
+            .trim_end()
+            .to_string()
+            + "..."
+    }
+
+    /// `text` in lines of at most `max` (a word longer than that is broken where it must).
+    fn wrap(&self, text: &str, px: f32, w: Weight, max: f32) -> Vec<String> {
+        let mut out = Vec::new();
+        for para in text.split('\n') {
+            let mut line = String::new();
+            for word in para.split_whitespace() {
+                let joined = if line.is_empty() {
+                    word.to_string()
+                } else {
+                    format!("{line} {word}")
+                };
+                if self.width(&joined, px, w) <= max {
+                    line = joined;
+                    continue;
+                }
+                if !line.is_empty() {
+                    out.push(std::mem::take(&mut line));
+                }
+                for c in word.chars() {
+                    let longer = format!("{line}{c}");
+                    if !line.is_empty() && self.width(&longer, px, w) > max {
+                        out.push(std::mem::replace(&mut line, c.to_string()));
+                    } else {
+                        line = longer;
+                    }
+                }
+            }
+            out.push(line);
+        }
+        out
+    }
+
+    fn lines(&self, e: &Element, w: f32) -> Vec<String> {
+        let Kind::Text {
+            text,
+            size,
+            weight: wt,
+            wrap,
+            ..
+        } = &e.kind
+        else {
+            return Vec::new();
+        };
+        let wt = weight(*wt);
+        if *wrap {
+            self.wrap(text, *size, wt, w.max(1.0))
+        } else {
+            text.split('\n')
+                .map(|l| self.fit(l, *size, wt, w.max(1.0)))
+                .collect()
+        }
+    }
+
+    fn button_content(&self, text: &str, icon: &Option<String>) -> f32 {
+        let t = self.width(text, BUTTON_PX, Weight::Medium);
+        match icon {
+            Some(_) if text.is_empty() => BUTTON_ICON,
+            Some(_) => BUTTON_ICON + 6.0 + t,
+            None => t,
+        }
+    }
+
+    /// The width an element takes in a row when nothing makes it smaller.
+    fn natural(&self, e: &Element) -> f32 {
+        match &e.kind {
+            Kind::Text {
+                text,
+                size,
+                weight: wt,
+                ..
+            } => text
+                .split('\n')
+                .map(|l| self.width(l, *size, weight(*wt)))
+                .fold(0.0, f32::max)
+                .ceil(),
+            Kind::Icon { size, .. } => *size,
+            Kind::Row { children, gap, .. } => {
+                children.iter().map(|c| self.natural(c)).sum::<f32>()
+                    + gap * children.len().saturating_sub(1) as f32
+            }
+            Kind::Bar { .. } => BAR_W,
+            Kind::Badge { text, weight: wt, .. } => {
+                (self.width(text, BADGE_PX, weight(*wt)) + 2.0 * BADGE_PAD).ceil()
+            }
+            Kind::Divider => 1.0,
+            Kind::Space { size } => *size,
+            Kind::Button { text, icon } => {
+                (self.button_content(text, icon) + 2.0 * BUTTON_PAD).ceil()
+            }
+            Kind::Tile { text, .. } if !text.is_empty() => {
+                (self.width(text, TILE_PX, Weight::Medium).max(TILE_ICON) + 2.0 * TILE_PAD).ceil()
+            }
+            _ => self.widget_natural(e),
+        }
+    }
+
+    /// The widths of a row's children in `w`: their own, the `grow` ones sharing what is
+    /// left; when they do not fit, the texts, labels and rows give up width alike.
+    fn row_widths(&self, children: &[Element], gap: f32, w: f32) -> Vec<f32> {
+        let gaps = gap * children.len().saturating_sub(1) as f32;
+        let mut ws: Vec<f32> = children
+            .iter()
+            .map(|c| if c.grow { 0.0 } else { self.natural(c) })
+            .collect();
+        let room = w - gaps - ws.iter().sum::<f32>();
+        let growing = children.iter().filter(|c| c.grow).count();
+        if room < 0.0 {
+            let shrinks = |c: &Element| {
+                !matches!(
+                    c.kind,
+                    Kind::Icon { .. } | Kind::Space { .. } | Kind::Divider
+                )
+            };
+            let soft: f32 = children
+                .iter()
+                .zip(&ws)
+                .filter(|(c, _)| shrinks(c))
+                .map(|(_, w)| w)
+                .sum();
+            if soft > 0.0 {
+                let k = ((soft + room) / soft).max(0.0);
+                for (c, w) in children.iter().zip(ws.iter_mut()) {
+                    if shrinks(c) {
+                        *w *= k;
+                    }
+                }
+            }
+        } else if growing > 0 {
+            for (c, w) in children.iter().zip(ws.iter_mut()) {
+                if c.grow {
+                    *w = room / growing as f32;
+                }
+            }
+        }
+        ws
+    }
+
+    /// An element's height at width `w` (a space or a divider in a row has none of its own).
+    fn height(&self, e: &Element, w: f32, in_row: bool) -> f32 {
+        match &e.kind {
+            Kind::Text { size, .. } => self.lines(e, w).len() as f32 * size * LINE,
+            Kind::Icon { size, .. } => *size,
+            Kind::Row { children, gap, .. } => {
+                let ws = self.row_widths(children, *gap, w);
+                children
+                    .iter()
+                    .zip(&ws)
+                    .map(|(c, cw)| self.height(c, *cw, true))
+                    .fold(0.0, f32::max)
+            }
+            Kind::Bar { height, .. } => *height,
+            Kind::Badge { .. } => BADGE_H,
+            Kind::Button { .. } => BUTTON_H,
+            Kind::Tile { text, .. } if !text.is_empty() => TILE_H,
+            Kind::Divider => {
+                if in_row {
+                    0.0
+                } else {
+                    1.0
+                }
+            }
+            Kind::Space { size } => {
+                if in_row {
+                    0.0
+                } else {
+                    *size
+                }
+            }
+            _ => self.widget_height(e, w),
+        }
+    }
+
+    fn rounded(&mut self, r: Rect, radius: f32, color: Color, hot: Option<usize>) {
+        self.out.items.push(Item::Rounded {
+            r,
+            radius,
+            color,
+            hot,
+        });
+    }
+
+    fn text(&mut self, text: String, px: f32, weight: Weight, at: Vec2, color: Color) {
+        if !text.is_empty() {
+            self.out.items.push(Item::Text {
+                text,
+                px,
+                weight,
+                at,
+                color,
+            });
+        }
+    }
+
+    /// The baseline of a line `px` high whose box starts at `top`, `h` high: capitals centred.
+    fn baseline(&self, top: f32, h: f32, px: f32, w: Weight) -> f32 {
+        top + (h + self.fonts.cap_height(px, w)) * 0.5
+    }
+
+    /// Put `e` into `r` (its width; in a row the row's height, in the stack its own).
+    fn emit(&mut self, e: &Element, r: Rect, in_row: bool) {
+        // (before what is in it: a clickable row's buttons are found first, as drawn later)
+        if e.takes_clicks()
+            && !matches!(e.kind, Kind::Button { .. } | Kind::Tile { .. })
+            && !e.is_control()
+        {
+            self.out.hits.push(Hit {
+                r,
+                element: e.id.clone(),
+                kind: HitKind::Click,
+            });
+        }
+        match &e.kind {
+            Kind::Text {
+                size,
+                weight: wt,
+                align,
+                ..
+            } => {
+                let wt = weight(*wt);
+                let lines = self.lines(e, r.w);
+                let lh = size * LINE;
+                let top = r.y + (r.h - lh * lines.len() as f32) * 0.5;
+                let c = e.color.map(color).unwrap_or(self.colors.ink);
+                for (k, line) in lines.into_iter().enumerate() {
+                    let lw = self.width(&line, *size, wt);
+                    let x = match align {
+                        Align::Left => r.x,
+                        Align::Center => r.x + (r.w - lw) * 0.5,
+                        Align::Right => r.right() - lw,
+                    };
+                    let y = self.baseline(top + k as f32 * lh, lh, *size, wt);
+                    self.text(line, *size, wt, Vec2::new(x, y), c);
+                }
+            }
+            Kind::Icon { name, size } => {
+                self.out.items.push(Item::Icon {
+                    name: name.clone(),
+                    center: Vec2::new(r.x + size * 0.5, r.y + r.h * 0.5),
+                    size: *size,
+                    color: e.color.map(color).unwrap_or(self.colors.ink),
+                });
+            }
+            Kind::Row {
+                children,
+                gap,
+                align,
+            } => {
+                let ws = self.row_widths(children, *gap, r.w);
+                let used = ws.iter().sum::<f32>() + gap * children.len().saturating_sub(1) as f32;
+                let free = (r.w - used).max(0.0);
+                let (mut x, step) = match align {
+                    RowAlign::Start => (r.x, *gap),
+                    RowAlign::Center => (r.x + free * 0.5, *gap),
+                    RowAlign::End => (r.x + free, *gap),
+                    RowAlign::Between if children.len() > 1 => {
+                        (r.x, gap + free / (children.len() - 1) as f32)
+                    }
+                    RowAlign::Between => (r.x, *gap),
+                };
+                for (c, cw) in children.iter().zip(ws) {
+                    let ch = self.height(c, cw, true);
+                    let cell = if ch == 0.0 {
+                        Rect::new(x, r.y, cw, r.h)
+                    } else {
+                        Rect::new(x, r.y + (r.h - ch) * 0.5, cw, ch)
+                    };
+                    self.emit(c, cell, true);
+                    x += cw + step;
+                }
+            }
+            Kind::Bar {
+                value,
+                height,
+                background,
+                segments,
+            } => {
+                let track = Rect::new(r.x, r.y + (r.h - height) * 0.5, r.w, *height);
+                self.rounded(
+                    track,
+                    height * 0.5,
+                    background.map(color).unwrap_or(self.colors.track),
+                    None,
+                );
+                if !self.bar_parts(track, segments) && *value > 0.0 {
+                    let fill = (r.w * value).max(*height).min(r.w);
+                    self.rounded(
+                        Rect::new(track.x, track.y, fill, *height),
+                        height * 0.5,
+                        e.color.map(color).unwrap_or(self.colors.accent),
+                        None,
+                    );
+                }
+            }
+            Kind::Badge { text, text_color, weight: wt } => self.badge(e, r, text, *text_color, weight(*wt)),
+            Kind::Divider => {
+                let c = e.color.map(color).unwrap_or(self.colors.divider);
+                let line = if in_row {
+                    Rect::new(r.x + r.w * 0.5 - 0.5, r.y, 1.0, r.h)
+                } else {
+                    Rect::new(r.x, r.y + (r.h - 1.0) * 0.5, r.w, 1.0)
+                };
+                self.out.items.push(Item::Rect { r: line, color: c });
+            }
+            Kind::Space { .. } => {}
+            Kind::Button { text, icon } => {
+                let b = Rect::new(r.x, r.y + (r.h - BUTTON_H) * 0.5, r.w, BUTTON_H);
+                let hit = self.out.hits.len();
+                self.out.hits.push(Hit {
+                    r: b,
+                    element: e.id.clone(),
+                    kind: HitKind::Click,
+                });
+                let fill = e.color.map(color).unwrap_or(self.colors.button);
+                self.rounded(b, BUTTON_R, fill, Some(hit));
+                // (on the see-through default the card's own light ink; on a colour, what reads on it)
+                let ink = if e.color.is_some() { ink_on(fill, self.colors) } else { self.colors.ink };
+                let room = (b.w - 2.0 * BUTTON_PAD).max(0.0);
+                let icon_w = if icon.is_some() {
+                    BUTTON_ICON + if text.is_empty() { 0.0 } else { 6.0 }
+                } else {
+                    0.0
+                };
+                let t = self.fit(text, BUTTON_PX, Weight::Medium, (room - icon_w).max(0.0));
+                let content = icon_w + self.width(&t, BUTTON_PX, Weight::Medium);
+                let x = b.x + (b.w - content) * 0.5;
+                if let Some(name) = icon {
+                    self.out.items.push(Item::Icon {
+                        name: name.clone(),
+                        center: Vec2::new(x + BUTTON_ICON * 0.5, b.y + b.h * 0.5),
+                        size: BUTTON_ICON,
+                        color: ink,
+                    });
+                }
+                let y = self.baseline(b.y, b.h, BUTTON_PX, Weight::Medium);
+                self.text(t, BUTTON_PX, Weight::Medium, Vec2::new(x + icon_w, y), ink);
+            }
+            Kind::Tile { text, icon, .. } if !text.is_empty() => self.tile(e, r, text, icon),
+            _ => self.widget_emit(e, r),
+        }
+    }
+}
+
+impl Layout<'_> {
+    fn tile(&mut self, e: &Element, r: Rect, text: &str, icon: &str) {
+        let b = Rect::new(r.x, r.y + (r.h - TILE_H) * 0.5, r.w, TILE_H);
+        let hit = self.out.hits.len();
+        self.out.hits.push(Hit {
+            r: b,
+            element: e.id.clone(),
+            kind: HitKind::Click,
+        });
+        let fill = e.color.map(color).unwrap_or(self.colors.tile);
+        self.rounded(b, TILE_R, fill, Some(hit));
+        let (ink, mark) = match e.color {
+            Some(_) => (ink_on(fill, self.colors), ink_on(fill, self.colors)),
+            None => (self.colors.ink, self.colors.accent),
+        };
+        let room = (b.w - 2.0 * TILE_PAD).max(1.0);
+        let widest = text
+            .split_whitespace()
+            .map(|w| self.width(w, TILE_PX, Weight::Medium))
+            .fold(0.0, f32::max);
+        let px = if widest > room {
+            (TILE_PX * room / widest).max(TILE_PX_MIN)
+        } else {
+            TILE_PX
+        };
+        let mut lines = self.wrap(text, px, Weight::Medium, room);
+        if lines.len() > 2 {
+            let rest = lines.split_off(1).join(" ");
+            lines.push(self.fit(&rest, px, Weight::Medium, room));
+        }
+        let lh = px * LINE;
+        let top = b.y + (b.h - TILE_ICON - TILE_GAP - lh * lines.len() as f32) * 0.5;
+        self.out.items.push(Item::Icon {
+            name: icon.to_string(),
+            center: Vec2::new(b.x + b.w * 0.5, top + TILE_ICON * 0.5),
+            size: TILE_ICON,
+            color: mark,
+        });
+        for (k, line) in lines.into_iter().enumerate() {
+            let lw = self.width(&line, px, Weight::Medium);
+            let y = self.baseline(
+                top + TILE_ICON + TILE_GAP + k as f32 * lh,
+                lh,
+                px,
+                Weight::Medium,
+            );
+            self.text(
+                line,
+                px,
+                Weight::Medium,
+                Vec2::new(b.x + (b.w - lw) * 0.5, y),
+                ink,
+            );
+        }
+    }
+}
+
+/// Lay a panel out: its size, what it is drawn from and where it takes clicks.
+/// `backdrop`: the opacity setting's strength for the game's own card colour (`ui::backdrop`).
+pub fn layout(p: &Panel, fonts: &Fonts, backdrop: f32) -> Laid {
+    layout_with_theme(p, fonts, backdrop, omsi_ui::theme::th())
+}
+
+fn layout_with_theme(p: &Panel, fonts: &Fonts, backdrop: f32, pal: Palette) -> Laid {
+    layout_typing_with_theme(p, fonts, backdrop, None, pal)
+}
+
+/// [`layout`], with the caret in the text field `typing` (the field's id).
+pub fn layout_typing(p: &Panel, fonts: &Fonts, backdrop: f32, typing: Option<&str>) -> Laid {
+    layout_typing_with_theme(p, fonts, backdrop, typing, omsi_ui::theme::th())
+}
+
+fn layout_typing_with_theme(p: &Panel, fonts: &Fonts, backdrop: f32, typing: Option<&str>, pal: Palette) -> Laid {
+    let mut l = Layout {
+        fonts,
+        out: Laid::default(),
+        colors: ThemeColors::of(pal),
+        typing,
+    };
+    let stripe = if p.accent.is_some() { STRIPE } else { 0.0 };
+    let x0 = stripe + p.padding;
+    let w = (p.width - x0 - p.padding).max(1.0);
+    if p.clickable {
+        l.out.hits.push(Hit {
+            r: Rect::default(),
+            element: None,
+            kind: HitKind::Click,
+        });
+    }
+    let mut y = p.padding;
+    for (i, c) in p.children.iter().enumerate() {
+        if i > 0 {
+            y += p.gap;
+        }
+        let h = l.height(c, w, false);
+        l.emit(c, Rect::new(x0, y, w, h), false);
+        y += h;
+    }
+    let mut out = l.out;
+    out.w = p.width;
+    out.h = (y + p.padding).max(2.0 * p.padding).max(1.0).ceil();
+    if p.clickable {
+        out.hits[0].r = Rect::new(0.0, 0.0, out.w, out.h);
+    }
+    out.radius = p.radius.min(out.w * 0.5).min(out.h * 0.5);
+    out.background = p
+        .background
+        .map(color)
+        .unwrap_or(l.colors.card.alpha(backdrop.min(1.0 / l.colors.card.0[3])));
+    out.accent = p.accent.map(color);
+    out
+}
+
+/// A notification as a panel: the stripe in its colour, the icon and the title in a row
+/// above the text.
+pub fn toast_panel(t: &Toast) -> Panel {
+    toast_panel_with_theme(t, omsi_ui::theme::th())
+}
+
+fn toast_panel_with_theme(t: &Toast, pal: Palette) -> Panel {
+    let accent = t.color.unwrap_or_else(|| {
+        let [r, g, b, a] = ThemeColors::of(pal).accent.0;
+        Rgba([(r * 255.0 + 0.5) as u8, (g * 255.0 + 0.5) as u8, (b * 255.0 + 0.5) as u8, (a * 255.0 + 0.5) as u8])
+    });
+    let element = |kind: Kind, grow: bool, c: Option<Rgba>| Element {
+        id: None,
+        color: c,
+        grow,
+        clickable: false,
+        kind,
+    };
+    let text = |text: &str, size: f32, w: pui::Weight| Kind::Text {
+        text: text.to_string(),
+        size,
+        weight: w,
+        align: Align::Left,
+        wrap: true,
+    };
+    let mut children = Vec::new();
+    let mut head = Vec::new();
+    if let Some(name) = t.icon.as_ref() {
+        head.push(element(
+            Kind::Icon {
+                name: name.clone(),
+                size: 20.0,
+            },
+            false,
+            Some(accent),
+        ));
+    }
+    match t.title.as_ref() {
+        Some(title) => head.push(element(
+            text(title, 13.0, pui::Weight::Bold),
+            true,
+            Some(accent),
+        )),
+        // (an icon with no title stands beside the text)
+        None if !head.is_empty() => head.push(element(
+            text(&t.text, 14.0, pui::Weight::Regular),
+            true,
+            None,
+        )),
+        None => {}
+    }
+    let text_in_head = t.title.is_none() && t.icon.is_some();
+    if !head.is_empty() {
+        children.push(element(
+            Kind::Row {
+                children: head,
+                gap: 8.0,
+                align: RowAlign::Start,
+            },
+            false,
+            None,
+        ));
+    }
+    if !text_in_head {
+        children.push(element(
+            text(&t.text, 14.0, pui::Weight::Regular),
+            false,
+            None,
+        ));
+    }
+    Panel {
+        anchor: pui::Anchor::TopRight,
+        x: 16.0,
+        y: TOAST_TOP,
+        width: TOAST_W,
+        padding: 12.0,
+        gap: 4.0,
+        background: None,
+        radius: 10.0,
+        accent: Some(accent),
+        visible: true,
+        clickable: false,
+        draggable: false,
+        grab: false,
+        frame: false,
+        children,
+    }
+}
+
+/// Where a card `w` x `h` goes on a screen of `screen` (logical): its anchor, moved by its
+/// offset towards the middle (right and down from a middle), kept on the screen.
+pub fn place(p: &Panel, w: f32, h: f32, screen: Vec2) -> Vec2 {
+    let (ax, ay) = p.anchor.factors();
+    let along = |a: f32, size: f32, room: f32, off: f32| {
+        let at = a * (room - size) + if a == 1.0 { -off } else { off };
+        at.clamp(0.0, (room - size).max(0.0))
+    };
+    Vec2::new(along(ax, w, screen.x, p.x), along(ay, h, screen.y, p.y))
+}
+
+/// A card cut off at the height `h` (its own pixels): what lies below is not drawn - the
+/// card's texture ends there - and takes no click. (The hits keep their places in the list:
+/// the shapes they light refer to them by it.)
+fn cut(l: &mut Laid, h: f32) {
+    if l.h <= h {
+        return;
+    }
+    l.h = h;
+    for x in &mut l.hits {
+        x.r.h = (h - x.r.y).clamp(0.0, x.r.h);
+    }
+    // (the map too: as much of it as there is room for, none below the cut)
+    if let Some((r, _)) = l.map.as_mut() {
+        r.h = (h - r.y).clamp(0.0, r.h);
+    }
+    l.map = l.map.filter(|(r, _)| r.h > 0.0);
+}
+
+/// The hit under `p` (card pixels): the last one drawn there.
+pub fn hit_at(laid: &Laid, p: Vec2) -> Option<usize> {
+    laid.hits.iter().rposition(|h| h.r.contains(p))
+}
+
+// --- drawing -----------------------------------------------------------------------------
+
+/// Draw a laid-out card into `target` (`size` physical pixels, `k` of them a logical one):
+/// the card's top left at `at` (logical) with its shadow round it; `hot` lights that hit's
+/// shape. `clear`: the target is cleared first, else drawn over.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_card(
+    gpu: &mut Gpu,
+    device: &mx::Device,
+    queue: &mx::Queue,
+    atlas: &mut Atlas,
+    fonts: &Fonts,
+    target: &mx::TextureView,
+    size: (u32, u32),
+    k: f32,
+    laid: &Laid,
+    at: Vec2,
+    hot: Option<usize>,
+    clear: bool,
+    images: &mut widgets::Images,
+) {
+    let mut p = Painter::with_scale(k);
+    let (w, h) = (size.0 as f32 / k, size.1 as f32 / k);
+    let card = Rect::new(at.x, at.y, laid.w, laid.h);
+    let phys = |r: Rect| [r.x * k, r.y * k, r.right() * k, r.bottom() * k];
+    // layer 0: the whole target; 1: the card, cut round; then one per rounded shape
+    let flat = |clip: [f32; 4], radius: f32| Layer {
+        viewport: [0.0, 0.0, w, h],
+        ..Layer::flat(clip, radius, 1.0)
+    };
+    let mut layers = vec![
+        flat([0.0, 0.0, size.0 as f32, size.1 as f32], 0.0),
+        flat(phys(card), laid.radius * k),
+    ];
+    let mut draws: Vec<Draw> = Vec::new();
+    let mut put = |p: &Painter, from: u32, layer: usize, texture: usize| {
+        if p.len() > from {
+            draws.push(Draw {
+                buffer: 0,
+                range: from..p.len(),
+                layer,
+                texture,
+            });
+        }
+    };
+    let n = p.len();
+    if !laid.flat {
+        p.shadow(
+            Rect::new(card.x, card.y + 2.0, card.w, card.h),
+            laid.radius,
+            SHADOW_BLUR,
+            SHADOW,
+        );
+    }
+    put(&p, n, 0, 0);
+    let n = p.len();
+    p.rect(card, laid.background);
+    if let Some(a) = laid.accent {
+        p.rect(Rect::new(card.x, card.y, STRIPE, card.h), a);
+    }
+    put(&p, n, 1, 0);
+    for item in &laid.items {
+        let n = p.len();
+        match item {
+            Item::Rounded {
+                r,
+                radius,
+                color,
+                hot: me,
+            } => {
+                let c = if hot.is_some() && *me == hot {
+                    lit(*color)
+                } else {
+                    *color
+                };
+                let r = Rect::new(r.x + at.x, r.y + at.y, r.w, r.h);
+                if layers.len() < MAX_LAYERS {
+                    p.rect(r, c);
+                    layers.push(flat(phys(r), radius * k));
+                    put(&p, n, layers.len() - 1, 0);
+                } else {
+                    p.rounded(r, *radius, c);
+                    put(&p, n, 1, 0);
+                }
+            }
+            Item::Rect { r, color } => {
+                p.rect(Rect::new(r.x + at.x, r.y + at.y, r.w, r.h), *color);
+                put(&p, n, 1, 0);
+            }
+            Item::Text {
+                text,
+                px,
+                weight,
+                at: base,
+                color,
+            } => {
+                p.text_as_is(
+                    atlas,
+                    fonts,
+                    text,
+                    *px,
+                    *weight,
+                    *base + at,
+                    TextAlign::Left,
+                    *color,
+                );
+                put(&p, n, 1, 0);
+            }
+            Item::Icon {
+                name,
+                center,
+                size,
+                color,
+            } => {
+                p.icon(atlas, name, *center + at, *size, *color);
+                put(&p, n, 1, 0);
+            }
+            Item::Image { r, path } => {
+                if let Some(tex) = images.get(gpu, device, queue, path) {
+                    let s = omsi_ui::Sprite { uv: [0.0, 0.0, 1.0, 1.0], w: r.w, h: r.h, ascent: 0.0 };
+                    p.sprite(s, Vec2::new(r.x, r.y) + at, Vec2::new(r.w, r.h), Color::WHITE);
+                    put(&p, n, 1, tex);
+                }
+            }
+            Item::Line { a, b, w, color } => {
+                p.line(*a + at, *b + at, *w, *color);
+                put(&p, n, 1, 0);
+            }
+            Item::Poly { pts, color } => {
+                let pts: Vec<Vec2> = pts.iter().map(|q| *q + at).collect();
+                p.convex(&pts, *color);
+                put(&p, n, 1, 0);
+            }
+        }
+    }
+    let verts: Vec<Vertex> = p.verts;
+    gpu.upload(device, queue, 0, &verts);
+    gpu.upload_atlas(queue, atlas);
+    let mut enc = device.create_command_encoder(Some("plugin panel"));
+    gpu.render(
+        device,
+        queue,
+        &mut enc,
+        target,
+        size,
+        clear.then_some(mx::Color::TRANSPARENT),
+        &layers,
+        &draws,
+    );
+    // (now: the next card's vertices and layers go into the same buffers)
+    queue.submit([enc.finish()]);
+}
+
+/// A card on the screen: what it was laid out from, its texture and where it is.
+struct Card {
+    revision: u64,
+    scale: f32,
+    backdrop: f32,
+    pal: Palette,
+    laid: Laid,
+    tex: Option<(TextureId, u32, u32)>,
+    /// The hit lit when it was drawn (None: to be drawn).
+    drawn: Option<Option<usize>>,
+    /// The card's top left on the window, physical pixels.
+    origin: Vec2,
+    /// A notification's place in the stack (logical), eased.
+    y: Option<f32>,
+    seen: u64,
+    /// The height it came to before it was cut off to fit the navigator's board, and the
+    /// room there it was cut off to (infinite for a card of its own).
+    full_h: f32,
+    room: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Key {
+    Panel(u64, String),
+    Toast(u64),
+}
+
+/// What the frame tells the panels.
+pub struct PanelsFrame {
+    /// The interface's part of the window (x, y, w, h; physical pixels).
+    pub hud: [f32; 4],
+    /// Physical pixels per logical one: the screen's scale times the interface size.
+    pub scale: f32,
+    /// The game's menus are open (or VR): nothing shows, the mouse is the game's.
+    pub hidden: bool,
+    /// The mouse, physical pixels on the window.
+    pub cursor: (f32, f32),
+    pub dt: f32,
+    /// `ui::backdrop` of the opacity setting.
+    pub backdrop: f32,
+    /// The palette in force (`omsi_ui::theme::th`): openOMSI's dark or light look, a
+    /// theme's over it.
+    pub palette: Palette,
+    /// The navigator's panel (physical x0, y0, x1, y1), which the notifications stay clear of.
+    pub navigator: Option<[f32; 4]>,
+    /// The navigator's board, where the panel with `anchor = "navigator"` goes (None: the
+    /// navigator shows none).
+    pub dock: Option<Dock>,
+}
+
+/// The navigator's board under its map.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Dock {
+    /// Its width and the most height it may take (physical pixels).
+    pub width: f32,
+    pub room: f32,
+    /// The navigator's scale: physical pixels per point of it (the panel is laid out in those).
+    pub scale: f32,
+    /// Its top left on the window (physical pixels), once the navigator made room for the
+    /// panel ([`PluginPanels::docked`]); None until then.
+    pub at: Option<Vec2>,
+    /// It is the navigator's whole frame, for a panel with `frame = true`.
+    pub frame: bool,
+}
+
+/// The plugins' panels on the screen.
+#[derive(Default)]
+pub struct PluginPanels {
+    gpu: Option<Gpu>,
+    fonts: Option<Fonts>,
+    atlas: Option<Atlas>,
+    cards: HashMap<Key, Card>,
+    frame: u64,
+    /// The interface's scale the cards were last laid out at (the app's drags divide by it).
+    pub scale: f32,
+    /// The plugins' pictures on the graphics card.
+    images: widgets::Images,
+    /// A slider or a panel being dragged with the mouse.
+    pub drag: Option<input::Drag>,
+    /// The field typed into when the cards were last laid out.
+    typing: Option<(u64, String, String)>,
+    /// The panel for the navigator (`anchor = "navigator"`) as last laid out: the room the
+    /// navigator makes for it, under its map or in its whole frame. None: no such panel.
+    pub docked: Option<Docked>,
+    /// The left button went down on a panel that takes clicks without the mouse (`grab`):
+    /// its release is the panel's too, not the cab's.
+    pub grabbed: bool,
+}
+
+impl PluginPanels {
+    /// Lay out, draw what changed and put every card on the screen (`scene.overlays`).
+    pub fn frame(&mut self, r: &Renderer, scene: &mut Scene, ui: &mut UiState, f: &PanelsFrame) {
+        self.frame += 1;
+        let k = f.scale.max(0.25);
+        self.scale = k;
+        let screen = Vec2::new(f.hud[2] / k, f.hud[3] / k);
+        ui.set_screen(screen.x, screen.y, k);
+        ui.set_shown(!f.hidden);
+        ui.tick(f.dt);
+        self.docked = None;
+        ui.set_dock(None);
+        if !f.hidden && (!ui.panels().is_empty() || !ui.toasts().is_empty()) {
+            self.show(r, scene, ui, f, k, screen);
+        }
+        // what is not there any more gives its texture back (hidden under a menu, a card
+        // keeps it for when the menu closes)
+        let frame = self.frame;
+        let exists = |key: &Key| match key {
+            Key::Panel(owner, id) => ui
+                .panels()
+                .iter()
+                .any(|e| e.owner == *owner && e.id == *id && e.panel.visible),
+            Key::Toast(serial) => ui.toasts().iter().any(|t| t.serial == *serial),
+        };
+        let gone: Vec<Key> = self
+            .cards
+            .iter()
+            .filter(|(key, c)| c.seen != frame && (!f.hidden || !exists(key)))
+            .map(|(key, _)| key.clone())
+            .collect();
+        for key in gone {
+            if let Some((t, _, _)) = self.cards.remove(&key).and_then(|c| c.tex) {
+                r.free_texture(scene, t);
+                scene.premultiplied.remove(&t);
+            }
+        }
+    }
+
+    fn show(
+        &mut self,
+        r: &Renderer,
+        scene: &mut Scene,
+        ui: &mut UiState,
+        f: &PanelsFrame,
+        k: f32,
+        screen: Vec2,
+    ) {
+        let fonts = self.fonts.get_or_insert_with(Fonts::new);
+        let atlas = self.atlas.get_or_insert_with(|| Atlas::new(1024));
+        let gpu = self
+            .gpu
+            .get_or_insert_with(|| Gpu::new(&r.device, r.format(), 1, atlas.size));
+        atlas.begin_frame();
+        let generation = atlas.generation;
+        let focused = ui.focused();
+        let cursor = Vec2::new(f.cursor.0, f.cursor.1);
+        // (the caret goes into the field typed into, and out of the one left)
+        let typing = ui.typing().map(|t| (t.owner, t.panel.clone(), t.element.clone()));
+        if typing != self.typing {
+            for (key, c) in self.cards.iter_mut() {
+                let hit = |t: &Option<(u64, String, String)>| matches!((key, t), (Key::Panel(o, id), Some((to, tp, _))) if o == to && id == tp);
+                if hit(&typing) || hit(&self.typing) {
+                    c.revision = u64::MAX;
+                }
+            }
+            self.typing = typing.clone();
+        }
+        let mut cards: Vec<Key> = Vec::new();
+        // (the first panel for the navigator's board is the one there; another waits)
+        let mut dock_taken = false;
+        let mut dock_said = None;
+        for e in ui.panels().iter().filter(|e| e.panel.visible) {
+            let dock = match (e.panel.anchor == pui::Anchor::Navigator, f.dock) {
+                (false, _) => None,
+                (true, Some(d)) if !dock_taken => {
+                    dock_taken = true;
+                    Some(d)
+                }
+                // (no board shown: the navigator hears there is a panel for one)
+                (true, None) => {
+                    self.docked.get_or_insert(Docked { frame: e.panel.frame, ..Docked::default() });
+                    continue;
+                }
+                _ => continue,
+            };
+            // (in the board: the navigator's scale and width, no card of its own round it)
+            let (ck, width) = match dock {
+                Some(d) => (d.scale.max(0.25), (d.width / d.scale.max(0.25)).max(40.0)),
+                None => (k, e.panel.width),
+            };
+            let key = Key::Panel(e.owner, e.id.clone());
+            let card = self.cards.entry(key.clone()).or_insert_with(|| Card {
+                revision: u64::MAX,
+                scale: 0.0,
+                backdrop: 0.0,
+                pal: Palette::OPENOMSI,
+                laid: Laid::default(),
+                tex: None,
+                drawn: None,
+                origin: Vec2::ZERO,
+                y: None,
+                seen: 0,
+                full_h: 0.0,
+                room: 0.0,
+            });
+            // (the most a panel in the board may be high, in its own pixels)
+            let room = dock.map_or(f32::INFINITY, |d| (d.room / ck).floor().max(1.0));
+            if card.revision != e.revision || card.scale != ck || card.backdrop != f.backdrop || card.pal != f.palette || card.laid.w != width || card.room != room {
+                let caret = typing.as_ref().filter(|t| t.0 == e.owner && t.1 == e.id).map(|t| t.2.as_str());
+                card.laid = match dock {
+                    Some(_) => {
+                        Laid { flat: true, ..layout_typing_with_theme(&nav::in_navigator(&e.panel, width), fonts, f.backdrop, caret, f.palette) }
+                    }
+                    None => layout_typing_with_theme(&e.panel, fonts, f.backdrop, caret, f.palette),
+                };
+                card.full_h = card.laid.h;
+                card.room = room;
+                cut(&mut card.laid, room);
+                card.revision = e.revision;
+                card.scale = ck;
+                card.backdrop = f.backdrop;
+                card.pal = f.palette;
+                card.drawn = None;
+            }
+            match dock {
+                Some(d) => {
+                    let map = card.laid.map.map(|(r, cards)| DockedMap { rect: [(r.x * ck).round(), (r.y * ck).round(), (r.w * ck).round(), (r.h * ck).round()], cards });
+                    let background = e.panel.background.filter(|_| e.panel.frame).map(color);
+                    self.docked = Some(Docked { height: (card.laid.h * ck).ceil(), frame: e.panel.frame, map, background });
+                    dock_said = Some(pui::Dock { width, room: d.room / ck, height: card.full_h, owner: Some(e.owner), frame: d.frame });
+                    // (until the navigator made room for it, it is laid out, not shown)
+                    let Some(at) = d.at else { continue };
+                    card.origin = Vec2::new(at.x.round(), at.y.round());
+                }
+                None => {
+                    let at = input::moved(place(&e.panel, card.laid.w, card.laid.h, screen), e.moved, card.laid.w, card.laid.h, screen);
+                    card.origin = Vec2::new(f.hud[0] + (at.x * k).round(), f.hud[1] + (at.y * k).round());
+                }
+            }
+            cards.push(key);
+        }
+        if let Some(d) = f.dock {
+            let s = d.scale.max(0.25);
+            ui.set_dock(Some(dock_said.unwrap_or(pui::Dock { width: (d.width / s).max(40.0), room: d.room / s, height: 0.0, owner: None, frame: d.frame })));
+        }
+        // the notifications, newest at the top, under the navigator when it is in the way
+        let right = screen.x - 16.0;
+        let mut top = TOAST_TOP;
+        if let Some(n) = f.navigator {
+            let (x0, y1) = ((n[0] - f.hud[0]) / k, n[3] / k);
+            if x0 < right && (n[2] - f.hud[0]) / k > right - TOAST_W && n[1] / k < screen.y * 0.5 {
+                top = top.max(y1 + TOAST_GAP);
+            }
+        }
+        let ease = 1.0 - (-f.dt.max(0.0) * 12.0).exp();
+        for t in ui.toasts().iter().rev() {
+            let key = Key::Toast(t.serial);
+            let card = self.cards.entry(key.clone()).or_insert_with(|| Card {
+                revision: 0,
+                scale: 0.0,
+                backdrop: 0.0,
+                pal: Palette::OPENOMSI,
+                laid: Laid::default(),
+                tex: None,
+                drawn: None,
+                origin: Vec2::ZERO,
+                y: None,
+                seen: 0,
+                full_h: 0.0,
+                room: f32::INFINITY,
+            });
+            if card.scale != k || card.backdrop != f.backdrop || card.pal != f.palette {
+                card.laid = layout_with_theme(&toast_panel_with_theme(t, f.palette), fonts, f.backdrop, f.palette);
+                card.scale = k;
+                card.backdrop = f.backdrop;
+                card.pal = f.palette;
+                card.drawn = None;
+            }
+            if top + card.laid.h > screen.y {
+                break;
+            }
+            let y = match card.y {
+                Some(y) => y + (top - y) * ease,
+                None => top,
+            };
+            card.y = Some(y);
+            // sliding in from the right edge, and out again at the end
+            let away = card.laid.w + MARGIN + 16.0;
+            let left = t.seconds - t.age;
+            let slide = if t.age < TOAST_IN {
+                1.0 - (t.age / TOAST_IN).powf(0.5)
+            } else if left < TOAST_OUT {
+                1.0 - left / TOAST_OUT
+            } else {
+                0.0
+            };
+            let x = right - card.laid.w + slide.clamp(0.0, 1.0) * away;
+            card.origin = Vec2::new(f.hud[0] + (x * k).round(), f.hud[1] + (y * k).round());
+            top += card.laid.h + TOAST_GAP;
+            cards.push(key);
+        }
+        for key in cards {
+            let Some(card) = self.cards.get_mut(&key) else {
+                continue;
+            };
+            card.seen = self.frame;
+            // (a card's own scale: the navigator's for the panel in its board, which casts no
+            // shadow and so needs no room round it: what was cut off stays out of the texture)
+            let k = card.scale.max(0.25);
+            let margin = if card.laid.flat { 0.0 } else { (MARGIN * k).ceil() };
+            let hot = match key {
+                Key::Panel(..) if focused => {
+                    let local = (cursor - card.origin) / k;
+                    hit_at(&card.laid, local).filter(|&i| card.laid.hits[i].element.is_some())
+                }
+                _ => None,
+            };
+            let (tw, th) = (
+                ((card.laid.w * k).ceil() + 2.0 * margin) as u32,
+                ((card.laid.h * k).ceil() + 2.0 * margin) as u32,
+            );
+            // (a card larger than the graphics chip's largest texture is not drawn: the
+            // texture would come out smaller than it was drawn for)
+            if tw.max(th) > r.device.limits().max_texture_dimension_2d {
+                continue;
+            }
+            if card.tex.is_some_and(|t| (t.1, t.2) != (tw, th)) {
+                let (t, _, _) = card.tex.take().unwrap();
+                r.free_texture(scene, t);
+                scene.premultiplied.remove(&t);
+            }
+            if card.tex.is_none() {
+                let t = r.add_render_texture(scene, tw, th);
+                scene.premultiplied.insert(t);
+                card.tex = Some((t, tw, th));
+                card.drawn = None;
+            }
+            let (tex, _, _) = card.tex.unwrap();
+            if card.drawn != Some(hot) {
+                if let Some(view) = r.texture_view(scene, tex) {
+                    draw_card(
+                        gpu,
+                        &r.device,
+                        &r.queue,
+                        atlas,
+                        fonts,
+                        &view,
+                        (tw, th),
+                        k,
+                        &card.laid,
+                        Vec2::splat(margin / k),
+                        hot,
+                        true,
+                        &mut self.images,
+                    );
+                    card.drawn = Some(hot);
+                }
+            }
+            let (x, y) = (card.origin.x - margin, card.origin.y - margin);
+            scene
+                .overlays
+                .push((tex, [x, y, x + tw as f32, y + th as f32]));
+        }
+        // (the atlas ran full in the middle of it: what was drawn then is drawn again)
+        if atlas.generation != generation {
+            for c in self.cards.values_mut() {
+                c.drawn = None;
+            }
+        }
+    }
+
+}
+
+/// The line the game shows while the panels have the mouse.
+pub const FOCUS_NOTE: &str = "The mouse is on the plugin panels | Esc gives it back";
+
+/// Whether the plugins' panels have the mouse (`omsi.ui.focus`): from the plugins alone, for
+/// where the rest of the game is borrowed.
+pub fn focused(plugins: &Option<omsi_plugin::Plugins>) -> bool {
+    plugins.as_ref().is_some_and(|p| p.ui.borrow().focused())
+}
+
+#[cfg(test)]
+mod theme_tests;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use omsi_plugin::ui::{panel_from_source, Anchor};
+
+    fn panel(src: &str) -> Panel {
+        panel_from_source(src).unwrap()
+    }
+
+    #[test]
+    fn a_row_gives_the_rest_to_what_grows() {
+        let fonts = Fonts::new();
+        let p = panel(
+            r#"{ width = 300, padding = 10, children = { { type = "row", gap = 8, children = {
+            { type = "icon", name = "schedule", size = 20 },
+            { type = "bar", value = 0.5, grow = true },
+            { type = "badge", text = "+2" },
+        } } } }"#,
+        );
+        let l = layout(&p, &fonts, 1.0);
+        let rounded: Vec<Rect> = l
+            .items
+            .iter()
+            .filter_map(|i| {
+                if let Item::Rounded { r, .. } = i {
+                    Some(*r)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        // the track from after the icon to before the badge, the badge at the right edge
+        let (track, badge) = (rounded[0], rounded[2]);
+        assert_eq!(track.x, 10.0 + 20.0 + 8.0);
+        assert!(
+            (badge.right() - 290.0).abs() < 0.01 && (track.right() + 8.0 - badge.x).abs() < 0.01,
+            "{track:?} {badge:?}"
+        );
+        assert_eq!(l.h, (10.0 + BADGE_H + 10.0f32).ceil());
+    }
+
+    #[test]
+    fn panels_are_placed_by_their_anchor_and_stay_on_the_screen() {
+        let screen = Vec2::new(1920.0, 1080.0);
+        let mut p = panel("{ x = 16, y = 20 }");
+        assert_eq!(place(&p, 300.0, 100.0, screen), Vec2::new(16.0, 20.0));
+        p.anchor = Anchor::BottomRight;
+        assert_eq!(
+            place(&p, 300.0, 100.0, screen),
+            Vec2::new(1920.0 - 316.0, 1080.0 - 120.0)
+        );
+        p.anchor = Anchor::Center;
+        assert_eq!(
+            place(&p, 300.0, 100.0, screen),
+            Vec2::new(810.0 + 16.0, 490.0 + 20.0)
+        );
+        p.anchor = Anchor::TopLeft;
+        p.x = -50.0;
+        assert_eq!(place(&p, 300.0, 100.0, screen).x, 0.0);
+    }
+
+    #[test]
+    fn clicks_find_the_innermost_part() {
+        let fonts = Fonts::new();
+        let p = panel(
+            r#"{ width = 300, clickable = true, children = {
+            { type = "row", id = "line", clickable = true, children = {
+                { type = "text", text = "Linie 5", grow = true },
+                { type = "button", id = "take", text = "Nehmen" },
+            } },
+            { type = "text", text = "nicht klickbar" },
+        } }"#,
+        );
+        let l = layout(&p, &fonts, 1.0);
+        let at = |i: usize| l.hits[i].r.center();
+        let element = |p: Vec2| hit_at(&l, p).and_then(|i| l.hits[i].element.clone());
+        let button = l
+            .hits
+            .iter()
+            .position(|h| h.element.as_deref() == Some("take"))
+            .unwrap();
+        assert_eq!(element(at(button)).as_deref(), Some("take"));
+        assert_eq!(
+            element(Vec2::new(20.0, at(button).y)).as_deref(),
+            Some("line")
+        );
+        // below the row: the panel itself
+        assert_eq!(hit_at(&l, Vec2::new(20.0, l.h - 14.0)), Some(0));
+        assert_eq!(element(Vec2::new(20.0, l.h - 14.0)), None);
+    }
+
+    #[test]
+    fn a_toast_is_a_card_with_its_colour() {
+        let fonts = Fonts::new();
+        let t = Toast {
+            owner: 1,
+            serial: 1,
+            text: "Fahrt beendet".into(),
+            title: Some("Karriere".into()),
+            icon: Some("payments".into()),
+            color: None,
+            seconds: 5.0,
+            age: 0.0,
+        };
+        let l = layout(&toast_panel(&t), &fonts, 1.0);
+        assert_eq!(l.w, TOAST_W);
+        assert!(l.accent.is_some());
+        assert_eq!(
+            l.items
+                .iter()
+                .filter(|i| matches!(i, Item::Icon { .. }))
+                .count(),
+            1
+        );
+        assert_eq!(
+            l.items
+                .iter()
+                .filter(|i| matches!(i, Item::Text { .. }))
+                .count(),
+            2
+        );
+    }
+}

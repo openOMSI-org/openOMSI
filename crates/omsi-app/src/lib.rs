@@ -236,9 +236,13 @@ use world_load::*;
 
 /// The game (and its launcher) from the command line: what `main` does.
 pub fn run() -> Result<()> {
+    omsi_cfg::migrate_legacy_data_dir();
+    // mX Graphics on: the game is mX's from here on, wgpu is not touched
+    if startup::mx_graphics() {
+        return openomsi_game_mx::run();
+    }
     view_sync::install_sim_decoder();
     startup::install_scene_settings();
-    omsi_cfg::migrate_legacy_data_dir();
     omsi_launcher_lib::adopt_own_inputs();
     #[cfg(target_os = "macos")]
     restart_with_allocator_settings();
@@ -631,7 +635,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     } else {
         crate::steam::Steam::start()
     };
-    let instance = game_graphics_instance(settings.mx_graphics);
+    let instance = graphics_instance();
     let vr_nav_profiles = crate::vr_navigator::Profiles::load(crate::vr_navigator::profiles_path().as_deref());
     let ui = ui::Ui::new();
     let rain = rain::Rain::new();

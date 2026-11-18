@@ -25,6 +25,10 @@ pub const SHARED: &str = "/storage/emulated/0/openOMSI";
 
 #[unsafe(no_mangle)]
 fn android_main(app: AndroidApp) {
+    // mX Graphics on: the game is mX's, wgpu is not touched
+    if app.internal_data_path().is_some_and(|home| crate::startup::mx_graphics_in(&home)) {
+        return openomsi_game_mx::android::android_main(app);
+    }
     crate::view_sync::install_sim_decoder();
     crate::startup::install_scene_settings();
     // an error is also written where a person finds it without a computer:

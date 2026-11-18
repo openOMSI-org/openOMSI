@@ -1,0 +1,1199 @@
+//! Optional PCVR session. This module is only compiled on Windows; the normal
+//! desktop and Android render paths do not depend on an OpenXR runtime.
+
+use anyhow::{anyhow, bail, Context, Result};
+use glam::{DVec3, Mat4, Quat, Vec3, Vec4};
+use openxr as xr;
+use std::time::{Duration, Instant};
+use windows::core::Interface;
+use windows::Win32::Graphics::Direct3D12::ID3D12Resource;
+use windows::Win32::Graphics::Dxgi::Common::*;
+
+use omsi_render::{Camera, Lighting, Renderer, Scene};
+
+mod pointer;
+use pointer::HeadPointer;
+mod sync;
+use sync::SwapchainSync;
+
+pub struct Vr {
+    instance: xr::Instance,
+    session: xr::Session<xr::D3D12>,
+    frame_waiter: xr::FrameWaiter,
+    frame_stream: xr::FrameStream<xr::D3D12>,
+    space: xr::Space,
+    swapchain: xr::Swapchain<xr::D3D12>,
+    images: Vec<mx::Texture>,
+    width: u32,
+    height: u32,
+    blend: xr::EnvironmentBlendMode,
+    mirror: Option<Mirror>,
+    desktop_mirror: bool,
+    origin: Option<Vec3>,
+    player_uid: Option<u64>,
+    origin_rotation: Option<Quat>,
+    smoothed_head: Option<(Vec3, Quat, Instant)>,
+    mirror_camera: Option<(Camera, Mat4)>,
+    menu_anchor: Option<UiAnchor>,
+    cursor_anchor: Option<UiAnchor>,
+    cursor_surface_local: Option<Vec3>,
+    head_pointer: HeadPointer,
+    cursor_menu_open: bool,
+    zoom_from: f32,
+    zoom_to: f32,
+    zoom_changed: Instant,
+    running: bool,
+    focused: bool,
+    events: xr::EventDataBuffer,
+    stats_since: Instant,
+    stats_frames: u32,
+    stats_wait: Duration,
+    stats_image_wait: Duration,
+    stats_render: Duration,
+    stats_eyes: [Duration; 2],
+    stats_desktop_mirror: Duration,
+    stats_stages_prev: std::collections::BTreeMap<&'static str, f64>,
+    // Drop last: keep the bound device/queue alive through XR destruction.
+    sync: SwapchainSync,
+}
+
+impl Drop for Vr {
+    fn drop(&mut self) {
+        // Field destruction follows this body. Finish application commands before
+        // xrDestroySwapchain, while retaining the device/queue until after it.
+        self.sync.finish();
+    }
+}
+
+struct Mirror {
+    pipeline: mx::RenderPipeline,
+    sampler: mx::Sampler,
+    params: mx::Buffer,
+}
+
+/// A flat UI surface fixed in the world after it is placed.
+#[derive(Clone, Copy)]
+struct UiAnchor {
+    origin: DVec3,
+    right: Vec3,
+    up: Vec3,
+    half_width: f32,
+    half_height: f32,
+}
+
+impl UiAnchor {
+    fn at(origin: DVec3, camera: &Camera, fov: xr::Fovf, distance: f32) -> Self {
+        Self {
+            origin,
+            right: camera.right(),
+            up: camera.up(),
+            half_width: distance * (fov.angle_right.tan() - fov.angle_left.tan()) * 0.5,
+            half_height: distance * (fov.angle_up.tan() - fov.angle_down.tan()) * 0.5,
+        }
+    }
+
+    fn menu(
+        origin: DVec3,
+        camera: &Camera,
+        fov: xr::Fovf,
+        distance: f32,
+        desktop_size: (u32, u32),
+    ) -> Self {
+        let mut anchor = Self::at(origin, camera, fov, distance);
+        anchor.half_height *= 0.60;
+        anchor.half_width =
+            anchor.half_height * desktop_size.0.max(1) as f32 / desktop_size.1.max(1) as f32;
+        anchor
+    }
+
+    fn point(&self, x: f32, y: f32) -> DVec3 {
+        self.origin
+            + (self.right * (x * self.half_width) + self.up * (y * self.half_height)).as_dvec3()
+    }
+
+    fn transform(&self, eye: &Camera, projection: Mat4) -> Mat4 {
+        let position = (self.origin - eye.position).as_vec3();
+        let basis = Mat4::from_cols(
+            (self.right * self.half_width).extend(0.0),
+            (self.up * self.half_height).extend(0.0),
+            Vec4::Z,
+            position.extend(1.0),
+        );
+        projection * Mat4::look_to_rh(Vec3::ZERO, eye.forward(), eye.up()) * basis
+    }
+
+    /// Project the 3D hit point, then face the dot towards each eye. A quad fixed
+    /// to the bus surface becomes an ellipse when the head looks across it.
+    fn cursor_transform(&self, eye: &Camera, projection: Mat4) -> Option<Mat4> {
+        let clip = self.cursor_clip(eye, projection);
+        (clip.w > 0.0).then(|| {
+            Mat4::from_cols(
+                Vec4::new(clip.w, 0.0, 0.0, 0.0),
+                Vec4::new(0.0, clip.w, 0.0, 0.0),
+                Vec4::Z,
+                clip,
+            )
+        })
+    }
+
+    fn cursor_clip(&self, eye: &Camera, projection: Mat4) -> Vec4 {
+        let position = (self.origin - eye.position).as_vec3();
+        projection * Mat4::look_to_rh(Vec3::ZERO, eye.forward(), eye.up()) * position.extend(1.0)
+    }
+}
+
+impl Vr {
+    pub fn new(
+        renderer: &mut Renderer,
+        configured_scale: f32,
+        desktop_mirror: bool,
+    ) -> Result<Self> {
+        let entry = xr::Entry::linked(&()).context("load OpenXR")?;
+        if !entry.enumerate_extensions()?.khr_d3d12_enable {
+            bail!("the active OpenXR runtime does not support D3D12");
+        }
+        let mut extensions = xr::ExtensionSet::default();
+        extensions.khr_d3d12_enable = true;
+        let instance = entry.create_instance(
+            &xr::ApplicationInfo {
+                application_name: "openOMSI",
+                application_version: 1,
+                engine_name: "openOMSI",
+                engine_version: 1,
+                api_version: xr::Version::new(1, 0, 0),
+            },
+            &extensions,
+            &[],
+            &(),
+        )?;
+        let system = instance.system(xr::FormFactor::HEAD_MOUNTED_DISPLAY)?;
+        let properties = instance.system_properties(system)?;
+        let requirements = instance.graphics_requirements::<xr::D3D12>(system)?;
+
+        // OpenXR must receive the exact device and command queue used for the
+        // textures mX draws. A second D3D12 device cannot present them.
+        let device = renderer
+            .device
+            .as_dx12()
+            .ok_or_else(|| anyhow!("OpenXR PCVR requires the DX12 graphics backend"))?;
+        let queue = renderer
+            .queue
+            .as_dx12()
+            .ok_or_else(|| anyhow!("mX did not expose its DX12 queue"))?;
+        let luid = unsafe { device.raw().GetAdapterLuid() };
+        if luid.LowPart != requirements.adapter_luid.LowPart
+            || luid.HighPart != requirements.adapter_luid.HighPart
+        {
+            bail!("the OpenXR headset and openOMSI are using different graphics adapters");
+        }
+        let binding = xr::d3d::SessionCreateInfoD3D12 {
+            device: device.raw().as_raw().cast(),
+            queue: queue.raw().as_raw().cast(),
+        };
+        let (session, frame_waiter, frame_stream) =
+            unsafe { instance.create_session::<xr::D3D12>(system, &binding) }
+                .context("create OpenXR D3D12 session")?;
+        let space = session
+            .create_reference_space(xr::ReferenceSpaceType::LOCAL, xr::Posef::IDENTITY)
+            .context("create OpenXR local space")?;
+        let view_type = xr::ViewConfigurationType::PRIMARY_STEREO;
+        let views = instance.enumerate_view_configuration_views(system, view_type)?;
+        if views.len() != 2 {
+            bail!("OpenXR runtime did not return two stereo views");
+        }
+        let recommended_width = views[0].recommended_image_rect_width;
+        let recommended_height = views[0].recommended_image_rect_height;
+        if views[1].recommended_image_rect_width != recommended_width
+            || views[1].recommended_image_rect_height != recommended_height
+        {
+            bail!("OpenXR eye resolutions differ; this renderer needs matching eye sizes");
+        }
+        // The runtime's recommendation is a quality target, not a minimum.
+        // Rendering both eyes at the full Quest Link size is expensive.
+        // (`OMSI_OPENXR_SCALE` is in `configured_scale` already: `Renderer::start_xr`)
+        let scale = configured_scale.clamp(0.5, 1.0);
+        let width = ((recommended_width as f32 * scale).round() as u32).max(1);
+        let height = ((recommended_height as f32 * scale).round() as u32).max(1);
+        let (format, dxgi_format) = match renderer.format() {
+            mx::TextureFormat::Bgra8UnormSrgb => (
+                mx::TextureFormat::Bgra8UnormSrgb,
+                DXGI_FORMAT_B8G8R8A8_UNORM_SRGB.0 as u32,
+            ),
+            mx::TextureFormat::Bgra8Unorm => (
+                mx::TextureFormat::Bgra8Unorm,
+                DXGI_FORMAT_B8G8R8A8_UNORM.0 as u32,
+            ),
+            mx::TextureFormat::Rgba8UnormSrgb => (
+                mx::TextureFormat::Rgba8UnormSrgb,
+                DXGI_FORMAT_R8G8B8A8_UNORM_SRGB.0 as u32,
+            ),
+            mx::TextureFormat::Rgba8Unorm => (
+                mx::TextureFormat::Rgba8Unorm,
+                DXGI_FORMAT_R8G8B8A8_UNORM.0 as u32,
+            ),
+            other => bail!("OpenXR cannot use renderer format {other:?}"),
+        };
+        if !session
+            .enumerate_swapchain_formats()?
+            .contains(&dxgi_format)
+        {
+            bail!("OpenXR runtime does not support the window's {format:?} color format");
+        }
+        let make_swapchain = |usage_flags| {
+            session.create_swapchain(&xr::SwapchainCreateInfo {
+                create_flags: xr::SwapchainCreateFlags::EMPTY,
+                usage_flags,
+                format: dxgi_format,
+                sample_count: 1,
+                width,
+                height,
+                face_count: 1,
+                array_size: 2,
+                mip_count: 1,
+            })
+        };
+        let (swapchain, sampled) = match make_swapchain(
+            xr::SwapchainUsageFlags::COLOR_ATTACHMENT | xr::SwapchainUsageFlags::SAMPLED,
+        ) {
+            Ok(swapchain) => (swapchain, true),
+            Err(error) => {
+                log::warn!(
+                    "OpenXR desktop mirror unavailable ({error}); using normal desktop view"
+                );
+                (
+                    make_swapchain(xr::SwapchainUsageFlags::COLOR_ATTACHMENT)?,
+                    false,
+                )
+            }
+        };
+        let size = mx::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 2,
+        };
+        let desc = mx::TextureDescriptor {
+            label: Some("OpenXR stereo swapchain"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: mx::TextureDimension::D2,
+            format,
+            usage: mx::TextureUsages::RENDER_ATTACHMENT
+                | if sampled {
+                    mx::TextureUsages::TEXTURE_BINDING
+                } else {
+                    mx::TextureUsages::empty()
+                },
+            view_formats: &[],
+        };
+        let imported = swapchain
+            .enumerate_images()?
+            .into_iter()
+            .map(|image| {
+                // OpenXR retains ownership; cloning the COM interface gives mX a
+                // separate reference for the lifetime of the imported texture.
+                let raw = image.cast();
+                let resource = unsafe {
+                    windows::Win32::Graphics::Direct3D12::ID3D12Resource::from_raw_borrowed(&raw)
+                }
+                .ok_or_else(|| anyhow!("OpenXR returned a null swapchain image"))?
+                .clone();
+                // SAFETY: the swapchain's image, of this device, described as it is; it
+                // rests in mX's home state between mX's commands (see `sync`)
+                Ok(mx::Texture::Dx12(unsafe {
+                    device.texture_from_raw(resource, &desc)
+                }))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let images = imported;
+        let blend = instance
+            .enumerate_environment_blend_modes(system, view_type)?
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("no OpenXR blend mode"))?;
+        let mirror = sampled.then(|| Mirror::new(renderer));
+        log::info!(
+            "OpenXR session opened for {} at {}x{} per eye ({}x{} recommended, scale {:.2})",
+            properties.system_name,
+            width,
+            height,
+            recommended_width,
+            recommended_height,
+            scale
+        );
+        if let Some(rate) = omsi_cfg::flags::OMSI_OPENXR_MIRROR_RATE.var() {
+            log::info!("OpenXR bus mirror rate override: {rate} pictures/s (-1: every mirror each game frame)");
+        }
+        renderer.prepare_xr_eye_pipelines();
+        Ok(Self {
+            sync: SwapchainSync::new(&renderer.device, &renderer.queue, images.len()),
+            instance,
+            session,
+            frame_waiter,
+            frame_stream,
+            space,
+            swapchain,
+            images,
+            width,
+            height,
+            blend,
+            mirror,
+            desktop_mirror,
+            origin: None,
+            player_uid: None,
+            origin_rotation: None,
+            smoothed_head: None,
+            mirror_camera: None,
+            menu_anchor: None,
+            cursor_anchor: None,
+            cursor_surface_local: None,
+            head_pointer: HeadPointer::default(),
+            cursor_menu_open: false,
+            zoom_from: 0.0,
+            zoom_to: 0.0,
+            zoom_changed: Instant::now(),
+            running: false,
+            focused: false,
+            events: xr::EventDataBuffer::new(),
+            stats_since: Instant::now(),
+            stats_frames: 0,
+            stats_wait: Duration::ZERO,
+            stats_image_wait: Duration::ZERO,
+            stats_render: Duration::ZERO,
+            stats_eyes: [Duration::ZERO; 2],
+            stats_desktop_mirror: Duration::ZERO,
+            stats_stages_prev: Default::default(),
+        })
+    }
+
+    pub fn poll(&mut self) -> Result<()> {
+        let mut refocus = false;
+        while let Some(event) = self.instance.poll_event(&mut self.events)? {
+            if let xr::Event::SessionStateChanged(change) = event {
+                let focused = change.state() == xr::SessionState::FOCUSED;
+                refocus |= focused && !self.focused;
+                self.focused = focused;
+                match change.state() {
+                    xr::SessionState::READY => {
+                        self.session
+                            .begin(xr::ViewConfigurationType::PRIMARY_STEREO)?;
+                        self.running = true;
+                    }
+                    xr::SessionState::STOPPING => {
+                        self.running = false;
+                        self.session.end()?;
+                    }
+                    xr::SessionState::EXITING | xr::SessionState::LOSS_PENDING => {
+                        self.running = false;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        // Valid poses can already exist while the headset is resting on a desk.
+        // Its position when the runtime gives us focus is the seated reference.
+        if refocus {
+            self.recenter();
+        }
+        Ok(())
+    }
+
+    pub fn recenter(&mut self) {
+        self.origin = None;
+        self.origin_rotation = None;
+        self.smoothed_head = None;
+        self.mirror_camera = None;
+        self.menu_anchor = None;
+        self.recenter_pointer();
+    }
+
+    pub fn recenter_pointer(&mut self) {
+        self.cursor_anchor = None;
+        self.cursor_surface_local = None;
+        self.head_pointer = HeadPointer::default();
+    }
+
+    pub fn toggle_desktop_mirror(&mut self) -> bool {
+        self.desktop_mirror = !self.desktop_mirror;
+        self.desktop_mirror
+    }
+
+    pub fn desktop_crop(&self, size: (u32, u32)) -> (f32, f32) {
+        let eye_aspect = self.width as f32 / self.height.max(1) as f32;
+        let desktop_aspect = size.0.max(1) as f32 / size.1.max(1) as f32;
+        if desktop_aspect > eye_aspect {
+            (1.0, eye_aspect / desktop_aspect)
+        } else {
+            (desktop_aspect / eye_aspect, 1.0)
+        }
+    }
+
+    pub fn needs_cursor_surface(&self, menu_open: bool) -> bool {
+        !menu_open
+    }
+
+    pub fn set_cursor_surface(
+        &mut self,
+        hit: Option<DVec3>,
+        bus_pose: Option<(DVec3, Mat4)>,
+    ) {
+        self.cursor_surface_local = hit.zip(bus_pose).map(|(point, (position, rotation))| {
+            rotation
+                .inverse()
+                .transform_point3((point - position).as_vec3())
+        });
+    }
+
+    fn animated_zoom(&mut self, active: bool) -> f32 {
+        let now = Instant::now();
+        let progress = (now.duration_since(self.zoom_changed).as_secs_f32() / 0.24).clamp(0.0, 1.0);
+        let eased = progress * progress * (3.0 - 2.0 * progress);
+        let current = self.zoom_from + (self.zoom_to - self.zoom_from) * eased;
+        let wanted = if active { 1.0 } else { 0.0 };
+        if wanted != self.zoom_to {
+            self.zoom_from = current;
+            self.zoom_to = wanted;
+            self.zoom_changed = now;
+        }
+        1.0 + current * 0.6
+    }
+
+    fn cursor_target(
+        &self,
+        position: (f32, f32),
+        size: (u32, u32),
+        camera: &Camera,
+        projection: Mat4,
+    ) -> DVec3 {
+        let position = self.head_pointer.position(position, size);
+        let direction = eye_ray(
+            camera,
+            projection,
+            position.0,
+            position.1,
+            size,
+            self.desktop_crop(size),
+        );
+        camera.position + (direction * 1.5).as_dvec3()
+    }
+
+    /// Pick through the same cropped left-eye picture shown on the desktop.
+    pub fn cursor_ray(
+        &self,
+        x: f32,
+        y: f32,
+        size: (u32, u32),
+    ) -> Option<(DVec3, Vec3, f32)> {
+        let (camera, projection) = self.mirror_camera?;
+        let h = size.1.max(1) as f32;
+        let crop = self.desktop_crop(size);
+        let position = if !self.cursor_menu_open {
+            self.head_pointer.position((x, y), size)
+        } else {
+            (x, y)
+        };
+        let direction = eye_ray(&camera, projection, position.0, position.1, size, crop);
+        let spread = 2.0 * (camera.fov_deg.to_radians() * 0.5).tan() * crop.1 / h;
+        Some((camera.position, direction, spread))
+    }
+
+    pub fn navigator_edit_camera(&self) -> Option<Camera> {
+        self.mirror_camera.map(|(camera, _)| camera)
+    }
+
+    pub fn render(
+        &mut self,
+        renderer: &mut Renderer,
+        scene: &mut Scene,
+        base: &Camera,
+        lighting: &Lighting,
+        desktop: &mx::TextureView,
+        desktop_size: (u32, u32),
+        menu_range: std::ops::Range<usize>,
+        cursor_overlay: Option<usize>,
+        tooltip_overlay: Option<usize>,
+        cursor_position: (f32, f32),
+        bus_pose: Option<(DVec3, Mat4)>,
+        navigator: Option<(usize, crate::navigator::Display)>,
+        player_uid: Option<u64>,
+        head_smoothing_ms: f32,
+        cockpit_pointer_enabled: bool,
+        zoom_active: bool,
+    ) -> Result<bool> {
+        if self.player_uid != player_uid {
+            self.recenter();
+            self.player_uid = player_uid;
+        }
+        self.poll()?;
+        if !self.running {
+            return Ok(false);
+        }
+        if self.stats_frames == 0 {
+            self.stats_since = Instant::now();
+        }
+        let wait_start = Instant::now();
+        let frame = self.frame_waiter.wait()?;
+        let wait_time = wait_start.elapsed();
+        self.frame_stream.begin()?;
+        if !frame.should_render {
+            self.frame_stream
+                .end(frame.predicted_display_time, self.blend, &[])?;
+            return Ok(false);
+        }
+        let (view_state, views) = self.session.locate_views(
+            xr::ViewConfigurationType::PRIMARY_STEREO,
+            frame.predicted_display_time,
+            &self.space,
+        )?;
+        if views.len() != 2 {
+            self.frame_stream
+                .end(frame.predicted_display_time, self.blend, &[])?;
+            bail!("OpenXR stopped providing stereo views");
+        }
+        // Valid poses may be inferred even when active tracking is unavailable.
+        // Input focus must not gate rendering: VISIBLE sessions should continue
+        // submitting layers, including underneath runtime overlays. Refocusing
+        // still recenters the seated origin in poll().
+        let valid = xr::ViewStateFlags::POSITION_VALID | xr::ViewStateFlags::ORIENTATION_VALID;
+        if !view_state.contains(valid) {
+            self.frame_stream.end(frame.predicted_display_time, self.blend, &[])?;
+            return Ok(false);
+        }
+        let midpoint = (xr_position(views[0].pose) + xr_position(views[1].pose)) * 0.5;
+        let raw_rotation = xr_rotation(views[0].pose);
+        let (head_position, head_rotation) = if head_smoothing_ms > 0.0 {
+            let now = Instant::now();
+            let (position, rotation) =
+                if let Some((previous_position, previous_rotation, previous_time)) =
+                    self.smoothed_head
+                {
+                    let dt = now.duration_since(previous_time).as_secs_f32();
+                    let tau = head_smoothing_ms.clamp(0.0, 30.0) * 0.001;
+                    let alpha = 1.0 - (-dt / tau).exp();
+                    (
+                        previous_position.lerp(midpoint, alpha),
+                        previous_rotation.slerp(raw_rotation, alpha),
+                    )
+                } else {
+                    (midpoint, raw_rotation)
+                };
+            self.smoothed_head = Some((position, rotation, now));
+            (position, rotation)
+        } else {
+            self.smoothed_head = None;
+            (midpoint, raw_rotation)
+        };
+        // Move both eyes as one head, preserving the runtime's eye offsets and
+        // their small orientation differences. Render and submit these same poses.
+        let eye_poses = [0, 1].map(|eye| {
+            if head_smoothing_ms <= 0.0 {
+                return views[eye].pose;
+            }
+            let eye_position = head_position
+                + head_rotation
+                    * (raw_rotation.inverse() * (xr_position(views[eye].pose) - midpoint));
+            let eye_rotation =
+                head_rotation * (raw_rotation.inverse() * xr_rotation(views[eye].pose));
+            xr::Posef {
+                orientation: xr::Quaternionf {
+                    x: eye_rotation.x,
+                    y: eye_rotation.y,
+                    z: eye_rotation.z,
+                    w: eye_rotation.w,
+                },
+                position: xr::Vector3f {
+                    x: eye_position.x,
+                    y: eye_position.y,
+                    z: eye_position.z,
+                },
+            }
+        });
+        let origin = *self.origin.get_or_insert(midpoint);
+        let origin_rotation = *self
+            .origin_rotation
+            .get_or_insert_with(|| initial_yaw_rotation(xr_rotation(views[0].pose)));
+        let image_wait_start = Instant::now();
+        let index = self.swapchain.acquire_image()? as usize;
+        self.swapchain.wait_image(xr::Duration::INFINITE)?;
+        self.stats_image_wait += image_wait_start.elapsed();
+        let render_start = Instant::now();
+        // OpenXR hands the image over in RENDER_TARGET; mX's commands find it in
+        // its home state (see `sync`).
+        self.sync.prepare_image(index, &self.images[index])?;
+        let mut vr_base = *base;
+        vr_base.roll = 0.0;
+        // Driver cameras may look down at the dashboard by default. In VR the
+        // headset supplies the player's pitch, so start from a level view.
+        vr_base.pitch = 0.0;
+        let zoom = self.animated_zoom(zoom_active);
+        let targets = [0, 1].map(|eye| {
+            self.images[index]
+                .create_view(&mx::TextureViewDescriptor {
+                    label: Some("OpenXR eye"),
+                    dimension: Some(mx::TextureViewDimension::D2),
+                    base_array_layer: eye as u32,
+                    array_layer_count: Some(1),
+                    ..Default::default()
+                })
+                .expect("mX: a texture view")
+        });
+        renderer.set_env_heading(Some(vr_base.yaw));
+        let mut eye_cameras = [vr_base; 2];
+        let mut ui_cameras = [vr_base; 2];
+        let mut eye_projections = [Mat4::IDENTITY; 2];
+        let mut ui_projections = [Mat4::IDENTITY; 2];
+        let stereo_center = (xr_position(eye_poses[0]) + xr_position(eye_poses[1])) * 0.5;
+        for (eye, xr_view) in views.iter().enumerate() {
+            let eye_start = Instant::now();
+            let tracked_eye = xr_position(eye_poses[eye]);
+            let tracked_relative = origin_rotation.inverse() * (tracked_eye - origin);
+            // A narrower picture magnifies stereo disparity. Reduce the virtual
+            // eye separation by the same factor so convergence stays unchanged.
+            let zoomed_eye = zoom_eye_position(tracked_eye, stereo_center, zoom);
+            let relative_position = origin_rotation.inverse() * (zoomed_eye - origin);
+            let relative_rotation = origin_rotation.inverse() * xr_rotation(eye_poses[eye]);
+            let mut camera =
+                eye_camera(&vr_base, relative_position, relative_rotation, xr_view.fov);
+            let ui_camera = eye_camera(&vr_base, tracked_relative, relative_rotation, xr_view.fov);
+            let ui_projection = eye_projection(xr_view.fov, camera.near, camera.depth_far());
+            // Magnify focal lengths but preserve each eye's asymmetric projection
+            // offset. Scaling that offset too displaced the two pictures apart.
+            let projection = zoom_projection(ui_projection, zoom);
+            camera.fov_deg = (2.0
+                * (((xr_view.fov.angle_up - xr_view.fov.angle_down) * 0.5).tan() / zoom).atan())
+            .to_degrees();
+            eye_cameras[eye] = camera;
+            ui_cameras[eye] = ui_camera;
+            eye_projections[eye] = projection;
+            ui_projections[eye] = ui_projection;
+            if eye == 0 {
+                self.mirror_camera = Some((camera, projection));
+            }
+            renderer.render_xr_eye(
+                scene,
+                &targets[eye],
+                self.width,
+                self.height,
+                &camera,
+                lighting,
+                projection,
+                eye == 1,
+            );
+            self.stats_eyes[eye] += eye_start.elapsed();
+        }
+        renderer.set_env_heading(None);
+        let menu_open = !menu_range.is_empty();
+        self.place_cursor(menu_open, cursor_position, desktop_size, bus_pose, &eye_cameras, &eye_projections, &ui_cameras, views[0].fov);
+        let menu_transforms = [0, 1].map(|eye| {
+            self.menu_anchor
+                .map(|anchor| anchor.transform(&ui_cameras[eye], ui_projections[eye]))
+                .unwrap_or(Mat4::IDENTITY)
+        });
+        let cursor_visible = self.head_pointer.visible(menu_open || cockpit_pointer_enabled, Instant::now());
+        let cursor_transforms = [0, 1].map(|eye| {
+            self.cursor_anchor
+                .filter(|_| cursor_visible)
+                .and_then(|anchor| {
+                    if menu_open {
+                        anchor.cursor_transform(&ui_cameras[eye], ui_projections[eye])
+                    } else {
+                        anchor.cursor_transform(&eye_cameras[eye], eye_projections[eye])
+                    }
+                })
+        });
+        let navigator = navigator.zip(bus_pose).and_then(|((index, display), (position, body))| {
+            let (texture, rect) = scene.overlays.get(index)?;
+            let aspect = (rect[2] - rect[0]) / (rect[3] - rect[1]);
+            if !aspect.is_finite() || aspect <= 0.0 { return None; }
+            Some((*texture, [0, 1].map(|eye| display.transform(position, body, &eye_cameras[eye], eye_projections[eye], aspect))))
+        });
+        renderer.render_xr_ui(
+            scene,
+            &targets,
+            desktop_size,
+            (self.width, self.height),
+            menu_range,
+            menu_transforms,
+            cursor_overlay,
+            tooltip_overlay,
+            cursor_transforms,
+            navigator,
+        );
+        self.draw_desktop(renderer, index, desktop, desktop_size);
+        // All eye/UI/mirror commands have been submitted on the exact queue bound
+        // to OpenXR; the image goes back to RENDER_TARGET after them on that queue.
+        // The D3D12 OpenXR contract orders runtime access on that queue; CPU
+        // completion is needed at swapchain destruction, not at release.
+        self.sync.release_image(index)?;
+        self.swapchain.release_image()?;
+        let rect = xr::Rect2Di {
+            offset: xr::Offset2Di { x: 0, y: 0 },
+            extent: xr::Extent2Di {
+                width: self.width as i32,
+                height: self.height as i32,
+            },
+        };
+        let projection_views = [0, 1].map(|eye| {
+            xr::CompositionLayerProjectionView::new()
+                .pose(eye_poses[eye])
+                .fov(views[eye].fov)
+                .sub_image(
+                    xr::SwapchainSubImage::new()
+                        .swapchain(&self.swapchain)
+                        .image_array_index(eye as u32)
+                        .image_rect(rect),
+                )
+        });
+        let layer = xr::CompositionLayerProjection::new()
+            .space(&self.space)
+            .views(&projection_views);
+        self.frame_stream
+            .end(frame.predicted_display_time, self.blend, &[&layer])?;
+        self.record_frame_stats(renderer, wait_time, render_start);
+        Ok(true)
+    }
+
+    /// Menus retain their existing placement. The cockpit pointer is reconstructed
+    /// from the current head pose and mouse offset every frame, so neither driving
+    /// nor looking elsewhere leaves the cursor attached to the old world position.
+    #[allow(clippy::too_many_arguments)]
+    fn place_cursor(&mut self, menu_open: bool, cursor_position: (f32, f32), desktop_size: (u32, u32), bus_pose: Option<(DVec3, Mat4)>, eye_cameras: &[Camera; 2], eye_projections: &[Mat4; 2], ui_cameras: &[Camera; 2], fov: xr::Fovf) {
+        if menu_open {
+            let center = (ui_cameras[0].position + ui_cameras[1].position) * 0.5
+                + (ui_cameras[0].forward() * 2.0).as_dvec3();
+            self.menu_anchor = Some(UiAnchor::menu(
+                center,
+                &ui_cameras[0],
+                fov,
+                2.0,
+                desktop_size,
+            ));
+        } else {
+            self.menu_anchor = None;
+        }
+        if let Some(menu) = self.menu_anchor {
+            let (w, h) = (desktop_size.0.max(1) as f32, desktop_size.1.max(1) as f32);
+            self.cursor_anchor = Some(UiAnchor {
+                origin: menu.point(
+                    cursor_position.0 / w * 2.0 - 1.0,
+                    1.0 - cursor_position.1 / h * 2.0,
+                ),
+                ..menu
+            });
+        } else {
+            let camera = &eye_cameras[0];
+            let target =
+                self.cursor_target(cursor_position, desktop_size, camera, eye_projections[0]);
+            let direction = (target - camera.position).as_vec3().normalize_or_zero();
+            // A recent surface hit supplies binocular depth, never the aim. Project
+            // that depth onto the current ray so drawing and picking cannot diverge
+            // while the headset or vehicle moves between hover updates.
+            let distance =
+                self.cursor_surface_local
+                    .zip(bus_pose)
+                    .map(|(local, (position, rotation))| {
+                    let hit = position + rotation.transform_point3(local).as_dvec3();
+                    (hit - camera.position).as_vec3()
+                        .dot(direction)
+                        .clamp(0.3, 8.0)
+                })
+                .unwrap_or(1.5);
+            let point = camera.position + (direction * distance).as_dvec3();
+            self.cursor_anchor = Some(UiAnchor::at(
+                point, camera,
+                fov,
+                distance));
+        }
+        self.head_pointer
+            .update(cursor_position, desktop_size, menu_open);
+        self.cursor_menu_open = menu_open;
+    }
+
+    /// The desktop window while the headset shows the game: the left eye's picture when the
+    /// desktop mirror is on, else black.
+    fn draw_desktop(&mut self, renderer: &Renderer, index: usize, desktop: &mx::TextureView, desktop_size: (u32, u32)) {
+        if let Some(mirror) = self.mirror.as_ref().filter(|_| self.desktop_mirror) {
+            let mirror_start = Instant::now();
+            let left_eye = self.images[index]
+                .create_view(&mx::TextureViewDescriptor {
+                    label: Some("OpenXR desktop mirror source"),
+                    dimension: Some(mx::TextureViewDimension::D2),
+                    base_array_layer: 0,
+                    array_layer_count: Some(1),
+                    ..Default::default()
+                })
+                .expect("mX: a texture view");
+            mirror.draw(
+                renderer,
+                &left_eye,
+                desktop,
+                (self.width, self.height),
+                desktop_size,
+            );
+            self.stats_desktop_mirror += mirror_start.elapsed();
+        } else {
+            let mut encoder = renderer
+                .device
+                .create_command_encoder(Some("OpenXR blank desktop"));
+            drop(encoder.begin_render_pass(&mx::RenderPassDescriptor {
+                label: Some("OpenXR blank desktop"),
+                color_attachments: &[Some(mx::RenderPassColorAttachment {
+                    view: desktop,
+                    resolve_target: None,
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                        store: mx::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            }));
+            renderer.queue.submit(Some(encoder.finish()));
+        }
+    }
+
+    /// The frame's times added to the statistics, logged every five seconds (with the
+    /// renderer's mirror stages under `OMSI_PROFILE`).
+    fn record_frame_stats(&mut self, renderer: &Renderer, wait_time: Duration, render_start: Instant) {
+        self.stats_frames += 1;
+        self.stats_wait += wait_time;
+        self.stats_render += render_start.elapsed();
+        let interval = self.stats_since.elapsed();
+        if interval >= Duration::from_secs(5) {
+            let count = self.stats_frames as f64;
+            log::info!(
+                "OpenXR: {:.1} fps, frame wait {:.1} ms/frame, image wait {:.1}, render {:.1} (eyes {:.1}+{:.1}, desktop mirror {:.1})",
+                count / interval.as_secs_f64(),
+                self.stats_wait.as_secs_f64() * 1000.0 / count,
+                self.stats_image_wait.as_secs_f64() * 1000.0 / count,
+                self.stats_render.as_secs_f64() * 1000.0 / count,
+                self.stats_eyes[0].as_secs_f64() * 1000.0 / count,
+                self.stats_eyes[1].as_secs_f64() * 1000.0 / count,
+                self.stats_desktop_mirror.as_secs_f64() * 1000.0 / count,
+            );
+            if omsi_cfg::flags::OMSI_PROFILE.is_set() {
+                let stages = renderer.stats.borrow();
+                let mut detail: Vec<_> = stages
+                    .iter()
+                    .filter(|(name, _)| name.starts_with("mirror."))
+                    .filter_map(|(&name, &total)| {
+                        let previous = self.stats_stages_prev.get(name).copied().unwrap_or(0.0);
+                        let ms = (total - previous) * 1000.0 / count;
+                        (ms >= 0.1).then_some((name, ms))
+                    })
+                    .collect();
+                detail.sort_by(|a, b| b.1.total_cmp(&a.1));
+                log::info!(
+                    "OpenXR renderer CPU stages: {}",
+                    detail
+                        .iter()
+                        .map(|(name, ms)| format!(
+                            "{} {:.1}",
+                            name.trim_start_matches("mirror."),
+                            ms
+                        ))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                self.stats_stages_prev.clone_from(&stages);
+            }
+            self.stats_since = Instant::now();
+            self.stats_frames = 0;
+            self.stats_wait = Duration::ZERO;
+            self.stats_image_wait = Duration::ZERO;
+            self.stats_render = Duration::ZERO;
+            self.stats_eyes = [Duration::ZERO; 2];
+            self.stats_desktop_mirror = Duration::ZERO;
+        }
+    }
+}
+
+impl Mirror {
+    fn new(renderer: &Renderer) -> Self {
+        let device = &renderer.device;
+        let shader = device
+            .create_shader_module(&mx::ShaderModuleDescriptor {
+                label: Some("OpenXR desktop mirror"),
+                source: &*(include_str!("xr_mirror.wgsl")),
+            })
+            .expect("mX: a shader");
+        let pipeline = device
+            .create_render_pipeline(&mx::RenderPipelineDescriptor {
+                label: Some("OpenXR desktop mirror"),
+                vertex: mx::VertexState {
+                    constants: &[],
+                    module: &shader,
+                    entry_point: Some("vertex_main"),
+                    buffers: &[],
+                },
+                primitive: mx::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(mx::FragmentState {
+                    constants: &[],
+                    module: &shader,
+                    entry_point: Some("fragment_main"),
+                    targets: &[Some(mx::ColorTargetState {
+                        format: renderer.format(),
+                        blend: None,
+                        write_mask: mx::ColorWrites::ALL,
+                    })],
+                }),
+            })
+            .expect("mX: a render pipeline");
+        let sampler = device
+            .create_sampler(&mx::SamplerDescriptor {
+                label: Some("OpenXR desktop mirror"),
+                mag_filter: mx::FilterMode::Linear,
+                min_filter: mx::FilterMode::Linear,
+                ..Default::default()
+            })
+            .expect("mX: a sampler");
+        let params = device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("OpenXR desktop mirror crop"),
+                size: 16,
+                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+            })
+            .expect("mX: a buffer");
+        Self {
+            pipeline,
+            sampler,
+            params,
+        }
+    }
+
+    fn draw(
+        &self,
+        renderer: &Renderer,
+        eye: &mx::TextureView,
+        desktop: &mx::TextureView,
+        source_size: (u32, u32),
+        desktop_size: (u32, u32),
+    ) {
+        let source_aspect = source_size.0 as f32 / source_size.1.max(1) as f32;
+        let desktop_aspect = desktop_size.0 as f32 / desktop_size.1.max(1) as f32;
+        let crop = if desktop_aspect > source_aspect {
+            [1.0, source_aspect / desktop_aspect]
+        } else {
+            [desktop_aspect / source_aspect, 1.0]
+        };
+        let mut params = [0u8; 16];
+        params[0..4].copy_from_slice(&crop[0].to_ne_bytes());
+        params[4..8].copy_from_slice(&crop[1].to_ne_bytes());
+        renderer
+            .queue
+            .write_buffer(&self.params, 0, &params)
+            .expect("mX: a queue write");
+        let bind_group = renderer.device.create_bind_group(&mx::BindGroupDescriptor {
+            label: Some("OpenXR desktop mirror"),
+            entries: &[
+                mx::BindGroupEntry {
+                    binding: 0,
+                    resource: self.params.as_entire_binding(),
+                },
+                mx::BindGroupEntry {
+                    binding: 1,
+                    resource: mx::BindingResource::TextureView(eye),
+                },
+                mx::BindGroupEntry {
+                    binding: 2,
+                    resource: mx::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
+        let mut encoder = renderer
+            .device
+            .create_command_encoder(Some("OpenXR desktop mirror"));
+        {
+            let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
+                label: Some("OpenXR desktop mirror"),
+            color_attachments: &[Some(mx::RenderPassColorAttachment {
+                    view: desktop,
+                    resolve_target: None,
+                    ops: mx::Operations {
+                        load: mx::LoadOp::Clear(mx::Color::BLACK),
+                        store: mx::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &bind_group);
+            pass.draw(0..3, 0..1);
+        }
+        // Sampling changed the XR image to a shader resource. OpenXR requires
+        // RENDER_TARGET again when we release it, and the load preserves pixels.
+        drop(encoder.begin_render_pass(&mx::RenderPassDescriptor {
+            label: Some("OpenXR return to render target"),
+            color_attachments: &[Some(mx::RenderPassColorAttachment {
+                view: eye,
+                resolve_target: None,
+                ops: mx::Operations {
+                    load: mx::LoadOp::Load,
+                    store: mx::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        }));
+        renderer.queue.submit(Some(encoder.finish()));
+    }
+}
+
+fn xr_position(pose: xr::Posef) -> Vec3 {
+    Vec3::new(pose.position.x, pose.position.y, pose.position.z)
+}
+
+fn xr_rotation(pose: xr::Posef) -> Quat {
+    let q = pose.orientation;
+    Quat::from_xyzw(q.x, q.y, q.z, q.w).normalize()
+}
+
+fn initial_yaw_rotation(rotation: Quat) -> Quat {
+    let forward = rotation * Vec3::NEG_Z;
+    let horizontal = Vec3::new(forward.x, 0.0, forward.z).normalize_or_zero();
+    if horizontal == Vec3::ZERO {
+        Quat::IDENTITY
+    } else {
+        Quat::from_rotation_y((-horizontal.x).atan2(-horizontal.z))
+    }
+}
+
+fn eye_camera(base: &Camera, position: Vec3, rotation: Quat, fov: xr::Fovf) -> Camera {
+    let right = base.right().normalize_or(Vec3::X);
+    // The headset-to-world transform must be rigid. Camera::up() returns world
+    // up for a level roll, even if the bus camera is pitched on a slope; that
+    // vector is then not perpendicular to its forward direction.
+    let up = right.cross(base.forward()).normalize_or(Vec3::Y);
+    let back = -base.forward();
+    let to_world = |v: Vec3| right * v.x + up * v.y + back * v.z;
+    let forward = to_world(rotation * Vec3::NEG_Z).normalize();
+    let eye_up = to_world(rotation * Vec3::Y).normalize();
+    let level_right = Vec3::new(forward.y, -forward.x, 0.0).normalize_or_zero();
+    let level_up = level_right.cross(forward);
+    Camera {
+        position: base.position + DVec3::from(to_world(position)),
+        yaw: forward.x.atan2(forward.y).to_degrees(),
+        pitch: forward.z.asin().to_degrees(),
+        roll: eye_up
+            .dot(level_right)
+            .atan2(eye_up.dot(level_up))
+            .to_degrees(),
+        fov_deg: (fov.angle_up - fov.angle_down).to_degrees(),
+        ..*base
+    }
+}
+
+fn eye_projection(fov: xr::Fovf, near: f32, far: f32) -> Mat4 {
+    let left = fov.angle_left.tan();
+    let right = fov.angle_right.tan();
+    let bottom = fov.angle_down.tan();
+    let top = fov.angle_up.tan();
+    let depth = far - near;
+    Mat4::from_cols_array(&[
+        2.0 / (right - left),
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.0 / (top - bottom),
+        0.0,
+        0.0,
+        (right + left) / (right - left),
+        (top + bottom) / (top - bottom),
+        near / depth,
+        -1.0,
+        0.0,
+        0.0,
+        near * far / depth,
+        0.0,
+    ])
+}
+
+fn zoom_eye_position(eye: Vec3, center: Vec3, zoom: f32) -> Vec3 {
+    center + (eye - center) / zoom
+}
+
+fn zoom_projection(mut projection: Mat4, zoom: f32) -> Mat4 {
+    projection.x_axis.x *= zoom;
+    projection.y_axis.y *= zoom;
+    projection
+}
+
+#[cfg(test)]
+mod zoom_tests {
+    use super::*;
+
+    #[test]
+    fn stereo_disparity_stays_stable_through_zoom_animation() {
+        let left_eye = Vec3::new(-0.032, 0.0, 0.0);
+        let right_eye = Vec3::new(0.032, 0.0, 0.0);
+        let left = eye_projection(
+            xr::Fovf {
+                angle_left: -0.9,
+                angle_right: 0.8,
+                angle_up: 0.8,
+                angle_down: -0.8,
+            },
+            0.05,
+            1000.0,
+        );
+        let right = eye_projection(
+            xr::Fovf {
+                angle_left: -0.8,
+                angle_right: 0.9,
+                angle_up: 0.8,
+                angle_down: -0.8,
+            },
+            0.05,
+            1000.0,
+        );
+        let screen_x = |eye: Vec3, projection: Mat4, point: Vec3| {
+            let clip = projection * (point - eye).extend(1.0);
+            clip.x / clip.w
+        };
+        for depth in [0.8, 2.0, 10.0] {
+            let point = Vec3::new(0.12, 0.0, -depth);
+            let normal = screen_x(left_eye, left, point) - screen_x(right_eye, right, point);
+            for zoom in [1.0, 1.1, 1.3, 1.45, 1.6] {
+                let magnified = screen_x(
+                    zoom_eye_position(left_eye, Vec3::ZERO, zoom),
+                    zoom_projection(left, zoom),
+                    point,
+                ) - screen_x(
+                    zoom_eye_position(right_eye, Vec3::ZERO, zoom),
+                    zoom_projection(right, zoom),
+                    point,
+                );
+                assert!(
+                    (magnified - normal).abs() < 1e-5,
+                    "depth {depth}, zoom {zoom}: {magnified} instead of {normal}"
+                );
+            }
+        }
+    }
+}
+
+fn eye_ray(
+    camera: &Camera,
+    projection: Mat4,
+    x: f32,
+    y: f32,
+    size: (u32, u32),
+    crop: (f32, f32),
+) -> Vec3 {
+    let w = size.0.max(1) as f32;
+    let h = size.1.max(1) as f32;
+    let nx = (x / w * 2.0 - 1.0) * crop.0;
+    let ny = (1.0 - y / h * 2.0) * crop.1;
+    let view = Mat4::look_to_rh(Vec3::ZERO, camera.forward(), camera.up());
+    (projection * view)
+        .inverse()
+        .project_point3(Vec3::new(nx, ny, 0.0))
+        .normalize_or_zero()
+}

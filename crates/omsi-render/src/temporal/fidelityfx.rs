@@ -370,9 +370,6 @@ impl Upscaler {
     }
 
     pub fn load(device: &wgpu::Device) -> Result<Upscaler> {
-        if wgpu_mx::custom::is_mx(device) {
-            bail!("the game is drawn by mX Graphics (Experimental), which FSR 3 does not run on yet");
-        }
         let dir = game_dir();
         let backend = if let Some(hal) = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() } {
             let raw = hal.raw_device().clone();
