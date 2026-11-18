@@ -183,10 +183,16 @@ fn clicking_control_shared_by_two_meshes_toggles_both_model_only_variables_both_
     for var in ["sched", "sched1"] {
         ty.model.meshes.push(omsi_model::MeshDef {
             mouse_event: Some("cp_sched_toggle".into()),
-            animations: vec![omsi_model::Animation {
-                variable: var.into(),
-                ..Default::default()
-            }],
+            animations: vec![
+                omsi_model::Animation {
+                    variable: var.into(),
+                    ..Default::default()
+                },
+                omsi_model::Animation {
+                    variable: "script_var".into(),
+                    ..Default::default()
+                },
+            ],
             ..Default::default()
         });
         ty.meshes.push(omsi_sim::vehicle::VehicleMesh {
