@@ -2,12 +2,13 @@
 //! with a stripe, for a note or an advice - and stop lists, the stops on a rail with their
 //! times, as the navigator's duty board drew them; and a bar's parts and a badge's weight.
 //! The navigator's map (`omsi.ui` version 6) is room the navigator fills: it is noted where
-//! it is ([`Laid::map`]), and nothing is drawn there.
+//! it is ([`Laid::map`]), and nothing is drawn there but the plugin's own cards over it
+//! (`overlay`, version 8), cut off at its edges.
 
 use super::{BADGE_H, BADGE_PAD, BADGE_PX, Item, Layout, color, ink_on};
 use glam::Vec2;
-use omsi_plugin::ui::{Element, Kind, Panel, Rgba, Stop, StopState};
-use omsi_ui::{Color, Rect, Weight};
+use omsi_plugin::ui::{Element, Kind, MapCard, Panel, Rgba, Stop, StopState};
+use omsi_ui::{Color, Fonts, Rect, Weight};
 
 /// The panel for the navigator as it was laid out, in physical pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -59,6 +60,40 @@ const NAME_X: f32 = 19.0;
 /// The rail where the bus has been, and the texts by where the stop is.
 /// The navigator's own map: this share of its width high.
 const MAP_SHARE: f32 = 0.8;
+
+/// What an item covers, near enough to tell whether it lies in a rectangle: a text from
+/// its baseline up by its size and down by a quarter of it.
+fn covers(fonts: &Fonts, i: &Item) -> Rect {
+    match i {
+        Item::Rounded { r, .. } | Item::Rect { r, .. } | Item::Image { r, .. } => *r,
+        Item::Text {
+            text,
+            px,
+            weight,
+            at,
+            ..
+        } => Rect::new(
+            at.x,
+            at.y - px,
+            fonts.width_as_is(text, *px, *weight),
+            px * 1.25,
+        ),
+        Item::Icon { center, size, .. } => {
+            Rect::new(center.x - size * 0.5, center.y - size * 0.5, *size, *size)
+        }
+        Item::Line { a, b, .. } => Rect::new(
+            a.x.min(b.x),
+            a.y.min(b.y),
+            (a.x - b.x).abs(),
+            (a.y - b.y).abs(),
+        ),
+        Item::Poly { pts, .. } => {
+            let lo = pts.iter().fold(Vec2::splat(f32::MAX), |m, p| m.min(*p));
+            let hi = pts.iter().fold(Vec2::splat(f32::MIN), |m, p| m.max(*p));
+            Rect::new(lo.x, lo.y, hi.x - lo.x, hi.y - lo.y)
+        }
+    }
+}
 
 impl Layout<'_> {
     pub(crate) fn nav_natural(&self, e: &Element) -> f32 {
@@ -132,12 +167,109 @@ impl Layout<'_> {
                     self.stop(s, rr, *size, rail, i > 0, i + 1 < stops.len());
                 }
             }
-            Kind::Map { cards, .. } => {
+            Kind::Map { cards, overlay, .. } => {
                 if self.out.map.is_none() {
                     self.out.map = Some((r, *cards));
                 }
+                for c in overlay {
+                    self.map_card(c, r);
+                }
             }
             _ => {}
+        }
+    }
+
+    /// A card of the plugin's own over the map `map` (`overlay`), laid out as a panel is - its
+    /// background, then what is in it stacked - at its place in the map less its offsets, as
+    /// wide as what is in it unless it says. The panel is drawn over the navigator's map, so
+    /// the card lies on it; cut off at the map's edges, it never covers the panel round it
+    /// (one taller than the map starts at the top and loses its bottom, as a panel taller than
+    /// the navigator's room does).
+    fn map_card(&mut self, c: &MapCard, map: Rect) {
+        let room = map.pad(c.x, c.y);
+        let natural = c
+            .children
+            .iter()
+            .map(|e| self.natural(e))
+            .fold(0.0, f32::max);
+        let w = c
+            .width
+            .unwrap_or(natural + 2.0 * c.padding)
+            .min(room.w)
+            .max(1.0);
+        let inner = (w - 2.0 * c.padding).max(1.0);
+        let heights: Vec<f32> = c
+            .children
+            .iter()
+            .map(|e| self.height(e, inner, false))
+            .collect();
+        let gaps = c.gap * c.children.len().saturating_sub(1) as f32;
+        let h = heights.iter().sum::<f32>() + gaps + 2.0 * c.padding;
+        let (ax, ay) = c.place.factors();
+        let card = Rect::new(
+            room.x + ax * (room.w - w),
+            room.y + (ay * (room.h - h)).max(0.0),
+            w,
+            h,
+        );
+        let from = (self.out.items.len(), self.out.hits.len());
+        let fill = c.background.map(color).unwrap_or(self.colors.card);
+        self.rounded(card, c.radius.min(w * 0.5).min(h * 0.5), fill, None);
+        let mut y = card.y + c.padding;
+        for (i, (e, eh)) in c.children.iter().zip(heights).enumerate() {
+            if i > 0 {
+                y += c.gap;
+            }
+            self.emit(e, Rect::new(card.x + c.padding, y, inner, eh), false);
+            y += eh;
+        }
+        self.clip(from, map);
+    }
+
+    /// Cut what was laid out from `from` on (its items, its hits) to `r`: a shape to its part
+    /// in `r`, and a text, an icon, a picture or a line only wholly in it is kept. A hit keeps
+    /// its place in the list (the shapes it lights refer to it by it), with no room outside.
+    fn clip(&mut self, (items, hits): (usize, usize), r: Rect) {
+        let cut = |b: Rect| {
+            let (x, y) = (b.x.clamp(r.x, r.right()), b.y.clamp(r.y, r.bottom()));
+            Rect::new(
+                x,
+                y,
+                (b.right().min(r.right()) - x).max(0.0),
+                (b.bottom().min(r.bottom()) - y).max(0.0),
+            )
+        };
+        let inside = |b: Rect| {
+            b.x >= r.x && b.y >= r.y && b.right() <= r.right() && b.bottom() <= r.bottom()
+        };
+        let laid = self.out.items.split_off(items);
+        let kept: Vec<Item> = laid
+            .into_iter()
+            .filter_map(|i| match i {
+                Item::Rounded {
+                    r: b,
+                    radius,
+                    color,
+                    hot,
+                } => {
+                    let b = cut(b);
+                    (b.w > 0.0 && b.h > 0.0).then(|| Item::Rounded {
+                        r: b,
+                        radius: radius.min(b.w * 0.5).min(b.h * 0.5),
+                        color,
+                        hot,
+                    })
+                }
+                Item::Rect { r: b, color } => {
+                    let b = cut(b);
+                    (b.w > 0.0 && b.h > 0.0).then_some(Item::Rect { r: b, color })
+                }
+                i => inside(covers(self.fonts, &i)).then_some(i),
+            })
+            .collect();
+        self.out.items.extend(kept);
+        for h in &mut self.out.hits[hits..] {
+            h.r = cut(h.r);
         }
     }
 
@@ -365,5 +497,190 @@ mod tests {
         assert_eq!(l.map.unwrap().0.h, 30.0);
         cut(&mut l, r.y);
         assert!(l.map.is_none());
+    }
+
+    fn within(r: Rect, room: Rect) -> bool {
+        r.x >= room.x - 0.01
+            && r.y >= room.y - 0.01
+            && r.right() <= room.right() + 0.01
+            && r.bottom() <= room.bottom() + 0.01
+    }
+
+    /// A map 300 x 240, 40 from the top of a panel that fills the navigator's frame, with a
+    /// card of `card`'s keys over it.
+    fn map_with(card: &str) -> Panel {
+        panel(&format!(
+            r#"{{ anchor = "navigator", frame = true, width = 300, padding = 0, gap = 0, children = {{
+            {{ type = "space", size = 40 }},
+            {{ type = "map", height = 240, cards = false, overlay = {{ {card} }} }},
+        }} }}"#
+        ))
+    }
+
+    /// Version 8: a card of the plugin's own lies on the map, at its place there, kept from
+    /// the map's edges; its shapes and texts are the panel's, drawn over the map.
+    #[test]
+    fn an_overlay_card_lies_on_the_map() {
+        let fonts = Fonts::new();
+        let l = layout(
+            &map_with(
+                r#"{ place = "top_right", width = 100, children = { { type = "text", text = "Markt" }, { type = "badge", text = "3 min" } } }"#,
+            ),
+            &fonts,
+            1.0,
+        );
+        let (map, cards) = l.map.expect("the map");
+        assert_eq!((map, cards), (Rect::new(0.0, 40.0, 300.0, 240.0), false));
+        assert!(l.items.len() >= 4, "{:?}", l.items);
+        let card = Rect::new(300.0 - 8.0 - 100.0, 40.0 + 8.0, 100.0, 240.0);
+        for i in &l.items {
+            assert!(within(super::covers(&fonts, i), card), "{i:?}");
+        }
+        // (the card behind what is in it: the game's card colour, its own corners)
+        assert!(
+            matches!(l.items[0], Item::Rounded { r, radius: 10.0, .. } if r.x == 192.0 && r.y == 48.0 && r.w == 100.0)
+        );
+        // a card as wide as what is in it, in the middle of the bottom
+        let l = layout(
+            &map_with(
+                r#"{ place = "bottom", children = { { type = "text", text = "62 km/h" } } }"#,
+            ),
+            &fonts,
+            1.0,
+        );
+        let Item::Rounded { r, .. } = l.items[0] else {
+            panic!("{:?}", l.items)
+        };
+        let w = fonts.width_as_is("62 km/h", 14.0, Weight::Regular).ceil() + 20.0;
+        assert!(
+            (r.w - w).abs() < 0.01 && (r.x - (300.0 - w) * 0.5).abs() < 0.01,
+            "{r:?}"
+        );
+        assert!((r.bottom() - (40.0 + 240.0 - 8.0)).abs() < 0.01, "{r:?}");
+        // a map elsewhere is empty room: the cards are laid out in it all the same
+        let q = panel(
+            r#"{ width = 200, padding = 0, children = { { type = "map", height = 100, overlay = { { place = "center", children = { { type = "text", text = "x" } } } } } } }"#,
+        );
+        let l = layout(&q, &fonts, 1.0);
+        assert!(
+            !l.items.is_empty()
+                && l.items
+                    .iter()
+                    .all(|i| within(super::covers(&fonts, i), Rect::new(0.0, 0.0, 200.0, 100.0)))
+        );
+    }
+
+    /// A card larger than the map is cut to it: no wider than the map less its offsets, and
+    /// what is below the map's bottom is not drawn and takes no click.
+    #[test]
+    fn an_overlay_card_stays_inside_the_map() {
+        let fonts = Fonts::new();
+        let buttons = (1..=12)
+            .map(|i| format!(r#"{{ type = "button", id = "b{i}", text = "Button {i}" }}"#))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let l = layout(
+            &map_with(&format!(
+                r#"{{ place = "bottom_left", width = 500, children = {{ {{ type = "text", text = "{}" }}, {buttons} }} }}"#,
+                "word ".repeat(60)
+            )),
+            &fonts,
+            1.0,
+        );
+        let map = Rect::new(0.0, 40.0, 300.0, 240.0);
+        assert!(l.items.len() > 4);
+        for i in &l.items {
+            assert!(within(super::covers(&fonts, i), map), "{i:?}");
+        }
+        for h in &l.hits {
+            assert!(within(h.r, map), "{h:?}");
+        }
+        let Item::Rounded { r, .. } = l.items[0] else {
+            panic!("{:?}", l.items)
+        };
+        assert_eq!(
+            (r.x, r.y, r.w, r.bottom()),
+            (8.0, 48.0, 300.0 - 16.0, 280.0)
+        );
+        // (the buttons that do not fit are not drawn and take no click)
+        assert!(l.hits.iter().any(|h| h.r.h == 0.0));
+        assert_eq!(
+            l.hits.iter().filter(|h| h.r.h > 0.0).count(),
+            l.items
+                .iter()
+                .filter(|i| matches!(i, Item::Rounded { hot: Some(_), .. }))
+                .count()
+        );
+    }
+
+    /// What in a card takes a click takes it as in the panel: the topmost hit there.
+    #[test]
+    fn an_overlay_button_clicks() {
+        let fonts = Fonts::new();
+        let l = layout(
+            &map_with(
+                r#"{ place = "bottom_right", children = { { type = "button", id = "next", text = "Next stop" } } }"#,
+            ),
+            &fonts,
+            1.0,
+        );
+        let i = l
+            .hits
+            .iter()
+            .position(|h| h.element.as_deref() == Some("next"))
+            .expect("the button's hit");
+        let r = l.hits[i].r;
+        assert!(
+            within(r, Rect::new(0.0, 40.0, 300.0, 240.0)) && r.h == BUTTON_H,
+            "{r:?}"
+        );
+        assert_eq!(hit_at(&l, r.center()), Some(i));
+        assert_eq!(l.hits[i].kind, HitKind::Click);
+        // (on the map beside the card: none, the press is the navigator's)
+        assert_eq!(hit_at(&l, Vec2::new(20.0, 60.0)), None);
+    }
+
+    /// A map without cards, or with an empty list of them, is laid out as it always was.
+    #[test]
+    fn a_map_without_overlay_lays_out_as_before() {
+        let fonts = Fonts::new();
+        let src = |overlay: &str| {
+            panel(&format!(
+                r#"{{ anchor = "navigator", frame = true, width = 360, padding = 10, gap = 6, children = {{
+                {{ type = "text", text = "Line 5", size = 14 }},
+                {{ type = "map", cards = false {overlay} }},
+                {{ type = "map", height = 40 }},
+                {{ type = "button", id = "go", text = "Go" }},
+            }} }}"#
+            ))
+        };
+        let before = layout(&src(""), &fonts, 1.0);
+        let empty = layout(&src(", overlay = {}"), &fonts, 1.0);
+        assert_eq!(
+            (before.w, before.h, before.map, &before.items, &before.hits),
+            (empty.w, empty.h, empty.map, &empty.items, &empty.hits)
+        );
+        assert_eq!(
+            before.map.unwrap().0,
+            Rect::new(
+                10.0,
+                10.0 + 14.0 * LINE + 6.0,
+                340.0,
+                (340.0 * 0.8f32).round()
+            )
+        );
+        assert_eq!(
+            before.h,
+            (10.0
+                + 14.0 * LINE
+                + 6.0
+                + (340.0 * 0.8f32).round()
+                + 6.0
+                + 40.0
+                + 6.0
+                + BUTTON_H
+                + 10.0)
+                .ceil()
+        );
     }
 }
