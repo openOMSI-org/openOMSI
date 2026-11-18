@@ -3,12 +3,12 @@
 //! keeps its default, so an old file never breaks a new build.
 
 use std::path::PathBuf;
-
 /// Version of the settings file (`version=`); files without it are version 1.
 #[cfg(test)]
 pub const SETTINGS_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, PartialEq)]
+#[rustfmt::skip]
 pub struct Settings {
     /// Samples per pixel: 1, 2, 4 or 8.
     pub msaa: u32,
@@ -575,6 +575,7 @@ pub struct Settings {
     pub remote_cockpit_port: u16,
 }
 
+#[rustfmt::skip]
 impl Default for Settings {
     fn default() -> Self {
         // a phone's graphics chip and battery: 2x MSAA (cheap on a tiled GPU), no
@@ -582,11 +583,11 @@ impl Default for Settings {
         if crate::platform::MOBILE { Self::phone() } else { Self::desktop() }
     }
 }
-
 /// A dedicated server's AI limits (`server.cfg`'s `ai_unsched_factor`, `ai_max_scheduled`,
 /// `ai_max_parked`, `ai_max_humans`), as `settings.cfg` lines read after the machine's own.
 pub(crate) static SERVER_AI_LIMITS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
+#[rustfmt::skip]
 impl Settings {
     /// HUD coordinates occupy the centre panel by default; world picking always
     /// keeps the full window's physical coordinates.
@@ -611,22 +612,20 @@ impl Settings {
     }
 }
 
+#[rustfmt::skip]
 impl Settings {
     pub fn perf_overlay_on(&self) -> bool {
         self.perf_overlay != "off"
     }
-
     /// The launcher setting, with the old environment switch kept for existing VR runs.
     pub fn vr_requested(&self) -> bool {
         cfg!(windows) && (self.vr || omsi_cfg::flags::OMSI_OPENXR.is_set())
     }
-
     /// `~/.openomsi/settings.cfg` (or `%USERPROFILE%` on Windows).
     pub fn path() -> Option<PathBuf> {
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
         Some(PathBuf::from(home).join(".openomsi").join("settings.cfg"))
     }
-
     /// The window's size in pixels the settings ask for (`resolution=WxH`, #904); None:
     /// automatic (fitted to the screen, the whole of it under gamescope).
     pub fn resolution() -> Option<(u32, u32)> {
@@ -666,7 +665,6 @@ impl Settings {
         *LAST.lock() = Some((p, text, s.clone()));
         s
     }
-
     /// One of the Tobii head-tracking lines, the pause menu's shortcuts or the interface theme of the settings file (`from_text`).
     fn read_extra(&mut self, k: &str, v: &str) {
         match k {
@@ -714,7 +712,6 @@ impl Settings {
             _ => self.fsr_sharpness = v.parse::<f32>().ok().filter(|n| n.is_finite()).map(|n| n.clamp(0.0, 1.0)).unwrap_or(0.8),
         }
     }
-
     /// The lit LEDs' glow and mipmaps, the night's brightness and the graphics interface
     /// (`from_text`): an unreadable number keeps the default.
     fn read_graphics(&mut self, k: &str, v: &str) {
@@ -1027,7 +1024,6 @@ impl Settings {
         s.settle_after_reading(graphics, version);
         s
     }
-
     /// One of Enhanced's light options as a settings file says it (`ray_tracing`, `light_shadows`,
     /// `cloud_shadows`, `light_glow`).
     fn set_light_option(&mut self, key: &str, v: &str) {
@@ -1074,7 +1070,6 @@ impl Settings {
             self.passenger_animation = "original".into();
         }
     }
-
     /// The settings as the file holds them. The game only ever reads the file - the
     /// launcher's settings page writes it - so this is here for the round-trip test that
     /// every key read is written back.
@@ -1157,19 +1152,16 @@ impl Settings {
         text.push_str(&format!("units={}\n", self.units));
         text
     }
-
     /// Real-Time Ray Tracing, with Enhanced graphics: ray-traced sun shadows, ambient occlusion
     /// and reflections (and the graded look that goes with them).
     pub fn ray_tracing(&self) -> bool {
         self.graphics == "enhanced" && self.ray_tracing_on
     }
-
     /// The graphics mode the renderer runs in, ray tracing counted as a mode of its own: `vanilla`,
     /// `vanilla_plus`, `enhanced` or `enhanced_plus` (Enhanced with Real-Time Ray Tracing).
     pub fn mode(&self) -> &'static str {
         if self.ray_tracing() { "enhanced_plus" } else { graphics_mode(&self.graphics) }
     }
-
     /// Windy trees, unless `OMSI_WINDY_TREES=0`/`1` says otherwise (A/B renders).
     pub fn windy_trees(&self) -> bool {
         match omsi_cfg::flags::OMSI_WINDY_TREES.var() {
@@ -1177,12 +1169,10 @@ impl Settings {
             None => self.windy_trees,
         }
     }
-
     /// Vanilla graphics: the picture as OMSI 2 draws it.
     pub fn classic(&self) -> bool {
         self.graphics == "vanilla"
     }
-
     /// How far objects are drawn (m, 0 = no limit): `max_obj_dist`, or when that is `auto`
     /// the visible distance the launcher sets, else the original's 900 m.
     pub fn object_distance(&self) -> f32 {
@@ -1192,12 +1182,10 @@ impl Settings {
             view_distance().map(|v| v as f32).unwrap_or(900.0)
         }
     }
-
     /// `auto` or the fraction, as the file and the log write it.
     pub fn render_scale_text(&self) -> String {
         if self.render_scale > 0.0 { format!("{}", self.render_scale) } else { "auto".into() }
     }
-
     /// Lighter graphics after the graphics device was lost `n` times this session: no
     /// multisampling, no SSAO, smaller shadow and mirror maps, fewer textures kept; a second
     /// loss also a smaller picture and no shadows.
@@ -1231,7 +1219,6 @@ impl Settings {
         }
         log::warn!("safer graphics after a lost graphics device ({n}): msaa 1, SSAO off, shadows {} ({}), video memory {} of its limit, render scale {}", self.shadows, self.shadow_size, if n >= 2 { "half" } else { "two thirds" }, self.render_scale_text());
     }
-
     /// The render scale the picture is drawn at: FSR 1's quality's, or the render scale's (0:
     /// automatic, the frame-rate governor's).
     pub fn scene_render_scale(&self) -> f32 {
@@ -1257,7 +1244,6 @@ impl Settings {
         let files = omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir());
         files.contains(&upscaler.as_str()).then(|| omsi_render::Temporal { upscaler, quality: omsi_render::TemporalQuality::parse(&self.upscale_quality) })
     }
-
     /// Frame generation as asked for, with the upscaler it works with chosen (asked every frame:
     /// no file is looked at; whether the Mac can run it is found when it starts).
     pub fn frame_generation(&self) -> bool {
@@ -1271,8 +1257,8 @@ impl Settings {
         omsi_render::RenderOptions { msaa: self.msaa, msaa_fallback: 0, anisotropy: self.anisotropy, shadow_size: self.shadow_size, ssao: self.ssao, render_scale, fsr1, temporal: self.temporal_upscaling(), fsr_sharpness: self.fsr_sharpness, xr_scale: 1.0, compress_textures: self.texture_compression, gpu_texture_compression: self.gpu_texture_compression, fxaa: self.post_aa != "off", min_obj_size: self.min_obj_size, max_obj_dist: self.object_distance(), mirror_enhanced: self.mirror_quality == "enhanced", mirror_shadows: self.mirror_shadows, mirror_particles: self.mirror_particles, omsi_shadow_casters: self.shadow_casters == "omsi", shadow_blobs: self.shadow_blobs, reflections: self.reflections > 0.0, preview_only: false, no_enhanced: !matches!(graphics_mode(&self.graphics), "enhanced" | "enhanced_plus"), ray_tracing: self.ray_tracing(), light_shadows: match self.light_shadows.as_str() { "off" => 0, "all" => 2, _ => 1 }, cloud_shadows: self.cloud_shadows, light_glow: self.light_glow, street_light: match self.street_light.as_str() { "on" => Some(true), "off" => Some(false), _ => None }, puddle_reflections: true, max_scene: None, detailed_trees: self.detailed_trees }
     }
 }
-
 /// `vanilla`, `vanilla_plus`, `enhanced` or `enhanced_plus` from the ways a file may spell them.
+#[rustfmt::skip]
 pub fn graphics_mode(v: &str) -> &'static str {
     match v.trim().to_ascii_lowercase().replace(['-', ' '], "_").as_str() {
         "enhanced_plus" | "enhanced+" | "enhancedplus" | "enhanced_+" | "2" => "enhanced_plus",
@@ -1281,16 +1267,16 @@ pub fn graphics_mode(v: &str) -> &'static str {
         _ => "vanilla_plus",
     }
 }
-
 /// `gpu_texture_compression` from a settings file: on unless it says off (`0`, `off`, `no`,
 /// `false`, or a test build's `disabled`).
+#[rustfmt::skip]
 pub fn gpu_texture_compression(v: &str) -> bool {
     !matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "off" | "no" | "false" | "disabled")
 }
-
 /// The setting `cab_wheel_rotation` from a value (degrees lock to lock), as the launcher
 /// reads it: under 90 (or not a number) 0, the bus's own animation; else rounded and kept
 /// within 180..=1800.
+#[rustfmt::skip]
 pub fn cab_wheel_rotation(v: f32) -> u32 {
     if !v.is_finite() || v < 90.0 {
         0
@@ -1298,8 +1284,8 @@ pub fn cab_wheel_rotation(v: f32) -> u32 {
         v.round().clamp(180.0, 1800.0) as u32
     }
 }
-
 /// The setting `pad_type`: `xbox`, `ps4`, `ps5`, else `auto`.
+#[rustfmt::skip]
 pub fn pad_type(v: &str) -> &'static str {
     match v.trim().to_ascii_lowercase().as_str() {
         "xbox" => "xbox",
@@ -1308,14 +1294,14 @@ pub fn pad_type(v: &str) -> &'static str {
         _ => "auto",
     }
 }
-
 /// The enhanced clouds' quality from a settings file: `low`, else `high` (an `auto` written by
 /// a test build reads as the default too).
+#[rustfmt::skip]
 pub fn cloud_quality(v: &str) -> &'static str {
     if v.trim().eq_ignore_ascii_case("low") { "low" } else { "high" }
 }
-
 /// Which lights cast shadows, from a settings file: `off` or `all`, else `street`.
+#[rustfmt::skip]
 pub fn light_shadows(v: &str) -> &'static str {
     match v.trim().to_ascii_lowercase().as_str() {
         "off" | "0" | "none" | "false" => "off",
@@ -1323,8 +1309,8 @@ pub fn light_shadows(v: &str) -> &'static str {
         _ => "street",
     }
 }
-
 /// The street-scale light from a settings file: `on` or `off`, else `auto`.
+#[rustfmt::skip]
 pub fn street_light(v: &str) -> &'static str {
     match v.trim().to_ascii_lowercase().as_str() {
         "on" | "1" | "true" => "on",
@@ -1334,6 +1320,7 @@ pub fn street_light(v: &str) -> &'static str {
 }
 
 /// The rain's quality from a settings file: `medium` or `low`, else `high`.
+#[rustfmt::skip]
 pub fn rain_quality(v: &str) -> &'static str {
     match v.trim().to_ascii_lowercase().as_str() {
         "medium" => "medium",
@@ -1344,14 +1331,17 @@ pub fn rain_quality(v: &str) -> &'static str {
 
 /// `view_distance=<metres>` of the settings file: how far around the camera the map's tiles
 /// are kept loaded (OMSI's "visible distance"). None when the file does not say.
+#[rustfmt::skip]
 pub fn view_distance() -> Option<f64> {
     let text = std::fs::read_to_string(Settings::path()?).ok()?;
     text.lines().filter_map(|l| l.trim().split_once('=')).find(|(k, _)| k.trim().eq_ignore_ascii_case("view_distance")).and_then(|(_, v)| v.trim().parse::<f64>().ok()).filter(|v| *v > 0.0)
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod tests;
 
+#[rustfmt::skip]
 impl Settings {
     /// The player's bus's `wearlifespan` for the maintenance condition (OMSI's table).
     pub fn wear_lifespan(&self) -> f32 {
@@ -1361,6 +1351,7 @@ impl Settings {
 
 /// The player's own turn of a bus's mirrors (degrees yaw, pitch per `[add_camera_reflexion]`),
 /// kept per `.bus` file in `~/.openomsi/mirrors.cfg` as `<bus file>|<mirror>=<yaw>,<pitch>`.
+#[rustfmt::skip]
 pub fn mirror_offsets(bus: &std::path::Path) -> Vec<[f32; 2]> {
     let key = bus.to_string_lossy().to_ascii_lowercase();
     let Some(p) = Settings::path().map(|p| p.with_file_name("mirrors.cfg")) else { return Vec::new() };
@@ -1383,6 +1374,7 @@ pub fn mirror_offsets(bus: &std::path::Path) -> Vec<[f32; 2]> {
 
 /// A bus's mirror shifts (bus frame, m: across, along, up), kept in the same file as the
 /// turns on lines `<bus>|s<n>=x,y,z` (a build that knows only turns skips them).
+#[rustfmt::skip]
 pub fn mirror_shifts(bus: &std::path::Path) -> Vec<[f32; 3]> {
     let key = bus.to_string_lossy().to_ascii_lowercase();
     let Some(p) = Settings::path().map(|p| p.with_file_name("mirrors.cfg")) else { return Vec::new() };
@@ -1406,6 +1398,7 @@ pub fn mirror_shifts(bus: &std::path::Path) -> Vec<[f32; 3]> {
 
 /// A bus's mirror field-of-view changes (degrees added to the mirror camera's), on lines
 /// `<bus>|f<n>=degrees` of the same file.
+#[rustfmt::skip]
 pub fn mirror_fovs(bus: &std::path::Path) -> Vec<f32> {
     let key = bus.to_string_lossy().to_ascii_lowercase();
     let Some(p) = Settings::path().map(|p| p.with_file_name("mirrors.cfg")) else { return Vec::new() };
@@ -1429,6 +1422,7 @@ pub fn mirror_fovs(bus: &std::path::Path) -> Vec<f32> {
 
 /// Keep a bus's mirror turns, shifts and field-of-view changes (see [`mirror_offsets`],
 /// [`mirror_shifts`], [`mirror_fovs`]).
+#[rustfmt::skip]
 pub fn save_mirror_state(bus: &std::path::Path, offsets: &[[f32; 2]], shifts: &[[f32; 3]], fovs: &[f32]) {
     let key = bus.to_string_lossy().to_ascii_lowercase();
     let Some(p) = Settings::path().map(|p| p.with_file_name("mirrors.cfg")) else { return };
@@ -1459,17 +1453,20 @@ pub fn save_mirror_state(bus: &std::path::Path, offsets: &[[f32; 2]], shifts: &[
     let _ = std::fs::write(&p, lines.join("\n") + "\n");
 }
 /// `resolution=` (or `window_size=`) of a settings text, the last one written.
+#[rustfmt::skip]
 pub fn resolution_of(text: &str) -> Option<(u32, u32)> {
     let v = text.lines().filter_map(|l| l.split_once('=')).filter(|(k, _)| matches!(k.trim().to_ascii_lowercase().as_str(), "resolution" | "window_size")).last()?.1;
     let (w, h) = omsi_launcher_lib::resolution_text(v).split_once('x').map(|(w, h)| (w.parse().ok(), h.parse().ok()))?;
     Some((w?, h?))
 }
 
+#[rustfmt::skip]
 pub fn fullscreen_scene_cap(fullscreen: bool, spanned: bool, resolution: Option<(u32, u32)>) -> Option<(u32, u32)> {
     resolution.filter(|_| fullscreen && !spanned)
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod resolution_tests {
     #[test]
     fn the_window_size_is_read_from_the_settings() {
@@ -1490,12 +1487,16 @@ mod resolution_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod right_stick_look_tests;
 #[cfg(test)]
+#[rustfmt::skip]
 mod sim_thread_tests;
 #[cfg(test)]
+#[rustfmt::skip]
 mod full_tank_tests;
 #[cfg(test)]
+#[rustfmt::skip]
 mod road_snow_tests;
 
 /// The driver's seat per bus (`~/.openomsi/seats.cfg`, a line `bus|x|y|z|pitch` each, the
@@ -1503,6 +1504,7 @@ mod road_snow_tests;
 /// menu was one for every bus: fitted to a Solaris, every other bus put the driver
 /// somewhere else than its `.bus` file does (#1355). A bus that has none takes the
 /// settings' own seat, which is where a seat set before this lives on.
+#[rustfmt::skip]
 pub mod bus_seats {
     use std::path::PathBuf;
 
@@ -1560,4 +1562,5 @@ pub mod bus_seats {
 
 #[cfg(test)]
 #[path = "settings/passenger_connections_tests.rs"]
+#[rustfmt::skip]
 mod passenger_connections_tests;

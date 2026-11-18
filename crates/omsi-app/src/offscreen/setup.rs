@@ -5,6 +5,7 @@ use super::*;
 use crate::view_sync::people::PeopleView;
 
 impl<'a> Offscreen<'a> {
+    #[rustfmt::skip]
     pub(super) fn setup(
         args: &'a Args,
         out: &'a PathBuf,
@@ -308,6 +309,7 @@ impl<'a> Offscreen<'a> {
 }
 
 /// The AI traffic (with no cars asked for, the light programs and the lamps only).
+#[rustfmt::skip]
 fn new_traffic(
     args: &Args,
     world: &World,
@@ -329,6 +331,7 @@ fn new_traffic(
 }
 
 /// The player's duty (`--line`, `--tour`, `--trip`), or why there is none.
+#[rustfmt::skip]
 fn player_duty(
     args: &Args,
     world: &World,
@@ -404,6 +407,7 @@ fn player_duty(
 
 /// The people at the stops and in the bus (`--passengers`, and always in a LAN game).
 #[allow(clippy::too_many_arguments)]
+#[rustfmt::skip]
 fn new_humans(
     args: &Args,
     settings: &settings::Settings,
@@ -469,10 +473,11 @@ fn new_humans(
     }
 }
 
-    // OMSI_GROUND_SAMPLE=<csv>: what the wheels stand on every metre along the street lanes
-    // within 400 m of the start (lane, s, x, y, lane z, ground z, the id of an object whose
-    // collision mesh stands in the way there) - two builds compared on
-    // the same map show where a change of the ground rules adds or removes a bump
+// OMSI_GROUND_SAMPLE=<csv>: what the wheels stand on every metre along the street lanes
+// within 400 m of the start (lane, s, x, y, lane z, ground z, the id of an object whose
+// collision mesh stands in the way there) - two builds compared on
+// the same map show where a change of the ground rules adds or removes a bump
+#[rustfmt::skip]
 fn ground_sample(world: &World, traffic: Option<&traffic::Traffic>, center: DVec3) -> Result<()> {
     if let (Some(path), Some(t)) = (omsi_cfg::flags::OMSI_GROUND_SAMPLE.var(), traffic.as_ref()) {
         use std::io::Write;

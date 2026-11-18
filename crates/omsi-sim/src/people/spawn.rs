@@ -73,7 +73,9 @@ impl PeopleSim {
         }
         let people_limit = bounded_people_limit(configured_people);
         if people_limit != configured_people {
-            log::warn!("human pool limit {configured_people} adjusted to {people_limit} for safe spawning");
+            log::warn!(
+                "human pool limit {configured_people} adjusted to {people_limit} for safe spawning"
+            );
         }
         PeopleSim {
             pool_types: types.len(),
@@ -203,17 +205,29 @@ impl PeopleSim {
             }
         };
         let used: HashSet<i64> = self.people.iter().filter_map(|p| bound(&p.state)).collect();
-        let gone: Vec<i64> = self.stops.keys().copied().filter(|id| !present.contains(id)).collect();
+        let gone: Vec<i64> = self
+            .stops
+            .keys()
+            .copied()
+            .filter(|id| !present.contains(id))
+            .collect();
         let mut removed = 0usize;
         for i in (0..self.people.len()).rev() {
             let p = &self.people[i];
             let lost_stop = bound(&p.state).is_some_and(|s| gone.contains(&s));
-            let lost_ground = p.place == Place::Ground && p.puppet.is_none() && !world.has_ground(p.position.x, p.position.y);
+            let lost_ground = p.place == Place::Ground
+                && p.puppet.is_none()
+                && !world.has_ground(p.position.x, p.position.y);
             if lost_stop || lost_ground {
                 self.release(i);
                 let p = self.people.swap_remove(i);
                 if debug_pax() {
-                    log::info!("t={:.1} pax {} taken away with its tile ({})", self.time, p.label(), p.state.name());
+                    log::info!(
+                        "t={:.1} pax {} taken away with its tile ({})",
+                        self.time,
+                        p.label(),
+                        p.state.name()
+                    );
                 }
                 self.retire(&p);
                 removed += 1;
@@ -222,13 +236,23 @@ impl PeopleSim {
         for id in &gone {
             self.stops.remove(id);
         }
-        let idle: Vec<i64> = self.stops.keys().copied().filter(|id| !used.contains(id)).collect();
+        let idle: Vec<i64> = self
+            .stops
+            .keys()
+            .copied()
+            .filter(|id| !used.contains(id))
+            .collect();
         let rebuilt = idle.len();
         for id in idle {
             self.stops.remove(&id);
         }
-        if debug_pax() || (omsi_cfg::flags::OMSI_PROFILE.is_set() && (removed > 0 || !gone.is_empty())) {
-            log::info!("people: tiles changed: {} stops gone, {rebuilt} set up again, {removed} people taken away", gone.len());
+        if debug_pax()
+            || (omsi_cfg::flags::OMSI_PROFILE.is_set() && (removed > 0 || !gone.is_empty()))
+        {
+            log::info!(
+                "people: tiles changed: {} stops gone, {rebuilt} set up again, {removed} people taken away",
+                gone.len()
+            );
         }
     }
 
@@ -244,7 +268,9 @@ impl PeopleSim {
         // (without a `[voicepath]` the pack's own folder: Berlin_1 and Berlin_86 carry the
         // voices themselves and name no path; the later packs point at theirs)
         let base = self.tickets.as_ref().and_then(|t| match &t.voice_path {
-            Some(vp) if !vp.trim().is_empty() => Some(omsi_cfg::resolve_path(&self.root, vp.trim())),
+            Some(vp) if !vp.trim().is_empty() => {
+                Some(omsi_cfg::resolve_path(&self.root, vp.trim()))
+            }
             _ => t.path.parent().map(|p| p.to_path_buf()),
         })?;
         let voice = self.people[i].ty.def.voice.trim();
@@ -277,7 +303,9 @@ impl PeopleSim {
         if limited && self.time - self.last_chat < CHAT_PAUSE && self.time >= self.last_chat {
             return;
         }
-        let Some(path) = self.voice_file(i, name) else { return };
+        let Some(path) = self.voice_file(i, name) else {
+            return;
+        };
         if limited {
             if let Some(&t) = self.voice_said.get(&path) {
                 if self.time - t < 10.0 && self.time >= t {
@@ -290,9 +318,17 @@ impl PeopleSim {
             self.last_chat = self.time;
         }
         if debug_pax() {
-            log::info!("t={:.1} pax {} says {name}", self.time, self.people[i].label());
+            log::info!(
+                "t={:.1} pax {} says {name}",
+                self.time,
+                self.people[i].label()
+            );
         }
-        self.voice_lines.push(VoiceLine { position: self.people[i].position + DVec3::new(0.0, 0.0, 1.6), speaker: self.people[i].id, path });
+        self.voice_lines.push(VoiceLine {
+            position: self.people[i].position + DVec3::new(0.0, 0.0, 1.6),
+            speaker: self.people[i].id,
+            path,
+        });
     }
 
     pub fn rand(&mut self) -> u64 {
@@ -328,13 +364,18 @@ impl PeopleSim {
     /// `seen` is its camera, where nobody plays: the people it took for the pool vanished in
     /// front of the players, passengers who had just stepped off a bus among them.
     pub fn near_a_lan_player(&self, p: DVec3) -> bool {
-        self.lan_centers.iter().any(|c| (p - *c).length() < SEEN_REACH)
+        self.lan_centers
+            .iter()
+            .any(|c| (p - *c).length() < SEEN_REACH)
     }
 
     /// The people of OMSI's pool there are now (everybody but avatars and other players'
     /// people mirrored here).
     pub fn pool_used(&self) -> usize {
-        self.people.iter().filter(|p| p.puppet.is_none() && !p.remote).count()
+        self.people
+            .iter()
+            .filter(|p| p.puppet.is_none() && !p.remote)
+            .count()
     }
 
     /// Room in the pool for one more person; when it is full somebody walking the street out
@@ -346,7 +387,15 @@ impl PeopleSim {
         let free = (0..self.people.len()).find(|&i| {
             let p = &self.people[i];
             // (not somebody put out to run for a bus, see `runners`)
-            p.puppet.is_none() && !p.remote && matches!(p.state, State::Strolling(_) | State::Standing | State::Leaving { .. }) && !self.seen(p.position) && !self.near_a_lan_player(p.position) && !self.put_out(p.id)
+            p.puppet.is_none()
+                && !p.remote
+                && matches!(
+                    p.state,
+                    State::Strolling(_) | State::Standing | State::Leaving { .. }
+                )
+                && !self.seen(p.position)
+                && !self.near_a_lan_player(p.position)
+                && !self.put_out(p.id)
         });
         match free {
             Some(i) => {
@@ -371,7 +420,19 @@ impl PeopleSim {
         let key: Vec<PathBuf> = paths.iter().map(|p| p.to_path_buf()).collect();
         let cabin = Cabin::load_train(&parts).map(Arc::new);
         if let Some(c) = cabin.as_ref().filter(|c| c.parts.len() > 1) {
-            log::info!("passenger cabin of {}: {} sections joined ({} places, {} entries, {} exits, {} path points)", v.ty.def.path.file_name().unwrap_or_default().to_string_lossy(), c.parts.len(), c.seats.len(), c.entries.len(), c.exits.len(), c.graph.points.len());
+            log::info!(
+                "passenger cabin of {}: {} sections joined ({} places, {} entries, {} exits, {} path points)",
+                v.ty.def
+                    .path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy(),
+                c.parts.len(),
+                c.seats.len(),
+                c.entries.len(),
+                c.exits.len(),
+                c.graph.points.len()
+            );
         }
         self.cabins.insert(key, cabin.clone());
         cabin
@@ -385,7 +446,15 @@ impl PeopleSim {
         vehicle.set_engine_var("GivenTicket", -1.0);
         match self.cabin_for(vehicle) {
             Some(c) => {
-                log::info!("passenger cabin: {} places ({} seats), {} entries, {} exits, {} path points, desk {:?}", c.seats.len(), c.seats.iter().filter(|s| s.seated).count(), c.entries.len(), c.exits.len(), c.graph.points.len(), c.desk.map(|d| d.0));
+                log::info!(
+                    "passenger cabin: {} places ({} seats), {} entries, {} exits, {} path points, desk {:?}",
+                    c.seats.len(),
+                    c.seats.iter().filter(|s| s.seated).count(),
+                    c.entries.len(),
+                    c.exits.len(),
+                    c.graph.points.len(),
+                    c.desk.map(|d| d.0)
+                );
                 if debug_pax() {
                     for (i, e) in c.entries.iter().enumerate() {
                         log::info!(
@@ -405,8 +474,14 @@ impl PeopleSim {
                             s.floor,
                             s.rot,
                             s.seated,
-                            s.switch_var.as_ref().map(|n| format!(" switched by {n} ({:?})", vehicle.var(n))).unwrap_or_default(),
-                            s.taken_var.as_ref().map(|n| format!(" occupancy into {n}")).unwrap_or_default()
+                            s.switch_var
+                                .as_ref()
+                                .map(|n| format!(" switched by {n} ({:?})", vehicle.var(n)))
+                                .unwrap_or_default(),
+                            s.taken_var
+                                .as_ref()
+                                .map(|n| format!(" occupancy into {n}"))
+                                .unwrap_or_default()
                         );
                     }
                 }
@@ -478,7 +553,9 @@ impl PeopleSim {
             let n_var = t.variants.len() as u64 + 1;
             let v0 = (self.rand() % n_var) as usize;
             // a clothing variant nobody near wears in this figure
-            let var = (0..n_var as usize).map(|k| (v0 + k) % n_var as usize).find(|v| !near.contains(&(tk, *v)));
+            let var = (0..n_var as usize)
+                .map(|k| (v0 + k) % n_var as usize)
+                .find(|v| !near.contains(&(tk, *v)));
             let figure_free = !near.iter().any(|n| n.0 == tk);
             match var {
                 Some(v) if figure_free || attempt >= 6 || kind.is_some() => {
@@ -499,7 +576,12 @@ impl PeopleSim {
         let id = self.next_id;
         self.next_id += 1;
         // (the meshes and instances come when the view catches up: `view_sync::apply_people`)
-        self.bodies.ops.push(BodyOp::Spawn { id, ty: ty.clone(), variant, position });
+        self.bodies.ops.push(BodyOp::Spawn {
+            id,
+            ty: ty.clone(),
+            variant,
+            position,
+        });
         if debug_pax() {
             log::info!(
                 "pax #{id} ({}) appears at ({:.1}, {:.1}, {:.1}): {}{}",
@@ -596,14 +678,21 @@ impl PeopleSim {
         if drivers.is_empty() {
             return;
         }
-        let figures: Vec<Arc<HumanType>> = self.types.get(self.pool_types..).map(<[_]>::to_vec).unwrap_or_default();
+        let figures: Vec<Arc<HumanType>> = self
+            .types
+            .get(self.pool_types..)
+            .map(<[_]>::to_vec)
+            .unwrap_or_default();
         let pool: Vec<Arc<HumanType>> = self.types[..self.pool_types.min(self.types.len())]
             .iter()
             .filter(|t| !drivers.contains(&human_key(&t.def.path.to_string_lossy())))
             .cloned()
             .collect();
         if !pool.is_empty() && pool.len() < self.pool_types {
-            log::info!("humans: {} of the map's drivers left out of the passengers", self.pool_types - pool.len());
+            log::info!(
+                "humans: {} of the map's drivers left out of the passengers",
+                self.pool_types - pool.len()
+            );
             self.pool_types = pool.len();
             self.types = pool;
             self.types.extend(figures);
@@ -621,7 +710,11 @@ impl PeopleSim {
         let path = omsi_cfg::resolve_path(world.map_dir(), "humans.txt");
         let list = omsi_map::ailists::load_list(&path);
         // (the figures put after the pool meanwhile stay, after it)
-        let figures: Vec<Arc<HumanType>> = self.types.get(self.pool_types..).map(<[_]>::to_vec).unwrap_or_default();
+        let figures: Vec<Arc<HumanType>> = self
+            .types
+            .get(self.pool_types..)
+            .map(<[_]>::to_vec)
+            .unwrap_or_default();
         if list.is_empty() {
             // (no list: everybody installed, but not the map's drivers)
             self.leave_out_drivers(world.map_dir());
@@ -634,7 +727,11 @@ impl PeopleSim {
         let mut picked: Vec<Arc<HumanType>> = Vec::new();
         for line in &list {
             let want = key(line.trim());
-            match self.types.iter().find(|t| key(&t.def.path.to_string_lossy()) == want) {
+            match self
+                .types
+                .iter()
+                .find(|t| key(&t.def.path.to_string_lossy()) == want)
+            {
                 Some(t) => picked.push(t.clone()),
                 None => picked.extend(map_human_types(world.root(), std::slice::from_ref(line))),
             }
@@ -642,7 +739,9 @@ impl PeopleSim {
         // (a list that names nobody to be found keeps everybody: a map without people
         // looked broken)
         if picked.is_empty() {
-            log::warn!("humans.txt of the map names nobody installed: keeping all people (the map's drivers left out)");
+            log::warn!(
+                "humans.txt of the map names nobody installed: keeping all people (the map's drivers left out)"
+            );
             self.leave_out_drivers(world.map_dir());
             return;
         }
@@ -684,7 +783,10 @@ impl PeopleSim {
                 continue;
             }
             let local = inv.transform_vector3((p.position - bus.position).as_vec3()) - centre;
-            if local.x.abs() < half_x + 0.2 && local.y.abs() < half_y + 0.2 && local.z.abs() < half_z + 1.0 {
+            if local.x.abs() < half_x + 0.2
+                && local.y.abs() < half_y + 0.2
+                && local.z.abs() < half_z + 1.0
+            {
                 inside.insert(p.id);
                 if !self.under_bus.contains(&p.id) {
                     knocked.push(i);
@@ -714,12 +816,16 @@ impl PeopleSim {
     /// `--riders n`: n passengers already in their places in the player's bus (a test
     /// start; OMSI's buses start empty), without a destination - they ride 1..20 km.
     pub fn seed_riders(&mut self, n: usize, bus: &VehicleInstance, world: &dyn World) {
-        let Some(cabin) = self.cabin_for(bus) else { return };
+        let Some(cabin) = self.cabin_for(bus) else {
+            return;
+        };
         let trailers = part_frames(bus, &cabin);
         let rot = bus.body_rotation();
         let off = places_off(bus, &cabin);
         for _ in 0..n {
-            let Some(k) = self.reserve_place(BusId::Player, &cabin.seats, &off) else { break };
+            let Some(k) = self.reserve_place(BusId::Player, &cabin.seats, &off) else {
+                break;
+            };
             let walk = 1.1 + (self.rand_f() as f32 * 2.0 - 1.0) * 0.2;
             let r = self.rand_f() as f32;
             let mut pax = Pax::new(walk, self.rand_f());
@@ -754,7 +860,9 @@ impl PeopleSim {
     /// Give back what a person holds (a waiting place, a seat) before they change plans.
     pub fn release(&mut self, i: usize) {
         let id = self.people[i].id;
-        let State::Pax(x) = &mut self.people[i].state else { return };
+        let State::Pax(x) = &mut self.people[i].state else {
+            return;
+        };
         let (stop, spot, bus, seat) = (x.stop, x.spot.take(), x.bus.or(x.inside), x.seat.take());
         if let (Some(s), Some(k)) = (stop, spot) {
             self.free_spot(s, k);
@@ -789,7 +897,10 @@ mod cabin_key_tests {
     #[test]
     fn a_borrowed_cabin_key_finds_the_owned_one() {
         let mut map: HashMap<Vec<PathBuf>, u32> = HashMap::new();
-        let (a, b) = (Path::new("Vehicles/MAN_SD200/MAN_SD80.bus"), Path::new("Vehicles/MAN_NL_NG/MAN_GN92_trail.bus"));
+        let (a, b) = (
+            Path::new("Vehicles/MAN_SD200/MAN_SD80.bus"),
+            Path::new("Vehicles/MAN_NL_NG/MAN_GN92_trail.bus"),
+        );
         map.insert(vec![a.to_path_buf()], 1);
         map.insert(vec![a.to_path_buf(), b.to_path_buf()], 2);
         assert_eq!(map.get(&CabinKey(&[a])), Some(&1));

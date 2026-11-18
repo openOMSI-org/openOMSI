@@ -1,7 +1,7 @@
 //! Passengers' tasks (sub_62e42c): setting one up and what each task does every frame.
 
-use super::*;
 use super::pax_stops::entry_on_platform;
+use super::*;
 
 const SHORT_RIDE_KM: f32 = 3.0;
 
@@ -11,14 +11,26 @@ pub(super) fn short_ride(dest: Option<&str>, ride_km: f32) -> bool {
 
 // A direct connection must have loaded walking ground all the way, not just a clear ray
 // above a fence. Keep unsupported stairs/gaps out until actual pavement routing is added.
-fn connection_walkable(from: DVec3, to: DVec3, height: impl Fn(f64, f64, f64) -> Option<f64>) -> bool {
-    if !from.is_finite() || !to.is_finite() || (to - from).length_squared() > 80.0 * 80.0 { return false; }
-    let steps = ((to - from).truncate().length() / 2.0).ceil().clamp(1.0, 40.0) as usize;
+fn connection_walkable(
+    from: DVec3,
+    to: DVec3,
+    height: impl Fn(f64, f64, f64) -> Option<f64>,
+) -> bool {
+    if !from.is_finite() || !to.is_finite() || (to - from).length_squared() > 80.0 * 80.0 {
+        return false;
+    }
+    let steps = ((to - from).truncate().length() / 2.0)
+        .ceil()
+        .clamp(1.0, 40.0) as usize;
     let mut z = from.z;
     for step in 1..=steps {
         let point = from.lerp(to, step as f64 / steps as f64);
-        let Some(next) = height(point.x, point.y, z) else { return false; };
-        if !next.is_finite() || (next - z).abs() > 0.6 || (next - point.z).abs() > 1.0 { return false; }
+        let Some(next) = height(point.x, point.y, z) else {
+            return false;
+        };
+        if !next.is_finite() || (next - z).abs() > 0.6 || (next - point.z).abs() > 1.0 {
+            return false;
+        }
         z = next;
     }
     (z - to.z).abs() <= 0.6
@@ -26,12 +38,25 @@ fn connection_walkable(from: DVec3, to: DVec3, height: impl Fn(f64, f64, f64) ->
 
 impl PeopleSim {
     /// sub_62e42c: a new task and what it starts with.
-    pub fn set_task(&mut self, i: usize, t: Task, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>, world: &dyn World) {
+    pub fn set_task(
+        &mut self,
+        i: usize,
+        t: Task,
+        buses: &[BusNow],
+        bus_ix: &HashMap<BusId, usize>,
+        world: &dyn World,
+    ) {
         if self.pax(i).is_none_or(|p| p.task == t) {
             return;
         }
         if debug_pax() {
-            log::info!("t={:.1} pax {} {} -> {}", self.time, self.people[i].label(), self.pax(i).unwrap().task.name(), t.name());
+            log::info!(
+                "t={:.1} pax {} {} -> {}",
+                self.time,
+                self.people[i].label(),
+                self.pax(i).unwrap().task.name(),
+                t.name()
+            );
         }
         let seatheight = self.people[i].ty.def.seat_height;
         self.pax_mut(i).unwrap().task = t;
@@ -41,7 +66,9 @@ impl PeopleSim {
                     let p = self.pax(i).unwrap();
                     (p.stop, p.spot)
                 };
-                let sp = stop.zip(spot).and_then(|(s, k)| self.stops.get(&s).and_then(|s| s.spots.get(k)).cloned());
+                let sp = stop
+                    .zip(spot)
+                    .and_then(|(s, k)| self.stops.get(&s).and_then(|s| s.spots.get(k)).cloned());
                 let p = self.pax_mut(i).unwrap();
                 p.st = 0;
                 match sp {
@@ -94,7 +121,9 @@ impl PeopleSim {
             }
             Task::InBusToPlace => {
                 let bus = self.pax(i).unwrap().bus;
-                let Some(bn) = bus.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else { return };
+                let Some(bn) = bus.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else {
+                    return;
+                };
                 let km = self.odometer.get(&bn.id).copied().unwrap_or(0.0);
                 let detailed = bn.id == BusId::Player;
                 let all = bn.cabin.all_points();
@@ -102,7 +131,12 @@ impl PeopleSim {
                 // of the player's do (Omsi.exe has them at their places at once, which looks
                 // like a jump in the saloon of a bus passing at a stop): to the place reserved,
                 // when the bus has paths to it. Without them, or without a place, at once.
-                let place_pt = self.pax(i).unwrap().seat.and_then(|k| bn.cabin.seats.get(k)).and_then(|s| bn.cabin.omsi_nearest(s.pos, &all, false, true, None, None));
+                let place_pt = self
+                    .pax(i)
+                    .unwrap()
+                    .seat
+                    .and_then(|k| bn.cabin.seats.get(k))
+                    .and_then(|s| bn.cabin.omsi_nearest(s.pos, &all, false, true, None, None));
                 let p = self.pax_mut(i).unwrap();
                 p.pax_state = 1.0;
                 p.km_start = km;
@@ -116,7 +150,14 @@ impl PeopleSim {
                 p.pt = bn.cabin.omsi_nearest(local, &all, false, false, None, None);
                 p.st = 5;
                 if debug_pax() && !detailed {
-                    log::info!("pax boards bus {:?}: place {:?} (path point {:?}), doorway point {:?}, {} path points", bn.id, p.seat, place_pt, p.pt, all.len());
+                    log::info!(
+                        "pax boards bus {:?}: place {:?} (path point {:?}), doorway point {:?}, {} path points",
+                        bn.id,
+                        p.seat,
+                        place_pt,
+                        p.pt,
+                        all.len()
+                    );
                 }
                 if !detailed && (place_pt.is_none() || p.pt.is_none()) {
                     // no way to the place: at it at once (sub_62a358 + task 7)
@@ -133,7 +174,12 @@ impl PeopleSim {
                         p.stamper = bn.cabin.nearest_stamper(local);
                         p.pt_target = p.stamper.and_then(|k| bn.cabin.stampers[k].0);
                     }
-                    TICKET_BUY => p.pt_target = bn.cabin.in_group(vec![bn.cabin.sale.and_then(|s| s.0)], bn.cabin.group_at(p.pt))[0],
+                    TICKET_BUY => {
+                        p.pt_target = bn.cabin.in_group(
+                            vec![bn.cabin.sale.and_then(|s| s.0)],
+                            bn.cabin.group_at(p.pt),
+                        )[0]
+                    }
                     _ => self.route_to_place(i, bn),
                 }
                 let p = self.pax_mut(i).unwrap();
@@ -145,7 +191,9 @@ impl PeopleSim {
             }
             Task::InBusToExit => {
                 let bus = self.pax(i).unwrap().bus.or(self.pax(i).unwrap().inside);
-                let Some(bn) = bus.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else { return };
+                let Some(bn) = bus.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else {
+                    return;
+                };
                 // the stop button: the player's bus gets it here, a timetable bus its own
                 // request (the app presses `int_haltewunsch` on it)
                 match bn.id {
@@ -158,7 +206,10 @@ impl PeopleSim {
                 }
                 let seat = self.pax(i).unwrap().seat;
                 let all = bn.cabin.all_points();
-                let from = seat.and_then(|k| bn.cabin.seats.get(k)).map(|s| s.pos).unwrap_or(self.pax(i).unwrap().pos.as_vec3());
+                let from = seat
+                    .and_then(|k| bn.cabin.seats.get(k))
+                    .map(|s| s.pos)
+                    .unwrap_or(self.pax(i).unwrap().pos.as_vec3());
                 let start = bn.cabin.omsi_nearest(from, &all, false, true, None, None);
                 let exits = bn.cabin.exit_points();
                 let p = self.pax_mut(i).unwrap();
@@ -170,8 +221,12 @@ impl PeopleSim {
                 let here = p.pos.as_vec3();
                 // the nearest exit (sub_62a49c / sub_62a5a8), of the sections they are in
                 let exits = bn.cabin.in_group(exits, bn.cabin.group_at(start));
-                p.pt_target = bn.cabin.omsi_nearest(here, &exits, false, false, None, None);
-                p.door = p.pt_target.and_then(|t| exits.iter().position(|e| *e == Some(t)));
+                p.pt_target = bn
+                    .cabin
+                    .omsi_nearest(here, &exits, false, false, None, None);
+                p.door = p
+                    .pt_target
+                    .and_then(|t| exits.iter().position(|e| *e == Some(t)));
                 if let Some(d) = p.door {
                     if let Some((_, x)) = self.pax_req.get_mut(&bn.id) {
                         if let Some(r) = x.get_mut(d) {
@@ -200,12 +255,20 @@ impl PeopleSim {
                     (Some(s), None) => self.take_spot(s),
                     _ => None,
                 };
-                let sp = stop.zip(spot).and_then(|(s, k)| self.stops.get(&s).and_then(|s| s.spots.get(k)).cloned());
+                let sp = stop
+                    .zip(spot)
+                    .and_then(|(s, k)| self.stops.get(&s).and_then(|s| s.spots.get(k)).cloned());
                 let stop_pos = stop.and_then(|s| self.stops.get(&s)).map(|s| s.pos);
                 // (no place free: at the stop's point - spread along the kerb by who they
                 // are, or everybody without a place stood in one another there)
                 let along = ((self.people[i].id % 7) as f64 - 3.0) * 0.7;
-                let fwd = stop.and_then(|s| self.stops.get(&s)).map(|s| { let h = s.heading.to_radians(); DVec3::new(h.sin(), h.cos(), 0.0) }).unwrap_or(DVec3::ZERO);
+                let fwd = stop
+                    .and_then(|s| self.stops.get(&s))
+                    .map(|s| {
+                        let h = s.heading.to_radians();
+                        DVec3::new(h.sin(), h.cos(), 0.0)
+                    })
+                    .unwrap_or(DVec3::ZERO);
                 let stop_pos = stop_pos.map(|q| q + fwd * along);
                 let p = self.pax_mut(i).unwrap();
                 p.spot = spot;
@@ -229,8 +292,15 @@ impl PeopleSim {
             }
             Task::SittingInBus => {
                 let bus = self.pax(i).unwrap().inside;
-                let Some(bn) = bus.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else { return };
-                let seat = self.pax(i).unwrap().seat.and_then(|k| bn.cabin.seats.get(k)).cloned();
+                let Some(bn) = bus.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else {
+                    return;
+                };
+                let seat = self
+                    .pax(i)
+                    .unwrap()
+                    .seat
+                    .and_then(|k| bn.cabin.seats.get(k))
+                    .cloned();
                 let p = self.pax_mut(i).unwrap();
                 p.st = 0;
                 if let Some(s) = seat {
@@ -256,21 +326,32 @@ impl PeopleSim {
     /// one with a button; one selling tickets for a buyer), and its index for the request.
     pub fn choose_entry(&mut self, i: usize, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) {
         let p = self.pax(i).unwrap().clone();
-        let Some(bn) = p.bus.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else { return };
+        let Some(bn) = p.bus.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else {
+            return;
+        };
         let here = match p.inside {
             Some(_) => p.pos.as_vec3(),
             None => bn.to_local(p.pos),
         };
         // (the doors of the sections of the place reserved)
         let group = p.seat.and_then(|k| bn.cabin.seats.get(k)).map(|s| s.group);
-        let side = p.stop.and_then(|stop| self.preferred_entry_side(stop, bn, p.pos));
+        let side = p
+            .stop
+            .and_then(|stop| self.preferred_entry_side(stop, bn, p.pos));
         // Never select the opposite doors just because they are closer or open:
         // on central BRT platforms this sent people straight through the bus.
-        let list: Vec<_> = bn.cabin.in_group(bn.cabin.entry_points(), group)
+        let list: Vec<_> = bn
+            .cabin
+            .in_group(bn.cabin.entry_points(), group)
             .into_iter()
             .enumerate()
             .map(|(k, point)| {
-                if bn.cabin.entries.get(k).is_some_and(|door| entry_on_platform(side, door.side)) {
+                if bn
+                    .cabin
+                    .entries
+                    .get(k)
+                    .is_some_and(|door| entry_on_platform(side, door.side))
+                {
                     point
                 } else {
                     None
@@ -278,15 +359,21 @@ impl PeopleSim {
             })
             .collect();
         let flags = bn.cabin.entry_flags();
-        let open: Vec<bool> = (0..list.len()).map(|k| bn.entry_open.get(k).copied().unwrap_or(false)).collect();
+        let open: Vec<bool> = (0..list.len())
+            .map(|k| bn.entry_open.get(k).copied().unwrap_or(false))
+            .collect();
         // Rear door boarding (#4055): the doors past the front one count too, open or shut,
         // so the nearest one wins instead of the queue filing to the front. A door that stays
         // shut while another of the bus is open - a bus whose script never opens it - sends
         // the passenger back to the open doors after half the `DOOR_GIVE_UP` wait, so the
         // option cannot leave anybody standing at a door that will not open.
         let rear = self.rear_door_boarding
-            && !p.door_since.is_some_and(|since| self.time - since > DOOR_GIVE_UP * 0.5);
-        let pt = bn.cabin.entry_nearest(here, &list, p.ticket == TICKET_BUY, &flags, &open, rear);
+            && !p
+                .door_since
+                .is_some_and(|since| self.time - since > DOOR_GIVE_UP * 0.5);
+        let pt = bn
+            .cabin
+            .entry_nearest(here, &list, p.ticket == TICKET_BUY, &flags, &open, rear);
         let p = self.pax_mut(i).unwrap();
         if let Some(q) = pt.and_then(|k| bn.cabin.graph.points.get(k)) {
             p.target = q.as_dvec3();
@@ -298,7 +385,12 @@ impl PeopleSim {
     /// sub_62a628: along the paths to the place reserved.
     pub fn route_to_place(&mut self, i: usize, bn: &BusNow) {
         let all = bn.cabin.all_points();
-        let seat = self.pax(i).unwrap().seat.and_then(|k| bn.cabin.seats.get(k)).map(|s| s.pos);
+        let seat = self
+            .pax(i)
+            .unwrap()
+            .seat
+            .and_then(|k| bn.cabin.seats.get(k))
+            .map(|s| s.pos);
         let p = self.pax_mut(i).unwrap();
         if let Some(s) = seat {
             p.pt_target = bn.cabin.omsi_nearest(s, &all, false, true, None, None);
@@ -329,14 +421,36 @@ impl PeopleSim {
                 let Some(b) = self.bus_for(i, stop, buses, bus_ix) else {
                     if super::debug_pax() && (self.time * 2.0).fract() < (dt as f64 * 2.0) {
                         let s = &self.stops[&stop];
-                        let listed: Vec<String> = s.buses.iter().map(|(id, inbox)| format!("{id:?} box {inbox} shows {:?}", bus_ix.get(id).and_then(|k| buses[*k].terminus.clone()))).collect();
-                        let termini = p.line.and_then(|k| s.lines.get(k)).map(|l| l.1.iter().cloned().collect::<Vec<_>>());
-                        log::info!("t={:.1} pax {} at stop {stop} for {:?} (line {:?} termini {:?}): no bus; listed {:?}", self.time, self.people[i].label(), p.dest, p.line, termini, listed);
+                        let listed: Vec<String> = s
+                            .buses
+                            .iter()
+                            .map(|(id, inbox)| {
+                                format!(
+                                    "{id:?} box {inbox} shows {:?}",
+                                    bus_ix.get(id).and_then(|k| buses[*k].terminus.clone())
+                                )
+                            })
+                            .collect();
+                        let termini = p
+                            .line
+                            .and_then(|k| s.lines.get(k))
+                            .map(|l| l.1.iter().cloned().collect::<Vec<_>>());
+                        log::info!(
+                            "t={:.1} pax {} at stop {stop} for {:?} (line {:?} termini {:?}): no bus; listed {:?}",
+                            self.time,
+                            self.people[i].label(),
+                            p.dest,
+                            p.line,
+                            termini,
+                            listed
+                        );
                     }
                     return;
                 };
                 let (b, why) = b;
-                let Some(bn) = bus_ix.get(&b).map(|k| &buses[*k]) else { return };
+                let Some(bn) = bus_ix.get(&b).map(|k| &buses[*k]) else {
+                    return;
+                };
                 // (a bus they gave up on at its shut doors: once it opens one)
                 if self.pax(i).unwrap().shunned == Some(b) {
                     if !bn.entry_open.iter().any(|o| *o) {
@@ -350,7 +464,13 @@ impl PeopleSim {
                     return;
                 }
                 if super::debug_pax() {
-                    log::info!("t={:.1} pax {} at stop {stop} for {:?}: bus {b:?} showing {:?} ({why:?})", self.time, self.people[i].label(), p.dest, bn.terminus);
+                    log::info!(
+                        "t={:.1} pax {} at stop {stop} for {:?}: bus {b:?} showing {:?} ({why:?})",
+                        self.time,
+                        self.people[i].label(),
+                        p.dest,
+                        bn.terminus
+                    );
                 }
                 self.set_task(i, Task::ToBus, buses, bus_ix, world);
             }
@@ -361,18 +481,45 @@ impl PeopleSim {
                         // A seat in a disconnected trailer needs an entry on this side
                         // too; otherwise a passenger reserves it and can never board.
                         let side = self.preferred_entry_side(stop, bn, p.pos);
-                        let off: Vec<bool> = bn.cabin.seats.iter().enumerate().map(|(k, seat)| {
-                            bn.places_off.get(k).copied().unwrap_or(false)
-                                || !bn.cabin.entries.iter().any(|door| door.point.is_some()
-                                    && door.group == seat.group && entry_on_platform(side, door.side))
-                        }).collect();
-                        let short = self.short_rides_stand && short_ride(p.dest.as_deref(), p.ride_km);
-                        let place = if short { self.reserve_by_a_door(bn.id, &bn.cabin.seats, &off, &bn.cabin.exits) } else { None };
-                        if let Some(k) = place.or_else(|| self.reserve_place(bn.id, &bn.cabin.seats, &off)) {
+                        let off: Vec<bool> = bn
+                            .cabin
+                            .seats
+                            .iter()
+                            .enumerate()
+                            .map(|(k, seat)| {
+                                bn.places_off.get(k).copied().unwrap_or(false)
+                                    || !bn.cabin.entries.iter().any(|door| {
+                                        door.point.is_some()
+                                            && door.group == seat.group
+                                            && entry_on_platform(side, door.side)
+                                    })
+                            })
+                            .collect();
+                        let short =
+                            self.short_rides_stand && short_ride(p.dest.as_deref(), p.ride_km);
+                        let place = if short {
+                            self.reserve_by_a_door(bn.id, &bn.cabin.seats, &off, &bn.cabin.exits)
+                        } else {
+                            None
+                        };
+                        if let Some(k) =
+                            place.or_else(|| self.reserve_place(bn.id, &bn.cabin.seats, &off))
+                        {
                             let (tk, id) = self.decide_pax_ticket(i, bn);
-                            let price = self.tickets.as_ref().and_then(|t| t.tickets.get(id.saturating_sub(1) as usize)).map(|t| t.value).unwrap_or(0.0);
+                            let price = self
+                                .tickets
+                                .as_ref()
+                                .and_then(|t| t.tickets.get(id.saturating_sub(1) as usize))
+                                .map(|t| t.value)
+                                .unwrap_or(0.0);
                             self.pax_mut(i).unwrap().seat = Some(k);
-                            self.new_ticket(i, tk, id, if id > 0 { price } else { 0.0 }, bn.id == BusId::Player);
+                            self.new_ticket(
+                                i,
+                                tk,
+                                id,
+                                if id > 0 { price } else { 0.0 },
+                                bn.id == BusId::Player,
+                            );
                             self.set_task(i, Task::WalkingToBus, buses, bus_ix, world);
                         }
                     }
@@ -388,7 +535,9 @@ impl PeopleSim {
                 }
             }
             Task::WalkingToBus => self.task_to_bus(i, buses, bus_ix, world),
-            Task::InBusToPlace => self.task_to_place(i, dt, buses, bus_ix, world, player_bus, taken_ticket),
+            Task::InBusToPlace => {
+                self.task_to_place(i, dt, buses, bus_ix, world, player_bus, taken_ticket)
+            }
             Task::InBusToExit => self.task_to_exit(i, buses, bus_ix, at_stops, world, remove),
             Task::WalkingToBusstop => {
                 if p.st == 3 {
@@ -435,7 +584,11 @@ impl PeopleSim {
                     return;
                 }
                 if let (Some(next), Some(dest)) = (reg.next, p.dest.as_ref()) {
-                    let name = self.stops.get(&next).map(|s| s.name.trim().to_string()).unwrap_or_default();
+                    let name = self
+                        .stops
+                        .get(&next)
+                        .map(|s| s.name.trim().to_string())
+                        .unwrap_or_default();
                     if self.stops.get(&next).is_some_and(|s| s.is_named(dest)) {
                         self.set_task(i, Task::InBusToExit, buses, bus_ix, world);
                         return;
@@ -458,19 +611,36 @@ impl PeopleSim {
     }
 
     /// Task 3 (sub_62a6a0 case 3): to the door and in.
-    pub fn task_to_bus(&mut self, i: usize, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>, world: &dyn World) {
+    pub fn task_to_bus(
+        &mut self,
+        i: usize,
+        buses: &[BusNow],
+        bus_ix: &HashMap<BusId, usize>,
+        world: &dyn World,
+    ) {
         let p = self.pax(i).unwrap().clone();
         let Some(bn) = p.bus.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else {
             self.set_task(i, Task::WalkingToBusstop, buses, bus_ix, world);
             return;
         };
-        let door_x = p.door.and_then(|d| bn.cabin.entries.get(d)).map(|e| e.inside.x).unwrap_or(0.0);
-        let open = p.door.map(|d| bn.entry_open.get(d).copied().unwrap_or(false)).unwrap_or(false);
+        let door_x = p
+            .door
+            .and_then(|d| bn.cabin.entries.get(d))
+            .map(|e| e.inside.x)
+            .unwrap_or(0.0);
+        let open = p
+            .door
+            .map(|d| bn.entry_open.get(d).copied().unwrap_or(false))
+            .unwrap_or(false);
         {
             let pp = self.pax_mut(i).unwrap();
             pp.clamp = true;
             pp.clamp_left = door_x < 0.0;
-            pp.clamp_x = if pp.clamp_left { bn.centre.x - bn.half.x - 0.5 } else { bn.centre.x + bn.half.x + 0.5 };
+            pp.clamp_x = if pp.clamp_left {
+                bn.centre.x - bn.half.x - 0.5
+            } else {
+                bn.centre.x + bn.half.x + 0.5
+            };
             pp.clamp_open = open;
         }
         // a shut door is asked for, from the moment they stand at it
@@ -508,7 +678,12 @@ impl PeopleSim {
             pp.door_since = None;
             pp.shunned = Some(bn.id);
             if super::debug_pax() {
-                log::info!("t={:.1} pax {} gives up at the shut doors of {:?}", self.time, self.people[i].label(), bn.id);
+                log::info!(
+                    "t={:.1} pax {} gives up at the shut doors of {:?}",
+                    self.time,
+                    self.people[i].label(),
+                    bn.id
+                );
             }
             self.set_task(i, Task::WalkingToBusstop, buses, bus_ix, world);
             return;
@@ -520,7 +695,12 @@ impl PeopleSim {
         if ok {
             if p.st != 3 {
                 self.choose_entry(i, buses, bus_ix);
-                let open = self.pax(i).unwrap().door.map(|d| bn.entry_open.get(d).copied().unwrap_or(false)).unwrap_or(false);
+                let open = self
+                    .pax(i)
+                    .unwrap()
+                    .door
+                    .map(|d| bn.entry_open.get(d).copied().unwrap_or(false))
+                    .unwrap_or(false);
                 let pp = self.pax_mut(i).unwrap();
                 pp.short = !open;
                 pp.st = 1;
@@ -565,7 +745,9 @@ impl PeopleSim {
         taken_ticket: &mut bool,
     ) {
         let p = self.pax(i).unwrap().clone();
-        let Some(bn) = p.inside.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else { return };
+        let Some(bn) = p.inside.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else {
+            return;
+        };
         if p.st == 7 {
             if p.ticket < TICKET_STAMP {
                 self.set_task(i, Task::SittingInBus, buses, bus_ix, world);
@@ -609,7 +791,10 @@ impl PeopleSim {
             } else if p.sub == 2 && p.timer <= 0.0 {
                 self.route_to_place(i, bn);
                 let pp = self.pax_mut(i).unwrap();
-                pp.pt = pp.stamper.and_then(|k| bn.cabin.stampers.get(k)).and_then(|s| s.0);
+                pp.pt = pp
+                    .stamper
+                    .and_then(|k| bn.cabin.stampers.get(k))
+                    .and_then(|s| s.0);
                 pp.ticket = TICKET_NONE;
                 pp.sub = 0;
             }
@@ -619,15 +804,28 @@ impl PeopleSim {
     }
 
     /// Task 5 (case 5): to the exit, out.
-    pub fn task_to_exit(&mut self, i: usize, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>, at_stops: &HashMap<BusId, BusAtStops>, world: &dyn World, remove: &mut Vec<usize>) {
+    pub fn task_to_exit(
+        &mut self,
+        i: usize,
+        buses: &[BusNow],
+        bus_ix: &HashMap<BusId, usize>,
+        at_stops: &HashMap<BusId, BusAtStops>,
+        world: &dyn World,
+        remove: &mut Vec<usize>,
+    ) {
         let p = self.pax(i).unwrap().clone();
         let Some(b) = p.inside else { return };
-        let Some(bn) = bus_ix.get(&b).map(|k| &buses[*k]) else { return };
+        let Some(bn) = bus_ix.get(&b).map(|k| &buses[*k]) else {
+            return;
+        };
         let reg = at_stops.get(&b).cloned().unwrap_or_default();
         if bn.speed.abs() >= 1.0 {
             self.pax_mut(i).unwrap().timer = 1.0;
         }
-        let door_open = p.door.map(|d| bn.exit_open.get(d).copied().unwrap_or(false)).unwrap_or(false);
+        let door_open = p
+            .door
+            .map(|d| bn.exit_open.get(d).copied().unwrap_or(false))
+            .unwrap_or(false);
         let may_leave = door_open && (reg.next.is_some() || p.complaint == 3);
         self.pax_mut(i).unwrap().short = !may_leave;
         let out = p.st == 7 && bn.speed.abs() < 1.0 && may_leave;
@@ -651,14 +849,26 @@ impl PeopleSim {
                 let pp = self.pax_mut(i).unwrap();
                 let here = pp.pos.as_vec3();
                 // (the exits of the sections they are in)
-                let group = bn.cabin.group_at(pp.pt.or_else(|| bn.cabin.omsi_nearest(here, &all, false, false, None, None)));
+                let group = bn.cabin.group_at(
+                    pp.pt
+                        .or_else(|| bn.cabin.omsi_nearest(here, &all, false, false, None, None)),
+                );
                 let exits = bn.cabin.in_group(bn.cabin.exit_points(), group);
-                let open: Vec<bool> = (0..exits.len()).map(|k| bn.exit_open.get(k).copied().unwrap_or(false)).collect();
+                let open: Vec<bool> = (0..exits.len())
+                    .map(|k| bn.exit_open.get(k).copied().unwrap_or(false))
+                    .collect();
                 // (with every exit still shut - the bus rolling in - the nearest exit, not the
                 // first of the list: the people of the whole saloon gathered at one door while
                 // the others stood empty, #1149)
                 let any_open = open.iter().zip(&exits).any(|(o, e)| *o && e.is_some());
-                let target = bn.cabin.omsi_nearest(here, &exits, false, false, None, any_open.then_some(open.as_slice()));
+                let target = bn.cabin.omsi_nearest(
+                    here,
+                    &exits,
+                    false,
+                    false,
+                    None,
+                    any_open.then_some(open.as_slice()),
+                );
                 if pp.st == 5 {
                     // walking: on from the point walked to, towards the new door (Omsi.exe
                     // changes only the target and the door)
@@ -668,7 +878,9 @@ impl PeopleSim {
                     pp.pt_target = target;
                     pp.st = 5;
                 }
-                pp.door = pp.pt_target.and_then(|t| exits.iter().position(|e| *e == Some(t)));
+                pp.door = pp
+                    .pt_target
+                    .and_then(|t| exits.iter().position(|e| *e == Some(t)));
             }
             if bn.id == BusId::Player {
                 self.stop_request = true;
@@ -684,14 +896,24 @@ impl PeopleSim {
         }
         // out of the bus: into the world, on along the pavement (task 8) - or, with no
         // pavement there, a few steps away from the door (`away_point`)
-        let Some((w, h)) = self.pax_world(&p, buses, bus_ix) else { return };
+        let Some((w, h)) = self.pax_world(&p, buses, bus_ix) else {
+            return;
+        };
         // (facing away from the bus's side: they stepped out walking along the aisle, and
         // with no pavement in reach they stood there with their back or their side to the
         // door, #1290)
-        let h = p.inside.and_then(|b| bus_ix.get(&b)).map(|k| &buses[*k]).map_or(h, |bn| away_from_side(bn.pos, bn.fwd(), w, h));
+        let h = p
+            .inside
+            .and_then(|b| bus_ix.get(&b))
+            .map(|k| &buses[*k])
+            .map_or(h, |bn| away_from_side(bn.pos, bn.fwd(), w, h));
         let away = {
             let l = p.pos.as_vec3();
-            let side = p.door.and_then(|d| bn.cabin.exits.get(d)).map(|e| e.side).unwrap_or(1.0);
+            let side = p
+                .door
+                .and_then(|d| bn.cabin.exits.get(d))
+                .map(|e| e.side)
+                .unwrap_or(1.0);
             let out = (bn.world(l + Vec3::X * side) - bn.world(l)).normalize_or_zero();
             let along = (bn.world(l + Vec3::Y) - bn.world(l)).normalize_or_zero();
             away_point(w, out, along, self.people[i].id)
@@ -702,92 +924,201 @@ impl PeopleSim {
         pp.pos = w;
         pp.yaw = h.to_radians();
         if debug_pax() {
-            log::info!("t={:.1} pax {} gets off at stop {:?} by exit {:?}", self.time, self.people[i].label(), stop, p.door);
+            log::info!(
+                "t={:.1} pax {} gets off at stop {:?} by exit {:?}",
+                self.time,
+                self.people[i].label(),
+                stop,
+                p.door
+            );
         }
-        if self.try_connection(i, w, h, stop, bn.id, buses, bus_ix, world) { return; }
+        if self.try_connection(i, w, h, stop, bn.id, buses, bus_ix, world) {
+            return;
+        }
         self.walk_street_from_bus(i, w, h, stop, away, world, remove);
     }
 
-    fn try_connection(&mut self, i: usize, at: DVec3, heading: f64, from_stop: Option<i64>, from_bus: BusId,
-        buses: &[BusNow], bus_ix: &HashMap<BusId, usize>, world: &dyn World) -> bool {
+    fn try_connection(
+        &mut self,
+        i: usize,
+        at: DVec3,
+        heading: f64,
+        from_stop: Option<i64>,
+        from_bus: BusId,
+        buses: &[BusNow],
+        bus_ix: &HashMap<BusId, usize>,
+        world: &dyn World,
+    ) -> bool {
         let percent = self.transfer_percent;
-        if percent <= 0.0 || !percent.is_finite() || from_stop.is_none() { return false; }
-        let count = self.pax(i).map_or(0, |p|p.transfer_count);
-        if count >= 2 { return false; }
-        if self.rand_f() * 100.0 >= percent.clamp(0.0,100.0) as f64 {
-            if from_bus == BusId::Player { log::debug!("Passenger connection: chance_percent={percent:.0} outcome=not_drawn"); }
+        if percent <= 0.0 || !percent.is_finite() || from_stop.is_none() {
             return false;
         }
-        let mut candidates: Vec<_> = self.stops.iter().filter_map(|(id,s)| {
-            if (s.pos.z-at.z).abs() > 2.0 || (s.pos-at).length_squared() > 80.0*80.0 { return None; }
-            // Check cheaper service availability before sampling up to 40 ground
-            // positions and tracing a collision ray at a busy interchange.
-            let serves = |bn: &BusNow, dest: &str, terms: &HashSet<String>| {
-                !matches!(bn.takes,Takes::Nobody)
-                    && !bn.route.as_ref().is_some_and(|r|r.is_last_stop(s))
-                    && bn.terminus.as_deref().is_some_and(|term|
-                        fit(*id,s,Some(dest),terms,term,&bn.takes)
-                            .or_else(||bn.route.as_ref().and_then(|r|r.takes_waiting_for(terms))).is_some())
-            };
-            let mut choices = Vec::new();
-            for (dest,weight) in &s.dests {
-                if !weight.is_finite() || *weight <= 0. || s.is_named(dest) { continue; }
-                let Some(line) = s.lines.iter().position(|(name,terms)|name.trim()==dest.trim() && !terms.is_empty()) else { continue; };
-                let terms=&s.lines[line].1;
-                let ready=s.buses.iter().any(|(b,in_box)| *b != from_bus && *in_box && bus_ix.get(b).is_some_and(|k| {
-                    let bn=&buses[*k]; bn.speed.abs()<1. && bn.entry_open.iter().any(|o|*o) && serves(bn,dest,terms)
-                }));
-                // A connection can wait at the very same pole for ANOTHER service.
-                // At a route's terminus it must not queue for the bus just left.
-                if Some(*id)==from_stop && !ready {
-                    let other_service=bus_ix.get(&from_bus).is_some_and(|k| {
-                        let origin=&buses[*k];
-                        !origin.terminus.as_deref().is_some_and(|t|terms.contains(t.trim()))
-                            && !origin.route.as_ref().is_some_and(|r|r.takes_waiting_for(terms).is_some())
-                    });
-                    if !other_service { continue; }
-                }
-                if !ready && !self.due_dests.as_ref().is_some_and(|d|
-                    d.get(id).is_some_and(|set|set.contains(dest.trim()))) { continue; }
-                choices.push((dest.clone(),line,f64::from(*weight),ready));
+        let count = self.pax(i).map_or(0, |p| p.transfer_count);
+        if count >= 2 {
+            return false;
+        }
+        if self.rand_f() * 100.0 >= percent.clamp(0.0, 100.0) as f64 {
+            if from_bus == BusId::Player {
+                log::debug!("Passenger connection: chance_percent={percent:.0} outcome=not_drawn");
             }
-            if choices.is_empty() { return None; }
-            if !connection_walkable(at, s.gather, |x, y, z| world.walk_height_near(x, y, z)) { return None; }
-            if world.collision().ray_blocked(at+DVec3::Z*0.9,s.gather+DVec3::Z*0.9,0.1,0.6) { return None; }
-            let ready=choices.iter().any(|c|c.3);
-            if ready { choices.retain(|c|c.3); }
-            Some((*id,ready,(s.pos-at).length_squared(),choices))
-        }).collect();
-        candidates.sort_by(|a,b| b.1.cmp(&a.1).then_with(||a.2.total_cmp(&b.2)).then_with(||a.0.cmp(&b.0)));
-        if let Some((stop,ready,_,choices)) = candidates.into_iter().next() {
+            return false;
+        }
+        let mut candidates: Vec<_> =
+            self.stops
+                .iter()
+                .filter_map(|(id, s)| {
+                    if (s.pos.z - at.z).abs() > 2.0 || (s.pos - at).length_squared() > 80.0 * 80.0 {
+                        return None;
+                    }
+                    // Check cheaper service availability before sampling up to 40 ground
+                    // positions and tracing a collision ray at a busy interchange.
+                    let serves = |bn: &BusNow, dest: &str, terms: &HashSet<String>| {
+                        !matches!(bn.takes, Takes::Nobody)
+                            && !bn.route.as_ref().is_some_and(|r| r.is_last_stop(s))
+                            && bn.terminus.as_deref().is_some_and(|term| {
+                                fit(*id, s, Some(dest), terms, term, &bn.takes)
+                                    .or_else(|| {
+                                        bn.route.as_ref().and_then(|r| r.takes_waiting_for(terms))
+                                    })
+                                    .is_some()
+                            })
+                    };
+                    let mut choices = Vec::new();
+                    for (dest, weight) in &s.dests {
+                        if !weight.is_finite() || *weight <= 0. || s.is_named(dest) {
+                            continue;
+                        }
+                        let Some(line) = s.lines.iter().position(|(name, terms)| {
+                            name.trim() == dest.trim() && !terms.is_empty()
+                        }) else {
+                            continue;
+                        };
+                        let terms = &s.lines[line].1;
+                        let ready = s.buses.iter().any(|(b, in_box)| {
+                            *b != from_bus
+                                && *in_box
+                                && bus_ix.get(b).is_some_and(|k| {
+                                    let bn = &buses[*k];
+                                    bn.speed.abs() < 1.
+                                        && bn.entry_open.iter().any(|o| *o)
+                                        && serves(bn, dest, terms)
+                                })
+                        });
+                        // A connection can wait at the very same pole for ANOTHER service.
+                        // At a route's terminus it must not queue for the bus just left.
+                        if Some(*id) == from_stop && !ready {
+                            let other_service = bus_ix.get(&from_bus).is_some_and(|k| {
+                                let origin = &buses[*k];
+                                !origin
+                                    .terminus
+                                    .as_deref()
+                                    .is_some_and(|t| terms.contains(t.trim()))
+                                    && !origin
+                                        .route
+                                        .as_ref()
+                                        .is_some_and(|r| r.takes_waiting_for(terms).is_some())
+                            });
+                            if !other_service {
+                                continue;
+                            }
+                        }
+                        if !ready
+                            && !self.due_dests.as_ref().is_some_and(|d| {
+                                d.get(id).is_some_and(|set| set.contains(dest.trim()))
+                            })
+                        {
+                            continue;
+                        }
+                        choices.push((dest.clone(), line, f64::from(*weight), ready));
+                    }
+                    if choices.is_empty() {
+                        return None;
+                    }
+                    if !connection_walkable(at, s.gather, |x, y, z| world.walk_height_near(x, y, z))
+                    {
+                        return None;
+                    }
+                    if world.collision().ray_blocked(
+                        at + DVec3::Z * 0.9,
+                        s.gather + DVec3::Z * 0.9,
+                        0.1,
+                        0.6,
+                    ) {
+                        return None;
+                    }
+                    let ready = choices.iter().any(|c| c.3);
+                    if ready {
+                        choices.retain(|c| c.3);
+                    }
+                    Some((*id, ready, (s.pos - at).length_squared(), choices))
+                })
+                .collect();
+        candidates.sort_by(|a, b| {
+            b.1.cmp(&a.1)
+                .then_with(|| a.2.total_cmp(&b.2))
+                .then_with(|| a.0.cmp(&b.0))
+        });
+        if let Some((stop, ready, _, choices)) = candidates.into_iter().next() {
             // The percentage was already drawn. Unlike ordinary street spawning,
             // selecting an onward destination must not draw "no bus journey" again
             // when this map's destination weights add up to less than one.
-            let total:f64=choices.iter().map(|c|c.2).sum();
-            let mut roll=self.rand_f()*total;
-            let mut selected=&choices[choices.len()-1];
-            for choice in &choices { roll-=choice.2; if roll<0. { selected=choice; break; } }
-            let (dest,line,_,_)=selected;
-            let walk=self.pax(i).map_or(1.1,|p|p.walk_speed);
-            let mut next=Pax::new(walk,self.rand_f());
-            next.stop=Some(stop); next.dest=Some(dest.clone()); next.line=Some(*line); next.pos=at; next.yaw=heading.to_radians();
-            next.transfer_from=Some(from_bus); next.transfer_count=count+1;
-            let p=&mut self.people[i];p.position=at;p.heading=heading;p.place=Place::Ground;
-            p.interior=0.0;p.vel=DVec2::ZERO;p.t_state=0.0;p.state=State::Pax(Box::new(next));
-            self.set_task(i,Task::WalkingToBusstop,buses,bus_ix,world);
-            if from_bus==BusId::Player {
-                log::debug!("Passenger connection: chance_percent={percent:.0} outcome=walking from_stop={from_stop:?} to_stop={stop} destination={dest:?} bus_ready={ready}");
+            let total: f64 = choices.iter().map(|c| c.2).sum();
+            let mut roll = self.rand_f() * total;
+            let mut selected = &choices[choices.len() - 1];
+            for choice in &choices {
+                roll -= choice.2;
+                if roll < 0. {
+                    selected = choice;
+                    break;
+                }
+            }
+            let (dest, line, _, _) = selected;
+            let walk = self.pax(i).map_or(1.1, |p| p.walk_speed);
+            let mut next = Pax::new(walk, self.rand_f());
+            next.stop = Some(stop);
+            next.dest = Some(dest.clone());
+            next.line = Some(*line);
+            next.pos = at;
+            next.yaw = heading.to_radians();
+            next.transfer_from = Some(from_bus);
+            next.transfer_count = count + 1;
+            let p = &mut self.people[i];
+            p.position = at;
+            p.heading = heading;
+            p.place = Place::Ground;
+            p.interior = 0.0;
+            p.vel = DVec2::ZERO;
+            p.t_state = 0.0;
+            p.state = State::Pax(Box::new(next));
+            self.set_task(i, Task::WalkingToBusstop, buses, bus_ix, world);
+            if from_bus == BusId::Player {
+                log::debug!(
+                    "Passenger connection: chance_percent={percent:.0} outcome=walking from_stop={from_stop:?} to_stop={stop} destination={dest:?} bus_ready={ready}"
+                );
             }
             return true;
         }
-        if from_bus==BusId::Player { log::debug!("Passenger connection: chance_percent={percent:.0} outcome=no_reachable_onward_service from_stop={from_stop:?}"); }
+        if from_bus == BusId::Player {
+            log::debug!(
+                "Passenger connection: chance_percent={percent:.0} outcome=no_reachable_onward_service from_stop={from_stop:?}"
+            );
+        }
         false
     }
 
     /// `walk_street` for somebody off a bus: where the stop has no pavement to go on
     /// along, they walk to `away` first (`State::Leaving`) instead of standing in the door.
     #[allow(clippy::too_many_arguments)]
-    pub fn walk_street_from_bus(&mut self, i: usize, at: DVec3, heading: f64, stop: Option<i64>, away: DVec3, world: &dyn World, remove: &mut Vec<usize>) {
+    pub fn walk_street_from_bus(
+        &mut self,
+        i: usize,
+        at: DVec3,
+        heading: f64,
+        stop: Option<i64>,
+        away: DVec3,
+        world: &dyn World,
+        remove: &mut Vec<usize>,
+    ) {
         self.walk_street(i, at, heading, stop, world, remove);
         if matches!(self.people[i].state, State::Standing) {
             self.people[i].state = State::Leaving { to: away };
@@ -796,12 +1127,27 @@ impl PeopleSim {
 
     /// sub_626818 / task 8: on as a pedestrian along the pavement from the stop - or gone
     /// when there is none.
-    pub fn walk_street(&mut self, i: usize, at: DVec3, heading: f64, stop: Option<i64>, world: &dyn World, remove: &mut Vec<usize>) {
+    pub fn walk_street(
+        &mut self,
+        i: usize,
+        at: DVec3,
+        heading: f64,
+        stop: Option<i64>,
+        world: &dyn World,
+        remove: &mut Vec<usize>,
+    ) {
         let _ = world;
         self.walk_street_plain(i, at, heading, stop, remove)
     }
 
-    pub fn walk_street_plain(&mut self, i: usize, at: DVec3, heading: f64, stop: Option<i64>, remove: &mut Vec<usize>) {
+    pub fn walk_street_plain(
+        &mut self,
+        i: usize,
+        at: DVec3,
+        heading: f64,
+        stop: Option<i64>,
+        remove: &mut Vec<usize>,
+    ) {
         let lane = stop.and_then(|s| self.stops.get(&s)).and_then(|s| s.lane);
         let p = &mut self.people[i];
         p.position = at;
@@ -813,7 +1159,11 @@ impl PeopleSim {
         let _ = &remove;
         match (lane, self.ped.as_ref()) {
             (Some((l, s)), Some(_)) => {
-                let leg = Leg { lane: l, a: s, b: s };
+                let leg = Leg {
+                    lane: l,
+                    a: s,
+                    b: s,
+                };
                 p.state = State::Strolling(PedWalk::new(vec![leg], true, 0.0));
             }
             _ => p.state = State::Standing,
@@ -840,13 +1190,28 @@ mod away_tests {
     #[test]
     fn people_getting_off_face_away_from_the_bus() {
         // a bus heading north (+y): its right-hand doors open to the east
-        let h = away_from_side(DVec3::ZERO, DVec2::new(0.0, 1.0), DVec3::new(1.4, 3.0, 0.0), 0.0);
+        let h = away_from_side(
+            DVec3::ZERO,
+            DVec2::new(0.0, 1.0),
+            DVec3::new(1.4, 3.0, 0.0),
+            0.0,
+        );
         assert!((h - 90.0).abs() < 1e-6, "{h}");
         // heading east (+x), doors on the right open to the south
-        let h = away_from_side(DVec3::new(10.0, 10.0, 0.0), DVec2::new(1.0, 0.0), DVec3::new(7.0, 8.6, 0.0), 0.0);
+        let h = away_from_side(
+            DVec3::new(10.0, 10.0, 0.0),
+            DVec2::new(1.0, 0.0),
+            DVec3::new(7.0, 8.6, 0.0),
+            0.0,
+        );
         assert!((h - 180.0).abs() < 1e-6, "{h}");
         // left-hand doors (driving on the left): to the west of a bus heading north
-        let h = away_from_side(DVec3::ZERO, DVec2::new(0.0, 1.0), DVec3::new(-1.4, -2.0, 0.0), 0.0);
+        let h = away_from_side(
+            DVec3::ZERO,
+            DVec2::new(0.0, 1.0),
+            DVec3::new(-1.4, -2.0, 0.0),
+            0.0,
+        );
         assert!((h - 270.0).abs() < 1e-6, "{h}");
     }
 }
@@ -856,7 +1221,12 @@ mod away_tests {
 /// (`along`, unit), by the person's number, so that a busload spreads out instead of
 /// crowding the doorway.
 pub fn away_point(door: DVec3, out: DVec3, along: DVec3, id: u32) -> DVec3 {
-    let r = |k: u32| (id.wrapping_mul(2_654_435_761).wrapping_add(k.wrapping_mul(40_503)) % 1000) as f64 / 1000.0;
+    let r = |k: u32| {
+        (id.wrapping_mul(2_654_435_761)
+            .wrapping_add(k.wrapping_mul(40_503))
+            % 1000) as f64
+            / 1000.0
+    };
     door + out * (2.5 + 2.5 * r(1)) + along * (14.0 * r(2) - 7.0)
 }
 

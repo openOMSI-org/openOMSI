@@ -71,7 +71,11 @@ pub const DOOR_GIVE_UP: f64 = 25.0;
 /// One continuous wait at a shut entry: when it began and whether it is past `DOOR_GIVE_UP`.
 /// An open door ends it, so a later closure starts a fresh wait.
 pub fn shut_door_wait(previous: Option<f64>, now: f64, at_shut_door: bool) -> (Option<f64>, bool) {
-    let since = if at_shut_door { Some(previous.unwrap_or(now)) } else { None };
+    let since = if at_shut_door {
+        Some(previous.unwrap_or(now))
+    } else {
+        None
+    };
     let expired = since.is_some_and(|start| now - start > DOOR_GIVE_UP);
     (since, expired)
 }
@@ -511,7 +515,10 @@ impl DutyTrip {
     /// object, as the stops' targets are.
     pub fn of(trip: &TripPlan, names: Option<&HashMap<i64, String>>) -> DutyTrip {
         let name = |s: &StopPlan| match names {
-            Some(n) => n.get(&s.object_id).cloned().unwrap_or_else(|| s.object_id.to_string()),
+            Some(n) => n
+                .get(&s.object_id)
+                .cloned()
+                .unwrap_or_else(|| s.object_id.to_string()),
             None => s.name.trim().to_string(),
         };
         DutyTrip {
@@ -519,7 +526,11 @@ impl DutyTrip {
             departure: trip.departure,
             terminus: trip.terminus.trim().to_string(),
             public: !trip.line.trim().is_empty(),
-            stops: trip.stops.iter().map(|s| (s.object_id, name(s), s.stops)).collect(),
+            stops: trip
+                .stops
+                .iter()
+                .map(|s| (s.object_id, name(s), s.stops))
+                .collect(),
         }
     }
 }
@@ -552,7 +563,11 @@ pub enum Takes {
     Terminus,
     /// Duty fallback unless the stop identifies the sign as another service.
     /// `next` is the stop due at; `done` means the trip reached its last stop.
-    Duty { trip: Arc<DutyTrip>, next: usize, done: bool },
+    Duty {
+        trip: Arc<DutyTrip>,
+        next: usize,
+        done: bool,
+    },
     /// Nobody waiting: another player's bus (their game boards it), a bus the player left
     /// standing (its riders get off as ever).
     Nobody,
@@ -583,7 +598,11 @@ fn list_ident(entry: &str) -> &str {
 impl SetRoute {
     /// Route `route` of depot file `hof`, its IBIS at stop `at` of the list (`IBIS_busstop`,
     /// None when not known). None for a route that is not there or has no stops.
-    pub fn from_depot(hof: &omsi_vehicle::Hof, route: usize, at: Option<usize>) -> Option<SetRoute> {
+    pub fn from_depot(
+        hof: &omsi_vehicle::Hof,
+        route: usize,
+        at: Option<usize>,
+    ) -> Option<SetRoute> {
         let final_ident = |r: usize| -> Option<&str> {
             let ident = list_ident(hof.info_busstop_lists.get(r)?.last()?);
             (!ident.is_empty()).then_some(ident)
@@ -591,29 +610,53 @@ impl SetRoute {
         let stops = hof.info_busstop_lists.get(route)?;
         let last = final_ident(route)?;
         let own = hof.info_trips.get(route)?;
-        let line_of = |t: &omsi_vehicle::hof::InfoTrip| (t.line.trim().to_string(), omsi_cfg::parse_i32(&t.code) / 100);
+        let line_of = |t: &omsi_vehicle::hof::InfoTrip| {
+            (
+                t.line.trim().to_string(),
+                omsi_cfg::parse_i32(&t.code) / 100,
+            )
+        };
         let mut same_service = Vec::new();
         for (r, trip) in hof.info_trips.iter().enumerate() {
-            if line_of(trip) != line_of(own) || !final_ident(r).is_some_and(|e| e.eq_ignore_ascii_case(last)) {
+            if line_of(trip) != line_of(own)
+                || !final_ident(r).is_some_and(|e| e.eq_ignore_ascii_case(last))
+            {
                 continue;
             }
-            let Some(dest) = hof.terminus_by_code(omsi_cfg::parse_i32(&trip.route)) else { continue };
+            let Some(dest) = hof.terminus_by_code(omsi_cfg::parse_i32(&trip.route)) else {
+                continue;
+            };
             let shown = dest.texture_id.trim();
             if !dest.all_exit && !shown.is_empty() {
                 same_service.push(shown.to_string());
             }
         }
-        let is_loop = stops.len() > 1 && stops.first().is_some_and(|s| list_ident(s).eq_ignore_ascii_case(last));
+        let is_loop = stops.len() > 1
+            && stops
+                .first()
+                .is_some_and(|s| list_ident(s).eq_ignore_ascii_case(last));
         let past_start = at.is_some_and(|k| k > 0);
-        let last_stop = if is_loop && !past_start { None } else { Some(last.to_string()) };
-        Some(SetRoute { last_stop, same_service })
+        let last_stop = if is_loop && !past_start {
+            None
+        } else {
+            Some(last.to_string())
+        };
+        Some(SetRoute {
+            last_stop,
+            same_service,
+        })
     }
 
     /// Whether somebody waiting for one of `termini` (their line record's) gets on for
     /// another route of this one's service.
     pub fn takes_waiting_for(&self, termini: &HashSet<String>) -> Option<Fit> {
-        let waited_for = |t: &String| termini.contains(t) || without_route(t).is_some_and(|bare| termini.contains(bare));
-        self.same_service.iter().any(waited_for).then_some(Fit::Terminus)
+        let waited_for = |t: &String| {
+            termini.contains(t) || without_route(t).is_some_and(|bare| termini.contains(bare))
+        };
+        self.same_service
+            .iter()
+            .any(waited_for)
+            .then_some(Fit::Terminus)
     }
 
     /// Whether the route ends at `stop` (everybody gets off).
@@ -640,16 +683,24 @@ pub enum AtStop {
 /// What a bus showing `terminus` (None: no destination, or one of `[addterminus_allexit]`)
 /// and taking `takes` does at stop `id`.
 pub fn at_stop(id: i64, stop: &PaxStop, terminus: Option<&str>, takes: &Takes) -> AtStop {
-    let Some(t) = terminus else { return AtStop::Empties };
+    let Some(t) = terminus else {
+        return AtStop::Empties;
+    };
     if stop.is_named(t) || without_route(t).is_some_and(|t| stop.is_named(t)) {
         return AtStop::Empties;
     }
     match takes {
         Takes::Nobody => AtStop::Passes,
         // the trip's last stop is its terminus, whatever the depot file calls it
-        Takes::Duty { trip, done: true, .. }
-            if !sign_is_other_service(stop, trip, t)
-                && trip.stops.iter().rev().find(|s| s.2).is_some_and(|(k, n, _)| *k == id || stop.is_named(n)) =>
+        Takes::Duty {
+            trip, done: true, ..
+        } if !sign_is_other_service(stop, trip, t)
+            && trip
+                .stops
+                .iter()
+                .rev()
+                .find(|s| s.2)
+                .is_some_and(|(k, n, _)| *k == id || stop.is_named(n)) =>
         {
             AtStop::Empties
         }
@@ -664,25 +715,32 @@ pub fn at_stop(id: i64, stop: &PaxStop, terminus: Option<&str>, takes: &Takes) -
 /// bus driven without a duty.)
 fn without_route(terminus: &str) -> Option<&str> {
     let (first, rest) = terminus.trim().split_once(char::is_whitespace)?;
-    let route = first.chars().all(|c| c.is_ascii_alphanumeric()) && first.chars().any(|c| c.is_ascii_digit());
+    let route = first.chars().all(|c| c.is_ascii_alphanumeric())
+        && first.chars().any(|c| c.is_ascii_digit());
     Some(rest.trim()).filter(|r| route && !r.is_empty())
 }
 
 /// Only known, disjoint stop records contradict the duty; unknown spellings still work.
 fn sign_is_other_service(stop: &PaxStop, trip: &DutyTrip, terminus: &str) -> bool {
     if terminus.trim() == trip.terminus.trim()
-        || without_route(terminus).is_some_and(|t| t == trip.terminus.trim()) {
+        || without_route(terminus).is_some_and(|t| t == trip.terminus.trim())
+    {
         return false;
     }
     let mut known = false;
     for (dest, termini) in &stop.lines {
         if !termini.contains(terminus.trim())
-            && !without_route(terminus).is_some_and(|t| termini.contains(t)) {
+            && !without_route(terminus).is_some_and(|t| termini.contains(t))
+        {
             continue;
         }
         // A shared destination or terminus is ambiguous, not proof of another service.
         if termini.contains(trip.terminus.trim())
-            || trip.stops.iter().any(|(_, name, calls)| *calls && name.trim() == dest.trim()) {
+            || trip
+                .stops
+                .iter()
+                .any(|(_, name, calls)| *calls && name.trim() == dest.trim())
+        {
             return false;
         }
         known = true;
@@ -705,7 +763,9 @@ pub enum Fit {
 /// Of the buses somebody waiting may take (bus, why, how far away), the one with the better
 /// reason (`Fit`), of those the nearest.
 pub fn best_bus(buses: impl Iterator<Item = (BusId, Fit, f64)>) -> Option<(BusId, Fit)> {
-    buses.min_by(|a, b| a.1.cmp(&b.1).then(a.2.total_cmp(&b.2))).map(|b| (b.0, b.1))
+    buses
+        .min_by(|a, b| a.1.cmp(&b.1).then(a.2.total_cmp(&b.2)))
+        .map(|b| (b.0, b.1))
 }
 
 /// Whether a bus showing `terminus` and taking `takes` is the bus of somebody waiting at stop
@@ -713,11 +773,27 @@ pub fn best_bus(buses: impl Iterator<Item = (BusId, Fit, f64)>) -> Option<(BusId
 ///
 /// Keep the duty fallback for HOF spelling differences unless the stop's records
 /// positively identify the sign as another service.
-pub fn fit(id: i64, stop: &PaxStop, dest: Option<&str>, termini: &HashSet<String>, terminus: &str, takes: &Takes) -> Option<Fit> {
-    if termini.contains(terminus.trim()) || without_route(terminus).is_some_and(|t| termini.contains(t)) {
+pub fn fit(
+    id: i64,
+    stop: &PaxStop,
+    dest: Option<&str>,
+    termini: &HashSet<String>,
+    terminus: &str,
+    takes: &Takes,
+) -> Option<Fit> {
+    if termini.contains(terminus.trim())
+        || without_route(terminus).is_some_and(|t| termini.contains(t))
+    {
         return Some(Fit::Terminus);
     }
-    let Takes::Duty { trip, next, done: false } = takes else { return None };
+    let Takes::Duty {
+        trip,
+        next,
+        done: false,
+    } = takes
+    else {
+        return None;
+    };
     if !trip.public || sign_is_other_service(stop, trip, terminus) {
         return None;
     }
@@ -731,7 +807,10 @@ pub fn fit(id: i64, stop: &PaxStop, dest: Option<&str>, termini: &HashSet<String
         let (sid, name, stops) = &trip.stops[*k];
         *stops && (*sid == id || stop.is_named(name))
     })?;
-    trip.stops[here + 1..].iter().any(|(_, name, stops)| *stops && name.trim() == dest).then_some(Fit::Duty)
+    trip.stops[here + 1..]
+        .iter()
+        .any(|(_, name, stops)| *stops && name.trim() == dest)
+        .then_some(Fit::Duty)
 }
 
 /// A point of the cabin's path network with its links in the file's order: the point at
@@ -756,10 +835,25 @@ pub fn build_routes(n: usize, links: &[(i32, i32, bool)]) -> Vec<Vec<RouteLink>>
             continue;
         }
         let (a, b) = (a as usize, b as usize);
-        adj[a].push(RouteLink { to: b, reach: vec![b], link: k, walk_back: !oneway });
-        adj[b].push(RouteLink { to: a, reach: vec![a], link: k, walk_back: true });
+        adj[a].push(RouteLink {
+            to: b,
+            reach: vec![b],
+            link: k,
+            walk_back: !oneway,
+        });
+        adj[b].push(RouteLink {
+            to: a,
+            reach: vec![a],
+            link: k,
+            walk_back: true,
+        });
     }
-    pub fn visit(adj: &mut Vec<Vec<RouteLink>>, p: usize, from: Option<usize>, stack: &mut Vec<usize>) {
+    pub fn visit(
+        adj: &mut Vec<Vec<RouteLink>>,
+        p: usize,
+        from: Option<usize>,
+        stack: &mut Vec<usize>,
+    ) {
         if let Some(q) = from {
             if let Some(k) = adj[p].iter().position(|l| l.to == q) {
                 for &s in stack.iter() {
@@ -799,7 +893,11 @@ pub fn holds_bus(x: &Pax, bus: BusId) -> Option<Option<i64>> {
         Task::InBusToExit if x.inside == Some(bus) => Some(None),
         // (somebody late who has hurried for longer than a bus waits: not any more)
         Task::WalkingToBus => x.late.is_none_or(|l| l.holds()).then_some(x.stop),
-        Task::ToBus | Task::WalkingToBusstop if x.inside.is_none() && x.late.is_some_and(|l| l.holds()) => Some(x.stop),
+        Task::ToBus | Task::WalkingToBusstop
+            if x.inside.is_none() && x.late.is_some_and(|l| l.holds()) =>
+        {
+            Some(x.stop)
+        }
         _ => None,
     }
 }
@@ -818,9 +916,21 @@ impl Cabin {
     /// stand at a shut button door with the others open); `avoid`: a passenger buying a
     /// ticket skips `{noticketsale}` doors. Nothing found: the first of the list, or the
     /// search again without `avoid`.
-    pub fn omsi_nearest(&self, p: Vec3, list: &[Option<usize>], avoid: bool, level: bool, flags: Option<&[(bool, bool)]>, open: Option<&[bool]>) -> Option<usize> {
+    pub fn omsi_nearest(
+        &self,
+        p: Vec3,
+        list: &[Option<usize>],
+        avoid: bool,
+        level: bool,
+        flags: Option<&[(bool, bool)]>,
+        open: Option<&[bool]>,
+    ) -> Option<usize> {
         let pts = &self.graph.points;
-        let any_open = open.is_some_and(|o| list.iter().enumerate().any(|(k, pt)| pt.is_some() && o.get(k).copied().unwrap_or(false)));
+        let any_open = open.is_some_and(|o| {
+            list.iter()
+                .enumerate()
+                .any(|(k, pt)| pt.is_some() && o.get(k).copied().unwrap_or(false))
+        });
         let mut best = 1e12f32;
         let mut found: Option<usize> = None;
         for (k, pt) in list.iter().enumerate() {
@@ -831,7 +941,9 @@ impl Cabin {
             }
             let d = weighted_dist(p, *q, 5.0);
             let shut_ok = match open {
-                Some(o) if o.len() >= list.len() && !o[k] => !any_open && flags.is_some_and(|f| f.get(k).is_some_and(|f| f.1)),
+                Some(o) if o.len() >= list.len() && !o[k] => {
+                    !any_open && flags.is_some_and(|f| f.get(k).is_some_and(|f| f.1))
+                }
                 _ => true,
             };
             if !shut_ok {
@@ -891,9 +1003,13 @@ impl Cabin {
     /// one a passenger who came in there stamps at. The first of equally near ones; in a
     /// cabin of sections nobody walks between, one in the sections of `p`'s nearest point.
     pub fn nearest_stamper(&self, p: Vec3) -> Option<usize> {
-        let at = |s: &(Option<usize>, Vec3)| s.0.and_then(|k| self.graph.points.get(k).copied()).unwrap_or(s.1);
+        let at = |s: &(Option<usize>, Vec3)| {
+            s.0.and_then(|k| self.graph.points.get(k).copied())
+                .unwrap_or(s.1)
+        };
         let d = |k: usize| weighted_dist(p, at(&self.stampers[k]), 5.0);
-        let group = self.group_at(self.omsi_nearest(p, &self.all_points(), false, false, None, None));
+        let group =
+            self.group_at(self.omsi_nearest(p, &self.all_points(), false, false, None, None));
         (0..self.stampers.len())
             .filter(|&k| self.groups <= 1 || self.group_at(self.stampers[k].0) == group)
             .min_by(|&a, &b| d(a).total_cmp(&d(b)))
@@ -909,7 +1025,10 @@ impl Cabin {
     /// are in - the doors and devices of the others are out of reach. One group: `list`.
     pub fn in_group(&self, list: Vec<Option<usize>>, g: Option<usize>) -> Vec<Option<usize>> {
         match g {
-            Some(g) if self.groups > 1 => list.into_iter().map(|p| p.filter(|&q| self.point_group.get(q) == Some(&g))).collect(),
+            Some(g) if self.groups > 1 => list
+                .into_iter()
+                .map(|p| p.filter(|&q| self.point_group.get(q) == Some(&g)))
+                .collect(),
             _ => list,
         }
     }
@@ -917,7 +1036,10 @@ impl Cabin {
     /// sub_723fac: the next point from `from` towards `to` and the link taken.
     pub fn route_next(&self, from: usize, to: usize) -> Option<(usize, usize)> {
         let links = self.routes.get(from)?;
-        links.iter().find(|l| l.reach.contains(&to)).map(|l| (l.to, l.link))
+        links
+            .iter()
+            .find(|l| l.reach.contains(&to))
+            .map(|l| (l.to, l.link))
     }
 
     /// The path points of the entries / exits, in order.
