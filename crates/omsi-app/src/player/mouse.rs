@@ -515,48 +515,69 @@ impl Player {
                 // a plain click on a control the scripts only know as a drag: dragged to its
                 // other end (a click opened the NL/NG driver's door by the mouse's jitter
                 // and a second click never shut it again)
-                let anim = def
-                    .animations
-                    .first()
-                    .map(|a| a.variable.clone())
-                    .filter(|v| !v.trim().is_empty() && v.trim().parse::<f32>().is_err());
-                if let (true, Some(var)) = (
-                    allow_auto_drag && auto_drag_click(&ev, self.press_info.0, self.press_info.1),
-                    anim,
-                ) {
-                    let now = self.vehicle.var(&var).unwrap_or(0.0);
-                    let target = if now > 0.5 { 0.0 } else { 1.0 };
-                    // (a variable of the scripts is theirs to move; only one that the model
-                    // alone names is flipped here, #3887)
-                    if self.vehicle.has_trigger(&format!("{ev}_drag"))
-                        || self.vehicle.ty.program.var(&var).is_some()
-                    {
-                        log::info!(
-                            "mouse event {ev}: a click on a drag control, {var} {now:.2} -> {target}"
-                        );
-                        self.auto_drag = Some(AutoDrag {
-                            ev,
-                            var,
-                            target,
-                            axis: 0,
-                            sign: if target > now { -1.0 } else { 1.0 },
-                            last: now,
-                            stalled: 0,
-                            t: 0.0,
-                        });
+                if allow_auto_drag && auto_drag_click(&ev, self.press_info.0, self.press_info.1) {
+                    if self.vehicle.has_trigger(&format!("{ev}_drag")) {
+                        let anim = def
+                            .animations
+                            .first()
+                            .map(|a| a.variable.clone())
+                            .filter(|v| !v.trim().is_empty() && v.trim().parse::<f32>().is_err())
+                            .or_else(|| {
+                                ty.model
+                                    .meshes
+                                    .iter()
+                                    .filter(|m| m.mouse_event.as_deref() == Some(ev.as_str()))
+                                    .flat_map(|m| m.animations.first().map(|a| a.variable.clone()))
+                                    .find(|v| {
+                                        !v.trim().is_empty() && v.trim().parse::<f32>().is_err()
+                                    })
+                            });
+                        if let Some(var) = anim {
+                            let now = self.vehicle.var(&var).unwrap_or(0.0);
+                            let target = if now > 0.5 { 0.0 } else { 1.0 };
+                            log::info!(
+                                "mouse event {ev}: a click on a drag control, {var} {now:.2} -> {target}"
+                            );
+                            self.auto_drag = Some(AutoDrag {
+                                ev,
+                                var,
+                                target,
+                                axis: 0,
+                                sign: if target > now { -1.0 } else { 1.0 },
+                                last: now,
+                                stalled: 0,
+                                t: 0.0,
+                            });
+                        }
                     } else {
-                        log::info!("mouse event {ev}: toggle control, {var} {now:.2} -> {target}");
-                        self.vehicle.set_var(&var, target);
-                        // all meshes sharing this control event flip their model-only variables together (#3887)
-                        for m in &ty.model.meshes {
-                            if m.mouse_event.as_deref() == Some(ev.as_str()) {
-                                for a in &m.animations {
-                                    let v_name = a.variable.trim();
-                                    if !v_name.is_empty()
-                                        && v_name.parse::<f32>().is_err()
-                                        && self.vehicle.ty.program.var(v_name).is_none()
-                                    {
-                                        self.vehicle.set_var(v_name, target);
+                        // (a variable of the scripts is theirs to move; only one that the model
+                        // alone names is flipped here, #3887)
+                        let is_model_only = |v: &str| {
+                            !v.is_empty()
+                                && v.parse::<f32>().is_err()
+                                && self.vehicle.ty.program.var(v).is_none()
+                        };
+                        let first_model_var = ty
+                            .model
+                            .meshes
+                            .iter()
+                            .filter(|m| m.mouse_event.as_deref() == Some(ev.as_str()))
+                            .flat_map(|m| m.animations.iter().map(|a| a.variable.trim()))
+                            .find(|v| is_model_only(v));
+                        if let Some(first_var) = first_model_var {
+                            let now = self.vehicle.var(first_var).unwrap_or(0.0);
+                            let target = if now > 0.5 { 0.0 } else { 1.0 };
+                            log::info!(
+                                "mouse event {ev}: toggle control, {first_var} {now:.2} -> {target}"
+                            );
+                            // all meshes sharing this control event flip their model-only variables together (#3887)
+                            for m in &ty.model.meshes {
+                                if m.mouse_event.as_deref() == Some(ev.as_str()) {
+                                    for a in &m.animations {
+                                        let v_name = a.variable.trim();
+                                        if is_model_only(v_name) {
+                                            self.vehicle.set_var(v_name, target);
+                                        }
                                     }
                                 }
                             }

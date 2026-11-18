@@ -180,19 +180,25 @@ fn clicking_control_shared_by_two_meshes_toggles_both_model_only_variables_both_
         "",
     );
     let mut ty = (*seed.ty).clone();
-    for var in ["sched", "sched1"] {
+    let mesh_anims = [
+        vec![],
+        vec![omsi_model::Animation {
+            variable: "script_var".into(),
+            ..Default::default()
+        }],
+        vec![omsi_model::Animation {
+            variable: "sched".into(),
+            ..Default::default()
+        }],
+        vec![omsi_model::Animation {
+            variable: "sched1".into(),
+            ..Default::default()
+        }],
+    ];
+    for anims in mesh_anims {
         ty.model.meshes.push(omsi_model::MeshDef {
             mouse_event: Some("cp_sched_toggle".into()),
-            animations: vec![
-                omsi_model::Animation {
-                    variable: var.into(),
-                    ..Default::default()
-                },
-                omsi_model::Animation {
-                    variable: "script_var".into(),
-                    ..Default::default()
-                },
-            ],
+            animations: anims,
             ..Default::default()
         });
         ty.meshes.push(omsi_sim::vehicle::VehicleMesh {
@@ -210,7 +216,7 @@ fn clicking_control_shared_by_two_meshes_toggles_both_model_only_variables_both_
     let ty = Arc::new(ty);
     let mut vehicle =
         omsi_sim::VehicleInstance::new(ty.clone(), omsi_sim::VehicleHost::new(Default::default()));
-    vehicle.mesh_props.resize_with(2, Default::default);
+    vehicle.mesh_props.resize_with(4, Default::default);
     let render = scene::VehicleRender {
         window_wipers: None,
         instances: vec![],
@@ -237,7 +243,7 @@ fn clicking_control_shared_by_two_meshes_toggles_both_model_only_variables_both_
     assert_eq!(player.vehicle.var("sched1"), None);
     assert_eq!(player.vehicle.var("script_var"), Some(0.42));
 
-    // First click: press mesh 0 and release (0 -> 1)
+    // First click: press mesh 0 (no animation of its own) and release (0 -> 1)
     player.pressed_mesh = Some(0);
     player.press_info = (false, 0.0);
     player.release();
@@ -246,7 +252,7 @@ fn clicking_control_shared_by_two_meshes_toggles_both_model_only_variables_both_
     assert_eq!(player.vehicle.var("sched1"), Some(1.0));
     assert_eq!(player.vehicle.var("script_var"), Some(0.42));
 
-    // Second click: press mesh 1 and release (1 -> 0)
+    // Second click: press mesh 1 (script-owned variable first) and release (1 -> 0)
     player.pressed_mesh = Some(1);
     player.press_info = (false, 0.0);
     player.release();
