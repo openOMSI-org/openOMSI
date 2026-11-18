@@ -75,7 +75,7 @@ impl App {
                 }
             }
         }
-        super::lan_accident::exchange(lan, self.session.traffic.as_mut());
+        super::lan_accident::exchange(lan, self.session.traffic.as_mut(), dt);
         let setup_ms = lan_tick_started.elapsed().as_secs_f64() * 1000.0;
         let phase = std::time::Instant::now();
         let sent = {
@@ -188,8 +188,12 @@ impl App {
             log::info!("LAN: command '{text}' from player {from} not taken");
             return;
         };
-        let host = self.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Host);
-        if super::lan_accident::on_command(self.session.traffic.as_mut(), host, from, &command) {
+        if super::lan_accident::on_command(
+            self.net.lan.as_mut(),
+            self.session.traffic.as_mut(),
+            from,
+            &command,
+        ) {
             return;
         }
         match command {

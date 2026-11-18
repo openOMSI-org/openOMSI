@@ -65,23 +65,30 @@ pub enum Command {
     AdminBansEnd { found: usize, total: usize },
     /// A game we host by code showed our notice (its id).
     NotifySeen(String),
-    /// A client's bus hit the host's car `car` (its traffic id), OMSI 2's accident.
-    Crash { car: u32, point: DVec3, push: DVec3, speed: f32, energy: f32, mass: f32 },
-    /// A client called the police to the accidents it caused.
-    Police,
-    /// (host) our accidents: one still open, new ones, and those we left behind.
-    Accident { open: bool, new: u32, fled: u32 },
+    /// OMSI 2's accident in LAN play (`omsi_sim::ai_traffic::accident`): a client's bus hit
+    /// the host's car `car` (its traffic id)...
+    Crash { seq: u32, car: u32, point: DVec3, push: DVec3, speed: f32, energy: f32, mass: f32 },
+    /// ... a client called the police...
+    Police(u32),
+    /// ... (host) our accidents: one open, how many we caused and left behind in all...
+    Accident { seq: u32, open: bool, new: u32, fled: u32 },
+    /// ... and the answers to them, by their numbers (`crash-seen` and `police-seen` from
+    /// the host).
+    CrashSeen(u32),
+    PoliceSeen(u32),
+    AccidentSeen(u32),
 }
 
-pub fn crash_command(car: u32, point: DVec3, push: DVec3, speed: f32, energy: f32, mass: f32) -> String {
+#[allow(clippy::too_many_arguments)]
+pub fn crash_command(seq: u32, car: u32, point: DVec3, push: DVec3, speed: f32, energy: f32, mass: f32) -> String {
     format!(
-        "crash {car} {:.3} {:.3} {:.3} {:.4} {:.4} {:.4} {speed:.3} {energy:.1} {mass:.1}",
+        "crash {seq} {car} {:.3} {:.3} {:.3} {:.4} {:.4} {:.4} {speed:.3} {energy:.1} {mass:.1}",
         point.x, point.y, point.z, push.x, push.y, push.z
     )
 }
 
-pub fn accident_command(open: bool, new: u32, fled: u32) -> String {
-    format!("accident {} {new} {fled}", u8::from(open))
+pub fn accident_command(seq: u32, open: bool, new: u32, fled: u32) -> String {
+    format!("accident {seq} {} {new} {fled}", u8::from(open))
 }
 
 /// Last valid speed policy sent by the host. Only host-sourced commands set this.
@@ -125,10 +132,11 @@ impl Command {
         Some(match verb {
             "notify-seen" => Command::NotifySeen(arg.trim().to_string()),
             "crash" => match numbers(arg)[..] {
-                [car, px, py, pz, dx, dy, dz, speed, energy, mass]
-                    if numbers(arg).iter().all(|v| v.is_finite()) && [car, speed, energy, mass].iter().all(|v| *v >= 0.0) =>
+                [seq, car, px, py, pz, dx, dy, dz, speed, energy, mass]
+                    if numbers(arg).iter().all(|v| v.is_finite()) && [seq, car, speed, energy, mass].iter().all(|v| *v >= 0.0) =>
                 {
                     Command::Crash {
+                        seq: seq as u32,
                         car: car as u32,
                         point: DVec3::new(px, py, pz),
                         push: DVec3::new(dx, dy, dz),
@@ -139,11 +147,14 @@ impl Command {
                 }
                 _ => return None,
             },
-            "police" => Command::Police,
+            "police" => Command::Police(arg.trim().parse().ok()?),
+            "accident-seen" => Command::AccidentSeen(arg.trim().parse().ok()?),
             _ if !host => return None,
+            "crash-seen" => Command::CrashSeen(arg.trim().parse().ok()?),
+            "police-seen" => Command::PoliceSeen(arg.trim().parse().ok()?),
             "accident" => match numbers(arg)[..] {
-                [open, new, fled] if new >= 0.0 && fled >= 0.0 => {
-                    Command::Accident { open: open > 0.5, new: new as u32, fled: fled as u32 }
+                [seq, open, new, fled] if seq >= 0.0 && new >= 0.0 && fled >= 0.0 => {
+                    Command::Accident { seq: seq as u32, open: open > 0.5, new: new as u32, fled: fled as u32 }
                 }
                 _ => return None,
             },
@@ -206,18 +217,24 @@ mod tests {
     #[test]
     fn accident_commands_read_back() {
         let (point, push) = (DVec3::new(892391.5, 4196807.25, 33.5), DVec3::new(0.6, -0.8, 0.0));
-        let text = crash_command(65537, point, push, 8.5, 60000.0, 12000.0);
+        let text = crash_command(7, 65537, point, push, 8.5, 60000.0, 12000.0);
+        assert!(text.len() < 160, "{text}");
         assert_eq!(
             Command::parse(3, &text),
-            Some(Command::Crash { car: 65537, point, push, speed: 8.5, energy: 60000.0, mass: 12000.0 })
+            Some(Command::Crash { seq: 7, car: 65537, point, push, speed: 8.5, energy: 60000.0, mass: 12000.0 })
         );
-        assert_eq!(Command::parse(3, "crash 1 0 0 0 1 0 0 nan 1 1"), None);
-        assert_eq!(Command::parse(3, "crash 1 inf 0 0 1 0 0 1 1 1"), None);
+        assert_eq!(Command::parse(3, "crash 1 1 0 0 0 1 0 0 nan 1 1"), None);
+        assert_eq!(Command::parse(3, "crash 1 1 inf 0 0 1 0 0 1 1 1"), None);
         assert_eq!(Command::parse(3, "crash 1 0 0"), None);
-        assert_eq!(Command::parse(3, "police"), Some(Command::Police));
-        assert_eq!(Command::parse(1, &accident_command(true, 1, 0)), Some(Command::Accident { open: true, new: 1, fled: 0 }));
-        assert_eq!(Command::parse(1, &accident_command(false, 0, 2)), Some(Command::Accident { open: false, new: 0, fled: 2 }));
-        assert_eq!(Command::parse(3, "accident 1 1 0"), None, "only the host tells a player of its accidents");
+        assert_eq!(Command::parse(3, "police 4"), Some(Command::Police(4)));
+        assert_eq!(Command::parse(3, "police"), None);
+        assert_eq!(Command::parse(3, "accident-seen 9"), Some(Command::AccidentSeen(9)));
+        assert_eq!(Command::parse(1, &accident_command(9, true, 1, 0)), Some(Command::Accident { seq: 9, open: true, new: 1, fled: 0 }));
+        assert_eq!(Command::parse(1, "crash-seen 7"), Some(Command::CrashSeen(7)));
+        assert_eq!(Command::parse(1, "police-seen 4"), Some(Command::PoliceSeen(4)));
+        for only_host in ["accident 9 1 1 0", "crash-seen 7", "police-seen 4"] {
+            assert_eq!(Command::parse(3, only_host), None, "{only_host}");
+        }
     }
 
     /// The host's commands read as what they mean, and are not taken from anybody else.

@@ -3,7 +3,7 @@
 
 use super::*;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DynamicImpact {
     pub obstacle_id: i64,
     pub point: DVec3,
