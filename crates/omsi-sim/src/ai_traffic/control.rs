@@ -244,11 +244,17 @@ impl TrafficSim {
         if self.mirror {
             self.accident.for_host(&impacts);
         }
-        self.player_impacts_by(impacts, accident::LOCAL);
+        self.player_impacts_by(impacts, accident::LOCAL, 0);
     }
 
-    /// The hits of `player` (`accident::LOCAL`, or a LAN client's session id).
-    pub fn player_impacts_by(&mut self, impacts: Vec<crate::vehicle::DynamicImpact>, player: u32) {
+    /// The hits of `player` (`accident::LOCAL`, or a LAN client's session id, with the
+    /// number the client gave them).
+    pub fn player_impacts_by(
+        &mut self,
+        impacts: Vec<crate::vehicle::DynamicImpact>,
+        player: u32,
+        seq: u32,
+    ) {
         for impact in impacts {
             let Some(id) = impact
                 .obstacle_id
@@ -261,13 +267,15 @@ impl TrafficSim {
             let Some(car) = self.cars.iter_mut().find(|car| car.id == id) else {
                 continue;
             };
-            if !self.mirror
+            if car.body.is_loose() {
+                self.accident.hit_again(car.id, player, seq);
+            } else if !self.mirror
                 && !car.vehicle.ty.def.fixed
                 && car.body.kind == crate::ai_motion::MotionKind::Road
-                && !car.body.is_loose()
+                && self.accident.may_knock(player, seq)
             {
                 car.body.set_loose(true);
-                self.accident.knock(car.id, player);
+                self.accident.knock(car.id, player, seq);
             }
             let dv = car.body.collision_impulse(
                 impact.push.truncate(),
