@@ -14,14 +14,14 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 mod menu;
-pub use menu::{MenuItem, MAX_MENU_ITEMS, MAX_MENU_LABEL};
+pub use menu::{MAX_MENU_ITEMS, MAX_MENU_LABEL, MenuItem};
 mod theme;
-pub use theme::{themes_for_load, ThemeInfo};
+pub use theme::{ThemeInfo, themes_for_load};
 mod dock;
 pub use dock::Dock;
 mod read;
 use read::patch;
-pub use read::{panel_from_source, parse_panel, parse_toast, ToastSpec};
+pub use read::{ToastSpec, panel_from_source, parse_panel, parse_toast};
 
 /// `omsi.ui.version`: raised when something is added a plugin may want to test for.
 /// 2: images, checkboxes, sliders, text fields, tabs, charts, tables, draggable panels.
@@ -181,7 +181,23 @@ pub struct Panel {
 
 impl Default for Panel {
     fn default() -> Panel {
-        Panel { anchor: Anchor::TopLeft, x: 0.0, y: 0.0, width: 300.0, padding: 12.0, gap: 6.0, background: None, radius: 12.0, accent: None, visible: true, clickable: false, draggable: false, grab: false, frame: false, children: Vec::new() }
+        Panel {
+            anchor: Anchor::TopLeft,
+            x: 0.0,
+            y: 0.0,
+            width: 300.0,
+            padding: 12.0,
+            gap: 6.0,
+            background: None,
+            radius: 12.0,
+            accent: None,
+            visible: true,
+            clickable: false,
+            draggable: false,
+            grab: false,
+            frame: false,
+            children: Vec::new(),
+        }
     }
 }
 
@@ -200,12 +216,22 @@ impl Element {
     /// Whether a click on it is a `ui_click`: a button's or a tile's always, others' with an id and
     /// `clickable = true`.
     pub fn takes_clicks(&self) -> bool {
-        matches!(self.kind, Kind::Button { .. } | Kind::Tile { off: false, .. }) || (self.clickable && self.id.is_some())
+        matches!(
+            self.kind,
+            Kind::Button { .. } | Kind::Tile { off: false, .. }
+        ) || (self.clickable && self.id.is_some())
     }
 
     /// Whether the mouse changes its value (a checkbox, a slider, a field, tabs).
     pub fn is_control(&self) -> bool {
-        self.id.is_some() && matches!(self.kind, Kind::Checkbox { .. } | Kind::Slider { .. } | Kind::Input { .. } | Kind::Tabs { .. })
+        self.id.is_some()
+            && matches!(
+                self.kind,
+                Kind::Checkbox { .. }
+                    | Kind::Slider { .. }
+                    | Kind::Input { .. }
+                    | Kind::Tabs { .. }
+            )
     }
 
     /// Its value as `ui.value` and `ui_change` give it.
@@ -253,40 +279,114 @@ pub struct Stop {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
-    Text { text: String, size: f32, weight: Weight, align: Align, wrap: bool },
+    Text {
+        text: String,
+        size: f32,
+        weight: Weight,
+        align: Align,
+        wrap: bool,
+    },
     /// A Material Symbols name of the game's icons; one it has not draws nothing.
-    Icon { name: String, size: f32 },
-    Row { children: Vec<Element>, gap: f32, align: RowAlign },
+    Icon {
+        name: String,
+        size: f32,
+    },
+    Row {
+        children: Vec<Element>,
+        gap: f32,
+        align: RowAlign,
+    },
     /// `segments` (shares and colours, side by side): a bar of several parts in place of
     /// `value`'s one.
-    Bar { value: f32, height: f32, background: Option<Rgba>, segments: Vec<(f32, Rgba)> },
-    Badge { text: String, text_color: Option<Rgba>, weight: Weight },
+    Bar {
+        value: f32,
+        height: f32,
+        background: Option<Rgba>,
+        segments: Vec<(f32, Rgba)>,
+    },
+    Badge {
+        text: String,
+        text_color: Option<Rgba>,
+        weight: Weight,
+    },
     Divider,
-    Space { size: f32 },
-    Button { text: String, icon: Option<String> },
-    Tile { text: String, icon: String, focus: bool, off: bool },
+    Space {
+        size: f32,
+    },
+    Button {
+        text: String,
+        icon: Option<String>,
+    },
+    Tile {
+        text: String,
+        icon: String,
+        focus: bool,
+        off: bool,
+    },
     /// A picture of the plugin's folder (PNG, JPEG, BMP, TGA); `path` None: no such file.
-    Image { path: Option<PathBuf>, width: f32, height: f32 },
-    Checkbox { text: String, checked: bool },
-    Slider { value: f32, min: f32, max: f32, step: f32 },
+    Image {
+        path: Option<PathBuf>,
+        width: f32,
+        height: f32,
+    },
+    Checkbox {
+        text: String,
+        checked: bool,
+    },
+    Slider {
+        value: f32,
+        min: f32,
+        max: f32,
+        step: f32,
+    },
     /// A text field: clicked, it takes what is typed until Enter, Esc or a click elsewhere.
-    Input { text: String, placeholder: String, max: usize },
-    Tabs { tabs: Vec<String>, selected: usize },
+    Input {
+        text: String,
+        placeholder: String,
+        max: usize,
+    },
+    Tabs {
+        tabs: Vec<String>,
+        selected: usize,
+    },
     /// Values over time, as a line or as bars; `min`/`max` None: the values' own.
-    Chart { values: Vec<f32>, min: Option<f32>, max: Option<f32>, height: f32, style: ChartStyle, fill: bool },
+    Chart {
+        values: Vec<f32>,
+        min: Option<f32>,
+        max: Option<f32>,
+        height: f32,
+        style: ChartStyle,
+        fill: bool,
+    },
     /// Columns of texts: the header row bold; `widths` shares of the width (none: alike),
     /// `aligns` each column's alignment (none: left), `inks` a colour of each cell's own
     /// (row by row; none: the element's).
-    Table { columns: Vec<String>, rows: Vec<Vec<String>>, widths: Vec<f32>, size: f32, aligns: Vec<Align>, inks: Vec<Vec<Option<Rgba>>> },
+    Table {
+        columns: Vec<String>,
+        rows: Vec<Vec<String>>,
+        widths: Vec<f32>,
+        size: f32,
+        aligns: Vec<Align>,
+        inks: Vec<Vec<Option<Rgba>>>,
+    },
     /// Its children stacked in a tinted box with a stripe on the left (the element's colour).
-    Box { children: Vec<Element>, gap: f32 },
+    Box {
+        children: Vec<Element>,
+        gap: f32,
+    },
     /// Stops on a rail: the ones behind the bus grey, the one it heads for marked, a time on
     /// the right (and before it when the bus will be there).
-    Stops { stops: Vec<Stop>, size: f32 },
+    Stops {
+        stops: Vec<Stop>,
+        size: f32,
+    },
     /// The navigator's map, in a panel that fills its frame: `height` (0: as high as the
     /// navigator's own map, 0.8 times its width), `cards` the navigator's cards over it (the
     /// next turn, the clock, the speed, the next stop). Elsewhere empty room.
-    Map { height: f32, cards: bool },
+    Map {
+        height: f32,
+        cards: bool,
+    },
 }
 
 /// A notification card of `omsi.ui.toast`.
@@ -372,7 +472,23 @@ impl Default for UiState {
     fn default() -> Self {
         let (themes, theme_now) = theme::for_load();
         // (until the game has drawn a frame: a 1080p screen)
-        UiState { panels: Vec::new(), toasts: Vec::new(), clicks: Vec::new(), changes: Vec::new(), focus: None, shown: true, screen: [1920.0, 1080.0, 1.0], serial: 0, typing: None, menu: Vec::new(), menu_picks: Vec::new(), dock: None, themes, theme_now, theme_ask: None }
+        UiState {
+            panels: Vec::new(),
+            toasts: Vec::new(),
+            clicks: Vec::new(),
+            changes: Vec::new(),
+            focus: None,
+            shown: true,
+            screen: [1920.0, 1080.0, 1.0],
+            serial: 0,
+            typing: None,
+            menu: Vec::new(),
+            menu_picks: Vec::new(),
+            dock: None,
+            themes,
+            theme_now,
+            theme_ask: None,
+        }
     }
 }
 
@@ -383,14 +499,20 @@ impl UiState {
     }
 
     fn find(&mut self, owner: u64, id: &str) -> Option<&mut PanelEntry> {
-        self.panels.iter_mut().find(|p| p.owner == owner && p.id == id)
+        self.panels
+            .iter_mut()
+            .find(|p| p.owner == owner && p.id == id)
     }
 
     /// Create or replace a plugin's panel. The same panel again changes nothing (a plugin
     /// that sets its panels on a timer redraws nothing while they stay the same).
     pub fn set(&mut self, owner: u64, id: &str, panel: Panel) -> Result<(), String> {
         check_id("the panel id", id)?;
-        if let Some(i) = self.panels.iter().position(|p| p.owner == owner && p.id == id) {
+        if let Some(i) = self
+            .panels
+            .iter()
+            .position(|p| p.owner == owner && p.id == id)
+        {
             if self.panels[i].panel != panel {
                 let revision = self.next_serial();
                 let e = &mut self.panels[i];
@@ -403,7 +525,13 @@ impl UiState {
             return Err(format!("a plugin has at most {MAX_PANELS} panels"));
         }
         let revision = self.next_serial();
-        self.panels.push(PanelEntry { owner, id: id.to_string(), panel, revision, moved: (0.0, 0.0) });
+        self.panels.push(PanelEntry {
+            owner,
+            id: id.to_string(),
+            panel,
+            revision,
+            moved: (0.0, 0.0),
+        });
         Ok(())
     }
 
@@ -412,8 +540,13 @@ impl UiState {
         let n = self.panels.len();
         self.panels.retain(|p| !(p.owner == owner && p.id == id));
         self.clicks.retain(|c| !(c.owner == owner && c.panel == id));
-        self.changes.retain(|c| !(c.owner == owner && c.panel == id));
-        if self.typing.as_ref().is_some_and(|t| t.owner == owner && t.panel == id) {
+        self.changes
+            .retain(|c| !(c.owner == owner && c.panel == id));
+        if self
+            .typing
+            .as_ref()
+            .is_some_and(|t| t.owner == owner && t.panel == id)
+        {
             self.typing = None;
         }
         self.panels.len() != n
@@ -444,7 +577,11 @@ impl UiState {
 
     /// The ids of a plugin's panels.
     pub fn ids(&self, owner: u64) -> Vec<String> {
-        self.panels.iter().filter(|p| p.owner == owner).map(|p| p.id.clone()).collect()
+        self.panels
+            .iter()
+            .filter(|p| p.owner == owner)
+            .map(|p| p.id.clone())
+            .collect()
     }
 
     /// A plugin's panel.
@@ -469,10 +606,20 @@ impl UiState {
 
     /// Change keys of one element of a panel (`ui.update`): what an element of its type
     /// takes, read as `set` reads them. Err when there is no such panel or element.
-    pub fn update(&mut self, owner: u64, id: &str, element: &str, fields: &Value, folder: Option<&Path>) -> Result<(), String> {
+    pub fn update(
+        &mut self,
+        owner: u64,
+        id: &str,
+        element: &str,
+        fields: &Value,
+        folder: Option<&Path>,
+    ) -> Result<(), String> {
         let serial = self.next_serial();
-        let e = self.find(owner, id).ok_or_else(|| format!("no panel \"{id}\""))?;
-        let el = find_element(&mut e.panel.children, element).ok_or_else(|| format!("no element \"{element}\" in panel \"{id}\""))?;
+        let e = self
+            .find(owner, id)
+            .ok_or_else(|| format!("no panel \"{id}\""))?;
+        let el = find_element(&mut e.panel.children, element)
+            .ok_or_else(|| format!("no element \"{element}\" in panel \"{id}\""))?;
         let before = el.clone();
         patch(el, fields, folder)?;
         if *el != before {
@@ -483,12 +630,19 @@ impl UiState {
 
     /// Whether `element` of a plugin's panel is a text field (a click on it starts typing).
     pub fn is_field(&self, owner: u64, id: &str, element: &str) -> bool {
-        self.panels.iter().find(|p| p.owner == owner && p.id == id).and_then(|e| find_in(&e.panel.children, element)).is_some_and(|e| matches!(e.kind, Kind::Input { .. }))
+        self.panels
+            .iter()
+            .find(|p| p.owner == owner && p.id == id)
+            .and_then(|e| find_in(&e.panel.children, element))
+            .is_some_and(|e| matches!(e.kind, Kind::Input { .. }))
     }
 
     /// The value of a checkbox, slider, field or tabs.
     pub fn value(&self, owner: u64, id: &str, element: &str) -> Option<Value> {
-        let e = self.panels.iter().find(|p| p.owner == owner && p.id == id)?;
+        let e = self
+            .panels
+            .iter()
+            .find(|p| p.owner == owner && p.id == id)?;
         find_in(&e.panel.children, element).map(Element::value)
     }
 
@@ -501,8 +655,23 @@ impl UiState {
             }
         }
         let serial = self.next_serial();
-        let ToastSpec { text, title, icon, color, seconds } = spec;
-        self.toasts.push(Toast { owner, serial, text, title, icon, color, seconds, age: 0.0 });
+        let ToastSpec {
+            text,
+            title,
+            icon,
+            color,
+            seconds,
+        } = spec;
+        self.toasts.push(Toast {
+            owner,
+            serial,
+            text,
+            title,
+            icon,
+            color,
+            seconds,
+            age: 0.0,
+        });
     }
 
     /// The panels have the mouse (`on`, asked by plugin `owner`) or let it go. They cannot
@@ -572,21 +741,33 @@ impl UiState {
         if self.clicks.len() >= MAX_CLICKS {
             self.clicks.remove(0);
         }
-        self.clicks.push(Click { owner, panel: panel.to_string(), element: element.map(str::to_string) });
+        self.clicks.push(Click {
+            owner,
+            panel: panel.to_string(),
+            element: element.map(str::to_string),
+        });
     }
 
     /// A click on a control; false when `el` is none.
     fn control_click(&mut self, owner: u64, panel: &str, el: &str) -> bool {
         let serial = self.next_serial();
-        let Some(e) = self.find(owner, panel) else { return false };
-        let Some(c) = find_element(&mut e.panel.children, el) else { return false };
+        let Some(e) = self.find(owner, panel) else {
+            return false;
+        };
+        let Some(c) = find_element(&mut e.panel.children, el) else {
+            return false;
+        };
         let value = match &mut c.kind {
             Kind::Checkbox { checked, .. } => {
                 *checked = !*checked;
                 Value::Bool(*checked)
             }
             Kind::Input { .. } => {
-                self.typing = Some(Typing { owner, panel: panel.to_string(), element: el.to_string() });
+                self.typing = Some(Typing {
+                    owner,
+                    panel: panel.to_string(),
+                    element: el.to_string(),
+                });
                 return true;
             }
             _ => return false,
@@ -598,27 +779,46 @@ impl UiState {
 
     fn push_change(&mut self, owner: u64, panel: &str, element: &str, value: Value) {
         // (a slider dragged: only its latest value waits)
-        if let Some(c) = self.changes.iter_mut().find(|c| c.owner == owner && c.panel == panel && c.element == element) {
+        if let Some(c) = self
+            .changes
+            .iter_mut()
+            .find(|c| c.owner == owner && c.panel == panel && c.element == element)
+        {
             c.value = value;
             return;
         }
         if self.changes.len() >= MAX_CLICKS {
             self.changes.remove(0);
         }
-        self.changes.push(Change { owner, panel: panel.to_string(), element: element.to_string(), value });
+        self.changes.push(Change {
+            owner,
+            panel: panel.to_string(),
+            element: element.to_string(),
+            value,
+        });
     }
 
     /// The game sets a control's value (a slider at `fraction` of its range, a tab chosen):
     /// changed, it is a change for the plugin.
     pub fn set_control(&mut self, owner: u64, panel: &str, element: &str, fraction: f32) {
         let serial = self.next_serial();
-        let Some(e) = self.find(owner, panel) else { return };
-        let Some(c) = find_element(&mut e.panel.children, element) else { return };
+        let Some(e) = self.find(owner, panel) else {
+            return;
+        };
+        let Some(c) = find_element(&mut e.panel.children, element) else {
+            return;
+        };
         let value = match &mut c.kind {
-            Kind::Slider { value, min, max, step } => {
+            Kind::Slider {
+                value,
+                min,
+                max,
+                step,
+            } => {
                 let mut v = *min + fraction.clamp(0.0, 1.0) * (*max - *min);
                 if *step > 0.0 {
-                    v = (*min + ((v - *min) / *step).round() * *step).clamp(min.min(*max), max.max(*min));
+                    v = (*min + ((v - *min) / *step).round() * *step)
+                        .clamp(min.min(*max), max.max(*min));
                 }
                 if v == *value {
                     return;
@@ -650,9 +850,18 @@ impl UiState {
     pub fn type_text(&mut self, text: Option<&str>) {
         let Some(t) = self.typing.clone() else { return };
         let serial = self.next_serial();
-        let Some(e) = self.find(t.owner, &t.panel) else { return };
-        let Some(c) = find_element(&mut e.panel.children, &t.element) else { return };
-        let Kind::Input { text: have, max, .. } = &mut c.kind else { return };
+        let Some(e) = self.find(t.owner, &t.panel) else {
+            return;
+        };
+        let Some(c) = find_element(&mut e.panel.children, &t.element) else {
+            return;
+        };
+        let Kind::Input {
+            text: have, max, ..
+        } = &mut c.kind
+        else {
+            return;
+        };
         match text {
             Some(s) => {
                 for ch in s.chars().filter(|c| !c.is_control()) {
@@ -678,7 +887,11 @@ impl UiState {
                 self.clicks.remove(0);
             }
             // (Enter in a field is a click on it: the plugin takes the text)
-            self.clicks.push(Click { owner: t.owner, panel: t.panel, element: Some(t.element) });
+            self.clicks.push(Click {
+                owner: t.owner,
+                panel: t.panel,
+                element: Some(t.element),
+            });
         }
     }
 
@@ -695,7 +908,9 @@ impl UiState {
         if self.clicks.is_empty() {
             return Vec::new();
         }
-        let (mine, rest) = std::mem::take(&mut self.clicks).into_iter().partition(|c| c.owner == owner);
+        let (mine, rest) = std::mem::take(&mut self.clicks)
+            .into_iter()
+            .partition(|c| c.owner == owner);
         self.clicks = rest;
         mine
     }
@@ -705,7 +920,9 @@ impl UiState {
         if self.changes.is_empty() {
             return Vec::new();
         }
-        let (mine, rest) = std::mem::take(&mut self.changes).into_iter().partition(|c| c.owner == owner);
+        let (mine, rest) = std::mem::take(&mut self.changes)
+            .into_iter()
+            .partition(|c| c.owner == owner);
         self.changes = rest;
         mine
     }
