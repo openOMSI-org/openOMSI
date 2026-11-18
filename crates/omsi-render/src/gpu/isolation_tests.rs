@@ -70,7 +70,7 @@ fn auxiliary_adapter_state_is_restored_after_failure() {
 
 #[test]
 fn auxiliary_adapter_state_device_open_does_not_publish_metadata() {
-    const CHILD: &str = "OMSI_AUXILIARY_METADATA_TEST_CHILD";
+    const CHILD: &str = "AUXILIARY_METADATA_TEST_CHILD";
     if std::env::var_os(CHILD).is_none() {
         let status = std::process::Command::new(std::env::current_exe().unwrap())
             .args([
