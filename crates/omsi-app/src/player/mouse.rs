@@ -555,7 +555,7 @@ impl Player {
                         let is_model_only = |v: &str| {
                             !v.is_empty()
                                 && v.parse::<f32>().is_err()
-                                && self.vehicle.ty.program.var(v).is_none()
+                                && ty.program.var(v).is_none()
                         };
                         let first_model_var = ty
                             .model
