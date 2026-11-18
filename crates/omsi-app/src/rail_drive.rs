@@ -778,18 +778,27 @@ pub(crate) fn change_switch(
             &[("{reach}", &SWITCH_REACH)],
         );
     };
-    let set = branches.iter().position(|(i, _)| {
-        net.lanes[*i]
-            .key
-            .is_some_and(|k| world.switch_set_to(scenery, k.id, k.path) == Some(true))
-    });
-    let (next, way) = omsi_sim::traffic::next_branch(&branches, set);
+    let states: Vec<Option<bool>> = branches
+        .iter()
+        .map(|(i, _)| {
+            let key = net.lanes[*i].key?;
+            world.switch_set_to(scenery, key.id, key.path)
+        })
+        .collect();
+    let (branches, set) = omsi_sim::traffic::settable_branches(&branches, &states);
     let metres = dist.round() as i64;
-    let Some(key) = net.lanes[branches[next].0].key else {
-        return omsi_ui::i18n::tr_fill(
+    let cannot = || {
+        omsi_ui::i18n::tr_fill(
             "The points {dist} m ahead cannot be set",
             &[("{dist}", &metres)],
-        );
+        )
+    };
+    if branches.len() < 2 {
+        return cannot();
+    }
+    let (next, way) = omsi_sim::traffic::next_branch(&branches, set);
+    let Some(key) = net.lanes[branches[next].0].key else {
+        return cannot();
     };
     world.set_switches(scenery, &[(key.id, key.path)]);
     match Thrown::from(world.switch_set_to(scenery, key.id, key.path)) {
@@ -800,12 +809,7 @@ pub(crate) fn change_switch(
                 &[("{dist}", &metres)],
             );
         }
-        Thrown::NoSwitch => {
-            return omsi_ui::i18n::tr_fill(
-                "The points {dist} m ahead cannot be set",
-                &[("{dist}", &metres)],
-            );
-        }
+        Thrown::NoSwitch => return cannot(),
     }
     log::info!(
         "change_switch: the points {dist:.0} m ahead ({} end) set {way} (lane {})",

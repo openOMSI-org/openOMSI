@@ -89,6 +89,22 @@ pub fn next_branch(branches: &[(usize, f64)], set: Option<usize>) -> (usize, &'s
     (next, way)
 }
 
+/// The branches the points can be set to (`branches`, each with its `switch_set_to` in
+/// `states`), and which of them is set. A track laid over a switch's path by another object
+/// is a branch of the network but no way the points go: it has no state.
+pub fn settable_branches(
+    branches: &[(usize, f64)],
+    states: &[Option<bool>],
+) -> (Vec<(usize, f64)>, Option<usize>) {
+    let (ways, set): (Vec<_>, Vec<_>) = branches
+        .iter()
+        .zip(states)
+        .filter_map(|(b, s)| s.map(|s| (*b, s)))
+        .unzip();
+    let at = set.iter().position(|&s| s);
+    (ways, at)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::traffic::{LaneBuilder, LaneKind, Network};
@@ -134,5 +150,22 @@ mod tests {
         assert_eq!(super::next_branch(&three, None), (2, "to the right"));
         assert_eq!(super::next_branch(&three, Some(2)), (0, "to the left"));
         assert_eq!(super::next_branch(&three, Some(0)), (1, "straight on"));
+    }
+
+    /// Points with a second straight track laid over them by another object (the triangle
+    /// at Eberlinsee): J goes between the two ways of the points and skips that track.
+    #[test]
+    fn a_track_over_the_points_is_no_way_to_set_them() {
+        let branches = [(10, -23.0), (11, 0.0), (12, 0.0)];
+        let (ways, set) = super::settable_branches(&branches, &[Some(false), Some(true), None]);
+        assert_eq!((ways.clone(), set), (vec![(10, -23.0), (11, 0.0)], Some(1)));
+        assert_eq!(super::next_branch(&ways, set), (0, "to the left"));
+        let (ways, set) = super::settable_branches(&branches, &[Some(true), Some(false), None]);
+        assert_eq!(super::next_branch(&ways, set), (1, "straight on"));
+        assert!(
+            super::settable_branches(&branches, &[None, None, None])
+                .0
+                .is_empty()
+        );
     }
 }
