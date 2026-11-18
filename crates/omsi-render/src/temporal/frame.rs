@@ -44,6 +44,8 @@ pub(crate) struct TemporalPipelines {
     pub(crate) late_motion: [wgpu::RenderPipeline; 6],
     pub(crate) sky: wgpu::RenderPipeline,
     pub(crate) motion_layout: wgpu::BindGroupLayout,
+    /// The late motion's group 2: the transparency mask's panes.
+    pub(crate) glass_layout: wgpu::BindGroupLayout,
     pub(crate) glass_mask: [wgpu::RenderPipeline; 2],
     pub(crate) rain_mask: [wgpu::RenderPipeline; 2],
     pub(crate) screen_mask: [wgpu::RenderPipeline; 2],
@@ -56,7 +58,7 @@ pub(crate) struct TemporalTargets {
     pub(crate) color_view: wgpu::TextureView,
     color_raw_view: wgpu::TextureView,
     pub(crate) color_bg: wgpu::BindGroup,
-    motion: wgpu::Texture,
+    pub(crate) motion: wgpu::Texture,
     pub(crate) motion_view: wgpu::TextureView,
     mask: wgpu::Texture,
     pub(crate) mask_view: wgpu::TextureView,
@@ -337,7 +339,9 @@ impl Renderer {
             usage: targets | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[self.format],
         });
-        let motion = tex("temporal motion vectors", render, TEMPORAL_MOTION_FORMAT, targets);
+        // (read back by the tests)
+        let readable = if cfg!(test) { wgpu::TextureUsages::COPY_SRC } else { wgpu::TextureUsages::empty() };
+        let motion = tex("temporal motion vectors", render, TEMPORAL_MOTION_FORMAT, targets | readable);
         let mask = tex("temporal transparency mask", render, TEMPORAL_MASK_FORMAT, targets);
         let output_tex = tex("temporal output", output, TEMPORAL_OUTPUT_FORMAT, targets | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC);
         let color_view = color.create_view(&wgpu::TextureViewDescriptor { format: Some(self.format), ..Default::default() });

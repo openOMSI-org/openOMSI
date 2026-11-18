@@ -43,8 +43,13 @@ struct MotionIn {
 // A cab's part this close behind a pane that wrote its depth (a gauge's glass, a display's
 // cover) still lays its motion there in the late pass (m): its pane hid it from the equal-depth
 // test, and the motion under the glass was the street's that the prepass left. A windscreen
-// has the street metres behind it and keeps that.
+// has the street metres behind it and keeps that. Only where the transparency mask has glass:
+// elsewhere a part hidden just behind an opaque one would lay its motion over that one's.
 const BEHIND_GLASS: f32 = 0.06;
+
+// The transparency mask's panes (the late pass's own group: drawn before it, see
+// `encode_temporal_glass_mask`).
+@group(2) @binding(1) var t_glass: texture_2d<f32>;
 
 struct LateMotionOut {
     @location(0) motion: vec4<f32>,
@@ -54,7 +59,9 @@ struct LateMotionOut {
 fn late(in: MotionIn) -> LateMotionOut {
     var out: LateMotionOut;
     out.motion = motion_pixels(in.cur, in.prev);
-    out.depth = clamp(in.lifted.z / in.lifted.w, 0.0, 1.0);
+    // (its own depth elsewhere: the depth test then passes only where the main pass left it)
+    let glass = textureLoad(t_glass, vec2<i32>(in.clip.xy), 0).r > 0.0;
+    out.depth = select(in.clip.z, clamp(in.lifted.z / in.lifted.w, 0.0, 1.0), glass);
     return out;
 }
 

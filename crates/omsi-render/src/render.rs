@@ -816,6 +816,7 @@ impl Renderer {
         }
         let puddles_on = self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
         self.encode_fog_lamps(&mut enc.picture, scene, &f, vp_mat, puddles_on, &mut timers);
+        self.encode_temporal_glass_mask(&mut enc.picture, scene, &f, &plan);
         self.encode_temporal_late_motion(&mut enc.picture, scene, &f, &plan);
         self.encode_temporal_mask(&mut enc.picture, scene, &f, &plan);
         self.encode_rain_film(&mut enc.picture, scene, &f, &plan.rain_batches, puddles_on);

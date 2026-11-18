@@ -42,6 +42,25 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<T
         bind_group_layouts: &[Some(&scene.camera_layout), Some(&scene.material_layout), None, Some(&motion_layout)],
         immediate_size: 0,
     });
+    // (the late pass reads the panes of the transparency mask, `t_glass` in `motion.wgsl`)
+    let glass_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("temporal late motion glass"),
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 1,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        }],
+    });
+    let late_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("temporal late motion"),
+        bind_group_layouts: &[Some(&scene.camera_layout), Some(&scene.material_layout), Some(&glass_layout), Some(&motion_layout)],
+        immediate_size: 0,
+    });
     let motion_target = [Some(wgpu::ColorTargetState {
         format: TEMPORAL_MOTION_FORMAT,
         blend: None,
@@ -63,8 +82,8 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<T
             _ => unreachable!(),
         };
         compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
-            label: Some("temporal depth prepass"),
-            layout: Some(&pl),
+            label: Some(if write { "temporal depth prepass" } else { "temporal late motion" }),
+            layout: Some(if write { &pl } else { &late_pl }),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_motion"),
@@ -168,6 +187,7 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<T
         late_motion: [make(0, false, false), make(0, true, false), make(1, false, false), make(1, true, false), make(2, false, false), make(2, true, false)],
         sky,
         motion_layout,
+        glass_layout,
         glass_mask: [mask(glass, false), mask(glass, true)],
         rain_mask: [mask("fs_rain_mask", false), mask("fs_rain_mask", true)],
         screen_mask: [mask("fs_screen_mask", false), mask("fs_screen_mask", true)],

@@ -1459,6 +1459,7 @@ mod fog;
 mod fsr;
 mod instance_layout;
 mod lamp_shadows;
+mod late_motion;
 mod light_grid;
 mod light_maps;
 mod long_road;
