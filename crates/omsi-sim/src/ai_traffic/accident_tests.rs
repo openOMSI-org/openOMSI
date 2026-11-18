@@ -232,3 +232,91 @@ fn an_old_state_arriving_late_is_ignored() {
     assert!(!s.client.accident_open());
     assert_eq!((s.client.take_accidents(), s.client.take_fled()), (1, 1));
 }
+
+fn hit_on(host: &TrafficSim, id: u64, seq: u32) -> AccidentMsg {
+    let at = car(host, id).vehicle.position;
+    AccidentMsg::Hit {
+        seq,
+        hit: DynamicImpact {
+            obstacle_id: -2 - id as i64,
+            point: at + DVec3::new(-1.0, 1.5, 0.5),
+            push: DVec3::new(1.0, 0.0, 0.0),
+            speed: 8.0,
+            energy: 60_000.0,
+            mass: 12_000.0,
+        },
+    }
+}
+
+/// The client hit a car (1), called the police (2) and hit another car (3), and the call
+/// arrives last: it clears the first accident, not the second.
+#[test]
+fn a_late_call_clears_only_the_accidents_before_it() {
+    let f = Fixture::new();
+    let mut s = Session::new(&f);
+    let other = add_car(&mut s.host, &f, 0, 150.0, 43, Some(8.0));
+    let msgs = [
+        hit_on(&s.host, s.car, 1),
+        hit_on(&s.host, other, 3),
+        AccidentMsg::Police { seq: 2 },
+    ];
+    for msg in msgs {
+        s.host.accident_from_player(CLIENT, msg);
+    }
+    assert!(!s.loose(), "the call covers the first hit");
+    assert!(car(&s.host, other).body.is_loose(), "not the one after it");
+    assert!(s.host.accident_open_by(CLIENT));
+}
+
+/// The same with the car hit again after the call: it stays where the second hit left it.
+#[test]
+fn a_late_call_leaves_a_car_hit_again_after_it() {
+    let f = Fixture::new();
+    let mut s = Session::new(&f);
+    let msgs = [
+        hit_on(&s.host, s.car, 1),
+        hit_on(&s.host, s.car, 3),
+        AccidentMsg::Police { seq: 2 },
+    ];
+    for msg in msgs {
+        s.host.accident_from_player(CLIENT, msg);
+    }
+    assert!(s.loose());
+    assert!(s.host.accident_open_by(CLIENT));
+    s.host
+        .accident_from_player(CLIENT, AccidentMsg::Police { seq: 4 });
+    assert!(!s.loose(), "a call after the second hit clears it");
+}
+
+/// The call (2) overtakes the hit it covers (1): the car is pushed but not left standing,
+/// and the client is told of no accident; a hit after the call is one.
+#[test]
+fn a_hit_arriving_after_the_call_that_covers_it_leaves_no_accident() {
+    let f = Fixture::new();
+    let mut s = Session::new(&f);
+    let late = hit_on(&s.host, s.car, 1);
+    s.host
+        .accident_from_player(CLIENT, AccidentMsg::Police { seq: 2 });
+    assert_eq!(
+        s.host.accident_from_player(CLIENT, late),
+        Some(AccidentMsg::HitSeen { seq: 1 })
+    );
+    assert!(!s.loose());
+    assert!(!s.host.accident_open_by(CLIENT));
+    assert!(s.host.accident_to_players(&[CLIENT], DT).is_empty());
+    let next = hit_on(&s.host, s.car, 3);
+    s.host.accident_from_player(CLIENT, next);
+    assert!(s.loose());
+    assert_eq!(
+        s.host.accident_to_players(&[CLIENT], DT),
+        vec![(
+            CLIENT,
+            AccidentMsg::State {
+                seq: 1,
+                open: true,
+                new: 1,
+                fled: 0
+            }
+        )]
+    );
+}

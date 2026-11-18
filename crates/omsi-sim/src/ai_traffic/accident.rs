@@ -111,8 +111,10 @@ struct Host {
 
 #[derive(Debug, Default)]
 pub struct Accidents {
-    /// Which player knocked each loose car off its route.
-    by_car: HashMap<u64, u32>,
+    /// Which player knocked each loose car off its route, and the number of that player's
+    /// last hit on it (0 for this game's player): a call for the police covers the hits
+    /// numbered before it, whatever order they arrive in.
+    by_car: HashMap<u64, (u32, u32)>,
     /// This game's player: accidents new and left behind not yet shown.
     new: u32,
     fled: u32,
@@ -121,8 +123,23 @@ pub struct Accidents {
 }
 
 impl Accidents {
-    pub(super) fn knock(&mut self, car: u64, player: u32) {
-        self.by_car.insert(car, player);
+    /// Whether a hit of `player`'s numbered `seq` may knock a car loose: one numbered before
+    /// a call for the police the host has had is covered by it.
+    pub(super) fn may_knock(&self, player: u32, seq: u32) -> bool {
+        player == LOCAL || self.clients.get(&player).is_none_or(|c| seq > c.police)
+    }
+
+    /// A loose car hit again: the call that clears it has to come after this hit.
+    pub(super) fn hit_again(&mut self, car: u64, player: u32, seq: u32) {
+        if let Some((p, s)) = self.by_car.get_mut(&car) {
+            if *p == player {
+                *s = (*s).max(seq);
+            }
+        }
+    }
+
+    pub(super) fn knock(&mut self, car: u64, player: u32, seq: u32) {
+        self.by_car.insert(car, (player, seq));
         if player == LOCAL {
             self.new += 1;
         } else {
@@ -148,9 +165,14 @@ impl TrafficSim {
     }
 
     pub fn accident_open_by(&self, player: u32) -> bool {
-        self.cars
-            .iter()
-            .any(|c| c.body.is_loose() && self.accident.by_car.get(&c.id) == Some(&player))
+        self.cars.iter().any(|c| {
+            c.body.is_loose()
+                && self
+                    .accident
+                    .by_car
+                    .get(&c.id)
+                    .is_some_and(|b| b.0 == player)
+        })
     }
 
     /// How many vehicles go back onto their route (a client asks the host for it).
@@ -168,9 +190,19 @@ impl TrafficSim {
     }
 
     pub fn clear_accidents_by(&mut self, player: u32) -> usize {
+        self.clear_accidents_before(player, u32::MAX)
+    }
+
+    /// The accidents of `player`'s hits numbered before `seq`.
+    fn clear_accidents_before(&mut self, player: u32, seq: u32) -> usize {
         let mut n = 0;
         for c in self.cars.iter_mut().filter(|c| c.body.is_loose()) {
-            if self.accident.by_car.get(&c.id) == Some(&player) {
+            if self
+                .accident
+                .by_car
+                .get(&c.id)
+                .is_some_and(|b| b.0 == player && b.1 < seq)
+            {
                 self.accident.by_car.remove(&c.id);
                 c.body.set_loose(false);
                 c.state.blinker = 0;
@@ -197,7 +229,7 @@ impl TrafficSim {
     /// A loose car whose tile went: whoever knocked it loose left the scene.
     pub fn leave_scene(&mut self, i: usize) -> AiCar {
         let id = self.cars[i].id;
-        match self.accident.by_car.remove(&id).unwrap_or(LOCAL) {
+        match self.accident.by_car.remove(&id).map_or(LOCAL, |b| b.0) {
             LOCAL => self.accident.fled += 1,
             player => self.accident.clients.entry(player).or_default().fled += 1,
         }
@@ -244,7 +276,7 @@ impl TrafficSim {
             } => {
                 if seq > host.seq {
                     host.seq = seq;
-                    host.open = open && host.police.is_none();
+                    host.open = open;
                     host.shown_new += new.saturating_sub(host.new);
                     host.shown_fled += fled.saturating_sub(host.fled);
                     host.new = host.new.max(new);
@@ -268,7 +300,7 @@ impl TrafficSim {
                     if client.hits.len() > HITS_REMEMBERED {
                         client.hits.pop_front();
                     }
-                    self.player_impacts_by(vec![hit], player);
+                    self.player_impacts_by(vec![hit], player, seq);
                 }
                 Some(AccidentMsg::HitSeen { seq })
             }
@@ -276,7 +308,7 @@ impl TrafficSim {
                 let client = self.accident.clients.entry(player).or_default();
                 if seq > client.police {
                     client.police = seq;
-                    self.clear_accidents_by(player);
+                    self.clear_accidents_before(player, seq);
                 }
                 Some(AccidentMsg::PoliceSeen { seq })
             }
