@@ -633,6 +633,111 @@ fn a_label_a_fraction_of_a_millimetre_in_front_of_a_stack_of_steps_stays_seen() 
     }
 }
 
+/// A blended screen slot in a stacked display keeps the measured cap: its full step must not
+/// carry it past a label 0.2 mm in front of the stack (#2790).
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_label_a_fraction_of_a_millimetre_in_front_of_a_stacked_screen_stays_seen() {
+    let mut renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let red = renderer.add_material_extra(
+        &mut scene,
+        None,
+        AlphaMode::Blend,
+        [1.0, 0.0, 0.0, 1.0],
+        true,
+        None,
+        None,
+        None,
+        None,
+        [0.0; 3],
+        MaterialExtra {
+            screen: true,
+            ..Default::default()
+        },
+    );
+    let green = renderer.add_material(
+        &mut scene,
+        None,
+        AlphaMode::Opaque,
+        [0.0, 1.0, 0.0, 1.0],
+        true,
+    );
+    let blue = renderer.add_material(
+        &mut scene,
+        None,
+        AlphaMode::Opaque,
+        [0.0, 0.0, 1.0, 1.0],
+        true,
+    );
+    let glass = renderer.add_mesh(
+        &mut scene,
+        &slotted(vec![
+            grid(0.0, 0.0, 0.0, 1.0, 4, 0.0, false),
+            grid(0.0, 0.0, 0.0, 1.0, 5, 33.0, true),
+            grid(0.0, 0.0, 0.0, 0.8, 6, 12.0, false),
+            grid(0.0, 0.0, 0.0, 1.0, 4, 47.0, true),
+        ]),
+    );
+    let label = renderer.add_mesh(
+        &mut scene,
+        &slotted(vec![
+            grid(0.0, 0.0, 0.0002, 0.5, 2, 0.0, false),
+            grid(0.0, 0.0, 0.0002, 0.4, 3, 21.0, true),
+        ]),
+    );
+    renderer.begin_object(&mut scene);
+    renderer.add_instance(
+        &mut scene,
+        label,
+        DVec3::ZERO,
+        Mat4::IDENTITY,
+        vec![green, green],
+    );
+    renderer.add_instance(
+        &mut scene,
+        glass,
+        DVec3::ZERO,
+        Mat4::IDENTITY,
+        vec![blue, blue, blue, red],
+    );
+    let lighting = Lighting {
+        shadows: false,
+        fog_density: 0.0,
+        ..Default::default()
+    };
+    for d in [2.0, 7.0, 15.0, 30.0] {
+        for pitch in [-90.0f64, -45.0] {
+            let (s, c) = pitch.to_radians().sin_cos();
+            let camera = Camera {
+                position: DVec3::new(0.0, -d * c, -d * s),
+                yaw: 0.0,
+                pitch: pitch as f32,
+                roll: 0.0,
+                fov_deg: 60.0,
+                near: 0.1,
+                far: 3000.0,
+            };
+            scene.dirty = true;
+            let rgba = renderer
+                .render_to_image(&mut scene, 256, 256, &camera, &lighting)
+                .unwrap();
+            let green = rgba
+                .chunks(4)
+                .filter(|p| p[1] > 150 && p[0] < 60 && p[2] < 60)
+                .count();
+            let red = rgba
+                .chunks(4)
+                .filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60)
+                .count();
+            assert!(
+                green > 0 && red > 0,
+                "at {d} m, pitch {pitch}: {green} pixels of the label, {red} of the stacked screen"
+            );
+        }
+    }
+}
+
 /// Shading normals may be authored independently of a display's flat geometry.
 /// They must not bend the depth offset and lift an earlier layer through its print.
 #[test]

@@ -609,7 +609,7 @@ pub(crate) fn draw_order_level(i: &Instance, slot: usize) -> f32 {
             (if mode == 1 { h } else { max + 1 - h }) as f32
         }
     };
-    if mode != 0 || i.slot_screens.get(slot).copied().unwrap_or(false) {
+    if mode != 0 {
         return level;
     }
     let Some(cap) = i

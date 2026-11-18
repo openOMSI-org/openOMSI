@@ -130,20 +130,10 @@ impl Renderer {
             &scene.meshes[mesh].flats,
             slots,
         );
-        let slot_screens = materials
-            .iter()
-            .map(|&material| {
-                scene
-                    .materials
-                    .get(material)
-                    .is_some_and(Material::is_screen)
-            })
-            .collect();
         scene.instances.push(Instance {
             draw_order,
             slot_levels,
             slot_depth_caps,
-            slot_screens,
             mesh,
             transform,
             origin,
@@ -210,20 +200,10 @@ impl Renderer {
             &scene.meshes[mesh].flats,
             slots,
         );
-        let slot_screens = materials
-            .iter()
-            .map(|&material| {
-                scene
-                    .materials
-                    .get(material)
-                    .is_some_and(Material::is_screen)
-            })
-            .collect();
         scene.instances.push(Instance {
             draw_order,
             slot_levels,
             slot_depth_caps,
-            slot_screens,
             mesh,
             transform,
             origin,

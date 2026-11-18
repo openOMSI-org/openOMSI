@@ -121,10 +121,6 @@ pub struct Material {
 }
 
 impl Material {
-    pub(crate) fn is_screen(&self) -> bool {
-        self.uniform.flags[0] > 0.5
-    }
-
     /// Whether the material samples texture `id`.
     pub fn uses_texture(&self, id: TextureId) -> bool {
         self.texture == Some(id)
