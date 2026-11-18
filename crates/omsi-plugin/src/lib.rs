@@ -981,7 +981,8 @@ pub struct HostConfig {
     pub host32: Option<PathBuf>,
     /// The program that runs Windows executables here (`wine`); none on Windows.
     pub runner: Option<PathBuf>,
-    /// Plugins the player switched off in the launcher, by [`status::key`] (#3919).
+    /// Plugins the player switched off in the launcher, by [`status::plugin_key`] or
+    /// [`status::opl_key`] (#3919).
     pub off: Vec<String>,
     /// Where the session's [`status::Report`] goes (None: nowhere).
     pub status_file: Option<PathBuf>,
@@ -1397,10 +1398,10 @@ impl Plugins {
     ) -> Plugins {
         let mut loaded: Vec<Plugin> = Vec::new();
         let mut status = status::Status::new(hosts.status_file.clone());
-        let off = |name: &str| hosts.off.contains(&status::key(name));
+        let off = |name: &str, stem: &str| status::is_off(&hosts.off, name, stem);
         for (opl, dir) in plugin_opls(dirs) {
             let name = status::opl_key(&opl, dir);
-            if off(&name) {
+            if off(&name, &name) {
                 log::info!(
                     "plugin {} left off (switched off in the launcher)",
                     opl.display()
@@ -1468,8 +1469,8 @@ impl Plugins {
                     continue;
                 }
                 let spec = lua::LuaSpec::disk(&path);
-                let name = spec.name.clone();
-                if off(&name) {
+                let name = status::plugin_key(&path, dir);
+                if off(&name, &spec.name) {
                     log::info!("Lua plugin {name} left off (switched off in the launcher)");
                     status.add(&name, &path, "lua", "off", "");
                     continue;
@@ -1491,16 +1492,16 @@ impl Plugins {
         let mut wasm = Vec::new();
         for dir in dirs {
             for path in oop::find_oop(dir) {
-                let name = path
+                let stem = path
                     .file_stem()
                     .map(|n| n.to_string_lossy().to_ascii_lowercase())
                     .unwrap_or_default();
                 if lua
                     .iter()
-                    .any(|p: &lua::LuaPlugin| p.name.eq_ignore_ascii_case(&name))
+                    .any(|p: &lua::LuaPlugin| p.name.eq_ignore_ascii_case(&stem))
                     || wasm
                         .iter()
-                        .any(|p: &wasm_plugin::WasmHost| p.name.eq_ignore_ascii_case(&name))
+                        .any(|p: &wasm_plugin::WasmHost| p.name.eq_ignore_ascii_case(&stem))
                 {
                     log::warn!(
                         "plugin {} left out: a plugin of that name is loaded already",
@@ -1508,7 +1509,8 @@ impl Plugins {
                     );
                     continue;
                 }
-                if off(&name) {
+                let name = status::plugin_key(&path, dir);
+                if off(&name, &stem) {
                     log::info!(
                         "plugin {} left off (switched off in the launcher)",
                         path.display()

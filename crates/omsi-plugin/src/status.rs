@@ -5,7 +5,8 @@
 use std::path::{Path, PathBuf};
 
 /// In the game's data folder (`~/.openomsi`): the plugins the player switched off in the
-/// launcher, one name a line ([`key`]).
+/// launcher, one name a line ([`key`]): [`plugin_key`] or [`opl_key`], or a bare stem an
+/// older launcher wrote ([`is_off`]).
 pub const OFF_FILE: &str = "plugins-off.txt";
 /// In the game's data folder: the last session's [`Report`].
 pub const STATUS_FILE: &str = "plugins-status.json";
@@ -25,8 +26,8 @@ pub fn read_off(dir: &Path) -> Vec<String> {
 /// One plugin's line.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Entry {
-    /// The name the launcher switches it by (in lower case): a `.lua` file's or a folder's
-    /// stem, a `.oop`'s stem, an `.opl`'s path under `plugins` ([`opl_key`]).
+    /// The name the launcher switches it by (in lower case): its path under `plugins`
+    /// ([`plugin_key`], [`opl_key`]).
     pub name: String,
     pub path: String,
     /// `"lua"`, `"oop"` or `"opl"`.
@@ -68,6 +69,28 @@ pub fn opl_key(opl: &Path, dir: &Path) -> String {
         .join("/"))
 }
 
+/// A Lua or `.oop` plugin's name: its path under the `plugins` folder `dir` (`foo.lua`,
+/// `foo.oop`), a folder plugin's folder with a `/` after it (`foo/` for `foo/main.lua`), so
+/// `foo.lua` and `foo/main.lua` are switched apart.
+pub fn plugin_key(path: &Path, dir: &Path) -> String {
+    let main = path
+        .file_name()
+        .is_some_and(|n| n.eq_ignore_ascii_case("main.lua"))
+        && path.parent() != Some(dir);
+    match path.parent().filter(|_| main) {
+        Some(folder) => format!("{}/", opl_key(folder, dir)),
+        None => opl_key(path, dir),
+    }
+}
+
+/// Whether the plugin `key` is in the off-list `off`; `stem` is the name an older launcher
+/// wrote for it (a `.lua`'s, a folder's or a `.oop`'s stem), which still leaves out every
+/// plugin of that stem, so a player's list is kept.
+pub fn is_off(off: &[String], key: &str, stem: &str) -> bool {
+    let stem = self::key(stem);
+    off.iter().any(|n| *n == key || *n == stem)
+}
+
 impl Status {
     pub fn new(file: Option<PathBuf>) -> Status {
         let at = std::time::SystemTime::now()
@@ -98,14 +121,15 @@ impl Status {
         });
     }
 
-    /// A loaded plugin the game switched off (too many errors, a call too long).
-    pub fn switched_off(&mut self, name: &str, error: &str) {
-        let k = key(name);
+    /// A loaded plugin the game switched off (too many errors, a call too long), by the file
+    /// it was loaded from: two plugins may have one name.
+    pub fn switched_off(&mut self, path: &Path, error: &str) {
+        let path = path.display().to_string();
         if let Some(e) = self
             .report
             .plugins
             .iter_mut()
-            .find(|e| e.name == k && e.state == "loaded")
+            .find(|e| e.path == path && e.state == "loaded")
         {
             e.state = "switched_off".into();
             e.error = error
@@ -158,7 +182,10 @@ mod tests {
             "syntax error near 'end'\nstack",
         );
         s.write();
-        s.switched_off("CRUISE", "attempt to index a nil value");
+        s.switched_off(
+            std::path::Path::new("plugins/cruise.lua"),
+            "attempt to index a nil value",
+        );
         let back: Report = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
         assert_eq!(back.plugins[0].state, "switched_off");
         assert_eq!(back.plugins[1].error, "syntax error near 'end'");
@@ -176,5 +203,20 @@ mod tests {
             opl_key(&dir.join("Pablo").join("Config.opl"), dir),
             opl_key(&dir.join("Config.opl"), dir)
         );
+    }
+
+    #[test]
+    fn a_lua_file_and_a_folder_of_one_name_are_two_plugins() {
+        let dir = Path::new("omsi/plugins");
+        let file = plugin_key(&dir.join("Foo.lua"), dir);
+        let folder = plugin_key(&dir.join("Foo").join("main.lua"), dir);
+        assert_eq!((file.as_str(), folder.as_str()), ("foo.lua", "foo/"));
+        assert_eq!(plugin_key(&dir.join("main.lua"), dir), "main.lua");
+        assert_eq!(plugin_key(&dir.join("foo.oop"), dir), "foo.oop");
+        let off = ["foo/".to_string()];
+        assert!(is_off(&off, &folder, "Foo") && !is_off(&off, &file, "Foo"));
+        // (an older launcher's bare name leaves out both, as it did)
+        let old = ["foo".to_string()];
+        assert!(is_off(&old, &folder, "Foo") && is_off(&old, &file, "Foo"));
     }
 }

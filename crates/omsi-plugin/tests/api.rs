@@ -304,9 +304,10 @@ fn the_launcher_switches_plugins_off_and_reads_what_became_of_them() {
             .find(|e| e.name == n)
             .map(|e| (e.state.clone(), e.error.is_empty()))
     };
-    assert_eq!(state("good"), Some(("loaded".into(), true)));
-    assert_eq!(state("quiet"), Some(("off".into(), true)));
-    assert_eq!(state("broken"), Some(("failed".into(), false)));
+    assert_eq!(state("good.lua"), Some(("loaded".into(), true)));
+    // ("quiet": the bare name an older launcher wrote still leaves it out)
+    assert_eq!(state("quiet.lua"), Some(("off".into(), true)));
+    assert_eq!(state("broken.lua"), Some(("failed".into(), false)));
     // the settings' description, for the launcher's form
     let schema = json::decode(
         &std::fs::read_to_string(d.join("good.data/settings.schema.json")).unwrap(),
@@ -323,6 +324,84 @@ fn the_launcher_switches_plugins_off_and_reads_what_became_of_them() {
             Some(&Value::Bool(true))
         )
     );
+}
+
+#[test]
+fn a_lua_file_and_a_folder_of_one_name_are_switched_apart() {
+    let d = dir("same-name");
+    let src = |who: &str| {
+        format!(
+            r#"local s = omsi.plugin.settings({{ {{ key = "who", type = "text", default = "?" }} }})
+            local said = false
+            function on_frame()
+              if not said then omsi.message("{who} " .. s.who); said = true end
+              if s.who == "boom" then error("boom") end
+            end"#
+        )
+    };
+    std::fs::write(d.join("foo.lua"), src("file")).unwrap();
+    std::fs::create_dir_all(d.join("foo/data")).unwrap();
+    std::fs::write(d.join("foo/main.lua"), src("folder")).unwrap();
+    std::fs::create_dir_all(d.join("foo.data")).unwrap();
+    std::fs::write(d.join("foo.data/settings.json"), r#"{ "who": "one" }"#).unwrap();
+    std::fs::write(d.join("foo/data/settings.json"), r#"{ "who": "two" }"#).unwrap();
+    let file = d.join("plugins-status.json");
+    let load = |off: &[&str]| {
+        let hosts = HostConfig {
+            off: off.iter().map(|n| n.to_string()).collect(),
+            status_file: Some(file.clone()),
+            ..Default::default()
+        };
+        let mut p = Plugins::load(std::slice::from_ref(&d), &hosts);
+        let mut g = Game::new();
+        p.frame(&mut g);
+        let report: omsi_plugin::status::Report =
+            serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        let states: Vec<(String, String)> = report
+            .plugins
+            .iter()
+            .map(|e| (e.name.clone(), e.state.clone()))
+            .collect();
+        (g.messages, states)
+    };
+    let st = |a: &str, b: &str| {
+        vec![
+            ("foo/".to_string(), a.to_string()),
+            ("foo.lua".to_string(), b.to_string()),
+        ]
+    };
+    // both run, each with its own settings
+    let (said, states) = load(&[]);
+    assert_eq!(said, ["folder two", "file one"]);
+    assert_eq!(states, st("loaded", "loaded"));
+    // each switched off alone
+    let (said, states) = load(&["foo/"]);
+    assert_eq!(said, ["file one"]);
+    assert_eq!(states, st("off", "loaded"));
+    let (said, states) = load(&["foo.lua"]);
+    assert_eq!(said, ["folder two"]);
+    assert_eq!(states, st("loaded", "off"));
+    // an older launcher's "foo" left out both, and still does
+    assert_eq!(load(&["foo"]).1, st("off", "off"));
+    // the one that fails is the one the status says was switched off
+    std::fs::write(d.join("foo.data/settings.json"), r#"{ "who": "boom" }"#).unwrap();
+    let hosts = HostConfig {
+        status_file: Some(file.clone()),
+        ..Default::default()
+    };
+    let mut p = Plugins::load(std::slice::from_ref(&d), &hosts);
+    let mut g = Game::new();
+    for _ in 0..20 {
+        p.frame(&mut g);
+    }
+    let report: omsi_plugin::status::Report =
+        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let states: Vec<(String, String)> = report
+        .plugins
+        .iter()
+        .map(|e| (e.name.clone(), e.state.clone()))
+        .collect();
+    assert_eq!(states, st("loaded", "switched_off"));
 }
 
 #[test]

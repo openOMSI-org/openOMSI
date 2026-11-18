@@ -83,13 +83,15 @@ The launcher's **Plugins** page lists every plugin of the `plugins` folders (Lua
 `.opl`). Players switch each on or off there without moving its files, see what the last game
 made of it, and change the settings it declared with `plugin.settings`:
 
-* The names switched off are in `~/.openomsi/plugins-off.txt`, one a line, in lower case: a
-  `.lua`'s file name without `.lua`, a folder plugin's folder stem (`my.plugin/main.lua` is
-  `my`), a `.oop`'s stem, and an `.opl`'s path under `plugins` (`pablo/mbas.opl`).
+* The plugins switched off are in `~/.openomsi/plugins-off.txt`, one a line, in lower case,
+  each by its path under `plugins`: `foo.lua`, a folder plugin's folder with a `/` after it
+  (`foo/` for `foo/main.lua`), `foo.oop`, and an `.opl`'s path (`pablo/mbas.opl`). So
+  `foo.lua` and `foo/main.lua` are two plugins, switched and set apart. A bare stem an older
+  launcher wrote (`foo`) still leaves out every Lua or `.oop` plugin of that stem.
   The game reads it before it loads the plugins and leaves those out.
-* After loading, the game writes `~/.openomsi/plugins-status.json`: every plugin with its
-  `state` (`loaded`, `off`, `failed` with the load error, e.g. a syntax error) and, when one is
-  switched off during the game for its errors, `switched_off` with the error.
+* After loading, the game writes `~/.openomsi/plugins-status.json`: every plugin, by the same
+  name, with its `state` (`loaded`, `off`, `failed` with the load error, e.g. a syntax error)
+  and, when one is switched off during the game for its errors, `switched_off` with the error.
 * `plugin.settings(...)` also writes `settings.schema.json` into the plugin's data folder,
   beside `settings.json`: `{title, settings: [{key, type, label, default, min, max, step,
   choices}]}`. The launcher makes a form of it and writes the values into `settings.json`,
