@@ -240,6 +240,8 @@
 "High (512)": "Жоғары (512)"
 "Very high (1024)": "Өте жоғары (1024)"
 "Boarding": "Отырғызу"
+"Rear door boarding": "Артқы есіктен отырғызу"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)": "Жолаушылар артқы және ортаңғы есіктерден де кіреді: әркім автобустың өз жағындағы ең жақын есікке барып, соны сұрайды, алдыңғы жақта кезекке тұрмайды. Бұл есікті әдеттегідей ашыңыз (өз пернесімен, барлық есіктермен немесе есікті босатумен)"
 "Pay and take the ticket": "Төлеп, билетті алу"
 "The driver sells the ticket": "Билетті жүргізуші сатады"
 "Just walk in": "Жай кіру"

@@ -610,6 +610,7 @@ impl App {
                         && self.settings.passenger_animation == "enhanced";
                     h.bad_driving = self.settings.pax_bad_driving;
                     h.boarding = self.settings.boarding.clone();
+                    h.rear_door_boarding = self.settings.rear_door_boarding;
                     h.stand_chance = self.settings.standing_chance;
                     h.short_rides_stand = self.settings.pax_short_rides_stand;
                     h.voices = match self.settings.pax_voices.as_str() { "off" => 2, "tickets" => 1, _ => 0 };

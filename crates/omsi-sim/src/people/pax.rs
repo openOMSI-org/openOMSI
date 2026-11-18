@@ -859,6 +859,34 @@ impl Cabin {
         found
     }
 
+    /// The entry to walk to now, as `choose_entry` asks it (sub_625b98), with the launcher's
+    /// `rear_door_boarding` (#4055): with it on, every door of `list` is worth walking to,
+    /// open or shut - the nearest one wins wherever the passenger stands, and they wait there
+    /// and ask for it (`PAX_Entry<n>_Req`), as neoOMSI's rear doors work. `avoid` (a
+    /// passenger who still has to buy a ticket) still keeps them at a door that sells. Off:
+    /// as Omsi.exe, a shut door counting only with `{withbutton}` and only while no door of
+    /// the list is open.
+    pub fn entry_nearest(
+        &self,
+        p: Vec3,
+        list: &[Option<usize>],
+        avoid: bool,
+        flags: &[(bool, bool)],
+        open: &[bool],
+        rear_boarding: bool,
+    ) -> Option<usize> {
+        let first = if rear_boarding {
+            self.omsi_nearest(p, list, avoid, false, Some(flags), None)
+        } else {
+            self.omsi_nearest(p, list, avoid, false, Some(flags), Some(open))
+        };
+        // A filtered list can begin with a door on the opposite side (None): with every
+        // matching door still shut, `omsi_nearest`'s rigid-bus fallback returns the first
+        // slot. The search again without the open mask keeps the ticket-sale filter and the
+        // nearest platform-facing door.
+        first.or_else(|| self.omsi_nearest(p, list, avoid, false, Some(flags), None))
+    }
+
     /// The validator nearest `p` (bus frame, the height weighed as in `omsi_nearest`): the
     /// one a passenger who came in there stamps at. The first of equally near ones; in a
     /// cabin of sections nobody walks between, one in the sections of `p`'s nearest point.

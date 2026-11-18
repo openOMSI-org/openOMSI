@@ -136,6 +136,32 @@ fn choose(h: &mut PeopleSim, bus: &BusNow) -> usize {
 }
 
 #[test]
+fn brt_rear_door_boarding_walks_to_the_nearest_door() {
+    let (mut h, bus) = setup("rear-boarding", None);
+    // By the front-left door, which is shut and has no `{withbutton}`: as OMSI 2 the queue
+    // walks back to the door with the button instead.
+    h.pax_mut(0).unwrap().pos = DVec3::new(-3.0, 4.0, 0.0);
+    assert_eq!(choose(&mut h, &bus), 2, "off: the door with the button");
+    // #4055: on, the door they stand at counts, shut or not, so the nearest one wins.
+    h.rear_door_boarding = true;
+    assert_eq!(choose(&mut h, &bus), 1, "on: the nearest door of their side");
+}
+
+#[test]
+fn brt_rear_door_boarding_returns_to_an_open_door_when_the_nearest_stays_shut() {
+    let (mut h, mut bus) = setup("rear-boarding-fallback", None);
+    // The button door is open and the front-left one is not: the queue waits there, so
+    // rear door boarding sends nobody to a door that will not open for good.
+    bus.entry_open[2] = true;
+    h.pax_mut(0).unwrap().pos = DVec3::new(-3.0, 4.0, 0.0);
+    h.rear_door_boarding = true;
+    assert_eq!(choose(&mut h, &bus), 1, "the nearest door, still shut");
+    // Half the `DOOR_GIVE_UP` wait at it, and the open door takes them back.
+    h.pax_mut(0).unwrap().door_since = Some(h.time - DOOR_GIVE_UP * 0.6);
+    assert_eq!(choose(&mut h, &bus), 2, "the open door, after the wait");
+}
+
+#[test]
 fn brt_side_configuration_respects_both_traffic_hands() {
     for left in [false, true] {
         let kerb = if left { -1.0 } else { 1.0 };

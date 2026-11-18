@@ -2292,6 +2292,7 @@ fn passenger_defaults(v: &mut Value) {
     v["passenger_hailing"] = json!(false);
     v["passenger_full_bus_reaction"] = json!(false);
     v["pax_short_rides_stand"] = json!(false);
+    v["rear_door_boarding"] = json!(false);
 }
 
 /// Initial values shared by desktop and phone, kept outside the long settings parser.
@@ -2487,6 +2488,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "ai_max_humans" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200)),
             "parked_buses_drawn" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(-1)),
             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices" => v[&k] = json!(val),
+            "rear_door_boarding" => v[&k] = json!(b(val)),
             "touch_door_mode" => v[&k] = json!(if val.eq_ignore_ascii_case("direct") { "direct" } else { "standard" }),
             "update_channel" => v[&k] = json!(if val.eq_ignore_ascii_case("beta") { "beta" } else { "stable" }),
             "photo_mode" => v[&k] = json!(if val.eq_ignore_ascii_case("advanced") { "advanced" } else { "simple" }),
@@ -2705,7 +2707,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let dynamic_arrows = b("nav_dynamic_arrows", legacy_arrows);
     let map_arrows = b("nav_map_arrows", legacy_arrows);
     let text = format!(
-        "# openOMSI settings (written by the launcher)\nversion=4\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\nvideo_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
+        "# openOMSI settings (written by the launcher)\nversion=4\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\nvideo_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\nrear_door_boarding={}\n",
         n("msaa", 4),
         n("anisotropy", 8),
         b("ssao", true),
@@ -2756,6 +2758,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             Some(Value::Number(x)) => x.to_string(),
             _ => "auto".to_string(),
         },
+        b("rear_door_boarding", false),
     );
     let ui_theme = if v.get("ui_theme").and_then(|x| x.as_str()).is_some_and(|x| x.eq_ignore_ascii_case("light")) { "light" } else { "dark" };
     let text = format!("{text}ui_theme={ui_theme}\n");

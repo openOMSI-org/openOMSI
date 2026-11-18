@@ -163,6 +163,7 @@ impl PeopleSim {
             visual_full_bus_reaction: false,
             bad_driving: true,
             boarding: "auto".into(),
+            rear_door_boarding: false,
             stand_chance: 0.05,
             short_rides_stand: false,
             give_ticket: false,
