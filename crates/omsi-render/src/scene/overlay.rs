@@ -941,6 +941,31 @@ mod tests {
         }
     }
 
+    /// A slightly tilted surface standing 0.1 mm off its base at its nearest edge is not on
+    /// the base: stepping it can carry it past geometry in front at a distance.
+    #[test]
+    fn a_slightly_tilted_surface_a_tenth_of_a_millimetre_off_at_its_nearest_edge_is_not_on_the_base()
+     {
+        for lift in [1.0e-4_f32, -1.0e-4] {
+            let mut mesh = quad(1.0, 0.2, 0, false);
+            let mut over = quad(1.0, 0.1, 1, true);
+            let slope = 0.2 * 1.0_f32.to_radians();
+            over.positions[0].z += lift;
+            over.positions[3].z += lift;
+            over.positions[1].z += lift + slope;
+            over.positions[2].z += lift + slope;
+            mesh.positions.extend(&over.positions);
+            mesh.normals.extend(&over.normals);
+            mesh.uvs.extend(&over.uvs);
+            mesh.indices.extend(over.indices.iter().map(|i| i + 4));
+            mesh.ranges = vec![(0, 6, 0), (6, 6, 1)];
+            let mut run = ObjectRun::default();
+            run.begin(None);
+            let levels = run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 2);
+            assert_eq!(levels, [0, 0], "lift {lift}");
+        }
+    }
+
     #[test]
     fn a_board_drawn_after_the_text_a_tenth_of_a_millimetre_in_front_of_it_takes_no_step() {
         assert_eq!(
