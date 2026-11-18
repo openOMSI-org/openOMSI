@@ -134,6 +134,10 @@ pub struct TrailerPart {
     /// [`CarRun`]: super::CarRun
     pub(super) runs_itself: bool,
     pub run: Option<Box<super::CarRun>>,
+    /// The part's own `[scripttexture]` pictures, which its own scripts draw (the NF6D's
+    /// rear cab's destination matrix): made with its [`CarRun`](super::CarRun) for a part
+    /// that does not share its scripts. Empty otherwise (it shows the leading vehicle's).
+    pub script_textures: Vec<crate::scripttex::ScriptTexture>,
 }
 
 /// The leading vehicle's variables a coupled part reads and writes every frame for each of
@@ -423,6 +427,7 @@ impl TrailerPart {
             coupled_at: [true, false],
             runs_itself: super::car_run::uses_place_in_train(&ty),
             run: None,
+            script_textures: Vec::new(),
             ty,
         }
     }
@@ -434,6 +439,14 @@ impl TrailerPart {
         let own_front = if self.reversed { behind } else { ahead };
         let own_back = if self.reversed { ahead } else { behind };
         [own_front, own_back, self.reversed].map(|b| if b { 1.0 } else { 0.0 })
+    }
+
+    /// One frame of the part's own scripts and nothing else (`update_scripts_only`).
+    pub(super) fn run_scripts_only(&mut self, main: &mut VehicleInstance) {
+        let place = self.place_in_train();
+        if let Some(run) = self.run.as_deref_mut() {
+            run.frame(main, place, None, &mut self.script_textures);
+        }
     }
 
     /// Variable `name` of the part's own [`CarRun`](super::CarRun); None when it has none
@@ -480,12 +493,15 @@ impl TrailerPart {
             .collect();
     }
 
-    /// Re-render the text textures whose variable (of the leading vehicle) changed;
-    /// returns the indices with a pending image.
+    /// Re-render the text textures whose variable changed: the part's own, where it runs its
+    /// own scripts and they declare it (the NF6D's rear cab's IBIS), else the leading
+    /// vehicle's; returns the indices with a pending image.
     pub fn update_text_textures(&mut self, main: &VehicleInstance) -> Vec<usize> {
         let mut changed = Vec::new();
+        let run = self.run.as_deref();
         for (i, t) in self.text_textures.iter_mut().enumerate() {
-            if t.update(main.text_texture_str(&t.def.variable)) {
+            let own = run.and_then(|r| r.get_str(&t.def.variable));
+            if t.update(own.unwrap_or_else(|| main.text_texture_str(&t.def.variable))) {
                 changed.push(i);
             }
         }
@@ -988,20 +1004,20 @@ impl TrailerPart {
         // a car that reads its place in the train runs its own scripts first, and its
         // meshes show its values (see `car_run`)
         let place = self.place_in_train();
-        let (ahead, behind) = (
-            &self.ty.def.control_cable_front,
-            &self.ty.def.control_cable_back,
-        );
-        let plugs = if self.reversed {
-            [behind.as_slice(), ahead.as_slice()]
-        } else {
-            [ahead.as_slice(), behind.as_slice()]
-        };
         let probe = main.height_probe_at(self.position, self.body_rotation());
         match self.run.as_deref_mut() {
-            Some(run) => run.frame(main, place, plugs, probe),
+            Some(run) => run.frame(main, place, probe, &mut self.script_textures),
             None if self.runs_itself => {
-                let run = super::CarRun::start(&self.ty, main, place);
+                if !self.ty.def.script_share {
+                    self.script_textures = self
+                        .ty
+                        .model
+                        .script_textures
+                        .iter()
+                        .map(|(w, h)| crate::scripttex::ScriptTexture::new(*w, *h))
+                        .collect();
+                }
+                let run = super::CarRun::start(&self.ty, main, place, &mut self.script_textures);
                 let slot_of =
                     |n: &str| omsi_script::compile::with_lower(n, |k| run.names.get(k).copied());
                 self.animators = part_animators(&self.ty, &slot_of);

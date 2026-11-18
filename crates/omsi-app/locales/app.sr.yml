@@ -4384,3 +4384,5 @@
 "Default for every bus": "Podrazumevani za svaki autobus"
 "Use for {bus}": "Koristi za {bus}"
 "Profile {name} in use": "Koristi se profil {name}"
+"Driving end {number} of {count}: {name}": "Upravljačnica {number} od {count}: {name}"
+"At the wheel in the other cab": "Za komandama u drugoj kabini"

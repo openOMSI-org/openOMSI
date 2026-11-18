@@ -4078,3 +4078,5 @@
 "Default for every bus": "Per defecte per a tots els autobusos"
 "Use for {bus}": "Fes-lo servir per a {bus}"
 "Profile {name} in use": "Perfil {name} en ús"
+"Driving end {number} of {count}: {name}": "Cabina {number} de {count}: {name}"
+"At the wheel in the other cab": "Als comandaments a l'altra cabina"

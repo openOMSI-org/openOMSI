@@ -4383,3 +4383,5 @@
 "Default for every bus": "ნაგულისხმევი ყველა ავტობუსისთვის"
 "Use for {bus}": "გამოიყენე {bus}-ისთვის"
 "Profile {name} in use": "გამოიყენება პროფილი {name}"
+"Driving end {number} of {count}: {name}": "მართვის კაბინა {number}/{count}: {name}"
+"At the wheel in the other cab": "მართვის პულტთან მეორე კაბინაში"

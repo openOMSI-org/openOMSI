@@ -14,6 +14,7 @@ pub mod chain;
 pub mod class;
 pub mod dynamics;
 pub mod track;
+pub mod trail;
 
 /// Whether the rail physics beyond the original's are on: the pantograph against the wire, the
 /// body on its springs and the power curve of AI trams.
@@ -27,3 +28,4 @@ pub use body::{Body, BodyOut, BodyParams};
 pub use class::{RailClass, TrackClass, TrackFacts};
 pub use dynamics::{Conditions, Consist, Forces, Outcome, step};
 pub use track::{RailMapConfig, TrackInfo, TrackRule, classify};
+pub use trail::Trail;

@@ -8,6 +8,7 @@ mod doors;
 mod gears;
 mod ibis;
 mod mouse;
+mod part_sounds;
 mod picking;
 mod rp_speed_limit;
 
@@ -1318,6 +1319,7 @@ impl Player {
         for (t, f) in &fired_files {
             log::info!("announcement: {t} -> {f}");
         }
+        let part_fired: part_sounds::PartFired = self.vehicle.take_part_fired();
         if let (Some(a), Some(ss)) = (audio, self.sounds.as_mut()) {
             let xf = self.vehicle.world_transform();
             let v = &self.vehicle;
@@ -1345,13 +1347,7 @@ impl Player {
                 v.var_slot(n).and_then(|i| vals.get(i).copied())
             };
             ss.update_fired(a, &|n| v.var(n), &xf, &fired, &at_fire);
-            ss.update_parts(
-                a,
-                &|n| v.var(n),
-                &|i| v.trailers.get(i).map(|t| t.world_transform()),
-                &fired,
-                &at_fire,
-            );
+            part_sounds::play(a, ss, v, &part_fired, &fired, &at_fire);
             for (t, f) in &fired_files {
                 ss.play_file_trigger(a, t, f, &|n| v.var(n), &xf);
             }

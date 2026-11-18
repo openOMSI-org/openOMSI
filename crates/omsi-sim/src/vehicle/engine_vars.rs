@@ -170,7 +170,12 @@ mod tests {
             "",
         );
         v.attach_trailer(part.ty.clone());
-        let run = crate::vehicle::car_run::CarRun::start(&part.ty, &mut v, [1.0, 0.0, 0.0]);
+        let run = crate::vehicle::car_run::CarRun::start(
+            &part.ty,
+            &mut v,
+            [1.0, 0.0, 0.0],
+            &mut Vec::new(),
+        );
         v.trailers[0].run = Some(Box::new(run));
         v.set_cabin_temperature(22.0);
         let run = v.trailers[0].run.as_ref().unwrap();

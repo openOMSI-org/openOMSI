@@ -3278,3 +3278,5 @@
 "Default for every bus": "すべてのバスの既定"
 "Use for {bus}": "{bus} で使う"
 "Profile {name} in use": "プロファイル {name} を使用中"
+"Driving end {number} of {count}: {name}": "運転台 {number}/{count}: {name}"
+"At the wheel in the other cab": "反対側の運転台で運転中"

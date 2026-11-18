@@ -3225,3 +3225,5 @@
 "Default for every bus": "Alapértelmezett minden buszhoz"
 "Use for {bus}": "Használat ehhez: {bus}"
 "Profile {name} in use": "{name} profil használatban"
+"Driving end {number} of {count}: {name}": "Vezetőállás {number}/{count}: {name}"
+"At the wheel in the other cab": "A másik vezetőállásban vezetsz"
