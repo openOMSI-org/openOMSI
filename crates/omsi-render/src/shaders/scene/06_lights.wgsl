@@ -25,21 +25,25 @@ fn point_lights(p: vec3<f32>, n: vec3<f32>, map_k: f32) -> vec3<f32> {
             }
             let l = lights[li];
             let d = l.pos.xyz - p;
-            let dist = length(d);
-            if (dist >= l.pos.w) {
+            let dist2 = dot(d, d);
+            let is_d3d_spot = l.dir.w >= -1.5 && l.extra.z != 0.0;
+            // Mirrored Enhanced frames carry light records with zero/negative
+            // classic radius. Only use the squared cutoff for lights that fade
+            // to zero at their range; Direct3D spots have a hard edge.
+            if (l.pos.w <= 0.0 || (!is_d3d_spot && dist2 > l.pos.w * l.pos.w)) {
+                continue;
+            }
+            if (is_d3d_spot && (l.extra.z < 0.0 || length(d) >= l.pos.w)) {
                 continue;
             }
             if (!(l.dir.w < -1.5 && l.dir.z < -0.5) && own_vehicle_blocks(p, l.pos.xyz)) {
                 continue;
             }
-            if (l.dir.w >= -1.5 && l.extra.z != 0.0) {
+            if (is_d3d_spot) {
                 // a Direct3D spot of the classic picture (lights.rs `push_classic_spot`): a
                 // vehicle's [spotlight] (its range negative) is the player's alone, lit by
                 // `classic_spot` at the vertices; another - a [spotlight_2], a cookie's
                 // cone - is lit so here, its ambient light with the diffuse
-                if (l.extra.z < 0.0) {
-                    continue;
-                }
                 let s = d3d_spot(p, n, l.pos.xyz, l.dir, l.extra.x, l.extra.z, l.color.rgb * l.color.w);
                 sum = sum + s[0] + s[1];
                 continue;
@@ -47,6 +51,7 @@ fn point_lights(p: vec3<f32>, n: vec3<f32>, map_k: f32) -> vec3<f32> {
             // full intensity within 1/8 of the range, then inverse-square, cut off at the range;
             // the strength was set by eye while a street lamp was still counted about three
             // times (see above), so it is three times what it was, to keep the lamp pools
+            let dist = sqrt(dist2);
             let r0 = l.pos.w * 0.125;
             let att = min(1.0, (r0 * r0) / max(dist * dist, 0.01)) * clamp(1.0 - dist / l.pos.w, 0.0, 1.0) * 3.75;
             let ndl = max(dot(n, d / max(dist, 0.01)), 0.15);
