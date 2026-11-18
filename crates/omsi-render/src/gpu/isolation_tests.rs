@@ -57,6 +57,23 @@ fn auxiliary_adapter_state_is_restored_after_failure() {
 
 #[test]
 fn auxiliary_adapter_state_device_open_does_not_publish_metadata() {
+    const CHILD: &str = "OMSI_AUXILIARY_METADATA_TEST_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "gpu::isolation_tests::auxiliary_adapter_state_device_open_does_not_publish_metadata",
+            ])
+            .env(CHILD, "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        return;
+    }
+    auxiliary_adapter_state_device_open_does_not_publish_metadata_body();
+}
+
+fn auxiliary_adapter_state_device_open_does_not_publish_metadata_body() {
     let gpu_options = omsi_texture::gpu_options();
     let texture = ADAPTER_TEXTURE_MB.load(Relaxed);
     let vram = ADAPTER_VRAM_MB.load(Relaxed);
