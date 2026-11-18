@@ -185,10 +185,10 @@ export function BusOptions() {
     </button>
     ${more && html`<div class="stack" style="gap:12px">
       <div class="grid-2">
-        ${numbers.length > 0 && html`<${Field} label="Fleet number">
-          <${Select} raw value=${c.number} options=${[['', `${t('Automatic')} (${numbers[0][0]})`], ...numbers.map(([n, p]) => [n, p ? `${n} - ${p}` : n])]} onChange=${(number) => choose({ number })} />
-          <${Input} value=${numbers.some(([n]) => n === c.number) ? '' : c.number} placeholder="Custom" onInput=${(number) => choose({ number })} />
-        </${Field}>`}
+        <${Field} label="Fleet number">
+          ${numbers.length > 0 && html`<${Select} raw value=${c.number} options=${[['', `${t('Automatic')} (${numbers[0][0]})`], ...numbers.map(([n, p]) => [n, p ? `${n} - ${p}` : n])]} onChange=${(number) => choose({ number })} />`}
+          <${Input} value=${numbers.length > 0 && numbers.some(([n]) => n === c.number) ? '' : c.number} placeholder=${numbers.length > 0 ? 'Custom' : 'Automatic'} onInput=${(number) => choose({ number })} />
+        </${Field}>
         <${Field} label="Number plate"><${Input} value=${c.plate} placeholder="Automatic" onInput=${(plate) => choose({ plate })} /></${Field}>
       </div>
       <${Field} label="Depot file">
