@@ -720,6 +720,104 @@ impl RailDrive {
     }
 }
 
+/// How far ahead (m) `change_switch` looks for points.
+const SWITCH_REACH: f32 = 50.0;
+
+/// What setting points did, from `World::switch_set_to` after the set.
+#[derive(Debug, PartialEq)]
+enum Thrown {
+    Moved,
+    Stuck,
+    /// No switch object, or its path has no `[switchdir]`: nothing there to set.
+    NoSwitch,
+}
+
+impl From<Option<bool>> for Thrown {
+    fn from(set_to: Option<bool>) -> Self {
+        match set_to {
+            Some(true) => Thrown::Moved,
+            Some(false) => Thrown::Stuck,
+            None => Thrown::NoSwitch,
+        }
+    }
+}
+
+/// The first points ahead of the train's leading end within `SWITCH_REACH` (the front end,
+/// or the rear end driven from the rear cab or backing; see `Network::points_ahead`).
+fn switch_ahead(r: &RailDrive, net: &Network, from_rear: bool) -> Option<(f32, Vec<(usize, f64)>)> {
+    let (lane, s, along) = if from_rear {
+        r.state_at(net, r.u - r.trail.reach_back)
+            .unwrap_or(r.spot())
+    } else {
+        r.spot()
+    };
+    net.points_ahead(lane, s, along != from_rear, SWITCH_REACH)
+}
+
+/// `change_switch` (J): the points ahead of the train's leading end are set to their next
+/// branch, as a tram driver sets them from the cab (Berlin's and Essen's by a button, the
+/// map's own points otherwise only by a click on them). What it did, for the screen.
+pub(crate) fn change_switch(
+    p: &Player,
+    net: &Network,
+    world: &World,
+    scenery: &mut omsi_sim::scenery::SceneryState,
+) -> String {
+    let Some(r) = p.rail.as_ref() else {
+        return omsi_ui::tr("Not on rails").into_owned();
+    };
+    let turned = p
+        .vehicle
+        .active_cab
+        .and_then(|k| p.vehicle.trailers.get(k))
+        .is_some_and(|t| t.reversed);
+    let from_rear = turned || p.vehicle.physics.speed < -0.1;
+    let Some((dist, branches)) = switch_ahead(r, net, from_rear) else {
+        return omsi_ui::i18n::tr_fill(
+            "No points within {reach} m ahead",
+            &[("{reach}", &SWITCH_REACH)],
+        );
+    };
+    let set = branches.iter().position(|(i, _)| {
+        net.lanes[*i]
+            .key
+            .is_some_and(|k| world.switch_set_to(scenery, k.id, k.path) == Some(true))
+    });
+    let (next, way) = omsi_sim::traffic::next_branch(&branches, set);
+    let metres = dist.round() as i64;
+    let Some(key) = net.lanes[branches[next].0].key else {
+        return omsi_ui::i18n::tr_fill(
+            "The points {dist} m ahead cannot be set",
+            &[("{dist}", &metres)],
+        );
+    };
+    world.set_switches(scenery, &[(key.id, key.path)]);
+    match Thrown::from(world.switch_set_to(scenery, key.id, key.path)) {
+        Thrown::Moved => {}
+        Thrown::Stuck => {
+            return omsi_ui::i18n::tr_fill(
+                "The points {dist} m ahead do not move",
+                &[("{dist}", &metres)],
+            );
+        }
+        Thrown::NoSwitch => {
+            return omsi_ui::i18n::tr_fill(
+                "The points {dist} m ahead cannot be set",
+                &[("{dist}", &metres)],
+            );
+        }
+    }
+    log::info!(
+        "change_switch: the points {dist:.0} m ahead ({} end) set {way} (lane {})",
+        if from_rear { "rear" } else { "front" },
+        branches[next].0
+    );
+    omsi_ui::i18n::tr_fill(
+        "Points {dist} m ahead: {way}",
+        &[("{dist}", &metres), ("{way}", &omsi_ui::tr(way))],
+    )
+}
+
 /// The indicator the driver has set (1 left, 2 right, else 0), from the script's switch or
 /// its lamps.
 fn blinker_of(v: &omsi_sim::VehicleInstance) -> u8 {
@@ -813,6 +911,16 @@ mod tests {
             head: [0.0, 0.0],
             half_width: 0.5,
         }
+    }
+
+    /// A keyed lane whose switch object is not in the scenery (or has no `[switchdir]`) is
+    /// points that cannot be set, not points that moved.
+    #[test]
+    fn points_without_a_switch_cannot_be_set() {
+        let scenery = omsi_sim::scenery::SceneryState::default();
+        assert_eq!(Thrown::from(scenery.switch_set_to(7, 0)), Thrown::NoSwitch);
+        assert_eq!(Thrown::from(Some(false)), Thrown::Stuck);
+        assert_eq!(Thrown::from(Some(true)), Thrown::Moved);
     }
 
     #[test]
