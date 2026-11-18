@@ -17,6 +17,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **Backing through points keeps the train together**: backing, the vehicle follows the track its
   train lies on, and the train's rear end takes the way the points are set (or the rear cab's
   indicator says) and throws them.
+- **New key J, set the points**: J sets the first points within 50 m ahead of the train's leading
+  end to their next branch (the rear end when driving from the rear cab or backing). It is
+  openOMSI's own key; OMSI 2 has none for it.
 - **mX Graphics (Experimental)** on a Mac: Settings → Graphics → Display → *mX Graphics (Experimental)* draws the game on Metal with [mX](https://github.com/openOMSI-org/mX), openOMSI's own graphics library, instead of wgpu, from the next start. The picture is meant to be the same. It is an early step: the game's shaders do not use mX's bindless textures yet, and in the tests so far it spent less processor time on a frame than wgpu and the same time on the graphics chip. Ray tracing and frame generation stay off with it; where mX cannot open the graphics chip, the game draws with wgpu as before. Off by default. mX's Direct3D 12 and Vulkan have not drawn the game on a real graphics card yet, so Windows and Linux do not offer the switch; `OMSI_MX=on` tries them for one run (without DLSS, FSR 3 and VR), and `OMSI_MX=off` turns mX off for a run on a Mac.
 - **Plugins see the AI vehicles' size**: `omsi.traffic.list()`, `get`, `nearest` and `ahead`
   give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,
