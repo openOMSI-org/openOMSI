@@ -1,5 +1,5 @@
 use super::*;
-use omsi_plugin::ui::{panel_from_source, Anchor};
+use omsi_plugin::ui::{Anchor, panel_from_source};
 
 fn panel(src: &str) -> Panel {
     panel_from_source(src).unwrap()
