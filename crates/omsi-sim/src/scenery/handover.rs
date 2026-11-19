@@ -6,6 +6,7 @@
 //! them in that order at the start of its step and before anything else reads it.
 
 use super::state::{SceneryObject, SceneryState};
+use super::SceneryInstance;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// One change of the loaded scenery, in the order the loader made them.
@@ -48,6 +49,26 @@ impl SceneryInbox {
     }
 }
 
+const SWITCH_VARS: &[&str] = &[
+    "Switch",
+    "Weiche",
+    "weiche_dir",
+    "weiche_pos",
+    "Weichenstellung",
+    "Weichenlage",
+    "switch_pos",
+    "active_path",
+];
+
+fn switch_var_value(inst: &SceneryInstance) -> Option<f32> {
+    for &name in SWITCH_VARS {
+        if let Some(val) = inst.var(name) {
+            return Some(val);
+        }
+    }
+    None
+}
+
 impl SceneryState {
     /// Take the changes `inbox` has (in order). A list that followed another inbox (another
     /// map) is emptied first.
@@ -74,28 +95,42 @@ impl SceneryState {
         }
     }
 
-    /// Whether switch object `id` is set to its path `path` (None: no such switch, or the
-    /// path has no `[switchdir]`).
+    /// Whether switch object `id` is set to its path `path` (None: no such switch).
     pub fn switch_set_to(&self, id: i64, path: u16) -> Option<bool> {
         let o = self.get(self.find(id)?);
-        let d = (*o.switch_dirs.get(path as usize)?)?;
-        Some(o.inst.var("Switch").map(|v| (v - d as f32).abs() < 0.5).unwrap_or(false))
+        let val = switch_var_value(&o.inst)?;
+        if let Some(Some(d)) = o.switch_dirs.get(path as usize) {
+            Some((val - *d as f32).abs() < 0.5)
+        } else if o.switch_dirs.iter().any(|d| d.is_some()) {
+            let any_other_active = o.switch_dirs.iter().filter_map(|d| *d).any(|d| (val - d as f32).abs() < 0.5);
+            Some(!any_other_active)
+        } else {
+            Some((val - path as f32).abs() < 0.5)
+        }
     }
 
-    /// Throw the points the trains need (`Traffic::switch_requests`): a switch object whose
-    /// `[path]` carries a `[switchdir]` gets that value in its script's `Switch` variable,
-    /// and its blades turn with it. (The first object of each id, as a search would find
-    /// it: every train asks for the points of its next five lanes on every frame.)
+    /// Throw the points the trains need (`Traffic::switch_requests`): a switch object gets
+    /// that value in its switch variables, and its blades turn with it.
     pub fn set_switches(&mut self, requests: &[(i64, u16)]) {
         for &(id, path) in requests {
             let Some(o) = self.find_mut(id) else { continue };
-            if let Some(Some(d)) = o.switch_dirs.get(path as usize) {
-                let d = *d;
-                let was = o.inst.var("Switch");
-                if o.inst.set_var("Switch", d as f32) && was != Some(d as f32) && omsi_cfg::flags::OMSI_DEBUG_SWITCHES.is_set() {
-                    let path = o.sco_path.as_deref().map(|p| p.display().to_string()).unwrap_or_default();
-                    log::info!("switch {} ({}) at ({:.0}, {:.0}) thrown to {d} for a train", id, path, o.pos.x, o.pos.y);
+            let target_d = if let Some(Some(d)) = o.switch_dirs.get(path as usize) {
+                *d as f32
+            } else if o.switch_dirs.iter().any(|d| d.is_some()) {
+                0.0
+            } else {
+                path as f32
+            };
+            let mut changed = false;
+            for &var in SWITCH_VARS {
+                let was = o.inst.var(var);
+                if o.inst.set_var(var, target_d) && was != Some(target_d) {
+                    changed = true;
                 }
+            }
+            if changed && omsi_cfg::flags::OMSI_DEBUG_SWITCHES.is_set() {
+                let path = o.sco_path.as_deref().map(|p| p.display().to_string()).unwrap_or_default();
+                log::info!("switch {} ({}) at ({:.0}, {:.0}) thrown to {target_d} for a train", id, path, o.pos.x, o.pos.y);
             }
         }
     }
@@ -236,9 +271,10 @@ mod tests {
         assert!(s.objects().windows(2).all(|w| w[0].key < w[1].key));
         // points thrown through the list, read back
         assert_eq!(s.switch_set_to(1, 1), Some(false));
+        assert_eq!(s.switch_set_to(1, 0), Some(true));
         s.set_switches(&[(1, 1)]);
         assert_eq!(s.switch_set_to(1, 1), Some(true));
-        assert_eq!(s.switch_set_to(1, 0), None);
+        assert_eq!(s.switch_set_to(1, 0), Some(false));
         let other = SceneryInbox::default();
         s.take_inbox(&other);
         assert!(s.is_empty());
