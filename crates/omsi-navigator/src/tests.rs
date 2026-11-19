@@ -1284,3 +1284,53 @@ fn minimap_route_cache_accumulates_small_steps_without_rebuilding_each_frame() {
     }
     assert_eq!(rebuilds, 50);
 }
+
+/// A plugin's partial palette - the land and the water alone - over the light and over the
+/// dark palette: the frame map's picture changes exactly those two and keeps every other
+/// colour of the theme the player chose; its ground's key is another than the shared one only
+/// while the plugin colours it. Once the plugin unloads, the frame map's picture is the chosen
+/// theme's again, on the shared ground, its own ground let go.
+#[test]
+fn a_partial_palette_under_both_themes_and_after_the_plugin() {
+    let (land, water) = (Color::hex(0xe8e4d8), Color::hex(0x2050a0));
+    let partial = map_colors(&[("land", 0xe8e4d8), ("water", 0x2050a0)]);
+    for (light, theme) in [(true, style::LIGHT), (false, style::DARK)] {
+        let mut n = Navigator::new(true, 0.85, "bottom-left");
+        n.light = light;
+        let shared = n.look_key();
+        colour(&mut n, partial);
+        n.framed = n.framed_now(n.frame_panel, 360.0, 500.0);
+        let hud = panel::PanelLook::hud(&n, 360.0);
+        let colors = n.frame_colors(&hud);
+        assert_eq!(colors, Some(partial));
+        let pal = n.picture_palette(colors.as_ref());
+        for name in style::NAMES {
+            let want = match name {
+                "land" => Some(land),
+                "water" => Some(water),
+                _ => theme.color(name),
+            };
+            assert_eq!(pal.color(name), want, "{name} in the light look: {light}");
+        }
+        let ground = n.ground_for(colors.as_ref());
+        assert!(
+            ground.own && ground.key != shared && ground.key == n.frame_look_key(colors.as_ref())
+        );
+        assert_eq!(ground.pal, pal);
+        assert_eq!(n.look_key(), shared, "the shared ground's key stays");
+        n.frame_ground = Some(FrameGround::default());
+        n.drop_frame_ground();
+        assert!(n.frame_ground.is_some());
+        // the plugin unloads: its panel and its colours go
+        n.frame_panel = None;
+        n.frame_look = None;
+        n.framed = n.framed_now(n.frame_panel, 360.0, 500.0);
+        n.drop_frame_ground();
+        assert!(n.frame_ground.is_none());
+        let colors = n.frame_colors(&hud);
+        assert_eq!(colors, None);
+        assert_eq!(n.picture_palette(colors.as_ref()), theme);
+        let ground = n.ground_for(colors.as_ref());
+        assert_eq!((ground.own, ground.key, ground.pal), (false, shared, theme));
+    }
+}
