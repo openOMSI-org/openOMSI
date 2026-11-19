@@ -117,3 +117,43 @@ fn cards_false_still_hides_them_all() {
     );
     assert_eq!(shown_cards(true, [true; 4]), [true; 4]);
 }
+
+/// A plugin's frame map that turns the next turn and the clock off has the navigator leave
+/// them out; once the plugin is gone - its panel and the look it gave the map with it - the
+/// cards are the navigator's own again: all of them, as the player has them. A look left
+/// over from the last frame without its panel is not read, and a frame map whose plugin
+/// gives it no look shows them all.
+#[test]
+fn removing_the_frame_plugin_gives_the_player_s_cards_back() {
+    let mut nav = Navigator::new(true, 0.85, "bottom-left");
+    let panel = FramePanel {
+        height: 400.0,
+        map: Some(FrameMap {
+            rect: [0.0, 40.0, 360.0, 288.0],
+            cards: true,
+        }),
+        background: None,
+    };
+    // (the cards over this frame's map: None, the navigator's own map with all of them)
+    let shown = |nav: &Navigator| {
+        nav.framed_now(nav.frame_panel, 360.0, 500.0)
+            .map(|f| f.map_or([false; 4], |(_, cards, show)| shown_cards(cards, show)))
+    };
+    nav.frame_panel = Some(panel);
+    nav.frame_look = Some(FrameLook {
+        show: [false, false, true, true],
+    });
+    assert_eq!(shown(&nav), Some([false, false, true, true]));
+    assert!(drawn([false, false, true, true]) < drawn([true; 4]));
+    // the plugin unloads: no panel, no look
+    nav.frame_panel = None;
+    nav.frame_look = None;
+    assert_eq!(shown(&nav), None);
+    // (its look of the last frame, the panel gone already: not read)
+    nav.frame_look = Some(FrameLook { show: [false; 4] });
+    assert_eq!(shown(&nav), None);
+    // (a frame map without a look of the plugin's: every card)
+    nav.frame_panel = Some(panel);
+    nav.frame_look = None;
+    assert_eq!(shown(&nav), Some([true; 4]));
+}
