@@ -1328,3 +1328,139 @@ fn minimap_route_cache_accumulates_small_steps_without_rebuilding_each_frame() {
     }
     assert_eq!(rebuilds, 50);
 }
+
+/// A frame at `heading` degrees and `speed_kmh`, a sixtieth of a second long.
+fn moving(heading: f64, speed_kmh: f32) -> NavFrame<'static> {
+    NavFrame {
+        traffic: None,
+        touch: false,
+        players: Vec::new(),
+        bus: DVec3::new(0.0, 10.0, 0.0),
+        heading,
+        speed_kmh,
+        outside_temp: 20.0,
+        inside_temp: 22.0,
+        line: None,
+        terminus: None,
+        stops: Vec::new(),
+        delay: None,
+        passengers: None,
+        stop_requested: false,
+        time: 0.0,
+        weekday: 0,
+        date: 20261113,
+        language: "en",
+        screen: (1280.0, 720.0),
+        ui_scale: 1.0,
+        follow_window: false,
+        dt: 1.0 / 60.0,
+        info_rect: None,
+        touch_gap: None,
+    }
+}
+
+/// What of the camera is the player's: the navigator's zoom and heading (the cockpit's screens
+/// and the remote cockpit draw with them), where the city map was zoomed and dragged to and
+/// how the compass turns it, and the settings that tilt the map.
+fn players_camera(n: &Navigator) -> (f64, f64, f64, DVec2, bool, u8, f64, bool, bool) {
+    (
+        n.zoom,
+        n.cam_heading,
+        n.city.mpp,
+        n.city.center,
+        n.city.follow,
+        n.orient,
+        n.city.phi,
+        n.show_3d,
+        n.classic_2d,
+    )
+}
+
+/// A plugin's camera on its frame map is the frame map's alone, also when the player zoomed
+/// and dragged the map and turned it north up before the plugin came: while the plugin holds
+/// its map 900 m away, north up, from straight above, the player's camera goes on exactly as
+/// on a navigator without the plugin, and once the plugin unloads every picture is the
+/// player's again - the frame map's own ground let go, its distance back to the navigator's.
+#[test]
+fn removing_a_plugin_s_camera_leaves_the_player_s_camera_as_it_was() {
+    let player = || {
+        let mut n = Navigator::new(true, 0.85, "bottom-left");
+        n.city.mpp = 3.5;
+        n.city.center = DVec2::new(420.0, -130.0);
+        n.city.follow = false;
+        n.orient = 1;
+        n.city.phi = 0.4;
+        n.show_3d = false;
+        n
+    };
+    let (mut n, mut alone) = (player(), player());
+    let drive = |n: &mut Navigator, alone: &mut Navigator, frames: usize| {
+        for i in 0..frames {
+            let f = moving(30.0 + (i % 90) as f64, 25.0 + (i % 40) as f32);
+            for nav in [&mut *n, &mut *alone] {
+                nav.ease_camera(&f);
+                nav.first = false;
+            }
+            assert_eq!(players_camera(n), players_camera(alone));
+        }
+    };
+    drive(&mut n, &mut alone, 120);
+    let before = players_camera(&n);
+    // the plugin's panel comes, its map's camera with it
+    let camera = FrameCamera {
+        distance: Some(CameraDistance::Fixed(900.0)),
+        north: Some(true),
+        ahead: Some(0.0),
+        tilt: Some(CameraTilt::Top),
+    };
+    n.frame_panel = Some(FramePanel {
+        height: 400.0,
+        map: Some(FrameMap {
+            rect: [0.0, 40.0, 360.0, 288.0],
+            cards: true,
+        }),
+        background: None,
+    });
+    n.frame_look = Some(FrameLook {
+        camera: Some(camera),
+    });
+    n.framed = n.framed_now(n.frame_panel, 360.0, 500.0);
+    assert_eq!(n.frame_camera(), Some(camera));
+    n.frame_ground = Some(FrameGround::default());
+    n.drop_frame_ground();
+    assert!(n.frame_ground.is_some(), "the frame map's own ground");
+    drive(&mut n, &mut alone, 300);
+    assert!(n.framed_zoom > 800.0, "{}", n.framed_zoom);
+    assert!(n.zoom <= MAX_ZOOM);
+    let look = panel::PanelLook::hud(&n, 360.0);
+    assert_eq!(look, panel::PanelLook::hud(&alone, 360.0));
+    assert!(!look.fixed_north && look.with_camera(Some(&camera)).fixed_north);
+    assert_eq!((n.show_3d, n.classic_2d), (false, false));
+    assert_eq!(n.ground_for(None, 1.0).key, alone.look_key());
+    // the plugin unloads: its panel and its look go
+    n.frame_panel = None;
+    n.frame_look = None;
+    n.framed = n.framed_now(n.frame_panel, 360.0, 500.0);
+    n.drop_frame_ground();
+    assert_eq!((n.framed, n.frame_camera()), (None, None));
+    assert!(n.frame_ground.is_none());
+    drive(&mut n, &mut alone, 300);
+    // (the frame map's distance follows the navigator's own again, eased, within a few metres
+    // as the speed changes; no picture draws with it until a frame map comes again)
+    assert!(
+        n.framed_zoom <= MAX_ZOOM && (n.framed_zoom - n.zoom).abs() < 5.0,
+        "{} {}",
+        n.framed_zoom,
+        n.zoom
+    );
+    assert_eq!(
+        (
+            n.city.mpp,
+            n.city.center,
+            n.city.follow,
+            n.orient,
+            n.city.phi
+        ),
+        (before.2, before.3, before.4, before.5, before.6)
+    );
+}
