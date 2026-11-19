@@ -25,6 +25,9 @@ struct RemoteView {
     inside_sounds: Option<omsi_audio::SoundSet>,
     /// The driver at the wheel (their bus stood empty here), hidden while they walk about.
     driver: Option<crate::driver::DriverFigure>,
+    /// Its driver figure and its destination displays are left out this frame (#2538: it is
+    /// far away, or the game is struggling).
+    reduced: bool,
     /// The figure (`Pose::figure`) the driver was made for: made again when another comes.
     /// (Made once, it kept the figure guessed before their INFO named theirs - one of the
     /// map's drivers -, and on foot they were a passenger picked by their id.)
@@ -38,20 +41,34 @@ pub(crate) struct LanView {
     remotes: hashbrown::HashMap<u32, RemoteView>,
     /// The world's reader of vehicle sets, lent to `omsi_lan::remote_load` while this lives.
     prefetching: Option<omsi_lan::remote_load::Lent>,
+    /// Whether the frame rate has this game struggling, for how finely the others are drawn.
+    budget: omsi_lan::others::Budget,
+    pub(crate) fps: f32,
 }
 
 impl LanView {
     /// A new room may reuse the same ids: release the old renders and sounds first.
-    pub(crate) fn clear(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene, audio: Option<&omsi_audio::AudioEngine>) {
+    pub(crate) fn clear(
+        &mut self,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        audio: Option<&omsi_audio::AudioEngine>,
+    ) {
         self.stop_freetex();
-        for (_, remote) in self.remotes.drain() { release(renderer, scene, world, audio, remote); }
+        for (_, remote) in self.remotes.drain() {
+            release(renderer, scene, world, audio, remote);
+        }
         self.prefetching = None;
     }
 
     /// The figure player `id` is drawn as: the one at their wheel, which their avatar on
     /// foot wears too (`sync_remote_walkers`).
     pub(crate) fn figure_type(&self, id: u32) -> Option<Arc<omsi_sim::human::HumanType>> {
-        self.remotes.get(&id).and_then(|v| v.driver.as_ref()).map(|d| d.human_type())
+        self.remotes
+            .get(&id)
+            .and_then(|v| v.driver.as_ref())
+            .map(|d| d.human_type())
     }
 }
 
@@ -70,7 +87,9 @@ pub(crate) fn apply_lan(
     // (other players' buses are read off the frame, their paint put on the GPU there too)
     if view.prefetching.is_none() {
         let p = w.vehicle_prefetch(r);
-        view.prefetching = Some(omsi_lan::remote_load::lend_prefetcher(Arc::new(move |ty: &omsi_sim::VehicleType, scheme: Option<usize>| p.prefetch(ty, scheme))));
+        view.prefetching = Some(omsi_lan::remote_load::lend_prefetcher(Arc::new(
+            move |ty: &omsi_sim::VehicleType, scheme: Option<usize>| p.prefetch(ty, scheme),
+        )));
     }
     let changes = std::mem::take(&mut game.drawn);
     for e in changes.events {
@@ -88,12 +107,23 @@ pub(crate) fn apply_lan(
         }
     }
     for (id, inside) in changes.heard {
-        if view.remotes.get(&id).is_some_and(|v| !v.sounds.is_empty() || v.inside_sounds.is_some()) {
+        if view
+            .remotes
+            .get(&id)
+            .is_some_and(|v| !v.sounds.is_empty() || v.inside_sounds.is_some())
+        {
             game.apply_player_sounds(id);
         }
         if let (Some(rv), Some(v)) = (game.remotes.get_mut(&id), view.remotes.get_mut(&id)) {
             // (a parked bus stands with everything off: no sound sets, no clips read for it)
-            sound_remote(rv, v, audio.filter(|_| !omsi_net::is_parked(id)), frame.listener, frame.muffled, inside);
+            sound_remote(
+                rv,
+                v,
+                audio.filter(|_| !omsi_net::is_parked(id)),
+                frame.listener,
+                frame.muffled,
+                inside,
+            );
         }
     }
     if let Some(a) = audio {
@@ -104,33 +134,94 @@ pub(crate) fn apply_lan(
                     .iter()
                     .flat_map(|s| s.playing(a))
                     .filter(|p| p.1 > 1.0e-4)
-                    .map(|(f, g, pitch)| format!("{} {:.3}x{:.2}", f.rsplit(['\\', '/']).next().unwrap_or(&f), g, pitch))
+                    .map(|(f, g, pitch)| {
+                        format!(
+                            "{} {:.3}x{:.2}",
+                            f.rsplit(['\\', '/']).next().unwrap_or(&f),
+                            g,
+                            pitch
+                        )
+                    })
                     .take(10)
                     .collect();
-                log::info!("LAN sounds of player {} ({} set(s)): {:?}", id, v.sounds.len(), playing);
+                log::info!(
+                    "LAN sounds of player {} ({} set(s)): {:?}",
+                    id,
+                    v.sounds.len(),
+                    playing
+                );
             }
         }
     }
     // draw them like AI traffic
+    let struggling = view.budget.step(view.fps);
+    let enabled = true;
     for (id, rv) in game.remotes.iter_mut() {
-        let Some(v) = view.remotes.get_mut(id) else { continue };
-        if v.driver_for.as_deref() != Some(rv.last.figure.as_str()) && !rv.stand_in && !omsi_net::is_parked(*id) {
+        let Some(v) = view.remotes.get_mut(id) else {
+            continue;
+        };
+        // (#2538) far away, or with the game struggling, only the bus itself: its driver and
+        // its destination displays are what nobody reads from there (the bus we ride in is
+        // never thinned)
+        let inside = frame.inside_of == Some(*id);
+        let distance = frame
+            .listener
+            .map(|l| (rv.vehicle().position - l).length())
+            .unwrap_or(0.0);
+        let reduced = omsi_lan::others::detail(enabled, distance, inside, struggling)
+            == omsi_lan::others::Detail::Reduced;
+        if reduced && !v.reduced {
+            // (made again if the bus comes back into full detail)
+            if let Some(mut d) = v.driver.take() {
+                d.hide(r, scene);
+            }
+            v.driver_for = None;
+        }
+        v.reduced = reduced;
+        if !reduced
+            && v.driver_for.as_deref() != Some(rv.last.figure.as_str())
+            && !rv.stand_in
+            && !omsi_net::is_parked(*id)
+        {
             v.driver_for = Some(rv.last.figure.clone());
             if let Some(mut d) = v.driver.take() {
                 d.hide(r, scene);
             }
             // their own figure at the wheel (a figure picked by their id otherwise)
-            v.driver = crate::driver::DriverFigure::new_named(w, r, scene, rv.vehicle(), omsi_net::human_path(&rv.last.figure).as_deref(), 1000 + *id as u64);
+            v.driver = crate::driver::DriverFigure::new_named(
+                w,
+                r,
+                scene,
+                rv.vehicle(),
+                omsi_net::human_path(&rv.last.figure).as_deref(),
+                1000 + *id as u64,
+            );
         }
-        if let Some(d) = v.driver.as_mut() {
-            d.update(r, scene, rv.vehicle(), &v.render, dt.max(1.0 / 120.0), rv.last.walker.is_none(), false);
+        if !reduced {
+            if let Some(d) = v.driver.as_mut() {
+                d.update(
+                    r,
+                    scene,
+                    rv.vehicle(),
+                    &v.render,
+                    dt.max(1.0 / 120.0),
+                    rv.last.walker.is_none(),
+                    false,
+                );
+            }
         }
         // drawn as the own bus is: its outside meshes from outside, its inside ones to
         // whoever stands in it (the outside and the AI meshes together fought over the
         // same surfaces - the flicker and the black patches in the saloon), opaque slots
         // never faded by an alpha variable the AI scripts left at 0, the bellows skinned
-        let inside = frame.inside_of == Some(*id);
-        crate::player::sync_vehicle_transforms(r, scene, rv.vehicle_mut(), &mut v.render, &mut v.trailer_renders, inside);
+        crate::player::sync_vehicle_transforms(
+            r,
+            scene,
+            rv.vehicle_mut(),
+            &mut v.render,
+            &mut v.trailer_renders,
+            inside,
+        );
     }
 }
 
@@ -143,20 +234,47 @@ fn made(w: &World, r: &Renderer, scene: &mut Scene, rv: &RemoteVehicle) -> Remot
     let trailer_renders = vehicle
         .trailers
         .iter()
-        .map(|t| w.add_vehicle_shared(r, scene, &t.ty, scheme.filter(|i| *i < t.ty.paint_schemes.len()), Some(&render)))
+        .map(|t| {
+            w.add_vehicle_shared(
+                r,
+                scene,
+                &t.ty,
+                scheme.filter(|i| *i < t.ty.paint_schemes.len()),
+                Some(&render),
+            )
+        })
         .collect();
-    let mut view = RemoteView { pixels: Default::default(), render, trailer_renders, sounds: Vec::new(), inside_sounds: None, driver: None, driver_for: None };
-    if !rv.stand_in && !rv.fallback { freetex::prepare(&mut view); }
+    let mut view = RemoteView {
+        pixels: Default::default(),
+        render,
+        trailer_renders,
+        sounds: Vec::new(),
+        inside_sounds: None,
+        reduced: false,
+        driver: None,
+        driver_for: None,
+    };
+    if !rv.stand_in && !rv.fallback {
+        freetex::prepare(&mut view);
+    }
     view
 }
 
 /// A remote vehicle has gone: its sounds stop and its instances go back to the world.
-fn release(r: &Renderer, scene: &mut Scene, world: &World, audio: Option<&omsi_audio::AudioEngine>, v: RemoteView) {
+fn release(
+    r: &Renderer,
+    scene: &mut Scene,
+    world: &World,
+    audio: Option<&omsi_audio::AudioEngine>,
+    v: RemoteView,
+) {
     if let Some(a) = audio {
         for mut s in v.sounds {
             s.stop_all(a);
         }
-        if let Some(mut sounds) = v.inside_sounds { sounds.stop_all(a); }
+        if let Some(mut sounds) = v.inside_sounds {
+            sounds.stop_all(a);
+        }
     }
     if let Some(mut d) = v.driver {
         d.hide(r, scene);
@@ -179,9 +297,14 @@ fn sound_remote(
 ) {
     let fired: Vec<String> = std::mem::take(&mut rv.vehicle_mut().host.fired_triggers);
     let fired_vars = std::mem::take(&mut rv.vehicle_mut().host.fired_trigger_vars);
-    let fired_files: Vec<(String, String)> = std::mem::take(&mut rv.vehicle_mut().host.fired_file_triggers);
+    let fired_files: Vec<(String, String)> =
+        std::mem::take(&mut rv.vehicle_mut().host.fired_file_triggers);
     let at_fire = |t: &str, n: &str| -> Option<f32> {
-        let vals = &fired_vars.iter().rev().find(|(k, _)| k.eq_ignore_ascii_case(t))?.1;
+        let vals = &fired_vars
+            .iter()
+            .rev()
+            .find(|(k, _)| k.eq_ignore_ascii_case(t))?
+            .1;
         rv.vehicle().var_slot(n).and_then(|i| vals.get(i).copied())
     };
     let (Some(audio), Some(at)) = (audio, listener) else {
@@ -198,12 +321,18 @@ fn sound_remote(
         }
         if view.inside_sounds.is_none()
             && audio.clips_ready(&omsi_audio::SoundSet::clip_paths(&cfg, &dir))
-            && table.part_sounds.iter().all(|(_, c, d)| audio.clips_ready(&omsi_audio::SoundSet::clip_paths(c, d)))
+            && table
+                .part_sounds
+                .iter()
+                .all(|(_, c, d)| audio.clips_ready(&omsi_audio::SoundSet::clip_paths(c, d)))
         {
             let number = rv.vehicle().number();
             let mut ss = omsi_audio::SoundSet::new(audio, &cfg.chosen_for(&number), &dir);
             for (k, c, d) in &table.part_sounds {
-                ss.add_part(*k, omsi_audio::SoundSet::new(audio, &c.chosen_for(&number), d));
+                ss.add_part(
+                    *k,
+                    omsi_audio::SoundSet::new(audio, &c.chosen_for(&number), d),
+                );
             }
             view.inside_sounds = Some(ss);
         }
@@ -218,7 +347,13 @@ fn sound_remote(
             // the exterior engine drowned the cab (#1759)
             omsi_audio::soundset::set_outside_open(Some(v.var("Snd_OutsideVol").unwrap_or(0.0)));
             ss.update_fired(audio, &|n| v.var(n), &xf, &fired, &at_fire);
-            ss.update_parts(audio, &|n| v.var(n), &|i| v.trailers.get(i).map(|t| t.world_transform()), &fired, &at_fire);
+            ss.update_parts(
+                audio,
+                &|n| v.var(n),
+                &|i| v.trailers.get(i).map(|t| t.world_transform()),
+                &fired,
+                &at_fire,
+            );
             for (t, f) in &fired_files {
                 ss.play_file_trigger(audio, t, f, &|n| v.var(n), &xf);
             }
@@ -248,12 +383,17 @@ fn sound_remote(
             view.sounds = table
                 .sounds
                 .iter()
-                .map(|(cfg, dir)| omsi_audio::SoundSet::new_exterior(audio, &cfg.chosen_for(&number), dir))
+                .map(|(cfg, dir)| {
+                    omsi_audio::SoundSet::new_exterior(audio, &cfg.chosen_for(&number), dir)
+                })
                 .collect();
             // the rear sections' sounds ride on the first set, each at its section
             if let Some(first) = view.sounds.first_mut() {
                 for (k, cfg, dir) in &table.part_sounds {
-                    first.add_part(*k, omsi_audio::SoundSet::new_exterior(audio, &cfg.chosen_for(&number), dir));
+                    first.add_part(
+                        *k,
+                        omsi_audio::SoundSet::new_exterior(audio, &cfg.chosen_for(&number), dir),
+                    );
                 }
             }
         }
@@ -263,7 +403,13 @@ fn sound_remote(
     for ss in view.sounds.iter_mut() {
         ss.set_muffled(muffled);
         ss.update_fired(audio, &|n| v.var(n), &xf, &fired, &at_fire);
-        ss.update_parts(audio, &|n| v.var(n), &|i| v.trailers.get(i).map(|t| t.world_transform()), &fired, &at_fire);
+        ss.update_parts(
+            audio,
+            &|n| v.var(n),
+            &|i| v.trailers.get(i).map(|t| t.world_transform()),
+            &fired,
+            &at_fire,
+        );
         for (t, f) in &fired_files {
             ss.play_file_trigger(audio, t, f, &|n| v.var(n), &xf);
         }
