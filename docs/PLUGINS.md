@@ -338,7 +338,7 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `7` (`6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
+`omsi.ui.version` is `8` (`7` before the `map` element's `colors`, `6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
 element, `4` before `grab`, `3` before boxes, stop lists and the other
 elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
 test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
@@ -429,6 +429,33 @@ omsi.ui.set("phone", { anchor = "navigator", frame = true, grab = true, padding 
 } })
 ```
 
+The map's `colors` (`omsi.ui.version` 8) give that map colours of its own, each by its name
+in the map's palette, over the light or dark colours the player chose for the navigator; a
+colour left out stays the player's:
+
+```lua
+{ type = "map", height = 200, colors = {
+  land = "#E8E4D8", water = "#7FB2E5", road = "#FFFFFF", road_edge = "#B9B4A8",
+  card = "#1C1C1EF0", card_text = "#FFFFFF", card_dim = "#A1A1A8",
+} }
+```
+
+The names are `land`, `grass`, `forest`, `field`, `paved_land`, `sand`, `water` (the ground),
+`road`, `road_edge`, `foot` (pavements), `area` (yards and car parks), `lane_paint`,
+`lane_amber` (the paint on the roads), `roof`, `roof_edge`, `wall_lit`, `wall_dark`, `shadow`
+(the houses), `tree`, `tree_edge`, `rail`, `rail_dash`, `tram`, and `card`, `card_text`,
+`card_dim` (the navigator's cards over that map, and its card under the panel where the panel
+gives no `background`). Each is `"#RRGGBB"` or `"#RRGGBBAA"`; a name that is no colour of the
+map here (the route's colours are not among them, nor the city map's labels and contour
+lines) is left alone, so a plugin written for a later game still shows; a colour of the wrong
+kind makes `set` return `false` and the reason. The colours are that
+map's alone: the city map, the screens in the cockpit and the navigator without the panel
+keep the player's, and a `map` that is not in a panel filling the frame ignores them. The
+map is built again in them once when they change, not at every frame (`land` and the cards'
+colours are drawn over it, and build nothing). A game before version
+8 leaves `colors` alone and shows the player's colours. The whole example is
+[`docs/examples/plugins/navigator_map.lua`](examples/plugins/navigator_map.lua).
+
 #### Elements
 
 Every element can have an `id`, a `color` and `visible = false` (left out, no room kept).
@@ -443,7 +470,7 @@ Every element can have an `id`, a `color` and `visible = false` (left out, no ro
 | `box` (4) | `children`, `gap` (default 4), `color` (default amber) | its children stacked in a box tinted with `color`, a stripe of it on the left: a note, an advice |
 | `stops` (4) | `stops` (`{ { name, time, expected, expected_color, state, tag }, ... }`, up to 128), `size` (13), `color` (the rail, default amber) | stops on a rail, a row each: `state` `"done"` (behind the bus: grey), `"now"` (the one it heads for: marked, bold) or `"ahead"` (the default); `time` on the right, `expected` before it in `expected_color`, and `tag` (`"terminus"`) before them |
 | `divider` | `color` | a thin line (in a row: upright) |
-| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height |
+| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`), `colors` (8: `{ land = "#E8E4D8", ... }`, see above) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`, in its `colors`); elsewhere empty room of its height |
 | `space` | `size` (default 8) | empty room (in a row: across) |
 | `button` | `id` (needed), `text`, `icon`, `color` | a button 34 high, across the panel (in a row as wide as its label, or what it grows to); a click on it is `ui_click(panel id, button id)` |
 | `image` | `src` (a PNG, JPEG, BMP or TGA of the plugin's folder), `width`, `height` (default 64) | the picture, made smaller to fit the width it has |

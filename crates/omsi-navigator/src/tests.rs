@@ -864,20 +864,231 @@ fn the_compass_keeps_clear_of_the_open_lines_panel() {
 fn a_frame_panel_s_map_stays_inside_the_navigator() {
     let m = |rect: [f32; 4]| FrameMap { rect, cards: false };
     assert_eq!(
-        framed_map(m([10.0, 80.0, 340.0, 272.0]), 360.0, 500.0),
-        (Rect::new(10.0, 80.0, 340.0, 272.0), false)
+        framed_map(m([10.0, 80.0, 340.0, 272.0]), None, 360.0, 500.0),
+        (
+            Rect::new(10.0, 80.0, 340.0, 272.0),
+            false,
+            FrameColors::default()
+        )
     );
     assert_eq!(
-        framed_map(m([10.0, 300.0, 400.0, 272.0]), 360.0, 500.0).0,
+        framed_map(m([10.0, 300.0, 400.0, 272.0]), None, 360.0, 500.0).0,
         Rect::new(10.0, 300.0, 350.0, 200.0)
     );
     assert_eq!(
-        framed_map(m([10.0, 600.0, 340.0, 272.0]), 360.0, 500.0).0.h,
+        framed_map(m([10.0, 600.0, 340.0, 272.0]), None, 360.0, 500.0)
+            .0
+            .h,
         0.0
     );
     // (no frame panel: the navigator lays itself out as ever)
     let n = Navigator::new(true, 0.85, "bottom-left");
-    assert_eq!((n.frame_panel, n.framed, n.frame_card), (None, None, None));
+    assert_eq!(
+        (n.frame_panel, n.frame_look, n.framed, n.frame_card),
+        (None, None, None, None)
+    );
+}
+
+/// Colours by the palette's names, as a frame map takes them.
+fn map_colors(colors: &[(&str, u32)]) -> FrameColors {
+    colors.iter().map(|&(n, c)| (n, Color::hex(c))).collect()
+}
+
+/// A frame panel on `n` whose map has these colours.
+fn colour(n: &mut Navigator, colors: FrameColors) {
+    n.frame_panel = Some(FramePanel {
+        height: 400.0,
+        map: Some(FrameMap {
+            rect: [0.0, 0.0, 360.0, 288.0],
+            cards: true,
+        }),
+        background: None,
+    });
+    n.frame_look = Some(FrameLook { colors });
+}
+
+/// The frame map's ground is built again for colours that change it, and once: other colours
+/// another key, the same ones the same key (the look the player chose still in it), while the
+/// navigator's own `look_key`, which the city map goes on using, stays as it is.
+#[test]
+fn the_frame_maps_key_changes_with_its_colours() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    n.light = true;
+    let today = n.look_key();
+    let sand = map_colors(&[("grass", 0xe8e4d8)]);
+    let sea = map_colors(&[("grass", 0xe8e4d8), ("water", 0x2050a0)]);
+    assert_ne!(n.frame_look_key(Some(&sand)), today);
+    assert_ne!(n.frame_look_key(Some(&sea)), n.frame_look_key(Some(&sand)));
+    assert_eq!(
+        n.frame_look_key(Some(&sand)),
+        n.frame_look_key(Some(&map_colors(&[("grass", 0xe8e4d8)])))
+    );
+    assert_eq!(n.look_key(), today);
+    // (the player's dark look: the frame map's ground again too)
+    let light = n.frame_look_key(Some(&sand));
+    n.light = false;
+    assert_ne!(n.frame_look_key(Some(&sand)), light);
+    assert_ne!(n.frame_look_key(Some(&sand)), n.look_key());
+    // (the cards are drawn anew in every picture: their colours build no ground)
+    let cards = map_colors(&[("card", 0x101010), ("card_text", 0xf0f0f0)]);
+    assert_eq!(n.frame_look_key(Some(&cards)), n.look_key());
+}
+
+/// The land under the map is drawn anew in every picture, as the cards are: its colour alone
+/// (with the cards' or not) leaves the frame map on the navigator's ground, which nothing is
+/// built again for, while the frame picture still takes it.
+#[test]
+fn a_land_colour_alone_keeps_the_shared_ground() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    n.light = true;
+    let land = map_colors(&[("land", 0xe8e4d8)]);
+    assert_eq!(n.frame_look_key(Some(&land)), n.look_key());
+    let ground = n.ground_for(Some(&land));
+    assert!(!ground.own && ground.pal == style::LIGHT);
+    assert_eq!(n.picture_palette(Some(&land)).land, Color::hex(0xe8e4d8));
+    let cards = map_colors(&[("land", 0xe8e4d8), ("card", 0x101010)]);
+    assert!(!n.ground_for(Some(&cards)).own);
+    // (with a colour of the ground beside it: the frame map's own)
+    let grass = map_colors(&[("land", 0xe8e4d8), ("grass", 0xe8e4d8)]);
+    assert!(n.ground_for(Some(&grass)).own);
+    // (and an own ground built before goes)
+    colour(&mut n, land);
+    n.frame_ground = Some(FrameGround::default());
+    n.drop_frame_ground();
+    assert!(n.frame_ground.is_none());
+}
+
+/// No colours, or the palette's own, leave the frame map on the navigator's ground: nothing is
+/// built for it.
+#[test]
+fn equal_colours_keep_the_key() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    n.light = true;
+    assert_eq!(n.frame_look_key(None), n.look_key());
+    assert_eq!(
+        n.frame_look_key(Some(&FrameColors::default())),
+        n.look_key()
+    );
+    let same: FrameColors = [("land", style::LIGHT.land), ("road", style::LIGHT.road)]
+        .into_iter()
+        .collect();
+    assert_eq!(n.frame_look_key(Some(&same)), n.look_key());
+    assert!(!n.ground_for(Some(&same)).own);
+    // (the light look's colours in the dark one change it)
+    n.light = false;
+    assert_ne!(n.frame_look_key(Some(&same)), n.look_key());
+    assert!(n.ground_for(Some(&same)).own);
+    // (a name the palette lacks is no colour)
+    assert_eq!(map_colors(&[("sky", 0x87ceeb)]), FrameColors::default());
+}
+
+/// The colours are the frame map's alone: its picture takes them, its cards too, over the
+/// light or dark palette the player chose. The screen in the cockpit, the remote cockpit and
+/// the navigator without a frame panel keep today's palette and the navigator's ground.
+#[test]
+fn the_cockpit_screen_keeps_todays_palette_beside_a_coloured_frame_map() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    n.light = true;
+    let c = map_colors(&[("land", 0xe8e4d8), ("water", 0x2050a0), ("card", 0x101010)]);
+    colour(&mut n, c);
+    n.framed = Some(Some((Rect::new(0.0, 0.0, 360.0, 288.0), true, c)));
+    let hud = panel::PanelLook::hud(&n, 360.0);
+    assert_eq!(n.frame_colors(&hud), Some(c));
+    let pal = n.picture_palette(Some(&c));
+    assert_eq!(
+        (pal.land, pal.card, pal.road),
+        (
+            Color::hex(0xe8e4d8),
+            Color::hex(0x101010),
+            style::LIGHT.road
+        )
+    );
+    for look in [
+        panel::PanelLook::screen((800, 480), 288.0),
+        panel::PanelLook::remote((800, 480)),
+    ] {
+        let colors = n.frame_colors(&look);
+        assert_eq!(colors, None);
+        assert_eq!(n.picture_palette(colors.as_ref()), style::LIGHT);
+        let ground = n.ground_for(colors.as_ref());
+        assert_eq!((ground.own, ground.key), (false, n.look_key()));
+    }
+    let frame = n.ground_for(Some(&c));
+    assert!(frame.own);
+    assert_ne!(frame.buffers(), n.ground_for(None).buffers());
+    n.light = false;
+    assert_eq!(n.picture_palette(Some(&c)).road, style::DARK.road);
+    assert_eq!(n.picture_palette(None), style::DARK);
+}
+
+/// Colours of a map the navigator does not show in a frame panel (laid out, not shown yet, or
+/// a frame panel without a map) are nothing to its pictures.
+#[test]
+fn colours_without_a_frame_map_change_nothing() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    n.light = true;
+    colour(&mut n, map_colors(&[("land", 0xe8e4d8)]));
+    let hud = panel::PanelLook::hud(&n, 360.0);
+    assert_eq!(n.frame_colors(&hud), None);
+    n.framed = Some(None);
+    assert_eq!(n.frame_colors(&hud), None);
+    assert_eq!(n.picture_palette(None), style::LIGHT);
+}
+
+/// The frame map's own ground is kept while its colours want it - the navigator fading out and
+/// in included - and let go once they no longer change the ground, or the map goes.
+#[test]
+fn a_frame_map_s_own_ground_goes_with_its_colours() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    colour(&mut n, map_colors(&[("water", 0x2050a0)]));
+    n.frame_ground = Some(FrameGround::default());
+    n.drop_frame_ground();
+    assert!(n.frame_ground.is_some());
+    // (no map shown for a while, the panel still there)
+    n.framed = None;
+    n.drop_frame_ground();
+    assert!(n.frame_ground.is_some());
+    colour(&mut n, map_colors(&[("card", 0x101010)]));
+    n.drop_frame_ground();
+    assert!(n.frame_ground.is_none());
+    n.frame_ground = Some(FrameGround::default());
+    n.frame_panel = None;
+    n.drop_frame_ground();
+    assert!(n.frame_ground.is_none());
+}
+
+/// A frame map's own ground not built yet: the map shows the navigator's meanwhile, from where
+/// that lies on the graphics card, and its own once it is there.
+#[test]
+fn a_frame_map_shows_the_navigator_s_ground_until_its_own_is_built() {
+    let roads = |x: f64| Roads {
+        reach: 800.0,
+        look: 0,
+        anchor: DVec2::new(x, 0.0),
+        lanes_seen: 0,
+        houses: [0; 3],
+        runs: Default::default(),
+        built_at: 0.0,
+    };
+    let shared = Some(roads(1.0));
+    let mut frame = Some(FrameGround::default());
+    let (r, buffers) = ground_drawn(&shared, &frame, true);
+    assert_eq!(
+        (r.map(|r| r.anchor.x), buffers),
+        (Some(1.0), [0, 12, 8, 13])
+    );
+    frame.as_mut().unwrap().roads = Some(roads(2.0));
+    let (r, buffers) = ground_drawn(&shared, &frame, true);
+    assert_eq!(
+        (r.map(|r| r.anchor.x), buffers),
+        (Some(2.0), [19, 20, 21, 22])
+    );
+    // (the other pictures: the navigator's, whatever the frame map has)
+    let (r, buffers) = ground_drawn(&shared, &frame, false);
+    assert_eq!(
+        (r.map(|r| r.anchor.x), buffers),
+        (Some(1.0), [0, 12, 8, 13])
+    );
 }
 
 #[test]

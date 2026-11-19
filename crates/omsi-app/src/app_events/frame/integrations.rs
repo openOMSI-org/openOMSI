@@ -157,6 +157,11 @@ impl App {
             };
             crate::game_lists::store_with(self, |v| v["ui_theme_pack"] = serde_json::json!(value));
         }
+        // the look a plugin's panel that fills the navigator's frame gives its map, from the
+        // panels' last layout as the panel itself (which the interface hands the navigator)
+        if let Some(n) = self.menus.navigator.as_mut() {
+            n.frame_look = frame_look(self.integrations.plugin_panels.docked);
+        }
         // OMSI_WATCH_VARS=a,b: every change of those variables of the player's bus
         if let (Some(p), Some(list)) =
             (self.player.as_ref(), omsi_cfg::flags::OMSI_WATCH_VARS.var())
@@ -242,4 +247,37 @@ fn theme_infos() -> Vec<omsi_plugin::ui::ThemeInfo> {
             name: name.clone(),
         })
         .collect()
+}
+
+/// The look a plugin's panel that fills the navigator's frame gives the map in it, for the
+/// navigator: None without such a panel or without a map in it.
+fn frame_look(docked: Option<crate::plugin_ui::Docked>) -> Option<navigator::FrameLook> {
+    let m = docked.filter(|d| d.frame)?.map?;
+    Some(navigator::FrameLook {
+        colors: frame_colors(&m.colors),
+    })
+}
+
+/// A plugin's map colours as the navigator takes them: by their names.
+fn frame_colors(colors: &crate::plugin_ui::MapColors) -> navigator::FrameColors {
+    omsi_plugin::ui::MAP_COLORS
+        .iter()
+        .zip(colors)
+        .filter_map(|(name, c)| Some((*name, (*c)?)))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    /// Every colour a plugin may give the navigator's map is one the navigator's palette has.
+    #[test]
+    fn every_map_colour_is_one_of_the_palette_s() {
+        use omsi_plugin::ui::MAP_COLORS;
+        for (i, name) in MAP_COLORS.iter().enumerate() {
+            let mut colors = [None; MAP_COLORS.len()];
+            colors[i] = Some(omsi_ui::Color::WHITE);
+            let c = super::frame_colors(&colors);
+            assert_ne!(c, super::navigator::FrameColors::default(), "{name}");
+        }
+    }
 }

@@ -2,8 +2,8 @@
 //! held to the limits and checked here, so that a plugin learns at once what is wrong.
 
 use super::{
-    Align, Anchor, ChartStyle, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS, MAX_TEXT, Panel,
-    Rgba, RowAlign, Stop, StopState, Weight, check_id,
+    Align, Anchor, ChartStyle, Element, Kind, MAP_COLORS, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS,
+    MAX_TEXT, Panel, Rgba, RowAlign, Stop, StopState, Weight, check_id,
 };
 use crate::api::Value;
 use std::path::{Path, PathBuf};
@@ -446,6 +446,39 @@ impl Reader<'_> {
             .collect()
     }
 
+    /// A map's colours: `{ land = "#E8E4D8", water = "#2050A0", ... }`, each by a name of
+    /// `MAP_COLORS`; another name is left alone, so that a plugin written for a later game still
+    /// shows here (a colour of the wrong kind is refused).
+    fn map_colors(&self, key: &str) -> Result<Vec<(String, Rgba)>, String> {
+        let names = match self.get(key) {
+            Value::Nil => return Ok(Vec::new()),
+            Value::List(l) if l.is_empty() => return Ok(Vec::new()),
+            Value::Map(m) => m
+                .iter()
+                .map(|(name, _)| name.clone())
+                .filter(|name| MAP_COLORS.contains(&name.as_str()))
+                .collect::<Vec<_>>(),
+            _ => {
+                return Err(format!(
+                    "{}: a table of colours by name is expected",
+                    self.at(key)
+                ));
+            }
+        };
+        let r = Reader {
+            t: self.get(key),
+            path: self.at(key),
+            folder: None,
+        };
+        names
+            .into_iter()
+            .map(|name| match r.color(&name)? {
+                Some(c) => Ok((name, c)),
+                None => Err(format!("{}: a colour is expected", r.at(&name))),
+            })
+            .collect()
+    }
+
     /// An image of the plugin's folder: the file when it is there.
     fn image(&self, key: &str) -> Result<Option<PathBuf>, String> {
         let Some(src) = self.string(key)? else {
@@ -572,6 +605,7 @@ impl Reader<'_> {
             "map" => Kind::Map {
                 height: self.number("height", 0.0, 0.0, 4000.0)?,
                 cards: self.boolean("cards", true)?,
+                colors: self.map_colors("colors")?,
             },
             "space" => Kind::Space {
                 size: self.number("size", 8.0, 0.0, 1000.0)?,

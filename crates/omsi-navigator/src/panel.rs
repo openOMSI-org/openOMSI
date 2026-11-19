@@ -313,7 +313,10 @@ impl Navigator {
             self.cam_heading
         };
         let wd = &WORDS;
-        let pal = *style::palette(self.light);
+        // (a frame panel's map in the colours it gives, its cards too; every other picture in
+        // the player's palette)
+        let colors = self.frame_colors(look);
+        let pal = self.picture_palette(colors.as_ref());
         self.atlas.begin_frame();
         let panel = Rect::new(0.0, 0.0, pw, ph);
         let radius = look.radius;
@@ -321,143 +324,30 @@ impl Navigator {
         // of its own, or no map at all)
         let plugin_frame = self.framed.filter(|_| look.plugins);
         let (map, cards, map_radius) = match plugin_frame {
-            Some(Some((r, cards))) => (r, cards, (10.0 * s).min(radius)),
+            Some(Some((r, cards, _))) => (r, cards, (10.0 * s).min(radius)),
             Some(None) => return self.draw_card_alone(renderer, target, size, &pal, look),
             None => (Rect::new(0.0, 0.0, pw, map_h), true, radius),
         };
         let framed = plugin_frame.is_some();
         let vp = [map.x, map.y, map.w, map.h];
 
-        // --- the ground (buffer 0): built again when the bus went far, tiles brought lanes,
-        // the map's layers came or the look changed
+        // --- the ground: the navigator's for every picture of it, or a frame map's own while its
+        // colours change it
         let own = self.own_net.clone();
         let global = self.global.clone();
         let net = global
             .as_deref()
             .or(f.traffic.map(|t| &t.net))
             .or(own.as_deref());
-        let lanes_now = net.map(|n| n.lanes.len()).unwrap_or(0);
-        let look_key = self.look_key();
-        let visible_reach =
-            super::build::view::panel_reach(zoom, map.w, map.h).unwrap_or(PANEL_REACH);
-        let reach =
-            super::build::view::panel_build_reach(map.w, map.h).unwrap_or(PANEL_REACH + 150.0);
-        let scaled_reach = super::build::view::panel_reach(MAX_ZOOM / look.map_scale, map.w, map.h)
-            .unwrap_or(visible_reach);
-        let reach = reach.max(scaled_reach + 150.0);
-        if remote {
-            self.remote_pic.reach = reach;
-        } else if !look.plugins {
-            self.screen_state.reach = reach;
-        }
-        let reach = reach
-            .max(self.remote_pic.reach)
-            .max(self.screen_state.reach);
-        let rebuild = match &self.roads {
-            None => lanes_now > 0 || self.map_data.is_some(),
-            Some(r) => {
-                r.look != look_key
-                    || super::build::view::panel_moved(
-                        r.reach,
-                        visible_reach,
-                        (r.anchor - f.bus.truncate()).length(),
-                    )
-                    || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5)
-            }
-        };
-        // (on a worker when the map's network is there; the picture keeps the old part meanwhile)
-        let mut built = None;
-        if let Some(job) = self.panel_job.as_ref() {
-            match job.poll() {
-                Ok(Some(mut b)) => {
-                    let (look, lanes, reach) = job.meta;
-                    let [_, houses @ ..] = b.counts;
-                    self.roads = Some(Roads {
-                        look,
-                        reach,
-                        anchor: b.anchor,
-                        lanes_seen: lanes,
-                        houses,
-                        runs: std::mem::take(&mut b.runs),
-                        built_at: self.time,
-                    });
-                    built = Some(b);
-                    self.panel_job = None;
-                }
-                Ok(None) => {}
-                Err(()) => self.panel_job = None,
-            }
-        }
-        if rebuild && self.panel_job.is_none() && built.is_none() {
-            let anchor = f.bus.truncate();
-            let mut parts = self.ground_parts(net, None);
-            let screen_zoomed_out = self.screen.is_some_and(|s| s.on && s.map_scale < 1.0);
-            parts.house_reach = Some(if look.map_scale < 1.0 || screen_zoomed_out {
-                reach.max(PANEL_REACH)
-            } else {
-                PANEL_REACH
-            });
-            // The older-style navigator needs only roads and route data.
-            // Skip terrain meshes, map packages, buildings and their shadows entirely.
-            if self.classic_2d {
-                parts.md = None;
-                parts.surface = None;
-            }
-            let look = if self.classic_2d {
-                GroundLook {
-                    surfaces: false,
-                    trees: false,
-                    dashes: false,
-                    tol: 1.0,
-                }
-            } else {
-                GroundLook {
-                    surfaces: true,
-                    trees: true,
-                    dashes: true,
-                    tol: 0.0,
-                }
-            };
-            let mpp =
-                (2.0 * zoom * (FOV.to_radians() as f64 * 0.5).tan() / map.h.max(1.0) as f64) as f32;
-            let paved = !self.classic_2d;
-            let models = (!self.classic_2d).then_some(PANEL_MODELS);
-            if self.global.is_some() {
-                let pal2 = pal;
-                let device = renderer.device.clone();
-                self.panel_job = Some(super::build::Job::start(
-                    (look_key, lanes_now, reach),
-                    move || {
-                        super::build::build(
-                            &parts, anchor, reach, &pal2, look, paved, models, true, mpp,
-                        )
-                        .made_on(&device)
-                    },
-                ));
-            } else {
-                let mut b = super::build::build(
-                    &parts, anchor, reach, &pal, look, paved, models, true, mpp,
-                );
-                let [_, houses @ ..] = b.counts;
-                self.roads = Some(Roads {
-                    look: look_key,
-                    reach,
-                    anchor,
-                    lanes_seen: lanes_now,
-                    houses,
-                    runs: std::mem::take(&mut b.runs),
-                    built_at: self.time,
-                });
-                built = Some(b);
-            }
-        }
+        let ground = self.ground_for(colors.as_ref());
+        let built = self.build_ground(renderer, f, net, &ground, (zoom, map), look);
+        // (the frame map's own ground once it is built; until then the navigator's)
+        let (drawn, buffers) = ground_drawn(&self.roads, &self.frame_ground, ground.own);
+        let (anchor, route_reach) = drawn.map_or((f.bus.truncate(), PANEL_REACH), |r| {
+            (r.anchor, r.reach.max(PANEL_REACH))
+        });
 
         // --- the camera (world relative to the anchor), behind and above the bus
-        let anchor = self
-            .roads
-            .as_ref()
-            .map(|r| r.anchor)
-            .unwrap_or(f.bus.truncate());
         let rel = |p: DVec3| Vec3::new((p.x - anchor.x) as f32, (p.y - anchor.y) as f32, 0.0);
         let hd = camera_heading.to_radians();
         let fwd = DVec2::new(hd.sin(), hd.cos());
@@ -498,100 +388,23 @@ impl Navigator {
         let mut route_verts: Option<(usize, u64, std::sync::Arc<[omsi_ui::paint::Vertex]>)> = None;
         let mut route_count = 0;
         let history = look.show_history && self.destination.is_none();
-        let history_slot = usize::from(history);
+        let slot = route_slot(history, ground.own);
         let route_net = global.as_deref().or(f.traffic.map(|t| &t.net));
         if let (Some(rn), true) = (route_net, !self.route.lanes.is_empty()) {
-            let first = self
-                .route
-                .lanes
-                .get(
-                    self.route
-                        .progress
-                        .min(self.route.lanes.len().saturating_sub(1)),
-                )
-                .copied();
-            let bus_lane = first.map(|l| lane_from_right(rn, l, f.bus)).unwrap_or(0);
-            let key = (
-                self.route.version,
-                self.jam_version,
-                anchor,
-                bus_lane,
-                look_key,
-                self.route.s,
-            );
-            let cached_route = self.route_mesh_history[history_slot].as_ref();
-            let route_changed = cached_route.is_none_or(|(cached, _, _)| {
-                built.is_some()
-                    || cached.0 != key.0
-                    || cached.1 != key.1
-                    || cached.2 != key.2
-                    || cached.3 != key.3
-                    || cached.4 != key.4
-                    || route_position_changed(cached.5, key.5)
-            });
-            if route_changed {
-                let mut p = Painter::new();
-                let route_reach = self
-                    .roads
-                    .as_ref()
-                    .map_or(PANEL_REACH, |r| r.reach.max(PANEL_REACH));
-                let style = RouteStyle {
-                    extra_m: -0.6,
-                    min_px: 5.0,
-                    arrows: Some((32.0, 900.0)),
-                    max_len: 12_000.0,
-                    near: Some((anchor, route_reach)),
-                };
-                if history {
-                    let lanes = if self.route.original_lanes.is_empty() {
-                        &self.route.lanes
-                    } else {
-                        &self.route.original_lanes
-                    };
-                    history_route(
-                        &mut p,
-                        rn,
-                        lanes,
-                        anchor,
-                        route_reach,
-                        &self.route_jam,
-                        &style,
-                        bus_lane,
-                        &pal,
-                    );
-                }
-                mapmesh::roads::build_route_to(
-                    &mut p,
-                    rn,
-                    &self.route.lanes[self.route.progress.min(self.route.lanes.len())..],
-                    anchor,
-                    self.route.s,
-                    &self.route_jam,
-                    &style,
-                    bus_lane,
-                    &pal,
-                    self.destination
-                        .as_ref()
-                        .and_then(|d| d.path.as_ref().map(|p| p.end_s)),
-                );
-                self.draw_waypoint_routes(&mut p, rn, anchor, &style, &pal);
-                let count = p.len();
-                self.route_mesh_history[history_slot] = Some((key, p.verts.into(), count));
-                self.route_mesh_generation[history_slot] =
-                    self.route_mesh_generation[history_slot].wrapping_add(1);
-            }
-            if let Some((_, verts, count)) = &self.route_mesh_history[history_slot] {
+            let on = (anchor, ground.key, route_reach);
+            self.route_mesh(rn, f, slot, on, built.is_some(), &pal);
+            if let Some((_, verts, count)) = &self.route_mesh_history[slot] {
                 route_count = *count;
-                let generation = self.route_mesh_generation[history_slot];
-                if self.route_mesh_uploaded != Some((history_slot, generation)) {
-                    route_verts = Some((history_slot, generation, verts.clone()));
+                let generation = self.route_mesh_generation[slot];
+                if self.route_mesh_uploaded != Some((slot, generation)) {
+                    route_verts = Some((slot, generation, verts.clone()));
                 }
             }
         } else if self.route_mesh_history.iter().any(Option::is_some) {
             route_verts = self
                 .route_mesh_uploaded
                 .map(|_| (usize::MAX, 0, std::sync::Arc::from([])));
-            self.route_mesh_history = [None, None];
+            self.route_mesh_history = Default::default();
             self.route_mesh_uploaded = None;
         }
 
@@ -726,7 +539,7 @@ impl Navigator {
             return;
         };
         if let Some(b) = built {
-            b.put(gpu, device, queue, [0, 12, 8, 13]);
+            b.put(gpu, device, queue, ground.buffers());
         }
         if let Some((slot, generation, v)) = route_verts {
             let (solid, ghost) = solid_and_ghost(&v, 0.3);
@@ -757,11 +570,12 @@ impl Navigator {
         for l in layers.iter_mut() {
             l.opacity *= look.fade;
         }
-        let solid_n = self.roads.as_ref().map_or(0, |r| r.houses[1] as u32);
+        let (drawn, _) = ground_drawn(&self.roads, &self.frame_ground, ground.own);
+        let solid_n = drawn.map_or(0, |r| r.houses[1] as u32);
         let three = self.show_3d && !self.classic_2d;
         let route_n = route_count;
         let mpp = map_layer.px_scale * zoom as f32 * 4.0;
-        let seen = |part: usize, on: bool| match (&self.roads, on) {
+        let seen = |part: usize, on: bool| match (drawn, on) {
             (Some(r), true) => super::cull::visible(&r.runs[part], vpm, mpp),
             _ => Vec::new(),
         };
@@ -771,14 +585,9 @@ impl Navigator {
             layer: 5,
             texture: 0,
         }];
-        for (buffer, part, on, layer) in [
-            (0, 0, true, 1),
-            (13, 3, !three, 1),
-            (12, 1, three, 2),
-            (8, 2, three, 3),
-        ] {
+        for (part, on, layer) in [(0, true, 1), (3, !three, 1), (1, three, 2), (2, three, 3)] {
             draws.extend(seen(part, on).into_iter().map(|range| Draw {
-                buffer,
+                buffer: buffers[part],
                 range,
                 layer,
                 texture: 0,
@@ -851,6 +660,242 @@ impl Navigator {
         } else {
             renderer.submit_with_frame(drawn);
         }
+    }
+
+    /// The route's mesh in cache `slot` (`route_slot`), built again for a change of the route,
+    /// three metres of progress, a new build of the ground (`built`) or another ground: `on`,
+    /// the anchor and the key of the ground it lies on, and how far from the anchor it is drawn.
+    pub(super) fn route_mesh(
+        &mut self,
+        rn: &Network,
+        f: &NavFrame,
+        slot: usize,
+        (anchor, ground_key, route_reach): (DVec2, u64, f64),
+        built: bool,
+        pal: &Palette,
+    ) {
+        let history = slot % 2 == 1;
+        let first = self
+            .route
+            .lanes
+            .get(
+                self.route
+                    .progress
+                    .min(self.route.lanes.len().saturating_sub(1)),
+            )
+            .copied();
+        let bus_lane = first.map(|l| lane_from_right(rn, l, f.bus)).unwrap_or(0);
+        let key = (
+            self.route.version,
+            self.jam_version,
+            anchor,
+            bus_lane,
+            ground_key,
+            self.route.s,
+        );
+        let cached_route = self.route_mesh_history[slot].as_ref();
+        let route_changed = cached_route.is_none_or(|(cached, _, _)| {
+            built
+                || cached.0 != key.0
+                || cached.1 != key.1
+                || cached.2 != key.2
+                || cached.3 != key.3
+                || cached.4 != key.4
+                || route_position_changed(cached.5, key.5)
+        });
+        if !route_changed {
+            return;
+        }
+        let mut p = Painter::new();
+        let style = RouteStyle {
+            extra_m: -0.6,
+            min_px: 5.0,
+            arrows: Some((32.0, 900.0)),
+            max_len: 12_000.0,
+            near: Some((anchor, route_reach)),
+        };
+        if history {
+            let lanes = if self.route.original_lanes.is_empty() {
+                &self.route.lanes
+            } else {
+                &self.route.original_lanes
+            };
+            history_route(
+                &mut p,
+                rn,
+                lanes,
+                anchor,
+                route_reach,
+                &self.route_jam,
+                &style,
+                bus_lane,
+                pal,
+            );
+        }
+        mapmesh::roads::build_route_to(
+            &mut p,
+            rn,
+            &self.route.lanes[self.route.progress.min(self.route.lanes.len())..],
+            anchor,
+            self.route.s,
+            &self.route_jam,
+            &style,
+            bus_lane,
+            pal,
+            self.destination
+                .as_ref()
+                .and_then(|d| d.path.as_ref().map(|p| p.end_s)),
+        );
+        self.draw_waypoint_routes(&mut p, rn, anchor, &style, pal);
+        let count = p.len();
+        self.route_mesh_history[slot] = Some((key, p.verts.into(), count));
+        self.route_mesh_generation[slot] = self.route_mesh_generation[slot].wrapping_add(1);
+    }
+
+    /// Builds this picture's ground again when the bus went far, tiles brought lanes, the
+    /// map's layers came or its look changed - on a worker when the map's network is there,
+    /// the picture keeping the old part meanwhile - and gives what was built just now, for the
+    /// graphics card. `net`: the network the roads are drawn from; `view`: the picture's zoom
+    /// and its map's rectangle.
+    fn build_ground(
+        &mut self,
+        renderer: &Renderer,
+        f: &NavFrame,
+        net: Option<&Network>,
+        ground: &GroundChoice,
+        (zoom, map): (f64, Rect),
+        look: &PanelLook,
+    ) -> Option<super::Built> {
+        let pal = ground.pal;
+        let lanes_now = net.map(|n| n.lanes.len()).unwrap_or(0);
+        let visible_reach =
+            super::build::view::panel_reach(zoom, map.w, map.h).unwrap_or(PANEL_REACH);
+        let reach =
+            super::build::view::panel_build_reach(map.w, map.h).unwrap_or(PANEL_REACH + 150.0);
+        let scaled_reach = super::build::view::panel_reach(MAX_ZOOM / look.map_scale, map.w, map.h)
+            .unwrap_or(visible_reach);
+        let mut reach = reach.max(scaled_reach + 150.0);
+        // (the navigator's ground reaches as far as the farthest of its pictures wants; a frame
+        // map's own as far as that map)
+        if !ground.own {
+            if self.remote_pic.drawing {
+                self.remote_pic.reach = reach;
+            } else if !look.plugins {
+                self.screen_state.reach = reach;
+            }
+            reach = reach
+                .max(self.remote_pic.reach)
+                .max(self.screen_state.reach);
+        }
+        let (mut roads, mut job) = match ground.own {
+            true => {
+                let g = self.frame_ground.get_or_insert_with(FrameGround::default);
+                (g.roads.take(), g.job.take())
+            }
+            false => (self.roads.take(), self.panel_job.take()),
+        };
+        let rebuild = match &roads {
+            None => lanes_now > 0 || self.map_data.is_some(),
+            Some(r) => {
+                r.look != ground.key
+                    || super::build::view::panel_moved(
+                        r.reach,
+                        visible_reach,
+                        (r.anchor - f.bus.truncate()).length(),
+                    )
+                    || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5)
+            }
+        };
+        let mut built = None;
+        if let Some(j) = job.as_ref() {
+            match j.poll() {
+                Ok(Some(mut b)) => {
+                    let (look, lanes, reach) = j.meta;
+                    let [_, houses @ ..] = b.counts;
+                    roads = Some(Roads {
+                        look,
+                        reach,
+                        anchor: b.anchor,
+                        lanes_seen: lanes,
+                        houses,
+                        runs: std::mem::take(&mut b.runs),
+                        built_at: self.time,
+                    });
+                    built = Some(b);
+                    job = None;
+                }
+                Ok(None) => {}
+                Err(()) => job = None,
+            }
+        }
+        if rebuild && job.is_none() && built.is_none() {
+            let anchor = f.bus.truncate();
+            let mut parts = self.ground_parts(net, None);
+            let screen_zoomed_out = self.screen.is_some_and(|s| s.on && s.map_scale < 1.0);
+            parts.house_reach = Some(if look.map_scale < 1.0 || screen_zoomed_out {
+                reach.max(PANEL_REACH)
+            } else {
+                PANEL_REACH
+            });
+            // The older-style navigator needs only roads and route data.
+            // Skip terrain meshes, map packages, buildings and their shadows entirely.
+            if self.classic_2d {
+                parts.md = None;
+                parts.surface = None;
+            }
+            let look = if self.classic_2d {
+                GroundLook {
+                    surfaces: false,
+                    trees: false,
+                    dashes: false,
+                    tol: 1.0,
+                }
+            } else {
+                GroundLook {
+                    surfaces: true,
+                    trees: true,
+                    dashes: true,
+                    tol: 0.0,
+                }
+            };
+            let mpp =
+                (2.0 * zoom * (FOV.to_radians() as f64 * 0.5).tan() / map.h.max(1.0) as f64) as f32;
+            let paved = !self.classic_2d;
+            let models = (!self.classic_2d).then_some(PANEL_MODELS);
+            if self.global.is_some() {
+                let pal2 = pal;
+                let device = renderer.device.clone();
+                job = Some(super::build::Job::start(
+                    (ground.key, lanes_now, reach),
+                    move || {
+                        super::build::build(
+                            &parts, anchor, reach, &pal2, look, paved, models, true, mpp,
+                        )
+                        .made_on(&device)
+                    },
+                ));
+            } else {
+                let mut b = super::build::build(
+                    &parts, anchor, reach, &pal, look, paved, models, true, mpp,
+                );
+                let [_, houses @ ..] = b.counts;
+                roads = Some(Roads {
+                    look: ground.key,
+                    reach,
+                    anchor,
+                    lanes_seen: lanes_now,
+                    houses,
+                    runs: std::mem::take(&mut b.runs),
+                    built_at: self.time,
+                });
+                built = Some(b);
+            }
+        }
+        match self.frame_ground.as_mut().filter(|_| ground.own) {
+            Some(g) => (g.roads, g.job) = (roads, job),
+            None => (self.roads, self.panel_job) = (roads, job),
+        }
+        built
     }
 
     /// The corner to pull for another size, on a navigator that is a widget.

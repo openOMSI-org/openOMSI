@@ -68,3 +68,75 @@ fn destination_card_keeps_speed_limit_indicator_data() {
 
     assert_eq!(nav.speed_limit, Some(50.0));
 }
+
+/// Pictures drawn in turn on two grounds (a frame map's own and the navigator's, each with its
+/// own anchor) keep each other's route mesh: each is built once, not again at every draw.
+#[test]
+fn pictures_on_two_grounds_keep_each_other_s_route() {
+    let mut nav = Navigator::new(true, 0.85, "bottom-left");
+    let net = Network {
+        lanes: vec![LaneBuilder::polyline(
+            vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, 400.0, 0.0)],
+            LaneKind::Street,
+            3.0,
+        )],
+        ..Default::default()
+    };
+    nav.set_route("trip", vec![0], true, 1);
+    let f = NavFrame {
+        traffic: None,
+        touch: false,
+        players: Vec::new(),
+        bus: DVec3::new(0.0, 10.0, 0.0),
+        heading: 0.0,
+        speed_kmh: 30.0,
+        outside_temp: 20.0,
+        inside_temp: 22.0,
+        line: None,
+        terminus: None,
+        stops: Vec::new(),
+        delay: None,
+        passengers: None,
+        stop_requested: false,
+        time: 0.0,
+        weekday: 0,
+        date: 20261113,
+        language: "en",
+        screen: (1280.0, 720.0),
+        ui_scale: 1.0,
+        follow_window: false,
+        dt: 1.0 / 60.0,
+        info_rect: None,
+        touch_gap: None,
+    };
+    let pal = *style::palette(true);
+    let (frame, screen) = (route_slot(false, true), route_slot(false, false));
+    for _ in 0..3 {
+        nav.route_mesh(
+            &net,
+            &f,
+            frame,
+            (DVec2::new(0.0, 8.0), 7, 800.0),
+            false,
+            &pal,
+        );
+        nav.route_mesh(&net, &f, screen, (DVec2::ZERO, 3, 800.0), false, &pal);
+    }
+    assert_eq!(nav.route_mesh_generation[frame], 1);
+    assert_eq!(nav.route_mesh_generation[screen], 1);
+    assert!(
+        nav.route_mesh_history[frame]
+            .as_ref()
+            .is_some_and(|m| m.2 > 0)
+    );
+    // (a new build of the frame map's ground: its route again, the other left as it is)
+    nav.route_mesh(
+        &net,
+        &f,
+        frame,
+        (DVec2::new(0.0, 8.0), 7, 800.0),
+        true,
+        &pal,
+    );
+    assert_eq!(nav.route_mesh_generation, [1, 0, 2, 0]);
+}

@@ -187,7 +187,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[1].kind,
         Kind::Map {
             height: 180.0,
-            cards: false
+            cards: false,
+            colors: Vec::new()
         }
     );
     // (no height: the navigator's own map's; its cards over it)
@@ -195,7 +196,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[2].kind,
         Kind::Map {
             height: 0.0,
-            cards: true
+            cards: true,
+            colors: Vec::new()
         }
     );
     assert!(
@@ -203,6 +205,78 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
             .unwrap_err()
             .contains("frame")
     );
+}
+
+/// A frame panel with a map of these `colors`, read.
+fn map_colors(colors: &str) -> Result<Vec<(String, Rgba)>, String> {
+    let p = panel(&format!(
+        "{{ anchor = \"navigator\", frame = true, children = {{ {{ type = \"map\", colors = {colors} }} }} }}"
+    ))?;
+    match &p.children[0].kind {
+        Kind::Map { colors, .. } => Ok(colors.clone()),
+        _ => unreachable!(),
+    }
+}
+
+/// The map's colours (version 8) by the palette's names; none given: the palette's own.
+#[test]
+fn a_map_takes_colours_of_its_own() {
+    let mut c =
+        map_colors(r##"{ land = "#E8E4D8", road_edge = "#00000080", card_text = "#101010" }"##)
+            .unwrap();
+    c.sort_by(|a, b| a.0.cmp(&b.0));
+    assert_eq!(
+        c,
+        [
+            ("card_text".to_string(), Rgba([0x10, 0x10, 0x10, 255])),
+            ("land".to_string(), Rgba([0xE8, 0xE4, 0xD8, 255])),
+            ("road_edge".to_string(), Rgba([0, 0, 0, 0x80])),
+        ]
+    );
+    assert_eq!(map_colors("{}"), Ok(Vec::new()));
+    assert_eq!(map_colors("nil"), Ok(Vec::new()));
+    // (every name of the list is a colour of the map)
+    for name in MAP_COLORS {
+        let c = map_colors(&format!(r##"{{ {name} = "#123456" }}"##)).unwrap();
+        assert_eq!(c, vec![(name.to_string(), Rgba([0x12, 0x34, 0x56, 255]))]);
+    }
+}
+
+#[test]
+fn a_colour_of_the_wrong_kind_is_refused() {
+    let e = map_colors(r##"{ land = "green" }"##).unwrap_err();
+    assert!(e.contains("colors.land") && e.contains("#RRGGBB"), "{e}");
+    let e = map_colors(r##"{ land = 3 }"##).unwrap_err();
+    assert!(e.contains("colors.land"), "{e}");
+    let e = map_colors(r##""#E8E4D8""##).unwrap_err();
+    assert!(e.contains("children[1].colors"), "{e}");
+    let e = map_colors(r##"{ "#E8E4D8" }"##).unwrap_err();
+    assert!(e.contains("children[1].colors"), "{e}");
+}
+
+#[test]
+fn an_unknown_colour_key_is_left_alone() {
+    // (a plugin written for a later game still shows here; the labels' and contour lines'
+    // colours, which the frame map does not draw, and the route's, which has a look of its
+    // own, are no colours of this map either)
+    let c = map_colors(r##"{ land = "#E8E4D8", sky = "#87CEEB" }"##).unwrap();
+    assert_eq!(c, vec![("land".to_string(), Rgba([0xE8, 0xE4, 0xD8, 255]))]);
+    for name in [
+        "label",
+        "label_halo",
+        "contour",
+        "route",
+        "route_edge",
+        "driven",
+    ] {
+        assert!(!MAP_COLORS.contains(&name));
+        assert_eq!(
+            map_colors(&format!(r##"{{ {name} = "#4A4A4F" }}"##)),
+            Ok(Vec::new())
+        );
+    }
+    // (an unknown name's value is not read: it may be of any kind)
+    assert_eq!(map_colors("{ sky = 3 }"), Ok(Vec::new()));
 }
 
 #[test]
