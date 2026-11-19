@@ -32,7 +32,8 @@ pub use read::{ToastSpec, panel_from_source, parse_panel, parse_toast};
 /// 6: a navigator panel that fills the navigator's whole frame (`frame`), and the navigator's
 /// map as an element of it (`map`).
 /// 7: the interface themes (`ui.themes`, `ui.theme`, `ui.set_theme`).
-pub const VERSION: i64 = 7;
+/// 8: the route's look on the navigator's map in a frame panel (`map`'s `route`).
+pub const VERSION: i64 = 8;
 /// Most panels of one plugin.
 pub const MAX_PANELS: usize = 16;
 /// Most elements of one panel, those in rows included.
@@ -382,11 +383,33 @@ pub enum Kind {
     },
     /// The navigator's map, in a panel that fills its frame: `height` (0: as high as the
     /// navigator's own map, 0.8 times its width), `cards` the navigator's cards over it (the
-    /// next turn, the clock, the speed, the next stop). Elsewhere empty room.
+    /// next turn, the clock, the speed, the next stop), `route` how the route looks on that map
+    /// (None: as the navigator draws it). Elsewhere empty room.
     Map {
         height: f32,
         cards: bool,
+        route: Option<MapRoute>,
     },
+}
+
+/// The route's look on a `map` element: each key left out is the navigator's own.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct MapRoute {
+    /// The route's colour, where the traffic flows (or all along with `jams = false`).
+    pub color: Option<Rgba>,
+    /// The thin edge along both its sides.
+    pub edge: Option<Rgba>,
+    /// The part of the route already driven: drawn in this colour only when it is given (the
+    /// navigator's map leaves it out).
+    pub driven: Option<Rgba>,
+    /// The route's least width on the screen, in pixels (1 to 40; the navigator's is 5).
+    pub width: Option<f32>,
+    /// The arrows along it.
+    pub arrows: Option<bool>,
+    /// The faint route through the houses that stand in front of it.
+    pub ghost: Option<bool>,
+    /// The jams' colours (amber, red, dark red) where the traffic is slow.
+    pub jams: Option<bool>,
 }
 
 /// A notification card of `omsi.ui.toast`.
