@@ -109,9 +109,9 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, shadow_size: u32, 
                 },
             }),
             multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
+            fragment: (kind == PIPE_ALPHA_TEST).then(|| wgpu::FragmentState {
                 module: &scene.shader,
-                entry_point: Some(if kind == PIPE_ALPHA_TEST { "fs_shadow_test" } else { "fs_shadow" }),
+                entry_point: Some("fs_shadow_test"),
                 targets: &[],
                 compilation_options: Default::default(),
             }),
