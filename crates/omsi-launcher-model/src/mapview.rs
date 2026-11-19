@@ -80,7 +80,11 @@ struct Roads {
 impl Roads {
     fn layers(&self) -> Option<Arc<omsi_map::layers::Layers>> {
         self.layers
-            .get_or_init(|| crate::host::host().map_layers(&self.root, &self.map_dir, &self.tiles, &self.chrono).map(Arc::new))
+            .get_or_init(|| {
+                crate::host::host()
+                    .map_layers(&self.root, &self.map_dir, &self.tiles, &self.chrono)
+                    .map(Arc::new)
+            })
             .clone()
     }
 
@@ -88,10 +92,16 @@ impl Roads {
     /// a map whose timetable still names a spline it no longer has - every lane of that
     /// spline, so a hole in the map's own data is not a hole in the picture.
     fn routes_of(&self, piece: &omsi_launcher_lib::RoadPiece) -> Vec<usize> {
-        if let Some(&i) = self.lanes.get(&(piece.tile_x, piece.tile_y, piece.spline, piece.path)) {
+        if let Some(&i) = self
+            .lanes
+            .get(&(piece.tile_x, piece.tile_y, piece.spline, piece.path))
+        {
             return vec![i];
         }
-        self.splines.get(&(piece.tile_x, piece.tile_y, piece.spline)).cloned().unwrap_or_default()
+        self.splines
+            .get(&(piece.tile_x, piece.tile_y, piece.spline))
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// The trip's route as lines in world metres: its pieces' lanes in order, a spline the
@@ -105,7 +115,10 @@ impl Roads {
             if found.len() > 1 {
                 let from = lanes.last().and_then(|l| l.last()).copied();
                 found.sort_by(|&a, &b| {
-                    let d = |i: usize| match (from, self.net.lanes.get(i).and_then(|l| l.points.first())) {
+                    let d = |i: usize| match (
+                        from,
+                        self.net.lanes.get(i).and_then(|l| l.points.first()),
+                    ) {
                         (Some(f), Some(p)) => f.distance(p.truncate()),
                         _ => 0.0,
                     };
@@ -135,7 +148,14 @@ fn simplify(pts: &[Vec3], tol: f32) -> Vec<Vec3> {
 /// stops stand - points in metres from `origin`, rounded to the decimetre, as flat
 /// `[x0, y0, x1, y1, ...]` lists. `colors` are the game's city map colours (casing, road, main
 /// road, route) as CSS.
-pub fn export(map: &str, global: &Path, date: &str, trip: &str, tolerance: f32, surface: bool) -> serde_json::Value {
+pub fn export(
+    map: &str,
+    global: &Path,
+    date: &str,
+    trip: &str,
+    tolerance: f32,
+    surface: bool,
+) -> serde_json::Value {
     export_with(map, global, date, trip, tolerance, surface, Detail::Map)
 }
 
@@ -153,28 +173,96 @@ pub enum Detail {
 
 /// `export` with a choice of how much is sent: `Editor` adds every stop of the map's timetable
 /// with its place, `"busstops": [{"id", "name", "at"}]`.
-pub fn export_with(map: &str, global: &Path, date: &str, trip: &str, tolerance: f32, surface: bool, detail: Detail) -> serde_json::Value {
+pub fn export_with(
+    map: &str,
+    global: &Path,
+    date: &str,
+    trip: &str,
+    tolerance: f32,
+    surface: bool,
+    detail: Detail,
+) -> serde_json::Value {
     use serde_json::json;
-    let look = Look { map: map.to_string(), global: global.to_path_buf(), date: date.to_string(), trip: trip.to_string(), entry: -1 };
+    let look = Look {
+        map: map.to_string(),
+        global: global.to_path_buf(),
+        date: date.to_string(),
+        trip: trip.to_string(),
+        entry: -1,
+    };
     let roads = roads_of(&look);
     let path = trip_of(&look);
     let o = roads.origin;
     let flat = |pts: &[DVec2]| -> Vec<f32> {
-        let v: Vec<Vec3> = pts.iter().map(|q| Vec3::new((q.x - o.x) as f32, (q.y - o.y) as f32, 0.0)).collect();
-        simplify(&v, tolerance).iter().flat_map(|q| [(q.x * 10.0).round() / 10.0, (q.y * 10.0).round() / 10.0]).collect()
+        let v: Vec<Vec3> = pts
+            .iter()
+            .map(|q| Vec3::new((q.x - o.x) as f32, (q.y - o.y) as f32, 0.0))
+            .collect();
+        simplify(&v, tolerance)
+            .iter()
+            .flat_map(|q| [(q.x * 10.0).round() / 10.0, (q.y * 10.0).round() / 10.0])
+            .collect()
     };
-    let list: Vec<serde_json::Value> = if detail == Detail::Route { Vec::new() } else { roads.roads.iter().map(|r| json!({ "w": (r.width * 10.0).round() / 10.0, "main": r.main, "p": flat(&r.points.iter().map(|q| q.truncate()).collect::<Vec<_>>()) })).collect() };
-    let route: Vec<Vec<f32>> = roads.route_lines(&path.route).iter().map(|l| flat(l)).collect();
-    let rel = |q: DVec2| [((q.x - o.x) * 10.0).round() / 10.0, ((q.y - o.y) * 10.0).round() / 10.0];
-    let stops: Vec<serde_json::Value> = path.stops.iter().enumerate().filter_map(|(k, id)| roads.objects.get(id).map(|q| json!({ "k": k, "at": rel(*q) }))).collect();
-    let entries: Vec<serde_json::Value> = if detail == Detail::Route { Vec::new() } else { roads.entries.iter().map(|e| json!({ "index": e.index, "name": e.name, "at": rel(e.at) })).collect() };
-    let css = |c: [f32; 4]| format!("rgba({},{},{},{:.3})", (c[0] * 255.0).round(), (c[1] * 255.0).round(), (c[2] * 255.0).round(), c[3]);
+    let list: Vec<serde_json::Value> = if detail == Detail::Route {
+        Vec::new()
+    } else {
+        roads.roads.iter().map(|r| json!({ "w": (r.width * 10.0).round() / 10.0, "main": r.main, "p": flat(&r.points.iter().map(|q| q.truncate()).collect::<Vec<_>>()) })).collect()
+    };
+    let route: Vec<Vec<f32>> = roads
+        .route_lines(&path.route)
+        .iter()
+        .map(|l| flat(l))
+        .collect();
+    let rel = |q: DVec2| {
+        [
+            ((q.x - o.x) * 10.0).round() / 10.0,
+            ((q.y - o.y) * 10.0).round() / 10.0,
+        ]
+    };
+    let stops: Vec<serde_json::Value> = path
+        .stops
+        .iter()
+        .enumerate()
+        .filter_map(|(k, id)| {
+            roads
+                .objects
+                .get(id)
+                .map(|q| json!({ "k": k, "at": rel(*q) }))
+        })
+        .collect();
+    let entries: Vec<serde_json::Value> = if detail == Detail::Route {
+        Vec::new()
+    } else {
+        roads
+            .entries
+            .iter()
+            .map(|e| json!({ "index": e.index, "name": e.name, "at": rel(e.at) }))
+            .collect()
+    };
+    let css = |c: [f32; 4]| {
+        format!(
+            "rgba({},{},{},{:.3})",
+            (c[0] * 255.0).round(),
+            (c[1] * 255.0).round(),
+            (c[2] * 255.0).round(),
+            c[3]
+        )
+    };
     let [casing, road, main, red] = crate::host::host().city_map_colors();
     // (a stop's name is the first of its busstop records; several records name one object)
     let busstops: Vec<serde_json::Value> = if detail == Detail::Editor {
         let data = omsi_timetable::TimetableData::load(global.parent().unwrap_or(Path::new("")));
         let mut seen = std::collections::HashSet::new();
-        data.bus_stops.iter().filter(|b| seen.insert(b.object_id)).filter_map(|b| roads.objects.get(&b.object_id).map(|q| json!({ "id": b.object_id, "name": b.name.trim(), "at": rel(*q) }))).collect()
+        data.bus_stops
+            .iter()
+            .filter(|b| seen.insert(b.object_id))
+            .filter_map(|b| {
+                roads
+                    .objects
+                    .get(&b.object_id)
+                    .map(|q| json!({ "id": b.object_id, "name": b.name.trim(), "at": rel(*q) }))
+            })
+            .collect()
     } else {
         Vec::new()
     };
@@ -199,29 +287,60 @@ const PACKAGE_MARGIN: f64 = 2500.0;
 /// under the roads: the filling triangles by class and the rivers, rail and borders, in metres
 /// from `origin` like the roads, and the manifest's dark colours as CSS. `null` for a map
 /// without a package, so the picture is what it always was.
-fn package_view(global: &Path, origin: DVec2, lo: DVec2, hi: DVec2, tolerance: f32) -> serde_json::Value {
+fn package_view(
+    global: &Path,
+    origin: DVec2,
+    lo: DVec2,
+    hi: DVec2,
+    tolerance: f32,
+) -> serde_json::Value {
     use omsi_map::package::{self, Package};
     use serde_json::json;
-    let Some(map_dir) = global.parent() else { return serde_json::Value::Null };
-    let Some(pkg) = Package::open(map_dir) else { return serde_json::Value::Null };
+    let Some(map_dir) = global.parent() else {
+        return serde_json::Value::Null;
+    };
+    let Some(pkg) = Package::open(map_dir) else {
+        return serde_json::Value::Null;
+    };
     let m = DVec2::splat(PACKAGE_MARGIN);
     let (a, b) = (lo - m, hi + m);
     let layers = pkg.layers(Some(((a.x, a.y), (b.x, b.y))));
     let r1 = |v: f64| (v * 10.0).round() / 10.0;
     let at = |q: (f64, f64)| [r1(q.0 - origin.x), r1(q.1 - origin.y)];
-    let fills: Vec<Vec<f64>> = layers.fills.iter().map(|list| list.iter().flat_map(|t| t.iter().flat_map(|q| at(*q))).collect()).collect();
+    let fills: Vec<Vec<f64>> = layers
+        .fills
+        .iter()
+        .map(|list| {
+            list.iter()
+                .flat_map(|t| t.iter().flat_map(|q| at(*q)))
+                .collect()
+        })
+        .collect();
     let lines: Vec<serde_json::Value> = layers
         .lines
         .iter()
         .filter_map(|l| {
-            let v: Vec<Vec3> = l.points.iter().map(|q| Vec3::new((q.0 - origin.x) as f32, (q.1 - origin.y) as f32, 0.0)).collect();
-            let p: Vec<f64> = simplify(&v, tolerance).iter().flat_map(|q| [r1(q.x as f64), r1(q.y as f64)]).collect();
+            let v: Vec<Vec3> = l
+                .points
+                .iter()
+                .map(|q| Vec3::new((q.0 - origin.x) as f32, (q.1 - origin.y) as f32, 0.0))
+                .collect();
+            let p: Vec<f64> = simplify(&v, tolerance)
+                .iter()
+                .flat_map(|q| [r1(q.x as f64), r1(q.y as f64)])
+                .collect();
             (p.len() >= 4).then(|| json!({ "c": l.class, "w": l.width, "p": p }))
         })
         .collect();
     let hex = |c: package::Rgb| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]);
     let d = pkg.dark;
-    log::info!("map package \"{}\": {} chunks, {} triangles, {} lines near the roads", pkg.name, pkg.chunks(), fills.iter().map(|f| f.len() / 6).sum::<usize>(), lines.len());
+    log::info!(
+        "map package \"{}\": {} chunks, {} triangles, {} lines near the roads",
+        pkg.name,
+        pkg.chunks(),
+        fills.iter().map(|f| f.len() / 6).sum::<usize>(),
+        lines.len()
+    );
     json!({
         "name": pkg.name,
         "credit": pkg.credit,
@@ -243,7 +362,10 @@ fn trip_of(look: &Look) -> omsi_launcher_lib::TripPath {
     }
     // a trip being made in the timetable editor: `@stops:<id>,<id>,...`, the stops it calls at
     if let Some(ids) = look.trip.trim().strip_prefix(STOPS_PREFIX) {
-        let ids: Vec<i64> = ids.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+        let ids: Vec<i64> = ids
+            .split(',')
+            .filter_map(|x| x.trim().parse().ok())
+            .collect();
         return omsi_launcher_lib::chain_path(&look.map, &look.date, &ids).unwrap_or_default();
     }
     match omsi_launcher_lib::trip_path(&look.map, &look.date, &look.trip) {
@@ -271,12 +393,33 @@ pub fn overview(look: Look) -> serde_json::Value {
     let o = roads.origin;
     let r1 = |v: f64| (v * 10.0).round() / 10.0;
     let flat = |pts: &[DVec2]| -> Vec<f64> {
-        let v: Vec<Vec3> = pts.iter().map(|q| Vec3::new((q.x - o.x) as f32, (q.y - o.y) as f32, 0.0)).collect();
-        simplify(&v, TOLERANCE).iter().flat_map(|p| [r1(p.x as f64), r1(p.y as f64)]).collect()
+        let v: Vec<Vec3> = pts
+            .iter()
+            .map(|q| Vec3::new((q.x - o.x) as f32, (q.y - o.y) as f32, 0.0))
+            .collect();
+        simplify(&v, TOLERANCE)
+            .iter()
+            .flat_map(|p| [r1(p.x as f64), r1(p.y as f64)])
+            .collect()
     };
     let roads_json: Vec<serde_json::Value> = roads.roads.iter().map(|r| json!({ "w": r.width, "main": r.main, "p": flat(&r.points.iter().map(|q| q.truncate()).collect::<Vec<_>>()) })).filter(|v| v["p"].as_array().is_some_and(|a| a.len() >= 4)).collect();
-    let route: Vec<Vec<f64>> = roads.route_lines(&trip.route).iter().map(|l| flat(l)).filter(|p| p.len() >= 4).collect();
-    let stops: Vec<serde_json::Value> = trip.stops.iter().enumerate().filter_map(|(i, id)| roads.objects.get(id).map(|q| json!({ "x": r1(q.x - o.x), "y": r1(q.y - o.y), "i": i }))).collect();
+    let route: Vec<Vec<f64>> = roads
+        .route_lines(&trip.route)
+        .iter()
+        .map(|l| flat(l))
+        .filter(|p| p.len() >= 4)
+        .collect();
+    let stops: Vec<serde_json::Value> = trip
+        .stops
+        .iter()
+        .enumerate()
+        .filter_map(|(i, id)| {
+            roads
+                .objects
+                .get(id)
+                .map(|q| json!({ "x": r1(q.x - o.x), "y": r1(q.y - o.y), "i": i }))
+        })
+        .collect();
     let entries: Vec<serde_json::Value> = roads.entries.iter().map(|e| json!({ "x": r1(e.at.x - o.x), "y": r1(e.at.y - o.y), "name": e.name, "index": e.index })).collect();
     json!({
         "map": look.map,
@@ -289,14 +432,24 @@ pub fn overview(look: Look) -> serde_json::Value {
         "stops": stops,
         "entries": entries,
         "lanes": roads.net.lanes.len(),
-        "layers": layers_view(roads.layers.as_deref(), o),
+        "layers": layers_view(roads.layers().as_deref(), o),
     })
 }
 
 /// The map's network and layers for the launcher's map (`omsi_navigator::MapGround`), and the
 /// world point the page measures from (`export`'s `origin`).
-pub fn map_network(map: &str, global: &Path, date: &str) -> (DVec2, Arc<Network>, Option<Arc<omsi_map::layers::Layers>>) {
-    let look = Look { map: map.to_string(), global: global.to_path_buf(), date: date.to_string(), trip: String::new(), entry: -1 };
+pub fn map_network(
+    map: &str,
+    global: &Path,
+    date: &str,
+) -> (DVec2, Arc<Network>, Option<Arc<omsi_map::layers::Layers>>) {
+    let look = Look {
+        map: map.to_string(),
+        global: global.to_path_buf(),
+        date: date.to_string(),
+        trip: String::new(),
+        entry: -1,
+    };
     let roads = roads_of(&look);
     (roads.origin, roads.net.clone(), roads.layers())
 }
@@ -305,13 +458,20 @@ pub fn map_network(map: &str, global: &Path, date: &str) -> (DVec2, Arc<Network>
 /// call on the same map and date: the route map and the ground the game builds for the
 /// launcher's map (`map_network`) share it.
 fn roads_of(look: &Look) -> Arc<Roads> {
-    static CACHE: std::sync::Mutex<Option<(PathBuf, String, Arc<Roads>)>> = std::sync::Mutex::new(None);
-    let cached = CACHE.lock().unwrap_or_else(|e| e.into_inner()).as_ref().filter(|(g, d, _)| *g == look.global && *d == look.date).map(|c| c.2.clone());
+    static CACHE: std::sync::Mutex<Option<(PathBuf, String, Arc<Roads>)>> =
+        std::sync::Mutex::new(None);
+    let cached = CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .filter(|(g, d, _)| *g == look.global && *d == look.date)
+        .map(|c| c.2.clone());
     if let Some(roads) = cached {
         return roads;
     }
     let roads = Arc::new(read_map(look));
-    *CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some((look.global.clone(), look.date.clone(), roads.clone()));
+    *CACHE.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some((look.global.clone(), look.date.clone(), roads.clone()));
     roads
 }
 
@@ -320,7 +480,9 @@ fn roads_of(look: &Look) -> Arc<Roads> {
 /// widths. `look.global` is the map's `global.cfg`; the tiles stand beside it and the assets
 /// the map names under the installation it belongs to.
 fn read_map(look: &Look) -> Roads {
-    let Ok(mut global) = omsi_map::GlobalCfg::load(&look.global) else { return Roads::default() };
+    let Ok(mut global) = omsi_map::GlobalCfg::load(&look.global) else {
+        return Roads::default();
+    };
     // (a map from OMSI 1 lists no entry points: they are its tiles' entry objects)
     if global.entry_points.is_empty() {
         global.add_object_entry_points();
@@ -328,8 +490,12 @@ fn read_map(look: &Look) -> Roads {
     // everything that turns a tile index and a place in the tile into world metres needs
     // this first (`[worldcoordinates]` maps use another grid)
     omsi_map::configure_grid(&global);
-    let Some(map_dir) = look.global.parent().map(Path::to_path_buf) else { return Roads::default() };
-    let chrono = omsi_map::date_code(&look.date).map(|c| omsi_map::active_chrono_dirs(&map_dir, c)).unwrap_or_default();
+    let Some(map_dir) = look.global.parent().map(Path::to_path_buf) else {
+        return Roads::default();
+    };
+    let chrono = omsi_map::date_code(&look.date)
+        .map(|c| omsi_map::active_chrono_dirs(&map_dir, c))
+        .unwrap_or_default();
     let size = omsi_map::tile_size();
     // the installation the map belongs to: what its `.sli` and `.sco` files are named from.
     // A map is a folder under a content root's `maps` (that is where the launcher's list came
@@ -338,7 +504,12 @@ fn read_map(look: &Look) -> Roads {
     let root = omsi_cfg::content_roots()
         .into_iter()
         .find(|r| map_dir.starts_with(r))
-        .or_else(|| map_dir.parent().and_then(|p| p.parent()).map(Path::to_path_buf))
+        .or_else(|| {
+            map_dir
+                .parent()
+                .and_then(|p| p.parent())
+                .map(Path::to_path_buf)
+        })
         .unwrap_or_else(|| map_dir.clone());
     let tiles: Vec<(i32, i32, PathBuf)> = global
         .tiles
@@ -347,14 +518,18 @@ fn read_map(look: &Look) -> Roads {
         .filter(|t| omsi_cfg::vfs::is_file(&t.2))
         .collect();
     let t0 = std::time::Instant::now();
-    let crate::host::CityMap { roads, net, places } = crate::host::host().city_map(&root, &tiles, &chrono);
+    let crate::host::CityMap { roads, net, places } =
+        crate::host::host().city_map(&root, &tiles, &chrono);
     // the lanes the timetable can name, and the lanes of every spline behind them
     let mut by_path = HashMap::new();
     let mut by_spline: HashMap<(i32, i32, i64), Vec<usize>> = HashMap::new();
     for (i, l) in net.lanes.iter().enumerate() {
         let Some(key) = l.key else { continue };
         by_path.insert((key.tile.0, key.tile.1, key.id, key.path), i);
-        by_spline.entry((key.tile.0, key.tile.1, key.id)).or_default().push(i);
+        by_spline
+            .entry((key.tile.0, key.tile.1, key.id))
+            .or_default()
+            .push(i);
     }
     // the entry points: on the tile the record names, else at their object (`World::
     // entry_point_place` reads them the same way)
@@ -368,7 +543,11 @@ fn read_map(look: &Look) -> Roads {
         // the marker carries where it stands in `global.cfg`'s list, so one left out here
         // (no tile, no object) does not shift the ones after it
         if let Some(p) = p {
-            entries.push(Entry { at: p, name: ep.name.clone(), index });
+            entries.push(Entry {
+                at: p,
+                name: ep.name.clone(),
+                index,
+            });
         }
     }
     let objects: HashMap<i64, DVec2> = places.iter().map(|(k, v)| (*k, v.truncate())).collect();
@@ -389,15 +568,26 @@ fn read_map(look: &Look) -> Roads {
     // piece of the next town) would shrink everything else to a dot, so the map opens on the
     // 1 - 99 % box of what the roads cover instead of the extremes (the far ones are still
     // there to be dragged to).
-    let mut xs: Vec<f32> = roads.iter().flat_map(|r| r.points.iter()).map(|q| q.x as f32).collect();
-    let mut ys: Vec<f32> = roads.iter().flat_map(|r| r.points.iter()).map(|q| q.y as f32).collect();
+    let mut xs: Vec<f32> = roads
+        .iter()
+        .flat_map(|r| r.points.iter())
+        .map(|q| q.x as f32)
+        .collect();
+    let mut ys: Vec<f32> = roads
+        .iter()
+        .flat_map(|r| r.points.iter())
+        .map(|q| q.y as f32)
+        .collect();
     xs.sort_by(f32::total_cmp);
     ys.sort_by(f32::total_cmp);
     let (lo, hi) = if xs.is_empty() {
         (min, max)
     } else {
         let at = |v: &Vec<f32>, t: f64| v[((v.len() - 1) as f64 * t) as usize] as f64;
-        (DVec2::new(at(&xs, 0.01), at(&ys, 0.01)), DVec2::new(at(&xs, 0.99), at(&ys, 0.99)))
+        (
+            DVec2::new(at(&xs, 0.01), at(&ys, 0.01)),
+            DVec2::new(at(&xs, 0.99), at(&ys, 0.99)),
+        )
     };
     log::info!(
         "map: {} roads from {} lanes in {} tiles, {} objects, {} entry points, read in {:.2} s; roads cover ({:.0}, {:.0}) - ({:.0}, {:.0}), opened at the 1 - 99 % box ({:.0}, {:.0}) - ({:.0}, {:.0})",
@@ -407,8 +597,14 @@ fn read_map(look: &Look) -> Roads {
         objects.len(),
         entries.len(),
         t0.elapsed().as_secs_f64(),
-        min.x, min.y, max.x, max.y,
-        lo.x, lo.y, hi.x, hi.y
+        min.x,
+        min.y,
+        max.x,
+        max.y,
+        lo.x,
+        lo.y,
+        hi.x,
+        hi.y
     );
     Roads {
         roads,
@@ -433,21 +629,42 @@ fn read_map(look: &Look) -> Roads {
 /// their heights, the railways and tram tracks. `null` when the game has none for the map.
 fn layers_view(l: Option<&omsi_map::layers::Layers>, origin: DVec2) -> serde_json::Value {
     use serde_json::json;
-    let Some(l) = l else { return serde_json::Value::Null };
+    let Some(l) = l else {
+        return serde_json::Value::Null;
+    };
     let shift = (l.origin - origin).as_vec2();
     let r1 = |v: f32| ((v as f64) * 10.0).round() / 10.0;
     let tris = |t: &[glam::Vec2]| -> Vec<f64> {
         t.chunks_exact(3)
             // (slivers under a few square decimetres are nothing at a launcher's zoom)
             .filter(|c| (c[1] - c[0]).perp_dot(c[2] - c[0]).abs() > 0.1)
-            .flat_map(|c| c.iter().flat_map(|q| [r1(q.x + shift.x), r1(q.y + shift.y)]).collect::<Vec<_>>())
+            .flat_map(|c| {
+                c.iter()
+                    .flat_map(|q| [r1(q.x + shift.x), r1(q.y + shift.y)])
+                    .collect::<Vec<_>>()
+            })
             .collect()
     };
-    let land: Vec<Vec<f64>> = (0..omsi_map::layers::LAND_CLASSES).map(|c| tris(l.land_of(c))).collect();
-    let paved: Vec<Vec<f64>> = (0..omsi_map::layers::PAVE_GREEN).map(|c| tris(l.paved_of(c))).collect();
+    let land: Vec<Vec<f64>> = (0..omsi_map::layers::LAND_CLASSES)
+        .map(|c| tris(l.land_of(c)))
+        .collect();
+    let paved: Vec<Vec<f64>> = (0..omsi_map::layers::PAVE_GREEN)
+        .map(|c| tris(l.paved_of(c)))
+        .collect();
     let houses: Vec<serde_json::Value> = l.buildings.iter().map(|b| json!({ "h": r1(b.height), "p": b.outline.iter().flat_map(|q| [r1(q.x + shift.x), r1(q.y + shift.y)]).collect::<Vec<_>>() })).collect();
     let lines: Vec<serde_json::Value> = l.lines.iter().filter(|x| x.class < omsi_map::layers::LINE_ROAD_EDGE).map(|x| json!({ "c": x.class, "w": r1(x.width), "p": x.points.iter().flat_map(|q| [r1(q.x + shift.x), r1(q.y + shift.y)]).collect::<Vec<_>>() })).collect();
-    let tiles: Vec<[f64; 4]> = l.tiles.iter().map(|t| [r1(t[0] + shift.x), r1(t[1] + shift.y), r1(t[2] + shift.x), r1(t[3] + shift.y)]).collect();
+    let tiles: Vec<[f64; 4]> = l
+        .tiles
+        .iter()
+        .map(|t| {
+            [
+                r1(t[0] + shift.x),
+                r1(t[1] + shift.y),
+                r1(t[2] + shift.x),
+                r1(t[3] + shift.y),
+            ]
+        })
+        .collect();
     json!({ "tiles": tiles, "land": land, "paved": paved, "houses": houses, "lines": lines })
 }
 
@@ -460,15 +677,32 @@ mod package_tests {
     #[test]
     #[ignore = "needs a map with a package: OMSI_TEST_PACKAGE_MAP=<path of its global.cfg>"]
     fn the_package_of_a_real_map_is_exported() {
-        let Some(global) = std::env::var_os("OMSI_TEST_PACKAGE_MAP").map(PathBuf::from) else { return };
+        let Some(global) = std::env::var_os("OMSI_TEST_PACKAGE_MAP").map(PathBuf::from) else {
+            return;
+        };
         let cfg = omsi_map::GlobalCfg::load(&global).expect("global.cfg");
         omsi_map::configure_grid(&cfg);
         let big = 1.0e12;
-        let v = package_view(&global, DVec2::ZERO, DVec2::splat(-big), DVec2::splat(big), 1.2);
+        let v = package_view(
+            &global,
+            DVec2::ZERO,
+            DVec2::splat(-big),
+            DVec2::splat(big),
+            1.2,
+        );
         assert!(!v.is_null(), "no package found beside {}", global.display());
-        let triangles: usize = v["fills"].as_array().unwrap().iter().map(|f| f.as_array().unwrap().len() / 6).sum();
+        let triangles: usize = v["fills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f.as_array().unwrap().len() / 6)
+            .sum();
         let lines = v["lines"].as_array().unwrap().len();
-        println!("package \"{}\": {triangles} triangles, {lines} lines, {} bytes of JSON", v["name"], v.to_string().len());
+        println!(
+            "package \"{}\": {triangles} triangles, {lines} lines, {} bytes of JSON",
+            v["name"],
+            v.to_string().len()
+        );
         assert!(triangles > 0);
     }
 
@@ -476,7 +710,13 @@ mod package_tests {
     fn a_map_without_a_package_exports_null() {
         let dir = std::env::temp_dir().join("omsi-mapview-no-package");
         let _ = std::fs::create_dir_all(&dir);
-        let v = package_view(&dir.join("global.cfg"), DVec2::ZERO, DVec2::splat(-10.0), DVec2::splat(10.0), 1.2);
+        let v = package_view(
+            &dir.join("global.cfg"),
+            DVec2::ZERO,
+            DVec2::splat(-10.0),
+            DVec2::splat(10.0),
+            1.2,
+        );
         assert!(v.is_null());
     }
 }
