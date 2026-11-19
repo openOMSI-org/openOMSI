@@ -44,6 +44,8 @@ pub(crate) fn in_navigator(p: &Panel, width: f32) -> Panel {
 pub struct DockedMap {
     pub rect: [f32; 4],
     pub cards: bool,
+    /// Which of them: the next turn, the clock, the speed, the next stop.
+    pub show: [bool; 4],
 }
 
 /// A box's room round what is in it (the stripe's side, the others), and its stripe.
@@ -132,9 +134,10 @@ impl Layout<'_> {
                     self.stop(s, rr, *size, rail, i > 0, i + 1 < stops.len());
                 }
             }
-            Kind::Map { cards, .. } => {
+            Kind::Map { cards, show, .. } => {
                 if self.out.map.is_none() {
-                    self.out.map = Some((r, *cards));
+                    self.out.map =
+                        Some((r, *cards, [show.turn, show.clock, show.speed, show.stop]));
                 }
             }
             _ => {}
@@ -334,14 +337,15 @@ mod tests {
         let p = panel(
             r#"{ anchor = "navigator", frame = true, width = 360, padding = 10, gap = 6, children = {
             { type = "text", text = "Line 5", size = 14 },
-            { type = "map", cards = false },
+            { type = "map", cards = false, show = { clock = false } },
             { type = "map", height = 40 },
             { type = "button", id = "go", text = "Go" },
         } }"#,
         );
         let mut l = layout(&p, &fonts, 1.0);
-        let (r, cards) = l.map.expect("the map");
+        let (r, cards, show) = l.map.expect("the map");
         assert!(!cards);
+        assert_eq!(show, [true, false, true, true]);
         assert_eq!((r.x, r.w, r.h), (10.0, 340.0, (340.0 * 0.8f32).round()));
         assert!((r.y - (10.0 + 14.0 * LINE + 6.0)).abs() < 0.01, "{r:?}");
         let empty = |l: &Laid| {

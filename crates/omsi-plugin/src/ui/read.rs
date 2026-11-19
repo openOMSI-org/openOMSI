@@ -2,8 +2,8 @@
 //! held to the limits and checked here, so that a plugin learns at once what is wrong.
 
 use super::{
-    Align, Anchor, ChartStyle, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS, MAX_TEXT, Panel,
-    Rgba, RowAlign, Stop, StopState, Weight, check_id,
+    Align, Anchor, CardSet, ChartStyle, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS,
+    MAX_TEXT, Panel, Rgba, RowAlign, Stop, StopState, Weight, check_id,
 };
 use crate::api::Value;
 use std::path::{Path, PathBuf};
@@ -224,6 +224,28 @@ impl Reader<'_> {
             Value::Bool(b) => Ok(*b),
             _ => Err(format!("{}: true or false is expected", self.at(key))),
         }
+    }
+
+    /// The `show` of a `map`: which of the navigator's cards show (each on unless it is `false`).
+    fn card_set(&self) -> Result<CardSet, String> {
+        let t = self.get("show");
+        if matches!(t, Value::Nil) {
+            return Ok(CardSet::default());
+        }
+        if !t.is_table() {
+            return Err(format!("{}: a table is expected", self.at("show")));
+        }
+        let r = Reader {
+            t,
+            path: self.at("show"),
+            folder: None,
+        };
+        Ok(CardSet {
+            turn: r.boolean("turn", true)?,
+            clock: r.boolean("clock", true)?,
+            speed: r.boolean("speed", true)?,
+            stop: r.boolean("stop", true)?,
+        })
     }
 
     /// A text (numbers are written as Lua writes them), at most `MAX_TEXT` characters.
@@ -572,6 +594,7 @@ impl Reader<'_> {
             "map" => Kind::Map {
                 height: self.number("height", 0.0, 0.0, 4000.0)?,
                 cards: self.boolean("cards", true)?,
+                show: self.card_set()?,
             },
             "space" => Kind::Space {
                 size: self.number("size", 8.0, 0.0, 1000.0)?,

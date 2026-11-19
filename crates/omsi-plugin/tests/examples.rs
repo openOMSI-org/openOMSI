@@ -266,3 +266,33 @@ fn the_passenger_log_runs() {
     no_errors(&g);
     assert!(g.log.borrow().is_empty(), "it only reads");
 }
+
+#[test]
+fn the_navigator_map_leaves_two_cards_out() {
+    use omsi_plugin::ui::{CardSet, Kind};
+    let mut p = load("ex-navigator-map", "navigator_map.lua");
+    let mut g = Game::new();
+    for _ in 0..3 {
+        p.frame(&mut g);
+    }
+    no_errors(&g);
+    assert_eq!(panel_ids(&p), ["navigator"]);
+    let ui = p.ui.borrow();
+    let shown = ui.panels()[0]
+        .panel
+        .children
+        .iter()
+        .find_map(|e| match &e.kind {
+            Kind::Map { show, .. } => Some(*show),
+            _ => None,
+        });
+    assert_eq!(
+        shown,
+        Some(CardSet {
+            turn: false,
+            clock: false,
+            speed: true,
+            stop: true
+        })
+    );
+}

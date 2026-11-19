@@ -32,7 +32,8 @@ pub use read::{ToastSpec, panel_from_source, parse_panel, parse_toast};
 /// 6: a navigator panel that fills the navigator's whole frame (`frame`), and the navigator's
 /// map as an element of it (`map`).
 /// 7: the interface themes (`ui.themes`, `ui.theme`, `ui.set_theme`).
-pub const VERSION: i64 = 7;
+/// 8: which of the navigator's cards show over a `map` (`show`).
+pub const VERSION: i64 = 8;
 /// Most panels of one plugin.
 pub const MAX_PANELS: usize = 16;
 /// Most elements of one panel, those in rows included.
@@ -382,11 +383,33 @@ pub enum Kind {
     },
     /// The navigator's map, in a panel that fills its frame: `height` (0: as high as the
     /// navigator's own map, 0.8 times its width), `cards` the navigator's cards over it (the
-    /// next turn, the clock, the speed, the next stop). Elsewhere empty room.
+    /// next turn, the clock, the speed, the next stop), `show` which of those four (with
+    /// `cards = false` none). Elsewhere empty room.
     Map {
         height: f32,
         cards: bool,
+        show: CardSet,
     },
+}
+
+/// Which of the navigator's cards over a `map` show: each is on unless the plugin turns it off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CardSet {
+    pub turn: bool,
+    pub clock: bool,
+    pub speed: bool,
+    pub stop: bool,
+}
+
+impl Default for CardSet {
+    fn default() -> Self {
+        CardSet {
+            turn: true,
+            clock: true,
+            speed: true,
+            stop: true,
+        }
+    }
 }
 
 /// A notification card of `omsi.ui.toast`.
