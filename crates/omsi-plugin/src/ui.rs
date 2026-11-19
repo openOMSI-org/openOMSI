@@ -32,7 +32,8 @@ pub use read::{ToastSpec, panel_from_source, parse_panel, parse_toast};
 /// 6: a navigator panel that fills the navigator's whole frame (`frame`), and the navigator's
 /// map as an element of it (`map`).
 /// 7: the interface themes (`ui.themes`, `ui.theme`, `ui.set_theme`).
-pub const VERSION: i64 = 7;
+/// 8: what a frame panel's map shows (`layers` of a `map`).
+pub const VERSION: i64 = 8;
 /// Most panels of one plugin.
 pub const MAX_PANELS: usize = 16;
 /// Most elements of one panel, those in rows included.
@@ -382,11 +383,33 @@ pub enum Kind {
     },
     /// The navigator's map, in a panel that fills its frame: `height` (0: as high as the
     /// navigator's own map, 0.8 times its width), `cards` the navigator's cards over it (the
-    /// next turn, the clock, the speed, the next stop). Elsewhere empty room.
+    /// next turn, the clock, the speed, the next stop), `layers` what it shows over the player's
+    /// settings. Elsewhere empty room.
     Map {
         height: f32,
         cards: bool,
+        layers: Option<MapLayers>,
     },
+}
+
+/// What a frame panel's map shows, for this map only: a layer given here is shown or left out
+/// whatever the player's settings say; one left out (None) follows the setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MapLayers {
+    /// The traffic's car dots.
+    pub cars: Option<bool>,
+    /// The public transport's drops with their lines.
+    pub transit: Option<bool>,
+    /// The bands where the traffic is slow or stands.
+    pub jams: Option<bool>,
+    /// The other players.
+    pub players: Option<bool>,
+    /// The package's icons.
+    pub icons: Option<bool>,
+    /// The stops' pins.
+    pub stops: Option<bool>,
+    /// The route the bus has driven.
+    pub history: Option<bool>,
 }
 
 /// A notification card of `omsi.ui.toast`.

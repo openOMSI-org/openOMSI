@@ -6,7 +6,7 @@
 
 use super::{BADGE_H, BADGE_PAD, BADGE_PX, Item, Layout, color, ink_on};
 use glam::Vec2;
-use omsi_plugin::ui::{Element, Kind, Panel, Rgba, Stop, StopState};
+use omsi_plugin::ui::{Element, Kind, MapLayers, Panel, Rgba, Stop, StopState};
 use omsi_ui::{Color, Rect, Weight};
 
 /// The panel for the navigator as it was laid out, in physical pixels.
@@ -44,6 +44,8 @@ pub(crate) fn in_navigator(p: &Panel, width: f32) -> Panel {
 pub struct DockedMap {
     pub rect: [f32; 4],
     pub cards: bool,
+    /// What the map shows over the player's settings (`layers` of the element).
+    pub layers: Option<MapLayers>,
 }
 
 /// A box's room round what is in it (the stripe's side, the others), and its stripe.
@@ -132,9 +134,9 @@ impl Layout<'_> {
                     self.stop(s, rr, *size, rail, i > 0, i + 1 < stops.len());
                 }
             }
-            Kind::Map { cards, .. } => {
+            Kind::Map { cards, layers, .. } => {
                 if self.out.map.is_none() {
-                    self.out.map = Some((r, *cards));
+                    self.out.map = Some((r, *cards, *layers));
                 }
             }
             _ => {}
@@ -334,13 +336,21 @@ mod tests {
         let p = panel(
             r#"{ anchor = "navigator", frame = true, width = 360, padding = 10, gap = 6, children = {
             { type = "text", text = "Line 5", size = 14 },
-            { type = "map", cards = false },
+            { type = "map", cards = false, layers = { cars = false } },
             { type = "map", height = 40 },
             { type = "button", id = "go", text = "Go" },
         } }"#,
         );
         let mut l = layout(&p, &fonts, 1.0);
-        let (r, cards) = l.map.expect("the map");
+        let (r, cards, layers) = l.map.expect("the map");
+        // (the first map's layers go with it: a layer left out is the setting's)
+        assert_eq!(
+            layers,
+            Some(MapLayers {
+                cars: Some(false),
+                ..MapLayers::default()
+            })
+        );
         assert!(!cards);
         assert_eq!((r.x, r.w, r.h), (10.0, 340.0, (340.0 * 0.8f32).round()));
         assert!((r.y - (10.0 + 14.0 * LINE + 6.0)).abs() < 0.01, "{r:?}");

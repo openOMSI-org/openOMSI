@@ -20,12 +20,22 @@ impl App {
                         crate::discord::Discord::start(&self.settings.discord_app_id);
                 }
                 let show = self.settings.discord_show;
-                let max = if show.players && self.integrations.discord.is_some() { self.discord_server_max() } else { 0 };
+                let max = if show.players && self.integrations.discord.is_some() {
+                    self.discord_server_max()
+                } else {
+                    0
+                };
                 if let Some(d) = self.integrations.discord.as_ref() {
                     let bus = self.player.as_ref().map(|p| {
                         let definition = &p.vehicle.ty.def;
-                        let short = omsi_launcher_lib::vehicle_type_label(&definition.type_name, &definition.path);
-                        let full = omsi_launcher_lib::display_bus_name(&format!("{} {short}", definition.manufacturer));
+                        let short = omsi_launcher_lib::vehicle_type_label(
+                            &definition.type_name,
+                            &definition.path,
+                        );
+                        let full = omsi_launcher_lib::display_bus_name(&format!(
+                            "{} {short}",
+                            definition.manufacturer
+                        ));
                         (short, full)
                     });
                     let duty = self.session.duty.as_ref();
@@ -35,10 +45,16 @@ impl App {
                     });
                     let game = crate::discord::Game {
                         map: self.world.as_ref().map(|w| w.global.name.as_str()),
-                        bus: bus.as_ref().map(|(short, full)| (short.as_str(), full.as_str())),
+                        bus: bus
+                            .as_ref()
+                            .map(|(short, full)| (short.as_str(), full.as_str())),
                         duty: duty.map(|d| (d.line.as_str(), d.tour.as_str())),
                         next_stop,
-                        players: self.net.lan.as_ref().map(|lan| (lan.session, crate::player_list::count(self), max)),
+                        players: self
+                            .net
+                            .lan
+                            .as_ref()
+                            .map(|lan| (lan.session, crate::player_list::count(self), max)),
                     };
                     d.set(crate::discord::Presence::for_game(&game, show));
                 }
@@ -98,7 +114,11 @@ impl App {
             // plugin's line)
             self.integrations.plugin_command = true;
             for c in commands {
-                if let Some(k) = self.game_menu_items().iter().position(|m| m.0 == c && m.0 != "plugin") {
+                if let Some(k) = self
+                    .game_menu_items()
+                    .iter()
+                    .position(|m| m.0 == c && m.0 != "plugin")
+                {
                     let was = self.menus.game_menu;
                     self.menus.menu_prev_pause = self.paused;
                     self.menu_choose(event_loop, k);
@@ -130,11 +150,22 @@ impl App {
         self.integrations.plugins = Some(plugins);
         if let Some(id) = theme_ask.filter(|id| *id != self.settings.ui_theme_pack) {
             log::info!("plugins: the interface theme \"{id}\" asked for");
-            let value = if id.is_empty() { crate::themes::OWN.to_string() } else { id };
+            let value = if id.is_empty() {
+                crate::themes::OWN.to_string()
+            } else {
+                id
+            };
             crate::game_lists::store_with(self, |v| v["ui_theme_pack"] = serde_json::json!(value));
         }
+        // the look a plugin's panel that fills the navigator's frame gives its map, from the
+        // panels' last layout as the panel itself (which the interface hands the navigator)
+        if let Some(n) = self.menus.navigator.as_mut() {
+            n.frame_look = frame_look(self.integrations.plugin_panels.docked);
+        }
         // OMSI_WATCH_VARS=a,b: every change of those variables of the player's bus
-        if let (Some(p), Some(list)) = (self.player.as_ref(), omsi_cfg::flags::OMSI_WATCH_VARS.var()) {
+        if let (Some(p), Some(list)) =
+            (self.player.as_ref(), omsi_cfg::flags::OMSI_WATCH_VARS.var())
+        {
             thread_local!(static LAST: std::cell::RefCell<std::collections::HashMap<String, f32>> = Default::default());
             LAST.with(|last| {
                 let mut last = last.borrow_mut();
@@ -162,30 +193,80 @@ impl App {
             h.ticket_asks_heard(&dropped);
         }
         if let (Some(h), Some(p)) = (self.session.humans.as_mut(), self.player.as_ref()) {
-            let hurt = steps::people_in_career(&mut self.session.career, h, p, self.settings.collision_pedestrians);
+            let hurt = steps::people_in_career(
+                &mut self.session.career,
+                h,
+                p,
+                self.settings.collision_pedestrians,
+            );
             for (name, price) in h.take_sales() {
-                let args = vec![omsi_plugin::InfoValue::Text(name.trim().to_string()), crate::plugins::num_f32(price)];
-                crate::plugins::queue_event(&mut self.integrations.plugin_events, "ticket_sold", args);
+                let args = vec![
+                    omsi_plugin::InfoValue::Text(name.trim().to_string()),
+                    crate::plugins::num_f32(price),
+                ];
+                crate::plugins::queue_event(
+                    &mut self.integrations.plugin_events,
+                    "ticket_sold",
+                    args,
+                );
             }
             if hurt > 0 {
                 self.service_msg = Some(("Pedestrian knocked down!".into(), 6.0));
-                crate::plugins::queue_event(&mut self.integrations.plugin_events, "pedestrian", vec![omsi_plugin::InfoValue::Num(hurt as f64)]);
+                crate::plugins::queue_event(
+                    &mut self.integrations.plugin_events,
+                    "pedestrian",
+                    vec![omsi_plugin::InfoValue::Num(hurt as f64)],
+                );
             }
         }
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn discord_server_max(&mut self) -> usize {
-        let Some(lan) = self.net.lan.as_ref() else { return 0 };
+        let Some(lan) = self.net.lan.as_ref() else {
+            return 0;
+        };
         if lan.role == omsi_net::Role::Host {
             return 64;
         }
-        let Some(target) = self.args.lan_join.clone() else { return 0 };
-        self.integrations.discord_max.get(&target, |t| omsi_net::ws::query(t, false).ok().map(|i| i.max_players))
+        let Some(target) = self.args.lan_join.clone() else {
+            return 0;
+        };
+        self.integrations.discord_max.get(&target, |t| {
+            omsi_net::ws::query(t, false).ok().map(|i| i.max_players)
+        })
     }
 }
 
 /// The game's interface themes as the plugins see them (`ui.themes`).
 fn theme_infos() -> Vec<omsi_plugin::ui::ThemeInfo> {
-    crate::themes::choices().iter().map(|(id, name)| omsi_plugin::ui::ThemeInfo { id: id.clone(), name: name.clone() }).collect()
+    crate::themes::choices()
+        .iter()
+        .map(|(id, name)| omsi_plugin::ui::ThemeInfo {
+            id: id.clone(),
+            name: name.clone(),
+        })
+        .collect()
+}
+
+/// The look a plugin's panel that fills the navigator's frame gives the map in it, for the
+/// navigator: None without such a panel or without a map in it.
+fn frame_look(docked: Option<crate::plugin_ui::Docked>) -> Option<navigator::FrameLook> {
+    let m = docked.filter(|d| d.frame)?.map?;
+    Some(navigator::FrameLook {
+        layers: m.layers.map(frame_layers).unwrap_or_default(),
+    })
+}
+
+/// What a plugin's map says it shows, for the navigator.
+fn frame_layers(l: omsi_plugin::ui::MapLayers) -> navigator::FrameLayers {
+    navigator::FrameLayers {
+        cars: l.cars,
+        transit: l.transit,
+        jams: l.jams,
+        players: l.players,
+        icons: l.icons,
+        stops: l.stops,
+        history: l.history,
+    }
 }

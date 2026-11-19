@@ -187,7 +187,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[1].kind,
         Kind::Map {
             height: 180.0,
-            cards: false
+            cards: false,
+            layers: None
         }
     );
     // (no height: the navigator's own map's; its cards over it)
@@ -195,7 +196,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[2].kind,
         Kind::Map {
             height: 0.0,
-            cards: true
+            cards: true,
+            layers: None
         }
     );
     assert!(
@@ -518,4 +520,63 @@ fn controls_change_and_tell_their_plugin() {
     assert!(ui.update(1, "p", "nothing", &Value::map([]), None).is_err());
     ui.drag(1, "p", 5.0, -2.0);
     assert_eq!(ui.get(1, "p").unwrap().moved, (5.0, -2.0));
+}
+
+#[test]
+fn a_map_takes_its_layers() {
+    let p = panel(
+        r##"{ anchor = "navigator", frame = true, children = {
+        { type = "map", layers = { cars = false, jams = true, history = true } },
+        { type = "map", layers = {} },
+    } }"##,
+    )
+    .unwrap();
+    let Kind::Map { layers, .. } = &p.children[0].kind else {
+        panic!("a map");
+    };
+    // (a layer left out is the player's setting: None)
+    assert_eq!(
+        *layers,
+        Some(MapLayers {
+            cars: Some(false),
+            jams: Some(true),
+            history: Some(true),
+            ..MapLayers::default()
+        })
+    );
+    let Kind::Map { layers, .. } = &p.children[1].kind else {
+        panic!("a map");
+    };
+    assert_eq!(*layers, Some(MapLayers::default()));
+}
+
+#[test]
+fn a_layer_that_is_no_boolean_is_refused() {
+    let err = |layers: &str| {
+        panel(&format!(
+            r##"{{ children = {{ {{ type = "map", layers = {layers} }} }} }}"##
+        ))
+        .unwrap_err()
+    };
+    assert!(err(r#"{ cars = "no" }"#).contains("layers.cars"));
+    assert!(err("{ stops = 1 }").contains("layers.stops"));
+    assert!(err("true").contains("layers"));
+}
+
+#[test]
+fn an_unknown_layer_is_left_alone() {
+    // (a plugin written for a later game still shows here)
+    let p =
+        panel(r##"{ children = { { type = "map", layers = { cars = false, foo = true } } } }"##)
+            .unwrap();
+    let Kind::Map { layers, .. } = &p.children[0].kind else {
+        panic!("a map");
+    };
+    assert_eq!(
+        *layers,
+        Some(MapLayers {
+            cars: Some(false),
+            ..MapLayers::default()
+        })
+    );
 }

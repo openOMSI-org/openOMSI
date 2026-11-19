@@ -2,8 +2,8 @@
 //! held to the limits and checked here, so that a plugin learns at once what is wrong.
 
 use super::{
-    Align, Anchor, ChartStyle, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS, MAX_TEXT, Panel,
-    Rgba, RowAlign, Stop, StopState, Weight, check_id,
+    Align, Anchor, ChartStyle, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS, MAX_TEXT,
+    MapLayers, Panel, Rgba, RowAlign, Stop, StopState, Weight, check_id,
 };
 use crate::api::Value;
 use std::path::{Path, PathBuf};
@@ -377,6 +377,36 @@ impl Reader<'_> {
         })
     }
 
+    /// A map's `layers`: a table of true or false for the layers it names; one left out is the
+    /// player's setting. A key it does not know is left alone, as everywhere in a panel.
+    fn layers(&self, key: &str) -> Result<Option<MapLayers>, String> {
+        let t = self.get(key);
+        if matches!(t, Value::Nil) {
+            return Ok(None);
+        }
+        if !t.is_table() {
+            return Err(format!("{}: a table is expected", self.at(key)));
+        }
+        let r = Reader {
+            t,
+            path: self.at(key),
+            folder: None,
+        };
+        let opt = |k: &str| match r.get(k) {
+            Value::Nil => Ok(None),
+            _ => r.boolean(k, false).map(Some),
+        };
+        Ok(Some(MapLayers {
+            cars: opt("cars")?,
+            transit: opt("transit")?,
+            jams: opt("jams")?,
+            players: opt("players")?,
+            icons: opt("icons")?,
+            stops: opt("stops")?,
+            history: opt("history")?,
+        }))
+    }
+
     /// A bar's parts: `{ { value = 0.6, color = "#34B26E" }, ... }`.
     fn segments(&self, key: &str) -> Result<Vec<(f32, Rgba)>, String> {
         let l = self.list(key)?;
@@ -572,6 +602,7 @@ impl Reader<'_> {
             "map" => Kind::Map {
                 height: self.number("height", 0.0, 0.0, 4000.0)?,
                 cards: self.boolean("cards", true)?,
+                layers: self.layers("layers")?,
             },
             "space" => Kind::Space {
                 size: self.number("size", 8.0, 0.0, 1000.0)?,
