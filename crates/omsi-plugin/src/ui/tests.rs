@@ -187,7 +187,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[1].kind,
         Kind::Map {
             height: 180.0,
-            cards: false
+            cards: false,
+            marks: None
         }
     );
     // (no height: the navigator's own map's; its cards over it)
@@ -195,7 +196,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[2].kind,
         Kind::Map {
             height: 0.0,
-            cards: true
+            cards: true,
+            marks: None
         }
     );
     assert!(
@@ -518,4 +520,89 @@ fn controls_change_and_tell_their_plugin() {
     assert!(ui.update(1, "p", "nothing", &Value::map([]), None).is_err());
     ui.drag(1, "p", 5.0, -2.0);
     assert_eq!(ui.get(1, "p").unwrap().moved, (5.0, -2.0));
+}
+
+#[test]
+fn a_map_takes_marks_of_its_own() {
+    let p = panel(
+        r##"{ anchor = "navigator", frame = true, children = {
+        { type = "map", marks = { bus = { color = "#FF00AA", size = 14 }, stop = "#111111",
+          next_stop = "#222222", last_stop = "#333333", closed_stop = "#444444" } },
+        { type = "map", marks = { bus = { size = 99 } } },
+        { type = "map", marks = { bus = { size = 1 } } },
+        { type = "map", marks = {} },
+        { type = "map" },
+    } }"##,
+    )
+    .unwrap();
+    let marks = |i: usize| match &p.children[i].kind {
+        Kind::Map { marks, .. } => *marks,
+        k => panic!("{k:?}"),
+    };
+    let rgb = |r, g, b| Some(Rgba([r, g, b, 255]));
+    assert_eq!(
+        marks(0),
+        Some(MapMarks {
+            bus: rgb(255, 0, 170),
+            bus_size: Some(14.0),
+            stop: rgb(0x11, 0x11, 0x11),
+            next_stop: rgb(0x22, 0x22, 0x22),
+            last_stop: rgb(0x33, 0x33, 0x33),
+            closed_stop: rgb(0x44, 0x44, 0x44),
+        })
+    );
+    // (a size out of range is held to it, as the other numbers are)
+    assert_eq!(marks(1).unwrap().bus_size, Some(40.0));
+    assert_eq!(marks(2).unwrap().bus_size, Some(4.0));
+    // (nothing given: the navigator's own, the same as no marks at all)
+    assert_eq!(marks(3), Some(MapMarks::default()));
+    assert_eq!(marks(4), None);
+}
+
+#[test]
+fn a_bus_size_out_of_range_is_refused() {
+    // (a size that is no number, a mark of the wrong kind: refused, with where it is)
+    for (marks, says) in [
+        (r#"{ bus = { size = "big" } }"#, "size"),
+        (r#"{ bus = "red" }"#, "bus"),
+        (r##"{ bus = { color = 5 } }"##, "color"),
+        (r#"{ closed_stop = "red" }"#, "closed_stop"),
+        (r#"{ stop = true }"#, "stop"),
+        (r#"5"#, "marks"),
+    ] {
+        let e = panel(&format!(
+            r##"{{ children = {{ {{ type = "map", marks = {marks} }} }} }}"##
+        ))
+        .unwrap_err();
+        assert!(e.contains(says), "{marks}: {e}");
+    }
+}
+
+#[test]
+fn an_unknown_marks_key_is_left_alone() {
+    // (a plugin written for a later game still shows here)
+    let marks = |src: &str| {
+        panel(&format!(
+            r##"{{ children = {{ {{ type = "map", marks = {src} }} }} }}"##
+        ))
+        .map(|p| match &p.children[0].kind {
+            Kind::Map { marks, .. } => *marks,
+            k => panic!("{k:?}"),
+        })
+    };
+    assert_eq!(
+        marks(r##"{ pin = "#FF0000", bus = { glow = 3, size = 14 }, stop = "#111111" }"##),
+        Ok(Some(MapMarks {
+            bus_size: Some(14.0),
+            stop: Some(Rgba([0x11, 0x11, 0x11, 255])),
+            ..MapMarks::default()
+        }))
+    );
+    // (a key of the wrong kind is still refused, with its path)
+    let e = marks(r##"{ pin = 1, stop = 3 }"##).unwrap_err();
+    assert!(e.contains("marks.stop"), "{e}");
+    let e = marks(r##"{ bus = { glow = 3, size = "big" } }"##).unwrap_err();
+    assert!(e.contains("marks.bus.size"), "{e}");
+    let e = marks(r##"{ bus = true }"##).unwrap_err();
+    assert!(e.contains("marks.bus"), "{e}");
 }

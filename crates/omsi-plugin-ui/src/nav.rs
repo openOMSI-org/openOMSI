@@ -6,7 +6,7 @@
 
 use super::{BADGE_H, BADGE_PAD, BADGE_PX, Item, Layout, color, ink_on};
 use glam::Vec2;
-use omsi_plugin::ui::{Element, Kind, Panel, Rgba, Stop, StopState};
+use omsi_plugin::ui::{Element, Kind, MapMarks, Panel, Rgba, Stop, StopState};
 use omsi_ui::{Color, Rect, Weight};
 
 /// The panel for the navigator as it was laid out, in physical pixels.
@@ -44,6 +44,30 @@ pub(crate) fn in_navigator(p: &Panel, width: f32) -> Panel {
 pub struct DockedMap {
     pub rect: [f32; 4],
     pub cards: bool,
+    /// How it draws the bus and the stops (None: as the navigator does).
+    pub marks: Option<DockedMarks>,
+}
+
+/// A map's `marks` in the colours the navigator draws with.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct DockedMarks {
+    pub bus: Option<Color>,
+    pub bus_size: Option<f32>,
+    pub stop: Option<Color>,
+    pub next_stop: Option<Color>,
+    pub last_stop: Option<Color>,
+    pub closed_stop: Option<Color>,
+}
+
+pub(crate) fn docked_marks(m: &MapMarks) -> DockedMarks {
+    DockedMarks {
+        bus: m.bus.map(color),
+        bus_size: m.bus_size,
+        stop: m.stop.map(color),
+        next_stop: m.next_stop.map(color),
+        last_stop: m.last_stop.map(color),
+        closed_stop: m.closed_stop.map(color),
+    }
 }
 
 /// A box's room round what is in it (the stripe's side, the others), and its stripe.
@@ -132,9 +156,10 @@ impl Layout<'_> {
                     self.stop(s, rr, *size, rail, i > 0, i + 1 < stops.len());
                 }
             }
-            Kind::Map { cards, .. } => {
+            Kind::Map { cards, marks, .. } => {
                 if self.out.map.is_none() {
                     self.out.map = Some((r, *cards));
+                    self.out.map_marks = *marks;
                 }
             }
             _ => {}
@@ -365,5 +390,24 @@ mod tests {
         assert_eq!(l.map.unwrap().0.h, 30.0);
         cut(&mut l, r.y);
         assert!(l.map.is_none());
+    }
+
+    #[test]
+    fn the_first_maps_marks_go_to_the_navigator() {
+        let fonts = Fonts::new();
+        let p = panel(
+            r##"{ anchor = "navigator", frame = true, width = 360, children = {
+            { type = "map", marks = { bus = { color = "#00FF00", size = 20 }, closed_stop = "#FF0000" } },
+            { type = "map", marks = { stop = "#0000FF" } },
+        } }"##,
+        );
+        let marks = super::docked_marks(&layout(&p, &fonts, 1.0).map_marks.expect("marks"));
+        assert_eq!(marks.bus, Some(Color::rgba(0, 255, 0, 1.0)));
+        assert_eq!(marks.bus_size, Some(20.0));
+        assert_eq!(marks.closed_stop, Some(Color::rgba(255, 0, 0, 1.0)));
+        assert_eq!(marks.stop, None);
+        // (no marks: none)
+        let q = panel(r#"{ children = { { type = "map" } } }"#);
+        assert!(layout(&q, &fonts, 1.0).map_marks.is_none());
     }
 }

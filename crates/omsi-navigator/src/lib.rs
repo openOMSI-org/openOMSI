@@ -57,7 +57,9 @@ const PLAYER: Color = Color::rgba(190, 96, 255, 1.0);
 /// An aircraft of the timetable (Spandau's approaches into Tegel run as line `TXL` on the
 /// map's air paths): no vehicle of the streets, left off the maps.
 pub fn in_the_air(c: &omsi_sim::ai_traffic::model::AiCar, net: &Network) -> bool {
-    net.lanes.get(c.state.lane).is_some_and(|l| l.kind == LaneKind::Air)
+    net.lanes
+        .get(c.state.lane)
+        .is_some_and(|l| l.kind == LaneKind::Air)
 }
 
 /// What a traffic vehicle is on the map: a trolleybus (its model has trolley poles to
@@ -65,13 +67,12 @@ pub fn in_the_air(c: &omsi_sim::ai_traffic::model::AiCar, net: &Network) -> bool
 /// showing a line), or any other car; and the line it shows, if it is public transport.
 fn traffic_kind(c: &omsi_sim::ai_traffic::model::AiCar) -> (Color, Option<String>) {
     let v = &c.vehicle;
-    let line = v
-        .ty
-        .program
-        .str_var("SetLineTo")
-        .and_then(|i| v.state.str_vars.get(i as usize))
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty() && s != "0");
+    let line =
+        v.ty.program
+            .str_var("SetLineTo")
+            .and_then(|i| v.state.str_vars.get(i as usize))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty() && s != "0");
     let trolley = v.var("cp_SHTANGALEV").is_some() || v.var("shtanga_lev_rot").is_some();
     let color = if c.is_rail() {
         TRAM
@@ -88,7 +89,17 @@ fn traffic_kind(c: &omsi_sim::ai_traffic::model::AiCar) -> (Color, Option<String
 /// in it, its point the way the vehicle heads (`dir`, on the screen), and the line beside it
 /// in green on a dark tag where there is room (`taken`: what is drawn there already).
 #[allow(clippy::too_many_arguments)]
-fn transit_drop(ui: &mut Painter, atlas: &mut Atlas, fonts: &Fonts, p: Vec2, dir: Vec2, line: Option<&str>, s: f32, taken: &mut Vec<Rect>, pal: &style::Palette) {
+fn transit_drop(
+    ui: &mut Painter,
+    atlas: &mut Atlas,
+    fonts: &Fonts,
+    p: Vec2,
+    dir: Vec2,
+    line: Option<&str>,
+    s: f32,
+    taken: &mut Vec<Rect>,
+    pal: &style::Palette,
+) {
     let r = 8.5 * s;
     let d = dir.normalize_or(Vec2::new(0.0, -1.0));
     let drop = |r: f32| -> Vec<Vec2> {
@@ -108,7 +119,9 @@ fn transit_drop(ui: &mut Painter, atlas: &mut Atlas, fonts: &Fonts, p: Vec2, dir
     ui.convex(&drop(r), TRANSIT);
     ui.icon(atlas, "directions_bus", p, 11.5 * s, Color::WHITE);
     taken.push(Rect::new(p.x - r, p.y - r, 2.0 * r, 2.0 * r));
-    let Some(line) = line.map(str::trim).filter(|l| !l.is_empty()) else { return };
+    let Some(line) = line.map(str::trim).filter(|l| !l.is_empty()) else {
+        return;
+    };
     let px = 11.5 * s;
     let l = fonts.fit(line, px, Weight::Bold, 54.0 * s);
     let w = fonts.width(&l, px, Weight::Bold) + 10.0 * s;
@@ -116,14 +129,27 @@ fn transit_drop(ui: &mut Painter, atlas: &mut Atlas, fonts: &Fonts, p: Vec2, dir
     // (beside the drop, away from its point)
     let right = d.x <= 0.3;
     for side in if right { [1.0f32, -1.0] } else { [-1.0, 1.0] } {
-        let x = if side > 0.0 { p.x + r + 4.0 * s } else { p.x - r - 4.0 * s - w };
+        let x = if side > 0.0 {
+            p.x + r + 4.0 * s
+        } else {
+            p.x - r - 4.0 * s - w
+        };
         let tag = Rect::new(x, p.y - h * 0.5, w, h);
         if taken.iter().any(|o| roads::rects_overlap(o, &tag)) {
             continue;
         }
         taken.push(tag);
         ui.rounded(tag, 4.0 * s, pal.card);
-        ui.text_in(atlas, fonts, &l, px, Weight::Bold, tag, Align::Center, TRANSIT_TEXT);
+        ui.text_in(
+            atlas,
+            fonts,
+            &l,
+            px,
+            Weight::Bold,
+            tag,
+            Align::Center,
+            TRANSIT_TEXT,
+        );
         return;
     }
 }
@@ -133,13 +159,27 @@ const WARN: Color = Color::rgba(235, 170, 60, 1.0);
 const STOP_REQUEST: Color = Color::hex(0xF0A030);
 
 pub fn stop_requested(vehicle: &omsi_sim::vehicle::VehicleInstance) -> bool {
-    ["haltewunsch", "haltewunschlampe"].iter().any(|name| vehicle.var(name).is_some_and(|v| v > 0.5))
+    ["haltewunsch", "haltewunschlampe"]
+        .iter()
+        .any(|name| vehicle.var(name).is_some_and(|v| v > 0.5))
 }
 
-fn stop_request_icon(ui: &mut Painter, atlas: &mut Atlas, requested: bool, mut row: Rect, scale: f32) -> Rect {
+fn stop_request_icon(
+    ui: &mut Painter,
+    atlas: &mut Atlas,
+    requested: bool,
+    mut row: Rect,
+    scale: f32,
+) -> Rect {
     if requested {
         let size = 32.0 * scale;
-        ui.icon(atlas, "stop_request", Vec2::new(row.right() - size * 0.5, row.center().y), size, STOP_REQUEST);
+        ui.icon(
+            atlas,
+            "stop_request",
+            Vec2::new(row.right() - size * 0.5, row.center().y),
+            size,
+            STOP_REQUEST,
+        );
         row.w -= size + 6.0 * scale;
     }
     row
@@ -232,7 +272,16 @@ struct Words {
     closed: &'static str,
 }
 
-const WORDS: Words = Words { days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], off_route: "Off route", rerouting: "Recalculating route", recalculated: "Route recalculated", no_duty: "Free drive", last_stop: "Final stop", on_time: "on time", closed: "Closed" };
+const WORDS: Words = Words {
+    days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    off_route: "Off route",
+    rerouting: "Recalculating route",
+    recalculated: "Route recalculated",
+    no_duty: "Free drive",
+    last_stop: "Final stop",
+    on_time: "on time",
+    closed: "Closed",
+};
 
 /// The route being followed: the lanes, how far along the bus is, and whether it was
 /// replaced by a way back after leaving it.
@@ -303,14 +352,25 @@ pub struct Navigator {
     /// map's, the place row's and the board's place, and the map shows only where the panel
     /// says (physical pixels, from the last frame). Set, `dock_slot` is the whole frame.
     pub frame_panel: Option<FramePanel>,
+    /// How that panel's map looks (set every frame before the panel itself, from the same
+    /// layout): read only for the map in the frame panel, never for the other pictures. None:
+    /// the navigator's own look.
+    pub frame_look: Option<FrameLook>,
     /// That panel's map in this frame's picture (texture pixels) and its cards, for `draw`:
     /// Some(None) a frame without a map; None no such panel.
     framed: Option<Option<(Rect, bool)>>,
     /// The colour that panel gives the navigator's card (None: the card's own).
     frame_card: Option<Color>,
-    /// What `framed` and `frame_card` were when the picture was last drawn (drawn again at
-    /// once when they change).
-    framed_drawn: (Option<Option<(Rect, bool)>>, Option<Color>),
+    /// How that panel's map draws the bus and the stops (only the picture of the frame panel
+    /// is drawn with it: not the cockpit's screen, not the remote picture, not the city map).
+    frame_marks: Option<FrameMarks>,
+    /// What `framed`, `frame_card` and `frame_marks` were when the picture was last drawn
+    /// (drawn again at once when they change).
+    framed_drawn: (
+        Option<Option<(Rect, bool)>>,
+        Option<Color>,
+        Option<FrameMarks>,
+    ),
     /// A board was asked for once: the lower part opened for it by itself then.
     dock_seen: bool,
     /// The board's height in this frame's picture (physical pixels), for `draw`.
@@ -347,7 +407,15 @@ pub struct Navigator {
     /// Street names of the map's lanes (from its street name signs).
     streets: Option<std::sync::Arc<Streets>>,
     #[allow(clippy::type_complexity)]
-    building: Option<std::sync::mpsc::Receiver<(Network, HashMap<i64, DVec3>, Streets, Option<omsi_map::package::Package>, NameHints)>>,
+    building: Option<
+        std::sync::mpsc::Receiver<(
+            Network,
+            HashMap<i64, DVec3>,
+            Streets,
+            Option<omsi_map::package::Package>,
+            NameHints,
+        )>,
+    >,
     /// What the street names were made from (signs and weaker hints), to make them again
     /// when the timetable's stop names add hints; and whether those were added.
     name_hints: NameHints,
@@ -360,7 +428,11 @@ pub struct Navigator {
     waypoints: Vec<destination::Destination>,
     duty_route: Option<Route>,
     entries: Vec<destination::EntryMarker>,
-    route_mesh_history: [Option<((u64, u64, DVec2, usize, u64, f32), std::sync::Arc<[omsi_ui::paint::Vertex]>, u32)>; 2],
+    route_mesh_history: [Option<(
+        (u64, u64, DVec2, usize, u64, f32),
+        std::sync::Arc<[omsi_ui::paint::Vertex]>,
+        u32,
+    )>; 2],
     route_mesh_generation: [u64; 2],
     route_mesh_uploaded: Option<(usize, u64)>,
     completed_stops: Vec<NavStop>,
@@ -428,7 +500,10 @@ pub struct Navigator {
     panel_job: Option<build::Job<(u64, usize, f64)>>,
     city_job: Option<build::Job<CityJob>>,
     road_cache: Option<(u64, std::sync::Arc<Vec<(MapRoad, bool)>>)>,
-    road_job: Option<(u64, std::sync::mpsc::Receiver<std::sync::Arc<Vec<(MapRoad, bool)>>>)>,
+    road_job: Option<(
+        u64,
+        std::sync::mpsc::Receiver<std::sync::Arc<Vec<(MapRoad, bool)>>>,
+    )>,
     /// Bumped when a new list of carriageways arrives (the ground is built again).
     roads_version: u64,
     /// Where each car was drawn last (eased towards where it is, so they glide).
@@ -452,7 +527,10 @@ pub struct Navigator {
     /// The map's timetable for the lines panel, for the date it was read for.
     times: Option<(i32, std::sync::Arc<line_times::LineTimes>)>,
     /// The worker reading it (for which date, and where the result comes).
-    times_job: Option<(i32, std::sync::mpsc::Receiver<std::sync::Arc<line_times::LineTimes>>)>,
+    times_job: Option<(
+        i32,
+        std::sync::mpsc::Receiver<std::sync::Arc<line_times::LineTimes>>,
+    )>,
     /// How far the panel has faded in (Shift+N fades it in and out rather than cutting).
     shown: f32,
     /// The trip's next stops (place, name, the bus's heading there) and where the bus is,
@@ -476,7 +554,10 @@ fn project(vp: Mat4, viewport: [f32; 4], p: Vec3) -> Option<Vec2> {
         return None;
     }
     let n = c.truncate() / c.w;
-    Some(Vec2::new(viewport[0] + (n.x * 0.5 + 0.5) * viewport[2], viewport[1] + (0.5 - n.y * 0.5) * viewport[3]))
+    Some(Vec2::new(
+        viewport[0] + (n.x * 0.5 + 0.5) * viewport[2],
+        viewport[1] + (0.5 - n.y * 0.5) * viewport[3],
+    ))
 }
 
 fn angle_diff(a: f64, b: f64) -> f64 {
@@ -524,7 +605,15 @@ pub fn placed_at(corner: &str) -> Option<[f32; 2]> {
 
 /// The GPS is a separate render texture composed after the scene's post AA.
 fn map_samples(format: wgpu::TextureFormat) -> u32 {
-    if format.guaranteed_format_features(wgpu::Features::empty()).flags.sample_count_supported(4) { 4 } else { 1 }
+    if format
+        .guaranteed_format_features(wgpu::Features::empty())
+        .flags
+        .sample_count_supported(4)
+    {
+        4
+    } else {
+        1
+    }
 }
 
 impl Navigator {
@@ -542,9 +631,11 @@ impl Navigator {
             dock: None,
             dock_slot: None,
             frame_panel: None,
+            frame_look: None,
             framed: None,
             frame_card: None,
-            framed_drawn: (None, None),
+            frame_marks: None,
+            framed_drawn: (None, None, None),
             dock_seen: false,
             board: None,
             speed_avg: 8.0,
@@ -656,7 +747,10 @@ impl Navigator {
                 // (the map's package: Maps/<Map>/openomsi-realmap, if it has one)
                 let surface = omsi_map::package::Package::open(&world.map_dir);
                 let m = world.navigation_map();
-                let mut net = Network { lanes: m.lanes, ..Default::default() };
+                let mut net = Network {
+                    lanes: m.lanes,
+                    ..Default::default()
+                };
                 net.link(1.5);
                 confirm_road_surfaces(&mut net, &m.road_surfaces);
                 probe_lanes(&net);
@@ -673,7 +767,9 @@ impl Navigator {
             std::thread::Builder::new()
                 .name("navigator layers".into())
                 .spawn(move || {
-                    let _ = ltx.send(mapmesh::MapData::new(std::sync::Arc::new(omsi_scene::threads::background_pool().install(|| w.map_layers()))));
+                    let _ = ltx.send(mapmesh::MapData::new(std::sync::Arc::new(
+                        omsi_scene::threads::background_pool().install(|| w.map_layers()),
+                    )));
                 })
                 .ok();
             self.layers_rx = Some(lrx);
@@ -682,17 +778,24 @@ impl Navigator {
 
     /// The map's layers, given at once (an offscreen picture reads them on its own thread).
     pub fn set_layers(&mut self, layers: omsi_map::layers::Layers) {
-        self.map_data = Some(std::sync::Arc::new(mapmesh::MapData::new(std::sync::Arc::new(layers))));
+        self.map_data = Some(std::sync::Arc::new(mapmesh::MapData::new(
+            std::sync::Arc::new(layers),
+        )));
         self.map_version += 1;
     }
 
     /// The map's network given at once (an offscreen picture reads it on its own thread).
     pub fn set_map(&mut self, map: omsi_scene::NavigationMap) {
-        let mut net = Network { lanes: map.lanes, ..Default::default() };
+        let mut net = Network {
+            lanes: map.lanes,
+            ..Default::default()
+        };
         net.link(1.5);
         confirm_road_surfaces(&mut net, &map.road_surfaces);
         probe_lanes(&net);
-        self.streets = Some(std::sync::Arc::new(build_streets(&net, &map.signs, &map.names)));
+        self.streets = Some(std::sync::Arc::new(build_streets(
+            &net, &map.signs, &map.names,
+        )));
         self.name_hints = (map.signs.clone(), map.names.clone());
         let global = std::sync::Arc::new(net);
         self.global = Some(global);
@@ -712,7 +815,9 @@ impl Navigator {
         if self.stop_names_learnt {
             return;
         }
-        let Some(net) = self.global.clone() else { return };
+        let Some(net) = self.global.clone() else {
+            return;
+        };
         self.stop_names_learnt = true;
         let mut hints = self.name_hints.1.clone();
         let before = hints.len();
@@ -722,7 +827,11 @@ impl Navigator {
             }
         }
         if hints.len() > before {
-            self.streets = Some(std::sync::Arc::new(build_streets(&net, &self.name_hints.0, &hints)));
+            self.streets = Some(std::sync::Arc::new(build_streets(
+                &net,
+                &self.name_hints.0,
+                &hints,
+            )));
             self.name_hints.1 = hints;
         }
     }
@@ -743,7 +852,9 @@ impl Navigator {
     }
 
     pub fn next_stop_distance_for(&self, object_id: i64) -> Option<f64> {
-        self.next_dist.filter(|(id, _)| *id == object_id).map(|(_, distance)| distance)
+        self.next_dist
+            .filter(|(id, _)| *id == object_id)
+            .map(|(_, distance)| distance)
     }
 
     fn invalidate_next_stop_distance(&mut self) {
@@ -764,7 +875,10 @@ impl Navigator {
                 }
             }
             None => {
-                let mut n = Network { lanes, ..Default::default() };
+                let mut n = Network {
+                    lanes,
+                    ..Default::default()
+                };
                 n.link(omsi_sim::traffic::LINK_TOLERANCE);
                 n.build_grid();
                 self.own_net = Some(std::sync::Arc::new(n));
@@ -816,354 +930,11 @@ impl Navigator {
         self.trip_completed = false;
         let r = self.duty_route_mut();
         if !r.key.is_empty() || !r.lanes.is_empty() {
-            *r = Route { version: r.version + 1, ..Route::default() };
+            *r = Route {
+                version: r.version + 1,
+                ..Route::default()
+            };
         }
-    }
-
-    /// Where the bus is along the route, and a way back when it left it.
-    fn follow(&mut self, f: &NavFrame) {
-        let global = self.global.clone();
-        let Some(net) = global.as_deref().or(f.traffic.map(|t| &t.net)) else { return };
-        let r = &mut self.route;
-        if r.lanes.is_empty() {
-            // no route (yet): the way to the next stop, looked for now and then
-            let Some(stop) = f.stops.first() else { return };
-            r.retry_in -= f.dt;
-            if r.retry_in > 0.0 {
-                return;
-            }
-            r.retry_in = REROUTE_EVERY * 2.0;
-            // (the lanes that pass the stop on its side of the road: a way that came to the
-            // stop on the far side turned round in front of it)
-            let targets: Vec<usize> = lanes_near(net, stop.position.truncate(), 40.0)
-                .into_iter()
-                .filter(|&i| net.lanes[i].kind == LaneKind::Street && passes_on_its_side(net, i, stop.position, 20.0))
-                .collect();
-            if let Some((mut path, k)) = way_to_any(net, f.bus, f.heading, &targets, 30_000.0) {
-                path.push(targets[k]);
-                log::info!("navigator: no route of the trip here yet; {} lanes to the next stop '{}'", path.len(), stop.name.trim());
-                r.lanes = path;
-                r.progress = 0;
-                r.s = 0.0;
-                r.version += 1;
-                r.provisional = true;
-            }
-            return;
-        }
-        r.note = (r.note - f.dt).max(0.0);
-        // where the next stop is on the route: the way to the route must not skip it
-        let stop_at = f.stops.first().and_then(|st| stop_on_route(net, &r.lanes[..r.lanes.len().min(r.progress + 1500)], r.progress, st.position, |_, _| true)).map(|(k, _)| k);
-        // the nearest route lane near the bus that runs its way, a little back to a lot ahead
-        // (before the bus first reached the route: only the stretch up to the next stop)
-        let (from, to) = match (r.joined, stop_at) {
-            (false, Some(k)) if r.approach => (r.progress.saturating_sub(3), (k + 2).min(r.lanes.len())),
-            (false, Some(k)) => (k.saturating_sub(40).max(r.progress), (k + 2).min(r.lanes.len())),
-            (true, Some(k)) => (r.progress.saturating_sub(3), (r.progress + 60).min(k.max(r.progress) + 2).min(r.lanes.len())),
-            _ => (r.progress.saturating_sub(3), (r.progress + 60).min(r.lanes.len())),
-        };
-        let mut best: Option<(usize, f32, f64)> = None;
-        for k in from..to {
-            let Some(l) = net.lanes.get(r.lanes[k]) else { continue };
-            let Some((s, d)) = l.nearest_point(f.bus) else { continue };
-            // (a wide road, a stop bay, a lane change or a turn in progress: the bus is still
-            // on its route well beyond the lane's middle; at 11 m and 75 deg it counted as off
-            // and the navigator recalculated for ever)
-            if d > 16.0 {
-                continue;
-            }
-            let (_, h) = l.at(s);
-            if angle_diff(f.heading, h as f64).abs() > 100.0 {
-                continue;
-            }
-            // (ahead of where the bus was preferred: a route crossing itself)
-            let score = d + if k < r.progress { 4.0 } else { 0.0 } + (k.saturating_sub(r.progress) as f64) * 0.05;
-            if best.map(|b| score < b.2).unwrap_or(true) {
-                best = Some((k, s, score));
-            }
-        }
-        match best {
-            Some((k, s, _)) => {
-                if k != r.progress {
-                    r.version += 1;
-                }
-                r.progress = k;
-                r.s = s;
-                r.on_route = true;
-                r.joined = true;
-                r.off_for = 0.0;
-            }
-            None => {
-                r.on_route = false;
-                r.off_for += f.dt;
-            }
-        }
-        // the way to the route: at once before the bus first reached it (from the depot or
-        // wherever it starts), after a moment off it once driving it
-        if r.on_route || (r.joined && r.off_for < OFF_ROUTE_AFTER) {
-            return;
-        }
-        r.retry_in -= f.dt;
-        if r.retry_in > 0.0 {
-            return;
-        }
-        r.retry_in = REROUTE_EVERY;
-        let base = r.progress.min(r.lanes.len() - 1);
-        // targets: the route from where the bus left it up to the next stop (joining it
-        // later would skip that stop), or on for 120 lanes when no stop is ahead
-        let (lo, hi) = match stop_at {
-            Some(k) => (k.saturating_sub(150).max(base), k + 1),
-            None => (base, (base + 120).min(r.lanes.len())),
-        };
-        // (from the depot to the first stop may be a long way; back onto the route is not)
-        let way = way_back(net, f.bus, f.heading, &r.lanes[lo..hi], if r.joined { 6000.0 } else { 30_000.0 });
-        if way.is_none() && omsi_cfg::flags::OMSI_DEBUG_NAV.is_set() {
-            let info: Vec<_> = r.lanes[lo..hi].iter().map(|&l| (l, net.lanes[l].kind, net.lanes[l].name.clone(), net.lanes.iter().filter(|x| x.next.contains(&l)).count(), net.lanes[l].start())).collect();
-            log::info!("navigator: off the route for {:.1} s and no way back found; targets {info:?}", r.off_for);
-        }
-        // the route's own lanes before a stop may be cut off from the road network (the
-        // map links nothing into the start of line 31's trip at Maulbeerallee): then a
-        // road past the stop running the route's way, else the route just after the stop
-        let max = if r.joined { 6000.0 } else { 30_000.0 };
-        let way = way.map(|(p, j)| (p, lo + j)).or_else(|| {
-            let k = stop_at?;
-            let st = f.stops.first()?;
-            let (_, h) = net.lanes[r.lanes[k]].nearest_point(st.position).map(|(s, _)| net.lanes[r.lanes[k]].at(s))?;
-            let near: Vec<usize> = lanes_near(net, st.position.truncate(), 40.0)
-                .into_iter()
-                .filter(|&i| {
-                    let l = &net.lanes[i];
-                    l.kind == LaneKind::Street
-                        && l.nearest_point(st.position).map(|(s, d)| d < 20.0 && angle_diff(l.at(s).1 as f64, h as f64).abs() < 60.0).unwrap_or(false)
-                })
-                .collect();
-            let (mut path, j) = way_to_any(net, f.bus, f.heading, &near, max)?;
-            path.push(near[j]);
-            log::info!("navigator: the route before stop '{}' cannot be reached; led onto the road past it", st.name.trim());
-            Some((path, k + 1))
-        })
-            .or_else(|| {
-                let k = stop_at?;
-                let hi = (k + 120).min(r.lanes.len());
-                (k + 1 < hi).then_some(())?;
-                way_back(net, f.bus, f.heading, &r.lanes[k + 1..hi], max).map(|(p, j)| (p, k + 1 + j))
-            });
-        if let Some((path, join)) = way {
-            let rest = r.lanes[join.min(r.lanes.len())..].to_vec();
-            log::info!(
-                "navigator: {} of {} lanes joins the route {} lanes on{}",
-                if r.joined { "a way back" } else { "the way to the route" },
-                path.len(),
-                join,
-                stop_at.map(|k| format!(" (the next stop is on route lane {k})")).unwrap_or_default()
-            );
-            let mut lanes = path;
-            lanes.extend(rest);
-            // (drawn from where the bus is on its first lane, not from that lane's start)
-            r.s = lanes.first().and_then(|&l| net.lanes.get(l)).and_then(|l| l.nearest_point(f.bus)).map(|p| p.0).unwrap_or(0.0);
-            r.lanes = lanes;
-            r.progress = 0;
-            r.version += 1;
-            if r.joined {
-                r.note = 4.0;
-                r.on_route = true;
-                r.off_for = 0.0;
-            } else {
-                r.approach = true;
-            }
-        }
-    }
-
-    /// Where each vehicle of the traffic is drawn: eased towards where it is, so that one the
-    /// traffic steps seldom (far from the bus) glides instead of jumping; a long way (a car put
-    /// back on the road elsewhere) is taken at once.
-    fn update_drawn_cars(&mut self, f: &NavFrame) {
-        let Some(t) = f.traffic else {
-            self.drawn_cars.clear();
-            return;
-        };
-        let k = ease(f.dt, 0.12);
-        let stamp = self.time;
-        for c in t.cars.iter().filter(|c| !c.gone) {
-            let now = c.vehicle.position;
-            let e = self.drawn_cars.entry(c.id).or_insert((now, stamp));
-            if (e.0 - now).truncate().length() > 40.0 {
-                e.0 = now;
-            } else {
-                e.0 += (now - e.0) * k;
-            }
-            e.1 = stamp;
-        }
-        self.drawn_cars.retain(|_, v| v.1 == stamp);
-    }
-
-    /// Where a vehicle of the traffic is drawn (see `update_drawn_cars`).
-    fn smoothed_position(&self, c: &omsi_sim::ai_traffic::model::AiCar) -> DVec3 {
-        self.drawn_cars.get(&c.id).map(|v| v.0).unwrap_or(c.vehicle.position)
-    }
-
-    /// How congested the lanes near the bus are, from how fast the traffic on them flows
-    /// against how fast it could (0 free … 1 standing), smoothed over seconds:
-    ///
-    /// * a car waiting at a red light, a bus at its stop, a car parked or pulling out is no
-    ///   evidence of a jam - only cars held for longer than a light's cycle count as standing;
-    /// * one car is no evidence either way: a lane needs two moving or standing in it;
-    /// * a full lane that moves is free (the old count of cars made busy streets amber and
-    ///   two cars at a light red).
-    ///
-    /// The route's own lanes take the levels of the traffic's lanes they are (by their key,
-    /// else by place and heading: junction paths have no key, and were never coloured).
-    fn update_congestion(&mut self, f: &NavFrame) {
-        self.congestion_t -= f.dt;
-        if self.congestion_t > 0.0 {
-            return;
-        }
-        let step = 0.25f32;
-        self.congestion_t = step;
-        let Some(t) = f.traffic else { return };
-        // per lane: the sum of the cars' speed against the lane's free speed, how many, and
-        // how many stand for long
-        let mut by_lane: HashMap<usize, (f32, u32, u32)> = HashMap::new();
-        for c in &t.cars {
-            if c.gone || (c.vehicle.position - f.bus).truncate().length() > 1500.0 {
-                continue;
-            }
-            // (a bus at its stop, or a car standing as part of the furniture)
-            if c.bus.as_ref().is_some_and(|b| !matches!(b.phase, omsi_sim::ai_traffic::bus_service::Phase::Running)) {
-                continue;
-            }
-            let Some(l) = t.net.lanes.get(c.state.lane) else { continue };
-            let free = (l.speed_limit_kmh.clamp(20.0, 60.0) / 3.6) * 0.8;
-            let v = c.state.speed.max(0.0);
-            // (waiting at a light up to a cycle is how traffic flows there)
-            let ratio = if v < 0.8 && c.stopped < 35.0 { 0.75 } else { (v / free).min(1.0) };
-            let e = by_lane.entry(c.state.lane).or_insert((0.0, 0, 0));
-            e.0 += ratio;
-            e.1 += 1;
-            if c.stopped > 45.0 {
-                e.2 += 1;
-            }
-        }
-        let k = ease(step, 6.0) as f32;
-        // (no cars: back to free, slowly)
-        for v in self.congestion.values_mut() {
-            *v -= *v * k * 0.5;
-        }
-        for (lane, (sum, n, standing)) in by_lane {
-            if n < 2 && standing == 0 {
-                continue;
-            }
-            let flow = sum / n as f32;
-            let mut score = (1.0 - flow).clamp(0.0, 1.0);
-            if standing >= 2 {
-                score = score.max(0.9);
-            }
-            let v = self.congestion.entry(lane).or_insert(0.0);
-            *v += (score - *v) * k;
-        }
-        self.congestion.retain(|_, v| *v > 0.03);
-        // the same for the route ahead, in the route's own network
-        let global = self.global.clone();
-        if t.lanes_generation != self.lane_map_gen.0 || self.global_version != self.lane_map_gen.1 {
-            self.lane_map.clear();
-            self.lane_map_gen = (t.lanes_generation, self.global_version);
-        }
-        let jam = match global.as_deref() {
-            Some(g) => {
-                let mut out = HashMap::new();
-                for (&l, &v) in &self.congestion {
-                    let targets = self.lane_map.entry(l).or_insert_with(|| same_paths(g, &t.net, l));
-                    for &gi in targets.iter() {
-                        out.insert(gi, v);
-                    }
-                }
-                out
-            }
-            None => self.congestion.clone(),
-        };
-        let net = global.as_deref().unwrap_or(&t.net);
-        let r = &self.route;
-        let mut route_jam = HashMap::new();
-        let mut cost = 0.0;
-        for &l in r.lanes.iter().skip(r.progress).take(600) {
-            let Some(&c) = jam.get(&l) else { continue };
-            route_jam.insert(l, c);
-            // the time the slow stretches ahead cost
-            if let Some(lane) = net.lanes.get(l) {
-                if level(c) >= 2 {
-                    let v_free = lane.speed_limit_kmh.clamp(20.0, 60.0) / 3.6;
-                    let v = (v_free * (1.0 - c)).max(1.0);
-                    cost += lane.length() / v - lane.length() / v_free;
-                }
-            }
-        }
-        self.jam_cost = cost;
-        let changed = route_jam.len() != self.route_jam.len() || route_jam.iter().any(|(l, c)| self.route_jam.get(l).map(|o| level(*o) != level(*c)).unwrap_or(true));
-        self.route_jam = route_jam;
-        if changed {
-            self.jam_version += 1;
-        }
-    }
-
-    /// The first real turn on the route within 1.5 km: a lane whose heading changes by more
-    /// than 35 degrees from its start to its end (a junction's curve), or a sharp bend
-    /// between two lanes. Gentle curves of a road are not turns.
-    fn turn_ahead(&self, net: &Network) -> Option<(i32, f32, f64, Option<String>)> {
-        let r = &self.route;
-        if !r.on_route {
-            return None;
-        }
-        let mut acc = -(r.s as f64);
-        let mut prev_end: Option<f32> = None;
-        for (j, &l) in r.lanes.iter().enumerate().skip(r.progress) {
-            let lane = net.lanes.get(l)?;
-            let len = if j + 1 == r.lanes.len() { self.destination.as_ref().and_then(|d| d.path.as_ref().map(|p| p.end_s)).unwrap_or(lane.length()) } else { lane.length() };
-            if acc > 1500.0 {
-                break;
-            }
-            let (h0, h1) = (lane.start_heading(), lane.at(len).1);
-            let mut d = omsi_sim::traffic::wrap_deg(h1 - h0);
-            if let Some(pe) = prev_end {
-                d += omsi_sim::traffic::wrap_deg(h0 - pe);
-            }
-            // (a short junction lane turns within a few metres; a long road curve does not count)
-            if d.abs() > 35.0 && (len < 60.0 || d.abs() > 70.0) && acc + len as f64 > 0.0 {
-                let dir = if d.abs() > 150.0 { 2 } else if d > 0.0 { 1 } else { -1 };
-                // the street it turns into: the first named lane after the turn
-                let street = r.lanes.iter().skip(j + 1).take(4).chain(std::iter::once(&l)).find_map(|&x| self.street_of(x)).map(str::to_string);
-                return Some((dir, d.abs(), acc.max(0.0), street));
-            }
-            prev_end = Some(h1);
-            acc += len as f64;
-        }
-        None
-    }
-
-    /// The street a lane of the route's network belongs to (the map's network only).
-    fn street_of(&self, lane: usize) -> Option<&str> {
-        self.global.as_ref()?;
-        let st = self.streets.as_deref()?;
-        let i = *st.of_lane.get(lane)?;
-        st.names.get(i as usize).map(String::as_str)
-    }
-
-    /// Distance along the route to `stop` (m).
-    fn route_distance(&self, net: &Network, stop: DVec3) -> Option<f64> {
-        if self.destination.is_some() { return None; }
-        let r = &self.route;
-        if r.progress >= r.lanes.len() {
-            return None;
-        }
-        let mut acc = vec![-(r.s as f64)];
-        for &l in r.lanes.iter().skip(r.progress) {
-            let next = acc[acc.len() - 1] + net.lanes.get(l)?.length() as f64;
-            if next > 30_000.0 {
-                break;
-            }
-            acc.push(next);
-        }
-        let ahead = |k: usize| acc[k - r.progress];
-        let (k, s) = stop_on_route(net, &r.lanes[..r.progress + acc.len().min(r.lanes.len() - r.progress)], r.progress, stop, |k, s| ahead(k) + s as f64 >= -5.0)?;
-        Some((ahead(k) + s as f64).max(0.0))
     }
 
     /// Advance, draw into the texture and put it on the screen.
@@ -1222,7 +993,11 @@ impl Navigator {
             match rx.try_recv() {
                 Ok((net, pos, streets, surface, hints)) => {
                     self.name_hints = hints;
-                    log::info!("navigator: the map's road network is there ({} lanes, {} streets named)", net.lanes.len(), streets.names.len());
+                    log::info!(
+                        "navigator: the map's road network is there ({} lanes, {} streets named)",
+                        net.lanes.len(),
+                        streets.names.len()
+                    );
                     self.streets = Some(std::sync::Arc::new(streets));
                     self.set_surface(surface);
                     self.global = Some(std::sync::Arc::new(net));
@@ -1237,14 +1012,22 @@ impl Navigator {
                     self.route_jam.clear();
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) if self.streets.is_none() => {
-                    self.streets = Some(std::sync::Arc::new(Streets { names: Vec::new(), of_lane: Vec::new(), labels: Vec::new() }));
+                    self.streets = Some(std::sync::Arc::new(Streets {
+                        names: Vec::new(),
+                        of_lane: Vec::new(),
+                        labels: Vec::new(),
+                    }));
                 }
                 Err(_) => {}
             }
         }
         if let Some(rx) = self.layers_rx.as_ref() {
             if let Ok(m) = rx.try_recv() {
-                log::info!("navigator: the map's layers are there ({} houses, {} trees)", m.layers.buildings.len(), m.layers.trees.len());
+                log::info!(
+                    "navigator: the map's layers are there ({} houses, {} trees)",
+                    m.layers.buildings.len(),
+                    m.layers.trees.len()
+                );
                 self.map_data = Some(std::sync::Arc::new(m));
                 self.map_version += 1;
                 self.layers_rx = None;
@@ -1252,26 +1035,84 @@ impl Navigator {
         }
         // stops whose tiles are not loaded: their place from the map
         if omsi_cfg::flags::OMSI_DEBUG_NAV.is_set() && self.time < 0.15 {
-            log::info!("navigator: stops {:?}", f.stops.iter().map(|s| (s.name.clone(), s.object_id, s.position != DVec3::ZERO, self.stop_pos.contains_key(&s.object_id))).collect::<Vec<_>>());
+            log::info!(
+                "navigator: stops {:?}",
+                f.stops
+                    .iter()
+                    .map(|s| (
+                        s.name.clone(),
+                        s.object_id,
+                        s.position != DVec3::ZERO,
+                        self.stop_pos.contains_key(&s.object_id)
+                    ))
+                    .collect::<Vec<_>>()
+            );
         }
         let f2;
         let f = if f.stops.iter().any(|s| s.position == DVec3::ZERO) {
-            f2 = NavFrame { stops: f.stops.iter().filter_map(|s| if s.position == DVec3::ZERO { self.stop_pos.get(&s.object_id).map(|p| NavStop { position: *p, ..s.clone() }) } else { Some(s.clone()) }).collect(), ..f.clone_ref() };
+            f2 = NavFrame {
+                stops: f
+                    .stops
+                    .iter()
+                    .filter_map(|s| {
+                        if s.position == DVec3::ZERO {
+                            self.stop_pos.get(&s.object_id).map(|p| NavStop {
+                                position: *p,
+                                ..s.clone()
+                            })
+                        } else {
+                            Some(s.clone())
+                        }
+                    })
+                    .collect(),
+                ..f.clone_ref()
+            };
             &f2
         } else {
             f
         };
-        if self.destination.is_some() { self.follow_destination(f); } else { self.follow(f); }
+        if self.destination.is_some() {
+            self.follow_destination(f);
+        } else {
+            self.follow(f);
+        }
         self.bus_at = f.bus;
-        self.stop_spots = if self.destination.is_some() { Vec::new() } else { f.stops.iter().take(3).map(|st| (st.position, st.name.clone(), f.heading, st.object_id)).collect() };
+        self.stop_spots = if self.destination.is_some() {
+            Vec::new()
+        } else {
+            f.stops
+                .iter()
+                .take(3)
+                .map(|st| (st.position, st.name.clone(), f.heading, st.object_id))
+                .collect()
+        };
         if omsi_cfg::flags::OMSI_DEBUG_NAV.is_set() && (self.time % 1.0) < f.dt {
-            log::info!("navigator: route {} lanes (complete {}, provisional {}, at {}, on it {}, off for {:.1} s), {} stops ahead, next {:?}, key {:?}", self.route.lanes.len(), self.route.complete, self.route.provisional, self.route.progress, self.route.on_route, self.route.off_for, f.stops.len(), f.stops.first().map(|s| (s.name.clone(), s.position.x.round(), s.position.y.round())), self.route.key);
+            log::info!(
+                "navigator: route {} lanes (complete {}, provisional {}, at {}, on it {}, off for {:.1} s), {} stops ahead, next {:?}, key {:?}",
+                self.route.lanes.len(),
+                self.route.complete,
+                self.route.provisional,
+                self.route.progress,
+                self.route.on_route,
+                self.route.off_for,
+                f.stops.len(),
+                f.stops.first().map(|s| (
+                    s.name.clone(),
+                    s.position.x.round(),
+                    s.position.y.round()
+                )),
+                self.route.key
+            );
         }
         self.update_congestion(f);
         self.update_drawn_cars(f);
         self.poll_road_job();
         // camera: zoomed out with speed, turned with the bus (both eased)
-        let want = zoom_target(f.speed_kmh, self.next_turn.as_ref().map(|t| t.2), angle_diff(self.cam_heading, f.heading));
+        let want = zoom_target(
+            f.speed_kmh,
+            self.next_turn.as_ref().map(|t| t.2),
+            angle_diff(self.cam_heading, f.heading),
+        );
         if self.first {
             self.zoom = want;
             self.cam_heading = f.heading;
@@ -1286,17 +1127,27 @@ impl Navigator {
             let global = self.global.clone();
             let net = global.as_deref().or(f.traffic.map(|t| &t.net));
             self.next_dist = match (f.stops.first(), net) {
-                (Some(s), Some(n)) if !self.route.lanes.is_empty() => self.route_distance(n, s.position).or_else(|| Some((s.position - f.bus).truncate().length())).map(|d| (s.object_id, d)),
+                (Some(s), Some(n)) if !self.route.lanes.is_empty() => self
+                    .route_distance(n, s.position)
+                    .or_else(|| Some((s.position - f.bus).truncate().length()))
+                    .map(|d| (s.object_id, d)),
                 (Some(s), _) => Some((s.object_id, (s.position - f.bus).truncate().length())),
                 _ => None,
             };
             self.next_turn = net.and_then(|n| self.turn_ahead(n));
             self.street_here = if self.route.on_route {
-                self.route.lanes.get(self.route.progress).and_then(|&l| self.street_of(l))
+                self.route
+                    .lanes
+                    .get(self.route.progress)
+                    .and_then(|&l| self.street_of(l))
             } else {
-                global.as_deref().and_then(|g| g.nearest_lane_near(f.bus, LaneKind::Street)).filter(|l| l.2 < 10.0).and_then(|l| self.street_of(l.0))
+                global
+                    .as_deref()
+                    .and_then(|g| g.nearest_lane_near(f.bus, LaneKind::Street))
+                    .filter(|l| l.2 < 10.0)
+                    .and_then(|l| self.street_of(l.0))
             }
-                .map(str::to_string);
+            .map(str::to_string);
             self.update_place(f.bus.truncate());
         }
         self.first = false;
@@ -1320,9 +1171,16 @@ impl Navigator {
         // (of the shorter side: a tablet held upright gave it half the screen's width, over
         // the on-screen buttons along the top)
         let base = (sh.min(sw) * 0.33).max(300.0);
-        let base = if f.follow_window { base } else { base.min(480.0) };
+        let base = if f.follow_window {
+            base
+        } else {
+            base.min(480.0)
+        };
         // (the widget's own size on top: `nav_size`, dragged at its corner)
-        let pw = (base * f.ui_scale * self.size.clamp(0.6, 2.0)).min((sh * 0.7).max(300.0) * self.size.clamp(1.0, 2.0)).min(sw * 0.92).round();
+        let pw = (base * f.ui_scale * self.size.clamp(0.6, 2.0))
+            .min((sh * 0.7).max(300.0) * self.size.clamp(1.0, 2.0))
+            .min(sw * 0.92)
+            .round();
         let map_h = (pw * 0.8).round();
         let look = panel::PanelLook::hud(self, pw);
         let s = look.scale;
@@ -1336,11 +1194,26 @@ impl Navigator {
         let room = (sh - map_h - loc_h - 32.0 * s).max(40.0 * s).round();
         // (a plugin's panel in the whole frame: as tall as it came to and as the window has
         // room for - the map's height until it is laid out -, the map where it says)
-        let whole = self.frame_panel.filter(|_| !self.cockpit_display && self.shown > 0.99);
+        let whole = self
+            .frame_panel
+            .filter(|_| !self.cockpit_display && self.shown > 0.99);
         let frame_room = (sh - 32.0 * s).max(map_h).round();
-        self.framed = whole.map(|p| p.map.map(|m| framed_map(m, pw, p.height.max(1.0).min(frame_room).round())).filter(|(r, _)| r.w >= 1.0 && r.h >= 1.0));
+        self.framed = whole.map(|p| {
+            p.map
+                .map(|m| framed_map(m, pw, p.height.max(1.0).min(frame_room).round()))
+                .filter(|(r, _)| r.w >= 1.0 && r.h >= 1.0)
+        });
         self.frame_card = whole.and_then(|p| p.background);
-        self.board = self.dock.filter(|_| whole.is_none() && self.schedule && !self.cockpit_display && self.shown > 0.99).map(|h| h.max(1.0).min(room).round());
+        self.frame_marks = whole
+            .and_then(|p| p.map)
+            .and(self.frame_look)
+            .and_then(|l| l.marks);
+        self.board = self
+            .dock
+            .filter(|_| {
+                whole.is_none() && self.schedule && !self.cockpit_display && self.shown > 0.99
+            })
+            .map(|h| h.max(1.0).min(room).round());
         let sched = match self.board {
             Some(h) => h,
             None => self.stop_list_height(s, f.stops.len()),
@@ -1356,7 +1229,12 @@ impl Navigator {
             if let Some(p) = whole {
                 self.dock_slot = Some(([x0, y0, pw, frame_room], s, p.height > 0.0, true));
             } else if self.board.is_some() {
-                self.dock_slot = Some(([x0, y0 + (map_h + loc_h).round(), pw, room], s, self.dock.is_some_and(|h| h > 0.0), false));
+                self.dock_slot = Some((
+                    [x0, y0 + (map_h + loc_h).round(), pw, room],
+                    s,
+                    self.dock.is_some_and(|h| h > 0.0),
+                    false,
+                ));
             }
         }
 
@@ -1372,12 +1250,18 @@ impl Navigator {
             self.target = Some((t, w, h));
         }
         let (tex, _, _) = self.target.unwrap();
-        let Some(view) = renderer.texture_view(scene, tex) else { return };
+        let Some(view) = renderer.texture_view(scene, tex) else {
+            return;
+        };
         self.frames_since_drawn = self.frames_since_drawn.saturating_add(1);
         // (a frame panel's map moved, or came or went: at once, not a few frames late)
-        if !self.city.open && (resized || self.frames_since_drawn >= self.draw_every || (self.framed, self.frame_card) != self.framed_drawn) {
+        if !self.city.open
+            && (resized
+                || self.frames_since_drawn >= self.draw_every
+                || (self.framed, self.frame_card, self.frame_marks) != self.framed_drawn)
+        {
             self.frames_since_drawn = 0;
-            self.framed_drawn = (self.framed, self.frame_card);
+            self.framed_drawn = (self.framed, self.frame_card, self.frame_marks);
             self.draw(renderer, &view, (w, h), map_h, &look, None, f);
         }
         // (the small navigator steps aside while the city map is open)
@@ -1390,7 +1274,6 @@ impl Navigator {
             self.city(renderer, scene, f);
         }
     }
-
 }
 
 /// A plugin's panel that fills the navigator's frame, as the panels laid it out (physical
@@ -1411,19 +1294,49 @@ pub struct FrameMap {
     pub cards: bool,
 }
 
+/// How a frame panel's map looks, beside where it is (`FrameMap`): handed over on its own so
+/// that the map's look reaches the navigator without the panel's place changing hands.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FrameLook {
+    /// How the map draws the bus and the stops (None: as it always did).
+    pub marks: Option<FrameMarks>,
+}
+
+/// The colours (and the bus's radius) a plugin's map gives the bus and the stops; what is not
+/// given is the navigator's own.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct FrameMarks {
+    pub bus: Option<Color>,
+    pub bus_size: Option<f32>,
+    pub stop: Option<Color>,
+    pub next_stop: Option<Color>,
+    pub last_stop: Option<Color>,
+    /// A stop closed today gets a pin in this colour; not given, it is one of the others.
+    pub closed_stop: Option<Color>,
+}
+
 /// Where a frame panel's map goes in a picture `pw` x `ph`: its rectangle kept inside it.
 fn framed_map(m: FrameMap, pw: f32, ph: f32) -> (Rect, bool) {
     let [x, y, w, h] = m.rect;
     let (x, y) = (x.clamp(0.0, pw), y.clamp(0.0, ph));
-    (Rect::new(x, y, w.clamp(0.0, pw - x), h.clamp(0.0, ph - y)), m.cards)
+    (
+        Rect::new(x, y, w.clamp(0.0, pw - x), h.clamp(0.0, ph - y)),
+        m.cards,
+    )
 }
 
 /// The lanes of `net` that are traffic lane `l`: the same path by its key, else (a junction's
 /// paths have none) the lane of `net` that starts and ends where it does, the same way.
 fn same_paths(net: &Network, traffic: &Network, l: usize) -> Vec<usize> {
-    let Some(lane) = traffic.lanes.get(l) else { return Vec::new() };
+    let Some(lane) = traffic.lanes.get(l) else {
+        return Vec::new();
+    };
     if let Some(cands) = lane.key.and_then(|k| net.by_key.get(&k)) {
-        let v: Vec<usize> = cands.iter().copied().filter(|&g| net.lanes[g].reversed == lane.reversed).collect();
+        let v: Vec<usize> = cands
+            .iter()
+            .copied()
+            .filter(|&g| net.lanes[g].reversed == lane.reversed)
+            .collect();
         if !v.is_empty() {
             return v;
         }
@@ -1443,10 +1356,34 @@ fn same_paths(net: &Network, traffic: &Network, l: usize) -> Vec<usize> {
 
 impl<'a> NavFrame<'a> {
     fn clone_ref(&self) -> NavFrame<'a> {
-        NavFrame { traffic: self.traffic, touch: self.touch, players: self.players.clone(), bus: self.bus, heading: self.heading, speed_kmh: self.speed_kmh, outside_temp: self.outside_temp, inside_temp: self.inside_temp, line: self.line.clone(), terminus: self.terminus.clone(), stops: self.stops.clone(), delay: self.delay, passengers: self.passengers, time: self.time, weekday: self.weekday, date: self.date, language: self.language, screen: self.screen, ui_scale: self.ui_scale, follow_window: self.follow_window, dt: self.dt, stop_requested: self.stop_requested, info_rect: self.info_rect, touch_gap: self.touch_gap }
+        NavFrame {
+            traffic: self.traffic,
+            touch: self.touch,
+            players: self.players.clone(),
+            bus: self.bus,
+            heading: self.heading,
+            speed_kmh: self.speed_kmh,
+            outside_temp: self.outside_temp,
+            inside_temp: self.inside_temp,
+            line: self.line.clone(),
+            terminus: self.terminus.clone(),
+            stops: self.stops.clone(),
+            delay: self.delay,
+            passengers: self.passengers,
+            time: self.time,
+            weekday: self.weekday,
+            date: self.date,
+            language: self.language,
+            screen: self.screen,
+            ui_scale: self.ui_scale,
+            follow_window: self.follow_window,
+            dt: self.dt,
+            stop_requested: self.stop_requested,
+            info_rect: self.info_rect,
+            touch_gap: self.touch_gap,
+        }
     }
 }
-
 
 pub use omsi_mapdraw::roads::{self, *};
 mod line_times;
@@ -1456,35 +1393,46 @@ mod orient;
 mod place;
 mod relief;
 mod surface;
-pub use omsi_mapdraw::style;
 pub use omsi_mapdraw as mapmesh;
+pub use omsi_mapdraw::style;
 mod panel;
 mod screen;
 pub use screen::Screen;
 mod duty;
 pub use duty::duty_parts;
-mod live;
 mod build;
+mod follow;
+mod live;
 pub use build::{Built, MapGround};
-mod cull;
 mod city_map;
+mod cull;
 mod destination;
 mod remote;
 pub use remote::RemoteNav;
 mod remote_picture;
-pub use remote_picture::RemoteFrame;
 pub use city_map::*;
 use lines_panel::*;
+pub use remote_picture::RemoteFrame;
 #[cfg(test)]
 mod tests;
-
 
 #[cfg(test)]
 #[path = "destination/tests.rs"]
 mod destination_tests;
 
-fn stop_on_route(net: &Network, lanes: &[usize], from: usize, stop: DVec3, ok: impl Fn(usize, f32) -> bool) -> Option<(usize, f32)> {
-    let near = |k: usize| net.lanes.get(lanes[k]).and_then(|l| l.nearest_point(stop)).filter(|&(s, d)| d < 25.0 && ok(k, s));
+fn stop_on_route(
+    net: &Network,
+    lanes: &[usize],
+    from: usize,
+    stop: DVec3,
+    ok: impl Fn(usize, f32) -> bool,
+) -> Option<(usize, f32)> {
+    let near = |k: usize| {
+        net.lanes
+            .get(lanes[k])
+            .and_then(|l| l.nearest_point(stop))
+            .filter(|&(s, d)| d < 25.0 && ok(k, s))
+    };
     let kerb = |k: usize| near(k).filter(|_| passes_on_its_side(net, lanes[k], stop, 25.0));
     let first = (from..lanes.len()).find(|&k| near(k).is_some())?;
     if let Some((s, _)) = kerb(first).filter(|&(_, d)| d < 6.0) {

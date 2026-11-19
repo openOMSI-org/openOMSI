@@ -2,8 +2,8 @@
 //! held to the limits and checked here, so that a plugin learns at once what is wrong.
 
 use super::{
-    Align, Anchor, ChartStyle, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS, MAX_TEXT, Panel,
-    Rgba, RowAlign, Stop, StopState, Weight, check_id,
+    Align, Anchor, ChartStyle, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS, MAX_TEXT,
+    MapMarks, Panel, Rgba, RowAlign, Stop, StopState, Weight, check_id,
 };
 use crate::api::Value;
 use std::path::{Path, PathBuf};
@@ -252,6 +252,38 @@ impl Reader<'_> {
                 )
             }),
         }
+    }
+
+    /// A table of its own at `key` (None: not given); anything else is an error.
+    fn table(&self, key: &str) -> Result<Option<Reader<'_>>, String> {
+        match self.get(key) {
+            Value::Nil => Ok(None),
+            v if v.is_table() => Ok(Some(Reader {
+                t: v,
+                path: self.at(key),
+                folder: None,
+            })),
+            _ => Err(format!("{}: a table is expected", self.at(key))),
+        }
+    }
+
+    /// A map's `marks`: colours for the stops and the bus, and the bus's size.
+    fn marks(&self, key: &str) -> Result<Option<MapMarks>, String> {
+        let Some(m) = self.table(key)? else {
+            return Ok(None);
+        };
+        let bus = m.table("bus")?;
+        Ok(Some(MapMarks {
+            bus: bus.as_ref().map_or(Ok(None), |b| b.color("color"))?,
+            bus_size: match &bus {
+                Some(b) => b.opt_number("size")?.map(|s| s.clamp(4.0, 40.0)),
+                None => None,
+            },
+            stop: m.color("stop")?,
+            next_stop: m.color("next_stop")?,
+            last_stop: m.color("last_stop")?,
+            closed_stop: m.color("closed_stop")?,
+        }))
     }
 
     fn list(&self, key: &str) -> Result<&[Value], String> {
@@ -572,6 +604,7 @@ impl Reader<'_> {
             "map" => Kind::Map {
                 height: self.number("height", 0.0, 0.0, 4000.0)?,
                 cards: self.boolean("cards", true)?,
+                marks: self.marks("marks")?,
             },
             "space" => Kind::Space {
                 size: self.number("size", 8.0, 0.0, 1000.0)?,
