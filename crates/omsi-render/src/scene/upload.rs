@@ -612,14 +612,18 @@ pub(crate) fn draw_order_level(i: &Instance, slot: usize) -> f32 {
     if mode != 0 {
         return level;
     }
-    let Some(cap) = i
-        .slot_depth_caps
-        .get(slot)
-        .copied()
-        .filter(|cap| cap.is_finite())
-    else {
+    let Some(caps) = i.slot_depth_caps.get(slot).copied() else {
         return level;
     };
-    let micrometres = (cap * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;
-    (4096 | (micrometres << 2) | level.round() as u32) as f32
+    // Both 10-bit limits and side flags fit exactly in the f32 instance value.
+    let mut encoded = level.round() as u32;
+    if caps.positive.is_finite() {
+        let micrometres = (caps.positive * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;
+        encoded |= (1 << 22) | (micrometres << 2);
+    }
+    if caps.negative.is_finite() {
+        let micrometres = (caps.negative * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;
+        encoded |= (1 << 23) | (micrometres << 12);
+    }
+    encoded as f32
 }

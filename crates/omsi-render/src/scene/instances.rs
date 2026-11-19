@@ -353,10 +353,13 @@ impl Renderer {
         if let Some(i) = scene.instances.get_mut(instance) {
             let level = level.min(crate::scene::overlay::MAX_LEVEL);
             if i.slot_levels.iter().any(|l| *l != level)
-                || i.slot_depth_caps.iter().any(|cap| cap.is_finite())
+                || i.slot_depth_caps
+                    .iter()
+                    .any(|caps| caps.positive.is_finite() || caps.negative.is_finite())
             {
                 i.slot_levels.iter_mut().for_each(|l| *l = level);
-                i.slot_depth_caps.fill(f32::INFINITY);
+                i.slot_depth_caps
+                    .fill(crate::scene::overlay::DepthCaps::default());
                 Self::mark_changed(scene, instance);
             }
         }

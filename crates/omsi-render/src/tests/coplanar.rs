@@ -730,9 +730,14 @@ fn a_label_a_fraction_of_a_millimetre_in_front_of_a_stacked_screen_stays_seen() 
                 .chunks(4)
                 .filter(|p| p[0] > 150 && p[1] < 60 && p[2] < 60)
                 .count();
+            let centre = &rgba[(128 * 256 + 128) * 4..(128 * 256 + 128) * 4 + 3];
             assert!(
                 green > 0 && red > 0,
                 "at {d} m, pitch {pitch}: {green} pixels of the label, {red} of the stacked screen"
+            );
+            assert!(
+                centre[1] > 150 && centre[0] < 60 && centre[2] < 60,
+                "the front label must remain visible over the screen at {d} m, pitch {pitch}: {centre:?}"
             );
         }
     }

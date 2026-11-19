@@ -34,6 +34,7 @@ pub(crate) const MAX_LEVEL: u8 = 3;
 pub(crate) struct Flat {
     pub(crate) slot: u32,
     pub(crate) normal: Vec3,
+    orientation: f32,
     pub(crate) offset: f32,
     pub(crate) lo: Vec3,
     pub(crate) hi: Vec3,
@@ -44,14 +45,30 @@ pub(crate) struct Flat {
 #[derive(Clone, Copy)]
 struct DepthCap {
     value: f32,
+    positive_side: bool,
     occluder: Flat,
 }
 
+/// A depth limit on each side of the slot's geometric normal.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DepthCaps {
+    pub(crate) positive: f32,
+    pub(crate) negative: f32,
+}
+
+impl Default for DepthCaps {
+    fn default() -> Self {
+        Self {
+            positive: f32::INFINITY,
+            negative: f32::INFINITY,
+        }
+    }
+}
+
 fn push_depth_cap(caps: &mut Vec<DepthCap>, candidate: DepthCap) {
-    if let Some(existing) = caps
-        .iter_mut()
-        .find(|cap| cap.occluder == candidate.occluder)
-    {
+    if let Some(existing) = caps.iter_mut().find(|cap| {
+        cap.occluder == candidate.occluder && cap.positive_side == candidate.positive_side
+    }) {
         existing.value = existing.value.min(candidate.value);
     } else {
         caps.push(candidate);
@@ -100,7 +117,8 @@ pub(crate) fn mesh_flats(data: &MeshData) -> Vec<Flat> {
             if area < 1e-8 {
                 continue;
             }
-            let (n, offset) = canonical(cross / (2.0 * area), (cross / (2.0 * area)).dot(p[0]));
+            let source_normal = cross / (2.0 * area);
+            let (n, offset) = canonical(source_normal, source_normal.dot(p[0]));
             let key = (
                 (n.x * 1000.0).round() as i32,
                 (n.y * 1000.0).round() as i32,
@@ -119,6 +137,11 @@ pub(crate) fn mesh_flats(data: &MeshData) -> Vec<Flat> {
                     Flat {
                         slot,
                         normal: n,
+                        orientation: if n.dot(source_normal) < 0.0 {
+                            -1.0
+                        } else {
+                            1.0
+                        },
                         offset,
                         lo,
                         hi,
@@ -241,10 +264,28 @@ fn lies_on(f: &Flat, g: &Flat) -> bool {
 /// `NEAR_GAP`: a surface the step of `f` would pass far off, though they are really apart.
 /// (Their tilt is not asked here: a flat seen nearly edge-on lifts its own edge over a small
 /// angle by more than the gap, and it is the middle distance that the step's lift reaches.)
-fn near_gap(f: &Flat, g: &Flat) -> Option<f32> {
-    facing(f, g, NEAR_GAP)
-        .map(|(gap, _)| gap)
-        .filter(|gap| (CENTRE_GAP..NEAR_GAP).contains(gap))
+fn near_gap_side(f: &Flat, g: &Flat) -> Option<(f32, bool)> {
+    let (centre_gap, radius, positive_side) = plane_separation(f, g)?;
+    let nearest_gap = centre_gap.abs() - radius;
+    (CENTRE_GAP..NEAR_GAP)
+        .contains(&nearest_gap)
+        .then_some((nearest_gap, positive_side))
+}
+
+fn plane_separation(f: &Flat, g: &Flat) -> Option<(f32, f32, bool)> {
+    facing(f, g, NEAR_GAP)?;
+    let centre = (f.lo + f.hi) * 0.5;
+    let centre = centre - f.normal * (f.normal.dot(centre) - f.offset);
+    let across = f.normal.cross(f.axis);
+    let centre_gap = g.normal.dot(centre) - g.offset;
+    let radius = f.half[0] * g.normal.dot(f.axis).abs() + f.half[1] * g.normal.dot(across).abs();
+    let orientation = if f.normal.dot(g.normal) < 0.0 {
+        -1.0
+    } else {
+        1.0
+    };
+    let candidate_side = -(orientation * centre_gap);
+    Some((centre_gap, radius, candidate_side * f.orientation >= 0.0))
 }
 
 impl ObjectRun {
@@ -295,7 +336,7 @@ impl ObjectRun {
         transform: Mat4,
         flats: &[Flat],
         slots: usize,
-    ) -> (Vec<u8>, Vec<f32>) {
+    ) -> (Vec<u8>, Vec<DepthCaps>) {
         if !self.fresh && (origin != self.origin || draw_order != self.next) {
             self.open = false;
             self.model = None;
@@ -308,7 +349,7 @@ impl ObjectRun {
         self.origin = origin;
         self.next = draw_order + 1;
         if !self.open {
-            return (vec![0; slots], vec![f32::INFINITY; slots]);
+            return (vec![0; slots], vec![DepthCaps::default(); slots]);
         }
         let known = self
             .model
@@ -330,13 +371,7 @@ impl ObjectRun {
             }
             let values = caps
                 .iter()
-                .map(|constraints| {
-                    constraints
-                        .iter()
-                        .map(|cap| cap.value)
-                        .min_by(f32::total_cmp)
-                        .unwrap_or(f32::INFINITY)
-                })
+                .map(|constraints| depth_cap_limits(constraints))
                 .collect();
             return (levels, values);
         }
@@ -345,6 +380,9 @@ impl ObjectRun {
             .iter()
             .filter_map(|f| {
                 let n = normal_m.transform_vector3(f.normal).try_normalize()?;
+                let source_normal = normal_m
+                    .transform_vector3(f.normal * f.orientation)
+                    .try_normalize()?;
                 let p = transform.transform_point3(f.normal * f.offset);
                 let (normal, offset) = canonical(n, n.dot(p));
                 let corners = (0..8).map(|c| {
@@ -367,6 +405,11 @@ impl ObjectRun {
                 Some(Flat {
                     slot: f.slot,
                     normal,
+                    orientation: if normal.dot(source_normal) < 0.0 {
+                        -1.0
+                    } else {
+                        1.0
+                    },
                     offset,
                     lo,
                     hi,
@@ -376,14 +419,14 @@ impl ObjectRun {
             })
             .collect();
         let mut levels = vec![0u8; slots];
-        let mut depth_caps = vec![f32::INFINITY; slots];
+        let mut depth_caps = vec![DepthCaps::default(); slots];
         let mut slot_caps: Vec<Arc<[DepthCap]>> = vec![Arc::from([]); slots];
         for slot in 0..slots {
             let mine: Vec<&Flat> = placed.iter().filter(|f| f.slot as usize == slot).collect();
             let mut level = 0u8;
             let mut under: Vec<usize> = Vec::new();
             // (the surfaces lying just off this slot's plane, with their steps)
-            let mut beside: Vec<(usize, u8, f32, Flat)> = Vec::new();
+            let mut beside: Vec<(usize, u8, f32, bool, Flat)> = Vec::new();
             for f in &mine {
                 for (kx, ky, kz) in [normal_key(f.normal), normal_key(-f.normal)] {
                     for dx in -1..=1 {
@@ -398,8 +441,8 @@ impl ObjectRun {
                                     if lies_on(f, g) {
                                         level = level.max(gl.saturating_add(1).min(MAX_LEVEL));
                                         under.push(i);
-                                    } else if let Some(gap) = near_gap(f, g) {
-                                        beside.push((i, *gl, gap, **f));
+                                    } else if let Some((gap, positive_side)) = near_gap_side(f, g) {
+                                        beside.push((i, *gl, gap, positive_side, **f));
                                     }
                                 }
                             }
@@ -411,7 +454,7 @@ impl ObjectRun {
             under.dedup();
             // (a surface of the base this slot is printed on is that base: a neighbouring patch
             // of it lying a little off the plane is no reason to drop the step over it)
-            beside.retain(|(i, _, _, _)| !under.contains(i));
+            beside.retain(|(i, _, _, _, _)| !under.contains(i));
             let beside_lo = beside.iter().map(|b| b.1).min();
             let beside_hi = beside.iter().map(|b| b.1).max();
             let base_level = under.iter().map(|&i| self.flats[i].1).min();
@@ -433,43 +476,50 @@ impl ObjectRun {
             let floor = under.iter().map(|&i| self.flats[i].1).max().unwrap_or(0);
             let level = level.max(floor);
             let mut cap_constraints: Vec<DepthCap> = Vec::new();
-            for (near, _, gap, _) in beside.iter().filter(|(near, near_level, _, target)| {
-                under.iter().any(|&base| {
-                    let overlaps_base =
-                        boxes_overlap(&self.flats[*near].0, &self.flats[base].0, BOX_GAP);
-                    let same_mesh_occluder = *near_level <= 1
-                        && Some(self.flats[base].1) == base_level
-                        && self.flats[*near].0.slot != self.flats[base].0.slot
-                        && projected_overlap(&self.flats[*near].0, target, CENTRE_GAP)
-                        && projected_overlap(&self.flats[*near].0, &self.flats[base].0, CENTRE_GAP);
-                    overlaps_base && (self.flat_meshes[*near] != mesh || same_mesh_occluder)
+            for (near, _, gap, positive_side, _) in
+                beside.iter().filter(|(near, near_level, _, _, target)| {
+                    under.iter().any(|&base| {
+                        let overlaps_base =
+                            boxes_overlap(&self.flats[*near].0, &self.flats[base].0, BOX_GAP);
+                        let same_mesh_occluder = *near_level <= 1
+                            && Some(self.flats[base].1) == base_level
+                            && self.flats[*near].0.slot != self.flats[base].0.slot
+                            && projected_overlap(&self.flats[*near].0, target, CENTRE_GAP)
+                            && projected_overlap(
+                                &self.flats[*near].0,
+                                &self.flats[base].0,
+                                CENTRE_GAP,
+                            );
+                        overlaps_base && (self.flat_meshes[*near] != mesh || same_mesh_occluder)
+                    })
                 })
-            }) {
+            {
                 push_depth_cap(
                     &mut cap_constraints,
                     DepthCap {
                         value: gap * 0.9,
+                        positive_side: *positive_side,
                         occluder: self.flats[*near].0,
                     },
                 );
             }
             for &base in &under {
                 for inherited in self.flat_caps[base].iter() {
-                    let still_near = mine.iter().any(|target| {
-                        facing(target, &inherited.occluder, BOX_GAP)
-                            .is_some_and(|(gap, _)| gap < NEAR_GAP)
-                            && projected_overlap(&inherited.occluder, target, CENTRE_GAP)
+                    let stays_on_side = mine.iter().any(|target| {
+                        plane_separation(target, &inherited.occluder).is_some_and(
+                            |(centre_gap, radius, positive_side)| {
+                                positive_side == inherited.positive_side
+                                    && centre_gap.abs() > radius
+                                    && projected_overlap(&inherited.occluder, target, CENTRE_GAP)
+                            },
+                        )
                     });
-                    if still_near {
+                    if stays_on_side {
                         push_depth_cap(&mut cap_constraints, *inherited);
                     }
                 }
             }
-            depth_caps[slot] = cap_constraints
-                .iter()
-                .map(|cap| cap.value)
-                .min_by(f32::total_cmp)
-                .unwrap_or(f32::INFINITY);
+            depth_caps[slot] = depth_cap_limits(&cap_constraints);
             let cap_constraints: Arc<[DepthCap]> = cap_constraints.into();
             slot_caps[slot] = Arc::clone(&cap_constraints);
             levels[slot] = level;
@@ -491,6 +541,18 @@ impl ObjectRun {
         }
         (levels, depth_caps)
     }
+}
+
+fn depth_cap_limits(caps: &[DepthCap]) -> DepthCaps {
+    caps.iter().fold(DepthCaps::default(), |mut limits, cap| {
+        let limit = if cap.positive_side {
+            &mut limits.positive
+        } else {
+            &mut limits.negative
+        };
+        *limit = limit.min(cap.value);
+        limits
+    })
 }
 
 #[cfg(test)]
@@ -1056,7 +1118,56 @@ mod tests {
         let (levels, caps) =
             run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 5);
         assert_eq!(levels, [0, 1, 1, 2, 2]);
-        assert!((caps[4] - 0.00018).abs() < 1e-7);
+        assert!((caps[4].positive - 0.00018).abs() < 1e-7);
+        assert!(caps[4].negative.is_infinite());
+    }
+
+    #[test]
+    fn a_near_surface_caps_only_the_side_it_occupies() {
+        for transform in [Mat4::IDENTITY, Mat4::from_rotation_y(std::f32::consts::PI)] {
+            for (offset, positive_side) in [(0.00007, true), (-0.00007, false)] {
+                let mesh = joined_mesh([
+                    quad(0.0, 0.4, 0, false),
+                    quad(offset, 0.3, 1, true),
+                    quad(0.0, 0.3, 2, false),
+                    quad(0.0, 0.25, 3, true),
+                    quad(0.0, 0.2, 4, false),
+                ]);
+                let mut run = ObjectRun::default();
+                run.begin(None);
+                let (levels, caps) =
+                    run.levels_with_caps([0; 3], 0, 0, transform, &mesh_flats(&mesh), 5);
+                assert_eq!(levels, [0, 0, 1, 2, 2]);
+                let (near, far) = if positive_side {
+                    (caps[4].positive, caps[4].negative)
+                } else {
+                    (caps[4].negative, caps[4].positive)
+                };
+                assert!((near - 0.000063).abs() < 1e-7, "offset {offset}: {caps:?}");
+                assert!(far.is_infinite(), "offset {offset}: {caps:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_near_plane_crossing_a_target_does_not_cap_the_whole_slot() {
+        let mut crossing = quad(0.0, 0.3, 1, true);
+        for point in &mut crossing.positions {
+            point.z += 0.00018 + point.x * 0.001;
+        }
+        let mesh = joined_mesh([
+            quad(0.0, 0.5, 0, false),
+            crossing,
+            quad(0.0, 0.4, 2, false),
+            quad(0.0, 0.3, 3, true),
+        ]);
+        let mut run = ObjectRun::default();
+        run.begin(None);
+        let (levels, caps) =
+            run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 4);
+        assert_eq!(levels, [0, 0, 1, 2]);
+        assert!(caps[3].positive.is_infinite());
+        assert!(caps[3].negative.is_infinite());
     }
 
     #[test]
@@ -1078,11 +1189,42 @@ mod tests {
         assert_eq!(add(&mut run, 1, 0.00007, 0.2).0, [0]);
         let (support_levels, support_caps) = add(&mut run, 2, 0.0, 1.0);
         assert_eq!(support_levels, [1]);
-        assert!((support_caps[0] - 0.000063).abs() < 1e-7);
+        assert!((support_caps[0].positive - 0.000063).abs() < 1e-7);
 
         let (child_levels, child_caps) = add(&mut run, 3, 0.00004, 0.1);
         assert_eq!(child_levels, [2]);
-        assert!((child_caps[0] - 0.000063).abs() < 1e-7);
+        assert!((child_caps[0].positive - 0.000063).abs() < 1e-7);
+    }
+
+    #[test]
+    fn an_inherited_cap_is_dropped_when_its_plane_crosses_the_child() {
+        let mut near = quad(0.00018, 0.4, 1, true);
+        for point in &mut near.positions {
+            point.z += point.x * 0.001;
+        }
+        let mesh = joined_mesh([
+            quad(0.0, 0.8, 0, false),
+            near,
+            quad(0.0, 0.1, 2, false),
+            quad(0.0, 0.4, 3, true),
+        ]);
+        let mut run = ObjectRun::default();
+        run.begin(None);
+        let (levels, caps) =
+            run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 4);
+        assert_eq!(levels, [0, 0, 1, 2]);
+        assert!(
+            caps[2].positive.is_finite(),
+            "support must keep its front cap"
+        );
+        assert!(
+            caps[3].positive.is_infinite(),
+            "crossing inherited cap: {caps:?}"
+        );
+        assert!(
+            caps[3].negative.is_infinite(),
+            "crossing inherited cap: {caps:?}"
+        );
     }
 
     #[test]
