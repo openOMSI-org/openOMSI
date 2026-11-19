@@ -320,10 +320,10 @@ impl Navigator {
         // (under a plugin's panel in the whole frame: its map where it says, rounded as a card
         // of its own, or no map at all)
         let plugin_frame = self.framed.filter(|_| look.plugins);
-        let (map, cards, map_radius) = match plugin_frame {
-            Some(Some((r, cards))) => (r, cards, (10.0 * s).min(radius)),
+        let (map, cards, show, map_radius) = match plugin_frame {
+            Some(Some((r, cards, show))) => (r, cards, show, (10.0 * s).min(radius)),
             Some(None) => return self.draw_card_alone(renderer, target, size, &pal, look),
-            None => (Rect::new(0.0, 0.0, pw, map_h), true, radius),
+            None => (Rect::new(0.0, 0.0, pw, map_h), true, [true; 4], radius),
         };
         let framed = plugin_frame.is_some();
         let vp = [map.x, map.y, map.w, map.h];
@@ -706,8 +706,9 @@ impl Navigator {
                 s,
             );
         }
-        if cards && !look.no_nav_ui {
-            self.draw_cards(&mut ui, f, wd, net, map, s, &pal);
+        let show = shown_cards(cards, show);
+        if show.contains(&true) && !look.no_nav_ui {
+            self.draw_cards(&mut ui, f, wd, net, map, show, s, &pal);
         }
         if self.schedule && !framed && !remote && !look.no_nav_ui {
             let loc_h = self.place_row_height(s);
@@ -1140,6 +1141,13 @@ pub(super) fn puck(ui: &mut Painter, at: Vec2, angle: f32, r: f32, fill: Color) 
     let rr = at + rot(Vec2::new(0.72, 0.75) * k);
     ui.tri(tip, l, m, Color::WHITE, Color::WHITE, Color::WHITE);
     ui.tri(tip, m, rr, Color::WHITE, Color::WHITE, Color::WHITE);
+}
+
+/// Which of the cards over the map are drawn (the next turn, the clock, the speed, the next
+/// stop): all of them when the panel's `cards` is on and its `show` leaves them on, none when
+/// `cards` is off.
+fn shown_cards(cards: bool, show: [bool; 4]) -> [bool; 4] {
+    show.map(|on| cards && on)
 }
 
 /// A car on the map: a small dot with a pale ring (as the other drivers were always shown).

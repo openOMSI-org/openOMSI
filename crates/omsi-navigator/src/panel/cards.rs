@@ -14,6 +14,7 @@ impl Navigator {
         wd: &Words,
         net: Option<&Network>,
         map: Rect,
+        show: [bool; 4],
         s: f32,
         pal: &Palette,
     ) {
@@ -21,7 +22,7 @@ impl Navigator {
         let units = omsi_ui::units::Units::now();
         // --- top left: the next turn, or the street the bus is on
         let mut left_w = 0.0;
-        if let Some((dir, angle, dist, street)) = self.next_turn.clone() {
+        if let Some((dir, angle, dist, street)) = self.next_turn.clone().filter(|_| show[0]) {
             let icon = match dir {
                 2 => "u_turn_left",
                 -1 if angle < 60.0 => "turn_slight_left",
@@ -82,7 +83,7 @@ impl Navigator {
                 );
             }
             left_w = w;
-        } else if let Some(n) = self.street_here.clone() {
+        } else if let Some(n) = self.street_here.clone().filter(|_| show[0]) {
             let px = 12.5 * s;
             let n = self.fonts.fit(&n, px, Weight::Bold, map.w * 0.55);
             let w = self.fonts.width(&n, px, Weight::Bold) + 34.0 * s;
@@ -118,7 +119,7 @@ impl Navigator {
             + 5.0 * s
             + self.fonts.width(day, 11.0 * s, Weight::Medium);
         let w = tw.max(self.fonts.width(&temp, 11.0 * s, Weight::Medium)) + 20.0 * s;
-        if map.w - left_w - 3.0 * pad > w {
+        if show[1] && map.w - left_w - 3.0 * pad > w {
             let b = Rect::new(map.right() - pad - w, map.y + pad, w, 40.0 * s);
             ui.shadow(b, 12.0 * s, 6.0 * s, Color::rgba(0, 0, 0, 0.12));
             ui.rounded(b, 12.0 * s, pal.card);
@@ -167,7 +168,9 @@ impl Navigator {
             map.w - 2.0 * pad,
             bottom_h,
         );
-        if self.destination.is_some() {
+        if !show[3] {
+            // (no next stop card: its place stays empty, the speed keeps where it is)
+        } else if self.destination.is_some() {
             self.draw_destination_card(ui, net, map, s, pal);
         } else {
             // --- bottom: the next stop
@@ -387,6 +390,9 @@ impl Navigator {
             (v > 1.0 && v < 200.0).then_some(v)
         });
         self.speed_limit = limit;
+        if !show[2] {
+            return;
+        }
         let r = 20.0 * s;
         let c = Vec2::new(card.x + r + 2.0 * s, card.y - r - 7.0 * s);
         let over = limit.is_some_and(|l| f.speed_kmh.abs() > l + 3.0);

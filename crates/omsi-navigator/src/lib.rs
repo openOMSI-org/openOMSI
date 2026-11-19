@@ -352,14 +352,18 @@ pub struct Navigator {
     /// map's, the place row's and the board's place, and the map shows only where the panel
     /// says (physical pixels, from the last frame). Set, `dock_slot` is the whole frame.
     pub frame_panel: Option<FramePanel>,
+    /// How that panel's map looks (set every frame before the panel itself, from the same
+    /// layout): read only for the map in the frame panel, never for the other pictures. None:
+    /// the navigator's own look.
+    pub frame_look: Option<FrameLook>,
     /// That panel's map in this frame's picture (texture pixels) and its cards, for `draw`:
     /// Some(None) a frame without a map; None no such panel.
-    framed: Option<Option<(Rect, bool)>>,
+    framed: Option<Option<(Rect, bool, [bool; 4])>>,
     /// The colour that panel gives the navigator's card (None: the card's own).
     frame_card: Option<Color>,
     /// What `framed` and `frame_card` were when the picture was last drawn (drawn again at
     /// once when they change).
-    framed_drawn: (Option<Option<(Rect, bool)>>, Option<Color>),
+    framed_drawn: (Option<Option<(Rect, bool, [bool; 4])>>, Option<Color>),
     /// A board was asked for once: the lower part opened for it by itself then.
     dock_seen: bool,
     /// The board's height in this frame's picture (physical pixels), for `draw`.
@@ -620,6 +624,7 @@ impl Navigator {
             dock: None,
             dock_slot: None,
             frame_panel: None,
+            frame_look: None,
             framed: None,
             frame_card: None,
             framed_drawn: (None, None),
@@ -1185,11 +1190,7 @@ impl Navigator {
             .frame_panel
             .filter(|_| !self.cockpit_display && self.shown > 0.99);
         let frame_room = (sh - 32.0 * s).max(map_h).round();
-        self.framed = whole.map(|p| {
-            p.map
-                .map(|m| framed_map(m, pw, p.height.max(1.0).min(frame_room).round()))
-                .filter(|(r, _)| r.w >= 1.0 && r.h >= 1.0)
-        });
+        self.framed = self.framed_now(whole, pw, frame_room);
         self.frame_card = whole.and_then(|p| p.background);
         self.board = self
             .dock
@@ -1277,14 +1278,43 @@ pub struct FrameMap {
     pub cards: bool,
 }
 
-/// Where a frame panel's map goes in a picture `pw` x `ph`: its rectangle kept inside it.
-fn framed_map(m: FrameMap, pw: f32, ph: f32) -> (Rect, bool) {
+/// How a frame panel's map looks, beside where it is (`FrameMap`): handed over on its own so
+/// that the map's look reaches the navigator without the panel's place changing hands.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FrameLook {
+    /// Which of the cards over it: the next turn, the clock, the speed, the next stop.
+    pub show: [bool; 4],
+}
+
+/// Where a frame panel's map goes in a picture `pw` x `ph`: its rectangle kept inside it, and
+/// which of its cards show (all of them without a look of the panel's).
+fn framed_map(m: FrameMap, look: Option<FrameLook>, pw: f32, ph: f32) -> (Rect, bool, [bool; 4]) {
     let [x, y, w, h] = m.rect;
     let (x, y) = (x.clamp(0.0, pw), y.clamp(0.0, ph));
     (
         Rect::new(x, y, w.clamp(0.0, pw - x), h.clamp(0.0, ph - y)),
         m.cards,
+        look.map_or([true; 4], |l| l.show),
     )
+}
+
+impl Navigator {
+    /// The frame panel `whole` shown this frame's map in the picture `pw` wide (the panel as
+    /// tall as it came to and as `frame_room` lets it be), with the panel's look: Some(None) a
+    /// frame without a map, None no such panel - and then no look of a plugin's at all.
+    fn framed_now(
+        &self,
+        whole: Option<FramePanel>,
+        pw: f32,
+        frame_room: f32,
+    ) -> Option<Option<(Rect, bool, [bool; 4])>> {
+        whole.map(|p| {
+            let ph = p.height.max(1.0).min(frame_room).round();
+            p.map
+                .map(|m| framed_map(m, self.frame_look, pw, ph))
+                .filter(|(r, ..)| r.w >= 1.0 && r.h >= 1.0)
+        })
+    }
 }
 
 /// The lanes of `net` that are traffic lane `l`: the same path by its key, else (a junction's

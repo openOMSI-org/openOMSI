@@ -173,6 +173,47 @@ fn a_panel_for_the_navigators_board() {
 }
 
 #[test]
+fn a_map_shows_some_of_the_cards() {
+    let p = panel(
+        r##"{ anchor = "navigator", frame = true, children = {
+        { type = "map", show = { clock = false, stop = false } },
+    } }"##,
+    )
+    .unwrap();
+    let Kind::Map { show, cards, .. } = &p.children[0].kind else {
+        panic!("a map");
+    };
+    assert!(*cards);
+    assert_eq!(
+        *show,
+        CardSet {
+            turn: true,
+            clock: false,
+            speed: true,
+            stop: false
+        }
+    );
+}
+
+#[test]
+fn a_map_outside_a_frame_panel_takes_a_show_without_a_word() {
+    let p = panel(r##"{ children = { { type = "map", show = { speed = false } } } }"##).unwrap();
+    assert!(!p.frame);
+    assert!(matches!(p.children[0].kind, Kind::Map { .. }));
+}
+
+#[test]
+fn a_show_of_a_number_is_refused() {
+    let e = panel(r##"{ children = { { type = "map", show = { turn = 1 } } } }"##).unwrap_err();
+    assert!(
+        e.contains("show.turn") && e.contains("true or false"),
+        "{e}"
+    );
+    let e = panel(r##"{ children = { { type = "map", show = true } } }"##).unwrap_err();
+    assert!(e.contains("show"), "{e}");
+}
+
+#[test]
 fn a_panel_that_fills_the_navigators_frame_with_its_map() {
     let p = panel(
         r##"{ anchor = "navigator", frame = true, children = {
@@ -187,7 +228,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[1].kind,
         Kind::Map {
             height: 180.0,
-            cards: false
+            cards: false,
+            show: CardSet::default()
         }
     );
     // (no height: the navigator's own map's; its cards over it)
@@ -195,7 +237,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[2].kind,
         Kind::Map {
             height: 0.0,
-            cards: true
+            cards: true,
+            show: CardSet::default()
         }
     );
     assert!(
@@ -518,4 +561,27 @@ fn controls_change_and_tell_their_plugin() {
     assert!(ui.update(1, "p", "nothing", &Value::map([]), None).is_err());
     ui.drag(1, "p", 5.0, -2.0);
     assert_eq!(ui.get(1, "p").unwrap().moved, (5.0, -2.0));
+}
+
+#[test]
+fn an_unknown_show_key_is_left_alone() {
+    // (a plugin written for a later game still shows here)
+    let p = panel(
+        r##"{ children = { { type = "map", show = { clock = false, weather = false } } } }"##,
+    )
+    .unwrap();
+    let Kind::Map { show, .. } = &p.children[0].kind else {
+        panic!("a map");
+    };
+    assert_eq!(
+        *show,
+        CardSet {
+            clock: false,
+            ..CardSet::default()
+        }
+    );
+    // (a key of the wrong kind is still refused, with its path)
+    let e = panel(r##"{ children = { { type = "map", show = { weather = false, turn = 1 } } } }"##)
+        .unwrap_err();
+    assert!(e.contains("show.turn"), "{e}");
 }

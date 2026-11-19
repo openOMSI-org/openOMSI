@@ -338,7 +338,7 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `7` (`6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
+`omsi.ui.version` is `8` (`7` before `show` on a `map`, `6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
 element, `4` before `grab`, `3` before boxes, stop lists and the other
 elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
 test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
@@ -411,7 +411,11 @@ it gives one, which the navigator paints as its card (with its corners and its o
 not the panel as a square of its own. The map, the place row and the
 stop list make way for it; the map shows only where the panel has a `map` element, with its
 own rounded corners, and the navigator's cards over it (the next turn, the clock, the speed,
-the next stop) unless the element says `cards = false`. The navigator stays the navigator: it
+the next stop) unless the element says `cards = false`; `show` (`omsi.ui.version` 8) picks which of
+them, a table of `turn`, `clock`, `speed` and `stop`, each `true` unless it is `false` (a key that is
+no card here is left alone, so a plugin written for a later game still shows; a key of
+another kind makes `ui.set` return `false` and the reason; `show` on a `map` outside such a panel
+does nothing). The navigator stays the navigator: it
 is moved and sized as before, Shift+N shows and hides it (there is no lower part to open), and
 a press on the map or on a part of the panel that takes no click is the navigator's - a drag
 moves it, a click opens the city map. A `grab` panel there takes clicks without the mouse on
@@ -424,7 +428,7 @@ version).
 ```lua
 omsi.ui.set("phone", { anchor = "navigator", frame = true, grab = true, padding = 10, children = {
   { type = "text", text = "Line 5 → Hauptbahnhof", weight = "bold" },
-  { type = "map", height = 200, cards = false },
+  { type = "map", height = 200, show = { turn = false, clock = false } },
   { type = "button", id = "next", text = "Next stop: Markt 09:14" },
 } })
 ```
@@ -443,7 +447,7 @@ Every element can have an `id`, a `color` and `visible = false` (left out, no ro
 | `box` (4) | `children`, `gap` (default 4), `color` (default amber) | its children stacked in a box tinted with `color`, a stripe of it on the left: a note, an advice |
 | `stops` (4) | `stops` (`{ { name, time, expected, expected_color, state, tag }, ... }`, up to 128), `size` (13), `color` (the rail, default amber) | stops on a rail, a row each: `state` `"done"` (behind the bus: grey), `"now"` (the one it heads for: marked, bold) or `"ahead"` (the default); `time` on the right, `expected` before it in `expected_color`, and `tag` (`"terminus"`) before them |
 | `divider` | `color` | a thin line (in a row: upright) |
-| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height |
+| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`), `show` (8: `{ turn, clock, speed, stop }`, each `true` unless `false`) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height |
 | `space` | `size` (default 8) | empty room (in a row: across) |
 | `button` | `id` (needed), `text`, `icon`, `color` | a button 34 high, across the panel (in a row as wide as its label, or what it grows to); a click on it is `ui_click(panel id, button id)` |
 | `image` | `src` (a PNG, JPEG, BMP or TGA of the plugin's folder), `width`, `height` (default 64) | the picture, made smaller to fit the width it has |
@@ -506,6 +510,7 @@ Complete plugins to start from (each runs in the tests against a stand-in game):
 | Plugin | What it shows |
 | --- | --- |
 | [`trip_panel.lua`](examples/plugins/trip_panel.lua) | a panel with the line, the next stop and a button |
+| [`navigator_map.lua`](examples/plugins/navigator_map.lua) | the navigator's frame as a panel of its own with the map in it, and only the speed and next stop cards over the map (`map`, `show`) |
 | [`dispatcher/`](examples/plugins/dispatcher/main.lua) | a dispatcher and a small career: a draggable panel with tabs, the duty's next stops in a table, a chart of the delays, pay for stops and trips kept in the storage, today's duties offered and taken with a click, settings, hotkeys |
 | [`telemetry_hud.lua`](examples/plugins/telemetry_hud.lua) | a HUD: the speed with a chart of the last minute, gear, rpm, fuel, passengers, the speed limit and the traffic light ahead; a warning before a red light; the values as JSON over UDP for a program beside the game |
 | [`passenger_log.lua`](examples/plugins/passenger_log.lua) | every passenger boarding the bus in `game.log`: age, boarding stop and destination, the ticket they will ask for (`passenger_ticket`, `people.get`) |

@@ -863,21 +863,33 @@ fn the_compass_keeps_clear_of_the_open_lines_panel() {
 #[test]
 fn a_frame_panel_s_map_stays_inside_the_navigator() {
     let m = |rect: [f32; 4]| FrameMap { rect, cards: false };
+    let look = Some(FrameLook {
+        show: [true, false, true, true],
+    });
     assert_eq!(
-        framed_map(m([10.0, 80.0, 340.0, 272.0]), 360.0, 500.0),
-        (Rect::new(10.0, 80.0, 340.0, 272.0), false)
+        framed_map(m([10.0, 80.0, 340.0, 272.0]), look, 360.0, 500.0),
+        (
+            Rect::new(10.0, 80.0, 340.0, 272.0),
+            false,
+            [true, false, true, true]
+        )
     );
     assert_eq!(
-        framed_map(m([10.0, 300.0, 400.0, 272.0]), 360.0, 500.0).0,
+        framed_map(m([10.0, 300.0, 400.0, 272.0]), look, 360.0, 500.0).0,
         Rect::new(10.0, 300.0, 350.0, 200.0)
     );
     assert_eq!(
-        framed_map(m([10.0, 600.0, 340.0, 272.0]), 360.0, 500.0).0.h,
+        framed_map(m([10.0, 600.0, 340.0, 272.0]), look, 360.0, 500.0)
+            .0
+            .h,
         0.0
     );
     // (no frame panel: the navigator lays itself out as ever)
     let n = Navigator::new(true, 0.85, "bottom-left");
-    assert_eq!((n.frame_panel, n.framed, n.frame_card), (None, None, None));
+    assert_eq!(
+        (n.frame_panel, n.frame_look, n.framed, n.frame_card),
+        (None, None, None, None)
+    );
 }
 
 #[test]
