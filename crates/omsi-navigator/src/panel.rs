@@ -676,7 +676,10 @@ impl Navigator {
             history,
             transit,
             &pal,
+            self.frame_marks.filter(|_| framed),
         );
+        // (the haze and the marks lie on the map: their own layer, see `marks_layer`)
+        let n_on_map = ui.len();
         if !look.no_nav_ui {
             self.draw_destination_markers(
                 &mut ui,
@@ -751,6 +754,7 @@ impl Navigator {
             depth_layer,
             depth_layer,
             backdrop,
+            marks_layer(framed, map, map_radius, flat),
         ];
         // The cockpit setting fades the map and its labels too; opaque map geometry
         // would otherwise cover the background whose opacity was changed.
@@ -811,7 +815,13 @@ impl Navigator {
             },
             Draw {
                 buffer: 2,
-                range: n_ui_start..all.len() as u32,
+                range: n_ui_start..n_ui_start + n_on_map,
+                layer: 6,
+                texture: 0,
+            },
+            Draw {
+                buffer: 2,
+                range: n_ui_start + n_on_map..all.len() as u32,
                 layer: 0,
                 texture: 0,
             },
@@ -953,6 +963,7 @@ impl Navigator {
         history: bool,
         mut transit: Vec<(DVec3, f64, Option<String>)>,
         pal: &Palette,
+        marks: Option<FrameMarks>,
     ) {
         let rel = |p: DVec3| Vec3::new((p.x - anchor.x) as f32, (p.y - anchor.y) as f32, 0.0);
         let n_stops = f.stops.len();
@@ -986,19 +997,15 @@ impl Navigator {
                 20.0 * s,
             );
             for (_, sp) in done.into_iter().rev() {
-                stop_pin_color(
-                    ui,
-                    &mut self.atlas,
-                    sp,
-                    false,
-                    false,
-                    s,
-                    Color::hex(0x808080),
-                );
+                let fill = stop_pin_color(PinKind::Done, false, None);
+                draw_pin(ui, &mut self.atlas, sp, false, false, s, fill);
             }
         }
         for (k, sp) in markers.into_iter().rev() {
-            stop_pin(ui, &mut self.atlas, sp, k == 0, k + 1 == n_stops, s);
+            let (next, last) = (k == 0, k + 1 == n_stops);
+            let closed = f.stops[k].closed.is_some();
+            let fill = stop_pin_color(PinKind::of(next, last), closed, marks.as_ref());
+            draw_pin(ui, &mut self.atlas, sp, next, last, s, fill);
         }
         transit.sort_by(|a, b| (a.0 - f.bus).length().total_cmp(&(b.0 - f.bus).length()));
         let mut taken: Vec<Rect> = Vec::new();
@@ -1051,7 +1058,8 @@ impl Navigator {
         }
         if let Some(bp) = project(vpm, vp, rel(f.bus)) {
             let a = (angle_diff(camera_heading, f.heading) as f32).to_radians();
-            puck(ui, bp, a, 10.0 * s, style::LIGHT.route);
+            let (fill, radius) = bus_mark(marks.as_ref());
+            puck(ui, bp, a, radius * s, fill);
         }
     }
 
@@ -1077,17 +1085,81 @@ pub(super) fn stop_pin(
     last: bool,
     s: f32,
 ) {
-    let fill = if next {
-        style::LIGHT.route
-    } else if last {
-        Color::hex(0xe5483d)
-    } else {
-        Color::hex(0x5d6b80)
-    };
-    stop_pin_color(ui, atlas, p, next, last, s, fill);
+    let fill = stop_pin_color(PinKind::of(next, last), false, None);
+    draw_pin(ui, atlas, p, next, last, s, fill);
 }
 
-fn stop_pin_color(
+/// The layer the haze and the marks over the map (the bus, the stops, the other players, the
+/// line tags) are drawn in: in a frame panel's map, cut off at the map's edges - with its
+/// corners - so that a puck or a pin by the edge is never drawn over the plugin's panel round
+/// it, however the frame is sized; on the navigator's own map, the panel's (`flat`) as ever.
+pub(super) fn marks_layer(framed: bool, map: Rect, map_radius: f32, flat: Layer) -> Layer {
+    if framed {
+        Layer::flat(
+            [map.x, map.y, map.right(), map.bottom()],
+            map_radius,
+            flat.opacity,
+        )
+    } else {
+        flat
+    }
+}
+
+/// Which colour a stop's pin has by where the stop is on the trip.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum PinKind {
+    /// The one the bus heads for.
+    Next,
+    /// The last one.
+    Last,
+    /// The others ahead.
+    Other,
+    /// Behind the bus.
+    Done,
+}
+
+impl PinKind {
+    /// The next stop wins where it is the last one as well.
+    fn of(next: bool, last: bool) -> PinKind {
+        match (next, last) {
+            (true, _) => PinKind::Next,
+            (_, true) => PinKind::Last,
+            _ => PinKind::Other,
+        }
+    }
+}
+
+/// The colour of a stop's pin: the navigator's own, or what a plugin's map asks for. A stop
+/// closed today has a colour of its own only where the map gives `closed_stop`; the stops behind
+/// the bus stay grey.
+fn stop_pin_color(kind: PinKind, closed: bool, marks: Option<&FrameMarks>) -> Color {
+    let own = marks.and_then(|m| match kind {
+        PinKind::Next => m.next_stop,
+        PinKind::Last => m.last_stop,
+        PinKind::Other => m.stop,
+        PinKind::Done => None,
+    });
+    let closed_as = marks
+        .and_then(|m| m.closed_stop)
+        .filter(|_| closed && kind != PinKind::Done);
+    closed_as.or(own).unwrap_or(match kind {
+        PinKind::Next => style::LIGHT.route,
+        PinKind::Last => Color::hex(0xe5483d),
+        PinKind::Other => Color::hex(0x5d6b80),
+        PinKind::Done => Color::hex(0x808080),
+    })
+}
+
+/// The bus's puck on the map: its colour and its radius, the navigator's own (the route's
+/// colour, 10) unless a plugin's map says otherwise.
+fn bus_mark(marks: Option<&FrameMarks>) -> (Color, f32) {
+    (
+        marks.and_then(|m| m.bus).unwrap_or(style::LIGHT.route),
+        marks.and_then(|m| m.bus_size).unwrap_or(10.0),
+    )
+}
+
+fn draw_pin(
     ui: &mut Painter,
     atlas: &mut Atlas,
     p: Vec2,

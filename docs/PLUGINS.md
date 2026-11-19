@@ -338,7 +338,7 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `7` (`6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
+`omsi.ui.version` is `8` (`7` before the marks of the bus and the stops on the navigator's map, `6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
 element, `4` before `grab`, `3` before boxes, stop lists and the other
 elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
 test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
@@ -429,6 +429,22 @@ omsi.ui.set("phone", { anchor = "navigator", frame = true, grab = true, padding 
 } })
 ```
 
+With `marks` (`omsi.ui.version` 8) the map draws the bus and the stops its own way, in a panel
+that fills the navigator's frame and nowhere else (the city map and the cockpit screens keep
+their colours): `bus = { color, size }` (the bus's colour, and its radius in pixels, 4 to 40 -
+a number outside that is held to it; the navigator's own are its route colour and 10), `stop`
+(the stops ahead), `next_stop` (the one the bus heads for) and `last_stop`, each a colour like
+`"#RRGGBB"`, and `closed_stop`: a stop ahead of the bus closed today (`duty.set_closed_stops`)
+then has a pin of that colour in place of its `stop`, `next_stop` or `last_stop` colour (without
+it, a closed stop is coloured as an open one). The stops behind the bus stay grey, closed or
+not. What is left out is drawn as before; a key that is no mark here (in `marks` or in `bus`) is
+left alone, so a plugin written for a later game still shows; a mark of the wrong kind is an
+error that says where it is.
+
+```lua
+{ type = "map", marks = { bus = { color = "#1565C0", size = 14 }, closed_stop = "#C62828" } },
+```
+
 #### Elements
 
 Every element can have an `id`, a `color` and `visible = false` (left out, no room kept).
@@ -443,7 +459,7 @@ Every element can have an `id`, a `color` and `visible = false` (left out, no ro
 | `box` (4) | `children`, `gap` (default 4), `color` (default amber) | its children stacked in a box tinted with `color`, a stripe of it on the left: a note, an advice |
 | `stops` (4) | `stops` (`{ { name, time, expected, expected_color, state, tag }, ... }`, up to 128), `size` (13), `color` (the rail, default amber) | stops on a rail, a row each: `state` `"done"` (behind the bus: grey), `"now"` (the one it heads for: marked, bold) or `"ahead"` (the default); `time` on the right, `expected` before it in `expected_color`, and `tag` (`"terminus"`) before them |
 | `divider` | `color` | a thin line (in a row: upright) |
-| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height |
+| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`), `marks` (8; see below) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height |
 | `space` | `size` (default 8) | empty room (in a row: across) |
 | `button` | `id` (needed), `text`, `icon`, `color` | a button 34 high, across the panel (in a row as wide as its label, or what it grows to); a click on it is `ui_click(panel id, button id)` |
 | `image` | `src` (a PNG, JPEG, BMP or TGA of the plugin's folder), `width`, `height` (default 64) | the picture, made smaller to fit the width it has |
@@ -506,6 +522,7 @@ Complete plugins to start from (each runs in the tests against a stand-in game):
 | Plugin | What it shows |
 | --- | --- |
 | [`trip_panel.lua`](examples/plugins/trip_panel.lua) | a panel with the line, the next stop and a button |
+| [`navigator_map.lua`](examples/plugins/navigator_map.lua) | a panel that fills the navigator's frame, its map with the bus and the stops marked in colours of the plugin's own |
 | [`dispatcher/`](examples/plugins/dispatcher/main.lua) | a dispatcher and a small career: a draggable panel with tabs, the duty's next stops in a table, a chart of the delays, pay for stops and trips kept in the storage, today's duties offered and taken with a click, settings, hotkeys |
 | [`telemetry_hud.lua`](examples/plugins/telemetry_hud.lua) | a HUD: the speed with a chart of the last minute, gear, rpm, fuel, passengers, the speed limit and the traffic light ahead; a warning before a red light; the values as JSON over UDP for a program beside the game |
 | [`passenger_log.lua`](examples/plugins/passenger_log.lua) | every passenger boarding the bus in `game.log`: age, boarding stop and destination, the ticket they will ask for (`passenger_ticket`, `people.get`) |

@@ -32,7 +32,8 @@ pub use read::{ToastSpec, panel_from_source, parse_panel, parse_toast};
 /// 6: a navigator panel that fills the navigator's whole frame (`frame`), and the navigator's
 /// map as an element of it (`map`).
 /// 7: the interface themes (`ui.themes`, `ui.theme`, `ui.set_theme`).
-pub const VERSION: i64 = 7;
+/// 8: marks of the bus and the stops on the navigator's map (`map`'s `marks`).
+pub const VERSION: i64 = 8;
 /// Most panels of one plugin.
 pub const MAX_PANELS: usize = 16;
 /// Most elements of one panel, those in rows included.
@@ -382,11 +383,28 @@ pub enum Kind {
     },
     /// The navigator's map, in a panel that fills its frame: `height` (0: as high as the
     /// navigator's own map, 0.8 times its width), `cards` the navigator's cards over it (the
-    /// next turn, the clock, the speed, the next stop). Elsewhere empty room.
+    /// next turn, the clock, the speed, the next stop), `marks` how the bus and the stops look
+    /// on it (None: as the navigator draws them). Elsewhere empty room.
     Map {
         height: f32,
         cards: bool,
+        marks: Option<MapMarks>,
     },
+}
+
+/// How the bus and the stops look on the navigator's map in a panel that fills its frame; a
+/// mark not given is the navigator's own.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct MapMarks {
+    pub bus: Option<Rgba>,
+    /// The bus's radius in pixels (4 to 40; the navigator's own is 10).
+    pub bus_size: Option<f32>,
+    /// The stops ahead, the one the bus heads for, and the last one.
+    pub stop: Option<Rgba>,
+    pub next_stop: Option<Rgba>,
+    pub last_stop: Option<Rgba>,
+    /// A stop closed today (`duty.set_closed_stops`); not given, it is one of the others.
+    pub closed_stop: Option<Rgba>,
 }
 
 /// A notification card of `omsi.ui.toast`.

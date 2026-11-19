@@ -25,7 +25,7 @@ use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Vertex, Weig
 
 pub mod input;
 mod nav;
-pub use nav::{Docked, DockedMap};
+pub use nav::{Docked, DockedMap, DockedMarks};
 mod look;
 #[cfg(test)]
 mod preview;
@@ -114,6 +114,8 @@ pub struct Laid {
     /// Where its first `map` element is, and whether the navigator's cards go over it: the
     /// navigator draws its map there under a panel that fills its frame.
     pub map: Option<(Rect, bool)>,
+    /// How that map draws the bus and the stops (its `marks`).
+    pub map_marks: Option<pui::MapMarks>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1226,6 +1228,7 @@ impl PluginPanels {
                             (r.h * ck).round(),
                         ],
                         cards,
+                        marks: card.laid.map_marks.as_ref().map(nav::docked_marks),
                     });
                     let background = e.panel.background.filter(|_| e.panel.frame).map(color);
                     self.docked = Some(Docked {

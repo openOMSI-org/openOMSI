@@ -352,14 +352,25 @@ pub struct Navigator {
     /// map's, the place row's and the board's place, and the map shows only where the panel
     /// says (physical pixels, from the last frame). Set, `dock_slot` is the whole frame.
     pub frame_panel: Option<FramePanel>,
+    /// How that panel's map looks (set every frame before the panel itself, from the same
+    /// layout): read only for the map in the frame panel, never for the other pictures. None:
+    /// the navigator's own look.
+    pub frame_look: Option<FrameLook>,
     /// That panel's map in this frame's picture (texture pixels) and its cards, for `draw`:
     /// Some(None) a frame without a map; None no such panel.
     framed: Option<Option<(Rect, bool)>>,
     /// The colour that panel gives the navigator's card (None: the card's own).
     frame_card: Option<Color>,
-    /// What `framed` and `frame_card` were when the picture was last drawn (drawn again at
-    /// once when they change).
-    framed_drawn: (Option<Option<(Rect, bool)>>, Option<Color>),
+    /// How that panel's map draws the bus and the stops (only the picture of the frame panel
+    /// is drawn with it: not the cockpit's screen, not the remote picture, not the city map).
+    frame_marks: Option<FrameMarks>,
+    /// What `framed`, `frame_card` and `frame_marks` were when the picture was last drawn
+    /// (drawn again at once when they change).
+    framed_drawn: (
+        Option<Option<(Rect, bool)>>,
+        Option<Color>,
+        Option<FrameMarks>,
+    ),
     /// A board was asked for once: the lower part opened for it by itself then.
     dock_seen: bool,
     /// The board's height in this frame's picture (physical pixels), for `draw`.
@@ -620,9 +631,11 @@ impl Navigator {
             dock: None,
             dock_slot: None,
             frame_panel: None,
+            frame_look: None,
             framed: None,
             frame_card: None,
-            framed_drawn: (None, None),
+            frame_marks: None,
+            framed_drawn: (None, None, None),
             dock_seen: false,
             board: None,
             speed_avg: 8.0,
@@ -1191,6 +1204,10 @@ impl Navigator {
                 .filter(|(r, _)| r.w >= 1.0 && r.h >= 1.0)
         });
         self.frame_card = whole.and_then(|p| p.background);
+        self.frame_marks = whole
+            .and_then(|p| p.map)
+            .and(self.frame_look)
+            .and_then(|l| l.marks);
         self.board = self
             .dock
             .filter(|_| {
@@ -1241,10 +1258,10 @@ impl Navigator {
         if !self.city.open
             && (resized
                 || self.frames_since_drawn >= self.draw_every
-                || (self.framed, self.frame_card) != self.framed_drawn)
+                || (self.framed, self.frame_card, self.frame_marks) != self.framed_drawn)
         {
             self.frames_since_drawn = 0;
-            self.framed_drawn = (self.framed, self.frame_card);
+            self.framed_drawn = (self.framed, self.frame_card, self.frame_marks);
             self.draw(renderer, &view, (w, h), map_h, &look, None, f);
         }
         // (the small navigator steps aside while the city map is open)
@@ -1275,6 +1292,27 @@ pub struct FramePanel {
 pub struct FrameMap {
     pub rect: [f32; 4],
     pub cards: bool,
+}
+
+/// How a frame panel's map looks, beside where it is (`FrameMap`): handed over on its own so
+/// that the map's look reaches the navigator without the panel's place changing hands.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FrameLook {
+    /// How the map draws the bus and the stops (None: as it always did).
+    pub marks: Option<FrameMarks>,
+}
+
+/// The colours (and the bus's radius) a plugin's map gives the bus and the stops; what is not
+/// given is the navigator's own.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct FrameMarks {
+    pub bus: Option<Color>,
+    pub bus_size: Option<f32>,
+    pub stop: Option<Color>,
+    pub next_stop: Option<Color>,
+    pub last_stop: Option<Color>,
+    /// A stop closed today gets a pin in this colour; not given, it is one of the others.
+    pub closed_stop: Option<Color>,
 }
 
 /// Where a frame panel's map goes in a picture `pw` x `ph`: its rectangle kept inside it.

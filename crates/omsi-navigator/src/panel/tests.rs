@@ -68,3 +68,90 @@ fn destination_card_keeps_speed_limit_indicator_data() {
 
     assert_eq!(nav.speed_limit, Some(50.0));
 }
+
+/// Without marks the stops' pins are the colours they always had; a closed stop is one of the
+/// others, and the stops behind the bus are grey.
+#[test]
+fn no_marks_are_todays_pins() {
+    for closed in [false, true] {
+        assert_eq!(
+            stop_pin_color(PinKind::Next, closed, None),
+            style::LIGHT.route
+        );
+        assert_eq!(
+            stop_pin_color(PinKind::Last, closed, None),
+            Color::hex(0xe5483d)
+        );
+        assert_eq!(
+            stop_pin_color(PinKind::Other, closed, None),
+            Color::hex(0x5d6b80)
+        );
+        assert_eq!(
+            stop_pin_color(PinKind::Done, closed, None),
+            Color::hex(0x808080)
+        );
+    }
+    // (marks that name nothing change nothing either)
+    let none = FrameMarks::default();
+    for kind in [PinKind::Next, PinKind::Last, PinKind::Other, PinKind::Done] {
+        assert_eq!(
+            stop_pin_color(kind, true, Some(&none)),
+            stop_pin_color(kind, true, None)
+        );
+    }
+}
+
+#[test]
+fn a_closed_stop_gets_its_colour_only_when_asked() {
+    let pink = Color::hex(0xff00aa);
+    let teal = Color::hex(0x00aaaa);
+    let asked = FrameMarks {
+        closed_stop: Some(pink),
+        stop: Some(teal),
+        ..Default::default()
+    };
+    // (a closed stop has the colour of its own, an open one that of its kind)
+    assert_eq!(stop_pin_color(PinKind::Other, true, Some(&asked)), pink);
+    assert_eq!(stop_pin_color(PinKind::Other, false, Some(&asked)), teal);
+    // (not asked: the closed stop is one of the others as before)
+    let plain = FrameMarks {
+        stop: Some(teal),
+        ..Default::default()
+    };
+    assert_eq!(stop_pin_color(PinKind::Other, true, Some(&plain)), teal);
+    // (the ones behind the bus stay grey)
+    assert_eq!(
+        stop_pin_color(PinKind::Done, true, Some(&asked)),
+        Color::hex(0x808080)
+    );
+    // (the next and the last stop have a colour each)
+    let ends = FrameMarks {
+        next_stop: Some(pink),
+        last_stop: Some(teal),
+        ..Default::default()
+    };
+    assert_eq!(stop_pin_color(PinKind::Next, false, Some(&ends)), pink);
+    assert_eq!(stop_pin_color(PinKind::Last, false, Some(&ends)), teal);
+    assert_eq!(
+        stop_pin_color(PinKind::Other, false, Some(&ends)),
+        Color::hex(0x5d6b80)
+    );
+}
+
+/// The bus is the navigator's red-orange puck of 10 unless the marks say otherwise: no marks,
+/// or none for the bus, keep it.
+#[test]
+fn the_bus_puck_is_todays_without_marks() {
+    assert_eq!(bus_mark(None), (style::LIGHT.route, 10.0));
+    assert_eq!(
+        bus_mark(Some(&FrameMarks::default())),
+        (style::LIGHT.route, 10.0)
+    );
+
+    let m = FrameMarks {
+        bus: Some(Color::hex(0x00aa00)),
+        bus_size: Some(16.0),
+        ..Default::default()
+    };
+    assert_eq!(bus_mark(Some(&m)), (Color::hex(0x00aa00), 16.0));
+}

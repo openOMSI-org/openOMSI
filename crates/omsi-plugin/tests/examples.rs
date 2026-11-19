@@ -266,3 +266,27 @@ fn the_passenger_log_runs() {
     no_errors(&g);
     assert!(g.log.borrow().is_empty(), "it only reads");
 }
+
+#[test]
+fn the_navigator_map_marks_the_bus_and_the_stops() {
+    let mut p = load("ex-navmap", "navigator_map.lua");
+    let mut g = Game::new();
+    for _ in 0..3 {
+        p.frame(&mut g);
+    }
+    no_errors(&g);
+    assert_eq!(panel_ids(&p), ["map"]);
+    let ui = p.ui.borrow();
+    let panel = &ui.panels()[0].panel;
+    assert!(panel.frame);
+    let marks = panel
+        .children
+        .iter()
+        .find_map(|c| match &c.kind {
+            omsi_plugin::ui::Kind::Map { marks, .. } => *marks,
+            _ => None,
+        })
+        .expect("the map's marks");
+    assert_eq!(marks.bus_size, Some(14.0));
+    assert!(marks.closed_stop.is_some());
+}
