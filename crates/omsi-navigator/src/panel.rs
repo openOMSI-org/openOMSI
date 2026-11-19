@@ -146,16 +146,7 @@ fn history_route(
     bus_lane: usize,
     pal: &Palette,
 ) {
-    let visible = |id: usize| {
-        net.lanes.get(id).is_some_and(|l| {
-            l.points.windows(2).any(|p| {
-                let a = p[0].truncate();
-                let d = p[1].truncate() - a;
-                let t = ((anchor - a).dot(d) / d.length_squared().max(1e-12)).clamp(0.0, 1.0);
-                (a + d * t - anchor).length() <= reach
-            })
-        })
-    };
+    let visible = |id: usize| lane_near(net, id, anchor, reach);
     let full_style = RouteStyle {
         near: None,
         max_len: f32::MAX,
@@ -318,12 +309,12 @@ impl Navigator {
         let panel = Rect::new(0.0, 0.0, pw, ph);
         let radius = look.radius;
         // (under a plugin's panel in the whole frame: its map where it says, rounded as a card
-        // of its own, or no map at all)
+        // of its own, or no map at all; the route's look it asks for there alone)
         let plugin_frame = self.framed.filter(|_| look.plugins);
-        let (map, cards, map_radius) = match plugin_frame {
-            Some(Some((r, cards))) => (r, cards, (10.0 * s).min(radius)),
+        let (map, cards, map_radius, route_look) = match plugin_frame {
+            Some(Some((r, cards, route))) => (r, cards, (10.0 * s).min(radius), route),
             Some(None) => return self.draw_card_alone(renderer, target, size, &pal, look),
-            None => (Rect::new(0.0, 0.0, pw, map_h), true, radius),
+            None => (Rect::new(0.0, 0.0, pw, map_h), true, radius, None),
         };
         let framed = plugin_frame.is_some();
         let vp = [map.x, map.y, map.w, map.h];
@@ -498,100 +489,26 @@ impl Navigator {
         let mut route_verts: Option<(usize, u64, std::sync::Arc<[omsi_ui::paint::Vertex]>)> = None;
         let mut route_count = 0;
         let history = look.show_history && self.destination.is_none();
-        let history_slot = usize::from(history);
         let route_net = global.as_deref().or(f.traffic.map(|t| &t.net));
         if let (Some(rn), true) = (route_net, !self.route.lanes.is_empty()) {
-            let first = self
-                .route
-                .lanes
-                .get(
-                    self.route
-                        .progress
-                        .min(self.route.lanes.len().saturating_sub(1)),
-                )
-                .copied();
-            let bus_lane = first.map(|l| lane_from_right(rn, l, f.bus)).unwrap_or(0);
-            let key = (
-                self.route.version,
-                self.jam_version,
-                anchor,
-                bus_lane,
-                look_key,
-                self.route.s,
-            );
-            let cached_route = self.route_mesh_history[history_slot].as_ref();
-            let route_changed = cached_route.is_none_or(|(cached, _, _)| {
-                built.is_some()
-                    || cached.0 != key.0
-                    || cached.1 != key.1
-                    || cached.2 != key.2
-                    || cached.3 != key.3
-                    || cached.4 != key.4
-                    || route_position_changed(cached.5, key.5)
-            });
-            if route_changed {
-                let mut p = Painter::new();
-                let route_reach = self
-                    .roads
-                    .as_ref()
-                    .map_or(PANEL_REACH, |r| r.reach.max(PANEL_REACH));
-                let style = RouteStyle {
-                    extra_m: -0.6,
-                    min_px: 5.0,
-                    arrows: Some((32.0, 900.0)),
-                    max_len: 12_000.0,
-                    near: Some((anchor, route_reach)),
-                };
-                if history {
-                    let lanes = if self.route.original_lanes.is_empty() {
-                        &self.route.lanes
-                    } else {
-                        &self.route.original_lanes
-                    };
-                    history_route(
-                        &mut p,
-                        rn,
-                        lanes,
-                        anchor,
-                        route_reach,
-                        &self.route_jam,
-                        &style,
-                        bus_lane,
-                        &pal,
-                    );
-                }
-                mapmesh::roads::build_route_to(
-                    &mut p,
-                    rn,
-                    &self.route.lanes[self.route.progress.min(self.route.lanes.len())..],
-                    anchor,
-                    self.route.s,
-                    &self.route_jam,
-                    &style,
-                    bus_lane,
-                    &pal,
-                    self.destination
-                        .as_ref()
-                        .and_then(|d| d.path.as_ref().map(|p| p.end_s)),
-                );
-                self.draw_waypoint_routes(&mut p, rn, anchor, &style, &pal);
-                let count = p.len();
-                self.route_mesh_history[history_slot] = Some((key, p.verts.into(), count));
-                self.route_mesh_generation[history_slot] =
-                    self.route_mesh_generation[history_slot].wrapping_add(1);
-            }
-            if let Some((_, verts, count)) = &self.route_mesh_history[history_slot] {
+            let route_reach = self
+                .roads
+                .as_ref()
+                .map_or(PANEL_REACH, |r| r.reach.max(PANEL_REACH));
+            let on = (anchor, look_key, route_reach);
+            let slot = self.route_mesh(rn, f, (history, route_look), on, built.is_some(), &pal);
+            if let Some((_, verts, count)) = &self.route_mesh_history[slot] {
                 route_count = *count;
-                let generation = self.route_mesh_generation[history_slot];
-                if self.route_mesh_uploaded != Some((history_slot, generation)) {
-                    route_verts = Some((history_slot, generation, verts.clone()));
+                let generation = self.route_mesh_generation[slot];
+                if self.route_mesh_uploaded != Some((slot, generation)) {
+                    route_verts = Some((slot, generation, verts.clone()));
                 }
             }
         } else if self.route_mesh_history.iter().any(Option::is_some) {
             route_verts = self
                 .route_mesh_uploaded
                 .map(|_| (usize::MAX, 0, std::sync::Arc::from([])));
-            self.route_mesh_history = [None, None];
+            self.route_mesh_history = Default::default();
             self.route_mesh_uploaded = None;
         }
 
@@ -787,7 +704,11 @@ impl Navigator {
         draws.extend([
             Draw {
                 buffer: 9,
-                range: 0..if three && solid_n > 0 { route_n } else { 0 },
+                range: 0..if three && solid_n > 0 && ghost_shown(route_look.as_ref()) {
+                    route_n
+                } else {
+                    0
+                },
                 layer: 1,
                 texture: 0,
             },
@@ -851,6 +772,101 @@ impl Navigator {
         } else {
             renderer.submit_with_frame(drawn);
         }
+    }
+
+    /// The route's mesh in its cache slot (`route_slot`, which it returns), built again for a
+    /// change of the route, of the jams, of the ground (`built`, its anchor or its look), of the
+    /// route's `look` (a frame map's own; None: the navigator's), or three metres of progress.
+    pub(super) fn route_mesh(
+        &mut self,
+        rn: &Network,
+        f: &NavFrame,
+        (history, look): (bool, Option<FrameRoute>),
+        (anchor, look_key, route_reach): (DVec2, u64, f64),
+        built: bool,
+        pal: &Palette,
+    ) -> usize {
+        let slot = route_slot(history, look);
+        let at = self
+            .route
+            .progress
+            .min(self.route.lanes.len().saturating_sub(1));
+        let first = self.route.lanes.get(at).copied();
+        let bus_lane = first.map(|l| lane_from_right(rn, l, f.bus)).unwrap_or(0);
+        let key = (
+            self.route.version,
+            self.jam_version,
+            anchor,
+            bus_lane,
+            look_key,
+            self.route.s,
+            look,
+        );
+        let cached_route = self.route_mesh_history[slot].as_ref();
+        let route_changed = cached_route.is_none_or(|(cached, _, _)| {
+            built
+                || cached.0 != key.0
+                || cached.1 != key.1
+                || cached.2 != key.2
+                || cached.3 != key.3
+                || cached.4 != key.4
+                || cached.6 != key.6
+                || route_position_changed(cached.5, key.5)
+        });
+        if !route_changed {
+            return slot;
+        }
+        let mut p = Painter::new();
+        let style = route_style(look.as_ref(), anchor, route_reach);
+        let pal = route_palette(pal, look.as_ref());
+        // (jams not shown: no lane is slow, so the route keeps its own colour all along)
+        let calm = HashMap::new();
+        let jam = if jams_shown(look.as_ref()) {
+            &self.route_jam
+        } else {
+            &calm
+        };
+        if history {
+            let lanes = if self.route.original_lanes.is_empty() {
+                &self.route.lanes
+            } else {
+                &self.route.original_lanes
+            };
+            history_route(
+                &mut p,
+                rn,
+                lanes,
+                anchor,
+                route_reach,
+                jam,
+                &style,
+                bus_lane,
+                &pal,
+            );
+        }
+        if let Some(colour) = look.and_then(|l| l.driven) {
+            let driven = (&self.route.lanes[..=at], self.route.s);
+            driven_route(&mut p, rn, driven, (anchor, route_reach), &style, colour);
+        }
+        mapmesh::roads::build_route_to(
+            &mut p,
+            rn,
+            &self.route.lanes[self.route.progress.min(self.route.lanes.len())..],
+            anchor,
+            self.route.s,
+            jam,
+            &style,
+            bus_lane,
+            &pal,
+            self.destination
+                .as_ref()
+                .and_then(|d| d.path.as_ref().map(|p| p.end_s)),
+        );
+        self.draw_waypoint_routes_in(&mut p, rn, anchor, &style, &pal, jam);
+        let count = p.len();
+        self.route_mesh_history[slot] = Some((key, p.verts.into(), count));
+        self.route_mesh_generation[slot] = self.route_mesh_generation[slot].wrapping_add(1);
+        slot
     }
 
     /// The corner to pull for another size, on a navigator that is a widget.

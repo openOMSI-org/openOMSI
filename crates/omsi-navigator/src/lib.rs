@@ -326,6 +326,17 @@ struct Roads {
     built_at: f32,
 }
 
+/// A frame panel's map in the picture, its cards and the route's look on it (`framed`).
+type FramedMap = Option<Option<(Rect, bool, Option<FrameRoute>)>>;
+
+/// A route mesh with what it was built for: the route's version, the jams' version, the
+/// ground's anchor, the bus's lane, the ground's look, how far along and the route's look.
+type RouteMesh = (
+    (u64, u64, DVec2, usize, u64, f32, Option<FrameRoute>),
+    std::sync::Arc<[omsi_ui::paint::Vertex]>,
+    u32,
+);
+
 pub struct Navigator {
     /// The current small-map texture in Scene::overlays, for the cockpit display.
     pub panel_overlay: Option<usize>,
@@ -352,14 +363,18 @@ pub struct Navigator {
     /// map's, the place row's and the board's place, and the map shows only where the panel
     /// says (physical pixels, from the last frame). Set, `dock_slot` is the whole frame.
     pub frame_panel: Option<FramePanel>,
-    /// That panel's map in this frame's picture (texture pixels) and its cards, for `draw`:
-    /// Some(None) a frame without a map; None no such panel.
-    framed: Option<Option<(Rect, bool)>>,
+    /// How that panel's map looks (set every frame before the panel itself, from the same
+    /// layout): read only for the map in the frame panel, never for the other pictures. None:
+    /// the navigator's own look.
+    pub frame_look: Option<FrameLook>,
+    /// That panel's map in this frame's picture (texture pixels), its cards and the route's
+    /// look on it, for `draw`: Some(None) a frame without a map; None no such panel.
+    framed: FramedMap,
     /// The colour that panel gives the navigator's card (None: the card's own).
     frame_card: Option<Color>,
     /// What `framed` and `frame_card` were when the picture was last drawn (drawn again at
     /// once when they change).
-    framed_drawn: (Option<Option<(Rect, bool)>>, Option<Color>),
+    framed_drawn: (FramedMap, Option<Color>),
     /// A board was asked for once: the lower part opened for it by itself then.
     dock_seen: bool,
     /// The board's height in this frame's picture (physical pixels), for `draw`.
@@ -417,12 +432,9 @@ pub struct Navigator {
     waypoints: Vec<destination::Destination>,
     duty_route: Option<Route>,
     entries: Vec<destination::EntryMarker>,
-    route_mesh_history: [Option<(
-        (u64, u64, DVec2, usize, u64, f32),
-        std::sync::Arc<[omsi_ui::paint::Vertex]>,
-        u32,
-    )>; 2],
-    route_mesh_generation: [u64; 2],
+    /// The route's meshes, by `route_slot`.
+    route_mesh_history: [Option<RouteMesh>; 4],
+    route_mesh_generation: [u64; 4],
     route_mesh_uploaded: Option<(usize, u64)>,
     completed_stops: Vec<NavStop>,
     trip_completed: bool,
@@ -620,6 +632,7 @@ impl Navigator {
             dock: None,
             dock_slot: None,
             frame_panel: None,
+            frame_look: None,
             framed: None,
             frame_card: None,
             framed_drawn: (None, None),
@@ -652,8 +665,8 @@ impl Navigator {
             waypoints: Vec::new(),
             duty_route: None,
             entries: Vec::new(),
-            route_mesh_history: [None, None],
-            route_mesh_generation: [0; 2],
+            route_mesh_history: Default::default(),
+            route_mesh_generation: [0; 4],
             route_mesh_uploaded: None,
             completed_stops: Vec::new(),
             trip_completed: false,
@@ -994,7 +1007,7 @@ impl Navigator {
                     // routes and roads again on the whole map
                     self.roads = None;
                     self.reset_navigation_network();
-                    self.route_mesh_history = [None, None];
+                    self.route_mesh_history = Default::default();
                     self.route_mesh_uploaded = None;
                     self.route_jam.clear();
                 }
@@ -1185,11 +1198,7 @@ impl Navigator {
             .frame_panel
             .filter(|_| !self.cockpit_display && self.shown > 0.99);
         let frame_room = (sh - 32.0 * s).max(map_h).round();
-        self.framed = whole.map(|p| {
-            p.map
-                .map(|m| framed_map(m, pw, p.height.max(1.0).min(frame_room).round()))
-                .filter(|(r, _)| r.w >= 1.0 && r.h >= 1.0)
-        });
+        self.framed = self.framed_now(whole, pw, frame_room);
         self.frame_card = whole.and_then(|p| p.background);
         self.board = self
             .dock
@@ -1277,14 +1286,45 @@ pub struct FrameMap {
     pub cards: bool,
 }
 
-/// Where a frame panel's map goes in a picture `pw` x `ph`: its rectangle kept inside it.
-fn framed_map(m: FrameMap, pw: f32, ph: f32) -> (Rect, bool) {
+/// How a frame panel's map looks, beside where it is (`FrameMap`): handed over on its own so
+/// that the map's look reaches the navigator without the panel's place changing hands.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FrameLook {
+    /// The route's look on it (None: as the other pictures draw it).
+    pub route: Option<FrameRoute>,
+}
+
+/// Where a frame panel's map goes in a picture `pw` x `ph`: its rectangle kept inside it, and
+/// the route's look the panel gives it. A route's look that changes nothing is none (the route
+/// as the other pictures draw it).
+fn framed_map(
+    m: FrameMap,
+    look: Option<FrameLook>,
+    pw: f32,
+    ph: f32,
+) -> (Rect, bool, Option<FrameRoute>) {
     let [x, y, w, h] = m.rect;
     let (x, y) = (x.clamp(0.0, pw), y.clamp(0.0, ph));
     (
         Rect::new(x, y, w.clamp(0.0, pw - x), h.clamp(0.0, ph - y)),
         m.cards,
+        look.and_then(|l| l.route)
+            .filter(|r| *r != FrameRoute::default()),
     )
+}
+
+impl Navigator {
+    /// The frame panel `whole` shown this frame's map in the picture `pw` wide (the panel as
+    /// tall as it came to and as `frame_room` lets it be), with the panel's look: Some(None) a
+    /// frame without a map, None no such panel - and then no look of a plugin's at all.
+    fn framed_now(&self, whole: Option<FramePanel>, pw: f32, frame_room: f32) -> FramedMap {
+        whole.map(|p| {
+            let ph = p.height.max(1.0).min(frame_room).round();
+            p.map
+                .map(|m| framed_map(m, self.frame_look, pw, ph))
+                .filter(|(r, ..)| r.w >= 1.0 && r.h >= 1.0)
+        })
+    }
 }
 
 /// The lanes of `net` that are traffic lane `l`: the same path by its key, else (a junction's
@@ -1357,6 +1397,9 @@ mod relief;
 mod surface;
 pub use omsi_mapdraw as mapmesh;
 pub use omsi_mapdraw::style;
+mod frame_route;
+pub use frame_route::FrameRoute;
+use frame_route::*;
 mod panel;
 mod screen;
 pub use screen::Screen;

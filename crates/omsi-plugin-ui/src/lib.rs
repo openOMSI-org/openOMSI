@@ -25,7 +25,7 @@ use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Vertex, Weig
 
 pub mod input;
 mod nav;
-pub use nav::{Docked, DockedMap};
+pub use nav::{Docked, DockedMap, DockedRoute};
 mod look;
 #[cfg(test)]
 mod preview;
@@ -111,9 +111,9 @@ pub struct Laid {
     pub hits: Vec<Hit>,
     /// Drawn without a shadow round it (a panel in the navigator's board).
     pub flat: bool,
-    /// Where its first `map` element is, and whether the navigator's cards go over it: the
-    /// navigator draws its map there under a panel that fills its frame.
-    pub map: Option<(Rect, bool)>,
+    /// Where its first `map` element is, whether the navigator's cards go over it and the
+    /// route's look: the navigator draws its map there under a panel that fills its frame.
+    pub map: Option<(Rect, bool, Option<pui::MapRoute>)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -805,10 +805,10 @@ fn cut(l: &mut Laid, h: f32) {
         x.r.h = (h - x.r.y).clamp(0.0, x.r.h);
     }
     // (the map too: as much of it as there is room for, none below the cut)
-    if let Some((r, _)) = l.map.as_mut() {
+    if let Some((r, ..)) = l.map.as_mut() {
         r.h = (h - r.y).clamp(0.0, r.h);
     }
-    l.map = l.map.filter(|(r, _)| r.h > 0.0);
+    l.map = l.map.filter(|(r, ..)| r.h > 0.0);
 }
 
 /// The hit under `p` (card pixels): the last one drawn there.
@@ -1218,7 +1218,7 @@ impl PluginPanels {
             }
             match dock {
                 Some(d) => {
-                    let map = card.laid.map.map(|(r, cards)| DockedMap {
+                    let map = card.laid.map.map(|(r, cards, route)| DockedMap {
                         rect: [
                             (r.x * ck).round(),
                             (r.y * ck).round(),
@@ -1226,6 +1226,7 @@ impl PluginPanels {
                             (r.h * ck).round(),
                         ],
                         cards,
+                        route: route.as_ref().map(nav::docked_route),
                     });
                     let background = e.panel.background.filter(|_| e.panel.frame).map(color);
                     self.docked = Some(Docked {

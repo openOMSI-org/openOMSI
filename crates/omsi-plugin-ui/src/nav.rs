@@ -6,7 +6,7 @@
 
 use super::{BADGE_H, BADGE_PAD, BADGE_PX, Item, Layout, color, ink_on};
 use glam::Vec2;
-use omsi_plugin::ui::{Element, Kind, Panel, Rgba, Stop, StopState};
+use omsi_plugin::ui::{Element, Kind, MapRoute, Panel, Rgba, Stop, StopState};
 use omsi_ui::{Color, Rect, Weight};
 
 /// The panel for the navigator as it was laid out, in physical pixels.
@@ -39,11 +39,38 @@ pub(crate) fn in_navigator(p: &Panel, width: f32) -> Panel {
 }
 
 /// The navigator's map in a panel that fills its frame: where it goes (physical pixels, from
-/// the panel's top left: x, y, width, height) and whether the navigator's cards go over it.
+/// the panel's top left: x, y, width, height), whether the navigator's cards go over it and
+/// how the route looks on it (None: as the navigator draws it).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DockedMap {
     pub rect: [f32; 4],
     pub cards: bool,
+    pub route: Option<DockedRoute>,
+}
+
+/// A map's `route` in the colours the navigator draws with.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct DockedRoute {
+    pub color: Option<Color>,
+    pub edge: Option<Color>,
+    pub driven: Option<Color>,
+    pub width: Option<f32>,
+    pub arrows: Option<bool>,
+    pub ghost: Option<bool>,
+    pub jams: Option<bool>,
+}
+
+/// A map's `route` as the navigator takes it.
+pub(crate) fn docked_route(r: &MapRoute) -> DockedRoute {
+    DockedRoute {
+        color: r.color.map(color),
+        edge: r.edge.map(color),
+        driven: r.driven.map(color),
+        width: r.width,
+        arrows: r.arrows,
+        ghost: r.ghost,
+        jams: r.jams,
+    }
 }
 
 /// A box's room round what is in it (the stripe's side, the others), and its stripe.
@@ -132,9 +159,9 @@ impl Layout<'_> {
                     self.stop(s, rr, *size, rail, i > 0, i + 1 < stops.len());
                 }
             }
-            Kind::Map { cards, .. } => {
+            Kind::Map { cards, route, .. } => {
                 if self.out.map.is_none() {
-                    self.out.map = Some((r, *cards));
+                    self.out.map = Some((r, *cards, *route));
                 }
             }
             _ => {}
@@ -340,8 +367,8 @@ mod tests {
         } }"#,
         );
         let mut l = layout(&p, &fonts, 1.0);
-        let (r, cards) = l.map.expect("the map");
-        assert!(!cards);
+        let (r, cards, route) = l.map.expect("the map");
+        assert!(!cards && route.is_none());
         assert_eq!((r.x, r.w, r.h), (10.0, 340.0, (340.0 * 0.8f32).round()));
         assert!((r.y - (10.0 + 14.0 * LINE + 6.0)).abs() < 0.01, "{r:?}");
         let empty = |l: &Laid| {
@@ -365,5 +392,32 @@ mod tests {
         assert_eq!(l.map.unwrap().0.h, 30.0);
         cut(&mut l, r.y);
         assert!(l.map.is_none());
+    }
+
+    /// A frame panel's map takes the route's look along to the navigator, as it is read.
+    #[test]
+    fn a_map_s_route_goes_with_its_place() {
+        let fonts = Fonts::new();
+        let p = panel(
+            r##"{ anchor = "navigator", frame = true, children = {
+            { type = "map", height = 120, route = { color = "#22AA44", width = 9, ghost = false } },
+        } }"##,
+        );
+        let Kind::Map { route, .. } = p.children[0].kind else {
+            unreachable!()
+        };
+        let (r, cards, laid) = layout(&p, &fonts, 1.0).map.unwrap();
+        assert_eq!((r.h, cards), (120.0, true));
+        assert!(route.is_some() && laid == route);
+        // (to the navigator in the colours it draws with, the rest as it is read)
+        let docked = super::docked_route(&laid.unwrap());
+        assert_eq!(docked.color, Some(Color::rgba(0x22, 0xaa, 0x44, 1.0)));
+        assert_eq!(
+            (docked.edge, docked.width, docked.ghost, docked.jams),
+            (None, Some(9.0), Some(false), None)
+        );
+        // (none said: none)
+        let p = panel(r#"{ children = { { type = "map" } } }"#);
+        assert_eq!(layout(&p, &fonts, 1.0).map.unwrap().2, None);
     }
 }

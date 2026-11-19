@@ -187,7 +187,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[1].kind,
         Kind::Map {
             height: 180.0,
-            cards: false
+            cards: false,
+            route: None
         }
     );
     // (no height: the navigator's own map's; its cards over it)
@@ -195,7 +196,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[2].kind,
         Kind::Map {
             height: 0.0,
-            cards: true
+            cards: true,
+            route: None
         }
     );
     assert!(
@@ -203,6 +205,65 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
             .unwrap_err()
             .contains("frame")
     );
+}
+
+/// A frame panel with a map of this `route`, read.
+fn map_route(route: &str) -> Result<Option<MapRoute>, String> {
+    let p = panel(&format!(
+        "{{ anchor = \"navigator\", frame = true, children = {{ {{ type = \"map\", route = {route} }} }} }}"
+    ))?;
+    match p.children[0].kind {
+        Kind::Map { route, .. } => Ok(route),
+        _ => unreachable!(),
+    }
+}
+
+/// The route's look on a map (version 8) and each of its keys; a key left out is the
+/// navigator's own, and the width is held to 1 - 40 pixels.
+#[test]
+fn a_map_takes_a_route_look() {
+    let route = |src: &str| map_route(src).unwrap();
+    assert_eq!(
+        route(
+            r##"{ color = "#3B82FF", edge = "#1D4ED8", driven = "#9FB4D380", width = 8,
+                arrows = false, ghost = false, jams = false }"##
+        ),
+        Some(MapRoute {
+            color: Some(Rgba([0x3B, 0x82, 0xFF, 255])),
+            edge: Some(Rgba([0x1D, 0x4E, 0xD8, 255])),
+            driven: Some(Rgba([0x9F, 0xB4, 0xD3, 0x80])),
+            width: Some(8.0),
+            arrows: Some(false),
+            ghost: Some(false),
+            jams: Some(false),
+        })
+    );
+    assert_eq!(
+        route("{ jams = true }"),
+        Some(MapRoute {
+            jams: Some(true),
+            ..MapRoute::default()
+        })
+    );
+    assert_eq!(route("{ width = 0 }").and_then(|r| r.width), Some(1.0));
+    assert_eq!(route("{ width = 99 }").and_then(|r| r.width), Some(40.0));
+    assert_eq!(route("{}"), Some(MapRoute::default()));
+    assert_eq!(route("nil"), None);
+}
+
+#[test]
+fn a_route_color_that_is_no_colour_is_refused() {
+    let err = |src: &str| map_route(src).unwrap_err();
+    let e = err("{ color = 5 }");
+    assert!(e.contains("route.color") && e.contains("no colour"), "{e}");
+    assert!(err(r#"{ edge = "blue" }"#).contains("route.edge"));
+    assert!(err("{ driven = true }").contains("route.driven"));
+    // (and the other keys of another kind)
+    assert!(err("true").contains("children[1].route"), "{}", err("true"));
+    assert!(err(r#"{ width = "wide" }"#).contains("route.width"));
+    assert!(err(r#"{ arrows = "yes" }"#).contains("route.arrows"));
+    assert!(err("{ ghost = 1 }").contains("route.ghost"));
+    assert!(err("{ jams = {} }").contains("route.jams"));
 }
 
 #[test]
@@ -518,4 +579,20 @@ fn controls_change_and_tell_their_plugin() {
     assert!(ui.update(1, "p", "nothing", &Value::map([]), None).is_err());
     ui.drag(1, "p", 5.0, -2.0);
     assert_eq!(ui.get(1, "p").unwrap().moved, (5.0, -2.0));
+}
+
+#[test]
+fn an_unknown_route_key_is_left_alone() {
+    // (a plugin written for a later game still shows here)
+    assert_eq!(
+        map_route(r##"{ glow = true, arrows = false, color = "#3B82FF" }"##),
+        Ok(Some(MapRoute {
+            color: Rgba::parse("#3B82FF"),
+            arrows: Some(false),
+            ..MapRoute::default()
+        }))
+    );
+    // (a key of the wrong kind is still refused, with its path)
+    let e = map_route(r#"{ glow = true, arrows = 1 }"#).unwrap_err();
+    assert!(e.contains("route.arrows"), "{e}");
 }

@@ -338,7 +338,7 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `7` (`6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
+`omsi.ui.version` is `8` (`7` before the `map` element's `route`, `6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
 element, `4` before `grab`, `3` before boxes, stop lists and the other
 elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
 test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
@@ -429,6 +429,28 @@ omsi.ui.set("phone", { anchor = "navigator", frame = true, grab = true, padding 
 } })
 ```
 
+The map's `route` (`omsi.ui.version` 8) says how the route looks on that map; each key left
+out is the navigator's own, and a `map` that is not in a panel filling the frame ignores it, as
+the cockpit screens and the navigator without such a panel do:
+
+```lua
+{ type = "map", height = 200, route = {
+  color = "#3B82FF",  -- the route where the traffic flows
+  edge = "#1D4ED8",   -- the thin edge along it
+  driven = "#9FB4D3", -- the part already driven, in this colour (left out: not drawn, as today)
+  width = 5,          -- its least width in pixels, held to 1 - 40 (wider where the lanes are)
+  arrows = true,      -- the arrows along it
+  ghost = true,       -- the faint route through the houses in front of it
+  jams = true,        -- amber, red and dark red where the traffic is slow (false: its colour all along)
+} }
+```
+
+Colours are `"#RRGGBB"` or `"#RRGGBBAA"`; a colour that is none, or a key of the wrong kind,
+makes `set` return `false` and the reason; a key that is none of the route's is left alone, so a
+plugin written for a later game still shows. A game before version 8 leaves `route` alone and
+draws the navigator's own route. The whole example is
+[`docs/examples/plugins/navigator_map.lua`](examples/plugins/navigator_map.lua).
+
 #### Elements
 
 Every element can have an `id`, a `color` and `visible = false` (left out, no room kept).
@@ -443,7 +465,7 @@ Every element can have an `id`, a `color` and `visible = false` (left out, no ro
 | `box` (4) | `children`, `gap` (default 4), `color` (default amber) | its children stacked in a box tinted with `color`, a stripe of it on the left: a note, an advice |
 | `stops` (4) | `stops` (`{ { name, time, expected, expected_color, state, tag }, ... }`, up to 128), `size` (13), `color` (the rail, default amber) | stops on a rail, a row each: `state` `"done"` (behind the bus: grey), `"now"` (the one it heads for: marked, bold) or `"ahead"` (the default); `time` on the right, `expected` before it in `expected_color`, and `tag` (`"terminus"`) before them |
 | `divider` | `color` | a thin line (in a row: upright) |
-| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height |
+| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`), `route` (8: `{ color, edge, driven, width, arrows, ghost, jams }`, see above) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`, its route as `route` says); elsewhere empty room of its height |
 | `space` | `size` (default 8) | empty room (in a row: across) |
 | `button` | `id` (needed), `text`, `icon`, `color` | a button 34 high, across the panel (in a row as wide as its label, or what it grows to); a click on it is `ui_click(panel id, button id)` |
 | `image` | `src` (a PNG, JPEG, BMP or TGA of the plugin's folder), `width`, `height` (default 64) | the picture, made smaller to fit the width it has |

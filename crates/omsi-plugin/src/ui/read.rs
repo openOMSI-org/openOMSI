@@ -2,8 +2,8 @@
 //! held to the limits and checked here, so that a plugin learns at once what is wrong.
 
 use super::{
-    Align, Anchor, ChartStyle, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS, MAX_TEXT, Panel,
-    Rgba, RowAlign, Stop, StopState, Weight, check_id,
+    Align, Anchor, ChartStyle, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS, MAX_TEXT,
+    MapRoute, Panel, Rgba, RowAlign, Stop, StopState, Weight, check_id,
 };
 use crate::api::Value;
 use std::path::{Path, PathBuf};
@@ -446,6 +446,33 @@ impl Reader<'_> {
             .collect()
     }
 
+    /// A map's route: `{ color = "#3B82FF", edge = "#1D4ED8", driven = "#9FB4D3", width = 5,
+    /// arrows = true, ghost = true, jams = true }`, each key left out the navigator's own.
+    fn route(&self, key: &str) -> Result<Option<MapRoute>, String> {
+        let t = self.get(key);
+        if t.is_nil() {
+            return Ok(None);
+        }
+        if !t.is_table() {
+            return Err(format!("{}: a table is expected", self.at(key)));
+        }
+        let r = Reader {
+            t,
+            path: self.at(key),
+            folder: None,
+        };
+        let flag = |k: &str| (!r.get(k).is_nil()).then(|| r.boolean(k, true)).transpose();
+        Ok(Some(MapRoute {
+            color: r.color("color")?,
+            edge: r.color("edge")?,
+            driven: r.color("driven")?,
+            width: r.opt_number("width")?.map(|w| w.clamp(1.0, 40.0)),
+            arrows: flag("arrows")?,
+            ghost: flag("ghost")?,
+            jams: flag("jams")?,
+        }))
+    }
+
     /// An image of the plugin's folder: the file when it is there.
     fn image(&self, key: &str) -> Result<Option<PathBuf>, String> {
         let Some(src) = self.string(key)? else {
@@ -572,6 +599,7 @@ impl Reader<'_> {
             "map" => Kind::Map {
                 height: self.number("height", 0.0, 0.0, 4000.0)?,
                 cards: self.boolean("cards", true)?,
+                route: self.route("route")?,
             },
             "space" => Kind::Space {
                 size: self.number("size", 8.0, 0.0, 1000.0)?,

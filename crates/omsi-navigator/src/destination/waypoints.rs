@@ -149,6 +149,20 @@ impl Navigator {
         style: &RouteStyle,
         pal: &style::Palette,
     ) {
+        self.draw_waypoint_routes_in(painter, net, anchor, style, pal, &self.route_jam);
+    }
+
+    /// The routes on to the waypoints, coloured by `jam` (empty: the route's own colour all
+    /// along).
+    pub(crate) fn draw_waypoint_routes_in(
+        &self,
+        painter: &mut Painter,
+        net: &Network,
+        anchor: DVec2,
+        style: &RouteStyle,
+        pal: &style::Palette,
+        jam: &HashMap<usize, f32>,
+    ) {
         for path in self.waypoints.iter().filter_map(|d| d.path.as_ref()) {
             mapmesh::roads::build_route_to(
                 painter,
@@ -156,7 +170,7 @@ impl Navigator {
                 &path.lanes,
                 anchor,
                 path.start_s,
-                &self.route_jam,
+                jam,
                 style,
                 0,
                 pal,
