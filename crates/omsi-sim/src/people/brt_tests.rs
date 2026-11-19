@@ -439,6 +439,7 @@ fn rhd_bus_with_left_entries_serves_ordinary_kerb_stop() {
     assert!(!rhd_bus.cabin.entries.is_empty());
     assert!(rhd_bus.cabin.entries.iter().all(|d| d.side < 0.0));
 
+    h.register_buses(std::slice::from_ref(&rhd_bus), 0.0);
     let ix = [(rhd_bus.id, 0)].into_iter().collect();
     assert_eq!(
         h.bus_for(0, 42, std::slice::from_ref(&rhd_bus), &ix),
