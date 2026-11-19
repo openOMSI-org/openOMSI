@@ -1082,7 +1082,7 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | `vehicle` | `name` | The player got into a vehicle, changed it, or left it (`nil`). | 0.1.5 |
 | `frame` | `dt` | Every frame of the game, after the bus's own scripts; not while paused. `dt` is the frame's seconds of game time. | 0.1.5 |
 | `stop` | - | The game ends, or the plugin is about to be loaded again. | 0.1.5 |
-| `key` | `key`, `down` | A key went down (`true`) or came up: winit's name of it (`"KeyH"`, `"F5"`, `"Numpad8"`). | 0.1.10 |
+| `key` | `key`, `down`, `combo` | A key went down (`true`) or came up: winit's name of it (`"KeyH"`, `"F5"`, `"Numpad8"`), and the combination it made with the modifiers held, spelled as `input.hotkey` takes them (`"Ctrl+KeyH"`, `"F5"`). | 0.1.10 |
 | `next_stop` | `new`, `old` | The duty's next stop changed, also to one of the same name (`omsi.info().next_stop_number` tells them apart). | 0.1.10 |
 | `view` | `new`, `old` | The view changed (`"driver"`, `"pax"`, `"outside"`, `"free"`, `"foot"`). | 0.1.10 |
 | `duty` | `line`, `tour` | A line and tour were taken (or given up: `nil`). | 0.1.10 |
@@ -1139,6 +1139,7 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | `lan_leave` | `id`, `name` | A player left the LAN session. | 0.2.22 |
 | `lan_message` | `from`, `data` | The same plugin on another player's game sent this one a message (`lan.send`): the player's id and the text. | 0.2.22 |
 | `lan_chat` | `name`, `text` | A line was said in the LAN session's chat (by another player or this one). | 0.2.22 |
+| `chat_command` | `text` | The player typed a `/`-line into the chat (`"/login name pass"`): while a plugin hears this, such a line is not said to the session at all (a password never reaches the other players). Say something back with `lan.chat`. | 0.2.22 |
 | `object_init` | `id`, `type`, `x`, `y`, `z`, `heading` | A scenery object this script drives came within its range (once, again if it leaves and comes back): the map's id of the object, its type (the `.sco` file's name), where it stands and the way it faces. Only a script a `.sco` names with `[lua_script]` hears the `object_*` events. | 0.2.22 |
 | `object_frame` | `id`, `dt` | A frame of an object this script drives, while it is in range; `dt` is the game seconds since the last frame of that object (at the rate of the `.sco`'s `[lua_rate]`, else every game frame). | 0.2.22 |
 | `object_gone` | `id` | An object this script drives left its range or was unloaded with its tile; its state in the script can go. | 0.2.22 |
