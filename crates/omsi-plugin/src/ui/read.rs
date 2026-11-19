@@ -2,8 +2,8 @@
 //! held to the limits and checked here, so that a plugin learns at once what is wrong.
 
 use super::{
-    Align, Anchor, ChartStyle, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS, MAX_TEXT, Panel,
-    Rgba, RowAlign, Stop, StopState, Weight, check_id,
+    Align, Anchor, ChartStyle, Distance, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS,
+    MAX_TEXT, MapCamera, Panel, Rgba, RowAlign, Stop, StopState, Tilt, Weight, check_id,
 };
 use crate::api::Value;
 use std::path::{Path, PathBuf};
@@ -446,6 +446,78 @@ impl Reader<'_> {
             .collect()
     }
 
+    /// A map's camera: `{ distance = 200, north = false, ahead = 0.17, tilt = "3d" }`, the
+    /// distance also `{ min = 150, max = 320 }` (a bound left out: the navigator's own, held
+    /// to the one given).
+    fn camera(&self, key: &str) -> Result<Option<MapCamera>, String> {
+        let t = self.get(key);
+        if t.is_nil() {
+            return Ok(None);
+        }
+        if !t.is_table() {
+            return Err(format!("{}: a table is expected", self.at(key)));
+        }
+        let r = Reader {
+            t,
+            path: self.at(key),
+            folder: None,
+        };
+        let distance = match r.get("distance") {
+            Value::Nil => None,
+            Value::Int(_) | Value::Num(_) => {
+                Some(Distance::Fixed(r.number("distance", 0.0, 50.0, 2000.0)?))
+            }
+            d if d.is_table() => {
+                let b = Reader {
+                    t: d,
+                    path: r.at("distance"),
+                    folder: None,
+                };
+                let given = |k: &str| !b.get(k).is_nil();
+                let min = b.number("min", 150.0, 50.0, 2000.0)?;
+                let max = b.number("max", 320.0, 50.0, 2000.0)?;
+                // (a bound left out gives way to the one given: `{ max = 100 }` is 100 to 100)
+                let (min, max) = match (given("min"), given("max")) {
+                    (true, true) if min > max => {
+                        return Err(format!("{}: min ({min}) is past max ({max})", b.path));
+                    }
+                    (false, true) => (min.min(max), max),
+                    (true, false) => (min, max.max(min)),
+                    _ => (min, max),
+                };
+                Some(Distance::Bounds { min, max })
+            }
+            _ => {
+                return Err(format!(
+                    "{}: a number or {{ min, max }} is expected",
+                    r.at("distance")
+                ));
+            }
+        };
+        let given = |k: &str| !r.get(k).is_nil();
+        Ok(Some(MapCamera {
+            distance,
+            north: given("north")
+                .then(|| r.boolean("north", false))
+                .transpose()?,
+            ahead: given("ahead")
+                .then(|| r.number("ahead", 0.0, 0.0, 0.5))
+                .transpose()?,
+            tilt: match r.string("tilt")?.as_deref() {
+                None => None,
+                Some("3d") => Some(Tilt::ThreeD),
+                Some("flat") => Some(Tilt::Flat),
+                Some("top") => Some(Tilt::Top),
+                Some(w) => {
+                    return Err(format!(
+                        "{}: \"{w}\" is no tilt (3d, flat, top)",
+                        r.at("tilt")
+                    ));
+                }
+            },
+        }))
+    }
+
     /// An image of the plugin's folder: the file when it is there.
     fn image(&self, key: &str) -> Result<Option<PathBuf>, String> {
         let Some(src) = self.string(key)? else {
@@ -572,6 +644,7 @@ impl Reader<'_> {
             "map" => Kind::Map {
                 height: self.number("height", 0.0, 0.0, 4000.0)?,
                 cards: self.boolean("cards", true)?,
+                camera: self.camera("camera")?,
             },
             "space" => Kind::Space {
                 size: self.number("size", 8.0, 0.0, 1000.0)?,

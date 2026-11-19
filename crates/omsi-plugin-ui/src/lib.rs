@@ -26,13 +26,12 @@ use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Vertex, Weig
 pub mod input;
 mod nav;
 pub use nav::{Docked, DockedMap};
+mod look;
 #[cfg(test)]
 mod preview;
 mod square;
 mod widgets;
-mod look;
 use look::*;
-
 
 /// A text line's height, times its size.
 pub const LINE: f32 = 1.3;
@@ -112,9 +111,9 @@ pub struct Laid {
     pub hits: Vec<Hit>,
     /// Drawn without a shadow round it (a panel in the navigator's board).
     pub flat: bool,
-    /// Where its first `map` element is, and whether the navigator's cards go over it: the
-    /// navigator draws its map there under a panel that fills its frame.
-    pub map: Option<(Rect, bool)>,
+    /// Where its first `map` element is, whether the navigator's cards go over it and its
+    /// camera: the navigator draws its map there under a panel that fills its frame.
+    pub map: Option<(Rect, bool, Option<pui::MapCamera>)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -145,10 +144,21 @@ pub enum Item {
         color: Color,
     },
     /// A picture of the plugin's folder (`widgets`).
-    Image { r: Rect, path: std::path::PathBuf },
-    Line { a: Vec2, b: Vec2, w: f32, color: Color },
+    Image {
+        r: Rect,
+        path: std::path::PathBuf,
+    },
+    Line {
+        a: Vec2,
+        b: Vec2,
+        w: f32,
+        color: Color,
+    },
     /// A convex shape (a chart's fill).
-    Poly { pts: Vec<Vec2>, color: Color },
+    Poly {
+        pts: Vec<Vec2>,
+        color: Color,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -290,9 +300,9 @@ impl Layout<'_> {
                     + gap * children.len().saturating_sub(1) as f32
             }
             Kind::Bar { .. } => BAR_W,
-            Kind::Badge { text, weight: wt, .. } => {
-                (self.width(text, BADGE_PX, weight(*wt)) + 2.0 * BADGE_PAD).ceil()
-            }
+            Kind::Badge {
+                text, weight: wt, ..
+            } => (self.width(text, BADGE_PX, weight(*wt)) + 2.0 * BADGE_PAD).ceil(),
             Kind::Divider => 1.0,
             Kind::Space { size } => *size,
             Kind::Button { text, icon } => {
@@ -502,7 +512,11 @@ impl Layout<'_> {
                     );
                 }
             }
-            Kind::Badge { text, text_color, weight: wt } => self.badge(e, r, text, *text_color, weight(*wt)),
+            Kind::Badge {
+                text,
+                text_color,
+                weight: wt,
+            } => self.badge(e, r, text, *text_color, weight(*wt)),
             Kind::Divider => {
                 let c = e.color.map(color).unwrap_or(self.colors.divider);
                 let line = if in_row {
@@ -524,7 +538,11 @@ impl Layout<'_> {
                 let fill = e.color.map(color).unwrap_or(self.colors.button);
                 self.rounded(b, BUTTON_R, fill, Some(hit));
                 // (on the see-through default the card's own light ink; on a colour, what reads on it)
-                let ink = if e.color.is_some() { ink_on(fill, self.colors) } else { self.colors.ink };
+                let ink = if e.color.is_some() {
+                    ink_on(fill, self.colors)
+                } else {
+                    self.colors.ink
+                };
                 let room = (b.w - 2.0 * BUTTON_PAD).max(0.0);
                 let icon_w = if icon.is_some() {
                     BUTTON_ICON + if text.is_empty() { 0.0 } else { 6.0 }
@@ -623,7 +641,13 @@ pub fn layout_typing(p: &Panel, fonts: &Fonts, backdrop: f32, typing: Option<&st
     layout_typing_with_theme(p, fonts, backdrop, typing, omsi_ui::theme::th())
 }
 
-fn layout_typing_with_theme(p: &Panel, fonts: &Fonts, backdrop: f32, typing: Option<&str>, pal: Palette) -> Laid {
+fn layout_typing_with_theme(
+    p: &Panel,
+    fonts: &Fonts,
+    backdrop: f32,
+    typing: Option<&str>,
+    pal: Palette,
+) -> Laid {
     let mut l = Layout {
         fonts,
         out: Laid::default(),
@@ -673,7 +697,12 @@ pub fn toast_panel(t: &Toast) -> Panel {
 fn toast_panel_with_theme(t: &Toast, pal: Palette) -> Panel {
     let accent = t.color.unwrap_or_else(|| {
         let [r, g, b, a] = ThemeColors::of(pal).accent.0;
-        Rgba([(r * 255.0 + 0.5) as u8, (g * 255.0 + 0.5) as u8, (b * 255.0 + 0.5) as u8, (a * 255.0 + 0.5) as u8])
+        Rgba([
+            (r * 255.0 + 0.5) as u8,
+            (g * 255.0 + 0.5) as u8,
+            (b * 255.0 + 0.5) as u8,
+            (a * 255.0 + 0.5) as u8,
+        ])
     });
     let element = |kind: Kind, grow: bool, c: Option<Rgba>| Element {
         id: None,
@@ -776,10 +805,10 @@ fn cut(l: &mut Laid, h: f32) {
         x.r.h = (h - x.r.y).clamp(0.0, x.r.h);
     }
     // (the map too: as much of it as there is room for, none below the cut)
-    if let Some((r, _)) = l.map.as_mut() {
+    if let Some((r, ..)) = l.map.as_mut() {
         r.h = (h - r.y).clamp(0.0, r.h);
     }
-    l.map = l.map.filter(|(r, _)| r.h > 0.0);
+    l.map = l.map.filter(|(r, ..)| r.h > 0.0);
 }
 
 /// The hit under `p` (card pixels): the last one drawn there.
@@ -906,8 +935,18 @@ pub fn draw_card(
             }
             Item::Image { r, path } => {
                 if let Some(tex) = images.get(gpu, device, queue, path) {
-                    let s = omsi_ui::Sprite { uv: [0.0, 0.0, 1.0, 1.0], w: r.w, h: r.h, ascent: 0.0 };
-                    p.sprite(s, Vec2::new(r.x, r.y) + at, Vec2::new(r.w, r.h), Color::WHITE);
+                    let s = omsi_ui::Sprite {
+                        uv: [0.0, 0.0, 1.0, 1.0],
+                        w: r.w,
+                        h: r.h,
+                        ascent: 0.0,
+                    };
+                    p.sprite(
+                        s,
+                        Vec2::new(r.x, r.y) + at,
+                        Vec2::new(r.w, r.h),
+                        Color::WHITE,
+                    );
                     put(&p, n, 1, tex);
                 }
             }
@@ -1089,7 +1128,9 @@ impl PluginPanels {
         let focused = ui.focused();
         let cursor = Vec2::new(f.cursor.0, f.cursor.1);
         // (the caret goes into the field typed into, and out of the one left)
-        let typing = ui.typing().map(|t| (t.owner, t.panel.clone(), t.element.clone()));
+        let typing = ui
+            .typing()
+            .map(|t| (t.owner, t.panel.clone(), t.element.clone()));
         if typing != self.typing {
             for (key, c) in self.cards.iter_mut() {
                 let hit = |t: &Option<(u64, String, String)>| matches!((key, t), (Key::Panel(o, id), Some((to, tp, _))) if o == to && id == tp);
@@ -1112,7 +1153,10 @@ impl PluginPanels {
                 }
                 // (no board shown: the navigator hears there is a panel for one)
                 (true, None) => {
-                    self.docked.get_or_insert(Docked { frame: e.panel.frame, ..Docked::default() });
+                    self.docked.get_or_insert(Docked {
+                        frame: e.panel.frame,
+                        ..Docked::default()
+                    });
                     continue;
                 }
                 _ => continue,
@@ -1139,12 +1183,28 @@ impl PluginPanels {
             });
             // (the most a panel in the board may be high, in its own pixels)
             let room = dock.map_or(f32::INFINITY, |d| (d.room / ck).floor().max(1.0));
-            if card.revision != e.revision || card.scale != ck || card.backdrop != f.backdrop || card.pal != f.palette || card.laid.w != width || card.room != room {
-                let caret = typing.as_ref().filter(|t| t.0 == e.owner && t.1 == e.id).map(|t| t.2.as_str());
+            if card.revision != e.revision
+                || card.scale != ck
+                || card.backdrop != f.backdrop
+                || card.pal != f.palette
+                || card.laid.w != width
+                || card.room != room
+            {
+                let caret = typing
+                    .as_ref()
+                    .filter(|t| t.0 == e.owner && t.1 == e.id)
+                    .map(|t| t.2.as_str());
                 card.laid = match dock {
-                    Some(_) => {
-                        Laid { flat: true, ..layout_typing_with_theme(&nav::in_navigator(&e.panel, width), fonts, f.backdrop, caret, f.palette) }
-                    }
+                    Some(_) => Laid {
+                        flat: true,
+                        ..layout_typing_with_theme(
+                            &nav::in_navigator(&e.panel, width),
+                            fonts,
+                            f.backdrop,
+                            caret,
+                            f.palette,
+                        )
+                    },
                     None => layout_typing_with_theme(&e.panel, fonts, f.backdrop, caret, f.palette),
                 };
                 card.full_h = card.laid.h;
@@ -1158,24 +1218,57 @@ impl PluginPanels {
             }
             match dock {
                 Some(d) => {
-                    let map = card.laid.map.map(|(r, cards)| DockedMap { rect: [(r.x * ck).round(), (r.y * ck).round(), (r.w * ck).round(), (r.h * ck).round()], cards });
+                    let map = card.laid.map.map(|(r, cards, camera)| DockedMap {
+                        rect: [
+                            (r.x * ck).round(),
+                            (r.y * ck).round(),
+                            (r.w * ck).round(),
+                            (r.h * ck).round(),
+                        ],
+                        cards,
+                        camera,
+                    });
                     let background = e.panel.background.filter(|_| e.panel.frame).map(color);
-                    self.docked = Some(Docked { height: (card.laid.h * ck).ceil(), frame: e.panel.frame, map, background });
-                    dock_said = Some(pui::Dock { width, room: d.room / ck, height: card.full_h, owner: Some(e.owner), frame: d.frame });
+                    self.docked = Some(Docked {
+                        height: (card.laid.h * ck).ceil(),
+                        frame: e.panel.frame,
+                        map,
+                        background,
+                    });
+                    dock_said = Some(pui::Dock {
+                        width,
+                        room: d.room / ck,
+                        height: card.full_h,
+                        owner: Some(e.owner),
+                        frame: d.frame,
+                    });
                     // (until the navigator made room for it, it is laid out, not shown)
                     let Some(at) = d.at else { continue };
                     card.origin = Vec2::new(at.x.round(), at.y.round());
                 }
                 None => {
-                    let at = input::moved(place(&e.panel, card.laid.w, card.laid.h, screen), e.moved, card.laid.w, card.laid.h, screen);
-                    card.origin = Vec2::new(f.hud[0] + (at.x * k).round(), f.hud[1] + (at.y * k).round());
+                    let at = input::moved(
+                        place(&e.panel, card.laid.w, card.laid.h, screen),
+                        e.moved,
+                        card.laid.w,
+                        card.laid.h,
+                        screen,
+                    );
+                    card.origin =
+                        Vec2::new(f.hud[0] + (at.x * k).round(), f.hud[1] + (at.y * k).round());
                 }
             }
             cards.push(key);
         }
         if let Some(d) = f.dock {
             let s = d.scale.max(0.25);
-            ui.set_dock(Some(dock_said.unwrap_or(pui::Dock { width: (d.width / s).max(40.0), room: d.room / s, height: 0.0, owner: None, frame: d.frame })));
+            ui.set_dock(Some(dock_said.unwrap_or(pui::Dock {
+                width: (d.width / s).max(40.0),
+                room: d.room / s,
+                height: 0.0,
+                owner: None,
+                frame: d.frame,
+            })));
         }
         // the notifications, newest at the top, under the navigator when it is in the way
         let right = screen.x - 16.0;
@@ -1204,7 +1297,12 @@ impl PluginPanels {
                 room: f32::INFINITY,
             });
             if card.scale != k || card.backdrop != f.backdrop || card.pal != f.palette {
-                card.laid = layout_with_theme(&toast_panel_with_theme(t, f.palette), fonts, f.backdrop, f.palette);
+                card.laid = layout_with_theme(
+                    &toast_panel_with_theme(t, f.palette),
+                    fonts,
+                    f.backdrop,
+                    f.palette,
+                );
                 card.scale = k;
                 card.backdrop = f.backdrop;
                 card.pal = f.palette;
@@ -1241,7 +1339,11 @@ impl PluginPanels {
             // (a card's own scale: the navigator's for the panel in its board, which casts no
             // shadow and so needs no room round it: what was cut off stays out of the texture)
             let k = card.scale.max(0.25);
-            let margin = if card.laid.flat { 0.0 } else { (MARGIN * k).ceil() };
+            let margin = if card.laid.flat {
+                0.0
+            } else {
+                (MARGIN * k).ceil()
+            };
             let hot = match key {
                 Key::Panel(..) if focused => {
                     let local = (cursor - card.origin) / k;
@@ -1302,7 +1404,6 @@ impl PluginPanels {
             }
         }
     }
-
 }
 
 /// The line the game shows while the panels have the mouse.
@@ -1318,125 +1419,4 @@ pub fn focused(plugins: &Option<omsi_plugin::Plugins>) -> bool {
 mod theme_tests;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use omsi_plugin::ui::{panel_from_source, Anchor};
-
-    fn panel(src: &str) -> Panel {
-        panel_from_source(src).unwrap()
-    }
-
-    #[test]
-    fn a_row_gives_the_rest_to_what_grows() {
-        let fonts = Fonts::new();
-        let p = panel(
-            r#"{ width = 300, padding = 10, children = { { type = "row", gap = 8, children = {
-            { type = "icon", name = "schedule", size = 20 },
-            { type = "bar", value = 0.5, grow = true },
-            { type = "badge", text = "+2" },
-        } } } }"#,
-        );
-        let l = layout(&p, &fonts, 1.0);
-        let rounded: Vec<Rect> = l
-            .items
-            .iter()
-            .filter_map(|i| {
-                if let Item::Rounded { r, .. } = i {
-                    Some(*r)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        // the track from after the icon to before the badge, the badge at the right edge
-        let (track, badge) = (rounded[0], rounded[2]);
-        assert_eq!(track.x, 10.0 + 20.0 + 8.0);
-        assert!(
-            (badge.right() - 290.0).abs() < 0.01 && (track.right() + 8.0 - badge.x).abs() < 0.01,
-            "{track:?} {badge:?}"
-        );
-        assert_eq!(l.h, (10.0 + BADGE_H + 10.0f32).ceil());
-    }
-
-    #[test]
-    fn panels_are_placed_by_their_anchor_and_stay_on_the_screen() {
-        let screen = Vec2::new(1920.0, 1080.0);
-        let mut p = panel("{ x = 16, y = 20 }");
-        assert_eq!(place(&p, 300.0, 100.0, screen), Vec2::new(16.0, 20.0));
-        p.anchor = Anchor::BottomRight;
-        assert_eq!(
-            place(&p, 300.0, 100.0, screen),
-            Vec2::new(1920.0 - 316.0, 1080.0 - 120.0)
-        );
-        p.anchor = Anchor::Center;
-        assert_eq!(
-            place(&p, 300.0, 100.0, screen),
-            Vec2::new(810.0 + 16.0, 490.0 + 20.0)
-        );
-        p.anchor = Anchor::TopLeft;
-        p.x = -50.0;
-        assert_eq!(place(&p, 300.0, 100.0, screen).x, 0.0);
-    }
-
-    #[test]
-    fn clicks_find_the_innermost_part() {
-        let fonts = Fonts::new();
-        let p = panel(
-            r#"{ width = 300, clickable = true, children = {
-            { type = "row", id = "line", clickable = true, children = {
-                { type = "text", text = "Linie 5", grow = true },
-                { type = "button", id = "take", text = "Nehmen" },
-            } },
-            { type = "text", text = "nicht klickbar" },
-        } }"#,
-        );
-        let l = layout(&p, &fonts, 1.0);
-        let at = |i: usize| l.hits[i].r.center();
-        let element = |p: Vec2| hit_at(&l, p).and_then(|i| l.hits[i].element.clone());
-        let button = l
-            .hits
-            .iter()
-            .position(|h| h.element.as_deref() == Some("take"))
-            .unwrap();
-        assert_eq!(element(at(button)).as_deref(), Some("take"));
-        assert_eq!(
-            element(Vec2::new(20.0, at(button).y)).as_deref(),
-            Some("line")
-        );
-        // below the row: the panel itself
-        assert_eq!(hit_at(&l, Vec2::new(20.0, l.h - 14.0)), Some(0));
-        assert_eq!(element(Vec2::new(20.0, l.h - 14.0)), None);
-    }
-
-    #[test]
-    fn a_toast_is_a_card_with_its_colour() {
-        let fonts = Fonts::new();
-        let t = Toast {
-            owner: 1,
-            serial: 1,
-            text: "Fahrt beendet".into(),
-            title: Some("Karriere".into()),
-            icon: Some("payments".into()),
-            color: None,
-            seconds: 5.0,
-            age: 0.0,
-        };
-        let l = layout(&toast_panel(&t), &fonts, 1.0);
-        assert_eq!(l.w, TOAST_W);
-        assert!(l.accent.is_some());
-        assert_eq!(
-            l.items
-                .iter()
-                .filter(|i| matches!(i, Item::Icon { .. }))
-                .count(),
-            1
-        );
-        assert_eq!(
-            l.items
-                .iter()
-                .filter(|i| matches!(i, Item::Text { .. }))
-                .count(),
-            2
-        );
-    }
-}
+mod tests;

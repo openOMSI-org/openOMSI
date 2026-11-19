@@ -338,7 +338,7 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `7` (`6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
+`omsi.ui.version` is `8` (`7` before the `map` element's `camera`, `6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
 element, `4` before `grab`, `3` before boxes, stop lists and the other
 elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
 test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
@@ -429,6 +429,30 @@ omsi.ui.set("phone", { anchor = "navigator", frame = true, grab = true, padding 
 } })
 ```
 
+The map's `camera` (`omsi.ui.version` 8) says how that map looks at the bus; each key left
+out is as the player set the navigator, and a `map` that is not in a panel filling the frame
+ignores it:
+
+```lua
+{ type = "map", height = 200, camera = {
+  distance = 200,     -- metres, as the navigator's own zoom (150 to 320, out with the speed, in
+                      -- for the next turn); { min = 150, max = 320 }: that zoom held between them
+                      -- (a bound left out: the navigator's own, held to the one given)
+  north = false,      -- true: north up; false: the bus's heading up
+  ahead = 0.17,       -- the share of the distance the view looks ahead of the bus (0: the bus in the middle)
+  tilt = "3d",        -- "3d" (52°, the houses standing), "flat" (60°, the houses flat) or "top"
+                      -- (straight down, the classic 2D map without houses)
+} }
+```
+
+`distance` is held to 50 - 2000 (each bound too) and `ahead` to 0 - 0.5; with `north = true`,
+`ahead` looks north of the bus, not along its heading. A `min` past the `max` (both given), a
+`tilt` of another word or a key of the wrong kind makes `set` return `false` and the
+reason; a key that is none of the camera's (in `camera` or in a `distance` table) is left alone,
+so a plugin written for a later game still shows. A game before version 8 leaves `camera` alone and shows the navigator's own camera.
+The whole example is
+[`docs/examples/plugins/navigator_map.lua`](examples/plugins/navigator_map.lua).
+
 #### Elements
 
 Every element can have an `id`, a `color` and `visible = false` (left out, no room kept).
@@ -443,7 +467,7 @@ Every element can have an `id`, a `color` and `visible = false` (left out, no ro
 | `box` (4) | `children`, `gap` (default 4), `color` (default amber) | its children stacked in a box tinted with `color`, a stripe of it on the left: a note, an advice |
 | `stops` (4) | `stops` (`{ { name, time, expected, expected_color, state, tag }, ... }`, up to 128), `size` (13), `color` (the rail, default amber) | stops on a rail, a row each: `state` `"done"` (behind the bus: grey), `"now"` (the one it heads for: marked, bold) or `"ahead"` (the default); `time` on the right, `expected` before it in `expected_color`, and `tag` (`"terminus"`) before them |
 | `divider` | `color` | a thin line (in a row: upright) |
-| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height |
+| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`), `camera` (8: `{ distance, north, ahead, tilt }`, see above) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`, seen as its `camera` says); elsewhere empty room of its height |
 | `space` | `size` (default 8) | empty room (in a row: across) |
 | `button` | `id` (needed), `text`, `icon`, `color` | a button 34 high, across the panel (in a row as wide as its label, or what it grows to); a click on it is `ui_click(panel id, button id)` |
 | `image` | `src` (a PNG, JPEG, BMP or TGA of the plugin's folder), `width`, `height` (default 64) | the picture, made smaller to fit the width it has |

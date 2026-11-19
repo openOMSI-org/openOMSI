@@ -218,6 +218,28 @@ fn the_trip_panel_runs_too() {
 }
 
 #[test]
+fn the_navigator_map_sets_its_camera() {
+    let mut p = load("ex-navmap", "navigator_map.lua");
+    let mut g = Game::new();
+    for _ in 0..3 {
+        p.frame(&mut g);
+    }
+    no_errors(&g);
+    assert_eq!(panel_ids(&p), ["navigator_map"]);
+    let ui = p.ui.borrow();
+    let panel = &ui.panels()[0].panel;
+    assert!(panel.frame);
+    let camera = panel.children.iter().find_map(|e| match e.kind {
+        omsi_plugin::ui::Kind::Map { camera, .. } => camera,
+        _ => None,
+    });
+    assert_eq!(
+        camera.and_then(|c| c.tilt),
+        Some(omsi_plugin::ui::Tilt::Top)
+    );
+}
+
+#[test]
 fn reduced_tickets_change_the_full_fare() {
     let mut p = load("ex-reduced", "reduced_tickets.lua");
     let mut g = Game::new();

@@ -187,7 +187,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[1].kind,
         Kind::Map {
             height: 180.0,
-            cards: false
+            cards: false,
+            camera: None
         }
     );
     // (no height: the navigator's own map's; its cards over it)
@@ -195,13 +196,119 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[2].kind,
         Kind::Map {
             height: 0.0,
-            cards: true
+            cards: true,
+            camera: None
         }
     );
     assert!(
         panel(r##"{ frame = "yes" }"##)
             .unwrap_err()
             .contains("frame")
+    );
+}
+
+/// A frame panel with a map of this `camera`, read.
+fn map_camera(camera: &str) -> Result<Option<MapCamera>, String> {
+    let p = panel(&format!(
+        "{{ anchor = \"navigator\", frame = true, children = {{ {{ type = \"map\", camera = {camera} }} }} }}"
+    ))?;
+    match p.children[0].kind {
+        Kind::Map { camera, .. } => Ok(camera),
+        _ => unreachable!(),
+    }
+}
+
+/// The camera of a map (version 8) and each of its keys; a key left out is the navigator's own.
+#[test]
+fn a_map_takes_a_camera() {
+    let camera = |src: &str| map_camera(src).unwrap();
+    assert_eq!(
+        camera(r#"{ distance = 200, north = true, ahead = 0, tilt = "top" }"#),
+        Some(MapCamera {
+            distance: Some(Distance::Fixed(200.0)),
+            north: Some(true),
+            ahead: Some(0.0),
+            tilt: Some(Tilt::Top),
+        })
+    );
+    assert_eq!(
+        camera(r#"{ distance = { min = 100, max = 400 }, tilt = "3d" }"#),
+        Some(MapCamera {
+            distance: Some(Distance::Bounds {
+                min: 100.0,
+                max: 400.0
+            }),
+            tilt: Some(Tilt::ThreeD),
+            ..MapCamera::default()
+        })
+    );
+    assert_eq!(
+        camera(r#"{ tilt = "flat" }"#).and_then(|c| c.tilt),
+        Some(Tilt::Flat)
+    );
+    assert_eq!(camera("{}"), Some(MapCamera::default()));
+    assert_eq!(camera("nil"), None);
+}
+
+/// Out of their range the numbers are held to it, as every number of a panel is.
+#[test]
+fn a_camera_distance_out_of_range_is_clamped() {
+    let camera = |src: &str| map_camera(src).unwrap().unwrap();
+    assert_eq!(
+        camera("{ distance = 10 }").distance,
+        Some(Distance::Fixed(50.0))
+    );
+    assert_eq!(
+        camera("{ distance = { min = 10, max = 9000 } }").distance,
+        Some(Distance::Bounds {
+            min: 50.0,
+            max: 2000.0
+        })
+    );
+    // (a bound left out is the navigator's own: 150 and 320)
+    assert_eq!(
+        camera("{ distance = { max = 1000 } }").distance,
+        Some(Distance::Bounds {
+            min: 150.0,
+            max: 1000.0
+        })
+    );
+    assert_eq!(camera("{ ahead = 2 }").ahead, Some(0.5));
+    assert_eq!(camera("{ ahead = -1 }").ahead, Some(0.0));
+}
+
+/// A bound left out gives way to the one given: a `max` under 150 is the zoom held to it, a
+/// `min` past 320 the zoom held from it. Only two bounds given the wrong way round are refused.
+#[test]
+fn a_camera_bound_left_out_gives_way_to_the_one_given() {
+    let bounds = |src: &str| match map_camera(src).unwrap().unwrap().distance {
+        Some(Distance::Bounds { min, max }) => (min, max),
+        d => panic!("{d:?}"),
+    };
+    assert_eq!(bounds("{ distance = { max = 100 } }"), (100.0, 100.0));
+    assert_eq!(bounds("{ distance = { min = 500 } }"), (500.0, 500.0));
+    assert_eq!(bounds("{ distance = { min = 200 } }"), (200.0, 320.0));
+    assert_eq!(bounds("{ distance = {} }"), (150.0, 320.0));
+}
+
+#[test]
+fn a_camera_of_the_wrong_kind_is_refused() {
+    let err = |src: &str| map_camera(src).unwrap_err();
+    assert!(err("200").contains("children[1].camera"), "{}", err("200"));
+    assert!(err(r#"{ distance = "far" }"#).contains("camera.distance"));
+    assert!(err(r#"{ north = "yes" }"#).contains("camera.north"));
+    assert!(err(r#"{ ahead = "some" }"#).contains("camera.ahead"));
+    // (a lower bound past the upper one: no zoom between them)
+    assert!(err("{ distance = { min = 400, max = 200 } }").contains("camera.distance"));
+    assert!(err("{ distance = { min = 400, max = 200 } }").contains("min"));
+}
+
+#[test]
+fn a_camera_tilt_of_another_word_is_refused() {
+    let e = map_camera(r#"{ tilt = "2d" }"#).unwrap_err();
+    assert!(
+        e.contains("camera.tilt") && e.contains("3d, flat, top"),
+        "{e}"
     );
 }
 
@@ -518,4 +625,25 @@ fn controls_change_and_tell_their_plugin() {
     assert!(ui.update(1, "p", "nothing", &Value::map([]), None).is_err());
     ui.drag(1, "p", 5.0, -2.0);
     assert_eq!(ui.get(1, "p").unwrap().moved, (5.0, -2.0));
+}
+
+#[test]
+fn an_unknown_camera_key_is_left_alone() {
+    // (a plugin written for a later game still shows here)
+    assert_eq!(
+        map_camera(r#"{ roll = 5, north = true, distance = { min = 100, zoom = 2 } }"#),
+        Ok(Some(MapCamera {
+            distance: Some(Distance::Bounds {
+                min: 100.0,
+                max: 320.0
+            }),
+            north: Some(true),
+            ..MapCamera::default()
+        }))
+    );
+    // (a key of the wrong kind is still refused, with its path)
+    let e = map_camera(r#"{ roll = 5, north = 1 }"#).unwrap_err();
+    assert!(e.contains("camera.north"), "{e}");
+    let e = map_camera(r#"{ distance = { zoom = 2, min = "far" } }"#).unwrap_err();
+    assert!(e.contains("camera.distance.min"), "{e}");
 }
