@@ -155,3 +155,61 @@ fn the_bus_puck_is_todays_without_marks() {
     };
     assert_eq!(bus_mark(Some(&m)), (Color::hex(0x00aa00), 16.0));
 }
+
+/// A plugin's frame map with a larger bus puck, the bus and the next stop by the map's edges:
+/// their marks reach past the map (the puck's ring, the pin's head), and they are drawn in a
+/// layer cut off at the map's edges, with its corners - never over the plugin's panel round
+/// the map - also once the frame is resized and the map with it. The navigator's own map (no
+/// frame panel) draws them in the panel's layer as ever.
+#[test]
+fn a_frame_map_s_marks_stay_inside_it_when_the_frame_is_resized() {
+    let mut nav = Navigator::new(true, 0.85, "bottom-left");
+    let flat = Layer::flat([0.0, 0.0, 360.0, 500.0], 14.0, 0.8);
+    let big = FrameMarks {
+        bus_size: Some(16.0),
+        ..Default::default()
+    };
+    let (fill, r) = bus_mark(Some(&big));
+    assert_eq!(r, 16.0);
+    // (the frame as the plugin first sizes it, then smaller, its map with it)
+    for (pw, ph, rect) in [
+        (360.0, 500.0, [0.0, 40.0, 360.0, 288.0]),
+        (300.0, 320.0, [20.0, 60.0, 200.0, 160.0]),
+    ] {
+        let (map, ..) = framed_map(FrameMap { rect, cards: true }, pw, ph);
+        assert_eq!([map.x, map.y, map.w, map.h], rect);
+        let mut ui = Painter::new();
+        puck(
+            &mut ui,
+            Vec2::new(map.right() - 3.0, map.bottom() - 3.0),
+            0.0,
+            r,
+            fill,
+        );
+        let pin = stop_pin_color(PinKind::Next, false, Some(&big));
+        draw_pin(
+            &mut ui,
+            &mut nav.atlas,
+            Vec2::new(map.x + 3.0, map.y + 3.0),
+            true,
+            false,
+            1.0,
+            pin,
+        );
+        let outside = |v: &&omsi_ui::Vertex| {
+            v.pos[0] < map.x
+                || v.pos[1] < map.y
+                || v.pos[0] > map.right()
+                || v.pos[1] > map.bottom()
+        };
+        assert!(
+            ui.verts.iter().filter(outside).count() > 0,
+            "the marks reach past the map"
+        );
+        let layer = marks_layer(true, map, 10.0, flat);
+        assert_eq!(layer.clip, [map.x, map.y, map.right(), map.bottom()]);
+        assert_eq!((layer.radius, layer.opacity), (10.0, flat.opacity));
+    }
+    let own = marks_layer(false, Rect::new(0.0, 0.0, 360.0, 288.0), 14.0, flat);
+    assert_eq!((own.clip, own.radius), (flat.clip, flat.radius));
+}
