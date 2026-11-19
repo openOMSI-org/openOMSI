@@ -15,9 +15,6 @@ name = "openomsi_game_mx"
 path = "src/lib.rs"
 
 
-[build-dependencies]
-winresource.workspace = true
-
 [dependencies]
 omsi-cfg = { path = "../omsi-cfg" }
 omsi-map = { path = "../omsi-map" }

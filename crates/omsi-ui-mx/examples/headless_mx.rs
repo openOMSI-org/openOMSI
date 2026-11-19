@@ -1,5 +1,5 @@
 //! Draw a few shapes with omsi-ui into a texture and write it as PNG (a check of the
-//! pipeline without the game): `cargo run -p omsi-ui --example headless out.png`
+//! pipeline without the game): `cargo run -p omsi-ui-mx --example headless_mx out.png`
 extern crate omsi_ui_mx as omsi_ui;
 use glam::{Mat4, Vec2, Vec3};
 use omsi_ui::{paint::Align, Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Weight};

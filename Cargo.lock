@@ -4128,7 +4128,6 @@ dependencies = [
  "ureq",
  "windows 0.62.2",
  "winit",
- "winresource",
  "zip",
 ]
 

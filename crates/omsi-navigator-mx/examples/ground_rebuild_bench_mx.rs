@@ -1,5 +1,5 @@
 //! Opt-in CPU/heap diagnostic; no GPU, game assets or frame-time claims.
-//! Run with `cargo run --release -p omsi-navigator --example ground_rebuild_bench -- grid`.
+//! Run with `cargo run --release -p omsi-navigator-mx --example ground_rebuild_bench_mx -- grid`.
 //! Modes: grid, large, stray, cache (NAVIGATOR_TEST_LAYERS selects a local map cache).
 //! Peaks are requested live Rust heap bytes above the prepared input, not process RSS.
 use glam::{DVec2, Vec2, Vec3};
