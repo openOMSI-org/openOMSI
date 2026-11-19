@@ -260,3 +260,140 @@ fn the_part_driven_shows_in_its_colour_when_given() {
     let slot = nav.route_mesh(&net, &f, (false, Some(look)), on, false, &pal);
     assert!(mesh_colours(&nav, slot).contains(&grey.0));
 }
+
+/// A road north with a turn east from its middle (a detour) and a road east from its end:
+/// 0 from (0, 0) to (0, 200), 1 on to (0, 400), 2 from there to (200, 400), 3 from (0, 200)
+/// to (200, 200).
+fn roads_with_a_detour() -> Network {
+    let lane = |a: (f64, f64), b: (f64, f64)| {
+        LaneBuilder::polyline(
+            vec![DVec3::new(a.0, a.1, 0.0), DVec3::new(b.0, b.1, 0.0)],
+            LaneKind::Street,
+            3.0,
+        )
+    };
+    let mut net = Network {
+        lanes: vec![
+            lane((0.0, 0.0), (0.0, 200.0)),
+            lane((0.0, 200.0), (0.0, 400.0)),
+            lane((0.0, 400.0), (200.0, 400.0)),
+            lane((0.0, 200.0), (200.0, 200.0)),
+        ],
+        ..Default::default()
+    };
+    net.lanes[0].next = vec![1, 3];
+    net.lanes[1].next = vec![2];
+    net.build_grid();
+    net
+}
+
+/// Where the route's mesh in cache `slot` lies and in which colours.
+fn mesh_points(nav: &Navigator, slot: usize) -> Vec<([f32; 3], [f32; 4])> {
+    let (_, verts, _) = nav.route_mesh_history[slot].as_ref().expect("a route mesh");
+    verts.iter().map(|v| (v.pos, v.color)).collect()
+}
+
+/// With a plugin's route look on its frame map, a detour - the route worked out again, other
+/// lanes, a new version - is drawn in that look at once, its mesh built again for the new
+/// route. Once the plugin unloads, the route is drawn in the navigator's own look from its own
+/// cache, as on a navigator that never had the plugin, and so is a pin's route with a waypoint
+/// after it, set on the city map as ever.
+#[test]
+fn a_detour_under_a_route_look_and_the_waypoints_after_it() {
+    let net = roads_with_a_detour();
+    let pal = *style::palette(true);
+    let on = (DVec2::ZERO, 3, 800.0);
+    let f = frame_at(DVec3::new(0.0, 10.0, 0.0));
+    let (mut nav, mut plain) = (
+        Navigator::new(true, 0.85, "bottom-left"),
+        Navigator::new(true, 0.85, "bottom-left"),
+    );
+    for n in [&mut nav, &mut plain] {
+        n.set_route("trip", vec![0, 1], true, 1);
+        // (the bus on it, 10 m along)
+        n.route.on_route = true;
+        n.route.s = 10.0;
+    }
+    // the plugin's frame map: its route green, 12 px wide, without arrows
+    let green = FrameRoute {
+        color: Some(Color::hex(0x22aa44)),
+        width: Some(12.0),
+        arrows: Some(false),
+        ..FrameRoute::default()
+    };
+    nav.frame_panel = Some(FramePanel {
+        height: 400.0,
+        map: Some(FrameMap {
+            rect: [0.0, 40.0, 360.0, 288.0],
+            cards: true,
+        }),
+        background: None,
+    });
+    nav.frame_look = Some(FrameLook { route: Some(green) });
+    // (the look as `draw` takes it for the frame map)
+    let drawn_look = |n: &Navigator| n.framed.flatten().and_then(|(_, _, r)| r);
+    nav.framed = nav.framed_now(nav.frame_panel, 360.0, 500.0);
+    assert_eq!(drawn_look(&nav), Some(green));
+    let slot = nav.route_mesh(&net, &f, (false, drawn_look(&nav)), on, false, &pal);
+    assert_eq!(nav.route_mesh_generation[slot], 1);
+    let east = |n: &Navigator, slot| mesh_points(n, slot).iter().any(|(p, _)| p[0] > 100.0);
+    assert!(!east(&nav, slot));
+    // the route worked out again round the detour
+    for n in [&mut nav, &mut plain] {
+        n.set_route("trip", vec![0, 3], true, 2);
+        assert_eq!(n.route.lanes, vec![0, 3]);
+    }
+    let again = nav.route_mesh(&net, &f, (false, drawn_look(&nav)), on, false, &pal);
+    assert_eq!(again, slot);
+    assert_eq!(
+        nav.route_mesh_generation[slot], 2,
+        "built again for the new route"
+    );
+    let points = mesh_points(&nav, slot);
+    assert!(east(&nav, slot), "along the detour");
+    assert!(
+        points.iter().all(|(p, _)| p[1] < 260.0),
+        "not on along the old route"
+    );
+    let colours: Vec<_> = points.iter().map(|(_, c)| *c).collect();
+    assert!(colours.contains(&Color::hex(0x22aa44).0) && !colours.contains(&pal.route.0));
+    // the plugin unloads: its panel and its look go
+    nav.frame_panel = None;
+    nav.frame_look = None;
+    nav.framed = nav.framed_now(nav.frame_panel, 360.0, 500.0);
+    assert_eq!((nav.framed, drawn_look(&nav)), (None, None));
+    let own = nav.route_mesh(&net, &f, (false, drawn_look(&nav)), on, false, &pal);
+    let plain_slot = plain.route_mesh(&net, &f, (false, None), on, false, &pal);
+    assert_eq!(
+        (own, plain_slot),
+        (route_slot(false, None), route_slot(false, None))
+    );
+    assert_eq!(mesh_points(&nav, own), mesh_points(&plain, plain_slot));
+    assert!(mesh_colours(&nav, own).contains(&pal.route.0));
+    assert!(!mesh_colours(&nav, own).contains(&Color::hex(0x22aa44).0));
+    // a pin with a waypoint after it: the route there and on to the waypoint, as ever
+    for n in [&mut nav, &mut plain] {
+        n.global = Some(std::sync::Arc::new(roads_with_a_detour()));
+        n.set_destination(DVec2::new(0.0, 300.0), None);
+        n.add_destination(DVec2::new(150.0, 400.0), None);
+        n.follow_destination(&f);
+    }
+    assert_eq!(nav.route.lanes, vec![0, 1]);
+    assert!(nav.waypoints[0].path.is_some(), "the waypoint's route");
+    let own = nav.route_mesh(&net, &f, (false, None), on, false, &pal);
+    let plain_slot = plain.route_mesh(&net, &f, (false, None), on, false, &pal);
+    let points = mesh_points(&nav, own);
+    assert_eq!(points, mesh_points(&plain, plain_slot));
+    assert!(
+        points.iter().any(|(p, _)| p[0] > 100.0 && p[1] > 380.0),
+        "on to the waypoint"
+    );
+    let waypoints = |n: &Navigator| {
+        let mut p = Painter::new();
+        let style = route_style(None, DVec2::ZERO, 800.0);
+        n.draw_waypoint_routes(&mut p, &net, DVec2::ZERO, &style, &pal);
+        p.verts.iter().map(|v| (v.pos, v.color)).collect::<Vec<_>>()
+    };
+    assert!(!waypoints(&nav).is_empty());
+    assert_eq!(waypoints(&nav), waypoints(&plain));
+}
