@@ -1,5 +1,6 @@
 use super::*;
 
+#[rustfmt::skip]
 fn diagnostic_vehicle(reverse: bool) -> VehicleInstance {
     VehicleInstance::new(
         Arc::new(diagnostic_type(reverse)),
@@ -7,6 +8,7 @@ fn diagnostic_vehicle(reverse: bool) -> VehicleInstance {
     )
 }
 
+#[rustfmt::skip]
 fn diagnostic_type(reverse: bool) -> VehicleType {
     let mut declared = vec!["unwritten", "selection", "initialised"];
     if reverse {
@@ -83,7 +85,9 @@ fn diagnostic_type(reverse: bool) -> VehicleType {
 /// Original OMSI 2 runtime diagnostic: distinct and shared missing names ignore
 /// comparisons 0/1/2; declared, unwritten names compare zero. Reversing model and
 /// varlist order does not change those results. No original vehicle assets needed.
+#[rustfmt::skip]
 #[test]
+#[rustfmt::skip]
 fn missing_visibility_names_are_distinct_from_declared_zero() {
     for reverse in [false, true] {
         let mut v = diagnostic_vehicle(reverse);
@@ -111,7 +115,9 @@ fn missing_visibility_names_are_distinct_from_declared_zero() {
     }
 }
 
+#[rustfmt::skip]
 #[test]
+#[rustfmt::skip]
 fn a_missing_visibility_name_does_not_activate_its_material_variant() {
     let mut v = diagnostic_vehicle(false);
     v.update_visuals(0.0);
@@ -132,7 +138,9 @@ fn a_missing_visibility_name_does_not_activate_its_material_variant() {
     }
 }
 
+#[rustfmt::skip]
 #[test]
+#[rustfmt::skip]
 fn scripted_selector_transitions_leave_missing_materials_at_base() {
     let mut v = diagnostic_vehicle(false);
     for selection in [1.0, 4.0, 1.0, 0.0, 1.0, 4.0, 1.0, 0.0] {
@@ -158,7 +166,9 @@ fn scripted_selector_transitions_leave_missing_materials_at_base() {
     }
 }
 
+#[rustfmt::skip]
 #[test]
+#[rustfmt::skip]
 fn an_engine_variable_registered_later_rebinds_visibility_and_materials() {
     let mut v = diagnostic_vehicle(false);
     v.update_visuals(0.0);
@@ -185,7 +195,9 @@ fn an_engine_variable_registered_later_rebinds_visibility_and_materials() {
     assert_eq!(v.mesh_props[monitor].slot_night, [1.0]);
 }
 
+#[rustfmt::skip]
 #[test]
+#[rustfmt::skip]
 fn a_setvar_on_a_model_only_name_switches_its_meshes() {
     let shown = |v: &VehicleInstance| -> Vec<String> {
         v.ty.model
@@ -218,7 +230,9 @@ fn a_setvar_on_a_model_only_name_switches_its_meshes() {
 /// Kajosoft Jelcz's `cockpit_frame` sets `v_drzwi` from its constant (0) and its repaints
 /// choose the glazed doors with `[setvar] v_drzwi 1`, which Omsi.exe draws (#3183). The
 /// scripts still see the scheme's value when they start, as before.
+#[rustfmt::skip]
 #[test]
+#[rustfmt::skip]
 fn a_schemes_setvar_is_what_is_drawn_after_the_scripts() {
     let dir = std::env::temp_dir().join(format!("omsi_scheme_after_scripts_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -243,11 +257,43 @@ fn a_schemes_setvar_is_what_is_drawn_after_the_scripts() {
     assert_eq!(v.var("v_drzwi"), Some(1.0));
 }
 
+/// The variables the player chose for the bus before it was made - the launcher's onboard
+/// computer, the IBIS unit the pack's repaints name (#4077) - are there for the scripts'
+/// `{init}`, which reads the unit's type to build its keys and its display, and they stay over
+/// the scheme's `[setvar]` of them every frame, as `--setvar` does after the spawn.
+#[rustfmt::skip]
+#[test]
+#[rustfmt::skip]
+fn a_variable_chosen_before_the_bus_is_made_is_there_for_init() {
+    let dir = std::env::temp_dir().join(format!("omsi_initial_vars_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let script = dir.join("ibis.osc");
+    std::fs::write(&script, "{init}\n(L.L.vis_ibis_type) (S.L.at_init)\n{end}\n{frame}\n(L.L.vis_ibis_type) (S.L.drawn)\n0 (S.L.vis_ibis_type)\n{end}\n").unwrap();
+    let vars = dir.join("vars.txt");
+    std::fs::write(&vars, "vis_ibis_type\nat_init\ndrawn\n").unwrap();
+    let program = omsi_script::compile(&omsi_script::CompileInput { scripts: vec![script], varlists: vec![vars], ..Default::default() });
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(program.errors.is_empty(), "{:?}", program.errors);
+    let mut ty = diagnostic_type(false);
+    ty.program = Arc::new(program);
+    ty.paint_schemes = vec![PaintScheme { set_vars: vec![("vis_ibis_type".into(), 0.0)], ..Default::default() }];
+    let mut host = VehicleHost::new(Default::default());
+    host.paint_scheme = Some(Some(0));
+    host.initial_vars = vec![("vis_ibis_type".into(), 2.0)];
+    let mut v = VehicleInstance::new(Arc::new(ty), host);
+    assert_eq!(v.var("at_init"), Some(2.0), "the scripts started with the unit the player picked");
+    v.update(1.0 / 30.0);
+    assert_eq!(v.var("drawn"), Some(2.0));
+    assert_eq!(v.var("vis_ibis_type"), Some(2.0), "and the paint's own value does not take it back");
+}
+
 /// A value asked for with `--setvar` stays over the scheme's `[setvar]` of the same variable,
 /// which is written every frame: the launcher's doors and mirrors chosen over a repaint's
 /// were the repaint's again a frame later, and only what the repaint does not set was the
 /// player's. What the scheme does not set is still the scripts' to change.
+#[rustfmt::skip]
 #[test]
+#[rustfmt::skip]
 fn a_value_set_over_the_scheme_stays_the_one_set() {
     let dir = std::env::temp_dir().join(format!("omsi_scheme_override_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -279,7 +325,9 @@ fn a_value_set_over_the_scheme_stays_the_one_set() {
     assert_eq!(v.var("v_doors"), Some(0.0));
 }
 
+#[rustfmt::skip]
 #[test]
+#[rustfmt::skip]
 fn a_repaint_lets_go_of_what_the_last_livery_set() {
     let dir = std::env::temp_dir().join(format!("omsi_repaint_release_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -314,7 +362,9 @@ fn a_repaint_lets_go_of_what_the_last_livery_set() {
     assert_eq!(v.var("Colorscheme"), Some(-1.0));
 }
 
+#[rustfmt::skip]
 #[test]
+#[rustfmt::skip]
 fn a_livery_changed_puts_back_what_the_old_one_set() {
     let painted = |init: &str| {
         let mut ty = (*crate::timetable_run::tests::script_test_vehicle(init, "v_drzwi\nv_font\n", "").ty).clone();
@@ -341,7 +391,9 @@ fn a_livery_changed_puts_back_what_the_old_one_set() {
     }
 }
 
+#[rustfmt::skip]
 #[test]
+#[rustfmt::skip]
 fn a_livery_let_go_of_gives_back_this_buss_own_init_value() {
     let mut ty = (*crate::timetable_run::tests::script_test_vehicle("{init}\n(L.$.yard) $length (S.L.v_font)\n{end}\n", "v_font\n", "yard\n").ty).clone();
     ty.paint_schemes = vec![PaintScheme { set_vars: vec![("v_font".into(), 7.0)], ..Default::default() }, PaintScheme::default()];
@@ -358,7 +410,9 @@ fn a_livery_let_go_of_gives_back_this_buss_own_init_value() {
     }
 }
 
+#[rustfmt::skip]
 #[test]
+#[rustfmt::skip]
 fn a_repaint_leaves_alone_what_neither_livery_sets() {
     let mut ty = (*crate::timetable_run::tests::script_test_vehicle("{init}\n7 (S.L.v_font)\n{end}\n", "ass_select_tone\nv_font\n", "").ty).clone();
     let pdo = PaintScheme { name: "PDO_1828".into(), set_vars: vec![("ASS_select_tone".into(), 2.0), ("v_font".into(), 7.0)], ..Default::default() };
@@ -376,7 +430,9 @@ fn a_repaint_leaves_alone_what_neither_livery_sets() {
     assert_eq!(v.var("ASS_select_tone"), Some(4.0), "the player's tone: neither TAN livery sets it");
 }
 
+#[rustfmt::skip]
 #[test]
+#[rustfmt::skip]
 fn a_coupled_car_lets_go_of_the_value_it_took_from_the_painted_bus() {
     let painted = |init: &str| {
         let mut ty = (*crate::timetable_run::tests::script_test_vehicle(init, "v_drzwi\n", "").ty).clone();

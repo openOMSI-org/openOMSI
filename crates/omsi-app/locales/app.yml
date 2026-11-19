@@ -1897,6 +1897,8 @@ _version: 2
   en: "MOD"
 "Fleet number":
   en: "Fleet number"
+"Onboard computer":
+  en: "Onboard computer"
 "Parts missing: needs %{packs}":
   en: "Parts missing: needs %{packs}"
 "manufacturer":

@@ -1,4 +1,5 @@
 include!("../../../tools/test-support/original_root.rs");
+#[rustfmt::skip]
 #[test]
 fn vehicle_type_label_falls_back_to_the_file_name() {
     let path = std::path::Path::new("Vehicles/Pack/NL_202.bus");
@@ -8,6 +9,7 @@ fn vehicle_type_label_falls_back_to_the_file_name() {
     assert_eq!(super::vehicle_type_label("  MAN_NL202  ", path), "MAN NL202");
 }
 
+#[rustfmt::skip]
 #[test]
 fn a_part_found_from_the_vehicle_folder_is_no_missing_pack() {
     let root = std::env::temp_dir().join(format!("openomsi-packs-{}", std::process::id()));
@@ -28,6 +30,7 @@ fn a_part_found_from_the_vehicle_folder_is_no_missing_pack() {
 include!("passenger_animation_tests.rs");
 include!("plugin_launch_tests.rs");
 
+#[rustfmt::skip]
 #[test]
 fn the_games_options_survive_a_save() {
     // what the pause menu's Options change, read back as they were set
@@ -68,6 +71,7 @@ fn the_games_options_survive_a_save() {
     assert_eq!(settings_from_text(Some(&saved))["discord_app_id"], json!("123456"));
 }
 
+#[rustfmt::skip]
 #[test]
 fn launcher_settings_bridge_unifies_ui_theme_with_legacy_nav_light() {
     assert_eq!(settings_from_text(None)["ui_theme"], json!("dark"));
@@ -89,6 +93,7 @@ fn launcher_settings_bridge_unifies_ui_theme_with_legacy_nav_light() {
     assert!(invalid.lines().any(|line| line == "ui_theme=dark"), "{invalid}");
 }
 
+#[rustfmt::skip]
 #[test]
 fn dsc_files_give_name_and_description() {
     let d = super::parse_dsc("\r\n[friendlyname]\r\nMAN\r\nNL202 - EN92\r\nBeige\r\n\r\n[description]\r\nAlthough the BVG did not purchase\r\n\r\n-Technical specifications-\r\n[end]\r\n");
@@ -107,6 +112,7 @@ use super::*;
 
 /// A duty file written before the number plate field (or one that leaves it out) loads
 /// with no plate, and a plate the player typed is kept as it stands.
+#[rustfmt::skip]
 #[test]
 fn a_picked_trip_starts_the_rest_of_the_tour() {
     let d = Duty { map: "maps/x/global.cfg".into(), bus: "Vehicles/x.bus".into(), time: "09:43".into(), line: Some("14".into()), tour: Some("1".into()), trip: Some("5".into()), whole_tour: true, ..Default::default() };
@@ -118,6 +124,7 @@ fn a_picked_trip_starts_the_rest_of_the_tour() {
 }
 
 include!("lan_join_tests.rs");
+#[rustfmt::skip]
 #[test]
 fn a_duty_keeps_its_plate_and_older_files_load_without_one() {
     let old: Duty = serde_json::from_str(r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00"}"#).unwrap();
@@ -127,6 +134,7 @@ fn a_duty_keeps_its_plate_and_older_files_load_without_one() {
 }
 
 /// The fleet number picked in the launcher reaches the game.
+#[rustfmt::skip]
 #[test]
 fn a_duty_passes_its_fleet_number() {
     let d: Duty = serde_json::from_str(r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00","number":"4711"}"#).unwrap();
@@ -134,6 +142,55 @@ fn a_duty_passes_its_fleet_number() {
     assert!(a.windows(2).any(|w| w[0] == "--number" && w[1] == "4711"), "{a:?}");
 }
 
+/// The onboard computer the player picked reaches the game as `--setvar`, which the game sets
+/// over the paint scheme's own `[setvar]`s before the scripts' {init} (#4077).
+#[rustfmt::skip]
+#[test]
+fn a_duty_passes_the_variables_picked_for_the_bus() {
+    let d: Duty = serde_json::from_str(r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00","setvars":{"vis_ibis_type":"1","v_drzwi":"0"}}"#).unwrap();
+    let a = duty_args_for_root(&d, Path::new("test-omsi")).unwrap();
+    assert!(a.windows(2).any(|w| w[0] == "--setvar" && w[1] == "v_drzwi=0,vis_ibis_type=1"), "{a:?}");
+    let plain: Duty = serde_json::from_str(r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00"}"#).unwrap();
+    assert!(!duty_args_for_root(&plain, Path::new("test-omsi")).unwrap().iter().any(|x| x == "--setvar"));
+    let empty: Duty = serde_json::from_str(r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00","setvars":{}}"#).unwrap();
+    assert!(!duty_args_for_root(&empty, Path::new("test-omsi")).unwrap().iter().any(|x| x == "--setvar"));
+}
+
+/// The variable names the launcher offers as the bus's onboard computer: the words the vehicle
+/// packs of OMSI use for it, and not the ones they use for doors, seats and the rest.
+#[rustfmt::skip]
+#[test]
+fn the_onboard_computers_are_the_variables_the_packs_name() {
+    for name in ["vis_ibis_type", "IBIS_Type", "vis_kasse", "Ticketprinter", "AFR4_unit", "vis_almex", "bordcomputer", "vis_ticketbox"] {
+        assert!(is_onboard_computer(name), "{name}");
+    }
+    for name in ["v_drzwi", "vis_tuer", "cockpit_frame", "v_seat", "matrix_type", "vis_spiegel"] {
+        assert!(!is_onboard_computer(name), "{name}");
+    }
+}
+
+/// The variables a bus's paints set, as the launcher offers them: one entry per variable, its
+/// values ascending with the paints that give them, the onboard computers first.
+#[rustfmt::skip]
+#[test]
+fn a_buss_variables_come_from_its_paints() {
+    let paints = vec![
+        ("IBIS classic".to_string(), vec![("vis_ibis_type".to_string(), 0.0), ("v_drzwi".to_string(), 1.0)]),
+        ("AFR4".to_string(), vec![("VIS_IBIS_TYPE".to_string(), 2.0)]),
+        ("Almex".to_string(), vec![("vis_ibis_type".to_string(), 1.0)]),
+    ];
+    let vars = vehicle_variables(&paints);
+    assert_eq!(vars[0].name, "vis_ibis_type", "the onboard computer comes first");
+    assert!(vars[0].onboard_computer);
+    assert_eq!(vars[0].values.iter().map(|v| v.value.as_str()).collect::<Vec<_>>(), ["0", "1", "2"]);
+    assert_eq!(vars[0].values[0].paints, ["IBIS classic"]);
+    assert_eq!(vars[0].values[1].paints, ["Almex"]);
+    assert_eq!(vars[0].values[2].paints, ["AFR4"]);
+    assert_eq!(vars[1].name, "v_drzwi");
+    assert!(!vars[1].onboard_computer);
+}
+
+#[rustfmt::skip]
 #[test]
 fn portuguese_variants_are_distinct() {
     assert_eq!(language_code("pt-BR"), "PTB");
@@ -142,6 +199,7 @@ fn portuguese_variants_are_distinct() {
     assert_eq!(language_iso("PTP"), "pt-pt");
 }
 
+#[rustfmt::skip]
 #[test]
 fn catalan_survives_settings_round_trip() {
     for alias in ["CAT", "ca", "ca-ES", "ca-AD", "Català", "catala", "Catalan"] {
@@ -154,6 +212,7 @@ fn catalan_survives_settings_round_trip() {
     }
 }
 
+#[rustfmt::skip]
 #[test]
 fn mirror_rendering_can_be_disabled() {
     let v = settings_from_text(Some("mirror_size=0\n"));
@@ -162,6 +221,7 @@ fn mirror_rendering_can_be_disabled() {
     assert!(text.lines().any(|l| l == "mirror_size=0"), "{text}");
 }
 
+#[rustfmt::skip]
 #[test]
 fn mirror_refresh_survives_the_launcher() {
     assert_eq!(settings_from_text(None)["mirror_refresh"], "full");
@@ -173,6 +233,7 @@ fn mirror_refresh_survives_the_launcher() {
     }
 }
 
+#[rustfmt::skip]
 #[test]
 fn mirror_hud_survives_the_launcher() {
     assert_eq!(settings_from_text(None)["mirror_hud"], 0);
@@ -184,6 +245,7 @@ fn mirror_hud_survives_the_launcher() {
     }
 }
 
+#[rustfmt::skip]
 #[test]
 fn mirror_hud_every_frame_survives_the_launcher() {
     assert_eq!(settings_from_text(None)["mirror_hud_every_frame"], false);
@@ -195,6 +257,7 @@ fn mirror_hud_every_frame_survives_the_launcher() {
     }
 }
 
+#[rustfmt::skip]
 #[test]
 fn sixteen_x_anisotropy_survives_the_launcher() {
     let v = settings_from_text(Some("anisotropy=16\n"));
@@ -204,6 +267,7 @@ fn sixteen_x_anisotropy_survives_the_launcher() {
     assert_eq!(settings_from_text(Some("anisotropy=32\n"))["anisotropy"], 16);
 }
 
+#[rustfmt::skip]
 #[test]
 fn update_settings_round_trip() {
     // no file: look for updates, ask before installing
@@ -220,6 +284,7 @@ fn update_settings_round_trip() {
     assert_eq!(settings_from_text(Some("update_channel=nightly\n"))["update_channel"], json!("stable"));
 }
 
+#[rustfmt::skip]
 #[test]
 fn vr_settings_round_trip() {
     let mut settings = settings_from_text(None);
@@ -235,6 +300,7 @@ fn vr_settings_round_trip() {
     }
 }
 
+#[rustfmt::skip]
 #[test]
 fn triple_screen_settings_survive_launcher_save() {
     let input = "triple_screen=1\ntriple_span=0\ntriple_width_mm=620\ntriple_distance_mm=700\ntriple_bezel_mm=18\ntriple_left_angle_deg=50\ntriple_right_angle_deg=40\ntriple_eye_height_mm=60\n";
@@ -268,6 +334,7 @@ fn triple_screen_settings_survive_launcher_save() {
     assert_eq!(loaded["fov"], 50.0);
 }
 
+#[rustfmt::skip]
 #[test]
 fn steering_view_settings_survive_the_launcher() {
     let values = settings_from_text(Some("steer_look=1\nsteer_look_angle=45\nsteer_look_response=0.5\n"));
@@ -282,6 +349,7 @@ fn steering_view_settings_survive_the_launcher() {
     assert_eq!(invalid["steer_look_response"], json!(0.25));
 }
 
+#[rustfmt::skip]
 #[test]
 fn high_vr_mirror_rates_survive_launcher_settings() {
     for rate in [-1, 0, 16, 60, 120, 240, 360] {
@@ -298,6 +366,7 @@ fn high_vr_mirror_rates_survive_launcher_settings() {
 
 /// The interface size: 100% without a file, kept as set, and a hand-written value out
 /// of range brought back into it.
+#[rustfmt::skip]
 #[test]
 fn interface_size_round_trip() {
     assert_eq!(settings_from_text(None)["ui_scale"], json!(1.0));
@@ -338,6 +407,7 @@ fn interface_size_round_trip() {
 
 /// The opacity is the whole interface's now: a file of an older build, where it was the
 /// navigator's, keeps its value under the new name, written once.
+#[rustfmt::skip]
 #[test]
 fn the_navigators_opacity_becomes_the_interfaces() {
     let old = "navigator_opacity=0.5\n";
@@ -348,6 +418,7 @@ fn the_navigators_opacity_becomes_the_interfaces() {
     assert!(!text.contains("navigator_opacity"), "{text}");
 }
 
+#[rustfmt::skip]
 #[test]
 fn the_wheels_tremble_settings_round_trip() {
     let mut settings = settings_from_text(None);
@@ -366,6 +437,7 @@ fn the_wheels_tremble_settings_round_trip() {
     assert_eq!(settings_from_text(Some("ff_fade=12\n"))["ff_fade"], 1.5);
 }
 
+#[rustfmt::skip]
 #[test]
 fn the_cab_wheel_rotation_round_trips() {
     // 0: the bus's own animation, as before the setting
@@ -386,6 +458,7 @@ fn the_cab_wheel_rotation_round_trips() {
     assert!(settings_to_text(&settings, None).lines().any(|l| l == "cab_wheel_rotation=1800"));
 }
 
+#[rustfmt::skip]
 #[test]
 fn settings_keep_what_the_page_does_not_manage() {
     // the user's file: a key of a newer game, a hand-written one, and the game's other
@@ -429,6 +502,7 @@ fn settings_keep_what_the_page_does_not_manage() {
 
 /// The lines follow the date as the game's do: Spandau's 1991 timetable change takes
 /// "5 & 5N" off and brings "130 & N30"; without a date it is the game's default day.
+#[rustfmt::skip]
 #[test]
 #[ignore = "needs the original OMSI 2 install (OMSI_ROOT)"]
 fn lines_follow_the_chrono_date() {
@@ -444,6 +518,7 @@ fn lines_follow_the_chrono_date() {
     assert!(lines_on(&map, "someday").is_err());
 }
 
+#[rustfmt::skip]
 #[test]
 fn settings_defaults_and_automatic_values() {
     let v = settings_from_text(None);
@@ -465,6 +540,7 @@ fn settings_defaults_and_automatic_values() {
 /// Dates fitted to a map's year span: moved to the nearest allowed year keeping the day,
 /// 29 February to the 28th in a year without it; inside the span, with no span, or not a
 /// date: unchanged. And the spans `[years]` gives.
+#[rustfmt::skip]
 #[test]
 fn dates_are_fitted_to_the_maps_year_span() {
     let nineties = Some((1991, 1999));
@@ -490,6 +566,7 @@ fn dates_are_fitted_to_the_maps_year_span() {
 
 /// A date the player chose keeps its year; only the machine's calendar is fitted to the
 /// map's `[years]`.
+#[rustfmt::skip]
 #[test]
 fn a_chosen_duty_date_keeps_its_year() {
     let span = Some((1986, 2000));
@@ -497,6 +574,7 @@ fn a_chosen_duty_date_keeps_its_year() {
     assert_eq!(date_for_game("2025-06-01", true, span), "2000-06-01");
 }
 
+#[rustfmt::skip]
 #[test]
 fn todays_year_is_kept_when_the_player_asks_for_it() {
     let dir = std::env::temp_dir().join(format!("openomsi-real-year-{}", std::process::id()));
@@ -513,6 +591,7 @@ fn todays_year_is_kept_when_the_player_asks_for_it() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[rustfmt::skip]
 #[test]
 fn a_depot_bus_is_handed_to_the_game() {
     let d = Duty { map: "maps/x/global.cfg".into(), bus: "Vehicles/x.bus".into(), time: "09:00".into(), depot: Some("6703c1a0".into()), ..Default::default() };
@@ -524,6 +603,7 @@ fn a_depot_bus_is_handed_to_the_game() {
 }
 
 /// Same-number tours on alternating weekdays remain separate across date changes.
+#[rustfmt::skip]
 #[test]
 fn duplicate_tour_numbers_have_distinct_stable_selections() {
     let map = std::env::temp_dir().join(format!("openomsi-duplicate-tours-{}", std::process::id()));
@@ -560,6 +640,7 @@ fn duplicate_tour_numbers_have_distinct_stable_selections() {
     std::fs::remove_dir_all(map).unwrap();
 }
 
+#[rustfmt::skip]
 #[test]
 fn comfortable_cabin_is_an_independent_opt_in_launch_flag() {
     let d = Duty {
@@ -586,6 +667,7 @@ fn comfortable_cabin_is_an_independent_opt_in_launch_flag() {
     assert!(!enabled.iter().any(|a| a == "--autostart"));
 }
 
+#[rustfmt::skip]
 #[test]
 fn frame_generation_survives_the_settings_file() {
     let page = super::settings_from_text(Some("upscaler=metalfx\nframe_generation=MetalFX\n"));
@@ -598,6 +680,7 @@ fn frame_generation_survives_the_settings_file() {
     assert!(crate::graphics_profiles::GRAPHICS_PROFILE_KEYS.contains(&"frame_generation"));
 }
 
+#[rustfmt::skip]
 #[test]
 fn the_upscaler_and_its_quality_survive_the_settings_file() {
     let page = super::settings_from_text(Some("upscaler=dlss

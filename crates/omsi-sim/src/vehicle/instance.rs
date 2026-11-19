@@ -2,6 +2,7 @@
 
 use super::*;
 
+#[rustfmt::skip]
 impl VehicleInstance {
     /// The fleet number the scripts know as `number` (empty for a vehicle without one).
     pub fn number(&self) -> String {
@@ -121,25 +122,33 @@ impl VehicleInstance {
             state.str_vars[i as usize] = h.name.clone();
         }
         let before_paint = scheme_values(&ty, &var_index, &state.vars);
+        let mut put = |name: &str, v: f32| {
+            let key = name.to_ascii_lowercase();
+            match var_index.get(&key) {
+                Some(id) => state.vars[*id as usize] = v,
+                None if model_only_vars.contains(&key) => {
+                    var_index.insert(key, state.vars.len() as omsi_script::VarId);
+                    state.vars.push(v);
+                }
+                None => {}
+            }
+        };
         if let Some(scheme) = host.paint_scheme {
             let scheme = scheme.filter(|i| *i < ty.paint_schemes.len());
-            let mut put = |name: &str, v: f32| {
-                let key = name.to_ascii_lowercase();
-                match var_index.get(&key) {
-                    Some(id) => state.vars[*id as usize] = v,
-                    None if model_only_vars.contains(&key) => {
-                        var_index.insert(key, state.vars.len() as omsi_script::VarId);
-                        state.vars.push(v);
-                    }
-                    None => {}
-                }
-            };
             put("Colorscheme", scheme.map(|i| i as f32).unwrap_or(-1.0));
             if let Some(i) = scheme {
                 for (var, v) in &ty.paint_schemes[i].set_vars {
                     put(var, *v);
                 }
             }
+        }
+        // What the player chose for this vehicle (the launcher's onboard computer: an IBIS
+        // unit, a ticket printer): over the repaint's [setvar]s, and before {init}, which
+        // reads the unit's type to build its keys, its display and its tickets. The value is
+        // kept over the scheme's each frame too (see `scheme_overrides`), as --setvar's is.
+        let chosen_vars = host.initial_vars.clone();
+        for (name, value) in &chosen_vars {
+            put(name, *value);
         }
         if let Some(i) = var_index.get("schedule_active") {
             state.vars[*i as usize] = host.schedule_active;
@@ -292,7 +301,7 @@ impl VehicleInstance {
             trailers_stepped: false,
             var_index: std::sync::Arc::new(var_index),
             model_only_vars,
-            scheme_overrides: Vec::new(),
+            scheme_overrides: chosen_vars,
             paint_base,
             props_plan: PropsPlan::default(),
             pax_vars: std::sync::OnceLock::new(),
@@ -504,6 +513,7 @@ impl VehicleInstance {
     }
 }
 
+#[rustfmt::skip]
 pub(super) fn scheme_var_names(ty: &VehicleType) -> Vec<String> {
     let mut names: Vec<String> = ty.paint_schemes.iter().flat_map(|s| &s.set_vars).map(|(n, _)| n.to_ascii_lowercase()).collect();
     names.sort_unstable();
@@ -511,6 +521,7 @@ pub(super) fn scheme_var_names(ty: &VehicleType) -> Vec<String> {
     names
 }
 
+#[rustfmt::skip]
 fn scheme_values(ty: &VehicleType, var_index: &HashMap<String, omsi_script::VarId>, vars: &[f32]) -> Vec<(String, Option<f32>)> {
     scheme_var_names(ty).into_iter().map(|k| {
         let v = var_index.get(&k).map(|id| vars[*id as usize]);
@@ -518,6 +529,7 @@ fn scheme_values(ty: &VehicleType, var_index: &HashMap<String, omsi_script::VarI
     }).collect()
 }
 
+#[rustfmt::skip]
 fn unpainted_values(program: &omsi_script::Program, before: Vec<(String, Option<f32>)>, var_index: &HashMap<String, omsi_script::VarId>, vars: &[f32]) -> Vec<(String, f32)> {
     before
         .into_iter()
@@ -528,10 +540,12 @@ fn unpainted_values(program: &omsi_script::Program, before: Vec<(String, Option<
         .collect()
 }
 
+#[rustfmt::skip]
 pub(super) fn scheme_sets(ty: &VehicleType, scheme: Option<usize>, name: &str) -> bool {
     scheme.and_then(|i| ty.paint_schemes.get(i)).is_some_and(|s| s.set_vars.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)))
 }
 
+#[rustfmt::skip]
 pub(super) fn control_cables(ty: &VehicleType) -> Vec<(omsi_script::VarId, omsi_script::VarId)> {
     let v = |name: &str| ty.program.var(name);
     let mut cables: Vec<_> = ty.def.control_cable_front.iter().chain(&ty.def.control_cable_back)
