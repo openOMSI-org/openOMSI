@@ -69,11 +69,21 @@ struct Roads {
     entries: Vec<Entry>,
     /// Every placed object's world place: the trip's stops are found here.
     objects: HashMap<i64, DVec2>,
-    /// The map's own layers (ground, water, paved surfaces, houses), when the game has them.
-    layers: Option<Arc<omsi_map::layers::Layers>>,
+    root: PathBuf,
+    map_dir: PathBuf,
+    tiles: Vec<(i32, i32, PathBuf)>,
+    chrono: Vec<PathBuf>,
+    /// The map's own layers (ground, water, paved surfaces, houses), built on demand when requested.
+    layers: std::sync::OnceLock<Option<Arc<omsi_map::layers::Layers>>>,
 }
 
 impl Roads {
+    fn layers(&self) -> Option<Arc<omsi_map::layers::Layers>> {
+        self.layers
+            .get_or_init(|| crate::host::host().map_layers(&self.root, &self.map_dir, &self.tiles, &self.chrono).map(Arc::new))
+            .clone()
+    }
+
     /// The lanes a trip's road piece runs on: the very `[path]` the timetable names, else -
     /// a map whose timetable still names a spline it no longer has - every lane of that
     /// spline, so a hole in the map's own data is not a hole in the picture.
@@ -177,7 +187,7 @@ pub fn export_with(map: &str, global: &Path, date: &str, trip: &str, tolerance: 
         // asks for no surface)
         "credit": global.parent().and_then(omsi_map::package::Package::open).map(|p| p.credit),
         "package": if surface && detail != Detail::Route { package_view(global, o, roads.lo, roads.hi, tolerance) } else { serde_json::Value::Null },
-        "layers": if surface && detail != Detail::Route { layers_view(roads.layers.as_deref(), o) } else { serde_json::Value::Null },
+        "layers": if surface && detail != Detail::Route { layers_view(roads.layers().as_deref(), o) } else { serde_json::Value::Null },
     })
 }
 
@@ -288,7 +298,7 @@ pub fn overview(look: Look) -> serde_json::Value {
 pub fn map_network(map: &str, global: &Path, date: &str) -> (DVec2, Arc<Network>, Option<Arc<omsi_map::layers::Layers>>) {
     let look = Look { map: map.to_string(), global: global.to_path_buf(), date: date.to_string(), trip: String::new(), entry: -1 };
     let roads = roads_of(&look);
-    (roads.origin, roads.net.clone(), roads.layers.clone())
+    (roads.origin, roads.net.clone(), roads.layers())
 }
 
 /// The map's data (`read_map`) for `look`'s map and date, read once and kept for the next
@@ -400,8 +410,22 @@ fn read_map(look: &Look) -> Roads {
         min.x, min.y, max.x, max.y,
         lo.x, lo.y, hi.x, hi.y
     );
-    let layers = crate::host::host().map_layers(&root, &map_dir, &tiles, &chrono).map(Arc::new);
-    Roads { roads, net: Arc::new(net), lanes: by_path, splines: by_spline, origin, lo, hi, entries, objects, layers }
+    Roads {
+        roads,
+        net: Arc::new(net),
+        lanes: by_path,
+        splines: by_spline,
+        origin,
+        lo,
+        hi,
+        entries,
+        objects,
+        root,
+        map_dir,
+        tiles,
+        chrono,
+        layers: std::sync::OnceLock::new(),
+    }
 }
 
 /// The map's layers as the page draws them under the roads, in metres from `origin` rounded to
