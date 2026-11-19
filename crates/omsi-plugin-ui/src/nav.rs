@@ -683,4 +683,101 @@ mod tests {
                 .ceil()
         );
     }
+
+    /// A card taller than the map is cut off at the map's bottom edge: what shows of it takes
+    /// its clicks, and a press just outside what shows - below the edge, where the card would
+    /// go on if it were not cut off, or just beside it - is no part of the plugin's: there the
+    /// press stays the navigator's (its map dragged, the city map opened).
+    #[test]
+    fn a_card_cut_off_at_the_map_s_edge_takes_no_click_past_it() {
+        let fonts = Fonts::new();
+        let buttons = (1..=12)
+            .map(|i| format!(r#"{{ type = "button", id = "b{i}", text = "Button {i}" }}"#))
+            .collect::<Vec<_>>()
+            .join(", ");
+        // (a map 300 x 240, 40 from the panel's top, with room of the panel's below it; the
+        // card 120 wide at 8, 8 in it: its buttons 34 high, 6 apart, from 48 + 10 down)
+        let src = format!(
+            r#"{{ anchor = "navigator", frame = true, grab = true, width = 300, padding = 0, gap = 0, children = {{
+            {{ type = "space", size = 40 }},
+            {{ type = "map", height = 240, cards = false, overlay = {{
+                {{ place = "top_left", x = 8, y = 8, width = 120, padding = 10, gap = 6, children = {{ {buttons} }} }},
+            }} }},
+            {{ type = "space", size = 60 }},
+        }} }}"#
+        );
+        let p = panel(&src);
+        let l = layout(&p, &fonts, 1.0);
+        let map = Rect::new(0.0, 40.0, 300.0, 240.0);
+        assert_eq!(l.map.map(|m| m.0), Some(map));
+        assert!(l.h >= 340.0, "the panel goes on below the map: {}", l.h);
+        // (the card's background: from its top to the map's bottom, not to its own 542)
+        let Item::Rounded { r, .. } = l.items[0] else {
+            panic!("{:?}", l.items)
+        };
+        assert_eq!(
+            (r.x, r.y, r.w, r.bottom()),
+            (8.0, 48.0, 120.0, map.bottom())
+        );
+        let element = |p: Vec2| hit_at(&l, p).and_then(|i| l.hits[i].element.clone());
+        let hit = |id: &str| {
+            l.hits
+                .iter()
+                .find(|h| h.element.as_deref() == Some(id))
+                .map(|h| h.r)
+                .unwrap()
+        };
+        // a button wholly on the map takes its click
+        assert_eq!(hit("b1"), Rect::new(18.0, 58.0, 100.0, BUTTON_H));
+        assert_eq!(element(hit("b1").center()).as_deref(), Some("b1"));
+        // the button across the edge: its part on the map takes it, up to the edge
+        assert_eq!(hit("b6"), Rect::new(18.0, 258.0, 100.0, 22.0));
+        assert_eq!(element(Vec2::new(68.0, 270.0)).as_deref(), Some("b6"));
+        assert_eq!(element(Vec2::new(68.0, 279.5)).as_deref(), Some("b6"));
+        // just below the edge, where the rest of it and the next button would be: none
+        assert_eq!(element(Vec2::new(68.0, 280.5)), None);
+        assert_eq!(element(Vec2::new(68.0, 291.0)), None);
+        assert_eq!(element(Vec2::new(68.0, 315.0)), None);
+        assert_eq!(hit("b7").h, 0.0);
+        // just beside the card, and beside the button on the card's own background: none
+        let y = hit("b1").center().y;
+        for x in [7.5, 17.5, 118.5, 128.5] {
+            assert_eq!(element(Vec2::new(x, y)), None, "{x}");
+        }
+        // as the game asks it, without the mouse: the panel takes the press on what shows of
+        // its buttons, and leaves it to the navigator everywhere else
+        let mut panels = PluginPanels {
+            scale: 1.0,
+            ..Default::default()
+        };
+        let mut ui = UiState::default();
+        ui.set(1, "phone", p.clone()).unwrap();
+        let laid = Laid { flat: true, ..l };
+        let card = Card {
+            revision: 0,
+            scale: 1.0,
+            backdrop: 1.0,
+            pal: Palette::OPENOMSI,
+            laid,
+            tex: None,
+            drawn: None,
+            origin: Vec2::ZERO,
+            y: None,
+            seen: panels.frame,
+            full_h: 0.0,
+            room: f32::INFINITY,
+        };
+        panels.cards.insert(Key::Panel(1, "phone".into()), card);
+        assert!(panels.grabs_at(&ui, 68.0, y));
+        assert!(panels.grabs_at(&ui, 68.0, 279.5));
+        for (x, y) in [
+            (68.0, 280.5),
+            (68.0, 315.0),
+            (128.5, y),
+            (118.5, y),
+            (150.0, 150.0),
+        ] {
+            assert!(!panels.grabs_at(&ui, x, y), "{x}, {y}");
+        }
+    }
 }
