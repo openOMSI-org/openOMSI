@@ -17,7 +17,9 @@
 
 use glam::Vec2;
 use hashbrown::HashMap;
-use omsi_plugin::ui::{self as pui, Align, Element, Kind, Panel, Rgba, RowAlign, Toast, UiState};
+use omsi_plugin::ui::{
+    self as pui, Align, Element, Kind, MapLayers, Panel, Rgba, RowAlign, Toast, UiState,
+};
 use omsi_render::{Renderer, Scene, TextureId};
 use omsi_ui::paint::Align as TextAlign;
 use omsi_ui::theme::Palette;
@@ -113,7 +115,7 @@ pub struct Laid {
     pub flat: bool,
     /// Where its first `map` element is, and whether the navigator's cards go over it: the
     /// navigator draws its map there under a panel that fills its frame.
-    pub map: Option<(Rect, bool)>,
+    pub map: Option<(Rect, bool, Option<MapLayers>)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -805,10 +807,10 @@ fn cut(l: &mut Laid, h: f32) {
         x.r.h = (h - x.r.y).clamp(0.0, x.r.h);
     }
     // (the map too: as much of it as there is room for, none below the cut)
-    if let Some((r, _)) = l.map.as_mut() {
+    if let Some((r, _, _)) = l.map.as_mut() {
         r.h = (h - r.y).clamp(0.0, r.h);
     }
-    l.map = l.map.filter(|(r, _)| r.h > 0.0);
+    l.map = l.map.filter(|(r, _, _)| r.h > 0.0);
 }
 
 /// The hit under `p` (card pixels): the last one drawn there.
@@ -1218,7 +1220,7 @@ impl PluginPanels {
             }
             match dock {
                 Some(d) => {
-                    let map = card.laid.map.map(|(r, cards)| DockedMap {
+                    let map = card.laid.map.map(|(r, cards, layers)| DockedMap {
                         rect: [
                             (r.x * ck).round(),
                             (r.y * ck).round(),
@@ -1226,6 +1228,7 @@ impl PluginPanels {
                             (r.h * ck).round(),
                         ],
                         cards,
+                        layers,
                     });
                     let background = e.panel.background.filter(|_| e.panel.frame).map(color);
                     self.docked = Some(Docked {

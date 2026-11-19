@@ -864,20 +864,29 @@ fn the_compass_keeps_clear_of_the_open_lines_panel() {
 fn a_frame_panel_s_map_stays_inside_the_navigator() {
     let m = |rect: [f32; 4]| FrameMap { rect, cards: false };
     assert_eq!(
-        framed_map(m([10.0, 80.0, 340.0, 272.0]), 360.0, 500.0),
-        (Rect::new(10.0, 80.0, 340.0, 272.0), false)
+        framed_map(m([10.0, 80.0, 340.0, 272.0]), None, 360.0, 500.0),
+        (
+            Rect::new(10.0, 80.0, 340.0, 272.0),
+            false,
+            FrameLayers::default()
+        )
     );
     assert_eq!(
-        framed_map(m([10.0, 300.0, 400.0, 272.0]), 360.0, 500.0).0,
+        framed_map(m([10.0, 300.0, 400.0, 272.0]), None, 360.0, 500.0).0,
         Rect::new(10.0, 300.0, 350.0, 200.0)
     );
     assert_eq!(
-        framed_map(m([10.0, 600.0, 340.0, 272.0]), 360.0, 500.0).0.h,
+        framed_map(m([10.0, 600.0, 340.0, 272.0]), None, 360.0, 500.0)
+            .0
+            .h,
         0.0
     );
     // (no frame panel: the navigator lays itself out as ever)
     let n = Navigator::new(true, 0.85, "bottom-left");
-    assert_eq!((n.frame_panel, n.framed, n.frame_card), (None, None, None));
+    assert_eq!(
+        (n.frame_panel, n.frame_look, n.framed, n.frame_card),
+        (None, None, None, None)
+    );
 }
 
 #[test]
@@ -1072,4 +1081,56 @@ fn minimap_route_cache_accumulates_small_steps_without_rebuilding_each_frame() {
         assert!((current - cached).abs() < 3.0);
     }
     assert_eq!(rebuilds, 50);
+}
+
+/// A frame map's layer it leaves out is the player's setting, whichever it is.
+#[test]
+fn a_layer_left_out_follows_the_setting() {
+    assert!(layer_on(true, None));
+    assert!(!layer_on(false, None));
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    n.show_ai = true;
+    n.show_cars = false;
+    n.show_surface = true;
+    let look = panel::PanelLook::hud(&n, 360.0);
+    let setting = n.layers_shown(&look, None);
+    assert!(setting.transit && !setting.cars && setting.icons && !setting.history);
+    // (a map that says nothing, or only of other layers, draws what the setting does)
+    assert_eq!(n.layers_shown(&look, Some(FrameLayers::default())), setting);
+    let only_jams = FrameLayers {
+        jams: Some(true),
+        ..FrameLayers::default()
+    };
+    assert_eq!(n.layers_shown(&look, Some(only_jams)), setting);
+}
+
+/// What a frame map gives overrides the setting, on or off, for that layer alone.
+#[test]
+fn layers_off_override_the_setting() {
+    assert!(!layer_on(true, Some(false)));
+    assert!(layer_on(false, Some(true)));
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    n.show_ai = true;
+    n.show_cars = true;
+    let look = panel::PanelLook::hud(&n, 360.0);
+    let over = FrameLayers {
+        cars: Some(false),
+        stops: Some(false),
+        history: Some(true),
+        ..FrameLayers::default()
+    };
+    let shown = n.layers_shown(&look, Some(over));
+    assert!(!shown.cars && !shown.stops && shown.history);
+    assert!(shown.transit && shown.jams && shown.players && shown.icons);
+    // (the player's settings are untouched: the cockpit screen and the city map keep them)
+    assert!(n.show_cars && n.show_ai);
+    assert!(n.layers_shown(&look, None).cars && n.layers_shown(&look, None).stops);
+    // (a plugin that turns a layer on gets it though the setting is off)
+    n.show_cars = false;
+    let on = FrameLayers {
+        cars: Some(true),
+        ..FrameLayers::default()
+    };
+    assert!(n.layers_shown(&look, Some(on)).cars);
+    assert!(!n.layers_shown(&look, None).cars);
 }

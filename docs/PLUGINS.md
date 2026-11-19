@@ -338,7 +338,7 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `7` (`6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
+`omsi.ui.version` is `8` (`7` before the `layers` of a frame panel's `map`, `6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
 element, `4` before `grab`, `3` before boxes, stop lists and the other
 elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
 test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
@@ -429,6 +429,23 @@ omsi.ui.set("phone", { anchor = "navigator", frame = true, grab = true, padding 
 } })
 ```
 
+The `map` element's `layers` (`omsi.ui.version` 8) choose what the map in the frame panel shows:
+`cars` (the traffic's car dots), `transit` (the buses, trams and trains as drops with their
+lines), `jams` (the bands on roads where the traffic is slow or stands), `players` (the other
+players), `icons` (the map package's places), `stops` (the stops' pins) and `history` (the route
+the bus has driven). A layer given as `true` or `false` is shown or left out whatever the
+player's settings (`nav_ai`, `nav_ai_cars`, the map package's setting...) say; a layer left out
+follows the setting, and without `layers` the map is as it always was. It reaches only the map
+drawn in a plugin's frame panel: the navigator without one, the city map and the cockpit
+screens keep the settings, and a `layers` on a `map` elsewhere is ignored. A value that is no
+`true` or `false` is refused with the key's name; a key that is no layer here is left alone, so a
+plugin written for a later game still shows. Icons come from
+the map package, so they stay away where the player has the package off.
+
+```lua
+{ type = "map", height = 220, layers = { cars = false, players = false, history = true } }
+```
+
 #### Elements
 
 Every element can have an `id`, a `color` and `visible = false` (left out, no room kept).
@@ -443,7 +460,7 @@ Every element can have an `id`, a `color` and `visible = false` (left out, no ro
 | `box` (4) | `children`, `gap` (default 4), `color` (default amber) | its children stacked in a box tinted with `color`, a stripe of it on the left: a note, an advice |
 | `stops` (4) | `stops` (`{ { name, time, expected, expected_color, state, tag }, ... }`, up to 128), `size` (13), `color` (the rail, default amber) | stops on a rail, a row each: `state` `"done"` (behind the bus: grey), `"now"` (the one it heads for: marked, bold) or `"ahead"` (the default); `time` on the right, `expected` before it in `expected_color`, and `tag` (`"terminus"`) before them |
 | `divider` | `color` | a thin line (in a row: upright) |
-| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height |
+| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`), `layers` (8: `{ cars, transit, jams, players, icons, stops, history }`, each `true` or `false`) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height. `layers` says what that map shows, over the player's settings and for this map alone |
 | `space` | `size` (default 8) | empty room (in a row: across) |
 | `button` | `id` (needed), `text`, `icon`, `color` | a button 34 high, across the panel (in a row as wide as its label, or what it grows to); a click on it is `ui_click(panel id, button id)` |
 | `image` | `src` (a PNG, JPEG, BMP or TGA of the plugin's folder), `width`, `height` (default 64) | the picture, made smaller to fit the width it has |
@@ -506,6 +523,7 @@ Complete plugins to start from (each runs in the tests against a stand-in game):
 | Plugin | What it shows |
 | --- | --- |
 | [`trip_panel.lua`](examples/plugins/trip_panel.lua) | a panel with the line, the next stop and a button |
+| [`navigator_map.lua`](examples/plugins/navigator_map.lua) | the navigator's frame for a panel, its map showing only the route and the stops (`map` with `layers`) |
 | [`dispatcher/`](examples/plugins/dispatcher/main.lua) | a dispatcher and a small career: a draggable panel with tabs, the duty's next stops in a table, a chart of the delays, pay for stops and trips kept in the storage, today's duties offered and taken with a click, settings, hotkeys |
 | [`telemetry_hud.lua`](examples/plugins/telemetry_hud.lua) | a HUD: the speed with a chart of the last minute, gear, rpm, fuel, passengers, the speed limit and the traffic light ahead; a warning before a red light; the values as JSON over UDP for a program beside the game |
 | [`passenger_log.lua`](examples/plugins/passenger_log.lua) | every passenger boarding the bus in `game.log`: age, boarding stop and destination, the ticket they will ask for (`passenger_ticket`, `people.get`) |

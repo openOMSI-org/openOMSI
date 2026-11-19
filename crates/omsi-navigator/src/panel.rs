@@ -320,12 +320,15 @@ impl Navigator {
         // (under a plugin's panel in the whole frame: its map where it says, rounded as a card
         // of its own, or no map at all)
         let plugin_frame = self.framed.filter(|_| look.plugins);
-        let (map, cards, map_radius) = match plugin_frame {
-            Some(Some((r, cards))) => (r, cards, (10.0 * s).min(radius)),
+        let (map, cards, map_radius, layers) = match plugin_frame {
+            Some(Some((r, cards, layers))) => (r, cards, (10.0 * s).min(radius), Some(layers)),
             Some(None) => return self.draw_card_alone(renderer, target, size, &pal, look),
-            None => (Rect::new(0.0, 0.0, pw, map_h), true, radius),
+            None => (Rect::new(0.0, 0.0, pw, map_h), true, radius, None),
         };
         let framed = plugin_frame.is_some();
+        // (what the map shows: the settings', and in a frame panel's picture alone what its
+        // map says over them)
+        let shown = self.layers_shown(look, layers);
         let vp = [map.x, map.y, map.w, map.h];
 
         // --- the ground (buffer 0): built again when the bus went far, tiles brought lanes,
@@ -497,7 +500,7 @@ impl Navigator {
         // --- the route (buffers 1 and 9): rebuilt for route changes or three metres of progress
         let mut route_verts: Option<(usize, u64, std::sync::Arc<[omsi_ui::paint::Vertex]>)> = None;
         let mut route_count = 0;
-        let history = look.show_history && self.destination.is_none();
+        let history = shown.history && self.destination.is_none();
         let history_slot = usize::from(history);
         let route_net = global.as_deref().or(f.traffic.map(|t| &t.net));
         if let (Some(rn), true) = (route_net, !self.route.lanes.is_empty()) {
@@ -607,7 +610,7 @@ impl Navigator {
         let mut dy = Painter::new();
         // other roads where the traffic is slow or stands: a band in its colour beside the
         // road's middle (as a map service draws it)
-        if let Some(net) = f.traffic.map(|t| &t.net) {
+        if let Some(net) = f.traffic.map(|t| &t.net).filter(|_| shown.jams) {
             for (&lane, &c) in &self.congestion {
                 let lv = level(c);
                 if lv < 2 {
@@ -632,7 +635,10 @@ impl Navigator {
         // the public transport as drops with their lines (over the map's marks, on the screen);
         // the map's own timetabled trains are left out
         let mut transit: Vec<(DVec3, f64, Option<String>)> = Vec::new();
-        if let Some(t) = f.traffic.filter(|_| self.show_ai && !look.no_nav_ui) {
+        if let Some(t) = f
+            .traffic
+            .filter(|_| (shown.cars || shown.transit) && !look.no_nav_ui)
+        {
             for c in &t.cars {
                 if c.gone
                     || c.is_rail()
@@ -644,10 +650,10 @@ impl Navigator {
                 let (color, line) = traffic_kind(c);
                 let at = self.smoothed_position(c);
                 if color == DOT {
-                    if self.show_cars {
+                    if shown.cars {
                         car_dot(&mut dy, rel(at), self.light);
                     }
-                } else {
+                } else if shown.transit {
                     transit.push((at, c.vehicle.heading, line));
                 }
             }
@@ -673,7 +679,7 @@ impl Navigator {
             anchor,
             s,
             camera_heading,
-            history,
+            shown,
             transit,
             &pal,
         );
@@ -694,7 +700,11 @@ impl Navigator {
             );
         }
         // the package's places: its icons on the map, the municipality and the street under it
-        let icon_verts = self.minimap_icons(vpm, vp, anchor, f.bus.truncate(), map, s);
+        let icon_verts = if shown.icons {
+            self.minimap_icons(vpm, vp, anchor, f.bus.truncate(), map, s)
+        } else {
+            Vec::new()
+        };
         // (the place row, the cards and the stop list: the plugin's panel has the rest of the
         // frame, and says whether the cards go over its map)
         if !framed && !remote && !look.no_nav_ui {
@@ -950,17 +960,18 @@ impl Navigator {
         anchor: DVec2,
         s: f32,
         camera_heading: f64,
-        history: bool,
+        shown: Shown,
         mut transit: Vec<(DVec3, f64, Option<String>)>,
         pal: &Palette,
     ) {
         let rel = |p: DVec3| Vec3::new((p.x - anchor.x) as f32, (p.y - anchor.y) as f32, 0.0);
         let n_stops = f.stops.len();
+        let history = shown.history;
         let markers = spaced_markers(
             f.stops
                 .iter()
                 .enumerate()
-                .filter(|_| !history || !self.trip_completed)
+                .filter(|_| shown.stops && (!history || !self.trip_completed))
                 .filter_map(|(k, st)| {
                     project(vpm, vp, rel(st.position))
                         .filter(|p| map.contains(*p))
@@ -968,7 +979,7 @@ impl Navigator {
                 }),
             20.0 * s,
         );
-        if history {
+        if history && shown.stops {
             let done = spaced_markers(
                 self.completed_stops
                     .iter()
@@ -1002,7 +1013,7 @@ impl Navigator {
         }
         transit.sort_by(|a, b| (a.0 - f.bus).length().total_cmp(&(b.0 - f.bus).length()));
         let mut taken: Vec<Rect> = Vec::new();
-        for pl in &f.players {
+        for pl in f.players.iter().filter(|_| shown.players) {
             let Some(p) = project(vpm, vp, rel(pl.position)).filter(|p| map.contains(*p)) else {
                 continue;
             };
@@ -1055,6 +1066,20 @@ impl Navigator {
         }
     }
 
+    /// Which layers this picture draws (see [`Shown`]).
+    pub(super) fn layers_shown(&self, look: &PanelLook, over: Option<FrameLayers>) -> Shown {
+        let settings = Shown {
+            cars: self.show_ai && self.show_cars,
+            transit: self.show_ai,
+            jams: true,
+            players: true,
+            icons: self.show_surface,
+            stops: true,
+            history: look.show_history,
+        };
+        over.map_or(settings, |o| settings.over(o))
+    }
+
     /// A key that changes with everything the ground's look depends on.
     pub(super) fn look_key(&self) -> u64 {
         (self.light as u64)
@@ -1064,6 +1089,36 @@ impl Navigator {
             | self.surface_version << 3
             | (self.map_version << 20)
             | (self.roads_version << 36)
+    }
+}
+
+/// The layers of the map a picture draws. The ground and the route's mesh are the same for all
+/// of them but the history (which the route's mesh has a slot for each way); the rest are drawn
+/// again every frame, so a picture's own choice costs nothing to the others.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Shown {
+    pub cars: bool,
+    pub transit: bool,
+    pub jams: bool,
+    pub players: bool,
+    pub icons: bool,
+    pub stops: bool,
+    pub history: bool,
+}
+
+impl Shown {
+    /// These layers with what a frame panel's map says over them: a layer it gives is that,
+    /// one it leaves out stays.
+    pub(super) fn over(self, o: FrameLayers) -> Shown {
+        Shown {
+            cars: layer_on(self.cars, o.cars),
+            transit: layer_on(self.transit, o.transit),
+            jams: layer_on(self.jams, o.jams),
+            players: layer_on(self.players, o.players),
+            icons: layer_on(self.icons, o.icons),
+            stops: layer_on(self.stops, o.stops),
+            history: layer_on(self.history, o.history),
+        }
     }
 }
 

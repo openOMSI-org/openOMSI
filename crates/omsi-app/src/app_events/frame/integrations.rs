@@ -157,6 +157,11 @@ impl App {
             };
             crate::game_lists::store_with(self, |v| v["ui_theme_pack"] = serde_json::json!(value));
         }
+        // the look a plugin's panel that fills the navigator's frame gives its map, from the
+        // panels' last layout as the panel itself (which the interface hands the navigator)
+        if let Some(n) = self.menus.navigator.as_mut() {
+            n.frame_look = frame_look(self.integrations.plugin_panels.docked);
+        }
         // OMSI_WATCH_VARS=a,b: every change of those variables of the player's bus
         if let (Some(p), Some(list)) =
             (self.player.as_ref(), omsi_cfg::flags::OMSI_WATCH_VARS.var())
@@ -242,4 +247,26 @@ fn theme_infos() -> Vec<omsi_plugin::ui::ThemeInfo> {
             name: name.clone(),
         })
         .collect()
+}
+
+/// The look a plugin's panel that fills the navigator's frame gives the map in it, for the
+/// navigator: None without such a panel or without a map in it.
+fn frame_look(docked: Option<crate::plugin_ui::Docked>) -> Option<navigator::FrameLook> {
+    let m = docked.filter(|d| d.frame)?.map?;
+    Some(navigator::FrameLook {
+        layers: m.layers.map(frame_layers).unwrap_or_default(),
+    })
+}
+
+/// What a plugin's map says it shows, for the navigator.
+fn frame_layers(l: omsi_plugin::ui::MapLayers) -> navigator::FrameLayers {
+    navigator::FrameLayers {
+        cars: l.cars,
+        transit: l.transit,
+        jams: l.jams,
+        players: l.players,
+        icons: l.icons,
+        stops: l.stops,
+        history: l.history,
+    }
 }

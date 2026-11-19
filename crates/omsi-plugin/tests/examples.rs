@@ -218,6 +218,28 @@ fn the_trip_panel_runs_too() {
 }
 
 #[test]
+fn the_navigator_map_example_asks_for_its_layers() {
+    let mut p = load("ex-navmap", "navigator_map.lua");
+    let mut g = Game::new();
+    for _ in 0..3 {
+        p.frame(&mut g);
+    }
+    no_errors(&g);
+    assert_eq!(panel_ids(&p), ["route_map"]);
+    let ui = p.ui.borrow();
+    let panel = &ui.panels()[0].panel;
+    assert!(panel.frame);
+    let Some(omsi_plugin::ui::Kind::Map { layers, .. }) = panel.children.get(1).map(|e| &e.kind)
+    else {
+        panic!("its map");
+    };
+    let layers = layers.expect("layers");
+    assert_eq!((layers.cars, layers.stops), (Some(false), Some(true)));
+    // (what it leaves out follows the player's setting)
+    assert_eq!(layers.history, None);
+}
+
+#[test]
 fn reduced_tickets_change_the_full_fare() {
     let mut p = load("ex-reduced", "reduced_tickets.lua");
     let mut g = Game::new();
