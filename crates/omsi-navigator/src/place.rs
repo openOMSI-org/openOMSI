@@ -260,20 +260,23 @@ impl Navigator {
     }
 
     /// The icons within reach of the small map's view, as vertices for the sheet's texture.
+    /// `zoom`: the camera's distance in this picture (a frame map's camera may take it far
+    /// past the navigator's own, and the icons reach as far).
     pub(super) fn minimap_icons(
         &self,
         vpm: Mat4,
-        vp: [f32; 4],
         anchor: DVec2,
         bus: DVec2,
         map: Rect,
         s: f32,
+        zoom: f64,
     ) -> Vec<Vertex> {
         let mut out = Vec::new();
         if !self.show_surface {
             return out;
         }
-        let reach = self.zoom * 3.5 + 300.0;
+        let vp = [map.x, map.y, map.w, map.h];
+        let reach = zoom * 3.5 + 300.0;
         for (i, (m, _)) in self.place.markers.iter().enumerate() {
             if (DVec2::new(m.at.0, m.at.1) - bus).length() > reach {
                 continue;
@@ -535,5 +538,40 @@ impl PlaceView {
     /// The package says where one is (municipalities or named streets).
     pub(super) fn has_location(&self) -> bool {
         self.has_location
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The icons reach as far as the picture's camera is from the bus: a frame map's camera
+    /// far out shows those it sees, the navigator's own zoom as before.
+    #[test]
+    fn the_icons_reach_as_far_as_the_picture_s_zoom() {
+        let mut n = Navigator::new(true, 0.85, "bottom-left");
+        n.place.markers = vec![(
+            Marker {
+                at: (0.0, 2000.0),
+                icon: "stop.png".into(),
+                width_px: 16.0,
+                name: "Zoo".into(),
+            },
+            0,
+        )];
+        n.place.sheet = Some(Sheet {
+            w: 1,
+            h: 1,
+            rgba: vec![0; 4],
+            rects: vec![([0.0, 0.0, 1.0, 1.0], 1.0)],
+        });
+        let vpm = Mat4::orthographic_rh(-5000.0, 5000.0, -5000.0, 5000.0, -1.0, 1.0);
+        let map = Rect::new(0.0, 0.0, 400.0, 400.0);
+        let icons = |zoom| {
+            n.minimap_icons(vpm, DVec2::ZERO, DVec2::ZERO, map, 1.0, zoom)
+                .len()
+        };
+        // (2 km away: past the navigator's own farthest, 320 m and its reach of 1420 m)
+        assert_eq!(icons(320.0), 0);
+        assert_eq!(icons(1000.0), 6);
     }
 }

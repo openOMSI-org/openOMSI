@@ -157,6 +157,11 @@ impl App {
             };
             crate::game_lists::store_with(self, |v| v["ui_theme_pack"] = serde_json::json!(value));
         }
+        // the look a plugin's panel that fills the navigator's frame gives its map, from the
+        // panels' last layout as the panel itself (which the interface hands the navigator)
+        if let Some(n) = self.menus.navigator.as_mut() {
+            n.frame_look = frame_look(self.integrations.plugin_panels.docked);
+        }
         // OMSI_WATCH_VARS=a,b: every change of those variables of the player's bus
         if let (Some(p), Some(list)) =
             (self.player.as_ref(), omsi_cfg::flags::OMSI_WATCH_VARS.var())
@@ -242,4 +247,32 @@ fn theme_infos() -> Vec<omsi_plugin::ui::ThemeInfo> {
             name: name.clone(),
         })
         .collect()
+}
+
+/// The look a plugin's panel that fills the navigator's frame gives the map in it, for the
+/// navigator: None without such a panel or without a map in it.
+fn frame_look(docked: Option<crate::plugin_ui::Docked>) -> Option<navigator::FrameLook> {
+    let m = docked.filter(|d| d.frame)?.map?;
+    Some(navigator::FrameLook {
+        camera: m.camera.map(frame_camera),
+    })
+}
+
+/// A plugin's map camera as the navigator takes it.
+fn frame_camera(c: omsi_plugin::ui::MapCamera) -> navigator::FrameCamera {
+    use navigator::{CameraDistance, CameraTilt};
+    use omsi_plugin::ui::{Distance, Tilt};
+    navigator::FrameCamera {
+        distance: c.distance.map(|d| match d {
+            Distance::Fixed(d) => CameraDistance::Fixed(d),
+            Distance::Bounds { min, max } => CameraDistance::Bounds { min, max },
+        }),
+        north: c.north,
+        ahead: c.ahead,
+        tilt: c.tilt.map(|t| match t {
+            Tilt::ThreeD => CameraTilt::ThreeD,
+            Tilt::Flat => CameraTilt::Flat,
+            Tilt::Top => CameraTilt::Top,
+        }),
+    }
 }

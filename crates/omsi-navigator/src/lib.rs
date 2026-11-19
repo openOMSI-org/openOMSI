@@ -352,14 +352,24 @@ pub struct Navigator {
     /// map's, the place row's and the board's place, and the map shows only where the panel
     /// says (physical pixels, from the last frame). Set, `dock_slot` is the whole frame.
     pub frame_panel: Option<FramePanel>,
-    /// That panel's map in this frame's picture (texture pixels) and its cards, for `draw`:
-    /// Some(None) a frame without a map; None no such panel.
-    framed: Option<Option<(Rect, bool)>>,
+    /// How that panel's map looks (set every frame before the panel itself, from the same
+    /// layout): read only for the map in the frame panel, never for the other pictures. None:
+    /// the navigator's own look.
+    pub frame_look: Option<FrameLook>,
+    /// That panel's map in this frame's picture (texture pixels), its cards and its camera,
+    /// for `draw`: Some(None) a frame without a map; None no such panel.
+    framed: Option<Option<FramedMap>>,
     /// The colour that panel gives the navigator's card (None: the card's own).
     frame_card: Option<Color>,
     /// What `framed` and `frame_card` were when the picture was last drawn (drawn again at
     /// once when they change).
-    framed_drawn: (Option<Option<(Rect, bool)>>, Option<Color>),
+    framed_drawn: (Option<Option<FramedMap>>, Option<Color>),
+    /// The frame panel map's distance, eased as `zoom` is: its camera may set it, and the
+    /// other maps keep the navigator's own.
+    framed_zoom: f64,
+    /// That map's own ground, while its camera wants another than the navigator's (see
+    /// `frame_camera`).
+    frame_ground: Option<FrameGround>,
     /// A board was asked for once: the lower part opened for it by itself then.
     dock_seen: bool,
     /// The board's height in this frame's picture (physical pixels), for `draw`.
@@ -421,8 +431,8 @@ pub struct Navigator {
         (u64, u64, DVec2, usize, u64, f32),
         std::sync::Arc<[omsi_ui::paint::Vertex]>,
         u32,
-    )>; 2],
-    route_mesh_generation: [u64; 2],
+    )>; 4],
+    route_mesh_generation: [u64; 4],
     route_mesh_uploaded: Option<(usize, u64)>,
     completed_stops: Vec<NavStop>,
     trip_completed: bool,
@@ -574,11 +584,28 @@ fn draw_every(now: u32, frame_dt: f32) -> u32 {
 
 const MAX_ZOOM: f64 = 320.0;
 
-fn zoom_target(speed_kmh: f32, turn_dist: Option<f64>, turning_deg: f64) -> f64 {
+/// The camera's distance: out with the speed, in for the next turn and in a bend, between 150
+/// and 320 m - or as a frame map's camera says: always its own, or held between its bounds.
+fn zoom_target(
+    speed_kmh: f32,
+    turn_dist: Option<f64>,
+    turning_deg: f64,
+    camera: Option<&FrameCamera>,
+) -> f64 {
+    let (min, max) = match camera.and_then(|c| c.distance) {
+        None => (150.0, MAX_ZOOM),
+        Some(CameraDistance::Fixed(d)) => return d as f64,
+        Some(CameraDistance::Bounds { min, max }) => (min as f64, max as f64),
+    };
     let speed = 150.0 + speed_kmh.abs() as f64 * 2.4;
     let turn = turn_dist.map_or(f64::MAX, |d| 150.0 + d * 0.6);
     let bend = 1.0 - (turning_deg.abs() / 25.0).clamp(0.0, 1.0) * 0.25;
-    (speed.min(turn) * bend).clamp(150.0, MAX_ZOOM)
+    (speed.min(turn) * bend).clamp(min, max)
+}
+
+/// `zoom` eased towards `want`: in sooner than out.
+fn eased_zoom(zoom: f64, want: f64, dt: f32) -> f64 {
+    zoom + (want - zoom) * ease(dt, if want < zoom { 0.7 } else { 1.8 })
 }
 
 fn ease(dt: f32, tau: f32) -> f64 {
@@ -620,9 +647,11 @@ impl Navigator {
             dock: None,
             dock_slot: None,
             frame_panel: None,
+            frame_look: None,
             framed: None,
             frame_card: None,
             framed_drawn: (None, None),
+            framed_zoom: 120.0,
             dock_seen: false,
             board: None,
             speed_avg: 8.0,
@@ -652,8 +681,8 @@ impl Navigator {
             waypoints: Vec::new(),
             duty_route: None,
             entries: Vec::new(),
-            route_mesh_history: [None, None],
-            route_mesh_generation: [0; 2],
+            route_mesh_history: Default::default(),
+            route_mesh_generation: [0; 4],
             route_mesh_uploaded: None,
             completed_stops: Vec::new(),
             trip_completed: false,
@@ -690,6 +719,7 @@ impl Navigator {
             resizing: None,
             drawn_cars: HashMap::new(),
             panel_job: None,
+            frame_ground: None,
             city_job: None,
             road_cache: None,
             road_job: None,
@@ -993,8 +1023,9 @@ impl Navigator {
                     self.building = None;
                     // routes and roads again on the whole map
                     self.roads = None;
+                    self.let_frame_ground_go();
                     self.reset_navigation_network();
-                    self.route_mesh_history = [None, None];
+                    self.route_mesh_history = Default::default();
                     self.route_mesh_uploaded = None;
                     self.route_jam.clear();
                 }
@@ -1094,18 +1125,7 @@ impl Navigator {
         self.update_congestion(f);
         self.update_drawn_cars(f);
         self.poll_road_job();
-        // camera: zoomed out with speed, turned with the bus (both eased)
-        let want = zoom_target(
-            f.speed_kmh,
-            self.next_turn.as_ref().map(|t| t.2),
-            angle_diff(self.cam_heading, f.heading),
-        );
-        if self.first {
-            self.zoom = want;
-            self.cam_heading = f.heading;
-        }
-        self.zoom += (want - self.zoom) * ease(f.dt, if want < self.zoom { 0.7 } else { 1.8 });
-        self.cam_heading += angle_diff(self.cam_heading, f.heading) * ease(f.dt, 0.3);
+        self.ease_camera(f);
         let v = f.speed_kmh.abs() / 3.6;
         self.speed_avg += (v - self.speed_avg) * ease(f.dt, 20.0) as f32;
         self.dist_t -= f.dt;
@@ -1185,11 +1205,8 @@ impl Navigator {
             .frame_panel
             .filter(|_| !self.cockpit_display && self.shown > 0.99);
         let frame_room = (sh - 32.0 * s).max(map_h).round();
-        self.framed = whole.map(|p| {
-            p.map
-                .map(|m| framed_map(m, pw, p.height.max(1.0).min(frame_room).round()))
-                .filter(|(r, _)| r.w >= 1.0 && r.h >= 1.0)
-        });
+        self.framed = self.framed_now(whole, pw, frame_room);
+        self.drop_frame_ground();
         self.frame_card = whole.and_then(|p| p.background);
         self.board = self
             .dock
@@ -1277,14 +1294,64 @@ pub struct FrameMap {
     pub cards: bool,
 }
 
-/// Where a frame panel's map goes in a picture `pw` x `ph`: its rectangle kept inside it.
-fn framed_map(m: FrameMap, pw: f32, ph: f32) -> (Rect, bool) {
+/// How a frame panel's map looks, beside where it is (`FrameMap`): handed over on its own so
+/// that the map's look reaches the navigator without the panel's place changing hands.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FrameLook {
+    /// How it looks at the bus (None: as the navigator's settings make it).
+    pub camera: Option<FrameCamera>,
+}
+
+/// A frame panel's map in the picture: where, its cards and its camera.
+type FramedMap = (Rect, bool, Option<FrameCamera>);
+
+/// Where a frame panel's map goes in a picture `pw` x `ph`: its rectangle kept inside it, and
+/// its camera (none without a look of the panel's).
+fn framed_map(m: FrameMap, look: Option<FrameLook>, pw: f32, ph: f32) -> FramedMap {
     let [x, y, w, h] = m.rect;
     let (x, y) = (x.clamp(0.0, pw), y.clamp(0.0, ph));
     (
         Rect::new(x, y, w.clamp(0.0, pw - x), h.clamp(0.0, ph - y)),
         m.cards,
+        look.and_then(|l| l.camera),
     )
+}
+
+impl Navigator {
+    /// The frame panel `whole` shown this frame's map in the picture `pw` wide (the panel as
+    /// tall as it came to and as `frame_room` lets it be), with the panel's look: Some(None) a
+    /// frame without a map, None no such panel - and then no look of a plugin's at all.
+    fn framed_now(
+        &self,
+        whole: Option<FramePanel>,
+        pw: f32,
+        frame_room: f32,
+    ) -> Option<Option<FramedMap>> {
+        whole.map(|p| {
+            let ph = p.height.max(1.0).min(frame_room).round();
+            p.map
+                .map(|m| framed_map(m, self.frame_look, pw, ph))
+                .filter(|(r, ..)| r.w >= 1.0 && r.h >= 1.0)
+        })
+    }
+
+    /// The camera this frame: zoomed out with speed, turned with the bus (both eased); a frame
+    /// panel's map as far as its camera says, the other maps as ever. The frame map's distance
+    /// is its own (`framed_zoom`): the navigator's (`zoom`) goes on as if there were none.
+    fn ease_camera(&mut self, f: &NavFrame) {
+        let turn = self.next_turn.as_ref().map(|t| t.2);
+        let bend = angle_diff(self.cam_heading, f.heading);
+        let want = zoom_target(f.speed_kmh, turn, bend, None);
+        let framed_want = zoom_target(f.speed_kmh, turn, bend, self.frame_camera().as_ref());
+        if self.first {
+            self.zoom = want;
+            self.framed_zoom = framed_want;
+            self.cam_heading = f.heading;
+        }
+        self.zoom = eased_zoom(self.zoom, want, f.dt);
+        self.framed_zoom = eased_zoom(self.framed_zoom, framed_want, f.dt);
+        self.cam_heading += angle_diff(self.cam_heading, f.heading) * ease(f.dt, 0.3);
+    }
 }
 
 /// The lanes of `net` that are traffic lane `l`: the same path by its key, else (a junction's
@@ -1357,6 +1424,9 @@ mod relief;
 mod surface;
 pub use omsi_mapdraw as mapmesh;
 pub use omsi_mapdraw::style;
+mod frame_camera;
+pub use frame_camera::{CameraDistance, CameraTilt, FrameCamera};
+use frame_camera::{FrameGround, GroundChoice, ground_drawn, pitch_for, route_slot, tilt_view};
 mod panel;
 mod screen;
 pub use screen::Screen;

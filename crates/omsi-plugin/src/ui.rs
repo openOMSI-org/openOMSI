@@ -32,7 +32,8 @@ pub use read::{ToastSpec, panel_from_source, parse_panel, parse_toast};
 /// 6: a navigator panel that fills the navigator's whole frame (`frame`), and the navigator's
 /// map as an element of it (`map`).
 /// 7: the interface themes (`ui.themes`, `ui.theme`, `ui.set_theme`).
-pub const VERSION: i64 = 7;
+/// 8: the camera of the navigator's map in a frame panel (`map`'s `camera`).
+pub const VERSION: i64 = 8;
 /// Most panels of one plugin.
 pub const MAX_PANELS: usize = 16;
 /// Most elements of one panel, those in rows included.
@@ -382,11 +383,43 @@ pub enum Kind {
     },
     /// The navigator's map, in a panel that fills its frame: `height` (0: as high as the
     /// navigator's own map, 0.8 times its width), `cards` the navigator's cards over it (the
-    /// next turn, the clock, the speed, the next stop). Elsewhere empty room.
+    /// next turn, the clock, the speed, the next stop), `camera` how that map looks at the bus
+    /// (None: as the navigator's settings make it). Elsewhere empty room.
     Map {
         height: f32,
         cards: bool,
+        camera: Option<MapCamera>,
     },
+}
+
+/// The camera of a `map` element: each key left out is the navigator's own, as the player
+/// set it.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct MapCamera {
+    pub distance: Option<Distance>,
+    /// True: north up; false: the bus's heading up.
+    pub north: Option<bool>,
+    /// The share of the distance the view looks ahead of the bus (0 to 0.5; 0: the bus in the
+    /// middle).
+    pub ahead: Option<f32>,
+    pub tilt: Option<Tilt>,
+}
+
+/// The camera's distance in metres (50 to 2000), as the navigator's own zoom is: always the
+/// same, or the navigator's zoom (out with the speed, in for the next turn) held between two.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Distance {
+    Fixed(f32),
+    Bounds { min: f32, max: f32 },
+}
+
+/// How the map tilts: `"3d"` the houses standing, `"flat"` the houses flat, `"top"` straight
+/// down, the classic 2D map.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tilt {
+    ThreeD,
+    Flat,
+    Top,
 }
 
 /// A notification card of `omsi.ui.toast`.

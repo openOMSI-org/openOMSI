@@ -691,14 +691,264 @@ fn redraw_rate_holds_steady_at_its_edges() {
 
 #[test]
 fn the_map_zooms_in_for_a_turn_and_out_on_the_straight() {
-    assert_eq!(zoom_target(0.0, None, 0.0), 150.0);
-    assert_eq!(zoom_target(80.0, None, 0.0), 320.0);
-    assert_eq!(zoom_target(-20.0, None, 0.0), zoom_target(20.0, None, 0.0));
-    assert_eq!(zoom_target(80.0, Some(1000.0), 0.0), 320.0);
-    assert!(zoom_target(70.0, Some(100.0), 0.0) < 220.0);
-    assert_eq!(zoom_target(70.0, Some(0.0), 0.0), 150.0);
-    assert!(zoom_target(50.0, None, 30.0) < zoom_target(50.0, None, 5.0));
-    assert!(zoom_target(50.0, None, -30.0) >= 150.0);
+    assert_eq!(zoom_target(0.0, None, 0.0, None), 150.0);
+    assert_eq!(zoom_target(80.0, None, 0.0, None), 320.0);
+    assert_eq!(
+        zoom_target(-20.0, None, 0.0, None),
+        zoom_target(20.0, None, 0.0, None)
+    );
+    assert_eq!(zoom_target(80.0, Some(1000.0), 0.0, None), 320.0);
+    assert!(zoom_target(70.0, Some(100.0), 0.0, None) < 220.0);
+    assert_eq!(zoom_target(70.0, Some(0.0), 0.0, None), 150.0);
+    assert!(zoom_target(50.0, None, 30.0, None) < zoom_target(50.0, None, 5.0, None));
+    assert!(zoom_target(50.0, None, -30.0, None) >= 150.0);
+}
+
+/// Without a camera (or one without a distance) the zoom is today's: 150 m and 2.4 m more a
+/// km/h, 150 m and 0.6 m more a metre to the next turn, held between 150 and 320 m.
+#[test]
+fn no_camera_is_todays_zoom() {
+    let north = FrameCamera {
+        north: Some(true),
+        ..FrameCamera::default()
+    };
+    for camera in [None, Some(&north)] {
+        assert_eq!(zoom_target(25.0, None, 0.0, camera), 150.0 + 2.4 * 25.0);
+        assert_eq!(
+            zoom_target(60.0, Some(50.0), 0.0, camera),
+            150.0 + 0.6 * 50.0
+        );
+        assert_eq!(zoom_target(100.0, None, 0.0, camera), 320.0);
+        assert_eq!(zoom_target(0.0, None, 0.0, camera), 150.0);
+    }
+}
+
+#[test]
+fn a_fixed_distance_is_kept() {
+    let fixed = FrameCamera {
+        distance: Some(CameraDistance::Fixed(600.0)),
+        ..FrameCamera::default()
+    };
+    for (kmh, turn, turning) in [(0.0, None, 0.0), (90.0, Some(20.0), 30.0)] {
+        assert_eq!(zoom_target(kmh, turn, turning, Some(&fixed)), 600.0);
+    }
+}
+
+#[test]
+fn bounds_hold_the_following_zoom() {
+    let bounds = |min, max| FrameCamera {
+        distance: Some(CameraDistance::Bounds { min, max }),
+        ..FrameCamera::default()
+    };
+    // (inside them it follows the speed and the turn as ever, past 320 m too)
+    let wide = bounds(60.0, 1000.0);
+    assert_eq!(
+        zoom_target(25.0, None, 0.0, Some(&wide)),
+        150.0 + 2.4 * 25.0
+    );
+    assert_eq!(
+        zoom_target(200.0, None, 0.0, Some(&wide)),
+        150.0 + 2.4 * 200.0
+    );
+    assert_eq!(zoom_target(400.0, None, 0.0, Some(&wide)), 1000.0);
+    let near = bounds(80.0, 120.0);
+    assert_eq!(zoom_target(0.0, None, 0.0, Some(&near)), 120.0);
+    let far = bounds(500.0, 800.0);
+    assert_eq!(zoom_target(60.0, Some(0.0), 0.0, Some(&far)), 500.0);
+}
+
+/// The pitch as the player's settings give it (the classic 2D straight down, the houses in 3D
+/// at 52°, flat at 60°) while the camera leaves `tilt` out; a tilt given overrides them.
+#[test]
+fn no_tilt_follows_the_settings() {
+    assert_eq!(pitch_for(None, true, false), 52.0);
+    assert_eq!(pitch_for(None, false, false), 60.0);
+    assert_eq!(pitch_for(None, true, true), 90.0);
+    assert_eq!(pitch_for(Some(CameraTilt::ThreeD), false, true), 52.0);
+    assert_eq!(pitch_for(Some(CameraTilt::Flat), true, true), 60.0);
+}
+
+#[test]
+fn top_is_straight_down() {
+    for (show_3d, classic_2d) in [(true, false), (false, false), (true, true)] {
+        assert_eq!(pitch_for(Some(CameraTilt::Top), show_3d, classic_2d), 90.0);
+    }
+}
+
+/// The frame map's ground is built again when its tilt changes whether houses are built (the
+/// classic 2D has none), and only then: an equal camera keeps it, and without a tilt it is
+/// the navigator's own (`look_key`), which the city map goes on using.
+#[test]
+fn the_frame_map_s_ground_follows_its_tilt() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    let tilt = |tilt| FrameCamera {
+        tilt,
+        ..FrameCamera::default()
+    };
+    let (top, flat) = (tilt(Some(CameraTilt::Top)), tilt(Some(CameraTilt::Flat)));
+    assert_eq!(n.frame_look_key(None), n.look_key());
+    assert_eq!(n.frame_look_key(Some(&tilt(None))), n.look_key());
+    assert_eq!(
+        n.frame_look_key(Some(&top)),
+        n.frame_look_key(Some(&tilt(Some(CameraTilt::Top))))
+    );
+    assert_ne!(n.frame_look_key(Some(&top)), n.look_key());
+    // (3D and flat build the same ground, the houses and their footprints: none between them)
+    assert_eq!(n.frame_look_key(Some(&flat)), n.look_key());
+    n.classic_2d = true;
+    assert_eq!(n.frame_look_key(Some(&top)), n.look_key());
+    assert_ne!(n.frame_look_key(Some(&flat)), n.look_key());
+}
+
+/// A frame map whose camera wants another ground (the classic 2D beside a player's 3D, or
+/// farther than the navigator's zoom goes) builds one of its own: the screens in the cockpit
+/// and the remote cockpit keep the navigator's, with its key and its reach. The frame map's
+/// own goes once its camera wants the navigator's ground again, or the map goes.
+#[test]
+fn a_frame_map_s_own_ground_leaves_the_navigator_s_alone() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    let top = FrameCamera {
+        tilt: Some(CameraTilt::Top),
+        ..FrameCamera::default()
+    };
+    let frame = n.ground_for(Some(&top), 1.0);
+    assert!(frame.own && frame.classic_2d);
+    assert_ne!(frame.key, n.look_key());
+    // (the cockpit screen beside it: no camera, the zoom of its own setting)
+    let screen = n.ground_for(None, 2.0);
+    assert_eq!(
+        (screen.own, screen.key, screen.classic_2d, screen.most),
+        (false, n.look_key(), false, 160.0)
+    );
+    assert_ne!(frame.buffers(), screen.buffers());
+    // (farther than the navigator goes: its own, reaching as far as the camera, its key
+    // another for each reach - built again once when the plugin changes it)
+    let far = FrameCamera {
+        distance: Some(CameraDistance::Fixed(900.0)),
+        ..FrameCamera::default()
+    };
+    let g = n.ground_for(Some(&far), 1.0);
+    assert!(g.own && g.most == 900.0 && g.key != n.look_key());
+    let farther = FrameCamera {
+        distance: Some(CameraDistance::Fixed(1200.0)),
+        ..FrameCamera::default()
+    };
+    assert_ne!(n.ground_for(Some(&farther), 1.0).key, g.key);
+    assert_eq!(n.ground_for(Some(&far), 1.0).key, g.key);
+    // (a camera that wants the navigator's ground draws on it)
+    let near = FrameCamera {
+        distance: Some(CameraDistance::Bounds {
+            min: 100.0,
+            max: 300.0,
+        }),
+        north: Some(true),
+        ahead: Some(0.0),
+        tilt: Some(CameraTilt::ThreeD),
+    };
+    assert_eq!(n.ground_for(Some(&near), 1.0), n.ground_for(None, 1.0));
+    // the frame map's own ground: kept while it is wanted, let go after
+    n.frame_panel = Some(FramePanel {
+        height: 400.0,
+        map: Some(FrameMap {
+            rect: [0.0, 0.0, 360.0, 288.0],
+            cards: true,
+        }),
+        background: None,
+    });
+    let look = |camera| {
+        Some(FrameLook {
+            camera: Some(camera),
+        })
+    };
+    n.frame_look = look(top);
+    n.frame_ground = Some(FrameGround::default());
+    n.drop_frame_ground();
+    assert!(n.frame_ground.is_some());
+    // (the navigator fading out and in again: no map shown for a while, the panel still there)
+    n.framed = None;
+    n.drop_frame_ground();
+    assert!(n.frame_ground.is_some());
+    n.frame_look = look(near);
+    n.drop_frame_ground();
+    assert!(n.frame_ground.is_none());
+    n.frame_ground = Some(FrameGround::default());
+    n.frame_panel = None;
+    n.drop_frame_ground();
+    assert!(n.frame_ground.is_none());
+}
+
+/// A frame map's own ground not built yet: the map shows the navigator's meanwhile, from where
+/// that lies on the graphics card, and its own once it is there.
+#[test]
+fn a_frame_map_shows_the_navigator_s_ground_until_its_own_is_built() {
+    let roads = |x: f64| Roads {
+        reach: 800.0,
+        look: 0,
+        anchor: DVec2::new(x, 0.0),
+        lanes_seen: 0,
+        houses: [0; 3],
+        runs: Default::default(),
+        built_at: 0.0,
+    };
+    let shared = Some(roads(1.0));
+    let mut frame = Some(FrameGround::default());
+    let (r, buffers) = ground_drawn(&shared, &frame, true);
+    assert_eq!(
+        (r.map(|r| r.anchor.x), buffers),
+        (Some(1.0), [0, 12, 8, 13])
+    );
+    frame.as_mut().unwrap().roads = Some(roads(2.0));
+    let (r, buffers) = ground_drawn(&shared, &frame, true);
+    assert_eq!(
+        (r.map(|r| r.anchor.x), buffers),
+        (Some(2.0), [19, 20, 21, 22])
+    );
+    // (the other pictures: the navigator's, whatever the frame map has)
+    let (r, buffers) = ground_drawn(&shared, &frame, false);
+    assert_eq!(
+        (r.map(|r| r.anchor.x), buffers),
+        (Some(1.0), [0, 12, 8, 13])
+    );
+}
+
+/// A map's camera is the frame map's alone: while no frame panel's map is shown the camera,
+/// the north and the bus's place are as the navigator's settings make them.
+#[test]
+fn a_camera_is_the_frame_map_s_alone() {
+    let camera = FrameCamera {
+        north: Some(true),
+        ahead: Some(0.0),
+        ..FrameCamera::default()
+    };
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    n.frame_panel = Some(FramePanel {
+        height: 400.0,
+        map: Some(FrameMap {
+            rect: [0.0, 0.0, 360.0, 288.0],
+            cards: true,
+        }),
+        background: None,
+    });
+    n.frame_look = Some(FrameLook {
+        camera: Some(camera),
+    });
+    // (laid out, not shown yet: nothing of it)
+    assert_eq!(n.frame_camera(), None);
+    n.framed = Some(Some((
+        Rect::new(0.0, 0.0, 360.0, 288.0),
+        true,
+        Some(camera),
+    )));
+    assert_eq!(n.frame_camera(), Some(camera));
+    let hud = panel::PanelLook::hud(&n, 360.0);
+    let (bus, fwd) = (DVec2::new(10.0, 20.0), DVec2::new(0.0, 1.0));
+    // (today's: heading up, the view 0.17 of the distance ahead of the bus)
+    assert!(!hud.fixed_north);
+    assert_eq!(hud.camera_target(bus, fwd, 200.0), bus + fwd * 200.0 * 0.17);
+    assert_eq!(hud.with_camera(None), hud);
+    let framed = hud.with_camera(Some(&camera));
+    assert!(framed.fixed_north);
+    assert_eq!(framed.camera_target(bus, fwd, 200.0), bus);
 }
 
 /// A stop a plugin closed (`duty.set_closed_stops`) is still on the list, marked with the
@@ -864,20 +1114,25 @@ fn the_compass_keeps_clear_of_the_open_lines_panel() {
 fn a_frame_panel_s_map_stays_inside_the_navigator() {
     let m = |rect: [f32; 4]| FrameMap { rect, cards: false };
     assert_eq!(
-        framed_map(m([10.0, 80.0, 340.0, 272.0]), 360.0, 500.0),
-        (Rect::new(10.0, 80.0, 340.0, 272.0), false)
+        framed_map(m([10.0, 80.0, 340.0, 272.0]), None, 360.0, 500.0),
+        (Rect::new(10.0, 80.0, 340.0, 272.0), false, None)
     );
     assert_eq!(
-        framed_map(m([10.0, 300.0, 400.0, 272.0]), 360.0, 500.0).0,
+        framed_map(m([10.0, 300.0, 400.0, 272.0]), None, 360.0, 500.0).0,
         Rect::new(10.0, 300.0, 350.0, 200.0)
     );
     assert_eq!(
-        framed_map(m([10.0, 600.0, 340.0, 272.0]), 360.0, 500.0).0.h,
+        framed_map(m([10.0, 600.0, 340.0, 272.0]), None, 360.0, 500.0)
+            .0
+            .h,
         0.0
     );
     // (no frame panel: the navigator lays itself out as ever)
     let n = Navigator::new(true, 0.85, "bottom-left");
-    assert_eq!((n.frame_panel, n.framed, n.frame_card), (None, None, None));
+    assert_eq!(
+        (n.frame_panel, n.frame_look, n.framed, n.frame_card),
+        (None, None, None, None)
+    );
 }
 
 #[test]

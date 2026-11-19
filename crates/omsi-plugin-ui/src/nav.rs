@@ -6,7 +6,7 @@
 
 use super::{BADGE_H, BADGE_PAD, BADGE_PX, Item, Layout, color, ink_on};
 use glam::Vec2;
-use omsi_plugin::ui::{Element, Kind, Panel, Rgba, Stop, StopState};
+use omsi_plugin::ui::{Element, Kind, MapCamera, Panel, Rgba, Stop, StopState};
 use omsi_ui::{Color, Rect, Weight};
 
 /// The panel for the navigator as it was laid out, in physical pixels.
@@ -39,11 +39,13 @@ pub(crate) fn in_navigator(p: &Panel, width: f32) -> Panel {
 }
 
 /// The navigator's map in a panel that fills its frame: where it goes (physical pixels, from
-/// the panel's top left: x, y, width, height) and whether the navigator's cards go over it.
+/// the panel's top left: x, y, width, height), whether the navigator's cards go over it and
+/// how it looks at the bus (None: as the navigator's settings make it).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DockedMap {
     pub rect: [f32; 4],
     pub cards: bool,
+    pub camera: Option<MapCamera>,
 }
 
 /// A box's room round what is in it (the stripe's side, the others), and its stripe.
@@ -132,9 +134,9 @@ impl Layout<'_> {
                     self.stop(s, rr, *size, rail, i > 0, i + 1 < stops.len());
                 }
             }
-            Kind::Map { cards, .. } => {
+            Kind::Map { cards, camera, .. } => {
                 if self.out.map.is_none() {
-                    self.out.map = Some((r, *cards));
+                    self.out.map = Some((r, *cards, *camera));
                 }
             }
             _ => {}
@@ -340,8 +342,8 @@ mod tests {
         } }"#,
         );
         let mut l = layout(&p, &fonts, 1.0);
-        let (r, cards) = l.map.expect("the map");
-        assert!(!cards);
+        let (r, cards, camera) = l.map.expect("the map");
+        assert!(!cards && camera.is_none());
         assert_eq!((r.x, r.w, r.h), (10.0, 340.0, (340.0 * 0.8f32).round()));
         assert!((r.y - (10.0 + 14.0 * LINE + 6.0)).abs() < 0.01, "{r:?}");
         let empty = |l: &Laid| {
@@ -365,5 +367,25 @@ mod tests {
         assert_eq!(l.map.unwrap().0.h, 30.0);
         cut(&mut l, r.y);
         assert!(l.map.is_none());
+    }
+
+    /// A frame panel's map takes its camera along to the navigator, as it is read.
+    #[test]
+    fn a_map_s_camera_goes_with_its_place() {
+        let fonts = Fonts::new();
+        let p = panel(
+            r#"{ anchor = "navigator", frame = true, children = {
+            { type = "map", height = 120, camera = { distance = 400, tilt = "top" } },
+        } }"#,
+        );
+        let Kind::Map { camera, .. } = p.children[0].kind else {
+            unreachable!()
+        };
+        let (r, cards, laid) = layout(&p, &fonts, 1.0).map.unwrap();
+        assert_eq!((r.h, cards), (120.0, true));
+        assert!(camera.is_some() && laid == camera);
+        // (none said: none)
+        let p = panel(r#"{ children = { { type = "map" } } }"#);
+        assert_eq!(layout(&p, &fonts, 1.0).map.unwrap().2, None);
     }
 }
