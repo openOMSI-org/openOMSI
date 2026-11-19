@@ -6,7 +6,7 @@
 
 use super::{BADGE_H, BADGE_PAD, BADGE_PX, Item, Layout, color, ink_on};
 use glam::Vec2;
-use omsi_plugin::ui::{Element, Kind, Panel, Rgba, Stop, StopState};
+use omsi_plugin::ui::{Element, Kind, MAP_COLORS, Panel, Rgba, Stop, StopState};
 use omsi_ui::{Color, Rect, Weight};
 
 /// The panel for the navigator as it was laid out, in physical pixels.
@@ -39,11 +39,27 @@ pub(crate) fn in_navigator(p: &Panel, width: f32) -> Panel {
 }
 
 /// The navigator's map in a panel that fills its frame: where it goes (physical pixels, from
-/// the panel's top left: x, y, width, height) and whether the navigator's cards go over it.
+/// the panel's top left: x, y, width, height), whether the navigator's cards go over it and
+/// its colours.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DockedMap {
     pub rect: [f32; 4],
     pub cards: bool,
+    pub colors: MapColors,
+}
+
+/// A map's colours, each in its name's place in `MAP_COLORS` (None: the navigator's own).
+pub type MapColors = [Option<Color>; MAP_COLORS.len()];
+
+/// The colours a `map` element gives, in their places.
+fn map_colors(given: &[(String, Rgba)]) -> MapColors {
+    let mut colors = [None; MAP_COLORS.len()];
+    for (name, c) in given {
+        if let Some(i) = MAP_COLORS.iter().position(|n| n == name) {
+            colors[i] = Some(color(*c));
+        }
+    }
+    colors
 }
 
 /// A box's room round what is in it (the stripe's side, the others), and its stripe.
@@ -132,9 +148,9 @@ impl Layout<'_> {
                     self.stop(s, rr, *size, rail, i > 0, i + 1 < stops.len());
                 }
             }
-            Kind::Map { cards, .. } => {
+            Kind::Map { cards, colors, .. } => {
                 if self.out.map.is_none() {
-                    self.out.map = Some((r, *cards));
+                    self.out.map = Some((r, *cards, map_colors(colors)));
                 }
             }
             _ => {}
@@ -300,7 +316,7 @@ impl Layout<'_> {
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use omsi_plugin::ui::panel_from_source;
+    use omsi_plugin::ui::{MAP_COLORS, panel_from_source};
 
     fn panel(src: &str) -> Panel {
         panel_from_source(src).unwrap()
@@ -340,8 +356,8 @@ mod tests {
         } }"#,
         );
         let mut l = layout(&p, &fonts, 1.0);
-        let (r, cards) = l.map.expect("the map");
-        assert!(!cards);
+        let (r, cards, colors) = l.map.expect("the map");
+        assert!(!cards && colors == [None; MAP_COLORS.len()]);
         assert_eq!((r.x, r.w, r.h), (10.0, 340.0, (340.0 * 0.8f32).round()));
         assert!((r.y - (10.0 + 14.0 * LINE + 6.0)).abs() < 0.01, "{r:?}");
         let empty = |l: &Laid| {
@@ -365,5 +381,34 @@ mod tests {
         assert_eq!(l.map.unwrap().0.h, 30.0);
         cut(&mut l, r.y);
         assert!(l.map.is_none());
+    }
+
+    /// A frame panel's map takes its colours along to the navigator, each in its name's place.
+    #[test]
+    fn a_map_s_colours_go_with_its_place() {
+        let fonts = Fonts::new();
+        let p = panel(
+            r##"{ anchor = "navigator", frame = true, children = {
+            { type = "map", height = 120, colors = { water = "#2050A0", land = "#E8E4D880" } },
+        } }"##,
+        );
+        let (r, cards, colors) = layout(&p, &fonts, 1.0).map.unwrap();
+        assert_eq!((r.h, cards), (120.0, true));
+        let at = |name: &str| MAP_COLORS.iter().position(|n| *n == name).unwrap();
+        assert_eq!(
+            colors[at("water")],
+            Some(color(Rgba([0x20, 0x50, 0xA0, 255])))
+        );
+        assert_eq!(
+            colors[at("land")],
+            Some(color(Rgba([0xE8, 0xE4, 0xD8, 0x80])))
+        );
+        assert_eq!(colors.iter().flatten().count(), 2);
+        // (none said: none)
+        let p = panel(r#"{ children = { { type = "map" } } }"#);
+        assert_eq!(
+            layout(&p, &fonts, 1.0).map.unwrap().2,
+            [None; MAP_COLORS.len()]
+        );
     }
 }

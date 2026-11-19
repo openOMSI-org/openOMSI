@@ -218,6 +218,36 @@ fn the_trip_panel_runs_too() {
 }
 
 #[test]
+fn the_navigator_map_has_colours_of_its_own() {
+    let mut p = load("ex-navmap", "navigator_map.lua");
+    let mut g = Game::new();
+    for _ in 0..3 {
+        p.frame(&mut g);
+    }
+    no_errors(&g);
+    assert_eq!(panel_ids(&p), ["navigator_map"]);
+    let ui = p.ui.borrow();
+    let panel = &ui.panels()[0].panel;
+    assert!(panel.frame);
+    let colors = panel
+        .children
+        .iter()
+        .find_map(|e| match &e.kind {
+            omsi_plugin::ui::Kind::Map { colors, .. } => Some(colors.clone()),
+            _ => None,
+        })
+        .expect("the map");
+    assert!(
+        colors.contains(&(
+            "water".to_string(),
+            omsi_plugin::ui::Rgba([0x7F, 0xB2, 0xE5, 255])
+        )),
+        "{colors:?}"
+    );
+    assert_eq!(colors.len(), 7);
+}
+
+#[test]
 fn reduced_tickets_change_the_full_fare() {
     let mut p = load("ex-reduced", "reduced_tickets.lua");
     let mut g = Game::new();

@@ -32,7 +32,39 @@ pub use read::{ToastSpec, panel_from_source, parse_panel, parse_toast};
 /// 6: a navigator panel that fills the navigator's whole frame (`frame`), and the navigator's
 /// map as an element of it (`map`).
 /// 7: the interface themes (`ui.themes`, `ui.theme`, `ui.set_theme`).
-pub const VERSION: i64 = 7;
+/// 8: the colours of the navigator's map in a frame panel (`map`'s `colors`).
+pub const VERSION: i64 = 8;
+/// The colours a `map` element may give the navigator's map, by the names of the map's
+/// palette: those the frame map draws (the route's are not among them, the route has a look of
+/// its own; nor the labels' and the contour lines', which only the city map draws).
+pub const MAP_COLORS: &[&str] = &[
+    "land",
+    "grass",
+    "forest",
+    "field",
+    "paved_land",
+    "sand",
+    "water",
+    "road",
+    "road_edge",
+    "foot",
+    "area",
+    "lane_paint",
+    "lane_amber",
+    "roof",
+    "roof_edge",
+    "wall_lit",
+    "wall_dark",
+    "shadow",
+    "tree",
+    "tree_edge",
+    "rail",
+    "rail_dash",
+    "tram",
+    "card",
+    "card_text",
+    "card_dim",
+];
 /// Most panels of one plugin.
 pub const MAX_PANELS: usize = 16;
 /// Most elements of one panel, those in rows included.
@@ -382,10 +414,13 @@ pub enum Kind {
     },
     /// The navigator's map, in a panel that fills its frame: `height` (0: as high as the
     /// navigator's own map, 0.8 times its width), `cards` the navigator's cards over it (the
-    /// next turn, the clock, the speed, the next stop). Elsewhere empty room.
+    /// next turn, the clock, the speed, the next stop), `colors` that map's colours by the
+    /// names of `MAP_COLORS`, over the light or dark ones the player chose (none: those, as
+    /// they are). Elsewhere empty room.
     Map {
         height: f32,
         cards: bool,
+        colors: Vec<(String, Rgba)>,
     },
 }
 
