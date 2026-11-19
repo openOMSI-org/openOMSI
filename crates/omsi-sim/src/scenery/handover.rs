@@ -5,8 +5,8 @@
 //! each new object (and each tile that goes) to a [`SceneryInbox`], and the list takes
 //! them in that order at the start of its step and before anything else reads it.
 
-use super::state::{SceneryObject, SceneryState};
 use super::SceneryInstance;
+use super::state::{SceneryObject, SceneryState};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// One change of the loaded scenery, in the order the loader made them.
@@ -34,7 +34,11 @@ static INBOXES: AtomicU64 = AtomicU64::new(1);
 
 impl Default for SceneryInbox {
     fn default() -> Self {
-        SceneryInbox { id: INBOXES.fetch_add(1, Ordering::Relaxed), next_key: AtomicU64::new(1), changes: Default::default() }
+        SceneryInbox {
+            id: INBOXES.fetch_add(1, Ordering::Relaxed),
+            next_key: AtomicU64::new(1),
+            changes: Default::default(),
+        }
     }
 }
 
@@ -102,7 +106,11 @@ impl SceneryState {
         if let Some(Some(d)) = o.switch_dirs.get(path as usize) {
             Some((val - *d as f32).abs() < 0.5)
         } else if o.switch_dirs.iter().any(|d| d.is_some()) {
-            let any_other_active = o.switch_dirs.iter().filter_map(|d| *d).any(|d| (val - d as f32).abs() < 0.5);
+            let any_other_active = o
+                .switch_dirs
+                .iter()
+                .filter_map(|d| *d)
+                .any(|d| (val - d as f32).abs() < 0.5);
             Some(!any_other_active)
         } else {
             Some((val - path as f32).abs() < 0.5)
@@ -129,8 +137,18 @@ impl SceneryState {
                 }
             }
             if changed && omsi_cfg::flags::OMSI_DEBUG_SWITCHES.is_set() {
-                let path = o.sco_path.as_deref().map(|p| p.display().to_string()).unwrap_or_default();
-                log::info!("switch {} ({}) at ({:.0}, {:.0}) thrown to {target_d} for a train", id, path, o.pos.x, o.pos.y);
+                let path = o
+                    .sco_path
+                    .as_deref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default();
+                log::info!(
+                    "switch {} ({}) at ({:.0}, {:.0}) thrown to {target_d} for a train",
+                    id,
+                    path,
+                    o.pos.x,
+                    o.pos.y
+                );
             }
         }
     }
@@ -162,7 +180,13 @@ impl SceneryState {
         }
         // (found anew only when objects came or went, not by a walk of the list each frame)
         if self.signals.0 != self.generation() {
-            let found: Vec<u32> = self.objects().iter().enumerate().filter(|(_, o)| ids.contains(&o.map_id)).map(|(i, _)| i as u32).collect();
+            let found: Vec<u32> = self
+                .objects()
+                .iter()
+                .enumerate()
+                .filter(|(_, o)| ids.contains(&o.map_id))
+                .map(|(i, _)| i as u32)
+                .collect();
             self.signals = (self.generation(), found);
         }
         let signals = std::mem::take(&mut self.signals.1);
@@ -172,17 +196,30 @@ impl SceneryState {
             if o.inst.var("Signal") != Some(a) {
                 o.inst.set_var("Signal", a);
                 if omsi_cfg::flags::OMSI_DEBUG_SIGNALS.is_set() {
-                    log::info!("signal {} at ({:.0}, {:.0}) shows {a}", o.map_id, o.pos.x, o.pos.y);
+                    log::info!(
+                        "signal {} at ({:.0}, {:.0}) shows {a}",
+                        o.map_id,
+                        o.pos.x,
+                        o.pos.y
+                    );
                 }
             }
-            o.inst.set_var("NextSignal", next.get(&o.map_id).copied().unwrap_or(0.0));
+            o.inst
+                .set_var("NextSignal", next.get(&o.map_id).copied().unwrap_or(0.0));
         }
         self.signals.1 = signals;
     }
 
     /// A press, release or move on page `page` of object `map_id`: what the page does
     /// (`omsi.setVar`, `omsi.trigger`) reaches the object's script.
-    pub fn html_pointer(&mut self, map_id: i64, page: usize, u: f32, v: f32, kind: crate::htmltex::PointerKind) -> bool {
+    pub fn html_pointer(
+        &mut self,
+        map_id: i64,
+        page: usize,
+        u: f32,
+        v: f32,
+        kind: crate::htmltex::PointerKind,
+    ) -> bool {
         match self.find_mut(map_id) {
             Some(o) => o.inst.html_pointer(page, u, v, kind),
             None => false,
@@ -198,7 +235,9 @@ impl SceneryState {
         let ok = o.inst.trigger(event);
         let drag = format!("{event}_drag");
         let low = event.to_ascii_lowercase();
-        if (low.contains("taste") || low.contains("button") || low.contains("click")) && o.inst.program.trigger(&drag).is_some() {
+        if (low.contains("taste") || low.contains("button") || low.contains("click"))
+            && o.inst.program.trigger(&drag).is_some()
+        {
             o.inst.host.mouse = (0.0, 0.0);
             o.inst.trigger(&drag);
             o.inst.host.mouse = (0.0, 0.0);
@@ -287,7 +326,12 @@ mod tests {
         let inbox = SceneryInbox::default();
         let mut s = SceneryState::default();
         let lamp = |key: u64, tile: (i32, i32)| {
-            let inst = SceneryInstance::new(Arc::new(omsi_script::Program::default()), &[], crate::SimClock::default(), &[]);
+            let inst = SceneryInstance::new(
+                Arc::new(omsi_script::Program::default()),
+                &[],
+                crate::SimClock::default(),
+                &[],
+            );
             SceneryChange::Lamp(crate::scenery::LampScript { key, tile, inst })
         };
         let (a, b, c) = (inbox.next_key(), inbox.next_key(), inbox.next_key());
