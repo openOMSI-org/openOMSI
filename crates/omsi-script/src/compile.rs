@@ -612,7 +612,7 @@ impl<'a> Compiler<'a> {
                                             patch(&mut block.ops[idx], end);
                                         }
                                         log::debug!("{}:{}: {{{b}}} starts while block {} is open (implicit end)", f.path.display(), line_no, block.name);
-                                        self.finish_block(kinds, block, false);
+                                        self.finish_block(kinds, block);
                                         cur = Some((vec![kind], Block { name, file: f.path.clone(), line: line_no, ..Default::default() }, Vec::new()));
                                     }
                                     None => cur = Some((vec![kind], Block { name, file: f.path.clone(), line: line_no, ..Default::default() }, Vec::new())),
@@ -636,7 +636,7 @@ impl<'a> Compiler<'a> {
                                     for (_, op) in extra_elses.drain(..) {
                                         patch(&mut block.ops[op], end);
                                     }
-                                    self.finish_block(kinds, block, true);
+                                    self.finish_block(kinds, block);
                                 } else {
                                     // Surplus {end} tokens are common in stock content; ignored.
                                     log::debug!("{}:{}: {{end}} without block", f.path.display(), line_no);
@@ -746,7 +746,7 @@ impl<'a> Compiler<'a> {
                 patch(&mut block.ops[idx], end);
             }
             log::debug!("{}: missing {{end}} at end of file", f.path.display());
-            self.finish_block(kinds, block, false);
+            self.finish_block(kinds, block);
         }
     }
 
@@ -756,30 +756,32 @@ impl<'a> Compiler<'a> {
         self.pending.push((block_idx, op_idx, name));
     }
 
-    fn finish_block(&mut self, mut kinds: Vec<BlockKind>, block: Block, ended: bool) {
+    fn finish_block(&mut self, mut kinds: Vec<BlockKind>, block: Block) {
         let id = self.p.blocks.len() as BlockId;
         self.p.blocks.push(block);
         kinds.dedup();
         for kind in kinds {
-            self.register(kind, id, ended);
+            self.register(kind, id);
         }
     }
 
-    fn register(&mut self, kind: BlockKind, id: BlockId, ended: bool) {
+    fn register(&mut self, kind: BlockKind, id: BlockId) {
         match kind {
             BlockKind::Init => self.p.init.push(id),
             BlockKind::Frame => {
-                self.p.frame.truncate(self.file_frames.0);
-                self.p.frame.push(id);
-                if !ended {
-                    self.file_frames.0 = self.p.frame.len();
+                let is_dup = self.p.frame[self.file_frames.0..].iter().any(|&prev| {
+                    self.p.blocks[prev as usize].ops == self.p.blocks[id as usize].ops
+                });
+                if !is_dup {
+                    self.p.frame.push(id);
                 }
             }
             BlockKind::FrameAi => {
-                self.p.frame_ai.truncate(self.file_frames.1);
-                self.p.frame_ai.push(id);
-                if !ended {
-                    self.file_frames.1 = self.p.frame_ai.len();
+                let is_dup = self.p.frame_ai[self.file_frames.1..].iter().any(|&prev| {
+                    self.p.blocks[prev as usize].ops == self.p.blocks[id as usize].ops
+                });
+                if !is_dup {
+                    self.p.frame_ai.push(id);
                 }
             }
             BlockKind::Macro(n) => {
@@ -1072,9 +1074,11 @@ mod tests {
     }
 
     #[test]
-    fn a_file_keeps_one_frame_block_as_it_keeps_one_macro_of_a_name() {
-        let twice = program_of("{frame}\n1 (S.L.a)\n{end}\n{frame}\n2 (S.L.b)\n{end}\n");
-        assert_eq!(twice.frame.len(), 1);
+    fn a_file_deduplicates_identical_frame_blocks_and_keeps_distinct_ones() {
+        let dup = program_of("{frame}\n1 (S.L.a)\n{end}\n{frame}\n1 (S.L.a)\n{end}\n");
+        assert_eq!(dup.frame.len(), 1);
+        let distinct = program_of("{frame}\n1 (S.L.a)\n{end}\n{frame}\n2 (S.L.b)\n{end}\n");
+        assert_eq!(distinct.frame.len(), 2);
         let stacked = program_of("{frame}\n{frame}\n3 (S.L.c)\n{end}\n");
         assert_eq!(stacked.frame.len(), 1);
         let cut_short = program_of("{frame}\n1 (S.L.a)\n{frame}\n2 (S.L.b)\n{end}\n");
