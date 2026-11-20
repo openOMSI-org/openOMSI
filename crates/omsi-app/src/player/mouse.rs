@@ -3,6 +3,7 @@
 
 use super::*;
 
+#[rustfmt::skip]
 impl Player {
     /// The switch under a ray, if any: the `[mouseevent]` mesh the cursor points at.
     ///
@@ -236,6 +237,15 @@ impl Player {
         Some((name, false))
     }
 
+    pub(crate) fn trigger_cab_control(&mut self, ev: &str) -> bool {
+        let was_interlocked = omsi_sim::input::is_stop_brake_interlocked(&self.vehicle);
+        let plain = self.vehicle.trigger(ev);
+        self.vehicle.update_scripts_only(0.0);
+        self.clear_momentary_mouse_flag(ev);
+        omsi_sim::input::maybe_release_held_brake(&self.vehicle, &mut self.axes, was_interlocked);
+        plain
+    }
+
     pub(crate) fn click(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
         self.release();
         if let Some(i) = self.pick(origin, dir, spread) {
@@ -244,16 +254,7 @@ impl Player {
                 .clone()
                 .unwrap();
             log::info!("mouse event {ev}");
-            let plain = self.vehicle.trigger(&ev);
-            // Momentary `[mouseevent]` buttons (Aachen ibox / ticket printer, #744) set a
-            // flag in the press trigger and clear it in `_drag` / `_off`. The frame script
-            // is what acts on the flag. Run that frame now, before the next redraw's
-            // `_drag` (or a quick `_off`) zeroes it and the click does nothing.
-            self.vehicle.update_scripts_only(0.0);
-            // Clear the press flag immediately after the frame consumed it. Otherwise a
-            // held click can be processed again on the next `tick` (digit keys append
-            // twice: `1`→`11`, and ibox `0`/`D11` becomes `1`→`10`→`100`).
-            self.clear_momentary_mouse_flag(&ev);
+            let plain = self.trigger_cab_control(&ev);
             self.pressed_mesh = Some(i);
             self.press_info = (plain, 0.0);
             self.auto_drag = None;
@@ -266,9 +267,7 @@ impl Player {
             .clone()
             .unwrap();
         log::info!("trailer mouse event {ev} (part {ti})");
-        self.vehicle.trigger(&ev);
-        self.vehicle.update_scripts_only(0.0);
-        self.clear_momentary_mouse_flag(&ev);
+        self.trigger_cab_control(&ev);
         self.pressed_trailer_mesh = Some((ti, i));
         Some(i)
     }
@@ -426,6 +425,7 @@ impl Player {
 
 /// A sun blind can be left at any position, including after a very short drag. Treating
 /// its drag-only click spot as a toggle turned a small adjustment into full travel.
+#[rustfmt::skip]
 fn auto_drag_click(event: &str, plain: bool, movement: f32) -> bool {
     let event = event.to_ascii_lowercase().replace(['_', '-'], "");
     !plain
@@ -436,6 +436,7 @@ fn auto_drag_click(event: &str, plain: bool, movement: f32) -> bool {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod roller_blind_tests {
     include!("../../../../tools/test-support/original_root.rs");
     use super::auto_drag_click;
@@ -583,6 +584,7 @@ pub(crate) struct AutoDrag {
     t: f32,
 }
 
+#[rustfmt::skip]
 impl Player {
     /// Drag a clicked drag-only control (see `auto_drag`) a step towards its other end.
     pub(crate) fn tick_auto_drag(&mut self, dt: f32) {
