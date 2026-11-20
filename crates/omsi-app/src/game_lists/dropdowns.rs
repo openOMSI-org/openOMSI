@@ -4,6 +4,7 @@ use super::*;
 
 /// The name of the weather in force (the file's name without its ending).
 /// The weather files (`Weather/*.owt`) of every content root, by name.
+#[rustfmt::skip]
 pub(super) fn weather_files() -> Vec<String> {
     let mut files: Vec<String> = omsi_cfg::read_dir_merged("Weather")
         .into_iter()
@@ -30,6 +31,7 @@ pub(crate) struct Dropdown {
 }
 
 /// The drop-down of the row `row` whose action is `id`, if that row has one.
+#[rustfmt::skip]
 pub(crate) fn dropdown_for(app: &App, row: usize, id: &str) -> Option<Dropdown> {
     let tr = |t: &str| omsi_ui::tr(t).into_owned();
     if app.metar_locked() && matches!(id, "weather" | "cloudkind" | "precipkind") {
@@ -97,6 +99,7 @@ pub(crate) fn dropdown_for(app: &App, row: usize, id: &str) -> Option<Dropdown> 
 }
 
 /// Do an entry of a drop-down.
+#[rustfmt::skip]
 pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
     let (verb, arg) = action.split_once(' ').unwrap_or((action, ""));
     if app.metar_locked() && matches!(verb, "wx" | "cloud" | "precip") {
@@ -200,6 +203,7 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
 }
 
 /// The session's weather as the player reads it (its name in the interface's language).
+#[rustfmt::skip]
 pub(super) fn weather_shown(app: &App) -> String {
     if crate::weather_tomorrow::selected(app.args.weather.as_deref()) { return "Tomorrow.io".into(); }
     match app.args.weather.as_deref() {
@@ -214,6 +218,7 @@ pub(super) fn weather_shown(app: &App) -> String {
     }
 }
 
+#[rustfmt::skip]
 pub(super) fn weather_name(app: &App) -> String {
     if app.session.weather.as_ref().is_some_and(|w| w.name == CUSTOM_WEATHER) {
         return CUSTOM_WEATHER.to_string();
@@ -237,6 +242,7 @@ pub(super) fn weather_name(app: &App) -> String {
 
 /// The launcher's settings file as the lists show it: read once (until something is
 /// written), with the keys still waiting to be written on top.
+#[rustfmt::skip]
 pub(super) fn settings_file() -> serde_json::Value {
     let mut v = SETTINGS_CACHE
         .lock()
@@ -254,6 +260,7 @@ pub(super) fn settings_file() -> serde_json::Value {
     v
 }
 
+#[rustfmt::skip]
 pub(super) fn value_text(v: &serde_json::Value) -> String {
     match v {
         serde_json::Value::String(x) => x.clone(),
@@ -263,10 +270,12 @@ pub(super) fn value_text(v: &serde_json::Value) -> String {
     }
 }
 
+#[rustfmt::skip]
 pub(super) fn same_value(a: &str, b: &str) -> bool {
     a == b || a.parse::<f64>().ok().zip(b.parse::<f64>().ok()).is_some_and(|(x, y)| (x - y).abs() < 1e-6)
 }
 
+#[rustfmt::skip]
 pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
     match key {
         "cloud_quality" => vec![("high", "High"), ("low", "Low")],
@@ -327,11 +336,13 @@ mod tests {
     use clap::Parser;
 
     #[test]
+    #[rustfmt::skip]
     fn interface_theme_dropdown_uses_the_shared_dark_and_light_values() {
         assert_eq!(select_options("ui_theme"), [("dark", "Dark"), ("light", "Light theme")]);
     }
 
     #[test]
+    #[rustfmt::skip]
     fn selecting_custom_controls_releases_the_arrow_driving_preset() {
         use winit::keyboard::KeyCode;
         let args = crate::cli::Args::parse_from(["openomsi", "--drive-keys", "arrows"]);
@@ -359,6 +370,7 @@ mod tests {
     }
 
     #[test]
+    #[rustfmt::skip]
     fn reloading_other_settings_keeps_the_command_line_driving_layout() {
         use winit::keyboard::KeyCode;
         let args = crate::cli::Args::parse_from(["openomsi", "--drive-keys", "arrows"]);
@@ -371,6 +383,7 @@ mod tests {
     }
 
     #[test]
+    #[rustfmt::skip]
     fn live_interface_theme_updates_the_navigator_map() {
         let args = crate::cli::Args::parse_from(["openomsi"]);
         let mut app = crate::assemble_app(args, crate::settings::Settings::default());
@@ -386,6 +399,7 @@ mod tests {
     }
 }
 
+#[rustfmt::skip]
 pub(super) fn select_state(file: &serde_json::Value, key: &str) -> (Vec<(&'static str, &'static str)>, Option<usize>, String) {
     let options = select_options(key);
     let cur = value_text(file.get(key).unwrap_or(&serde_json::Value::Null));
@@ -393,6 +407,7 @@ pub(super) fn select_state(file: &serde_json::Value, key: &str) -> (Vec<(&'stati
     (options, at, cur)
 }
 
+#[rustfmt::skip]
 pub(super) fn select_row(file: &serde_json::Value, key: &str, name: &str, desc: &str) -> Option<(String, String)> {
     let (options, at, cur) = select_state(file, key);
     if options.is_empty() {
@@ -406,26 +421,31 @@ pub(super) fn select_row(file: &serde_json::Value, key: &str, name: &str, desc: 
 
 /// The quality presets (`graphics_presets`, as the launcher's): Low to Ultra, each with its
 /// graphics mode.
+#[rustfmt::skip]
 pub(super) fn presets(_file: &serde_json::Value) -> [(&'static str, serde_json::Value); 6] {
     omsi_launcher_lib::graphics_presets()
 }
 
+#[rustfmt::skip]
 pub(super) fn preset_now(file: &serde_json::Value) -> Option<usize> {
     presets(file).iter().position(|p| {
         p.1.as_object().is_some_and(|o| o.iter().all(|(k, v)| same_value(&value_text(v), &value_text(file.get(k).unwrap_or(&serde_json::Value::Null)))))
     })
 }
 
+#[rustfmt::skip]
 pub(super) fn preset_row(file: &serde_json::Value, name: &str, desc: &str) -> Option<(String, String)> {
     let label = omsi_ui::tr(preset_now(file).map(|i| presets(file)[i].0).unwrap_or("Custom")).into_owned();
     Some((row(name, 'o', &label, desc, None), "preset".to_string()))
 }
 
+#[rustfmt::skip]
 pub(crate) fn saved_settings() -> Option<serde_json::Value> {
     flush_settings(true);
     omsi_launcher_lib::get_settings().ok()
 }
 
+#[rustfmt::skip]
 pub(crate) fn store_with(app: &mut App, change: impl FnOnce(&mut serde_json::Value)) {
     flush_settings(true);
     let Ok(mut v) = omsi_launcher_lib::get_settings() else { return };
@@ -449,6 +469,7 @@ pub(crate) fn store_with(app: &mut App, change: impl FnOnce(&mut serde_json::Val
     }
 }
 
+#[rustfmt::skip]
 pub(super) fn reload_settings(app: &mut App) {
     flush_settings(true);
     // (the seat is the bus's, see `bus_seats`: it is read again for the bus)
@@ -464,6 +485,7 @@ pub(super) fn reload_settings(app: &mut App) {
 /// A layout picked during the drive must reach the key handlers too. Keeping the old
 /// `args.drive_keys` left plain arrows steering after selecting Custom controls; Alt
 /// happened to bypass that preset and let the interior-camera bindings through.
+#[rustfmt::skip]
 fn sync_driving_keys(app: &mut App, previous: &str) {
     if app.settings.drive_keys == previous {
         return;
@@ -475,10 +497,12 @@ fn sync_driving_keys(app: &mut App, previous: &str) {
     app.args.drive_keys.clone_from(&app.settings.drive_keys);
 }
 
+#[rustfmt::skip]
 pub(crate) fn session_mode(app: &App) -> &'static str {
     mode_of_session(&app.args.session_settings, app.settings.mode())
 }
 
+#[rustfmt::skip]
 pub(super) fn mode_of_session(session: &crate::startup::SessionSettings, graphics: &str) -> &'static str {
     let traced = crate::settings::graphics_mode(graphics) == "enhanced_plus";
     if session.enhanced_plus || (session.enhanced && traced) {
@@ -492,6 +516,7 @@ pub(super) fn mode_of_session(session: &crate::startup::SessionSettings, graphic
     }
 }
 
+#[rustfmt::skip]
 fn settings_in_mode(mode: &str) -> crate::settings::Settings {
     let file = settings_file();
     let text = omsi_launcher_lib::settings_to_text(&file, None);
@@ -502,6 +527,7 @@ fn settings_in_mode(mode: &str) -> crate::settings::Settings {
     s
 }
 
+#[rustfmt::skip]
 pub(super) fn text_in_mode(text: &str, mode: &str) -> crate::settings::Settings {
     // (the mode as the file spells it: Enhanced and ray tracing apart)
     let (graphics, rt) = match mode {
@@ -512,6 +538,7 @@ pub(super) fn text_in_mode(text: &str, mode: &str) -> crate::settings::Settings 
     crate::settings::Settings::from_text(&format!("{text}\ngraphics={graphics}\nray_tracing={rt}\n"))
 }
 
+#[rustfmt::skip]
 pub(super) fn sync_live(app: &mut App) {
     // (the upscaler and its sharpening at once, FSR 1 built when first asked for; and the
     // render scale with them, FSR's quality being one. Only when one of them changed and FSR
@@ -556,6 +583,7 @@ pub(super) fn sync_live(app: &mut App) {
         h.visual_full_bus_reaction = s.passenger_full_bus_reaction && s.passenger_animation == "enhanced";
         h.bad_driving = s.pax_bad_driving;
         h.boarding = s.boarding.clone();
+        h.rear_door_boarding = s.rear_door_boarding;
         h.stand_chance = s.standing_chance;
         h.short_rides_stand = s.pax_short_rides_stand;
         h.voices = match s.pax_voices.as_str() {

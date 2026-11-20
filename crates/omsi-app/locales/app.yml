@@ -561,6 +561,10 @@ _version: 2
   en: "The driver sells the ticket"
 "Just walk in":
   en: "Just walk in"
+"Rear door boarding":
+  en: "Rear door boarding"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)":
+  en: "Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)"
 "Passengers pay the exact fare":
   en: "Passengers pay the exact fare"
 "Passengers react to bad driving":

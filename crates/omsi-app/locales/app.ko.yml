@@ -239,6 +239,8 @@
 "High (512)": "높음 (512)"
 "Very high (1024)": "매우 높음 (1024)"
 "Boarding": "승차 방식"
+"Rear door boarding": "뒷문 승차"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)": "승객이 뒷문과 중간문으로도 탑니다. 각자 버스에서 자기 쪽의 가장 가까운 문으로 가서 문을 요청하며, 앞문에 줄을 서지 않습니다. 그 문은 평소처럼 열어 주세요(해당 문 키, 모든 문, 또는 문 해제)"
 "Pay and take the ticket": "결제 후 승차권 직접 수령"
 "The driver sells the ticket": "운전자가 승차권 판매"
 "Just walk in": "그냥 탑승"
