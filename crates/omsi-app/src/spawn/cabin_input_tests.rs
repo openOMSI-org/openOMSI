@@ -218,18 +218,12 @@ fn stop_brake_interlock_releases_held_brake_only_when_disengaging() {
 
     // 3. Cab control (mouse click) engaging preserves held brake:
     p.axes.brake = 1.0;
-    let was = omsi_sim::input::is_stop_brake_interlocked(&p.vehicle);
-    p.vehicle.trigger("cp_stop_brake_toggle");
-    p.vehicle.update_scripts_only(0.0);
-    omsi_sim::input::maybe_release_held_brake(&p.vehicle, &mut p.axes, was);
+    p.trigger_cab_control("cp_stop_brake_toggle");
     assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(1.0));
     assert_eq!(p.axes.brake, 1.0);
 
     // 4. Cab control (mouse click) disengaging releases held brake:
-    let was = omsi_sim::input::is_stop_brake_interlocked(&p.vehicle);
-    p.vehicle.trigger("cp_stop_brake_toggle");
-    p.vehicle.update_scripts_only(0.0);
-    omsi_sim::input::maybe_release_held_brake(&p.vehicle, &mut p.axes, was);
+    p.trigger_cab_control("cp_stop_brake_toggle");
     assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(0.0));
     assert_eq!(p.axes.brake, 0.0);
 }

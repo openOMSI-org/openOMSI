@@ -453,7 +453,7 @@ impl App {
             p.axes.pedal_hold = self.settings.brake_hold;
             p.axes.pedal_speed = self.settings.key_pedal_speed;
             p.analog = analog;
-            if analog.throttle.unwrap_or(0.0).max(p.axes.throttle) > 0.05 {
+            if !p.axes.brake_key && analog.throttle.unwrap_or(0.0).max(p.axes.throttle) > 0.05 {
                 p.axes.brake = 0.0;
             }
             for (name, down) in actions {
@@ -573,5 +573,27 @@ mod tests {
         assert_eq!(gear_step("gear_up"), Some(true));
         assert_eq!(gear_step("GEAR_DOWN"), Some(false));
         assert_eq!(gear_step("retarder_up"), None);
+    }
+
+    #[test]
+    fn actively_pressed_keyboard_brake_builds_despite_analog_throttle() {
+        let mut axes = omsi_sim::KeyboardAxes {
+            brake_key: true,
+            pedal_hold: true,
+            ..Default::default()
+        };
+        for _ in 0..10 {
+            if !axes.brake_key && 0.35 > 0.05 {
+                axes.brake = 0.0;
+            }
+            axes.update(0.016);
+        }
+        assert!(axes.brake > 0.1, "brake built up to {}", axes.brake);
+
+        axes.brake_key = false;
+        if !axes.brake_key && 0.35 > 0.05 {
+            axes.brake = 0.0;
+        }
+        assert_eq!(axes.brake, 0.0);
     }
 }
