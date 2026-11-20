@@ -1,21 +1,25 @@
 //! The player: their bus, its controls and cameras.
-
 use super::*;
 use omsi_input::auto_shift::GateMemory;
-
+#[rustfmt::skip]
 mod cameras;
+#[rustfmt::skip]
 mod doors;
+#[rustfmt::skip]
 mod gears;
+#[rustfmt::skip]
 mod ibis;
+#[rustfmt::skip]
 mod mouse;
+#[rustfmt::skip]
 mod picking;
+#[rustfmt::skip]
 mod rp_speed_limit;
-
 pub(crate) use cameras::*;
 pub(crate) use doors::*;
-pub(crate) use picking::*;
 pub(crate) use mouse::AutoDrag;
-
+pub(crate) use picking::*;
+#[rustfmt::skip]
 fn indicator_toggle_action(state: &mut u8, lever: Option<u8>, want: u8) -> &'static str {
     // Scripts can cancel the lever themselves after a turn; prefer their current state.
     if let Some(lever) = lever { *state = lever; }
@@ -30,35 +34,35 @@ fn indicator_toggle_action(state: &mut u8, lever: Option<u8>, want: u8) -> &'sta
         if want == 1 { "blinker_left_set" } else { "blinker_right_set" }
     }
 }
-
 /// The indicator lever to put back after a frame of the script (None: leave it): where
 /// the settings keep an indicator on (`cancel` off), the script turning it off by itself
 /// in its frame - a bus whose indicator cancels after a turn, on a phone's wheel after a
 /// second or two (#451) - is undone. The player's own keys and clicks run as triggers
 /// between the frames, so they still turn it off.
+#[rustfmt::skip]
 fn kept_indicator(cancel: bool, before: Option<f32>, after: Option<f32>) -> Option<f32> {
     let (before, after) = (before?.round(), after?.round());
     (!cancel && (before == 1.0 || before == 2.0) && after == 0.0).then_some(before)
 }
-
+#[rustfmt::skip]
 fn is_blinker_cancel_trigger(name: &str) -> bool {
     let n = name.trim().to_ascii_lowercase();
     let n = n.strip_prefix("ev_").unwrap_or(&n);
     n.strip_prefix("lights_").unwrap_or(n) == "blinker_swoff"
 }
-
 /// Whether the view follows the steering (the setting on): only from the driver's seat as the
 /// bus places it, its standard camera - a look at the ticket printer or out of the side
 /// window from another of the cab's cameras turned with the wheel as well.
+#[rustfmt::skip]
 pub(crate) fn steering_follows(view: &str, cam_choice: (usize, usize)) -> bool {
     view == "driver" && cam_choice.0 == 0
 }
-
+#[rustfmt::skip]
 pub(crate) fn steering_view_yaw(current: f32, steering: f32, dt: f32, enabled: bool, angle: f32, response: f32) -> f32 {
     let target = if enabled { steering.clamp(-1.0, 1.0) * angle.clamp(0.0, 60.0) } else { 0.0 };
     current + (target - current) * (1.0 - (-dt.max(0.0) / response.clamp(0.05, 1.0)).exp())
 }
-
+#[rustfmt::skip]
 pub(crate) fn driver_head_look(
     look: (f32, f32),
     view: &str,
@@ -71,11 +75,10 @@ pub(crate) fn driver_head_look(
         look
     }
 }
-
 #[cfg(test)]
+#[rustfmt::skip]
 mod driver_head_look_tests {
     use super::driver_head_look;
-
     #[test]
     fn only_the_standard_driver_camera_follows_the_steering() {
         assert!(super::steering_follows("driver", (0, 0)));
@@ -84,7 +87,6 @@ mod driver_head_look_tests {
         assert!(!super::steering_follows("pax", (0, 0)));
         assert!(!super::steering_follows("outside", (0, 0)));
     }
-
     #[test]
     fn head_pitch_adjusts_only_non_vr_driver_view() {
         assert_eq!(
@@ -102,7 +104,6 @@ mod driver_head_look_tests {
         );
     }
 }
-
 /// The vehicle actions of the keys held whose `Inputs/keyboard.cfg` entry has the "held"
 /// flag ([`omsi_content::input::KEY_HOLD`], the key list's " *"), by scan code: Omsi.exe
 /// (0x6466b8) gives the vehicle their action again every frame the key stays down, not
@@ -110,8 +111,9 @@ mod driver_head_look_tests {
 /// (`bus_rollband_up`, `_dn`: its line or destination moves by the frame's time on each
 /// call); fired once, it moved by a frame's worth and no more (#1098, #1145).
 #[derive(Default)]
+#[rustfmt::skip]
 pub(crate) struct HeldRepeat(hashbrown::HashMap<i32, (Vec<String>, bool)>);
-
+#[rustfmt::skip]
 impl HeldRepeat {
     /// The key went down with these actions (its press fires them itself).
     fn press(&mut self, scan: i32, names: Vec<String>) {
@@ -121,11 +123,9 @@ impl HeldRepeat {
             self.0.insert(scan, (names, true));
         }
     }
-
     fn release(&mut self, scan: i32) {
         self.0.remove(&scan);
     }
-
     /// The actions to fire again this frame: those of every key still held, but not of one
     /// that went down since the last frame - its press was this frame's call.
     fn due(&mut self) -> Vec<String> {
@@ -138,8 +138,8 @@ impl HeldRepeat {
         due
     }
 }
-
 /// Everything about the spawned player vehicle.
+#[rustfmt::skip]
 pub(crate) struct Player {
     /// Which vehicle this is, for as long as the session runs (the people riding in one
     /// the player left know it by this, see `Humans::player_bus_swapped`).
@@ -256,12 +256,11 @@ pub(crate) struct Player {
     pub(crate) blind_pick: Option<schedule::BlindPick>,
     /// The IBIS being typed, with the line and terminus it is typed for.
     pub(crate) ibis_typist: Option<(omsi_sim::ibis::Typist, String, String, Vec<String>)>,
-    /// The duty is typed into the IBIS by itself (after Shift+U or `--autostart`): a new
-    /// trip of the duty is typed too.
+    /// The duty is typed into the IBIS by itself (after Shift+U or `--autostart`): a new trip of the duty is typed too.
     pub(crate) duty_typed: bool,
-    /// The plugins (by owner mark) that leave the IBIS to the driver (`duty.set_auto_ibis`):
-    /// the game types the duty into it by itself (Shift+U, `--autostart`, each new trip) only
-    /// while there is none. Each plugin lets go of its own hold as it goes.
+    /// The duty's stop the IBIS was last given (#2267; None - never): `ibis_auto_stop` types it again as the bus serves them.
+    pub(crate) ibis_shown: Option<usize>,
+    /// The plugins (by owner mark) that leave the IBIS to the driver (`duty.set_auto_ibis`): the game types the duty into it by itself (Shift+U, `--autostart`, each new trip) only while there is none. Each plugin lets go of its own hold as it goes.
     pub(crate) ibis_holds: std::collections::BTreeSet<u64>,
     /// The stop a page asked the duty to go on with (`omsi.setNextStop`), for the game to
     /// hand to the duty.
@@ -286,7 +285,6 @@ pub(crate) struct Player {
     /// The stop announcements the game presses the IBIS on for (see `auto_announce`).
     pub(crate) announce: crate::auto_announce::AutoAnnounce,
 }
-
 // Putting a bus into service (Shift+U, `--autostart`) is `omsi_sim::startup`: it presses
 // whatever the vehicle's scripts use to switch the electrics on and to crank the engine
 // (found in the compiled scripts, the keys of `Inputs/keyboard.cfg` first) and watches the
@@ -295,7 +293,6 @@ pub(crate) struct Player {
 // the battery toggle used to switch the electrics off and every display went dead. No gear
 // is selected at the end: the bus spawns in N anyway, and a D pressed while the auto-start
 // was still running was thrown back to N by it.
-
 /// OMSI's own layout drives the bus with Shift and the numpad (throttle Shift+Num 8, brake
 /// Shift+Num 2, steering Shift+Num 4/6). A laptop or a Mac keyboard has no numpad at all, so
 /// the arrow keys drive as well; all they do in OMSI is step through the interior cameras.
@@ -309,6 +306,7 @@ pub(crate) struct Player {
 /// `simple` - W/S/A/D and Up/Down drive (plain Left/Right keep OMSI's interior camera
 /// switch, view_interiorcam_minus/plus, Omsi.exe 0x706278; A/D steer); `wasd` - W/S/A/D only;
 /// `arrows` - the arrow keys only (W/S/D keep their OMSI meaning: wipers, viewpoint, gear).
+#[rustfmt::skip]
 pub(crate) fn fallback_action(code: KeyCode, preset: &str) -> Option<omsi_sim::EngineAction> {
     use omsi_sim::EngineAction as A;
     let preset = preset.to_ascii_lowercase();
@@ -330,11 +328,11 @@ pub(crate) fn fallback_action(code: KeyCode, preset: &str) -> Option<omsi_sim::E
         _ => return None,
     })
 }
-
 /// Keyboard actions of `Inputs/keyboard.cfg` that no vehicle script handles under that
 /// name: the original translates them into the triggers the scripts do define (the
 /// indicators are `kw_blinker_*` in every stock bus, while the key file says
 /// `blinker_left_set`). Each action lists the trigger names tried in turn.
+#[rustfmt::skip]
 pub(crate) const ACTION_ALIASES: &[(&str, &[&str])] = &[
     (
         "blinker_left_set",
@@ -357,7 +355,7 @@ pub(crate) const ACTION_ALIASES: &[(&str, &[&str])] = &[
         &["parking_brake_mouse", "cp_feststellbremse_toggle"],
     ),
 ];
-
+#[rustfmt::skip]
 impl Player {
     /// Door key `n` (1 = the front door; 0 = all of them): the triggers fired. All the doors
     /// close the ones open when any is (leaving the others as they are) and else open them
@@ -404,7 +402,6 @@ impl Player {
         }
         fire
     }
-
     /// `doors_release`: the bus's door release (`VehicleInstance::door_release_trigger`); the triggers fired.
     pub(crate) fn door_release(&mut self) -> Vec<String> {
         let fired: Vec<String> = self.vehicle.door_release_trigger().map(str::to_string).into_iter().collect();
@@ -414,7 +411,6 @@ impl Player {
         }
         fired
     }
-
     /// A door key let go: the `_off` of the triggers it fired (the push buttons of the
     /// automatic doors are held between the two).
     pub(crate) fn door_key_off(&mut self, fired: &[String]) {
@@ -425,7 +421,6 @@ impl Player {
             }
         }
     }
-
     pub(crate) fn toggle_indicator(&mut self, want: u8) {
         let lever = if self.vehicle.var("lights_sw_warnblinker").is_some_and(|v| v > 0.5) {
             Some(3)
@@ -436,7 +431,6 @@ impl Player {
         self.action(action, true);
         self.action(action, false);
     }
-
     /// Fire a keyboard action as a script trigger, falling back to the names the stock
     /// scripts use for it. Returns whether any script block ran.
     pub(crate) fn action(&mut self, name: &str, pressed: bool) -> bool {
@@ -522,7 +516,6 @@ impl Player {
         let done = self.toggle_as_steps(name, pressed);
         done
     }
-
     /// A trigger of `--triggers` at its time (the offscreen run's and the window's): a gate of
     /// a manual gearbox comes with the automatic clutch, as from the keys; the game's door
     /// actions (`door_<n>` / `doors_all`) as a button pressed and let go; else the script's
@@ -538,7 +531,6 @@ impl Player {
             self.vehicle.trigger(name);
         }
     }
-
     /// OMSI's automatic clutch for a gear lever whose scripts only take a gear with the
     /// clutch pedal right down (`(L.L.clutch) 1 =`, the LiAZ and PAZ KPP) and do not read
     /// `AutoClutch` themselves: a gate chosen with a key, a phone's gear button or a
@@ -562,7 +554,6 @@ impl Player {
         self.vehicle.set_var("Clutch", 1.0);
         self.axes.clutch = 1.0;
     }
-
     /// The I key: all saloon light circuits on, or all off. OMSI binds one key to each
     /// circuit (Inputs/keyboard.cfg: 7 `cp_licht_untenrechts_toggle`, 8
     /// `cp_licht_oberdeck_toggle`, 9 `cp_licht_unterdeck_toggle`) and the buses wire them
@@ -586,7 +577,6 @@ impl Player {
             "Saloon lights off".into()
         }
     }
-
     /// How many of the model's `[interiorlight]` lamps are lit now.
     fn saloon_lamps_lit(&self) -> usize {
         self.vehicle
@@ -597,7 +587,6 @@ impl Player {
             .filter(|l| self.vehicle.var(&l.variable).unwrap_or(0.0) > 0.5)
             .count()
     }
-
     /// Switch the saloon lights on or off: every saloon light switch `Inputs/keyboard.cfg`
     /// knows (`cp_…licht…`/`…light…`, not the driver's lamp) is pressed once and taken
     /// back (the variables restored) when the scripts moved the lamps the other way. Returns the
@@ -642,7 +631,6 @@ impl Player {
         }
         done
     }
-
     /// How many of the model's outside lamps (`[light_enh]`, `[light_enh_2]`) are lit now.
     fn outside_lamps_lit(&self) -> usize {
         let v = &self.vehicle;
@@ -658,7 +646,6 @@ impl Player {
             .filter(|n| !n.is_empty() && v.var(n).unwrap_or(0.0) > 0.5)
             .count()
     }
-
     /// L (`kw_scheinwerfer_toggle`) on a bus whose side and tail lights have a switch of
     /// their own (Ctrl+L, `kw_standlicht_toggle`): switching the headlights on puts those on
     /// too, and switching them off puts them out again when L put them on. The LiAZ 5292's
@@ -697,7 +684,6 @@ impl Player {
             }
         }
     }
-
     /// A key OMSI binds to a `<switch>_toggle` on a bus whose switch only turns in steps
     /// (`<switch>_up` / `<switch>_down`): the Procity's light switch has
     /// `kw_scheinwerfer_up`/`_down` and nothing answered L (`kw_scheinwerfer_toggle`), so its
@@ -732,7 +718,6 @@ impl Player {
         }
         true
     }
-
     /// Handle a key: engine actions change the axes, everything else fires script triggers.
     pub(crate) fn key(&mut self, scan: i32, modifiers: i32, pressed: bool) {
         let names: Vec<String> = if pressed {
@@ -774,7 +759,6 @@ impl Player {
         }
         self.from_keyboard = false;
     }
-
     /// Start the whole bus by itself (Shift+U): everything a driver does to put it into
     /// service. Returns what to show in the HUD.
     pub(crate) fn start_up(&mut self) -> String {
@@ -800,12 +784,10 @@ impl Player {
             "Putting the vehicle into service ...".to_string()
         }
     }
-
     /// An auto-start is under way putting the bus into service (not switching it off).
     pub(crate) fn putting_into_service(&self) -> bool {
         self.startup.as_ref().is_some_and(|s| !s.shutting_down())
     }
-
     /// The vehicle actions `Inputs/keyboard.cfg` puts on keys.
     pub(crate) fn bound_actions(&self) -> Vec<String> {
         let mut names: Vec<String> = Vec::new();
@@ -816,7 +798,6 @@ impl Player {
         }
         names
     }
-
     /// Advance a running auto-start, then the IBIS typing; true while the auto-start is
     /// still going.
     pub(crate) fn tick_startup(&mut self, dt: f32) -> bool {
@@ -848,7 +829,6 @@ impl Player {
         }
         false
     }
-
     /// After dark a bus put into service (Shift+U) has its saloon lit, as a driver switches it
     /// on before the first stop: every key `Inputs/keyboard.cfg` gives a saloon light switch
     /// is pressed once, and pressed again when that put out more of the model's
@@ -876,7 +856,6 @@ impl Player {
             log::info!("auto-start: saloon lights switched on after dark ({})", done.join(", "));
         }
     }
-
     /// The driver's head follows the bus's accelerations a little late, as a body does:
     /// forward when braking, out of a bend, down over a bump (OMSI's head movement).
     /// The driver's head on its neck, as Omsi.exe moves the driver's view (0x7e2110): a mass
@@ -1212,6 +1191,7 @@ impl Player {
 /// from there, as in OMSI, where the mouse and the keys turn the one wheel (#184). The
 /// keys' own position was held at the middle while the mouse steered, and the wheel sprang
 /// back to it.
+#[rustfmt::skip]
 pub(crate) fn keep_wheel(p: Option<&mut Player>) {
     if let Some(p) = p {
         p.axes.steering = p.vehicle.physics.controls.steering;
@@ -1225,6 +1205,7 @@ pub(crate) fn keep_wheel(p: Option<&mut Player>) {
 /// the same movement of the hand turns the wheels a fifth as far: the wheel "gets heavier".
 /// The mouse's point may lie past the window's edges (app_impl/mouse_grab.rs): the caller
 /// holds the result at the full lock.
+#[rustfmt::skip]
 pub(crate) fn mouse_steering(cursor_x: f32, width: f32, kmh: f32) -> f32 {
     let x = 2.0 * cursor_x / width.max(1.0) - 1.0;
     x / (kmh / 10.0).max(1.0)
@@ -1235,6 +1216,7 @@ pub(crate) fn mouse_steering(cursor_x: f32, width: f32, kmh: f32) -> f32 {
 /// the way every `fade`), then within ~60 ms - the cursor comes in bursts, and taken as it
 /// came the wheel moved in steps. Without `smooth` (#1092) they are where the cursor says at
 /// once, as Omsi.exe sets the curvature and the pedals from it every frame.
+#[rustfmt::skip]
 pub(crate) fn mouse_follow(fade: f32, dt: f32, smooth: bool) -> f32 {
     if fade > 0.0 {
         (-std::f32::consts::LN_2 / fade * dt).exp()
@@ -1245,6 +1227,7 @@ pub(crate) fn mouse_follow(fade: f32, dt: f32, smooth: bool) -> f32 {
     }
 }
 
+#[rustfmt::skip]
 pub(crate) fn mouse_pedal_target(input: f32, strength: f32) -> f32 {
     (input.clamp(0.0, 1.0) * strength.clamp(0.25, 4.0)).min(1.0)
 }
@@ -1253,12 +1236,14 @@ pub(crate) fn mouse_pedal_target(input: f32, strength: f32) -> f32 {
 /// is snapped: in f32 the easing stops one step short of the target (1 - 6e-8 at 60 fps), and
 /// the stock gearbox scripts kick down only at a throttle of exactly 1 - the cursor at the top
 /// edge never gave it.
+#[rustfmt::skip]
 pub(crate) fn mouse_pedal(current: f32, target: f32, k: f32) -> f32 {
     let v = target + (current - target) * k;
     if (v - target).abs() < 1e-4 { target } else { v }
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod kept_indicator_tests {
     use super::kept_indicator;
 
@@ -1289,6 +1274,7 @@ mod kept_indicator_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod orbit_pivot_tests {
     use super::orbit_pivot;
     use glam::DVec3;
@@ -1308,6 +1294,7 @@ mod orbit_pivot_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod mouse_tests {
     use super::{mouse_follow, mouse_pedal, mouse_pedal_target, mouse_steering};
 
@@ -1382,6 +1369,7 @@ mod mouse_tests {
 
 /// The line of a depot route: the file's line column, or - when that is empty or a placeholder
 /// such as "XXX" - the line of its code (`code` = line x 100 + route).
+#[rustfmt::skip]
 fn route_line(t: &omsi_vehicle::hof::InfoTrip) -> String {
     let raw = t.line.trim();
     let code = omsi_cfg::parse_i32(&t.code);
@@ -1392,6 +1380,7 @@ fn route_line(t: &omsi_vehicle::hof::InfoTrip) -> String {
     }
 }
 #[cfg(test)]
+#[rustfmt::skip]
 mod preset_tests {
     use super::fallback_action;
     use omsi_sim::EngineAction as A;
@@ -1409,6 +1398,7 @@ mod preset_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod indicator_tests {
     use super::indicator_toggle_action;
 
@@ -1441,6 +1431,7 @@ mod indicator_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod held_repeat_tests {
     use super::HeldRepeat;
 
@@ -1464,6 +1455,7 @@ mod held_repeat_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod steering_view_tests {
     use super::steering_view_yaw;
 

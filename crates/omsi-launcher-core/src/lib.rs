@@ -3403,6 +3403,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // an early timetable bus waits only at the stops the timetable times (off: at every
     // stop, as in OMSI; #1773)
     v["ai_wait_timed_stops_only"] = json!(false);
+    v["ibis_auto_stop"] = json!(false);
     v["pax_bad_driving"] = json!(true);
     passenger_defaults(&mut v);
     // the arrival half of the stops of a depot file that keeps two recordings per stop
@@ -4242,6 +4243,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "mirror_shadows"
             | "mirror_particles"
             | "ai_wait_timed_stops_only"
+            | "ibis_auto_stop"
             | "pax_bad_driving"
             | "passenger_connections"
             | "passenger_hailing"
@@ -5003,6 +5005,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("trip_summary", true),
         b("full_tank", true)
     ));
+    text.push_str(&format!("ibis_auto_stop={}\n", b("ibis_auto_stop", false)));
     text.push_str(&format!("pax_bad_driving={}\n", b("pax_bad_driving", true)));
     text.push_str(&format!(
         "passenger_connections={}\npassenger_transfer_percent={}\n",
