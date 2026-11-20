@@ -5,6 +5,7 @@
 use super::*;
 use crate::view_sync::{self, ViewSync};
 
+#[rustfmt::skip]
 impl Offscreen<'_> {
     /// One step, the `i`-th (false: a server was told to stop).
     pub(super) fn step(&mut self, i: usize) -> Result<bool> {
@@ -318,7 +319,7 @@ impl Offscreen<'_> {
         if let Some(d) = duty.as_mut() {
             // (no plugins in an offscreen run: what they would be told goes to the log)
             let mut events = Vec::new();
-            steps::duty_step(
+            let note = steps::duty_step(
                 d,
                 player,
                 world,
@@ -331,6 +332,9 @@ impl Offscreen<'_> {
                 Some(&mut events),
                 announce,
             );
+            if let Some(text) = note {
+                log::info!("{text}");
+            }
             for e in events {
                 log::info!("plugin event: {e:?}");
             }
@@ -982,6 +986,7 @@ impl Offscreen<'_> {
 /// brought up to date after cars were taken off the road.
 struct AdminTraffic<'a, F: FnMut(&mut crate::traffic::Traffic)>(&'a mut crate::traffic::Traffic, F);
 
+#[rustfmt::skip]
 impl<F: FnMut(&mut crate::traffic::Traffic)> omsi_lan::admin::world::ServerTraffic for AdminTraffic<'_, F> {
     fn set_density(&mut self, n: usize) {
         self.0.target = n;
@@ -996,12 +1001,14 @@ impl<F: FnMut(&mut crate::traffic::Traffic)> omsi_lan::admin::world::ServerTraff
     }
 }
 
+#[rustfmt::skip]
 fn follow_server_clock(day_time: f64, want: f64) -> (f64, Option<f64>) {
     let jump = want - day_time;
     (want, (jump.abs() >= 120.0).then_some(jump))
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod tests {
     use super::follow_server_clock;
 
