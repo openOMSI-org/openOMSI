@@ -11,7 +11,7 @@ import { call } from '../api.js';
 import { Icon } from '../icons.js';
 import { Button, Dialog, Empty, Notice, Search, Segmented, Select, Slider, Spinner, Tag, useConfirm } from '../ui.js';
 import { BusPreview } from '../preview.js';
-import { listsModel, dirty, shouldRead } from './ai-lists-model.js';
+import { listsModel, dirty, shouldRead, tickedRows, tickRow, tickAll, sharedPaint, paintRows } from './ai-lists-model.js';
 
 const ai = () => S.ai;
 const up = (patch) => set({ ai: { ...S.ai, ...patch } });
@@ -75,7 +75,7 @@ const modified = (g) => {
 const resetGroup = (g) => {
   const was = ai().data?.defaults.find((d) => key(d) === key(g));
   if (!was) return;
-  change({ groups: ai().groups.map((x) => (key(x) === key(g) ? clone(was) : x)) });
+  change({ groups: ai().groups.map((x) => (key(x) === key(g) ? clone(was) : x)), ticked: null });
 };
 
 /** The next fleet number of a depot: one above the largest number there. */
@@ -202,6 +202,10 @@ function TrafficTab() {
 
 // --- depots ---------------------------------------------------------------------------
 
+// (no paint has this name: a file name cannot hold it)
+const MIXED = '\u0000mixed';
+
+/** `value` null: the buses it is for have different paints, and it says "Paint". */
 function PaintSelect({ file, value, onChange }) {
   const s = useStore();
   const k = norm(file);
@@ -213,23 +217,41 @@ function PaintSelect({ file, value, onChange }) {
       .then((p) => up({ paints: { ...ai().paints, [k]: p } }))
       .catch(() => up({ paints: { ...ai().paints, [k]: [] } }));
   }, [k]);
-  const options = [['', 'Its own paint'], ...(known || []).map((p) => [p, p])];
-  return html`<${Select} value=${value || ''} options=${options} onChange=${onChange} raw=${false} />`;
+  const options = [...(value === null ? [[MIXED, 'Paint']] : []), ['', 'Its own paint'], ...(known || []).map((p) => [p, p])];
+  return html`<${Select} value=${value === null ? MIXED : value || ''} options=${options} onChange=${(p) => p !== MIXED && onChange(p)} raw=${false} />`;
 }
 
 const dateText = (d) => (d ? `${String(d).slice(0, 4)}-${String(d).slice(4, 6)}-${String(d).slice(6, 8)}` : '');
 
+function Tick({ on, label, title, onClick }) {
+  return html`<button type="button" role="checkbox" aria-checked=${on} aria-label=${label} title=${title} class=${'ail-tick' + (on ? ' on' : '')} onClick=${(e) => (e.stopPropagation(), onClick())}>${on && html`<${Icon} name="check" size=${14} />`}</button>`;
+}
+
 function TypGroup({ g, ti }) {
+  const a = ai();
   const tg = g.typgroups[ti];
+  const n = tg.entries.length;
+  const at = `${a.map}|${key(g)}|${ti}|${norm(tg.file)}`;
+  const rows = tickedRows(a.ticked, at, n);
+  // (the ticks as they are now, not as drawn: quick clicks come before the page is drawn again)
+  const tick = (i) => up({ ticked: tickRow(ai().ticked, at, n, i) });
+  const paintTicked = (p) => setGroup(g, (x) => paintRows(x.typgroups[ti].entries, tickedRows(ai().ticked, at, n), p));
   return html`<div class="ail-type">
     <div class=${'ail-type-head' + (focused(tg.file) && !ai().focus.paint ? ' on' : '')} onClick=${() => focusOn(tg.file)}>
+      ${n > 0 && html`<${Tick} on=${rows.length === n} label=${t('Select all')} title=${t('Select all')} onClick=${() => up({ ticked: tickAll(ai().ticked, at, n) })} />`}
       <span class="grow"><b>${nameOf(tg.file)}</b><small>${folderOf(tg.file)}</small></span>
       <${Button} small label="Replace type" onClick=${() => up({ pick: { kind: 'type', group: g, index: ti } })} />
       <${Button} small icon="plus" label="Add bus" onClick=${() => setGroup(g, (x) => x.typgroups[ti].entries.push(...newEntries(x, 1)))} />
       <${Button} kind="ghost" small icon="trash" title="Remove" onClick=${() => setGroup(g, (x) => x.typgroups.splice(ti, 1))} />
     </div>
+    ${rows.length > 0 && html`<div class="ail-ticked">
+      <${Tag}><${Icon} name="check" size=${12} /> ${rows.length}</${Tag}>
+      <div class="ail-ticked-paint"><${PaintSelect} file=${tg.file} value=${sharedPaint(tg.entries, rows)} onChange=${paintTicked} /></div>
+      <${Button} kind="ghost" small label="Clear" onClick=${() => up({ ticked: null })} />
+    </div>`}
     <div class="ail-entries">
-      ${tg.entries.map((e, i) => html`<div class=${'ail-entry' + (focused(tg.file) && ai().focus.paint && ai().focus.paint === e.paint ? ' on' : '')} key=${i} onClick=${() => focusOn(tg.file, e.paint)}>
+      ${tg.entries.map((e, i) => html`<div class=${'ail-entry' + (focused(tg.file) && ai().focus.paint && ai().focus.paint === e.paint ? ' on' : '') + (rows.includes(i) ? ' ticked' : '')} key=${i} onClick=${() => focusOn(tg.file, e.paint)}>
+        <${Tick} on=${rows.includes(i)} label=${e.number || String(i + 1)} title="" onClick=${() => tick(i)} />
         <input class="input" value=${e.number} title=${t('Fleet number')} placeholder=${t('Number')} onInput=${(ev) => setGroup(g, (x) => (x.typgroups[ti].entries[i].number = ev.currentTarget.value))} />
         <input class="input" value=${e.registration} title=${t('Plate')} placeholder=${t('Plate')} onInput=${(ev) => setGroup(g, (x) => (x.typgroups[ti].entries[i].registration = ev.currentTarget.value))} />
         <${PaintSelect} file=${tg.file} value=${e.paint} onChange=${(p) => setGroup(g, (x) => (x.typgroups[ti].entries[i].paint = p))} />
@@ -396,7 +418,7 @@ export function AiListsPage() {
     ${d && a.tab === 'depot' && html`<${DepotTab} />`}
     ${d && a.tab === 'lines' && html`<${LinesTab} />`}
     ${changed && html`<div class="ail-save"><span>${t('You have unsaved changes.')}</span>
-      <${Button} label="Discard" onClick=${() => change({ groups: clone(a.saved), rules: clone(a.savedRules) })} />
+      <${Button} label="Discard" onClick=${() => change({ groups: clone(a.saved), rules: clone(a.savedRules), ticked: null })} />
       <${Button} kind="primary" icon="save" label="Save" disabled=${a.busy} onClick=${save} /></div>`}
     ${pk && html`<${Picker}
       title=${pk.kind === 'replace' ? 'Replace with' : pk.kind === 'rule' ? 'Add a type to the line' : pk.kind === 'add' ? 'Add a vehicle' : pk.kind === 'type' ? 'Replace the type with' : 'Add a type to the depot'}

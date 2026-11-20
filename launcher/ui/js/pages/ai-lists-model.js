@@ -13,6 +13,31 @@ export const dirty = (a) => JSON.stringify(a.groups) !== JSON.stringify(a.saved)
  * replace them: the lists stay those of the date they were read on, the one a save compares with). */
 export const shouldRead = (a, map, date) => !!map && a.loaded !== `${map}|${date}` && a.loading !== `${map}|${date}` && !a.busy && !dirty(a);
 
+// (one type at a time: its buses share its repaints, so the paint chosen exists on all of them)
+export const tickedRows = (ticked, at, n) => (ticked && ticked.at === at && ticked.n === n ? ticked.rows : []);
+
+export function tickRow(ticked, at, n, i) {
+  const rows = tickedRows(ticked, at, n);
+  const next = rows.includes(i) ? rows.filter((r) => r !== i) : [...rows, i].sort((a, b) => a - b);
+  return next.length ? { at, n, rows: next } : null;
+}
+
+export function tickAll(ticked, at, n) {
+  return tickedRows(ticked, at, n).length === n || !n ? null : { at, n, rows: [...Array(n).keys()] };
+}
+
+export function sharedPaint(entries, rows) {
+  const paints = new Set(rows.map((i) => entries[i]?.paint || ''));
+  return paints.size === 1 ? [...paints][0] : null;
+}
+
+const shape = (groups) =>
+  JSON.stringify((groups || []).map((g) => [g.name, g.depot, (g.typgroups || []).map((tg) => [String(tg.file || '').replace(/\\/g, '/').toLowerCase(), tg.entries?.length || 0])]));
+
+export function paintRows(entries, rows, paint) {
+  for (const i of rows) if (entries[i]) entries[i].paint = paint;
+}
+
 /** `io`: `call(cmd, args)`, `get()` the page's state, `up(patch)` to change it, `toast(text, kind)`
  * and `t(text)`. */
 export function listsModel({ call, get, up, toast, t }) {
@@ -21,13 +46,13 @@ export function listsModel({ call, get, up, toast, t }) {
   async function read(map, date) {
     const mine = ++latest;
     const key = `${map}|${date}`;
-    up({ map, loaded: null, loading: key, data: null, error: null });
+    up({ map, loaded: null, loading: key, data: null, error: null, ticked: null });
     try {
       const data = await call('ai_lists', { map, date });
       if (mine !== latest) return;
       const groups = data.groups.map(({ random, modified, ...g }) => g);
       const rules = data.lines.filter((l) => l.rule).map((l) => l.rule);
-      up({ loaded: key, loading: null, data, groups: clone(groups), saved: clone(groups), rules: clone(rules), savedRules: clone(rules), pick: null });
+      up({ loaded: key, loading: null, data, groups: clone(groups), saved: clone(groups), rules: clone(rules), savedRules: clone(rules), pick: null, ticked: null });
     } catch (e) {
       if (mine !== latest) return;
       up({ loaded: key, loading: null, error: String(e.message || e) });
@@ -60,8 +85,11 @@ export function listsModel({ call, get, up, toast, t }) {
 
   /** A change made by the player: refused while a save or a reset is under way. */
   const change = (patch) => {
-    if (get().busy) return false;
-    up(typeof patch === 'function' ? patch(get()) : patch);
+    const a = get();
+    if (a.busy) return false;
+    const p = typeof patch === 'function' ? patch(a) : patch;
+    // (once the rows change, the rows ticked are no longer the buses ticked)
+    up(p.groups && a.ticked && shape(p.groups) !== shape(a.groups) ? { ...p, ticked: null } : p);
     return true;
   };
 
