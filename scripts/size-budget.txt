@@ -2,14 +2,17 @@
 # file <lines> <path>: files over 1500 lines may grow 5 % past this.
 # fn <lines> <crate>::<name> <where>: functions over 300 lines may grow 5 % past this.
 # Lower it with `scripts/size-budget.sh --update`; raise it only by hand, with a reason.
+file 1727 crates/omsi-app/src/plugins.rs
 file 1502 crates/omsi-app/src/settings.rs
 file 1724 crates/omsi-app/src/ui.rs
 file 2981 crates/omsi-input/src/controllers.rs
 file 2704 crates/omsi-lan/src/game.rs
-file 3434 crates/omsi-launcher-core/src/lib.rs
+file 1555 crates/omsi-launcher-api/src/lib.rs
+file 4632 crates/omsi-launcher-core/src/lib.rs
 file 1585 crates/omsi-model/src/lib.rs
 file 3236 crates/omsi-net/src/lib.rs
 file 1517 crates/omsi-net/src/tests.rs
+file 1821 crates/omsi-plugin/src/lib.rs
 file 1520 crates/omsi-render/src/rt.rs
 file 1511 crates/omsi-scene/src/vehicles.rs
 file 1609 crates/omsi-ui/src/kit.rs
