@@ -1,3 +1,4 @@
+#![rustfmt::skip]
 //! The launcher's data side: what the window asks for (maps, buses, lines, tours, the
 //! roadbook, weather, profiles, settings) and how a duty is turned into a command line for
 //! the game. Everything here is plain functions over the OMSI content crates; the window
