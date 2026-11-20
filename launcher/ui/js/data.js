@@ -363,6 +363,8 @@ export function choose(patch) {
   }
   // (another bus does not carry on with the depot bus's plate)
   if (c.bus !== before.bus && !('plate' in patch) && depotBusOf(before)) c.plate = '';
+  // (nor with the variables picked for it: its onboard computer is its own)
+  if (c.bus !== before.bus && !('setvars' in patch)) c.setvars = {};
   set({ choice: c });
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => call('choice_save', { choice: S.choice }).catch(() => {}), 400);
@@ -537,6 +539,8 @@ export async function duty(extra = {}) {
   const trip = pickedTrip();
   const ask = () => Promise.race([call('server_query', { address: c.lan_addr.trim() }).catch(() => null), new Promise((r) => setTimeout(r, 3000))]);
   const joined = c.lan_mode === 'join' && !extra.tutorial && !extra.situation ? c.lan_map || (await ask())?.map : '';
+  // (the variables picked for the bus; an empty one means the paint's own value)
+  const setvars = Object.fromEntries(Object.entries(c.setvars || {}).filter(([, v]) => String(v ?? '').trim() !== ''));
   const hostMap = (joined || '').trim().replace(/\\/g, '/');
   const installed = S.maps?.find((m) => m.file.toLowerCase() === hostMap.toLowerCase())?.file;
   return {
@@ -545,6 +549,7 @@ export async function duty(extra = {}) {
     paint: c.paint || null,
     plate: c.plate?.trim() || null,
     number: c.number?.trim() || null,
+    setvars: Object.keys(setvars).length ? setvars : null,
     hof: dutyHof() || null,
     entry: c.entry,
     line: c.free ? null : c.line,

@@ -4,16 +4,19 @@
 //! Everything slow runs on a thread of its own and comes back as a [`Msg`]; the window
 //! drains them at the start of each frame, so it never waits.
 
+#[rustfmt::skip]
 mod vehicle;
 
+#[rustfmt::skip]
 use crate::host::host;
 use omsi_launcher_lib as core;
-pub use omsi_launcher_lib::crash::{crash_of, disconnect_of, CRASH_TAIL_GAP};
+pub use omsi_launcher_lib::crash::{CRASH_TAIL_GAP, crash_of, disconnect_of};
 use serde::{Deserialize, Serialize};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Instant;
 
 /// Results of background work.
+#[rustfmt::skip]
 pub enum Msg {
     Content(Result<(Vec<core::MapInfo>, Vec<core::VehicleInfo>, Vec<core::WeatherInfo>), String>),
     /// The first reading of the content: the maps and weathers (quick to read), before the
@@ -48,6 +51,7 @@ pub enum Msg {
 /// their own (empty: the server's).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
+#[rustfmt::skip]
 pub struct ServerEntry {
     pub name: String,
     pub address: String,
@@ -57,6 +61,7 @@ pub struct ServerEntry {
 /// How the Multiplayer page joins a server.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[rustfmt::skip]
 pub enum JoinProto {
     /// Straight to the game port over UDP (gateway status still required).
     Udp,
@@ -71,6 +76,7 @@ pub enum JoinProto {
 
 /// Select the gameplay address only after a gateway has answered. A bare explicit
 /// port in Auto names the game port unless that exact HTTP endpoint answered status.
+#[rustfmt::skip]
 fn server_join_address(address: &str, proto: JoinProto, info: Option<&omsi_net::ws::ServerInfo>) -> Result<(String, JoinProto), &'static str> {
     let address = address.trim();
     let is_web = omsi_net::ws::ws_url(address).is_some() || omsi_net::official::is_alias(address);
@@ -100,11 +106,13 @@ fn server_join_address(address: &str, proto: JoinProto, info: Option<&omsi_net::
 }
 
 /// A code host's first responsive status endpoint, including its tunnel.
+#[rustfmt::skip]
 fn host_status(code: &str) -> Result<omsi_net::ws::ServerInfo, String> {
     omsi_net::ws::query_session(code)
 }
 
 /// The list as saved, with the official server first when it is not in it.
+#[rustfmt::skip]
 fn with_official(mut list: Vec<ServerEntry>) -> Vec<ServerEntry> {
     if !list.iter().any(|s| omsi_net::official::is_alias(&s.address)) {
         list.insert(0, ServerEntry { name: omsi_net::official::NAME.into(), address: omsi_net::official::ALIAS.into(), protocol: JoinProto::Auto });
@@ -112,6 +120,7 @@ fn with_official(mut list: Vec<ServerEntry>) -> Vec<ServerEntry> {
     list
 }
 
+#[rustfmt::skip]
 fn servers_path() -> std::path::PathBuf {
     core::data_dir().join("servers.json")
 }
@@ -119,6 +128,7 @@ fn servers_path() -> std::path::PathBuf {
 /// The duty as it is remembered between launches (`~/.openomsi/launcher-duty.json`).
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(default)]
+#[rustfmt::skip]
 pub struct Choice {
     pub bus: String,
     pub paint: String,
@@ -126,6 +136,10 @@ pub struct Choice {
     pub plate: String,
     /// The fleet number picked from the bus's `[number]` list (empty: no selection yet).
     pub number: String,
+    /// The variables the player picked for this bus - its onboard computer (the IBIS unit or
+    /// ticket printer its repaints name), a door type: name to the value a paint gives it
+    /// (empty: the paint's own, `--setvar`, #4077).
+    pub setvars: std::collections::BTreeMap<String, String>,
     pub hof: String,
     /// The depot file was chosen by hand (else it follows the map and the date).
     pub hof_manual: bool,
@@ -164,6 +178,7 @@ pub struct Choice {
     pub version: u32,
 }
 
+#[rustfmt::skip]
 impl Default for Choice {
     fn default() -> Self {
         Choice {
@@ -171,6 +186,7 @@ impl Default for Choice {
             paint: String::new(),
             plate: String::new(),
             number: String::new(),
+            setvars: Default::default(),
             hof: String::new(),
             hof_manual: false,
             map: String::new(),
@@ -199,10 +215,12 @@ impl Default for Choice {
     }
 }
 
+#[rustfmt::skip]
 fn choice_path() -> std::path::PathBuf {
     core::data_dir().join("launcher-duty.json")
 }
 
+#[rustfmt::skip]
 impl Choice {
     pub fn load() -> Choice {
         let c: Choice = std::fs::read_to_string(choice_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
@@ -241,6 +259,7 @@ impl Choice {
     }
 }
 
+#[rustfmt::skip]
 pub struct State {
     pub config: core::Config,
     pub maps: Vec<core::MapInfo>,
@@ -320,6 +339,7 @@ pub struct State {
     rx: Receiver<Msg>,
 }
 
+#[rustfmt::skip]
 impl State {
     pub fn new() -> State {
         let (tx, rx) = channel();
@@ -698,6 +718,7 @@ impl State {
             paint: Some(c.paint.clone()).filter(|p| !p.is_empty()),
             plate: Some(c.plate.clone()).filter(|p| !p.trim().is_empty()),
             number: Some(c.number.clone()).filter(|n| !n.trim().is_empty()),
+            setvars: Some(c.setvars.iter().filter(|(k, v)| !k.trim().is_empty() && !v.trim().is_empty()).map(|(k, v)| (k.clone(), v.clone())).collect()).filter(|m: &std::collections::BTreeMap<String, String>| !m.is_empty()),
             hof: Some(if c.hof_manual { c.hof.clone() } else { self.default_hof() }).filter(|p| !p.is_empty()),
             entry: Some(c.entry),
             line: if c.free { None } else { c.line.clone() },
@@ -875,6 +896,7 @@ impl State {
         self.fresh.retain(|_, t| now.duration_since(*t).as_secs() < 600);
     }
 
+    #[rustfmt::skip]
     fn handle(&mut self, m: Msg) {
         match m {
             Msg::Crashed(why) => {
@@ -904,9 +926,7 @@ impl State {
                 self.server_info.insert(address, (Instant::now(), info));
             }
             Msg::ContentEarly { maps, weathers } => {
-                if !self.content_first {
-                    return;
-                }
+                if !self.content_first { return; }
                 host().mt_protect(&mut maps.iter().flat_map(|m| [m.name.as_str(), m.friendly.as_str()]));
                 host().mt_protect(&mut weathers.iter().map(|w| w.name.as_str()));
                 self.maps = maps;
@@ -916,9 +936,7 @@ impl State {
                 self.set_status(format!("Reading the buses... ({} maps)", self.maps.len()), false);
             }
             Msg::VehiclesRead { batch, done, total } => {
-                if !self.content_first {
-                    return;
-                }
+                if !self.content_first { return; }
                 host().mt_protect(&mut batch.iter().flat_map(|v| [v.name.as_str(), v.manufacturer.as_str(), v.type_name.as_str()]).chain(batch.iter().flat_map(|v| v.paints.iter().map(|p| p.as_str()))));
                 self.vehicles.extend(batch);
                 self.set_status(format!("Reading the vehicle folders: {done} of {total} ({maps} maps, {buses} buses)", maps = self.maps.len(), buses = self.vehicles.len()), false);
@@ -947,6 +965,7 @@ impl State {
                         self.choice.bus = v.file.clone();
                         self.choice.paint.clear();
                         self.choice.number = self.random_bus_number();
+                        self.choice.setvars.clear();
                         self.choice.hof = self.default_hof();
                     }
                 }
@@ -1200,6 +1219,7 @@ impl State {
         self.choice.bus = file.to_string();
         self.choice.paint.clear();
         self.choice.number = self.random_bus_number();
+        self.choice.setvars.clear();
         // (a hand-picked depot file stays when the new bus has one of that name)
         let keep = self.choice.hof_manual && self.bus().is_some_and(|v| v.hofs.iter().any(|h| h.eq_ignore_ascii_case(&self.choice.hof)));
         if !keep {
@@ -1288,20 +1308,24 @@ impl State {
 }
 
 /// Whether the game started from here (its process `pid`) is in a list of games.
+#[rustfmt::skip]
 fn game_listed(pid: Option<u32>, instances: &[core::Instance]) -> bool {
     pid.is_some_and(|p| instances.iter().any(|i| i.pid == p))
 }
 
 /// The trip a tour starts with at `now`, shared by the route preview and the launch choice.
+#[rustfmt::skip]
 pub(super) fn trip_index_at(tour: &core::TourInfo, now: f64) -> Option<usize> {
     tour.trips.iter().position(|x| x.departure >= now - 120.0).or(if tour.trips.is_empty() { None } else { Some(tour.trips.len() - 1) })
 }
 
+#[rustfmt::skip]
 pub fn hhmm(seconds: f64) -> String {
     let s = seconds.max(0.0).round() as i64;
     format!("{:02}:{:02}", (s / 3600) % 24, (s % 3600) / 60)
 }
 
+#[rustfmt::skip]
 pub fn fmt_bytes(b: u64) -> String {
     let b = b as f64;
     if b >= (1u64 << 30) as f64 {
@@ -1313,11 +1337,13 @@ pub fn fmt_bytes(b: u64) -> String {
     }
 }
 
+#[rustfmt::skip]
 pub fn short_map(m: &str) -> String {
     m.trim_start_matches("maps/").trim_end_matches("/global.cfg").to_string()
 }
 
 /// Why `root` is not an OMSI 2 to play on, said so that the player knows what to choose.
+#[rustfmt::skip]
 pub fn root_problem(root: &str) -> String {
     let root = root.trim();
     let p = std::path::Path::new(root);
@@ -1336,6 +1362,7 @@ pub fn root_problem(root: &str) -> String {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod choice_tests {
     #[test]
     fn server_join_protocol_matrix() {
@@ -1441,6 +1468,7 @@ mod choice_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod launch_tests {
     use omsi_launcher_lib::Instance;
 
@@ -1462,6 +1490,7 @@ mod launch_tests {
     }
 }
 
+#[rustfmt::skip]
 fn read_settings_file() -> Option<String> {
     std::fs::read_to_string(core::data_dir().join("settings.cfg")).ok()
 }
