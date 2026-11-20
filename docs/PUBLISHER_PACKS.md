@@ -87,4 +87,4 @@ rollback by a user controlling the machine. A running player also holds usable p
 memory and GPU resources; paging and a modified executable can expose it. Protected packs
 reduce accidental redistribution through official tools, not extraction by an administrator.
 
-The map layer generator does not write its disk cache for a map with `dependencies.json`, nor for a map whose layers were made while files of an encrypted publisher pack were read (an ordinary map may still place objects that only an installed pack has). Every other map keeps its cache, also after an encrypted pack has been mounted. Multiplayer session stores are sealed at rest but hold no publisher-protected content and are not counted.
+The map layer generator does not write its disk cache for a map with `dependencies.json`, nor for a map whose layers were made while files of an encrypted publisher pack were read. Every other map keeps its cache, also with encrypted packs installed. Multiplayer session stores are sealed at rest but hold no publisher-protected content and are not counted.
