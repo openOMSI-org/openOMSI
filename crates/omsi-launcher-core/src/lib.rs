@@ -3404,6 +3404,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // stop, as in OMSI; #1773)
     v["ai_wait_timed_stops_only"] = json!(false);
     v["pax_bad_driving"] = json!(true);
+    v["pax_late_tolerance_min"] = json!(5.0);
     passenger_defaults(&mut v);
     // the arrival half of the stops of a depot file that keeps two recordings per stop
     v["auto_announce"] = json!(false);
@@ -4249,6 +4250,15 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "pax_short_rides_stand"
             | "auto_announce"
             | "ambient" => v[&k] = json!(b(val)),
+            "pax_late_tolerance_min" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .unwrap_or(5.0)
+                        .clamp(0.0, 120.0)
+                )
+            }
             "head_tracking_source" => v[&k] = json!(head_tracking_source(val)),
             "tobii_edges" => v[&k] = json!(b(val)),
             "head_tracking_smoothing" | "head_tracking_dead_zone" => {
@@ -5004,6 +5014,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("full_tank", true)
     ));
     text.push_str(&format!("pax_bad_driving={}\n", b("pax_bad_driving", true)));
+    text.push_str(&format!(
+        "pax_late_tolerance_min={}\n",
+        f("pax_late_tolerance_min", 5.0).clamp(0.0, 120.0)
+    ));
     text.push_str(&format!(
         "passenger_connections={}\npassenger_transfer_percent={}\n",
         b("passenger_connections", false),
