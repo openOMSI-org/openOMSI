@@ -197,36 +197,7 @@ fn stop_brake_interlock_releases_held_brake_only_when_disengaging() {
         keep_winding: false,
     });
     vehicle.mesh_props.resize_with(1, Default::default);
-    let ty = vehicle.ty.clone();
-    let render = scene::VehicleRender {
-        window_wipers: None,
-    };
-    let mut p = Player {
-        uid: 1,
-        vehicle,
-        render,
-        trailer_renders: vec![],
-        axes: omsi_sim::KeyboardAxes::default(),
-        analog: crate::controllers::Analog::default(),
-        cam_choice: (0, 0),
-        bindings: vec![],
-        sounds: None,
-        pressed_mesh: None,
-        pressed_trailer_mesh: None,
-        occlude_controls: false,
-        drawn_outside: false,
-        press_info: (true, 0.0),
-        auto_drag: None,
-        startup: None,
-        startup_at: None,
-        sell_ticket: false,
-        give_change: false,
-        momentary_gears: false,
-        from_keyboard: false,
-        auto_clutch: false,
-        auto_gearbox: false,
-        door_buttons: Default::default(),
-    };
+    let mut p = test_player(vehicle, vec![]);
 
     // 1. Keyboard engaging preserves held brake:
     p.axes.brake = 1.0;
