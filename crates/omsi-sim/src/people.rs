@@ -38,12 +38,12 @@
 //! neighbourhood changed and nobody uses it, a stop whose tile went takes its people with
 //! it, and nobody stands or walks where the ground is not loaded.
 
+use crate::VehicleInstance;
 use crate::ai_traffic::TrafficSim;
 use crate::crowd::{self, Block, CrowdParams, PathGraph, Walker};
 use crate::human::{Activity, HumanType};
 use crate::human_omsi::{AnimInput, OmsiAnim};
 use crate::traffic::{LaneKind, Network};
-use crate::VehicleInstance;
 use glam::{DVec2, DVec3, Mat4, Vec3};
 use hashbrown::{HashMap, HashSet};
 use omsi_vehicle::PassengerCabin;
@@ -53,46 +53,82 @@ use std::sync::Arc;
 // The simulation: the people and what they do. It does not draw: what the renderer has to
 // follow it writes down (`bodies`), and omsi-app's `humans` view replays that at the end
 // of the public calls that make people (`tick`, `populate`, `avatar`, ...).
+#[rustfmt::skip]
 pub mod model;
+#[rustfmt::skip]
+pub mod free_drive;
+#[rustfmt::skip]
 pub mod cabin;
+#[rustfmt::skip]
 pub mod pednet;
+#[rustfmt::skip]
 pub mod spawn;
+#[rustfmt::skip]
 pub mod populate;
+#[rustfmt::skip]
 pub mod buses;
+#[rustfmt::skip]
 pub mod door_requests;
+#[rustfmt::skip]
 pub mod bus_view;
 pub use bus_view::{CabinView, PlayerBusView};
+#[rustfmt::skip]
 pub mod tick;
+#[rustfmt::skip]
 pub mod walk;
+#[rustfmt::skip]
 pub mod report;
+#[rustfmt::skip]
 pub mod avatar;
+#[rustfmt::skip]
 pub mod mirror;
+#[rustfmt::skip]
 pub mod scratch;
 // The passengers, as Omsi.exe runs them.
+#[rustfmt::skip]
 pub mod pax;
+#[rustfmt::skip]
 pub mod pax_stops;
+#[rustfmt::skip]
 pub mod pax_tick;
+#[rustfmt::skip]
 pub mod pax_task;
+#[rustfmt::skip]
 pub mod pax_driver;
+#[rustfmt::skip]
 pub mod runners;
+#[rustfmt::skip]
 pub mod ticket_hook;
 // What the renderer has to follow, the money on the desk and what the people need of the map.
+#[rustfmt::skip]
 pub mod bodies;
+#[rustfmt::skip]
 pub mod pose_facts;
+#[rustfmt::skip]
 pub mod money;
+#[rustfmt::skip]
 pub mod world;
 #[cfg(test)]
+#[rustfmt::skip]
 mod tests;
 #[cfg(test)]
+#[rustfmt::skip]
 mod population_limit_tests;
 #[cfg(test)]
+#[rustfmt::skip]
 mod ticket_hook_tests;
 #[cfg(test)]
+#[rustfmt::skip]
 mod bad_driving_tests;
 #[cfg(test)]
+#[rustfmt::skip]
 mod desk_ticket_tests;
 #[cfg(test)]
+#[rustfmt::skip]
 mod destination_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod free_drive_tests;
 
 use avatar::*;
 use cabin::*;
@@ -104,13 +140,13 @@ use runners::*;
 // The module's API, at the paths it always had in omsi-app (some only returned, never named
 // outside).
 pub use avatar::{AvatarCmd, SeatSpot};
-pub use door_requests::DoorRequest;
 pub use bodies::{BodyOp, BodyOps};
-pub use mirror::{placed_bus_id, remote_bus_id, remote_bus_player, LanPerson, MirrorPose};
+pub use door_requests::DoorRequest;
+pub use mirror::{LanPerson, MirrorPose, placed_bus_id, remote_bus_id, remote_bus_player};
 pub use model::{BusId, DoorWants, Eye, Footfall, PeopleSim, Person, Place, State, VoiceLine};
 pub use money::Money;
-pub use pose_facts::PoseFacts;
 pub use pax::DutyTrip;
+pub use pose_facts::PoseFacts;
 pub use ticket_hook::{TicketAsk, TicketChange};
 pub use world::World;
 
@@ -140,7 +176,6 @@ const JOINT_BLEND: f32 = 0.5;
 fn debug_pax() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| {
-        omsi_cfg::flags::OMSI_DEBUG_PAX.is_set()
-            || omsi_cfg::flags::OMSI_DEBUG_HUMANS.is_set()
+        omsi_cfg::flags::OMSI_DEBUG_PAX.is_set() || omsi_cfg::flags::OMSI_DEBUG_HUMANS.is_set()
     })
 }

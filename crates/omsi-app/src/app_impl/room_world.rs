@@ -130,6 +130,9 @@ impl App {
             humans.visual_hailing =
                 self.settings.passenger_hailing && self.settings.passenger_animation == "enhanced";
             humans.bad_driving = self.settings.pax_bad_driving;
+            humans.free_drive_fill = omsi_sim::people::free_drive::FreeDriveFill::from_setting(
+                &self.settings.pax_free_drive,
+            );
             humans.boarding = self.settings.boarding.clone();
             humans.stand_chance = self.settings.standing_chance;
             humans.short_rides_stand = self.settings.pax_short_rides_stand;
