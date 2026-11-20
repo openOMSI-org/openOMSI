@@ -90,17 +90,8 @@ pub struct ServerInfo {
     pub list_challenge: String,
 }
 
-/// One bus and its named paints, as the dedicated server offers them. The catalogue
-/// is informative: secure mod transfer still requires an authenticated manifest.
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct FleetPaints {
-    pub bus: String,
-    pub paints: Vec<String>,
-    /// Whole model, including every advertised paint. Informational only: clients
-    /// may compare local bytes, but may not download based on this status alone.
-    #[serde(default)]
-    pub content: String,
-}
+mod fleet;
+pub use fleet::FleetPaints;
 
 /// What a dedicated server's shared world holds: the AI cars on the roads (`cars`), its
 /// timetable buses (`buses`), the cars put to sleep far from every player (`dormant`), the
@@ -1092,6 +1083,7 @@ mod tests {
                 bus: "Vehicles/Test/test.bus".into(),
                 paints: vec!["Base".into(), "Azul \"especial\"".into(), "São Paulo".into()],
                 content: String::new(),
+                local_only: true,
             }],
             ..Default::default()
         };

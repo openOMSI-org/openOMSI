@@ -17,7 +17,8 @@ pub(super) const MAX_HOF: u64 = 4 << 20;
 const MAX_FETCHES: usize = 64;
 
 /// The host's depot files by name in lower case (the file name without `.hof`).
-static OFFERED: Mutex<Option<HashMap<String, PathBuf>>> = Mutex::new(None);
+type DepotSource = (PathBuf, PathBuf);
+static OFFERED: Mutex<Option<HashMap<String, DepotSource>>> = Mutex::new(None);
 
 /// A player's fetches in the session they are of: the file, once here, or None when the host had
 /// none to give. Another session (another host, in the same process: the phone's launcher and
@@ -48,29 +49,29 @@ fn valid(name: &str) -> Option<String> {
 
 /// The host: `path` is the depot file its AI bus of depot `name` uses; a player asking for
 /// `name` gets that file.
-pub fn offer(name: &str, path: &Path) {
+pub fn offer(name: &str, path: &Path, vehicle: &Path) {
     let Some(key) = valid(name) else { return };
     let mut guard = OFFERED.lock().unwrap_or_else(|e| e.into_inner());
     let map = guard.get_or_insert_with(HashMap::new);
-    if !map.contains_key(&key) {
-        map.insert(key, path.to_path_buf());
-    }
+    map.entry(key).or_insert_with(|| (path.to_path_buf(), vehicle.to_path_buf()));
 }
 
 /// The host's file for depot `name`: its bus's own, else `HOFs/<name>.hof` of the content.
 pub(super) fn served(name: &str) -> Option<PathBuf> {
     let key = valid(name)?;
     let offered = OFFERED.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|m| m.get(&key).cloned());
+    let offered = offered.and_then(|(path, vehicle)| super::transfer_policy::allows_file(&vehicle).then_some(path));
     offered.or_else(|| omsi_cfg::find_in_roots(&format!("HOFs/{}.hof", name.trim())).map(|(_, p)| p)).filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("hof")))
 }
 
 /// The host's answer to `HOF <name>`: `OK <len>` and the file, or `ERR`.
 pub(super) fn answer(root: &Path, name: &str, out: &mut impl Write) -> std::io::Result<()> {
     // (as every file sent: never one that resolves outside the content's folders)
-    let Some(path) = served(name).filter(|p| super::server_fleet::trusted_source(root, p)) else {
+    let Some(path) = served(name).filter(|p| super::server_fleet::trusted_source(root, p)
+        && !super::transfer_policy::marked_private(p)) else {
         return writeln!(out, "ERR no depot file {name}");
     };
-    match std::fs::read(&path) {
+    match omsi_cfg::vfs::read(&path) {
         Ok(bytes) if bytes.len() as u64 <= MAX_HOF => {
             writeln!(out, "OK {}", bytes.len())?;
             out.write_all(&bytes)
@@ -234,11 +235,15 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("Town.hof");
         std::fs::write(&file, b"[name]\nTown\n").unwrap();
-        offer("Town", &file);
+        let bus = dir.join("bus.bus");
+        std::fs::write(&bus, "[openomsi_multiplayer]\nallow_file_transfer 1\n").unwrap();
+        offer("Town", &file, &bus);
         assert_eq!(served("town"), Some(file.clone()));
         let mut out = Vec::new();
         answer(&dir, "TOWN", &mut out).unwrap();
         assert_eq!(out, b"OK 12\n[name]\nTown\n");
+        std::fs::write(&bus, "[openomsi_multiplayer]\nallow_file_transfer 0\n").unwrap();
+        assert_eq!(served("Town"), None);
         let mut out = Vec::new();
         answer(&dir, "../Town", &mut out).unwrap();
         assert!(out.starts_with(b"ERR"));

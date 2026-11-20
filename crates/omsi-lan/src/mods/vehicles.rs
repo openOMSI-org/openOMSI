@@ -26,6 +26,11 @@ struct Vehicles {
     manifests: Vec<(String, VehicleManifest)>,
     /// The size of each kept file by its SHA-256 (what a blob is asked for by).
     sizes: HashMap<String, u64>,
+    shareable: HashMap<String, u64>,
+    shareable_manifests: HashSet<String>,
+    policy_generation: u64,
+    policy_checked: std::time::Instant,
+    policy_revision: Arc<()>,
     mounted: HashSet<String>,
     /// Files refused for what they are (`quarantine`), by their content and kind
     /// (`held_key`): why. A bus is kept and drawn without them (`withhold`).
@@ -58,6 +63,8 @@ struct HeldBack {
 pub(in crate::mods) struct Buses {
     /// None before the store is opened (`open`).
     kept: Mutex<Option<Vehicles>>,
+    /// Serializes policy scans while leaving the store available during filesystem checks.
+    policy_refresh: Mutex<()>,
     /// The files served last, unsealed (`served`): a file asked for piece by piece is opened
     /// once, not once a piece. At most `SERVED_BYTES` of them.
     served_last: Mutex<VecDeque<(String, Arc<Vec<u8>>)>>,
@@ -86,6 +93,7 @@ impl Default for Buses {
     fn default() -> Self {
         Buses {
             kept: Mutex::default(),
+            policy_refresh: Mutex::default(),
             served_last: Mutex::default(),
             opening: Mutex::default(),
             finishing: Mutex::default(),

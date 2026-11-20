@@ -2,8 +2,8 @@
 
 use super::*;
 
-pub(in crate::mods) fn adopt_local(m: &VehicleManifest) -> usize {
-    buses().adopt_local(m)
+pub(in crate::mods) fn adopt_local(m: &VehicleManifest, descriptors_only: bool) -> usize {
+    buses().adopt_local(m, descriptors_only)
 }
 
 /// Hashes of this machine's own files, by path: (size, modification time, SHA-256).
@@ -19,11 +19,14 @@ impl Buses {
     /// had the server read and hash its whole installation over and over), each file by its
     /// size first and by its hash remembered (`local_sha`) - only a file that is the same is
     /// read.
-    pub(super) fn adopt_local(&self, m: &VehicleManifest) -> usize {
+    pub(super) fn adopt_local(&self, m: &VehicleManifest, descriptors_only: bool) -> usize {
         let _one = self.adopting.lock().unwrap_or_else(|e| e.into_inner());
         let mut n = 0;
         for k in self.missing(m) {
             let e = &m.entries[k];
+            if descriptors_only && !crate::mods::transfer_policy::is_descriptor(&e.path) {
+                continue;
+            }
             if let Some(d) = self.own_copy(e) {
                 if self.put_sent(e, &d).is_ok() {
                     n += 1;
@@ -36,7 +39,12 @@ impl Buses {
     /// This machine's own file at `e`'s path (in its content or the installation, never a
     /// session's), if it is that file: read only once its size and hash say so.
     pub(super) fn own_copy(&self, e: &Entry) -> Option<Vec<u8>> {
-        let (_, p) = omsi_cfg::find_in_roots(&e.path).filter(|(r, _)| !omsi_cfg::is_sandbox(r))?;
+        let (root, p) = omsi_cfg::find_in_roots(&e.path).filter(|(r, _)| !omsi_cfg::is_sandbox(r))?;
+        if !crate::mods::server_fleet::trusted_source(&root, &p)
+            || crate::mods::transfer_policy::marked_private(&p)
+        {
+            return None;
+        }
         if !self.local_sha(&p, e.size).is_some_and(|h| h.eq_ignore_ascii_case(&e.sha256)) {
             return None;
         }

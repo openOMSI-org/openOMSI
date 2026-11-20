@@ -31,9 +31,9 @@ impl Buses {
     /// (its raw size, codec, bytes on the wire).
     pub(super) fn packed(&self, sha: &str, i: u64) -> Option<(u64, char, Vec<u8>)> {
         let sha = sha.to_ascii_lowercase();
-        let g = self.lock();
+        let g = self.lock_with_current_policy();
         let v = g.as_ref()?;
-        let size = *v.sizes.get(&sha)?;
+        let size = *v.shareable.get(&sha)?;
         if i >= pieces::count(size) {
             return None;
         }

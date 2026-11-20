@@ -99,10 +99,28 @@ impl OwnBus {
     pub(in crate::mods) fn manifest(&self, root: &Path, bus: &str, paint: &str, own: impl FnOnce() -> Vec<PathBuf>) -> Option<OwnIdentity> {
         let key = format!("{bus}|{paint}");
         let mut guard = self.own.lock().unwrap_or_else(|e| e.into_inner());
+        if !crate::mods::transfer_policy::allows_bus(root, bus) {
+            self.fp.lock().unwrap_or_else(|e| e.into_inner()).1.clear();
+            log::info!("LAN: {bus} opts out of file transfers; other players use a stand-in");
+            *self.failed.lock().unwrap_or_else(|e| e.into_inner()) = key;
+            omsi_cfg::vfs::record_reads(false);
+            return None;
+        }
         if let Some(o) = guard.as_ref().filter(|o| o.key == key) {
-            return Some((o.manifest.clone(), o.fingerprint.clone(), o.files.clone()));
+            if crate::mods::transfer_policy::allows_dependencies(&o.files) {
+                return Some((o.manifest.clone(), o.fingerprint.clone(), o.files.clone()));
+            }
+            self.fp.lock().unwrap_or_else(|e| e.into_inner()).1.clear();
+            return None;
         }
         let files = chosen(root, bus, own());
+        if files.iter().any(|(_, path)| !crate::mods::server_fleet::trusted_source(root, path))
+            || !crate::mods::transfer_policy::allows_dependencies(&files) {
+            log::info!("LAN: {bus} depends on a protected vehicle; not shared");
+            *self.failed.lock().unwrap_or_else(|e| e.into_inner()) = key;
+            omsi_cfg::vfs::record_reads(false);
+            return None;
+        }
         // (what this run read was only for `chosen`'s log of what the description misses: the
         // recording stops and its set goes - it was kept, and grew, for the whole session)
         omsi_cfg::vfs::record_reads(false);

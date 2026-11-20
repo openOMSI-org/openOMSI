@@ -322,10 +322,8 @@ pub struct LanGame {
     last_received: u64,
     /// The host's weather last taken over from its clock messages.
     weather_seen: Option<String>,
-    /// Vehicles another player drives that could not be made here, and when that was
-    /// tried: tried again only after a while (every frame, a server read a big add-on bus
-    /// it could not load over and over and stood still for everybody).
-    failed: hashbrown::HashMap<(u32, String), std::time::Instant>,
+    /// Cooldown for failed loads of a remote vehicle and its current livery.
+    failed: hashbrown::HashMap<(u32, String, String), std::time::Instant>,
     /// Our vehicle's variable table (by its program), for `omsi_net::vars`.
     my_vars: Option<(usize, Arc<VarTable>)>,
     my_var_schema: Option<String>,
@@ -570,6 +568,7 @@ pub fn share_mods(args: &mut LanConfig, lan: &mut LanSession) -> Option<crate::m
             // does, and keeps its own for them: `mods::upload::keep_own`; a server takes them
             // as its server.cfg says)
             if !args.server {
+                crate::mods::share_maps(false);
                 crate::mods::upload::accept(crate::mods::upload::a_hosting_game_takes_uploads());
             }
             if let (Some(listener), Some(key)) = (lan.take_mods_listener(), lan.host_key()) {
@@ -2430,7 +2429,8 @@ pub fn tick_receive(
             }
         }
         if !game.remotes.contains_key(&pose.id) && remote_type::its_turn(game, pose.id) {
-            let key = (pose.id, pose.bus.clone());
+            game.failed.retain(|(id, bus, paint), _| *id != pose.id || (bus == &pose.bus && paint == &pose.paint));
+            let key = (pose.id, pose.bus.clone(), pose.paint.clone());
             if game.failed.get(&key).is_some_and(|t| t.elapsed().as_secs_f32() < 30.0) {
                 continue;
             }

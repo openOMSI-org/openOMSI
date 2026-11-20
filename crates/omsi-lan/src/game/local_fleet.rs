@@ -9,6 +9,11 @@ pub(super) fn verified(args: &LanConfig, lan: &mut LanSession) -> bool {
     let planned = Pose { bus: bus.clone(), ..Default::default() };
     let worker = std::thread::spawn(move || {
         let info = omsi_net::ws::query(&target, false).ok()?;
+        if installed(&root, &bus) && info.fleet.iter().any(|entry| {
+            entry.local_only && entry.bus.eq_ignore_ascii_case(&bus.replace('\\', "/"))
+        }) {
+            return Some(true);
+        }
         Some(matches_announced(&info.fleet, &bus, &paint, || {
             crate::mods::fleet_fingerprint(&root, &bus).ok()
         }))
@@ -93,6 +98,7 @@ mod tests {
             bus: "Vehicles/Test Bus/test.bus".into(),
             paints: vec!["Bahia Blue".into()],
             content: format!("v2-{}", "a".repeat(64)),
+            local_only: false,
         }]
     }
 

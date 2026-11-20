@@ -51,10 +51,6 @@ impl App {
     }
 
     pub(crate) fn repaint_driven(&mut self, scheme: Option<usize>) {
-        if self.net.lan.is_some() {
-            self.service_msg = Some((omsi_ui::tr("In a LAN session the livery is chosen before the bus is placed").into_owned(), 3.0));
-            return;
-        }
         let (Some(p), Some(w), Some(r), Some(scene)) = (self.player.as_mut(), self.world.clone(), self.renderer.as_ref(), self.scene.as_mut()) else { return };
         let ty = p.vehicle.ty.clone();
         let scheme = scheme.filter(|i| *i < ty.paint_schemes.len());
