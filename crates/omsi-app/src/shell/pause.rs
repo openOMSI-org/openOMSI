@@ -97,6 +97,7 @@ pub(crate) fn rail_icon(id: &str) -> &'static str {
         "duty" => "departure_board",
         "skipstop" => "near_me",
         "endduty" => "sports_score",
+        "police" => "warning",
         "save" => "save",
         "saveslot" => "add",
         "load" => "history",
