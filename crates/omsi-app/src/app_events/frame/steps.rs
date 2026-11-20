@@ -454,6 +454,8 @@ pub(crate) fn duty_step(
     learn_loaded: bool,
     plugin_events: Option<&mut Vec<omsi_plugin::GameEvent>>,
     announce: bool,
+    // (#2267) the IBIS's stop follows the duty's (`ibis_auto_stop`)
+    ibis_auto_stop: bool,
 ) {
     if let Some(stop) = p.html_next_stop.take() {
         if d.skip_to(stop) {
@@ -540,6 +542,20 @@ pub(crate) fn duty_step(
     if d.take_trip_change() && p.duty_typed {
         let (trip, stop) = d.trip_for_ibis();
         p.set_duty_destination(trip, stop);
+        p.ibis_shown = Some(stop);
+    }
+    // (#2267) the IBIS's stop follows the duty as the bus serves them, for the players who let
+    // the game type the IBIS and asked it to: the driver's "next stop" key, pressed by itself
+    let auto_ibis = p.duty_typed && p.ibis_auto();
+    if omsi_sim::timetable_run::PlayerDuty::ibis_stop_stale(
+        p.ibis_shown,
+        d.trip_for_ibis().1,
+        auto_ibis,
+        ibis_auto_stop,
+    ) {
+        let (trip, stop) = d.trip_for_ibis();
+        p.ibis_to_stop(trip, stop);
+        p.ibis_shown = Some(stop);
     }
     let mut fonts = world.fonts.lock();
     if let Err(e) = crate::schedule_paper::update_vehicle(&mut p.vehicle, d, &mut fonts) {
