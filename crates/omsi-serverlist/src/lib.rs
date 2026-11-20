@@ -16,7 +16,7 @@ pub mod publish;
 pub use moderation::{BuiltinModerator, IconVerdict, ImageClassifier, Moderator, Verdict};
 
 /// The list service (a Cloudflare Worker, see `services/serverlist/README.md`).
-pub const DEFAULT_SERVICE: &str = "https://serverlist.openomsi.workers.dev";
+pub const DEFAULT_SERVICE: &str = "https://openomsi-serverlist.savvabestbrother.workers.dev";
 
 /// The service a setting names (`public_list_url`), else the default; only `https://`.
 pub fn service_url(setting: &str) -> String {
