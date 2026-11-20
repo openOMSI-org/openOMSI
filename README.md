@@ -40,11 +40,28 @@ It loads the existing OMSI 2 maps, buses, scenery and mods as they are.
 * **A launcher** - pick a map, line, tour, bus and livery on one screen with a route map and a
   live bus preview; mods from a folder or a `.zip`/`.7z`/`.rar`; keys and game controllers
   (wheels, pedals, force feedback); updates on a Stable or Beta channel.
+* **Driving as in OMSI 2, and a little more** - timetables, tickets, passengers and AI traffic
+  as the original runs them, and a remote cockpit on a phone or tablet.
+* **Trams, metros, trains and trolleybuses** - rail vehicles on their own tracks and a real
+  overhead wire for trolleybuses ([docs/RAIL.md](docs/RAIL.md),
+  [docs/TROLLEYBUS.md](docs/TROLLEYBUS.md)).
 * **Multiplayer** - LAN sessions and a dedicated server ([docs/SERVER.md](docs/SERVER.md)).
 * **Every platform** - Windows, macOS, Linux and Android; VR through OpenXR on Windows
   ([docs/VR.md](docs/VR.md)).
-* **More for modders** - PBR materials, larger textures, more lights, and plugins in Lua or
-  compiled `.oop` (Lua or WebAssembly), plus OMSI's own plugin DLLs on Windows.
+* **More for modders** - PBR materials, larger textures, more lights, HTML textures, interface
+  themes, and plugins in Lua or compiled `.oop` (Lua or WebAssembly), plus OMSI's own plugin
+  DLLs on Windows. Plugins can be published in the
+  [plugin catalog](https://github.com/openOMSI-org/openOMSI-Plugins).
+
+## The openOMSI family
+
+| Project | What it is |
+| --- | --- |
+| [openOMSI](https://github.com/openOMSI-org/openOMSI) | the game and its launcher (this repository) |
+| [openMapper](https://github.com/openOMSI-org/openMapper) | a simple map editor: draw roads, place objects, shape the ground, drive the map in openOMSI ([docs/OPENMAPPER.md](docs/OPENMAPPER.md)) |
+| [openOMSI Plugins](https://github.com/openOMSI-org/openOMSI-Plugins) | the catalog of reviewed, open source Lua plugins |
+| [Development Tools](https://github.com/openOMSI-org/openOMSI-Development-Tools) | the plugin workbench: projects, API docs, the `.oop` compiler |
+| [Add-ons list](docs/ADDONS.md) | projects others make for openOMSI, shown on the launcher's *Add-ons* page |
 
 ## Download
 
@@ -144,6 +161,13 @@ The documentation is on the website, **https://openomsi.org/**, and in [`docs/`]
 | [PBR materials](docs/PBR.md) | normal, roughness, metalness and occlusion maps |
 | [Map packages](docs/MAP_PACKAGE.md) | optional surroundings a map can ship for the navigator and city map |
 | [Plugins](docs/PLUGINS.md) | Lua and WebAssembly plugins, `.oop` files, OMSI plugin DLLs |
+| [openMapper](docs/OPENMAPPER.md) | the map editor |
+| [Trams, metros and trains](docs/RAIL.md) | rail vehicles, tracks and stations |
+| [Transport modes](docs/TRANSPORT_MODES.md) | how a vehicle and a map say what kind of transport they are for |
+| [Trolleybuses](docs/TROLLEYBUS.md) | the overhead wire and the poles |
+| [HTML textures](docs/HTMLTEXTURE.md) | web pages as textures in buses and on maps |
+| [Interface themes](docs/THEMES.md) | the look of the game's own screens |
+| [Voice chat](docs/VOICE.md) | talking to other players |
 | [Development Tools](https://github.com/openOMSI-org/openOMSI-Development-Tools) | the plugin workbench: projects, API docs, the `.oop` compiler |
 | [Add-ons](docs/ADDONS.md) | the launcher's directory of add-ons, and how to list yours |
 | [Content formats](docs/FORMATS.md) | every OMSI 2 file format |
@@ -181,6 +205,7 @@ openOMSI/
 ├── tools/         omsi-check (format coverage), avatar and ambience pack builders, voice chat plugin
 ├── scripts/       build scripts for every platform, version.sh, release notes
 ├── assets/        fonts, icons, logos
+├── docker/        container images of the dedicated server
 ├── docs/          documentation (also published on the website)
 ├── site/          the website
 ├── release/       health.json: released versions known to be broken

@@ -374,6 +374,17 @@ struct DepthIn {
     @location(5) world: vec3<f32>,
 };
 
+struct ShadowOut {
+    @builtin(position) @invariant clip: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) @interpolate(flat) params: vec4<f32>,
+};
+struct ShadowIn {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) @interpolate(flat) params: vec4<f32>,
+};
+
 @vertex
 fn vs_depth(in: VsIn) -> DepthOut {
     let e = draw_list[in.inst];
