@@ -690,7 +690,7 @@ impl Settings {
             "tobii_edges" => self.tobii_edges = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
             "zoom_hold_latch" => self.zoom_hold_latch = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
             "zoom_hold_amount" => self.zoom_hold_amount = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.15, 1.0)).unwrap_or(self.zoom_hold_amount),
-            "flashlight_cursor" => self.flashlight_cursor = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
+            "flashlight_cursor" | "others_detail" => { let on = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"); if k == "others_detail" { self.others_detail = on } else { self.flashlight_cursor = on } }
             _ => {
                 let x = omsi_launcher_lib::head_tracking_value(k, v.parse::<f64>().ok()) as f32;
                 if k == "head_tracking_smoothing" { self.head_tracking_smoothing = x } else { self.head_tracking_dead_zone = x }
@@ -1003,7 +1003,7 @@ impl Settings {
                 "head_tracking_invert_x" => s.head_tracking_invert_x = b(v),
                 "head_tracking_invert_y" => s.head_tracking_invert_y = b(v),
                 "head_tracking_invert_z" => s.head_tracking_invert_z = b(v),
-                "head_tracking_source" | "tobii_edges" | "head_tracking_smoothing" | "head_tracking_dead_zone" | "pause_quick_actions" | "ui_theme_pack" | "zoom_hold_amount" | "zoom_hold_latch" | "flashlight_cursor" => s.read_extra(&k, v),
+                "head_tracking_source" | "tobii_edges" | "head_tracking_smoothing" | "head_tracking_dead_zone" | "pause_quick_actions" | "ui_theme_pack" | "zoom_hold_amount" | "zoom_hold_latch" | "flashlight_cursor" | "others_detail" => s.read_extra(&k, v),
                 "discord_status" => s.discord_status = b(v),
                 "discord_app_id" => s.discord_app_id = v.trim().to_string(),
                 k if crate::discord::Show::KEYS.contains(&k) => s.discord_show.set(k, b(v)),
