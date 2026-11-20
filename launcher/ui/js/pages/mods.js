@@ -7,7 +7,7 @@ import { t, bytes, ago } from '../i18n.js';
 import { call, onPhone } from '../api.js';
 import { Icon } from '../icons.js';
 import { Button, Card, Dialog, Empty, PageHead, Search, Select, Spinner, Tag, Toggle, Notice, useConfirm } from '../ui.js';
-import { pollNow, loadContent, cached, installMod, jobRunning } from '../data.js';
+import { pollNow, loadContent, cached, rereadUntil, installMod, jobRunning } from '../data.js';
 
 const KIND = { bus: ['bus', 'Bus'], map: ['map', 'Map'], archive: ['folder', 'Archive'], other: ['puzzle', 'Other'] };
 
@@ -32,6 +32,9 @@ export function ModsPage() {
   const [q, setQ] = useState('');
   const [show, setShow] = useState('all');
   const [busy, setBusy] = useState({});
+  // (a switch shows what was asked of it right away, until the list read after it says so
+  // itself: the read takes seconds on a big content folder, #4017)
+  const [want, setWant] = useState({});
   const [open, setOpen] = useState(null);
   const [ask, confirm] = useConfirm();
   const read = () => cached('mods', 'mods_status');
@@ -86,6 +89,9 @@ export function ModsPage() {
     if (!m.enabled) counts.off++;
   }
   const kind = counts[show] ? show : 'all';
+  // (the mods on their way, at the top of the whole list: being installed, or installed and
+  // not listed yet, #4016)
+  const arriving = kind === 'all' && !q ? jobs.filter((j) => jobRunning(j) || s.settling.includes(j.id)) : [];
   const fits = (m) => (kind === 'all' ? true : kind === 'off' ? !m.enabled : (m.kind in counts ? m.kind : 'other') === kind);
   const mods = all
     .filter(fits)
@@ -96,15 +102,22 @@ export function ModsPage() {
     await f();
     setBusy((b) => ({ ...b, [m.id]: false }));
   };
+  const wish = (id, on) => setWant((w) => {
+    const { [id]: _, ...rest } = w;
+    return on === undefined ? rest : { ...rest, [id]: on };
+  });
   const toggle = (m, on) => busyWhile(m, async () => {
+    wish(m.id, on);
     try {
       await call('mod_set_enabled', { id: m.id, on });
       toast(t(on ? '{name} switched on' : '{name} switched off', { name: m.name }), 'ok');
-      read();
       loadContent();
+      // (the switch keeps its new position until a read answers: a failed one is asked again)
+      await rereadUntil('mods', 'mods_status');
     } catch (e) {
       toast(t(e.message), 'error');
     }
+    wish(m.id);
   });
   const remove = async (m) => {
     setBusy((b) => ({ ...b, [m.id]: true }));
@@ -121,8 +134,9 @@ export function ModsPage() {
       try {
         await call('mod_remove', { id: m.id });
         toast(t('{name} deleted', { name: m.name }), 'ok');
-        read();
         loadContent();
+        // (its row stays, busy, until a list read after it no longer has it)
+        await rereadUntil('mods', 'mods_status');
       } catch (e) {
         toast(t(e.message), 'error');
       }
@@ -137,7 +151,7 @@ export function ModsPage() {
     <${PageHead} title="Mods" text="A bus, a map, scenery, a whole OMSI folder - as a folder or a .zip, .7z or .rar. The original OMSI 2 folder is never written to." />
     <div class="drive" style="grid-template-columns:minmax(0,1fr) 360px">
       <div class="stack">
-        ${status?.error && html`<${Notice} kind="danger">${status.error}</${Notice}>`}
+        ${(s.readError.mods || status?.error) && html`<${Notice} kind="danger">${s.readError.mods || status.error}</${Notice}>`}
         <${Card} title="Installed mods" actions=${html`<div class="row wrap" style="gap:8px;justify-content:flex-end">
             ${status?.content_dir && html`<${Button} small icon="folder" label="Content folder" onClick=${() => call('open_path', { path: status.content_dir }).catch((e) => toast(t(e.message), 'error'))} />`}
             <div style="width:220px;max-width:100%"><${Search} value=${q} onInput=${setQ} placeholder="Search mods..." /></div>
@@ -150,11 +164,20 @@ export function ModsPage() {
             </div>
             <span class="muted small">${t('{n} mods, {on} on', { n: all.length, on: all.length - counts.off })}</span>
           </div>`}
+          ${status && s.reading.mods && html`<div class="row muted small" style="margin-bottom:8px"><${Spinner} /> ${t('Reading the content folder...')}</div>`}
           ${!status
             ? html`<div class="row muted"><${Spinner} /> ${t('Reading the content folder...')}</div>`
-            : mods.length === 0
+            : mods.length === 0 && arriving.length === 0
               ? html`<${Empty} icon="puzzle" text=${q || kind !== 'all' ? 'No mod matches.' : 'No mods yet. Choose a folder or an archive on the right, or drop one onto the window.'} />`
               : html`<div class="list" style="margin:0 -8px">
+                  ${arriving.map((j) => html`<div class="list-item" style="cursor:default">
+                    <${Icon} name="download" />
+                    <div class="grow" style="min-width:0">
+                      <div class="title ellipsis" style="opacity:.7">${j.name}</div>
+                      <div class="sub">${jobRunning(j) ? [t(j.state), jobPct(j) > 0 && `${jobPct(j).toFixed(0)} %`].filter(Boolean).join(' - ') : t('done')}</div>
+                    </div>
+                    <${Spinner} />
+                  </div>`)}
                   ${mods.map((m) => {
                     const tree = modTree(m.paths);
                     // (the game's folders it holds and how many in each, as the game's own launcher said:
@@ -168,7 +191,7 @@ export function ModsPage() {
                         <div class="sub">${[t(KIND[m.kind]?.[1] || 'Other'), holds, bytes(m.bytes), m.installed ? ago(m.installed) : !m.noted ? t('found in the content folder') : ''].filter(Boolean).join(' - ')}</div>
                       </div>
                       ${busy[m.id] && html`<${Spinner} />`}
-                      <div onClick=${(e) => e.stopPropagation()}><${Toggle} checked=${m.enabled} disabled=${!!busy[m.id]} onChange=${(on) => toggle(m, on)} /></div>
+                      <div onClick=${(e) => e.stopPropagation()}><${Toggle} checked=${m.id in want ? want[m.id] : m.enabled} disabled=${!!busy[m.id]} onChange=${(on) => toggle(m, on)} /></div>
                       <${Button} small kind="ghost" icon="trash" disabled=${!!busy[m.id]} title="Delete this mod (asks first; switch it off instead to keep it)" onClick=${(e) => (e.stopPropagation(), remove(m))} />
                     </div>
                     ${open === m.id && html`<div style="padding:4px 12px 12px 44px" class="small selectable stack">${tree.map(([folder, items]) => html`<div class="row" style="align-items:baseline;gap:12px">
@@ -225,8 +248,10 @@ export function ModsPage() {
   `;
 }
 
+const jobPct = (j) => (j.bytes_total ? (j.bytes_done / j.bytes_total) * 100 : j.files_total ? (j.files_done / j.files_total) * 100 : 0);
+
 function Job({ j }) {
-  const pct = j.bytes_total ? (j.bytes_done / j.bytes_total) * 100 : j.files_total ? (j.files_done / j.files_total) * 100 : 0;
+  const pct = jobPct(j);
   const active = jobRunning(j);
   return html`<div class="stack" style="gap:6px">
     <div class="row">
