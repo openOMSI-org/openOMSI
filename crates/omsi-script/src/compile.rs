@@ -955,21 +955,37 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn same_frame_block(&self, left: BlockId, right: BlockId) -> bool {
+        let (left, right) = (left as usize, right as usize);
+        if self.p.blocks[left].ops != self.p.blocks[right].ops {
+            return false;
+        }
+        // Unresolved calls still have identical placeholder ops.
+        let calls = |id| {
+            let start = self.pending.partition_point(|(block, _, _)| *block < id);
+            self.pending[start..]
+                .iter()
+                .take_while(move |(block, _, _)| *block == id)
+                .map(|(_, op, name)| (op, name))
+        };
+        calls(left).eq(calls(right))
+    }
+
     fn register(&mut self, kind: BlockKind, id: BlockId) {
         match kind {
             BlockKind::Init => self.p.init.push(id),
             BlockKind::Frame => {
-                let is_dup = self.p.frame[self.file_frames.0..].iter().any(|&prev| {
-                    self.p.blocks[prev as usize].ops == self.p.blocks[id as usize].ops
-                });
+                let is_dup = self.p.frame[self.file_frames.0..]
+                    .iter()
+                    .any(|&prev| self.same_frame_block(prev, id));
                 if !is_dup {
                     self.p.frame.push(id);
                 }
             }
             BlockKind::FrameAi => {
-                let is_dup = self.p.frame_ai[self.file_frames.1..].iter().any(|&prev| {
-                    self.p.blocks[prev as usize].ops == self.p.blocks[id as usize].ops
-                });
+                let is_dup = self.p.frame_ai[self.file_frames.1..]
+                    .iter()
+                    .any(|&prev| self.same_frame_block(prev, id));
                 if !is_dup {
                     self.p.frame_ai.push(id);
                 }
@@ -1376,6 +1392,29 @@ mod tests {
             2,
             "a frame block without its end, cut short by the next header, still runs"
         );
+    }
+
+    #[test]
+    fn frame_blocks_compare_pending_macro_calls_before_deduplicating() {
+        for kind in ["frame", "frame_ai"] {
+            let p = program_of(&format!(
+                "{{{kind}}}\n(M.L.first)\n{{end}}\n\
+                 {{{kind}}}\n(M.L.second)\n{{end}}\n\
+                 {{{kind}}}\n(M.L.first)\n{{end}}\n\
+                 {{macro:first}}\n1 (S.L.a)\n{{end}}\n\
+                 {{macro:second}}\n2 (S.L.b)\n{{end}}\n"
+            ));
+            let frames = if kind == "frame" {
+                &p.frame
+            } else {
+                &p.frame_ai
+            };
+            assert_eq!(frames.len(), 2, "{kind}");
+            assert_ne!(
+                p.blocks[frames[0] as usize].ops,
+                p.blocks[frames[1] as usize].ops
+            );
+        }
     }
 
     #[test]
