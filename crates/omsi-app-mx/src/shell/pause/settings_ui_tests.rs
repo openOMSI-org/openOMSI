@@ -2,44 +2,157 @@ use super::*;
 use crate::app_impl::MenuLine;
 
 fn fixture(world: bool) -> Vec<(&'static str, String)> {
-    let row = |name: &str, kind: char, value: &str, desc: &str| format!("{name}\u{1f}{kind}\u{1f}{value}\u{1f}{desc}\u{1f}0.5");
+    let row = |name: &str, kind: char, value: &str, desc: &str| {
+        format!("{name}\u{1f}{kind}\u{1f}{value}\u{1f}{desc}\u{1f}0.5")
+    };
     if world {
         vec![
             ("#", row("Live weather", 'i', "", "")),
-            ("metar_sync", row("METAR sync", 's', "off", "The weather follows the real METAR report")),
-            ("metar_src", row("METAR source", 'o', "VHHH", "The airport used for real weather.")),
-            ("metar_icao_edit", row("ICAO", 'e', "VHHH", "Enter any 4-letter ICAO station.")),
-            ("metar_once", row("METAR report", 'a', "Load once", "Load the selected station once without enabling continuous METAR sync.")),
+            (
+                "metar_sync",
+                row(
+                    "METAR sync",
+                    's',
+                    "off",
+                    "The weather follows the real METAR report",
+                ),
+            ),
+            (
+                "metar_src",
+                row(
+                    "METAR source",
+                    'o',
+                    "VHHH",
+                    "The airport used for real weather.",
+                ),
+            ),
+            (
+                "metar_icao_edit",
+                row("ICAO", 'e', "VHHH", "Enter any 4-letter ICAO station."),
+            ),
+            (
+                "metar_once",
+                row(
+                    "METAR report",
+                    'a',
+                    "Load once",
+                    "Load the selected station once without enabling continuous METAR sync.",
+                ),
+            ),
             ("#", row("Weather preset and clouds", 'i', "", "")),
-            ("weather", row("Preset", 'o', "Clear sky", "A ready-made weather")),
-            ("cloud_cover", row("Cloud cover", 'v', "50 %", "How much of the sky the clouds cover.")),
+            (
+                "weather",
+                row("Preset", 'o', "Clear sky", "A ready-made weather"),
+            ),
+            (
+                "cloud_cover",
+                row(
+                    "Cloud cover",
+                    'v',
+                    "50 %",
+                    "How much of the sky the clouds cover.",
+                ),
+            ),
             ("#", row("Temperature and humidity", 'i', "", "")),
-            ("temp", row("Temperature", 'v', "25 °C", "The air temperature.")),
-            ("humidity", row("Humidity", 'v', "70 %", "Relative humidity of the air.")),
+            (
+                "temp",
+                row("Temperature", 'v', "25 °C", "The air temperature."),
+            ),
+            (
+                "humidity",
+                row("Humidity", 'v', "70 %", "Relative humidity of the air."),
+            ),
             ("#", row("Wind", 'i', "", "")),
-            ("wind_speed", row("Wind speed", 'v', "5 m/s", "How fast the wind blows; it drives the clouds.")),
-            ("wind_dir", row("Wind direction", 'v', "180°", "The direction of the wind in degrees (0 is north).")),
+            (
+                "wind_speed",
+                row(
+                    "Wind speed",
+                    'v',
+                    "5 m/s",
+                    "How fast the wind blows; it drives the clouds.",
+                ),
+            ),
+            (
+                "wind_dir",
+                row(
+                    "Wind direction",
+                    'v',
+                    "180°",
+                    "The direction of the wind in degrees (0 is north).",
+                ),
+            ),
         ]
     } else {
         vec![
             ("#", row("Destination and depot", 'i', "", "")),
-            ("dest", row("Destination display", 'o', "", "Change the current destination")),
-            ("hof", row("Depot file (HOF)", 'o', "", "Change the current depot file (used for the timetable)")),
+            (
+                "dest",
+                row(
+                    "Destination display",
+                    'o',
+                    "",
+                    "Change the current destination",
+                ),
+            ),
+            (
+                "hof",
+                row(
+                    "Depot file (HOF)",
+                    'o',
+                    "",
+                    "Change the current depot file (used for the timetable)",
+                ),
+            ),
             ("#", row("Vehicle identification", 'i', "", "")),
-            ("number", row("Fleet number", 'o', "", "Change the vehicle's current fleet number")),
-            ("custom_number_edit", row("Custom fleet number", 'e', "1234", "Enter custom fleet number (not from the list)")),
-            ("custom_ident_edit", row("Custom plate", 'e', "AB 1234", "Enter custom plate (leave free for automatic)")),
+            (
+                "number",
+                row(
+                    "Fleet number",
+                    'o',
+                    "",
+                    "Change the vehicle's current fleet number",
+                ),
+            ),
+            (
+                "custom_number_edit",
+                row(
+                    "Custom fleet number",
+                    'e',
+                    "1234",
+                    "Enter custom fleet number (not from the list)",
+                ),
+            ),
+            (
+                "custom_ident_edit",
+                row(
+                    "Custom plate",
+                    'e',
+                    "AB 1234",
+                    "Enter custom plate (leave free for automatic)",
+                ),
+            ),
             ("#", row("Driver", 'i', "", "")),
-            ("driver", row("Driver", 'o', "", "Change the current driver profile")),
+            (
+                "driver",
+                row("Driver", 'o', "", "Change the current driver profile"),
+            ),
         ]
     }
 }
 
-fn nested_view<'a>(rail: &'a [MenuLine], rows: &'a [(&'static str, String)], world: bool) -> PauseView<'a> {
-    let titles: Vec<String> = if world { vec!["Time", "Weather", "Traffic and people", "Tools"] } else { vec!["Display and driver", "Vehicles", "Service"] }
-        .into_iter()
-        .map(|text| omsi_ui::tr(text).into_owned())
-        .collect();
+fn nested_view<'a>(
+    rail: &'a [MenuLine],
+    rows: &'a [(&'static str, String)],
+    world: bool,
+) -> PauseView<'a> {
+    let titles: Vec<String> = if world {
+        vec!["Time", "Weather", "Traffic and people", "Tools"]
+    } else {
+        vec!["Display and driver", "Vehicles", "Service"]
+    }
+    .into_iter()
+    .map(|text| omsi_ui::tr(text).into_owned())
+    .collect();
     PauseView {
         paused: true,
         quick_actions: "default",
@@ -48,28 +161,59 @@ fn nested_view<'a>(rail: &'a [MenuLine], rows: &'a [(&'static str, String)], wor
         disabled: &[],
         kbd: true,
         keys: true,
-        summary: Summary { bus: "Test vehicle".into(), driver: "Driver".into() },
+        summary: Summary {
+            bus: "Test vehicle".into(),
+            driver: "Driver".into(),
+        },
         online: Default::default(),
         list: Some(ListView {
             kind: MenuKind::Options,
-            head: Some((omsi_ui::tr(if world { "World options..." } else { "Vehicle options..." }).into_owned(), String::new())),
+            head: Some((
+                omsi_ui::tr(if world {
+                    "World options..."
+                } else {
+                    "Vehicle options..."
+                })
+                .into_owned(),
+                String::new(),
+            )),
             badge: None,
             tabs: Some((titles, usize::from(world))),
-            items: rows.iter().map(|(id, label)| (*id, label.as_str())).collect(),
+            items: rows
+                .iter()
+                .map(|(id, label)| (*id, label.as_str()))
+                .collect(),
             sel: 1,
             preview: None,
             pane_first: None,
             dropdown: None,
-            key: if world { "World1".into() } else { "Vehicle0".into() },
+            key: if world {
+                "World1".into()
+            } else {
+                "Vehicle0".into()
+            },
         }),
     }
 }
 
 #[test]
 fn pause_nested_groups_preserve_original_indices_and_hide_back() {
-    let items = [("#", "First"), ("a", "A"), ("b", "B"), ("#", "Second"), ("c", "C"), ("back", "Back")];
-    assert_eq!(settings_groups(&items, true), vec![vec![0, 1, 2], vec![3, 4]]);
-    assert_eq!(settings_groups(&items, false), vec![vec![0, 1, 2], vec![3, 4, 5]]);
+    let items = [
+        ("#", "First"),
+        ("a", "A"),
+        ("b", "B"),
+        ("#", "Second"),
+        ("c", "C"),
+        ("back", "Back"),
+    ];
+    assert_eq!(
+        settings_groups(&items, true),
+        vec![vec![0, 1, 2], vec![3, 4]]
+    );
+    assert_eq!(
+        settings_groups(&items, false),
+        vec![vec![0, 1, 2], vec![3, 4, 5]]
+    );
 }
 
 #[test]
@@ -82,7 +226,13 @@ fn pause_nested_rows_keep_original_mouse_action_indices() {
     sh.ui.input.mouse = Vec2::new(350.0, 245.0);
     sh.ui.input.pressed = true;
     sh.ui.input.released = true;
-    settings_rows(&mut sh, &v, v.list.as_ref().unwrap(), Rect::new(300.0, 180.0, 800.0, 600.0), &mut None);
+    settings_rows(
+        &mut sh,
+        &v,
+        v.list.as_ref().unwrap(),
+        Rect::new(300.0, 180.0, 800.0, 600.0),
+        &mut None,
+    );
     assert_eq!(sh.actions, [Action::Choose(1)]);
 }
 
@@ -92,7 +242,15 @@ fn pause_nested_controls_draw_on_narrow_windows() {
     for width in [120.0, 200.0, 440.0] {
         let mut sh = Shell::new();
         sh.begin(400.0, 600.0, 1.0, 1.0 / 60.0);
-        settings_row(&mut sh.ui, 7, label, Rect::new(0.0, 0.0, width, 80.0), true, false, &mut None);
+        settings_row(
+            &mut sh.ui,
+            7,
+            label,
+            Rect::new(0.0, 0.0, width, 80.0),
+            true,
+            false,
+            &mut None,
+        );
     }
 }
 
@@ -102,7 +260,11 @@ fn pause_nested_vehicle_and_world_draw_at_all_window_sizes() {
         let rows = fixture(world);
         let rail = vec![
             ("resume", "Resume".into(), None),
-            (if world { "world" } else { "vehicle" }, "Options".into(), None),
+            (
+                if world { "world" } else { "vehicle" },
+                "Options".into(),
+                None,
+            ),
             ("quit", "End the session".into(), None),
         ];
         for (w, h) in [(400.0, 600.0), (1440.0, 900.0), (1920.0, 1080.0)] {
@@ -118,12 +280,21 @@ fn pause_nested_vehicle_and_world_draw_at_all_window_sizes() {
 #[test]
 #[ignore = "Requires a graphics adapter and OPENOMSI_PAUSE_PREVIEW output directory"]
 fn pause_nested_write_preview() {
-    omsi_ui::i18n::set_lookup(|lang, text| crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned()));
+    omsi_ui::i18n::set_lookup(|lang, text| {
+        crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned())
+    });
     omsi_ui::i18n::set_language("zh-tw");
-    let out = std::path::PathBuf::from(std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set preview directory"));
+    let out = std::path::PathBuf::from(
+        std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set preview directory"),
+    );
     std::fs::create_dir_all(&out).unwrap();
     let instance = mx::Instance::default();
-    let renderer = pollster::block_on(omsi_render::Renderer::new(&instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb),)).unwrap();
+    let renderer = pollster::block_on(omsi_render::Renderer::new(
+        &instance,
+        None,
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
+    ))
+    .unwrap();
     for (name, world, w, h) in [
         ("pause-vehicle-options", false, 1440, 900),
         ("pause-world-options", true, 1440, 900),
@@ -132,16 +303,29 @@ fn pause_nested_write_preview() {
         let rows = fixture(world);
         let rail = vec![
             ("resume", "Resume".into(), None),
-            (if world { "world" } else { "vehicle" }, "Options".into(), None),
+            (
+                if world { "world" } else { "vehicle" },
+                "Options".into(),
+                None,
+            ),
             ("quit", "End the session".into(), None),
         ];
         let mut sh = Shell::new();
         sh.begin(w as f32, h as f32, 1.0, 1.0 / 60.0);
         draw(&mut sh, &nested_view(&rail, &rows, world));
         sh.finish();
-        let pixels = sh.picture_for_shot(&renderer, w, h).expect("drawn settings");
+        let pixels = sh
+            .picture_for_shot(&renderer, w, h)
+            .expect("drawn settings");
         assert_eq!(pixels[(((h / 2) * w + w - 2) * 4 + 3) as usize], 255);
-        image::save_buffer(out.join(format!("{name}.png")), &pixels, w, h, image::ColorType::Rgba8).unwrap();
+        image::save_buffer(
+            out.join(format!("{name}.png")),
+            &pixels,
+            w,
+            h,
+            image::ColorType::Rgba8,
+        )
+        .unwrap();
         println!("preview: {}", out.join(format!("{name}.png")).display());
     }
 }
@@ -150,7 +334,10 @@ fn pause_nested_write_preview() {
 fn pause_settings_keep_main_row_density() {
     assert_eq!(LIST_ROW, 40.0);
     assert_eq!(row_h("item", "Name\u{1f}a"), ROW + 4.0);
-    assert_eq!(row_h("item", "Name\u{1f}a\u{1f}Value\u{1f}Description"), 52.0);
+    assert_eq!(
+        row_h("item", "Name\u{1f}a\u{1f}Value\u{1f}Description"),
+        52.0
+    );
     assert_eq!(row_h(crate::game_lists::HEADING, "Group"), 34.0);
 }
 
@@ -164,13 +351,25 @@ fn pause_settings_mouse_hover_suppresses_keyboard_highlight() {
         let mut sh = Shell::new();
         sh.begin(1366.0, 768.0, 1.0, 1.0 / 60.0);
         sh.ui.input.mouse = mouse;
-        settings_rows(&mut sh, &v, v.list.as_ref().unwrap(), Rect::new(300.0, 180.0, 800.0, 500.0), &mut None);
+        settings_rows(
+            &mut sh,
+            &v,
+            v.list.as_ref().unwrap(),
+            Rect::new(300.0, 180.0, 800.0, 500.0),
+            &mut None,
+        );
         sh.finish();
         sh.drawn.unwrap().verts
     };
     let hovered = Vec2::new(350.0, 330.0);
-    assert!(render(true, hovered) == render(false, hovered), "mouse hover must suppress keyboard focus");
-    assert!(render(true, Vec2::ZERO) != render(false, Vec2::ZERO), "keyboard focus must remain visible without hover");
+    assert!(
+        render(true, hovered) == render(false, hovered),
+        "mouse hover must suppress keyboard focus"
+    );
+    assert!(
+        render(true, Vec2::ZERO) != render(false, Vec2::ZERO),
+        "keyboard focus must remain visible without hover"
+    );
 }
 
 #[test]
@@ -451,19 +650,32 @@ fn pause_settings_scale_stays_stable_until_slider_release() {
     sh.pointer(270.0, 100.0);
     sh.button(true);
     let action = settings_row(
-        &mut sh.ui, 1, "Range\u{1f}v\u{1f}50\u{1f}\u{1f}0.5",
-        Rect::new(0.0, 80.0, 500.0, 40.0), false, false, &mut None,
+        &mut sh.ui,
+        1,
+        "Range\u{1f}v\u{1f}50\u{1f}\u{1f}0.5",
+        Rect::new(0.0, 80.0, 500.0, 40.0),
+        false,
+        false,
+        &mut None,
     );
     assert!(matches!(action, Some(Action::Control(1, _))));
     sh.finish();
     sh.begin(800.0, 600.0, 1.5, 0.016);
-    assert_eq!(sh.scale, 1.0, "drag geometry must not move with the selected scale");
+    assert_eq!(
+        sh.scale, 1.0,
+        "drag geometry must not move with the selected scale"
+    );
     sh.button(false);
     sh.begin(800.0, 600.0, 1.5, 0.016);
     assert_eq!(sh.scale, 1.0, "release must use the same slider geometry");
     settings_row(
-        &mut sh.ui, 1, "Range\u{1f}v\u{1f}50\u{1f}\u{1f}0.5",
-        Rect::new(0.0, 80.0, 500.0, 40.0), false, false, &mut None,
+        &mut sh.ui,
+        1,
+        "Range\u{1f}v\u{1f}50\u{1f}\u{1f}0.5",
+        Rect::new(0.0, 80.0, 500.0, 40.0),
+        false,
+        false,
+        &mut None,
     );
     sh.finish();
     sh.begin(800.0, 600.0, 1.5, 0.016);
@@ -496,7 +708,10 @@ fn pause_date_field_opens_calendar_without_changing_clock() {
         false,
         &mut None,
     );
-    assert!(action.is_none(), "opening the calendar must not execute a row action");
+    assert!(
+        action.is_none(),
+        "opening the calendar must not execute a row action"
+    );
     sh.finish();
     sh.ui.input.mouse = Vec2::new(260.0, 140.0);
     assert!(
@@ -505,9 +720,16 @@ fn pause_date_field_opens_calendar_without_changing_clock() {
     );
 }
 
-
 fn calendar_row(sh: &mut Shell) -> Option<Action> {
-    settings_row(&mut sh.ui, 7, "Date\u{1f}d\u{1f}2026-11-03", Rect::new(0.0, 80.0, 500.0, 40.0), false, false, &mut None)
+    settings_row(
+        &mut sh.ui,
+        7,
+        "Date\u{1f}d\u{1f}2026-11-03",
+        Rect::new(0.0, 80.0, 500.0, 40.0),
+        false,
+        false,
+        &mut None,
+    )
 }
 
 #[test]
@@ -522,8 +744,14 @@ fn pause_date_field_commits_only_the_selected_day() {
         sh.finish();
     }
     sh.begin(800.0, 600.0, 1.0, 0.016);
-    assert_eq!(calendar_row(&mut sh), Some(Action::Date("2026-11-10".into())));
-    assert!(!sh.ui.dismiss_date_popup(), "selection must close the calendar");
+    assert_eq!(
+        calendar_row(&mut sh),
+        Some(Action::Date("2026-11-10".into()))
+    );
+    assert!(
+        !sh.ui.dismiss_date_popup(),
+        "selection must close the calendar"
+    );
 }
 
 #[test]
@@ -548,28 +776,53 @@ fn pause_read_only_date_does_not_open_a_calendar() {
     sh.ui.input.mouse = Vec2::new(300.0, 100.0);
     sh.ui.input.pressed = true;
     sh.ui.input.released = true;
-    assert!(settings_row(&mut sh.ui, 7, "Date and time\u{1f}i\u{1f}2026-11-03 13:24:56", Rect::new(0.0, 80.0, 500.0, 40.0), false, false, &mut None).is_none());
+    assert!(
+        settings_row(
+            &mut sh.ui,
+            7,
+            "Date and time\u{1f}i\u{1f}2026-11-03 13:24:56",
+            Rect::new(0.0, 80.0, 500.0, 40.0),
+            false,
+            false,
+            &mut None
+        )
+        .is_none()
+    );
     assert!(!sh.ui.dismiss_date_popup());
 }
-
 
 #[test]
 #[ignore = "Requires a graphics adapter and OPENOMSI_PAUSE_PREVIEW output directory"]
 fn render_pause_date_calendar_preview() {
-    omsi_ui::i18n::set_lookup(|lang, text| crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned()));
+    omsi_ui::i18n::set_lookup(|lang, text| {
+        crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned())
+    });
     omsi_ui::i18n::set_language("zh-tw");
-    let out = std::path::PathBuf::from(std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set preview directory"));
+    let out = std::path::PathBuf::from(
+        std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set preview directory"),
+    );
     std::fs::create_dir_all(&out).unwrap();
     let instance = mx::Instance::default();
-    let renderer = pollster::block_on(omsi_render::Renderer::new(&instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb),)).unwrap();
+    let renderer = pollster::block_on(omsi_render::Renderer::new(
+        &instance,
+        None,
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
+    ))
+    .unwrap();
     let rows = vec![
         ("#", "Date\u{1f}i".to_owned()),
         ("date", "Date\u{1f}d\u{1f}2026-11-03\u{1f}The day the timetable, the season and the map's changes follow".to_owned()),
         ("clock_shift -86400", "Date -1 day\u{1f}a\u{1f}-1 day\u{1f}Move the date.".to_owned()),
         ("clock_shift 86400", "Date +1 day\u{1f}a\u{1f}+1 day\u{1f}Move the date.".to_owned()),
     ];
-    let rail = vec![("resume", "Resume".into(), None), ("world", "World options...".into(), None)];
-    for (name, w, h) in [("pause-date-desktop", 1440, 900), ("pause-date-narrow", 400, 720)] {
+    let rail = vec![
+        ("resume", "Resume".into(), None),
+        ("world", "World options...".into(), None),
+    ];
+    for (name, w, h) in [
+        ("pause-date-desktop", 1440, 900),
+        ("pause-date-narrow", 400, 720),
+    ] {
         let mut view = nested_view(&rail, &rows, true);
         view.kbd = false;
         let list = view.list.as_mut().unwrap();
@@ -588,8 +841,17 @@ fn render_pause_date_calendar_preview() {
             draw(&mut sh, &view);
             sh.finish();
         }
-        let pixels = sh.picture_for_shot(&renderer, w, h).expect("drawn calendar");
-        image::save_buffer(out.join(format!("{name}.png")), &pixels, w, h, image::ColorType::Rgba8).unwrap();
+        let pixels = sh
+            .picture_for_shot(&renderer, w, h)
+            .expect("drawn calendar");
+        image::save_buffer(
+            out.join(format!("{name}.png")),
+            &pixels,
+            w,
+            h,
+            image::ColorType::Rgba8,
+        )
+        .unwrap();
         println!("preview: {}", out.join(format!("{name}.png")).display());
     }
 }
@@ -618,7 +880,13 @@ fn settings_search_filtered_click_keeps_original_action_index() {
     sh.ui.input.mouse = Vec2::new(350.0, 245.0);
     sh.ui.input.pressed = true;
     sh.ui.input.released = true;
-    settings_rows(&mut sh, &v, v.list.as_ref().unwrap(), Rect::new(300.0, 180.0, 800.0, 600.0), &mut None);
+    settings_rows(
+        &mut sh,
+        &v,
+        v.list.as_ref().unwrap(),
+        Rect::new(300.0, 180.0, 800.0, 600.0),
+        &mut None,
+    );
     assert_eq!(sh.actions, [Action::Choose(6)]);
     assert_eq!(sh.settings_search.visible, [6]);
 }
@@ -635,12 +903,22 @@ fn settings_search_toolbar_types_and_resets_when_page_changes() {
     sh.ui.focus = Some(id_of("pause-settings-search"));
     sh.ui.input.text = "Fleet".into();
     let mut body = Rect::new(300.0, 180.0, 800.0, 600.0);
-    search::toolbar(&mut sh, list, Rect::new(300.0, 100.0, 700.0, 650.0), &mut body);
+    search::toolbar(
+        &mut sh,
+        list,
+        Rect::new(300.0, 100.0, 700.0, 650.0),
+        &mut body,
+    );
     assert_eq!(sh.settings_search.query, "Fleet");
     assert_eq!(body.y, 228.0);
     sh.ui.input.text.clear();
     sh.settings_search.page = "Other".into();
-    search::toolbar(&mut sh, list, Rect::new(300.0, 100.0, 700.0, 650.0), &mut body);
+    search::toolbar(
+        &mut sh,
+        list,
+        Rect::new(300.0, 100.0, 700.0, 650.0),
+        &mut body,
+    );
     assert!(sh.settings_search.query.is_empty());
     assert!(!search::focused(&sh));
 }
@@ -649,13 +927,19 @@ fn settings_search_toolbar_types_and_resets_when_page_changes() {
 fn settings_search_closes_phone_keyboard_and_keeps_desktop_text() {
     use clap::Parser;
     use winit::keyboard::KeyCode as K;
-    let mut app = crate::assemble_app(crate::cli::Args::parse_from(["openomsi"]), crate::settings::Settings::default());
+    let mut app = crate::assemble_app(
+        crate::cli::Args::parse_from(["openomsi"]),
+        crate::settings::Settings::default(),
+    );
     app.menus.game_menu = Some(0);
     app.open_list(crate::game_lists::ListKind::Options(0));
     app.shell.ui.focus = Some(id_of("pause-settings-search"));
     crate::platform::TEXT_INPUT_ON.with(|flag| flag.set(false));
     crate::platform::phone_keyboard(None, true);
-    assert_eq!(crate::platform::TEXT_INPUT_ON.with(|flag| flag.get()), crate::platform::MOBILE);
+    assert_eq!(
+        crate::platform::TEXT_INPUT_ON.with(|flag| flag.get()),
+        crate::platform::MOBILE
+    );
     assert!(app.settings_search_key(K::KeyE, Some("é")));
     assert_eq!(app.shell.ui.input.text, "é");
     assert!(app.settings_search_key(K::Escape, None));
@@ -665,7 +949,14 @@ fn settings_search_closes_phone_keyboard_and_keeps_desktop_text() {
 
 #[test]
 fn pause_unheaded_long_page_uses_right_column_with_original_action_index() {
-    let rows: Vec<_> = (0..8).map(|_| ("keybind", "Binding\u{1f}a\u{1f}Key\u{1f}Change binding".to_string())).collect();
+    let rows: Vec<_> = (0..8)
+        .map(|_| {
+            (
+                "keybind",
+                "Binding\u{1f}a\u{1f}Key\u{1f}Change binding".to_string(),
+            )
+        })
+        .collect();
     let rail = Vec::new();
     let mut v = nested_view(&rail, &rows, false);
     v.list.as_mut().unwrap().sel = 0;
@@ -674,6 +965,12 @@ fn pause_unheaded_long_page_uses_right_column_with_original_action_index() {
     sh.ui.input.mouse = Vec2::new(1200.0, 215.0);
     sh.ui.input.pressed = true;
     sh.ui.input.released = true;
-    settings_rows(&mut sh, &v, v.list.as_ref().unwrap(), Rect::new(300.0, 180.0, 1100.0, 600.0), &mut None);
+    settings_rows(
+        &mut sh,
+        &v,
+        v.list.as_ref().unwrap(),
+        Rect::new(300.0, 180.0, 1100.0, 600.0),
+        &mut None,
+    );
     assert_eq!(sh.actions, [Action::Choose(4)]);
 }

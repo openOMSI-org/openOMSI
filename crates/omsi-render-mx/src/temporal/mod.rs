@@ -376,7 +376,11 @@ pub fn fallback_render_size(quality: TemporalQuality, out: (u32, u32)) -> (u32, 
 /// The size MetalFX draws at, and whether it is larger than the quality asked for: Apple's
 /// scaler goes up to `max_scale` times a side (`supportedInputContentMaxScaleForDevice`), which
 /// is less than Ultra performance's three on most Macs.
-pub fn metalfx_render_size(quality: TemporalQuality, out: (u32, u32), max_scale: f32) -> ((u32, u32), bool) {
+pub fn metalfx_render_size(
+    quality: TemporalQuality,
+    out: (u32, u32),
+    max_scale: f32,
+) -> ((u32, u32), bool) {
     mx_upscale::metalfx_render_size(quality.mx(), out, max_scale)
 }
 

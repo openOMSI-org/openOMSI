@@ -38,7 +38,14 @@ fn value_noise(x: [f32; 3], tile: f32) -> f32 {
     let f = [fract(x[0]), fract(x[1]), fract(x[2])];
     let u = f.map(|f| f * f * (3.0 - 2.0 * f));
     let h = |dx: f32, dy: f32, dz: f32| {
-        hash13([modf(p[0] + dx, tile), modf(p[1] + dy, tile), modf(p[2] + dz, tile)], 0.1031)
+        hash13(
+            [
+                modf(p[0] + dx, tile),
+                modf(p[1] + dy, tile),
+                modf(p[2] + dz, tile),
+            ],
+            0.1031,
+        )
     };
     let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
     let x00 = lerp(h(0.0, 0.0, 0.0), h(1.0, 0.0, 0.0), u[0]);
@@ -58,9 +65,17 @@ fn worley(x: [f32; 3], tile: f32) -> f32 {
         for j in -1..=1 {
             for i in -1..=1 {
                 let b = [i as f32, j as f32, k as f32];
-                let c = [modf(p[0] + b[0], tile), modf(p[1] + b[1], tile), modf(p[2] + b[2], tile)];
+                let c = [
+                    modf(p[0] + b[0], tile),
+                    modf(p[1] + b[1], tile),
+                    modf(p[2] + b[2], tile),
+                ];
                 // the cell's point, one hash per axis
-                let o = [hash13(c, 1031.1031), hash13([c[1] + 7.3, c[2], c[0]], 1031.1031), hash13([c[2] + 3.1, c[0], c[1]], 1031.1031)];
+                let o = [
+                    hash13(c, 1031.1031),
+                    hash13([c[1] + 7.3, c[2], c[0]], 1031.1031),
+                    hash13([c[2] + 3.1, c[0], c[1]], 1031.1031),
+                ];
                 let r = [b[0] - f[0] + o[0], b[1] - f[1] + o[1], b[2] - f[2] + o[2]];
                 best = best.min(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
             }
@@ -85,7 +100,10 @@ fn shape_texel(u: f32, v: f32) -> [f32; 3] {
     let perlin = fbm(c, 7, 4.0, value_noise);
     let cells = fbm(c, 4, 8.0, worley);
     let r = (1.0 + (perlin - 1.0) * 0.9) * (1.0 + (cells - 1.0) * 0.7);
-    let g = 0.625 * fbm(c, 3, 15.0, worley) + 0.25 * fbm(c, 3, 19.0, worley) + 0.125 * fbm(c, 3, 23.0, worley) - 1.0;
+    let g = 0.625 * fbm(c, 3, 15.0, worley)
+        + 0.25 * fbm(c, 3, 19.0, worley)
+        + 0.125 * fbm(c, 3, 23.0, worley)
+        - 1.0;
     let b = 1.0 - fbm([c[0] + 0.5, c[1] + 0.5, c[2] + 0.5], 4, 9.0, worley);
     [r, g + 1.0, b]
 }
@@ -103,9 +121,16 @@ fn to_u8(v: f32) -> u8 {
 }
 
 /// Rows of `n` computed on as many threads as the machine has.
-fn parallel_rows<T: Send + Clone + Default>(n: usize, row_len: usize, f: impl Fn(usize, &mut [T]) + Sync) -> Vec<T> {
+fn parallel_rows<T: Send + Clone + Default>(
+    n: usize,
+    row_len: usize,
+    f: impl Fn(usize, &mut [T]) + Sync,
+) -> Vec<T> {
     let mut out = vec![T::default(); n * row_len];
-    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).max(1);
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .max(1);
     let per = n.div_ceil(threads);
     std::thread::scope(|s| {
         for (k, chunk) in out.chunks_mut(per * row_len).enumerate() {
@@ -158,7 +183,11 @@ pub fn detail_volume() -> Vec<Vec<u8>> {
     let base = parallel_rows::<u8>(n * n, n, |zy, row| {
         let (z, y) = (zy / n, zy % n);
         for (x, v) in row.iter_mut().enumerate() {
-            *v = to_u8(detail_texel((x as f32 + 0.5) / n as f32, (y as f32 + 0.5) / n as f32, (z as f32 + 0.5) / n as f32));
+            *v = to_u8(detail_texel(
+                (x as f32 + 0.5) / n as f32,
+                (y as f32 + 0.5) / n as f32,
+                (z as f32 + 0.5) / n as f32,
+            ));
         }
     });
     let mut levels = vec![base];
@@ -195,7 +224,9 @@ pub struct Noise {
 const CACHE_HEADER: &[u8; 8] = b"OMSCN001"; // bump when the noise algorithm changes
 
 fn levels_size(size: u32, dimensions: u32, bpp: usize) -> usize {
-    (0..=size.trailing_zeros()).map(|m| ((size >> m) as usize).pow(dimensions) * bpp).sum()
+    (0..=size.trailing_zeros())
+        .map(|m| ((size >> m) as usize).pow(dimensions) * bpp)
+        .sum()
 }
 
 fn cache_size() -> usize {
@@ -203,7 +234,9 @@ fn cache_size() -> usize {
 }
 
 fn checksum(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf29ce484222325, |h, b| (h ^ *b as u64).wrapping_mul(0x100000001b3))
+    bytes.iter().fold(0xcbf29ce484222325, |h, b| {
+        (h ^ *b as u64).wrapping_mul(0x100000001b3)
+    })
 }
 
 fn decode_cache(bytes: &[u8]) -> Option<Noise> {
@@ -211,24 +244,33 @@ fn decode_cache(bytes: &[u8]) -> Option<Noise> {
         return None;
     }
     let expected = u64::from_le_bytes(bytes[8..16].try_into().ok()?);
-    if checksum(&bytes[16..]) != expected { return None; }
+    if checksum(&bytes[16..]) != expected {
+        return None;
+    }
     let mut at = 16;
     let mut read = |size: u32, dimensions: u32, bpp: usize| {
-        (0..=size.trailing_zeros()).map(|m| {
-            let len = ((size >> m) as usize).pow(dimensions) * bpp;
-            let level = bytes[at..at + len].to_vec();
-            at += len;
-            level
-        }).collect()
+        (0..=size.trailing_zeros())
+            .map(|m| {
+                let len = ((size >> m) as usize).pow(dimensions) * bpp;
+                let level = bytes[at..at + len].to_vec();
+                at += len;
+                level
+            })
+            .collect()
     };
-    Some(Noise { shape: read(SHAPE_SIZE, 2, 4), detail: read(DETAIL_SIZE, 3, 1) })
+    Some(Noise {
+        shape: read(SHAPE_SIZE, 2, 4),
+        detail: read(DETAIL_SIZE, 3, 1),
+    })
 }
 
 fn encode_cache(noise: &Noise) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(cache_size());
     bytes.extend_from_slice(CACHE_HEADER);
     bytes.extend_from_slice(&[0; 8]);
-    for level in noise.shape.iter().chain(&noise.detail) { bytes.extend_from_slice(level); }
+    for level in noise.shape.iter().chain(&noise.detail) {
+        bytes.extend_from_slice(level);
+    }
     let hash = checksum(&bytes[16..]);
     bytes[8..16].copy_from_slice(&hash.to_le_bytes());
     bytes
@@ -238,13 +280,17 @@ fn cache_path() -> Option<std::path::PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     let home = std::path::PathBuf::from(home);
     // An unavailable home or cache is harmless; do not write into the game/mod folders.
-    home.is_absolute().then(|| home.join(".openomsi/cache/cloud-noise-v1.bin"))
+    home.is_absolute()
+        .then(|| home.join(".openomsi/cache/cloud-noise-v1.bin"))
 }
 
 fn load_noise(path: Option<&std::path::Path>) -> Noise {
     if let Some(path) = path {
         // Bound reads before allocating: an unrelated/corrupt file cannot exhaust memory.
-        if std::fs::metadata(path).ok().is_some_and(|m| m.len() == cache_size() as u64) {
+        if std::fs::metadata(path)
+            .ok()
+            .is_some_and(|m| m.len() == cache_size() as u64)
+        {
             if let Some(noise) = std::fs::read(path).ok().and_then(|b| decode_cache(&b)) {
                 return noise;
             }
@@ -254,10 +300,15 @@ fn load_noise(path: Option<&std::path::Path>) -> Noise {
     let (shape, detail) = std::thread::scope(|s| {
         let a = s.spawn(shape_map);
         let b = s.spawn(detail_volume);
-        (a.join().expect("cloud shape"), b.join().expect("cloud detail"))
+        (
+            a.join().expect("cloud shape"),
+            b.join().expect("cloud detail"),
+        )
     });
     let noise = Noise { shape, detail };
-    if let Some(path) = path { save_noise(path, &noise); }
+    if let Some(path) = path {
+        save_noise(path, &noise);
+    }
     noise
 }
 
@@ -265,16 +316,27 @@ fn save_noise(path: &std::path::Path, noise: &Noise) {
     use std::io::Write;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let Some(parent) = path.parent() else { return };
-    if std::fs::create_dir_all(parent).is_err() { return; }
-    let temp = path.with_extension(format!("{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    if std::fs::create_dir_all(parent).is_err() {
+        return;
+    }
+    let temp = path.with_extension(format!(
+        "{}-{}.tmp",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     let result = (|| -> std::io::Result<()> {
-        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)?;
         file.write_all(&encode_cache(noise))?;
         drop(file);
         // A competing launcher/game may have filled it first. Either complete copy works.
         std::fs::rename(&temp, path)
     })();
-    if result.is_err() { let _ = std::fs::remove_file(temp); }
+    if result.is_err() {
+        let _ = std::fs::remove_file(temp);
+    }
 }
 
 pub fn noise() -> &'static Noise {
@@ -301,7 +363,8 @@ mod tests {
         let mut bad = bytes.clone();
         bad[100] ^= 1;
         assert!(decode_cache(&bad).is_none());
-        let path = std::env::temp_dir().join(format!("omsi-cloud-cache-{}.bin", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("omsi-cloud-cache-{}.bin", std::process::id()));
         save_noise(&path, &generated);
         let disk = load_noise(Some(&path));
         assert_eq!(disk.shape, generated.shape);
@@ -325,7 +388,10 @@ mod tests {
         let shape = shape_map();
         assert_eq!(shape.len(), SHAPE_SIZE.trailing_zeros() as usize + 1);
         let r: Vec<u8> = shape[0].chunks(4).map(|p| p[0]).collect();
-        let (lo, hi) = (r.iter().min().copied().unwrap_or(0), r.iter().max().copied().unwrap_or(0));
+        let (lo, hi) = (
+            r.iter().min().copied().unwrap_or(0),
+            r.iter().max().copied().unwrap_or(0),
+        );
         assert!(hi - lo > 120, "shape R spans {lo}..{hi}");
     }
 }

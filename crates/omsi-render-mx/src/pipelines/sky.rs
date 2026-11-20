@@ -20,18 +20,35 @@ impl SkyBase {
     /// This includes ANGLE's texture-unit fallback, not only the launcher's preview.
     pub(crate) fn new(device: &mx::Device, queue: &mx::Queue, enhanced: bool) -> SkyBase {
         // sky dome
-        let (cloud_shape_view, cloud_detail_view, cloud_sampler, cloud_shape_cpu) = cloud_noise_textures(device, queue, enhanced);
+        let (cloud_shape_view, cloud_detail_view, cloud_sampler, cloud_shape_cpu) =
+            cloud_noise_textures(device, queue, enhanced);
         log::info!("renderer: compiling the sky and clouds shaders");
-        let sky_shader = compile_shader(device, mx::ShaderModuleDescriptor {
-            label: Some("sky"),
-            source: &*(shader_source(enhanced)),
-        });
-        let vanilla_buf = uniform_buffer(device, "vanilla sky", std::mem::size_of::<VanillaSkyUniform>() as u64);
-        SkyBase {  cloud_shape_view, cloud_detail_view, cloud_sampler, cloud_shape_cpu, vanilla_buf, shader: sky_shader,  }
+        let sky_shader = compile_shader(
+            device,
+            mx::ShaderModuleDescriptor {
+                label: Some("sky"),
+                source: &*(shader_source(enhanced)),
+            },
+        );
+        let vanilla_buf = uniform_buffer(
+            device,
+            "vanilla sky",
+            std::mem::size_of::<VanillaSkyUniform>() as u64,
+        );
+        SkyBase {
+            cloud_shape_view,
+            cloud_detail_view,
+            cloud_sampler,
+            cloud_shape_cpu,
+            vanilla_buf,
+            shader: sky_shader,
+        }
     }
 
     pub(crate) fn pipeline_base(&self) -> SkyPipelineBase {
-        SkyPipelineBase { shader: self.shader.clone(),  }
+        SkyPipelineBase {
+            shader: self.shader.clone(),
+        }
     }
 }
 
@@ -42,8 +59,13 @@ pub(crate) struct SkyPipelineBase {
 }
 
 impl SkyPipelineBase {
-    pub(crate) fn pipeline(&self, device: &mx::Device,
-        f: mx::TextureFormat, fs: &str, msaa: u32) -> mx::RenderPipeline {
+    pub(crate) fn pipeline(
+        &self,
+        device: &mx::Device,
+        f: mx::TextureFormat,
+        fs: &str,
+        msaa: u32,
+    ) -> mx::RenderPipeline {
         self.pipeline_for(device, f, fs, msaa, rt_gbuf())
     }
 
@@ -60,37 +82,45 @@ impl SkyPipelineBase {
             step_mode: mx::VertexStepMode::Vertex,
             attributes: &SKY_ATTRIBUTES,
         };
-        compile_pipeline(device, &mx::RenderPipelineDescriptor {
-            label: Some("sky"),
-            vertex: mx::VertexState {
+        compile_pipeline(
+            device,
+            &mx::RenderPipelineDescriptor {
+                label: Some("sky"),
+                vertex: mx::VertexState {
                     constants: &[],
-                module: &self.shader,
-                entry_point: Some("vs_main"),
-                buffers: &[sky_vertex],
-            },
-            primitive: mx::PrimitiveState {
+                    module: &self.shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[sky_vertex],
+                },
+                primitive: mx::PrimitiveState {
                     topology: mx::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                front_face: mx::FrontFace::Ccw,
-                ..Default::default()
-            },
-            // (the dome lies on the far plane: over a cleared depth it covers everything,
-            // over laid depth only what is still empty)
-            depth_stencil: Some(depth_test(mx::CompareFunction::GreaterEqual)),
+                    cull_mode: None,
+                    front_face: mx::FrontFace::Ccw,
+                    ..Default::default()
+                },
+                // (the dome lies on the far plane: over a cleared depth it covers everything,
+                // over laid depth only what is still empty)
+                depth_stencil: Some(depth_test(mx::CompareFunction::GreaterEqual)),
                 multisample: mx::MultisampleState {
-                count: msaa,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(mx::FragmentState {
+                    count: msaa,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(mx::FragmentState {
                     constants: &[],
-                module: &self.shader,
-                entry_point: Some(fs),
-                targets: &color_targets_for(f, None, mx::ColorWrites::COLOR, false, false,
+                    module: &self.shader,
+                    entry_point: Some(fs),
+                    targets: &color_targets_for(
+                        f,
+                        None,
+                        mx::ColorWrites::COLOR,
+                        false,
+                        false,
                         surfaces,
                     ),
-            }),
-        })
+                }),
+            },
+        )
     }
 }
 
@@ -158,7 +188,8 @@ mod tests {
 }
 
 /// The sky's sampler and the dome's vertex and index buffers (and index count).
-pub(crate) fn dome(device: &mx::Device,
+pub(crate) fn dome(
+    device: &mx::Device,
     queue: &mx::Queue,
 ) -> (mx::Sampler, (mx::Buffer, mx::Buffer, u32)) {
     let sky_sampler = device
@@ -187,7 +218,19 @@ pub(crate) fn dome(device: &mx::Device,
             si.extend_from_slice(&[a, b, a + 1, a + 1, b, b + 1]);
         }
     }
-    let sky_vb = buffer_init(device, queue, Some("sky vb"), bytemuck::cast_slice(&sv), mx::BufferUsages::VERTEX,);
-    let sky_ib = buffer_init(device, queue, Some("sky ib"), bytemuck::cast_slice(&si), mx::BufferUsages::INDEX,);
+    let sky_vb = buffer_init(
+        device,
+        queue,
+        Some("sky vb"),
+        bytemuck::cast_slice(&sv),
+        mx::BufferUsages::VERTEX,
+    );
+    let sky_ib = buffer_init(
+        device,
+        queue,
+        Some("sky ib"),
+        bytemuck::cast_slice(&si),
+        mx::BufferUsages::INDEX,
+    );
     (sky_sampler, (sky_vb, sky_ib, si.len() as u32))
 }

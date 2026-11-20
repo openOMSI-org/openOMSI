@@ -62,27 +62,50 @@ pub(crate) fn put_vehicle(v: &mut omsi_sim::VehicleInstance, at: DVec3, heading:
 }
 
 /// The vehicle just placed (`uid`) follows the mouse until it is set down.
-pub(crate) fn begin_placing(menus: &mut crate::app::MenuState, service_msg: &mut Option<(String, f32)>, uid: u64, heading: f64) {
-    menus.placing = Some(Placing { uid, heading, at: None, blocked: false });
+pub(crate) fn begin_placing(
+    menus: &mut crate::app::MenuState,
+    service_msg: &mut Option<(String, f32)>,
+    uid: u64,
+    heading: f64,
+) {
+    menus.placing = Some(Placing {
+        uid,
+        heading,
+        at: None,
+        blocked: false,
+    });
     *service_msg = Some(("Placing: point at the ground, mouse wheel or Q / E turns it, R turns it round, click sets it down, Esc takes it away".into(), 30.0));
 }
 
 impl App {
     /// Every frame while placing: the vehicle where the cursor points.
     pub(crate) fn placing_frame(&mut self) {
-        let Some(pl) = self.menus.placing.as_ref() else { return };
+        let Some(pl) = self.menus.placing.as_ref() else {
+            return;
+        };
         let (uid, heading) = (pl.uid, pl.heading);
         let Some(k) = self.session.placed.iter().position(|q| q.uid == uid) else {
             self.menus.placing = None;
             return;
         };
-        let (Some(w), Some(cam), Some(s)) = (self.world.clone(), self.camera.as_ref(), self.gfx.surface.as_ref()) else { return };
+        let (Some(w), Some(cam), Some(s)) = (
+            self.world.clone(),
+            self.camera.as_ref(),
+            self.gfx.surface.as_ref(),
+        ) else {
+            return;
+        };
         let (o, d) = self.world_cursor_ray(cam, (s.config.width, s.config.height));
         let hit = ground_hit(&w, o, d.as_dvec3(), 400.0);
         // in another vehicle (the own bus, the traffic, another placed one)?
         let blocked = hit
             .map(|at| {
-                let bb = self.session.placed[k].vehicle.ty.def.bounding_box.unwrap_or([2.5, 11.0, 3.0, 0.0, 0.0, 1.5]);
+                let bb = self.session.placed[k]
+                    .vehicle
+                    .ty
+                    .def
+                    .bounding_box
+                    .unwrap_or([2.5, 11.0, 3.0, 0.0, 0.0, 1.5]);
                 let me = Obb::from_box(bb, at, heading);
                 let mut others: Vec<Obb> = Vec::new();
                 let mut add = |v: &omsi_sim::VehicleInstance| {
@@ -116,9 +139,13 @@ impl App {
             pl.blocked = blocked;
         }
         let msg = match (hit, blocked) {
-            (None, _) => "Placing: point at the ground (wheel / Q / E turn, R turns round, Esc takes it away)",
+            (None, _) => {
+                "Placing: point at the ground (wheel / Q / E turn, R turns round, Esc takes it away)"
+            }
             (Some(_), true) => "Placing: it would stand in another vehicle here",
-            (Some(_), false) => "Placing: click to set it down (wheel / Q / E turn, R turns round, Esc takes it away)",
+            (Some(_), false) => {
+                "Placing: click to set it down (wheel / Q / E turn, R turns round, Esc takes it away)"
+            }
         };
         self.service_msg = Some((msg.into(), 0.5));
     }
@@ -132,7 +159,9 @@ impl App {
 
     /// A left click while placing: set down where it stands (true: the click was taken).
     pub(crate) fn placing_click(&mut self) -> bool {
-        let Some(pl) = self.menus.placing.as_ref() else { return false };
+        let Some(pl) = self.menus.placing.as_ref() else {
+            return false;
+        };
         match (pl.at, pl.blocked) {
             (Some(_), false) => {
                 let uid = pl.uid;
@@ -142,13 +171,25 @@ impl App {
                     for _ in 0..3 {
                         q.vehicle.update(1.0 / 30.0);
                     }
-                    let name = format!("{} {}", q.vehicle.ty.def.manufacturer, q.vehicle.ty.def.type_name);
-                    let how = if self.player.is_some() { "Esc menu: Drive the next vehicle" } else { "G at its driver's door" };
-                    self.service_msg = Some((format!("Placed: {} ({how} to drive it)", name.trim()), 5.0));
+                    let name = format!(
+                        "{} {}",
+                        q.vehicle.ty.def.manufacturer, q.vehicle.ty.def.type_name
+                    );
+                    let how = if self.player.is_some() {
+                        "Esc menu: Drive the next vehicle"
+                    } else {
+                        "G at its driver's door"
+                    };
+                    self.service_msg =
+                        Some((format!("Placed: {} ({how} to drive it)", name.trim()), 5.0));
                 }
             }
-            (Some(_), true) => self.service_msg = Some(("It would stand in another vehicle here".into(), 2.0)),
-            (None, _) => self.service_msg = Some(("Point at the ground to set it down".into(), 2.0)),
+            (Some(_), true) => {
+                self.service_msg = Some(("It would stand in another vehicle here".into(), 2.0))
+            }
+            (None, _) => {
+                self.service_msg = Some(("Point at the ground to set it down".into(), 2.0))
+            }
         }
         true
     }
@@ -197,9 +238,16 @@ impl App {
             if let (Some(a), Some(mut ss)) = (self.sound.audio.as_ref(), q.sounds.take()) {
                 ss.stop_all(a);
             }
-            if let (Some(w), Some(r), Some(scene)) = (self.world.clone(), self.renderer.as_ref(), self.scene.as_mut()) {
+            if let (Some(w), Some(r), Some(scene)) = (
+                self.world.clone(),
+                self.renderer.as_ref(),
+                self.scene.as_mut(),
+            ) {
                 if let Some(h) = self.session.humans.as_mut() {
-                    h.evict(crate::humans::BusId::Ai(crate::humans::placed_bus_id(q.uid)), &w);
+                    h.evict(
+                        crate::humans::BusId::Ai(crate::humans::placed_bus_id(q.uid)),
+                        &w,
+                    );
                 }
                 if let Some(mut d) = q.driver.take() {
                     d.hide(r, scene);
@@ -213,18 +261,29 @@ impl App {
                 }
             }
         }
-        self.service_msg = Some((omsi_ui::i18n::tr_fill("{n} placed vehicle(s) removed", &[("{n}", &n.to_string())]), 3.0));
+        self.service_msg = Some((
+            omsi_ui::i18n::tr_fill("{n} placed vehicle(s) removed", &[("{n}", &n.to_string())]),
+            3.0,
+        ));
     }
 
     /// Escape while placing: the vehicle goes again.
     pub(crate) fn placing_cancel(&mut self) {
-        let Some(pl) = self.menus.placing.take() else { return };
-        let Some(k) = self.session.placed.iter().position(|q| q.uid == pl.uid) else { return };
+        let Some(pl) = self.menus.placing.take() else {
+            return;
+        };
+        let Some(k) = self.session.placed.iter().position(|q| q.uid == pl.uid) else {
+            return;
+        };
         let mut q = self.session.placed.remove(k);
         if let (Some(a), Some(mut ss)) = (self.sound.audio.as_ref(), q.sounds.take()) {
             ss.stop_all(a);
         }
-        if let (Some(w), Some(r), Some(scene)) = (self.world.clone(), self.renderer.as_ref(), self.scene.as_mut()) {
+        if let (Some(w), Some(r), Some(scene)) = (
+            self.world.clone(),
+            self.renderer.as_ref(),
+            self.scene.as_mut(),
+        ) {
             if let Some(mut d) = q.driver.take() {
                 d.hide(r, scene);
             }

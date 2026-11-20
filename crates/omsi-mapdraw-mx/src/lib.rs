@@ -3,8 +3,8 @@
 //! map by `omsi_scene::mapgen`) as triangles (`MapData`), and the navigator's roads from the
 //! traffic network: their meshes, the route with its arrows, the street names (`roads`).
 
+mod mesh;
 pub mod roads;
 pub mod style;
-mod mesh;
 
-pub use mesh::{GroundLook, MapData, MODEL_TRIANGLES};
+pub use mesh::{GroundLook, MODEL_TRIANGLES, MapData};

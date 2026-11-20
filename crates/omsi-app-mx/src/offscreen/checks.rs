@@ -33,13 +33,33 @@ fn check_entries(world: &World) {
             let q = ep.quat;
             let qyaw = (2.0 * q[1].atan2(q[3])).to_degrees();
             let rec = crate::spawn::recorded_entry_pos(ep, pos);
-            log::info!("entry {:3} \"{}\": object heading {:.1}, record quaternion yaw {:.1} (q {:?}), object at ({:.1}, {:.1}, {:.1}), recorded at {:?}", ep.index, ep.name, rot[0], qyaw, q, pos.x, pos.y, pos.z, rec.map(|r| (r.x, r.y, r.z)));
+            log::info!(
+                "entry {:3} \"{}\": object heading {:.1}, record quaternion yaw {:.1} (q {:?}), object at ({:.1}, {:.1}, {:.1}), recorded at {:?}",
+                ep.index,
+                ep.name,
+                rot[0],
+                qyaw,
+                q,
+                pos.x,
+                pos.y,
+                pos.z,
+                rec.map(|r| (r.x, r.y, r.z))
+            );
             let road = world.ground_height(pos.x, pos.y);
             let walk = world.walk_height(pos.x, pos.y);
             let terrain = world.ground_terrain(pos.x, pos.y);
             if road.is_none() {
                 bare += 1;
-                log::info!("entry {:3} \"{}\" at ({:.0}, {:.0}) heading {:.0}: NO ROAD (surface {:?}, terrain {:?})", ep.index, ep.name, pos.x, pos.y, rot[0], walk, terrain);
+                log::info!(
+                    "entry {:3} \"{}\" at ({:.0}, {:.0}) heading {:.0}: NO ROAD (surface {:?}, terrain {:?})",
+                    ep.index,
+                    ep.name,
+                    pos.x,
+                    pos.y,
+                    rot[0],
+                    walk,
+                    terrain
+                );
             }
         }
         log::info!(
@@ -56,8 +76,16 @@ fn check_obstacles(world: &World, traffic: Option<&traffic::Traffic>) {
         if let Some(t) = traffic.as_ref() {
             let boxes = world.data.peek().lists.collision.clone();
             // (parked cars stand beside the lanes by design; the traffic steers round them)
-            let parked: std::collections::HashSet<i64> = world.tile_state.lock().values().flat_map(|st| st.parked_boxes.iter().map(|b| b.id).collect::<Vec<_>>()).collect();
-            let mut hits: std::collections::BTreeMap<i64, (omsi_sim::collision::Obb, usize, DVec3)> = Default::default();
+            let parked: std::collections::HashSet<i64> = world
+                .tile_state
+                .lock()
+                .values()
+                .flat_map(|st| st.parked_boxes.iter().map(|b| b.id).collect::<Vec<_>>())
+                .collect();
+            let mut hits: std::collections::BTreeMap<
+                i64,
+                (omsi_sim::collision::Obb, usize, DVec3),
+            > = Default::default();
             let mut probes = 0usize;
             for l in t
                 .net
@@ -73,13 +101,21 @@ fn check_obstacles(world: &World, traffic: Option<&traffic::Traffic>) {
                     probes += 1;
                     // a bus body: 2.5 m wide, from 0.35 m over the lane (its floor clears
                     // kerbs and covers) to 3.2 m
-                    let probe = omsi_sim::collision::Obb::from_box([2.4, 2.0, 2.85, 0.0, 0.0, 1.775], p, hdg as f64);
+                    let probe = omsi_sim::collision::Obb::from_box(
+                        [2.4, 2.0, 2.85, 0.0, 0.0, 1.775],
+                        p,
+                        hdg as f64,
+                    );
                     // pitched with the lane, as a bus on it is
                     let (ahead, behind) = (l.at((s + 1.0).min(len)).0, l.at((s - 3.0).max(0.0)).0);
                     let fwd = (ahead - behind).try_normalize().unwrap_or(DVec3::Y);
                     let right = fwd.cross(DVec3::Z).normalize_or(DVec3::X);
                     let up = right.cross(fwd);
-                    let solid = omsi_sim::collision::Box3 { center: p + up * 1.775, axes: [right, fwd, up], half: DVec3::new(1.2, 1.0, 1.425) };
+                    let solid = omsi_sim::collision::Box3 {
+                        center: p + up * 1.775,
+                        axes: [right, fwd, up],
+                        half: DVec3::new(1.2, 1.0, 1.425),
+                    };
                     for b in boxes.obstacles_near_solid(&probe, Some(&solid)) {
                         if b.overlaps(&probe) && !parked.contains(&b.id) {
                             hits.entry(b.id).or_insert((b, 0, p)).1 += 1;
@@ -87,16 +123,38 @@ fn check_obstacles(world: &World, traffic: Option<&traffic::Traffic>) {
                     }
                 }
             }
-            log::info!("obstacle check: {probes} lane points, {} obstacle boxes stand on a driving lane", hits.len());
+            log::info!(
+                "obstacle check: {probes} lane points, {} obstacle boxes stand on a driving lane",
+                hits.len()
+            );
             // `OMSI_LANES_NEAR=x,y,r`: the driving lanes passing there (where to put a test bus)
             if let Some(v) = omsi_cfg::flags::OMSI_LANES_NEAR.var() {
                 let v: Vec<f64> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
                 if v.len() == 3 {
                     let c = glam::DVec2::new(v[0], v[1]);
-                    for (i, l) in t.net.lanes.iter().enumerate().filter(|(_, l)| l.kind == omsi_sim::traffic::LaneKind::Street) {
-                        if let Some(k) = l.points.iter().position(|p| (p.truncate() - c).length() < v[2]) {
+                    for (i, l) in t
+                        .net
+                        .lanes
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, l)| l.kind == omsi_sim::traffic::LaneKind::Street)
+                    {
+                        if let Some(k) = l
+                            .points
+                            .iter()
+                            .position(|p| (p.truncate() - c).length() < v[2])
+                        {
                             let p = l.points[k];
-                            log::info!("  lane {i} {} at ({:.1}, {:.1}, {:.1}) heading {:.1}, {:.0} m long, width {:.1}", l.name, p.x, p.y, p.z, l.headings[k], l.length(), l.width);
+                            log::info!(
+                                "  lane {i} {} at ({:.1}, {:.1}, {:.1}) heading {:.1}, {:.0} m long, width {:.1}",
+                                l.name,
+                                p.x,
+                                p.y,
+                                p.z,
+                                l.headings[k],
+                                l.length(),
+                                l.width
+                            );
                         }
                     }
                 }
@@ -104,7 +162,16 @@ fn check_obstacles(world: &World, traffic: Option<&traffic::Traffic>) {
             for (id, (b, n, p)) in &hits {
                 log::info!(
                     "  obstacle key {id} at ({:.1}, {:.1}) z {:.1}..{:.1} half {:.1}x{:.1} hdg {:.0}: {n} lane points, first at ({:.1}, {:.1}, {:.1})",
-                    b.center.x, b.center.y, b.z0, b.z1, b.half.x, b.half.y, b.heading.to_degrees(), p.x, p.y, p.z
+                    b.center.x,
+                    b.center.y,
+                    b.z0,
+                    b.z1,
+                    b.half.x,
+                    b.half.y,
+                    b.heading.to_degrees(),
+                    p.x,
+                    p.y,
+                    p.z
                 );
             }
         }
@@ -118,7 +185,12 @@ fn check_wheels(world: &World, traffic: Option<&traffic::Traffic>) {
     if omsi_cfg::flags::OMSI_CHECK_WHEELS.is_set() {
         if let Some(t) = traffic.as_ref() {
             let (mut points, mut walls, mut steps) = (0usize, Vec::new(), Vec::new());
-            for l in t.net.lanes.iter().filter(|l| l.kind == omsi_sim::traffic::LaneKind::Street && !l.invisible) {
+            for l in t
+                .net
+                .lanes
+                .iter()
+                .filter(|l| l.kind == omsi_sim::traffic::LaneKind::Street && !l.invisible)
+            {
                 let len = l.length();
                 let mut s = 1.0f32;
                 while s < len - 1.0 {
@@ -147,17 +219,31 @@ fn check_wheels(world: &World, traffic: Option<&traffic::Traffic>) {
                     }
                 }
             }
-            log::info!("wheel check: {points} wheel points, {} under a face (a wall to the tyre), {} off the lane's height by more than 30 cm", walls.len(), steps.len());
+            log::info!(
+                "wheel check: {points} wheel points, {} under a face (a wall to the tyre), {} off the lane's height by more than 30 cm",
+                walls.len(),
+                steps.len()
+            );
             let mut hist = [0usize; 17];
             for (_, d) in &walls {
                 hist[((d * 10.0) as usize).min(16)] += 1;
             }
             log::info!("  wall faces by height over the lane (0.1 m steps from 0): {hist:?}");
             for (w, d) in walls.iter().take(40) {
-                log::info!("  wall at ({:.1}, {:.1}, {:.1}): face {d:+.2} m over the lane", w.x, w.y, w.z);
+                log::info!(
+                    "  wall at ({:.1}, {:.1}, {:.1}): face {d:+.2} m over the lane",
+                    w.x,
+                    w.y,
+                    w.z
+                );
             }
             for (w, d) in steps.iter().take(40) {
-                log::info!("  ground at ({:.1}, {:.1}, {:.1}): {d:+.2} m off the lane", w.x, w.y, w.z);
+                log::info!(
+                    "  ground at ({:.1}, {:.1}, {:.1}): {d:+.2} m off the lane",
+                    w.x,
+                    w.y,
+                    w.z
+                );
             }
         }
     }
@@ -182,7 +268,10 @@ fn road_rules(traffic: Option<&traffic::Traffic>) {
                 .iter()
                 .filter(|l| l.density > 0.001 && l.density < 0.9)
                 .count();
-            log::info!("traffic rules: {} street lanes, {no_cars} closed to cars, {zero} with density 0, {quiet} quieter than normal", street.len());
+            log::info!(
+                "traffic rules: {} street lanes, {no_cars} closed to cars, {zero} with density 0, {quiet} quieter than normal",
+                street.len()
+            );
         }
     }
 }
@@ -255,7 +344,10 @@ fn check_roads(world: &World, traffic: Option<&traffic::Traffic>) {
             // and a half more (up to the hub and 5 cm the wheels used to climb anyway).
             wheel_faces(world, t);
             runs.sort_by(|a, b| b.1.total_cmp(&a.1));
-            log::info!("road check: {naked} of {checked} points along the driving lanes have no road surface under them ({:.1}%)", naked as f32 / checked.max(1) as f32 * 100.0);
+            log::info!(
+                "road check: {naked} of {checked} points along the driving lanes have no road surface under them ({:.1}%)",
+                naked as f32 / checked.max(1) as f32 * 100.0
+            );
             // OMSI_CHECK_SPLINES: chained splines whose ends do not meet in height
             if omsi_cfg::flags::OMSI_CHECK_SPLINES.is_set() {
                 spline_check(world);
@@ -336,9 +428,21 @@ fn buried_roads(world: &World, t: &traffic::Traffic) {
             }
         }
     }
-    log::info!("slightly buried: {} road points 0.5..15 cm under the ground; e.g. {:?}", slight.len(), slight.iter().step_by((slight.len() / 6).max(1)).take(6).map(|(p, o)| format!("({:.0}, {:.0}, {:.1}) {:.2} m", p.x, p.y, p.z, o)).collect::<Vec<_>>());
+    log::info!(
+        "slightly buried: {} road points 0.5..15 cm under the ground; e.g. {:?}",
+        slight.len(),
+        slight
+            .iter()
+            .step_by((slight.len() / 6).max(1))
+            .take(6)
+            .map(|(p, o)| format!("({:.0}, {:.0}, {:.1}) {:.2} m", p.x, p.y, p.z, o))
+            .collect::<Vec<_>>()
+    );
     worst_b.sort_by(|a, b| b.1.total_cmp(&a.1));
-    log::info!("buried check: {buried} of {checked2} road points have ground standing over them ({:.1}%)", buried as f32 / checked2.max(1) as f32 * 100.0);
+    log::info!(
+        "buried check: {buried} of {checked2} road points have ground standing over them ({:.1}%)",
+        buried as f32 / checked2.max(1) as f32 * 100.0
+    );
     for (lo, hi) in [
         (0.15, 0.3),
         (0.3, 0.6),
@@ -368,9 +472,7 @@ fn wheel_faces(world: &World, t: &traffic::Traffic) {
     let mut faces: Vec<(DVec3, f64, f32)> = Vec::new();
     // (a lane's own height is not always its road's: on some ramps it runs a metre
     // below the surface)
-    let surface = |p: DVec3| {
-        world.data.peek().drive_probe(p.x, p.y, p.z + 1.5).below
-    };
+    let surface = |p: DVec3| world.data.peek().drive_probe(p.x, p.y, p.z + 1.5).below;
     for l in t
         .net
         .lanes
@@ -388,11 +490,7 @@ fn wheel_faces(world: &World, t: &traffic::Traffic) {
                 continue;
             };
             rolled += 1;
-            let wheel = world.data.peek().drive_probe(
-                p.x,
-                p.y,
-                g + climb,
-            );
+            let wheel = world.data.peek().drive_probe(p.x, p.y, g + climb);
             match wheel.above.filter(|z| *z < g + overhead) {
                 Some(face) => {
                     if face - g <= hub {
@@ -408,7 +506,11 @@ fn wheel_faces(world: &World, t: &traffic::Traffic) {
             }
         }
     }
-    log::info!("wheel check: {} faces a bus wheel cannot climb along {:.0} km of driving lanes: {steep} steps of {climb:.2}..{hub:.2} m (climbed before), {high} higher", steep + high, rolled as f64 * 0.1 / 1000.0);
+    log::info!(
+        "wheel check: {} faces a bus wheel cannot climb along {:.0} km of driving lanes: {steep} steps of {climb:.2}..{hub:.2} m (climbed before), {high} higher",
+        steep + high,
+        rolled as f64 * 0.1 / 1000.0
+    );
     // one line per place (faces within 10 m of each other), lowest first
     let mut places: Vec<(DVec3, f64, f64, usize, f32)> = Vec::new();
     for (p, h, dir) in &faces {
@@ -442,17 +544,32 @@ fn spline_check(world: &World) {
     let mut bad: Vec<(f64, String)> = Vec::new();
     for (id, (a, b, prev, next, file)) in ends.iter() {
         for (me, other) in [(*b, *next), (*a, *prev)] {
-            let Some((oa, ob, ..)) = ends.get(&other) else { continue };
+            let Some((oa, ob, ..)) = ends.get(&other) else {
+                continue;
+            };
             // the other's end that lies at this one (a chain may run either way)
-            let there = if (oa.truncate() - me.truncate()).length() <= (ob.truncate() - me.truncate()).length() { *oa } else { *ob };
-            let (d2, dz) = ((there.truncate() - me.truncate()).length(), (there.z - me.z).abs());
+            let there = if (oa.truncate() - me.truncate()).length()
+                <= (ob.truncate() - me.truncate()).length()
+            {
+                *oa
+            } else {
+                *ob
+            };
+            let (d2, dz) = (
+                (there.truncate() - me.truncate()).length(),
+                (there.z - me.z).abs(),
+            );
             if d2 < 1.0 && dz > 0.1 && id < &other {
                 bad.push((dz, format!("spline {id} ({file}) and {other}: {dz:.2} m apart in height at ({:.0}, {:.0}, {:.2})", me.x, me.y, me.z)));
             }
         }
     }
     bad.sort_by(|x, y| y.0.total_cmp(&x.0));
-    log::info!("spline check: {} of {} chained ends differ in height by over 10 cm", bad.len(), ends.len());
+    log::info!(
+        "spline check: {} of {} chained ends differ in height by over 10 cm",
+        bad.len(),
+        ends.len()
+    );
     for (_, l) in bad.iter().take(15) {
         log::info!("  {l}");
     }
@@ -463,10 +580,18 @@ fn probe_grid(world: &World) {
     // rows of centimetres relative to the middle ('.' where it is the same, '#' where the
     // ground there is more than 5 cm lower: a gap in the road the wheels fall through)
     if let Some(spec) = omsi_cfg::flags::OMSI_PROBE_GRID.var() {
-        let v: Vec<f64> = spec.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+        let v: Vec<f64> = spec
+            .split(',')
+            .filter_map(|t| t.trim().parse().ok())
+            .collect();
         if v.len() >= 4 {
             let (cx, cy, half, step) = (v[0], v[1], v[2], v[3].max(0.001));
-            let mid = world.data.peek().drive_probe(cx, cy, 1e6).below.unwrap_or(0.0);
+            let mid = world
+                .data
+                .peek()
+                .drive_probe(cx, cy, 1e6)
+                .below
+                .unwrap_or(0.0);
             let n = (half / step).round() as i64;
             for j in (-n..=n).rev() {
                 let row: String = (-n..=n)
@@ -519,7 +644,10 @@ fn probe_line(world: &World) {
                     .and_then(|s| s.sample(lx, ly));
                 let top = terrain.map(|t| t as f64 + 30.0).unwrap_or(1e6);
                 let wheel = world.data.peek().drive_probe(x, y, top);
-                log::info!("probe ({x:.1}, {y:.1}) tile ({tx}, {ty}) local ({lx:.1}, {ly:.1}): terrain {terrain:?} surface {surface:?} wheels {:?}", wheel.below);
+                log::info!(
+                    "probe ({x:.1}, {y:.1}) tile ({tx}, {ty}) local ({lx:.1}, {ly:.1}): terrain {terrain:?} surface {surface:?} wheels {:?}",
+                    wheel.below
+                );
             }
         }
     }
@@ -553,8 +681,7 @@ pub(super) fn road_photo(
                 let mut s = 3.0f32;
                 // the carriageway itself, and the verge a few metres to either side, which
                 // in a city street is paved too
-                let side: f64 = omsi_cfg::flags::OMSI_ROAD_PHOTO_SIDE.parse()
-                    .unwrap_or(0.0);
+                let side: f64 = omsi_cfg::flags::OMSI_ROAD_PHOTO_SIDE.parse().unwrap_or(0.0);
                 while s < len {
                     let (p, h) = l.at(s);
                     let a = (h as f64).to_radians();
@@ -566,7 +693,12 @@ pub(super) fn road_photo(
             // a spread sample so one long street cannot dominate
             let cap: usize = omsi_cfg::flags::OMSI_ROAD_PHOTO_N.parse().unwrap_or(400);
             let step = (points.len() / cap.max(1)).max(1);
-            let sample: Vec<(DVec3, f64)> = points.iter().copied().zip(headings.iter().copied()).step_by(step).collect();
+            let sample: Vec<(DVec3, f64)> = points
+                .iter()
+                .copied()
+                .zip(headings.iter().copied())
+                .step_by(step)
+                .collect();
             let (mut green, mut checked) = (0usize, 0usize);
             let mut spots: Vec<(DVec3, [u8; 3])> = Vec::new();
             let mut holes: Vec<(usize, DVec3, Camera)> = Vec::new();
@@ -603,10 +735,29 @@ pub(super) fn road_photo(
                 if omsi_cfg::flags::OMSI_HOLE_PHOTO.is_set() {
                     // (at a slant: the lower half of the picture only, which is all under the
                     // horizon)
-                    let deep = if slant.is_some() { Camera { near: 0.3, far: 400.0, ..cam } } else { Camera { near: 20.0, far: 65.0, ..cam } };
+                    let deep = if slant.is_some() {
+                        Camera {
+                            near: 0.3,
+                            far: 400.0,
+                            ..cam
+                        }
+                    } else {
+                        Camera {
+                            near: 20.0,
+                            far: 65.0,
+                            ..cam
+                        }
+                    };
                     if let Ok(px) = renderer.render_to_image(scene, 96, 96, &deep, lighting) {
                         let from = if slant.is_some() { 48 * 96 * 4 } else { 0 };
-                        let sky = px[from..].chunks_exact(4).filter(|c| c[2] as i32 > c[0] as i32 + 30 && c[2] as i32 > c[1] as i32 + 8 && c[2] > 150).count();
+                        let sky = px[from..]
+                            .chunks_exact(4)
+                            .filter(|c| {
+                                c[2] as i32 > c[0] as i32 + 30
+                                    && c[2] as i32 > c[1] as i32 + 8
+                                    && c[2] > 150
+                            })
+                            .count();
                         if sky > 3 {
                             holes.push((sky, *p, deep));
                         }
@@ -630,12 +781,29 @@ pub(super) fn road_photo(
             }
             if omsi_cfg::flags::OMSI_HOLE_PHOTO.is_set() {
                 holes.sort_by(|a, b| b.0.cmp(&a.0));
-                log::info!("hole photo: {} of {checked} places show the sky through the ground", holes.len());
+                log::info!(
+                    "hole photo: {} of {checked} places show the sky through the ground",
+                    holes.len()
+                );
                 for (n, p, c) in holes.iter().take(40) {
-                    log::info!("   {n} sky pixels at ({:.1}, {:.1}, {:.2})  (--cam {:.1},{:.1},{:.1},{:.0},{:.1},{:.0})", p.x, p.y, p.z, c.position.x, c.position.y, c.position.z, c.yaw, c.pitch, c.fov_deg);
+                    log::info!(
+                        "   {n} sky pixels at ({:.1}, {:.1}, {:.2})  (--cam {:.1},{:.1},{:.1},{:.0},{:.1},{:.0})",
+                        p.x,
+                        p.y,
+                        p.z,
+                        c.position.x,
+                        c.position.y,
+                        c.position.z,
+                        c.yaw,
+                        c.pitch,
+                        c.fov_deg
+                    );
                 }
             }
-            log::info!("road photo: {green} of {checked} places along the carriageways show ground instead of road ({:.1} %)", green as f32 / checked.max(1) as f32 * 100.0);
+            log::info!(
+                "road photo: {green} of {checked} places along the carriageways show ground instead of road ({:.1} %)",
+                green as f32 / checked.max(1) as f32 * 100.0
+            );
             for (p, c) in &spots {
                 log::info!(
                     "   green at ({:.1}, {:.1}, {:.2}) rgb {:?}  (--cam {:.0},{:.0},{:.0},0,-89)",

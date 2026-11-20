@@ -1,5 +1,5 @@
 use super::*;
-use crate::perf_overlay::{graph_scale, Part, PerfOverlay, Sample, HISTORY};
+use crate::perf_overlay::{HISTORY, Part, PerfOverlay, Sample, graph_scale};
 
 const GRAPH_H: u32 = 64;
 const GRAPH_EVERY: f32 = 1.0 / 30.0;
@@ -272,7 +272,14 @@ impl Ui {
             0.0
         };
         let h = pad + lh + 6.0 * s + gh + 10.0 * s + legend_h + lh * line_count as f32 + pad;
-        self.hud_card(r, scene, [x0, y0, x0 + w, y0 + h], hud::RADIUS * s, self.text.backdrop, s);
+        self.hud_card(
+            r,
+            scene,
+            [x0, y0, x0 + w, y0 + h],
+            hud::RADIUS * s,
+            self.text.backdrop,
+            s,
+        );
         let put = |scene: &mut Scene, l: &Placed, x: f32, y: f32| {
             let (x, y) = (x.round(), (y + (lh - l.h) * 0.5).round());
             scene.overlays.push((l.tex, [x, y, x + l.cap, y + l.h]));
@@ -282,7 +289,18 @@ impl Ui {
         put(scene, &head, x0 + w - pad - head.w, y);
         y += lh + 6.0 * s;
         let well = self.hud.shade(self.hud.ink, 0.06, self.text.backdrop);
-        self.text.rounded(r, scene, [x0 + pad - 4.0 * s, y - 4.0 * s, x0 + w - pad + 4.0 * s, y + gh + 4.0 * s], 8.0 * s, well);
+        self.text.rounded(
+            r,
+            scene,
+            [
+                x0 + pad - 4.0 * s,
+                y - 4.0 * s,
+                x0 + w - pad + 4.0 * s,
+                y + gh + 4.0 * s,
+            ],
+            8.0 * s,
+            well,
+        );
         if let Some(tex) = graph {
             scene
                 .overlays
@@ -301,7 +319,13 @@ impl Ui {
             let x = x0 + pad + (i % 2) as f32 * (cw + 12.0 * s);
             let ry = y + (i / 2) as f32 * lh;
             let sy = (ry + (lh - swatch) * 0.5).round();
-            self.text.rounded(r, scene, [x, sy, x + swatch, sy + swatch], swatch * 0.5, p.color());
+            self.text.rounded(
+                r,
+                scene,
+                [x, sy, x + swatch, sy + swatch],
+                swatch * 0.5,
+                p.color(),
+            );
             put(scene, name, x + swatch + 6.0 * s, ry);
             put(scene, value, x + cw - value.w, ry);
         }

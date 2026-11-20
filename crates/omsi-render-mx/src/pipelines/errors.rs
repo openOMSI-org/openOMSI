@@ -39,7 +39,9 @@ const INVALID_FLOOD: u64 = 1500;
 
 pub(crate) fn install(
     device: &mx::Device,
-    format: mx::TextureFormat, options: &RenderOptions) -> ErrorFlags {
+    format: mx::TextureFormat,
+    options: &RenderOptions,
+) -> ErrorFlags {
     let msaa = options.msaa;
     // A GPU error while multisampling is on is logged and switches multisampling off
     // at the next frame (`render_inner`). Otherwise it is logged and the game goes on:
@@ -168,7 +170,11 @@ mod msaa_blame_tests {
         let oom = mx::Error::OutOfMemory("a texture".into());
         assert!(!blames_msaa(&oom, "Out of Memory", 4));
         let invalid = mx::Error::Device("v".into());
-        assert!(!blames_msaa(&invalid, "BindGroup with 'camera' label is invalid", 4));
+        assert!(!blames_msaa(
+            &invalid,
+            "BindGroup with 'camera' label is invalid",
+            4
+        ));
         assert!(blames_msaa(&invalid, "Sample count 3 is invalid", 4));
         assert!(blames_msaa(&invalid, "Color state [0] is invalid", 4));
         assert!(!blames_msaa(&invalid, "Sample count 3 is invalid", 1));

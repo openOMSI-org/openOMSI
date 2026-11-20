@@ -77,7 +77,11 @@ pub fn vehicle_boxes(v: &omsi_sim::VehicleInstance) -> Vec<(DVec3, f64, [f32; 6]
     let front = v.ty.def.bounding_box.map(|bb| (v.position, v.heading, bb));
     let parts = v.trailers.iter().filter_map(|t| {
         // a part coupled the other way round stands turned about its own origin
-        let heading = if t.reversed { t.heading + 180.0 } else { t.heading };
+        let heading = if t.reversed {
+            t.heading + 180.0
+        } else {
+            t.heading
+        };
         t.ty.def.bounding_box.map(|bb| (t.position, heading, bb))
     });
     front.into_iter().chain(parts).collect()
@@ -85,7 +89,15 @@ pub fn vehicle_boxes(v: &omsi_sim::VehicleInstance) -> Vec<(DVec3, f64, [f32; 6]
 
 impl Rain {
     pub fn new() -> Rain {
-        Rain { kind: 0, rate: 0.0, quality: 2, drop_mm: 2.0, eye: Vec3::ZERO, temp: 10.0, cover: None }
+        Rain {
+            kind: 0,
+            rate: 0.0,
+            quality: 2,
+            drop_mm: 2.0,
+            eye: Vec3::ZERO,
+            temp: 10.0,
+            cover: None,
+        }
     }
 
     /// `kind`: 0 none, 1 rain, 2 snow; `rate` 0..1; `quality` the rain's (see [`quality_of`]).
@@ -173,7 +185,12 @@ fn make_snow_on_glass() -> omsi_texture::Image {
         let (ix, iy) = (x.floor(), y.floor());
         let (fx, fy) = (x - ix, y - iy);
         let (sx, sy) = (fx * fx * (3.0 - 2.0 * fx), fy * fy * (3.0 - 2.0 * fy));
-        let at = |dx: i32, dy: i32| hash((ix as i32 + dx).rem_euclid(n) + shift, (iy as i32 + dy).rem_euclid(n) + shift)[0];
+        let at = |dx: i32, dy: i32| {
+            hash(
+                (ix as i32 + dx).rem_euclid(n) + shift,
+                (iy as i32 + dy).rem_euclid(n) + shift,
+            )[0]
+        };
         let (a, b, c, d) = (at(0, 0), at(1, 0), at(0, 1), at(1, 1));
         (a + (b - a) * sx) + ((c + (d - c) * sx) - (a + (b - a) * sx)) * sy
     };
@@ -182,18 +199,31 @@ fn make_snow_on_glass() -> omsi_texture::Image {
     let mut rgba = vec![255u8; SIDE * SIDE * 4];
     for py in 0..SIDE {
         for px in 0..SIDE {
-            let (u, v) = ((px as f32 + 0.5) / SIDE as f32, (py as f32 + 0.5) / SIDE as f32);
+            let (u, v) = (
+                (px as f32 + 0.5) / SIDE as f32,
+                (py as f32 + 0.5) / SIDE as f32,
+            );
             let mut flakes = 0.0f32;
             for (layer, n) in CRYSTALS.iter().enumerate() {
                 let (x, y) = (u * *n as f32, v * *n as f32);
                 let (cx, cy) = (x.floor() as i32, y.floor() as i32);
-                let h = hash(cx.rem_euclid(*n) + layer as i32 * 37, cy.rem_euclid(*n) + layer as i32 * 37);
-                let h2 = hash(cx.rem_euclid(*n) + layer as i32 * 37 + 91, cy.rem_euclid(*n) + layer as i32 * 37 + 13);
+                let h = hash(
+                    cx.rem_euclid(*n) + layer as i32 * 37,
+                    cy.rem_euclid(*n) + layer as i32 * 37,
+                );
+                let h2 = hash(
+                    cx.rem_euclid(*n) + layer as i32 * 37 + 91,
+                    cy.rem_euclid(*n) + layer as i32 * 37 + 13,
+                );
                 let (ox, oy) = (cx as f32 + 0.25 + 0.5 * h[0], cy as f32 + 0.25 + 0.5 * h[1]);
                 let r = 0.16 + 0.2 * h2[0];
                 // (a crystal shows once the cover passes its own threshold: all of the
                 // larger layer's and most of the fine one's, at full cover)
-                let shown = if h2[1] <= if layer == 1 { 0.85 } else { 1.15 } { 1.0 } else { 0.0 };
+                let shown = if h2[1] <= if layer == 1 { 0.85 } else { 1.15 } {
+                    1.0
+                } else {
+                    0.0
+                };
                 let edge = 1.0 - smooth(r * 0.55, r, ((x - ox).powi(2) + (y - oy).powi(2)).sqrt());
                 flakes = flakes.max(shown * edge * (0.6 + 0.4 * h[0]));
             }
@@ -238,17 +268,26 @@ mod tests {
     #[test]
     fn snow_on_glass_has_mip_levels_and_stays_white() {
         let img = super::snow_on_glass(std::path::Path::new("/nonexistent"));
-        assert!(img.rgba.chunks_exact(4).all(|p| p[..3].iter().all(|c| *c >= 224)));
+        assert!(
+            img.rgba
+                .chunks_exact(4)
+                .all(|p| p[..3].iter().all(|c| *c >= 224))
+        );
         let instance = mx::Instance::with_backends(mx::Backends::NOOP);
         let renderer = pollster::block_on(omsi_render::Renderer::new_with(
             &instance,
             None,
             Some(mx::TextureFormat::Rgba8UnormSrgb),
-            omsi_render::RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
+            omsi_render::RenderOptions {
+                msaa: 1,
+                shadow_size: 1024,
+                ..Default::default()
+            },
         ))
         .expect("noop renderer");
         let mut scene = renderer.new_scene();
-        let id = super::add_snow_on_glass(&renderer, &mut scene, std::path::Path::new("/nonexistent"));
+        let id =
+            super::add_snow_on_glass(&renderer, &mut scene, std::path::Path::new("/nonexistent"));
         assert_eq!(renderer.texture_levels(&scene, id), Some((512, 512, 10)));
     }
 
@@ -261,7 +300,11 @@ mod tests {
             &instance,
             None,
             Some(mx::TextureFormat::Rgba8UnormSrgb),
-            omsi_render::RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
+            omsi_render::RenderOptions {
+                msaa: 1,
+                shadow_size: 1024,
+                ..Default::default()
+            },
         ))
         .expect("noop renderer");
         let mut scene = renderer.new_scene();
@@ -272,7 +315,11 @@ mod tests {
         }
         let r = scene.rainfall;
         assert_eq!(r.rate, 1.0);
-        assert!((r.eye_velocity - Vec3::X * 10.0).length() < 0.1, "{:?}", r.eye_velocity);
+        assert!(
+            (r.eye_velocity - Vec3::X * 10.0).length() < 0.1,
+            "{:?}",
+            r.eye_velocity
+        );
         assert_eq!(r.wind, Vec3::X * 3.0);
         rain.set(2, 1.0, 2);
         rain.tick(0.05, Vec3::ZERO, Vec3::ZERO, &mut scene);
@@ -304,7 +351,10 @@ mod tests {
     fn the_snow_cover_builds_up_and_thaws() {
         let heavy = snow_cover(2, 1.0, -3.0, 600.0, 0.0);
         let light = snow_cover(2, 0.1, -3.0, 600.0, 0.0);
-        assert!(heavy > 0.6 && heavy < 0.8 && light < heavy / 3.0, "{heavy} {light}");
+        assert!(
+            heavy > 0.6 && heavy < 0.8 && light < heavy / 3.0,
+            "{heavy} {light}"
+        );
         assert_eq!(snow_cover(2, 1.0, -3.0, 2000.0, 0.0), 1.0);
         assert_eq!(snow_cover(2, 1.0, 5.0, 600.0, 0.0), 0.0);
         assert_eq!(snow_cover(0, 0.0, -5.0, 3600.0, 0.8), 0.8);
@@ -338,9 +388,18 @@ mod tests {
             }
         }
         let mean = img.rgba.chunks_exact(4).map(|p| p[3] as f32).sum::<f32>() / (512.0 * 512.0);
-        assert!(mean > 40.0 && mean < 190.0, "the glass is clear or opaque (mean alpha {mean})");
+        assert!(
+            mean > 40.0 && mean < 190.0,
+            "the glass is clear or opaque (mean alpha {mean})"
+        );
         let (a, b) = (rim / n_rim, middle / n_middle);
-        assert!(a < b * 1.3 && b < a * 1.3, "the tile is not even: rim {a:.1}, middle {b:.1}");
-        assert!(seam < inner * 2.0, "the seam shows: {seam:.0} against {inner:.0}");
+        assert!(
+            a < b * 1.3 && b < a * 1.3,
+            "the tile is not even: rim {a:.1}, middle {b:.1}"
+        );
+        assert!(
+            seam < inner * 2.0,
+            "the seam shows: {seam:.0} against {inner:.0}"
+        );
     }
 }

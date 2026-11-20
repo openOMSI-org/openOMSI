@@ -44,7 +44,10 @@ fn changed_freetex_reuses_cached_materials_and_rebinds_only_after_resize() {
     // Selecting the cached material again sees those new pixels, without rebuilding it.
     assert_eq!(scene.materials[cached_zero].texture, Some(zero));
     // A different owner's private texture remains unchanged by a remote update.
-    assert_eq!(read_first_texture_block(&renderer, &scene.textures[one]), [0, 0, 255, 255]);
+    assert_eq!(
+        read_first_texture_block(&renderer, &scene.textures[one]),
+        [0, 0, 255, 255]
+    );
     assert!(renderer.refresh_texture(&mut scene, zero, &picture(8, &[255, 255, 0, 255])));
     assert_ne!(scene.textures[zero].generation, old_generation);
     assert_eq!(renderer.rebind_textures(&mut scene, &[zero]), 1);
@@ -149,10 +152,23 @@ fn read_first_texture_block(renderer: &Renderer, texture: &GpuTexture) -> Vec<u8
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn blank_display_textures_are_cleared_transparent() {
     let instance = mx::Instance::new();
-    let renderer = pollster::block_on(Renderer::new_with(&instance, None, Some(mx::TextureFormat::Rgba8UnormSrgb), RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() })).expect("test renderer");
+    let renderer = pollster::block_on(Renderer::new_with(
+        &instance,
+        None,
+        Some(mx::TextureFormat::Rgba8UnormSrgb),
+        RenderOptions {
+            msaa: 1,
+            shadow_size: 1024,
+            ..Default::default()
+        },
+    ))
+    .expect("test renderer");
     let mut scene = renderer.new_scene();
     assert!(true);
     let id = renderer.add_blank_texture(&mut scene, 256, 64, true);
     assert_eq!(scene.textures[id].texture.mip_level_count(), 9);
-    assert_eq!(read_first_texture_block(&renderer, &scene.textures[id]), vec![0; 4]);
+    assert_eq!(
+        read_first_texture_block(&renderer, &scene.textures[id]),
+        vec![0; 4]
+    );
 }

@@ -1,4 +1,4 @@
-use super::{hud, wrap_rows, Frame, Label, MenuKind, Renderer, Scene, TextureId, Ui, BOLD};
+use super::{BOLD, Frame, Label, MenuKind, Renderer, Scene, TextureId, Ui, hud, wrap_rows};
 
 /// A translated label and its live value on the information bar.
 #[derive(Clone, Debug, PartialEq)]
@@ -152,7 +152,9 @@ fn delay_seconds(value: &str) -> f32 {
         Some(rest) => (-1.0, rest),
         None => (1.0, value.trim_start_matches('+')),
     };
-    let mut parts = rest.split(':').map(|part| part.trim().parse::<f32>().unwrap_or(0.0));
+    let mut parts = rest
+        .split(':')
+        .map(|part| part.trim().parse::<f32>().unwrap_or(0.0));
     let minutes = parts.next().unwrap_or(0.0);
     let seconds = parts.next().unwrap_or(0.0);
     sign * (minutes * 60.0 + seconds)
@@ -231,7 +233,15 @@ impl Ui {
                     InfoItemStyle::Normal => 13.0,
                 };
                 let value_px = (value_px * s).round().max(1.0) as u32;
-                let value_weight = if !secondary && matches!(item.style, InfoItemStyle::Clock | InfoItemStyle::Speed | InfoItemStyle::SpeedLimit) { BOLD } else { 0 };
+                let value_weight = if !secondary
+                    && matches!(
+                        item.style,
+                        InfoItemStyle::Clock | InfoItemStyle::Speed | InfoItemStyle::SpeedLimit
+                    ) {
+                    BOLD
+                } else {
+                    0
+                };
                 let tint = match item.style {
                     InfoItemStyle::Status => Some(hud::WARN),
                     InfoItemStyle::Delay => Some(hud::delay_color(delay_seconds(&item.value))),
@@ -256,7 +266,11 @@ impl Ui {
                         _ => None,
                     }
                 };
-                let icon_size = if item.style == InfoItemStyle::Status { 18.0 } else { 16.0 } * s;
+                let icon_size = if item.style == InfoItemStyle::Status {
+                    18.0
+                } else {
+                    16.0
+                } * s;
                 let icon_room = icon_name.map_or(0.0, |_| icon_size + stack_gap);
                 let prefix_room = if icon_room > 0.0 {
                     icon_room
@@ -300,7 +314,10 @@ impl Ui {
                 let values: Vec<Label> = text
                     .values
                     .iter()
-                    .map(|line| ui.text.label_op(r, scene, line, value_px | value_weight, value_color, 1.0))
+                    .map(|line| {
+                        ui.text
+                            .label_op(r, scene, line, value_px | value_weight, value_color, 1.0)
+                    })
                     .collect();
                 let badge = item.badge.as_deref().map(|text| {
                     ui.text
@@ -658,9 +675,11 @@ impl Ui {
                 let x = (x0 + x1 - w) * 0.5;
                 let opacity = self.text.backdrop.clamp(0.0, 1.0);
                 self.hud_card(r, scene, [x, y, x + w, y + h], hud::RADIUS * s, opacity, s);
-                let divider = self
-                    .text
-                    .solid(r, scene, hud::tint(self.hud.ink, (30.0 * opacity).round() as u8));
+                let divider = self.text.solid(
+                    r,
+                    scene,
+                    hud::tint(self.hud.ink, (30.0 * opacity).round() as u8),
+                );
                 let mut row_y = y + pad_y;
                 for (row_at, (primary, indexes, row_width, row_height)) in rows.iter().enumerate() {
                     let labels = if *primary {
@@ -819,11 +838,13 @@ mod tests {
         });
         assert_eq!(lines.labels.join(" "), "Next stop");
         assert_eq!(lines.values.concat(), item.value);
-        assert!(lines
-            .labels
-            .iter()
-            .chain(&lines.values)
-            .all(|line| line.chars().count() <= 8));
+        assert!(
+            lines
+                .labels
+                .iter()
+                .chain(&lines.values)
+                .all(|line| line.chars().count() <= 8)
+        );
     }
 
     #[test]
@@ -847,10 +868,12 @@ mod tests {
             |text, _| text.chars().count() as f32,
         );
         assert_eq!(lines.values.concat(), item.value);
-        assert!(lines
-            .values
-            .iter()
-            .all(|line| line.chars().count() as f32 + icon_and_gap <= room));
+        assert!(
+            lines
+                .values
+                .iter()
+                .all(|line| line.chars().count() as f32 + icon_and_gap <= room)
+        );
     }
 
     #[test]

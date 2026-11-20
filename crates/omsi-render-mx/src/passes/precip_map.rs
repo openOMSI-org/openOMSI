@@ -16,9 +16,23 @@ pub(crate) const PRECIP_TEXELS: u32 = 1024;
 /// on its texels while the camera moves).
 pub(crate) fn precip_matrix(cam_rel: Vec3) -> Mat4 {
     let texel = PRECIP_RANGE * 2.0 / PRECIP_TEXELS as f32;
-    let c = glam::Vec2::new((cam_rel.x / texel).round() * texel, (cam_rel.y / texel).round() * texel);
-    let view = Mat4::look_at_rh(Vec3::new(c.x, c.y, cam_rel.z + 150.0), Vec3::new(c.x, c.y, cam_rel.z), Vec3::Y);
-    Mat4::orthographic_rh(-PRECIP_RANGE, PRECIP_RANGE, -PRECIP_RANGE, PRECIP_RANGE, 0.0, 300.0) * view
+    let c = glam::Vec2::new(
+        (cam_rel.x / texel).round() * texel,
+        (cam_rel.y / texel).round() * texel,
+    );
+    let view = Mat4::look_at_rh(
+        Vec3::new(c.x, c.y, cam_rel.z + 150.0),
+        Vec3::new(c.x, c.y, cam_rel.z),
+        Vec3::Y,
+    );
+    Mat4::orthographic_rh(
+        -PRECIP_RANGE,
+        PRECIP_RANGE,
+        -PRECIP_RANGE,
+        PRECIP_RANGE,
+        0.0,
+        300.0,
+    ) * view
 }
 
 /// The map's texture, the camera the casters are drawn with (the frame's own with the close
@@ -55,9 +69,13 @@ impl PrecipMap {
                 usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
             })
             .expect("mX: a buffer");
-        PrecipMap { view: tex
+        PrecipMap {
+            view: tex
                 .create_view(&Default::default())
-                .expect("mX: a texture view"), camera_buf, matrix: std::cell::Cell::new(None) }
+                .expect("mX: a texture view"),
+            camera_buf,
+            matrix: std::cell::Cell::new(None),
+        }
     }
 
     /// What the rain's and the snow's shaders take of it: the matrix (identity) and whether
@@ -77,12 +95,20 @@ impl Renderer {
         let mut c = *cu;
         c.light_view_proj_close = m.to_cols_array_2d();
         c.sun_dir = [0.0; 4];
-        self.queue.write_buffer(&self.shadows.precip.camera_buf, 0, bytemuck::bytes_of(&c))
+        self.queue
+            .write_buffer(&self.shadows.precip.camera_buf, 0, bytemuck::bytes_of(&c))
             .expect("mX: a queue write");
     }
 
     /// Draw the map (when the frame has one: see `ShadowPlan::precip`).
-    pub(crate) fn encode_precip_map(&self, encoder: &mut mx::CommandEncoder, scene: &Scene, sh: &ShadowPlan, shadow_batches: &[Vec<Batch>; SHADOW_LISTS], timers: &mut PassTimers) {
+    pub(crate) fn encode_precip_map(
+        &self,
+        encoder: &mut mx::CommandEncoder,
+        scene: &Scene,
+        sh: &ShadowPlan,
+        shadow_batches: &[Vec<Batch>; SHADOW_LISTS],
+        timers: &mut PassTimers,
+    ) {
         let (Some(m), Some(bg)) = (sh.precip, scene.precip_bind_group.as_ref()) else {
             self.shadows.precip.matrix.set(None);
             return;
@@ -94,14 +120,21 @@ impl Renderer {
                 view: &self.shadows.precip.view,
                 depth_ops: Some(mx::Operations {
                     load: mx::LoadOp::Clear(1.0),
-                    store: mx::StoreOp::Store, }),
+                    store: mx::StoreOp::Store,
+                }),
                 stencil_ops: None,
             }),
-            timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "precipitation roof"),
+            timestamp_writes: pass_timer(
+                timers.set.as_ref(),
+                &mut timers.timed,
+                "precipitation roof",
+            ),
             occlusion_query_set: None,
         });
         pass.set_bind_group(0, bg);
-        encode_batches(&mut pass, scene, &shadow_batches[PRECIP_LIST], |pipe| &self.shadows.shadow_pipelines[4 + pipe as usize]);
+        encode_batches(&mut pass, scene, &shadow_batches[PRECIP_LIST], |pipe| {
+            &self.shadows.shadow_pipelines[4 + pipe as usize]
+        });
         drop(pass);
         self.shadows.precip.matrix.set(Some(m));
     }
@@ -118,7 +151,10 @@ mod tests {
         let m = precip_matrix(Vec3::new(3.0, 4.0, 1.5));
         let roof = m.project_point3(Vec3::new(5.0, 6.0, 4.0));
         let floor = m.project_point3(Vec3::new(5.0, 6.0, 1.0));
-        assert!(roof.z < floor.z && roof.z > 0.0 && floor.z < 1.0, "{roof:?} {floor:?}");
+        assert!(
+            roof.z < floor.z && roof.z > 0.0 && floor.z < 1.0,
+            "{roof:?} {floor:?}"
+        );
         assert!((roof.x - floor.x).abs() < 1e-6 && (roof.y - floor.y).abs() < 1e-6);
         let p = Vec3::new(10.3, -7.7, 0.0);
         let frac = |cam: Vec3| {
@@ -128,7 +164,12 @@ mod tests {
         };
         let f0 = frac(Vec3::ZERO);
         for k in 1..30 {
-            assert!((frac(Vec3::new(0.011 * k as f32, -0.017 * k as f32, 0.0)) - f0).abs().max_element() < 0.02);
+            assert!(
+                (frac(Vec3::new(0.011 * k as f32, -0.017 * k as f32, 0.0)) - f0)
+                    .abs()
+                    .max_element()
+                    < 0.02
+            );
         }
     }
 }

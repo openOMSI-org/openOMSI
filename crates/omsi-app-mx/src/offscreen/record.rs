@@ -32,10 +32,24 @@ pub(super) struct Recorder {
 impl Recorder {
     /// A recorder for the run writing to `out`, when `OMSI_RECORD` asks for one.
     /// `doppler`: OMSI's `sound_doppler` setting.
-    pub(super) fn new(out: &Path, player: Option<&mut Player>, root: &Path, doppler: bool) -> Option<Recorder> {
-        let fps = omsi_cfg::flags::OMSI_RECORD.parse::<f32>().filter(|f| *f > 0.0 && *f <= 60.0)?;
-        let from = omsi_cfg::flags::OMSI_RECORD_FROM.parse::<f32>().unwrap_or(0.0).max(0.0);
-        let stem = out.file_stem().and_then(|s| s.to_str()).unwrap_or("film").to_string();
+    pub(super) fn new(
+        out: &Path,
+        player: Option<&mut Player>,
+        root: &Path,
+        doppler: bool,
+    ) -> Option<Recorder> {
+        let fps = omsi_cfg::flags::OMSI_RECORD
+            .parse::<f32>()
+            .filter(|f| *f > 0.0 && *f <= 60.0)?;
+        let from = omsi_cfg::flags::OMSI_RECORD_FROM
+            .parse::<f32>()
+            .unwrap_or(0.0)
+            .max(0.0);
+        let stem = out
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("film")
+            .to_string();
         let dir = out.with_file_name(format!("{stem}_frames"));
         if let Err(e) = std::fs::create_dir_all(&dir) {
             log::warn!("record: {}: {e}", dir.display());
@@ -48,8 +62,23 @@ impl Recorder {
         }
         let ambience = crate::ambience::Ambience::load(&audio, root);
         let soundscape = crate::soundscape::Soundscape::new(true, 0.8);
-        log::info!("record: {fps} pictures a second from {from} s into {}, the sound into {stem}.wav", dir.display());
-        Some(Recorder { audio, ambience, soundscape, fps, from, dir, wav: out.with_file_name(format!("{stem}.wav")), samples: Vec::new(), mixed: 0, pictures: 0, peak: 0.0 })
+        log::info!(
+            "record: {fps} pictures a second from {from} s into {}, the sound into {stem}.wav",
+            dir.display()
+        );
+        Some(Recorder {
+            audio,
+            ambience,
+            soundscape,
+            fps,
+            from,
+            dir,
+            wav: out.with_file_name(format!("{stem}.wav")),
+            samples: Vec::new(),
+            mixed: 0,
+            pictures: 0,
+            peak: 0.0,
+        })
     }
 }
 
@@ -98,22 +127,70 @@ impl Offscreen<'_> {
     /// A picture of this moment (as `--snapshots` takes it) and its camera.
     pub(super) fn picture_now(&mut self) -> Result<(Vec<u8>, Camera)> {
         if let Some(t) = self.traffic.as_mut() {
-            view_sync::sync(ViewSync::traffic(t, &mut self.scenery), &mut self.sim_view, &self.world, &self.renderer, &mut self.scene);
+            view_sync::sync(
+                ViewSync::traffic(t, &mut self.scenery),
+                &mut self.sim_view,
+                &self.world,
+                &self.renderer,
+                &mut self.scene,
+            );
         }
         let cam = self.camera_now();
-        let (p, view, keys) = (self.player.as_ref(), &self.sim_view.traffic, omsi_scene::road_snow::vehicles(None, self.traffic.as_deref()).iter().map(|x| x.0).chain([0]).collect::<Vec<_>>());
-        omsi_scene::road_snow::show_roofs(&self.renderer, &mut self.scene, keys, |k| if k == 0 { p.map(|p| (&p.render, &p.trailer_renders[..])) } else { view.car(k - 1).map(|c| (&c.body, &c.trailers[..])) });
+        let (p, view, keys) = (
+            self.player.as_ref(),
+            &self.sim_view.traffic,
+            omsi_scene::road_snow::vehicles(None, self.traffic.as_deref())
+                .iter()
+                .map(|x| x.0)
+                .chain([0])
+                .collect::<Vec<_>>(),
+        );
+        omsi_scene::road_snow::show_roofs(&self.renderer, &mut self.scene, keys, |k| {
+            if k == 0 {
+                p.map(|p| (&p.render, &p.trailer_renders[..]))
+            } else {
+                view.car(k - 1).map(|c| (&c.body, &c.trailers[..]))
+            }
+        });
         if let Some(h) = self.humans_off.as_mut() {
-            view_sync::sync(ViewSync::people(h, None, cam.position), &mut self.sim_view, &self.world, &self.renderer, &mut self.scene);
+            view_sync::sync(
+                ViewSync::people(h, None, cam.position),
+                &mut self.sim_view,
+                &self.world,
+                &self.renderer,
+                &mut self.scene,
+            );
         }
         // the time of day of this moment, and its lights: street lamps by night and the
         // vehicles' own (indicators, brake and tail lights) as they are now - without them
         // a snapshot showed no vehicle light at all
         let daylight = omsi_sim::Daylight::compute(&self.run_clock, self.envir.as_ref());
-        steps::world_lamps(&self.world, &self.renderer, &mut self.scene, &self.run_clock, &daylight, true, true);
+        steps::world_lamps(
+            &self.world,
+            &self.renderer,
+            &mut self.scene,
+            &self.run_clock,
+            &daylight,
+            true,
+            true,
+        );
         {
-            let vehicles = steps::light_vehicles(self.player.as_ref(), self.traffic.as_ref(), &self.remotes_off);
-            world_lights(&mut self.renderer, &self.world, &mut self.scene, &self.weather, &daylight, cam.position, &vehicles, &self.settings.vehicle_smoke, self.player.is_some());
+            let vehicles = steps::light_vehicles(
+                self.player.as_ref(),
+                self.traffic.as_ref(),
+                &self.remotes_off,
+            );
+            world_lights(
+                &mut self.renderer,
+                &self.world,
+                &mut self.scene,
+                &self.weather,
+                &daylight,
+                cam.position,
+                &vehicles,
+                &self.settings.vehicle_smoke,
+                self.player.is_some(),
+            );
             if omsi_cfg::flags::OMSI_FLASHLIGHT.is_set() {
                 lights::flashlight_ahead(&mut self.scene, &cam);
             }
@@ -126,16 +203,21 @@ impl Offscreen<'_> {
         }
         self.spray.sprites(cam.position, &mut self.scene.smoke);
         let lighting = self.lighting_now(&cam);
-        self.world.finish_texture_upgrades(&self.renderer, &mut self.scene);
+        self.world
+            .finish_texture_upgrades(&self.renderer, &mut self.scene);
         crate::view_sync::digest::log_scene_digest(&self.scene, Some(&self.sim_view), "snapshot");
-        let pixels = self.renderer.render_to_image(&mut self.scene, self.w, self.h, &cam, &lighting)?;
+        let pixels =
+            self.renderer
+                .render_to_image(&mut self.scene, self.w, self.h, &cam, &lighting)?;
         Ok((pixels, cam))
     }
 
     /// The recording's step `i` (`t_s` into the run): this step's sound, and the picture
     /// when one is due.
     pub(super) fn record_step(&mut self, i: usize, t_s: f32) -> Result<()> {
-        let Some(mut rec) = self.recorder.take() else { return Ok(()) };
+        let Some(mut rec) = self.recorder.take() else {
+            return Ok(());
+        };
         let result = self.record_with(&mut rec, i, t_s);
         self.recorder = Some(rec);
         result
@@ -164,8 +246,21 @@ impl Offscreen<'_> {
             t.update_audio(a, cam.position, street, inside, None, self.settings.vol_ai);
         }
         let daylight = omsi_sim::Daylight::compute(&self.run_clock, self.envir.as_ref());
-        let people = self.humans_off.as_ref().map(|h| h.people.iter().filter(|p| (p.position - cam.position).length() < 40.0).count() as u32).unwrap_or(0);
-        let open = self.player.as_ref().and_then(|p| p.vehicle.var("Snd_OutsideVol")).unwrap_or(0.0);
+        let people = self
+            .humans_off
+            .as_ref()
+            .map(|h| {
+                h.people
+                    .iter()
+                    .filter(|p| (p.position - cam.position).length() < 40.0)
+                    .count() as u32
+            })
+            .unwrap_or(0);
+        let open = self
+            .player
+            .as_ref()
+            .and_then(|p| p.vehicle.var("Snd_OutsideVol"))
+            .unwrap_or(0.0);
         rec.soundscape.update(
             a,
             crate::soundscape::Moment {
@@ -182,14 +277,25 @@ impl Offscreen<'_> {
                 dt,
             },
         );
-        if let Some(every) = omsi_cfg::flags::OMSI_DEBUG_SOUND.parse::<f32>().filter(|e| *e > 0.0) {
+        if let Some(every) = omsi_cfg::flags::OMSI_DEBUG_SOUND
+            .parse::<f32>()
+            .filter(|e| *e > 0.0)
+        {
             if (t_s / every).floor() != ((t_s - dt) / every).floor() {
                 let heard = rec.soundscape.take_heard();
-                log::info!("sound: ambience at {t_s:.0} s - {}; heard {heard}", rec.soundscape.last);
+                log::info!(
+                    "sound: ambience at {t_s:.0} s - {}; heard {heard}",
+                    rec.soundscape.last
+                );
             }
         }
-        let precip = if rec.soundscape.active() { (0, 0.0) } else { precip_of(&self.weather) };
-        rec.ambience.update(a, dt, precip, inside, street, cam.position, &[]);
+        let precip = if rec.soundscape.active() {
+            (0, 0.0)
+        } else {
+            precip_of(&self.weather)
+        };
+        rec.ambience
+            .update(a, dt, precip, inside, street, cam.position, &[]);
         // the sound of this step, to the sample (no drift between the picture and the sound)
         let due = (((i + 1) as f64) * dt as f64 * RATE as f64).round() as u64;
         let n = due.saturating_sub(rec.mixed) as usize;
@@ -199,7 +305,8 @@ impl Offscreen<'_> {
         if filming {
             for x in &mixed {
                 rec.peak = rec.peak.max(x.abs());
-                rec.samples.push((x * 32767.0).round().clamp(-32768.0, 32767.0) as i16);
+                rec.samples
+                    .push((x * 32767.0).round().clamp(-32768.0, 32767.0) as i16);
             }
         }
         if i.is_multiple_of(super::steps_in(1.0)) {
@@ -207,13 +314,23 @@ impl Offscreen<'_> {
         }
         // the pictures: one each 1/fps second of film
         let film_t = t_s - rec.from;
-        let want = if filming { ((film_t + dt) * rec.fps).floor() as usize } else { 0 };
+        let want = if filming {
+            ((film_t + dt) * rec.fps).floor() as usize
+        } else {
+            0
+        };
         while filming && rec.pictures < want {
             let (pixels, _) = self.picture_now()?;
             let path = rec.dir.join(format!("f{:05}.jpg", rec.pictures));
-            let rgb: Vec<u8> = pixels.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2]]).collect();
+            let rgb: Vec<u8> = pixels
+                .chunks_exact(4)
+                .flat_map(|p| [p[0], p[1], p[2]])
+                .collect();
             let file = std::fs::File::create(&path)?;
-            let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(std::io::BufWriter::new(file), 92);
+            let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(
+                std::io::BufWriter::new(file),
+                92,
+            );
             enc.encode(&rgb, self.w, self.h, image::ExtendedColorType::Rgb8)?;
             rec.pictures += 1;
         }
@@ -222,7 +339,9 @@ impl Offscreen<'_> {
 
     /// The recording's end: the sound into its WAV file.
     pub(super) fn finish_recording(&mut self) -> Result<()> {
-        let Some(rec) = self.recorder.take() else { return Ok(()) };
+        let Some(rec) = self.recorder.take() else {
+            return Ok(());
+        };
         write_wav(&rec.wav, RATE, 2, &rec.samples)?;
         log::info!(
             "record: {} pictures in {}, {:.1} s of sound in {} (peak {:.1} dBFS)",

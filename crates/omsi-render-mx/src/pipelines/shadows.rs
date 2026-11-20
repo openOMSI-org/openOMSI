@@ -23,7 +23,13 @@ fn smaller_shadow_size(size: u32) -> Option<u32> {
 
 /// `lamps`: the picture is an Enhanced one, which looks the lamps' shadows up (the plain ones
 /// have no tiles under the far map, nor pipelines to draw them).
-pub(crate) fn build(device: &mx::Device, scene: &SceneBase, shadow_size: u32, lamps: bool, cube: bool) -> Shadows {
+pub(crate) fn build(
+    device: &mx::Device,
+    scene: &SceneBase,
+    shadow_size: u32,
+    lamps: bool,
+    cube: bool,
+) -> Shadows {
     let depth_map = |label: &str, width: u32, height: u32| {
         device
             .create_texture(&mx::TextureDescriptor {
@@ -45,7 +51,12 @@ pub(crate) fn build(device: &mx::Device, scene: &SceneBase, shadow_size: u32, la
     let mut size = shadow_size;
     let (lamp_atlas, shadow_tex, shadow_tex_far) = loop {
         // (the lamps' tiles are left out where their pipelines are: see `basic_pipelines`)
-        let lamp_atlas = LampAtlas::new(size, lamps && !basic_pipelines(), device.limits().max_texture_dimension_2d, cube);
+        let lamp_atlas = LampAtlas::new(
+            size,
+            lamps && !basic_pipelines(),
+            device.limits().max_texture_dimension_2d,
+            cube,
+        );
         // (the smallest size is made outside the scope: a card with no room even for it fails
         // the renderer's build in the caller's scope - see `build_with_fallbacks` - instead of
         // drawing every frame with invalid shadow maps)
@@ -75,7 +86,9 @@ pub(crate) fn build(device: &mx::Device, scene: &SceneBase, shadow_size: u32, la
         }
     };
     if lamp_atlas.rows == 0 && lamps && !basic_pipelines() {
-        log::warn!("renderer: no room for the lamps' shadow tiles under a far shadow map of {size} texels: the lamps cast no shadows");
+        log::warn!(
+            "renderer: no room for the lamps' shadow tiles under a far shadow map of {size} texels: the lamps cast no shadows"
+        );
     }
     let shadow_view = shadow_tex
         .create_view(&Default::default())
@@ -94,44 +107,51 @@ pub(crate) fn build(device: &mx::Device, scene: &SceneBase, shadow_size: u32, la
         })
         .expect("mX: a sampler");
     let make_shadow = |kind: u8, cascade: u8| {
-        compile_pipeline(device, &mx::RenderPipelineDescriptor {
-            label: Some("shadow"),
-            vertex: mx::VertexState {
+        compile_pipeline(
+            device,
+            &mx::RenderPipelineDescriptor {
+                label: Some("shadow"),
+                vertex: mx::VertexState {
                     constants: &[],
-                module: &scene.shader,
-                entry_point: Some(match cascade {
-                    0 => "vs_shadow",
-                    1 => "vs_shadow_far",
-                    2 => "vs_shadow_close",
-                    _ => "vs_shadow_lamp",
-                }),
-                buffers: &[scene.vertex_layout.clone()],
-            },
-            primitive: mx::PrimitiveState {
-                    topology: mx::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                front_face: mx::FrontFace::Cw,
-                ..Default::default()
-            },
-            depth_stencil: Some(mx::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: true,
-                    depth_compare: mx::CompareFunction::LessEqual,
-                stencil: Default::default(),
-                bias: mx::DepthBiasState {
-                    constant: 4,
-                    slope_scale: 3.0,
-                    clamp: 0.0,
+                    module: &scene.shader,
+                    entry_point: Some(match cascade {
+                        0 => "vs_shadow",
+                        1 => "vs_shadow_far",
+                        2 => "vs_shadow_close",
+                        _ => "vs_shadow_lamp",
+                    }),
+                    buffers: &[scene.vertex_layout.clone()],
                 },
-            }),
-            multisample: Default::default(),
-            fragment: Some(mx::FragmentState {
+                primitive: mx::PrimitiveState {
+                    topology: mx::PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    front_face: mx::FrontFace::Cw,
+                    ..Default::default()
+                },
+                depth_stencil: Some(mx::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: mx::CompareFunction::LessEqual,
+                    stencil: Default::default(),
+                    bias: mx::DepthBiasState {
+                        constant: 4,
+                        slope_scale: 3.0,
+                        clamp: 0.0,
+                    },
+                }),
+                multisample: Default::default(),
+                fragment: Some(mx::FragmentState {
                     constants: &[],
-                module: &scene.shader,
-                entry_point: Some(if kind == PIPE_ALPHA_TEST { "fs_shadow_test" } else { "fs_shadow" }),
-                targets: &[],
-            }),
-        })
+                    module: &scene.shader,
+                    entry_point: Some(if kind == PIPE_ALPHA_TEST {
+                        "fs_shadow_test"
+                    } else {
+                        "fs_shadow"
+                    }),
+                    targets: &[],
+                }),
+            },
+        )
     };
     let shadow_clear_pipeline = clear_pipeline(device);
     let mut shadow_pipelines = vec![
@@ -166,34 +186,40 @@ pub(crate) fn build(device: &mx::Device, scene: &SceneBase, shadow_size: u32, la
 
 fn clear_pipeline(device: &mx::Device) -> mx::RenderPipeline {
     log::info!("renderer: compiling the shadow clear shader");
-    let module = compile_shader(device, mx::ShaderModuleDescriptor {
-        label: Some("shadow clear"),
-        source:
+    let module = compile_shader(
+        device,
+        mx::ShaderModuleDescriptor {
+            label: Some("shadow clear"),
+            source:
                 &*("@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
                         let x = f32(i32(i & 1u) * 4 - 1);
                         let y = f32(i32(i >> 1u) * 4 - 1);
                         return vec4<f32>(x, y, 1.0, 1.0);
                     }"),
-    });
-    compile_pipeline(device, &mx::RenderPipelineDescriptor {
-        label: Some("shadow clear"),
-        vertex: mx::VertexState {
-                constants: &[],
-            module: &module,
-            entry_point: Some("vs"),
-            buffers: &[],
         },
-        primitive: mx::PrimitiveState::default(),
+    );
+    compile_pipeline(
+        device,
+        &mx::RenderPipelineDescriptor {
+            label: Some("shadow clear"),
+            vertex: mx::VertexState {
+                constants: &[],
+                module: &module,
+                entry_point: Some("vs"),
+                buffers: &[],
+            },
+            primitive: mx::PrimitiveState::default(),
             depth_stencil: Some(mx::DepthStencilState {
-            format: DEPTH_FORMAT,
-            depth_write_enabled: true,
+                format: DEPTH_FORMAT,
+                depth_write_enabled: true,
                 depth_compare: mx::CompareFunction::Always,
-            stencil: Default::default(),
-            bias: Default::default(),
-        }),
-        multisample: Default::default(),
-        fragment: None,
-    })
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: Default::default(),
+            fragment: None,
+        },
+    )
 }
 
 #[cfg(test)]

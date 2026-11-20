@@ -4,22 +4,36 @@
 //! turns it off; the quick menu's statistics tile shows the last one again.
 
 use super::{button, card, divider, el, grow_row, note, row, text, theme_color, title};
-use omsi_ui::theme::Palette;
-use crate::journey::{hms, TripSummary};
+use crate::journey::{TripSummary, hms};
 use omsi_plugin::ui::{Anchor, Element, Kind, Panel, Rgba, RowAlign, Weight};
+use omsi_ui::theme::Palette;
 use omsi_ui::tr;
 
 fn icon(name: &str, size: f32, color: Rgba) -> Element {
-    Element { color: Some(color), ..el(None, Kind::Icon { name: name.to_string(), size }) }
+    Element {
+        color: Some(color),
+        ..el(
+            None,
+            Kind::Icon {
+                name: name.to_string(),
+                size,
+            },
+        )
+    }
 }
 
 fn label(t: &str, pal: Palette) -> Element {
-    Element { color: Some(theme_color(pal.text_dim)), ..text(&tr(t), 12.0, Weight::Medium) }
+    Element {
+        color: Some(theme_color(pal.text_dim)),
+        ..text(&tr(t), 12.0, Weight::Medium)
+    }
 }
 
 fn grade(percent: Option<f64>, pal: Palette) -> Rgba {
     let colors = pal;
-    let Some(percent) = percent else { return theme_color(colors.text_dim) };
+    let Some(percent) = percent else {
+        return theme_color(colors.text_dim);
+    };
     if percent >= 80.0 {
         theme_color(colors.ok)
     } else if percent >= 50.0 {
@@ -39,8 +53,18 @@ fn status_color(status: &str, pal: Palette) -> Option<Rgba> {
 }
 
 fn columns(children: Vec<Element>) -> Element {
-    let children = children.into_iter().map(|c| Element { grow: true, ..c }).collect();
-    el(None, Kind::Row { children, gap: 24.0, align: RowAlign::Start })
+    let children = children
+        .into_iter()
+        .map(|c| Element { grow: true, ..c })
+        .collect();
+    el(
+        None,
+        Kind::Row {
+            children,
+            gap: 24.0,
+            align: RowAlign::Start,
+        },
+    )
 }
 
 fn head(lines: &str) -> String {
@@ -56,8 +80,17 @@ fn stars(lit: u8, pal: Palette) -> Element {
     let colors = pal;
     let accent = theme_color(colors.accent);
     let unlit = theme_color(colors.text_faint);
-    let children = (0..5).map(|k| icon("star", 18.0, if k < lit { accent } else { unlit })).collect();
-    el(None, Kind::Row { children, gap: 2.0, align: RowAlign::End })
+    let children = (0..5)
+        .map(|k| icon("star", 18.0, if k < lit { accent } else { unlit }))
+        .collect();
+    el(
+        None,
+        Kind::Row {
+            children,
+            gap: 2.0,
+            align: RowAlign::End,
+        },
+    )
 }
 
 pub(crate) struct TripPanel {
@@ -68,22 +101,52 @@ pub(crate) struct TripPanel {
 
 impl TripPanel {
     pub(crate) fn new(summary: TripSummary) -> TripPanel {
-        TripPanel { summary, said: None }
+        TripPanel {
+            summary,
+            said: None,
+        }
     }
 
     pub(crate) fn panel(&self, pal: Palette) -> Panel {
         let s = &self.summary;
         let accent = theme_color(pal.accent);
         let mut children = vec![
-            row(vec![icon("directions_bus", 22.0, accent), Element { grow: true, ..title(&tr("Trip summary")) }, stars(s.stars(), pal)], RowAlign::Start),
+            row(
+                vec![
+                    icon("directions_bus", 22.0, accent),
+                    Element {
+                        grow: true,
+                        ..title(&tr("Trip summary"))
+                    },
+                    stars(s.stars(), pal),
+                ],
+                RowAlign::Start,
+            ),
             text(&tr(&s.title), 14.0, Weight::Medium),
             note(&head(&s.head), pal),
         ];
         if let Some(mood) = s.mood() {
-            children.push(row(vec![icon("forum", 18.0, accent), text(&tr(mood), 14.0, Weight::Medium)], RowAlign::Start));
+            children.push(row(
+                vec![
+                    icon("forum", 18.0, accent),
+                    text(&tr(mood), 14.0, Weight::Medium),
+                ],
+                RowAlign::Start,
+            ));
         }
         children.push(divider());
-        let mut tiles = vec![("location_on", format!("{} / {}", s.served.0, s.served.1), "stops served"), ("schedule", format!("{} / {}", s.on_time, s.served.0), "on time")];
+        let mut tiles = vec![
+            (
+                "location_on",
+                format!("{} / {}", s.served.0, s.served.1),
+                "stops served",
+            ),
+            (
+                "schedule",
+                format!("{} / {}", s.on_time, s.served.0),
+                "on time",
+            ),
+        ];
         if let Some(km) = s.km {
             tiles.push(("route", format!("{km:.1} km"), "distance"));
         }
@@ -93,26 +156,103 @@ impl TripPanel {
         if let Some(r) = s.rating {
             tiles.push(("groups", r.passengers.to_string(), "passengers"));
         }
-        children.push(grow_row(tiles.iter().map(|(i, v, _)| row(vec![icon(i, 18.0, accent), text(v, 17.0, Weight::Bold)], RowAlign::Start)).collect()));
-        children.push(grow_row(tiles.iter().map(|(_, _, l)| label(l, pal)).collect()));
+        children.push(grow_row(
+            tiles
+                .iter()
+                .map(|(i, v, _)| {
+                    row(
+                        vec![icon(i, 18.0, accent), text(v, 17.0, Weight::Bold)],
+                        RowAlign::Start,
+                    )
+                })
+                .collect(),
+        ));
+        children.push(grow_row(
+            tiles.iter().map(|(_, _, l)| label(l, pal)).collect(),
+        ));
         if let Some(r) = s.rating {
             children.push(divider());
-            let gauges = [("speed", Some(r.driving), "driving"), ("airport_shuttle", r.comfort_rated(), "comfort"), ("receipt_long", r.tickets_rated(), "ticket selling")];
+            let gauges = [
+                ("speed", Some(r.driving), "driving"),
+                ("airport_shuttle", r.comfort_rated(), "comfort"),
+                ("receipt_long", r.tickets_rated(), "ticket selling"),
+            ];
             children.push(columns(
                 gauges
                     .iter()
-                    .map(|(i, p, l)| row(vec![icon(i, 16.0, accent), Element { grow: true, ..label(l, pal) }, Element { color: Some(grade(*p, pal)), ..text(&p.map(|p| format!("{p:.0} %")).unwrap_or_else(|| "-".into()), 13.0, Weight::Bold) }], RowAlign::Start))
+                    .map(|(i, p, l)| {
+                        row(
+                            vec![
+                                icon(i, 16.0, accent),
+                                Element {
+                                    grow: true,
+                                    ..label(l, pal)
+                                },
+                                Element {
+                                    color: Some(grade(*p, pal)),
+                                    ..text(
+                                        &p.map(|p| format!("{p:.0} %"))
+                                            .unwrap_or_else(|| "-".into()),
+                                        13.0,
+                                        Weight::Bold,
+                                    )
+                                },
+                            ],
+                            RowAlign::Start,
+                        )
+                    })
                     .collect(),
             ));
-            children.push(columns(gauges.iter().map(|(_, p, _)| Element { color: Some(grade(*p, pal)), ..el(None, Kind::Bar { value: p.map_or(0.0, |p| (p / 100.0).clamp(0.0, 1.0) as f32), height: 6.0, background: None, segments: Vec::new() }) }).collect()));
+            children.push(columns(
+                gauges
+                    .iter()
+                    .map(|(_, p, _)| Element {
+                        color: Some(grade(*p, pal)),
+                        ..el(
+                            None,
+                            Kind::Bar {
+                                value: p.map_or(0.0, |p| (p / 100.0).clamp(0.0, 1.0) as f32),
+                                height: 6.0,
+                                background: None,
+                                segments: Vec::new(),
+                            },
+                        )
+                    })
+                    .collect(),
+            ));
         }
         children.push(divider());
-        let rows: Vec<Vec<String>> = s.rows.iter().map(|r| r.iter().enumerate().map(|(k, c)| if k == 4 { tr(c).into_owned() } else { c.clone() }).collect()).collect();
-        let inks = s.rows.iter().map(|r| (0..6).map(|k| (k == 4).then(|| status_color(&r[4], pal)).flatten()).collect()).collect();
+        let rows: Vec<Vec<String>> = s
+            .rows
+            .iter()
+            .map(|r| {
+                r.iter()
+                    .enumerate()
+                    .map(|(k, c)| {
+                        if k == 4 {
+                            tr(c).into_owned()
+                        } else {
+                            c.clone()
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+        let inks = s
+            .rows
+            .iter()
+            .map(|r| {
+                (0..6)
+                    .map(|k| (k == 4).then(|| status_color(&r[4], pal)).flatten())
+                    .collect()
+            })
+            .collect();
         children.push(el(
             None,
             Kind::Table {
-                columns: ["Bus stop", "Plan", "Actual", "Diff", "Status", "Odometer"].map(|c| tr(c).into_owned()).to_vec(),
+                columns: ["Bus stop", "Plan", "Actual", "Diff", "Status", "Odometer"]
+                    .map(|c| tr(c).into_owned())
+                    .to_vec(),
                 rows,
                 widths: vec![0.29, 0.13, 0.13, 0.14, 0.15, 0.16],
                 size: 13.0,
@@ -120,11 +260,21 @@ impl TripPanel {
                 inks,
             },
         ));
-        children.push(grow_row(vec![button("copy", &tr("Copy"), Some("content_copy")), button("save", &tr("Save"), Some("save")), button("close", &tr("Close"), Some("close"))]));
+        children.push(grow_row(vec![
+            button("copy", &tr("Copy"), Some("content_copy")),
+            button("save", &tr("Save"), Some("save")),
+            button("close", &tr("Close"), Some("close")),
+        ]));
         if let Some(said) = &self.said {
             children.push(note(said, pal));
         }
-        children.push(row(vec![note(&tr("Settings → Gameplay → Trip summary turns it off."), pal)], RowAlign::Start));
+        children.push(row(
+            vec![note(
+                &tr("Settings → Gameplay → Trip summary turns it off."),
+                pal,
+            )],
+            RowAlign::Start,
+        ));
         card(Anchor::Center, 0.0, 0.0, 660.0, 236, pal, children)
     }
 
@@ -149,7 +299,8 @@ pub(crate) fn to_clipboard(text: &str) -> bool {
             if c.is_none() {
                 *c = arboard::Clipboard::new().ok();
             }
-            c.as_mut().is_some_and(|cb| cb.set_text(text.to_string()).is_ok())
+            c.as_mut()
+                .is_some_and(|cb| cb.set_text(text.to_string()).is_ok())
         })
     }
     #[cfg(target_os = "ios")]
@@ -164,10 +315,18 @@ pub(crate) fn to_clipboard(text: &str) -> bool {
 }
 
 pub(crate) fn click(app: &mut crate::App, id: &str) {
-    let Some(t) = app.menus.game_panels.trip.as_mut() else { return };
+    let Some(t) = app.menus.game_panels.trip.as_mut() else {
+        return;
+    };
     match id {
         "copy" => {
-            t.said = Some(if to_clipboard(&t.summary.text_in(|s| omsi_ui::tr(s).into_owned())) { omsi_ui::tr("Copied to the clipboard").into_owned() } else { omsi_ui::tr("The clipboard cannot be reached").into_owned() });
+            t.said = Some(
+                if to_clipboard(&t.summary.text_in(|s| omsi_ui::tr(s).into_owned())) {
+                    omsi_ui::tr("Copied to the clipboard").into_owned()
+                } else {
+                    omsi_ui::tr("The clipboard cannot be reached").into_owned()
+                },
+            );
         }
         "save" => {
             t.said = Some(match t.summary.save_in(|s| omsi_ui::tr(s).into_owned()) {

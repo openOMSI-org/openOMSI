@@ -13,7 +13,7 @@
 use super::*;
 use std::path::Path;
 
-pub(crate) use omsi_lan::server_cfg::{enforce_vehicles, player_info, ServerCfg, SERVER_VEHICLES};
+pub(crate) use omsi_lan::server_cfg::{SERVER_VEHICLES, ServerCfg, enforce_vehicles, player_info};
 
 /// Announce the server's own bus paints without allocating GPU resources. Only
 /// buses explicitly in server.cfg are indexed; an unrestricted fleet has no finite
@@ -23,15 +23,24 @@ fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> 
     use std::sync::atomic::{AtomicUsize, Ordering};
     let total = cfg.vehicles.len().min(256);
     if cfg.vehicles.len() > 256 {
-        log::warn!("server fleet: {} buses in `vehicles`: only the first 256 are announced", cfg.vehicles.len());
+        log::warn!(
+            "server fleet: {} buses in `vehicles`: only the first 256 are announced",
+            cfg.vehicles.len()
+        );
     }
     if total == 0 {
         return Vec::new();
     }
     // (every file of every bus and paint is read and hashed - their hashes are kept for the
     // next start - four buses at a time; the web port is open meanwhile)
-    log::info!("server fleet: checking {total} buses and their paints (a first start reads every file; later starts are faster)");
-    let (t0, done, failed) = (std::time::Instant::now(), AtomicUsize::new(0), AtomicUsize::new(0));
+    log::info!(
+        "server fleet: checking {total} buses and their paints (a first start reads every file; later starts are faster)"
+    );
+    let (t0, done, failed) = (
+        std::time::Instant::now(),
+        AtomicUsize::new(0),
+        AtomicUsize::new(0),
+    );
     let one = |bus: &String| -> Option<omsi_net::ws::FleetPaints> {
         let fail = |why: String| {
             failed.fetch_add(1, Ordering::Relaxed);
@@ -43,12 +52,18 @@ fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> 
             return None;
         };
         let found = omsi_cfg::find_in_roots(&rel).map(|(_, p)| p);
-        let path = found.clone().unwrap_or_else(|| omsi_cfg::resolve_path(root, &rel));
+        let path = found
+            .clone()
+            .unwrap_or_else(|| omsi_cfg::resolve_path(root, &rel));
         let t = std::time::Instant::now();
         let vehicle = match omsi_sim::VehicleType::load(root, &path) {
             Ok(v) => v,
             Err(e) => {
-                let why = if found.is_none() { " (not found in the content folders)" } else { "" };
+                let why = if found.is_none() {
+                    " (not found in the content folders)"
+                } else {
+                    ""
+                };
                 fail(format!("cannot load {}{why}: {e}", path.display()));
                 return None;
             }
@@ -56,19 +71,34 @@ fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> 
         // Use the same resolved scheme names as the authenticated LISTBUS
         // transfer. A server build must not depend on launcher-only crates.
         let loaded = t.elapsed().as_secs_f64();
-        let paints: Vec<String> = vehicle.paint_schemes.iter().take(128).map(|p| p.name.clone()).collect();
+        let paints: Vec<String> = vehicle
+            .paint_schemes
+            .iter()
+            .take(128)
+            .map(|p| p.name.clone())
+            .collect();
         let content = match omsi_lan::mods::fleet_fingerprint_loaded(root, &rel, &path, &vehicle) {
             Ok(c) => c,
             Err(e) => {
-                fail(format!("{rel}: its files cannot be offered to the players ({e})"));
+                fail(format!(
+                    "{rel}: its files cannot be offered to the players ({e})"
+                ));
                 String::new()
             }
         };
         if !content.is_empty() {
             let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-            log::info!("server fleet: {n}/{total}: {rel}: {} paints ({:.1} s, loading the bus {loaded:.1} s)", paints.len(), t.elapsed().as_secs_f64());
+            log::info!(
+                "server fleet: {n}/{total}: {rel}: {} paints ({:.1} s, loading the bus {loaded:.1} s)",
+                paints.len(),
+                t.elapsed().as_secs_f64()
+            );
         }
-        Some(omsi_net::ws::FleetPaints { bus: rel, paints, content })
+        Some(omsi_net::ws::FleetPaints {
+            bus: rel,
+            paints,
+            content,
+        })
     };
     // four plain threads taking the next bus in turn - not a Rayon pool: the hashing inside
     // runs on a pool of its own, and a Rayon worker waiting on another pool takes more of its
@@ -91,7 +121,10 @@ fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> 
                 })
             })
             .collect();
-        workers.into_iter().flat_map(|w| w.join().unwrap_or_default()).collect()
+        workers
+            .into_iter()
+            .flat_map(|w| w.join().unwrap_or_default())
+            .collect()
     });
     let mut checked = checked;
     // (in the order of `vehicles`, as before)
@@ -103,7 +136,11 @@ fn fleet_paints(cfg: &ServerCfg, root: &Path) -> Vec<omsi_net::ws::FleetPaints> 
         offers.len(),
         offers.iter().map(|o| o.paints.len()).sum::<usize>(),
         t0.elapsed().as_secs_f64(),
-        if failed > 0 { format!(", {failed} with problems (the lines above say which)") } else { String::new() }
+        if failed > 0 {
+            format!(", {failed} with problems (the lines above say which)")
+        } else {
+            String::new()
+        }
     );
     offers
 }
@@ -117,10 +154,12 @@ pub(crate) fn announce_fleet(cfg: &ServerCfg, root: &Path) {
         return;
     }
     let (cfg, root) = (cfg.clone(), root.to_path_buf());
-    let spawned = std::thread::Builder::new().name("server fleet".into()).spawn(move || {
-        let fleet = fleet_paints(&cfg, &root);
-        omsi_lan::game::update_server_fleet(fleet, 1);
-    });
+    let spawned = std::thread::Builder::new()
+        .name("server fleet".into())
+        .spawn(move || {
+            let fleet = fleet_paints(&cfg, &root);
+            omsi_lan::game::update_server_fleet(fleet, 1);
+        });
     if let Err(e) = spawned {
         log::warn!("server fleet: cannot check the fleet: {e}");
     }
@@ -147,7 +186,9 @@ pub(crate) fn info_of(cfg: &ServerCfg, _root: &Path) -> omsi_net::ws::ServerInfo
         players_public: cfg.share_positions,
         player_list: Vec::new(),
         local_admin_password: cfg.admin_password.clone(),
-        direct: Some(cfg.public_address.clone()).filter(|a| a != "off").unwrap_or_default(),
+        direct: Some(cfg.public_address.clone())
+            .filter(|a| a != "off")
+            .unwrap_or_default(),
         ..Default::default()
     }
 }
@@ -155,13 +196,24 @@ pub(crate) fn info_of(cfg: &ServerCfg, _root: &Path) -> omsi_net::ws::ServerInfo
 /// The floor nearest the height a parked bus stands at (a bus on the lower of two floors
 /// stays on it); only where there is none, the one further up, then the terrain.
 pub(crate) fn parked_floor(world: &World, x: f64, y: f64, near: f64) -> Option<f64> {
-    world.stand_height(x, y, near).or_else(|| world.stand_height(x, y, near + 4.0)).or_else(|| world.ground_height(x, y))
+    world
+        .stand_height(x, y, near)
+        .or_else(|| world.stand_height(x, y, near + 4.0))
+        .or_else(|| world.ground_height(x, y))
 }
 
 pub(crate) fn park_buses(server: bool, args: &Args, world: &World) {
     if server {
-        let spots: Vec<omsi_lan::parked::Spot> = world.global.entry_points.iter().filter_map(|e| world.entry_point_place(e)).map(|(at, h)| (at.to_array(), h[0] as f32)).collect();
-        omsi_lan::parked::start(&args.root, &args.map, &spots, &|x, y, near| parked_floor(world, x, y, near));
+        let spots: Vec<omsi_lan::parked::Spot> = world
+            .global
+            .entry_points
+            .iter()
+            .filter_map(|e| world.entry_point_place(e))
+            .map(|(at, h)| (at.to_array(), h[0] as f32))
+            .collect();
+        omsi_lan::parked::start(&args.root, &args.map, &spots, &|x, y, near| {
+            parked_floor(world, x, y, near)
+        });
     }
 }
 
@@ -174,15 +226,31 @@ pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
         cfg.map = m.trim().replace('\\', "/");
     }
     SERVER_MODE.store(true, std::sync::atomic::Ordering::Relaxed);
-    let _ = SERVER_ADMIN.set((cfg.admin_password.clone(), cfg.moderator_password.clone(), if cfg.real_time { 1.0 } else { cfg.time_speed }));
+    let _ = SERVER_ADMIN.set((
+        cfg.admin_password.clone(),
+        cfg.moderator_password.clone(),
+        if cfg.real_time { 1.0 } else { cfg.time_speed },
+    ));
     start_administration(&cfg, path);
     omsi_lan::server_cfg::set_server_speed_limit_kmh(cfg.speed_limit_kmh);
-    log::info!("server: RP speed limit: {}", if cfg.speed_limit_kmh == 0 { "disabled".to_string() } else { format!("{} km/h", cfg.speed_limit_kmh) });
+    log::info!(
+        "server: RP speed limit: {}",
+        if cfg.speed_limit_kmh == 0 {
+            "disabled".to_string()
+        } else {
+            format!("{} km/h", cfg.speed_limit_kmh)
+        }
+    );
     omsi_lan::admin::allow_player_teleport(cfg.allow_player_teleport);
     // the machine bans: this server's list beside server.cfg, and the owner's (all my sessions)
     omsi_lan::bans::announce_local_hardware_id();
     omsi_lan::bans::require_hardware_id(cfg.require_hardware_id);
-    omsi_lan::bans::install(omsi_lan::bans::BanStore::open(Some(cfg.dir.join("bans.json")), cfg.owner_bans.clone().or_else(omsi_lan::bans::BanStore::default_owner_path)));
+    omsi_lan::bans::install(omsi_lan::bans::BanStore::open(
+        Some(cfg.dir.join("bans.json")),
+        cfg.owner_bans
+            .clone()
+            .or_else(omsi_lan::bans::BanStore::default_owner_path),
+    ));
     crate::real_time::set_server_real(cfg.real_time);
     let _ = SERVER_VEHICLES.set(cfg.vehicles.clone());
     cfg.apply_to_mods();
@@ -200,9 +268,17 @@ pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     }
     args.weather = cfg.weather.clone();
     // the METAR sync: the report's weather from the start (the host loop downloads it again)
-    let station = cfg.metar_sync.then(|| if cfg.metar_station.is_empty() { omsi_launcher_lib::nearest_airport(&args.root.to_string_lossy(), &args.map) } else { cfg.metar_station.clone() });
+    let station = cfg.metar_sync.then(|| {
+        if cfg.metar_station.is_empty() {
+            omsi_launcher_lib::nearest_airport(&args.root.to_string_lossy(), &args.map)
+        } else {
+            cfg.metar_station.clone()
+        }
+    });
     if let Some(icao) = station.as_ref() {
-        match crate::weather_setup::try_metar(icao).and_then(|w| crate::weather_setup::report_wire(&w)) {
+        match crate::weather_setup::try_metar(icao)
+            .and_then(|w| crate::weather_setup::report_wire(&w))
+        {
             Some(wire) => args.weather = Some(wire),
             None => log::warn!("server: no METAR report for {icao} yet; trying again soon"),
         }
@@ -213,7 +289,9 @@ pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     args.schedule = cfg.timetable;
     args.ai_drive_through_parked = cfg.ai_drive_through_parked;
     if cfg.ai_drive_through_parked {
-        log::info!("server: ai_drive_through_parked = 1: the AI drives on through a parked car standing in its lane, as OMSI 2's does");
+        log::info!(
+            "server: ai_drive_through_parked = 1: the AI drives on through a parked car standing in its lane, as OMSI 2's does"
+        );
     }
     args.passengers = cfg.passengers;
     let _ = SERVER_PASSENGERS.set((cfg.passengers, cfg.passenger_density));
@@ -222,7 +300,10 @@ pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     }
     let limits = cfg.ai_limits.settings_lines();
     if !limits.is_empty() {
-        log::info!("server: AI limits of server.cfg over settings.cfg: {}", limits.trim_end().replace('\n', ", "));
+        log::info!(
+            "server: AI limits of server.cfg over settings.cfg: {}",
+            limits.trim_end().replace('\n', ", ")
+        );
         let _ = crate::settings::SERVER_AI_LIMITS.set(limits);
     }
     args.lan_host = Some(cfg.port);
@@ -234,15 +315,33 @@ pub(crate) fn prepare(args: &mut Args, path: &Path) -> Result<ServerCfg> {
     if args.offscreen.is_none() {
         args.offscreen = Some(std::env::temp_dir().join("omsi-server-unused.png"));
     }
-    let density = cfg.passenger_density.map(|d| d.to_string()).unwrap_or_else(|| "as settings.cfg".into());
-    log::info!("server: you run this server, not openOMSI: you are responsible for the data your players send it (driver names, network addresses, chat, voice) and for what you keep of it, such as logs and bans");
-    log::info!("server '{}': map {}, {} at {}, traffic {}, timetable {}, passengers {} (density {density}), UDP {} / web {}, at most {} players", cfg.name, cfg.map, cfg.date.as_deref().unwrap_or("today"), cfg.time, cfg.traffic, cfg.timetable, cfg.passengers, cfg.port, cfg.web_port, cfg.max_players);
+    let density = cfg
+        .passenger_density
+        .map(|d| d.to_string())
+        .unwrap_or_else(|| "as settings.cfg".into());
+    log::info!(
+        "server: you run this server, not openOMSI: you are responsible for the data your players send it (driver names, network addresses, chat, voice) and for what you keep of it, such as logs and bans"
+    );
+    log::info!(
+        "server '{}': map {}, {} at {}, traffic {}, timetable {}, passengers {} (density {density}), UDP {} / web {}, at most {} players",
+        cfg.name,
+        cfg.map,
+        cfg.date.as_deref().unwrap_or("today"),
+        cfg.time,
+        cfg.traffic,
+        cfg.timetable,
+        cfg.passengers,
+        cfg.port,
+        cfg.web_port,
+        cfg.max_players
+    );
     Ok(cfg)
 }
 
 /// A dedicated server's people: whether it has any (`passengers`) and its
 /// `passenger_density` (None: the machine's own passengers setting).
-pub(crate) static SERVER_PASSENGERS: std::sync::OnceLock<(bool, Option<f32>)> = std::sync::OnceLock::new();
+pub(crate) static SERVER_PASSENGERS: std::sync::OnceLock<(bool, Option<f32>)> =
+    std::sync::OnceLock::new();
 
 /// The map of `server.cfg` is installed (in the original folder or the content folder), or
 /// what to do: the maps there are.
@@ -251,7 +350,14 @@ pub(crate) fn check_map(args: &Args) -> Result<(), String> {
     if omsi_cfg::vfs::exists(&path) {
         return Ok(());
     }
-    Err(format!("the map {} (server.cfg's map, or --server-map) is not installed ({} not found). Installed maps: {}", args.map, path.display(), Some(installed_maps().join(", ")).filter(|l| !l.is_empty()).unwrap_or_else(|| "none".into())))
+    Err(format!(
+        "the map {} (server.cfg's map, or --server-map) is not installed ({} not found). Installed maps: {}",
+        args.map,
+        path.display(),
+        Some(installed_maps().join(", "))
+            .filter(|l| !l.is_empty())
+            .unwrap_or_else(|| "none".into())
+    ))
 }
 
 pub(crate) use omsi_lan::server_cfg::installed_maps;
@@ -260,7 +366,8 @@ pub(crate) use omsi_lan::server_cfg::installed_maps;
 pub(crate) static SERVER_METAR: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
 
 /// A dedicated server's admin and moderator passwords and clock speed (for the host loop).
-pub(crate) static SERVER_ADMIN: std::sync::OnceLock<(String, String, f64)> = std::sync::OnceLock::new();
+pub(crate) static SERVER_ADMIN: std::sync::OnceLock<(String, String, f64)> =
+    std::sync::OnceLock::new();
 
 /// What of a dedicated server's state stays as `server.cfg` says (the rest is the loop's).
 static SERVER_STATE: std::sync::OnceLock<omsi_admin::ServerState> = std::sync::OnceLock::new();
@@ -269,21 +376,49 @@ static SERVER_STATE: std::sync::OnceLock<omsi_admin::ServerState> = std::sync::O
 /// (`admin-audit.log` beside `server.cfg`, put aside at 1 MB).
 fn start_administration(cfg: &ServerCfg, path: &Path) {
     if !cfg.moderator_password.is_empty() && cfg.moderator_password == cfg.admin_password {
-        log::warn!("server.cfg: moderator_password is the admin_password: it gives the admin's role");
+        log::warn!(
+            "server.cfg: moderator_password is the admin_password: it gives the admin's role"
+        );
     }
-    let pw = omsi_admin::Passwords { admin: cfg.admin_password.clone(), moderator: cfg.moderator_password.clone() };
+    let pw = omsi_admin::Passwords {
+        admin: cfg.admin_password.clone(),
+        moderator: cfg.moderator_password.clone(),
+    };
     let audit = path.parent().map(|d| d.join("admin-audit.log"));
-    let hub = std::sync::Arc::new(omsi_admin::Hub::new(omsi_admin::Auth::new(pw, Default::default()), omsi_admin::Audit::new(audit, 1 << 20)));
+    let hub = std::sync::Arc::new(omsi_admin::Hub::new(
+        omsi_admin::Auth::new(pw, Default::default()),
+        omsi_admin::Audit::new(audit, 1 << 20),
+    ));
     omsi_lan::admin::install_hub(hub.clone());
     omsi_net::ws::believe_cf_connecting_ip(cfg.gateway_cf_connecting_ip);
     // the web panel and its API on the gateway (`admin_web`: who may reach them)
-    let web = omsi_admin::WebCfg { mode: cfg.admin_web, origins: cfg.admin_web_origins.clone(), trusted_proxies: cfg.admin_trusted_proxies.clone(), proxy_header: cfg.admin_proxy_header, traffic_max: crate::game_lists::TRAFFIC_MAX };
+    let web = omsi_admin::WebCfg {
+        mode: cfg.admin_web,
+        origins: cfg.admin_web_origins.clone(),
+        trusted_proxies: cfg.admin_trusted_proxies.clone(),
+        proxy_header: cfg.admin_proxy_header,
+        traffic_max: crate::game_lists::TRAFFIC_MAX,
+    };
     let has_password = !cfg.admin_password.is_empty() || !cfg.moderator_password.is_empty();
     match (web.mode, has_password) {
-        (omsi_admin::WebMode::Off, _) => log::info!("server: no web administration (admin_web = off)"),
+        (omsi_admin::WebMode::Off, _) => {
+            log::info!("server: no web administration (admin_web = off)")
+        }
         (_, false) => log::info!("server: no admin_password: the administration is off"),
-        (omsi_admin::WebMode::Local, true) => log::info!("server: web administration at http://127.0.0.1:{}/admin/ (from this machine only)", cfg.web_port),
-        (omsi_admin::WebMode::Remote, true) => log::warn!("server: web administration at http://127.0.0.1:{}/admin/ and over HTTPS through {:?}{}", cfg.web_port, web.trusted_proxies, if cfg.tunnel { " - with the public tunnel too: only the passwords guard it" } else { "" }),
+        (omsi_admin::WebMode::Local, true) => log::info!(
+            "server: web administration at http://127.0.0.1:{}/admin/ (from this machine only)",
+            cfg.web_port
+        ),
+        (omsi_admin::WebMode::Remote, true) => log::warn!(
+            "server: web administration at http://127.0.0.1:{}/admin/ and over HTTPS through {:?}{}",
+            cfg.web_port,
+            web.trusted_proxies,
+            if cfg.tunnel {
+                " - with the public tunnel too: only the passwords guard it"
+            } else {
+                ""
+            }
+        ),
     }
     omsi_lan::gateway::open_admin_api(hub, web);
     let _ = SERVER_STATE.set(omsi_admin::ServerState {
@@ -301,7 +436,13 @@ fn start_administration(cfg: &ServerCfg, path: &Path) {
 
 /// The server's state for the admins' panels now (`time`: the clock, s; `world`: as for
 /// `GET /status`).
-pub(crate) fn admin_state(time: f64, speed: f64, weather: &str, metar: Option<&str>, world: omsi_net::ws::WorldCounts) -> omsi_admin::ServerState {
+pub(crate) fn admin_state(
+    time: f64,
+    speed: f64,
+    weather: &str,
+    metar: Option<&str>,
+    world: omsi_net::ws::WorldCounts,
+) -> omsi_admin::ServerState {
     let clock = time.rem_euclid(86_400.0);
     omsi_admin::ServerState {
         time: crate::schedule::hhmm(clock),
@@ -322,7 +463,8 @@ pub(crate) fn admin_state(time: f64, speed: f64, weather: &str, metar: Option<&s
 }
 
 /// A dedicated server run: graphics without a device, the whole world by interest.
-pub(crate) static SERVER_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static SERVER_MODE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// Every second of a server run: what the status page says (players, time, weather) and
 /// who is where (`GET /players`, when `share_positions` is on).
@@ -331,15 +473,29 @@ pub(crate) fn tick_status(lan: &omsi_net::LanSession, time: f64, weather: &str) 
     // (the admin's clock shift may take the time below 0 or past midnight: 23:08 had come
     // out as "00:-52")
     omsi_net::addrs::find_direct(lan, |a| crate::lan::update_server_direct(a));
-    crate::lan::update_server_info(players, &lan.world.date, &crate::schedule::hhmm(time.rem_euclid(86400.0)), weather);
+    crate::lan::update_server_info(
+        players,
+        &lan.world.date,
+        &crate::schedule::hhmm(time.rem_euclid(86400.0)),
+        weather,
+    );
     let parked = omsi_lan::parked::server_free();
-    let poses: Vec<&omsi_net::Pose> = lan.peers().filter(|p| p.has_info && p.has_pose).map(|p| &p.pose).chain(&parked).collect();
-    let list = poses.iter().filter_map(|q| player_info(q, |id| poses.iter().copied().find(|o| o.id == id))).collect();
+    let poses: Vec<&omsi_net::Pose> = lan
+        .peers()
+        .filter(|p| p.has_info && p.has_pose)
+        .map(|p| &p.pose)
+        .chain(&parked)
+        .collect();
+    let list = poses
+        .iter()
+        .filter_map(|q| player_info(q, |id| poses.iter().copied().find(|o| o.id == id)))
+        .collect();
     crate::lan::update_server_players(list);
 }
 
 /// The public server list's publisher while the server runs (`public_server = 1`).
-static PUBLIC_LIST: std::sync::Mutex<Option<omsi_lan::public_list::Handle>> = std::sync::Mutex::new(None);
+static PUBLIC_LIST: std::sync::Mutex<Option<omsi_lan::public_list::Handle>> =
+    std::sync::Mutex::new(None);
 
 /// List the server in the public list if `server.cfg` says so; the log says why it is not.
 pub(crate) fn start_public_list(cfg: &ServerCfg) {
@@ -348,7 +504,9 @@ pub(crate) fn start_public_list(cfg: &ServerCfg) {
     }
     match omsi_lan::public_list::start(cfg, &format!("{} ({})", omsi_platform::VERSION, BUILD)) {
         Ok(h) => {
-            log::info!("server: public_server = 1: listing in the public server list (checked first; it appears once the list service has reached the web port or the tunnel)");
+            log::info!(
+                "server: public_server = 1: listing in the public server list (checked first; it appears once the list service has reached the web port or the tunnel)"
+            );
             if let Ok(mut p) = PUBLIC_LIST.lock() {
                 *p = Some(h);
             }

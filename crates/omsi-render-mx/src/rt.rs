@@ -244,7 +244,6 @@ pub(super) fn reflect_source() -> String {
     .join("\n")
 }
 
-
 impl RayTracer {
     pub(super) fn new(device: &mx::Device) -> RayTracer {
         let module = device
@@ -261,7 +260,7 @@ impl RayTracer {
                     module: &module,
                     entry_point: Some(entry),
                     constants: &constants,
-                    })
+                })
                 .expect("mX: a compute pipeline")
         };
         let trace = pipeline("cs_trace", None);
@@ -333,7 +332,7 @@ impl RayTracer {
                     constants: &div,
                 }),
             })
-        .expect("mX: a render pipeline");
+            .expect("mX: a render pipeline");
         let tlas_cap = 8192;
         RayTracer {
             blas: hashbrown::HashMap::new(),

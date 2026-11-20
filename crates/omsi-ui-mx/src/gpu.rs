@@ -63,13 +63,40 @@ pub struct Layer {
 impl Layer {
     /// Pixels only, clipped to `clip`.
     pub fn flat(clip: [f32; 4], radius: f32, opacity: f32) -> Layer {
-        Layer { view_proj: Mat4::IDENTITY, viewport: [0.0; 4], clip, radius, opacity, px_scale: 0.0, depth: false, shadow: false, height: 1.0 }
+        Layer {
+            view_proj: Mat4::IDENTITY,
+            viewport: [0.0; 4],
+            clip,
+            radius,
+            opacity,
+            px_scale: 0.0,
+            depth: false,
+            shadow: false,
+            height: 1.0,
+        }
     }
     /// A perspective view of a world drawn into `viewport`.
-    pub fn world(view: Mat4, fov_y: f32, viewport: [f32; 4], clip: [f32; 4], radius: f32, opacity: f32) -> Layer {
+    pub fn world(
+        view: Mat4,
+        fov_y: f32,
+        viewport: [f32; 4],
+        clip: [f32; 4],
+        radius: f32,
+        opacity: f32,
+    ) -> Layer {
         let aspect = viewport[2] / viewport[3].max(1.0);
         let proj = Mat4::perspective_rh(fov_y, aspect, 1.0, 20000.0);
-        Layer { view_proj: proj * view, viewport, clip, radius, opacity, px_scale: 2.0 * (fov_y * 0.5).tan() / viewport[3].max(1.0), depth: false, shadow: false, height: 1.0 }
+        Layer {
+            view_proj: proj * view,
+            viewport,
+            clip,
+            radius,
+            opacity,
+            px_scale: 2.0 * (fov_y * 0.5).tan() / viewport[3].max(1.0),
+            depth: false,
+            shadow: false,
+            height: 1.0,
+        }
     }
     /// The same layer drawn depth-tested (see `depth`).
     pub fn with_depth(mut self) -> Layer {
@@ -155,19 +182,32 @@ pub struct Gpu {
 impl Gpu {
     /// A pipeline drawing into `format` with `samples` MSAA samples, and an atlas texture of
     /// `atlas_size` pixels square (texture 0).
-    pub fn new(device: &mx::Device,
-        format: mx::TextureFormat, samples: u32, atlas_size: u32) -> Gpu {
+    pub fn new(
+        device: &mx::Device,
+        format: mx::TextureFormat,
+        samples: u32,
+        atlas_size: u32,
+    ) -> Gpu {
         Self::make(device, format, samples, atlas_size, false)
     }
 
     /// The same with a depth buffer: layers marked `depth` are depth-tested (see [`Layer::depth`]).
-    pub fn with_depth(device: &mx::Device,
-        format: mx::TextureFormat, samples: u32, atlas_size: u32) -> Gpu {
+    pub fn with_depth(
+        device: &mx::Device,
+        format: mx::TextureFormat,
+        samples: u32,
+        atlas_size: u32,
+    ) -> Gpu {
         Self::make(device, format, samples, atlas_size, true)
     }
 
-    fn make(device: &mx::Device,
-        format: mx::TextureFormat, samples: u32, atlas_size: u32, with_depth: bool) -> Gpu {
+    fn make(
+        device: &mx::Device,
+        format: mx::TextureFormat,
+        samples: u32,
+        atlas_size: u32,
+        with_depth: bool,
+    ) -> Gpu {
         let shader = device
             .create_shader_module(&mx::ShaderModuleDescriptor {
                 label: Some("omsi-ui"),
@@ -242,10 +282,17 @@ impl Gpu {
             depth_fail_op: mx::StencilOperation::Keep,
             pass_op: mx::StencilOperation::IncrementClamp,
         };
-        let shadow_stencil = mx::StencilState { front: once, back: once, read_mask: 0xff, write_mask: 0xff };
+        let shadow_stencil = mx::StencilState {
+            front: once,
+            back: once,
+            read_mask: 0xff,
+            write_mask: 0xff,
+        };
         let pipeline = make_pipeline(with_depth.then(|| depth_state(false, Default::default())));
-        let pipeline_depth = with_depth.then(|| make_pipeline(Some(depth_state(true, Default::default()))));
-        let pipeline_shadow = with_depth.then(|| make_pipeline(Some(depth_state(false, shadow_stencil))));
+        let pipeline_depth =
+            with_depth.then(|| make_pipeline(Some(depth_state(true, Default::default()))));
+        let pipeline_shadow =
+            with_depth.then(|| make_pipeline(Some(depth_state(false, shadow_stencil))));
         let uniform = device
             .create_buffer(&mx::BufferDescriptor {
                 label: Some("omsi-ui uniform"),
@@ -264,15 +311,37 @@ impl Gpu {
                 ..Default::default()
             })
             .expect("mX: a sampler");
-        let mut g = Gpu { pipeline, pipeline_depth, pipeline_shadow, depth: None, uniform,
-            uniform_groups: Vec::new(), sampler, buffers: Vec::new(), packed: Vec::new(), textures: Vec::new(), msaa: None, failed_target: None, samples, format, atlas_size: atlas_size.max(1), device: device.clone() };
+        let mut g = Gpu {
+            pipeline,
+            pipeline_depth,
+            pipeline_shadow,
+            depth: None,
+            uniform,
+            uniform_groups: Vec::new(),
+            sampler,
+            buffers: Vec::new(),
+            packed: Vec::new(),
+            textures: Vec::new(),
+            msaa: None,
+            failed_target: None,
+            samples,
+            format,
+            atlas_size: atlas_size.max(1),
+            device: device.clone(),
+        };
         let atlas = vec![0u8; (atlas_size * atlas_size * 4) as usize];
         g.add_texture_internal(device, None, atlas_size, atlas_size, &atlas);
         g
     }
 
-    fn add_texture_internal(&mut self, device: &mx::Device,
-        queue: Option<&mx::Queue>, w: u32, h: u32, rgba: &[u8]) -> usize {
+    fn add_texture_internal(
+        &mut self,
+        device: &mx::Device,
+        queue: Option<&mx::Queue>,
+        w: u32,
+        h: u32,
+        rgba: &[u8],
+    ) -> usize {
         let texture = device
             .create_texture(&mx::TextureDescriptor {
                 label: Some("omsi-ui image"),
@@ -296,7 +365,11 @@ impl Gpu {
             .create_view(&Default::default())
             .expect("mX: a texture view");
         let group = self.group(device, &view);
-        self.textures.push(Some(Tex { texture: Some(texture), group, size: (w, h) }));
+        self.textures.push(Some(Tex {
+            texture: Some(texture),
+            group,
+            size: (w, h),
+        }));
         self.textures.len() - 1
     }
 
@@ -310,7 +383,9 @@ impl Gpu {
                 },
                 mx::BindGroupEntry {
                     binding: 1,
-                    resource: mx::BindingResource::Sampler(&self.sampler), }],
+                    resource: mx::BindingResource::Sampler(&self.sampler),
+                },
+            ],
         })
     }
 
@@ -347,18 +422,36 @@ impl Gpu {
     }
 
     /// An RGBA picture (straight alpha, sRGB) to draw with; returns its texture index.
-    pub fn add_image(&mut self, device: &mx::Device,
-        queue: &mx::Queue, w: u32, h: u32, rgba: &[u8]) -> usize {
+    pub fn add_image(
+        &mut self,
+        device: &mx::Device,
+        queue: &mx::Queue,
+        w: u32,
+        h: u32,
+        rgba: &[u8],
+    ) -> usize {
         self.add_texture_internal(device, Some(queue), w, h, rgba)
     }
 
     /// Replace the pixels of a picture added by `add_image` (same size; else it is made
     /// anew under the same index).
-    pub fn update_image(&mut self, device: &mx::Device,
-        queue: &mx::Queue, id: usize, w: u32, h: u32, rgba: &[u8]) {
+    pub fn update_image(
+        &mut self,
+        device: &mx::Device,
+        queue: &mx::Queue,
+        id: usize,
+        w: u32,
+        h: u32,
+        rgba: &[u8],
+    ) {
         let same = matches!(self.textures.get(id), Some(Some(t)) if t.size == (w, h) && t.texture.is_some());
         if same {
-            let t = self.textures[id].as_ref().unwrap().texture.as_ref().unwrap();
+            let t = self.textures[id]
+                .as_ref()
+                .unwrap()
+                .texture
+                .as_ref()
+                .unwrap();
             Self::write(queue, t, w, [0, 0, w, h], rgba);
             return;
         }
@@ -373,20 +466,36 @@ impl Gpu {
     }
 
     /// A texture drawn elsewhere (a render target) to draw with; returns its index.
-    pub fn add_view(&mut self, device: &mx::Device,
-        view: &mx::TextureView, size: (u32, u32)) -> usize {
+    pub fn add_view(
+        &mut self,
+        device: &mx::Device,
+        view: &mx::TextureView,
+        size: (u32, u32),
+    ) -> usize {
         let group = self.group(device, view);
-        self.textures.push(Some(Tex { texture: None, group, size }));
+        self.textures.push(Some(Tex {
+            texture: None,
+            group,
+            size,
+        }));
         self.textures.len() - 1
     }
 
     /// Point `id` at another view (a render target made anew at another size).
-    pub fn set_view(&mut self, device: &mx::Device,
+    pub fn set_view(
+        &mut self,
+        device: &mx::Device,
         id: usize,
-        view: &mx::TextureView, size: (u32, u32)) {
+        view: &mx::TextureView,
+        size: (u32, u32),
+    ) {
         let group = self.group(device, view);
         if let Some(slot) = self.textures.get_mut(id) {
-            *slot = Some(Tex { texture: None, group, size });
+            *slot = Some(Tex {
+                texture: None,
+                group,
+                size,
+            });
         }
     }
 
@@ -425,13 +534,20 @@ impl Gpu {
                 .expect("mX: a texture view");
             let group = self.group(&device, &view);
             if let Some(slot) = self.textures.first_mut() {
-                *slot = Some(Tex { texture: Some(texture), group, size: (size, size) });
+                *slot = Some(Tex {
+                    texture: Some(texture),
+                    group,
+                    size: (size, size),
+                });
             }
             self.atlas_size = size;
             atlas.mark_all_dirty();
         }
         if let Some(r) = atlas.take_dirty() {
-            if let Some(Some(Tex { texture: Some(t), .. })) = self.textures.first() {
+            if let Some(Some(Tex {
+                texture: Some(t), ..
+            })) = self.textures.first()
+            {
                 Self::write(queue, t, atlas.size, r, &atlas.rgba);
             }
         }
@@ -513,14 +629,20 @@ impl Gpu {
         }
     }
 
-    fn attachment(&mut self, device: &mx::Device,
+    fn attachment(
+        &mut self,
+        device: &mx::Device,
         label: &str,
         (w, h): (u32, u32),
         format: mx::TextureFormat,
     ) -> Option<mx::TextureView> {
         let made = device.create_texture(&mx::TextureDescriptor {
             label: Some(label),
-            size: mx::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            size: mx::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: self.samples,
             dimension: mx::TextureDimension::D2,
@@ -544,12 +666,18 @@ impl Gpu {
 
     /// [`Self::render`] through `attachments` instead of the `Gpu`'s own.
     #[allow(clippy::too_many_arguments)]
-    pub fn render_with(&mut self, attachments: &mut Attachments, device: &mx::Device,
+    pub fn render_with(
+        &mut self,
+        attachments: &mut Attachments,
+        device: &mx::Device,
         queue: &mx::Queue,
         encoder: &mut mx::CommandEncoder,
         target: &mx::TextureView,
         size: (u32, u32),
-        clear: Option<mx::Color>, layers: &[Layer], draws: &[Draw]) {
+        clear: Option<mx::Color>,
+        layers: &[Layer],
+        draws: &[Draw],
+    ) {
         std::mem::swap(&mut self.msaa, &mut attachments.msaa);
         std::mem::swap(&mut self.depth, &mut attachments.depth);
         self.render(device, queue, encoder, target, size, clear, layers, draws);
@@ -559,18 +687,33 @@ impl Gpu {
 
     /// Draw into `target` (`size` pixels): cleared to `clear` first when given.
     #[allow(clippy::too_many_arguments)]
-    pub fn render(&mut self, device: &mx::Device,
+    pub fn render(
+        &mut self,
+        device: &mx::Device,
         queue: &mx::Queue,
         encoder: &mut mx::CommandEncoder,
         target: &mx::TextureView,
         size: (u32, u32),
-        clear: Option<mx::Color>, layers: &[Layer], draws: &[Draw]) {
+        clear: Option<mx::Color>,
+        layers: &[Layer],
+        draws: &[Draw],
+    ) {
         let (w, h) = (size.0.max(1), size.1.max(1));
         // the layers' uniforms
         let mut data = vec![0u8; (SLOT * MAX_LAYERS) as usize];
         for (k, l) in layers.iter().take(MAX_LAYERS as usize).enumerate() {
-            let vp = if l.viewport[2] > 0.0 { l.viewport } else { [0.0, 0.0, w as f32, h as f32] };
-            let u = Uniform { view_proj: l.view_proj.to_cols_array_2d(), viewport: vp, target: [w as f32, h as f32, l.height, 0.0], clip: l.clip, params: [l.radius, l.opacity, l.px_scale, 0.0] };
+            let vp = if l.viewport[2] > 0.0 {
+                l.viewport
+            } else {
+                [0.0, 0.0, w as f32, h as f32]
+            };
+            let u = Uniform {
+                view_proj: l.view_proj.to_cols_array_2d(),
+                viewport: vp,
+                target: [w as f32, h as f32, l.height, 0.0],
+                clip: l.clip,
+                params: [l.radius, l.opacity, l.px_scale, 0.0],
+            };
             let at = k * SLOT as usize;
             data[at..at + std::mem::size_of::<Uniform>()].copy_from_slice(bytemuck::bytes_of(&u));
         }
@@ -596,21 +739,41 @@ impl Gpu {
                     }],
                 }));
         }
-        if self.samples > 1 && self.msaa.as_ref().map(|m| (m.1, m.2) != (w, h)).unwrap_or(true) {
+        if self.samples > 1
+            && self
+                .msaa
+                .as_ref()
+                .map(|m| (m.1, m.2) != (w, h))
+                .unwrap_or(true)
+        {
             self.msaa = None;
-            let Some(view) = self.attachment(device, "omsi-ui msaa", (w, h), self.format) else { return };
+            let Some(view) = self.attachment(device, "omsi-ui msaa", (w, h), self.format) else {
+                return;
+            };
             self.msaa = Some((view, w, h));
         }
-        if self.pipeline_depth.is_some() && self.depth.as_ref().map(|d| (d.1, d.2) != (w, h)).unwrap_or(true) {
+        if self.pipeline_depth.is_some()
+            && self
+                .depth
+                .as_ref()
+                .map(|d| (d.1, d.2) != (w, h))
+                .unwrap_or(true)
+        {
             self.depth = None;
-            let Some(view) = self.attachment(device, "omsi-ui depth", (w, h), DEPTH_FORMAT) else { return };
+            let Some(view) = self.attachment(device, "omsi-ui depth", (w, h), DEPTH_FORMAT) else {
+                return;
+            };
             self.depth = Some((view, w, h));
         }
         let (view, resolve) = match (&self.msaa, self.samples > 1) {
             (Some(m), true) => (&m.0, Some(target)),
             _ => (target, None),
         };
-        let depth_view = self.pipeline_depth.as_ref().and(self.depth.as_ref()).map(|d| &d.0);
+        let depth_view = self
+            .pipeline_depth
+            .as_ref()
+            .and(self.depth.as_ref())
+            .map(|d| &d.0);
         let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
             label: Some("omsi-ui"),
             color_attachments: &[Some(mx::RenderPassColorAttachment {
@@ -625,7 +788,9 @@ impl Gpu {
                     store: if resolve.is_some() {
                         mx::StoreOp::Discard
                     } else {
-                        mx::StoreOp::Store } },
+                        mx::StoreOp::Store
+                    },
+                },
             })],
             depth_stencil_attachment: depth_view.map(|view| mx::RenderPassDepthStencilAttachment {
                 view,
@@ -644,10 +809,15 @@ impl Gpu {
         let mut depth_on: Option<u8> = None;
         let mut state: Option<(usize, usize, usize)> = None;
         for d in draws {
-            let (Some((Some(buf), _)), Some(l)) = (self.buffers.get(d.buffer), layers.get(d.layer)) else { continue };
+            let (Some((Some(buf), _)), Some(l)) = (self.buffers.get(d.buffer), layers.get(d.layer))
+            else {
+                continue;
+            };
             // (a texture that is not there - one freed, or a number kept from another device -
             // draws nothing: taken for the atlas, a picture came out as the interface's words)
-            let Some(Some(tex)) = self.textures.get(d.texture) else { continue };
+            let Some(Some(tex)) = self.textures.get(d.texture) else {
+                continue;
+            };
             if d.range.is_empty() || d.layer as usize >= self.uniform_groups.len() {
                 continue;
             }
@@ -676,10 +846,21 @@ impl Gpu {
             // viewport it squeezed an interface zoomed by 1.1 into the top-left 90 % of the
             // window while the clips stayed full size (cut-off text, a black band below).
             let flat = l.px_scale == 0.0 && l.view_proj == Mat4::IDENTITY;
-            let vp = if l.viewport[2] > 0.0 && !flat { l.viewport } else { [0.0, 0.0, w as f32, h as f32] };
+            let vp = if l.viewport[2] > 0.0 && !flat {
+                l.viewport
+            } else {
+                [0.0, 0.0, w as f32, h as f32]
+            };
             let vx = vp[0].clamp(0.0, w as f32 - 1.0);
             let vy = vp[1].clamp(0.0, h as f32 - 1.0);
-            pass.set_viewport(vx, vy, vp[2].min(w as f32 - vx).max(1.0), vp[3].min(h as f32 - vy).max(1.0), 0.0, 1.0);
+            pass.set_viewport(
+                vx,
+                vy,
+                vp[2].min(w as f32 - vx).max(1.0),
+                vp[3].min(h as f32 - vy).max(1.0),
+                0.0,
+                1.0,
+            );
             let x0 = l.clip[0].floor().clamp(0.0, w as f32) as u32;
             let y0 = l.clip[1].floor().clamp(0.0, h as f32) as u32;
             let x1 = l.clip[2].ceil().clamp(0.0, w as f32) as u32;
@@ -699,17 +880,37 @@ impl Gpu {
 mod tests {
     #[test]
     fn packed_vertices_keep_their_values_in_36_bytes() {
-        let v = crate::Vertex { pos: [1234.5, -987.25, 3.5], ext: [-0.7071, 1.0], width: [3.4, 2.5], uv: [0.123456, 0.987654], color: [0.2, 0.5, 1.0, 0.02], mode: [3.0, 1.0] };
+        let v = crate::Vertex {
+            pos: [1234.5, -987.25, 3.5],
+            ext: [-0.7071, 1.0],
+            width: [3.4, 2.5],
+            uv: [0.123456, 0.987654],
+            color: [0.2, 0.5, 1.0, 0.02],
+            mode: [3.0, 1.0],
+        };
         let p = super::pack(&v);
         assert_eq!(std::mem::size_of::<super::Packed>(), 36);
-        use std::mem::offset_of;
         use super::Packed;
-        assert_eq!([offset_of!(Packed, ext), offset_of!(Packed, width), offset_of!(Packed, uv), offset_of!(Packed, color), offset_of!(Packed, mode)], [12, 16, 20, 28, 32]);
+        use std::mem::offset_of;
+        assert_eq!(
+            [
+                offset_of!(Packed, ext),
+                offset_of!(Packed, width),
+                offset_of!(Packed, uv),
+                offset_of!(Packed, color),
+                offset_of!(Packed, mode)
+            ],
+            [12, 16, 20, 28, 32]
+        );
         let f = |b: [u16; 2]| b.map(|x| half::f16::from_bits(x).to_f32());
         assert_eq!(p.pos, v.pos);
         assert_eq!(p.uv, v.uv);
         assert_eq!(f(p.mode), v.mode);
-        for (a, b) in f(p.ext).iter().chain(&f(p.width)).zip(v.ext.iter().chain(&v.width)) {
+        for (a, b) in f(p.ext)
+            .iter()
+            .chain(&f(p.width))
+            .zip(v.ext.iter().chain(&v.width))
+        {
             assert!((a - b).abs() <= b.abs() * 1e-3, "{a} {b}");
         }
         assert_eq!(p.color, [51, 128, 255, 5]);
@@ -728,13 +929,21 @@ mod tests {
         let verts = vec![crate::Vertex::default(); super::PACK_CHUNK * 2 + 7];
         let v = super::Gpu::vertices(&device, &verts);
         assert!(v.0.is_some());
-        assert_eq!(v.1, (verts.len() * std::mem::size_of::<super::Packed>()) as u64);
+        assert_eq!(
+            v.1,
+            (verts.len() * std::mem::size_of::<super::Packed>()) as u64
+        );
     }
 
     #[test]
     fn shader_validates() {
         let m = naga::front::wgsl::parse_str(include_str!("ui.wgsl")).expect("parse");
-        naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&m).expect("valid");
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::all(),
+        )
+        .validate(&m)
+        .expect("valid");
     }
 
     #[test]
@@ -770,9 +979,27 @@ mod tests {
             .expect("mX: a texture view");
         let mut encoder = device.create_command_encoder(None);
         let huge = device.limits().max_texture_dimension_2d + 1;
-        gpu.render(&device, &queue, &mut encoder, &view, (huge, 64), None, &[], &[]);
+        gpu.render(
+            &device,
+            &queue,
+            &mut encoder,
+            &view,
+            (huge, 64),
+            None,
+            &[],
+            &[],
+        );
         assert!(gpu.msaa.is_none());
-        gpu.render(&device, &queue, &mut encoder, &view, (64, 64), None, &[], &[]);
+        gpu.render(
+            &device,
+            &queue,
+            &mut encoder,
+            &view,
+            (64, 64),
+            None,
+            &[],
+            &[],
+        );
         assert!(gpu.msaa.is_some());
         let done = queue.submit([encoder.finish()]);
         device.wait(done).expect("the frames ran");
@@ -791,12 +1018,17 @@ mod tests {
         let format = mx::TextureFormat::Rgba8UnormSrgb;
         let mut gpu = super::Gpu::with_depth(&device, format, 4, 256);
         let target = |side: u32| {
-            device.create_texture(&mx::TextureDescriptor {
+            device
+                .create_texture(&mx::TextureDescriptor {
                     label: None,
-                    size: mx::Extent3d { width: side, height: side, depth_or_array_layers: 1 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: mx::TextureDimension::D2,
+                    size: mx::Extent3d {
+                        width: side,
+                        height: side,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: mx::TextureDimension::D2,
                     format,
                     usage: mx::TextureUsages::RENDER_ATTACHMENT,
                     view_formats: &[],
@@ -808,11 +1040,38 @@ mod tests {
         let (panel, screen) = (target(64), target(32));
         let mut screens = super::Attachments::default();
         let mut encoder = device.create_command_encoder(None);
-        gpu.render(&device, &queue, &mut encoder, &panel, (64, 64), None, &[], &[]);
-        gpu.render_with(&mut screens, &device, &queue, &mut encoder, &screen, (32, 32), None, &[], &[]);
-        assert_eq!(gpu.msaa.as_ref().map(|m| (m.1, m.2)), Some((64, 64)), "the panel's stay");
+        gpu.render(
+            &device,
+            &queue,
+            &mut encoder,
+            &panel,
+            (64, 64),
+            None,
+            &[],
+            &[],
+        );
+        gpu.render_with(
+            &mut screens,
+            &device,
+            &queue,
+            &mut encoder,
+            &screen,
+            (32, 32),
+            None,
+            &[],
+            &[],
+        );
+        assert_eq!(
+            gpu.msaa.as_ref().map(|m| (m.1, m.2)),
+            Some((64, 64)),
+            "the panel's stay"
+        );
         assert_eq!(gpu.depth.as_ref().map(|d| (d.1, d.2)), Some((64, 64)));
-        assert_eq!(screens.msaa.as_ref().map(|m| (m.1, m.2)), Some((32, 32)), "the screen's are its holder's");
+        assert_eq!(
+            screens.msaa.as_ref().map(|m| (m.1, m.2)),
+            Some((32, 32)),
+            "the screen's are its holder's"
+        );
         assert_eq!(screens.depth.as_ref().map(|d| (d.1, d.2)), Some((32, 32)));
         queue.submit([encoder.finish()]);
     }

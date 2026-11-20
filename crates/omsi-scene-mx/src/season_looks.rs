@@ -52,18 +52,33 @@ fn plant_key(key: i64, tx: i32, ty: i32) -> u64 {
 impl World {
     /// The type a placed plant takes in a season's phase: `ot` itself, or its copy in the
     /// other look when the plant `key` (in tile `tx`, `ty`) has that look.
-    pub(super) fn plant_look(&self, file: &str, ot: Arc<ObjectType>, key: i64, tx: i32, ty: i32) -> Arc<ObjectType> {
+    pub(super) fn plant_look(
+        &self,
+        file: &str,
+        ot: Arc<ObjectType>,
+        key: i64,
+        tx: i32,
+        ty: i32,
+    ) -> Arc<ObjectType> {
         if ot.sco.tree.is_some() || !is_plant(&ot.sco) {
             // ([tree] cards take their picture per tree: see `tree_look_texture`)
             return ot;
         }
-        let Some(look) = omsi_texture::mixed_look(plant_key(key, tx, ty)) else { return ot };
+        let Some(look) = omsi_texture::mixed_look(plant_key(key, tx, ty)) else {
+            return ot;
+        };
         self.object_type_look(file, None, Some(&look)).unwrap_or(ot)
     }
 
     /// The picture of a `[tree]` card in the plant's own look: the file of the other
     /// season named in full, or `texture` as it is.
-    pub(super) fn tree_look_texture(&self, ot: &ObjectType, texture: &str, key: i64, pos: DVec3) -> String {
+    pub(super) fn tree_look_texture(
+        &self,
+        ot: &ObjectType,
+        texture: &str,
+        key: i64,
+        pos: DVec3,
+    ) -> String {
         if omsi_texture::season_mix().is_none() {
             return texture.to_string();
         }
@@ -82,7 +97,14 @@ impl World {
         if now == then {
             return texture.to_string();
         }
-        count_extra(&self.season_extra, [then.clone()], &format!("tree {texture} also in {}", look.as_deref().unwrap_or("summer")));
+        count_extra(
+            &self.season_extra,
+            [then.clone()],
+            &format!(
+                "tree {texture} also in {}",
+                look.as_deref().unwrap_or("summer")
+            ),
+        );
         then.to_string_lossy().into_owned()
     }
 
@@ -107,7 +129,11 @@ impl World {
                 .clone()
         };
         let mut changed = Vec::new();
-        for (_, mats, overrides) in ot.meshes.iter_mut().chain(ot.lower_lods.iter_mut().flat_map(|l| l.1.iter_mut())) {
+        for (_, mats, overrides) in ot
+            .meshes
+            .iter_mut()
+            .chain(ot.lower_lods.iter_mut().flat_map(|l| l.1.iter_mut()))
+        {
             for m in mats.iter_mut() {
                 if let Some(n) = renamed(&m.texture) {
                     m.texture = n.clone();
@@ -125,7 +151,15 @@ impl World {
             return None;
         }
         self.season_extra.lock().types += 1;
-        count_extra(&self.season_extra, changed, &format!("{} also in {}", ot.sco.path.display(), look.unwrap_or("summer")));
+        count_extra(
+            &self.season_extra,
+            changed,
+            &format!(
+                "{} also in {}",
+                ot.sco.path.display(),
+                look.unwrap_or("summer")
+            ),
+        );
         Some(())
     }
 }

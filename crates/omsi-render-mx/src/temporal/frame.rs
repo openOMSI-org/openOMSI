@@ -139,7 +139,10 @@ pub(crate) fn temporal_mip_bias(render_w: u32, full_w: u32, extra: f32) -> f32 {
 
 /// A picture of the window's size and format for frame generation: a plain UNORM resource (the
 /// sRGB-encoded numbers, as the upscaler's input), drawn through the renderer's sRGB view.
-fn hudless_target(device: &mx::Device, (width, height): (u32, u32), format: mx::TextureFormat,
+fn hudless_target(
+    device: &mx::Device,
+    (width, height): (u32, u32),
+    format: mx::TextureFormat,
 ) -> (mx::Texture, mx::TextureView) {
     let texture = device
         .create_texture(&mx::TextureDescriptor {
@@ -212,7 +215,13 @@ impl Renderer {
         if self.temporal.is_some() {
             return true;
         }
-        let Some(asked) = self.options.temporal.filter(|_| self.temporal_pipes.is_some()) else { return false };
+        let Some(asked) = self
+            .options
+            .temporal
+            .filter(|_| self.temporal_pipes.is_some())
+        else {
+            return false;
+        };
         let method = asked.upscaler.method();
         let loaded = match self.temporal_kept.take() {
             Some(r) if r.method() == method => Ok(r),
@@ -224,7 +233,11 @@ impl Renderer {
                     runtime,
                     targets: None,
                     keep: Default::default(),
-                    motion_buf: uniform_buffer(&self.device, "temporal motion", std::mem::size_of::<MotionUniform>() as u64),
+                    motion_buf: uniform_buffer(
+                        &self.device,
+                        "temporal motion",
+                        std::mem::size_of::<MotionUniform>() as u64,
+                    ),
                     blit_buf: uniform_buffer(&self.device, "temporal blit", 16),
                     prev_models: None,
                     prev_epoch: u64::MAX,
@@ -234,7 +247,12 @@ impl Renderer {
                     hudless: Vec::new(),
                     hudless_frame: None,
                 });
-                log::info!("{} upscaling ({}) running on {}", asked.upscaler.as_str(), asked.quality.as_str(), self.adapter_name);
+                log::info!(
+                    "{} upscaling ({}) running on {}",
+                    asked.upscaler.as_str(),
+                    asked.quality.as_str(),
+                    self.adapter_name
+                );
                 true
             }
             Err(e) => {
@@ -253,11 +271,16 @@ impl Renderer {
         }
         let d = self.temporal.as_ref().filter(|d| d.prev.is_some())?;
         let t = d.targets.as_ref().filter(|t| t.output == (width, height))?;
-        Some(self.read_texture(&t.output_tex, mx::TextureAspect::All).map(opaque))
+        Some(
+            self.read_texture(&t.output_tex, mx::TextureAspect::All)
+                .map(opaque),
+        )
     }
 
     fn temporal_quality(&self) -> TemporalQuality {
-        self.options.temporal.map_or_else(Default::default, |t| t.quality)
+        self.options
+            .temporal
+            .map_or_else(Default::default, |t| t.quality)
     }
 
     pub(crate) fn temporal_render_size(&mut self, full: (u32, u32)) -> (u32, u32) {
@@ -269,10 +292,21 @@ impl Renderer {
     }
 
     pub(crate) fn temporal_targets(&mut self, render: (u32, u32), output: (u32, u32)) {
-        let Some(blit_buf) = self.temporal.as_ref().filter(|d| !d.targets.as_ref().is_some_and(|t| t.render == render && t.output == output)).map(|d| d.blit_buf.clone()) else {
+        let Some(blit_buf) = self
+            .temporal
+            .as_ref()
+            .filter(|d| {
+                !d.targets
+                    .as_ref()
+                    .is_some_and(|t| t.render == render && t.output == output)
+            })
+            .map(|d| d.blit_buf.clone())
+        else {
             return;
         };
-        let tex = |label: &str, (w, h): (u32, u32), format: mx::TextureFormat,
+        let tex = |label: &str,
+                   (w, h): (u32, u32),
+                   format: mx::TextureFormat,
                    usage: mx::TextureUsages| {
             self.device
                 .create_texture(&mx::TextureDescriptor {
@@ -300,7 +334,9 @@ impl Renderer {
                 label: Some("temporal scene"),
                 size: mx::Extent3d {
                     width: render.0,
-                    height: render.1, depth_or_array_layers: 1 },
+                    height: render.1,
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: mx::TextureDimension::D2,
@@ -308,10 +344,25 @@ impl Renderer {
                 usage: targets | mx::TextureUsages::COPY_SRC,
                 view_formats: &[self.format],
             })
-        .expect("mX: a texture");
-        let motion = tex("temporal motion vectors", render, TEMPORAL_MOTION_FORMAT, targets);
-        let mask = tex("temporal transparency mask", render, TEMPORAL_MASK_FORMAT, targets);
-        let output_tex = tex("temporal output", output, TEMPORAL_OUTPUT_FORMAT, targets | mx::TextureUsages::STORAGE_BINDING | mx::TextureUsages::COPY_SRC,);
+            .expect("mX: a texture");
+        let motion = tex(
+            "temporal motion vectors",
+            render,
+            TEMPORAL_MOTION_FORMAT,
+            targets,
+        );
+        let mask = tex(
+            "temporal transparency mask",
+            render,
+            TEMPORAL_MASK_FORMAT,
+            targets,
+        );
+        let output_tex = tex(
+            "temporal output",
+            output,
+            TEMPORAL_OUTPUT_FORMAT,
+            targets | mx::TextureUsages::STORAGE_BINDING | mx::TextureUsages::COPY_SRC,
+        );
         let color_view = color
             .create_view(&mx::TextureViewDescriptor {
                 format: Some(self.format),
@@ -331,36 +382,84 @@ impl Renderer {
         let output_bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("temporal output"),
             entries: &[
-                mx::BindGroupEntry { binding: 0, resource: blit_buf.as_entire_binding() },
-                mx::BindGroupEntry { binding: 1, resource: mx::BindingResource::TextureView(&output_view), },
-                mx::BindGroupEntry { binding: 2, resource: mx::BindingResource::Sampler(&self.tone.post_sampler), },
+                mx::BindGroupEntry {
+                    binding: 0,
+                    resource: blit_buf.as_entire_binding(),
+                },
+                mx::BindGroupEntry {
+                    binding: 1,
+                    resource: mx::BindingResource::TextureView(&output_view),
+                },
+                mx::BindGroupEntry {
+                    binding: 2,
+                    resource: mx::BindingResource::Sampler(&self.tone.post_sampler),
+                },
             ],
         });
         let d = self.temporal.as_mut().expect("temporal state");
         if let Some(old) = d.targets.take() {
-            d.keep.push_back(vec![old.color, old.motion, old.mask, old.output_tex]);
+            d.keep
+                .push_back(vec![old.color, old.motion, old.mask, old.output_tex]);
         }
         d.prev = None;
-        d.targets = Some(TemporalTargets { render, output, color, color_view,  color_bg, motion, motion_view, mask, mask_view, output_tex,  output_bg });
+        d.targets = Some(TemporalTargets {
+            render,
+            output,
+            color,
+            color_view,
+            color_bg,
+            motion,
+            motion_view,
+            mask,
+            mask_view,
+            output_tex,
+            output_bg,
+        });
     }
 
     pub(crate) fn temporal_jitter(&mut self, scene: &Scene, f: &FrameCtx, vp_plain: Mat4) -> Mat4 {
-        let (width, height, full_w, full_h, camera, ro) = (f.width, f.height, f.full_w, f.target.texture().height(), f.camera, f.ro);
-        if self.temporal_pipes.is_none() { return vp_plain }
-        let Some(d) = self.temporal.as_mut() else { return vp_plain };
+        let (width, height, full_w, full_h, camera, ro) = (
+            f.width,
+            f.height,
+            f.full_w,
+            f.target.texture().height(),
+            f.camera,
+            f.ro,
+        );
+        if self.temporal_pipes.is_none() {
+            return vp_plain;
+        }
+        let Some(d) = self.temporal.as_mut() else {
+            return vp_plain;
+        };
         d.frame += 1;
         let i = (d.frame % jitter_phases(width, full_w) as u64) as u32 + 1;
         let jitter = [halton(i, 2) - 0.5, halton(i, 3) - 0.5];
-        let shift = Mat4::from_translation(Vec3::new(2.0 * jitter[0] / width as f32, -2.0 * jitter[1] / height as f32, 0.0));
-        let prev = d.prev.filter(|p| p.render == (width, height) && p.output == (full_w, full_h));
-        let jumped = prev.is_some_and(|p| (p.camera.position - camera.position).length() > 30.0 || p.camera.forward().dot(camera.forward()) < 0.8);
+        let shift = Mat4::from_translation(Vec3::new(
+            2.0 * jitter[0] / width as f32,
+            -2.0 * jitter[1] / height as f32,
+            0.0,
+        ));
+        let prev = d
+            .prev
+            .filter(|p| p.render == (width, height) && p.output == (full_w, full_h));
+        let jumped = prev.is_some_and(|p| {
+            (p.camera.position - camera.position).length() > 30.0
+                || p.camera.forward().dot(camera.forward()) < 0.8
+        });
         let (vp_prev, vp_prev_here) = match prev {
-            Some(p) => (p.camera.view_proj(p.aspect, p.origin), p.camera.view_proj(p.aspect, ro)),
+            Some(p) => (
+                p.camera.view_proj(p.aspect, p.origin),
+                p.camera.view_proj(p.aspect, ro),
+            ),
             None => (vp_plain, vp_plain),
         };
         let origin_delta = prev.map_or(Vec3::ZERO, |p| (p.origin - ro).as_vec3());
         if let Some(GpuArray::Buffer(models)) = scene.model_buf.as_ref() {
-            if d.prev_models.as_ref().is_none_or(|(b, _)| b.size() < models.size()) {
+            if d.prev_models
+                .as_ref()
+                .is_none_or(|(b, _)| b.size() < models.size())
+            {
                 let buf = self
                     .device
                     .create_buffer(&mx::BufferDescriptor {
@@ -372,35 +471,70 @@ impl Renderer {
                 let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
                     label: Some("temporal motion"),
                     entries: &[
-                        mx::BindGroupEntry { binding: 0, resource: d.motion_buf.as_entire_binding() },
-                        mx::BindGroupEntry { binding: 1, resource: buf.as_entire_binding() },
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: d.motion_buf.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 1,
+                            resource: buf.as_entire_binding(),
+                        },
                     ],
                 });
                 d.prev_models = Some((buf, bg));
                 d.prev_epoch = u64::MAX;
             }
         }
-        let models_ok = prev.is_some() && d.prev_epoch == scene.model_epoch && d.prev_models.is_some();
+        let models_ok =
+            prev.is_some() && d.prev_epoch == scene.model_epoch && d.prev_models.is_some();
         let mu = MotionUniform {
             vp: vp_plain.to_cols_array_2d(),
             vp_prev: vp_prev.to_cols_array_2d(),
             vp_prev_here: vp_prev_here.to_cols_array_2d(),
             vp_inv: vp_plain.inverse().to_cols_array_2d(),
-            params: [width as f32, height as f32, if models_ok { 1.0 } else { 0.0 }, d.prev_entries as f32],
-            origin_delta: [origin_delta.x, origin_delta.y, origin_delta.z, MAX_FRAME_JUMP],
+            params: [
+                width as f32,
+                height as f32,
+                if models_ok { 1.0 } else { 0.0 },
+                d.prev_entries as f32,
+            ],
+            origin_delta: [
+                origin_delta.x,
+                origin_delta.y,
+                origin_delta.z,
+                MAX_FRAME_JUMP,
+            ],
         };
-        self.queue.write_buffer(&d.motion_buf, 0, bytemuck::bytes_of(&mu))
+        self.queue
+            .write_buffer(&d.motion_buf, 0, bytemuck::bytes_of(&mu))
             .expect("mX: a queue write");
-        self.temporal_pending = Some(TemporalFrame { vp: vp_plain, vp_prev_here, jitter, reset: prev.is_none() || jumped, aspect: f.aspect, dt: f.dt });
+        self.temporal_pending = Some(TemporalFrame {
+            vp: vp_plain,
+            vp_prev_here,
+            jitter,
+            reset: prev.is_none() || jumped,
+            aspect: f.aspect,
+            dt: f.dt,
+        });
         shift * vp_plain
     }
 
     /// Last commands of the scene encoder in an upscaled frame: the model matrices copied for the
     /// next frame's motion.
-    pub(crate) fn temporal_end_of_scene(&mut self, encoder: &mut mx::CommandEncoder, scene: &Scene) {
-        let Some(d) = self.temporal.as_mut() else { return };
-        if let (Some(GpuArray::Buffer(models)), Some((prev, _))) = (scene.model_buf.as_ref(), d.prev_models.as_ref()) {
-            let bytes = (scene.uploaded_entries as u64 * 64).min(models.size()).min(prev.size());
+    pub(crate) fn temporal_end_of_scene(
+        &mut self,
+        encoder: &mut mx::CommandEncoder,
+        scene: &Scene,
+    ) {
+        let Some(d) = self.temporal.as_mut() else {
+            return;
+        };
+        if let (Some(GpuArray::Buffer(models)), Some((prev, _))) =
+            (scene.model_buf.as_ref(), d.prev_models.as_ref())
+        {
+            let bytes = (scene.uploaded_entries as u64 * 64)
+                .min(models.size())
+                .min(prev.size());
             if bytes > 0 {
                 encoder.copy_buffer_to_buffer(models, 0, prev, 0, bytes);
             }
@@ -417,7 +551,9 @@ impl Renderer {
         let full = (f.full_w, target.texture().height());
         let overlays = f.overlays.len();
         let quality = self.temporal_quality();
-        let (Some(d), Some(ao)) = (self.temporal.as_mut(), self.targets.ao.as_ref()) else { return };
+        let (Some(d), Some(ao)) = (self.temporal.as_mut(), self.targets.ao.as_ref()) else {
+            return;
+        };
         let Some(t) = d.targets.as_ref() else { return };
         let fov = camera.fov_deg.to_radians();
         let proj = Mat4::perspective_rh(fov, frame.aspect, camera.depth_far(), camera.near);
@@ -446,9 +582,16 @@ impl Renderer {
             view_to_world: sl_matrix(view.inverse()),
             ..Default::default()
         };
-        let inputs = Inputs { color: &t.color, depth: Some(&ao.depth_tex),
+        let inputs = Inputs {
+            color: &t.color,
+            depth: Some(&ao.depth_tex),
             motion: Some(&t.motion),
-            mask: Some(&t.mask), output: &t.output_tex, render_size: render, output_size: full, guides: None, };
+            mask: Some(&t.mask),
+            output: &t.output_tex,
+            render_size: render,
+            output_size: full,
+            guides: None,
+        };
         let clock = std::time::Instant::now();
         let result = d
             .runtime
@@ -457,15 +600,29 @@ impl Renderer {
         let ok = match result {
             Ok(()) => true,
             Err(e) => {
-                log::error!("upscaling stopped working ({e:#}); the picture is drawn without it from now on");
+                log::error!(
+                    "upscaling stopped working ({e:#}); the picture is drawn without it from now on"
+                );
                 false
             }
         };
-        d.keep.push_back(vec![t.color.clone(), ao.depth_tex.clone(), t.motion.clone(), t.mask.clone(), t.output_tex.clone()]);
+        d.keep.push_back(vec![
+            t.color.clone(),
+            ao.depth_tex.clone(),
+            t.motion.clone(),
+            t.mask.clone(),
+            t.output_tex.clone(),
+        ]);
         while d.keep.len() > 4 {
             d.keep.pop_front();
         }
-        d.prev = Some(TemporalPrev { camera: *camera, aspect: frame.aspect, origin: ro, render, output: full });
+        d.prev = Some(TemporalPrev {
+            camera: *camera,
+            aspect: frame.aspect,
+            origin: ro,
+            render,
+            output: full,
+        });
         // (`upscale.wgsl`'s third mode: the upscalers return the sRGB-encoded numbers they were
         // given, and writing them to the sRGB window unconverted would encode them twice)
         let sharpen = match d.runtime.method() {
@@ -499,11 +656,19 @@ impl Renderer {
         // between the two.
         let generation = self.frame_generation.clone().filter(|g| ok && g.working());
         let hudless = generation.as_ref().map(|_| {
-            if d.hudless.first().is_none_or(|(h, _)| (h.width(), h.height()) != full) {
-                d.hudless = (0..2).map(|_| hudless_target(&self.device, full, self.format)).collect();
+            if d.hudless
+                .first()
+                .is_none_or(|(h, _)| (h.width(), h.height()) != full)
+            {
+                d.hudless = (0..2)
+                    .map(|_| hudless_target(&self.device, full, self.format))
+                    .collect();
                 d.hudless_frame = None;
             }
-            let last = d.hudless_frame.filter(|at| at + 1 == d.frame).map(|_| d.hudless[((d.frame + 1) % 2) as usize].0.clone());
+            let last = d
+                .hudless_frame
+                .filter(|at| at + 1 == d.frame)
+                .map(|_| d.hudless[((d.frame + 1) % 2) as usize].0.clone());
             d.hudless_frame = Some(d.frame);
             (d.hudless[(d.frame % 2) as usize].clone(), last)
         });
@@ -515,7 +680,8 @@ impl Renderer {
                     resolve_target: None,
                     ops: mx::Operations {
                         load: mx::LoadOp::Clear(mx::Color::BLACK),
-                        store: mx::StoreOp::Store, },
+                        store: mx::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -533,7 +699,8 @@ impl Renderer {
                     resolve_target: None,
                     ops: mx::Operations {
                         load: mx::LoadOp::Clear(mx::Color::BLACK),
-                        store: mx::StoreOp::Store, },
+                        store: mx::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,

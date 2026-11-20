@@ -17,7 +17,10 @@ pub(crate) fn panel(at: glam::DVec3, pal: Palette) -> Panel {
         vec![
             title("Move the vehicle here?"),
             note(&format!("x {:.0}  y {:.0}", at.x, at.y), pal),
-            grow_row(vec![button("yes", "Move here", Some("near_me")), button("no", "Cancel", Some("close"))]),
+            grow_row(vec![
+                button("yes", "Move here", Some("near_me")),
+                button("no", "Cancel", Some("close")),
+            ]),
         ],
     )
 }
@@ -28,13 +31,25 @@ pub(crate) fn ask(app: &mut crate::App, at: glam::DVec3) {
 }
 
 pub(crate) fn click(app: &mut crate::App, id: &str) {
-    let Some(at) = app.menus.game_panels.move_to.take() else { return };
+    let Some(at) = app.menus.game_panels.move_to.take() else {
+        return;
+    };
     if id != "yes" {
         return;
     }
-    let Some(heading) = app.camera.as_ref().map(|c| c.yaw as f64).or_else(|| app.player.as_ref().map(|p| p.vehicle.heading)) else { return };
+    let Some(heading) = app
+        .camera
+        .as_ref()
+        .map(|c| c.yaw as f64)
+        .or_else(|| app.player.as_ref().map(|p| p.vehicle.heading))
+    else {
+        return;
+    };
     if crate::admin::request_teleport(app, at, heading) {
-        app.service_msg = Some((omsi_ui::tr("The bus stands where the map was clicked").into_owned(), 3.0));
+        app.service_msg = Some((
+            omsi_ui::tr("The bus stands where the map was clicked").into_owned(),
+            3.0,
+        ));
         app.service_event("teleport", "player", None);
     }
 }

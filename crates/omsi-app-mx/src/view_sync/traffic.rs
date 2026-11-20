@@ -13,12 +13,12 @@
 use crate::scene::{VehicleRender, World};
 use crate::traffic::Traffic;
 use hashbrown::HashMap;
+use omsi_render::{Renderer, Scene};
+use omsi_sim::VehicleType;
 use omsi_sim::traffic::TrafficLightController;
 use omsi_sim::view_events::{CarLooks, FrameSnapshot, LookLimits, PartFrame, TrafficEvent};
-use omsi_sim::VehicleType;
-use std::sync::Arc;
-use omsi_render::{Renderer, Scene};
 use omsi_texture::Image;
+use std::sync::Arc;
 
 pub(super) const SCRIPT_UPLOAD_BUDGET: usize = 4 << 20;
 
@@ -56,7 +56,9 @@ pub(crate) struct TrafficView {
 }
 
 impl TrafficView {
-    pub(crate) fn car(&self, id: u64) -> Option<&CarRender> { self.cars.get(&id) } // car `id`'s renders
+    pub(crate) fn car(&self, id: u64) -> Option<&CarRender> {
+        self.cars.get(&id)
+    } // car `id`'s renders
     /// The renders of the car `id` that has just been put on the road.
     pub(crate) fn insert(&mut self, id: u64, render: CarRender) {
         if let Some(old) = self.cars.insert(id, render) {
@@ -75,22 +77,47 @@ impl TrafficView {
     }
 
     /// Car `id` has gone: its renders go back to the world now.
-    pub(crate) fn release_car(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene, id: u64) {
+    pub(crate) fn release_car(
+        &mut self,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        id: u64,
+    ) {
         if let Some(r) = self.cars.remove(&id) {
             release_car_render(world, renderer, scene, r);
         }
     }
 
     /// Couple another part of type `t` to car `id`'s picture.
-    pub(crate) fn add_trailer(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene, id: u64, t: &Arc<VehicleType>) {
+    pub(crate) fn add_trailer(
+        &mut self,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        id: u64,
+        t: &Arc<VehicleType>,
+    ) {
         if let Some(r) = self.cars.get_mut(&id) {
-            r.trailers
-                .push(world.add_vehicle_shared_lod(renderer, scene, t, None, Some(&r.body), true));
+            r.trailers.push(world.add_vehicle_shared_lod(
+                renderer,
+                scene,
+                t,
+                None,
+                Some(&r.body),
+                true,
+            ));
         }
     }
 
     /// Let the renders of car `id`'s coupled parts go now (it gets others).
-    pub(crate) fn release_trailers(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene, id: u64) {
+    pub(crate) fn release_trailers(
+        &mut self,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        id: u64,
+    ) {
         if let Some(r) = self.cars.get_mut(&id) {
             for t in r.trailers.drain(..) {
                 world.release_vehicle(renderer, scene, t);
@@ -114,15 +141,35 @@ impl TrafficView {
     }
 
     /// Follow one thing the traffic did (see [`TrafficEvent`]).
-    pub(crate) fn apply(&mut self, event: TrafficEvent, world: &World, renderer: &Renderer, scene: &mut Scene) {
+    pub(crate) fn apply(
+        &mut self,
+        event: TrafficEvent,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+    ) {
         match event {
-            TrafficEvent::Spawned { id, ty, scheme, trailers } => {
+            TrafficEvent::Spawned {
+                id,
+                ty,
+                scheme,
+                trailers,
+            } => {
                 let body = world.add_vehicle_shared_lod(renderer, scene, &ty, scheme, None, true);
                 let trailers = trailers
                     .iter()
-                    .map(|(t, scheme)| world.add_vehicle_shared_lod(renderer, scene, t, *scheme, Some(&body), true))
+                    .map(|(t, scheme)| {
+                        world.add_vehicle_shared_lod(renderer, scene, t, *scheme, Some(&body), true)
+                    })
                     .collect();
-                self.insert(id, CarRender { body, trailers, strs: Vec::new() });
+                self.insert(
+                    id,
+                    CarRender {
+                        body,
+                        trailers,
+                        strs: Vec::new(),
+                    },
+                );
             }
             TrafficEvent::Released { id } => self.release_car(world, renderer, scene, id),
             TrafficEvent::Retired { id } => self.retire(id),
@@ -137,10 +184,18 @@ impl TrafficView {
                     release_car_render(world, renderer, scene, r);
                 }
             }
-            TrafficEvent::TrailerAdded { id, ty } => self.add_trailer(world, renderer, scene, id, &ty),
-            TrafficEvent::TrailersReleased { id } => self.release_trailers(world, renderer, scene, id),
-            TrafficEvent::ParkedDeparted { instances } => crate::scene::show_parked_instances(renderer, scene, &instances, false),
-            TrafficEvent::ParkedReturned { instances } => crate::scene::show_parked_instances(renderer, scene, &instances, true),
+            TrafficEvent::TrailerAdded { id, ty } => {
+                self.add_trailer(world, renderer, scene, id, &ty)
+            }
+            TrafficEvent::TrailersReleased { id } => {
+                self.release_trailers(world, renderer, scene, id)
+            }
+            TrafficEvent::ParkedDeparted { instances } => {
+                crate::scene::show_parked_instances(renderer, scene, &instances, false)
+            }
+            TrafficEvent::ParkedReturned { instances } => {
+                crate::scene::show_parked_instances(renderer, scene, &instances, true)
+            }
         }
     }
 }
@@ -149,7 +204,13 @@ impl TrafficView {
 /// `Traffic::events` in their order (see [`TrafficEvent`]). Called right after each call
 /// that can put cars on the road or take them off, where those calls used to make the
 /// renderer calls themselves.
-pub(crate) fn apply_traffic(t: &mut Traffic, view: &mut TrafficView, world: &World, renderer: &Renderer, scene: &mut Scene) {
+pub(crate) fn apply_traffic(
+    t: &mut Traffic,
+    view: &mut TrafficView,
+    world: &World,
+    renderer: &Renderer,
+    scene: &mut Scene,
+) {
     if t.events.is_empty() {
         return;
     }
@@ -159,7 +220,12 @@ pub(crate) fn apply_traffic(t: &mut Traffic, view: &mut TrafficView, world: &Wor
 }
 
 /// Give the renders of a car back to the world, its body first.
-pub(crate) fn release_car_render(world: &World, renderer: &Renderer, scene: &mut Scene, r: CarRender) {
+pub(crate) fn release_car_render(
+    world: &World,
+    renderer: &Renderer,
+    scene: &mut Scene,
+    r: CarRender,
+) {
     for r in std::iter::once(r.body).chain(r.trailers) {
         world.release_vehicle(renderer, scene, r);
     }
@@ -179,16 +245,29 @@ impl Traffic {
         for (ty, _) in &sets {
             self.prime_pull_out_room(ty, false);
         }
-        log::info!("traffic: {} vehicle/paint sets of the random traffic read and uploaded in {:.1} s", sets.len(), t0.elapsed().as_secs_f32());
+        log::info!(
+            "traffic: {} vehicle/paint sets of the random traffic read and uploaded in {:.1} s",
+            sets.len(),
+            t0.elapsed().as_secs_f32()
+        );
     }
 
     /// The drivers of the timetable buses near the camera: made when a bus comes within
     /// `DRIVER_NEAR`, posed every sync, let go when it is twice that far or gone. They read
     /// their buses from the snapshot (`TrafficSim::snapshot_drivers`).
-    pub(super) fn sync_drivers(&mut self, view: &mut TrafficView, world: &World, renderer: &Renderer, scene: &mut Scene) {
-        self.sim.snapshot_drivers(&mut self.snapshot, DRIVER_NEAR * 2.0);
+    pub(super) fn sync_drivers(
+        &mut self,
+        view: &mut TrafficView,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+    ) {
+        self.sim
+            .snapshot_drivers(&mut self.snapshot, DRIVER_NEAR * 2.0);
         let snap = &self.snapshot;
-        let Some(eye) = snap.drivers_eye() else { return };
+        let Some(eye) = snap.drivers_eye() else {
+            return;
+        };
         let dt = snap.drivers_dt().max(1.0 / 120.0);
         let mut keep: Vec<u64> = Vec::new();
         for bus in snap.driver_buses() {
@@ -221,7 +300,12 @@ impl Traffic {
                 f.update(renderer, scene, &car, &r.body, dt, true, false);
             }
         }
-        let gone: Vec<u64> = view.drivers.keys().copied().filter(|id| !keep.contains(id)).collect();
+        let gone: Vec<u64> = view
+            .drivers
+            .keys()
+            .copied()
+            .filter(|id| !keep.contains(id))
+            .collect();
         for id in gone {
             if let Some(mut f) = view.drivers.remove(&id) {
                 f.hide(renderer, scene);
@@ -230,7 +314,14 @@ impl Traffic {
         }
     }
 
-    pub(super) fn sync(&mut self, view: &mut TrafficView, world: &World, scenery: &mut omsi_sim::scenery::SceneryState, renderer: &Renderer, scene: &mut Scene) {
+    pub(super) fn sync(
+        &mut self,
+        view: &mut TrafficView,
+        world: &World,
+        scenery: &mut omsi_sim::scenery::SceneryState,
+        renderer: &Renderer,
+        scene: &mut Scene,
+    ) {
         self.sync_world(view, world, renderer, scene);
         self.sync_drawn(view, world, scenery, renderer, scene);
     }
@@ -238,7 +329,13 @@ impl Traffic {
     /// What every tick needs: cars that have parked (the simulation takes them off) leave
     /// their parked object in their place from now on, and the renders of cars gone go back
     /// to the world.
-    pub(super) fn sync_world(&mut self, view: &mut TrafficView, world: &World, renderer: &Renderer, scene: &mut Scene) {
+    pub(super) fn sync_world(
+        &mut self,
+        view: &mut TrafficView,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+    ) {
         self.settle_parked(world);
         apply_traffic(self, view, world, renderer, scene);
         for r in std::mem::take(&mut view.released) {
@@ -248,7 +345,14 @@ impl Traffic {
 
     /// What only the picture needs, once a frame: the drivers, the lamps and the cars'
     /// transforms, materials and script textures.
-    pub(super) fn sync_drawn(&mut self, view: &mut TrafficView, world: &World, scenery: &mut omsi_sim::scenery::SceneryState, renderer: &Renderer, scene: &mut Scene) {
+    pub(super) fn sync_drawn(
+        &mut self,
+        view: &mut TrafficView,
+        world: &World,
+        scenery: &mut omsi_sim::scenery::SceneryState,
+        renderer: &Renderer,
+        scene: &mut Scene,
+    ) {
         // (drawn between the traffic's last two steps, where this frame falls: see
         // `TrafficSim::advance`; back where they stand once drawn)
         self.sim.show_between();
@@ -267,11 +371,25 @@ impl Traffic {
         }
         let mut index: Option<HashMap<u64, usize>> = None;
         for (k, frame) in snap.cars.iter().enumerate() {
-            let Some(looks) = snap.looks(frame).filter(|_| frame.shown) else { continue };
-            let Some(r) = view.cars.get(&frame.id) else { continue };
+            let Some(looks) = snap.looks(frame).filter(|_| frame.shown) else {
+                continue;
+            };
+            let Some(r) = view.cars.get(&frame.id) else {
+                continue;
+            };
             let i = match self.sim.cars.get(k) {
                 Some(c) if c.id == frame.id => k,
-                _ => match index.get_or_insert_with(|| self.sim.cars.iter().enumerate().map(|(i, c)| (c.id, i)).collect()).get(&frame.id) {
+                _ => match index
+                    .get_or_insert_with(|| {
+                        self.sim
+                            .cars
+                            .iter()
+                            .enumerate()
+                            .map(|(i, c)| (c.id, i))
+                            .collect()
+                    })
+                    .get(&frame.id)
+                {
                     Some(&i) => i,
                     None => continue,
                 },
@@ -281,8 +399,14 @@ impl Traffic {
             if r.body.hidden || parts.len() != 1 + v.trailers.len() {
                 continue;
             }
-            let now = std::iter::once((v.position, v.body_rotation())).chain(v.trailers.iter().map(|t| (t.position, t.body_rotation())));
-            for (j, ((part, (position, rot)), render)) in parts.iter().zip(now).zip(std::iter::once(&r.body).chain(&r.trailers)).enumerate() {
+            let now = std::iter::once((v.position, v.body_rotation()))
+                .chain(v.trailers.iter().map(|t| (t.position, t.body_rotation())));
+            for (j, ((part, (position, rot)), render)) in parts
+                .iter()
+                .zip(now)
+                .zip(std::iter::once(&r.body).chain(&r.trailers))
+                .enumerate()
+            {
                 let turn = rot * part.rotation.inverse();
                 let meshes = snap.meshes(part);
                 for (inst, m) in render.instances.iter().zip(meshes) {
@@ -292,10 +416,24 @@ impl Traffic {
                     renderer.set_transform(scene, *inst, position, rot);
                 }
                 let lamps = snap.lamps(looks, j);
-                crate::scene::sync_interior_lamps(renderer, scene, &part.ty, position, rot, |li| lamps.get(li).copied().unwrap_or(false), render);
+                crate::scene::sync_interior_lamps(
+                    renderer,
+                    scene,
+                    &part.ty,
+                    position,
+                    rot,
+                    |li| lamps.get(li).copied().unwrap_or(false),
+                    render,
+                );
                 if j == 0 {
-                    let local = |m: usize| meshes.get(m).map_or(glam::Mat4::IDENTITY, |f| turn * f.local);
-                    crate::view_sync::vehicle_damage::place_cracks(renderer, scene, render, position, local);
+                    let local = |m: usize| {
+                        meshes
+                            .get(m)
+                            .map_or(glam::Mat4::IDENTITY, |f| turn * f.local)
+                    };
+                    crate::view_sync::vehicle_damage::place_cracks(
+                        renderer, scene, render, position, local,
+                    );
                 }
             }
             if let Some(d) = view.drivers.get(&frame.id) {
@@ -305,7 +443,13 @@ impl Traffic {
     }
 
     /// The traffic light lamps (see `sync`).
-    fn sync_lamps(&mut self, world: &World, scenery: &mut omsi_sim::scenery::SceneryState, renderer: &Renderer, scene: &mut Scene) {
+    fn sync_lamps(
+        &mut self,
+        world: &World,
+        scenery: &mut omsi_sim::scenery::SceneryState,
+        renderer: &Renderer,
+        scene: &mut Scene,
+    ) {
         // (the lamps' scripts are the simulation's: it takes the lamps placed since first)
         world.scenery_sync(scenery);
         let lamps = &mut scenery.lamps;
@@ -326,13 +470,21 @@ impl Traffic {
         }
         for lamp in world.light_objects.lock().iter_mut() {
             if debug_lamps && lamp.animated {
-                log::info!("moving lamp at ({:.1}, {:.1}), {:.0} m from the viewer", lamp.pos.x, lamp.pos.y, near.map(|p| (lamp.pos - p).length()).unwrap_or(0.0));
+                log::info!(
+                    "moving lamp at ({:.1}, {:.1}), {:.0} m from the viewer",
+                    lamp.pos.x,
+                    lamp.pos.y,
+                    near.map(|p| (lamp.pos - p).length()).unwrap_or(0.0)
+                );
             }
             let dist = near.map(|p| (lamp.pos - p).length()).unwrap_or(0.0);
             if dist > 1200.0 {
                 continue;
             }
-            let key = lamp.script.map(|k| k as usize).unwrap_or(lamp.parent as usize ^ lamp.index);
+            let key = lamp
+                .script
+                .map(|k| k as usize)
+                .unwrap_or(lamp.parent as usize ^ lamp.index);
             if dist > LAMP_NEAR && !lamp.animated && !lamp_turn_now(key, self.lamp_turn) {
                 if lamp.script.is_some() {
                     *self.lamp_owed.entry(key).or_default() += frame_dt;
@@ -388,7 +540,15 @@ impl Traffic {
                             r.to_axis_angle().1.to_degrees()
                         })
                         .fold(0.0f32, f32::max);
-                    log::info!("lamp at ({:.1}, {:.1}): light state {:?} (crossing {:?}, light {}{}), meshes turned up to {turn:.0} deg", lamp.pos.x, lamp.pos.y, vars.traffic_light_phase, self.sim.controller_of_object.get(&lamp.parent), lamp.index, if lamp.any_light { ", any" } else { "" });
+                    log::info!(
+                        "lamp at ({:.1}, {:.1}): light state {:?} (crossing {:?}, light {}{}), meshes turned up to {turn:.0} deg",
+                        lamp.pos.x,
+                        lamp.pos.y,
+                        vars.traffic_light_phase,
+                        self.sim.controller_of_object.get(&lamp.parent),
+                        lamp.index,
+                        if lamp.any_light { ", any" } else { "" }
+                    );
                 }
                 if lamp.animated {
                     for (i, (inst, _)) in lamp.instances.iter().enumerate() {
@@ -411,15 +571,25 @@ impl Traffic {
             if !lamp.texts.is_empty() {
                 if let Some(s) = lamp.script.and_then(|k| lamps.get_mut(k)) {
                     let _ = s.take_refresh_strings();
-                    for (tex, st) in lamp.texts.iter_mut().filter(|(_, st)| dist < TEXT_NEAR || st.last_text.is_none()) {
+                    for (tex, st) in lamp
+                        .texts
+                        .iter_mut()
+                        .filter(|(_, st)| dist < TEXT_NEAR || st.last_text.is_none())
+                    {
                         let text = s.str_var(st.def.variable.trim()).to_string();
                         if st.update(&text) {
                             if let Some(rgba) = st.pending.take() {
-                                let (w, h) = (st.def.width.max(1) as u32, st.def.height.max(1) as u32);
+                                let (w, h) =
+                                    (st.def.width.max(1) as u32, st.def.height.max(1) as u32);
                                 renderer.update_texture_mips(
                                     scene,
                                     *tex,
-                                    &omsi_texture::Image { width: w, height: h, rgba, has_alpha: true },
+                                    &omsi_texture::Image {
+                                        width: w,
+                                        height: h,
+                                        rgba,
+                                        has_alpha: true,
+                                    },
                                 );
                             }
                         }
@@ -432,7 +602,11 @@ impl Traffic {
                 lamp.script.and_then(|k| lamps.get(k)).and_then(|s| {
                     // A failed/missing script can still have a varlist of zeroes. Keep
                     // stock fallback behaviour if it has no runnable frame block.
-                    if s.program.frame.is_empty() { None } else { s.var(var) }
+                    if s.program.frame.is_empty() {
+                        None
+                    } else {
+                        s.var(var)
+                    }
                 })
             };
             let raw_value = |lamp: &crate::scene::LightObject, var: &str| -> f32 {
@@ -445,10 +619,21 @@ impl Traffic {
             // A lamp mixing a scripted channel with the phase's can show red and green at
             // once; keep the stop aspect in that case.
             let scripted_red = scripted(lamp, "red");
-            let red = crate::scene::traffic_lamp_value("red", scripted_red, crate::scene::standard_traffic_lamp("red", r, y, g, request));
-            let red_on = red_masks_green(scripted_red.is_some(), scripted(lamp, "green").is_some(), red);
+            let red = crate::scene::traffic_lamp_value(
+                "red",
+                scripted_red,
+                crate::scene::standard_traffic_lamp("red", r, y, g, request),
+            );
+            let red_on = red_masks_green(
+                scripted_red.is_some(),
+                scripted(lamp, "green").is_some(),
+                red,
+            );
             let value = |lamp: &crate::scene::LightObject, var: &str| -> f32 {
-                let green = matches!(var.trim().to_ascii_lowercase().as_str(), "green" | "gruen" | "grün");
+                let green = matches!(
+                    var.trim().to_ascii_lowercase().as_str(),
+                    "green" | "gruen" | "grün"
+                );
                 let v = raw_value(lamp, var);
                 if green && red_on { 0.0 } else { v }
             };
@@ -474,7 +659,11 @@ impl Traffic {
                     scene,
                     *inst,
                     *slot,
-                    if crate::scene::change_picks_item(value(lamp, var)) { *item } else { *base },
+                    if crate::scene::change_picks_item(value(lamp, var)) {
+                        *item
+                    } else {
+                        *base
+                    },
                 );
             }
             for k in 0..lamp.coronas.len() {
@@ -492,12 +681,22 @@ impl Traffic {
                     Some(slots) => {
                         let known = |v: &str| -> Option<f32> {
                             let scripted = lamp.script.and_then(|k| lamps.get(k)).and_then(|s| {
-                                if s.program.frame.is_empty() { None } else { s.var(v) }
+                                if s.program.frame.is_empty() {
+                                    None
+                                } else {
+                                    s.var(v)
+                                }
                             });
-                            let raw = scripted
-                                .or_else(|| v.trim().parse::<f32>().ok())
-                                .or_else(|| crate::scene::standard_traffic_lamp(v, r, y, g, request));
-                            let green = matches!(v.trim().to_ascii_lowercase().as_str(), "green" | "gruen" | "grün");
+                            let raw =
+                                scripted
+                                    .or_else(|| v.trim().parse::<f32>().ok())
+                                    .or_else(|| {
+                                        crate::scene::standard_traffic_lamp(v, r, y, g, request)
+                                    });
+                            let green = matches!(
+                                v.trim().to_ascii_lowercase().as_str(),
+                                "green" | "gruen" | "grün"
+                            );
                             raw.map(|value| if green && red_on { 0.0 } else { value })
                         };
                         let (alpha, light) = slots.values(&known);
@@ -515,7 +714,13 @@ impl Traffic {
     /// textures run, the uploads, cracks and dents taken, the bellows reshaped) is taken into
     /// the snapshot first (`TrafficSim::snapshot_looks`); the renderer is then given the
     /// same calls in the same order as when it was done car by car here.
-    fn sync_cars(&mut self, view: &mut TrafficView, world: &World, renderer: &Renderer, scene: &mut Scene) {
+    fn sync_cars(
+        &mut self,
+        view: &mut TrafficView,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+    ) {
         // `Envir_Brightness`, which Omsi.exe sets for every road vehicle as for the
         // player's: the stock buses fade their windows by it at night (left at the engine's
         // default of 1, an AI bus under the street lamps kept its daytime brown glass)
@@ -530,20 +735,31 @@ impl Traffic {
         // their mean colour beyond 50 m, and every timetable bus coming up the street had
         // a blank sign until it was almost there.) What a far car's scripts redraw goes to
         // the GPU at most every half second, a slice of the cars per frame.
-        let limits = LookLimits { displays_far: crate::scene::DISPLAYS_FAR, skin_distance: SKIN_DISTANCE, upload_budget: SCRIPT_UPLOAD_BUDGET };
-        self.sim.snapshot_looks(&mut self.snapshot, &mut self.looks, &limits);
+        let limits = LookLimits {
+            displays_far: crate::scene::DISPLAYS_FAR,
+            skin_distance: SKIN_DISTANCE,
+            upload_budget: SCRIPT_UPLOAD_BUDGET,
+        };
+        self.sim
+            .snapshot_looks(&mut self.snapshot, &mut self.looks, &limits);
         // one buffer for the per-mesh alpha of every car: a fresh copy for each mesh of each
         // car was thousands of small allocations a frame in a busy street
         let mut alpha: Vec<f32> = Vec::new();
         let snap = &self.snapshot;
         for frame in &snap.cars {
-            let Some(r) = view.cars.get_mut(&frame.id) else { continue };
+            let Some(r) = view.cars.get_mut(&frame.id) else {
+                continue;
+            };
             // out of sight (`tick` decided): hidden once, then left alone until it comes
             // into view again - its many per-mesh updates were a third of this stage
             let Some(looks) = snap.looks(frame).filter(|_| frame.shown) else {
                 if !r.body.hidden {
                     r.body.hidden = true;
-                    for inst in r.body.instances.iter().chain(&r.body.far).chain(r.trailers.iter().flat_map(|r| r.instances.iter().chain(&r.far))) {
+                    for inst in r.body.instances.iter().chain(&r.body.far).chain(
+                        r.trailers
+                            .iter()
+                            .flat_map(|r| r.instances.iter().chain(&r.far)),
+                    ) {
                         renderer.set_params(scene, *inst, &[], false, &[]);
                     }
                 }
@@ -553,8 +769,20 @@ impl Traffic {
             show_looks(renderer, scene, snap, snap.parts(frame), looks, r);
             // where the body and its coupled parts stand and how their meshes are drawn: from
             // the snapshot (the body first, then the parts, as their renders go)
-            for (part, r) in snap.parts(frame).iter().zip(std::iter::once(&r.body).chain(r.trailers.iter())) {
-                pose_part(renderer, scene, snap, part, r, self.ridden == Some(frame.id), &mut alpha);
+            for (part, r) in snap
+                .parts(frame)
+                .iter()
+                .zip(std::iter::once(&r.body).chain(r.trailers.iter()))
+            {
+                pose_part(
+                    renderer,
+                    scene,
+                    snap,
+                    part,
+                    r,
+                    self.ridden == Some(frame.id),
+                    &mut alpha,
+                );
             }
         }
     }
@@ -563,7 +791,14 @@ impl Traffic {
 /// Bring car `r`'s renders to its looks in the snapshot (`parts`: its body, then its coupled
 /// parts): interior lamps, pictures, switched materials, cracks and dents, bellows - in the
 /// order the view sync gave the renderer these calls when it read the car itself.
-fn show_looks(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, parts: &[PartFrame], looks: &CarLooks, r: &mut CarRender) {
+fn show_looks(
+    renderer: &Renderer,
+    scene: &mut Scene,
+    snap: &FrameSnapshot,
+    parts: &[PartFrame],
+    looks: &CarLooks,
+    r: &mut CarRender,
+) {
     let Some(body) = parts.first() else { return };
     for (i, s) in &looks.str_changes {
         let i = *i as usize;
@@ -572,23 +807,52 @@ fn show_looks(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part
         }
         r.strs[i].clone_from(s);
     }
-    let vars = crate::scene::CarVars { ty: &looks.ty, index: &looks.var_index, vars: snap.vars(looks), strs: &r.strs };
+    let vars = crate::scene::CarVars {
+        ty: &looks.ty,
+        index: &looks.var_index,
+        vars: snap.vars(looks),
+        strs: &r.strs,
+    };
     let text = |renderer: &Renderer, scene: &mut Scene, render: &VehicleRender, part: u32| {
         for (_, i, width, height, rgba) in looks.text_uploads.iter().filter(|u| u.0 == part) {
             if let Some(Some(tex)) = render.text_textures.get(*i) {
-                renderer.update_texture_mips(scene, *tex, &Image { width: *width, height: *height, rgba: rgba.clone(), has_alpha: true });
+                renderer.update_texture_mips(
+                    scene,
+                    *tex,
+                    &Image {
+                        width: *width,
+                        height: *height,
+                        rgba: rgba.clone(),
+                        has_alpha: true,
+                    },
+                );
             }
         }
     };
     // the body: its interior lamps, its text and script textures, its materials, its damage
     let render = &mut r.body;
     let lamps = snap.lamps(looks, 0);
-    crate::scene::sync_interior_lamps(renderer, scene, &looks.ty, body.position, body.rotation, |li| lamps.get(li).copied().unwrap_or(false), render);
+    crate::scene::sync_interior_lamps(
+        renderer,
+        scene,
+        &looks.ty,
+        body.position,
+        body.rotation,
+        |li| lamps.get(li).copied().unwrap_or(false),
+        render,
+    );
     text(renderer, scene, render, 0);
     let mut rebound = Vec::new();
     for u in &looks.script_uploads {
-        let Some(Some(tex)) = render.script_textures.get(u.index) else { continue };
-        let img = Image { width: u.width, height: u.height, rgba: u.rgba.clone(), has_alpha: true };
+        let Some(Some(tex)) = render.script_textures.get(u.index) else {
+            continue;
+        };
+        let img = Image {
+            width: u.width,
+            height: u.height,
+            rgba: u.rgba.clone(),
+            has_alpha: true,
+        };
         if u.mipmaps {
             if renderer.update_texture_mips(scene, *tex, &img) {
                 rebound.push(*tex);
@@ -603,7 +867,17 @@ fn show_looks(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part
     let local = |m: usize| meshes.get(m).map_or(glam::Mat4::IDENTITY, |f| f.local);
     crate::view_sync::vehicle_damage::place_cracks(renderer, scene, render, body.position, local);
     for (mesh, impact, energy, local) in &looks.cracks {
-        crate::view_sync::vehicle_damage::add_crack(renderer, scene, render, &looks.ty, body.position, *mesh, *impact, *energy, *local);
+        crate::view_sync::vehicle_damage::add_crack(
+            renderer,
+            scene,
+            render,
+            &looks.ty,
+            body.position,
+            *mesh,
+            *impact,
+            *energy,
+            *local,
+        );
     }
     for dent in &looks.dents {
         crate::view_sync::vehicle_damage::add_dent(renderer, scene, render, &looks.ty, dent);
@@ -614,7 +888,15 @@ fn show_looks(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part
     // the unswitched materials it was built with)
     for (k, (part, render)) in parts.iter().skip(1).zip(r.trailers.iter_mut()).enumerate() {
         let lamps = snap.lamps(looks, k + 1);
-        crate::scene::sync_interior_lamps(renderer, scene, &part.ty, part.position, part.rotation, |li| lamps.get(li).copied().unwrap_or(false), render);
+        crate::scene::sync_interior_lamps(
+            renderer,
+            scene,
+            &part.ty,
+            part.position,
+            part.rotation,
+            |li| lamps.get(li).copied().unwrap_or(false),
+            render,
+        );
         crate::scene::sync_materials(renderer, scene, &vars, render);
         text(renderer, scene, render, k as u32 + 1);
     }
@@ -622,8 +904,14 @@ fn show_looks(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part
     // player's while it is near enough for the fold to show (`SKIN_DISTANCE`; farther out its
     // shape just stays as it was, which nobody can tell from still following the road)
     for (part, mesh, pos, nrm) in &looks.skins {
-        let render = if *part == 0 { Some(&r.body) } else { r.trailers.get(*part as usize - 1) };
-        let (Some(render), Some(ty)) = (render, parts.get(*part as usize).map(|p| &p.ty)) else { continue };
+        let render = if *part == 0 {
+            Some(&r.body)
+        } else {
+            r.trailers.get(*part as usize - 1)
+        };
+        let (Some(render), Some(ty)) = (render, parts.get(*part as usize).map(|p| &p.ty)) else {
+            continue;
+        };
         if let Some((_, id, _)) = render.skinned.iter().find(|(i, _, _)| i == mesh) {
             renderer.update_mesh(scene, *id, pos, nrm, &ty.meshes[*mesh].data.uvs);
         }
@@ -632,7 +920,15 @@ fn show_looks(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part
 
 /// Bring one vehicle part's instances (`r`) to `part` of the snapshot: their transforms and
 /// per-slot values. `alpha`: a buffer for the slots' alpha, kept by the caller.
-fn pose_part(renderer: &Renderer, scene: &mut Scene, snap: &FrameSnapshot, part: &PartFrame, r: &VehicleRender, inside: bool, alpha: &mut Vec<f32>) {
+fn pose_part(
+    renderer: &Renderer,
+    scene: &mut Scene,
+    snap: &FrameSnapshot,
+    part: &PartFrame,
+    r: &VehicleRender,
+    inside: bool,
+    alpha: &mut Vec<f32>,
+) {
     let meshes = snap.meshes(part);
     // the lower levels of detail stand where the body does; the renderer draws them or the
     // full model by the vehicle's size on the screen
@@ -717,23 +1013,55 @@ mod tests {
 
     #[test]
     fn red_hides_green_only_when_the_two_come_from_different_places() {
-        assert!(red_masks_green(true, false, 1.0), "scripted red, green from the phase");
-        assert!(red_masks_green(false, true, 1.0), "red from the phase, scripted green");
+        assert!(
+            red_masks_green(true, false, 1.0),
+            "scripted red, green from the phase"
+        );
+        assert!(
+            red_masks_green(false, true, 1.0),
+            "red from the phase, scripted green"
+        );
         assert!(red_masks_green(false, false, 1.0));
-        assert!(!red_masks_green(true, true, 1.0), "a script lighting both is shown as it says");
-        assert!(!red_masks_green(false, false, 0.0), "no red, nothing hidden");
+        assert!(
+            !red_masks_green(true, true, 1.0),
+            "a script lighting both is shown as it says"
+        );
+        assert!(
+            !red_masks_green(false, false, 0.0),
+            "no red, nothing hidden"
+        );
     }
 
     #[test]
     fn the_bus_ridden_in_shows_its_inside() {
         assert_eq!(mesh_shown(0, false), (true, false));
-        assert_eq!(mesh_shown(2, false), (false, false), "a cab mesh, from outside");
+        assert_eq!(
+            mesh_shown(2, false),
+            (false, false),
+            "a cab mesh, from outside"
+        );
         assert_eq!(mesh_shown(4, false), (true, false));
-        assert_eq!(mesh_shown(2, true), (true, false), "the mirrors and buttons inside");
-        assert_eq!(mesh_shown(1, true), (true, true), "the outside, in the mirrors only");
+        assert_eq!(
+            mesh_shown(2, true),
+            (true, false),
+            "the mirrors and buttons inside"
+        );
+        assert_eq!(
+            mesh_shown(1, true),
+            (true, true),
+            "the outside, in the mirrors only"
+        );
         assert_eq!(mesh_shown(3, true), (true, false));
-        assert_eq!(mesh_shown(4, true), (false, false), "the AI stand-in, not from inside");
+        assert_eq!(
+            mesh_shown(4, true),
+            (false, false),
+            "the AI stand-in, not from inside"
+        );
         assert_eq!(mesh_shown(1, false), (false, false));
-        assert_eq!(mesh_shown(5, true), (true, true), "outside and AI: in the mirrors only");
+        assert_eq!(
+            mesh_shown(5, true),
+            (true, true),
+            "outside and AI: in the mirrors only"
+        );
     }
 }

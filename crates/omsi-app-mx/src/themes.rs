@@ -10,9 +10,9 @@
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
+use omsi_ui::Color;
 use omsi_ui::icons::{Mark, Stage};
 use omsi_ui::theme::{self, Glass, Palette};
-use omsi_ui::Color;
 
 /// openOMSI's own look as the settings file writes it (the setting reads it as "").
 pub(crate) const OWN: &str = "openomsi";
@@ -41,8 +41,17 @@ pub(crate) enum Progress {
 /// has one, and its marks: what comes in as the loading reaches it) or a picture.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Logo {
-    Svg { src: String, size: (f32, f32), progress_len: Option<f32>, marks: Vec<Mark> },
-    Picture { w: u32, h: u32, rgba: Arc<Vec<u8>> },
+    Svg {
+        src: String,
+        size: (f32, f32),
+        progress_len: Option<f32>,
+        marks: Vec<Mark>,
+    },
+    Picture {
+        w: u32,
+        h: u32,
+        rgba: Arc<Vec<u8>>,
+    },
 }
 
 impl Logo {
@@ -58,7 +67,11 @@ impl Logo {
     /// Its pixels fitted into a square of `n` (the pause menu's logo), centred.
     pub fn square_pixels(&self, n: u32) -> Option<Vec<u8>> {
         let a = self.aspect();
-        let (w, h) = if a >= 1.0 { (n, ((n as f32 / a).round() as u32).max(1)) } else { (((n as f32 * a).round() as u32).max(1), n) };
+        let (w, h) = if a >= 1.0 {
+            (n, ((n as f32 / a).round() as u32).max(1))
+        } else {
+            (((n as f32 * a).round() as u32).max(1), n)
+        };
         let px = self.pixels(w, h, None, &|_| Stage::Shown)?;
         let (x0, y0) = ((n - w) / 2, (n - h) / 2);
         let mut out = vec![0u8; (n * n * 4) as usize];
@@ -80,16 +93,44 @@ impl Logo {
 
     /// Its pixels at `w` x `h` (straight RGBA) - with the loading's progress `frac` shown as
     /// `progress` has it (none: the whole logo), its marks as `stage` has them.
-    pub fn pixels(&self, w: u32, h: u32, progress: Option<(Progress, f32)>, stage: &dyn Fn(&Mark) -> Stage) -> Option<Vec<u8>> {
-        let staged = |src: &str, marks: &[Mark]| if marks.is_empty() { src.to_string() } else { omsi_ui::icons::staged_svg(src, marks, stage) };
-        if let (Logo::Svg { src, progress_len: Some(len), marks, .. }, Some((Progress::Stroke, frac))) = (self, progress) {
-            return omsi_ui::icons::rasterize_rgba(&omsi_ui::icons::progress_svg(&staged(src, marks), "progress", *len, frac, TRACK), w, h);
+    pub fn pixels(
+        &self,
+        w: u32,
+        h: u32,
+        progress: Option<(Progress, f32)>,
+        stage: &dyn Fn(&Mark) -> Stage,
+    ) -> Option<Vec<u8>> {
+        let staged = |src: &str, marks: &[Mark]| {
+            if marks.is_empty() {
+                src.to_string()
+            } else {
+                omsi_ui::icons::staged_svg(src, marks, stage)
+            }
+        };
+        if let (
+            Logo::Svg {
+                src,
+                progress_len: Some(len),
+                marks,
+                ..
+            },
+            Some((Progress::Stroke, frac)),
+        ) = (self, progress)
+        {
+            return omsi_ui::icons::rasterize_rgba(
+                &omsi_ui::icons::progress_svg(&staged(src, marks), "progress", *len, frac, TRACK),
+                w,
+                h,
+            );
         }
         let mut px = match self {
-            Logo::Svg { src, marks, .. } => omsi_ui::icons::rasterize_rgba(&staged(src, marks), w, h)?,
+            Logo::Svg { src, marks, .. } => {
+                omsi_ui::icons::rasterize_rgba(&staged(src, marks), w, h)?
+            }
             Logo::Picture { w: pw, h: ph, rgba } => {
                 let img = image::RgbaImage::from_raw(*pw, *ph, rgba.to_vec())?;
-                image::imageops::resize(&img, w, h, image::imageops::FilterType::Triangle).into_raw()
+                image::imageops::resize(&img, w, h, image::imageops::FilterType::Triangle)
+                    .into_raw()
             }
         };
         if let Some((_, frac)) = progress {
@@ -97,7 +138,8 @@ impl Logo {
             let cut = (w as f32 * frac.clamp(0.0, 1.0)).round() as usize;
             for (i, p) in px.chunks_mut(4).enumerate() {
                 if i % w as usize >= cut {
-                    let grey = (0.2126 * p[0] as f32 + 0.7152 * p[1] as f32 + 0.0722 * p[2] as f32) as u8;
+                    let grey =
+                        (0.2126 * p[0] as f32 + 0.7152 * p[1] as f32 + 0.0722 * p[2] as f32) as u8;
                     p[..3].fill(grey);
                     p[3] = (p[3] as f32 * TRACK) as u8;
                 }
@@ -138,7 +180,10 @@ impl Theme {
     /// Its palette over openOMSI's light or dark look, as the player chose (`ui_theme`): its
     /// colours, what it leaves out from that look, its corners and its glass.
     pub fn palette(&self, light: bool) -> Palette {
-        let (mut p, _) = Palette::with_colors(theme::palette(light), self.colors.iter().map(|(k, c)| (k.as_str(), *c)));
+        let (mut p, _) = Palette::with_colors(
+            theme::palette(light),
+            self.colors.iter().map(|(k, c)| (k.as_str(), *c)),
+        );
         p.radius = self.radius.unwrap_or(p.radius);
         p.glass = self.glass;
         p
@@ -148,9 +193,21 @@ impl Theme {
 /// A theme file read: `text` of the folder `dir`, the theme `id`. What it gets wrong it says;
 /// what it does not know is logged and left out.
 pub(crate) fn parse(id: &str, dir: &Path, text: &str) -> Result<Theme, String> {
-    let v: serde_json::Value = serde_json::from_str(text).map_err(|e| format!("theme.json: {e}"))?;
+    let v: serde_json::Value =
+        serde_json::from_str(text).map_err(|e| format!("theme.json: {e}"))?;
     let o = v.as_object().ok_or("theme.json: an object is expected")?;
-    let known = ["name", "title", "colors", "radius", "glass", "loading", "logo", "author", "version", "description"];
+    let known = [
+        "name",
+        "title",
+        "colors",
+        "radius",
+        "glass",
+        "loading",
+        "logo",
+        "author",
+        "version",
+        "description",
+    ];
     for k in o.keys().filter(|k| !known.contains(&k.as_str())) {
         log::warn!("interface theme \"{id}\": \"{k}\" is not known, left out");
     }
@@ -161,8 +218,13 @@ pub(crate) fn parse(id: &str, dir: &Path, text: &str) -> Result<Theme, String> {
     let mut colors: Vec<(String, Color)> = Vec::new();
     let mut known = Palette::OPENOMSI;
     if let Some(c) = o.get("colors") {
-        for (k, val) in c.as_object().ok_or("colors: an object of colours is expected")? {
-            let c = color_of(val).ok_or_else(|| format!("colors.{k}: \"#rrggbb\", \"#rrggbbaa\" or [r, g, b, a] is expected"))?;
+        for (k, val) in c
+            .as_object()
+            .ok_or("colors: an object of colours is expected")?
+        {
+            let c = color_of(val).ok_or_else(|| {
+                format!("colors.{k}: \"#rrggbb\", \"#rrggbbaa\" or [r, g, b, a] is expected")
+            })?;
             if known.color_mut(k).is_some() {
                 colors.push((k.clone(), c));
             } else {
@@ -171,7 +233,11 @@ pub(crate) fn parse(id: &str, dir: &Path, text: &str) -> Result<Theme, String> {
         }
     }
     let radius = match o.get("radius") {
-        Some(r) => Some(r.as_f64().filter(|r| (0.0..=24.0).contains(r)).ok_or("radius: 0 to 24 is expected")? as f32),
+        Some(r) => Some(
+            r.as_f64()
+                .filter(|r| (0.0..=24.0).contains(r))
+                .ok_or("radius: 0 to 24 is expected")? as f32,
+        ),
         None => None,
     };
     let glass = match o.get("glass") {
@@ -181,11 +247,20 @@ pub(crate) fn parse(id: &str, dir: &Path, text: &str) -> Result<Theme, String> {
             let num = |k: &str, max: f64, default: f32| -> Result<f32, String> {
                 match g.get(k) {
                     None => Ok(default),
-                    Some(x) => x.as_f64().filter(|x| (0.0..=max).contains(x)).map(|x| x as f32).ok_or(format!("glass.{k}: 0 to {max} is expected")),
+                    Some(x) => x
+                        .as_f64()
+                        .filter(|x| (0.0..=max).contains(x))
+                        .map(|x| x as f32)
+                        .ok_or(format!("glass.{k}: 0 to {max} is expected")),
                 }
             };
             let d = Glass::DEFAULT;
-            Some(Glass { opacity: num("opacity", 1.0, d.opacity)?, blur: num("blur", 64.0, d.blur)?, edge: num("edge", 1.0, d.edge)?, highlight: num("highlight", 1.0, d.highlight)? })
+            Some(Glass {
+                opacity: num("opacity", 1.0, d.opacity)?,
+                blur: num("blur", 64.0, d.blur)?,
+                edge: num("edge", 1.0, d.edge)?,
+                highlight: num("highlight", 1.0, d.highlight)?,
+            })
         }
         Some(_) => return Err("glass: true, false or an object is expected".into()),
     };
@@ -193,7 +268,8 @@ pub(crate) fn parse(id: &str, dir: &Path, text: &str) -> Result<Theme, String> {
     if let Some(l) = o.get("loading") {
         let l = l.as_object().ok_or("loading: an object is expected")?;
         if let Some(c) = l.get("background") {
-            loading.background = Some(color_of(c).ok_or("loading.background: a colour is expected")?);
+            loading.background =
+                Some(color_of(c).ok_or("loading.background: a colour is expected")?);
         }
         if let Some(c) = l.get("text") {
             loading.text = Some(color_of(c).ok_or("loading.text: a colour is expected")?);
@@ -205,30 +281,67 @@ pub(crate) fn parse(id: &str, dir: &Path, text: &str) -> Result<Theme, String> {
             "bar" => Progress::Bar,
             "stroke" => Progress::Stroke,
             "fill" => Progress::Fill,
-            other => return Err(format!("loading.progress: \"bar\", \"stroke\" or \"fill\" is expected, not \"{other}\"")),
+            other => {
+                return Err(format!(
+                    "loading.progress: \"bar\", \"stroke\" or \"fill\" is expected, not \"{other}\""
+                ));
+            }
         };
         match (&loading.logo, loading.progress) {
-            (None, Progress::Stroke | Progress::Fill) => return Err("loading.progress: a logo (loading.logo) is needed to show the progress".into()),
+            (None, Progress::Stroke | Progress::Fill) => {
+                return Err(
+                    "loading.progress: a logo (loading.logo) is needed to show the progress".into(),
+                );
+            }
             // (a logo without the path to draw along: filled instead)
-            (Some(Logo::Picture { .. } | Logo::Svg { progress_len: None, .. }), Progress::Stroke) => {
-                log::warn!("interface theme \"{id}\": the loading logo has no path with id=\"progress\": it is filled from the left instead");
+            (
+                Some(
+                    Logo::Picture { .. }
+                    | Logo::Svg {
+                        progress_len: None, ..
+                    },
+                ),
+                Progress::Stroke,
+            ) => {
+                log::warn!(
+                    "interface theme \"{id}\": the loading logo has no path with id=\"progress\": it is filled from the left instead"
+                );
                 loading.progress = Progress::Fill;
             }
             _ => {}
         }
     }
-    let logo = o.get("logo").map(|f| text_of(f, "logo").and_then(|f| read_logo(dir, &f))).transpose()?;
+    let logo = o
+        .get("logo")
+        .map(|f| text_of(f, "logo").and_then(|f| read_logo(dir, &f)))
+        .transpose()?;
     let title = o.get("title").map(|t| text_of(t, "title")).transpose()?;
-    Ok(Theme { id: id.to_string(), name, colors, radius, glass, loading, logo, title })
+    Ok(Theme {
+        id: id.to_string(),
+        name,
+        colors,
+        radius,
+        glass,
+        loading,
+        logo,
+        title,
+    })
 }
 
 /// A name or a file of the theme file: a text, on one line, not too long.
 fn text_of(v: &serde_json::Value, what: &str) -> Result<String, String> {
-    let t = v.as_str().ok_or(format!("{what}: a text is expected"))?.trim();
+    let t = v
+        .as_str()
+        .ok_or(format!("{what}: a text is expected"))?
+        .trim();
     if t.is_empty() || t.chars().count() > 200 || t.chars().any(char::is_control) {
         return Err(format!("{what}: one line of text is expected"));
     }
-    Ok(if what == "name" || what == "title" { t.chars().take(MAX_NAME).collect() } else { t.to_string() })
+    Ok(if what == "name" || what == "title" {
+        t.chars().take(MAX_NAME).collect()
+    } else {
+        t.to_string()
+    })
 }
 
 /// A colour of the theme file: `"#rrggbb"`, `"#rrggbbaa"` or `[r, g, b]` / `[r, g, b, a]`
@@ -241,7 +354,12 @@ fn color_of(v: &serde_json::Value) -> Option<Color> {
             let byte = |x: f64| (0.0..=255.0).contains(&x).then_some(x.round() as u8);
             let alpha = n.get(3).copied().unwrap_or(1.0);
             (0.0..=1.0).contains(&alpha).then_some(())?;
-            Some(Color::rgba(byte(n[0])?, byte(n[1])?, byte(n[2])?, alpha as f32))
+            Some(Color::rgba(
+                byte(n[0])?,
+                byte(n[1])?,
+                byte(n[2])?,
+                alpha as f32,
+            ))
         }
         _ => None,
     }
@@ -255,21 +373,33 @@ fn read_logo(dir: &Path, file: &str) -> Result<Logo, String> {
         return Err(format!("{file}: a file in the theme's folder is expected"));
     }
     let path = dir.join(rel);
-    let len = std::fs::metadata(&path).map_err(|e| format!("{file}: {e}"))?.len();
+    let len = std::fs::metadata(&path)
+        .map_err(|e| format!("{file}: {e}"))?
+        .len();
     if len > MAX_FILE {
         return Err(format!("{file}: larger than {} MB", MAX_FILE >> 20));
     }
     if file.to_ascii_lowercase().ends_with(".svg") {
         let src = std::fs::read_to_string(&path).map_err(|e| format!("{file}: {e}"))?;
-        let size = omsi_ui::icons::svg_size(&src).filter(|s| s.0 > 0.0 && s.1 > 0.0).ok_or(format!("{file}: not an SVG that can be drawn"))?;
+        let size = omsi_ui::icons::svg_size(&src)
+            .filter(|s| s.0 > 0.0 && s.1 > 0.0)
+            .ok_or(format!("{file}: not an SVG that can be drawn"))?;
         let progress_len = omsi_ui::icons::path_length(&src, "progress");
         let marks = omsi_ui::icons::marks(&src);
-        return Ok(Logo::Svg { src, size, progress_len, marks });
+        return Ok(Logo::Svg {
+            src,
+            size,
+            progress_len,
+            marks,
+        });
     }
     let fits = |w: u32, h: u32| (1..=MAX_PICTURE).contains(&w) && (1..=MAX_PICTURE).contains(&h);
     let too_large = || format!("{file}: 1 to {MAX_PICTURE} pixels wide and high is expected");
     // (its size from its header first: a small file can hold a picture far larger than that)
-    let header = image::ImageReader::open(&path).ok().and_then(|r| r.with_guessed_format().ok()).and_then(|r| r.into_dimensions().ok());
+    let header = image::ImageReader::open(&path)
+        .ok()
+        .and_then(|r| r.with_guessed_format().ok())
+        .and_then(|r| r.into_dimensions().ok());
     if header.is_some_and(|(w, h)| !fits(w, h)) {
         return Err(too_large());
     }
@@ -277,18 +407,31 @@ fn read_logo(dir: &Path, file: &str) -> Result<Logo, String> {
     if !fits(img.width, img.height) {
         return Err(too_large());
     }
-    Ok(Logo::Picture { w: img.width, h: img.height, rgba: Arc::new(img.rgba) })
+    Ok(Logo::Picture {
+        w: img.width,
+        h: img.height,
+        rgba: Arc::new(img.rgba),
+    })
 }
 
 /// A theme's id is the name of its folder: letters, digits, `-`, `_` and `.`.
 fn valid_id(id: &str) -> bool {
-    !id.is_empty() && id.len() <= MAX_NAME && id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')) && !id.eq_ignore_ascii_case("openomsi")
+    !id.is_empty()
+        && id.len() <= MAX_NAME
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        && !id.eq_ignore_ascii_case("openomsi")
 }
 
 /// Every theme there is, (id, folder): the content roots' `Themes` folders first, then the
 /// plugins'; of two of one id (in any case) the first.
 pub(crate) fn found() -> Vec<(String, PathBuf)> {
-    let roots: Vec<PathBuf> = omsi_cfg::content_roots().iter().filter(|r| !omsi_cfg::is_sandbox(r)).cloned().collect();
+    let roots: Vec<PathBuf> = omsi_cfg::content_roots()
+        .iter()
+        .filter(|r| !omsi_cfg::is_sandbox(r))
+        .cloned()
+        .collect();
     found_in(&roots)
 }
 
@@ -296,12 +439,27 @@ fn found_in(roots: &[PathBuf]) -> Vec<(String, PathBuf)> {
     let mut out: Vec<(String, PathBuf)> = Vec::new();
     for folder in ["themes", "plugins"] {
         for root in roots {
-            let Some(dir) = omsi_plugin::resolve_path(root, folder).filter(|d| d.is_dir()) else { continue };
-            let Ok(entries) = std::fs::read_dir(&dir) else { continue };
-            let mut dirs: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.join("theme.json").is_file()).collect();
+            let Some(dir) = omsi_plugin::resolve_path(root, folder).filter(|d| d.is_dir()) else {
+                continue;
+            };
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            let mut dirs: Vec<PathBuf> = entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.join("theme.json").is_file())
+                .collect();
             dirs.sort();
             for d in dirs {
-                let Some(id) = d.file_name().and_then(|n| n.to_str()).filter(|id| valid_id(id)).map(str::to_string) else { continue };
+                let Some(id) = d
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .filter(|id| valid_id(id))
+                    .map(str::to_string)
+                else {
+                    continue;
+                };
                 if !out.iter().any(|(o, _)| o.eq_ignore_ascii_case(&id)) {
                     out.push((id, d));
                 }
@@ -313,7 +471,10 @@ fn found_in(roots: &[PathBuf]) -> Vec<(String, PathBuf)> {
 
 /// The theme `id` of `themes`, read.
 fn load_from(themes: &[(String, PathBuf)], id: &str) -> Result<Theme, String> {
-    let (id, dir) = themes.iter().find(|(t, _)| t.eq_ignore_ascii_case(id)).ok_or("there is no theme of that id")?;
+    let (id, dir) = themes
+        .iter()
+        .find(|(t, _)| t.eq_ignore_ascii_case(id))
+        .ok_or("there is no theme of that id")?;
     let file = dir.join("theme.json");
     let len = std::fs::metadata(&file).map_err(|e| e.to_string())?.len();
     if len > MAX_FILE {
@@ -338,7 +499,11 @@ struct State {
     theme: Option<Arc<Theme>>,
 }
 
-static STATE: Mutex<State> = Mutex::new(State { wanted: String::new(), light: false, theme: None });
+static STATE: Mutex<State> = Mutex::new(State {
+    wanted: String::new(),
+    light: false,
+    theme: None,
+});
 
 /// Puts the theme `id` (the setting `ui_theme_pack`) in force over openOMSI's light or dark
 /// look (`ui_theme`), when they are not already: the theme read anew when it is another, the
@@ -355,7 +520,13 @@ pub(crate) fn sync(id: &str, light: bool) {
         if !id.is_empty() {
             match load_from(&found(), id) {
                 Ok(t) => {
-                    log::info!("interface theme \"{}\" ({}): glass {}, loading {:?}", t.id, t.name, t.glass.is_some(), t.loading.progress);
+                    log::info!(
+                        "interface theme \"{}\" ({}): glass {}, loading {:?}",
+                        t.id,
+                        t.name,
+                        t.glass.is_some(),
+                        t.loading.progress
+                    );
                     s.theme = Some(Arc::new(t));
                 }
                 Err(e) => log::warn!("interface theme \"{id}\": {e} - openOMSI's own look"),
@@ -363,7 +534,10 @@ pub(crate) fn sync(id: &str, light: bool) {
         }
     }
     s.light = light;
-    let palette = s.theme.as_ref().map_or(theme::palette(light), |t| t.palette(light));
+    let palette = s
+        .theme
+        .as_ref()
+        .map_or(theme::palette(light), |t| t.palette(light));
     theme::set(palette);
 }
 
@@ -375,7 +549,11 @@ pub(crate) fn palette(light: bool) -> Palette {
 
 /// The theme in force (none: openOMSI's own look).
 pub(crate) fn current() -> Option<Arc<Theme>> {
-    STATE.lock().unwrap_or_else(|e| e.into_inner()).theme.clone()
+    STATE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .theme
+        .clone()
 }
 
 /// The themes the player can choose, (id, name): openOMSI's own look first. Looked for once.
@@ -385,7 +563,16 @@ pub(crate) fn choices() -> &'static [(String, String)] {
         let mut out = vec![(String::new(), "openOMSI".to_string())];
         for (id, dir) in found() {
             // (its name, without reading its pictures)
-            let name = std::fs::read_to_string(dir.join("theme.json")).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()).and_then(|v| v.get("name").and_then(|n| n.as_str()).map(|n| n.trim().chars().take(MAX_NAME).collect::<String>())).filter(|n| !n.is_empty()).unwrap_or_else(|| id.clone());
+            let name = std::fs::read_to_string(dir.join("theme.json"))
+                .ok()
+                .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+                .and_then(|v| {
+                    v.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|n| n.trim().chars().take(MAX_NAME).collect::<String>())
+                })
+                .filter(|n| !n.is_empty())
+                .unwrap_or_else(|| id.clone());
             out.push((id, name));
         }
         out
@@ -421,23 +608,50 @@ mod tests {
             "sparkle": true
         }"##;
         let t = parse("omsihub", &dir, text).unwrap();
-        assert_eq!((t.name.as_str(), t.title.as_deref()), ("Omsi-Hub", Some("Omsi-Hub")));
+        assert_eq!(
+            (t.name.as_str(), t.title.as_deref()),
+            ("Omsi-Hub", Some("Omsi-Hub"))
+        );
         assert_eq!(t.palette(false).accent, Color::rgba(0xf5, 0x86, 0x20, 1.0));
-        assert_eq!((t.palette(false).surface, t.palette(false).panel), (Color::rgba(16, 30, 62, 1.0), Color::rgba(16, 30, 62, 1.0)));
+        assert_eq!(
+            (t.palette(false).surface, t.palette(false).panel),
+            (Color::rgba(16, 30, 62, 1.0), Color::rgba(16, 30, 62, 1.0))
+        );
         assert_eq!(t.palette(false).radius, 14.0);
-        assert_eq!(t.palette(false).glass, Some(Glass { opacity: 0.55, blur: 28.0, ..Glass::DEFAULT }));
+        assert_eq!(
+            t.palette(false).glass,
+            Some(Glass {
+                opacity: 0.55,
+                blur: 28.0,
+                ..Glass::DEFAULT
+            })
+        );
         assert_eq!(t.loading.progress, Progress::Stroke);
         assert_eq!(t.loading.background, Some(Color::rgba(7, 16, 31, 1.0)));
         let logo = t.loading.logo.as_ref().unwrap();
         assert_eq!(logo.aspect(), 2.0);
         // the loading bar: drawn along the path as far as the loading is
-        let half = logo.pixels(200, 100, Some((Progress::Stroke, 0.5)), &|_| Stage::Shown).unwrap();
+        let half = logo
+            .pixels(200, 100, Some((Progress::Stroke, 0.5)), &|_| Stage::Shown)
+            .unwrap();
         let whole = logo.pixels(200, 100, None, &|_| Stage::Shown).unwrap();
         let ink = |px: &[u8]| px.chunks(4).filter(|p| p[3] > 128).count();
-        assert!(ink(&half) > ink(&whole) / 4 && ink(&half) < ink(&whole), "{} of {}", ink(&half), ink(&whole));
+        assert!(
+            ink(&half) > ink(&whole) / 4 && ink(&half) < ink(&whole),
+            "{} of {}",
+            ink(&half),
+            ink(&whole)
+        );
         // filled from the left: the right half faint
-        let fill = logo.pixels(200, 100, Some((Progress::Fill, 0.5)), &|_| Stage::Shown).unwrap();
-        assert!(fill.chunks(4).enumerate().filter(|(i, _)| i % 200 >= 100).all(|(_, p)| p[3] <= 50));
+        let fill = logo
+            .pixels(200, 100, Some((Progress::Fill, 0.5)), &|_| Stage::Shown)
+            .unwrap();
+        assert!(
+            fill.chunks(4)
+                .enumerate()
+                .filter(|(i, _)| i % 200 >= 100)
+                .all(|(_, p)| p[3] <= 50)
+        );
         assert!(t.logo.is_some());
     }
 
@@ -456,12 +670,22 @@ mod tests {
         assert!(bad(r#"{"logo": "/etc/x.svg"}"#).contains("theme's folder"));
         assert!(bad(r#"{"logo": "missing.svg"}"#).contains("missing.svg"));
         // (a picture too large is told by its header, before it is decoded)
-        image::RgbaImage::new(5000, 1).save(dir.join("wide.png")).unwrap();
+        image::RgbaImage::new(5000, 1)
+            .save(dir.join("wide.png"))
+            .unwrap();
         assert!(bad(r#"{"logo": "wide.png"}"#).contains("4096"));
         // (a stroke without the path to draw along: filled; no name: the id)
         std::fs::write(dir.join("plain.svg"), r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>"#).unwrap();
-        let t = parse("x", &dir, r#"{"loading": {"logo": "plain.svg", "progress": "stroke"}, "glass": true}"#).unwrap();
-        assert_eq!((t.name.as_str(), t.loading.progress, t.palette(false).glass), ("x", Progress::Fill, Some(Glass::DEFAULT)));
+        let t = parse(
+            "x",
+            &dir,
+            r#"{"loading": {"logo": "plain.svg", "progress": "stroke"}, "glass": true}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            (t.name.as_str(), t.loading.progress, t.palette(false).glass),
+            ("x", Progress::Fill, Some(Glass::DEFAULT))
+        );
         assert_eq!(t.palette(false).accent, Palette::OPENOMSI.accent);
     }
 
@@ -472,7 +696,15 @@ mod tests {
         let root = folder("roots");
         let a = root.join("a");
         let b = root.join("b");
-        for (dir, json) in [(a.join("Themes/Night"), r#"{"name": "Night"}"#), (b.join("Themes/night"), r#"{"name": "Other"}"#), (b.join("plugins/omsihub"), r##"{"name": "Omsi-Hub", "colors": {"accent": "#f58620"}}"##), (b.join("plugins/plain"), "")] {
+        for (dir, json) in [
+            (a.join("Themes/Night"), r#"{"name": "Night"}"#),
+            (b.join("Themes/night"), r#"{"name": "Other"}"#),
+            (
+                b.join("plugins/omsihub"),
+                r##"{"name": "Omsi-Hub", "colors": {"accent": "#f58620"}}"##,
+            ),
+            (b.join("plugins/plain"), ""),
+        ] {
             std::fs::create_dir_all(&dir).unwrap();
             if !json.is_empty() {
                 std::fs::write(dir.join("theme.json"), json).unwrap();
@@ -484,7 +716,10 @@ mod tests {
         let ids: Vec<&str> = found.iter().map(|(id, _)| id.as_str()).collect();
         assert_eq!(ids, ["Night", "omsihub"]);
         let t = load_from(&found, "OMSIHUB").unwrap();
-        assert_eq!((t.id.as_str(), t.palette(false).accent), ("omsihub", Color::rgba(0xf5, 0x86, 0x20, 1.0)));
+        assert_eq!(
+            (t.id.as_str(), t.palette(false).accent),
+            ("omsihub", Color::rgba(0xf5, 0x86, 0x20, 1.0))
+        );
         assert!(load_from(&found, "plain").is_err());
         // the setting: one id, openOMSI's own look by any of its names
         assert_eq!(setting(" omsihub "), "omsihub");
@@ -501,6 +736,8 @@ mod tests {
             assert_eq!(omsi_ui::tr("Theme pack"), "Themapakket");
             assert!(omsi_ui::tr(desc).starts_with("Hoe de menu's"));
         });
-        crate::with_test_language("de", || assert_eq!(omsi_ui::tr("Theme pack"), "Designpaket"));
+        crate::with_test_language("de", || {
+            assert_eq!(omsi_ui::tr("Theme pack"), "Designpaket")
+        });
     }
 }

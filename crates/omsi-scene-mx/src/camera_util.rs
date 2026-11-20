@@ -130,24 +130,51 @@ pub fn mirror_in_view(eye: DVec3, radius: f32, view: &(Camera, f32)) -> bool {
 /// which happened to fit a mirror facing straight back at the driver and no other: the left
 /// mirrors, the kerb-side blind-spot mirrors and the door monitors of many buses looked into
 /// the saloon or at the sky.)
-pub fn mirror_view(v: &omsi_sim::VehicleInstance, c: &omsi_vehicle::Camera, eye: DVec3, off: [f32; 2]) -> omsi_vehicle::Camera {
+pub fn mirror_view(
+    v: &omsi_sim::VehicleInstance,
+    c: &omsi_vehicle::Camera,
+    eye: DVec3,
+    off: [f32; 2],
+) -> omsi_vehicle::Camera {
     mirror_view_in(v.position, v.body_rotation(), c, eye, off)
 }
 
 /// [`mirror_view`] for a camera of a body at `position`, turned by `rot` (a rear section's).
 /// A `[add_camera_reflexion_static]` camera (`fixed`) is no mirror: it looks along its own
 /// yaw and pitch (and the player's turn of it), wherever the eye is.
-pub fn mirror_view_in(position: DVec3, rot: glam::Mat4, c: &omsi_vehicle::Camera, eye: DVec3, off: [f32; 2]) -> omsi_vehicle::Camera {
+pub fn mirror_view_in(
+    position: DVec3,
+    rot: glam::Mat4,
+    c: &omsi_vehicle::Camera,
+    eye: DVec3,
+    off: [f32; 2],
+) -> omsi_vehicle::Camera {
     if c.fixed {
-        return omsi_vehicle::Camera { yaw: c.yaw + off[0], pitch: (c.pitch + off[1]).clamp(-89.0, 89.0), ..c.clone() };
+        return omsi_vehicle::Camera {
+            yaw: c.yaw + off[0],
+            pitch: (c.pitch + off[1]).clamp(-89.0, 89.0),
+            ..c.clone()
+        };
     }
-    let at = position + rot.transform_point3(glam::Vec3::new(c.pos[0], c.pos[1], c.pos[2])).as_dvec3();
+    let at = position
+        + rot
+            .transform_point3(glam::Vec3::new(c.pos[0], c.pos[1], c.pos[2]))
+            .as_dvec3();
     let d = rot.inverse().transform_vector3((at - eye).as_vec3());
-    let Some(d) = d.try_normalize() else { return c.clone() };
-    let (y, p) = ((c.yaw + off[0]).to_radians(), (c.pitch + off[1]).to_radians());
+    let Some(d) = d.try_normalize() else {
+        return c.clone();
+    };
+    let (y, p) = (
+        (c.yaw + off[0]).to_radians(),
+        (c.pitch + off[1]).to_radians(),
+    );
     let m = glam::Vec3::new(p.cos() * y.sin(), p.cos() * y.cos(), p.sin());
     let r = d - m * (2.0 * d.dot(m));
-    omsi_vehicle::Camera { yaw: r.x.atan2(r.y).to_degrees(), pitch: mirror_pitch_deg(r), ..c.clone() }
+    omsi_vehicle::Camera {
+        yaw: r.x.atan2(r.y).to_degrees(),
+        pitch: mirror_pitch_deg(r),
+        ..c.clone()
+    }
 }
 
 /// The pitch Omsi.exe gives a mirror camera looking along `r` (0x7efc60, arcsine 0x45a3d4):
@@ -162,8 +189,16 @@ fn mirror_pitch_deg(r: glam::Vec3) -> f32 {
 /// A mirror camera as the player has set it: moved by a shift (bus frame, m) and with
 /// `dfov` degrees added to its field of view (a mirror that gives none draws with 50).
 pub fn adjusted(c: &omsi_vehicle::Camera, s: [f32; 3], dfov: f32) -> omsi_vehicle::Camera {
-    let fov = if dfov.abs() > 0.01 { (if c.fov > 1.0 { c.fov } else { 50.0 } + dfov).clamp(8.0, 110.0) } else { c.fov };
-    omsi_vehicle::Camera { pos: [c.pos[0] + s[0], c.pos[1] + s[1], c.pos[2] + s[2]], fov, ..c.clone() }
+    let fov = if dfov.abs() > 0.01 {
+        (if c.fov > 1.0 { c.fov } else { 50.0 } + dfov).clamp(8.0, 110.0)
+    } else {
+        c.fov
+    };
+    omsi_vehicle::Camera {
+        pos: [c.pos[0] + s[0], c.pos[1] + s[1], c.pos[2] + s[2]],
+        fov,
+        ..c.clone()
+    }
 }
 
 #[cfg(test)]
@@ -176,11 +211,19 @@ mod tests {
         for heading in [0.0f32, 40.0, 135.0, 260.0] {
             let pitch = |deg: f32| {
                 let (h, e) = (heading.to_radians(), deg.to_radians());
-                super::mirror_pitch_deg(glam::Vec3::new(h.sin() * e.cos(), h.cos() * e.cos(), e.sin()))
+                super::mirror_pitch_deg(glam::Vec3::new(
+                    h.sin() * e.cos(),
+                    h.cos() * e.cos(),
+                    e.sin(),
+                ))
             };
             let want = |deg: f32| deg.to_radians().tan().clamp(-1.0, 1.0).asin().to_degrees();
             for deg in [0.0, 12.0, -30.0, 44.0, -60.0] {
-                assert!((pitch(deg) - want(deg)).abs() < 1e-3, "{heading} {deg}: {}", pitch(deg));
+                assert!(
+                    (pitch(deg) - want(deg)).abs() < 1e-3,
+                    "{heading} {deg}: {}",
+                    pitch(deg)
+                );
             }
             assert!((pitch(-30.0) + 35.264).abs() < 1e-2);
         }
@@ -191,8 +234,18 @@ mod tests {
     /// where it is pointed, wherever the eye is, turned by the player's offset.
     #[test]
     fn a_static_camera_does_not_follow_the_eye() {
-        let mirror = omsi_vehicle::Camera { pos: [1.2, 5.0, 2.0], fov: 30.0, yaw: 180.0, ..Default::default() };
-        let cctv = omsi_vehicle::Camera { fixed: true, yaw: 90.0, pitch: -40.0, ..mirror.clone() };
+        let mirror = omsi_vehicle::Camera {
+            pos: [1.2, 5.0, 2.0],
+            fov: 30.0,
+            yaw: 180.0,
+            ..Default::default()
+        };
+        let cctv = omsi_vehicle::Camera {
+            fixed: true,
+            yaw: 90.0,
+            pitch: -40.0,
+            ..mirror.clone()
+        };
         let views = |c: &omsi_vehicle::Camera| {
             [DVec3::new(0.0, 4.0, 2.0), DVec3::new(-0.5, 3.0, 2.2)]
                 .map(|eye| super::mirror_view_in(DVec3::ZERO, Mat4::IDENTITY, c, eye, [0.0; 2]))
@@ -201,7 +254,13 @@ mod tests {
         let [a, b] = views(&mirror);
         assert!((a.0 - b.0).abs() > 1.0, "{a:?} {b:?}");
         assert_eq!(views(&cctv), [(90.0, -40.0); 2]);
-        let turned = super::mirror_view_in(DVec3::ZERO, Mat4::IDENTITY, &cctv, DVec3::ZERO, [5.0, -60.0]);
+        let turned = super::mirror_view_in(
+            DVec3::ZERO,
+            Mat4::IDENTITY,
+            &cctv,
+            DVec3::ZERO,
+            [5.0, -60.0],
+        );
         assert_eq!((turned.yaw, turned.pitch), (95.0, -89.0));
     }
 }

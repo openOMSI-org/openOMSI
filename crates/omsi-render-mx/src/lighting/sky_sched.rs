@@ -66,7 +66,17 @@ pub(crate) struct SkySched {
 
 impl Default for SkySched {
     fn default() -> Self {
-        Self { owed: 0, slice: 0, staging_eye: None, staged: 0, swap: false, staging: None, probe_since: f32::INFINITY, sky_new: false, since_slice: SLICE_EVERY }
+        Self {
+            owed: 0,
+            slice: 0,
+            staging_eye: None,
+            staged: 0,
+            swap: false,
+            staging: None,
+            probe_since: f32::INFINITY,
+            sky_new: false,
+            since_slice: SLICE_EVERY,
+        }
     }
 }
 
@@ -93,7 +103,12 @@ impl SkySched {
 
     /// This window frame's slices (one or two passes). `face` and `round` are the probe's
     /// `cube_next` and `cube_round`, moved on as faces are completed.
-    pub(crate) fn plan(&mut self, face: &mut u32, round: &mut u32, dt: f32) -> [Option<SkySlice>; 2] {
+    pub(crate) fn plan(
+        &mut self,
+        face: &mut u32,
+        round: &mut u32,
+        dt: f32,
+    ) -> [Option<SkySlice>; 2] {
         self.since_slice += dt.max(0.0);
         let filling = self.staging_eye.is_some() && !self.staging_full();
         if filling || self.since_slice >= SLICE_EVERY {
@@ -106,11 +121,21 @@ impl SkySched {
         let mut k = 0;
         for _ in 0..n {
             let s = if self.staging_eye.is_some() && !self.staging_full() {
-                let s = SkySlice { staging: true, face: self.staged / SKY_CUBE_SLICES, first: self.staged % SKY_CUBE_SLICES, count: 1 };
+                let s = SkySlice {
+                    staging: true,
+                    face: self.staged / SKY_CUBE_SLICES,
+                    first: self.staged % SKY_CUBE_SLICES,
+                    count: 1,
+                };
                 self.staged += 1;
                 s
             } else {
-                let s = SkySlice { staging: false, face: *face, first: self.slice, count: 1 };
+                let s = SkySlice {
+                    staging: false,
+                    face: *face,
+                    first: self.slice,
+                    count: 1,
+                };
                 self.slice += 1;
                 if self.slice == SKY_CUBE_SLICES {
                     self.slice = 0;
@@ -120,7 +145,10 @@ impl SkySched {
                 s
             };
             // (the next band of the same face goes into the same pass)
-            let joins = k > 0 && out[k - 1].is_some_and(|p| p.staging == s.staging && p.face == s.face && p.first + p.count == s.first);
+            let joins = k > 0
+                && out[k - 1].is_some_and(|p| {
+                    p.staging == s.staging && p.face == s.face && p.first + p.count == s.first
+                });
             if joins {
                 if let Some(p) = out[k - 1].as_mut() {
                     p.count += 1;
@@ -146,7 +174,11 @@ mod tests {
         let (mut face, mut round) = (0, 0);
         for n in 0..96u32 {
             let out = s.plan(&mut face, &mut round, 0.05);
-            assert_eq!(out.iter().flatten().map(|p| p.count).sum::<u32>(), 1, "frame {n}");
+            assert_eq!(
+                out.iter().flatten().map(|p| p.count).sum::<u32>(),
+                1,
+                "frame {n}"
+            );
         }
         assert_eq!((face, round), (0, 24));
         s.owed += 1;
@@ -174,7 +206,11 @@ mod tests {
         assert_eq!(seen.len(), 24);
         assert_eq!((face, round), (2, 5));
         s.start_staging(DVec3::ZERO);
-        assert_eq!(s.staging_eye, Some(DVec3::new(1.0, 2.0, 3.0)), "a fill under way is not restarted");
+        assert_eq!(
+            s.staging_eye,
+            Some(DVec3::new(1.0, 2.0, 3.0)),
+            "a fill under way is not restarted"
+        );
         let p = s.plan(&mut face, &mut round, 0.05)[0].unwrap();
         assert!(!p.staging && p.face == 2);
     }
@@ -187,10 +223,18 @@ mod tests {
             let frames = (fps * 10.0) as u32;
             let mut slices = 0;
             for _ in 0..frames {
-                slices += s.plan(&mut face, &mut round, 1.0 / fps).iter().flatten().map(|p| p.count).sum::<u32>();
+                slices += s
+                    .plan(&mut face, &mut round, 1.0 / fps)
+                    .iter()
+                    .flatten()
+                    .map(|p| p.count)
+                    .sum::<u32>();
             }
             let want = frames.min(240);
-            assert!(slices.abs_diff(want) <= 2, "{fps} fps: {slices} slices in 10 s, {want} wanted");
+            assert!(
+                slices.abs_diff(want) <= 2,
+                "{fps} fps: {slices} slices in 10 s, {want} wanted"
+            );
         }
     }
 

@@ -56,8 +56,17 @@ impl World {
             if o.lamp.is_none() {
                 for (_, _, overrides) in &o.ot.meshes {
                     for ov in overrides.iter().filter(|m| !m.item && m.freetex.is_some()) {
-                        let Some((_, var)) = &ov.freetex else { continue };
-                        if let Some(name) = resolve_scenery_freetex_name(var, ov, overrides, o.script.as_ref(), None, &o.strings) {
+                        let Some((_, var)) = &ov.freetex else {
+                            continue;
+                        };
+                        if let Some(name) = resolve_scenery_freetex_name(
+                            var,
+                            ov,
+                            overrides,
+                            o.script.as_ref(),
+                            None,
+                            &o.strings,
+                        ) {
                             push(name, &o.ot.texture_dirs(&self.root), &mut names);
                         }
                     }
@@ -115,7 +124,12 @@ impl World {
         }
         // the painted ground layers (and their detail textures) of the tile, the masks moved to `paint` once cut
         let ground_dirs = vec![self.root.clone()];
-        let layers = p.paint_masks.iter().map(|m| m.0).chain(p.paint.iter().map(|m| m.0)).chain(p.wall_paint.iter().map(|m| m.0));
+        let layers = p
+            .paint_masks
+            .iter()
+            .map(|m| m.0)
+            .chain(p.paint.iter().map(|m| m.0))
+            .chain(p.wall_paint.iter().map(|m| m.0));
         for layer in layers {
             if let Some(gt) = self.global.ground_textures.get(layer) {
                 push(&gt.texture, &ground_dirs, &mut names);
@@ -251,7 +265,10 @@ impl World {
                 None,
                 env.map(|e| (e, 0.45)),
                 [0.0; 3],
-                omsi_render::MaterialExtra { water: true, ..Default::default() },
+                omsi_render::MaterialExtra {
+                    water: true,
+                    ..Default::default()
+                },
             )
         };
         let tree_mesh = renderer.add_mesh(scene, &tree_quad_mesh());
@@ -302,7 +319,10 @@ impl World {
         for (mesh, o3d_mats, overrides) in &ot.meshes {
             let mut mats: Vec<MaterialId> = Vec::new();
             // (once a mesh: asked again for every slot, the 294 slots of a St-Servan crossing took 30 ms)
-            let override_slots: Vec<Option<usize>> = overrides.iter().map(|o| omsi_sim::vehicle::override_slot(o3d_mats, o)).collect();
+            let override_slots: Vec<Option<usize>> = overrides
+                .iter()
+                .map(|o| omsi_sim::vehicle::override_slot(o3d_mats, o))
+                .collect();
             for (slot, m) in o3d_mats.iter().enumerate() {
                 let tex_of = |gpu: &mut GpuCache,
                               scene: &mut Scene,
@@ -314,7 +334,10 @@ impl World {
                     Some(id)
                 };
                 let for_slot = |o: &&MaterialDef| {
-                    overrides.iter().zip(&override_slots).any(|(x, s)| std::ptr::eq(x, *o) && *s == Some(slot))
+                    overrides
+                        .iter()
+                        .zip(&override_slots)
+                        .any(|(x, s)| std::ptr::eq(x, *o) && *s == Some(slot))
                 };
                 // a slot fed by [useTextTexture] / [useScriptTexture] gets a generated picture:
                 // the name in the mesh is a placeholder (the stop poles' Textfeld_1.bmp, the
@@ -397,9 +420,12 @@ impl World {
                 // picture. (Not with a transmap, an `[alphascale]` or a texture with alpha.)
                 let surface_phase = matches!(
                     ot.sco.render_type,
-                    omsi_scenery::sco::RenderType::Surface | omsi_scenery::sco::RenderType::OnSurface
+                    omsi_scenery::sco::RenderType::Surface
+                        | omsi_scenery::sco::RenderType::OnSurface
                 );
-                let faded = slot_ov.iter().any(|o| o.alphascale.as_ref().is_some_and(|v| !v.trim().is_empty()));
+                let faded = slot_ov
+                    .iter()
+                    .any(|o| o.alphascale.as_ref().is_some_and(|v| !v.trim().is_empty()));
                 // A blend with no alpha to take it from is opaque, whatever the picture is
                 // made of: one with no alpha channel, one whose alpha channel has no
                 // transparent texel at all (the GG2 signs' `directions\*.png` pictures are
@@ -415,13 +441,19 @@ impl World {
                 // outline between: see `picture_blend_fade`) is the same case one step on -
                 // nothing to blend by but the cut-away part - and is drawn alpha-tested so
                 // that the solid part of the object writes depth.
-                let blend_fade = if !surface_phase || transmap.is_some() || faded || generated || is_null_texture(&m.texture) {
+                let blend_fade = if !surface_phase
+                    || transmap.is_some()
+                    || faded
+                    || generated
+                    || is_null_texture(&m.texture)
+                {
                     None
                 } else if tex.is_none() {
                     Some(super::staging::BlendFade::Solid)
                 } else {
                     let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
-                    omsi_texture::find_texture(&m.texture, &dirs_ref).map(|p| super::staging::picture_blend_fade(&p))
+                    omsi_texture::find_texture(&m.texture, &dirs_ref)
+                        .map(|p| super::staging::picture_blend_fade(&p))
                 };
                 let alpha = super::staging::blend_alpha(alpha, blend_fade);
                 // [matl_envmap]: the same reflection rule as on vehicles (factor x mask; a
@@ -478,8 +510,26 @@ impl World {
                 renderer.light_map_next.set(ot.sco.light_map_mapping);
                 // OMSI_DEBUG_OBJMAT=<part of the object's file name>: how its slots are made
                 if let Some(f) = omsi_cfg::flags::OMSI_DEBUG_OBJMAT.var() {
-                    if ot.sco.path.to_string_lossy().to_ascii_lowercase().contains(&f.to_ascii_lowercase()) {
-                        log::info!("{} slot {slot} '{}': tex {} alpha {:?} color {:?} emissive {:?} night {} transmap {:?} envmap {:?} auto_night {}", ot.sco.path.display(), m.texture, tex.is_some(), alpha, color, emissive, night.is_some(), transmap.map(|t| t.1), envmap.map(|e| e.1), t.auto_night);
+                    if ot
+                        .sco
+                        .path
+                        .to_string_lossy()
+                        .to_ascii_lowercase()
+                        .contains(&f.to_ascii_lowercase())
+                    {
+                        log::info!(
+                            "{} slot {slot} '{}': tex {} alpha {:?} color {:?} emissive {:?} night {} transmap {:?} envmap {:?} auto_night {}",
+                            ot.sco.path.display(),
+                            m.texture,
+                            tex.is_some(),
+                            alpha,
+                            color,
+                            emissive,
+                            night.is_some(),
+                            transmap.map(|t| t.1),
+                            envmap.map(|e| e.1),
+                            t.auto_night
+                        );
                     }
                 }
                 // [matl_lightmap]: laid on the light as on a vehicle (a lamp's lens, a lit
@@ -493,7 +543,8 @@ impl World {
                     None => glow_mask(&slot_ov).and_then(|name| tex_of(gpu, scene, name, &mut t)),
                 };
                 let base = renderer.add_material_extra(
-                    scene, tex, alpha, color, false, transmap, night, light, envmap, emissive, extra,
+                    scene, tex, alpha, color, false, transmap, night, light, envmap, emissive,
+                    extra,
                 );
                 let base = gpu.material(renderer, scene, base);
                 t.materials.push(base);
@@ -562,7 +613,15 @@ impl World {
                 },
             ));
         }
-        self.type_gpu_lods(renderer, scene, gpu, ot, &mut t, (&dirs, images), ground_mat);
+        self.type_gpu_lods(
+            renderer,
+            scene,
+            gpu,
+            ot,
+            &mut t,
+            (&dirs, images),
+            ground_mat,
+        );
         gpu.types.insert(key, t);
         key
     }
@@ -586,7 +645,9 @@ impl World {
         // say [LOD] 0.1 (the signal) before [LOD] 1 (its low version): taken as size bands
         // the low version stood in close up and the signal vanished in the distance; and a
         // model with a single [LOD] 0.5 is drawn at any size.
-        let mins: Vec<f32> = std::iter::once(ot.lod0_min).chain(ot.lower_lods.iter().map(|l| l.0)).collect();
+        let mins: Vec<f32> = std::iter::once(ot.lod0_min)
+            .chain(ot.lower_lods.iter().map(|l| l.0))
+            .collect();
         let band = |i: usize| -> (f32, f32) {
             let lo = if i + 1 == mins.len() { 0.0 } else { mins[i] };
             (lo, mins[..i].iter().copied().fold(f32::MAX, f32::min))
@@ -689,7 +750,9 @@ impl World {
             self.poles.lock().retain(|k, _| !poles.contains(k));
             self.help_arrows.lock().remove(&key);
             self.parked_objects.lock().retain(|_, p| p.tile != key);
-            self.departed_objects.lock().retain(|_, (p, _, _)| p.tile != key);
+            self.departed_objects
+                .lock()
+                .retain(|_, (p, _, _)| p.tile != key);
             self.edit_objects.lock().retain(|_, o| o.tile != key);
             freed = self.gpu.lock().release_tile(renderer, scene, tg) > 0;
         }
@@ -756,19 +819,35 @@ impl World {
                         if !path.to_string_lossy().ends_with("#bump") {
                             attach_pbr(renderer, scene, &path, id);
                         }
-                        gpu.textures.insert(
-                            path.clone(),
-                            TexEntry::uploaded(id, img, scene),
-                        );
+                        gpu.textures
+                            .insert(path.clone(), TexEntry::uploaded(id, img, scene));
                         // the tile holds the texture until its object types take it over
-                        if slow && t_item.elapsed().as_millis() > 8 { log::info!("upload: texture {} ({}x{} {:?}) took {} ms", path.display(), img.width, img.height, img.format, t_item.elapsed().as_millis()); }
+                        if slow && t_item.elapsed().as_millis() > 8 {
+                            log::info!(
+                                "upload: texture {} ({}x{} {:?}) took {} ms",
+                                path.display(),
+                                img.width,
+                                img.height,
+                                img.format,
+                                t_item.elapsed().as_millis()
+                            );
+                        }
                         u.tg.shared_textures.push(path);
                     }
                 }
             } else if let Some(ot) = u.types.pop() {
                 let before = (gpu.sync_decodes, gpu.sync_decode_secs);
                 let key = self.type_gpu(renderer, scene, gpu, &ot, &u.prepared.images, ground_mat);
-                if slow && t_item.elapsed().as_millis() > 8 { log::info!("upload: object type {} took {} ms ({} meshes, {} textures decoded here in {:.0} ms)", ot.model_dir.display(), t_item.elapsed().as_millis(), ot.meshes.len(), gpu.sync_decodes - before.0, (gpu.sync_decode_secs - before.1) * 1000.0); }
+                if slow && t_item.elapsed().as_millis() > 8 {
+                    log::info!(
+                        "upload: object type {} took {} ms ({} meshes, {} textures decoded here in {:.0} ms)",
+                        ot.model_dir.display(),
+                        t_item.elapsed().as_millis(),
+                        ot.meshes.len(),
+                        gpu.sync_decodes - before.0,
+                        (gpu.sync_decode_secs - before.1) * 1000.0
+                    );
+                }
                 if !u.tg.types.contains(&key) {
                     gpu.types.get_mut(&key).unwrap().users += 1;
                     u.tg.types.push(key);

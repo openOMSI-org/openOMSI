@@ -27,19 +27,27 @@ pub(crate) struct LampSight {
 
 impl LampSight {
     pub(crate) fn new(device: &mx::Device, leave_out_enhanced: bool) -> Option<LampSight> {
-        if leave_out_enhanced || basic_pipelines() || gl_backend() || omsi_cfg::flags::OMSI_NO_LAMP_SIGHT.is_set() {
+        if leave_out_enhanced
+            || basic_pipelines()
+            || gl_backend()
+            || omsi_cfg::flags::OMSI_NO_LAMP_SIGHT.is_set()
+        {
             return None;
         }
         optional_pipeline(device, "the lamp sight", || LampSight::build(device))
     }
 
     fn build(device: &mx::Device) -> LampSight {
-        let module = compile_shader(device, mx::ShaderModuleDescriptor {
-            label: Some("lamp sight"),
-            source: &*(include_str!("../lamp_sight.wgsl")),
-        });
+        let module = compile_shader(
+            device,
+            mx::ShaderModuleDescriptor {
+                label: Some("lamp sight"),
+                source: &*(include_str!("../lamp_sight.wgsl")),
+            },
+        );
         let targets = [target(mx::TextureFormat::Rgba8Unorm, None)];
-        let pipeline = no_vertex_pipeline("lamp sight", &module, "fs_sight", &targets).create(device);
+        let pipeline =
+            no_vertex_pipeline("lamp sight", &module, "fs_sight", &targets).create(device);
         let texture = device
             .create_texture(&mx::TextureDescriptor {
                 label: Some("lamp sight"),
@@ -65,7 +73,11 @@ impl LampSight {
             .expect("mX: a buffer");
         LampSight {
             pipeline,
-            uniform: uniform_buffer(device, "lamp sight", std::mem::size_of::<SightUniform>() as u64),
+            uniform: uniform_buffer(
+                device,
+                "lamp sight",
+                std::mem::size_of::<SightUniform>() as u64,
+            ),
             view: texture
                 .create_view(&Default::default())
                 .expect("mX: a texture view"),
@@ -79,7 +91,10 @@ impl LampSight {
     }
 
     pub(crate) fn seen(&self, at: DVec3) -> f32 {
-        self.seen.iter().find(|(p, _)| p.distance_squared(at) < 1.0).map_or(1.0, |s| s.1)
+        self.seen
+            .iter()
+            .find(|(p, _)| p.distance_squared(at) < 1.0)
+            .map_or(1.0, |s| s.1)
     }
 
     pub(crate) fn idle(&self) -> bool {
@@ -100,7 +115,9 @@ impl LampSight {
             self.frames_waiting = 0;
             return;
         }
-        let Some(lamps) = self.waiting.as_ref() else { return };
+        let Some(lamps) = self.waiting.as_ref() else {
+            return;
+        };
         self.frames_waiting += 1;
         if self.frames_waiting > 240 {
             self.seen.clear();
@@ -125,10 +142,16 @@ impl LampSight {
         self.frames_waiting = 0;
     }
 
-    pub(crate) fn encode(&mut self, device: &mx::Device,
+    pub(crate) fn encode(
+        &mut self,
+        device: &mx::Device,
         queue: &mx::Queue,
         encoder: &mut mx::CommandEncoder,
-        depth: &mx::TextureView, view_proj: Mat4, ro: DVec3, eye: Vec3) {
+        depth: &mx::TextureView,
+        view_proj: Mat4,
+        ro: DVec3,
+        eye: Vec3,
+    ) {
         if self.waiting.is_some() || self.candidates.is_empty() {
             return;
         }
@@ -147,8 +170,14 @@ impl LampSight {
         let bg = device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("lamp sight"),
             entries: &[
-                mx::BindGroupEntry { binding: 0, resource: self.uniform.as_entire_binding() },
-                mx::BindGroupEntry { binding: 1, resource: mx::BindingResource::TextureView(depth), },
+                mx::BindGroupEntry {
+                    binding: 0,
+                    resource: self.uniform.as_entire_binding(),
+                },
+                mx::BindGroupEntry {
+                    binding: 1,
+                    resource: mx::BindingResource::TextureView(depth),
+                },
             ],
         });
         {
@@ -159,7 +188,8 @@ impl LampSight {
                     resolve_target: None,
                     ops: mx::Operations {
                         load: mx::LoadOp::Clear(mx::Color::WHITE),
-                        store: mx::StoreOp::Store, },
+                        store: mx::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -171,19 +201,36 @@ impl LampSight {
         }
         encoder.copy_texture_to_buffer(
             mx::TexelCopyTextureInfo {
-                texture: &self.view.texture(), mip_level: 0, origin: mx::Origin3d::ZERO,
-                aspect: mx::TextureAspect::All, },
+                texture: &self.view.texture(),
+                mip_level: 0,
+                origin: mx::Origin3d::ZERO,
+                aspect: mx::TextureAspect::All,
+            },
             mx::TexelCopyBufferInfo {
                 buffer: &self.readback,
-                layout: mx::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(SIGHT_LAMPS as u32 * 4), rows_per_image: Some(1) },
+                layout: mx::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(SIGHT_LAMPS as u32 * 4),
+                    rows_per_image: Some(1),
+                },
             },
-            mx::Extent3d { width: SIGHT_LAMPS as u32, height: 1, depth_or_array_layers: 1 },
+            mx::Extent3d {
+                width: SIGHT_LAMPS as u32,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
         );
         self.waiting = Some(self.candidates.clone());
     }
 }
 
-pub(crate) fn brightest_glare(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, forward: Vec3, view_proj: Mat4) -> Vec<DVec3> {
+pub(crate) fn brightest_glare(
+    lights: &[PointLight],
+    ro: DVec3,
+    cam_rel: Vec3,
+    forward: Vec3,
+    view_proj: Mat4,
+) -> Vec<DVec3> {
     let mut sources: Vec<(DVec3, f32)> = glare_sources(lights, ro, cam_rel, forward)
         .into_iter()
         .filter(|(at, _)| {

@@ -5,11 +5,24 @@ use super::*;
 
 impl Renderer {
     // --- depth prepass + ambient occlusion (single-sampled, camera projection)
-    pub(crate) fn encode_depth_prepass(&self, prepass_encoder: &mut mx::CommandEncoder, scene: &Scene, f: &FrameCtx, prepass_batches: &[Batch], timers: &mut PassTimers) {
-        let (camera, aspect, width, height, ao_on) = (f.camera, f.aspect, f.width, f.height, f.ao_on);
+    pub(crate) fn encode_depth_prepass(
+        &self,
+        prepass_encoder: &mut mx::CommandEncoder,
+        scene: &Scene,
+        f: &FrameCtx,
+        prepass_batches: &[Batch],
+        timers: &mut PassTimers,
+    ) {
+        let (camera, aspect, width, height, ao_on) =
+            (f.camera, f.aspect, f.width, f.height, f.ao_on);
         if f.prepass_on {
             let proj = f.projection.unwrap_or_else(|| {
-                Mat4::perspective_rh(camera.fov_deg.to_radians(), aspect, camera.depth_far(), camera.near)
+                Mat4::perspective_rh(
+                    camera.fov_deg.to_radians(),
+                    aspect,
+                    camera.depth_far(),
+                    camera.near,
+                )
             });
             let u = SsaoUniform {
                 inv_proj: proj.inverse().to_cols_array_2d(),
@@ -20,10 +33,23 @@ impl Renderer {
                     height.div_ceil(2) as f32,
                 ],
                 shift: [proj.z_axis.x, proj.z_axis.y, 0.0, 0.0],
-                wide: if f.enhanced_frame { occlusion_tuning(self.street_light()) } else { [0.0; 4] },
+                wide: if f.enhanced_frame {
+                    occlusion_tuning(self.street_light())
+                } else {
+                    [0.0; 4]
+                },
                 // (the window's own view only: another eye or panel is not where it was)
                 reproj: self.tone.bounce_reproj.0,
-                history: [if f.lead_view { self.tone.bounce_reproj.1 } else { 0.0 }, 0.0, 0.0, 0.0],
+                history: [
+                    if f.lead_view {
+                        self.tone.bounce_reproj.1
+                    } else {
+                        0.0
+                    },
+                    0.0,
+                    0.0,
+                    0.0,
+                ],
             };
             self.queue
                 .write_buffer(&self.ao_buf, 0, bytemuck::bytes_of(&u))
@@ -31,7 +57,10 @@ impl Renderer {
             let ao = self.targets.ao.as_ref().unwrap();
             // temporal upscaling: the same depth, and each pixel's motion written beside it
             let motion = if f.temporal_frame {
-                self.temporal_pipes.as_ref().zip(self.temporal.as_ref()).and_then(|(p, d)| Some((p, d.targets.as_ref()?, &d.prev_models.as_ref()?.1)))
+                self.temporal_pipes
+                    .as_ref()
+                    .zip(self.temporal.as_ref())
+                    .and_then(|(p, d)| Some((p, d.targets.as_ref()?, &d.prev_models.as_ref()?.1)))
             } else {
                 None
             };
@@ -40,12 +69,17 @@ impl Renderer {
                 resolve_target: None,
                 ops: mx::Operations {
                     load: mx::LoadOp::Clear(mx::Color::TRANSPARENT),
-                    store: mx::StoreOp::Store, },
+                    store: mx::StoreOp::Store,
+                },
             })];
             {
                 let mut pass = prepass_encoder.begin_render_pass(&mx::RenderPassDescriptor {
                     label: Some("depth prepass"),
-                    color_attachments: if motion.is_some() { &motion_target[..] } else { &[] },
+                    color_attachments: if motion.is_some() {
+                        &motion_target[..]
+                    } else {
+                        &[]
+                    },
                     depth_stencil_attachment: Some(mx::RenderPassDepthStencilAttachment {
                         view: &ao.depth_view,
                         depth_ops: Some(mx::Operations {
@@ -54,7 +88,11 @@ impl Renderer {
                         }),
                         stencil_ops: None,
                     }),
-                    timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "depth prepass"),
+                    timestamp_writes: pass_timer(
+                        timers.set.as_ref(),
+                        &mut timers.timed,
+                        "depth prepass",
+                    ),
                     occlusion_query_set: None,
                 });
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
@@ -70,8 +108,26 @@ impl Renderer {
                 });
             }
             for (pipe, bg, target, pass_label) in [
-                (if ao.bounce { &self.ssao_pipeline } else { &self.plain_ssao_pipeline }, &ao.ssao_bg, &ao.ao_view, "ssao"),
-                (if ao.bounce { &self.blur_pipeline } else { &self.plain_blur_pipeline }, &ao.blur_bg, &ao.blur_view, "ssao blur"),
+                (
+                    if ao.bounce {
+                        &self.ssao_pipeline
+                    } else {
+                        &self.plain_ssao_pipeline
+                    },
+                    &ao.ssao_bg,
+                    &ao.ao_view,
+                    "ssao",
+                ),
+                (
+                    if ao.bounce {
+                        &self.blur_pipeline
+                    } else {
+                        &self.plain_blur_pipeline
+                    },
+                    &ao.blur_bg,
+                    &ao.blur_view,
+                    "ssao blur",
+                ),
             ] {
                 let Some(pipe) = pipe.as_ref().filter(|_| ao_on) else {
                     break;
@@ -87,7 +143,11 @@ impl Renderer {
                         },
                     })],
                     depth_stencil_attachment: None,
-                    timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, pass_label),
+                    timestamp_writes: pass_timer(
+                        timers.set.as_ref(),
+                        &mut timers.timed,
+                        pass_label,
+                    ),
                     occlusion_query_set: None,
                 });
                 pass.set_pipeline(pipe);
@@ -99,12 +159,20 @@ impl Renderer {
 
     // --- the enhanced sky cube: a slice of a face a frame (all six faces the first time and
     // for a new sky), drawn in the window's frame only (see `SkySched`)
-    pub(crate) fn encode_sky_cube(&mut self, prepass_encoder: &mut mx::CommandEncoder, scene: &Scene, f: &FrameCtx, probe_redraw: bool, timers: &mut PassTimers) {
+    pub(crate) fn encode_sky_cube(
+        &mut self,
+        prepass_encoder: &mut mx::CommandEncoder,
+        scene: &Scene,
+        f: &FrameCtx,
+        probe_redraw: bool,
+        timers: &mut PassTimers,
+    ) {
         let (enhanced, lead_view) = (f.enhanced, f.lead_view);
         if !(enhanced && (lead_view || probe_redraw)) {
             return;
         }
-        let (Some(probe), Some(sky_bg)) = (self.tone.probe.as_mut(), scene.sky_bind_group.as_ref()) else {
+        let (Some(probe), Some(sky_bg)) = (self.tone.probe.as_mut(), scene.sky_bind_group.as_ref())
+        else {
             return;
         };
         // (face, round, the old picture's share, rows, into the cube for the next eye): a
@@ -114,7 +182,10 @@ impl Renderer {
         let mut draws: Vec<(u32, u32, f64, (u32, u32), bool)> = Vec::new();
         if full {
             probe.sched.cancel_staging();
-            draws.extend((0..6).flat_map(|f| (0..SKY_CUBE_ROUNDS).map(move |r| (f, r, r as f64 / (r as f64 + 1.0), (0, SKY_CUBE_SIZE), false))));
+            draws.extend((0..6).flat_map(|f| {
+                (0..SKY_CUBE_ROUNDS)
+                    .map(move |r| (f, r, r as f64 / (r as f64 + 1.0), (0, SKY_CUBE_SIZE), false))
+            }));
         } else {
             if std::mem::take(&mut probe.sched.swap) {
                 // the cube filled for the eye the frame's uniform has: over the one in use
@@ -122,22 +193,51 @@ impl Renderer {
                     prepass_encoder.copy_texture_to_texture(
                         staging.as_image_copy(),
                         probe.cube_tex.as_image_copy(),
-                        mx::Extent3d { width: SKY_CUBE_SIZE, height: SKY_CUBE_SIZE, depth_or_array_layers: 6 },
+                        mx::Extent3d {
+                            width: SKY_CUBE_SIZE,
+                            height: SKY_CUBE_SIZE,
+                            depth_or_array_layers: 6,
+                        },
                     );
                 }
             }
             if lead_view {
                 let round = (probe.cube_round / 6) % SKY_CUBE_ROUNDS;
                 let (mut next, mut rounds) = (probe.cube_next, probe.cube_round);
-                for s in probe.sched.plan(&mut next, &mut rounds, if f.env.sky_cube_every_frame { SLICE_EVERY } else { f.dt }).into_iter().flatten() {
+                for s in probe
+                    .sched
+                    .plan(
+                        &mut next,
+                        &mut rounds,
+                        if f.env.sky_cube_every_frame {
+                            SLICE_EVERY
+                        } else {
+                            f.dt
+                        },
+                    )
+                    .into_iter()
+                    .flatten()
+                {
                     let history = if s.staging { 0.0 } else { SKY_CUBE_HISTORY };
-                    draws.push((s.face, round, history, slice_rows(s.first, s.count), s.staging));
+                    draws.push((
+                        s.face,
+                        round,
+                        history,
+                        slice_rows(s.first, s.count),
+                        s.staging,
+                    ));
                 }
                 (probe.cube_next, probe.cube_round) = (next, rounds);
             } else {
                 // (a view of its own before the window's first frame: a whole face)
                 let round = (probe.cube_round / 6) % SKY_CUBE_ROUNDS;
-                draws.push((probe.cube_next, round, SKY_CUBE_HISTORY, (0, SKY_CUBE_SIZE), false));
+                draws.push((
+                    probe.cube_next,
+                    round,
+                    SKY_CUBE_HISTORY,
+                    (0, SKY_CUBE_SIZE),
+                    false,
+                ));
                 probe.cube_next = (probe.cube_next + 1) % 6;
                 probe.cube_round = probe.cube_round.wrapping_add(1);
             }
@@ -190,20 +290,36 @@ impl Renderer {
                     resolve_target: None,
                     ops: mx::Operations {
                         // (a slice keeps the rest of its face)
-                        load: if history > 0.0 || !whole { mx::LoadOp::Load } else { mx::LoadOp::Clear(mx::Color::BLACK) },
+                        load: if history > 0.0 || !whole {
+                            mx::LoadOp::Load
+                        } else {
+                            mx::LoadOp::Clear(mx::Color::BLACK)
+                        },
                         store: mx::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: if single { pass_timer(timers.set.as_ref(), &mut timers.timed, "sky cube") } else { None },
+                timestamp_writes: if single {
+                    pass_timer(timers.set.as_ref(), &mut timers.timed, "sky cube")
+                } else {
+                    None
+                },
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&probe.cube_pipeline);
-            pass.set_blend_constant(mx::Color { r: history, g: history, b: history, a: history });
+            pass.set_blend_constant(mx::Color {
+                r: history,
+                g: history,
+                b: history,
+                a: history,
+            });
             if !whole {
                 pass.set_scissor_rect(0, y0, SKY_CUBE_SIZE, rows);
             }
-            pass.set_bind_group(0, &probe.cube_bind_groups[(f * SKY_CUBE_ROUNDS + round) as usize], );
+            pass.set_bind_group(
+                0,
+                &probe.cube_bind_groups[(f * SKY_CUBE_ROUNDS + round) as usize],
+            );
             pass.set_bind_group(1, sky_bg);
             pass.draw(0..3, 0..1);
         }
@@ -211,7 +327,13 @@ impl Renderer {
 
     // --- the reflection probe of the enhanced path: the sky into the six faces, then
     // each blurrier level from the sharper ones (three faces a pass)
-    pub(crate) fn encode_probe(&self, prepass_encoder: &mut mx::CommandEncoder, scene: &Scene, probe_redraw: bool, timers: &mut PassTimers) {
+    pub(crate) fn encode_probe(
+        &self,
+        prepass_encoder: &mut mx::CommandEncoder,
+        scene: &Scene,
+        probe_redraw: bool,
+        timers: &mut PassTimers,
+    ) {
         if probe_redraw {
             if let (Some(probe), Some(sky_bg)) =
                 (self.tone.probe.as_ref(), scene.sky_bind_group.as_ref())

@@ -242,7 +242,10 @@ fn online_player_management_opens_a_modal_for_the_selected_connection() {
     sh.ui.input.pressed = true;
     sh.ui.input.released = true;
     management_modal(&mut sh, &v);
-    assert_eq!(sh.pause_online.management, Some((target, Some("ban".into()))));
+    assert_eq!(
+        sh.pause_online.management,
+        Some((target, Some("ban".into())))
+    );
     assert!(sh.actions.is_empty());
 }
 

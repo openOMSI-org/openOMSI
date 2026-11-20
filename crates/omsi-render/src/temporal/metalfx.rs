@@ -6,12 +6,14 @@
 //! called by name. Its work goes into a command buffer of wgpu's own Metal queue, right after
 //! the scene's: a Metal queue runs its buffers in the order they were committed.
 
-use super::{metalfx_render_size, FrameConstants, Inputs, TemporalQuality};
-use anyhow::{anyhow, bail, Result};
-use objc2::rc::{autoreleasepool, Retained};
+use super::{FrameConstants, Inputs, TemporalQuality, metalfx_render_size};
+use anyhow::{Result, anyhow, bail};
+use objc2::rc::{Retained, autoreleasepool};
 use objc2::runtime::{AnyClass, AnyObject, ProtocolObject};
-use objc2::{msg_send, sel, Message};
-use objc2_metal::{MTLCommandBuffer, MTLCommandQueue, MTLDevice, MTLPixelFormat, MTLTexture, MTLTextureUsage};
+use objc2::{Message, msg_send, sel};
+use objc2_metal::{
+    MTLCommandBuffer, MTLCommandQueue, MTLDevice, MTLPixelFormat, MTLTexture, MTLTextureUsage,
+};
 use std::ffi::CStr;
 use std::sync::OnceLock;
 
@@ -27,16 +29,20 @@ pub(crate) type RawScaler = Retained<AnyObject>;
 /// MetalFX's class of this name, the framework opened first; None on a macOS without it.
 pub(super) fn class(name: &CStr) -> Option<&'static AnyClass> {
     static OPENED: OnceLock<bool> = OnceLock::new();
-    let opened = *OPENED.get_or_init(|| !unsafe { libc::dlopen(FRAMEWORK.as_ptr(), libc::RTLD_LAZY | libc::RTLD_GLOBAL) }.is_null());
+    let opened = *OPENED.get_or_init(|| {
+        !unsafe { libc::dlopen(FRAMEWORK.as_ptr(), libc::RTLD_LAZY | libc::RTLD_GLOBAL) }.is_null()
+    });
     opened.then(|| AnyClass::get(name)).flatten()
 }
 
 fn descriptor_class() -> Result<&'static AnyClass> {
-    class(c"MTLFXTemporalScalerDescriptor").ok_or_else(|| anyhow!("this macOS has no MetalFX (it comes with macOS 13 and newer)"))
+    class(c"MTLFXTemporalScalerDescriptor")
+        .ok_or_else(|| anyhow!("this macOS has no MetalFX (it comes with macOS 13 and newer)"))
 }
 
 pub(super) fn texture(t: &wgpu::Texture, what: &str) -> Result<Texture> {
-    let hal = unsafe { t.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("no Metal texture under MetalFX's {what}"))?;
+    let hal = unsafe { t.as_hal::<wgpu_hal::api::Metal>() }
+        .ok_or_else(|| anyhow!("no Metal texture under MetalFX's {what}"))?;
     Ok(hal.raw_handle().retain())
 }
 
@@ -61,7 +67,13 @@ impl Frame {
     }
 
     fn formats(&self) -> [MTLPixelFormat; 5] {
-        [self.color.pixelFormat(), self.depth.pixelFormat(), self.motion.pixelFormat(), self.mask.pixelFormat(), self.output.pixelFormat()]
+        [
+            self.color.pixelFormat(),
+            self.depth.pixelFormat(),
+            self.motion.pixelFormat(),
+            self.mask.pixelFormat(),
+            self.output.pixelFormat(),
+        ]
     }
 }
 
@@ -100,7 +112,8 @@ impl Upscaler {
 
     pub fn load(device: &wgpu::Device) -> Result<Upscaler> {
         let raw = {
-            let hal = unsafe { device.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("the game is not running on Metal"))?;
+            let hal = unsafe { device.as_hal::<wgpu_hal::api::Metal>() }
+                .ok_or_else(|| anyhow!("the game is not running on Metal"))?;
             hal.raw_device().clone()
         };
         let class = descriptor_class()?;
@@ -109,11 +122,27 @@ impl Upscaler {
             bail!("this Mac's graphics chip cannot run MetalFX's temporal scaler");
         }
         // (macOS 14 and newer tell how far this chip scales up)
-        let tells: bool = unsafe { msg_send![class, respondsToSelector: sel!(supportedInputContentMaxScaleForDevice:)] };
-        let max_scale: f32 = if tells { unsafe { msg_send![class, supportedInputContentMaxScaleForDevice: &*raw] } } else { MAX_SCALE_UNKNOWN };
-        let max_scale = if max_scale.is_finite() && max_scale >= 1.0 { max_scale } else { MAX_SCALE_UNKNOWN };
+        let tells: bool = unsafe {
+            msg_send![class, respondsToSelector: sel!(supportedInputContentMaxScaleForDevice:)]
+        };
+        let max_scale: f32 = if tells {
+            unsafe { msg_send![class, supportedInputContentMaxScaleForDevice: &*raw] }
+        } else {
+            MAX_SCALE_UNKNOWN
+        };
+        let max_scale = if max_scale.is_finite() && max_scale >= 1.0 {
+            max_scale
+        } else {
+            MAX_SCALE_UNKNOWN
+        };
         log::info!("MetalFX upscaling: Apple's temporal scaler, up to {max_scale}x on this Mac");
-        Ok(Upscaler { device: raw, max_scale, scaler: None, last: None, clamp_told: false })
+        Ok(Upscaler {
+            device: raw,
+            max_scale,
+            scaler: None,
+            last: None,
+            clamp_told: false,
+        })
     }
 
     /// The size to draw at: the quality's, but no smaller than MetalFX scales up from here.
@@ -121,20 +150,38 @@ impl Upscaler {
         let (size, clamped) = metalfx_render_size(quality, out, self.max_scale);
         if clamped && !self.clamp_told {
             self.clamp_told = true;
-            log::warn!("MetalFX upscaling: {} would scale up {:.1}x, this Mac's MetalFX does {}x at most; drawing at {}x{}", quality.as_str(), 1.0 / quality.scale(), self.max_scale, size.0, size.1);
+            log::warn!(
+                "MetalFX upscaling: {} would scale up {:.1}x, this Mac's MetalFX does {}x at most; drawing at {}x{}",
+                quality.as_str(),
+                1.0 / quality.scale(),
+                self.max_scale,
+                size.0,
+                size.1
+            );
         }
         size
     }
 
-    fn scaler_for(&mut self, frame: &Frame, render: (u32, u32), output: (u32, u32)) -> Result<&Scaler> {
+    fn scaler_for(
+        &mut self,
+        frame: &Frame,
+        render: (u32, u32),
+        output: (u32, u32),
+    ) -> Result<&Scaler> {
         let formats = frame.formats();
-        if self.scaler.as_ref().is_some_and(|s| s.render != render || s.output != output || s.formats != formats) {
+        if self
+            .scaler
+            .as_ref()
+            .is_some_and(|s| s.render != render || s.output != output || s.formats != formats)
+        {
             self.scaler = None;
         }
         if self.scaler.is_none() {
             let class = descriptor_class()?;
             let desc: Retained<AnyObject> = unsafe { msg_send![class, new] };
-            let mask: bool = unsafe { msg_send![&*desc, respondsToSelector: sel!(setReactiveMaskTextureEnabled:)] };
+            let mask: bool = unsafe {
+                msg_send![&*desc, respondsToSelector: sel!(setReactiveMaskTextureEnabled:)]
+            };
             let made: Option<Retained<AnyObject>> = unsafe {
                 let _: () = msg_send![&*desc, setColorTextureFormat: formats[0]];
                 let _: () = msg_send![&*desc, setDepthTextureFormat: formats[1]];
@@ -152,15 +199,32 @@ impl Upscaler {
                 }
                 msg_send![&*desc, newTemporalScalerWithDevice: &*self.device]
             };
-            let raw = made.ok_or_else(|| anyhow!("MetalFX made no temporal scaler for {}x{} to {}x{} ({:?})", render.0, render.1, output.0, output.1, formats))?;
+            let raw = made.ok_or_else(|| {
+                anyhow!(
+                    "MetalFX made no temporal scaler for {}x{} to {}x{} ({:?})",
+                    render.0,
+                    render.1,
+                    output.0,
+                    output.1,
+                    formats
+                )
+            })?;
             // (what MetalFX needs of each texture; a texture without it would stop the game
             // in Metal's own check instead of here)
             let mut needs: Vec<(&str, MTLTextureUsage, &Texture)> = unsafe {
                 vec![
                     ("picture", msg_send![&*raw, colorTextureUsage], &frame.color),
                     ("depth", msg_send![&*raw, depthTextureUsage], &frame.depth),
-                    ("motion vectors", msg_send![&*raw, motionTextureUsage], &frame.motion),
-                    ("result", msg_send![&*raw, outputTextureUsage], &frame.output),
+                    (
+                        "motion vectors",
+                        msg_send![&*raw, motionTextureUsage],
+                        &frame.motion,
+                    ),
+                    (
+                        "result",
+                        msg_send![&*raw, outputTextureUsage],
+                        &frame.output,
+                    ),
                 ]
             };
             if mask {
@@ -182,20 +246,50 @@ impl Upscaler {
             }
             for (what, need, have) in needs {
                 if have.usage().0 & need.0 != need.0 {
-                    bail!("MetalFX cannot use the {what} texture (usage {:#x}, it needs {:#x})", have.usage().0, need.0);
+                    bail!(
+                        "MetalFX cannot use the {what} texture (usage {:#x}, it needs {:#x})",
+                        have.usage().0,
+                        need.0
+                    );
                 }
             }
-            log::info!("MetalFX upscaling: {}x{} to {}x{}{}", render.0, render.1, output.0, output.1, if mask { "" } else { ", without the mask (macOS 14.4 and newer take one)" });
-            self.scaler = Some(Scaler { raw, render, output, formats, mask });
+            log::info!(
+                "MetalFX upscaling: {}x{} to {}x{}{}",
+                render.0,
+                render.1,
+                output.0,
+                output.1,
+                if mask {
+                    ""
+                } else {
+                    ", without the mask (macOS 14.4 and newer take one)"
+                }
+            );
+            self.scaler = Some(Scaler {
+                raw,
+                render,
+                output,
+                formats,
+                mask,
+            });
         }
         Ok(self.scaler.as_ref().expect("made above"))
     }
 
-    pub fn upscale(&mut self, queue: &wgpu::Queue, inputs: &Inputs, c: &FrameConstants) -> Result<()> {
+    pub fn upscale(
+        &mut self,
+        queue: &wgpu::Queue,
+        inputs: &Inputs,
+        c: &FrameConstants,
+    ) -> Result<()> {
         autoreleasepool(|_| {
             let frame = Frame::of(inputs)?;
-            let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("no Metal queue under wgpu's"))?;
-            let buffer = queue_hal.as_raw().commandBuffer().ok_or_else(|| anyhow!("Metal gave no command buffer for MetalFX"))?;
+            let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Metal>() }
+                .ok_or_else(|| anyhow!("no Metal queue under wgpu's"))?;
+            let buffer = queue_hal
+                .as_raw()
+                .commandBuffer()
+                .ok_or_else(|| anyhow!("Metal gave no command buffer for MetalFX"))?;
             let scaler = self.scaler_for(&frame, inputs.render_size, inputs.output_size)?;
             let none: Option<&ProtocolObject<dyn MTLTexture>> = None;
             unsafe {

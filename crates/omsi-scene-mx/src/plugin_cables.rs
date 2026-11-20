@@ -71,7 +71,10 @@ struct Palette {
 impl Palette {
     /// The material of `color` for one more cable (`make` makes it when there is none yet).
     fn take(&mut self, color: [f32; 4], make: impl FnOnce() -> MaterialId) -> MaterialId {
-        let e = self.by.entry(color.map(f32::to_bits)).or_insert_with(|| (make(), 0));
+        let e = self
+            .by
+            .entry(color.map(f32::to_bits))
+            .or_insert_with(|| (make(), 0));
         e.1 += 1;
         e.0
     }
@@ -81,7 +84,11 @@ impl Palette {
         let key = color.map(f32::to_bits);
         let e = self.by.get_mut(&key)?;
         e.1 -= 1;
-        if e.1 == 0 { self.by.remove(&key).map(|(m, _)| m) } else { None }
+        if e.1 == 0 {
+            self.by.remove(&key).map(|(m, _)| m)
+        } else {
+            None
+        }
     }
 }
 
@@ -147,7 +154,11 @@ impl PluginCables {
         }
         // (a world cable's vertices are kept near its first point, for the f32 they are
         // stored in; a bus cable's are in the bus's frame already)
-        let origin = if cable.on_bus { DVec3::ZERO } else { DVec3::from_array(cable.points[0]) };
+        let origin = if cable.on_bus {
+            DVec3::ZERO
+        } else {
+            DVec3::from_array(cable.points[0])
+        };
         let data = tube(&cable.points, origin, cable.radius);
         let material = self.material(cable.color, r, scene);
         let own = self.drawn.remove(&key);
@@ -156,8 +167,13 @@ impl PluginCables {
             self.release(d.cable.color, r, scene);
         }
         let reused = own.or_else(|| {
-            let same = self.spare.iter().position(|s| s.verts == data.positions.len());
-            let d = same.or(self.spare.len().checked_sub(1)).map(|i| self.spare.remove(i))?;
+            let same = self
+                .spare
+                .iter()
+                .position(|s| s.verts == data.positions.len());
+            let d = same
+                .or(self.spare.len().checked_sub(1))
+                .map(|i| self.spare.remove(i))?;
             self.spare_verts -= d.verts;
             Some(d)
         });
@@ -190,7 +206,12 @@ impl PluginCables {
                     }
                     None => r.add_instance(scene, mesh, origin, Mat4::IDENTITY, vec![material]),
                 };
-                Drawn { mesh, instance, verts: data.positions.len(), cable }
+                Drawn {
+                    mesh,
+                    instance,
+                    verts: data.positions.len(),
+                    cable,
+                }
             }
         };
         self.drawn.insert(key, d);
@@ -199,7 +220,11 @@ impl PluginCables {
     fn material(&mut self, color: [f32; 4], r: &Renderer, scene: &mut Scene) -> MaterialId {
         let free = &mut self.free_materials;
         self.materials.take(color, || {
-            let alpha = if color[3] < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque };
+            let alpha = if color[3] < 1.0 {
+                AlphaMode::Blend
+            } else {
+                AlphaMode::Opaque
+            };
             let new = r.add_material(scene, None, alpha, color, false);
             match free.pop() {
                 Some(into) => {
@@ -221,7 +246,12 @@ impl PluginCables {
         }
     }
 
-    fn add_mesh(&mut self, data: &omsi_geometry::MeshData, r: &Renderer, scene: &mut Scene) -> MeshId {
+    fn add_mesh(
+        &mut self,
+        data: &omsi_geometry::MeshData,
+        r: &Renderer,
+        scene: &mut Scene,
+    ) -> MeshId {
         let new = r.add_mesh(scene, data);
         match self.free_meshes.pop() {
             Some(into) => {
@@ -245,7 +275,10 @@ impl PluginCables {
 /// `origin`. Each ring stands square to the line there, turned along it without
 /// twisting (parallel transport), so a long wire's faces do not spiral.
 fn tube(points: &[[f64; 3]], origin: DVec3, radius: f32) -> omsi_geometry::MeshData {
-    let pts: Vec<Vec3> = points.iter().map(|p| (DVec3::from_array(*p) - origin).as_vec3()).collect();
+    let pts: Vec<Vec3> = points
+        .iter()
+        .map(|p| (DVec3::from_array(*p) - origin).as_vec3())
+        .collect();
     let n = pts.len();
     let tangent = |i: usize| -> Vec3 {
         let a = pts[i.saturating_sub(1)];
@@ -255,7 +288,12 @@ fn tube(points: &[[f64; 3]], origin: DVec3, radius: f32) -> omsi_geometry::MeshD
     let mut positions = Vec::with_capacity(n * SIDES);
     let mut normals = Vec::with_capacity(n * SIDES);
     let t0 = tangent(0);
-    let mut side = if t0.z.abs() < 0.9 { t0.cross(Vec3::Z) } else { t0.cross(Vec3::X) }.normalize();
+    let mut side = if t0.z.abs() < 0.9 {
+        t0.cross(Vec3::Z)
+    } else {
+        t0.cross(Vec3::X)
+    }
+    .normalize();
     let mut prev_t = t0;
     for (i, p) in pts.iter().enumerate() {
         let t = tangent(i);
@@ -284,7 +322,14 @@ fn tube(points: &[[f64; 3]], origin: DVec3, radius: f32) -> omsi_geometry::MeshD
     }
     let uvs = vec![Vec2::ZERO; positions.len()];
     let count = indices.len() as u32;
-    omsi_geometry::MeshData { positions, normals, uvs, ranges: vec![(0, count, 0)], indices, one_sided: false }
+    omsi_geometry::MeshData {
+        positions,
+        normals,
+        uvs,
+        ranges: vec![(0, count, 0)],
+        indices,
+        one_sided: false,
+    }
 }
 
 #[cfg(test)]
@@ -293,7 +338,11 @@ mod tests {
 
     #[test]
     fn a_tube_has_a_ring_a_point_and_its_faces_stand_round_the_line() {
-        let pts = [[100.0, 200.0, 6.0], [110.0, 200.0, 5.8], [120.0, 200.0, 6.0]];
+        let pts = [
+            [100.0, 200.0, 6.0],
+            [110.0, 200.0, 5.8],
+            [120.0, 200.0, 6.0],
+        ];
         let origin = DVec3::from_array(pts[0]);
         let m = tube(&pts, origin, 0.01);
         assert_eq!(m.positions.len(), 3 * SIDES);
@@ -311,8 +360,20 @@ mod tests {
         let mut p = Palette::default();
         let mut made = 0;
         let red = [1.0, 0.0, 0.0, 1.0];
-        assert_eq!(p.take(red, || { made += 1; 7 }), 7);
-        assert_eq!(p.take(red, || { made += 1; 8 }), 7);
+        assert_eq!(
+            p.take(red, || {
+                made += 1;
+                7
+            }),
+            7
+        );
+        assert_eq!(
+            p.take(red, || {
+                made += 1;
+                8
+            }),
+            7
+        );
         assert_eq!(made, 1);
         assert_eq!(p.give_back(red), None);
         assert_eq!(p.give_back(red), Some(7));
@@ -332,7 +393,12 @@ mod tests {
             &instance,
             None,
             Some(mx::TextureFormat::Rgba8UnormSrgb),
-            omsi_render::RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, ..Default::default() },
+            omsi_render::RenderOptions {
+                msaa: 1,
+                ssao: false,
+                shadow_size: 1024,
+                ..Default::default()
+            },
         ))
         .unwrap()
     }
@@ -355,13 +421,20 @@ mod tests {
             // a cable that takes a new colour and a new number of points each frame, and one
             // laid and taken away again and again
             let mut frame = vec![(key("wire"), Some(cable(i)))];
-            frame.push((key("rope"), if i % 2 == 0 { Some(cable(i + 3)) } else { None }));
+            frame.push((
+                key("rope"),
+                if i % 2 == 0 { Some(cable(i + 3)) } else { None },
+            ));
             cables.sync(|_| frame, None, &r, &mut scene);
             if i == 4 {
                 steady = Some(sizes(&scene));
             }
         }
-        assert_eq!(Some(sizes(&scene)), steady, "the scene's meshes, materials and instances");
+        assert_eq!(
+            Some(sizes(&scene)),
+            steady,
+            "the scene's meshes, materials and instances"
+        );
     }
 
     #[test]

@@ -41,10 +41,24 @@ pub(crate) fn apply(v: &mut VehicleInstance, h: &Hands) -> Option<&'static str> 
         return None;
     }
     let both = (h.keys)(KeyCode::ShiftLeft) || (h.keys)(KeyCode::ShiftRight);
-    let cmd = |ray: Option<(DVec3, DVec3)>| if pull { RopeCmd::Pull } else { RopeCmd::Raise { ray, auto: false } };
+    let cmd = |ray: Option<(DVec3, DVec3)>| {
+        if pull {
+            RopeCmd::Pull
+        } else {
+            RopeCmd::Raise { ray, auto: false }
+        }
+    };
     let (eye, fwd) = h.eye?;
-    let reach = if h.view == "foot" { FOOT_REACH } else { CAMERA_REACH };
-    let handle = |side: f32| pos + rot.transform_point3(Vec3::new(side.signum() * 0.45, rear + 0.1, 0.9)).as_dvec3();
+    let reach = if h.view == "foot" {
+        FOOT_REACH
+    } else {
+        CAMERA_REACH
+    };
+    let handle = |side: f32| {
+        pos + rot
+            .transform_point3(Vec3::new(side.signum() * 0.45, rear + 0.1, 0.9))
+            .as_dvec3()
+    };
     let mut near: Vec<(usize, f64)> = g
         .rig
         .poles
@@ -61,7 +75,11 @@ pub(crate) fn apply(v: &mut VehicleInstance, h: &Hands) -> Option<&'static str> 
         return Some("Too far from the ropes: go to the back of the bus");
     }
     let ray = Some((eye, fwd.as_dvec3()));
-    let chosen: Vec<usize> = if both { near.iter().map(|n| n.0).collect() } else { vec![near[0].0] };
+    let chosen: Vec<usize> = if both {
+        near.iter().map(|n| n.0).collect()
+    } else {
+        vec![near[0].0]
+    };
     for k in chosen {
         g.ropes[k] = cmd(ray);
     }
@@ -73,18 +91,32 @@ pub(crate) fn apply(v: &mut VehicleInstance, h: &Hands) -> Option<&'static str> 
 /// the wire should be for the pole's working angle.
 pub(crate) fn scripted(v: &mut VehicleInstance, spec: &str, t: f64) {
     let (pos, rot, _) = v.trolley_frame();
-    let Some(g) = v.trolley.as_deref_mut() else { return };
+    let Some(g) = v.trolley.as_deref_mut() else {
+        return;
+    };
     g.ropes.iter_mut().for_each(|r| *r = RopeCmd::Idle);
     for item in spec.split(';') {
         let mut it = item.trim().split(':');
-        let (Some(range), Some(cmd), Some(poles)) = (it.next(), it.next(), it.next()) else { continue };
-        let Some((a, b)) = range.split_once('-') else { continue };
-        let (Ok(a), Ok(b)) = (a.trim().parse::<f64>(), b.trim().parse::<f64>()) else { continue };
+        let (Some(range), Some(cmd), Some(poles)) = (it.next(), it.next(), it.next()) else {
+            continue;
+        };
+        let Some((a, b)) = range.split_once('-') else {
+            continue;
+        };
+        let (Ok(a), Ok(b)) = (a.trim().parse::<f64>(), b.trim().parse::<f64>()) else {
+            continue;
+        };
         if t < a || t >= b {
             continue;
         }
         for c in poles.chars() {
-            let Some(k) = c.to_digit(10).map(|d| d as usize).filter(|k| *k < g.rig.poles.len()) else { continue };
+            let Some(k) = c
+                .to_digit(10)
+                .map(|d| d as usize)
+                .filter(|k| *k < g.rig.poles.len())
+            else {
+                continue;
+            };
             g.ropes[k] = if cmd == "pull" {
                 RopeCmd::Pull
             } else {
@@ -94,9 +126,15 @@ pub(crate) fn scripted(v: &mut VehicleInstance, spec: &str, t: f64) {
                 let l = p.def.length as f64;
                 let tip_local = Vec3::new(0.0, -(work.cos() * l) as f32, (work.sin() * l) as f32);
                 let target = pos + rot.transform_point3(p.def.base + tip_local).as_dvec3();
-                let eye = pos + rot.transform_point3(Vec3::new(p.def.base.x, -9.5, 1.7)).as_dvec3();
+                let eye = pos
+                    + rot
+                        .transform_point3(Vec3::new(p.def.base.x, -9.5, 1.7))
+                        .as_dvec3();
                 let _ = base;
-                RopeCmd::Raise { ray: Some((eye, (target - eye).normalize())), auto: false }
+                RopeCmd::Raise {
+                    ray: Some((eye, (target - eye).normalize())),
+                    auto: false,
+                }
             };
         }
     }

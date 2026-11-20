@@ -17,11 +17,18 @@ pub(crate) struct Ssao {
 pub(crate) fn ssao(device: &mx::Device, gl: bool) -> Ssao {
     // ambient occlusion: a depth prepass with the camera projection, then the AO and a blur
     log::info!("renderer: compiling the SSAO shaders");
-    let ssao_shader = compile_shader(device, mx::ShaderModuleDescriptor {
-        label: Some("ssao"),
-        source: &*(include_str!("../ssao.wgsl")),
-    });
-    let ao_buf = uniform_buffer(device, "ssao params", std::mem::size_of::<SsaoUniform>() as u64);
+    let ssao_shader = compile_shader(
+        device,
+        mx::ShaderModuleDescriptor {
+            label: Some("ssao"),
+            source: &*(include_str!("../ssao.wgsl")),
+        },
+    );
+    let ao_buf = uniform_buffer(
+        device,
+        "ssao params",
+        std::mem::size_of::<SsaoUniform>() as u64,
+    );
     let ao_sampler = clamped_linear_sampler(device);
     // (r the occlusion, g the depth it was worked out at, b and a the bounced light)
     let targets = [target(mx::TextureFormat::Rgba16Float, None)];
@@ -34,7 +41,14 @@ pub(crate) fn ssao(device: &mx::Device, gl: bool) -> Ssao {
     let blur_pipeline = (!gl).then(|| make_ao("fs_blur"));
     let plain_ssao_pipeline = (!gl).then(|| make_plain("fs_ssao"));
     let plain_blur_pipeline = (!gl).then(|| make_plain("fs_blur"));
-    Ssao {  buf: ao_buf, sampler: ao_sampler, ssao_pipeline, blur_pipeline, plain_ssao_pipeline, plain_blur_pipeline }
+    Ssao {
+        buf: ao_buf,
+        sampler: ao_sampler,
+        ssao_pipeline,
+        blur_pipeline,
+        plain_ssao_pipeline,
+        plain_blur_pipeline,
+    }
 }
 
 pub(crate) struct FogLamps {
@@ -45,28 +59,49 @@ pub(crate) struct FogLamps {
 pub(crate) fn fog_lamps(device: &mx::Device, hdr_format: mx::TextureFormat, gl: bool) -> FogLamps {
     // the lamps in the fog: the camera group (lights, grid, the enhanced uniform) and the
     // prepass depth, added onto the high-range picture
-    let fog_lamps_buf = uniform_buffer(device, "fog lamps params", std::mem::size_of::<FogLampUniform>() as u64);
-    let fog_lamps_pipeline = (!gl && !array_path().no_storage() && !basic_pipelines()).then(|| optional_pipeline(device, "the lamps in the fog", || {
-        log::info!("renderer: compiling the lamps in the fog shaders");
-        let module = compile_shader(device, mx::ShaderModuleDescriptor {
-            label: Some("fog lamps"),
-            source: &*(fog_lamps_shader_source()),
-        });
-        let make = |entry: &str, blend: Option<mx::BlendState>| {
-                    no_vertex_pipeline(entry, &module, entry, &[target(hdr_format, blend)]).vs("vs_fog_lamps").create(device)
-        };
-        // (the second added onto what is there)
-        let add = mx::BlendState {
+    let fog_lamps_buf = uniform_buffer(
+        device,
+        "fog lamps params",
+        std::mem::size_of::<FogLampUniform>() as u64,
+    );
+    let fog_lamps_pipeline = (!gl && !array_path().no_storage() && !basic_pipelines())
+        .then(|| {
+            optional_pipeline(device, "the lamps in the fog", || {
+                log::info!("renderer: compiling the lamps in the fog shaders");
+                let module = compile_shader(
+                    device,
+                    mx::ShaderModuleDescriptor {
+                        label: Some("fog lamps"),
+                        source: &*(fog_lamps_shader_source()),
+                    },
+                );
+                let make = |entry: &str, blend: Option<mx::BlendState>| {
+                    no_vertex_pipeline(entry, &module, entry, &[target(hdr_format, blend)])
+                        .vs("vs_fog_lamps")
+                        .create(device)
+                };
+                // (the second added onto what is there)
+                let add = mx::BlendState {
                     color: mx::BlendComponent {
                         src_factor: mx::BlendFactor::One,
                         dst_factor: mx::BlendFactor::One,
-                        operation: mx::BlendOperation::Add, },
-            alpha: mx::BlendComponent {
+                        operation: mx::BlendOperation::Add,
+                    },
+                    alpha: mx::BlendComponent {
                         src_factor: mx::BlendFactor::Zero,
                         dst_factor: mx::BlendFactor::One,
-                        operation: mx::BlendOperation::Add, },
-        };
-        [make("fs_fog_lamps", None), make("fs_fog_composite", Some(add))]
-    })).flatten();
-    FogLamps {  buf: fog_lamps_buf, pipeline: fog_lamps_pipeline }
+                        operation: mx::BlendOperation::Add,
+                    },
+                };
+                [
+                    make("fs_fog_lamps", None),
+                    make("fs_fog_composite", Some(add)),
+                ]
+            })
+        })
+        .flatten();
+    FogLamps {
+        buf: fog_lamps_buf,
+        pipeline: fog_lamps_pipeline,
+    }
 }

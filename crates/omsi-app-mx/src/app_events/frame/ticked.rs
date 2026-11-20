@@ -5,7 +5,7 @@
 //! then the view of it, the sounds, the LAN, the interface and the picture once a frame again
 //! (`FRAME_AFTER`), with the player's bus and the camera drawn between the last two ticks.
 
-use super::stages::{WindowFrame, FRAME_AFTER, FRAME_BEFORE, FRAME_TICK};
+use super::stages::{FRAME_AFTER, FRAME_BEFORE, FRAME_TICK, WindowFrame};
 use super::*;
 use crate::frame_stages::Flow;
 
@@ -30,7 +30,8 @@ impl App {
             let app = frame.app();
             app.fixed_tick.enter_tick(k, ticks.n);
             if k + 1 == ticks.n {
-                app.fixed_tick.remember(app.player.as_ref().map(|p| &p.vehicle));
+                app.fixed_tick
+                    .remember(app.player.as_ref().map(|p| &p.vehicle));
             }
             frame.set_tick_dt(Some(tick_dt));
             frame.set_ticks(ticks.n);
@@ -43,7 +44,9 @@ impl App {
             Some(d) => d,
             None => {
                 let app = frame.app();
-                app.fixed_tick.daylight().unwrap_or_else(|| omsi_sim::Daylight::compute(&app.clock, app.session.envir.as_ref()))
+                app.fixed_tick.daylight().unwrap_or_else(|| {
+                    omsi_sim::Daylight::compute(&app.clock, app.session.envir.as_ref())
+                })
             }
         };
         frame.set_daylight(daylight);
@@ -71,7 +74,11 @@ impl App {
     pub(crate) fn player_to_drawn_pose(&mut self) -> Option<DrawnPose> {
         let p = self.player.as_mut().filter(|_| !self.paused)?;
         let (sim, drawn) = self.fixed_tick.to_drawn(&mut p.vehicle)?;
-        Some(DrawnPose { uid: p.uid, sim, drawn })
+        Some(DrawnPose {
+            uid: p.uid,
+            sim,
+            drawn,
+        })
     }
 
     pub(super) fn traffic_drawn_behind(&self) -> f32 {
@@ -83,8 +90,12 @@ impl App {
     }
 
     pub(crate) fn player_back_to_sim_pose(&mut self, pose: Option<DrawnPose>) {
-        let Some(p) = self.player.as_mut() else { return };
-        if let Some(d) = pose.filter(|d| d.uid == p.uid && omsi_sim::tick::poses_of(&p.vehicle) == d.drawn) {
+        let Some(p) = self.player.as_mut() else {
+            return;
+        };
+        if let Some(d) =
+            pose.filter(|d| d.uid == p.uid && omsi_sim::tick::poses_of(&p.vehicle) == d.drawn)
+        {
             omsi_sim::tick::put(&mut p.vehicle, &d.sim);
         }
     }

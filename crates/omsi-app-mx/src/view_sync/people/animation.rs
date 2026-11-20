@@ -9,13 +9,17 @@ use omsi_sim::people::{BusId, PoseFacts};
 mod floor;
 
 fn is_procedural_mode(value: &str) -> bool {
-    matches!(value.to_ascii_lowercase().as_str(), "procedural" | "enhanced" | "1")
+    matches!(
+        value.to_ascii_lowercase().as_str(),
+        "procedural" | "enhanced" | "1"
+    )
 }
 
 pub(super) fn enabled() -> bool {
     // Read once per game session (PeopleView::new), not once per process: on Android
     // another game is started in the launcher's existing process.
-    let mode = omsi_cfg::flags::OMSI_PAX_ANIMATION.live_var()
+    let mode = omsi_cfg::flags::OMSI_PAX_ANIMATION
+        .live_var()
         .unwrap_or_else(|_| crate::settings::Settings::load().passenger_animation);
     is_procedural_mode(&mode)
 }
@@ -24,7 +28,14 @@ pub(super) fn enabled() -> bool {
 /// the frame has it: `PersonFrame::facts`). This changes only how bodies are skinned,
 /// never boarding, movement or ticket logic. `st`: the person as drawn (the pose's own
 /// state, the ankles for `OMSI_TRACE_PAX`).
-pub(super) fn bones(p: &PersonFrame, ty: &omsi_sim::human::HumanType, st: &mut PersonView, dt: f32, world: &World, buses: &HashMap<BusId, &omsi_sim::people::cabin::BusNow>) -> [Affine3A; SLOTS] {
+pub(super) fn bones(
+    p: &PersonFrame,
+    ty: &omsi_sim::human::HumanType,
+    st: &mut PersonView,
+    dt: f32,
+    world: &World,
+    buses: &HashMap<BusId, &omsi_sim::people::cabin::BusNow>,
+) -> [Affine3A; SLOTS] {
     let (origin, heading, frame) = match p.place {
         Place::Ground => (p.position, p.heading, 0),
         Place::Bus(bus, at) => {
@@ -35,7 +46,14 @@ pub(super) fn bones(p: &PersonFrame, ty: &omsi_sim::human::HumanType, st: &mut P
             (at.as_dvec3(), p.lheading, frame)
         }
     };
-    let PoseFacts { activity, seat, reach, floor_lift, hold, seated_level } = p.facts;
+    let PoseFacts {
+        activity,
+        seat,
+        reach,
+        floor_lift,
+        hold,
+        seated_level,
+    } = p.facts;
     let bus = match p.place {
         Place::Bus(id, _) => buses.get(&id).copied(),
         Place::Ground => None,
@@ -64,7 +82,11 @@ pub(super) fn bones(p: &PersonFrame, ty: &omsi_sim::human::HumanType, st: &mut P
                     Some(b) => b.to_local(st.last_world) - origin.as_vec3(),
                     None => (st.last_world - origin).as_vec3(),
                 } * glam::Vec3::new(1.0, 1.0, 0.0);
-                st.glide = if drawn.length() < 3.0 { drawn } else { glam::Vec3::ZERO };
+                st.glide = if drawn.length() < 3.0 {
+                    drawn
+                } else {
+                    glam::Vec3::ZERO
+                };
             }
             None => st.glide = glam::Vec3::ZERO,
         }

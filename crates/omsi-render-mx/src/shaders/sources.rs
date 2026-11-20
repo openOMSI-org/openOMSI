@@ -266,7 +266,8 @@ pub(crate) fn materials_from_heap(src: &str) -> String {
         ("t_pbr_orm", "mx_tex2d[mx_mat.pbr_orm]"),
         ("s_tile", "mx_samplers[mx_mat.tile_sampler]"),
     ];
-    let mut out = src.to_string();
+    // (a checkout with CRLF line ends, as on Windows, has them in the included source too)
+    let mut out = src.replace("\r\n", "\n");
     // the bound declarations go
     for (k, (name, _)) in BOUND.iter().enumerate() {
         let ty = if name.starts_with("s_") {
@@ -674,6 +675,21 @@ mod tree_detail_tests {
             );
             assert!(out.contains("-> vec3<f32> {\n    return up;\n}"));
             assert_eq!(out.matches("fn ").count(), src.matches("fn ").count());
+        }
+    }
+}
+
+#[cfg(test)]
+mod materials_from_heap_tests {
+    /// a Windows checkout has CRLF line ends in the included shader: the bound declarations
+    /// are still found and taken out
+    #[test]
+    fn the_bound_materials_go_with_either_line_end() {
+        let joined = super::scene_shader_bound_forms(false, false, false);
+        for src in [joined.clone(), joined.replace('\n', "\r\n")] {
+            let out = super::materials_from_heap(&src);
+            assert!(!out.contains("var t_diffuse: texture_2d<f32>;"));
+            assert!(out.contains("mx_tex2d[mx_mat.diffuse]"));
         }
     }
 }

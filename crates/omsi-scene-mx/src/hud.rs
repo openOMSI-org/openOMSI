@@ -16,8 +16,18 @@ pub struct Hud {
 
 impl Hud {
     pub fn new(fonts: &mut omsi_sim::texttex::FontLibrary) -> Hud {
-        let font = fonts.load("DIN Narrow").or_else(|| fonts.load("DIN_Narrow")).or_else(|| fonts.load("DIN"));
-        Hud { font, texture: None, width: 900, height: 0, last: Vec::new(), scale: 0.45 }
+        let font = fonts
+            .load("DIN Narrow")
+            .or_else(|| fonts.load("DIN_Narrow"))
+            .or_else(|| fonts.load("DIN"));
+        Hud {
+            font,
+            texture: None,
+            width: 900,
+            height: 0,
+            last: Vec::new(),
+            scale: 0.45,
+        }
     }
 
     /// Re-render when the lines changed and register the overlay for this frame. A line
@@ -29,17 +39,28 @@ impl Hud {
             scene.overlays.clear();
             return;
         }
-        let Some(font) = self.font.clone() else { return };
+        let Some(font) = self.font.clone() else {
+            return;
+        };
         let lh = font.font.height.max(8) as u32 + 4;
         if self.last != lines || self.texture.is_none() {
-            let rows: Vec<String> = lines.iter().map(|l| legible(&font, l)).flat_map(|l| wrap(&font, &l, self.width as i32 - 4)).collect();
+            let rows: Vec<String> = lines
+                .iter()
+                .map(|l| legible(&font, l))
+                .flat_map(|l| wrap(&font, &l, self.width as i32 - 4))
+                .collect();
             let h = lh * rows.len().max(1) as u32;
             let mut img = vec![0u8; (self.width * h * 4) as usize];
             for (i, l) in rows.iter().enumerate() {
                 let row = font.render(l, self.width, lh, false, [255, 255, 255]);
                 compose_row(&mut img, &row, self.width, lh, i as u32 * lh);
             }
-            let image = omsi_texture::Image { width: self.width, height: h, rgba: img, has_alpha: true };
+            let image = omsi_texture::Image {
+                width: self.width,
+                height: h,
+                rgba: img,
+                has_alpha: true,
+            };
             match self.texture {
                 Some(t) if self.height == h => renderer.update_texture(scene, t, &image),
                 _ => self.texture = Some(renderer.add_texture(scene, &image, false)),
@@ -48,7 +69,10 @@ impl Hud {
             self.last = lines.to_vec();
         }
         if let Some(t) = self.texture {
-            let (w, h) = (self.width as f32 * self.scale, self.height as f32 * self.scale);
+            let (w, h) = (
+                self.width as f32 * self.scale,
+                self.height as f32 * self.scale,
+            );
             scene.overlays.clear();
             scene.overlays.push((t, [12.0, 12.0, 12.0 + w, 12.0 + h]));
         }
@@ -75,7 +99,10 @@ fn compose_row(img: &mut [u8], row: &[u8], width: u32, lh: u32, y0: u32) {
     let row = &shifted[..];
     let mut outline = vec![0u8; (width * lh) as usize];
     let mut right = -1;
-    let disc: Vec<(i32, i32)> = (-OUTLINE..=OUTLINE).flat_map(|dy| (-OUTLINE..=OUTLINE).map(move |dx| (dx, dy))).filter(|(dx, dy)| dx * dx + dy * dy <= OUTLINE * OUTLINE + 1).collect();
+    let disc: Vec<(i32, i32)> = (-OUTLINE..=OUTLINE)
+        .flat_map(|dy| (-OUTLINE..=OUTLINE).map(move |dx| (dx, dy)))
+        .filter(|(dx, dy)| dx * dx + dy * dy <= OUTLINE * OUTLINE + 1)
+        .collect();
     for y in 0..hh {
         for x in 0..w {
             let a = row[((y * w + x) * 4 + 3) as usize];
@@ -164,8 +191,27 @@ mod tests {
 
     /// Every glyph 10 px wide with no gap.
     fn font() -> FontAtlas {
-        let chars = "abcdefghijklmnopqrstuvwxyz:".chars().map(|ch| omsi_content::font::FontChar { ch, x0: 0, x1: 10, y: 0 }).collect();
-        FontAtlas::new(omsi_content::font::Font { height: 12, gap: 0, chars, ..Default::default() }, 1, 1, vec![0; 4], vec![0; 4])
+        let chars = "abcdefghijklmnopqrstuvwxyz:"
+            .chars()
+            .map(|ch| omsi_content::font::FontChar {
+                ch,
+                x0: 0,
+                x1: 10,
+                y: 0,
+            })
+            .collect();
+        FontAtlas::new(
+            omsi_content::font::Font {
+                height: 12,
+                gap: 0,
+                chars,
+                ..Default::default()
+            },
+            1,
+            1,
+            vec![0; 4],
+            vec![0; 4],
+        )
     }
 
     #[test]
@@ -173,12 +219,25 @@ mod tests {
         let f = font();
         assert_eq!(wrap(&f, "short line", 200), vec!["short line"]);
         // a space without a glyph counts as the gap (1 px)
-        assert_eq!(wrap(&f, "no duty:   line five does not run", 100), vec!["no duty:", "line five", "does not", "run"]);
-        assert_eq!(wrap(&f, "unbreakablewordhere ok", 100), vec!["unbreakablewordhere", "ok"]);
-        for row in wrap(&f, "no duty: line five does not run on that date at all", 250) {
+        assert_eq!(
+            wrap(&f, "no duty:   line five does not run", 100),
+            vec!["no duty:", "line five", "does not", "run"]
+        );
+        assert_eq!(
+            wrap(&f, "unbreakablewordhere ok", 100),
+            vec!["unbreakablewordhere", "ok"]
+        );
+        for row in wrap(
+            &f,
+            "no duty: line five does not run on that date at all",
+            250,
+        ) {
             assert!(f.text_width(&row) <= 250, "{row}");
         }
-        assert_eq!(legible(&f, "line 5 & 5N: 1000_FPW"), "line 5 + 5N: 1000 FPW");
+        assert_eq!(
+            legible(&f, "line 5 & 5N: 1000_FPW"),
+            "line 5 + 5N: 1000 FPW"
+        );
     }
 
     /// A glyph pixel stays white and opaque, is ringed by a dark outline several pixels

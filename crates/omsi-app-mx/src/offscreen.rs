@@ -147,14 +147,25 @@ impl Offscreen<'_> {
             return;
         }
         let steps = steps.max(1) as f64;
-        let list: Vec<String> = self.profile.iter().map(|(k, v)| format!("{k} {:.2}", v / steps * 1000.0)).collect();
-        log::info!("profile: offscreen stages per step (ms): {}", list.join(", "));
+        let list: Vec<String> = self
+            .profile
+            .iter()
+            .map(|(k, v)| format!("{k} {:.2}", v / steps * 1000.0))
+            .collect();
+        log::info!(
+            "profile: offscreen stages per step (ms): {}",
+            list.join(", ")
+        );
     }
 
     /// After the steps: the run's reports, the checks asked for, the picture.
     fn finish(mut self) -> Result<()> {
         let args = self.args;
-        let Self { ref mut camera, ref traffic, .. } = self;
+        let Self {
+            ref mut camera,
+            ref traffic,
+            ..
+        } = self;
         if let Some(id) = follow_id(args, traffic.as_ref()) {
             match follow_camera(traffic.as_ref(), id) {
                 Some(c) => {
@@ -189,7 +200,12 @@ impl Offscreen<'_> {
 
 /// The camera the run's eye is (for the traffic, the people and the spray): a followed
 /// car's, else the player's view, else the run's camera.
-fn eye_camera(args: &Args, traffic: Option<&traffic::Traffic>, player: Option<&Player>, camera: &Camera) -> Camera {
+fn eye_camera(
+    args: &Args,
+    traffic: Option<&traffic::Traffic>,
+    player: Option<&Player>,
+    camera: &Camera,
+) -> Camera {
     match traffic.and_then(|t| follow_id(args, Some(t)).and_then(|id| follow_camera(Some(t), id))) {
         Some(c) => c,
         None => match player {
@@ -203,13 +219,15 @@ fn eye_camera(args: &Args, traffic: Option<&traffic::Traffic>, player: Option<&P
 
 /// The player's view from `base` with the head turned as --look says (the outside view
 /// kept clear of the world).
-fn player_view(args: &Args, settings: &settings::Settings, p: &mut Player, base: &Camera, world: &World) -> Camera {
-    let look = crate::player::driver_head_look(
-        look_of(args),
-        &args.view,
-        settings.seat_pitch_deg,
-        false,
-    );
+fn player_view(
+    args: &Args,
+    settings: &settings::Settings,
+    p: &mut Player,
+    base: &Camera,
+    world: &World,
+) -> Camera {
+    let look =
+        crate::player::driver_head_look(look_of(args), &args.view, settings.seat_pitch_deg, false);
     let cam = p.camera_look(&args.view, base, look, offscreen_orbit());
     if args.view == "outside" {
         p.camera_clipped(cam, world, offscreen_orbit(), 0.0)
@@ -219,7 +237,13 @@ fn player_view(args: &Args, settings: &settings::Settings, p: &mut Player, base:
 }
 
 /// The player's bus and its driver into the scene, as a picture of them is taken.
-fn pose_player(p: &mut Player, renderer: &Renderer, scene: &mut Scene, args: &Args, settings: &settings::Settings) {
+fn pose_player(
+    p: &mut Player,
+    renderer: &Renderer,
+    scene: &mut Scene,
+    args: &Args,
+    settings: &settings::Settings,
+) {
     p.sync_transforms(
         renderer,
         scene,
@@ -232,7 +256,15 @@ fn pose_player(p: &mut Player, renderer: &Renderer, scene: &mut Scene, args: &Ar
     p.panto_fx.update(0.0, &mut p.vehicle);
     p.finish_window_paints(renderer, scene);
     crate::scene::sync_vehicle_damage(renderer, scene, &mut p.vehicle, &mut p.render);
-    p.sync_driver_hands(renderer, scene, 1.0 / 30.0, settings.driver, args.view == "driver", false, settings.driver_like_omsi);
+    p.sync_driver_hands(
+        renderer,
+        scene,
+        1.0 / 30.0,
+        settings.driver,
+        args.view == "driver",
+        false,
+        settings.driver_like_omsi,
+    );
 }
 
 /// The lights of a picture: the lamps' cones in this weather, the corona pictures, the
@@ -251,9 +283,18 @@ fn world_lights(
     lights::upload_corona_textures(renderer);
     world.update_light_map_atlas(renderer, eye);
     lights::collect(
-        world, scene, daylight, eye, vehicles,
-        lights::ConeWeather { enhanced: !renderer.options.no_enhanced, ..lights::ConeWeather::of(weather, daylight.night) },
-        lights::VehicleSmoke::from_setting(vehicle_smoke), player_first, 1.0,
+        world,
+        scene,
+        daylight,
+        eye,
+        vehicles,
+        lights::ConeWeather {
+            enhanced: !renderer.options.no_enhanced,
+            ..lights::ConeWeather::of(weather, daylight.night)
+        },
+        lights::VehicleSmoke::from_setting(vehicle_smoke),
+        player_first,
+        1.0,
     );
     // (and the pictures the lights asked for first now: a picture has the one frame)
     lights::upload_corona_textures(renderer);
@@ -311,11 +352,25 @@ fn tyre_lows(v: &omsi_sim::VehicleInstance, world: &World) -> Vec<(DVec3, f64)> 
     let mut out = Vec::new();
     for (i, vm) in v.ty.meshes.iter().enumerate() {
         let def = &v.ty.model.meshes[vm.def_index];
-        if !v.mesh_props[i].visible || !def.animations.iter().any(|an| an.variable.to_ascii_lowercase().starts_with("wheel_rotation_")) {
+        if !v.mesh_props[i].visible
+            || !def.animations.iter().any(|an| {
+                an.variable
+                    .to_ascii_lowercase()
+                    .starts_with("wheel_rotation_")
+            })
+        {
             continue;
         }
         let xf = v.mesh_local_transform(i);
-        let Some(q) = vm.data.positions.iter().map(|q| xf.transform_point3(*q)).min_by(|a, b| a.z.total_cmp(&b.z)) else { continue };
+        let Some(q) = vm
+            .data
+            .positions
+            .iter()
+            .map(|q| xf.transform_point3(*q))
+            .min_by(|a, b| a.z.total_cmp(&b.z))
+        else {
+            continue;
+        };
         let w = v.position + q.as_dvec3();
         if let Some(g) = world.ground_height(w.x, w.y) {
             out.push((w, w.z - g));
@@ -335,7 +390,12 @@ const NO_EXTREMES: DriveExtremes = (0.0, 0.0, f64::MIN, f64::MAX, (DVec3::ZERO, 
 /// y forward, z up; yaw relative to the bus) for close-ups of displays and switches - the
 /// final picture and every `--snapshots` one.
 /// With a triple screen, the frustum around its three panels (see `App::sight_extent`).
-fn triple_extent(settings: &crate::settings::Settings, cam: &Camera, w: u32, h: u32) -> Option<(f64, f64)> {
+fn triple_extent(
+    settings: &crate::settings::Settings,
+    cam: &Camera,
+    w: u32,
+    h: u32,
+) -> Option<(f64, f64)> {
     (settings.triple.enabled && !settings.vr_requested()).then(|| {
         let (x, y) = settings.triple.view_extent(cam, w, h);
         (x as f64, y as f64)
@@ -343,7 +403,9 @@ fn triple_extent(settings: &crate::settings::Settings, cam: &Camera, w: u32, h: 
 }
 
 fn vehicle_camera(player: &Player, camera: &mut Camera) {
-    let Some(spec) = omsi_cfg::flags::OMSI_CAM_VEHICLE.var() else { return };
+    let Some(spec) = omsi_cfg::flags::OMSI_CAM_VEHICLE.var() else {
+        return;
+    };
     let v: Vec<f32> = spec
         .split(',')
         .filter_map(|s| s.trim().parse().ok())
@@ -351,10 +413,10 @@ fn vehicle_camera(player: &Player, camera: &mut Camera) {
     if v.len() >= 5 {
         camera.position = player.vehicle.position
             + player
-            .vehicle
-            .body_rotation()
-            .transform_point3(Vec3::new(v[0], v[1], v[2]))
-            .as_dvec3();
+                .vehicle
+                .body_rotation()
+                .transform_point3(Vec3::new(v[0], v[1], v[2]))
+                .as_dvec3();
         camera.yaw = player.vehicle.heading as f32 + v[3];
         camera.pitch = v[4];
         camera.near = 0.02;

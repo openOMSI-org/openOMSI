@@ -127,7 +127,9 @@ pub(super) fn draw(
     let narrow = w < 480.0;
     ui.panel(r);
     let mut title_size = if narrow { 14.0 } else { 21.0 };
-    while title_size > 10.0 && ui.width("Plugin process permission", title_size, Weight::Bold) > r.w - 40.0 {
+    while title_size > 10.0
+        && ui.width("Plugin process permission", title_size, Weight::Bold) > r.w - 40.0
+    {
         title_size -= 0.5;
     }
     ui.text(

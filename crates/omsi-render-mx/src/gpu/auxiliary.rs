@@ -1,7 +1,7 @@
 //! Worker-local adapter capabilities for auxiliary renderers, including compiler jobs.
 use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
 pub(crate) struct AuxiliaryState {
@@ -43,7 +43,10 @@ pub(crate) struct AdapterBool {
 
 impl AdapterBool {
     pub const fn new(index: usize) -> Self {
-        Self { global: AtomicBool::new(false), index }
+        Self {
+            global: AtomicBool::new(false),
+            index,
+        }
     }
 
     pub fn load(&self, order: Ordering) -> bool {
@@ -70,7 +73,9 @@ impl AdapterBool {
 
 pub(crate) struct AdapterArrays(AtomicU8);
 impl AdapterArrays {
-    pub const fn new() -> Self { Self(AtomicU8::new(0)) }
+    pub const fn new() -> Self {
+        Self(AtomicU8::new(0))
+    }
     pub fn load(&self, order: Ordering) -> u8 {
         match auxiliary_context() {
             Some(state) => state.lock().unwrap_or_else(|e| e.into_inner()).arrays,

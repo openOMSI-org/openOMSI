@@ -135,7 +135,9 @@ impl TripleScreen {
         let (f, r, u) = (camera.forward(), camera.right(), camera.up());
         let mut extent = (0.0f32, 0.0f32);
         for v in self.views(camera, width, height) {
-            let inv = (v.projection * Mat4::look_to_rh(Vec3::ZERO, v.camera.forward(), v.camera.up())).inverse();
+            let inv = (v.projection
+                * Mat4::look_to_rh(Vec3::ZERO, v.camera.forward(), v.camera.up()))
+            .inverse();
             for (x, y) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
                 let d = inv.project_point3(Vec3::new(x, y, 0.0)).normalize_or_zero();
                 let z = d.dot(f);
@@ -261,7 +263,10 @@ mod tests {
         assert!(views.iter().all(|v| v.viewport[2] == 1921));
         assert_eq!(views[0].viewport[0], 0);
         for i in 0..2 {
-            assert_eq!(views[i + 1].viewport[0], views[i].viewport[0] + views[i].viewport[2]);
+            assert_eq!(
+                views[i + 1].viewport[0],
+                views[i].viewport[0] + views[i].viewport[2]
+            );
         }
         let end = views[2].viewport[0] + views[2].viewport[2];
         assert!(end >= 5761 && end < 5761 + 3);
@@ -286,14 +291,22 @@ mod tests {
     }
     #[test]
     fn view_extent_covers_the_side_panels() {
-        let cam = Camera { roll: 0.0, pitch: 0.0, ..camera() };
+        let cam = Camera {
+            roll: 0.0,
+            pitch: 0.0,
+            ..camera()
+        };
         let rig = TripleScreen::default();
         let (tx, ty) = rig.view_extent(&cam, 5760, 1080);
         // the centre panel alone: 300 mm either side at 650 mm
         assert!(tx > 300.0 / 650.0 * 2.0, "{tx}");
         assert!(ty >= rig.views(&cam, 5760, 1080)[1].projection.y_axis.y.recip() - 1e-4);
         // a flat row: the outer edges at 900 mm either side
-        let flat = TripleScreen { left_angle_deg: 0.0, right_angle_deg: 0.0, ..rig };
+        let flat = TripleScreen {
+            left_angle_deg: 0.0,
+            right_angle_deg: 0.0,
+            ..rig
+        };
         assert!((flat.view_extent(&cam, 5760, 1080).0 - 900.0 / 650.0).abs() < 1e-3);
     }
 

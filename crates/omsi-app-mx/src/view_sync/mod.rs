@@ -54,9 +54,9 @@ use traffic::TrafficView;
 
 // (registered by the scene, whose worlds read pictures as they open)
 pub(crate) use crate::scene::host::install_sim_decoder;
+pub(crate) use lan::apply_lan;
 pub(crate) use people::apply_people;
 pub(crate) use traffic::apply_traffic;
-pub(crate) use lan::apply_lan;
 
 /// What the renderer shows of the simulation, kept for the next view sync: the AI traffic's
 /// renders and drivers, and the people's meshes, posing and ticket blocks. Each part starts
@@ -93,13 +93,32 @@ pub(crate) struct ViewSync<'a> {
 
 impl<'a> ViewSync<'a> {
     /// The traffic alone.
-    pub(crate) fn traffic(traffic: &'a mut Traffic, scenery: &'a mut omsi_sim::scenery::SceneryState) -> ViewSync<'a> {
-        ViewSync { traffic: Some((traffic, scenery)), people: None, world_only: false }
+    pub(crate) fn traffic(
+        traffic: &'a mut Traffic,
+        scenery: &'a mut omsi_sim::scenery::SceneryState,
+    ) -> ViewSync<'a> {
+        ViewSync {
+            traffic: Some((traffic, scenery)),
+            people: None,
+            world_only: false,
+        }
     }
 
     /// The people alone (see [`People`]).
-    pub(crate) fn people(humans: &'a mut Humans, bus: Option<&'a VehicleInstance>, camera: DVec3) -> ViewSync<'a> {
-        ViewSync { traffic: None, people: Some(People { humans, bus, camera }), world_only: false }
+    pub(crate) fn people(
+        humans: &'a mut Humans,
+        bus: Option<&'a VehicleInstance>,
+        camera: DVec3,
+    ) -> ViewSync<'a> {
+        ViewSync {
+            traffic: None,
+            people: Some(People {
+                humans,
+                bus,
+                camera,
+            }),
+            world_only: false,
+        }
     }
 
     /// Only what the next tick needs (see `world_only`) when `world_only`.
@@ -114,7 +133,13 @@ impl<'a> ViewSync<'a> {
 /// traffic lamps, the cars' transforms, materials and script textures), then the people
 /// (the coins and ticket blocks of the player's bus, those who went since, the posing and
 /// skinning and their transforms).
-pub(crate) fn sync(what: ViewSync<'_>, view: &mut SimView, world: &World, renderer: &Renderer, scene: &mut Scene) {
+pub(crate) fn sync(
+    what: ViewSync<'_>,
+    view: &mut SimView,
+    world: &World,
+    renderer: &Renderer,
+    scene: &mut Scene,
+) {
     if let Some((t, scenery)) = what.traffic {
         if what.world_only {
             t.sync_world(&mut view.traffic, world, renderer, scene);
@@ -125,7 +150,12 @@ pub(crate) fn sync(what: ViewSync<'_>, view: &mut SimView, world: &World, render
     if what.world_only {
         return;
     }
-    if let Some(People { humans, bus, camera }) = what.people {
+    if let Some(People {
+        humans,
+        bus,
+        camera,
+    }) = what.people
+    {
         if let Some(bus) = bus {
             humans.sync_money(&mut view.people, world, renderer, scene, bus);
         }

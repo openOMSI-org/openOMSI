@@ -13,17 +13,17 @@ use omsi_plugin::ui::{Align, Element, Kind, Panel, Rgba, RowAlign, UiState, Weig
 use omsi_ui::theme::Palette;
 
 mod dest_form;
-mod multiplayer;
 mod move_here;
+mod multiplayer;
 pub(crate) mod radio_panel;
 pub(crate) use dest_form::open as open_dest_form;
 pub(crate) use move_here::ask as ask_move;
+#[cfg(test)]
+mod preview;
 pub(crate) mod quick_menu;
 pub(crate) mod remote_panel;
 pub(crate) mod trip_summary;
 pub(crate) mod view_editor;
-#[cfg(test)]
-mod preview;
 
 /// The panels' owner in their `UiState` (there is no other).
 const GAME: u64 = 1;
@@ -53,7 +53,14 @@ pub(crate) struct GamePanels {
 impl GamePanels {
     /// Whether any panel is open.
     pub(crate) fn any(&self) -> bool {
-        self.multiplayer.is_some() || self.quick.is_some() || self.trip.is_some() || self.dest.is_some() || self.view.is_some() || self.radio.is_some() || self.move_to.is_some() || self.remote.is_some()
+        self.multiplayer.is_some()
+            || self.quick.is_some()
+            || self.trip.is_some()
+            || self.dest.is_some()
+            || self.view.is_some()
+            || self.radio.is_some()
+            || self.move_to.is_some()
+            || self.remote.is_some()
     }
 
     /// Whether the panels have the mouse.
@@ -65,11 +72,26 @@ impl GamePanels {
 // --- the elements --------------------------------------------------------------------------
 
 pub(super) fn el(id: Option<&str>, kind: Kind) -> Element {
-    Element { id: id.map(str::to_string), color: None, grow: false, clickable: false, kind }
+    Element {
+        id: id.map(str::to_string),
+        color: None,
+        grow: false,
+        clickable: false,
+        kind,
+    }
 }
 
 pub(super) fn text(t: &str, size: f32, weight: Weight) -> Element {
-    el(None, Kind::Text { text: t.to_string(), size, weight, align: Align::Left, wrap: true })
+    el(
+        None,
+        Kind::Text {
+            text: t.to_string(),
+            size,
+            weight,
+            align: Align::Left,
+            wrap: true,
+        },
+    )
 }
 
 pub(super) fn title(t: &str) -> Element {
@@ -77,36 +99,101 @@ pub(super) fn title(t: &str) -> Element {
 }
 
 pub(super) fn note(t: &str, pal: Palette) -> Element {
-    Element { color: Some(theme_color(pal.text_dim)), ..text(t, 12.0, Weight::Regular) }
+    Element {
+        color: Some(theme_color(pal.text_dim)),
+        ..text(t, 12.0, Weight::Regular)
+    }
 }
 
 pub(super) fn button(id: &str, t: &str, icon: Option<&str>) -> Element {
-    el(Some(id), Kind::Button { text: t.to_string(), icon: icon.map(str::to_string) })
+    el(
+        Some(id),
+        Kind::Button {
+            text: t.to_string(),
+            icon: icon.map(str::to_string),
+        },
+    )
 }
 
 pub(super) fn row(children: Vec<Element>, align: RowAlign) -> Element {
-    el(None, Kind::Row { children, gap: 8.0, align })
+    el(
+        None,
+        Kind::Row {
+            children,
+            gap: 8.0,
+            align,
+        },
+    )
 }
 
 /// A row of children that share its width alike.
 pub(super) fn grow_row(children: Vec<Element>) -> Element {
-    row(children.into_iter().map(|c| Element { grow: true, ..c }).collect(), RowAlign::Start)
+    row(
+        children
+            .into_iter()
+            .map(|c| Element { grow: true, ..c })
+            .collect(),
+        RowAlign::Start,
+    )
 }
 
 /// A labelled slider: the name and its value in words to the left, the slider to the right.
-pub(super) fn slider_row(id: &str, name: &str, shown: &str, value: f32, range: (f32, f32), step: f32) -> Element {
+pub(super) fn slider_row(
+    id: &str,
+    name: &str,
+    shown: &str,
+    value: f32,
+    range: (f32, f32),
+    step: f32,
+) -> Element {
     row(
         vec![
-            Element { grow: false, ..text(name, 13.0, Weight::Regular) },
-            Element { grow: true, ..el(None, Kind::Text { text: shown.to_string(), size: 13.0, weight: Weight::Medium, align: Align::Right, wrap: false }) },
-            Element { grow: false, ..el(Some(id), Kind::Slider { value, min: range.0, max: range.1, step }) },
+            Element {
+                grow: false,
+                ..text(name, 13.0, Weight::Regular)
+            },
+            Element {
+                grow: true,
+                ..el(
+                    None,
+                    Kind::Text {
+                        text: shown.to_string(),
+                        size: 13.0,
+                        weight: Weight::Medium,
+                        align: Align::Right,
+                        wrap: false,
+                    },
+                )
+            },
+            Element {
+                grow: false,
+                ..el(
+                    Some(id),
+                    Kind::Slider {
+                        value,
+                        min: range.0,
+                        max: range.1,
+                        step,
+                    },
+                )
+            },
         ],
         RowAlign::Start,
     )
 }
 
 pub(super) fn input(id: &str, value: &str, placeholder: &str, max: usize) -> Element {
-    Element { grow: true, ..el(Some(id), Kind::Input { text: value.to_string(), placeholder: placeholder.to_string(), max }) }
+    Element {
+        grow: true,
+        ..el(
+            Some(id),
+            Kind::Input {
+                text: value.to_string(),
+                placeholder: placeholder.to_string(),
+                max,
+            },
+        )
+    }
 }
 
 pub(super) fn divider() -> Element {
@@ -119,10 +206,38 @@ pub(super) fn theme_color(c: omsi_ui::Color) -> Rgba {
 
 /// The game's card: the colour of the panels (openOMSI's own near black in its dark look), a
 /// little see-through over the picture (`alpha`).
-pub(super) fn card(anchor: omsi_plugin::ui::Anchor, x: f32, y: f32, width: f32, alpha: u8, pal: Palette, children: Vec<Element>) -> Panel {
-    let [r, g, b, _] = if pal == Palette::OPENOMSI { [14, 16, 20, 255] } else { theme_color(pal.panel).0 };
+pub(super) fn card(
+    anchor: omsi_plugin::ui::Anchor,
+    x: f32,
+    y: f32,
+    width: f32,
+    alpha: u8,
+    pal: Palette,
+    children: Vec<Element>,
+) -> Panel {
+    let [r, g, b, _] = if pal == Palette::OPENOMSI {
+        [14, 16, 20, 255]
+    } else {
+        theme_color(pal.panel).0
+    };
     let background = Rgba([r, g, b, alpha]);
-    Panel { anchor, x, y, width, padding: 14.0, gap: 8.0, background: Some(background), radius: 12.0, accent: None, visible: true, clickable: false, draggable: false, grab: false, frame: false, children }
+    Panel {
+        anchor,
+        x,
+        y,
+        width,
+        padding: 14.0,
+        gap: 8.0,
+        background: Some(background),
+        radius: 12.0,
+        accent: None,
+        visible: true,
+        clickable: false,
+        draggable: false,
+        grab: false,
+        frame: false,
+        children,
+    }
 }
 
 // --- the frame -----------------------------------------------------------------------------
@@ -154,12 +269,15 @@ impl crate::App {
             match c.panel.as_str() {
                 "view" => view_editor::change(self, &c.element, &c.value),
                 "dest" => dest_form::change(self, &c.element, &c.value),
-                "multiplayer" => {},
+                "multiplayer" => {}
                 _ => {}
             }
         }
         // A completed trip's summary waits until the bus stops: the panel takes the mouse.
-        let speed = self.player.as_ref().map_or(f32::INFINITY, |p| p.vehicle.physics.velocity_kmh());
+        let speed = self
+            .player
+            .as_ref()
+            .map_or(f32::INFINITY, |p| p.vehicle.physics.velocity_kmh());
         let still = if self.paused { 0.0 } else { dt };
         if let Some(j) = self.session.journey.as_mut() {
             if self.settings.trip_summary {
@@ -177,21 +295,69 @@ impl crate::App {
         let gp = &mut self.menus.game_panels;
         if gp.quick.is_some() && gp.ui.focused() {
             let (x, y) = self.input.cursor;
-            if let Some(el) = gp.draw.press_at(&gp.ui, x, y).filter(|p| p.panel == "quick").and_then(|p| p.element) {
+            if let Some(el) = gp
+                .draw
+                .press_at(&gp.ui, x, y)
+                .filter(|p| p.panel == "quick")
+                .and_then(|p| p.element)
+            {
                 if let Some(q) = gp.quick.as_mut() {
                     q.hover(&el, (x, y));
                 }
             }
         }
         let panels: Vec<(&str, Option<Panel>)> = vec![
-            ("view", self.menus.game_panels.view.as_ref().map(|v| v.panel(self, pal))),
-            ("trip", self.menus.game_panels.trip.as_ref().map(|t| t.panel(pal))),
-            ("dest", self.menus.game_panels.dest.as_ref().map(|d| d.panel(pal))),
-            ("multiplayer", self.menus.game_panels.multiplayer.as_ref().map(|f| f.panel(self, pal))),
-            ("quick", self.menus.game_panels.quick.as_ref().map(|q| q.panel(self))),
-            ("move", self.menus.game_panels.move_to.map(|at| move_here::panel(at, pal))),
-            ("radio", self.menus.game_panels.radio.as_ref().map(|r| r.panel(self, pal))),
-            ("remote", self.menus.game_panels.remote.as_ref().map(|r| r.panel(self, pal))),
+            (
+                "view",
+                self.menus
+                    .game_panels
+                    .view
+                    .as_ref()
+                    .map(|v| v.panel(self, pal)),
+            ),
+            (
+                "trip",
+                self.menus.game_panels.trip.as_ref().map(|t| t.panel(pal)),
+            ),
+            (
+                "dest",
+                self.menus.game_panels.dest.as_ref().map(|d| d.panel(pal)),
+            ),
+            (
+                "multiplayer",
+                self.menus
+                    .game_panels
+                    .multiplayer
+                    .as_ref()
+                    .map(|f| f.panel(self, pal)),
+            ),
+            (
+                "quick",
+                self.menus.game_panels.quick.as_ref().map(|q| q.panel(self)),
+            ),
+            (
+                "move",
+                self.menus
+                    .game_panels
+                    .move_to
+                    .map(|at| move_here::panel(at, pal)),
+            ),
+            (
+                "radio",
+                self.menus
+                    .game_panels
+                    .radio
+                    .as_ref()
+                    .map(|r| r.panel(self, pal)),
+            ),
+            (
+                "remote",
+                self.menus
+                    .game_panels
+                    .remote
+                    .as_ref()
+                    .map(|r| r.panel(self, pal)),
+            ),
         ];
         let gp = &mut self.menus.game_panels;
         for (id, p) in panels {
@@ -205,16 +371,33 @@ impl crate::App {
             }
         }
         let clean = self.clean_screen_shown();
-        let (Some(r), Some(scene)) = (self.renderer.as_ref(), self.scene.as_mut()) else { return };
-        let dpi = self.window.as_ref().map_or(1.0, |w| w.scale_factor() as f32);
-        let mut size = crate::ui::size_factor(hud[3], dpi, self.settings.ui_scale, self.settings.ui_scale_window);
+        let (Some(r), Some(scene)) = (self.renderer.as_ref(), self.scene.as_mut()) else {
+            return;
+        };
+        let dpi = self
+            .window
+            .as_ref()
+            .map_or(1.0, |w| w.scale_factor() as f32);
+        let mut size = crate::ui::size_factor(
+            hud[3],
+            dpi,
+            self.settings.ui_scale,
+            self.settings.ui_scale_window,
+        );
         // (the trip's summary shrinks to fit a small screen - a phone - rather than spill off it)
         if let Some((w, h)) = self.menus.game_panels.trip.as_ref().map(|t| t.extent()) {
-            size = size.min(hud[2] * 0.96 / (w * dpi)).min(hud[3] * 0.96 / (h * dpi));
+            size = size
+                .min(hud[2] * 0.96 / (w * dpi))
+                .min(hud[3] * 0.96 / (h * dpi));
         }
         self.menus.game_panels.laid_out = Some((hud, dpi * size));
         let map_open = self.menus.navigator.as_ref().is_some_and(|n| n.map_open());
-        let hidden = vr_active || self.menus.game_menu.is_some() || self.menus.chooser.is_some() || map_open || self.photo.is_some() || clean;
+        let hidden = vr_active
+            || self.menus.game_menu.is_some()
+            || self.menus.chooser.is_some()
+            || map_open
+            || self.photo.is_some()
+            || clean;
         let frame = crate::plugin_ui::PanelsFrame {
             hud,
             scale: dpi * size,
@@ -266,21 +449,33 @@ impl crate::App {
         }
         let (x, y) = self.input.cursor;
         let press = gp.draw.press_at(&gp.ui, x, y);
-        if gp.ui.typing().is_some() && !press.as_ref().is_some_and(|p| gp.ui.typing().is_some_and(|t| t.panel == p.panel && p.element.as_deref() == Some(t.element.as_str()))) {
+        if gp.ui.typing().is_some()
+            && !press.as_ref().is_some_and(|p| {
+                gp.ui.typing().is_some_and(|t| {
+                    t.panel == p.panel && p.element.as_deref() == Some(t.element.as_str())
+                })
+            })
+        {
             gp.ui.stop_typing(false);
         }
         let Some(pr) = press else {
             if gp.quick.take().is_some() {
                 return true;
             }
-            return gp.multiplayer.is_some() || gp.trip.is_some() || gp.dest.is_some() || gp.move_to.is_some() || gp.remote.is_some();
+            return gp.multiplayer.is_some()
+                || gp.trip.is_some()
+                || gp.dest.is_some()
+                || gp.move_to.is_some()
+                || gp.remote.is_some();
         };
         match (pr.kind, pr.element.as_deref()) {
             (crate::plugin_ui::HitKind::Slider, Some(el)) => {
                 gp.ui.set_control(pr.owner, &pr.panel, el, pr.fraction);
                 gp.slider = Some((pr.panel.clone(), el.to_string(), pr.span));
             }
-            (crate::plugin_ui::HitKind::Tabs, Some(el)) => gp.ui.set_control(pr.owner, &pr.panel, el, pr.fraction),
+            (crate::plugin_ui::HitKind::Tabs, Some(el)) => {
+                gp.ui.set_control(pr.owner, &pr.panel, el, pr.fraction)
+            }
             _ if pr.hit => gp.ui.click(pr.owner, &pr.panel, pr.element.as_deref()),
             _ => {}
         }
@@ -290,7 +485,9 @@ impl crate::App {
     /// The cursor moved: a slider held follows it. True when one did.
     pub(crate) fn game_panel_drag(&mut self, x: f32) -> bool {
         let gp = &mut self.menus.game_panels;
-        let Some((panel, el, track)) = gp.slider.clone() else { return false };
+        let Some((panel, el, track)) = gp.slider.clone() else {
+            return false;
+        };
         let f = ((x - track[0]) / (track[1] - track[0]).max(1.0)).clamp(0.0, 1.0);
         gp.ui.set_control(GAME, &panel, &el, f);
         true
@@ -298,7 +495,11 @@ impl crate::App {
 
     /// A key while the panels are open: typed into the field being typed into (Enter takes
     /// it, Esc leaves it), Esc closes the panel on top. True when the key was theirs.
-    pub(crate) fn game_panel_key(&mut self, code: winit::keyboard::KeyCode, text: Option<&str>) -> bool {
+    pub(crate) fn game_panel_key(
+        &mut self,
+        code: winit::keyboard::KeyCode,
+        text: Option<&str>,
+    ) -> bool {
         use winit::keyboard::KeyCode;
         let gp = &mut self.menus.game_panels;
         if gp.ui.typing().is_some() {
@@ -328,7 +529,13 @@ impl crate::App {
             return true;
         }
         let gp = &mut self.menus.game_panels;
-        if gp.quick.take().is_some() || gp.move_to.take().is_some() || gp.dest.take().is_some() || gp.trip.take().is_some() || gp.radio.take().is_some() || gp.remote.take().is_some() {
+        if gp.quick.take().is_some()
+            || gp.move_to.take().is_some()
+            || gp.dest.take().is_some()
+            || gp.trip.take().is_some()
+            || gp.radio.take().is_some()
+            || gp.remote.take().is_some()
+        {
             return true;
         }
         if gp.view.is_some() {
@@ -349,7 +556,11 @@ impl crate::App {
         match (alt, pressed) {
             (true, true) if !repeat => gp.alt_alone = true,
             (true, false) if std::mem::take(&mut gp.alt_alone) => {
-                if self.menus.game_menu.is_none() && self.menus.chooser.is_none() && self.photo.is_none() && !self.vr_active() {
+                if self.menus.game_menu.is_none()
+                    && self.menus.chooser.is_none()
+                    && self.photo.is_none()
+                    && !self.vr_active()
+                {
                     quick_menu::toggle(self);
                 }
             }
@@ -360,7 +571,11 @@ impl crate::App {
 
     /// `open_menue` (the quick menu) from a key that is not a Shift, Ctrl or Alt key.
     pub(crate) fn quick_menu_key(&mut self) {
-        if self.menus.game_menu.is_none() && self.menus.chooser.is_none() && self.photo.is_none() && !self.vr_active() {
+        if self.menus.game_menu.is_none()
+            && self.menus.chooser.is_none()
+            && self.photo.is_none()
+            && !self.vr_active()
+        {
             quick_menu::toggle(self);
         }
     }
@@ -374,9 +589,17 @@ impl crate::App {
 /// Whether `code` is the key whose tap opens the quick menu: keyboard.cfg's `open_menue`
 /// where it is a Shift, Ctrl or Alt key (either side's code, or one side's), Alt where the
 /// file has no entry for it.
-pub(crate) fn quick_menu_tap_key(game_keys: &[omsi_content::KeyBinding], code: winit::keyboard::KeyCode) -> bool {
-    let Some(both) = omsi_input::keys::both_code(code) else { return false };
-    match game_keys.iter().find(|b| b.action.eq_ignore_ascii_case("open_menue")) {
+pub(crate) fn quick_menu_tap_key(
+    game_keys: &[omsi_content::KeyBinding],
+    code: winit::keyboard::KeyCode,
+) -> bool {
+    let Some(both) = omsi_input::keys::both_code(code) else {
+        return false;
+    };
+    match game_keys
+        .iter()
+        .find(|b| b.action.eq_ignore_ascii_case("open_menue"))
+    {
         None => both == omsi_input::keys::ALT_BOTH,
         Some(b) => b.scan_code == both || omsi_input::keys::dik_code(code) == Some(b.scan_code),
     }
@@ -391,7 +614,13 @@ mod quick_menu_key_tests {
     /// The quick menu's key moved away from Alt: Alt no longer opens it (#2392).
     #[test]
     fn the_quick_menu_follows_open_menue() {
-        let kb = |k: i32| vec![KeyBinding { action: "open_menue".into(), scan_code: k, modifier: 0 }];
+        let kb = |k: i32| {
+            vec![KeyBinding {
+                action: "open_menue".into(),
+                scan_code: k,
+                modifier: 0,
+            }]
+        };
         assert!(quick_menu_tap_key(&[], AltLeft));
         assert!(quick_menu_tap_key(&kb(92), AltRight));
         assert!(!quick_menu_tap_key(&kb(92), ShiftLeft));

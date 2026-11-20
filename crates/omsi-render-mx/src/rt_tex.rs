@@ -157,7 +157,13 @@ impl TexStore {
 
     /// Where mesh `id`'s triangles' coordinates are (in triangles), queued for a copy when it
     /// has none yet - at most `UV_BUDGET` a frame; None while it has none.
-    pub(super) fn mesh_uvs(&mut self, device: &mx::Device, id: MeshId, m: &GpuMesh, frame: u64) -> Option<u32> {
+    pub(super) fn mesh_uvs(
+        &mut self,
+        device: &mx::Device,
+        id: MeshId,
+        m: &GpuMesh,
+        frame: u64,
+    ) -> Option<u32> {
         if let Some(e) = self.meshes.get_mut(&id) {
             if e.generation == m.generation {
                 e.used = frame;
@@ -169,7 +175,11 @@ impl TexStore {
         let tris = m.index_bytes / 12;
         let limits = device.limits();
         let max_binding = limits.max_storage_buffer_binding_size;
-        if tris == 0 || self.jobs.len() >= UV_BUDGET || m.vertex_buf.size() > max_binding || m.index_buf.size() > max_binding {
+        if tris == 0
+            || self.jobs.len() >= UV_BUDGET
+            || m.vertex_buf.size() > max_binding
+            || m.index_buf.size() > max_binding
+        {
             return None;
         }
         let at = match page_take(&mut self.uv_free, &mut self.uv_top, self.uv_cap, tris) {
@@ -191,8 +201,25 @@ impl TexStore {
             page_give(&mut self.uv_free, &mut self.uv_top, at, tris);
             return None;
         }
-        self.meshes.insert(id, MeshUv { generation: m.generation, at, tris, used: frame });
-        self.jobs.push(UvJob { vb: m.vertex_buf.clone(), ib: m.index_buf.clone(), job: [m.base_vertex.max(0) as u32, m.first_index, tris as u32, at as u32] });
+        self.meshes.insert(
+            id,
+            MeshUv {
+                generation: m.generation,
+                at,
+                tris,
+                used: frame,
+            },
+        );
+        self.jobs.push(UvJob {
+            vb: m.vertex_buf.clone(),
+            ib: m.index_buf.clone(),
+            job: [
+                m.base_vertex.max(0) as u32,
+                m.first_index,
+                tris as u32,
+                at as u32,
+            ],
+        });
         Some(at as u32)
     }
 
@@ -214,9 +241,12 @@ impl TexStore {
     }
 
     /// Copy this frame's meshes' coordinates (and what the buffer held, when it grew).
-    pub(super) fn encode_uvs(&mut self, device: &mx::Device,
+    pub(super) fn encode_uvs(
+        &mut self,
+        device: &mx::Device,
         queue: &mx::Queue,
-        encoder: &mut mx::CommandEncoder,) {
+        encoder: &mut mx::CommandEncoder,
+    ) {
         if let Some(old) = self.uvs_old.take() {
             encoder.copy_buffer_to_buffer(&old, 0, &self.uvs, 0, old.size().min(self.uvs.size()));
         }
@@ -256,7 +286,9 @@ impl TexStore {
                             resource: mx::BindingResource::Buffer(mx::BufferBinding {
                                 buffer: &self.job_buf,
                                 offset: k as u64 * self.stride,
-                                size: Some(16), }) },
+                                size: Some(16),
+                            }),
+                        },
                     ],
                 })
             })
@@ -278,16 +310,32 @@ impl TexStore {
 
     /// The atlas tall enough for textures `wanted` (grown: the tiles made so far copied over);
     /// true when it was made anew.
-    pub(super) fn ensure_atlas(&mut self, device: &mx::Device,
-        encoder: &mut mx::CommandEncoder, wanted: &[usize]) -> bool {
-        let Some(&last) = wanted.iter().filter(|&&t| t < MAX_TILES).max() else { return false };
-        let need = ((last as u32 / PER_ROW + 1) * TILE).next_power_of_two().min(ATLAS_W);
+    pub(super) fn ensure_atlas(
+        &mut self,
+        device: &mx::Device,
+        encoder: &mut mx::CommandEncoder,
+        wanted: &[usize],
+    ) -> bool {
+        let Some(&last) = wanted.iter().filter(|&&t| t < MAX_TILES).max() else {
+            return false;
+        };
+        let need = ((last as u32 / PER_ROW + 1) * TILE)
+            .next_power_of_two()
+            .min(ATLAS_W);
         let have = self.atlas.height();
         if need <= have {
             return false;
         }
         let (atlas, view, store) = make_atlas(device, need);
-        encoder.copy_texture_to_texture(self.atlas.as_image_copy(), atlas.as_image_copy(), mx::Extent3d { width: ATLAS_W, height: have, depth_or_array_layers: 1 });
+        encoder.copy_texture_to_texture(
+            self.atlas.as_image_copy(),
+            atlas.as_image_copy(),
+            mx::Extent3d {
+                width: ATLAS_W,
+                height: have,
+                depth_or_array_layers: 1,
+            },
+        );
         (self.atlas, self.atlas_view, self.atlas_store) = (atlas, view, store);
         true
     }
@@ -297,7 +345,16 @@ impl TexStore {
     pub(super) fn write_tiles(&self, queue: &mx::Queue, wanted: &[usize]) {
         let mut bytes = vec![0u8; wanted.len() * self.stride as usize];
         for (k, &t) in wanted.iter().enumerate() {
-            let tile = if t < MAX_TILES { [(t as u32 % PER_ROW * TILE) as f32, (t as u32 / PER_ROW * TILE) as f32, 1.0, 0.0] } else { [0.0; 4] };
+            let tile = if t < MAX_TILES {
+                [
+                    (t as u32 % PER_ROW * TILE) as f32,
+                    (t as u32 / PER_ROW * TILE) as f32,
+                    1.0,
+                    0.0,
+                ]
+            } else {
+                [0.0; 4]
+            };
             let at = k * self.stride as usize;
             bytes[at..at + 16].copy_from_slice(bytemuck::cast_slice(&tile));
         }

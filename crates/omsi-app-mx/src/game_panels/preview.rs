@@ -45,13 +45,35 @@ fn picture(name: &str, panels: &[(Panel, Option<&str>)]) {
     for (i, (p, hot)) in panels.iter().enumerate() {
         let laid = layout_typing(p, &fonts, 1.0, None);
         let at = place(p, laid.w, laid.h, screen);
-        let hot = hot.and_then(|id| laid.hits.iter().position(|h| h.element.as_deref() == Some(id)));
-        draw_card(&mut gpu, &device, &queue, &mut atlas, &fonts, &view, (w, h), k, &laid, at, hot, i == 0, &mut images);
+        let hot = hot.and_then(|id| {
+            laid.hits
+                .iter()
+                .position(|h| h.element.as_deref() == Some(id))
+        });
+        draw_card(
+            &mut gpu,
+            &device,
+            &queue,
+            &mut atlas,
+            &fonts,
+            &view,
+            (w, h),
+            k,
+            &laid,
+            at,
+            hot,
+            i == 0,
+            &mut images,
+        );
     }
     let dir = omsi_cfg::flags::OMSI_UI_PREVIEW
         .live_var()
         .ok()
-        .and_then(|p| std::path::PathBuf::from(p).parent().map(|d| d.to_path_buf()))
+        .and_then(|p| {
+            std::path::PathBuf::from(p)
+                .parent()
+                .map(|d| d.to_path_buf())
+        })
         .unwrap_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"));
     let out = dir.join(name);
     // read back, laid over sky, houses and the street
@@ -66,16 +88,35 @@ fn picture(name: &str, panels: &[(Panel, Option<&str>)]) {
     let mut enc = device.create_command_encoder(None);
     enc.copy_texture_to_buffer(
         target.as_image_copy(),
-        mx::TexelCopyBufferInfo { buffer: &buf, layout: mx::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } },
-        mx::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        mx::TexelCopyBufferInfo {
+            buffer: &buf,
+            layout: mx::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(stride),
+                rows_per_image: None,
+            },
+        },
+        mx::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
     );
     queue.submit([enc.finish()]);
-    let data = buf.map_read_now(0..buf.size(), |b| b.to_vec()).expect("mX: the preview read back");
+    let data = buf
+        .map_read_now(0..buf.size(), |b| b.to_vec())
+        .expect("mX: the preview read back");
     let mut img = image::RgbaImage::new(w, h);
     for y in 0..h {
         for x in 0..w {
             let t = y as f32 / h as f32;
-            let bg: [f32; 3] = if t < 0.45 { [120.0 + 80.0 * t, 165.0 + 60.0 * t, 225.0] } else if t < 0.7 { [160.0, 140.0, 128.0] } else { [70.0, 72.0, 76.0] };
+            let bg: [f32; 3] = if t < 0.45 {
+                [120.0 + 80.0 * t, 165.0 + 60.0 * t, 225.0]
+            } else if t < 0.7 {
+                [160.0, 140.0, 128.0]
+            } else {
+                [70.0, 72.0, 76.0]
+            };
             let i = (y * stride + x * 4) as usize;
             let a = data[i + 3] as f32 / 255.0;
             let px = |c: usize| (data[i + c] as f32 + bg[c] * (1.0 - a)).min(255.0) as u8;
@@ -87,22 +128,59 @@ fn picture(name: &str, panels: &[(Panel, Option<&str>)]) {
 }
 
 fn summary() -> crate::journey::TripSummary {
-    let row = |s: &str, p: &str, a: &str, d: &str, st: &str, o: &str| [s, p, a, d, st, o].map(String::from);
+    let row = |s: &str, p: &str, a: &str, d: &str, st: &str, o: &str| {
+        [s, p, a, d, st, o].map(String::from)
+    };
     crate::journey::TripSummary {
         title: "Trip 3  |  137 to S+U Rathaus Spandau  |  08:20:00".into(),
-        head: "Driver Test  |  Berlin-Spandau  |  MAN NL202  |  1989-05-30\nLine 137, tour 2".into(),
+        head: "Driver Test  |  Berlin-Spandau  |  MAN NL202  |  1989-05-30\nLine 137, tour 2"
+            .into(),
         rows: vec![
-            row("Hahneberg", "08:20:00", "08:20:41", "+00:00:41", "On time", "75556.6 km"),
-            row("Heerstr./Wilhelmstr.", "08:23:00", "08:24:10", "+00:01:10", "On time", "75557.9 km"),
-            row("Melanchthonplatz", "08:25:00", "08:29:10", "+00:04:10", "Delayed", "75558.4 km"),
+            row(
+                "Hahneberg",
+                "08:20:00",
+                "08:20:41",
+                "+00:00:41",
+                "On time",
+                "75556.6 km",
+            ),
+            row(
+                "Heerstr./Wilhelmstr.",
+                "08:23:00",
+                "08:24:10",
+                "+00:01:10",
+                "On time",
+                "75557.9 km",
+            ),
+            row(
+                "Melanchthonplatz",
+                "08:25:00",
+                "08:29:10",
+                "+00:04:10",
+                "Delayed",
+                "75558.4 km",
+            ),
             row("Am Juliusturm", "08:28:00", "", "", "Not served", ""),
-            row("S+U Rathaus Spandau", "08:32:00", "08:31:30", "-00:00:30", "On time", "75560.2 km"),
+            row(
+                "S+U Rathaus Spandau",
+                "08:32:00",
+                "08:31:30",
+                "-00:00:30",
+                "On time",
+                "75560.2 km",
+            ),
         ],
         km: Some(3.6),
         served: (4, 5),
         on_time: 3,
         driven: Some(690.0),
-        rating: Some(crate::journey::TripRating { driving: 82.0, comfort: 95.0, tickets: 60.0, passengers: 23, tickets_asked: 9 }),
+        rating: Some(crate::journey::TripRating {
+            driving: 82.0,
+            comfort: 95.0,
+            tickets: 60.0,
+            passengers: 23,
+            tickets_asked: 9,
+        }),
         stem: "preview".into(),
         dir: std::env::temp_dir(),
     }
@@ -111,16 +189,76 @@ fn summary() -> crate::journey::TripSummary {
 #[test]
 #[ignore]
 fn preview() {
-    let state = quick_menu::TileState { off: vec!["map"], lit: vec!["arrows", "duty"] };
-    picture("game-panels-quick.png", &[(quick_menu::QuickMenu { focus: 7, ..Default::default() }.panel_of(&state, Palette::OPENOMSI), Some("refuel"))]);
-    let page2 = quick_menu::QuickMenu { page: 1, focus: 2, ..Default::default() };
-    picture("game-panels-quick-2.png", &[(page2.panel_of(&quick_menu::TileState { off: vec!["skipstop", "endduty", "players", "admin", "tobus"], lit: vec![] }, Palette::OPENOMSI), None)]);
-    picture("game-panels-trip.png", &[(trip_summary::TripPanel::new(summary()).panel(Palette::OPENOMSI), Some("save"))]);
-    let form = dest_form::DestForm { route: "137".into(), lines: ["Sonderfahrt".into(), "Betriebshof".into()], ..Default::default() };
-    picture("game-panels-dest.png", &[(form.panel(Palette::OPENOMSI), Some("select"))]);
-    let values = view_editor::ViewValues { seat: [0.05, -0.12, 0.03], pitch: -4.0, yaw: 6.5, fov: Some(62.0), mirrors: vec![[2.5, -1.0], [-3.0, 0.5]] };
-    picture("game-panels-view.png", &[(view_editor::ViewEditor::default().panel_of(&values, Palette::OPENOMSI), None)]);
-    picture("game-panels-move.png", &[(move_here::panel(glam::DVec3::new(-1948.9, -174.7, 8.8), Palette::OPENOMSI), Some("yes"))]);
+    let state = quick_menu::TileState {
+        off: vec!["map"],
+        lit: vec!["arrows", "duty"],
+    };
+    picture(
+        "game-panels-quick.png",
+        &[(
+            quick_menu::QuickMenu {
+                focus: 7,
+                ..Default::default()
+            }
+            .panel_of(&state, Palette::OPENOMSI),
+            Some("refuel"),
+        )],
+    );
+    let page2 = quick_menu::QuickMenu {
+        page: 1,
+        focus: 2,
+        ..Default::default()
+    };
+    picture(
+        "game-panels-quick-2.png",
+        &[(
+            page2.panel_of(
+                &quick_menu::TileState {
+                    off: vec!["skipstop", "endduty", "players", "admin", "tobus"],
+                    lit: vec![],
+                },
+                Palette::OPENOMSI,
+            ),
+            None,
+        )],
+    );
+    picture(
+        "game-panels-trip.png",
+        &[(
+            trip_summary::TripPanel::new(summary()).panel(Palette::OPENOMSI),
+            Some("save"),
+        )],
+    );
+    let form = dest_form::DestForm {
+        route: "137".into(),
+        lines: ["Sonderfahrt".into(), "Betriebshof".into()],
+        ..Default::default()
+    };
+    picture(
+        "game-panels-dest.png",
+        &[(form.panel(Palette::OPENOMSI), Some("select"))],
+    );
+    let values = view_editor::ViewValues {
+        seat: [0.05, -0.12, 0.03],
+        pitch: -4.0,
+        yaw: 6.5,
+        fov: Some(62.0),
+        mirrors: vec![[2.5, -1.0], [-3.0, 0.5]],
+    };
+    picture(
+        "game-panels-view.png",
+        &[(
+            view_editor::ViewEditor::default().panel_of(&values, Palette::OPENOMSI),
+            None,
+        )],
+    );
+    picture(
+        "game-panels-move.png",
+        &[(
+            move_here::panel(glam::DVec3::new(-1948.9, -174.7, 8.8), Palette::OPENOMSI),
+            Some("yes"),
+        )],
+    );
 }
 
 #[test]
@@ -131,15 +269,72 @@ fn multiplayer_preview() {
         crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned())
     });
     omsi_ui::i18n::set_language("en");
-    let form = multiplayer::Multiplayer { target: "OMSI-EXAMPLE-ROOM-CODE".into(), said: None };
-    for (name, pal) in [("dark", omsi_ui::theme::palette(false)), ("light", Palette::LIGHT)] {
+    let form = multiplayer::Multiplayer {
+        target: "OMSI-EXAMPLE-ROOM-CODE".into(),
+        said: None,
+    };
+    for (name, pal) in [
+        ("dark", omsi_ui::theme::palette(false)),
+        ("light", Palette::LIGHT),
+    ] {
         omsi_ui::theme::with_palette(pal, || {
-        picture(&format!("multiplayer-single-{name}.png"), &[(form.panel_of(false, None, None, None, pal), Some("paste"))]);
-        picture(&format!("multiplayer-host-settings-{name}.png"), &[(form.panel_of(false, None, Some(omsi_net::Role::Host), None, pal), None)]);
-        picture(&format!("multiplayer-{name}.png"), &[(form.panel_of(false, None, Some(omsi_net::Role::Client), None, pal), Some("paste"))]);
-        picture(&format!("multiplayer-confirm-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", true)), Some(omsi_net::Role::Client), None, pal), Some("confirm"))]);
-        picture(&format!("multiplayer-host-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", false)), Some(omsi_net::Role::Host), None, pal), Some("back"))]);
-        picture(&format!("multiplayer-vehicle-warning-{name}.png"), &[(form.panel_of(false, Some(("maps/Grundorf/global.cfg", false)), Some(omsi_net::Role::Client), Some(false), pal), Some("back"))]);
+            picture(
+                &format!("multiplayer-single-{name}.png"),
+                &[(form.panel_of(false, None, None, None, pal), Some("paste"))],
+            );
+            picture(
+                &format!("multiplayer-host-settings-{name}.png"),
+                &[(
+                    form.panel_of(false, None, Some(omsi_net::Role::Host), None, pal),
+                    None,
+                )],
+            );
+            picture(
+                &format!("multiplayer-{name}.png"),
+                &[(
+                    form.panel_of(false, None, Some(omsi_net::Role::Client), None, pal),
+                    Some("paste"),
+                )],
+            );
+            picture(
+                &format!("multiplayer-confirm-{name}.png"),
+                &[(
+                    form.panel_of(
+                        false,
+                        Some(("maps/Grundorf/global.cfg", true)),
+                        Some(omsi_net::Role::Client),
+                        None,
+                        pal,
+                    ),
+                    Some("confirm"),
+                )],
+            );
+            picture(
+                &format!("multiplayer-host-{name}.png"),
+                &[(
+                    form.panel_of(
+                        false,
+                        Some(("maps/Grundorf/global.cfg", false)),
+                        Some(omsi_net::Role::Host),
+                        None,
+                        pal,
+                    ),
+                    Some("back"),
+                )],
+            );
+            picture(
+                &format!("multiplayer-vehicle-warning-{name}.png"),
+                &[(
+                    form.panel_of(
+                        false,
+                        Some(("maps/Grundorf/global.cfg", false)),
+                        Some(omsi_net::Role::Client),
+                        Some(false),
+                        pal,
+                    ),
+                    Some("back"),
+                )],
+            );
         });
     }
 }

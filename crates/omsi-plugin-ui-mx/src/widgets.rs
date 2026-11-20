@@ -2,7 +2,7 @@
 //! fields, tabs, charts, tables, images and the icon-only tiles - their sizes and what they
 //! are drawn from.
 
-use super::{color, ink_on, Hit, HitKind, Item, Layout, LINE};
+use super::{Hit, HitKind, Item, LINE, Layout, color, ink_on};
 use glam::Vec2;
 use hashbrown::HashMap;
 use omsi_plugin::ui::{Align, ChartStyle, Element, Kind, Rgba};
@@ -27,12 +27,22 @@ impl Layout<'_> {
         match &e.kind {
             Kind::Tile { .. } => super::square::SQUARE,
             Kind::Image { width, .. } => *width,
-            Kind::Checkbox { text, .. } => (CHECK + CHECK_GAP + self.width(text, CONTROL_PX, Weight::Regular)).ceil(),
+            Kind::Checkbox { text, .. } => {
+                (CHECK + CHECK_GAP + self.width(text, CONTROL_PX, Weight::Regular)).ceil()
+            }
             Kind::Slider { .. } => SLIDER_W,
             Kind::Input { .. } => FIELD_W,
-            Kind::Tabs { tabs, .. } => tabs.iter().map(|t| self.width(t, CONTROL_PX, Weight::Medium) + 24.0).sum::<f32>().ceil(),
+            Kind::Tabs { tabs, .. } => tabs
+                .iter()
+                .map(|t| self.width(t, CONTROL_PX, Weight::Medium) + 24.0)
+                .sum::<f32>()
+                .ceil(),
             Kind::Chart { .. } => CHART_W,
-            Kind::Table { columns, size, .. } => columns.iter().map(|c| self.width(c, *size, Weight::Bold) + 12.0).sum::<f32>().ceil(),
+            Kind::Table { columns, size, .. } => columns
+                .iter()
+                .map(|c| self.width(c, *size, Weight::Bold) + 12.0)
+                .sum::<f32>()
+                .ceil(),
             _ => self.nav_natural(e),
         }
     }
@@ -47,8 +57,17 @@ impl Layout<'_> {
             Kind::Input { .. } => FIELD_H,
             Kind::Tabs { .. } => TABS_H,
             Kind::Chart { height, .. } => *height,
-            Kind::Table { columns, rows, size, .. } => {
-                let head = if columns.is_empty() { 0.0 } else { size * LINE + 3.0 };
+            Kind::Table {
+                columns,
+                rows,
+                size,
+                ..
+            } => {
+                let head = if columns.is_empty() {
+                    0.0
+                } else {
+                    size * LINE + 3.0
+                };
                 head + rows.len() as f32 * size * LINE
             }
             _ => self.nav_height(e, w),
@@ -56,46 +75,98 @@ impl Layout<'_> {
     }
 
     fn hit(&mut self, r: Rect, e: &Element, kind: HitKind) -> usize {
-        self.out.hits.push(Hit { r, element: e.id.clone(), kind });
+        self.out.hits.push(Hit {
+            r,
+            element: e.id.clone(),
+            kind,
+        });
         self.out.hits.len() - 1
     }
 
     pub fn widget_emit(&mut self, e: &Element, r: Rect) {
         let accent = e.color.map(color).unwrap_or(self.colors.accent);
         match &e.kind {
-            Kind::Tile { icon, focus, off, .. } => self.square_tile(e, r, icon, *focus, *off),
-            Kind::Image { path, width, height } => {
+            Kind::Tile {
+                icon, focus, off, ..
+            } => self.square_tile(e, r, icon, *focus, *off),
+            Kind::Image {
+                path,
+                width,
+                height,
+            } => {
                 let k = (r.w / width).min(1.0);
                 let (w, h) = (width * k, height * k);
                 if let Some(path) = path {
-                    self.out.items.push(Item::Image { r: Rect::new(r.x, r.y + (r.h - h) * 0.5, w, h), path: path.clone() });
+                    self.out.items.push(Item::Image {
+                        r: Rect::new(r.x, r.y + (r.h - h) * 0.5, w, h),
+                        path: path.clone(),
+                    });
                 }
             }
             Kind::Checkbox { text, checked } => {
                 let hot = self.hit(r, e, HitKind::Click);
                 let b = Rect::new(r.x, r.y + (r.h - CHECK) * 0.5, CHECK, CHECK);
-                self.rounded(b, 4.0, if *checked { accent } else { self.colors.track }, Some(hot));
+                self.rounded(
+                    b,
+                    4.0,
+                    if *checked { accent } else { self.colors.track },
+                    Some(hot),
+                );
                 if *checked {
-                    self.out.items.push(Item::Icon { name: "check".into(), center: Vec2::new(b.x + CHECK * 0.5, b.y + CHECK * 0.5), size: 16.0, color: ink_on(accent, self.colors) });
+                    self.out.items.push(Item::Icon {
+                        name: "check".into(),
+                        center: Vec2::new(b.x + CHECK * 0.5, b.y + CHECK * 0.5),
+                        size: 16.0,
+                        color: ink_on(accent, self.colors),
+                    });
                 }
                 let x = b.right() + CHECK_GAP;
                 let t = self.fit(text, CONTROL_PX, Weight::Regular, (r.right() - x).max(0.0));
                 let y = self.baseline(r.y, r.h, CONTROL_PX, Weight::Regular);
-                self.text(t, CONTROL_PX, Weight::Regular, Vec2::new(x, y), self.colors.ink);
+                self.text(
+                    t,
+                    CONTROL_PX,
+                    Weight::Regular,
+                    Vec2::new(x, y),
+                    self.colors.ink,
+                );
             }
-            Kind::Slider { value, min, max, .. } => {
+            Kind::Slider {
+                value, min, max, ..
+            } => {
                 // (the knob stays inside the track's ends)
-                let track = Rect::new(r.x + KNOB * 0.5, r.y + r.h * 0.5 - 2.0, (r.w - KNOB).max(1.0), 4.0);
+                let track = Rect::new(
+                    r.x + KNOB * 0.5,
+                    r.y + r.h * 0.5 - 2.0,
+                    (r.w - KNOB).max(1.0),
+                    4.0,
+                );
                 let hot = self.hit(Rect::new(track.x, r.y, track.w, r.h), e, HitKind::Slider);
-                let f = if max > min { ((value - min) / (max - min)).clamp(0.0, 1.0) } else { 0.0 };
+                let f = if max > min {
+                    ((value - min) / (max - min)).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
                 self.rounded(track, 2.0, self.colors.track, None);
                 if f > 0.0 {
-                    self.rounded(Rect::new(track.x, track.y, track.w * f, track.h), 2.0, accent, None);
+                    self.rounded(
+                        Rect::new(track.x, track.y, track.w * f, track.h),
+                        2.0,
+                        accent,
+                        None,
+                    );
                 }
                 let cx = track.x + track.w * f;
-                self.rounded(Rect::new(cx - KNOB * 0.5, r.y + (r.h - KNOB) * 0.5, KNOB, KNOB), KNOB * 0.5, self.colors.ink, Some(hot));
+                self.rounded(
+                    Rect::new(cx - KNOB * 0.5, r.y + (r.h - KNOB) * 0.5, KNOB, KNOB),
+                    KNOB * 0.5,
+                    self.colors.ink,
+                    Some(hot),
+                );
             }
-            Kind::Input { text, placeholder, .. } => {
+            Kind::Input {
+                text, placeholder, ..
+            } => {
                 let b = Rect::new(r.x, r.y + (r.h - FIELD_H) * 0.5, r.w, FIELD_H);
                 let hot = self.hit(b, e, HitKind::Click);
                 self.rounded(b, 6.0, self.colors.button, Some(hot));
@@ -108,16 +179,42 @@ impl Layout<'_> {
                 if typing && t != *shown {
                     let chars: Vec<char> = shown.chars().collect();
                     let mut start = 0;
-                    while start < chars.len() && self.width(&chars[start..].iter().collect::<String>(), CONTROL_PX, Weight::Regular) > room {
+                    while start < chars.len()
+                        && self.width(
+                            &chars[start..].iter().collect::<String>(),
+                            CONTROL_PX,
+                            Weight::Regular,
+                        ) > room
+                    {
                         start += 1;
                     }
                     t = chars[start..].iter().collect();
                 }
-                let tw = if text.is_empty() { 0.0 } else { self.width(&t, CONTROL_PX, Weight::Regular) };
-                self.text(t, CONTROL_PX, Weight::Regular, Vec2::new(b.x + FIELD_PAD, y), if text.is_empty() { self.colors.muted } else { self.colors.ink });
+                let tw = if text.is_empty() {
+                    0.0
+                } else {
+                    self.width(&t, CONTROL_PX, Weight::Regular)
+                };
+                self.text(
+                    t,
+                    CONTROL_PX,
+                    Weight::Regular,
+                    Vec2::new(b.x + FIELD_PAD, y),
+                    if text.is_empty() {
+                        self.colors.muted
+                    } else {
+                        self.colors.ink
+                    },
+                );
                 if typing {
-                    self.out.items.push(Item::Rect { r: Rect::new(b.x + FIELD_PAD + tw + 1.0, b.y + 7.0, 1.5, b.h - 14.0), color: accent });
-                    self.out.items.push(Item::Rect { r: Rect::new(b.x + 4.0, b.bottom() - 2.0, b.w - 8.0, 2.0), color: accent });
+                    self.out.items.push(Item::Rect {
+                        r: Rect::new(b.x + FIELD_PAD + tw + 1.0, b.y + 7.0, 1.5, b.h - 14.0),
+                        color: accent,
+                    });
+                    self.out.items.push(Item::Rect {
+                        r: Rect::new(b.x + 4.0, b.bottom() - 2.0, b.w - 8.0, 2.0),
+                        color: accent,
+                    });
                 }
             }
             Kind::Tabs { tabs, selected } => {
@@ -130,30 +227,85 @@ impl Layout<'_> {
                     let cell = Rect::new(b.x + w * i as f32, b.y, w, b.h);
                     let on = i == *selected;
                     if on {
-                        self.rounded(Rect::new(cell.x + 2.0, cell.y + 2.0, cell.w - 4.0, cell.h - 4.0), 6.0, accent, None);
+                        self.rounded(
+                            Rect::new(cell.x + 2.0, cell.y + 2.0, cell.w - 4.0, cell.h - 4.0),
+                            6.0,
+                            accent,
+                            None,
+                        );
                     }
                     let t = self.fit(t, CONTROL_PX, Weight::Medium, (cell.w - 12.0).max(0.0));
                     let tw = self.width(&t, CONTROL_PX, Weight::Medium);
                     let y = self.baseline(cell.y, cell.h, CONTROL_PX, Weight::Medium);
-                    self.text(t, CONTROL_PX, Weight::Medium, Vec2::new(cell.x + (cell.w - tw) * 0.5, y), if on { ink_on(accent, self.colors) } else { self.colors.ink });
+                    self.text(
+                        t,
+                        CONTROL_PX,
+                        Weight::Medium,
+                        Vec2::new(cell.x + (cell.w - tw) * 0.5, y),
+                        if on {
+                            ink_on(accent, self.colors)
+                        } else {
+                            self.colors.ink
+                        },
+                    );
                 }
             }
-            Kind::Chart { values, min, max, style, fill, .. } => self.chart(r, values, *min, *max, *style, *fill, accent),
-            Kind::Table { columns, rows, widths, size, aligns, inks } => self.table(r, columns, rows, widths, *size, e.color.map(color), aligns, inks),
+            Kind::Chart {
+                values,
+                min,
+                max,
+                style,
+                fill,
+                ..
+            } => self.chart(r, values, *min, *max, *style, *fill, accent),
+            Kind::Table {
+                columns,
+                rows,
+                widths,
+                size,
+                aligns,
+                inks,
+            } => self.table(
+                r,
+                columns,
+                rows,
+                widths,
+                *size,
+                e.color.map(color),
+                aligns,
+                inks,
+            ),
             _ => self.nav_emit(e, r),
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn chart(&mut self, r: Rect, values: &[f32], min: Option<f32>, max: Option<f32>, style: ChartStyle, fill: bool, c: Color) {
-        self.out.items.push(Item::Rect { r, color: self.colors.divider.alpha(0.6) });
+    fn chart(
+        &mut self,
+        r: Rect,
+        values: &[f32],
+        min: Option<f32>,
+        max: Option<f32>,
+        style: ChartStyle,
+        fill: bool,
+        c: Color,
+    ) {
+        self.out.items.push(Item::Rect {
+            r,
+            color: self.colors.divider.alpha(0.6),
+        });
         if values.is_empty() {
             return;
         }
         // (bars stand on 0 unless a value is below it; a line spans its values)
         let least = values.iter().copied().fold(f32::INFINITY, f32::min);
-        let lo = min.unwrap_or(if style == ChartStyle::Bars { least.min(0.0) } else { least });
-        let mut hi = max.unwrap_or_else(|| values.iter().copied().fold(f32::NEG_INFINITY, f32::max));
+        let lo = min.unwrap_or(if style == ChartStyle::Bars {
+            least.min(0.0)
+        } else {
+            least
+        });
+        let mut hi =
+            max.unwrap_or_else(|| values.iter().copied().fold(f32::NEG_INFINITY, f32::max));
         if hi <= lo {
             hi = lo + 1.0;
         }
@@ -163,40 +315,85 @@ impl Layout<'_> {
                 let w = r.w / values.len() as f32;
                 for (i, v) in values.iter().enumerate() {
                     let top = y_of(*v);
-                    let bar = Rect::new(r.x + w * i as f32 + (w * 0.15).min(1.0), top, (w * 0.7).max(1.0).max(w - 2.0), r.bottom() - top);
+                    let bar = Rect::new(
+                        r.x + w * i as f32 + (w * 0.15).min(1.0),
+                        top,
+                        (w * 0.7).max(1.0).max(w - 2.0),
+                        r.bottom() - top,
+                    );
                     self.out.items.push(Item::Rect { r: bar, color: c });
                 }
             }
             ChartStyle::Line => {
                 let n = values.len();
-                let x_of = |i: usize| if n == 1 { r.x + r.w * 0.5 } else { r.x + r.w * i as f32 / (n - 1) as f32 };
-                for i in 1..n {
-                    let (a, b) = (Vec2::new(x_of(i - 1), y_of(values[i - 1])), Vec2::new(x_of(i), y_of(values[i])));
-                    if fill {
-                        self.out.items.push(Item::Poly { pts: vec![a, b, Vec2::new(b.x, r.bottom()), Vec2::new(a.x, r.bottom())], color: c.alpha(0.25) });
+                let x_of = |i: usize| {
+                    if n == 1 {
+                        r.x + r.w * 0.5
+                    } else {
+                        r.x + r.w * i as f32 / (n - 1) as f32
                     }
-                    self.out.items.push(Item::Line { a, b, w: 2.0, color: c });
+                };
+                for i in 1..n {
+                    let (a, b) = (
+                        Vec2::new(x_of(i - 1), y_of(values[i - 1])),
+                        Vec2::new(x_of(i), y_of(values[i])),
+                    );
+                    if fill {
+                        self.out.items.push(Item::Poly {
+                            pts: vec![a, b, Vec2::new(b.x, r.bottom()), Vec2::new(a.x, r.bottom())],
+                            color: c.alpha(0.25),
+                        });
+                    }
+                    self.out.items.push(Item::Line {
+                        a,
+                        b,
+                        w: 2.0,
+                        color: c,
+                    });
                 }
             }
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn table(&mut self, r: Rect, columns: &[String], rows: &[Vec<String>], widths: &[f32], size: f32, c: Option<Color>, aligns: &[Align], inks: &[Vec<Option<Rgba>>]) {
-        let n = columns.len().max(rows.iter().map(Vec::len).max().unwrap_or(0)).max(1);
-        let shares: Vec<f32> = (0..n).map(|i| widths.get(i).copied().filter(|w| *w > 0.0).unwrap_or(1.0)).collect();
+    fn table(
+        &mut self,
+        r: Rect,
+        columns: &[String],
+        rows: &[Vec<String>],
+        widths: &[f32],
+        size: f32,
+        c: Option<Color>,
+        aligns: &[Align],
+        inks: &[Vec<Option<Rgba>>],
+    ) {
+        let n = columns
+            .len()
+            .max(rows.iter().map(Vec::len).max().unwrap_or(0))
+            .max(1);
+        let shares: Vec<f32> = (0..n)
+            .map(|i| widths.get(i).copied().filter(|w| *w > 0.0).unwrap_or(1.0))
+            .collect();
         let total: f32 = shares.iter().sum();
-        let xs: Vec<(f32, f32)> = shares.iter().scan(r.x, |x, s| {
-            let w = r.w * s / total;
-            let cell = (*x, w);
-            *x += w;
-            Some(cell)
-        }).collect();
+        let xs: Vec<(f32, f32)> = shares
+            .iter()
+            .scan(r.x, |x, s| {
+                let w = r.w * s / total;
+                let cell = (*x, w);
+                *x += w;
+                Some(cell)
+            })
+            .collect();
         let lh = size * LINE;
         let mut y = r.y;
         // (a cell's text in its column as the column is aligned; a right one keeps clear of
         // the next column's left edge, a left one of its own right edge)
-        let line = |l: &mut Self, cells: &[String], own: Option<&Vec<Option<Rgba>>>, y: f32, weight: Weight, ink: Color| {
+        let line = |l: &mut Self,
+                    cells: &[String],
+                    own: Option<&Vec<Option<Rgba>>>,
+                    y: f32,
+                    weight: Weight,
+                    ink: Color| {
             for (k, cell) in cells.iter().enumerate().take(n) {
                 let (x, w) = xs[k];
                 let t = l.fit(cell, size, weight, (w - 6.0).max(0.0));
@@ -207,18 +404,31 @@ impl Layout<'_> {
                     Align::Center => x + (w - tw) * 0.5,
                     Align::Right => x + w - tw - if k + 1 < n { 6.0 } else { 0.0 },
                 };
-                let ink = own.and_then(|o| o.get(k).copied().flatten()).map(color).unwrap_or(ink);
+                let ink = own
+                    .and_then(|o| o.get(k).copied().flatten())
+                    .map(color)
+                    .unwrap_or(ink);
                 l.text(t, size, weight, Vec2::new(at, base), ink);
             }
         };
         if !columns.is_empty() {
             line(self, columns, None, y, Weight::Bold, self.colors.muted);
             y += lh + 1.0;
-            self.out.items.push(Item::Rect { r: Rect::new(r.x, y, r.w, 1.0), color: self.colors.divider });
+            self.out.items.push(Item::Rect {
+                r: Rect::new(r.x, y, r.w, 1.0),
+                color: self.colors.divider,
+            });
             y += 2.0;
         }
         for (i, row) in rows.iter().enumerate() {
-            line(self, row, inks.get(i), y, Weight::Regular, c.unwrap_or(self.colors.ink));
+            line(
+                self,
+                row,
+                inks.get(i),
+                y,
+                Weight::Regular,
+                c.unwrap_or(self.colors.ink),
+            );
             y += lh;
         }
     }
@@ -232,14 +442,23 @@ pub struct Images {
 
 impl Images {
     /// The picture's texture, read from its file the first time (None: it cannot be read).
-    pub fn get(&mut self, gpu: &mut Gpu, device: &mx::Device,
-        queue: &mx::Queue, path: &Path) -> Option<usize> {
+    pub fn get(
+        &mut self,
+        gpu: &mut Gpu,
+        device: &mx::Device,
+        queue: &mx::Queue,
+        path: &Path,
+    ) -> Option<usize> {
         if let Some(t) = self.loaded.get(path) {
             return *t;
         }
         let tex = match image::open(path) {
             Ok(img) => {
-                let img = if img.width().max(img.height()) > IMAGE_MAX { img.thumbnail(IMAGE_MAX, IMAGE_MAX) } else { img };
+                let img = if img.width().max(img.height()) > IMAGE_MAX {
+                    img.thumbnail(IMAGE_MAX, IMAGE_MAX)
+                } else {
+                    img
+                };
                 let rgba = img.to_rgba8();
                 Some(gpu.add_image(device, queue, rgba.width(), rgba.height(), rgba.as_raw()))
             }
@@ -268,7 +487,17 @@ mod tests {
         )
         .unwrap();
         let l = layout(&p, &fonts, 1.0);
-        let at = |t: &str| l.items.iter().find_map(|i| match i { Item::Text { text, at, color, .. } if text == t => Some((*at, *color)), _ => None }).unwrap();
+        let at = |t: &str| {
+            l.items
+                .iter()
+                .find_map(|i| match i {
+                    Item::Text {
+                        text, at, color, ..
+                    } if text == t => Some((*at, *color)),
+                    _ => None,
+                })
+                .unwrap()
+        };
         let (zoo, _) = at("Zoo");
         let (late, ink) = at("+3:12");
         assert!(zoo.x < 1.0, "{zoo:?}");
@@ -291,14 +520,36 @@ mod tests {
         .unwrap();
         let l = layout(&p, &fonts, 1.0);
         // the button in the box still takes its clicks, inside the box's padding
-        let ok = l.hits.iter().find(|h| h.element.as_deref() == Some("ok")).expect("the button's hit");
+        let ok = l
+            .hits
+            .iter()
+            .find(|h| h.element.as_deref() == Some("ok"))
+            .expect("the button's hit");
         assert!(ok.r.x > 10.0 && ok.r.y > 5.0, "{:?}", ok.r);
         // three stops, one row each, their names in order down the list
-        let ys: Vec<f32> = ["Markt", "Rathaus", "Bahnhof"].iter().map(|n| l.items.iter().find_map(|i| match i { Item::Text { text, at, .. } if text == n => Some(at.y), _ => None }).unwrap()).collect();
+        let ys: Vec<f32> = ["Markt", "Rathaus", "Bahnhof"]
+            .iter()
+            .map(|n| {
+                l.items
+                    .iter()
+                    .find_map(|i| match i {
+                        Item::Text { text, at, .. } if text == n => Some(at.y),
+                        _ => None,
+                    })
+                    .unwrap()
+            })
+            .collect();
         assert!(ys[0] < ys[1] && ys[1] < ys[2], "{ys:?}");
         assert!(((ys[2] - ys[1]) - 22.0).abs() < 1.0, "{ys:?}");
         // the bar's two parts: a quarter and three quarters of its width
-        let parts: Vec<f32> = l.items.iter().filter_map(|i| match i { Item::Rounded { r, .. } if r.h == 6.0 && r.w < 300.0 => Some(r.w), _ => None }).collect();
+        let parts: Vec<f32> = l
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Rounded { r, .. } if r.h == 6.0 && r.w < 300.0 => Some(r.w),
+                _ => None,
+            })
+            .collect();
         assert_eq!(parts.len(), 2, "{parts:?}");
         assert!(parts[1] > 2.5 * parts[0], "{parts:?}");
     }
@@ -310,7 +561,14 @@ mod tests {
         let fonts = Fonts::new();
         let p = panel_from_source(r##"{ width = 300, padding = 0, children = { { type = "bar", height = 8, segments = { { value = 0.01 }, { value = 100 }, { value = 0.01 } } } } }"##).unwrap();
         let l = layout(&p, &fonts, 1.0);
-        let parts: Vec<Rect> = l.items.iter().filter_map(|i| match i { Item::Rounded { r, .. } if r.h == 8.0 && r.w < 300.0 => Some(*r), _ => None }).collect();
+        let parts: Vec<Rect> = l
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Rounded { r, .. } if r.h == 8.0 && r.w < 300.0 => Some(*r),
+                _ => None,
+            })
+            .collect();
         assert_eq!(parts.len(), 3, "{parts:?}");
         for w in parts.windows(2) {
             assert!(w[0].right() <= w[1].x, "{parts:?}");
@@ -336,12 +594,40 @@ mod tests {
         )
         .unwrap();
         let l = layout_typing(&p, &fonts, 1.0, Some("i"));
-        let kinds: Vec<(Option<&str>, HitKind)> = l.hits.iter().map(|h| (h.element.as_deref(), h.kind)).collect();
-        assert_eq!(kinds, [(Some("c"), HitKind::Click), (Some("s"), HitKind::Slider), (Some("i"), HitKind::Click), (Some("t"), HitKind::Tabs)]);
+        let kinds: Vec<(Option<&str>, HitKind)> = l
+            .hits
+            .iter()
+            .map(|h| (h.element.as_deref(), h.kind))
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                (Some("c"), HitKind::Click),
+                (Some("s"), HitKind::Slider),
+                (Some("i"), HitKind::Click),
+                (Some("t"), HitKind::Tabs)
+            ]
+        );
         // the chart's line in two segments with their fill, the bars, the table's header line
-        assert_eq!(l.items.iter().filter(|i| matches!(i, Item::Line { .. })).count(), 2);
-        assert_eq!(l.items.iter().filter(|i| matches!(i, Item::Poly { .. })).count(), 2);
-        assert!(l.items.iter().any(|i| matches!(i, Item::Text { text, .. } if text == "Markt")));
+        assert_eq!(
+            l.items
+                .iter()
+                .filter(|i| matches!(i, Item::Line { .. }))
+                .count(),
+            2
+        );
+        assert_eq!(
+            l.items
+                .iter()
+                .filter(|i| matches!(i, Item::Poly { .. }))
+                .count(),
+            2
+        );
+        assert!(
+            l.items
+                .iter()
+                .any(|i| matches!(i, Item::Text { text, .. } if text == "Markt"))
+        );
         // (an image that is not there takes its room and draws nothing)
         assert!(!l.items.iter().any(|i| matches!(i, Item::Image { .. })));
         assert!(l.h > 300.0, "{}", l.h);
@@ -387,7 +673,11 @@ mod tests {
         let icon = std::env::temp_dir().join(format!("omsi-ui-badge-{}.png", std::process::id()));
         image::RgbaImage::from_fn(64, 64, |x, y| {
             let d = ((x as f32 - 31.5).powi(2) + (y as f32 - 31.5).powi(2)).sqrt();
-            if d > 31.0 { image::Rgba([0, 0, 0, 0]) } else { image::Rgba([244, 127 + (y * 2) as u8, 48, 255]) }
+            if d > 31.0 {
+                image::Rgba([0, 0, 0, 0])
+            } else {
+                image::Rgba([244, 127 + (y * 2) as u8, 48, 255])
+            }
         })
         .save(&icon)
         .unwrap();
@@ -409,12 +699,34 @@ mod tests {
         let mut p = panel_from_source(&src).unwrap();
         // (the picture by its path: a panel of the tests has no plugin folder)
         if let Kind::Row { children, .. } = &mut p.children[0].kind {
-            children[0].kind = Kind::Image { path: Some(icon.clone()), width: 40.0, height: 40.0 };
+            children[0].kind = Kind::Image {
+                path: Some(icon.clone()),
+                width: 40.0,
+                height: 40.0,
+            };
         }
         let laid = layout_typing(&p, &fonts, 1.0, Some("i"));
         let mut images = super::Images::default();
-        draw_card(&mut gpu, &device, &queue, &mut atlas, &fonts, &view, (w, h), k, &laid, Vec2::new(30.0, 20.0), Some(1), true, &mut images);
-        let out = omsi_cfg::flags::OMSI_UI_PREVIEW.live_var().unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/ui-controls.png").to_string());
+        draw_card(
+            &mut gpu,
+            &device,
+            &queue,
+            &mut atlas,
+            &fonts,
+            &view,
+            (w, h),
+            k,
+            &laid,
+            Vec2::new(30.0, 20.0),
+            Some(1),
+            true,
+            &mut images,
+        );
+        let out = omsi_cfg::flags::OMSI_UI_PREVIEW
+            .live_var()
+            .unwrap_or_else(|_| {
+                concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/ui-controls.png").to_string()
+            });
         super::super::preview::save(&device, &queue, &target, w, h, &out);
     }
 }

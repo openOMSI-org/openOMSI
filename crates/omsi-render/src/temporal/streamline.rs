@@ -28,19 +28,24 @@
 //! DLSS records into a command list of ours on wgpu's queue, between the scene's submit and the
 //! HUD's: the queue's order is the only synchronisation. Textures go over in wgpu's last state.
 
-use super::d3d12::{game_dir, wide, ListRing};
+use super::d3d12::{ListRing, game_dir, wide};
 use super::vulkan::{VkGpu, VkRing};
+use super::{FrameConstants, Inputs, TemporalQuality, fallback_render_size};
+use anyhow::{Context, Result, anyhow, bail};
 use ash::vk;
-use super::{fallback_render_size, FrameConstants, Inputs, TemporalQuality};
-use anyhow::{anyhow, bail, Context, Result};
-use std::ffi::{c_char, c_void, CStr};
-use windows::core::{Interface, PCSTR, PCWSTR};
+use std::ffi::{CStr, c_char, c_void};
 use windows::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows::Win32::Graphics::Direct3D12::*;
 use windows::Win32::Graphics::Dxgi::Common::*;
-use windows::Win32::Graphics::Dxgi::{IDXGIDeviceSubObject_Impl, IDXGIObject_Impl, IDXGIOutput, IDXGISwapChain, IDXGISwapChain_Impl, DXGI_FRAME_STATISTICS, DXGI_PRESENT, DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_CHAIN_FLAG};
-use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR};
-
+use windows::Win32::Graphics::Dxgi::{
+    DXGI_FRAME_STATISTICS, DXGI_PRESENT, DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_CHAIN_FLAG,
+    IDXGIDeviceSubObject_Impl, IDXGIObject_Impl, IDXGIOutput, IDXGISwapChain, IDXGISwapChain_Impl,
+};
+use windows::Win32::System::LibraryLoader::{
+    GetProcAddress, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR,
+    LoadLibraryExW,
+};
+use windows::core::{Interface, PCSTR, PCWSTR};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -61,20 +66,74 @@ struct Base {
 
 impl Base {
     const fn new(struct_type: StructType, struct_version: usize) -> Base {
-        Base { next: std::ptr::null_mut(), struct_type, struct_version }
+        Base {
+            next: std::ptr::null_mut(),
+            struct_type,
+            struct_version,
+        }
     }
 }
 
-const PREFERENCES: StructType = StructType { data1: 0x1ca10965, data2: 0xbf8e, data3: 0x432b, data4: [0x8d, 0xa1, 0x67, 0x16, 0xd8, 0x79, 0xfb, 0x14] };
-const RESOURCE: StructType = StructType { data1: 0x3a9d70cf, data2: 0x2418, data3: 0x4b72, data4: [0x83, 0x91, 0x13, 0xf8, 0x72, 0x1c, 0x72, 0x61] };
-const RESOURCE_TAG: StructType = StructType { data1: 0x4c6a5aad, data2: 0xb445, data3: 0x496c, data4: [0x87, 0xff, 0x1a, 0xf3, 0x84, 0x5b, 0xe6, 0x53] };
-const VIEWPORT_HANDLE: StructType = StructType { data1: 0x171b6435, data2: 0x9b3c, data3: 0x4fc8, data4: [0x99, 0x94, 0xfb, 0xe5, 0x25, 0x69, 0xaa, 0xa4] };
-const ADAPTER_INFO: StructType = StructType { data1: 0x0677315f, data2: 0xa746, data3: 0x4492, data4: [0x9f, 0x42, 0xcb, 0x61, 0x42, 0xc9, 0xc3, 0xd4] };
-const CONSTANTS: StructType = StructType { data1: 0xdcd35ad7, data2: 0x4e4a, data3: 0x4bad, data4: [0xa9, 0x0c, 0xe0, 0xc4, 0x9e, 0xb2, 0x3a, 0xfe] };
-const DLSS_OPTIONS: StructType = StructType { data1: 0x6ac826e4, data2: 0x4c61, data3: 0x4101, data4: [0xa9, 0x2d, 0x63, 0x8d, 0x42, 0x10, 0x57, 0xb8] };
-const VULKAN_INFO: StructType = StructType { data1: 0x0eed6fd5, data2: 0x82cd, data3: 0x43a9, data4: [0xbd, 0xb5, 0x47, 0xa5, 0xba, 0x2f, 0x45, 0xd6] };
-const FEATURE_REQUIREMENTS: StructType = StructType { data1: 0x66714097, data2: 0xac6d, data3: 0x4bc6, data4: [0x89, 0x15, 0x1e, 0x0f, 0x55, 0xa6, 0xb6, 0x1f] };
-const DLSS_OPTIMAL_SETTINGS: StructType = StructType { data1: 0xef1d0957, data2: 0xfd58, data3: 0x4df7, data4: [0xb5, 0x04, 0x8b, 0x69, 0xd8, 0xaa, 0x6b, 0x76] };
+const PREFERENCES: StructType = StructType {
+    data1: 0x1ca10965,
+    data2: 0xbf8e,
+    data3: 0x432b,
+    data4: [0x8d, 0xa1, 0x67, 0x16, 0xd8, 0x79, 0xfb, 0x14],
+};
+const RESOURCE: StructType = StructType {
+    data1: 0x3a9d70cf,
+    data2: 0x2418,
+    data3: 0x4b72,
+    data4: [0x83, 0x91, 0x13, 0xf8, 0x72, 0x1c, 0x72, 0x61],
+};
+const RESOURCE_TAG: StructType = StructType {
+    data1: 0x4c6a5aad,
+    data2: 0xb445,
+    data3: 0x496c,
+    data4: [0x87, 0xff, 0x1a, 0xf3, 0x84, 0x5b, 0xe6, 0x53],
+};
+const VIEWPORT_HANDLE: StructType = StructType {
+    data1: 0x171b6435,
+    data2: 0x9b3c,
+    data3: 0x4fc8,
+    data4: [0x99, 0x94, 0xfb, 0xe5, 0x25, 0x69, 0xaa, 0xa4],
+};
+const ADAPTER_INFO: StructType = StructType {
+    data1: 0x0677315f,
+    data2: 0xa746,
+    data3: 0x4492,
+    data4: [0x9f, 0x42, 0xcb, 0x61, 0x42, 0xc9, 0xc3, 0xd4],
+};
+const CONSTANTS: StructType = StructType {
+    data1: 0xdcd35ad7,
+    data2: 0x4e4a,
+    data3: 0x4bad,
+    data4: [0xa9, 0x0c, 0xe0, 0xc4, 0x9e, 0xb2, 0x3a, 0xfe],
+};
+const DLSS_OPTIONS: StructType = StructType {
+    data1: 0x6ac826e4,
+    data2: 0x4c61,
+    data3: 0x4101,
+    data4: [0xa9, 0x2d, 0x63, 0x8d, 0x42, 0x10, 0x57, 0xb8],
+};
+const VULKAN_INFO: StructType = StructType {
+    data1: 0x0eed6fd5,
+    data2: 0x82cd,
+    data3: 0x43a9,
+    data4: [0xbd, 0xb5, 0x47, 0xa5, 0xba, 0x2f, 0x45, 0xd6],
+};
+const FEATURE_REQUIREMENTS: StructType = StructType {
+    data1: 0x66714097,
+    data2: 0xac6d,
+    data3: 0x4bc6,
+    data4: [0x89, 0x15, 0x1e, 0x0f, 0x55, 0xa6, 0xb6, 0x1f],
+};
+const DLSS_OPTIMAL_SETTINGS: StructType = StructType {
+    data1: 0xef1d0957,
+    data2: 0xfd58,
+    data3: 0x4df7,
+    data4: [0xb5, 0x04, 0x8b, 0x69, 0xd8, 0xaa, 0x6b, 0x76],
+};
 
 const SDK_VERSION: u64 = (2 << 48) | (14 << 32) | (1 << 16) | 0xfedc;
 const FEATURE_DLSS: u32 = 0;
@@ -333,12 +392,21 @@ type FnSetVulkanInfo = unsafe extern "C" fn(*const VulkanInfo) -> i32;
 type FnGetFeatureRequirements = unsafe extern "C" fn(u32, *mut FeatureRequirements) -> i32;
 type FnGetFeatureFunction = unsafe extern "C" fn(u32, *const c_char, *mut *mut c_void) -> i32;
 type FnGetNewFrameToken = unsafe extern "C" fn(*mut *const c_void, *const u32) -> i32;
-type FnSetTagForFrame = unsafe extern "C" fn(*const c_void, *const ViewportHandle, *const ResourceTag, u32, *mut c_void) -> i32;
-type FnSetConstants = unsafe extern "C" fn(*const Constants, *const c_void, *const ViewportHandle) -> i32;
-type FnEvaluateFeature = unsafe extern "C" fn(u32, *const c_void, *const *const Base, u32, *mut c_void) -> i32;
+type FnSetTagForFrame = unsafe extern "C" fn(
+    *const c_void,
+    *const ViewportHandle,
+    *const ResourceTag,
+    u32,
+    *mut c_void,
+) -> i32;
+type FnSetConstants =
+    unsafe extern "C" fn(*const Constants, *const c_void, *const ViewportHandle) -> i32;
+type FnEvaluateFeature =
+    unsafe extern "C" fn(u32, *const c_void, *const *const Base, u32, *mut c_void) -> i32;
 type FnFreeResources = unsafe extern "C" fn(u32, *const ViewportHandle) -> i32;
 type FnUpgradeInterface = unsafe extern "C" fn(*mut *mut c_void) -> i32;
-type FnDlssGetOptimalSettings = unsafe extern "C" fn(*const DlssOptions, *mut DlssOptimalSettingsS) -> i32;
+type FnDlssGetOptimalSettings =
+    unsafe extern "C" fn(*const DlssOptions, *mut DlssOptimalSettingsS) -> i32;
 type FnDlssSetOptions = unsafe extern "C" fn(*const ViewportHandle, *const DlssOptions) -> i32;
 
 /// `sl::Result::eWarnOutOfVRAM`: a warning. The call did its work, the card is just over its
@@ -347,20 +415,50 @@ const WARN_OUT_OF_VRAM: i32 = 39;
 
 fn result_name(r: i32) -> &'static str {
     const NAMES: [&str; 41] = [
-        "eOk", "eErrorIO", "eErrorDriverOutOfDate", "eErrorOSOutOfDate", "eErrorOSDisabledHWS", "eErrorDeviceNotCreated",
-        "eErrorNoSupportedAdapterFound", "eErrorAdapterNotSupported", "eErrorNoPlugins", "eErrorVulkanAPI", "eErrorDXGIAPI",
-        "eErrorD3DAPI", "eErrorNRDAPI", "eErrorNVAPI", "eErrorReflexAPI", "eErrorNGXFailed", "eErrorJSONParsing",
-        "eErrorMissingProxy", "eErrorMissingResourceState", "eErrorInvalidIntegration", "eErrorMissingInputParameter",
-        "eErrorNotInitialized", "eErrorComputeFailed", "eErrorInitNotCalled", "eErrorExceptionHandler",
-        "eErrorInvalidParameter", "eErrorMissingConstants", "eErrorDuplicatedConstants", "eErrorMissingOrInvalidAPI",
-        "eErrorCommonConstantsMissing", "eErrorUnsupportedInterface", "eErrorFeatureMissing", "eErrorFeatureNotSupported",
-        "eErrorFeatureMissingHooks", "eErrorFeatureFailedToLoad", "eErrorFeatureWrongPriority",
-        "eErrorFeatureMissingDependency", "eErrorFeatureManagerInvalidState", "eErrorInvalidState", "eWarnOutOfVRAM", "?",
+        "eOk",
+        "eErrorIO",
+        "eErrorDriverOutOfDate",
+        "eErrorOSOutOfDate",
+        "eErrorOSDisabledHWS",
+        "eErrorDeviceNotCreated",
+        "eErrorNoSupportedAdapterFound",
+        "eErrorAdapterNotSupported",
+        "eErrorNoPlugins",
+        "eErrorVulkanAPI",
+        "eErrorDXGIAPI",
+        "eErrorD3DAPI",
+        "eErrorNRDAPI",
+        "eErrorNVAPI",
+        "eErrorReflexAPI",
+        "eErrorNGXFailed",
+        "eErrorJSONParsing",
+        "eErrorMissingProxy",
+        "eErrorMissingResourceState",
+        "eErrorInvalidIntegration",
+        "eErrorMissingInputParameter",
+        "eErrorNotInitialized",
+        "eErrorComputeFailed",
+        "eErrorInitNotCalled",
+        "eErrorExceptionHandler",
+        "eErrorInvalidParameter",
+        "eErrorMissingConstants",
+        "eErrorDuplicatedConstants",
+        "eErrorMissingOrInvalidAPI",
+        "eErrorCommonConstantsMissing",
+        "eErrorUnsupportedInterface",
+        "eErrorFeatureMissing",
+        "eErrorFeatureNotSupported",
+        "eErrorFeatureMissingHooks",
+        "eErrorFeatureFailedToLoad",
+        "eErrorFeatureWrongPriority",
+        "eErrorFeatureMissingDependency",
+        "eErrorFeatureManagerInvalidState",
+        "eErrorInvalidState",
+        "eWarnOutOfVRAM",
+        "?",
     ];
     NAMES.get(r as usize).copied().unwrap_or("?")
 }
-
-
 
 fn check(what: &str, r: i32) -> Result<()> {
     static VRAM_WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -368,11 +466,16 @@ fn check(what: &str, r: i32) -> Result<()> {
         0 => Ok(()),
         WARN_OUT_OF_VRAM => {
             if !VRAM_WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                log::warn!("{what}: Streamline says the graphics card is over its memory budget; expect stutter, or lower the video memory or the window size");
+                log::warn!(
+                    "{what}: Streamline says the graphics card is over its memory budget; expect stutter, or lower the video memory or the window size"
+                );
             }
             Ok(())
         }
-        _ => Err(anyhow!("{what} failed in Streamline: {} ({r})", result_name(r))),
+        _ => Err(anyhow!(
+            "{what} failed in Streamline: {} ({r})",
+            result_name(r)
+        )),
     }
 }
 
@@ -431,22 +534,44 @@ fn not_implemented<T>() -> windows::core::Result<T> {
 }
 
 impl IDXGIObject_Impl for NullSwapChain_Impl {
-    fn SetPrivateData(&self, _: *const windows::core::GUID, _: u32, _: *const c_void) -> windows::core::Result<()> {
+    fn SetPrivateData(
+        &self,
+        _: *const windows::core::GUID,
+        _: u32,
+        _: *const c_void,
+    ) -> windows::core::Result<()> {
         not_implemented()
     }
-    fn SetPrivateDataInterface(&self, _: *const windows::core::GUID, _: windows::core::Ref<windows::core::IUnknown>) -> windows::core::Result<()> {
+    fn SetPrivateDataInterface(
+        &self,
+        _: *const windows::core::GUID,
+        _: windows::core::Ref<windows::core::IUnknown>,
+    ) -> windows::core::Result<()> {
         not_implemented()
     }
-    fn GetPrivateData(&self, _: *const windows::core::GUID, _: *mut u32, _: *mut c_void) -> windows::core::Result<()> {
+    fn GetPrivateData(
+        &self,
+        _: *const windows::core::GUID,
+        _: *mut u32,
+        _: *mut c_void,
+    ) -> windows::core::Result<()> {
         not_implemented()
     }
-    fn GetParent(&self, _: *const windows::core::GUID, _: *mut *mut c_void) -> windows::core::Result<()> {
+    fn GetParent(
+        &self,
+        _: *const windows::core::GUID,
+        _: *mut *mut c_void,
+    ) -> windows::core::Result<()> {
         not_implemented()
     }
 }
 
 impl IDXGIDeviceSubObject_Impl for NullSwapChain_Impl {
-    fn GetDevice(&self, riid: *const windows::core::GUID, device: *mut *mut c_void) -> windows::core::Result<()> {
+    fn GetDevice(
+        &self,
+        riid: *const windows::core::GUID,
+        device: *mut *mut c_void,
+    ) -> windows::core::Result<()> {
         unsafe { self.device.query(riid, device) }.ok()
     }
 }
@@ -455,19 +580,39 @@ impl IDXGISwapChain_Impl for NullSwapChain_Impl {
     fn Present(&self, _: u32, _: DXGI_PRESENT) -> windows::core::HRESULT {
         windows::Win32::Foundation::S_OK
     }
-    fn GetBuffer(&self, _: u32, _: *const windows::core::GUID, _: *mut *mut c_void) -> windows::core::Result<()> {
+    fn GetBuffer(
+        &self,
+        _: u32,
+        _: *const windows::core::GUID,
+        _: *mut *mut c_void,
+    ) -> windows::core::Result<()> {
         not_implemented()
     }
-    fn SetFullscreenState(&self, _: windows::core::BOOL, _: windows::core::Ref<IDXGIOutput>) -> windows::core::Result<()> {
+    fn SetFullscreenState(
+        &self,
+        _: windows::core::BOOL,
+        _: windows::core::Ref<IDXGIOutput>,
+    ) -> windows::core::Result<()> {
         not_implemented()
     }
-    fn GetFullscreenState(&self, _: *mut windows::core::BOOL, _: windows::core::OutRef<IDXGIOutput>) -> windows::core::Result<()> {
+    fn GetFullscreenState(
+        &self,
+        _: *mut windows::core::BOOL,
+        _: windows::core::OutRef<IDXGIOutput>,
+    ) -> windows::core::Result<()> {
         not_implemented()
     }
     fn GetDesc(&self) -> windows::core::Result<DXGI_SWAP_CHAIN_DESC> {
         not_implemented()
     }
-    fn ResizeBuffers(&self, _: u32, _: u32, _: u32, _: DXGI_FORMAT, _: &DXGI_SWAP_CHAIN_FLAG) -> windows::core::Result<()> {
+    fn ResizeBuffers(
+        &self,
+        _: u32,
+        _: u32,
+        _: u32,
+        _: DXGI_FORMAT,
+        _: &DXGI_SWAP_CHAIN_FLAG,
+    ) -> windows::core::Result<()> {
         Ok(())
     }
     fn ResizeTarget(&self, _: *const DXGI_MODE_DESC) -> windows::core::Result<()> {
@@ -486,12 +631,21 @@ impl IDXGISwapChain_Impl for NullSwapChain_Impl {
 
 fn load_fn<T: Copy>(module: HMODULE, name: &CStr) -> Result<T> {
     debug_assert_eq!(std::mem::size_of::<T>(), std::mem::size_of::<usize>());
-    let f = unsafe { GetProcAddress(module, PCSTR(name.as_ptr().cast())) }
-        .ok_or_else(|| anyhow!("{} is not exported by sl.interposer.dll (an older Streamline?)", name.to_string_lossy()))?;
+    let f = unsafe { GetProcAddress(module, PCSTR(name.as_ptr().cast())) }.ok_or_else(|| {
+        anyhow!(
+            "{} is not exported by sl.interposer.dll (an older Streamline?)",
+            name.to_string_lossy()
+        )
+    })?;
     Ok(unsafe { std::mem::transmute_copy::<_, T>(&f) })
 }
 
-fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32], render_api: u32) -> Result<(Vec<u16>, Vec<*const u16>)> {
+fn init(
+    module: HMODULE,
+    dir: &std::path::Path,
+    features: &'static [u32],
+    render_api: u32,
+) -> Result<(Vec<u16>, Vec<*const u16>)> {
     let init: FnInit = load_fn(module, c"slInit")?;
     let plugin_dir = wide(dir);
     let plugin_paths = vec![plugin_dir.as_ptr()];
@@ -506,7 +660,10 @@ fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32], render
         allocate_callback: std::ptr::null(),
         release_callback: std::ptr::null(),
         log_message_callback: Some(sl_log),
-        flags: FLAG_DISABLE_CL_STATE_TRACKING | FLAG_DISABLE_DEBUG_TEXT | FLAG_USE_MANUAL_HOOKING | FLAG_FRAME_BASED_TAGGING,
+        flags: FLAG_DISABLE_CL_STATE_TRACKING
+            | FLAG_DISABLE_DEBUG_TEXT
+            | FLAG_USE_MANUAL_HOOKING
+            | FLAG_FRAME_BASED_TAGGING,
         features_to_load: features.as_ptr(),
         num_features_to_load: features.len() as u32,
         application_id: 0,
@@ -523,7 +680,10 @@ fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32], render
 fn feature_fn(module: HMODULE, feature: u32, name: &CStr) -> Result<*mut c_void> {
     let get_feature_function: FnGetFeatureFunction = load_fn(module, c"slGetFeatureFunction")?;
     let mut f: *mut c_void = std::ptr::null_mut();
-    check(&format!("slGetFeatureFunction({})", name.to_string_lossy()), unsafe { get_feature_function(feature, name.as_ptr(), &mut f) })?;
+    check(
+        &format!("slGetFeatureFunction({})", name.to_string_lossy()),
+        unsafe { get_feature_function(feature, name.as_ptr(), &mut f) },
+    )?;
     if f.is_null() {
         bail!("Streamline does not offer {}", name.to_string_lossy());
     }
@@ -588,19 +748,32 @@ unsafe impl Send for Prepared {}
 static PREPARED: std::sync::Mutex<Option<Prepared>> = std::sync::Mutex::new(None);
 
 fn open_interposer(dir: &std::path::Path) -> Result<HMODULE> {
-    let missing = omsi_cfg::upscaler_files::missing(dir, "dlss", omsi_cfg::upscaler_files::Api::Dx12);
+    let missing =
+        omsi_cfg::upscaler_files::missing(dir, "dlss", omsi_cfg::upscaler_files::Api::Dx12);
     if !missing.is_empty() {
-        bail!("{} not found in {} (they come with NVIDIA's Streamline SDK, bin/x64)", missing.join(", "), dir.display());
+        bail!(
+            "{} not found in {} (they come with NVIDIA's Streamline SDK, bin/x64)",
+            missing.join(", "),
+            dir.display()
+        );
     }
     let interposer = wide(&dir.join("sl.interposer.dll"));
-    Ok(unsafe { LoadLibraryExW(PCWSTR(interposer.as_ptr()), None, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS) }.context("opening sl.interposer.dll")?)
+    Ok(unsafe {
+        LoadLibraryExW(
+            PCWSTR(interposer.as_ptr()),
+            None,
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+        )
+    }
+    .context("opening sl.interposer.dll")?)
 }
 
 fn static_names(count: u32, names: *const *const c_char) -> Vec<&'static CStr> {
     (0..count as usize)
         .filter_map(|i| {
             let p = unsafe { *names.add(i) };
-            (!p.is_null()).then(|| &*Box::leak(unsafe { CStr::from_ptr(p) }.to_owned().into_boxed_c_str()))
+            (!p.is_null())
+                .then(|| &*Box::leak(unsafe { CStr::from_ptr(p) }.to_owned().into_boxed_c_str()))
         })
         .collect()
 }
@@ -677,7 +850,11 @@ pub fn vulkan_extensions() -> Result<Vec<&'static CStr>> {
 }
 
 /// The Vulkan 1.2 features DLSS may ask for that the device is made with
-pub const VULKAN_FEATURES: [&str; 3] = ["timelineSemaphore", "descriptorIndexing", "bufferDeviceAddress"];
+pub const VULKAN_FEATURES: [&str; 3] = [
+    "timelineSemaphore",
+    "descriptorIndexing",
+    "bufferDeviceAddress",
+];
 
 pub fn vulkan_abandon() {
     if let Some(p) = PREPARED.lock().unwrap_or_else(|e| e.into_inner()).take() {
@@ -720,19 +897,31 @@ impl Runtime {
                 let _ = FreeLibrary(module);
             });
         }
-        let gpu = VkGpu::of(device).ok_or_else(|| anyhow!("the game is not running on DirectX 12 or Vulkan (Settings: Graphics API)"))?;
+        let gpu = VkGpu::of(device).ok_or_else(|| {
+            anyhow!("the game is not running on DirectX 12 or Vulkan (Settings: Graphics API)")
+        })?;
         let prepared = PREPARED.lock().unwrap_or_else(|e| e.into_inner()).take().ok_or_else(|| anyhow!("on Vulkan DLSS takes its place from the next start of the game, chosen before it (its device extensions are given when the device is made); this run goes on without it"))?;
         let module = prepared.module;
         let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
-        Self::start(module, &game_dir(), prepared.paths, Device::Vulkan(gpu)).inspect_err(|_| unsafe {
-            shutdown();
-            let _ = FreeLibrary(module);
-        })
+        Self::start(module, &game_dir(), prepared.paths, Device::Vulkan(gpu)).inspect_err(
+            |_| unsafe {
+                shutdown();
+                let _ = FreeLibrary(module);
+            },
+        )
     }
 
-    fn start(module: HMODULE, dir: &std::path::Path, paths: (Vec<u16>, Vec<*const u16>), device: Device) -> Result<Runtime> {
+    fn start(
+        module: HMODULE,
+        dir: &std::path::Path,
+        paths: (Vec<u16>, Vec<*const u16>),
+        device: Device,
+    ) -> Result<Runtime> {
         let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
-        let calls = Calls { is_supported: load_fn(module, c"slIsFeatureSupported")?, is_loaded: load_fn(module, c"slIsFeatureLoaded")? };
+        let calls = Calls {
+            is_supported: load_fn(module, c"slIsFeatureSupported")?,
+            is_loaded: load_fn(module, c"slIsFeatureLoaded")?,
+        };
         let get_new_frame_token: FnGetNewFrameToken = load_fn(module, c"slGetNewFrameToken")?;
         let set_tag_for_frame: FnSetTagForFrame = load_fn(module, c"slSetTagForFrame")?;
         let set_constants: FnSetConstants = load_fn(module, c"slSetConstants")?;
@@ -747,18 +936,25 @@ impl Runtime {
                 let adapter = AdapterInfo {
                     base: Base::new(ADAPTER_INFO, 1),
                     device_luid: (&mut luid as *mut windows::Win32::Foundation::LUID).cast(),
-                    device_luid_size_in_bytes: std::mem::size_of::<windows::Win32::Foundation::LUID>() as u32,
+                    device_luid_size_in_bytes: std::mem::size_of::<windows::Win32::Foundation::LUID>(
+                    ) as u32,
                     vk_physical_device: std::ptr::null_mut(),
                 };
                 Self::supported(module, &calls, &adapter)?;
                 let ring = ListRing::new(&device).context("DLSS's command lists")?;
-                let pacer: IDXGISwapChain = NullSwapChain { device: device.clone() }.into();
+                let pacer: IDXGISwapChain = NullSwapChain {
+                    device: device.clone(),
+                }
+                .into();
                 let mut raw = pacer.as_raw();
                 let r = unsafe { upgrade_interface(&mut raw) };
                 let pacer = if r == 0 && !raw.is_null() && raw != pacer.as_raw() {
                     Some(unsafe { IDXGISwapChain::from_raw(raw) })
                 } else {
-                    log::warn!("DLSS: no swap-chain proxy from Streamline ({}), so its per-frame housekeeping is skipped", result_name(r));
+                    log::warn!(
+                        "DLSS: no swap-chain proxy from Streamline ({}), so its per-frame housekeeping is skipped",
+                        result_name(r)
+                    );
                     None
                 };
                 Backend::Dx12 { ring, pacer }
@@ -789,13 +985,32 @@ impl Runtime {
                     vk_physical_device: vk::Handle::as_raw(gpu.physical) as *mut c_void,
                 };
                 Self::supported(module, &calls, &adapter)?;
-                Backend::Vulkan { ring: VkRing::new(&gpu).context("DLSS's command buffers")? }
+                Backend::Vulkan {
+                    ring: VkRing::new(&gpu).context("DLSS's command buffers")?,
+                }
             }
         };
-        let get_optimal_settings: FnDlssGetOptimalSettings = unsafe { std::mem::transmute(feature_fn(module, FEATURE_DLSS, c"slDLSSGetOptimalSettings")?) };
-        let set_options: FnDlssSetOptions = unsafe { std::mem::transmute(feature_fn(module, FEATURE_DLSS, c"slDLSSSetOptions")?) };
-        let api = if matches!(backend, Backend::Dx12 { .. }) { "DirectX 12" } else { "Vulkan" };
-        log::info!("DLSS: Streamline {}.{}.{} and its DLSS plugin loaded from {} ({api})", SDK_VERSION >> 48, (SDK_VERSION >> 32) & 0xffff, (SDK_VERSION >> 16) & 0xffff, dir.display());
+        let get_optimal_settings: FnDlssGetOptimalSettings = unsafe {
+            std::mem::transmute(feature_fn(
+                module,
+                FEATURE_DLSS,
+                c"slDLSSGetOptimalSettings",
+            )?)
+        };
+        let set_options: FnDlssSetOptions =
+            unsafe { std::mem::transmute(feature_fn(module, FEATURE_DLSS, c"slDLSSSetOptions")?) };
+        let api = if matches!(backend, Backend::Dx12 { .. }) {
+            "DirectX 12"
+        } else {
+            "Vulkan"
+        };
+        log::info!(
+            "DLSS: Streamline {}.{}.{} and its DLSS plugin loaded from {} ({api})",
+            SDK_VERSION >> 48,
+            (SDK_VERSION >> 32) & 0xffff,
+            (SDK_VERSION >> 16) & 0xffff,
+            dir.display()
+        );
         Ok(Runtime {
             module,
             shutdown,
@@ -807,7 +1022,10 @@ impl Runtime {
             get_optimal_settings,
             set_options,
             _paths: paths,
-            viewport: ViewportHandle { base: Base::new(VIEWPORT_HANDLE, 1), value: 0 },
+            viewport: ViewportHandle {
+                base: Base::new(VIEWPORT_HANDLE, 1),
+                value: 0,
+            },
             options_set: None,
             optimal: Vec::new(),
             frame: 0,
@@ -817,9 +1035,14 @@ impl Runtime {
     }
 
     fn supported(_module: HMODULE, calls: &Calls, adapter: &AdapterInfo) -> Result<()> {
-        check("the DLSS check of this card (it takes a GeForce RTX and an up-to-date driver)", unsafe { (calls.is_supported)(FEATURE_DLSS, adapter) })?;
+        check(
+            "the DLSS check of this card (it takes a GeForce RTX and an up-to-date driver)",
+            unsafe { (calls.is_supported)(FEATURE_DLSS, adapter) },
+        )?;
         let mut loaded = false;
-        check("slIsFeatureLoaded", unsafe { (calls.is_loaded)(FEATURE_DLSS, &mut loaded) })?;
+        check("slIsFeatureLoaded", unsafe {
+            (calls.is_loaded)(FEATURE_DLSS, &mut loaded)
+        })?;
         if !loaded {
             bail!("sl.dlss.dll was not loaded by Streamline");
         }
@@ -859,39 +1082,79 @@ impl Runtime {
             return *s;
         }
         let options = Self::options(quality, out);
-        let mut settings = DlssOptimalSettingsS { base: Base::new(DLSS_OPTIMAL_SETTINGS, 1), s: DlssOptimalSettings::default() };
+        let mut settings = DlssOptimalSettingsS {
+            base: Base::new(DLSS_OPTIMAL_SETTINGS, 1),
+            s: DlssOptimalSettings::default(),
+        };
         let r = unsafe { (self.get_optimal_settings)(&options, &mut settings) };
-        let size = if r == 0 && settings.s.optimal_render_width > 0 && settings.s.optimal_render_height > 0 {
-            (settings.s.optimal_render_width.min(out.0), settings.s.optimal_render_height.min(out.1))
+        let size = if r == 0
+            && settings.s.optimal_render_width > 0
+            && settings.s.optimal_render_height > 0
+        {
+            (
+                settings.s.optimal_render_width.min(out.0),
+                settings.s.optimal_render_height.min(out.1),
+            )
         } else {
-            log::warn!("DLSS: Streamline gave no picture size for {quality:?} in a {}x{} window ({}); taking NVIDIA's ratio", out.0, out.1, result_name(r));
+            log::warn!(
+                "DLSS: Streamline gave no picture size for {quality:?} in a {}x{} window ({}); taking NVIDIA's ratio",
+                out.0,
+                out.1,
+                result_name(r)
+            );
             fallback_render_size(quality, out)
         };
         // (only this window's sizes are kept and told: a live resize asks for one at every step)
         if self.optimal.is_empty() {
-            log::info!("DLSS {quality:?}: the {}x{} window is drawn at {}x{}", out.0, out.1, size.0, size.1);
+            log::info!(
+                "DLSS {quality:?}: the {}x{} window is drawn at {}x{}",
+                out.0,
+                out.1,
+                size.0,
+                size.1
+            );
         }
         self.optimal.retain(|((_, window), _)| *window == out);
         self.optimal.push(((quality, out), size));
         size
     }
 
-    pub fn evaluate(&mut self, queue: &wgpu::Queue, quality: TemporalQuality, inputs: &Inputs, c: &FrameConstants) -> Result<()> {
+    pub fn evaluate(
+        &mut self,
+        queue: &wgpu::Queue,
+        quality: TemporalQuality,
+        inputs: &Inputs,
+        c: &FrameConstants,
+    ) -> Result<()> {
         if self.options_set != Some((quality, inputs.output_size)) {
             // (a new quality or window size: resizing the proxy makes Streamline drop what it
             // made for the old one)
-            if let (Backend::Dx12 { pacer: Some(p), .. }, Some(_)) = (&self.backend, self.options_set) {
-                let _ = unsafe { p.ResizeBuffers(0, inputs.output_size.0, inputs.output_size.1, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG(0)) };
+            if let (Backend::Dx12 { pacer: Some(p), .. }, Some(_)) =
+                (&self.backend, self.options_set)
+            {
+                let _ = unsafe {
+                    p.ResizeBuffers(
+                        0,
+                        inputs.output_size.0,
+                        inputs.output_size.1,
+                        DXGI_FORMAT_UNKNOWN,
+                        DXGI_SWAP_CHAIN_FLAG(0),
+                    )
+                };
             }
             // (on Vulkan no present of ours ever empties Streamline's queue of old contexts: without
             // this every window size kept its own, up to a full card)
             if matches!(self.backend, Backend::Vulkan { .. }) && self.allocated {
                 self.backend.wait();
-                check("slFreeResources(DLSS)", unsafe { (self.free_resources)(FEATURE_DLSS, &self.viewport) })?;
+                check("slFreeResources(DLSS)", unsafe {
+                    (self.free_resources)(FEATURE_DLSS, &self.viewport)
+                })?;
                 self.allocated = false;
             }
             let options = Self::options(quality, inputs.output_size);
-            check("slDLSSSetOptions", unsafe { (self.set_options)(&self.viewport, &options) })?;
+            check("slDLSSSetOptions", unsafe {
+                (self.set_options)(&self.viewport, &options)
+            })?;
             self.options_set = Some((quality, inputs.output_size));
         }
         let (rw, rh) = inputs.render_size;
@@ -914,25 +1177,47 @@ impl Runtime {
             internal_flags: 0,
             reserved: 0,
         };
-        let textures = [inputs.color, inputs.depth, inputs.motion, inputs.output, inputs.mask];
+        let textures = [
+            inputs.color,
+            inputs.depth,
+            inputs.motion,
+            inputs.output,
+            inputs.mask,
+        ];
         let sizes = [(rw, rh), (rw, rh), (rw, rh), (ow, oh), (rw, rh)];
         // (the picture's resource is plain UNORM and drawn through an sRGB view: see
         // `temporal_targets`. DLSS takes its sRGB-encoded numbers as they are, as FSR 3 does:
         // read through an sRGB view it made them linear and gave them back so, too dark)
-        let formats = [inputs.color.format(), inputs.depth.format(), inputs.motion.format(), inputs.output.format(), inputs.mask.format()];
+        let formats = [
+            inputs.color.format(),
+            inputs.depth.format(),
+            inputs.motion.format(),
+            inputs.output.format(),
+            inputs.mask.format(),
+        ];
         // (the states the scene's submit leaves them in: `temporal_end_of_scene` makes sure the
         // last pass on each is a render pass)
         let depth_at = 1;
         let mut res: [Resource; 5] = match &self.backend {
             Backend::Dx12 { .. } => {
                 let raw = |t: &wgpu::Texture| -> Result<ID3D12Resource> {
-                    let h = unsafe { t.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 resource under a DLSS texture"))?;
+                    let h = unsafe { t.as_hal::<wgpu_hal::api::Dx12>() }
+                        .ok_or_else(|| anyhow!("no Direct3D 12 resource under a DLSS texture"))?;
                     Ok(unsafe { h.raw_resource() }.clone())
                 };
                 let mut out = Vec::with_capacity(5);
                 for (k, t) in textures.iter().enumerate() {
-                    let state = if k == depth_at { D3D12_RESOURCE_STATE_DEPTH_WRITE } else { D3D12_RESOURCE_STATE_RENDER_TARGET };
-                    out.push(blank(raw(t)?.as_raw(), state.0 as u32, dxgi_format(formats[k]), sizes[k]));
+                    let state = if k == depth_at {
+                        D3D12_RESOURCE_STATE_DEPTH_WRITE
+                    } else {
+                        D3D12_RESOURCE_STATE_RENDER_TARGET
+                    };
+                    out.push(blank(
+                        raw(t)?.as_raw(),
+                        state.0 as u32,
+                        dxgi_format(formats[k]),
+                        sizes[k],
+                    ));
                 }
                 out.try_into().map_err(|_| anyhow!("five resources"))?
             }
@@ -943,21 +1228,50 @@ impl Runtime {
                     let (image, memory) = super::vulkan::image_and_memory(t)?;
                     let view = super::vulkan::view(inputs.views[order[k]])?;
                     let depth = k == depth_at;
-                    let layout = if depth { vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL } else { vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL };
-                    let mut r = blank(vk::Handle::as_raw(image) as *mut c_void, layout.as_raw() as u32, super::vulkan::format(formats[k]).as_raw() as u32, sizes[k]);
+                    let layout = if depth {
+                        vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                    } else {
+                        vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
+                    };
+                    let mut r = blank(
+                        vk::Handle::as_raw(image) as *mut c_void,
+                        layout.as_raw() as u32,
+                        super::vulkan::format(formats[k]).as_raw() as u32,
+                        sizes[k],
+                    );
                     r.memory = vk::Handle::as_raw(memory) as *mut c_void;
                     r.view = vk::Handle::as_raw(view) as *mut c_void;
-                    r.flags = if t.format() != formats[k] { vk::ImageCreateFlags::MUTABLE_FORMAT.as_raw() } else { 0 };
+                    r.flags = if t.format() != formats[k] {
+                        vk::ImageCreateFlags::MUTABLE_FORMAT.as_raw()
+                    } else {
+                        0
+                    };
                     r.usage = super::vulkan::usage(t.usage(), depth).as_raw();
                     out.push(r);
                 }
                 out.try_into().map_err(|_| anyhow!("five resources"))?
             }
         };
-        let render_extent = Extent { top: 0, left: 0, width: rw, height: rh };
-        let output_extent = Extent { top: 0, left: 0, width: ow, height: oh };
+        let render_extent = Extent {
+            top: 0,
+            left: 0,
+            width: rw,
+            height: rh,
+        };
+        let output_extent = Extent {
+            top: 0,
+            left: 0,
+            width: ow,
+            height: oh,
+        };
         let [c0, c1, c2, c3, c4] = &mut res;
-        let tag = |r: &mut Resource, kind: u32, extent: Extent| ResourceTag { base: Base::new(RESOURCE_TAG, 1), resource: r, kind, lifecycle: VALID_UNTIL_EVALUATE, extent };
+        let tag = |r: &mut Resource, kind: u32, extent: Extent| ResourceTag {
+            base: Base::new(RESOURCE_TAG, 1),
+            resource: r,
+            kind,
+            lifecycle: VALID_UNTIL_EVALUATE,
+            extent,
+        };
         let tags = [
             tag(c0, BUFFER_SCALING_INPUT_COLOR, render_extent),
             tag(c1, BUFFER_DEPTH, render_extent),
@@ -967,13 +1281,24 @@ impl Runtime {
         ];
         let mut token: *const c_void = std::ptr::null();
         self.frame = self.frame.wrapping_add(1);
-        check("slGetNewFrameToken", unsafe { (self.get_new_frame_token)(&mut token, &self.frame) })?;
+        check("slGetNewFrameToken", unsafe {
+            (self.get_new_frame_token)(&mut token, &self.frame)
+        })?;
         if token.is_null() {
             bail!("slGetNewFrameToken returned no token");
         }
         let f2 = |v: [f32; 2]| Float2 { x: v[0], y: v[1] };
-        let f3 = |v: [f32; 3]| Float3 { x: v[0], y: v[1], z: v[2] };
-        let identity = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]];
+        let f3 = |v: [f32; 3]| Float3 {
+            x: v[0],
+            y: v[1],
+            z: v[2],
+        };
+        let identity = [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ];
         let constants = Constants {
             base: Base::new(CONSTANTS, 2),
             camera_view_to_clip: c.view_to_clip,
@@ -1007,13 +1332,27 @@ impl Runtime {
                 let list = ring.begin()?;
                 (list.as_raw(), Some(list))
             }
-            Backend::Vulkan { ring, .. } => (vk::Handle::as_raw(ring.begin()?) as *mut c_void, None),
+            Backend::Vulkan { ring, .. } => {
+                (vk::Handle::as_raw(ring.begin()?) as *mut c_void, None)
+            }
         };
         let recorded = (|| -> Result<()> {
-            check("slSetConstants", unsafe { (self.set_constants)(&constants, token, &self.viewport) })?;
-            check("slSetTagForFrame", unsafe { (self.set_tag_for_frame)(token, &self.viewport, tags.as_ptr(), tags.len() as u32, list_ptr) })?;
+            check("slSetConstants", unsafe {
+                (self.set_constants)(&constants, token, &self.viewport)
+            })?;
+            check("slSetTagForFrame", unsafe {
+                (self.set_tag_for_frame)(
+                    token,
+                    &self.viewport,
+                    tags.as_ptr(),
+                    tags.len() as u32,
+                    list_ptr,
+                )
+            })?;
             let inputs: [*const Base; 1] = [&self.viewport.base];
-            check("slEvaluateFeature(DLSS)", unsafe { (self.evaluate_feature)(FEATURE_DLSS, token, inputs.as_ptr(), 1, list_ptr) })?;
+            check("slEvaluateFeature(DLSS)", unsafe {
+                (self.evaluate_feature)(FEATURE_DLSS, token, inputs.as_ptr(), 1, list_ptr)
+            })?;
             Ok(())
         })();
         // (closed and submitted even when a call above failed: an empty list does no harm, and
@@ -1021,7 +1360,8 @@ impl Runtime {
         drop(dx12_list);
         match &mut self.backend {
             Backend::Dx12 { ring, .. } => {
-                let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 queue under wgpu's"))?;
+                let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Dx12>() }
+                    .ok_or_else(|| anyhow!("no Direct3D 12 queue under wgpu's"))?;
                 let raw_queue = queue_hal.as_raw().clone();
                 drop(queue_hal);
                 ring.submit(&raw_queue)?;
@@ -1049,7 +1389,10 @@ impl Drop for Runtime {
             }
             let r = (self.shutdown)();
             if r != 0 {
-                log::warn!("DLSS: Streamline did not shut down cleanly: {}", result_name(r));
+                log::warn!(
+                    "DLSS: Streamline did not shut down cleanly: {}",
+                    result_name(r)
+                );
             }
             let _ = FreeLibrary(self.module);
         }

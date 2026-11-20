@@ -184,17 +184,10 @@ mod weather_cache_tests {
             Vec::new(),
             vec![("Weather/test.owt".into(), "Cached weather".into())],
         ] {
-            let mut app = crate::assemble_app(
-                crate::Args::parse_from(["openomsi"]),
-                Default::default(),
-            );
-            app.net.lan = Some(omsi_net::LanSession::host(
-                0,
-                "host",
-                Default::default(),
-                false,
-            )
-            .unwrap());
+            let mut app =
+                crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+            app.net.lan =
+                Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
             app.shell.pause_category = navigation::Category::Online;
             app.menus.online_weather.set(weather.clone()).unwrap();
             for _ in 0..2 {
@@ -215,10 +208,7 @@ mod weather_cache_tests {
 
     #[test]
     fn hidden_online_page_does_not_load_weather() {
-        let app = crate::assemble_app(
-            crate::Args::parse_from(["openomsi"]),
-            Default::default(),
-        );
+        let app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
         from_app(&app);
         assert!(app.menus.online_weather.get().is_none());
     }

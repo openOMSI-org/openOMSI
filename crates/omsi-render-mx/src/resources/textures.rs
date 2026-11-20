@@ -1,8 +1,8 @@
 //! Textures on the GPU: uploads (prepared off the main thread, or with their mips made on
 //! the GPU), render targets, replacing, shrinking and rebinding them.
 
-use crate::*;
 use crate::pipelines::mip::MipAverage;
+use crate::*;
 
 #[cfg(test)]
 #[path = "texture_memory_tests.rs"]
@@ -36,9 +36,18 @@ pub(crate) fn next_gen() -> u64 {
 impl GpuTexture {
     /// A slot showing `view` (a picture the renderer draws: the one behind the rain on the
     /// glass), with `texture` a small stand-in the slot's bookkeeping asks about.
-    pub(crate) fn showing(texture: mx::Texture,
-        view: mx::TextureView, size: (u32, u32)) -> GpuTexture {
-        GpuTexture { texture, view, size, bytes: 0, generation: next_gen() }
+    pub(crate) fn showing(
+        texture: mx::Texture,
+        view: mx::TextureView,
+        size: (u32, u32),
+    ) -> GpuTexture {
+        GpuTexture {
+            texture,
+            view,
+            size,
+            bytes: 0,
+            generation: next_gen(),
+        }
     }
 
     pub(crate) fn new(texture: mx::Texture, size: (u32, u32), bytes: u64) -> GpuTexture {
@@ -58,10 +67,12 @@ impl GpuTexture {
 /// Set where a texture could not be made for want of graphics memory (see
 /// [`try_create_texture`]); read with the device's own out-of-memory flag by
 /// `Renderer::take_out_of_memory`.
-pub(crate) static TEXTURE_OUT_OF_MEMORY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static TEXTURE_OUT_OF_MEMORY: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 static MALFORMED_MIP_UPLOADS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-static FAILED_TEXTURE_CREATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static FAILED_TEXTURE_CREATIONS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 /// Cumulative texture upload failures in this process, for the game log.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -79,7 +90,14 @@ pub fn texture_upload_faults() -> TextureUploadFaults {
 }
 
 /// Count a rejected upload, including the level and the byte count needed to reproduce it.
-fn report_short_mip(w: u32, h: u32, format: omsi_texture::PixelFormat, level: usize, have: usize, need: usize) {
+fn report_short_mip(
+    w: u32,
+    h: u32,
+    format: omsi_texture::PixelFormat,
+    level: usize,
+    have: usize,
+    need: usize,
+) {
     let n = MALFORMED_MIP_UPLOADS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
     if n <= 5 || n % 100 == 0 {
         log::warn!(
@@ -109,7 +127,8 @@ fn first_short_mip(data: &omsi_texture::TextureData) -> Option<(usize, usize, us
 /// main pass among them: a black picture for the rest of the session while the sounds and
 /// the menus went on (#2472). A texture that cannot be made is drawn as a plain stand-in
 /// instead, and when memory ran short the game keeps fewer textures from then on.
-pub(crate) fn try_create_texture(device: &mx::Device,
+pub(crate) fn try_create_texture(
+    device: &mx::Device,
     desc: &mx::TextureDescriptor,
 ) -> Option<mx::Texture> {
     create_texture_checked(device, desc).ok()
@@ -126,15 +145,27 @@ thread_local! {
     static TEXTURE_TEST_MAX_BYTES: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
 }
 
-fn create_texture_checked(device: &mx::Device,
+fn create_texture_checked(
+    device: &mx::Device,
     desc: &mx::TextureDescriptor,
 ) -> Result<mx::Texture, TextureCreationError> {
     if desc.size.width == 0 || desc.size.height == 0 {
-        log::warn!("texture {}x{}: drawn plain instead", desc.size.width, desc.size.height);
+        log::warn!(
+            "texture {}x{}: drawn plain instead",
+            desc.size.width,
+            desc.size.height
+        );
         return Err(TextureCreationError::Invalid);
     }
     #[cfg(test)]
-    if TEXTURE_TEST_MAX_BYTES.get().is_some_and(|max| texture_bytes(desc.format, desc.size.width, desc.size.height, desc.mip_level_count) > max) {
+    if TEXTURE_TEST_MAX_BYTES.get().is_some_and(|max| {
+        texture_bytes(
+            desc.format,
+            desc.size.width,
+            desc.size.height,
+            desc.mip_level_count,
+        ) > max
+    }) {
         return Err(TextureCreationError::OutOfMemory);
     }
     let e = match device.create_texture(desc) {
@@ -145,7 +176,10 @@ fn create_texture_checked(device: &mx::Device,
     if out_of_memory {
         TEXTURE_OUT_OF_MEMORY.store(true, std::sync::atomic::Ordering::Relaxed);
     }
-    let reason = if out_of_memory { TextureCreationError::OutOfMemory } else { TextureCreationError::Invalid 
+    let reason = if out_of_memory {
+        TextureCreationError::OutOfMemory
+    } else {
+        TextureCreationError::Invalid
     };
     let n = FAILED_TEXTURE_CREATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if n < 5 || n % 1000 == 0 {
@@ -168,15 +202,20 @@ fn smaller_upload(data: &omsi_texture::TextureData) -> Option<omsi_texture::Text
     }
     let mut small = fit_texture(data, side / 2)?;
     if small.format.is_compressed() && (small.width % 4 != 0 || small.height % 4 != 0) {
-        let rgba = small.format.decode_level(small.levels.first()?, small.width, small.height, true);
+        let rgba =
+            small
+                .format
+                .decode_level(small.levels.first()?, small.width, small.height, true);
         small.format = omsi_texture::PixelFormat::Rgba8;
         small.levels = vec![rgba];
         small.gpu_mips = true;
     }
-    if small.format == omsi_texture::PixelFormat::Rgba8 && small.levels.len() == 1 && small.gpu_mips {
+    if small.format == omsi_texture::PixelFormat::Rgba8 && small.levels.len() == 1 && small.gpu_mips
+    {
         let (mut w, mut h) = (small.width, small.height);
         while w > 1 || h > 1 {
-            let (rgba, nw, nh) = omsi_texture::bc::downsample_alpha_weighted(small.levels.last()?, w, h);
+            let (rgba, nw, nh) =
+                omsi_texture::bc::downsample_alpha_weighted(small.levels.last()?, w, h);
             small.levels.push(rgba);
             (w, h) = (nw, nh);
         }
@@ -290,18 +329,21 @@ pub fn prepare_texture(
         height: h,
         depth_or_array_layers: 1,
     };
-    let made = create_texture_checked(device, &mx::TextureDescriptor {
-        label: None,
-        size,
-        mip_level_count: levels,
-        sample_count: 1,
-        dimension: mx::TextureDimension::D2,
-        format,
-        usage: mx::TextureUsages::TEXTURE_BINDING
+    let made = create_texture_checked(
+        device,
+        &mx::TextureDescriptor {
+            label: None,
+            size,
+            mip_level_count: levels,
+            sample_count: 1,
+            dimension: mx::TextureDimension::D2,
+            format,
+            usage: mx::TextureUsages::TEXTURE_BINDING
                 | mx::TextureUsages::COPY_DST
                 | mx::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
+            view_formats: &[],
+        },
+    );
     let texture = match made {
         Ok(texture) => texture,
         Err(TextureCreationError::OutOfMemory) => {
@@ -310,7 +352,9 @@ pub fn prepare_texture(
                 .and_then(|small| prepare_texture(device, queue, &small))
                 .or_else(|| Some(PreparedTexture(stand_in_texture(device, queue))));
         }
-        Err(TextureCreationError::Invalid) => return Some(PreparedTexture(stand_in_texture(device, queue))),
+        Err(TextureCreationError::Invalid) => {
+            return Some(PreparedTexture(stand_in_texture(device, queue)));
+        }
     };
     let (bw, bh) = format.block_dimensions();
     let block = format.block_copy_size().unwrap_or(4);
@@ -354,7 +398,13 @@ pub(crate) fn upload_texture(
     img: &omsi_texture::Image,
     mipmaps: bool,
 ) -> GpuTexture {
-    upload_texture_format(device, queue, img, mipmaps, mx::TextureFormat::Rgba8UnormSrgb,)
+    upload_texture_format(
+        device,
+        queue,
+        img,
+        mipmaps,
+        mx::TextureFormat::Rgba8UnormSrgb,
+    )
 }
 
 pub(crate) fn upload_texture_format(
@@ -374,16 +424,19 @@ pub(crate) fn upload_texture_format(
         height: img.height,
         depth_or_array_layers: 1,
     };
-    let Some(texture) = try_create_texture(device, &mx::TextureDescriptor {
-        label: None,
-        size,
-        mip_level_count: mip_count,
-        sample_count: 1,
-        dimension: mx::TextureDimension::D2,
-        format,
-        usage: mx::TextureUsages::TEXTURE_BINDING | mx::TextureUsages::COPY_DST,
-        view_formats: &[],
-    }) else {
+    let Some(texture) = try_create_texture(
+        device,
+        &mx::TextureDescriptor {
+            label: None,
+            size,
+            mip_level_count: mip_count,
+            sample_count: 1,
+            dimension: mx::TextureDimension::D2,
+            format,
+            usage: mx::TextureUsages::TEXTURE_BINDING | mx::TextureUsages::COPY_DST,
+            view_formats: &[],
+        },
+    ) else {
         return stand_in_texture(device, queue);
     };
     // CPU box-filter mip chain
@@ -450,12 +503,7 @@ pub(crate) fn upload_texture_format(
         texture,
         view,
         size: (img.width, img.height),
-        bytes: texture_bytes(
-            format,
-            img.width,
-            img.height,
-            mip_count,
-        ),
+        bytes: texture_bytes(format, img.width, img.height, mip_count),
         generation: next_gen(),
     }
 }
@@ -464,7 +512,10 @@ pub(crate) fn upload_texture_format(
 /// or 4096 on older ones) made to fit: its smaller levels when it has them, else the picture
 /// halved until it fits. None when it fits as it is. A too big texture used to be a device
 /// error, and the material that used it one too.
-pub fn fit_texture(data: &omsi_texture::TextureData, max: u32) -> Option<omsi_texture::TextureData> {
+pub fn fit_texture(
+    data: &omsi_texture::TextureData,
+    max: u32,
+) -> Option<omsi_texture::TextureData> {
     use omsi_texture::PixelFormat;
     let (w, h) = (data.width.max(1), data.height.max(1));
     if w <= max && h <= max {
@@ -476,9 +527,12 @@ pub fn fit_texture(data: &omsi_texture::TextureData, max: u32) -> Option<omsi_te
     }
     if (k as usize) < data.levels.len() {
         return Some(omsi_texture::TextureData {
-            width: (w >> k).max(1), height: (h >> k).max(1),
-            levels: data.levels[k as usize..].to_vec(), format: data.format,
-            has_alpha: data.has_alpha, gpu_mips: data.gpu_mips,
+            width: (w >> k).max(1),
+            height: (h >> k).max(1),
+            levels: data.levels[k as usize..].to_vec(),
+            format: data.format,
+            has_alpha: data.has_alpha,
+            gpu_mips: data.gpu_mips,
         });
     }
     // one level only: decode it and halve it
@@ -492,7 +546,14 @@ pub fn fit_texture(data: &omsi_texture::TextureData, max: u32) -> Option<omsi_te
         rgba = next;
         (cw, ch) = (nw, nh);
     }
-    Some(omsi_texture::TextureData { width: cw, height: ch, format: PixelFormat::Rgba8, levels: vec![rgba], has_alpha: data.has_alpha, gpu_mips: true })
+    Some(omsi_texture::TextureData {
+        width: cw,
+        height: ch,
+        format: PixelFormat::Rgba8,
+        levels: vec![rgba],
+        has_alpha: data.has_alpha,
+        gpu_mips: true,
+    })
 }
 
 /// A size halved (both sides, as `fit_texture` halves a picture) until neither passes `max`.
@@ -520,20 +581,37 @@ pub(crate) fn fit_image(img: &omsi_texture::Image, max: u32) -> Option<omsi_text
         gpu_mips: true,
     };
     let small = fit_texture(&data, max)?;
-    Some(omsi_texture::Image { width: small.width, height: small.height, rgba: small.levels.into_iter().next().unwrap_or_default(), has_alpha: img.has_alpha })
+    Some(omsi_texture::Image {
+        width: small.width,
+        height: small.height,
+        rgba: small.levels.into_iter().next().unwrap_or_default(),
+        has_alpha: img.has_alpha,
+    })
 }
 
 #[cfg(test)]
 pub(crate) mod fit_tests {
     #[test]
     fn a_big_picture_is_halved_until_it_fits() {
-        let data = omsi_texture::TextureData { width: 8, height: 4, format: omsi_texture::PixelFormat::Rgba8, levels: vec![vec![200; 8 * 4 * 4]], has_alpha: false, gpu_mips: true };
+        let data = omsi_texture::TextureData {
+            width: 8,
+            height: 4,
+            format: omsi_texture::PixelFormat::Rgba8,
+            levels: vec![vec![200; 8 * 4 * 4]],
+            has_alpha: false,
+            gpu_mips: true,
+        };
         let small = super::fit_texture(&data, 2).unwrap();
         assert_eq!((small.width, small.height), (2, 1));
         assert_eq!(small.levels[0].len(), 2 * 4);
         assert!(super::fit_texture(&data, 8).is_none());
         // a picture of the game's own, and a size, the same way
-        let img = omsi_texture::Image { width: 5000, height: 300, rgba: vec![9; 5000 * 300 * 4], has_alpha: true };
+        let img = omsi_texture::Image {
+            width: 5000,
+            height: 300,
+            rgba: vec![9; 5000 * 300 * 4],
+            has_alpha: true,
+        };
         let small = super::fit_image(&img, 2048).unwrap();
         assert_eq!((small.width, small.height), (1250, 75));
         assert_eq!(small.rgba.len(), 1250 * 75 * 4);
@@ -569,14 +647,30 @@ impl Renderer {
 
     /// Unconverted RGBA channels for dynamic masks and other data rather than colour.
     pub fn add_data_texture(&self, scene: &mut Scene, img: &omsi_texture::Image) -> TextureId {
-        let texture = upload_texture_format(&self.device, &self.queue, img, false, mx::TextureFormat::Rgba8Unorm,);
+        let texture = upload_texture_format(
+            &self.device,
+            &self.queue,
+            img,
+            false,
+            mx::TextureFormat::Rgba8Unorm,
+        );
         scene.textures.push(texture);
         scene.textures.len() - 1
     }
 
     /// A transparent texture for a vehicle's displays; `mipmaps`: with the levels its text is drawn into.
-    pub fn add_blank_texture(&self, scene: &mut Scene, width: u32, height: u32, mipmaps: bool) -> TextureId {
-        let (width, height) = fit_size(width.max(1), height.max(1), self.device.limits().max_texture_dimension_2d);
+    pub fn add_blank_texture(
+        &self,
+        scene: &mut Scene,
+        width: u32,
+        height: u32,
+        mipmaps: bool,
+    ) -> TextureId {
+        let (width, height) = fit_size(
+            width.max(1),
+            height.max(1),
+            self.device.limits().max_texture_dimension_2d,
+        );
         let mipmaps = mipmaps && width > 1 && height > 1;
         // A newly allocated GPU texture has undefined contents. Script displays may be
         // sampled before their first `STUnlock`, so initialise them as transparent rather
@@ -585,8 +679,17 @@ impl Renderer {
         let texture = if true {
             self.cleared_texture(width, height, mipmaps)
         } else {
-            let image = omsi_texture::Image { width, height, rgba: vec![0; (width * height * 4) as usize], has_alpha: true };
-            if mipmaps { self.upload_texture_gpu_mips(&image) } else { upload_texture(&self.device, &self.queue, &image, false) }
+            let image = omsi_texture::Image {
+                width,
+                height,
+                rgba: vec![0; (width * height * 4) as usize],
+                has_alpha: true,
+            };
+            if mipmaps {
+                self.upload_texture_gpu_mips(&image)
+            } else {
+                upload_texture(&self.device, &self.queue, &image, false)
+            }
         };
         scene.textures.push(texture);
         scene.textures.len() - 1
@@ -594,7 +697,11 @@ impl Renderer {
 
     /// An sRGB texture cleared to transparent on the GPU, made as `upload_texture` (`upload_texture_gpu_mips`) makes it.
     fn cleared_texture(&self, width: u32, height: u32, mipmaps: bool) -> GpuTexture {
-        let mip_count = if mipmaps { (32 - width.max(height).leading_zeros()).max(1) } else { 1 };
+        let mip_count = if mipmaps {
+            (32 - width.max(height).leading_zeros()).max(1)
+        } else {
+            1
+        };
         let usage = if mipmaps {
             mx::TextureUsages::TEXTURE_BINDING
                 | mx::TextureUsages::COPY_DST
@@ -604,16 +711,23 @@ impl Renderer {
             mx::TextureUsages::TEXTURE_BINDING | mx::TextureUsages::COPY_DST
         };
         let format = mx::TextureFormat::Rgba8UnormSrgb;
-        let Some(texture) = try_create_texture(&self.device, &mx::TextureDescriptor {
-            label: None,
-            size: mx::Extent3d { width, height, depth_or_array_layers: 1 },
-            mip_level_count: mip_count,
-            sample_count: 1,
-            dimension: mx::TextureDimension::D2,
-            format,
-            usage,
-            view_formats: &[],
-        }) else {
+        let Some(texture) = try_create_texture(
+            &self.device,
+            &mx::TextureDescriptor {
+                label: None,
+                size: mx::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: mip_count,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format,
+                usage,
+                view_formats: &[],
+            },
+        ) else {
             return stand_in_texture(&self.device, &self.queue);
         };
         // (submitted now: a script's first picture, written after, then comes after the clear)
@@ -623,28 +737,55 @@ impl Renderer {
         let view = texture
             .create_view(&Default::default())
             .expect("mX: a texture view");
-        GpuTexture { texture, view, size: (width, height), bytes: texture_bytes(format, width, height, mip_count), generation: next_gen() }
+        GpuTexture {
+            texture,
+            view,
+            size: (width, height),
+            bytes: texture_bytes(format, width, height, mip_count),
+            generation: next_gen(),
+        }
     }
 
     /// The PBR set found beside diffuse texture `diffuse` (`omsi_texture::pbr`): its maps up
     /// (as data, not colours) and known to the materials made with that texture from now on.
-    pub fn add_pbr_maps(&self, scene: &mut Scene, diffuse: TextureId, set: &omsi_texture::pbr::PbrImages) {
+    pub fn add_pbr_maps(
+        &self,
+        scene: &mut Scene,
+        diffuse: TextureId,
+        set: &omsi_texture::pbr::PbrImages,
+    ) {
         // stored so that the sRGB textures give back the bytes as they are: a normal map's
         // 128 read as 0.22 through the sRGB curve bent every normal
         let lut: Vec<u8> = (0..256)
             .map(|v| {
                 let l = v as f32 / 255.0;
-                let s = if l <= 0.003_130_8 { l * 12.92 } else { 1.055 * l.powf(1.0 / 2.4) - 0.055 };
+                let s = if l <= 0.003_130_8 {
+                    l * 12.92
+                } else {
+                    1.055 * l.powf(1.0 / 2.4) - 0.055
+                };
                 (s * 255.0 + 0.5).clamp(0.0, 255.0) as u8
             })
             .collect();
         let mut up = |img: &omsi_texture::Image| {
-            let data = omsi_texture::Image { width: img.width, height: img.height, rgba: img.rgba.iter().map(|b| lut[*b as usize]).collect(), has_alpha: false };
+            let data = omsi_texture::Image {
+                width: img.width,
+                height: img.height,
+                rgba: img.rgba.iter().map(|b| lut[*b as usize]).collect(),
+                has_alpha: false,
+            };
             self.add_texture(scene, &data, true)
         };
         let normal = set.normal.as_ref().map(&mut up);
         let orm = set.orm.as_ref().map(&mut up);
-        scene.pbr_maps.insert(diffuse, PbrMaps { normal, orm, flags: set.flags });
+        scene.pbr_maps.insert(
+            diffuse,
+            PbrMaps {
+                normal,
+                orm,
+                flags: set.flags,
+            },
+        );
     }
 
     /// The device takes BC1-3 (DXT) textures.
@@ -671,7 +812,14 @@ impl Renderer {
         // Also validate the RGBA single-level path, which builds its mip chain on the GPU
         // and therefore returns None from prepare_texture.
         if let Some((level, have, need)) = first_short_mip(data) {
-            report_short_mip(data.width.max(1), data.height.max(1), data.format, level, have, need);
+            report_short_mip(
+                data.width.max(1),
+                data.height.max(1),
+                data.format,
+                level,
+                have,
+                need,
+            );
             return stand_in_texture(&self.device, &self.queue);
         }
         if let Some(t) = prepare_texture(&self.device, &self.queue, data) {
@@ -724,10 +872,25 @@ impl Renderer {
         self.upload_rgba_mips_with(width, height, rgba, MipAverage::ByCoverage)
     }
 
-    fn upload_rgba_mips_with(&self, width: u32, height: u32, rgba: &[u8], average: MipAverage) -> GpuTexture {
-        let need = (width as usize).saturating_mul(height as usize).saturating_mul(4);
+    fn upload_rgba_mips_with(
+        &self,
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+        average: MipAverage,
+    ) -> GpuTexture {
+        let need = (width as usize)
+            .saturating_mul(height as usize)
+            .saturating_mul(4);
         if rgba.len() < need {
-            report_short_mip(width, height, omsi_texture::PixelFormat::Rgba8, 0, rgba.len(), need);
+            report_short_mip(
+                width,
+                height,
+                omsi_texture::PixelFormat::Rgba8,
+                0,
+                rgba.len(),
+                need,
+            );
             return stand_in_texture(&self.device, &self.queue);
         }
         let img = RgbaRef {
@@ -741,23 +904,29 @@ impl Renderer {
             height: img.height,
             depth_or_array_layers: 1,
         };
-        let made = create_texture_checked(&self.device, &mx::TextureDescriptor {
-            label: None,
-            size,
-            mip_level_count: mip_count,
-            sample_count: 1,
-            dimension: mx::TextureDimension::D2,
+        let made = create_texture_checked(
+            &self.device,
+            &mx::TextureDescriptor {
+                label: None,
+                size,
+                mip_level_count: mip_count,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
                 format: mx::TextureFormat::Rgba8UnormSrgb,
                 usage: mx::TextureUsages::TEXTURE_BINDING
                     | mx::TextureUsages::COPY_DST
                     | mx::TextureUsages::COPY_SRC
                     | mx::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
+                view_formats: &[],
+            },
+        );
         let texture = match made {
             Ok(texture) => texture,
-            Err(TextureCreationError::OutOfMemory) if average == MipAverage::ByCoverage && width.max(height) > 1 => {
-                let (small, w, h) = omsi_texture::bc::downsample_alpha_weighted(rgba, width, height);
+            Err(TextureCreationError::OutOfMemory)
+                if average == MipAverage::ByCoverage && width.max(height) > 1 =>
+            {
+                let (small, w, h) =
+                    omsi_texture::bc::downsample_alpha_weighted(rgba, width, height);
                 return self.upload_rgba_mips_with(w, h, &small, average);
             }
             Err(_) => return stand_in_texture(&self.device, &self.queue),
@@ -800,8 +969,17 @@ impl Renderer {
     /// Build all lower levels of `texture` by rendering each level from the last. The
     /// texture has already received its level-zero pixels and was created with render-attach
     /// usage by [`upload_rgba_gpu_mips`].
-    pub(crate) fn generate_mip_chain(&self, texture: &mx::Texture, mip_count: u32, average: MipAverage) {
-        let pipeline = if average == MipAverage::Independent { &self.mip_text_pipeline } else { &self.mip_pipeline };
+    pub(crate) fn generate_mip_chain(
+        &self,
+        texture: &mx::Texture,
+        mip_count: u32,
+        average: MipAverage,
+    ) {
+        let pipeline = if average == MipAverage::Independent {
+            &self.mip_text_pipeline
+        } else {
+            &self.mip_pipeline
+        };
         let mut encoder = self.device.create_command_encoder(Some("mips"));
         for level in 1..mip_count {
             let src = texture
@@ -860,7 +1038,12 @@ impl Renderer {
     /// False when `id` is no texture that can be drawn into.
     pub fn clear_texture(&self, scene: &Scene, id: TextureId, color: mx::Color) -> bool {
         // A view of a whole mip chain is no colour attachment.
-        let Some(t) = scene.textures.get(id).filter(|t| t.texture.usage().contains(mx::TextureUsages::RENDER_ATTACHMENT) && t.texture.mip_level_count() == 1) else {
+        let Some(t) = scene.textures.get(id).filter(|t| {
+            t.texture
+                .usage()
+                .contains(mx::TextureUsages::RENDER_ATTACHMENT)
+                && t.texture.mip_level_count() == 1
+        }) else {
             return false;
         };
         let mut encoder = self.device.create_command_encoder(Some("clear texture"));
@@ -871,7 +1054,8 @@ impl Renderer {
                 resolve_target: None,
                 ops: mx::Operations {
                     load: mx::LoadOp::Clear(color),
-                    store: mx::StoreOp::Store, },
+                    store: mx::StoreOp::Store,
+                },
             })],
             depth_stencil_attachment: None,
             timestamp_writes: None,
@@ -883,7 +1067,11 @@ impl Renderer {
 
     pub fn upload_speed_mb_s(&self) -> f64 {
         let n = 1024u32;
-        let size = mx::Extent3d { width: n, height: n, depth_or_array_layers: 1 };
+        let size = mx::Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        };
         let texture = self
             .device
             .create_texture(&mx::TextureDescriptor {
@@ -926,7 +1114,11 @@ impl Renderer {
 
     /// A texture the scene can be rendered into (`render_to_texture`), e.g. a rear-view mirror.
     pub fn add_render_texture(&self, scene: &mut Scene, width: u32, height: u32) -> TextureId {
-        let (width, height) = fit_size(width.max(1), height.max(1), self.device.limits().max_texture_dimension_2d);
+        let (width, height) = fit_size(
+            width.max(1),
+            height.max(1),
+            self.device.limits().max_texture_dimension_2d,
+        );
         let size = mx::Extent3d {
             width,
             height,
@@ -977,18 +1169,34 @@ impl Renderer {
         let view = t.view.clone();
         let (w, h) = t.size;
         self.texture_aspect = Some(aspect);
-        self.render_inner(scene, &view, w, h, camera, lighting, false, Some(id), None, false);
+        self.render_inner(
+            scene,
+            &view,
+            w,
+            h,
+            camera,
+            lighting,
+            false,
+            Some(id),
+            None,
+            false,
+        );
         self.texture_aspect = None;
     }
 
     /// Replace the pixels of a texture (same size as when created, no mipmaps regenerated).
     pub fn update_texture(&self, scene: &Scene, id: TextureId, img: &omsi_texture::Image) {
-        let Some(gt) = scene.textures.get(id) else { return };
+        let Some(gt) = scene.textures.get(id) else {
+            return;
+        };
         // (a picture larger than the chip takes went up halved, see `fit_image`; one larger
         // than its texture is not written - a device error each frame)
         let fitted = fit_image(img, self.device.limits().max_texture_dimension_2d);
         let img = fitted.as_ref().unwrap_or(img);
-        if img.width > gt.size.0 || img.height > gt.size.1 || img.rgba.len() < (img.width * img.height * 4) as usize {
+        if img.width > gt.size.0
+            || img.height > gt.size.1
+            || img.rgba.len() < (img.width * img.height * 4) as usize
+        {
             return;
         }
         let t = &gt.texture;
@@ -1015,9 +1223,21 @@ impl Renderer {
             .expect("mX: a queue write");
     }
 
-    pub fn update_texture_rect(&self, scene: &Scene, id: TextureId, img: &omsi_texture::Image, [x, y, w, h]: [u32; 4]) {
-        let Some(gt) = scene.textures.get(id) else { return };
-        if (img.width, img.height) != gt.size || x + w > img.width || y + h > img.height || img.rgba.len() < (img.width * img.height * 4) as usize {
+    pub fn update_texture_rect(
+        &self,
+        scene: &Scene,
+        id: TextureId,
+        img: &omsi_texture::Image,
+        [x, y, w, h]: [u32; 4],
+    ) {
+        let Some(gt) = scene.textures.get(id) else {
+            return;
+        };
+        if (img.width, img.height) != gt.size
+            || x + w > img.width
+            || y + h > img.height
+            || img.rgba.len() < (img.width * img.height * 4) as usize
+        {
             return;
         }
         self.queue
@@ -1060,7 +1280,12 @@ impl Renderer {
         let img = fitted.as_ref().unwrap_or(img);
         let levels = (32 - img.width.max(img.height).leading_zeros()).max(1);
         if old.size != (img.width, img.height) || old.texture.mip_level_count() != levels {
-            scene.textures[id] = self.upload_rgba_mips_with(img.width, img.height, &img.rgba, MipAverage::Independent);
+            scene.textures[id] = self.upload_rgba_mips_with(
+                img.width,
+                img.height,
+                &img.rgba,
+                MipAverage::Independent,
+            );
             return true;
         }
         self.update_texture(scene, id, img);
@@ -1083,7 +1308,8 @@ impl Renderer {
         }
         let texture = self.upload_texture_data(data);
         let old = &scene.textures[id];
-        let lost_detail = data.width >= old.size.0 && data.height >= old.size.1
+        let lost_detail = data.width >= old.size.0
+            && data.height >= old.size.1
             && (texture.size.0 < old.size.0 || texture.size.1 < old.size.1);
         if texture.bytes == 0 || (old.bytes > 0 && lost_detail) {
             return false;
@@ -1185,13 +1411,22 @@ impl Renderer {
     /// [`Renderer::drop_top_levels_in`], [`Renderer::finish_level_drops`]): a submit of
     /// its own for each of the budget pass's up to 96 textures cost more than the copies.
     pub fn begin_level_drops(&self) -> LevelDrops {
-        LevelDrops { encoder: None, count: 0 }
+        LevelDrops {
+            encoder: None,
+            count: 0,
+        }
     }
 
     /// [`Renderer::drop_top_levels`], its copies recorded into `drops` (the slot takes the
     /// smaller texture at once; the copies run when the drops are finished, before anything
     /// drawn after them).
-    pub fn drop_top_levels_in(&self, drops: &mut LevelDrops, scene: &mut Scene, id: TextureId, n: u32) -> bool {
+    pub fn drop_top_levels_in(
+        &self,
+        drops: &mut LevelDrops,
+        scene: &mut Scene,
+        id: TextureId,
+        n: u32,
+    ) -> bool {
         let Some(t) = scene.textures.get(id) else {
             return false;
         };
@@ -1208,22 +1443,25 @@ impl Renderer {
         }
         let new_levels = levels - n;
         // (no memory for the smaller copy: the texture stays as it is)
-        let Some(texture) = try_create_texture(&self.device, &mx::TextureDescriptor {
-            label: None,
-            size: mx::Extent3d {
-                width: nw,
-                height: nh,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: new_levels,
-            sample_count: 1,
-            dimension: mx::TextureDimension::D2,
-            format,
-            usage: mx::TextureUsages::TEXTURE_BINDING
+        let Some(texture) = try_create_texture(
+            &self.device,
+            &mx::TextureDescriptor {
+                label: None,
+                size: mx::Extent3d {
+                    width: nw,
+                    height: nh,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: new_levels,
+                sample_count: 1,
+                dimension: mx::TextureDimension::D2,
+                format,
+                usage: mx::TextureUsages::TEXTURE_BINDING
                     | mx::TextureUsages::COPY_DST
                     | mx::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        }) else {
+                view_formats: &[],
+            },
+        ) else {
             return false;
         };
         let encoder = drops

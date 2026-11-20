@@ -60,7 +60,11 @@ fn the_cab_is_heard_by_how_far_in_the_eyes_are() {
     let xf = v.world_transform();
     let at = |x: f32, y: f32| xf.transform_point3(glam::Vec3::new(x, y, bb[5])).as_dvec3();
     let wall = bb[3] + bb[0] * 0.5;
-    assert_eq!(super::inside_amount(&v, at(wall + 1.0, bb[4])), 0.0, "outside");
+    assert_eq!(
+        super::inside_amount(&v, at(wall + 1.0, bb[4])),
+        0.0,
+        "outside"
+    );
     assert_eq!(super::inside_amount(&v, at(bb[3], bb[4])), 1.0, "the aisle");
     let half = super::inside_amount(&v, at(wall - super::CAB_SOUND_DEPTH * 0.5, bb[4]));
     assert!((half - 0.5).abs() < 0.02, "{half}");
@@ -71,7 +75,10 @@ fn the_cab_is_heard_by_how_far_in_the_eyes_are() {
 #[test]
 fn embankments_stop_a_step_above_the_footing() {
     let kerb = |_: f64, y: f64| Some(if y >= 0.0 { 0.12 } else { 0.0 });
-    assert!(ground_gradient(kerb, DVec2::new(3.0, 0.02), 0.12) <= MAX_WALK_GRADIENT, "a kerb is no embankment");
+    assert!(
+        ground_gradient(kerb, DVec2::new(3.0, 0.02), 0.12) <= MAX_WALK_GRADIENT,
+        "a kerb is no embankment"
+    );
     let slope = |deg: f64| move |_: f64, y: f64| Some(y.max(0.0) * deg.to_radians().tan());
     let walk_north = |ground: &dyn Fn(f64, f64) -> Option<f64>| {
         let (mut y, mut z) = (-0.8, 0.0);
@@ -93,7 +100,10 @@ fn embankments_stop_a_step_above_the_footing() {
     let embankment = walk_north(&slope(55.0));
     // (its foot, within the half span the gradient is taken over, still gives footing)
     let foot_allowance = GRADIENT_HALF_SPAN * 55f64.to_radians().tan();
-    assert!(embankment > STEP && embankment < STEP + foot_allowance, "climbed to {embankment:.2} m");
+    assert!(
+        embankment > STEP && embankment < STEP + foot_allowance,
+        "climbed to {embankment:.2} m"
+    );
     assert!(walk_north(&slope(20.0)) > 1.5, "the path");
 }
 
@@ -140,7 +150,11 @@ fn an_ai_bus_is_ridden_from_its_inside_only_in_the_walkers_own_eyes() {
     assert_eq!(f.ridden_ai(), None, "still settling");
     f.settle = 0.0;
     f.seat = None;
-    f.transit = Some(Transit::walk(DVec3::ZERO, DVec3::X, Some((BusId::Ai(7), glam::Vec3::ZERO))));
+    f.transit = Some(Transit::walk(
+        DVec3::ZERO,
+        DVec3::X,
+        Some((BusId::Ai(7), glam::Vec3::ZERO)),
+    ));
     assert_eq!(f.ridden_ai(), Some(7), "walking up the aisle");
     f.transit = Some(Transit::walk(DVec3::ZERO, DVec3::X, None));
     assert_eq!(f.ridden_ai(), None, "stepping out");
@@ -187,14 +201,32 @@ fn a_turn_is_a_curve_with_no_speed_lost_to_a_snap() {
 #[test]
 fn g_on_foot_sits_down_unless_it_is_the_get_up_chord() {
     use omsi_content::input::{KEY_CTRL, KEY_SHIFT};
-    let bind = |modifier| vec![omsi_content::KeyBinding { action: "get_up".into(), scan_code: 34, modifier }];
+    let bind = |modifier| {
+        vec![omsi_content::KeyBinding {
+            action: "get_up".into(),
+            scan_code: 34,
+            modifier,
+        }]
+    };
     let default = bind(KEY_CTRL | KEY_SHIFT);
-    assert!(super::get_up_chord(&default, true, true), "Ctrl+Shift+G steps out");
-    assert!(!super::get_up_chord(&default, false, true), "Shift+G while running sits down");
+    assert!(
+        super::get_up_chord(&default, true, true),
+        "Ctrl+Shift+G steps out"
+    );
+    assert!(
+        !super::get_up_chord(&default, false, true),
+        "Shift+G while running sits down"
+    );
     assert!(!super::get_up_chord(&default, true, false));
     assert!(!super::get_up_chord(&default, false, false));
-    assert!(super::get_up_chord(&bind(KEY_CTRL), true, false), "moved to Ctrl+G");
-    assert!(!super::get_up_chord(&[], true, true), "unbound: the walker keeps G");
+    assert!(
+        super::get_up_chord(&bind(KEY_CTRL), true, false),
+        "moved to Ctrl+G"
+    );
+    assert!(
+        !super::get_up_chord(&[], true, true),
+        "unbound: the walker keeps G"
+    );
 }
 
 #[test]
@@ -205,7 +237,9 @@ fn foot_key_keeps_screenshot_chord_and_rebound_pause() {
     );
     app.session.on_foot = Some(walker());
     let f6_scan = omsi_input::keys::dik_code(KeyCode::F6).unwrap();
-    app.input.game_keys.retain(|b| !b.action.eq_ignore_ascii_case("sim_pause"));
+    app.input
+        .game_keys
+        .retain(|b| !b.action.eq_ignore_ascii_case("sim_pause"));
     app.input.game_keys.push(omsi_content::KeyBinding {
         action: "sim_pause".into(),
         scan_code: f6_scan,

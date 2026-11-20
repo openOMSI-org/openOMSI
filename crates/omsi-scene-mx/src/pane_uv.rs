@@ -27,7 +27,9 @@ pub(crate) fn gpu_mesh(vt: &omsi_sim::VehicleType, i: usize) -> Option<Cow<'_, M
         .filter(|slot| {
             vm.overrides.iter().any(|m| {
                 omsi_sim::vehicle::override_slot(&vm.materials, m) == Some(*slot as usize)
-                    && m.alphascale.as_deref().is_some_and(|v| v.trim().to_ascii_lowercase().starts_with("rain_window"))
+                    && m.alphascale
+                        .as_deref()
+                        .is_some_and(|v| v.trim().to_ascii_lowercase().starts_with("rain_window"))
             })
         })
         .collect();
@@ -48,16 +50,34 @@ pub(crate) fn gpu_mesh(vt: &omsi_sim::VehicleType, i: usize) -> Option<Cow<'_, M
 /// raked pane unrolls without a seam: a normal a degree off between two triangles would
 /// shift the pattern by a few centimetres at the far end of a twelve-metre bus.
 pub fn metric_film_uvs(data: &MeshData, film: &[u32]) -> Option<MeshData> {
-    if data.indices.is_empty() || !film.iter().any(|s| data.ranges.iter().any(|r| r.2 == *s && r.1 > 0)) {
+    if data.indices.is_empty()
+        || !film
+            .iter()
+            .any(|s| data.ranges.iter().any(|r| r.2 == *s && r.1 > 0))
+    {
         return None;
     }
     // (the point's key: its position to a millimetre)
-    let key = |p: glam::Vec3| [(p.x * 1000.0).round() as i32, (p.y * 1000.0).round() as i32, (p.z * 1000.0).round() as i32];
-    let triangles = |first: u32, count: u32| (first as usize..(first + count) as usize).step_by(3).filter_map(|k| {
-        let tri = data.indices.get(k..k + 3)?;
-        let p = [*data.positions.get(tri[0] as usize)?, *data.positions.get(tri[1] as usize)?, *data.positions.get(tri[2] as usize)?];
-        Some((k, p))
-    });
+    let key = |p: glam::Vec3| {
+        [
+            (p.x * 1000.0).round() as i32,
+            (p.y * 1000.0).round() as i32,
+            (p.z * 1000.0).round() as i32,
+        ]
+    };
+    let triangles = |first: u32, count: u32| {
+        (first as usize..(first + count) as usize)
+            .step_by(3)
+            .filter_map(|k| {
+                let tri = data.indices.get(k..k + 3)?;
+                let p = [
+                    *data.positions.get(tri[0] as usize)?,
+                    *data.positions.get(tri[1] as usize)?,
+                    *data.positions.get(tri[2] as usize)?,
+                ];
+                Some((k, p))
+            })
+    };
     // One pane = the film triangles that meet at their corners (a windscreen of two curved
     // halves is one pane; a rear window and the side windows of the same slot are not).
     // Each pane gets ONE normal, the area-weighted mean of its triangles, so that its glass
@@ -84,7 +104,11 @@ pub fn metric_film_uvs(data: &MeshData, film: &[u32]) -> Option<MeshData> {
                     parent.len() - 1
                 });
             }
-            let (r0, r1, r2) = (find(&mut parent, c[0]), find(&mut parent, c[1]), find(&mut parent, c[2]));
+            let (r0, r1, r2) = (
+                find(&mut parent, c[0]),
+                find(&mut parent, c[1]),
+                find(&mut parent, c[2]),
+            );
             parent[r1] = r0;
             let r2 = find(&mut parent, r2);
             parent[r2] = r0;
@@ -118,7 +142,12 @@ pub fn metric_film_uvs(data: &MeshData, film: &[u32]) -> Option<MeshData> {
                 let n = out.positions.len() as u32;
                 let normal = mean(*q).unwrap_or(glam::Vec3::Z);
                 out.positions.push(*q);
-                out.normals.push(data.normals.get(data.indices[k + c] as usize).copied().unwrap_or(normal.normalize_or_zero()));
+                out.normals.push(
+                    data.normals
+                        .get(data.indices[k + c] as usize)
+                        .copied()
+                        .unwrap_or(normal.normalize_or_zero()),
+                );
                 out.uvs.push(pane_coordinate(*q, normal) / TILE);
                 out.indices[k + c] = n;
             }
@@ -144,7 +173,11 @@ fn oriented(n: glam::Vec3) -> glam::Vec3 {
 pub fn pane_coordinate(p: glam::Vec3, normal: glam::Vec3) -> glam::Vec2 {
     let n = oriented(normal).normalize_or_zero();
     let across = glam::Vec3::Z.cross(n);
-    let t = if across.length() < 0.2 { glam::Vec3::X } else { across.normalize() };
+    let t = if across.length() < 0.2 {
+        glam::Vec3::X
+    } else {
+        across.normalize()
+    };
     let b = n.cross(t);
     glam::Vec2::new(p.dot(t), p.dot(b))
 }
@@ -157,10 +190,20 @@ mod tests {
     /// A flat pane `w` wide and `h` high facing back (normal -y), its texture coordinates
     /// squeezed to a hundredth of the width, with a second slot sharing two of its vertices.
     fn pane(w: f32, h: f32) -> MeshData {
-        let positions = vec![Vec3::new(0.0, 0.0, 1.0), Vec3::new(w, 0.0, 1.0), Vec3::new(w, 0.0, 1.0 + h), Vec3::new(0.0, 0.0, 1.0 + h)];
+        let positions = vec![
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(w, 0.0, 1.0),
+            Vec3::new(w, 0.0, 1.0 + h),
+            Vec3::new(0.0, 0.0, 1.0 + h),
+        ];
         MeshData {
             normals: vec![-Vec3::Y; 4],
-            uvs: vec![Vec2::new(0.0, 0.0), Vec2::new(0.01, 0.0), Vec2::new(0.01, 1.0), Vec2::new(0.0, 1.0)],
+            uvs: vec![
+                Vec2::new(0.0, 0.0),
+                Vec2::new(0.01, 0.0),
+                Vec2::new(0.01, 1.0),
+                Vec2::new(0.0, 1.0),
+            ],
             positions,
             indices: vec![0, 1, 2, 0, 2, 3, 0, 1, 2],
             ranges: vec![(0, 6, 0), (6, 3, 1)],
@@ -177,8 +220,14 @@ mod tests {
             let m = metric_film_uvs(&d, &[0]).expect("film");
             let idx = |k: usize| m.indices[k] as usize;
             let (a, b, c) = (m.uvs[idx(0)], m.uvs[idx(1)], m.uvs[idx(2)]);
-            assert!(((a - b).length() - w / TILE).abs() < 1e-4, "{w}x{h}: {a} {b}");
-            assert!(((b - c).length() - h / TILE).abs() < 1e-4, "{w}x{h}: {b} {c}");
+            assert!(
+                ((a - b).length() - w / TILE).abs() < 1e-4,
+                "{w}x{h}: {a} {b}"
+            );
+            assert!(
+                ((b - c).length() - h / TILE).abs() < 1e-4,
+                "{w}x{h}: {b} {c}"
+            );
             // (up the glass is the second coordinate: it grows with z)
             assert!((c.y - b.y).abs() > 0.0 && (c.x - b.x).abs() < 1e-5);
             // the second slot keeps its vertices and its coordinates
@@ -206,8 +255,12 @@ mod tests {
     fn a_curved_pane_unrolls_on_one_plane() {
         let a = 0.2f32;
         let positions = vec![
-            Vec3::new(0.0, 0.0, 1.0), Vec3::new(1.0, 0.0, 1.0), Vec3::new(1.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 2.0),
-            Vec3::new(1.0 + a.cos(), -a.sin(), 1.0), Vec3::new(1.0 + a.cos(), -a.sin(), 2.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(1.0, 0.0, 1.0),
+            Vec3::new(1.0, 0.0, 2.0),
+            Vec3::new(0.0, 0.0, 2.0),
+            Vec3::new(1.0 + a.cos(), -a.sin(), 1.0),
+            Vec3::new(1.0 + a.cos(), -a.sin(), 2.0),
         ];
         let d = MeshData {
             normals: vec![-Vec3::Y; 6],

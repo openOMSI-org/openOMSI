@@ -100,7 +100,8 @@ impl Renderer {
     /// (a vehicle set, named by `model`): its steps are worked out for the first copy only.
     pub fn begin_shared_object(&self, scene: &mut Scene, model: impl std::hash::Hash) {
         use std::hash::{BuildHasher, BuildHasherDefault};
-        let key = BuildHasherDefault::<std::collections::hash_map::DefaultHasher>::default().hash_one(model);
+        let key = BuildHasherDefault::<std::collections::hash_map::DefaultHasher>::default()
+            .hash_one(model);
         scene.object_run.begin(Some(key));
     }
 
@@ -122,7 +123,14 @@ impl Renderer {
         let draw_order = scene.next_instance_order;
         scene.next_instance_order += 1;
         let key = crate::frame_plan::origin_key(origin);
-        let (slot_levels, slot_depth_caps) = scene.object_run.levels_with_caps(key, draw_order, mesh, transform, &scene.meshes[mesh].flats, slots);
+        let (slot_levels, slot_depth_caps) = scene.object_run.levels_with_caps(
+            key,
+            draw_order,
+            mesh,
+            transform,
+            &scene.meshes[mesh].flats,
+            slots,
+        );
         scene.instances.push(Instance {
             draw_order,
             slot_levels,
@@ -185,7 +193,14 @@ impl Renderer {
         let draw_order = scene.next_instance_order;
         scene.next_instance_order += 1;
         let key = crate::frame_plan::origin_key(origin);
-        let (slot_levels, slot_depth_caps) = scene.object_run.levels_with_caps(key, draw_order, mesh, transform, &scene.meshes[mesh].flats, slots);
+        let (slot_levels, slot_depth_caps) = scene.object_run.levels_with_caps(
+            key,
+            draw_order,
+            mesh,
+            transform,
+            &scene.meshes[mesh].flats,
+            slots,
+        );
         scene.instances.push(Instance {
             draw_order,
             slot_levels,
@@ -271,9 +286,10 @@ impl Renderer {
             return first;
         }
         let first = scene.interior_lights.len() as u32;
-        scene
-            .interior_lights
-            .extend((0..n).map(|_| PointLight { intensity: 0.0, ..Default::default() }));
+        scene.interior_lights.extend((0..n).map(|_| PointLight {
+            intensity: 0.0,
+            ..Default::default()
+        }));
         first
     }
 
@@ -298,7 +314,11 @@ impl Renderer {
     /// Which lamps light an instance: `count` (up to `MAX_LAMPS_PER_MESH`) slots from `first` (see
     /// `Instance::interior_lamps`).
     pub fn set_interior_lamps(&self, scene: &mut Scene, instance: usize, first: u32, count: u32) {
-        let code = if count == 0 { 0 } else { first * LAMP_CODE_STRIDE + count.min(MAX_LAMPS_PER_MESH) };
+        let code = if count == 0 {
+            0
+        } else {
+            first * LAMP_CODE_STRIDE + count.min(MAX_LAMPS_PER_MESH)
+        };
         let i = &mut scene.instances[instance];
         if i.interior_lamps != code {
             i.interior_lamps = code;
@@ -471,12 +491,23 @@ impl Renderer {
     /// through the instance transform (the model matrix is that transform moved by the
     /// origin, so no matrix product is needed), the radius scaled by the largest axis.
     pub(crate) fn bounding_sphere(scene: &Scene, i: &Instance) -> (Vec3, f32) {
-        let b = if scene.cache_bounds { i.bounds } else { InstanceBounds::new(&scene.meshes[i.mesh], i.transform) };
-        (b.centre + (i.origin - scene.render_origin).as_vec3(), b.radius)
+        let b = if scene.cache_bounds {
+            i.bounds
+        } else {
+            InstanceBounds::new(&scene.meshes[i.mesh], i.transform)
+        };
+        (
+            b.centre + (i.origin - scene.render_origin).as_vec3(),
+            b.radius,
+        )
     }
 
     pub(crate) fn instance_scale(scene: &Scene, i: &Instance) -> f32 {
-        if scene.cache_bounds { i.bounds.scale } else { transform_scale(i.transform) }
+        if scene.cache_bounds {
+            i.bounds.scale
+        } else {
+            transform_scale(i.transform)
+        }
     }
 
     pub(crate) fn mesh_bounds_changed(scene: &mut Scene, mesh: MeshId) {
@@ -503,10 +534,14 @@ impl Renderer {
     }
 
     pub(crate) fn prepare_bounds(scene: &mut Scene) {
-        if !scene.cache_bounds { return; }
+        if !scene.cache_bounds {
+            return;
+        }
         let blocks = scene.instances.len().div_ceil(CULL_BLOCK);
         let all = scene.dirty || scene.block_bounds.len() != blocks;
-        scene.block_bounds.resize(blocks, (DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)));
+        scene
+            .block_bounds
+            .resize(blocks, (DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)));
         scene.block_dirty.resize(blocks, false);
         let grow = |bb: &mut (DVec3, DVec3), i: &Instance| {
             let c = i.origin + i.bounds.centre.as_dvec3();
@@ -536,7 +571,9 @@ impl Renderer {
                 // Scan once per pose update, rather than once per shadow/mirror view.
                 if scene.bounds_users_stale {
                     let known = &scene.bounds_known;
-                    scene.bounds_users = (0..scene.instances.len()).filter(|&k| known.get(scene.instances[k].mesh).copied().unwrap_or(false)).collect();
+                    scene.bounds_users = (0..scene.instances.len())
+                        .filter(|&k| known.get(scene.instances[k].mesh).copied().unwrap_or(false))
+                        .collect();
                     scene.bounds_users_stale = false;
                 }
                 let all: Vec<usize>;
@@ -547,7 +584,9 @@ impl Renderer {
                     &scene.bounds_users
                 };
                 for &k in scan {
-                    let Some(i) = scene.instances.get_mut(k) else { continue };
+                    let Some(i) = scene.instances.get_mut(k) else {
+                        continue;
+                    };
                     if scene.bounds_meshes.get(i.mesh).copied().unwrap_or(false) {
                         i.bounds = InstanceBounds::new(&scene.meshes[i.mesh], i.transform);
                         grow(&mut scene.block_bounds[k / CULL_BLOCK], i);
@@ -562,7 +601,9 @@ impl Renderer {
         }
         let rebuild = |scene: &mut Scene, b: usize| {
             let mut bb = (DVec3::splat(f64::MAX), DVec3::splat(f64::MIN));
-            for i in &scene.instances[b * CULL_BLOCK..((b + 1) * CULL_BLOCK).min(scene.instances.len())] {
+            for i in
+                &scene.instances[b * CULL_BLOCK..((b + 1) * CULL_BLOCK).min(scene.instances.len())]
+            {
                 grow(&mut bb, i);
             }
             scene.block_bounds[b] = bb;
@@ -588,7 +629,9 @@ impl Renderer {
     }
 
     pub(crate) fn cull_blocks(scene: &Scene) -> Option<Vec<(Vec3, f32)>> {
-        (scene.cache_bounds && scene.block_bounds.len() == scene.instances.len().div_ceil(CULL_BLOCK)).then(|| {
+        (scene.cache_bounds
+            && scene.block_bounds.len() == scene.instances.len().div_ceil(CULL_BLOCK))
+        .then(|| {
             scene
                 .block_bounds
                 .iter()
@@ -596,7 +639,10 @@ impl Renderer {
                     if lo.x > hi.x {
                         (Vec3::ZERO, 0.0)
                     } else {
-                        (((lo + hi) * 0.5 - scene.render_origin).as_vec3(), ((hi - lo).length() * 0.5) as f32)
+                        (
+                            ((lo + hi) * 0.5 - scene.render_origin).as_vec3(),
+                            ((hi - lo).length() * 0.5) as f32,
+                        )
                     }
                 })
                 .collect()

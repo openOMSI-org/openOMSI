@@ -28,15 +28,41 @@ fn field_group(field: &str) -> Option<Option<Group>> {
         "ui" | "photo" | "photo_settings" | "devtools" | "service_msg" => Some(Ui),
         "gfx" | "window" | "renderer" | "scene" | "xr" => Some(Gfx),
         "perf" => Some(Perf),
-        "session.placed" | "session.seat_bus" | "session.safe_pose" | "session.safe_age" | "session.pumping" => Some(Player),
-        "session.traffic" | "session.schedule" | "session.timetable_book" | "session.populate_t"
-        | "session.traffic_heavy_frame" | "session.first_populate" | "pipeline" => Some(Traffic),
+        "session.placed" | "session.seat_bus" | "session.safe_pose" | "session.safe_age"
+        | "session.pumping" => Some(Player),
+        "session.traffic"
+        | "session.schedule"
+        | "session.timetable_book"
+        | "session.populate_t"
+        | "session.traffic_heavy_frame"
+        | "session.first_populate"
+        | "pipeline" => Some(Traffic),
         "session.humans" | "session.humans_populate_t" | "session.on_foot" => Some(People),
-        "session.duty" | "session.duty_places" | "session.career" | "session.journey" | "session.depot_base" | "session.depot_prev" => Some(Duty),
-        "session.world_day" | "session.clock_jump" | "session.pending_time" | "session.autosave_t" => Some(Clock),
-        "session.rain" | "session.cabin_air" | "session.spray" | "session.lamps_on" | "session.envir" | "session.weather"
-        | "session.wetness" | "session.cloud_drift" | "session.weather_blend" | "session.weather_cycle" | "session.metar_rx"
-        | "session.metar_once" | "session.metar_next" | "session.sky" | "session.tomorrow" => Some(Weather),
+        "session.duty"
+        | "session.duty_places"
+        | "session.career"
+        | "session.journey"
+        | "session.depot_base"
+        | "session.depot_prev" => Some(Duty),
+        "session.world_day"
+        | "session.clock_jump"
+        | "session.pending_time"
+        | "session.autosave_t" => Some(Clock),
+        "session.rain"
+        | "session.cabin_air"
+        | "session.spray"
+        | "session.lamps_on"
+        | "session.envir"
+        | "session.weather"
+        | "session.wetness"
+        | "session.cloud_drift"
+        | "session.weather_blend"
+        | "session.weather_cycle"
+        | "session.metar_rx"
+        | "session.metar_once"
+        | "session.metar_next"
+        | "session.sky"
+        | "session.tomorrow" => Some(Weather),
         _ => return None,
     })
 }
@@ -66,7 +92,8 @@ fn part_group(part: &str) -> Group {
 }
 
 fn src(path: &str) -> String {
-    std::fs::read_to_string(format!("{}/src/{path}", env!("CARGO_MANIFEST_DIR"))).unwrap_or_else(|e| panic!("{path}: {e}"))
+    std::fs::read_to_string(format!("{}/src/{path}", env!("CARGO_MANIFEST_DIR")))
+        .unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
 #[test]
@@ -77,28 +104,50 @@ fn every_app_field_has_a_group() {
         .collect();
     let session = omsi_srcscan::struct_fields(&src("app/groups.rs"), "SessionState");
     assert!(!session.is_empty(), "no SessionState in app/groups.rs");
-    missing.extend(session.into_iter().map(|f| format!("session.{f}")).filter(|f| field_group(f).is_none()));
-    assert!(missing.is_empty(), "fields without a group (frame_stages/access_tests.rs, field_group): {missing:?}");
+    missing.extend(
+        session
+            .into_iter()
+            .map(|f| format!("session.{f}"))
+            .filter(|f| field_group(f).is_none()),
+    );
+    assert!(
+        missing.is_empty(),
+        "fields without a group (frame_stages/access_tests.rs, field_group): {missing:?}"
+    );
 }
 
 #[test]
 fn window_stages_touch_only_what_they_declare() {
     use crate::app_events::WINDOW_FRAME;
     let stages = WINDOW_FRAME.iter();
-    let sources = omsi_srcscan::sources(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/src")));
+    let sources = omsi_srcscan::sources(std::path::Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src"
+    )));
     let code = omsi_srcscan::Code::read(&sources, "App");
     // the contexts the `App`'s methods take of it (`XCx::of(&mut self.parts())`), by name
     let contexts: std::collections::BTreeMap<String, Vec<Group>> = sources
         .iter()
         .flat_map(|(_, s)| omsi_srcscan::contexts(s))
-        .map(|(name, parts)| (format!("{name}::of"), parts.iter().map(|p| part_group(p)).collect()))
+        .map(|(name, parts)| {
+            (
+                format!("{name}::of"),
+                parts.iter().map(|p| part_group(p)).collect(),
+            )
+        })
         .collect();
     let arms = omsi_srcscan::match_arms(&src("app_events/frame/stages.rs"), "run_stage", "stage");
-    assert!(arms.len() >= WINDOW_FRAME.len(), "run_stage's arms not found: {:?}", arms.keys());
+    assert!(
+        arms.len() >= WINDOW_FRAME.len(),
+        "run_stage's arms not found: {:?}",
+        arms.keys()
+    );
     let mut wrong = Vec::new();
     for s in stages {
         let i = s.info();
-        let arm = arms.get(&format!("{s:?}")).unwrap_or_else(|| panic!("no run_stage arm for {s:?}"));
+        let arm = arms
+            .get(&format!("{s:?}"))
+            .unwrap_or_else(|| panic!("no run_stage arm for {s:?}"));
         // (a stage handed its context, `XCx::of(&mut app.parts())`, is held to it by the
         // compiler; what its arm calls on the `App` besides is checked here as for the others)
         let (mut fields, mut entries) = code.scan("app", arm);
@@ -109,23 +158,45 @@ fn window_stages_touch_only_what_they_declare() {
         let touched: BTreeSet<Group> = fields
             .iter()
             .filter_map(|f| field_group(f).flatten())
-            .chain(fields.iter().filter_map(|f| contexts.get(f)).flatten().copied())
+            .chain(
+                fields
+                    .iter()
+                    .filter_map(|f| contexts.get(f))
+                    .flatten()
+                    .copied(),
+            )
             .collect();
         let undeclared: Vec<_> = touched.difference(&declared).collect();
         if !undeclared.is_empty() {
-            wrong.push(format!("{}: reaches {undeclared:?} (from {entries:?})", i.name));
+            wrong.push(format!(
+                "{}: reaches {undeclared:?} (from {entries:?})",
+                i.name
+            ));
         }
     }
-    assert!(wrong.is_empty(), "stages reach groups they do not declare (app_events/frame/stages.rs):\n{}", wrong.join("\n"));
+    assert!(
+        wrong.is_empty(),
+        "stages reach groups they do not declare (app_events/frame/stages.rs):\n{}",
+        wrong.join("\n")
+    );
 }
 
 #[test]
 fn the_on_screen_wheel_and_pedals_reach_the_bus_before_its_ticks() {
-    use crate::app_events::{WindowStage, FRAME_BEFORE};
+    use crate::app_events::{FRAME_BEFORE, WindowStage};
     assert!(FRAME_BEFORE.contains(&WindowStage::PadActions));
     let arms = omsi_srcscan::match_arms(&src("app_events/frame/stages.rs"), "run_stage", "stage");
-    let arm = arms.get("PadActions").expect("no run_stage arm for PadActions");
-    let pads = arm.find("frame_pad_actions(").expect("PadActions does not set the controllers' axes");
-    let touch = arm.find("touch_frame(").expect("PadActions does not take the on-screen controls");
-    assert!(pads < touch, "the controllers' axes overwrite the on-screen controls before the ticks");
+    let arm = arms
+        .get("PadActions")
+        .expect("no run_stage arm for PadActions");
+    let pads = arm
+        .find("frame_pad_actions(")
+        .expect("PadActions does not set the controllers' axes");
+    let touch = arm
+        .find("touch_frame(")
+        .expect("PadActions does not take the on-screen controls");
+    assert!(
+        pads < touch,
+        "the controllers' axes overwrite the on-screen controls before the ticks"
+    );
 }

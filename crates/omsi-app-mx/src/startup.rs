@@ -10,7 +10,16 @@ pub(crate) fn process_cpu_seconds() -> Option<f64> {
     use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
     let (mut created, mut exited, mut kernel, mut user) = Default::default();
     // SAFETY: the pseudo handle of this process needs no closing; the four times are ours
-    unsafe { GetProcessTimes(GetCurrentProcess(), &mut created, &mut exited, &mut kernel, &mut user) }.ok()?;
+    unsafe {
+        GetProcessTimes(
+            GetCurrentProcess(),
+            &mut created,
+            &mut exited,
+            &mut kernel,
+            &mut user,
+        )
+    }
+    .ok()?;
     // (in units of 100 ns)
     let ticks = |t: FILETIME| ((t.dwHighDateTime as u64) << 32 | t.dwLowDateTime as u64) as f64;
     Some((ticks(kernel) + ticks(user)) / 1e7)
@@ -41,7 +50,10 @@ pub(crate) fn process_cpu_seconds() -> Option<f64> {
 pub(crate) fn thread_cpu_seconds() -> Option<f64> {
     #[cfg(unix)]
     {
-        let mut ts = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+        let mut ts = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
         // SAFETY: `ts` is a valid timespec for the call to fill.
         if unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut ts) } == 0 {
             return Some(ts.tv_sec as f64 + ts.tv_nsec as f64 * 1e-9);
@@ -52,8 +64,19 @@ pub(crate) fn thread_cpu_seconds() -> Option<f64> {
     {
         use windows::Win32::System::Threading::{GetCurrentThread, GetThreadTimes};
         let (mut created, mut exited, mut kernel, mut user) = Default::default();
-        unsafe { GetThreadTimes(GetCurrentThread(), &mut created, &mut exited, &mut kernel, &mut user) }.ok()?;
-        let ticks = |t: windows::Win32::Foundation::FILETIME| ((t.dwHighDateTime as u64) << 32 | t.dwLowDateTime as u64) as f64;
+        unsafe {
+            GetThreadTimes(
+                GetCurrentThread(),
+                &mut created,
+                &mut exited,
+                &mut kernel,
+                &mut user,
+            )
+        }
+        .ok()?;
+        let ticks = |t: windows::Win32::Foundation::FILETIME| {
+            ((t.dwHighDateTime as u64) << 32 | t.dwLowDateTime as u64) as f64
+        };
         Some((ticks(kernel) + ticks(user)) / 1e7)
     }
     #[cfg(not(any(unix, windows)))]
@@ -70,7 +93,13 @@ pub(crate) fn process_instructions() -> Option<u64> {
     {
         let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
         // SAFETY: `info` is a rusage_info_v4 for the call to fill, as RUSAGE_INFO_V4 says.
-        let r = unsafe { libc::proc_pid_rusage(std::process::id() as i32, libc::RUSAGE_INFO_V4, &mut info as *mut _ as *mut libc::rusage_info_t) };
+        let r = unsafe {
+            libc::proc_pid_rusage(
+                std::process::id() as i32,
+                libc::RUSAGE_INFO_V4,
+                &mut info as *mut _ as *mut libc::rusage_info_t,
+            )
+        };
         (r == 0).then_some(info.ri_instructions)
     }
     #[cfg(not(target_os = "macos"))]
@@ -95,7 +124,9 @@ pub(crate) fn is_omsi_root(p: &Path) -> bool {
 pub(crate) fn fatal_dialog(title: &str, text: &str) {
     log::error!("{title}: {text}");
     // started from a terminal (the message is right there) or by a test harness
-    if std::io::IsTerminal::is_terminal(&std::io::stderr()) || omsi_cfg::flags::OMSI_BACKGROUND.is_set() {
+    if std::io::IsTerminal::is_terminal(&std::io::stderr())
+        || omsi_cfg::flags::OMSI_BACKGROUND.is_set()
+    {
         return;
     }
     #[cfg(target_os = "macos")]
@@ -106,15 +137,27 @@ pub(crate) fn fatal_dialog(title: &str, text: &str) {
             esc(title),
             esc(text)
         );
-        let _ = std::process::Command::new("osascript").arg("-e").arg(script).status();
+        let _ = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(script)
+            .status();
     }
     #[cfg(windows)]
     {
         #[link(name = "user32")]
         unsafe extern "system" {
-            fn MessageBoxW(hwnd: *mut core::ffi::c_void, text: *const u16, caption: *const u16, kind: u32) -> i32;
+            fn MessageBoxW(
+                hwnd: *mut core::ffi::c_void,
+                text: *const u16,
+                caption: *const u16,
+                kind: u32,
+            ) -> i32;
         }
-        let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+        let wide = |s: &str| {
+            s.encode_utf16()
+                .chain(std::iter::once(0))
+                .collect::<Vec<u16>>()
+        };
         let (t, c) = (wide(text), wide(title));
         // MB_OK | MB_ICONERROR
         unsafe {
@@ -149,12 +192,21 @@ pub(crate) fn own_bindings(root: &Path, modifier: i32) -> std::collections::Hash
 }
 
 fn own_bindings_in(file: &Path, modifier: i32) -> std::collections::HashSet<i32> {
-    let Ok(m) = omsi_content::KeyboardCfg::load(file) else { return Default::default() };
-    let stock: std::collections::HashSet<(String, i32, i32)> = crate::stock_keys::STOCK_KEYS.iter().map(|(a, k, md)| (a.to_ascii_lowercase(), *k, *md)).collect();
+    let Ok(m) = omsi_content::KeyboardCfg::load(file) else {
+        return Default::default();
+    };
+    let stock: std::collections::HashSet<(String, i32, i32)> = crate::stock_keys::STOCK_KEYS
+        .iter()
+        .map(|(a, k, md)| (a.to_ascii_lowercase(), *k, *md))
+        .collect();
     m.vehicles
         .iter()
         .chain(m.game.iter())
-        .filter(|b| b.chord() == modifier && b.scan_code != 0 && !stock.contains(&(b.action.to_ascii_lowercase(), b.scan_code, b.modifier)))
+        .filter(|b| {
+            b.chord() == modifier
+                && b.scan_code != 0
+                && !stock.contains(&(b.action.to_ascii_lowercase(), b.scan_code, b.modifier))
+        })
         .map(|b| b.scan_code)
         .collect()
 }
@@ -189,8 +241,12 @@ pub(crate) fn find_root() -> Option<PathBuf> {
     }
     // the folder the launcher was told about (Setup)
     if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        if let Ok(t) = std::fs::read_to_string(PathBuf::from(home).join(".openomsi/launcher.json")) {
-            if let Some(r) = serde_json::from_str::<serde_json::Value>(&t).ok().and_then(|v| v.get("root").and_then(|r| r.as_str()).map(PathBuf::from)) {
+        if let Ok(t) = std::fs::read_to_string(PathBuf::from(home).join(".openomsi/launcher.json"))
+        {
+            if let Some(r) = serde_json::from_str::<serde_json::Value>(&t)
+                .ok()
+                .and_then(|v| v.get("root").and_then(|r| r.as_str()).map(PathBuf::from))
+            {
                 first.push(r);
             }
         }
@@ -221,14 +277,28 @@ pub(crate) fn graphics_instance() -> mx::Instance {
         let adapters = instance.enumerate_adapters();
         if adapters.iter().any(|a| !is_software(&a.info())) {
             log::info!(
-                "graphics: mX on {:?} ({})", b, adapters.iter().map(|a| a.info().name).collect::<Vec<_>>().join(", "));
+                "graphics: mX on {:?} ({})",
+                b,
+                adapters
+                    .iter()
+                    .map(|a| a.info().name)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
             return instance;
         }
         if adapters.is_empty() {
             log::info!("graphics: no {b:?} adapter here");
             last = Some(instance);
         } else {
-            log::info!("graphics: {b:?} has only a software renderer ({})", adapters.iter().map(|a| a.info().name).collect::<Vec<_>>().join(", "));
+            log::info!(
+                "graphics: {b:?} has only a software renderer ({})",
+                adapters
+                    .iter()
+                    .map(|a| a.info().name)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
             software.get_or_insert(instance);
         }
     }
@@ -274,10 +344,21 @@ fn angle_available() -> bool {
         if !cfg!(windows) {
             return false;
         }
-        let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) else { return false };
-        let missing: Vec<&str> = ["libEGL.dll", "libGLESv2.dll"].into_iter().filter(|f| !dir.join(f).is_file()).collect();
+        let Some(dir) = std::env::current_exe()
+            .ok()
+            .and_then(|e| e.parent().map(Path::to_path_buf))
+        else {
+            return false;
+        };
+        let missing: Vec<&str> = ["libEGL.dll", "libGLESv2.dll"]
+            .into_iter()
+            .filter(|f| !dir.join(f).is_file())
+            .collect();
         if !missing.is_empty() {
-            log::info!("graphics: ANGLE (DirectX 11) is not tried: no {} next to the game", missing.join(" or "));
+            log::info!(
+                "graphics: ANGLE (DirectX 11) is not tried: no {} next to the game",
+                missing.join(" or ")
+            );
         }
         missing.is_empty()
     })
@@ -297,11 +378,22 @@ pub(crate) fn backend_order() -> Vec<GraphicsApi> {
         return vec![GraphicsApi::Native(mx::Backends::METAL)];
     }
     let settings = crate::settings::Settings::load();
-    let chosen = omsi_cfg::flags::OMSI_BACKEND.var().map(str::to_string).unwrap_or(settings.graphics_api.clone());
+    let chosen = omsi_cfg::flags::OMSI_BACKEND
+        .var()
+        .map(str::to_string)
+        .unwrap_or(settings.graphics_api.clone());
     let wanted = if settings.vr_requested() {
         "dx12".to_owned()
-    } else if let Some(t) = settings.temporal_upscaling().filter(|_| omsi_cfg::flags::OMSI_BACKEND.var().is_none()) {
-        omsi_cfg::upscaler_files::first_api(&chosen, t.upscaler.as_str(), &omsi_cfg::upscaler_files::program_dir()).to_owned()
+    } else if let Some(t) = settings
+        .temporal_upscaling()
+        .filter(|_| omsi_cfg::flags::OMSI_BACKEND.var().is_none())
+    {
+        omsi_cfg::upscaler_files::first_api(
+            &chosen,
+            t.upscaler.as_str(),
+            &omsi_cfg::upscaler_files::program_dir(),
+        )
+        .to_owned()
     } else {
         chosen
     };
@@ -332,7 +424,10 @@ pub(crate) fn backend_order() -> Vec<GraphicsApi> {
         _ => None,
     };
     // (the one asked for first, the others after it: a machine without it still starts)
-    first.into_iter().chain(all.into_iter().filter(|b| Some(*b) != first)).collect()
+    first
+        .into_iter()
+        .chain(all.into_iter().filter(|b| Some(*b) != first))
+        .collect()
 }
 
 static VULKAN_FIRST: std::sync::OnceLock<Option<(u32, u32)>> = std::sync::OnceLock::new();
@@ -352,8 +447,14 @@ fn vulkan_first(wanted: &str) -> bool {
                 .collect();
             let mark = vulkan_lost_path().and_then(|p| std::fs::read_to_string(p).ok());
             let chosen = vulkan_adapter(wanted, mark.as_deref(), &adapters);
-            if chosen.is_none() && mark.is_some() && vulkan_adapter(wanted, None, &adapters).is_some() {
-                log::info!("graphics: Auto keeps to DirectX 12, a device was lost on Vulkan here ({})", mark.as_deref().unwrap_or_default().trim());
+            if chosen.is_none()
+                && mark.is_some()
+                && vulkan_adapter(wanted, None, &adapters).is_some()
+            {
+                log::info!(
+                    "graphics: Auto keeps to DirectX 12, a device was lost on Vulkan here ({})",
+                    mark.as_deref().unwrap_or_default().trim()
+                );
             }
             chosen
         })
@@ -364,8 +465,14 @@ fn auto_api(wanted: &str) -> bool {
     matches!(wanted.trim().to_ascii_lowercase().as_str(), "" | "auto")
 }
 
-fn vulkan_adapter(wanted: &str, lost_mark: Option<&str>, adapters: &[(mx::DeviceType, u32, u32)],) -> Option<(u32, u32)> {
-    let (_, vendor, device) = *adapters.iter().find(|a| a.0 == mx::DeviceType::DiscreteGpu)?;
+fn vulkan_adapter(
+    wanted: &str,
+    lost_mark: Option<&str>,
+    adapters: &[(mx::DeviceType, u32, u32)],
+) -> Option<(u32, u32)> {
+    let (_, vendor, device) = *adapters
+        .iter()
+        .find(|a| a.0 == mx::DeviceType::DiscreteGpu)?;
     let lost = lost_mark.is_some_and(|m| m.trim() == vulkan_lost_mark(vendor, device));
     (auto_api(wanted) && vendor == 0x1002 && !lost).then_some((vendor, device))
 }
@@ -375,18 +482,28 @@ fn vulkan_lost_mark(vendor: u32, device: u32) -> String {
 }
 
 pub(crate) fn mark_vulkan_lost() {
-    let (Some(Some((vendor, device))), Some(p)) = (VULKAN_FIRST.get(), vulkan_lost_path()) else { return };
+    let (Some(Some((vendor, device))), Some(p)) = (VULKAN_FIRST.get(), vulkan_lost_path()) else {
+        return;
+    };
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
     let _ = std::fs::write(p, vulkan_lost_mark(*vendor, *device));
 }
 
-fn vulkan_pin_after(pin: Option<(u32, u32)>, mut made: impl Iterator<Item = Option<GraphicsApi>>) -> Option<(u32, u32)> {
+fn vulkan_pin_after(
+    pin: Option<(u32, u32)>,
+    mut made: impl Iterator<Item = Option<GraphicsApi>>,
+) -> Option<(u32, u32)> {
     pin.filter(|_| !made.any(|b| b == Some(GraphicsApi::Native(mx::Backends::DX12))))
 }
 
-fn vulkan_passed_over(pin: Option<(u32, u32)>, backend: mx::Backend, vendor: u32, device: u32) -> bool {
+fn vulkan_passed_over(
+    pin: Option<(u32, u32)>,
+    backend: mx::Backend,
+    vendor: u32,
+    device: u32,
+) -> bool {
     backend == mx::Backend::Vulkan && pin.is_some_and(|p| p != (vendor, device))
 }
 
@@ -402,7 +519,9 @@ fn is_software(info: &mx::AdapterInfo) -> bool {
 }
 
 fn software_adapter(name: &str, device_type: mx::DeviceType) -> bool {
-    device_type == mx::DeviceType::Cpu || name.contains("Microsoft Basic Render Driver") || name.contains("llvmpipe")
+    device_type == mx::DeviceType::Cpu
+        || name.contains("Microsoft Basic Render Driver")
+        || name.contains("llvmpipe")
 }
 
 fn backend_instance(api: GraphicsApi) -> mx::Instance {
@@ -447,7 +566,11 @@ struct Opener {
 }
 
 impl Opener {
-    fn new(instance: &mx::Instance, window: &std::sync::Arc<winit::window::Window>, options: omsi_render::RenderOptions) -> Opener {
+    fn new(
+        instance: &mx::Instance,
+        window: &std::sync::Arc<winit::window::Window>,
+        options: omsi_render::RenderOptions,
+    ) -> Opener {
         Opener {
             window: window.clone(),
             options,
@@ -492,7 +615,11 @@ impl Opener {
             let surface = match omsi_render::create_surface(&inst, &self.window) {
                 Ok(s) => s,
                 Err(e) => {
-                    self.failures.push(format!("{}: no surface ({e})", b.map(|b| format!("{b:?}")).unwrap_or_else(|| "first choice".into())));
+                    self.failures.push(format!(
+                        "{}: no surface ({e})",
+                        b.map(|b| format!("{b:?}"))
+                            .unwrap_or_else(|| "first choice".into())
+                    ));
                     self.no_surface.push(self.k);
                     self.k += 1;
                     continue;
@@ -511,9 +638,18 @@ impl Opener {
                     continue;
                 }
                 if self.software_round {
-                    log::warn!("graphics: no graphics chip could be opened; trying the software renderer {what} (a few frames a second at best)");
+                    log::warn!(
+                        "graphics: no graphics chip could be opened; trying the software renderer {what} (a few frames a second at best)"
+                    );
                 }
-                match omsi_render::catch(|| pollster::block_on(Renderer::open_on(adapter, Some(&surface), None, self.options))) {
+                match omsi_render::catch(|| {
+                    pollster::block_on(Renderer::open_on(
+                        adapter,
+                        Some(&surface),
+                        None,
+                        self.options,
+                    ))
+                }) {
                     // (the same instance is looked at again after a renderer that then failed
                     // to build: its next adapter, the failed one being in `failures`)
                     Some(Ok(o)) => return Some((o, what, inst)),
@@ -523,7 +659,8 @@ impl Opener {
                     }
                     None => {
                         log::warn!("graphics: {what} failed while being opened");
-                        self.failures.push(format!("{what}: failed while being opened"));
+                        self.failures
+                            .push(format!("{what}: failed while being opened"));
                     }
                 }
             }
@@ -532,7 +669,14 @@ impl Opener {
     }
 
     fn give_up(&self) -> anyhow::Error {
-        anyhow!("no graphics device could be opened ({}); updating the graphics driver usually helps", if self.failures.is_empty() { "no adapter can show a window".to_string() } else { self.failures.join("; ") })
+        anyhow!(
+            "no graphics device could be opened ({}); updating the graphics driver usually helps",
+            if self.failures.is_empty() {
+                "no adapter can show a window".to_string()
+            } else {
+                self.failures.join("; ")
+            }
+        )
     }
 }
 
@@ -578,23 +722,48 @@ impl RendererStart {
     /// The graphics device for `window`, on `instance` or the next interface and adapter that
     /// can (`instance` then becomes that one's, see `Opener`); its pipelines are
     /// being built from here on.
-    pub(crate) fn begin(instance: &mut mx::Instance, window: &std::sync::Arc<winit::window::Window>, options: omsi_render::RenderOptions) -> Result<RendererStart> {
+    pub(crate) fn begin(
+        instance: &mut mx::Instance,
+        window: &std::sync::Arc<winit::window::Window>,
+        options: omsi_render::RenderOptions,
+    ) -> Result<RendererStart> {
         let mut opener = Opener::new(instance, window, options);
-        let Some((opened, what, inst)) = opener.next() else { return Err(opener.give_up()) };
+        let Some((opened, what, inst)) = opener.next() else {
+            return Err(opener.give_up());
+        };
         *instance = inst;
-        let (device, queue, format) = (opened.device().clone(), opened.queue().clone(), opened.format());
-        let mut start = RendererStart { device, queue, format, building: None, built: None, what, opener };
+        let (device, queue, format) = (
+            opened.device().clone(),
+            opened.queue().clone(),
+            opened.format(),
+        );
+        let mut start = RendererStart {
+            device,
+            queue,
+            format,
+            building: None,
+            built: None,
+            what,
+            opener,
+        };
         // ANGLE's window takes its sRGB pictures encoded by the renderer (`SrgbEncode`), and
         // its pipelines are compiled on a thread of its own already: built on the spot.
-        let angle = opened.adapter_info().backend == mx::Backend::Gl && opened.adapter_info().name.contains("ANGLE");
+        let angle = opened.adapter_info().backend == mx::Backend::Gl
+            && opened.adapter_info().name.contains("ANGLE");
         if angle {
-            start.built = Some(omsi_render::catch(|| pollster::block_on(opened.finish())).unwrap_or_else(|| Err(anyhow!("failed while its pipelines were built"))));
+            start.built = Some(
+                omsi_render::catch(|| pollster::block_on(opened.finish()))
+                    .unwrap_or_else(|| Err(anyhow!("failed while its pipelines were built"))),
+            );
             return Ok(start);
         }
-        let spawned = std::thread::Builder::new().name("renderer pipelines".into()).stack_size(BUILD_STACK).spawn(move || {
-            as_urgent_as_the_main_thread();
-            omsi_render::catch(|| pollster::block_on(opened.finish()))
-        });
+        let spawned = std::thread::Builder::new()
+            .name("renderer pipelines".into())
+            .stack_size(BUILD_STACK)
+            .spawn(move || {
+                as_urgent_as_the_main_thread();
+                omsi_render::catch(|| pollster::block_on(opened.finish()))
+            });
         match spawned {
             Ok(h) => start.building = Some(h),
             Err(e) => start.built = Some(Err(anyhow!("no thread for the pipelines: {e}"))),
@@ -619,14 +788,22 @@ impl RendererStart {
     pub(crate) fn wait(mut self, instance: &mut mx::Instance) -> Result<Renderer> {
         let mut built = match (self.built.take(), self.building.take()) {
             (Some(b), _) => b,
-            (None, Some(h)) => h.join().ok().flatten().unwrap_or_else(|| Err(anyhow!("failed while its pipelines were built"))),
+            (None, Some(h)) => h
+                .join()
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| Err(anyhow!("failed while its pipelines were built"))),
             (None, None) => Err(anyhow!("renderer pipelines: not built")),
         };
         loop {
             match built {
                 Ok(r) => {
                     if !self.opener.failures.is_empty() {
-                        log::warn!("graphics: drawing on {}; before it {}", self.what, self.opener.failures.join("; "));
+                        log::warn!(
+                            "graphics: drawing on {}; before it {}",
+                            self.what,
+                            self.opener.failures.join("; ")
+                        );
                     }
                     return Ok(r);
                 }
@@ -635,17 +812,22 @@ impl RendererStart {
                     self.opener.failures.push(format!("{}: {e:#}", self.what));
                 }
             }
-            let Some((opened, what, inst)) = self.opener.next() else { return Err(self.opener.give_up()) };
+            let Some((opened, what, inst)) = self.opener.next() else {
+                return Err(self.opener.give_up());
+            };
             *instance = inst;
             self.what = what;
-            built = omsi_render::catch(|| pollster::block_on(opened.finish())).unwrap_or_else(|| Err(anyhow!("failed while its pipelines were built")));
+            built = omsi_render::catch(|| pollster::block_on(opened.finish()))
+                .unwrap_or_else(|| Err(anyhow!("failed while its pipelines were built")));
         }
     }
 }
 
 /// A picture of `color` alone into `surface`, shown (no pipeline needed: a clear). False when
 /// the window gave no picture to draw into (hidden, covered, being resized).
-pub(crate) fn present_clear(surface: &mut SurfaceState<'_>, device: &mx::Device,
+pub(crate) fn present_clear(
+    surface: &mut SurfaceState<'_>,
+    device: &mx::Device,
     queue: &mx::Queue,
     window: &winit::window::Window,
     color: mx::Color,
@@ -671,7 +853,9 @@ pub(crate) fn present_clear(surface: &mut SurfaceState<'_>, device: &mx::Device,
             resolve_target: None,
             ops: mx::Operations {
                 load: mx::LoadOp::Clear(color),
-                store: mx::StoreOp::Store, } })],
+                store: mx::StoreOp::Store,
+            },
+        })],
         ..Default::default()
     }));
     queue.submit([enc.finish()]);
@@ -690,12 +874,21 @@ pub(crate) fn fatal_message(text: &str) {
     linux_message(text);
     #[cfg(windows)]
     {
+        use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
         use windows::core::PCWSTR;
-        use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
-        let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+        let wide = |s: &str| {
+            s.encode_utf16()
+                .chain(std::iter::once(0))
+                .collect::<Vec<u16>>()
+        };
         let (t, c) = (wide(text), wide("openOMSI"));
         unsafe {
-            MessageBoxW(None, PCWSTR(t.as_ptr()), PCWSTR(c.as_ptr()), MB_OK | MB_ICONERROR);
+            MessageBoxW(
+                None,
+                PCWSTR(t.as_ptr()),
+                PCWSTR(c.as_ptr()),
+                MB_OK | MB_ICONERROR,
+            );
         }
     }
 }
@@ -706,18 +899,35 @@ pub(crate) fn fatal_message(text: &str) {
 /// nor in a background run.
 #[cfg(target_os = "linux")]
 fn linux_message(text: &str) {
-    let desktop = std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some();
+    let desktop =
+        std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some();
     if !desktop || std::env::var_os("OMSI_BACKGROUND").is_some_and(|v| !v.is_empty() && v != "0") {
         return;
     }
     let tries: [(&str, Vec<&str>); 3] = [
-        ("zenity", vec!["--error", "--title=openOMSI", "--width=520", "--no-markup", "--text", text]),
+        (
+            "zenity",
+            vec![
+                "--error",
+                "--title=openOMSI",
+                "--width=520",
+                "--no-markup",
+                "--text",
+                text,
+            ],
+        ),
         ("kdialog", vec!["--title", "openOMSI", "--error", text]),
         ("xmessage", vec!["-center", text]),
     ];
     for (program, args) in tries {
         // (the first one that is there; it returns when the player closed it)
-        if std::process::Command::new(program).args(&args).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok() {
+        if std::process::Command::new(program)
+            .args(&args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok()
+        {
             return;
         }
     }
@@ -734,12 +944,16 @@ pub use omsi_platform::{BUILD, VERSION};
 /// The game runs inside gamescope (a Steam Deck's Gaming Mode, a Steam Machine): one
 /// window, shown over the whole screen.
 pub(crate) fn under_gamescope() -> bool {
-    std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some() || std::env::var("XDG_CURRENT_DESKTOP").is_ok_and(|d| d.to_ascii_lowercase().contains("gamescope"))
+    std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some()
+        || std::env::var("XDG_CURRENT_DESKTOP")
+            .is_ok_and(|d| d.to_ascii_lowercase().contains("gamescope"))
 }
 
 /// The screen the game opens on: the one the launcher stands on (`OMSI_SCREEN_AT`, the
 /// launcher's middle), else the main one (#1959: it always opened on the main screen).
-pub(crate) fn home_monitor(event_loop: &winit::event_loop::ActiveEventLoop) -> Option<winit::monitor::MonitorHandle> {
+pub(crate) fn home_monitor(
+    event_loop: &winit::event_loop::ActiveEventLoop,
+) -> Option<winit::monitor::MonitorHandle> {
     let at = omsi_cfg::flags::OMSI_SCREEN_AT.var().and_then(|v| {
         let (x, y) = v.split_once(',')?;
         Some((x.trim().parse::<i32>().ok()?, y.trim().parse::<i32>().ok()?))
@@ -754,7 +968,14 @@ pub(crate) fn home_monitor(event_loop: &winit::event_loop::ActiveEventLoop) -> O
     .or_else(|| event_loop.available_monitors().next())
 }
 
-pub(crate) fn fit_window(event_loop: &winit::event_loop::ActiveEventLoop, w: f64, h: f64) -> (winit::dpi::LogicalSize<f64>, Option<winit::dpi::PhysicalPosition<i32>>) {
+pub(crate) fn fit_window(
+    event_loop: &winit::event_loop::ActiveEventLoop,
+    w: f64,
+    h: f64,
+) -> (
+    winit::dpi::LogicalSize<f64>,
+    Option<winit::dpi::PhysicalPosition<i32>>,
+) {
     let Some(m) = home_monitor(event_loop) else {
         return (winit::dpi::LogicalSize::new(w, h), None);
     };
@@ -767,7 +988,11 @@ pub(crate) fn fit_window(event_loop: &winit::event_loop::ActiveEventLoop, w: f64
 /// `want` points fitted into a screen of `screen` pixels at `scale` (the size kept to 90 %
 /// of its width and 85 % of its height - a title bar and a task bar take some - with the
 /// shape kept), and where it starts for the screen's middle (pixels).
-pub(crate) fn fit_rect(want: (f64, f64), screen: (f64, f64), scale: f64) -> ((f64, f64), (i32, i32)) {
+pub(crate) fn fit_rect(
+    want: (f64, f64),
+    screen: (f64, f64),
+    scale: f64,
+) -> ((f64, f64), (i32, i32)) {
     let (sw, sh) = (screen.0 / scale, screen.1 / scale);
     let k = (sw * 0.9 / want.0).min(sh * 0.85 / want.1).min(1.0);
     let (w, h) = ((want.0 * k).round(), (want.1 * k).round());
@@ -809,15 +1034,27 @@ pub(crate) struct SessionSettings {
 
 impl Default for SessionSettings {
     fn default() -> SessionSettings {
-        SessionSettings { enhanced_plus: false, enhanced: false, classic: false, clouds: true, sound_scenery: 1.0, mirror_size: 256, rain_quality: 2 }
+        SessionSettings {
+            enhanced_plus: false,
+            enhanced: false,
+            classic: false,
+            clouds: true,
+            sound_scenery: 1.0,
+            mirror_size: 256,
+            rain_quality: 2,
+        }
     }
 }
 
 impl SessionSettings {
     /// A game session's: the settings, the arguments and the switches.
-    pub(crate) fn for_session(settings: &crate::settings::Settings, args: &crate::Args) -> SessionSettings {
+    pub(crate) fn for_session(
+        settings: &crate::settings::Settings,
+        args: &crate::Args,
+    ) -> SessionSettings {
         let plus = args.enhanced_plus || omsi_cfg::flags::OMSI_ENHANCED_PLUS.is_set();
-        let enhanced = settings.enhanced || args.enhanced || plus || omsi_cfg::flags::OMSI_ENHANCED.is_set();
+        let enhanced =
+            settings.enhanced || args.enhanced || plus || omsi_cfg::flags::OMSI_ENHANCED.is_set();
         omsi_scene::road_snow::choose(settings.road_snow);
         SessionSettings {
             enhanced_plus: plus,
@@ -848,9 +1085,16 @@ impl SessionSettings {
 
     /// The renderer's options: the settings', with ray tracing when Enhanced+ is asked for
     /// whatever they say.
-    pub(crate) fn render_options(&self, settings: &crate::settings::Settings) -> omsi_render::RenderOptions {
+    pub(crate) fn render_options(
+        &self,
+        settings: &crate::settings::Settings,
+    ) -> omsi_render::RenderOptions {
         let o = settings.render_options();
-        omsi_render::RenderOptions { ray_tracing: o.ray_tracing || self.enhanced_plus, no_enhanced: o.no_enhanced && !self.enhanced, ..o }
+        omsi_render::RenderOptions {
+            ray_tracing: o.ray_tracing || self.enhanced_plus,
+            no_enhanced: o.no_enhanced && !self.enhanced,
+            ..o
+        }
     }
 
     /// The world's settings from these (see `scene::host::SceneSettings`).
@@ -873,11 +1117,12 @@ impl SessionSettings {
     }
 }
 
-
 /// The game's settings a world reads as it opens (see `scene::host::OpenSettings`), from the
 /// settings file at that moment.
 pub(crate) fn install_scene_settings() {
-    crate::scene::host::install_open_settings(|| crate::scene::host::OpenSettings { max_parked: crate::settings::Settings::load().ai_max_parked as i64 });
+    crate::scene::host::install_open_settings(|| crate::scene::host::OpenSettings {
+        max_parked: crate::settings::Settings::load().ai_max_parked as i64,
+    });
 }
 
 /// macOS's allocator keeps freed large blocks for reuse, and they count as the game's
@@ -957,8 +1202,14 @@ mod window_tests {
         assert!(software_adapter("Microsoft Basic Render Driver", Cpu));
         assert!(software_adapter("Microsoft Basic Render Driver", Other));
         assert!(software_adapter("llvmpipe (LLVM 15.0.7, 256 bits)", Cpu));
-        assert!(!software_adapter("Intel(R) HD Graphics 2500", IntegratedGpu));
-        assert!(!software_adapter("NVIDIA GeForce RTX 3050 Laptop GPU", DiscreteGpu));
+        assert!(!software_adapter(
+            "Intel(R) HD Graphics 2500",
+            IntegratedGpu
+        ));
+        assert!(!software_adapter(
+            "NVIDIA GeForce RTX 3050 Laptop GPU",
+            DiscreteGpu
+        ));
     }
 
     #[test]
@@ -977,18 +1228,29 @@ mod window_tests {
         assert_eq!(pick("dx12", None, &[amd]), None);
         let mark = super::vulkan_lost_mark(0x1002, 0x744c);
         assert_eq!(pick("auto", Some(&mark), &[amd]), None);
-        assert_eq!(pick("auto", Some("0.0.1|1002-744c"), &[amd]), Some((0x1002, 0x744c)));
-        assert_eq!(pick("auto", Some(&super::vulkan_lost_mark(0x1002, 0x73bf)), &[amd]), Some((0x1002, 0x744c)));
+        assert_eq!(
+            pick("auto", Some("0.0.1|1002-744c"), &[amd]),
+            Some((0x1002, 0x744c))
+        );
+        assert_eq!(
+            pick(
+                "auto",
+                Some(&super::vulkan_lost_mark(0x1002, 0x73bf)),
+                &[amd]
+            ),
+            Some((0x1002, 0x744c))
+        );
     }
 
     #[test]
     fn the_other_vulkan_adapters_are_tried_once_directx_12_could_not_draw() {
-        use super::{vulkan_passed_over, vulkan_pin_after, GraphicsApi};
+        use super::{GraphicsApi, vulkan_passed_over, vulkan_pin_after};
         use mx::Backend::{Dx12, Vulkan};
         let (radeon, apu) = ((0x1002, 0x744c), (0x1002, 0x164e));
         let [vulkan, dx12, gl] = [mx::Backends::VULKAN, mx::Backends::DX12, mx::Backends::GL]
             .map(|b| Some(GraphicsApi::Native(b)));
-        let skipped = |pin, backend, (vendor, device)| vulkan_passed_over(pin, backend, vendor, device);
+        let skipped =
+            |pin, backend, (vendor, device)| vulkan_passed_over(pin, backend, vendor, device);
         let pin = vulkan_pin_after(Some(radeon), [None, vulkan].into_iter());
         assert_eq!(pin, Some(radeon));
         assert!(!skipped(pin, Vulkan, radeon));
@@ -997,7 +1259,10 @@ mod window_tests {
         let pin = vulkan_pin_after(pin, [None, vulkan, dx12].into_iter());
         assert_eq!(pin, None);
         assert!(!skipped(pin, Vulkan, apu));
-        assert_eq!(vulkan_pin_after(None, [None, vulkan, dx12, gl].into_iter()), None);
+        assert_eq!(
+            vulkan_pin_after(None, [None, vulkan, dx12, gl].into_iter()),
+            None
+        );
         assert!(!skipped(None, Vulkan, apu));
     }
 
@@ -1005,7 +1270,10 @@ mod window_tests {
     fn the_window_fits_a_small_screen_and_sits_in_its_middle() {
         // 1920 x 1200 at 125 %: 1600 x 900 points would be 2000 px wide
         let ((w, h), (x, y)) = super::fit_rect((1600.0, 900.0), (1920.0, 1200.0), 1.25);
-        assert!(w * 1.25 <= 1920.0 * 0.9 + 1.0 && h * 1.25 <= 1200.0 * 0.85 + 1.0, "{w} x {h}");
+        assert!(
+            w * 1.25 <= 1920.0 * 0.9 + 1.0 && h * 1.25 <= 1200.0 * 0.85 + 1.0,
+            "{w} x {h}"
+        );
         assert!(((w / h) - 16.0 / 9.0).abs() < 0.01);
         assert!((x as f64 - (1920.0 - w * 1.25) / 2.0).abs() <= 1.0);
         assert!(y > 0);

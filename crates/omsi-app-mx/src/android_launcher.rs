@@ -6,9 +6,9 @@
 //! and comes back when it ends. The bus preview and the city map are drawn by the launcher
 //! service on a thread of this process (`launcher::InProcess`).
 
+use jni::JNIEnv;
 use jni::objects::{GlobalRef, JByteArray, JClass, JObject, JString, JValue};
 use jni::sys::{jbyteArray, jstring};
-use jni::JNIEnv;
 use serde_json::Value;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -40,9 +40,16 @@ fn bridge(name: &str, args: &[&str]) {
     let Some(class) = BRIDGE.get() else { return };
     let ctx = ndk_context::android_context();
     // SAFETY: the VM ndk_context was given lives as long as the program
-    let Ok(vm) = (unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }) else { return };
-    let Ok(mut env) = vm.attach_current_thread() else { return };
-    let strings: Vec<JObject> = args.iter().filter_map(|a| env.new_string(a).ok().map(JObject::from)).collect();
+    let Ok(vm) = (unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }) else {
+        return;
+    };
+    let Ok(mut env) = vm.attach_current_thread() else {
+        return;
+    };
+    let strings: Vec<JObject> = args
+        .iter()
+        .filter_map(|a| env.new_string(a).ok().map(JObject::from))
+        .collect();
     let values: Vec<JValue> = strings.iter().map(JValue::Object).collect();
     let sig = format!("({})V", "Ljava/lang/String;".repeat(values.len()));
     // SAFETY: the global reference is the class `LauncherBridge`
@@ -74,9 +81,17 @@ impl omsi_launcher_api::Platform for Phone {
     fn support_package(&self, out: &std::path::Path) -> Option<Result<std::path::PathBuf, String>> {
         Some((|| {
             // Android sets OMSI_CONTENT to shared storage or the app's external data folder.
-            let folder = std::env::var_os("OMSI_CONTENT").ok_or("the Android content folder is not available")?;
-            let out = std::path::PathBuf::from(folder).join(out.file_name().ok_or("invalid support package filename")?);
-            let value = crate::support_bundle::snapshot(None, &crate::settings::Settings::load(), None, None, "launcher");
+            let folder = std::env::var_os("OMSI_CONTENT")
+                .ok_or("the Android content folder is not available")?;
+            let out = std::path::PathBuf::from(folder)
+                .join(out.file_name().ok_or("invalid support package filename")?);
+            let value = crate::support_bundle::snapshot(
+                None,
+                &crate::settings::Settings::load(),
+                None,
+                None,
+                "launcher",
+            );
             crate::support_bundle::export(&out, &value).map_err(|e| format!("{e:#}"))?;
             Ok(out)
         })())
@@ -94,7 +109,12 @@ fn take(env: &mut JNIEnv, s: &JString) -> String {
 /// `LauncherBridge.call(cmd, args)`: a command of the page (on the bridge's worker thread);
 /// "1" and the JSON answer, or "0" and the error.
 // (exported by the wgpu game, which hands over to this one with mX Graphics on)
-pub extern "system" fn Java_org_openomsi_game_LauncherBridge_call<'a>(mut env: JNIEnv<'a>, class: JClass<'a>, cmd: JString<'a>, args: JString<'a>) -> jstring {
+pub extern "system" fn Java_org_openomsi_game_LauncherBridge_call<'a>(
+    mut env: JNIEnv<'a>,
+    class: JClass<'a>,
+    cmd: JString<'a>,
+    args: JString<'a>,
+) -> jstring {
     if BRIDGE.get().is_none() {
         if let Ok(g) = env.new_global_ref(&class) {
             let _ = BRIDGE.set(g);
@@ -110,18 +130,27 @@ pub extern "system" fn Java_org_openomsi_game_LauncherBridge_call<'a>(mut env: J
     if cmd == "config_save" && out.starts_with('1') {
         std::thread::spawn(super::android::hide_content_from_gallery);
     }
-    env.new_string(out).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
+    env.new_string(out)
+        .map(|s| s.into_raw())
+        .unwrap_or(std::ptr::null_mut())
 }
 
 /// `LauncherBridge.bytes(cmd, args)`: a command answering bytes (the preview's pictures);
 /// the bytes after a 1, or a 0 and the error's text.
 // (exported by the wgpu game, which hands over to this one with mX Graphics on)
-pub extern "system" fn Java_org_openomsi_game_LauncherBridge_bytes<'a>(mut env: JNIEnv<'a>, _class: JClass<'a>, cmd: JString<'a>, args: JString<'a>) -> jbyteArray {
+pub extern "system" fn Java_org_openomsi_game_LauncherBridge_bytes<'a>(
+    mut env: JNIEnv<'a>,
+    _class: JClass<'a>,
+    cmd: JString<'a>,
+    args: JString<'a>,
+) -> jbyteArray {
     let cmd = take(&mut env, &cmd);
     let args: Value = serde_json::from_str(&take(&mut env, &args)).unwrap_or(Value::Null);
     let out = match omsi_launcher_api::call_bytes(&cmd, &args, &Phone) {
         Ok(b) => [&[1u8][..], &b].concat(),
         Err(e) => [&[0u8][..], e.as_bytes()].concat(),
     };
-    env.byte_array_from_slice(&out).map(JByteArray::into_raw).unwrap_or(std::ptr::null_mut())
+    env.byte_array_from_slice(&out)
+        .map(JByteArray::into_raw)
+        .unwrap_or(std::ptr::null_mut())
 }

@@ -33,7 +33,14 @@ pub(crate) const CUBE_BLOCKS: usize = 2;
 /// stay inside the face they were found in.
 pub(crate) const CUBE_FACE_FOV: f32 = 96.0;
 /// The directions of a cube's faces, in the order of its tiles.
-pub(crate) const CUBE_FACES: [Vec3; 6] = [Vec3::X, Vec3::NEG_X, Vec3::Y, Vec3::NEG_Y, Vec3::Z, Vec3::NEG_Z];
+pub(crate) const CUBE_FACES: [Vec3; 6] = [
+    Vec3::X,
+    Vec3::NEG_X,
+    Vec3::Y,
+    Vec3::NEG_Y,
+    Vec3::Z,
+    Vec3::NEG_Z,
+];
 /// The shadow casters' lists of a frame: the near, far and close cascades, then one per
 /// tile (each lamp's own: an embedded source leaves its own fixture out), and last the
 /// precipitation's roof map (`passes::precip_map`).
@@ -187,7 +194,9 @@ pub(crate) fn group_spots(spots: &mut [Spot]) -> Vec<SpotGroup> {
         if level == Vec3::ZERO {
             continue;
         }
-        let home = groups.iter_mut().find(|(g, _, _)| (g.position - s.position).length() < PAIR_SPAN && g.look.dot(level) > 0.9);
+        let home = groups.iter_mut().find(|(g, _, _)| {
+            (g.position - s.position).length() < PAIR_SPAN && g.look.dot(level) > 0.9
+        });
         match home {
             Some((g, sum, dirs)) => {
                 g.members.push(s.index);
@@ -199,7 +208,17 @@ pub(crate) fn group_spots(spots: &mut [Spot]) -> Vec<SpotGroup> {
                 g.range = g.range.max(s.range);
                 g.score += s.score;
             }
-            None => groups.push((SpotGroup { position: s.position, look: level, range: s.range, score: s.score, members: vec![s.index] }, s.position, level)),
+            None => groups.push((
+                SpotGroup {
+                    position: s.position,
+                    look: level,
+                    range: s.range,
+                    score: s.score,
+                    members: vec![s.index],
+                },
+                s.position,
+                level,
+            )),
         }
     }
     let mut out: Vec<SpotGroup> = groups.into_iter().map(|g| g.0).collect();
@@ -211,8 +230,20 @@ pub(crate) fn group_spots(spots: &mut [Spot]) -> Vec<SpotGroup> {
 /// touch the side planes of the frustum, nor the near and far ones, whichever way depth runs.
 /// A plane the projection makes none of (an infinite far one) is not tested.
 pub(crate) fn sphere_in_view(view_proj: &Mat4, center: Vec3, radius: f32) -> bool {
-    let r = [view_proj.row(0), view_proj.row(1), view_proj.row(2), view_proj.row(3)];
-    let planes = [r[3] + r[0], r[3] - r[0], r[3] + r[1], r[3] - r[1], r[2], r[3] - r[2]];
+    let r = [
+        view_proj.row(0),
+        view_proj.row(1),
+        view_proj.row(2),
+        view_proj.row(3),
+    ];
+    let planes = [
+        r[3] + r[0],
+        r[3] - r[0],
+        r[3] + r[1],
+        r[3] - r[1],
+        r[2],
+        r[3] - r[2],
+    ];
     let c = center.extend(1.0);
     planes.iter().all(|p| {
         let n = p.truncate().length();
@@ -262,12 +293,28 @@ mod tests {
     #[test]
     fn the_view_test_culls_what_lies_outside_it() {
         let look = Mat4::look_to_rh(Vec3::ZERO, Vec3::Y, Vec3::Z);
-        for vp in [Mat4::perspective_rh(1.2, 1.5, 0.1, 100.0) * look, Mat4::perspective_rh(1.2, 1.5, 100.0, 0.1) * look, Mat4::perspective_infinite_reverse_rh(1.2, 1.5, 0.1) * look] {
+        for vp in [
+            Mat4::perspective_rh(1.2, 1.5, 0.1, 100.0) * look,
+            Mat4::perspective_rh(1.2, 1.5, 100.0, 0.1) * look,
+            Mat4::perspective_infinite_reverse_rh(1.2, 1.5, 0.1) * look,
+        ] {
             assert!(sphere_in_view(&vp, Vec3::new(0.0, 20.0, 0.0), 1.0));
-            assert!(sphere_in_view(&vp, Vec3::new(0.0, -2.0, 0.0), 3.0), "touching the near plane");
-            assert!(!sphere_in_view(&vp, Vec3::new(0.0, -30.0, 0.0), 5.0), "behind");
-            assert!(!sphere_in_view(&vp, Vec3::new(60.0, 10.0, 0.0), 2.0), "far to the side");
-            assert!(sphere_in_view(&vp, Vec3::new(14.0, 10.0, 0.0), 8.0), "touching the side");
+            assert!(
+                sphere_in_view(&vp, Vec3::new(0.0, -2.0, 0.0), 3.0),
+                "touching the near plane"
+            );
+            assert!(
+                !sphere_in_view(&vp, Vec3::new(0.0, -30.0, 0.0), 5.0),
+                "behind"
+            );
+            assert!(
+                !sphere_in_view(&vp, Vec3::new(60.0, 10.0, 0.0), 2.0),
+                "far to the side"
+            );
+            assert!(
+                sphere_in_view(&vp, Vec3::new(14.0, 10.0, 0.0), 8.0),
+                "touching the side"
+            );
         }
     }
 
@@ -296,7 +343,10 @@ mod tests {
             ("fog lamps", include_str!("../fog_lamps.wgsl")),
             ("precipitation", include_str!("../precip_common.wgsl")),
         ] {
-            assert!(text.contains(&format!("lamp_view_proj: array<mat4x4<f32>, {n}>,")), "{name}");
+            assert!(
+                text.contains(&format!("lamp_view_proj: array<mat4x4<f32>, {n}>,")),
+                "{name}"
+            );
         }
         // (a beam's shadow in the air is read from the world's, the vehicles' and the saloon's tiles;
         // a cube's faces are not looked up there)
@@ -305,18 +355,42 @@ mod tests {
         let air = include_str!("../lamp_air.wgsl");
         assert!(air.contains(&format!("tile_k < {m}u")) && air.contains(&format!("tile_p < {m}u")));
         let lamps = include_str!("../shaders/enhanced/02_lamps.wgsl");
-        assert!(lamps.contains(&format!("let saloon = k >= {}u && k < {}u;", CABIN_SLOTS.start, CABIN_SLOTS.end)));
-        assert!(lamps.contains(&format!("if (k >= {}u) {{", CUBE_SLOTS.start)), "the cube blocks start where the shader says");
-        assert!(include_str!("../shaders/scene/04_shadow_passes.wgsl").contains(&format!("const LAMP_ENTRY_BITS: u32 = {LAMP_ENTRY_BITS}u;")));
-        assert!(lamps.contains(&format!("floor(m / {:.1})", LAMP_MARK)), "marks are decoded in steps of LAMP_MARK");
-        assert!(n < (1usize << (32 - LAMP_ENTRY_BITS)), "a tile's number fits above the entry's bits");
-        assert!(LAMP_MARK * (n as f32 + 1.0) < 1e6, "marks stay exact in a float");
+        assert!(lamps.contains(&format!(
+            "let saloon = k >= {}u && k < {}u;",
+            CABIN_SLOTS.start, CABIN_SLOTS.end
+        )));
+        assert!(
+            lamps.contains(&format!("if (k >= {}u) {{", CUBE_SLOTS.start)),
+            "the cube blocks start where the shader says"
+        );
+        assert!(
+            include_str!("../shaders/scene/04_shadow_passes.wgsl")
+                .contains(&format!("const LAMP_ENTRY_BITS: u32 = {LAMP_ENTRY_BITS}u;"))
+        );
+        assert!(
+            lamps.contains(&format!("floor(m / {:.1})", LAMP_MARK)),
+            "marks are decoded in steps of LAMP_MARK"
+        );
+        assert!(
+            n < (1usize << (32 - LAMP_ENTRY_BITS)),
+            "a tile's number fits above the entry's bits"
+        );
+        assert!(
+            LAMP_MARK * (n as f32 + 1.0) < 1e6,
+            "marks stay exact in a float"
+        );
     }
 
     /// Two headlamps of a car are one source, a car across the road another.
     #[test]
     fn headlamps_come_in_pairs() {
-        let lamp = |index: u32, x: f32, y: f32, dir: Vec3, score: f32| Spot { index, position: Vec3::new(x, y, 0.8), direction: dir, range: 60.0, score };
+        let lamp = |index: u32, x: f32, y: f32, dir: Vec3, score: f32| Spot {
+            index,
+            position: Vec3::new(x, y, 0.8),
+            direction: dir,
+            range: 60.0,
+            score,
+        };
         let mut spots = [
             lamp(10, -0.7, 5.0, Vec3::new(0.0, 1.0, -0.03), 4.0),
             lamp(11, 0.7, 5.0, Vec3::new(0.0, 1.0, -0.03), 4.0),

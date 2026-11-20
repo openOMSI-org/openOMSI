@@ -395,7 +395,12 @@ mod passenger_connection_authority_tests {
         let solo = Args::parse_from(["openomsi"]);
         assert!(solo.passenger_connections_allowed(false));
         assert!(!solo.passenger_connections_allowed(true));
-        for flags in [vec!["--lan-host", "27015"], vec!["--lan-join", "127.0.0.1:27015"], vec!["--lan-join", "wss://localhost/ws"], vec!["--server", "server.cfg"]] {
+        for flags in [
+            vec!["--lan-host", "27015"],
+            vec!["--lan-join", "127.0.0.1:27015"],
+            vec!["--lan-join", "wss://localhost/ws"],
+            vec!["--server", "server.cfg"],
+        ] {
             let args = Args::parse_from(std::iter::once("openomsi").chain(flags));
             assert!(!args.passenger_connections_allowed(false));
             assert!(!args.passenger_connections_allowed(true));

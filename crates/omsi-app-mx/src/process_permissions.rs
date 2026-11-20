@@ -1,8 +1,8 @@
 //! Trusted game UI for native helper requests. Plugin panels cannot approve these.
 use omsi_plugin::api::process::{ProcessDecision, ProcessPrompt};
 mod dialog;
-use dialog::draw;
 pub(crate) use dialog::DialogState;
+use dialog::draw;
 
 #[cfg(test)]
 mod tests;

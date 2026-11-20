@@ -43,8 +43,11 @@ pub(crate) struct VanillaSkyUniform {
 /// and the detail volume (3-D R8), both with their mip chains, and a repeating sampler.
 /// Without `enhanced_noise` (the launcher's preview, which draws no enhanced sky) both are
 /// a texel each, and nothing is generated.
-pub(crate) fn cloud_noise_textures(device: &mx::Device,
-    queue: &mx::Queue, enhanced_noise: bool) -> (mx::TextureView, mx::TextureView, mx::Sampler, Vec<u8>) {
+pub(crate) fn cloud_noise_textures(
+    device: &mx::Device,
+    queue: &mx::Queue,
+    enhanced_noise: bool,
+) -> (mx::TextureView, mx::TextureView, mx::Sampler, Vec<u8>) {
     let t0 = std::time::Instant::now();
     // (made once a process, and kept on the disk between starts: see `clouds::noise`)
     let none = (vec![vec![0, 0, 0, 255]], vec![vec![0]]);
@@ -52,9 +55,17 @@ pub(crate) fn cloud_noise_textures(device: &mx::Device,
         Some(n) => (&n.shape, &n.detail),
         None => (&none.0, &none.1),
     };
-    let make = |label: &str, size: u32, dim: mx::TextureDimension,
-                format: mx::TextureFormat, bpp: u32, levels: &[Vec<u8>]| {
-        let depth = if dim == mx::TextureDimension::D3 { size } else { 1 };
+    let make = |label: &str,
+                size: u32,
+                dim: mx::TextureDimension,
+                format: mx::TextureFormat,
+                bpp: u32,
+                levels: &[Vec<u8>]| {
+        let depth = if dim == mx::TextureDimension::D3 {
+            size
+        } else {
+            1
+        };
         let tex = device
             .create_texture(&mx::TextureDescriptor {
                 label: Some(label),
@@ -73,7 +84,11 @@ pub(crate) fn cloud_noise_textures(device: &mx::Device,
             .expect("mX: a texture");
         for (m, data) in levels.iter().enumerate() {
             let e = (size >> m).max(1);
-            let d = if dim == mx::TextureDimension::D3 { e } else { 1 };
+            let d = if dim == mx::TextureDimension::D3 {
+                e
+            } else {
+                1
+            };
             queue
                 .write_texture(
                     mx::TexelCopyTextureInfo {
@@ -99,11 +114,27 @@ pub(crate) fn cloud_noise_textures(device: &mx::Device,
         tex.create_view(&mx::TextureViewDescriptor::default())
             .expect("mX: a texture view")
     };
-    let (shape_size, detail_size) = if enhanced_noise { (clouds::SHAPE_SIZE, clouds::DETAIL_SIZE) } else { (1, 1) };
-    let shape_view = make("cloud shape", shape_size, mx::TextureDimension::D2,
-        mx::TextureFormat::Rgba8Unorm, 4, shape);
-    let detail_view = make("cloud detail", detail_size, mx::TextureDimension::D3,
-        mx::TextureFormat::R8Unorm, 1, detail);
+    let (shape_size, detail_size) = if enhanced_noise {
+        (clouds::SHAPE_SIZE, clouds::DETAIL_SIZE)
+    } else {
+        (1, 1)
+    };
+    let shape_view = make(
+        "cloud shape",
+        shape_size,
+        mx::TextureDimension::D2,
+        mx::TextureFormat::Rgba8Unorm,
+        4,
+        shape,
+    );
+    let detail_view = make(
+        "cloud detail",
+        detail_size,
+        mx::TextureDimension::D3,
+        mx::TextureFormat::R8Unorm,
+        1,
+        detail,
+    );
     let sampler = device
         .create_sampler(&mx::SamplerDescriptor {
             label: Some("cloud noise"),

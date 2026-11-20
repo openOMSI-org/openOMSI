@@ -11,19 +11,19 @@
 
 use std::collections::HashSet;
 
+use crate::app_impl::ShiftClockCx;
 use glam::{DVec3, Vec3};
 use omsi_render::Camera;
 use winit::keyboard::KeyCode;
-use crate::app_impl::ShiftClockCx;
 
 mod pad;
 mod panel;
 mod render;
 
 // (the lens and the darkroom are the omsi-photo crate)
-use omsi_photo::{develop, exposure, lens};
 pub(crate) use develop::Grade;
 pub(crate) use omsi_photo::stretch;
+use omsi_photo::{develop, exposure, lens};
 
 /// A request of the photo mode's panel.
 #[derive(Clone, Debug, PartialEq)]
@@ -45,7 +45,13 @@ pub(crate) enum Request {
 }
 
 /// How far the camera may go from the bus: (metres, label).
-pub(crate) const RANGES: [(f32, &str); 5] = [(25.0, "25 m"), (50.0, "50 m"), (100.0, "100 m"), (250.0, "250 m"), (f32::INFINITY, "Unlimited")];
+pub(crate) const RANGES: [(f32, &str); 5] = [
+    (25.0, "25 m"),
+    (50.0, "50 m"),
+    (100.0, "100 m"),
+    (250.0, "250 m"),
+    (f32::INFINITY, "Unlimited"),
+];
 /// The frame: (width / height, label); None: the window's.
 pub(crate) const ASPECTS: [(Option<f32>, &str); 8] = [
     (None, "Window"),
@@ -61,10 +67,29 @@ pub(crate) const GRIDS: [&str; 4] = ["Off", "Rule of thirds", "Golden ratio", "C
 /// The f-numbers of the aperture ring.
 pub(crate) const FSTOPS: [f32; 11] = [1.2, 1.4, 1.8, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0, 22.0];
 /// Shutter times (s) with their labels.
-pub(crate) const SHUTTERS: [(f32, &str); 8] = [(1.0 / 8.0, "1/8 s"), (1.0 / 15.0, "1/15 s"), (1.0 / 30.0, "1/30 s"), (1.0 / 60.0, "1/60 s"), (1.0 / 125.0, "1/125 s"), (1.0 / 250.0, "1/250 s"), (1.0 / 500.0, "1/500 s"), (1.0 / 1000.0, "1/1000 s")];
-pub(crate) const BLADES: [(u32, &str); 4] = [(0, "Round"), (5, "5 blades"), (6, "6 blades"), (8, "8 blades")];
+pub(crate) const SHUTTERS: [(f32, &str); 8] = [
+    (1.0 / 8.0, "1/8 s"),
+    (1.0 / 15.0, "1/15 s"),
+    (1.0 / 30.0, "1/30 s"),
+    (1.0 / 60.0, "1/60 s"),
+    (1.0 / 125.0, "1/125 s"),
+    (1.0 / 250.0, "1/250 s"),
+    (1.0 / 500.0, "1/500 s"),
+    (1.0 / 1000.0, "1/1000 s"),
+];
+pub(crate) const BLADES: [(u32, &str); 4] = [
+    (0, "Round"),
+    (5, "5 blades"),
+    (6, "6 blades"),
+    (8, "8 blades"),
+];
 /// Pictures a photo is made of when it has depth of field or motion blur.
-pub(crate) const QUALITY: [(u32, &str); 4] = [(16, "Draft (16 samples)"), (32, "Good (32 samples)"), (64, "High (64 samples)"), (128, "Best (128 samples)")];
+pub(crate) const QUALITY: [(u32, &str); 4] = [
+    (16, "Draft (16 samples)"),
+    (32, "Good (32 samples)"),
+    (64, "High (64 samples)"),
+    (128, "Best (128 samples)"),
+];
 /// The saved photo's size, times the window's.
 pub(crate) const SIZES: [(f32, &str); 2] = [(1.0, "As the window"), (2.0, "Double (supersampled)")];
 /// The brightest aperture of the advanced mode's lens.
@@ -126,8 +151,42 @@ pub(crate) struct Settings {
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
-            orbit: false, fov: lens::fov_for(35.0), roll: 0.0, speed: 1.0, range: 1, grid: 0, aspect: 0, dof: false, auto_focus: true, focus: 10.0, fstop: 4, blades: 0, motion: false, shutter: 2, quality: 1, grade: Grade::neutral(), size: 0,
-            level: false, tripod: false, sensor: 0, exposure: exposure::Exposure::default(), lens_max: 1, wb: 0, kelvin: 5500.0, profile: 0, lens_raw: false, tilt: [0.0; 2], shift: [0.0; 2], highlights: 0.5, noise: true, bracket: 0, bracket_step: 1.0, png16: false, zebra: false, peaking: false, histogram: true,
+            orbit: false,
+            fov: lens::fov_for(35.0),
+            roll: 0.0,
+            speed: 1.0,
+            range: 1,
+            grid: 0,
+            aspect: 0,
+            dof: false,
+            auto_focus: true,
+            focus: 10.0,
+            fstop: 4,
+            blades: 0,
+            motion: false,
+            shutter: 2,
+            quality: 1,
+            grade: Grade::neutral(),
+            size: 0,
+            level: false,
+            tripod: false,
+            sensor: 0,
+            exposure: exposure::Exposure::default(),
+            lens_max: 1,
+            wb: 0,
+            kelvin: 5500.0,
+            profile: 0,
+            lens_raw: false,
+            tilt: [0.0; 2],
+            shift: [0.0; 2],
+            highlights: 0.5,
+            noise: true,
+            bracket: 0,
+            bracket_step: 1.0,
+            png16: false,
+            zebra: false,
+            peaking: false,
+            histogram: true,
         }
     }
 }
@@ -135,7 +194,11 @@ impl Default for Settings {
 impl Settings {
     /// The sensor's height (mm): full frame in the simple mode.
     pub(crate) fn sensor_h(&self, pro: bool) -> f32 {
-        if pro { exposure::SENSORS[self.sensor.min(exposure::SENSORS.len() - 1)].1 } else { 24.0 }
+        if pro {
+            exposure::SENSORS[self.sensor.min(exposure::SENSORS.len() - 1)].1
+        } else {
+            24.0
+        }
     }
 
     /// The real focal length (mm) of the lens on the sensor.
@@ -198,11 +261,20 @@ pub(crate) struct Photo {
 }
 
 impl Photo {
-    fn new(cam: Camera, anchor: DVec3, bus_velocity: Vec3, prev_paused: bool, settings: Settings) -> Photo {
+    fn new(
+        cam: Camera,
+        anchor: DVec3,
+        bus_velocity: Vec3,
+        prev_paused: bool,
+        settings: Settings,
+    ) -> Photo {
         let to = cam.position - anchor;
         let dist = (to.length() as f32).clamp(3.0, 60.0);
         let around = (to.x as f32).atan2(to.y as f32).to_degrees();
-        let up = ((to.z as f32) / dist.max(0.1)).clamp(-1.0, 1.0).asin().to_degrees();
+        let up = ((to.z as f32) / dist.max(0.1))
+            .clamp(-1.0, 1.0)
+            .asin()
+            .to_degrees();
         let mut cam = cam;
         cam.fov_deg = settings.fov;
         cam.roll = settings.roll;
@@ -267,12 +339,22 @@ impl Photo {
         let focal_eq = lens::focal_mm(s.fov);
         let max = LENS_MAX[s.lens_max.min(LENS_MAX.len() - 1)];
         let min = if max >= 2.8 { 32.0 } else { 22.0 };
-        self.metered = Some(exposure::meter(&s.exposure, self.scene_ev, (max, min), focal_eq));
+        self.metered = Some(exposure::meter(
+            &s.exposure,
+            self.scene_ev,
+            (max, min),
+            focal_eq,
+        ));
     }
 
     /// The camera turned by (dx, dy) degrees (right, down).
     pub(crate) fn look(&mut self, dx: f32, dy: f32) {
-        let fine = if self.keys.contains(&KeyCode::AltLeft) || self.keys.contains(&KeyCode::AltRight) { 0.25 } else { 1.0 };
+        let fine =
+            if self.keys.contains(&KeyCode::AltLeft) || self.keys.contains(&KeyCode::AltRight) {
+                0.25
+            } else {
+                1.0
+            };
         self.dragged += dx.abs() + dy.abs();
         let (dx, dy) = (dx * fine, dy * fine);
         if self.settings.orbit {
@@ -286,7 +368,8 @@ impl Photo {
 
     /// The lens zoomed by wheel notches (up: longer).
     pub(crate) fn zoom(&mut self, notches: f32) {
-        self.fov_target = (self.fov_target * (1.0 - 0.08 * notches)).clamp(lens::fov_for(400.0), lens::fov_for(10.0));
+        self.fov_target = (self.fov_target * (1.0 - 0.08 * notches))
+            .clamp(lens::fov_for(400.0), lens::fov_for(10.0));
     }
 
     /// The focus distance the lens is at: the bus (where the camera looks at it) when it
@@ -303,9 +386,19 @@ impl Photo {
         // (the bus's surface where the camera sees its middle, from the shot's depth: its
         // middle itself lay a couple of metres behind the side the camera looks at)
         let tan = (self.cam.fov_deg.to_radians() * 0.5).tan();
-        let (w, h) = self.render.depth.as_ref().map(|d| (d.0 as f32, d.1 as f32)).unwrap_or((16.0, 9.0));
-        let (u, v) = (to.dot(self.cam.right()) / along / (tan * w / h), to.dot(self.cam.up()) / along / tan);
-        let surface = (u.abs() < 0.95 && v.abs() < 0.95).then(|| self.render.depth_at(0.5 + u * 0.5, 0.5 - v * 0.5)).flatten();
+        let (w, h) = self
+            .render
+            .depth
+            .as_ref()
+            .map(|d| (d.0 as f32, d.1 as f32))
+            .unwrap_or((16.0, 9.0));
+        let (u, v) = (
+            to.dot(self.cam.right()) / along / (tan * w / h),
+            to.dot(self.cam.up()) / along / tan,
+        );
+        let surface = (u.abs() < 0.95 && v.abs() < 0.95)
+            .then(|| self.render.depth_at(0.5 + u * 0.5, 0.5 - v * 0.5))
+            .flatten();
         match surface {
             Some(d) if d < along + 0.5 && d > along - 6.0 => d,
             _ => along,
@@ -320,15 +413,31 @@ impl Photo {
         let axis = |plus: bool, minus: bool| (plus as i32 - minus as i32) as f32;
         // W A S D move, Space (or E) rises and Ctrl (or C, Q) sinks, as in a game's free camera
         let up = k(KeyCode::Space) || k(KeyCode::KeyE);
-        let down = k(KeyCode::ControlLeft) || k(KeyCode::ControlRight) || k(KeyCode::KeyC) || k(KeyCode::KeyQ);
-        let mut m = Vec3::new(axis(k(KeyCode::KeyD), k(KeyCode::KeyA)), axis(k(KeyCode::KeyW), k(KeyCode::KeyS)), axis(up, down));
+        let down = k(KeyCode::ControlLeft)
+            || k(KeyCode::ControlRight)
+            || k(KeyCode::KeyC)
+            || k(KeyCode::KeyQ);
+        let mut m = Vec3::new(
+            axis(k(KeyCode::KeyD), k(KeyCode::KeyA)),
+            axis(k(KeyCode::KeyW), k(KeyCode::KeyS)),
+            axis(up, down),
+        );
         m += self.pad.moves();
         m += Vec3::new(self.touch_move.x, self.touch_move.y, self.touch_z);
         m.z *= 0.5;
-        let fast = if k(KeyCode::ShiftLeft) || k(KeyCode::ShiftRight) || self.touch_fast { 4.0 } else if k(KeyCode::AltLeft) || k(KeyCode::AltRight) { 0.25 } else { 1.0 };
+        let fast = if k(KeyCode::ShiftLeft) || k(KeyCode::ShiftRight) || self.touch_fast {
+            4.0
+        } else if k(KeyCode::AltLeft) || k(KeyCode::AltRight) {
+            0.25
+        } else {
+            1.0
+        };
         // the arrows and the right stick turn the view; Z and X roll it
         let turn = 70.0 * dt * (self.cam.fov_deg / 60.0).clamp(0.15, 1.5);
-        let (lx, ly) = (axis(k(KeyCode::ArrowRight), k(KeyCode::ArrowLeft)) + self.pad.look[0], axis(k(KeyCode::ArrowDown), k(KeyCode::ArrowUp)) + self.pad.look[1]);
+        let (lx, ly) = (
+            axis(k(KeyCode::ArrowRight), k(KeyCode::ArrowLeft)) + self.pad.look[0],
+            axis(k(KeyCode::ArrowDown), k(KeyCode::ArrowUp)) + self.pad.look[1],
+        );
         if lx != 0.0 || ly != 0.0 {
             self.look(lx * turn, ly * turn);
         }
@@ -337,7 +446,10 @@ impl Photo {
             self.settings.roll = (self.settings.roll + roll * 30.0 * dt).clamp(-45.0, 45.0);
         }
         // the lens: + and - (and the pad's d-pad) zoom
-        let zoom = axis(k(KeyCode::Equal) || k(KeyCode::NumpadAdd), k(KeyCode::Minus) || k(KeyCode::NumpadSubtract)) + self.pad.zoom;
+        let zoom = axis(
+            k(KeyCode::Equal) || k(KeyCode::NumpadAdd),
+            k(KeyCode::Minus) || k(KeyCode::NumpadSubtract),
+        ) + self.pad.zoom;
         if zoom != 0.0 {
             self.zoom(zoom * dt * 6.0);
         }
@@ -358,9 +470,14 @@ impl Photo {
             self.orbit.0 = (self.orbit.0 + self.vel.y * dt).clamp(2.0, range.min(400.0));
             self.orbit.1 += self.vel.x * dt;
             self.orbit.2 = (self.orbit.2 + self.vel.z * dt).clamp(-10.0, 85.0);
-            let (d, a, e) = (self.orbit.0 as f64, (self.orbit.1 as f64).to_radians(), (self.orbit.2 as f64).to_radians());
+            let (d, a, e) = (
+                self.orbit.0 as f64,
+                (self.orbit.1 as f64).to_radians(),
+                (self.orbit.2 as f64).to_radians(),
+            );
             let centre = self.anchor + DVec3::new(0.0, 0.0, 1.5);
-            self.cam.position = centre + DVec3::new(a.sin() * e.cos(), a.cos() * e.cos(), e.sin()) * d;
+            self.cam.position =
+                centre + DVec3::new(a.sin() * e.cos(), a.cos() * e.cos(), e.sin()) * d;
             let dir = (centre - self.cam.position).as_vec3().normalize_or(Vec3::Y);
             self.cam.yaw = dir.x.atan2(dir.y).to_degrees();
             self.cam.pitch = dir.z.clamp(-1.0, 1.0).asin().to_degrees();
@@ -408,8 +525,13 @@ impl Photo {
             KeyCode::KeyR => Some(Request::Level),
             KeyCode::Tab => {
                 let n = panel::tabs(self.pro).len();
-                let back = self.keys.contains(&KeyCode::ShiftLeft) || self.keys.contains(&KeyCode::ShiftRight);
-                self.tab = if back { (self.tab + n - 1) % n } else { (self.tab + 1) % n };
+                let back = self.keys.contains(&KeyCode::ShiftLeft)
+                    || self.keys.contains(&KeyCode::ShiftRight);
+                self.tab = if back {
+                    (self.tab + n - 1) % n
+                } else {
+                    (self.tab + 1) % n
+                };
                 None
             }
             _ => None,
@@ -420,22 +542,41 @@ impl Photo {
 impl Photo {
     /// The photo as last developed (w, h, RGBA).
     pub(crate) fn developed(&self) -> Option<(u32, u32, &[u8])> {
-        self.render.developed.as_ref().map(|(w, h, px)| (*w, *h, px.as_slice()))
+        self.render
+            .developed
+            .as_ref()
+            .map(|(w, h, px)| (*w, *h, px.as_slice()))
     }
 
     /// The photo as the window shows it (the live view's aids over it).
     pub(crate) fn shown(&self) -> Option<(u32, u32, &[u8])> {
         let (w, h, px) = self.developed()?;
-        Some((w, h, self.render.shown.as_deref().filter(|s| s.len() == px.len()).unwrap_or(px)))
+        Some((
+            w,
+            h,
+            self.render
+                .shown
+                .as_deref()
+                .filter(|s| s.len() == px.len())
+                .unwrap_or(px),
+        ))
     }
 }
 
 /// `OMSI_PHOTO`: settings for a test, `key=value` by commas.
 fn test_settings(s: &mut Settings, text: &str) {
     for part in text.split(',') {
-        let Some((k, v)) = part.split_once('=') else { continue };
+        let Some((k, v)) = part.split_once('=') else {
+            continue;
+        };
         let x: f32 = v.trim().parse().unwrap_or(0.0);
-        let near = |list: &[f32]| list.iter().enumerate().min_by(|a, b| (a.1 - x).abs().total_cmp(&(b.1 - x).abs())).map(|e| e.0).unwrap_or(0);
+        let near = |list: &[f32]| {
+            list.iter()
+                .enumerate()
+                .min_by(|a, b| (a.1 - x).abs().total_cmp(&(b.1 - x).abs()))
+                .map(|e| e.0)
+                .unwrap_or(0)
+        };
         match k.trim() {
             "orbit" => s.orbit = x != 0.0,
             "focal" => s.fov = lens::fov_for(x),
@@ -447,7 +588,10 @@ fn test_settings(s: &mut Settings, text: &str) {
             }
             "motion" => s.motion = x != 0.0,
             "shutter" => s.shutter = near(&SHUTTERS.map(|t| 1.0 / t.0)),
-            "filter" => s.grade.filter = develop::Filter::ALL[(x as usize).min(develop::Filter::ALL.len() - 1)],
+            "filter" => {
+                s.grade.filter =
+                    develop::Filter::ALL[(x as usize).min(develop::Filter::ALL.len() - 1)]
+            }
             "vignette" => s.grade.vignette = x,
             "grain" => s.grade.grain = x,
             "exposure" => s.grade.exposure = x,
@@ -481,7 +625,10 @@ fn test_settings(s: &mut Settings, text: &str) {
             "png16" => s.png16 = x != 0.0,
             "zebra" => s.zebra = x != 0.0,
             "peaking" => s.peaking = x != 0.0,
-            "border" => s.grade.border = develop::Border::ALL[(x as usize).min(develop::Border::ALL.len() - 1)],
+            "border" => {
+                s.grade.border =
+                    develop::Border::ALL[(x as usize).min(develop::Border::ALL.len() - 1)]
+            }
             "clarity" => s.grade.clarity = x,
             "noise" => s.noise = x != 0.0,
             "pro" => {}
@@ -508,7 +655,10 @@ impl crate::App {
             Some(p) => {
                 let h = p.vehicle.heading.to_radians();
                 let v = p.vehicle.physics.speed;
-                (p.vehicle.position, Vec3::new(h.sin() as f32, h.cos() as f32, 0.0) * v)
+                (
+                    p.vehicle.position,
+                    Vec3::new(h.sin() as f32, h.cos() as f32, 0.0) * v,
+                )
             }
             None => (cam.position, Vec3::ZERO),
         };
@@ -527,7 +677,9 @@ impl crate::App {
         ph.cam.pitch = cam.pitch;
         // (a test's orbit: OMSI_PHOTO dist, around, up)
         for part in omsi_cfg::flags::OMSI_PHOTO.var().unwrap_or("").split(',') {
-            let Some((k, v)) = part.split_once('=') else { continue };
+            let Some((k, v)) = part.split_once('=') else {
+                continue;
+            };
             let x: f32 = v.trim().parse().unwrap_or(0.0);
             match k.trim() {
                 "dist" => ph.orbit.0 = x,
@@ -537,7 +689,11 @@ impl crate::App {
                 "tab" => ph.tab = x as usize,
                 // (a moving bus for a rolling shot without driving one)
                 "kmh" => {
-                    let h = self.player.as_ref().map(|p| p.vehicle.heading.to_radians()).unwrap_or(0.0);
+                    let h = self
+                        .player
+                        .as_ref()
+                        .map(|p| p.vehicle.heading.to_radians())
+                        .unwrap_or(0.0);
                     ph.bus_velocity = Vec3::new(h.sin() as f32, h.cos() as f32, 0.0) * x / 3.6;
                 }
                 _ => {}
@@ -547,7 +703,13 @@ impl crate::App {
         if self.net.lan.is_none() {
             self.paused = true;
         }
-        log::info!("photo mode on at {:.1},{:.1},{:.1}, the bus at {:.1} km/h", cam.position.x, cam.position.y, cam.position.z, velocity.length() * 3.6);
+        log::info!(
+            "photo mode on at {:.1},{:.1},{:.1}, the bus at {:.1} km/h",
+            cam.position.x,
+            cam.position.y,
+            cam.position.z,
+            velocity.length() * 3.6
+        );
     }
 
     pub(crate) fn photo_request(&mut self, r: Request) {
@@ -556,7 +718,9 @@ impl crate::App {
 
     /// A key while the photo mode is on: all of them are its own.
     pub(crate) fn photo_key(&mut self, code: KeyCode, pressed: bool, repeat: bool) {
-        let Some(ph) = self.photo.as_mut() else { return };
+        let Some(ph) = self.photo.as_mut() else {
+            return;
+        };
         if repeat {
             return;
         }
@@ -568,7 +732,10 @@ impl crate::App {
 
 crate::app::stage_ctx!(
     /// The photo mode's part of the game (the clock it may move included).
-    PhotoCx { reads: [input, net, world], writes: [ui, clock, view, menus, traffic, player, gfx] }
+    PhotoCx {
+        reads: [input, net, world],
+        writes: [ui, clock, view, menus, traffic, player, gfx]
+    }
 );
 
 /// Out of the photo mode: the game as it was.
@@ -577,7 +744,10 @@ fn exit_photo(cx: &mut PhotoCx) {
     *cx.ui.photo_settings = Some(ph.settings.clone());
     *cx.clock.paused = ph.prev_paused;
     if ph.clock_shift != 0.0 {
-        crate::app_impl::shift_clock(crate::app::narrow!(cx => ShiftClockCx { reads: [net, input, world], writes: [clock, traffic, player, ui, gfx] }), -ph.clock_shift);
+        crate::app_impl::shift_clock(
+            crate::app::narrow!(cx => ShiftClockCx { reads: [net, input, world], writes: [clock, traffic, player, ui, gfx] }),
+            -ph.clock_shift,
+        );
     }
     if let Some(c) = ph.prev_camera {
         *cx.view.camera = Some(c);
@@ -599,7 +769,11 @@ pub(crate) fn photo_request(cx: &mut PhotoCx, r: Request) {
         }
         Request::Reset => {
             if let Some(ph) = cx.ui.photo.as_mut() {
-                ph.settings = Settings { fov: ph.settings.fov, orbit: ph.settings.orbit, ..Settings::default() };
+                ph.settings = Settings {
+                    fov: ph.settings.fov,
+                    orbit: ph.settings.orbit,
+                    ..Settings::default()
+                };
                 ph.fov_target = ph.settings.fov;
             }
         }
@@ -625,26 +799,44 @@ pub(crate) fn photo_request(cx: &mut PhotoCx, r: Request) {
                         }
                         ph.focus_mark = Some((x, y, 1.5));
                     }
-                    None => ph.note = Some((omsi_ui::tr("Hold the camera still a moment, then click to focus").into_owned(), 3.0)),
+                    None => {
+                        ph.note = Some((
+                            omsi_ui::tr("Hold the camera still a moment, then click to focus")
+                                .into_owned(),
+                            3.0,
+                        ))
+                    }
                 }
             }
         }
         Request::Hyperfocal => {
             if let Some(ph) = cx.ui.photo.as_mut() {
                 let sh = ph.settings.sensor_h(ph.pro);
-                let (_, _, hyper) = exposure::dof_limits(ph.settings.focal(ph.pro), ph.fstop(), 10.0, sh);
+                let (_, _, hyper) =
+                    exposure::dof_limits(ph.settings.focal(ph.pro), ph.fstop(), 10.0, sh);
                 ph.settings.auto_focus = false;
                 ph.settings.focus = hyper.clamp(0.3, 5000.0);
             }
         }
         Request::Clock(secs) => {
-            if cx.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+            if cx
+                .net
+                .lan
+                .as_ref()
+                .is_some_and(|l| l.role == omsi_net::Role::Client)
+            {
                 if let Some(ph) = cx.ui.photo.as_mut() {
-                    ph.note = Some((omsi_ui::tr("In a LAN session the host sets the clock").into_owned(), 3.0));
+                    ph.note = Some((
+                        omsi_ui::tr("In a LAN session the host sets the clock").into_owned(),
+                        3.0,
+                    ));
                 }
             } else {
                 let moved = !crate::app_impl::real_time_locked(cx.common.settings, cx.net);
-                crate::app_impl::shift_clock(crate::app::narrow!(cx => ShiftClockCx { reads: [net, input, world], writes: [clock, traffic, player, ui, gfx] }), secs);
+                crate::app_impl::shift_clock(
+                    crate::app::narrow!(cx => ShiftClockCx { reads: [net, input, world], writes: [clock, traffic, player, ui, gfx] }),
+                    secs,
+                );
                 if let Some(ph) = cx.ui.photo.as_mut() {
                     if moved {
                         ph.clock_shift += secs;
@@ -674,9 +866,18 @@ pub(crate) fn photo(mut cx: PhotoCx, dt: f32) {
         photo_request(&mut cx, r);
     }
     let world = cx.world.world.clone();
-    let Some(ph) = cx.ui.photo.as_mut() else { return };
-    ph.touch_move = if cx.input.touch.enabled { let s = cx.input.touch.stick_analog(); glam::Vec2::new(s.x, -s.y) } else { glam::Vec2::ZERO };
-    ph.fly(dt.min(0.1), |x, y| world.as_ref().and_then(|w| w.ground_height(x, y)));
+    let Some(ph) = cx.ui.photo.as_mut() else {
+        return;
+    };
+    ph.touch_move = if cx.input.touch.enabled {
+        let s = cx.input.touch.stick_analog();
+        glam::Vec2::new(s.x, -s.y)
+    } else {
+        glam::Vec2::ZERO
+    };
+    ph.fly(dt.min(0.1), |x, y| {
+        world.as_ref().and_then(|w| w.ground_height(x, y))
+    });
     if let Some(n) = ph.note.as_mut() {
         n.1 -= dt;
     }

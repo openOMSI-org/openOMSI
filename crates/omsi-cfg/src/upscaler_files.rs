@@ -6,9 +6,20 @@
 
 use std::path::{Path, PathBuf};
 
-const DLSS: [&str; 4] = ["sl.interposer.dll", "sl.common.dll", "sl.dlss.dll", "nvngx_dlss.dll"];
-const FSR3_DX12: [&str; 2] = ["amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_upscaler_dx12.dll"];
-const FSR3_VULKAN: [&str; 2] = ["amd_fidelityfx_loader_vk.dll", "amd_fidelityfx_upscaler_vk.dll"];
+const DLSS: [&str; 4] = [
+    "sl.interposer.dll",
+    "sl.common.dll",
+    "sl.dlss.dll",
+    "nvngx_dlss.dll",
+];
+const FSR3_DX12: [&str; 2] = [
+    "amd_fidelityfx_loader_dx12.dll",
+    "amd_fidelityfx_upscaler_dx12.dll",
+];
+const FSR3_VULKAN: [&str; 2] = [
+    "amd_fidelityfx_loader_vk.dll",
+    "amd_fidelityfx_upscaler_vk.dll",
+];
 const XESS: [&str; 1] = ["libxess.dll"];
 /// Frame generation's, beside its upscaler's (`mx_upscale::FrameGenMethod::files`).
 const DLSS_G: [&str; 4] = [
@@ -32,7 +43,10 @@ pub enum Api {
 }
 
 pub fn program_dir() -> PathBuf {
-    std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf)).unwrap_or_else(|| ".".into())
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| ".".into())
 }
 
 pub fn files(upscaler: &str, api: Api) -> &'static [&'static str] {
@@ -46,11 +60,17 @@ pub fn files(upscaler: &str, api: Api) -> &'static [&'static str] {
 }
 
 pub fn missing(dir: &Path, upscaler: &str, api: Api) -> Vec<&'static str> {
-    files(upscaler, api).iter().copied().filter(|f| !dir.join(f).is_file()).collect()
+    files(upscaler, api)
+        .iter()
+        .copied()
+        .filter(|f| !dir.join(f).is_file())
+        .collect()
 }
 
 fn present(dir: &Path, upscaler: &str) -> bool {
-    [Api::Dx12, Api::Vulkan].into_iter().any(|api| !files(upscaler, api).is_empty() && missing(dir, upscaler, api).is_empty())
+    [Api::Dx12, Api::Vulkan]
+        .into_iter()
+        .any(|api| !files(upscaler, api).is_empty() && missing(dir, upscaler, api).is_empty())
 }
 
 /// An adapter DLSS may run on: NVIDIA's (PCI vendor 0x10de) with RTX in its name. A candidate,
@@ -61,7 +81,11 @@ pub fn rtx_candidate(vendor: u32, name: &str) -> bool {
 
 pub fn rtx_present() -> bool {
     static RTX: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *RTX.get_or_init(|| adapters().iter().any(|(vendor, name)| rtx_candidate(*vendor, name)))
+    *RTX.get_or_init(|| {
+        adapters()
+            .iter()
+            .any(|(vendor, name)| rtx_candidate(*vendor, name))
+    })
 }
 
 #[cfg(windows)]
@@ -72,10 +96,21 @@ fn adapters() -> Vec<(u32, String)> {
     };
     let mut out = Vec::new();
     for index in 0..64 {
-        let Ok(adapter) = (unsafe { factory.EnumAdapters1(index) }) else { break };
-        let Ok(info) = (unsafe { adapter.GetDesc1() }) else { continue };
-        let end = info.Description.iter().position(|&c| c == 0).unwrap_or(info.Description.len());
-        out.push((info.VendorId, String::from_utf16_lossy(&info.Description[..end])));
+        let Ok(adapter) = (unsafe { factory.EnumAdapters1(index) }) else {
+            break;
+        };
+        let Ok(info) = (unsafe { adapter.GetDesc1() }) else {
+            continue;
+        };
+        let end = info
+            .Description
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(info.Description.len());
+        out.push((
+            info.VendorId,
+            String::from_utf16_lossy(&info.Description[..end]),
+        ));
     }
     out
 }
@@ -96,7 +131,9 @@ pub fn available(dir: &Path) -> Vec<&'static str> {
 }
 
 fn offered(dir: &Path, windows: bool, rtx: bool, metalfx: bool) -> Vec<&'static str> {
-    let files = ["dlss", "fsr3", "xess"].into_iter().filter(|u| windows && present(dir, u) && (*u != "dlss" || rtx));
+    let files = ["dlss", "fsr3", "xess"]
+        .into_iter()
+        .filter(|u| windows && present(dir, u) && (*u != "dlss" || rtx));
     files.chain(metalfx.then_some("metalfx")).collect()
 }
 
@@ -130,7 +167,10 @@ pub fn quality_word(s: &str) -> &'static str {
 /// and the upscaler's DLLs for it are in `dir`, else DirectX 12.
 pub fn first_api(chosen: &str, upscaler: &str, dir: &Path) -> &'static str {
     let vulkan = missing(dir, upscaler, Api::Vulkan).is_empty();
-    if vulkan && (chosen.trim().eq_ignore_ascii_case("vulkan") || !missing(dir, upscaler, Api::Dx12).is_empty()) {
+    if vulkan
+        && (chosen.trim().eq_ignore_ascii_case("vulkan")
+            || !missing(dir, upscaler, Api::Dx12).is_empty())
+    {
         "vulkan"
     } else {
         "dx12"
@@ -167,7 +207,13 @@ pub fn frame_generation_word(s: &str) -> &'static str {
 
 /// macOS's major version, out of its `SystemVersion.plist`.
 fn macos_major(plist: &str) -> Option<u32> {
-    let version = plist.split("<key>ProductVersion</key>").nth(1)?.split("<string>").nth(1)?.split("</string>").next()?;
+    let version = plist
+        .split("<key>ProductVersion</key>")
+        .nth(1)?
+        .split("<string>")
+        .nth(1)?
+        .split("</string>")
+        .next()?;
     version.trim().split('.').next()?.parse().ok()
 }
 
@@ -175,7 +221,13 @@ fn macos_major(plist: &str) -> Option<u32> {
 /// `metalfx_present` is: the interpolator itself is asked when the game starts it.
 pub fn metalfx_frames_present() -> bool {
     static PRESENT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *PRESENT.get_or_init(|| metalfx_present() && std::fs::read_to_string(SYSTEM_VERSION).ok().and_then(|p| macos_major(&p)).is_some_and(|v| v >= 26))
+    *PRESENT.get_or_init(|| {
+        metalfx_present()
+            && std::fs::read_to_string(SYSTEM_VERSION)
+                .ok()
+                .and_then(|p| macos_major(&p))
+                .is_some_and(|v| v >= 26)
+    })
 }
 
 /// The frame generation this machine can run, as the menus offer it: `metalfx` on a Mac; on
@@ -266,7 +318,8 @@ mod tests {
     use super::*;
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("omsi-upscaler-files-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("omsi-upscaler-files-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -321,10 +374,24 @@ mod tests {
             std::fs::write(dir.join(f), b"").unwrap();
         }
         assert_eq!(offered(&dir, true, true, false), ["dlss", "fsr3"]);
-        assert_eq!(offered(&dir, false, true, true), ["metalfx"], "the DLLs are of no use on a Mac");
+        assert_eq!(
+            offered(&dir, false, true, true),
+            ["metalfx"],
+            "the DLLs are of no use on a Mac"
+        );
         assert!(files("metalfx", Api::Dx12).is_empty() && files("metalfx", Api::Vulkan).is_empty());
-        assert_eq!(metalfx_present(), cfg!(all(target_os = "macos", target_arch = "aarch64")) && Path::new(METALFX).is_dir());
-        assert_eq!((label("dlss"), label("fsr3"), label("metalfx")), ("NVIDIA DLSS (experimental)", "AMD FSR 3 (experimental)", "Apple MetalFX (experimental)"));
+        assert_eq!(
+            metalfx_present(),
+            cfg!(all(target_os = "macos", target_arch = "aarch64")) && Path::new(METALFX).is_dir()
+        );
+        assert_eq!(
+            (label("dlss"), label("fsr3"), label("metalfx")),
+            (
+                "NVIDIA DLSS (experimental)",
+                "AMD FSR 3 (experimental)",
+                "Apple MetalFX (experimental)"
+            )
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -347,19 +414,36 @@ mod tests {
             assert_eq!(frame_generation_word(word), "off");
         }
         // (the Windows words of #3763 are kept, not turned into `off` by a Mac build)
-        assert_eq!([frame_generation_word("FSR3"), frame_generation_word("dlss"), frame_generation_word("dlss4x")], ["fsr3", "dlss2x", "dlss4x"]);
+        assert_eq!(
+            [
+                frame_generation_word("FSR3"),
+                frame_generation_word("dlss"),
+                frame_generation_word("dlss4x")
+            ],
+            ["fsr3", "dlss2x", "dlss4x"]
+        );
         assert_eq!(generators(true), ["metalfx"]);
         assert!(generators(false).is_empty());
         assert_eq!(frame_generation_menu(&[]), [("off", "Off")]);
-        assert_eq!(frame_generation_menu(&["metalfx"]), [("off", "Off"), ("metalfx", "Apple MetalFX (experimental)")]);
+        assert_eq!(
+            frame_generation_menu(&["metalfx"]),
+            [("off", "Off"), ("metalfx", "Apple MetalFX (experimental)")]
+        );
         // (never where MetalFX itself is not: Windows, Linux, a Mac with an Intel chip)
         assert!(!metalfx_frames_present() || metalfx_present());
-        assert_eq!(frame_generation_choices().is_empty(), !metalfx_frames_present());
+        assert_eq!(
+            frame_generation_choices().is_empty(),
+            !metalfx_frames_present()
+        );
     }
 
     #[test]
     fn frame_generation_needs_macos_26() {
-        let plist = |v: &str| format!("<dict>\n\t<key>ProductName</key>\n\t<string>macOS</string>\n\t<key>ProductVersion</key>\n\t<string>{v}</string>\n</dict>");
+        let plist = |v: &str| {
+            format!(
+                "<dict>\n\t<key>ProductName</key>\n\t<string>macOS</string>\n\t<key>ProductVersion</key>\n\t<string>{v}</string>\n</dict>"
+            )
+        };
         assert_eq!(macos_major(&plist("15.6.1")), Some(15));
         assert_eq!(macos_major(&plist("26.0")), Some(26));
         assert_eq!(macos_major(&plist("27.2.1")), Some(27));

@@ -18,7 +18,11 @@ pub(crate) struct Preopened(Arc<parking_lot::Mutex<Option<(PathBuf, i32, World)>
 
 impl std::fmt::Debug for Preopened {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(if self.0.lock().is_some() { "Preopened(world)" } else { "Preopened(none)" })
+        f.write_str(if self.0.lock().is_some() {
+            "Preopened(world)"
+        } else {
+            "Preopened(none)"
+        })
     }
 }
 
@@ -37,7 +41,9 @@ impl Preopened {
 /// duty_trip`, `args.duty_first_stop`), and with `--auto-entry` the entry point nearest to
 /// that stop by road (`args.entry`).
 pub(crate) fn place_on_duty(args: &mut Args) {
-    let Some(line) = args.line.clone() else { return };
+    let Some(line) = args.line.clone() else {
+        return;
+    };
     if !args.schedule || args.bus.is_none() || args.spawn.is_some() || args.is_resuming() {
         return;
     }
@@ -56,17 +62,32 @@ pub(crate) fn place_on_duty(args: &mut Args) {
     struct Keep(Preopened, Option<(PathBuf, i32, World)>);
     impl Drop for Keep {
         fn drop(&mut self) {
-            *self.0 .0.lock() = self.1.take();
+            *self.0.0.lock() = self.1.take();
         }
     }
-    let keep = Keep(args.preopened.clone(), Some((map_cfg, clock.date_code(), world)));
+    let keep = Keep(
+        args.preopened.clone(),
+        Some((map_cfg, clock.date_code(), world)),
+    );
     let world = &keep.1.as_ref().unwrap().2;
     let mut sch = schedule::Schedule::new(&args.root, world, &clock);
     let now = parse_time(&args.time);
-    let Ok(mut duty) = sch.player_duty(world, &line, args.tour.as_deref().unwrap_or(""), now, args.trip.as_deref(), args.whole_tour) else { return };
+    let Ok(mut duty) = sch.player_duty(
+        world,
+        &line,
+        args.tour.as_deref().unwrap_or(""),
+        now,
+        args.trip.as_deref(),
+        args.whole_tour,
+    ) else {
+        return;
+    };
     let map = world.navigation_map();
     duty.learn_places(&map.places);
-    let mut net = omsi_sim::traffic::Network { lanes: map.lanes, ..Default::default() };
+    let mut net = omsi_sim::traffic::Network {
+        lanes: map.lanes,
+        ..Default::default()
+    };
     net.link(1.5);
     // the entry points and where they stand (heading from the object)
     let entries: Vec<(usize, String, DVec3, f64)> = {
@@ -77,7 +98,10 @@ pub(crate) fn place_on_duty(args: &mut Args) {
             .entry_points
             .iter()
             .enumerate()
-            .filter_map(|(k, e)| pos.get(&e.object_id).map(|(p, r)| (k, e.name.clone(), *p, r[0])))
+            .filter_map(|(k, e)| {
+                pos.get(&e.object_id)
+                    .map(|(p, r)| (k, e.name.clone(), *p, r[0]))
+            })
             .collect()
     };
     // the trip: the one the bus could start in time from the nearest entry (from the one
@@ -92,16 +116,28 @@ pub(crate) fn place_on_duty(args: &mut Args) {
         // per stop: the route lanes up to it (the way in must not skip it)
         for (j, stop) in trip.stops.iter().enumerate().take(4) {
             let Some(p) = stop.position else { continue };
-            let Some(li) = route.iter().position(|&l| net.lanes[l].nearest_point(p).map(|q| q.1 < 25.0).unwrap_or(false)) else { continue };
+            let Some(li) = route.iter().position(|&l| {
+                net.lanes[l]
+                    .nearest_point(p)
+                    .map(|q| q.1 < 25.0)
+                    .unwrap_or(false)
+            }) else {
+                continue;
+            };
             let targets: Vec<usize> = route[li.saturating_sub(60)..=li].to_vec();
-            let stop_s = net.lanes[route[li]].nearest_point(p).map(|q| q.0).unwrap_or(0.0);
+            let stop_s = net.lanes[route[li]]
+                .nearest_point(p)
+                .map(|q| q.0)
+                .unwrap_or(0.0);
             let cost = |from: DVec3, heading: f64| -> Option<f64> {
                 // an entry point on the route itself, before the stop (the terminus in
                 // front of a bus put down at its entry): there already. The way round the
                 // network to the start of the lane it stands on was all that was looked
                 // for, and the first stop counted as out of reach.
                 let before = targets.iter().any(|&l| {
-                    net.lanes[l].nearest_point(from).is_some_and(|(s, d)| d < 6.0 && (l != route[li] || s <= stop_s + 1.0))
+                    net.lanes[l]
+                        .nearest_point(from)
+                        .is_some_and(|(s, d)| d < 6.0 && (l != route[li] || s <= stop_s + 1.0))
                 });
                 if before {
                     return Some((p - from).truncate().length());
@@ -121,18 +157,41 @@ pub(crate) fn place_on_duty(args: &mut Args) {
                         .map(|e| (e, (e.2 - route_start).truncate().length()))
                         .filter(|(_, d)| *d < 40.0)
                         .min_by(|a, b| a.1.total_cmp(&b.1))
-                        .map(|(e, _)| (e, route[..=li].iter().map(|&l| net.lanes[l].length() as f64).sum::<f64>()))
+                        .map(|(e, _)| {
+                            (
+                                e,
+                                route[..=li]
+                                    .iter()
+                                    .map(|&l| net.lanes[l].length() as f64)
+                                    .sum::<f64>(),
+                            )
+                        })
                 })
                 .flatten();
             let pick = if let Some(d) = depot {
                 Some(d)
             } else if args.auto_entry {
-                entries.iter().filter_map(|e| cost(e.2, e.3).map(|c| (e, c))).min_by(|a, b| a.1.total_cmp(&b.1))
+                entries
+                    .iter()
+                    .filter_map(|e| cost(e.2, e.3).map(|c| (e, c)))
+                    .min_by(|a, b| a.1.total_cmp(&b.1))
             } else {
-                entries.iter().find(|e| e.0 == args.entry.min(world.global.entry_points.len().saturating_sub(1))).and_then(|e| cost(e.2, e.3).map(|c| (e, c)))
+                entries
+                    .iter()
+                    .find(|e| {
+                        e.0 == args
+                            .entry
+                            .min(world.global.entry_points.len().saturating_sub(1))
+                    })
+                    .and_then(|e| cost(e.2, e.3).map(|c| (e, c)))
             };
             let Some(((ei, name, _, _), way)) = pick else {
-                log::info!("duty start: no entry point leads to stop {} '{}' of trip {}", j, stop.name.trim(), trip.name);
+                log::info!(
+                    "duty start: no entry point leads to stop {} '{}' of trip {}",
+                    j,
+                    stop.name.trim(),
+                    trip.name
+                );
                 continue;
             };
             log::info!(
@@ -157,23 +216,39 @@ pub(crate) fn place_on_duty(args: &mut Args) {
             // stop - at town speed, with ten minutes to start the bus and set the IBIS.
             // (Not for a joining player: the clock is the host's.)
             let leave = stop.arr.max(trip.departure) - way / 7.0 - 600.0;
-            if args.lan_join.is_none() && !args.start_synced && !args.keep_time && leave - now > 15.0 * 60.0 {
+            if args.lan_join.is_none()
+                && !args.start_synced
+                && !args.keep_time
+                && leave - now > 15.0 * 60.0
+            {
                 let from = schedule::hhmm(now);
-                args.time = format!("{:02}:{:02}:00", (leave / 3600.0) as i64 % 24, (leave / 60.0) as i64 % 60);
-                log::info!("duty start: the tour's first trip leaves at {}: the clock goes from {from} to {}", schedule::hhmm(trip.departure), args.time);
-                args.clock_moved = Some(format!("The tour starts at {}: the clock was moved from {from} to {}", schedule::hhmm(trip.departure), &args.time[..5]));
+                args.time = format!(
+                    "{:02}:{:02}:00",
+                    (leave / 3600.0) as i64 % 24,
+                    (leave / 60.0) as i64 % 60
+                );
+                log::info!(
+                    "duty start: the tour's first trip leaves at {}: the clock goes from {from} to {}",
+                    schedule::hhmm(trip.departure),
+                    args.time
+                );
+                args.clock_moved = Some(format!(
+                    "The tour starts at {}: the clock was moved from {from} to {}",
+                    schedule::hhmm(trip.departure),
+                    &args.time[..5]
+                ));
             }
             return;
         }
     }
-    log::info!("duty start: no stop of the next trips can be reached from the entry points; the timetable decides, {:.1} s", t0.elapsed().as_secs_f64());
+    log::info!(
+        "duty start: no stop of the next trips can be reached from the entry points; the timetable decides, {:.1} s",
+        t0.elapsed().as_secs_f64()
+    );
 }
 
 /// Adjust the new session's cabin once after script initialization, on any trip.
-pub(crate) fn set_starting_cabin_temperature(
-    args: &Args,
-    vehicle: &mut omsi_sim::VehicleInstance,
-) {
+pub(crate) fn set_starting_cabin_temperature(args: &Args, vehicle: &mut omsi_sim::VehicleInstance) {
     if use_comfortable_cabin(args) {
         if args.on_foot {
             args.pending_cabin_temperature

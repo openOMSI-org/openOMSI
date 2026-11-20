@@ -5,20 +5,26 @@ use crate::*;
 
 pub(crate) fn origin_key(origin: DVec3) -> [u64; 3] {
     // DVec3 equality treats -0 and +0 alike. Keep that property in the hash key.
-    origin.to_array().map(|v| if v == 0.0 { 0 } else { v.to_bits() })
+    origin
+        .to_array()
+        .map(|v| if v == 0.0 { 0 } else { v.to_bits() })
 }
 
 /// For each distinct origin, the object's nearest blended mesh distance, rather than
 /// the single point all its meshes share (a long vehicle's origin can be far from its
 /// window nearest the camera). Full coordinates and the existing float equality apply.
-pub(crate) fn nearest_by_origin(items: impl IntoIterator<Item = (DVec3, f32)>) -> HashMap<[u64; 3], f32> {
+pub(crate) fn nearest_by_origin(
+    items: impl IntoIterator<Item = (DVec3, f32)>,
+) -> HashMap<[u64; 3], f32> {
     let mut out: HashMap<[u64; 3], f32> = HashMap::new();
     for (origin, d) in items {
         // NaN origins never compared equal in the old lookup either.
         if origin.is_nan() {
             continue;
         }
-        out.entry(origin_key(origin)).and_modify(|best| *best = best.min(d)).or_insert(d);
+        out.entry(origin_key(origin))
+            .and_modify(|best| *best = best.min(d))
+            .or_insert(d);
     }
     out
 }
@@ -99,7 +105,8 @@ pub(crate) fn batch_items(
                 })
                 .collect();
             keys.sort_unstable_by_key(|k| k.0);
-            let field = |key: u64, from: u32, to: u32| ((key >> from) & ((1 << (to - from)) - 1)) as u32;
+            let field =
+                |key: u64, from: u32, to: u32| ((key >> from) & ((1 << (to - from)) - 1)) as u32;
             let mut k = 0;
             while k < keys.len() {
                 let (key, _, material) = keys[k];
@@ -126,7 +133,10 @@ pub(crate) fn batch_items(
     while k < items.len() {
         let d = items[k];
         let start = list.len() as u32;
-        while k < items.len() && (items[k].pipe, items[k].mesh, items[k].range, items[k].look) == (d.pipe, d.mesh, d.range, d.look) {
+        while k < items.len()
+            && (items[k].pipe, items[k].mesh, items[k].range, items[k].look)
+                == (d.pipe, d.mesh, d.range, d.look)
+        {
             list.push(items[k].entry);
             k += 1;
         }
@@ -195,7 +205,11 @@ pub(crate) fn encode_batches_filtered<'a, E: mx::RenderEncoder>(
             pass.set_immediates(0, binding.immediates());
             material = b.material;
         }
-        pass.draw_indexed(first_index + b.first..first_index + b.first + b.count, base_vertex, b.instances.clone());
+        pass.draw_indexed(
+            first_index + b.first..first_index + b.first + b.count,
+            base_vertex,
+            b.instances.clone(),
+        );
     }
 }
 
@@ -260,12 +274,23 @@ pub(crate) fn effective_render_phase(instance: &Instance) -> RenderPhase {
 }
 
 pub(crate) fn world_surface_phase(phase: RenderPhase) -> bool {
-    matches!(phase, RenderPhase::PreSurface | RenderPhase::Surface | RenderPhase::Spline | RenderPhase::OnSurface)
+    matches!(
+        phase,
+        RenderPhase::PreSurface
+            | RenderPhase::Surface
+            | RenderPhase::Spline
+            | RenderPhase::OnSurface
+    )
 }
 
 /// Only diffuse-alpha ground coverage is committed after the surface phases. Painted
 /// terrain masks, ordinary glass, and explicit no-Z-check materials keep their semantics.
-pub(crate) fn surface_depth_coverage(phase: RenderPhase, alpha: AlphaMode, transmap: bool, no_z_check: bool) -> bool {
+pub(crate) fn surface_depth_coverage(
+    phase: RenderPhase,
+    alpha: AlphaMode,
+    transmap: bool,
+    no_z_check: bool,
+) -> bool {
     world_surface_phase(phase) && alpha == AlphaMode::Blend && !transmap && !no_z_check
 }
 /// Which depth-prepass variant a material contributes to. A blended material normally has
@@ -326,7 +351,11 @@ pub(crate) fn surface_instance_code(
 }
 
 /// OMSI's spline blend sort is horizontal in the x/z ground plane; Rust's vertical axis is z.
-pub(crate) fn horizontal_sort_distance(origin: DVec3, render_origin: DVec3, camera_relative: Vec3) -> f32 {
+pub(crate) fn horizontal_sort_distance(
+    origin: DVec3,
+    render_origin: DVec3,
+    camera_relative: Vec3,
+) -> f32 {
     let p = (origin - render_origin).as_vec3() - camera_relative;
     glam::Vec2::new(p.x, p.y).length()
 }
@@ -373,13 +402,22 @@ pub(crate) fn culls_back_faces(scene: &Scene, inst: &Instance) -> bool {
 
 /// How many bundles `record_bundles` makes of `n` batches (each of the same share).
 pub(crate) fn bundle_parts(pool: Option<&rayon::ThreadPool>, n: usize) -> usize {
-    let max_parts = pool.map(|p| (p.current_num_threads() + 1).clamp(4, 8)).unwrap_or(4);
+    let max_parts = pool
+        .map(|p| (p.current_num_threads() + 1).clamp(4, 8))
+        .unwrap_or(4);
     let parts = (n / 250).clamp(1, max_parts);
-    if parts == 1 { 1 } else { n.div_ceil(n.div_ceil(parts)) }
+    if parts == 1 {
+        1
+    } else {
+        n.div_ceil(n.div_ceil(parts))
+    }
 }
 
 /// The batches each bundle of `record_bundles` is made of, in order.
-pub(crate) fn bundle_chunks<'b>(pool: Option<&rayon::ThreadPool>, batches: &'b [Batch]) -> Vec<&'b [Batch]> {
+pub(crate) fn bundle_chunks<'b>(
+    pool: Option<&rayon::ThreadPool>,
+    batches: &'b [Batch],
+) -> Vec<&'b [Batch]> {
     let parts = bundle_parts(pool, batches.len());
     if parts == 1 {
         return vec![batches];
@@ -405,7 +443,12 @@ pub(crate) fn record_bundles(
     samples: u32,
     surfaces: bool,
 ) -> Vec<Option<mx::RenderBundle>> {
-    let color_formats = [Some(format), Some(MASK_FORMAT), Some(GBUF_FORMAT), Some(AUX_FORMAT)];
+    let color_formats = [
+        Some(format),
+        Some(MASK_FORMAT),
+        Some(GBUF_FORMAT),
+        Some(AUX_FORMAT),
+    ];
     let record = |chunk: &[Batch]| -> mx::RenderBundle {
         let mut bundle = device.create_render_bundle_encoder(&mx::RenderBundleEncoderDescriptor {
             label: Some("main pass part"),
@@ -435,15 +478,24 @@ pub(crate) fn record_bundles(
         match r {
             Ok(b) => Some(b),
             Err(_) => {
-                static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                static SAID: std::sync::atomic::AtomicBool =
+                    std::sync::atomic::AtomicBool::new(false);
                 if !SAID.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                    log::error!("a part of the picture could not be recorded (the graphics card is out of memory?); left out");
+                    log::error!(
+                        "a part of the picture could not be recorded (the graphics card is out of memory?); left out"
+                    );
                 }
                 None
             }
         }
     };
-    let part = |k: usize| reuse.get(k).cloned().flatten().or_else(|| record(chunks[k]));
+    let part = |k: usize| {
+        reuse
+            .get(k)
+            .cloned()
+            .flatten()
+            .or_else(|| record(chunks[k]))
+    };
     if chunks.len() == 1 {
         return vec![part(0)];
     }

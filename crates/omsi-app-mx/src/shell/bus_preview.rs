@@ -187,12 +187,21 @@ impl State {
             match std::thread::Builder::new()
                 .name("bus chooser preview".into())
                 .spawn(move || {
-                    omsi_render::with_auxiliary_renderer(|| run(requests, answers, options, adapter));
+                    omsi_render::with_auxiliary_renderer(|| {
+                        run(requests, answers, options, adapter)
+                    });
                     // run's showroom (including loaders) and renderer are dropped here.
-                    log::info!("bus preview: worker finished; showroom, loaders and renderer released");
-                })
-            {
-                Ok(thread) => self.worker = Some(Worker { tx, rx, thread: Some(thread) }),
+                    log::info!(
+                        "bus preview: worker finished; showroom, loaders and renderer released"
+                    );
+                }) {
+                Ok(thread) => {
+                    self.worker = Some(Worker {
+                        tx,
+                        rx,
+                        thread: Some(thread),
+                    })
+                }
                 Err(error) => {
                     self.busy = false;
                     self.error = Some(error.to_string());
@@ -234,9 +243,16 @@ impl super::Shell {
             gpu.free(texture);
         }
         // Preserve the only closing worker across resets; reopening must await its exit.
-        let shutdown = self.bus_preview.worker.as_mut().and_then(|worker| worker.thread.take())
+        let shutdown = self
+            .bus_preview
+            .worker
+            .as_mut()
+            .and_then(|worker| worker.thread.take())
             .or_else(|| self.bus_preview.shutdown.take());
-        self.bus_preview = State { shutdown, ..State::default() };
+        self.bus_preview = State {
+            shutdown,
+            ..State::default()
+        };
     }
 
     pub(crate) fn upload_bus_preview(&mut self, renderer: &Renderer) {
@@ -256,7 +272,12 @@ impl super::Shell {
     }
 }
 
-fn run(requests: Receiver<Request>, answers: SyncSender<Reply>, options: RenderOptions, adapter: mx::Adapter,) {
+fn run(
+    requests: Receiver<Request>,
+    answers: SyncSender<Reply>,
+    options: RenderOptions,
+    adapter: mx::Adapter,
+) {
     let Ok(mut request) = requests.recv() else {
         return;
     };
@@ -361,7 +382,11 @@ mod tests {
             drop(_owner);
             done.send(()).unwrap();
         });
-        drop(Worker { tx, rx, thread: Some(thread) });
+        drop(Worker {
+            tx,
+            rx,
+            thread: Some(thread),
+        });
         finished.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(weak.upgrade().is_none());
     }
@@ -381,13 +406,23 @@ mod tests {
             delayed.recv().unwrap();
             done.send(()).unwrap();
         });
-        shell.bus_preview.worker = Some(Worker { tx, rx, thread: Some(thread) });
+        shell.bus_preview.worker = Some(Worker {
+            tx,
+            rx,
+            thread: Some(thread),
+        });
         shell.clear_bus_preview();
         started.recv_timeout(Duration::from_secs(5)).unwrap();
         let mut deferred = Vec::new();
         for _ in 0..10 {
-            shell.bus_preview.select(Some(Look { bus: "bus".into(), ..Default::default() }),
-                "Selected bus".into(), "Text chooser stays responsive".into());
+            shell.bus_preview.select(
+                Some(Look {
+                    bus: "bus".into(),
+                    ..Default::default()
+                }),
+                "Selected bus".into(),
+                "Text chooser stays responsive".into(),
+            );
             shell.bus_preview.update(RenderOptions::default(), None);
             deferred.push(shell.bus_preview.busy);
             assert_eq!(shell.bus_preview.title, "Selected bus");
@@ -396,18 +431,32 @@ mod tests {
         }
         release.send(()).unwrap();
         finished.recv_timeout(Duration::from_secs(5)).unwrap();
-        assert!(deferred.into_iter().all(|waiting| waiting),
-            "every reopen must wait for the previous worker, even across repeated clears");
+        assert!(
+            deferred.into_iter().all(|waiting| waiting),
+            "every reopen must wait for the previous worker, even across repeated clears"
+        );
         let deadline = Instant::now() + Duration::from_secs(5);
         while shell.bus_preview.shutdown_pending() {
-            assert!(Instant::now() < deadline, "completed teardown must free the worker slot");
+            assert!(
+                Instant::now() < deadline,
+                "completed teardown must free the worker slot"
+            );
             std::thread::yield_now();
         }
         assert!(shell.bus_preview.shutdown.is_none());
-        shell.bus_preview.select(Some(Look { bus: "next".into(), ..Default::default() }),
-            "Next bus".into(), String::new());
+        shell.bus_preview.select(
+            Some(Look {
+                bus: "next".into(),
+                ..Default::default()
+            }),
+            "Next bus".into(),
+            String::new(),
+        );
         shell.bus_preview.update(RenderOptions::default(), None);
-        assert!(!shell.bus_preview.busy, "normal adapter handling must resume after teardown");
+        assert!(
+            !shell.bus_preview.busy,
+            "normal adapter handling must resume after teardown"
+        );
     }
 
     #[test]
@@ -441,7 +490,11 @@ mod tests {
         state.sent = Some(previous.clone());
         let (tx, requests) = mpsc::sync_channel(1);
         let (answers, rx) = mpsc::sync_channel(1);
-        state.worker = Some(Worker { tx, rx, thread: None });
+        state.worker = Some(Worker {
+            tx,
+            rx,
+            thread: None,
+        });
         for _ in 0..10 {
             state.select(None, "Search".into(), String::new());
             assert!(
@@ -468,15 +521,17 @@ mod tests {
         shell.clear_bus_preview();
         assert!(shell.bus_preview.worker.is_none());
         assert!(requests.recv().is_err());
-        assert!(answers
-            .send(Reply {
-                serial: 0,
-                pixels: None,
-                busy: false,
-                error: None,
-                views: Vec::new()
-            })
-            .is_err());
+        assert!(
+            answers
+                .send(Reply {
+                    serial: 0,
+                    pixels: None,
+                    busy: false,
+                    error: None,
+                    views: Vec::new()
+                })
+                .is_err()
+        );
     }
 
     #[test]
@@ -614,7 +669,8 @@ mod tests {
         };
         let options = crate::launcher::showroom_options(&crate::settings::Settings::load());
         let instance = crate::graphics_instance();
-        let renderer = pollster::block_on(Renderer::new_with(&instance, None, None, options)).unwrap();
+        let renderer =
+            pollster::block_on(Renderer::new_with(&instance, None, None, options)).unwrap();
         let mut state = State::default();
         state.select(Some(look.clone()), "Bus".into(), String::new());
         let wait = |state: &mut State| {
@@ -772,7 +828,11 @@ mod tests {
         let (tx, _requests) = mpsc::sync_channel(1);
         let (answers, rx) = mpsc::sync_channel(1);
         drop(answers);
-        state.worker = Some(Worker { tx, rx, thread: None });
+        state.worker = Some(Worker {
+            tx,
+            rx,
+            thread: None,
+        });
         state.sent = state.request();
         state.update(RenderOptions::default(), None);
         assert!(!state.busy);

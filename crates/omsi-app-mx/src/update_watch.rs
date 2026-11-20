@@ -9,7 +9,7 @@
 //! off, `OMSI_UPDATE_URL` points it elsewhere (and lets a development build try it: one
 //! never replaces itself, so it is not asked otherwise).
 
-use crate::ui::{push_notice, Notice, NoticeKind};
+use crate::ui::{Notice, NoticeKind, push_notice};
 use crate::updater::{self, Status, Updater};
 use std::time::{Duration, Instant};
 
@@ -36,7 +36,8 @@ impl UpdateWatch {
         let s = omsi_launcher_lib::settings_from_text(text.as_deref());
         let on = |k: &str, d: bool| s.get(k).and_then(|v| v.as_bool()).unwrap_or(d);
         let testing = omsi_cfg::flags::OMSI_UPDATE_URL.is_set();
-        let installable = testing || updater::install_place().is_ok() || cfg!(target_os = "android");
+        let installable =
+            testing || updater::install_place().is_ok() || cfg!(target_os = "android");
         let enabled = on("update_check", true)
             && !omsi_cfg::flags::OMSI_NO_UPDATE.is_set()
             && !updater::is_test_build(updater::current_version())
@@ -48,7 +49,12 @@ impl UpdateWatch {
             notify: on("update_notify", true),
             auto: on("update_auto", false),
             // (a test against OMSI_UPDATE_URL looks at once)
-            next_check: Instant::now() + if testing { Duration::from_secs(3) } else { FIRST_CHECK },
+            next_check: Instant::now()
+                + if testing {
+                    Duration::from_secs(3)
+                } else {
+                    FIRST_CHECK
+                },
             told_found: None,
             told_ready: None,
         }
@@ -68,10 +74,24 @@ impl UpdateWatch {
             Status::Available(r) => {
                 if self.told_found.as_deref() != Some(r.version.as_str()) {
                     self.told_found = Some(r.version.clone());
-                    log::info!("update: {} is out - downloading it in the background", r.version);
+                    log::info!(
+                        "update: {} is out - downloading it in the background",
+                        r.version
+                    );
                     if self.notify {
-                        let text = format!("openOMSI {} is out: it is downloaded in the background and installed when this session ends", r.version);
-                        push_notice(notices, Notice { kind: NoticeKind::Update, text, left: 10.0, total: 10.0 });
+                        let text = format!(
+                            "openOMSI {} is out: it is downloaded in the background and installed when this session ends",
+                            r.version
+                        );
+                        push_notice(
+                            notices,
+                            Notice {
+                                kind: NoticeKind::Update,
+                                text,
+                                left: 10.0,
+                                total: 10.0,
+                            },
+                        );
                     }
                 }
                 self.updater.prefetch(r);
@@ -81,13 +101,28 @@ impl UpdateWatch {
                 if self.notify {
                     // (a quick download: this card takes the place of "is out" still showing)
                     let found = format!("openOMSI {} is out", r.version);
-                    notices.retain(|n| !(n.kind == NoticeKind::Update && n.text.starts_with(&found)));
+                    notices
+                        .retain(|n| !(n.kind == NoticeKind::Update && n.text.starts_with(&found)));
                     let text = if cfg!(target_os = "android") || !self.auto {
-                        format!("openOMSI {} is downloaded: the launcher offers it when this session ends", r.version)
+                        format!(
+                            "openOMSI {} is downloaded: the launcher offers it when this session ends",
+                            r.version
+                        )
                     } else {
-                        format!("openOMSI {} is downloaded: it is installed when this session ends", r.version)
+                        format!(
+                            "openOMSI {} is downloaded: it is installed when this session ends",
+                            r.version
+                        )
                     };
-                    push_notice(notices, Notice { kind: NoticeKind::Update, text, left: 8.0, total: 8.0 });
+                    push_notice(
+                        notices,
+                        Notice {
+                            kind: NoticeKind::Update,
+                            text,
+                            left: 8.0,
+                            total: 8.0,
+                        },
+                    );
                 }
             }
             // (no card for a failure: it is tried again quietly, the log says why)

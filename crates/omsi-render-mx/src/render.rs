@@ -24,7 +24,7 @@ pub(crate) fn post_pass(
         depth_stencil_attachment: None,
         timestamp_writes: timer,
         occlusion_query_set: None,
-        });
+    });
     pass.set_pipeline(pipeline);
     pass.set_bind_group(0, bg);
     pass.draw(0..3, 0..1);
@@ -165,7 +165,10 @@ impl Renderer {
     /// The lightning strikes since the last call, as (seconds until the thunder is heard,
     /// distance in m, direction): the sound plays the thunder of what the picture showed.
     pub fn take_strikes(&mut self) -> Vec<(f32, f32, [f32; 2])> {
-        std::mem::take(&mut self.tone.lightning.strikes).into_iter().map(|s| (s.delay, s.distance, s.dir)).collect()
+        std::mem::take(&mut self.tone.lightning.strikes)
+            .into_iter()
+            .map(|s| (s.delay, s.distance, s.dir))
+            .collect()
     }
 
     /// Change the dynamic parameters of an instance. `slot_alpha` entries beyond the mesh's
@@ -216,7 +219,12 @@ impl Renderer {
     /// `Self::build` again with `options`: on ANGLE on the compiler thread of its own (see
     /// `angle::compile`: on this thread's stack the D3D compiler overflowed it).
     pub(crate) fn rebuilt(&self, options: RenderOptions) -> Renderer {
-        let (device, queue, name, format) = (self.device.clone(), self.queue.clone(), self.adapter_name.clone(), self.format);
+        let (device, queue, name, format) = (
+            self.device.clone(),
+            self.queue.clone(),
+            self.adapter_name.clone(),
+            self.format,
+        );
         let build = move || Self::build(device, queue, name, format, options);
         if cfg!(windows) && gl_backend() && self.adapter_name.contains("ANGLE") {
             angle::compile(&self.device, build)
@@ -227,8 +235,14 @@ impl Renderer {
 
     /// Rebuild without the ray tracing after a GPU error while it was on (see `rt_error`).
     pub(crate) fn fall_back_without_ray_tracing(&mut self, scene: &mut Scene) {
-        log::error!("ray tracing failed on {}; Enhanced+ draws as Enhanced from now on", self.adapter_name);
-        let options = RenderOptions { ray_tracing: false, ..self.options };
+        log::error!(
+            "ray tracing failed on {}; Enhanced+ draws as Enhanced from now on",
+            self.adapter_name
+        );
+        let options = RenderOptions {
+            ray_tracing: false,
+            ..self.options
+        };
         RT_BUFFERS.store(false, std::sync::atomic::Ordering::Relaxed);
         self.rebuild_in_place(scene, options);
     }
@@ -237,7 +251,15 @@ impl Renderer {
     pub(crate) fn fall_back_without_upscaler(&mut self, scene: &mut Scene) {
         let msaa = self.options.msaa_fallback.max(1);
         log::warn!("drawing without the upscaler from now on, with {msaa}x MSAA");
-        self.rebuild_with(scene, RenderOptions { temporal: None, msaa, msaa_fallback: 0, ..self.options });
+        self.rebuild_with(
+            scene,
+            RenderOptions {
+                temporal: None,
+                msaa,
+                msaa_fallback: 0,
+                ..self.options
+            },
+        );
     }
 
     /// Rebuild the pipelines and targets without multisampling after a GPU error with it.
@@ -251,7 +273,9 @@ impl Renderer {
             self.adapter_name
         );
         update_ceiling(|ceiling| {
-            if let Some(c) = ceiling.as_mut() { c.msaa = 1; }
+            if let Some(c) = ceiling.as_mut() {
+                c.msaa = 1;
+            }
         });
         let options = RenderOptions {
             msaa: 1,
@@ -262,20 +286,46 @@ impl Renderer {
 
     pub fn rebuild_with(&mut self, scene: &mut Scene, options: RenderOptions) -> bool {
         let options = match ceiling() {
-            Some(c) => RenderOptions { msaa: c.msaa_for(options.msaa), ssao: options.ssao && c.ssao, shadow_size: options.shadow_size.clamp(512, c.shadow_size), puddle_reflections: options.puddle_reflections && c.puddle_reflections, ..options },
+            Some(c) => RenderOptions {
+                msaa: c.msaa_for(options.msaa),
+                ssao: options.ssao && c.ssao,
+                shadow_size: options.shadow_size.clamp(512, c.shadow_size),
+                puddle_reflections: options.puddle_reflections && c.puddle_reflections,
+                ..options
+            },
             None => options,
         };
         // (an upscaler takes the place of the MSAA, whatever the settings say; the player's stays
         // for when it gives up)
         let options = match options.temporal {
-            Some(_) => RenderOptions { msaa: 1, msaa_fallback: if options.msaa > 1 { options.msaa } else { options.msaa_fallback }, ..options },
+            Some(_) => RenderOptions {
+                msaa: 1,
+                msaa_fallback: if options.msaa > 1 {
+                    options.msaa
+                } else {
+                    options.msaa_fallback
+                },
+                ..options
+            },
             None => options,
         };
-        let options = if options.ray_tracing && options.msaa > 4 && !omsi_cfg::flags::OMSI_FULL_GPU.is_set() { RenderOptions { msaa: 4, ..options } } else { options };
+        let options = if options.ray_tracing
+            && options.msaa > 4
+            && !omsi_cfg::flags::OMSI_FULL_GPU.is_set()
+        {
+            RenderOptions { msaa: 4, ..options }
+        } else {
+            options
+        };
         if options == self.options {
             return false;
         }
-        log::info!("graphics rebuilt: {}x MSAA, shadow map {}, SSAO {}", options.msaa, options.shadow_size, options.ssao);
+        log::info!(
+            "graphics rebuilt: {}x MSAA, shadow map {}, SSAO {}",
+            options.msaa,
+            options.shadow_size,
+            options.ssao
+        );
         self.rebuild_in_place(scene, options);
         true
     }
@@ -288,7 +338,10 @@ impl Renderer {
         if let Some(g) = &self.frame_generation {
             g.wait();
         }
-        let upscaler = self.temporal_runtime().or_else(|| self.temporal_kept.take()).filter(|_| options.temporal.is_some());
+        let upscaler = self
+            .temporal_runtime()
+            .or_else(|| self.temporal_kept.take())
+            .filter(|_| options.temporal.is_some());
         // Release render targets before building their replacements. Keeping the old
         // targets alive while the new renderer is built can turn a recoverable OOM into
         // another allocation failure.
@@ -302,7 +355,12 @@ impl Renderer {
         self.targets.glass_picture = None;
         self.targets.target_use.clear();
         let (mesh_pages, frame_generation) = (self.mesh_pages, self.frame_generation.take());
-        *self = Renderer { mesh_pages, temporal_kept: upscaler, frame_generation, ..self.rebuilt(options) };
+        *self = Renderer {
+            mesh_pages,
+            temporal_kept: upscaler,
+            frame_generation,
+            ..self.rebuilt(options)
+        };
         scene.dirty = true;
         scene.model_buf = None;
         scene.params_buf = None;
@@ -325,12 +383,22 @@ impl Renderer {
         if self.targets.triple_targets.take().is_some() {
             self.history.triple_culling = Default::default();
         }
-        self.render_inner(scene, target, width, height, camera, lighting, true, None, None, false);
+        self.render_inner(
+            scene, target, width, height, camera, lighting, true, None, None, false,
+        );
     }
 
     /// `render` for the window's own picture, the only one temporal upscaling draws: a photo or
     /// an off-screen picture would rebuild its targets and lose its history.
-    pub fn render_window(&mut self, scene: &mut Scene, target: &mx::TextureView, width: u32, height: u32, camera: &Camera, lighting: &Lighting) {
+    pub fn render_window(
+        &mut self,
+        scene: &mut Scene,
+        target: &mx::TextureView,
+        width: u32,
+        height: u32,
+        camera: &Camera,
+        lighting: &Lighting,
+    ) {
         self.temporal_window = true;
         self.render(scene, target, width, height, camera, lighting);
         self.temporal_window = false;
@@ -482,7 +550,10 @@ impl Renderer {
         let history = &mut self.history.triple_culling[panel];
         std::mem::swap(self.history.cull_drawn.get_mut(), &mut history.drawn);
         std::mem::swap(self.history.object_sizes.get_mut(), &mut history.sizes);
-        std::mem::swap(self.history.object_sizes_scratch.get_mut(), &mut history.scratch);
+        std::mem::swap(
+            self.history.object_sizes_scratch.get_mut(),
+            &mut history.scratch,
+        );
     }
 
     /// Render one OpenXR view using the headset's asymmetric projection matrix.
@@ -501,7 +572,18 @@ impl Renderer {
         second_eye: bool,
     ) {
         self.swap_xr_culling(second_eye as usize);
-        self.render_inner(scene, target, width, height, camera, lighting, false, None, Some(projection), second_eye);
+        self.render_inner(
+            scene,
+            target,
+            width,
+            height,
+            camera,
+            lighting,
+            false,
+            None,
+            Some(projection),
+            second_eye,
+        );
         self.swap_xr_culling(second_eye as usize);
     }
 
@@ -511,7 +593,10 @@ impl Renderer {
         let history = &mut self.history.xr_culling[eye];
         std::mem::swap(self.history.cull_drawn.get_mut(), &mut history.drawn);
         std::mem::swap(self.history.object_sizes.get_mut(), &mut history.sizes);
-        std::mem::swap(self.history.object_sizes_scratch.get_mut(), &mut history.scratch);
+        std::mem::swap(
+            self.history.object_sizes_scratch.get_mut(),
+            &mut history.scratch,
+        );
     }
 
     /// Composite the shared game menu and a world-positioned pointer into each eye.
@@ -529,7 +614,9 @@ impl Renderer {
         cursor_transforms: [Option<Mat4>; 2],
         navigator: Option<(TextureId, [Mat4; 2])>,
     ) {
-        let Some(menu) = scene.overlays.get(menu_range) else { return };
+        let Some(menu) = scene.overlays.get(menu_range) else {
+            return;
+        };
         if menu.is_empty() && cursor_transforms.iter().all(Option::is_none) && navigator.is_none() {
             return;
         }
@@ -542,19 +629,28 @@ impl Renderer {
                 uniform[index * 4..index * 4 + 4].copy_from_slice(&corner.to_array());
             }
             uniform[16] = scene.premultiplied.contains(id) as u8 as f32;
-            let buffer = buffer_init(&self.device, &self.queue, Some("OpenXR menu rectangle"), bytemuck::cast_slice(&uniform), mx::BufferUsages::UNIFORM,
+            let buffer = buffer_init(
+                &self.device,
+                &self.queue,
+                Some("OpenXR menu rectangle"),
+                bytemuck::cast_slice(&uniform),
+                mx::BufferUsages::UNIFORM,
             );
             let group = self.device.create_bind_group(&mx::BindGroupDescriptor {
                 label: Some("OpenXR menu rectangle"),
                 entries: &[
-                    mx::BindGroupEntry { binding: 0, resource: buffer.as_entire_binding() },
+                    mx::BindGroupEntry {
+                        binding: 0,
+                        resource: buffer.as_entire_binding(),
+                    },
                     mx::BindGroupEntry {
                         binding: 1,
                         resource: mx::BindingResource::TextureView(&texture.view),
                     },
                     mx::BindGroupEntry {
                         binding: 2,
-                        resource: mx::BindingResource::Sampler(&self.sky.sky_sampler), },
+                        resource: mx::BindingResource::Sampler(&self.sky.sky_sampler),
+                    },
                 ],
             });
             Some((buffer, group))
@@ -562,15 +658,26 @@ impl Renderer {
         let mut prepared = [Vec::new(), Vec::new()];
         for eye in 0..2 {
             if let Some((id, transforms)) = navigator.as_ref() {
-                let quad = [Vec4::new(-1.0, 1.0, 0.0, 1.0), Vec4::new(1.0, 1.0, 0.0, 1.0),
-                            Vec4::new(1.0, -1.0, 0.0, 1.0), Vec4::new(-1.0, -1.0, 0.0, 1.0)]
-                    .map(|p| transforms[eye] * p);
-                if let Some(item) = prepare(id, quad) { prepared[eye].push(item); }
+                let quad = [
+                    Vec4::new(-1.0, 1.0, 0.0, 1.0),
+                    Vec4::new(1.0, 1.0, 0.0, 1.0),
+                    Vec4::new(1.0, -1.0, 0.0, 1.0),
+                    Vec4::new(-1.0, -1.0, 0.0, 1.0),
+                ]
+                .map(|p| transforms[eye] * p);
+                if let Some(item) = prepare(id, quad) {
+                    prepared[eye].push(item);
+                }
             }
             for (index, (id, rect)) in menu.iter().enumerate() {
                 // The first rectangle dims the view. Every other rectangle is
                 // projected from the same menu plane in world space.
-                let transform = if index == 0 && rect[0] <= 0.0 && rect[1] <= 0.0 && rect[2] >= w && rect[3] >= h {
+                let transform = if index == 0
+                    && rect[0] <= 0.0
+                    && rect[1] <= 0.0
+                    && rect[2] >= w
+                    && rect[3] >= h
+                {
                     Mat4::IDENTITY
                 } else {
                     menu_transforms[eye]
@@ -585,7 +692,9 @@ impl Renderer {
                     transform * Vec4::new(x1, y1, 0.0, 1.0),
                     transform * Vec4::new(x0, y1, 0.0, 1.0),
                 ];
-                if let Some(item) = prepare(id, quad) { prepared[eye].push(item); }
+                if let Some(item) = prepare(id, quad) {
+                    prepared[eye].push(item);
+                }
             }
             if let (Some(index), Some(transform)) = (cursor_overlay, cursor_transforms[eye]) {
                 if let Some((id, rect)) = scene.overlays.get(index) {
@@ -597,10 +706,16 @@ impl Renderer {
                         transform * Vec4::new(half_x, -half_y, 0.0, 1.0),
                         transform * Vec4::new(-half_x, -half_y, 0.0, 1.0),
                     ];
-                    if let Some(item) = prepare(id, quad) { prepared[eye].push(item); }
+                    if let Some(item) = prepare(id, quad) {
+                        prepared[eye].push(item);
+                    }
                 }
                 if let Some((id, rect)) = tooltip_overlay.and_then(|i| scene.overlays.get(i)) {
-                    let pointer_width = scene.overlays.get(index).map(|(_, r)| r[2] - r[0]).unwrap_or(24.0);
+                    let pointer_width = scene
+                        .overlays
+                        .get(index)
+                        .map(|(_, r)| r[2] - r[0])
+                        .unwrap_or(24.0);
                     let left = (pointer_width * 0.5 + 8.0) * 2.0 / eye_w;
                     let right = left + (rect[2] - rect[0]) * 2.0 / eye_w;
                     let bottom = -(rect[3] - rect[1]) * 2.0 / eye_h;
@@ -610,7 +725,9 @@ impl Renderer {
                         transform * Vec4::new(right, bottom, 0.0, 1.0),
                         transform * Vec4::new(left, bottom, 0.0, 1.0),
                     ];
-                    if let Some(item) = prepare(id, quad) { prepared[eye].push(item); }
+                    if let Some(item) = prepare(id, quad) {
+                        prepared[eye].push(item);
+                    }
                 }
             }
         }
@@ -623,7 +740,8 @@ impl Renderer {
                     resolve_target: None,
                     ops: mx::Operations {
                         load: mx::LoadOp::Load,
-                        store: mx::StoreOp::Store, },
+                        store: mx::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -767,7 +885,17 @@ impl Renderer {
         };
         // OMSI_PROFILE: time per stage, the mirrors apart from the window's picture
         let mut clock = StageClock::new(with_overlays);
-        let args = FrameArgs { target, width, height, camera, lighting, with_overlays, exclude_texture, projection, second_eye };
+        let args = FrameArgs {
+            target,
+            width,
+            height,
+            camera,
+            lighting,
+            with_overlays,
+            exclude_texture,
+            projection,
+            second_eye,
+        };
         let f = self.begin_frame(scene, env, args, &mut clock);
         let sh = self.plan_shadow_cache(scene, &f);
         let (vp_mat, cu, probe_redraw) = self.frame_uniforms(scene, &f, &sh, &mut clock);
@@ -798,8 +926,12 @@ impl Renderer {
             b.instances = b.instances.start + at..b.instances.end + at;
         }
         plan.list.extend_from_slice(&shadow_list);
-        self.count_draws(scene, with_overlays,
-            &visible, &plan, &shadow_batches,
+        self.count_draws(
+            scene,
+            with_overlays,
+            &visible,
+            &plan,
+            &shadow_batches,
             timer_view,
         );
         clock.stage(self, "items", "mirror.items");
@@ -820,32 +952,61 @@ impl Renderer {
         self.encode_shadow_maps(&mut enc.shadow, scene, &sh, &shadow_batches, &mut timers);
         self.encode_lamp_shadows(&mut enc.shadow, scene, &f, &shadow_batches, &mut timers);
         self.encode_precip_map(&mut enc.shadow, scene, &sh, &shadow_batches, &mut timers);
-        let prepass_batches = if self.shares_prepass_depth(&f, &plan) { plan.prefill_batches() } else { &plan.prepass_batches };
+        let prepass_batches = if self.shares_prepass_depth(&f, &plan) {
+            plan.prefill_batches()
+        } else {
+            &plan.prepass_batches
+        };
         self.encode_depth_prepass(&mut enc.prepass, scene, &f, prepass_batches, &mut timers);
         if plan.ground.active() {
             self.encode_ground(&mut enc.prepass, scene, &plan.ground, &mut timers);
         }
         if f.enhanced && f.lead_view && f.prepass_on && self.device_lost().is_none() {
             if let (Some(s), Some(ao)) = (self.tone.lamp_sight.as_mut(), self.targets.ao.as_ref()) {
-                s.encode(&self.device, &self.queue, &mut enc.prepass, &ao.depth_view, vp_mat, f.ro, f.cam_rel);
+                s.encode(
+                    &self.device,
+                    &self.queue,
+                    &mut enc.prepass,
+                    &ao.depth_view,
+                    vp_mat,
+                    f.ro,
+                    f.cam_rel,
+                );
             }
         }
         if f.rt_frame {
-            self.encode_ray_tracing(&mut enc.prepass, scene, timers.set.as_ref(), &mut timers.timed);
+            self.encode_ray_tracing(
+                &mut enc.prepass,
+                scene,
+                timers.set.as_ref(),
+                &mut timers.timed,
+            );
         }
         self.encode_sky_cube(&mut enc.prepass, scene, &f, probe_redraw, &mut timers);
         self.encode_probe(&mut enc.prepass, scene, probe_redraw, &mut timers);
-        let mut main_parts = self.encode_main_pass(&mut enc.picture, scene, &f, &plan, &main_bundles, &mut timers);
+        let mut main_parts = self.encode_main_pass(
+            &mut enc.picture,
+            scene,
+            &f,
+            &plan,
+            &main_bundles,
+            &mut timers,
+        );
         // Turning the recorded passes into Metal commands is the costliest CPU step of a
         // frame (wgpu checks every draw): the shadow maps, the prepass, the main pass and
         // the passes after it are finished side by side on helper threads and this one.
         let big =
-            shadow_batches.iter().map(|b| b.len()).sum::<usize>() + plan.prepass_batches.len() > 64 || !main_parts.is_empty() || (!cfg!(any(target_os = "macos", target_os = "ios")) && main_bundles.len() >= 2);
+            shadow_batches.iter().map(|b| b.len()).sum::<usize>() + plan.prepass_batches.len() > 64
+                || !main_parts.is_empty()
+                || (!cfg!(any(target_os = "macos", target_os = "ios")) && main_bundles.len() >= 2);
         if big && !f.env.no_post_split {
-            let rest = self.device.create_command_encoder(Some("after the main pass"));
+            let rest = self
+                .device
+                .create_command_encoder(Some("after the main pass"));
             main_parts.push(std::mem::replace(&mut enc.picture, rest));
         }
-        let puddles_on = self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
+        let puddles_on =
+            self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
         self.encode_fog_lamps(&mut enc.picture, scene, &f, vp_mat, puddles_on, &mut timers);
         self.encode_temporal_late_motion(&mut enc.picture, scene, &f, &plan);
         self.encode_temporal_mask(&mut enc.picture, scene, &f, &plan);
@@ -891,7 +1052,12 @@ impl Renderer {
         let px = self.render_image(scene, width, height, camera, lighting, None);
         self.depth_readback = false;
         let px = px?;
-        let tex = self.targets.ao.as_ref().filter(|a| copies && a.size == (width, height)).map(|a| a.depth_tex.clone());
+        let tex = self
+            .targets
+            .ao
+            .as_ref()
+            .filter(|a| copies && a.size == (width, height))
+            .map(|a| a.depth_tex.clone());
         let depth = match tex {
             Some(t) => {
                 // (a backend that cannot copy depth back: the picture without it)
@@ -902,10 +1068,15 @@ impl Renderer {
                         // the view
                         let (near, far) = (camera.near as f64, camera.depth_far() as f64);
                         let r = near / (far - near);
-                        Some(raw.chunks_exact(4).take((width * height) as usize).map(|b| {
-                            let d = f32::from_le_bytes([b[0], b[1], b[2], b[3]]) as f64;
-                            (r * far / (d + r)).min(far) as f32
-                        }).collect())
+                        Some(
+                            raw.chunks_exact(4)
+                                .take((width * height) as usize)
+                                .map(|b| {
+                                    let d = f32::from_le_bytes([b[0], b[1], b[2], b[3]]) as f64;
+                                    (r * far / (d + r)).min(far) as f32
+                                })
+                                .collect(),
+                        )
                     }
                     Err(e) => {
                         log::warn!("the depth could not be read back: {e}");
@@ -983,10 +1154,16 @@ impl Renderer {
         Ok(out)
     }
 
-    pub(crate) fn read_texture(&self, texture: &mx::Texture,
-        aspect: mx::TextureAspect,) -> Result<Vec<u8>> {
+    pub(crate) fn read_texture(
+        &self,
+        texture: &mx::Texture,
+        aspect: mx::TextureAspect,
+    ) -> Result<Vec<u8>> {
         let (width, height) = (texture.width(), texture.height());
-        let row_bytes = width * texture.format().block_copy_size()
+        let row_bytes = width
+            * texture
+                .format()
+                .block_copy_size()
                 .context("unsupported readback format")?;
         let bpr = row_bytes.div_ceil(256) * 256;
         let buf = self

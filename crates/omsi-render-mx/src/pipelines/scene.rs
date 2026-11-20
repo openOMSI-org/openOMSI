@@ -30,12 +30,15 @@ impl SceneBase {
         // One module for both paths: the enhanced fragment shader shares the vertex shader,
         // which the depth prepass relies on to the last bit (see `VsOut::clip`).
         log::info!("renderer: compiling the scene shaders");
-        let shader = compile_shader(device, mx::ShaderModuleDescriptor {
-            label: Some("omsi"),
-            source: &*(scene_shader_source(
+        let shader = compile_shader(
+            device,
+            mx::ShaderModuleDescriptor {
+                label: Some("omsi"),
+                source: &*(scene_shader_source(
                     GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed),
                 )),
-        });
+            },
+        );
         let _ = omit_enhanced;
         let lm_atlas = device
             .create_texture(&mx::TextureDescriptor {
@@ -71,9 +74,21 @@ impl SceneBase {
             step_mode: mx::VertexStepMode::Vertex,
             attributes: &VERTEX_ATTRIBUTES,
         };
-        let bias: i32 = omsi_cfg::flags::OMSI_SURFACE_BIAS.parse()
-            .unwrap_or(-24);
-        SceneBase { shader,  lm_atlas, lm_uniform, snow_track, snow_track_uniform,  vertex_layout, bias, trees: if detailed_trees && !GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed) { &[("DETAILED_TREES", 1.0)] } else { &[] } }
+        let bias: i32 = omsi_cfg::flags::OMSI_SURFACE_BIAS.parse().unwrap_or(-24);
+        SceneBase {
+            shader,
+            lm_atlas,
+            lm_uniform,
+            snow_track,
+            snow_track_uniform,
+            vertex_layout,
+            bias,
+            trees: if detailed_trees && !GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed) {
+                &[("DETAILED_TREES", 1.0)]
+            } else {
+                &[]
+            },
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -94,59 +109,72 @@ impl SceneBase {
         let use_alpha_to_coverage = alpha_to_coverage && samples > 1;
         let constants: Vec<(&str, f64)> = [
             ("ALPHA_TEST", if alpha_to_coverage { 1.0 } else { 0.0 }),
-            ("ALPHA_TO_COVERAGE", if use_alpha_to_coverage { 1.0 } else { 0.0 }),
+            (
+                "ALPHA_TO_COVERAGE",
+                if use_alpha_to_coverage { 1.0 } else { 0.0 },
+            ),
             ("TERRAIN_PAINT", if terrain_paint { 1.0 } else { 0.0 }),
-        ].into_iter().chain(self.trees.iter().copied()).collect();
-        compile_pipeline(device, &mx::RenderPipelineDescriptor {
-            label: Some("omsi"),
-            vertex: mx::VertexState {
+        ]
+        .into_iter()
+        .chain(self.trees.iter().copied())
+        .collect();
+        compile_pipeline(
+            device,
+            &mx::RenderPipelineDescriptor {
+                label: Some("omsi"),
+                vertex: mx::VertexState {
                     constants: self.trees,
-                module: &self.shader,
-                entry_point: Some("vs_main"),
-                buffers: &[self.vertex_layout.clone()],
-            },
-            primitive: one_sided_primitive(cull),
-            // Reversed Z: the near plane is 1 and the far plane 0, so nearer means
-            // greater. The depth bias keeps its meaning (negative = towards the viewer)
-            // only if its sign is turned around with the axis.
-            depth_stencil: Some(mx::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: depth_write,
-                    depth_compare: mx::CompareFunction::GreaterEqual,
-                stencil: Default::default(),
-                bias: mx::DepthBiasState {
-                    constant: -bias,
-                    slope_scale: if bias != 0 {
-                        -bias.signum() as f32 * 2.0
-                    } else {
-                        0.0
-                    },
-                    clamp: 0.0,
+                    module: &self.shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[self.vertex_layout.clone()],
                 },
-            }),
-            multisample: mx::MultisampleState {
-                count: samples,
-                mask: !0,
-                alpha_to_coverage_enabled: use_alpha_to_coverage,
-            },
-            fragment: Some(mx::FragmentState {
-                module: &self.shader,
-                entry_point: Some(fs),
-                targets: &color_targets_for(
-                    format,
-                    blend,
-                    if fs == "fs_surface_depth" { mx::ColorWrites::empty() } else { mx::ColorWrites::ALL },
-                    fs != "fs_surface_depth",
-                    fs == "fs_enhanced",
+                primitive: one_sided_primitive(cull),
+                // Reversed Z: the near plane is 1 and the far plane 0, so nearer means
+                // greater. The depth bias keeps its meaning (negative = towards the viewer)
+                // only if its sign is turned around with the axis.
+                depth_stencil: Some(mx::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: depth_write,
+                    depth_compare: mx::CompareFunction::GreaterEqual,
+                    stencil: Default::default(),
+                    bias: mx::DepthBiasState {
+                        constant: -bias,
+                        slope_scale: if bias != 0 {
+                            -bias.signum() as f32 * 2.0
+                        } else {
+                            0.0
+                        },
+                        clamp: 0.0,
+                    },
+                }),
+                multisample: mx::MultisampleState {
+                    count: samples,
+                    mask: !0,
+                    alpha_to_coverage_enabled: use_alpha_to_coverage,
+                },
+                fragment: Some(mx::FragmentState {
+                    module: &self.shader,
+                    entry_point: Some(fs),
+                    targets: &color_targets_for(
+                        format,
+                        blend,
+                        if fs == "fs_surface_depth" {
+                            mx::ColorWrites::empty()
+                        } else {
+                            mx::ColorWrites::ALL
+                        },
+                        fs != "fs_surface_depth",
+                        fs == "fs_enhanced",
                         surfaces,
                     ),
-                // Only cutouts and painted terrain keep their discard; opaque and blended
-                // materials retain early depth testing. (A blend that writes depth writes it
-                // where it is invisible too: Omsi.exe draws `[matl_alpha] 2` with the alpha
-                // test off, and content hides things under invisible covers, #2059.)
-                constants: &constants,
-            }),
-        })
+                    // Only cutouts and painted terrain keep their discard; opaque and blended
+                    // materials retain early depth testing. (A blend that writes depth writes it
+                    // where it is invisible too: Omsi.exe draws `[matl_alpha] 2` with the alpha
+                    // test off, and content hides things under invisible covers, #2059.)
+                    constants: &constants,
+                }),
+            },
+        )
     }
 
     pub(crate) const PIPELINES: usize = PIPE_KINDS as usize * 4;
@@ -154,7 +182,11 @@ impl SceneBase {
     /// The ground albedo pass's pipelines (`fs_ground`): the terrain's opaque base (0 to 3:
     /// two-sided or culled, without or with the surface bias) and its paint layers blended
     /// over it (4 to 7). Depth is only tested, against the depth prepass's.
-    pub(crate) fn ground_pipeline_at(&self, device: &mx::Device, index: usize) -> mx::RenderPipeline {
+    pub(crate) fn ground_pipeline_at(
+        &self,
+        device: &mx::Device,
+        index: usize,
+    ) -> mx::RenderPipeline {
         let paint = index >= 4;
         let (cull, surface) = (index & 2 != 0, index & 1 != 0);
         let bias = if surface { self.bias } else { 0 };
@@ -162,47 +194,65 @@ impl SceneBase {
             color: mx::BlendComponent {
                 src_factor: mx::BlendFactor::SrcAlpha,
                 dst_factor: mx::BlendFactor::OneMinusSrcAlpha,
-                operation: mx::BlendOperation::Add, },
+                operation: mx::BlendOperation::Add,
+            },
             // (the alpha channel stays as the base wrote it)
             alpha: mx::BlendComponent {
                 src_factor: mx::BlendFactor::Zero,
                 dst_factor: mx::BlendFactor::One,
-                operation: mx::BlendOperation::Add, },
-        });
-        compile_pipeline(device, &mx::RenderPipelineDescriptor {
-            label: Some("ground albedo"),
-            vertex: mx::VertexState {
-                    constants: &[],
-                module: &self.shader,
-                entry_point: Some("vs_main"),
-                buffers: &[self.vertex_layout.clone()],
+                operation: mx::BlendOperation::Add,
             },
-            primitive: one_sided_primitive(cull),
-            depth_stencil: Some(mx::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: false,
-                    depth_compare: mx::CompareFunction::GreaterEqual,
-                stencil: Default::default(),
-                bias: mx::DepthBiasState {
-                    constant: -bias,
-                    slope_scale: if bias != 0 { -bias.signum() as f32 * 2.0 } else { 0.0 },
-                    clamp: 0.0,
+        });
+        compile_pipeline(
+            device,
+            &mx::RenderPipelineDescriptor {
+                label: Some("ground albedo"),
+                vertex: mx::VertexState {
+                    constants: &[],
+                    module: &self.shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[self.vertex_layout.clone()],
                 },
-            }),
-            multisample: mx::MultisampleState::default(),
+                primitive: one_sided_primitive(cull),
+                depth_stencil: Some(mx::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: false,
+                    depth_compare: mx::CompareFunction::GreaterEqual,
+                    stencil: Default::default(),
+                    bias: mx::DepthBiasState {
+                        constant: -bias,
+                        slope_scale: if bias != 0 {
+                            -bias.signum() as f32 * 2.0
+                        } else {
+                            0.0
+                        },
+                        clamp: 0.0,
+                    },
+                }),
+                multisample: mx::MultisampleState::default(),
                 fragment: Some(mx::FragmentState {
-                module: &self.shader,
-                entry_point: Some("fs_ground"),
-                targets: &[Some(mx::ColorTargetState { format: GROUND_FORMAT, blend, write_mask: mx::ColorWrites::ALL, })],
-                constants: &[("TERRAIN_PAINT", if paint { 1.0 } else { 0.0 })],
-            }),
-        })
+                    module: &self.shader,
+                    entry_point: Some("fs_ground"),
+                    targets: &[Some(mx::ColorTargetState {
+                        format: GROUND_FORMAT,
+                        blend,
+                        write_mask: mx::ColorWrites::ALL,
+                    })],
+                    constants: &[("TERRAIN_PAINT", if paint { 1.0 } else { 0.0 })],
+                }),
+            },
+        )
     }
 
     /// The pipeline at `index` of the ones per `pipe_code` (kind, then culled, then surface
     /// bias): the kind decides blending and the depth write.
-    pub(crate) fn pipeline_at_for(&self, device: &mx::Device,
-        f: mx::TextureFormat, fs: &str, samples: u32, index: usize,
+    pub(crate) fn pipeline_at_for(
+        &self,
+        device: &mx::Device,
+        f: mx::TextureFormat,
+        fs: &str,
+        samples: u32,
+        index: usize,
         surfaces: bool,
     ) -> mx::RenderPipeline {
         let kind = (index / 4) as u8;
@@ -213,7 +263,11 @@ impl SceneBase {
         self.pipeline(
             device,
             f,
-            if kind == PIPE_SURFACE_DEPTH { "fs_surface_depth" } else { fs },
+            if kind == PIPE_SURFACE_DEPTH {
+                "fs_surface_depth"
+            } else {
+                fs
+            },
             blend,
             depth_write,
             cull,
@@ -242,7 +296,12 @@ pub(crate) struct PaneMaskPipelines {
     pub prefill: [mx::RenderPipeline; 2],
 }
 
-pub(crate) fn prepass(device: &mx::Device, scene: &SceneBase, msaa: u32, enhanced: bool) -> Prepass {
+pub(crate) fn prepass(
+    device: &mx::Device,
+    scene: &SceneBase,
+    msaa: u32,
+    enhanced: bool,
+) -> Prepass {
     let make_prepass_samples = prepass_builder(device, scene);
     let make_prepass = |kind: u8, cull: bool| make_prepass_samples(kind, cull, 1, false, false);
     let pipelines = [
@@ -260,33 +319,72 @@ pub(crate) fn prepass(device: &mx::Device, scene: &SceneBase, msaa: u32, enhance
     // Excavations need a depth refill even at 1x, after their floors and covers.
     // The depth-only pass's pipelines cannot bind the main pass's colour targets.
     let msaa_pipelines = (msaa > 1 || enhanced).then(|| {
-        [(0, false), (0, true), (1, false), (1, true), (2, false), (2, true)]
-            .map(|(kind, cull)| make_prepass_samples(kind, cull, msaa, true, rt_gbuf()))
+        [
+            (0, false),
+            (0, true),
+            (1, false),
+            (1, true),
+            (2, false),
+            (2, true),
+        ]
+        .map(|(kind, cull)| make_prepass_samples(kind, cull, msaa, true, rt_gbuf()))
     });
     let eye_pipelines = None;
     let pane_mask =
         (msaa > 1 && enhanced && MULTISAMPLED_SHADING.load(std::sync::atomic::Ordering::Relaxed))
             .then(|| pane_mask(device, scene, msaa));
-    Prepass { pipelines, msaa_pipelines,
+    Prepass {
+        pipelines,
+        msaa_pipelines,
         eye_pipelines,
         pane_mask,
     }
 }
 
 fn pane_mask(device: &mx::Device, scene: &SceneBase, msaa: u32) -> PaneMaskPipelines {
-    let panes = [(false, 0), (true, 0), (false, scene.bias), (true, scene.bias)]
-        .map(|(cull, bias)| depth_pipeline(device, scene, "fs_depth", cull, msaa, false, false, bias));
-    let prefill = [false, true].map(|cull| depth_pipeline(device, scene,  "fs_depth_masked", cull, msaa, true, rt_gbuf(), 0));
+    let panes = [
+        (false, 0),
+        (true, 0),
+        (false, scene.bias),
+        (true, scene.bias),
+    ]
+    .map(|(cull, bias)| depth_pipeline(device, scene, "fs_depth", cull, msaa, false, false, bias));
+    let prefill = [false, true].map(|cull| {
+        depth_pipeline(
+            device,
+            scene,
+            "fs_depth_masked",
+            cull,
+            msaa,
+            true,
+            rt_gbuf(),
+            0,
+        )
+    });
     PaneMaskPipelines { panes, prefill }
 }
 
-pub(crate) fn eye_prepass(device: &mx::Device, scene: &SceneBase, msaa: u32) -> [mx::RenderPipeline; 6] {
+pub(crate) fn eye_prepass(
+    device: &mx::Device,
+    scene: &SceneBase,
+    msaa: u32,
+) -> [mx::RenderPipeline; 6] {
     let make = prepass_builder(device, scene);
-    [(0, false), (0, true), (1, false), (1, true), (2, false), (2, true)]
-        .map(|(kind, cull)| make(kind, cull, msaa, true, false))
+    [
+        (0, false),
+        (0, true),
+        (1, false),
+        (1, true),
+        (2, false),
+        (2, true),
+    ]
+    .map(|(kind, cull)| make(kind, cull, msaa, true, false))
 }
 
-fn prepass_builder<'a>(device: &'a mx::Device, scene: &'a SceneBase) -> impl Fn(u8, bool, u32, bool, bool) -> mx::RenderPipeline + 'a {
+fn prepass_builder<'a>(
+    device: &'a mx::Device,
+    scene: &'a SceneBase,
+) -> impl Fn(u8, bool, u32, bool, bool) -> mx::RenderPipeline + 'a {
     // the prepass culls exactly as the main pass does: a back face that wrote depth
     // here would hide what the main pass then draws behind it
     move |kind: u8, cull: bool, samples: u32, in_main: bool, surfaces: bool| {
@@ -304,37 +402,64 @@ fn prepass_builder<'a>(device: &'a mx::Device, scene: &'a SceneBase) -> impl Fn(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn depth_pipeline(device: &mx::Device, scene: &SceneBase,  fragment: &str, cull: bool, samples: u32, in_main: bool, surfaces: bool, bias: i32) -> mx::RenderPipeline {
-    compile_pipeline(device, &mx::RenderPipelineDescriptor {
-        label: Some("depth prepass"),
-        vertex: mx::VertexState {
+fn depth_pipeline(
+    device: &mx::Device,
+    scene: &SceneBase,
+    fragment: &str,
+    cull: bool,
+    samples: u32,
+    in_main: bool,
+    surfaces: bool,
+    bias: i32,
+) -> mx::RenderPipeline {
+    compile_pipeline(
+        device,
+        &mx::RenderPipelineDescriptor {
+            label: Some("depth prepass"),
+            vertex: mx::VertexState {
                 constants: &[],
-            module: &scene.shader,
-            // (the place and the cut-out's coverage only: see `vs_depth`)
-            entry_point: Some("vs_depth"),
-            buffers: &[scene.vertex_layout.clone()],
-        },
-        primitive: one_sided_primitive(cull),
-        depth_stencil: Some(mx::DepthStencilState {
-            format: DEPTH_FORMAT,
-            depth_write_enabled: true,
-                depth_compare: mx::CompareFunction::GreaterEqual,
-            stencil: Default::default(),
-            bias: mx::DepthBiasState {
-                constant: -bias,
-                slope_scale: if bias != 0 { -bias.signum() as f32 * 2.0 } else { 0.0 },
-                clamp: 0.0,
+                module: &scene.shader,
+                // (the place and the cut-out's coverage only: see `vs_depth`)
+                entry_point: Some("vs_depth"),
+                buffers: &[scene.vertex_layout.clone()],
             },
-        }),
-        multisample: mx::MultisampleState { count: samples, ..Default::default() },
-        fragment: Some(mx::FragmentState {
+            primitive: one_sided_primitive(cull),
+            depth_stencil: Some(mx::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: mx::CompareFunction::GreaterEqual,
+                stencil: Default::default(),
+                bias: mx::DepthBiasState {
+                    constant: -bias,
+                    slope_scale: if bias != 0 {
+                        -bias.signum() as f32 * 2.0
+                    } else {
+                        0.0
+                    },
+                    clamp: 0.0,
+                },
+            }),
+            multisample: mx::MultisampleState {
+                count: samples,
+                ..Default::default()
+            },
+            fragment: Some(mx::FragmentState {
                 constants: scene.trees,
-            module: &scene.shader,
-            entry_point: Some(fragment),
-            targets: &if in_main {
-                        color_targets_for(HDR_FORMAT, None, mx::ColorWrites::empty(), false, false,
-                            surfaces,
-                        ) } else { Vec::new() },
-        }),
-    })
+                module: &scene.shader,
+                entry_point: Some(fragment),
+                targets: &if in_main {
+                    color_targets_for(
+                        HDR_FORMAT,
+                        None,
+                        mx::ColorWrites::empty(),
+                        false,
+                        false,
+                        surfaces,
+                    )
+                } else {
+                    Vec::new()
+                },
+            }),
+        },
+    )
 }

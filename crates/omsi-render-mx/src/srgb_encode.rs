@@ -33,7 +33,11 @@ pub(crate) struct SrgbEncode {
 impl SrgbEncode {
     /// For a window of the sRGB `format` on ANGLE, else none.
     pub(crate) fn wanted(renderer: &crate::Renderer, format: mx::TextureFormat) -> Option<Self> {
-        if !(cfg!(windows) && crate::gl_backend() && renderer.adapter_name.contains("ANGLE") && format.is_srgb()) {
+        if !(cfg!(windows)
+            && crate::gl_backend()
+            && renderer.adapter_name.contains("ANGLE")
+            && format.is_srgb())
+        {
             return None;
         }
         let device = &renderer.device;
@@ -63,8 +67,15 @@ impl SrgbEncode {
                 multisample: Default::default(),
             })
             .expect("mX: a render pipeline");
-        log::info!("{}: the window keeps no sRGB colour space; each frame is encoded into it", renderer.adapter_name);
-        Some(SrgbEncode { pipeline,  stand_in: Default::default(), format })
+        log::info!(
+            "{}: the window keeps no sRGB colour space; each frame is encoded into it",
+            renderer.adapter_name
+        );
+        Some(SrgbEncode {
+            pipeline,
+            stand_in: Default::default(),
+            format,
+        })
     }
 
     /// The window's own format: plain RGBA8 where the frame is encoded into it.
@@ -96,11 +107,17 @@ impl SrgbEncode {
                 .expect("mX: a texture view");
             let group = device.create_bind_group(&mx::BindGroupDescriptor {
                 label: Some("sRGB encode"),
-                entries: &[mx::BindGroupEntry { binding: 0, resource: mx::BindingResource::TextureView(&view), }],
+                entries: &[mx::BindGroupEntry {
+                    binding: 0,
+                    resource: mx::BindingResource::TextureView(&view),
+                }],
             });
             *stand_in = Some((texture, view, group));
         }
-        stand_in.as_ref().map(|(_, v, _)| v.clone()).expect("stand-in")
+        stand_in
+            .as_ref()
+            .map(|(_, v, _)| v.clone())
+            .expect("stand-in")
     }
 
     /// The stand-in the frame is drawn into, when there is one.
@@ -109,11 +126,16 @@ impl SrgbEncode {
     }
 
     /// Encodes the stand-in into the window's `frame`.
-    pub(crate) fn encode(&self, device: &mx::Device,
+    pub(crate) fn encode(
+        &self,
+        device: &mx::Device,
         queue: &mx::Queue,
-        frame: &mx::SurfaceTexture,) {
+        frame: &mx::SurfaceTexture,
+    ) {
         let stand_in = self.stand_in.borrow();
-        let Some((_, _, group)) = stand_in.as_ref() else { return };
+        let Some((_, _, group)) = stand_in.as_ref() else {
+            return;
+        };
         let target = frame
             .texture
             .create_view(&Default::default())
@@ -127,7 +149,8 @@ impl SrgbEncode {
                     resolve_target: None,
                     ops: mx::Operations {
                         load: mx::LoadOp::Clear(mx::Color::BLACK),
-                        store: mx::StoreOp::Store, },
+                        store: mx::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -149,8 +172,9 @@ mod tests {
         let module = naga::front::wgsl::parse_str(super::SHADER).expect("parse");
         naga::valid::Validator::new(
             naga::valid::ValidationFlags::all(),
-            naga::valid::Capabilities::empty(),)
-            .validate(&module)
-            .expect("validate");
+            naga::valid::Capabilities::empty(),
+        )
+        .validate(&module)
+        .expect("validate");
     }
 }

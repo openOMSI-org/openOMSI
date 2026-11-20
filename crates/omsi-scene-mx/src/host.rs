@@ -3,7 +3,7 @@
 //! simulation draws its pictures with. The game sets these at its start; a world a test or
 //! a tool opens takes the defaults.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering::Relaxed};
 
 // The settings below are set by the game at every session start and read while worlds and
 // vehicles load, where no game state is at hand.
@@ -41,7 +41,12 @@ pub struct SceneSettings {
 
 impl Default for SceneSettings {
     fn default() -> SceneSettings {
-        SceneSettings { sound_scenery: AtomicU32::new(1.0f32.to_bits()), mirror_size: AtomicU32::new(256), rain_quality: AtomicU8::new(2), snow: AtomicBool::new(false) }
+        SceneSettings {
+            sound_scenery: AtomicU32::new(1.0f32.to_bits()),
+            mirror_size: AtomicU32::new(256),
+            rain_quality: AtomicU8::new(2),
+            snow: AtomicBool::new(false),
+        }
     }
 }
 
@@ -108,15 +113,24 @@ pub fn open_settings() -> OpenSettings {
 pub fn install_sim_decoder() {
     omsi_sim::image_decode::install(|path| {
         omsi_texture::decode_file(path)
-            .map(|i| omsi_sim::image_decode::DecodedImage { width: i.width, height: i.height, rgba: i.rgba, has_alpha: i.has_alpha })
+            .map(|i| omsi_sim::image_decode::DecodedImage {
+                width: i.width,
+                height: i.height,
+                rgba: i.rgba,
+                has_alpha: i.has_alpha,
+            })
             .map_err(|e| e.to_string())
     });
     // (the classic engine runs every page unless the page asks for the modern one)
     omsi_sim::htmltex::set_backend(|width, height, html, api| {
         if omsi_htmlpage::wanted(html) {
-            Box::new(omsi_htmlpage::EngineRenderer::with_api(width, height, html, api))
+            Box::new(omsi_htmlpage::EngineRenderer::with_api(
+                width, height, html, api,
+            ))
         } else {
-            Box::new(omsi_htmlengine::EngineRenderer::with_api(width, height, html, api))
+            Box::new(omsi_htmlengine::EngineRenderer::with_api(
+                width, height, html, api,
+            ))
         }
     });
 }

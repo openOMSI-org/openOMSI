@@ -14,7 +14,10 @@ fn path(
     direction: i32,
 ) -> String {
     let extra = if keyword == "path_2" { "0\n0\n" } else { "" };
-    format!("[{keyword}]\n{}\n{}\n{}\n{heading}\n{radius}\n{length}\n{}\n{}\n0\n3\n{direction}\n0\n{extra}", start.x, start.y, start.z, gradients[0], gradients[1])
+    format!(
+        "[{keyword}]\n{}\n{}\n{}\n{heading}\n{radius}\n{length}\n{}\n{}\n0\n3\n{direction}\n0\n{extra}",
+        start.x, start.y, start.z, gradients[0], gradients[1]
+    )
 }
 
 fn lanes(text: &str, pos: DVec3, heading: f64) -> Vec<Lane> {

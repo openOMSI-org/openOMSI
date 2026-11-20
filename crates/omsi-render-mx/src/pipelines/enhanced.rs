@@ -21,12 +21,20 @@ struct Lighting<'a> {
     sky_lut_view: &'a mx::TextureView,
 }
 
-pub(crate) fn build(device: &mx::Device,
+pub(crate) fn build(
+    device: &mx::Device,
     queue: &mx::Queue,
     hdr_format: mx::TextureFormat,
-    camera_buf: &mx::Buffer, sky: &SkyBase, with_probe: bool) -> Enhanced {
+    camera_buf: &mx::Buffer,
+    sky: &SkyBase,
+    with_probe: bool,
+) -> Enhanced {
     // --- enhanced lighting: the uniform, the sky table, the reflection probe
-    let enh_buf = uniform_buffer(device, "enhanced lighting", std::mem::size_of::<EnhancedUniform>() as u64);
+    let enh_buf = uniform_buffer(
+        device,
+        "enhanced lighting",
+        std::mem::size_of::<EnhancedUniform>() as u64,
+    );
     let sky_lut = device
         .create_texture(&mx::TextureDescriptor {
             label: Some("sky table"),
@@ -57,9 +65,20 @@ pub(crate) fn build(device: &mx::Device,
             ..Default::default()
         })
         .expect("mX: a sampler");
-    let lighting = Lighting { camera_buf, enh_buf: &enh_buf, lin_sampler: &lin_sampler, sky_lut_view: &sky_lut_view };
+    let lighting = Lighting {
+        camera_buf,
+        enh_buf: &enh_buf,
+        lin_sampler: &lin_sampler,
+        sky_lut_view: &sky_lut_view,
+    };
     let probe = with_probe.then(|| probe(device, queue, hdr_format, &lighting, sky));
-    Enhanced { enh_buf, sky_lut, sky_lut_view, lin_sampler, probe }
+    Enhanced {
+        enh_buf,
+        sky_lut,
+        sky_lut_view,
+        lin_sampler,
+        probe,
+    }
 }
 
 /// A bind group of the probe's layout reading `src` with the pass parameters in `pass`.
@@ -73,12 +92,30 @@ fn probe_bind_group(
     device.create_bind_group(&mx::BindGroupDescriptor {
         label: Some(label),
         entries: &[
-            mx::BindGroupEntry { binding: 0, resource: lighting.camera_buf.as_entire_binding() },
-            mx::BindGroupEntry { binding: 11, resource: lighting.enh_buf.as_entire_binding() },
-            mx::BindGroupEntry { binding: 13, resource: mx::BindingResource::Sampler(lighting.lin_sampler), },
-            mx::BindGroupEntry { binding: 14, resource: mx::BindingResource::TextureView(lighting.sky_lut_view), },
-            mx::BindGroupEntry { binding: 15, resource: pass.as_entire_binding() },
-            mx::BindGroupEntry { binding: 16, resource: mx::BindingResource::TextureView(src), },
+            mx::BindGroupEntry {
+                binding: 0,
+                resource: lighting.camera_buf.as_entire_binding(),
+            },
+            mx::BindGroupEntry {
+                binding: 11,
+                resource: lighting.enh_buf.as_entire_binding(),
+            },
+            mx::BindGroupEntry {
+                binding: 13,
+                resource: mx::BindingResource::Sampler(lighting.lin_sampler),
+            },
+            mx::BindGroupEntry {
+                binding: 14,
+                resource: mx::BindingResource::TextureView(lighting.sky_lut_view),
+            },
+            mx::BindGroupEntry {
+                binding: 15,
+                resource: pass.as_entire_binding(),
+            },
+            mx::BindGroupEntry {
+                binding: 16,
+                resource: mx::BindingResource::TextureView(src),
+            },
         ],
     })
 }
@@ -197,19 +234,24 @@ fn probe(
             };
             [0u32, 3].map(|first| {
                 let rough = m as f32 / (PROBE_MIPS - 1) as f32;
-                let buf = buffer_init(device, queue, Some("probe pass"), bytemuck::cast_slice(&[
-                        first as f32,
-                        rough,
-                        PROBE_SIZE as f32,
-                        m as f32,
-                    ]), mx::BufferUsages::UNIFORM,);
+                let buf = buffer_init(
+                    device,
+                    queue,
+                    Some("probe pass"),
+                    bytemuck::cast_slice(&[first as f32, rough, PROBE_SIZE as f32, m as f32]),
+                    mx::BufferUsages::UNIFORM,
+                );
                 probe_bind_group(device, "probe", lighting, &buf, &src)
             })
         })
         .collect();
     let plain = target(hdr_format, None);
     let targets = [plain.clone(), plain.clone(), plain.clone()];
-    let probe_pipeline = |entry: &str| no_vertex_pipeline(entry, &sky.shader, entry, &targets).vs("vs_probe").create(device);
+    let probe_pipeline = |entry: &str| {
+        no_vertex_pipeline(entry, &sky.shader, entry, &targets)
+            .vs("vs_probe")
+            .create(device)
+    };
     let cube_faces: Vec<mx::TextureView> = (0..6)
         .map(|f| {
             cube_tex
@@ -229,7 +271,13 @@ fn probe(
     let cube_bind_groups: Vec<mx::BindGroup> = (0..6 * SKY_CUBE_ROUNDS)
         .map(|k| {
             let (f, round) = (k / SKY_CUBE_ROUNDS, k % SKY_CUBE_ROUNDS);
-            let buf = buffer_init(device, queue, Some("sky cube face"), bytemuck::cast_slice(&[f as f32, round as f32, SKY_CUBE_SIZE as f32, 0.0]), mx::BufferUsages::UNIFORM,);
+            let buf = buffer_init(
+                device,
+                queue,
+                Some("sky cube face"),
+                bytemuck::cast_slice(&[f as f32, round as f32, SKY_CUBE_SIZE as f32, 0.0]),
+                mx::BufferUsages::UNIFORM,
+            );
             probe_bind_group(device, "sky cube", lighting, &buf, &dummy_view)
         })
         .collect();
@@ -247,9 +295,14 @@ fn probe(
             operation: mx::BlendOperation::Add,
         },
     };
-    let cube_pipeline = no_vertex_pipeline("sky cube",  &sky.shader, "fs_sky_cube", &[target(hdr_format, Some(redraw_blend))])
-        .vs("vs_probe")
-        .create(device);
+    let cube_pipeline = no_vertex_pipeline(
+        "sky cube",
+        &sky.shader,
+        "fs_sky_cube",
+        &[target(hdr_format, Some(redraw_blend))],
+    )
+    .vs("vs_probe")
+    .create(device);
     Probe {
         view,
         faces,

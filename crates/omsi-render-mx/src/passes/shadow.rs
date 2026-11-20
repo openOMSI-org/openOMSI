@@ -13,7 +13,10 @@ pub(crate) struct LampSigs {
 
 impl Default for LampSigs {
     fn default() -> Self {
-        LampSigs { sums: [0; LAMP_SHADOWS], volatile: 0 }
+        LampSigs {
+            sums: [0; LAMP_SHADOWS],
+            volatile: 0,
+        }
     }
 }
 
@@ -48,7 +51,11 @@ pub(crate) struct LampTiles {
 
 impl Default for LampTiles {
     fn default() -> Self {
-        LampTiles { frame: LampSigs::default(), drawn: [None; LAMP_SHADOWS], frames: 0 }
+        LampTiles {
+            frame: LampSigs::default(),
+            drawn: [None; LAMP_SHADOWS],
+            frames: 0,
+        }
     }
 }
 
@@ -67,14 +74,26 @@ fn mix(h: u64, x: u64) -> u64 {
 /// place in the vehicle's frame, to a coarser step: the numbers that come out of the vehicle's
 /// own rotation are the same to a few millionths only.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn lamp_item_hash(inst: &Instance, pose: u32, kind: u8, range: u32, material: u32, look: u32, alpha: f32, frame: Option<(&Mat4, DVec3)>) -> u64 {
+pub(crate) fn lamp_item_hash(
+    inst: &Instance,
+    pose: u32,
+    kind: u8,
+    range: u32,
+    material: u32,
+    look: u32,
+    alpha: f32,
+    frame: Option<(&Mat4, DVec3)>,
+) -> u64 {
     let mut h = mix(0x9e37_79b9_7f4a_7c15, inst.mesh as u64);
     h = mix(h, alpha.to_bits() as u64);
     h = mix(h, (range as u64) << 32 | pose as u64);
     h = mix(h, (material as u64) << 8 | kind as u64);
     h = mix(h, look as u64);
     if let Some((to_local, ro)) = frame {
-        return mix(mix(h, cabin_place(inst, to_local, ro)), 0x2545_f491_4f6c_dd1d);
+        return mix(
+            mix(h, cabin_place(inst, to_local, ro)),
+            0x2545_f491_4f6c_dd1d,
+        );
     }
     // (the place to a few millimetres and the turn to a tenth of a degree, a fraction of
     // a tile's texel: a bus standing with its engine running shakes by less, and taken
@@ -134,21 +153,43 @@ impl CabinMotion {
         self.still.clear();
         self.still.resize(n, false);
         for (i, inst) in scene.instances.iter().enumerate() {
-            let inside = inst.visible && cabin.vehicle.contains(Renderer::bounding_sphere(scene, inst).0, 0.3);
+            let inside = inst.visible
+                && cabin
+                    .vehicle
+                    .contains(Renderer::bounding_sphere(scene, inst).0, 0.3);
             if !inside {
                 self.seen[i] = (0, CABIN_UNTRACKED);
                 continue;
             }
-            let key = mix(cabin_place(inst, &cabin.to_local, scene.render_origin), scene.meshes[inst.mesh].pose as u64);
+            let key = mix(
+                cabin_place(inst, &cabin.to_local, scene.render_origin),
+                scene.meshes[inst.mesh].pose as u64,
+            );
             let (last, age) = self.seen[i];
-            let age = if age == CABIN_UNTRACKED { CABIN_SETTLE_FRAMES } else if last == key { (age + 1).min(CABIN_SETTLE_FRAMES) } else { 0 };
+            let age = if age == CABIN_UNTRACKED {
+                CABIN_SETTLE_FRAMES
+            } else if last == key {
+                (age + 1).min(CABIN_SETTLE_FRAMES)
+            } else {
+                0
+            };
             self.seen[i] = (key, age);
             self.still[i] = age >= CABIN_SETTLE_FRAMES;
         }
         if omsi_cfg::flags::OMSI_DEBUG_DRAWS.is_set() {
             let inside = self.seen.iter().filter(|s| s.1 != CABIN_UNTRACKED).count();
-            let moving: Vec<usize> = (0..n).filter(|&i| self.seen[i].1 != CABIN_UNTRACKED && !self.still[i]).collect();
-            log::info!("saloon: {inside} parts in the vehicle, {} moving: {:?}", moving.len(), moving.iter().take(12).map(|&i| (i, scene.meshes[scene.instances[i].mesh].pose)).collect::<Vec<_>>());
+            let moving: Vec<usize> = (0..n)
+                .filter(|&i| self.seen[i].1 != CABIN_UNTRACKED && !self.still[i])
+                .collect();
+            log::info!(
+                "saloon: {inside} parts in the vehicle, {} moving: {:?}",
+                moving.len(),
+                moving
+                    .iter()
+                    .take(12)
+                    .map(|&i| (i, scene.meshes[scene.instances[i].mesh].pose))
+                    .collect::<Vec<_>>()
+            );
         }
     }
 }
@@ -165,8 +206,16 @@ pub(crate) fn lamp_tile_key(sums: &LampSigs, k: usize, view_proj: Mat4) -> u64 {
 impl Renderer {
     /// The near cascade (with the close one beside it in the atlas) and the far cascade,
     /// each when it is redrawn this frame.
-    pub(crate) fn encode_shadow_maps(&self, shadow_encoder: &mut mx::CommandEncoder, scene: &Scene, sh: &ShadowPlan, shadow_batches: &[Vec<Batch>; SHADOW_LISTS], timers: &mut PassTimers) {
-        let (draw_shadows, redraw_near, redraw_far) = (sh.draw_shadows, sh.redraw_near, sh.redraw_far);
+    pub(crate) fn encode_shadow_maps(
+        &self,
+        shadow_encoder: &mut mx::CommandEncoder,
+        scene: &Scene,
+        sh: &ShadowPlan,
+        shadow_batches: &[Vec<Batch>; SHADOW_LISTS],
+        timers: &mut PassTimers,
+    ) {
+        let (draw_shadows, redraw_near, redraw_far) =
+            (sh.draw_shadows, sh.redraw_near, sh.redraw_far);
         for cascade in [0usize, 1] {
             if !draw_shadows || (cascade == 1 && !redraw_far) {
                 continue;
@@ -178,14 +227,25 @@ impl Renderer {
             };
             let keep_near = cascade == 0 && !redraw_near;
             // (the far map keeps the street lamps' tiles under it when they are kept)
-            let keep_lamps = cascade == 1 && self.shadows.lamp_tiles.get().drawn.iter().any(|d| d.is_some());
+            let keep_lamps = cascade == 1
+                && self
+                    .shadows
+                    .lamp_tiles
+                    .get()
+                    .drawn
+                    .iter()
+                    .any(|d| d.is_some());
             let mut pass = shadow_encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("shadow"),
                 color_attachments: &[],
                 depth_stencil_attachment: Some(mx::RenderPassDepthStencilAttachment {
                     view,
                     depth_ops: Some(mx::Operations {
-                        load: if keep_near || keep_lamps { mx::LoadOp::Load } else { mx::LoadOp::Clear(1.0) },
+                        load: if keep_near || keep_lamps {
+                            mx::LoadOp::Load
+                        } else {
+                            mx::LoadOp::Clear(1.0)
+                        },
                         store: mx::StoreOp::Store,
                     }),
                     stencil_ops: None,
@@ -237,7 +297,14 @@ impl Renderer {
 
     // the lamps' maps: tiles under the far map (`LampAtlas`), each cleared and drawn when
     // what it shows has changed (see `LampTiles`)
-    pub(crate) fn encode_lamp_shadows(&self, shadow_encoder: &mut mx::CommandEncoder, scene: &Scene, f: &FrameCtx, shadow_batches: &[Vec<Batch>; SHADOW_LISTS], timers: &mut PassTimers) {
+    pub(crate) fn encode_lamp_shadows(
+        &self,
+        shadow_encoder: &mut mx::CommandEncoder,
+        scene: &Scene,
+        f: &FrameCtx,
+        shadow_batches: &[Vec<Batch>; SHADOW_LISTS],
+        timers: &mut PassTimers,
+    ) {
         let lamp_shadows = &f.lamp_shadows;
         // (the frames that draw the lamps' maps keep the record: a mirror's has none)
         if !f.with_overlays || f.projection.is_some() {
@@ -251,24 +318,54 @@ impl Renderer {
                 continue;
             };
             let key = lamp_tile_key(&tiles.frame, k, l.key_matrix());
-            let foliage_turn = tiles.frame.volatile & (1u64 << k) != 0 && (tiles.frames.wrapping_add(k as u32)) % FOLIAGE_TILE_PERIOD == 0;
+            let foliage_turn = tiles.frame.volatile & (1u64 << k) != 0
+                && (tiles.frames.wrapping_add(k as u32)) % FOLIAGE_TILE_PERIOD == 0;
             if *d != Some(key) || foliage_turn || f.env.lamp_shadows_every_frame {
                 if f.env.debug_draws {
-                    log::info!("lamp shadow tile {k} drawn: {} (lamp at {:?}, {} batches)", if *d != Some(key) { "changed" } else { "moving foliage" }, l.position, shadow_batches[3 + k].len());
+                    log::info!(
+                        "lamp shadow tile {k} drawn: {} (lamp at {:?}, {} batches)",
+                        if *d != Some(key) {
+                            "changed"
+                        } else {
+                            "moving foliage"
+                        },
+                        l.position,
+                        shadow_batches[3 + k].len()
+                    );
                 }
                 redraw[k] = true;
                 *d = Some(key);
             }
         }
         if f.env.debug_draws && !lamp_shadows.is_empty() {
-            let count = |run: std::ops::Range<usize>| (run.clone().filter(|k| redraw[*k]).count(), lamp_shadows.iter().filter(|l| run.contains(&l.slot)).count());
+            let count = |run: std::ops::Range<usize>| {
+                (
+                    run.clone().filter(|k| redraw[*k]).count(),
+                    lamp_shadows
+                        .iter()
+                        .filter(|l| run.contains(&l.slot))
+                        .count(),
+                )
+            };
             let (w, v, c) = (count(WORLD_SLOTS), count(VEHICLE_SLOTS), count(CABIN_SLOTS));
-            log::info!("lamp shadow tiles drawn: world {} of {}, vehicle {} of {}, saloon {} of {}", w.0, w.1, v.0, v.1, c.0, c.1);
+            log::info!(
+                "lamp shadow tiles drawn: world {} of {}, vehicle {} of {}, saloon {} of {}",
+                w.0,
+                w.1,
+                v.0,
+                v.1,
+                c.0,
+                c.1
+            );
         }
         tiles.frames = tiles.frames.wrapping_add(1);
         self.shadows.lamp_tiles.set(tiles);
         if f.env.debug_draws {
-            *self.counts.borrow_mut().entry("lamp shadow tiles drawn").or_default() += redraw.iter().filter(|r| **r).count() as f64;
+            *self
+                .counts
+                .borrow_mut()
+                .entry("lamp shadow tiles drawn")
+                .or_default() += redraw.iter().filter(|r| **r).count() as f64;
         }
         if redraw.iter().any(|r| *r) {
             let mut pass = shadow_encoder.begin_render_pass(&mx::RenderPassDescriptor {
@@ -278,10 +375,15 @@ impl Renderer {
                     view: &self.shadows.shadow_view_far,
                     depth_ops: Some(mx::Operations {
                         load: mx::LoadOp::Load,
-                        store: mx::StoreOp::Store, }),
+                        store: mx::StoreOp::Store,
+                    }),
                     stencil_ops: None,
                 }),
-                timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "lamp shadows"),
+                timestamp_writes: pass_timer(
+                    timers.set.as_ref(),
+                    &mut timers.timed,
+                    "lamp shadows",
+                ),
                 occlusion_query_set: None,
             });
             let atlas = self.shadows.lamp_atlas;
@@ -309,7 +411,11 @@ mod tests {
     #[test]
     fn lamp_tile_keys() {
         let items = [3u64, 0xdead_beef, 77, 1 << 40];
-        let (mut a, mut b, mut c) = (LampSigs::default(), LampSigs::default(), LampSigs::default());
+        let (mut a, mut b, mut c) = (
+            LampSigs::default(),
+            LampSigs::default(),
+            LampSigs::default(),
+        );
         for &h in &items {
             a.add(1, h);
         }

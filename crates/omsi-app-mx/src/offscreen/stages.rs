@@ -26,11 +26,39 @@ pub(crate) enum OffscreenStage {
 /// people, the LAN, the spray and the snapshots due.
 pub(crate) const OFFSCREEN_STEP: &[OffscreenStage] = {
     use OffscreenStage::*;
-    &[Server, Clock, Traffic, Startup, Duty, Drive, GroundGap, Humans, Lan, Surroundings, Snapshot, Record]
+    &[
+        Server,
+        Clock,
+        Traffic,
+        Startup,
+        Duty,
+        Drive,
+        GroundGap,
+        Humans,
+        Lan,
+        Surroundings,
+        Snapshot,
+        Record,
+    ]
 };
 
-const fn stage(key: ProfKey, phase: Phase, role: Role, reads: &'static [Group], writes: &'static [Group]) -> StageInfo {
-    StageInfo { name: key.name(), phase, role, reads, writes, takes: &[], gives: &[], profile: Profile::Key(key) }
+const fn stage(
+    key: ProfKey,
+    phase: Phase,
+    role: Role,
+    reads: &'static [Group],
+    writes: &'static [Group],
+) -> StageInfo {
+    StageInfo {
+        name: key.name(),
+        phase,
+        role,
+        reads,
+        writes,
+        takes: &[],
+        gives: &[],
+        profile: Profile::Key(key),
+    }
 }
 
 impl frame_stages::Stage for OffscreenStage {
@@ -40,18 +68,109 @@ impl frame_stages::Stage for OffscreenStage {
         use Phase as P;
         use ProfKey as K;
         match self {
-            Server => stage(K::Server, P::Housekeeping, Role::Own, &[G::Net, G::Clock, G::Traffic, G::People], &[G::Net, G::Clock, G::Traffic, G::Gfx]),
-            Clock => stage(K::Clock, P::Sim, Role::Clock, &[G::Clock, G::Weather, G::World], &[G::Clock, G::Player]),
-            Traffic => stage(K::Traffic, P::Sim, Role::Traffic, &[G::Traffic, G::Player, G::People, G::World, G::View, G::Clock, G::Weather, G::Net], &[G::Traffic, G::Player, G::Gfx, G::Perf]),
+            Server => stage(
+                K::Server,
+                P::Housekeeping,
+                Role::Own,
+                &[G::Net, G::Clock, G::Traffic, G::People],
+                &[G::Net, G::Clock, G::Traffic, G::Gfx],
+            ),
+            Clock => stage(
+                K::Clock,
+                P::Sim,
+                Role::Clock,
+                &[G::Clock, G::Weather, G::World],
+                &[G::Clock, G::Player],
+            ),
+            Traffic => stage(
+                K::Traffic,
+                P::Sim,
+                Role::Traffic,
+                &[
+                    G::Traffic,
+                    G::Player,
+                    G::People,
+                    G::World,
+                    G::View,
+                    G::Clock,
+                    G::Weather,
+                    G::Net,
+                ],
+                &[G::Traffic, G::Player, G::Gfx, G::Perf],
+            ),
             Startup => stage(K::Startup, P::Sim, Role::Own, &[G::Player], &[G::Player]),
-            Duty => stage(K::Duty, P::Sim, Role::Duty, &[G::Duty, G::Player, G::People, G::Clock, G::World], &[G::Duty, G::Player, G::Perf]),
-            Drive => stage(K::Drive, P::Sim, Role::Player, &[G::Player, G::Input, G::World, G::Traffic], &[G::Player, G::Traffic, G::Gfx, G::Perf]),
-            GroundGap => stage(K::GroundGap, P::Sim, Role::Own, &[G::World, G::Player, G::Traffic, G::Clock], &[G::Perf]),
-            Humans => stage(K::Humans, P::Sim, Role::People, &[G::People, G::Player, G::Traffic, G::Duty, G::Clock, G::World, G::View, G::Net], &[G::People, G::Player, G::Traffic, G::Duty, G::Gfx, G::Perf]),
-            Lan => stage(K::Lan, P::Sim, Role::Lan, &[G::Net, G::Player, G::Clock, G::Duty, G::View], &[G::Net, G::Traffic, G::People, G::Gfx, G::Sound]),
-            Surroundings => stage(K::Surroundings, P::Present, Role::Surroundings, &[G::Weather, G::Player, G::Traffic, G::Net, G::View, G::People], &[G::Weather]),
-            Snapshot => stage(K::Snapshot, P::Output, Role::Picture, &[G::Gfx, G::View, G::Traffic, G::Weather], &[G::Gfx, G::Perf]),
-            Record => stage(K::Record, P::Output, Role::Own, &[G::Gfx, G::View, G::Sound], &[G::Gfx, G::Perf]),
+            Duty => stage(
+                K::Duty,
+                P::Sim,
+                Role::Duty,
+                &[G::Duty, G::Player, G::People, G::Clock, G::World],
+                &[G::Duty, G::Player, G::Perf],
+            ),
+            Drive => stage(
+                K::Drive,
+                P::Sim,
+                Role::Player,
+                &[G::Player, G::Input, G::World, G::Traffic],
+                &[G::Player, G::Traffic, G::Gfx, G::Perf],
+            ),
+            GroundGap => stage(
+                K::GroundGap,
+                P::Sim,
+                Role::Own,
+                &[G::World, G::Player, G::Traffic, G::Clock],
+                &[G::Perf],
+            ),
+            Humans => stage(
+                K::Humans,
+                P::Sim,
+                Role::People,
+                &[
+                    G::People,
+                    G::Player,
+                    G::Traffic,
+                    G::Duty,
+                    G::Clock,
+                    G::World,
+                    G::View,
+                    G::Net,
+                ],
+                &[G::People, G::Player, G::Traffic, G::Duty, G::Gfx, G::Perf],
+            ),
+            Lan => stage(
+                K::Lan,
+                P::Sim,
+                Role::Lan,
+                &[G::Net, G::Player, G::Clock, G::Duty, G::View],
+                &[G::Net, G::Traffic, G::People, G::Gfx, G::Sound],
+            ),
+            Surroundings => stage(
+                K::Surroundings,
+                P::Present,
+                Role::Surroundings,
+                &[
+                    G::Weather,
+                    G::Player,
+                    G::Traffic,
+                    G::Net,
+                    G::View,
+                    G::People,
+                ],
+                &[G::Weather],
+            ),
+            Snapshot => stage(
+                K::Snapshot,
+                P::Output,
+                Role::Picture,
+                &[G::Gfx, G::View, G::Traffic, G::Weather],
+                &[G::Gfx, G::Perf],
+            ),
+            Record => stage(
+                K::Record,
+                P::Output,
+                Role::Own,
+                &[G::Gfx, G::View, G::Sound],
+                &[G::Gfx, G::Perf],
+            ),
         }
     }
 }

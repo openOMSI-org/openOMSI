@@ -23,14 +23,14 @@ use std::sync::Arc;
 
 use omsi_sim::timetable_run::*;
 
-pub use omsi_sim::timetable_run::{PlannedStop, PlannedTrip, PlayerDuty};
-pub(crate) use omsi_sim::timetable_run::{
-    has_roller_blind, hhmm, ibis_stop_index, player_ibis, set_ai_destination,
-    set_ai_destination_at, set_player_destination_directly, set_player_destination_with_display,
-    shown_destination, turn_roller_blind, BlindPick,
-};
 #[cfg(test)]
 pub(crate) use omsi_sim::timetable_run::set_player_destination_at;
+pub(crate) use omsi_sim::timetable_run::{
+    BlindPick, has_roller_blind, hhmm, ibis_stop_index, player_ibis, set_ai_destination,
+    set_ai_destination_at, set_player_destination_directly, set_player_destination_with_display,
+    shown_destination, turn_roller_blind,
+};
+pub use omsi_sim::timetable_run::{PlannedStop, PlannedTrip, PlayerDuty};
 
 /// The timetable (`ScheduleSim`, which everything of the timetable reads through `Deref`)
 /// with the vehicle sets it reads and uploads ahead for the GPU.
@@ -56,8 +56,14 @@ pub struct Schedule {
 
 /// What the worker found on the whole map's network: the trips' tracks and the blocks' lanes.
 pub(crate) struct TransitSolved {
-    trips: Vec<(String, Result<omsi_sim::timetable_run::transit::Routed, String>)>,
-    blocks: Vec<(String, Result<omsi_sim::ai_traffic::blocks::BlockDef, String>)>,
+    trips: Vec<(
+        String,
+        Result<omsi_sim::timetable_run::transit::Routed, String>,
+    )>,
+    blocks: Vec<(
+        String,
+        Result<omsi_sim::ai_traffic::blocks::BlockDef, String>,
+    )>,
 }
 
 impl std::ops::Deref for Schedule {
@@ -95,21 +101,32 @@ impl Schedule {
     /// same), the trips and blocks routed over it, and the result taken by `poll_transit`. The
     /// trips' departures wait until then.
     pub fn start_transit(&mut self, world: Arc<World>) {
-        let has_blocks = world.transit.signals.blocks.iter().any(|b| b.from.is_some() && b.to.is_some());
+        let has_blocks = world
+            .transit
+            .signals
+            .blocks
+            .iter()
+            .any(|b| b.from.is_some() && b.to.is_some());
         if self.transit_rx.is_some() || !(self.sim.transit_pending() || has_blocks) {
             return;
         }
         let wanted = self.sim.transit_wanted();
         let (tx, rx) = std::sync::mpsc::channel();
-        let spawned = std::thread::Builder::new().name("transport routes".into()).spawn(move || {
-            let m = world.navigation_map();
-            let mut net = omsi_sim::traffic::Network { lanes: m.lanes, ..Default::default() };
-            net.link(1.5);
-            let places: hashbrown::HashMap<i64, glam::DVec3> = m.places.into_iter().collect();
-            let trips = omsi_sim::timetable_run::transit::route_all(&net, &places, &wanted);
-            let blocks = omsi_sim::timetable_run::transit::route_blocks(&net, &world.transit.signals);
-            let _ = tx.send(TransitSolved { trips, blocks });
-        });
+        let spawned = std::thread::Builder::new()
+            .name("transport routes".into())
+            .spawn(move || {
+                let m = world.navigation_map();
+                let mut net = omsi_sim::traffic::Network {
+                    lanes: m.lanes,
+                    ..Default::default()
+                };
+                net.link(1.5);
+                let places: hashbrown::HashMap<i64, glam::DVec3> = m.places.into_iter().collect();
+                let trips = omsi_sim::timetable_run::transit::route_all(&net, &places, &wanted);
+                let blocks =
+                    omsi_sim::timetable_run::transit::route_blocks(&net, &world.transit.signals);
+                let _ = tx.send(TransitSolved { trips, blocks });
+            });
         if spawned.is_ok() {
             self.transit_rx = Some(rx);
         }
@@ -138,7 +155,12 @@ impl Schedule {
             Err(std::sync::mpsc::TryRecvError::Empty) => None,
             Err(_) => {
                 // (the worker died: give the trips up rather than hold their departures for ever)
-                let all: Vec<_> = self.sim.transit_wanted().into_iter().map(|t| (t.trip, Err("the router stopped".to_string()))).collect();
+                let all: Vec<_> = self
+                    .sim
+                    .transit_wanted()
+                    .into_iter()
+                    .map(|t| (t.trip, Err("the router stopped".to_string())))
+                    .collect();
                 self.sim.install_transit(all);
                 self.transit_rx = None;
                 None
@@ -148,7 +170,12 @@ impl Schedule {
 
     /// The lanes a trip runs on (for the navigator): its track, else the station links
     /// between its stops, as far as the tiles have brought them - and whether that is all.
-    pub fn trip_route(&self, world: &World, traffic: &Traffic, trip_name: &str) -> (Vec<usize>, bool) {
+    pub fn trip_route(
+        &self,
+        world: &World,
+        traffic: &Traffic,
+        trip_name: &str,
+    ) -> (Vec<usize>, bool) {
         self.sim.trip_route(&*world.data(), &traffic.sim, trip_name)
     }
 
@@ -168,7 +195,8 @@ impl Schedule {
         trip: Option<&str>,
         whole_tour: bool,
     ) -> Result<PlayerDuty, String> {
-        self.sim.player_duty(&*world.data(), line, tour, now, trip, whole_tour)
+        self.sim
+            .player_duty(&*world.data(), line, tour, now, trip, whole_tour)
     }
 
     /// Make the departure boards of the stops whose displays are near
@@ -187,13 +215,19 @@ impl Schedule {
         boards.clock = Some(clock.clone());
         // (a stop a page asks for anew is made at once, not up to a second later: the boards of
         // the map's own displays may just have been made without it)
-        let new_name = boards.wanted_names.iter().any(|k| !boards.departures.contains_key(k));
-        if (self.sim.boards_fresh(now) && !new_name) || (boards.wanted.is_empty() && boards.wanted_names.is_empty()) {
+        let new_name = boards
+            .wanted_names
+            .iter()
+            .any(|k| !boards.departures.contains_key(k));
+        if (self.sim.boards_fresh(now) && !new_name)
+            || (boards.wanted.is_empty() && boards.wanted_names.is_empty())
+        {
             return;
         }
         let (wanted, wanted_names) = (boards.wanted.clone(), boards.wanted_names.clone());
         let (by_stop, departures) =
-            self.sim.make_boards(traffic.map(|t| &t.sim), wanted, wanted_names, duty, clock);
+            self.sim
+                .make_boards(traffic.map(|t| &t.sim), wanted, wanted_names, duty, clock);
         boards.by_stop = by_stop;
         boards.departures = departures;
         boards.departures_gen = boards.departures_gen.wrapping_add(1);
@@ -204,21 +238,29 @@ impl Schedule {
     /// The timetable buses on the road, for outside tools (`telemetry`): line, tour, trip file,
     /// next stop (map object), standing at it, delay, position and fleet number of each.
     pub fn telemetry_ai(&self, traffic: Option<&crate::traffic::Traffic>) -> serde_json::Value {
-        let Some(t) = traffic else { return serde_json::Value::Array(Vec::new()) };
+        let Some(t) = traffic else {
+            return serde_json::Value::Array(Vec::new());
+        };
         let list = self.sim.ai_bus_rows(&t.sim);
-        serde_json::Value::Array(list.into_iter().map(|b| serde_json::json!({
-            "id": b.id,
-            "line": b.line,
-            "tour": b.tour,
-            "trip": b.trip,
-            "terminus": b.terminus,
-            "depart": b.depart,
-            "next_stop_id": b.next_stop_id,
-            "at_stop": b.at_stop,
-            "trip_done": b.trip_done,
-            "delay_s": b.delay_s,
-            "x": b.x, "y": b.y,
-            "number": b.number,
-        })).collect())
+        serde_json::Value::Array(
+            list.into_iter()
+                .map(|b| {
+                    serde_json::json!({
+                        "id": b.id,
+                        "line": b.line,
+                        "tour": b.tour,
+                        "trip": b.trip,
+                        "terminus": b.terminus,
+                        "depart": b.depart,
+                        "next_stop_id": b.next_stop_id,
+                        "at_stop": b.at_stop,
+                        "trip_done": b.trip_done,
+                        "delay_s": b.delay_s,
+                        "x": b.x, "y": b.y,
+                        "number": b.number,
+                    })
+                })
+                .collect(),
+        )
     }
 }

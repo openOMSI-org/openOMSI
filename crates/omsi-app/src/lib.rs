@@ -16,12 +16,12 @@ mod admin_panel;
 mod auto_announce;
 mod player_list;
 mod voice_chat;
-use omsi_scene::check;
 use omsi_platform::discord;
+use omsi_scene::check;
 #[cfg(steam)]
 mod steam;
-pub(crate) use omsi_scene::head_idle;
 use omsi_input::{head_filter, headtrack, tobii};
+pub(crate) use omsi_scene::head_idle;
 #[cfg(windows)]
 use omsi_xr::openxr;
 #[cfg(target_os = "android")]
@@ -29,32 +29,32 @@ mod android;
 #[cfg(target_os = "android")]
 mod android_launcher;
 #[cfg(target_os = "ios")]
-mod ios;
-#[cfg(target_os = "ios")]
 mod apple;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod apple_bridge;
+#[cfg(target_os = "ios")]
+mod ios;
+mod placing;
 mod platform;
 mod touch;
 mod units;
-mod placing;
 use omsi_mt as mt;
 use omsi_platform::updater;
 mod update_watch;
 use omsi_platform::presence;
 use omsi_soundscape::ambience;
 mod soundscape;
-use omsi_scene::wheel_surface;
-use omsi_scene::camera_arm;
-use omsi_vehicle::cam_approach;
 use omsi_career::career;
 use omsi_input::describe;
+use omsi_scene::camera_arm;
 pub(crate) use omsi_scene::editor;
+use omsi_scene::wheel_surface;
+use omsi_vehicle::cam_approach;
 mod duty_book;
 mod first_graphics;
+mod game_controller_menu;
 mod game_lists;
 mod game_panels;
-mod game_controller_menu;
 mod rail_drive;
 use omsi_scene::driver;
 use omsi_scene::export;
@@ -77,13 +77,13 @@ use omsi_scene::money;
 mod milezero;
 mod radio;
 
-use omsi_scene::puddles;
 use omsi_platform::quit;
-use omsi_weather::condensation;
+use omsi_scene::puddles;
 use omsi_scene::{rain, window_wipers};
+use omsi_weather::condensation;
 mod scene;
-mod season_phase;
 mod schedule;
+mod season_phase;
 /// The cab's paper timetable (`omsi_scene::schedule_paper`) in the game's language.
 mod schedule_paper {
     pub(crate) fn update_vehicle(
@@ -91,32 +91,34 @@ mod schedule_paper {
         duty: &omsi_sim::timetable_run::PlayerDuty,
         fonts: &mut omsi_sim::texttex::FontLibrary,
     ) -> anyhow::Result<()> {
-        omsi_scene::schedule_paper::update_vehicle(vehicle, duty, fonts, || crate::settings::Settings::load().language)
+        omsi_scene::schedule_paper::update_vehicle(vehicle, duty, fonts, || {
+            crate::settings::Settings::load().language
+        })
     }
 }
-mod real_time;
-mod settings;
-mod shell;
-mod photo;
 mod depot_bus;
 mod devtools;
+mod photo;
+mod real_time;
+mod remote;
+mod settings;
+mod shell;
 mod telemetry;
 mod themes;
-mod remote;
 use omsi_scene::threads;
 use omsi_scene::tiles;
 mod traffic;
+mod ui;
 mod view_sync;
 mod watchdog;
-mod ui;
 
 // the game itself, split by what each part does
 mod app;
-mod applog;
-mod logmask;
 mod app_events;
+mod applog;
 mod bus_service;
 mod camera_util;
+mod logmask;
 // the game controllers, their mappings and force feedback (`omsi-input`), at their old paths
 use omsi_input::{controllers, gamepad_profile, hpattern};
 mod cli;
@@ -124,30 +126,30 @@ use omsi_input::diagnostics;
 mod perf_overlay;
 mod perf_report;
 pub(crate) use omsi_cfg::profile_keys;
-mod frame_stages;
-mod support_bundle;
-mod duty_start;
-mod input_script;
 mod app_impl;
+mod duty_start;
+mod frame_stages;
+mod input_script;
+mod support_bundle;
 use omsi_guard::launcher_link;
 use omsi_lan::mods as lan_mods;
 mod memory;
 mod offscreen;
 pub(crate) use omsi_sim::ground_gap;
 mod on_foot;
+mod optimiser;
 mod trolley_hands;
 mod trolley_mouse;
 pub(crate) mod trolley_net;
-mod optimiser;
 use omsi_scene::route_arrows;
-mod server;
 mod player;
 mod plugin_io;
+mod server;
 // the plugins' panels (`omsi-plugin-ui`) at their old path, and the app's side of their input
 use omsi_plugin_ui as plugin_ui;
 mod plugin_panels;
-mod process_permissions;
 mod plugins;
+mod process_permissions;
 mod services;
 mod sim_thread;
 mod situation;
@@ -169,7 +171,9 @@ use omsi_launcher_lib::i18n::TABLES as _LOCALES;
 
 /// Show the interface in `code` (the settings' ENG / DEU / FRA / RUS).
 pub(crate) fn ui_language(code: &str) {
-    omsi_ui::i18n::set_lookup(|lang, text| _rust_i18n_try_translate(lang, text).map(|t| t.into_owned()));
+    omsi_ui::i18n::set_lookup(|lang, text| {
+        _rust_i18n_try_translate(lang, text).map(|t| t.into_owned())
+    });
     static TEMPLATES: std::sync::Once = std::sync::Once::new();
     TEMPLATES.call_once(|| omsi_ui::i18n::set_templates(locale_keys(_LOCALES)));
     let iso = omsi_launcher_lib::language_iso(code);
@@ -184,54 +188,57 @@ const MISSING_ORIGINAL: &str = "The original OMSI 2 was not found.\n\n\
     Missing in {folder}: {missing}";
 
 fn locale_keys(yml: &str) -> impl Iterator<Item = String> + '_ {
-    yml.lines().filter_map(|l| l.strip_prefix('"')?.strip_suffix("\":")).filter(|k| k.contains('{')).filter_map(|k| {
-        let mut out = String::new();
-        let mut chars = k.chars();
-        while let Some(c) = chars.next() {
-            if c != '\\' {
-                out.push(c);
-                continue;
+    yml.lines()
+        .filter_map(|l| l.strip_prefix('"')?.strip_suffix("\":"))
+        .filter(|k| k.contains('{'))
+        .filter_map(|k| {
+            let mut out = String::new();
+            let mut chars = k.chars();
+            while let Some(c) = chars.next() {
+                if c != '\\' {
+                    out.push(c);
+                    continue;
+                }
+                out.push(match chars.next()? {
+                    'n' => '\n',
+                    't' => '\t',
+                    x @ ('"' | '\\') => x,
+                    _ => return None,
+                });
             }
-            out.push(match chars.next()? {
-                'n' => '\n',
-                't' => '\t',
-                x @ ('"' | '\\') => x,
-                _ => return None,
-            });
-        }
-        Some(out)
-    })
+            Some(out)
+        })
 }
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
+use app::*;
+use camera_util::*;
 use clap::Parser;
+use cli::*;
+use diagnostics::*;
+use duty_start::*;
 use glam::{DVec3, Vec3};
+use input_script::*;
+use launcher_link::*;
+use memory::*;
+use offscreen::*;
 use omsi_render::{Camera, Renderer, Scene, SurfaceState};
+use player::*;
 use scene::World;
+use services::*;
+use situation::*;
+use spawn::*;
+use startup::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
+use traffic_link::*;
+use weather_setup::*;
 use winit::application::ApplicationHandler;
 use winit::event::{DeviceEvent, ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
-use app::*;
-use camera_util::*;
-use cli::*;
-use diagnostics::*;
-use duty_start::*;
-use input_script::*;
-use launcher_link::*;
-use memory::*;
-use offscreen::*;
-use player::*;
-use services::*;
-use situation::*;
-use spawn::*;
-use startup::*;
-use traffic_link::*;
-use weather_setup::*;
 use world_load::*;
 
 /// The game (and its launcher) from the command line: what `main` does.
@@ -250,7 +257,10 @@ pub fn run() -> Result<()> {
     attach_parent_console();
     // `--check <file or folder>` (`--check-vehicle`, its old name): the loaders' findings
     // as JSON, no window, no log
-    if matches!(std::env::args().nth(1).as_deref(), Some("--check" | "--check-vehicle")) {
+    if matches!(
+        std::env::args().nth(1).as_deref(),
+        Some("--check" | "--check-vehicle")
+    ) {
         let rest: Vec<String> = std::env::args().skip(2).collect();
         return check::run(&rest, crate::startup::find_root);
     }
@@ -266,7 +276,9 @@ pub fn run() -> Result<()> {
         }
         let backtrace = std::backtrace::Backtrace::force_capture();
         log::error!("the game stopped on an error (build {BUILD}): {info}\n{backtrace}");
-        omsi_platform::diagnostics::panicked(omsi_platform::diagnostics::panic_report(info, &backtrace));
+        omsi_platform::diagnostics::panicked(omsi_platform::diagnostics::panic_report(
+            info, &backtrace,
+        ));
         default_hook(info);
     }));
     log::info!(
@@ -286,13 +298,18 @@ pub fn run() -> Result<()> {
     if let Some(out) = &args.export_diagnostics {
         let value = support_bundle::snapshot(None, &settings::Settings::load(), None, None, "cli");
         support_bundle::export(out, &value)?;
-        println!("Support package written to {} - look inside before you attach it to an issue", out.display());
+        println!(
+            "Support package written to {} - look inside before you attach it to an issue",
+            out.display()
+        );
         return Ok(());
     }
     // Started by a double click or with no arguments at all: that is the launcher's job.
     // The launcher itself runs the game with a full command line (--no-menu, --map, ...).
     let bare = std::env::args().len() == 1;
-    let Some((args, server_cfg)) = prepare(args, bare)? else { return Ok(()) };
+    let Some((args, server_cfg)) = prepare(args, bare)? else {
+        return Ok(());
+    };
     if bare && !args.menu {
         // the launcher, another program (it starts the game again with a full command
         // line): OMSI_LAUNCHER=<program>, else the desktop launcher beside the game
@@ -303,10 +320,14 @@ pub fn run() -> Result<()> {
     }
     // Launcher helpers and the launcher itself must not count as a running game.
     let _cache_activity = omsi_cfg::cache_activity::game(&omsi_launcher_lib::data_dir())?
-        .only_cleanup_when(|| !omsi_launcher_lib::instances::list().iter().any(|game| {
-            game.running && game.pid != std::process::id()
-        }));
-    let Some(app) = make_app(args, server_cfg)? else { return Ok(()) };
+        .only_cleanup_when(|| {
+            !omsi_launcher_lib::instances::list()
+                .iter()
+                .any(|game| game.running && game.pid != std::process::id())
+        });
+    let Some(app) = make_app(args, server_cfg)? else {
+        return Ok(());
+    };
     // a game session's start goes into the start guard's journal (a version whose sessions
     // keep failing before their first frames is healed at the launcher's next start)
     if app.args.server.is_none() {
@@ -332,16 +353,20 @@ fn game_event_loop() -> Result<EventLoop<()>> {
     #[cfg(target_os = "macos")]
     if omsi_cfg::flags::OMSI_HIDDEN_WINDOW.is_set() {
         use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
-        return Ok(EventLoop::builder().with_activation_policy(ActivationPolicy::Accessory).build()?);
+        return Ok(EventLoop::builder()
+            .with_activation_policy(ActivationPolicy::Accessory)
+            .build()?);
     }
     Ok(EventLoop::new()?)
 }
 
-
 /// Everything before a window: the language, the session's random seed, the original
 /// installation and the content roots (mods, archives). None when the program has
 /// nothing more to do (a fatal error was shown).
-pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option<server::ServerCfg>)>> {
+pub(crate) fn prepare(
+    mut args: Args,
+    bare: bool,
+) -> Result<Option<(Args, Option<server::ServerCfg>)>> {
     optimiser::recover_cut_short();
     ui_language(&settings::Settings::load().language);
     units::Units::from_setting(&settings::Settings::load().units).set();
@@ -399,7 +424,9 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
                 // installation of it there is nothing to play on, and every player must have
                 // the same base whatever copy of OMSI 2 they own
                 let missing = omsi_cfg::missing_original_essentials(&args.root);
-                let text = omsi_ui::tr(MISSING_ORIGINAL).replace("{folder}", &args.root.display().to_string()).replace("{missing}", &missing.join(", "));
+                let text = omsi_ui::tr(MISSING_ORIGINAL)
+                    .replace("{folder}", &args.root.display().to_string())
+                    .replace("{missing}", &missing.join(", "));
                 if server_cfg.is_some() || args.list_maps {
                     eprintln!("{text}");
                 } else {
@@ -413,7 +440,9 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
             }
         }
     }
-    if let Some(memo) = root_memo().filter(|_| is_omsi_root(&args.root) && server_cfg.is_none() && args.pack_map.is_none()) {
+    if let Some(memo) = root_memo()
+        .filter(|_| is_omsi_root(&args.root) && server_cfg.is_none() && args.pack_map.is_none())
+    {
         let _ = std::fs::write(memo, args.root.to_string_lossy().as_bytes());
     }
     // content roots: the game's own folder (mods) first, then the original installation
@@ -457,7 +486,10 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
 
 /// The game for `args`, ready for its window; None when there is no window to open (a
 /// picture or a model was written instead).
-pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) -> Result<Option<App>> {
+pub(crate) fn make_app(
+    mut args: Args,
+    server_cfg: Option<server::ServerCfg>,
+) -> Result<Option<App>> {
     if let (Some(map), Some(to)) = (args.pack_map.clone(), args.pack_to.clone()) {
         omsi_lan::map_pack::run(&map, &to)?;
         return Ok(None);
@@ -466,7 +498,14 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     // offscreen run - a dedicated server, a picture - steps inline and never asks)
     if args.offscreen.is_none() {
         let sim_thread = omsi_sim::sim_thread::set_enabled(settings::Settings::load().sim_thread);
-        log::info!("sim thread: {}", if sim_thread { "the AI traffic, the people and the scenery scripts step beside the picture" } else { "off: every step on the main thread" });
+        log::info!(
+            "sim thread: {}",
+            if sim_thread {
+                "the AI traffic, the people and the scenery scripts step beside the picture"
+            } else {
+                "off: every step on the main thread"
+            }
+        );
     }
     let _lan_status = lan::StatusFileGuard;
     // (a resumed bus loads its saved sheet by full path before any sheet is made this run)
@@ -477,7 +516,11 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     }
     apply_situation(&mut args)?;
     // `openomsi`: the official server, wherever its tunnel is today (see omsi_net::official)
-    if let Some(t) = args.lan_join.clone().filter(|t| omsi_net::official::is_alias(t)) {
+    if let Some(t) = args
+        .lan_join
+        .clone()
+        .filter(|t| omsi_net::official::is_alias(t))
+    {
         match omsi_net::official::resolve_target(&t) {
             Ok(url) => {
                 log::info!("LAN: the official server is at {url}");
@@ -491,7 +534,11 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     // "Automatic" put it at the map's first entry point, the depot
     // real-time sync: the game starts at this device's date and time (a joining player's
     // clock is the host's, a server's is its server.cfg's); a duty does not move it
-    if settings::Settings::load().time_sync && args.lan_join.is_none() && args.server.is_none() && args.offscreen.is_none() {
+    if settings::Settings::load().time_sync
+        && args.lan_join.is_none()
+        && args.server.is_none()
+        && args.offscreen.is_none()
+    {
         real_time::start_at_now(&mut args);
     }
     // a season chosen with its phase moves the date into it (the sun, the weather and the
@@ -513,10 +560,22 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     args.session_settings = startup::SessionSettings::for_session(&settings, &args);
     // the LAN session (offscreen too, so that one game's view of another can be rendered);
     // a joining player's world is the host's (taken over again when the window loads it)
-    let settings_text = std::fs::read_to_string(omsi_launcher_lib::data_dir().join("settings.cfg")).ok();
-    omsi_lan::bans::allow_hardware_id(omsi_launcher_lib::settings_from_text(settings_text.as_deref()).get("hardware_id").and_then(|v| v.as_bool()).unwrap_or(true));
+    let settings_text =
+        std::fs::read_to_string(omsi_launcher_lib::data_dir().join("settings.cfg")).ok();
+    omsi_lan::bans::allow_hardware_id(
+        omsi_launcher_lib::settings_from_text(settings_text.as_deref())
+            .get("hardware_id")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true),
+    );
     let mut lan = if args.export_glb.is_none() {
-        lan::start(&args.lan_config(), &lan::AppLanHost { args: &args, world: None })
+        lan::start(
+            &args.lan_config(),
+            &lan::AppLanHost {
+                args: &args,
+                world: None,
+            },
+        )
     } else {
         None
     };
@@ -529,7 +588,9 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     if server_cfg.is_some() && lan.is_none() {
         // Do not pass the password-bearing server configuration to diagnostics.
         // The failed bind above already reports the candidate port and socket error.
-        eprintln!("server: cannot open the session (the line above says why): another server or program uses the UDP/TCP port, or the system refuses it. Stop the other one, or choose another `port` in the server configuration.");
+        eprintln!(
+            "server: cannot open the session (the line above says why): another server or program uses the UDP/TCP port, or the system refuses it. Stop the other one, or choose another `port` in the server configuration."
+        );
         std::process::exit(3);
     }
     // turned away at the door (banned, full, another version): no game to play there
@@ -545,13 +606,20 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
         let mut c = args.lan_config();
         mods_server = lan::share_mods(&mut c, l);
         if let Some(why) = c.mod_fetch_error.take() {
-            return Err(anyhow::anyhow!("The selected server bus could not be verified or downloaded: {why}"));
+            return Err(anyhow::anyhow!(
+                "The selected server bus could not be verified or downloaded: {why}"
+            ));
         }
         lan::take_host_map(&mut c, l);
         args.take_lan_config(&c);
     }
     if let (Some(cfg), Some(l)) = (server_cfg.as_ref(), lan.as_ref()) {
-        lan::open_public_gateway(l, server::info_of(cfg, &args.root), cfg.web_port, cfg.tunnel);
+        lan::open_public_gateway(
+            l,
+            server::info_of(cfg, &args.root),
+            cfg.web_port,
+            cfg.tunnel,
+        );
         server::announce_fleet(cfg, &args.root);
         lan::publish_vehicles(args.root.clone(), cfg.vehicles.clone());
         server::start_public_list(cfg);
@@ -560,19 +628,27 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
             std::thread::spawn(|| {
                 for _ in 0..300 {
                     if let Some(u) = lan::tunnel_url() {
-                        println!("\n  Server address for the players: {u}\n  (Multiplayer -> Servers -> Add)\n");
+                        println!(
+                            "\n  Server address for the players: {u}\n  (Multiplayer -> Servers -> Add)\n"
+                        );
                         return;
                     }
                     std::thread::sleep(std::time::Duration::from_millis(200));
                 }
-                println!("  No tunnel address (is cloudflared installed?): players join at this machine's address and the UDP port");
+                println!(
+                    "  No tunnel address (is cloudflared installed?): players join at this machine's address and the UDP port"
+                );
             });
         }
     }
     // a host's clock runs at its time speed (a server's: its server.cfg)
     if let (Some(l), None) = (lan.as_mut(), server_cfg.as_ref()) {
         if l.role == omsi_net::Role::Host {
-            l.clock_speed = if settings.time_sync { 1.0 } else { settings.time_speed.clamp(1.0, 30.0) };
+            l.clock_speed = if settings.time_sync {
+                1.0
+            } else {
+                settings.time_speed.clamp(1.0, 30.0)
+            };
         }
     }
     // a server's voice chat: what its server.cfg allows (a game that hosts has its own settings)
@@ -592,7 +668,15 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
     if let Some(out) = args.offscreen.clone() {
         if let Some(l) = lan.as_mut() {
             let mut c = args.lan_config();
-            lan::adopt_host_world(&mut c, &crate::app_impl::lan_tick::AppLanHost { args: &args, world: None }, l, &mut lan_game);
+            lan::adopt_host_world(
+                &mut c,
+                &crate::app_impl::lan_tick::AppLanHost {
+                    args: &args,
+                    world: None,
+                },
+                l,
+                &mut lan_game,
+            );
             args.take_lan_config(&c);
         }
         let r = run_offscreen(&args, &out, lan, lan_game);
@@ -623,7 +707,10 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     // (as the last session left it, #1164)
     let info_bar = settings.info_bar;
     let is_server = args.server.is_some();
-    let sky = crate::weather_setup::SkyState { look: args.session_settings, ..Default::default() };
+    let sky = crate::weather_setup::SkyState {
+        look: args.session_settings,
+        ..Default::default()
+    };
     // What loads, starts or reads the clock, made one after the other in a fixed order before
     // the App and its groups are put together (their logs and threads come in this order).
     // Steam must be initialized before the graphics instance and window so its overlay can
@@ -636,7 +723,8 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
         crate::steam::Steam::start()
     };
     let instance = graphics_instance();
-    let vr_nav_profiles = crate::vr_navigator::Profiles::load(crate::vr_navigator::profiles_path().as_deref());
+    let vr_nav_profiles =
+        crate::vr_navigator::Profiles::load(crate::vr_navigator::profiles_path().as_deref());
     let ui = ui::Ui::new();
     let rain = rain::Rain::new();
     let cabin_air = crate::condensation::CabinAir::new();
@@ -646,13 +734,23 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     let started = Instant::now();
     let last = Instant::now();
     let input_script = parse_input_script();
-    let game_keys = omsi_content::KeyboardCfg::load(&crate::startup::keyboard_cfg(&args_root_for_keys)).unwrap_or_default().with_game_defaults().with_vr_defaults().game;
+    let game_keys =
+        omsi_content::KeyboardCfg::load(&crate::startup::keyboard_cfg(&args_root_for_keys))
+            .unwrap_or_default()
+            .with_game_defaults()
+            .with_vr_defaults()
+            .game;
     let own_keys = crate::startup::own_keys(&args_root_for_keys);
-    let own_shift = crate::startup::own_bindings(&args_root_for_keys, omsi_content::input::KEY_SHIFT);
+    let own_shift =
+        crate::startup::own_bindings(&args_root_for_keys, omsi_content::input::KEY_SHIFT);
     let fps_t = Instant::now();
     let update_watch = crate::update_watch::UpdateWatch::new();
     // (a server counts its players by their own games, not itself)
-    let presence = if is_server || cfg!(test) { None } else { crate::presence::Presence::start() };
+    let presence = if is_server || cfg!(test) {
+        None
+    } else {
+        crate::presence::Presence::start()
+    };
     let touch = touch::Touch::new();
     App {
         args,
@@ -894,7 +992,8 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             plugin_command: false,
             plugin_panels: Default::default(),
             discord: None,
-            discord_t: 0.0, discord_max: Default::default(),
+            discord_t: 0.0,
+            discord_max: Default::default(),
             #[cfg(steam)]
             steam,
             update_watch,
@@ -984,7 +1083,10 @@ mod tests {
 pub(crate) fn with_test_language<T>(code: &str, f: impl FnOnce() -> T) -> T {
     use std::sync::{Mutex, OnceLock};
     static LANGUAGE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    let _guard = LANGUAGE_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = LANGUAGE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     ui_language(code);
     let result = f();
     ui_language("ENG");
@@ -993,14 +1095,24 @@ pub(crate) fn with_test_language<T>(code: &str, f: impl FnOnce() -> T) -> T {
 
 #[cfg(test)]
 mod locale_tests {
-    use omsi_ui::i18n::{templated, templates, Piece};
+    use omsi_ui::i18n::{Piece, templated, templates};
 
     #[test]
     fn the_template_keys_of_the_tables_are_read_as_the_code_writes_them() {
-        let raw = super::_LOCALES.lines().filter(|l| l.starts_with('"') && l.contains('{')).count();
+        let raw = super::_LOCALES
+            .lines()
+            .filter(|l| l.starts_with('"') && l.contains('{'))
+            .count();
         assert_eq!(super::locale_keys(super::_LOCALES).count(), raw);
-        let used: Vec<String> = templates(super::locale_keys(super::_LOCALES)).into_iter().map(|(k, _)| k).collect();
-        for k in ["Graphics profile \"{name}\" not found", "Mirror panel added ({} in all)", "Head tracking with opentrack (UDP port {})"] {
+        let used: Vec<String> = templates(super::locale_keys(super::_LOCALES))
+            .into_iter()
+            .map(|(k, _)| k)
+            .collect();
+        for k in [
+            "Graphics profile \"{name}\" not found",
+            "Mirror panel added ({} in all)",
+            "Head tracking with opentrack (UDP port {})",
+        ] {
             assert!(used.iter().any(|x| x == k), "{k}");
         }
     }
@@ -1025,8 +1137,14 @@ mod locale_tests {
             "1 other player",
             "{n} other players",
         ] {
-            let translated = super::_rust_i18n_try_translate("zh-tw", key).map(|text| text.into_owned());
-            assert!(translated.as_ref().is_some_and(|text| !text.trim().is_empty() && text != key), "zh-tw: {key}");
+            let translated =
+                super::_rust_i18n_try_translate("zh-tw", key).map(|text| text.into_owned());
+            assert!(
+                translated
+                    .as_ref()
+                    .is_some_and(|text| !text.trim().is_empty() && text != key),
+                "zh-tw: {key}"
+            );
         }
     }
 
@@ -1034,7 +1152,8 @@ mod locale_tests {
     fn a_translated_template_is_left_as_it_is_when_translated_again() {
         let t = templates(super::locale_keys(super::_LOCALES));
         for lang in super::_rust_i18n_available_locales() {
-            let tr = |key: &str| super::_rust_i18n_try_translate(&lang, key).map(|t| t.into_owned());
+            let tr =
+                |key: &str| super::_rust_i18n_try_translate(&lang, key).map(|t| t.into_owned());
             for (key, pieces) in &t {
                 // the text the code would draw: a value per placeholder, the same one for a name used twice
                 let mut names: Vec<&str> = Vec::new();
@@ -1046,16 +1165,32 @@ mod locale_tests {
                             if n.is_empty() || !names.contains(&n.as_str()) {
                                 names.push(n);
                             }
-                            format!("V{}", if n.is_empty() { names.len() } else { names.iter().position(|x| x == n).unwrap() + 1 })
+                            format!(
+                                "V{}",
+                                if n.is_empty() {
+                                    names.len()
+                                } else {
+                                    names.iter().position(|x| x == n).unwrap() + 1
+                                }
+                            )
                         }
                     })
                     .collect();
-                let Some(once) = templated(&t, &sample, tr) else { continue };
+                let Some(once) = templated(&t, &sample, tr) else {
+                    continue;
+                };
                 // no value is lost (a named one may be used twice: "{e} electrics ... with {e}")
-                for v in sample.split('V').skip(1).filter_map(|s| s.split(|c: char| !c.is_ascii_digit()).next()) {
+                for v in sample
+                    .split('V')
+                    .skip(1)
+                    .filter_map(|s| s.split(|c: char| !c.is_ascii_digit()).next())
+                {
                     assert!(once.contains(&format!("V{v}")), "{lang}: {key}: {once}");
                 }
-                assert!(templated(&t, &once, tr).is_none_or(|twice| twice == once), "{lang}: {key}: {once}");
+                assert!(
+                    templated(&t, &once, tr).is_none_or(|twice| twice == once),
+                    "{lang}: {key}: {once}"
+                );
             }
         }
     }

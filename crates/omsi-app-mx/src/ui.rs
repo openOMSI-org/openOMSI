@@ -11,18 +11,18 @@ use omsi_render::{Renderer, Scene, TextureId};
 
 mod chat;
 mod hud;
-pub(crate) use hud::{window_size, SIZE_KEYS};
-mod menu;
+pub(crate) use hud::{SIZE_KEYS, window_size};
 mod information_bar;
+mod loading;
+mod menu;
 mod perf_panel;
 mod text;
-mod loading;
 
 pub use text::TextCache;
 mod mz;
-pub use mz::{MzState, MzView};
 pub use information_bar::{InfoBar, InfoItem, InfoItemStyle};
 use menu::*;
+pub use mz::{MzState, MzView};
 use text::*;
 
 // ---------------------------------------------------------------------------------------
@@ -105,22 +105,41 @@ impl Notice {
             "success" | "ok" => NoticeKind::Success,
             _ => NoticeKind::Info,
         };
-        let text = it.next().map(str::trim).filter(|t| !t.is_empty())?.to_string();
+        let text = it
+            .next()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())?
+            .to_string();
         let total = secs.clamp(2.0, 30.0);
-        Some((id, Notice { kind, text, left: total, total }))
+        Some((
+            id,
+            Notice {
+                kind,
+                text,
+                left: total,
+                total,
+            },
+        ))
     }
 
     /// A notice of the game's own: `kind`'s time.
     pub fn new(kind: NoticeKind, text: impl Into<String>) -> Notice {
         let total = kind.secs();
-        Notice { kind, text: text.into(), left: total, total }
+        Notice {
+            kind,
+            text: text.into(),
+            left: total,
+            total,
+        }
     }
 
     /// How far it is there (0 to 1, eased): coming in over `NOTICE_IN`, going over its last
     /// `NOTICE_OUT` - its opacity, and how much room it takes in the stack, so that the
     /// cards round it slide instead of jumping.
     pub fn alpha(&self) -> f32 {
-        let k = (self.left / NOTICE_OUT).min((self.total - self.left) / NOTICE_IN).clamp(0.0, 1.0);
+        let k = (self.left / NOTICE_OUT)
+            .min((self.total - self.left) / NOTICE_IN)
+            .clamp(0.0, 1.0);
         k * k * (3.0 - 2.0 * k)
     }
 }
@@ -128,7 +147,10 @@ impl Notice {
 /// A new notice in the list. The same text still on the screen stays its time again instead
 /// of standing twice; with more than `NOTICES_SHOWN` the oldest fades out to make room.
 pub fn push_notice(list: &mut Vec<Notice>, n: Notice) {
-    if let Some(o) = list.iter_mut().find(|o| o.kind == n.kind && o.text == n.text && o.left > NOTICE_OUT) {
+    if let Some(o) = list
+        .iter_mut()
+        .find(|o| o.kind == n.kind && o.text == n.text && o.left > NOTICE_OUT)
+    {
         // (its age kept: it does not fade in once more)
         o.total = o.total - o.left + n.total;
         o.left = n.total;
@@ -166,10 +188,18 @@ impl NoteWatch {
 
     /// This frame's lines: (key, text, kind). The key names the condition (its text may
     /// change with a value in it, a pressure or a sum, without being a new one).
-    pub fn frame(&mut self, dt: f32, lines: &[(String, String, NoticeKind)], list: &mut Vec<Notice>) {
+    pub fn frame(
+        &mut self,
+        dt: f32,
+        lines: &[(String, String, NoticeKind)],
+        list: &mut Vec<Notice>,
+    ) {
         self.now += dt.max(0.0);
         for (key, text, kind) in lines {
-            let fresh = self.seen.get(key).is_none_or(|&t| self.now - t > Self::REARM);
+            let fresh = self
+                .seen
+                .get(key)
+                .is_none_or(|&t| self.now - t > Self::REARM);
             self.seen.insert(key.clone(), self.now);
             if fresh && !text.trim().is_empty() {
                 push_notice(list, Notice::new(*kind, text.clone()));
@@ -183,7 +213,11 @@ impl NoteWatch {
 /// The part of a line of the game that names its condition: up to its first bracket or
 /// colon ("Parking brake is on  (. releases it)", "Air pressure is low (4.1 bar ...)").
 pub fn note_key(text: &str) -> String {
-    text.split(['(', ':']).next().unwrap_or(text).trim().to_string()
+    text.split(['(', ':'])
+        .next()
+        .unwrap_or(text)
+        .trim()
+        .to_string()
 }
 
 /// What the chat widget needs from the session each frame.
@@ -233,7 +267,11 @@ impl ChatWidget {
 /// drawn as it always was. With `window` off (`Settings::ui_scale_window`) it does not grow
 /// with the window at all.
 pub fn size_factor(height_px: f32, dpi: f32, size: f32, window: bool) -> f32 {
-    let grown = if window { (height_px / dpi.max(0.5) / 1080.0).clamp(1.0, 2.0) } else { 1.0 };
+    let grown = if window {
+        (height_px / dpi.max(0.5) / 1080.0).clamp(1.0, 2.0)
+    } else {
+        1.0
+    };
     grown * size
 }
 
@@ -275,7 +313,6 @@ pub struct Preview {
     /// a tour to take on later), when it can be set.
     pub time: Option<String>,
 }
-
 
 /// The timetable window of the trip driven: its line and terminus, the tour and trip, how
 /// late, the stops, and the trip after it.
@@ -518,13 +555,55 @@ impl Ui {
         }
         self.chat.rect[0] += x;
         self.chat.rect[2] += x;
-        for rect in self.mz.rect.iter_mut().chain(self.mz.play.iter_mut()).chain(self.mz.request.iter_mut()) {
+        for rect in self
+            .mz
+            .rect
+            .iter_mut()
+            .chain(self.mz.play.iter_mut())
+            .chain(self.mz.request.iter_mut())
+        {
             rect[0] += x;
             rect[2] += x;
         }
     }
     pub fn new() -> Option<Ui> {
-        Some(Ui { origin_x: 0.0, text: TextCache::new()?, chat: ChatWidget::default(), menu_rects: Vec::new(), menu_arrows: Vec::new(), menu_scroll_thumb: None, menu_scroll_track: None, menu_ctl: Vec::new(), dd_rects: Vec::new(), dd_top: 0, dd_rows: 8, dd_scroll: None, menu_side: Vec::new(), menu_pane: Vec::new(), menu_pane_start: 0, menu_pane_go: None, menu_pane_box: None, menu_pane_scroll: None, menu_time: Vec::new(), anim: Default::default(), anim_dt: 0.0, menu_overlay_range: 0..0, vr_cursor_overlay: None, vr_tooltip_overlay: None, menu_start: 0, menu_rows: 0, menu_row_h: 1.0, images: Default::default(), info_rect: None, perf: Default::default(), mz: Default::default(), hud: hud::Hud::new(false), grips: [None; 3], caps: [f32::MAX; 3], logo_marks: Default::default() })
+        Some(Ui {
+            origin_x: 0.0,
+            text: TextCache::new()?,
+            chat: ChatWidget::default(),
+            menu_rects: Vec::new(),
+            menu_arrows: Vec::new(),
+            menu_scroll_thumb: None,
+            menu_scroll_track: None,
+            menu_ctl: Vec::new(),
+            dd_rects: Vec::new(),
+            dd_top: 0,
+            dd_rows: 8,
+            dd_scroll: None,
+            menu_side: Vec::new(),
+            menu_pane: Vec::new(),
+            menu_pane_start: 0,
+            menu_pane_go: None,
+            menu_pane_box: None,
+            menu_pane_scroll: None,
+            menu_time: Vec::new(),
+            anim: Default::default(),
+            anim_dt: 0.0,
+            menu_overlay_range: 0..0,
+            vr_cursor_overlay: None,
+            vr_tooltip_overlay: None,
+            menu_start: 0,
+            menu_rows: 0,
+            menu_row_h: 1.0,
+            images: Default::default(),
+            info_rect: None,
+            perf: Default::default(),
+            mz: Default::default(),
+            hud: hud::Hud::new(false),
+            grips: [None; 3],
+            caps: [f32::MAX; 3],
+            logo_marks: Default::default(),
+        })
     }
 
     /// Draw the frame's interface: its overlays go after the HUD's in `scene.overlays`.
@@ -536,15 +615,29 @@ impl Ui {
         // --- name tags above the other players' buses
         for ((x, y), name, sub, alpha) in &f.tags {
             let a = (alpha.clamp(0.0, 1.0) * 255.0) as u8;
-            let l = self.text.label(r, scene, name, (19.0 * s) as u32, [255, 255, 255, 220]);
+            let l = self
+                .text
+                .label(r, scene, name, (19.0 * s) as u32, [255, 255, 255, 220]);
             let x0 = x - l.w as f32 * 0.5;
             let y0 = y - l.h as f32;
             if a > 0 {
-                scene.overlays.push((l.tex, [x0, y0, x0 + l.w as f32, y0 + l.h as f32]));
+                scene
+                    .overlays
+                    .push((l.tex, [x0, y0, x0 + l.w as f32, y0 + l.h as f32]));
                 if !sub.is_empty() {
-                    let m = self.text.label(r, scene, sub, (12.0 * s) as u32, [210, 225, 255, 200]);
+                    let m = self
+                        .text
+                        .label(r, scene, sub, (12.0 * s) as u32, [210, 225, 255, 200]);
                     let mx = x - m.w as f32 * 0.5;
-                    scene.overlays.push((m.tex, [mx, y0 + l.h as f32 - 3.0 * s, mx + m.w as f32, y0 + l.h as f32 - 3.0 * s + m.h as f32]));
+                    scene.overlays.push((
+                        m.tex,
+                        [
+                            mx,
+                            y0 + l.h as f32 - 3.0 * s,
+                            mx + m.w as f32,
+                            y0 + l.h as f32 - 3.0 * s + m.h as f32,
+                        ],
+                    ));
                 }
             }
         }
@@ -560,21 +653,47 @@ impl Ui {
             let x0 = 16.0 * s;
             // (below the on-screen buttons of a phone, which keep their size when the
             // interface is made smaller)
-            let y0 = if crate::platform::touch_controls() { (80.0 * f.scale.max(0.5) * f.ui_scale.max(1.0)).max(corner_top) } else { corner_top };
-            let lines: Vec<String> = f.notes.iter().filter(|n| !n.trim().is_empty()).take(8).map(|n| clip_to(&self.text, &omsi_ui::tr(n), px as f32, f.width * 0.6)).collect();
+            let y0 = if crate::platform::touch_controls() {
+                (80.0 * f.scale.max(0.5) * f.ui_scale.max(1.0)).max(corner_top)
+            } else {
+                corner_top
+            };
+            let lines: Vec<String> = f
+                .notes
+                .iter()
+                .filter(|n| !n.trim().is_empty())
+                .take(8)
+                .map(|n| clip_to(&self.text, &omsi_ui::tr(n), px as f32, f.width * 0.6))
+                .collect();
             if lines.is_empty() {
                 y0
             } else {
                 let lh = (px as f32 * 1.5).round();
                 let (pad_x, pad_y) = (12.0 * s, 8.0 * s);
-                let w = lines.iter().map(|t| self.text.width_raw(t, px as f32)).fold(0.0f32, f32::max) + pad_x * 2.0;
+                let w = lines
+                    .iter()
+                    .map(|t| self.text.width_raw(t, px as f32))
+                    .fold(0.0f32, f32::max)
+                    + pad_x * 2.0;
                 let y0 = self.below_info(x0, x0 + w, y0, s);
                 let h = pad_y * 2.0 + lh * lines.len() as f32;
-                self.hud_card(r, scene, [x0, y0, x0 + w, y0 + h], hud::RADIUS * s, self.text.backdrop, s);
+                self.hud_card(
+                    r,
+                    scene,
+                    [x0, y0, x0 + w, y0 + h],
+                    hud::RADIUS * s,
+                    self.text.backdrop,
+                    s,
+                );
                 for (i, t) in lines.iter().enumerate() {
-                    let l = self.text.label_op(r, scene, t, px, hud::text(self.hud.dim), 1.0);
+                    let l = self
+                        .text
+                        .label_op(r, scene, t, px, hud::text(self.hud.dim), 1.0);
                     let ly = (y0 + pad_y + lh * (i as f32 + 0.5) - l.h as f32 * 0.5).round();
-                    scene.overlays.push((l.tex, [x0 + pad_x, ly, x0 + pad_x + l.w as f32, ly + l.h as f32]));
+                    scene.overlays.push((
+                        l.tex,
+                        [x0 + pad_x, ly, x0 + pad_x + l.w as f32, ly + l.h as f32],
+                    ));
                 }
                 y0 + h
             }
@@ -591,7 +710,11 @@ impl Ui {
             let width = (460.0 * s).min(f.width * 0.6);
             let open = c.typing.is_some();
             let n = c.lines.len();
-            let end = n.saturating_sub(if open || self.chat.hovered { self.chat.scroll } else { 0 });
+            let end = n.saturating_sub(if open || self.chat.hovered {
+                self.chat.scroll
+            } else {
+                0
+            });
             let box_h = lh * CHAT_SHOWN as f32 + lh * 1.6;
             self.chat.rect = [x0 - 6.0 * s, y0 - 6.0 * s, x0 + width, y0 + box_h];
             self.chat.hovered = self.chat.contains(f.cursor.0, f.cursor.1);
@@ -608,11 +731,20 @@ impl Ui {
                 while i > 0 && rows.len() < CHAT_SHOWN {
                     i -= 1;
                     let line = &c.lines[i];
-                    let color = if line.starts_with("* ") { [255, 226, 140, 230] } else { [255, 255, 255, 230] };
+                    let color = if line.starts_with("* ") {
+                        [255, 226, 140, 230]
+                    } else {
+                        [255, 255, 255, 230]
+                    };
                     let line = self.chat.translations.line(line, &language, |key| {
-                        crate::_rust_i18n_try_translate(&language, key).map(|text| text.into_owned())
+                        crate::_rust_i18n_try_translate(&language, key)
+                            .map(|text| text.into_owned())
                     });
-                    for (k, t) in wrap_rows(line.as_ref(), width, indent, &measure).into_iter().enumerate().rev() {
+                    for (k, t) in wrap_rows(line.as_ref(), width, indent, &measure)
+                        .into_iter()
+                        .enumerate()
+                        .rev()
+                    {
                         if rows.len() == CHAT_SHOWN {
                             break;
                         }
@@ -624,20 +756,36 @@ impl Ui {
             let mut y = y0 + lh * (CHAT_SHOWN - rows.len()) as f32;
             for (dx, text, color) in rows {
                 let l = self.text.label_raw(r, scene, &text, px, color);
-                scene.overlays.push((l.tex, [x0 + dx, y, x0 + dx + l.w as f32, y + l.h as f32]));
+                scene
+                    .overlays
+                    .push((l.tex, [x0 + dx, y, x0 + dx + l.w as f32, y + l.h as f32]));
                 y += lh;
             }
             if show_box {
                 // the input box: shown when the cursor is over the chat or it is typed into
                 let by = y0 + lh * CHAT_SHOWN as f32 + lh * 0.2;
                 let bh = lh * 1.25;
-                self.hud_card(r, scene, [x0 - 4.0 * s, by, x0 + width, by + bh], bh * 0.5, self.text.backdrop, s);
+                self.hud_card(
+                    r,
+                    scene,
+                    [x0 - 4.0 * s, by, x0 + width, by + bh],
+                    bh * 0.5,
+                    self.text.backdrop,
+                    s,
+                );
                 self.chat.caret_t += dt;
-                let caret = if open && (self.chat.caret_t % 1.0) < 0.55 { "|" } else { "" };
+                let caret = if open && (self.chat.caret_t % 1.0) < 0.55 {
+                    "|"
+                } else {
+                    ""
+                };
                 let (text, color) = match c.typing {
                     Some(t) => (format!("{t}{caret}"), hud::text(self.hud.ink)),
                     None => match &c.open_key {
-                        Some(k) => (format!("Click here or press {} to chat", k), hud::text(self.hud.dim)),
+                        Some(k) => (
+                            format!("Click here or press {} to chat", k),
+                            hud::text(self.hud.dim),
+                        ),
                         // chat_open unbound: no "(unbound)" in the hint
                         None => ("Click here to chat".to_string(), hud::text(self.hud.dim)),
                     },
@@ -645,16 +793,37 @@ impl Ui {
                 let text = clip_left(&self.text, &text, px as f32, width - 10.0 * s);
                 let l = self.text.label(r, scene, &text, px, color);
                 let ty = by + (bh - l.h as f32) * 0.5;
-                scene.overlays.push((l.tex, [x0 + 2.0 * s, ty, x0 + 2.0 * s + l.w as f32, ty + l.h as f32]));
+                scene.overlays.push((
+                    l.tex,
+                    [x0 + 2.0 * s, ty, x0 + 2.0 * s + l.w as f32, ty + l.h as f32],
+                ));
                 if self.chat.scroll > 0 && (open || self.chat.hovered) {
-                    let m = self.text.label(r, scene, &omsi_ui::tr("{n} newer below").replace("{n}", &self.chat.scroll.to_string()), (11.0 * s) as u32, [200, 200, 200, 200]);
-                    scene.overlays.push((m.tex, [x0 + width - m.w as f32, by - m.h as f32, x0 + width, by]));
+                    let m = self.text.label(
+                        r,
+                        scene,
+                        &omsi_ui::tr("{n} newer below")
+                            .replace("{n}", &self.chat.scroll.to_string()),
+                        (11.0 * s) as u32,
+                        [200, 200, 200, 200],
+                    );
+                    scene.overlays.push((
+                        m.tex,
+                        [x0 + width - m.w as f32, by - m.h as f32, x0 + width, by],
+                    ));
                 }
             }
             if let Some(e) = c.error {
-                let l = self.text.label(r, scene, &format!("{}: {}", omsi_ui::tr("Not sent"), omsi_ui::tr(e)), (12.0 * s) as u32, [255, 150, 150, 220]);
+                let l = self.text.label(
+                    r,
+                    scene,
+                    &format!("{}: {}", omsi_ui::tr("Not sent"), omsi_ui::tr(e)),
+                    (12.0 * s) as u32,
+                    [255, 150, 150, 220],
+                );
                 let ey = y0 + box_h;
-                scene.overlays.push((l.tex, [x0, ey, x0 + l.w as f32, ey + l.h as f32]));
+                scene
+                    .overlays
+                    .push((l.tex, [x0, ey, x0 + l.w as f32, ey + l.h as f32]));
             }
         } else {
             self.chat.hovered = false;
@@ -665,18 +834,42 @@ impl Ui {
         self.draw_notices(r, scene, f, s);
         if let Some(fps) = f.fps {
             // (on a small flat card, as the other plates: over a bright sky bare text was hard to read)
-            let l = self.text.label_op(r, scene, &if f.fps_generated >= 1.0 { format!("{:.0} fps ({fps:.0} + FG)", fps + f.fps_generated) } else { format!("{fps:.0} fps") }, (12.0 * s).round() as u32, hud::text(self.hud.dim), 1.0);
+            let l = self.text.label_op(
+                r,
+                scene,
+                &if f.fps_generated >= 1.0 {
+                    format!("{:.0} fps ({fps:.0} + FG)", fps + f.fps_generated)
+                } else {
+                    format!("{fps:.0} fps")
+                },
+                (12.0 * s).round() as u32,
+                hud::text(self.hud.dim),
+                1.0,
+            );
             let x = (f.width - l.w as f32 - 14.0 * s).round();
             let y = (10.0 * s).round();
-            self.hud_card(r, scene, [x - 8.0 * s, y, x + l.w as f32 + 8.0 * s, y + l.h as f32], hud::RADIUS * s, self.text.backdrop, s);
-            scene.overlays.push((l.tex, [x, y, x + l.w as f32, y + l.h as f32]));
+            self.hud_card(
+                r,
+                scene,
+                [x - 8.0 * s, y, x + l.w as f32 + 8.0 * s, y + l.h as f32],
+                hud::RADIUS * s,
+                self.text.backdrop,
+                s,
+            );
+            scene
+                .overlays
+                .push((l.tex, [x, y, x + l.w as f32, y + l.h as f32]));
         }
         self.draw_perf(r, scene, f, s, dt);
         let tutorial_w = (420.0 * s).min(f.width * 0.42);
         // --- the timetable window, on the right (left of a tutorial page, which has the
         // same corner)
         if let Some(t) = f.timetable.as_ref() {
-            let beside = if f.tutorial.is_some() { tutorial_w + 12.0 * s } else { 0.0 };
+            let beside = if f.tutorial.is_some() {
+                tutorial_w + 12.0 * s
+            } else {
+                0.0
+            };
             self.draw_timetable(r, scene, f, t, corner_top, beside, s);
         }
         // --- a tutorial page, on the right
@@ -705,7 +898,14 @@ impl Ui {
             let tp = (18.0 * s) as u32;
             if !title.is_empty() {
                 for line in wrap(&self.text, title, tp as f32, w - pad * 2.0) {
-                    let l = self.text.label_op(r, scene, &omsi_ui::tr(&line), tp, hud::text(self.hud.ink), 1.0);
+                    let l = self.text.label_op(
+                        r,
+                        scene,
+                        &omsi_ui::tr(&line),
+                        tp,
+                        hud::text(self.hud.ink),
+                        1.0,
+                    );
                     items.push((l.tex, [x + pad, y, x + pad + l.w as f32, y + l.h as f32]));
                     y += l.h as f32;
                 }
@@ -718,19 +918,48 @@ impl Ui {
                     if y > max_y {
                         break 'text;
                     }
-                    let l = self.text.label_op(r, scene, &omsi_ui::tr(&line), bp, hud::text(self.hud.dim), 1.0);
+                    let l = self.text.label_op(
+                        r,
+                        scene,
+                        &omsi_ui::tr(&line),
+                        bp,
+                        hud::text(self.hud.dim),
+                        1.0,
+                    );
                     items.push((l.tex, [x + pad, y, x + pad + l.w as f32, y + l.h as f32]));
                     y += l.h as f32 * 0.95;
                 }
                 y += 5.0 * s;
             }
             let tr = |t: &str| omsi_ui::tr(t).into_owned();
-            let foot = format!("{} {}/{}   |   {}   |   {}   |   {}", tr("Page"), at + 1, count, tr("Enter next"), tr("Page Up back"), tr("Ctrl+T hide"));
-            let l = self.text.label_op(r, scene, &foot, (12.0 * s) as u32, hud::text(self.hud.muted), 1.0);
+            let foot = format!(
+                "{} {}/{}   |   {}   |   {}   |   {}",
+                tr("Page"),
+                at + 1,
+                count,
+                tr("Enter next"),
+                tr("Page Up back"),
+                tr("Ctrl+T hide")
+            );
+            let l = self.text.label_op(
+                r,
+                scene,
+                &foot,
+                (12.0 * s) as u32,
+                hud::text(self.hud.muted),
+                1.0,
+            );
             y += 4.0 * s;
             items.push((l.tex, [x + pad, y, x + pad + l.w as f32, y + l.h as f32]));
             y += l.h as f32 + pad;
-            self.hud_card(r, scene, [x, top, x + w, y], hud::RADIUS * s, self.text.backdrop, s);
+            self.hud_card(
+                r,
+                scene,
+                [x, top, x + w, y],
+                hud::RADIUS * s,
+                self.text.backdrop,
+                s,
+            );
             scene.overlays.extend(items);
         }
         // --- the game menu and its lists, in the middle over a dimmed picture
@@ -741,12 +970,24 @@ impl Ui {
         // --- the mouse-over name, right of the cursor
         self.vr_tooltip_overlay = None;
         if let Some(t) = f.tooltip.as_ref().filter(|t| !t.is_empty()) {
-            let ink = if f.vr { [237, 237, 237, 0] } else { hud::text(self.hud.ink) };
-            let l = self.text.label_op(r, scene, &tooltip_label(t), (13.0 * s).round() as u32, ink, 1.0);
+            let ink = if f.vr {
+                [237, 237, 237, 0]
+            } else {
+                hud::text(self.hud.ink)
+            };
+            let l = self.text.label_op(
+                r,
+                scene,
+                &tooltip_label(t),
+                (13.0 * s).round() as u32,
+                ink,
+                1.0,
+            );
             let mut x = f.cursor.0.clamp(0.0, f.width) + 16.0 * s;
             let mut y = f.cursor.1 + 2.0 * s;
             if f.tooltip_above {
-                x = (f.cursor.0 - l.w as f32 * 0.5).clamp(5.0 * s, (f.width - l.w as f32 - 5.0 * s).max(5.0 * s));
+                x = (f.cursor.0 - l.w as f32 * 0.5)
+                    .clamp(5.0 * s, (f.width - l.w as f32 - 5.0 * s).max(5.0 * s));
                 y = (f.cursor.1 - 56.0 * s - l.h as f32).max(0.0);
             } else if x + l.w as f32 > f.width {
                 x = (f.cursor.0.clamp(0.0, f.width) - 8.0 * s - l.w as f32).max(5.0 * s);
@@ -758,15 +999,26 @@ impl Ui {
                 self.vr_tooltip_overlay = Some(scene.overlays.len());
             } else {
                 // (in a headset the text alone is placed in front of the eye)
-                self.hud_card(r, scene, [x - 9.0 * s, y, x + l.w as f32 + 9.0 * s, y + l.h as f32], hud::RADIUS * s, 1.0, s);
+                self.hud_card(
+                    r,
+                    scene,
+                    [x - 9.0 * s, y, x + l.w as f32 + 9.0 * s, y + l.h as f32],
+                    hud::RADIUS * s,
+                    1.0,
+                    s,
+                );
             }
-            scene.overlays.push((l.tex, [x, y, x + l.w as f32, y + l.h as f32]));
+            scene
+                .overlays
+                .push((l.tex, [x, y, x + l.w as f32, y + l.h as f32]));
         }
         if let (Some((x, y)), false) = (f.steer_cross, f.vr) {
             // (the size of the system's crosshair cursor: 17 logical pixels)
             let tex = self.text.steer_cross(r, scene);
             let half = 8.5 * f.scale;
-            scene.overlays.push((tex, [x - half, y - half, x + half, y + half]));
+            scene
+                .overlays
+                .push((tex, [x - half, y - half, x + half, y + half]));
         }
         if f.vr {
             let pointer = self.text.vr_pointer(r, scene);
@@ -811,7 +1063,16 @@ impl Ui {
     /// launcher's trips table (arrives, stop, departs), the stops passed muted, the next one
     /// on a soft band of the route's colour with a bar at its left; the next trip at the end.
     #[allow(clippy::too_many_arguments)]
-    fn draw_timetable(&mut self, r: &Renderer, scene: &mut Scene, f: &Frame, t: &TimetableView, top: f32, beside: f32, s: f32) {
+    fn draw_timetable(
+        &mut self,
+        r: &Renderer,
+        scene: &mut Scene,
+        f: &Frame,
+        t: &TimetableView,
+        top: f32,
+        beside: f32,
+        s: f32,
+    ) {
         let size = self.shown_size(1, f.sizes[1]);
         let s = s * size;
         let ink_1 = hud::text(self.hud.ink);
@@ -819,10 +1080,18 @@ impl Ui {
         let muted = hud::text(self.hud.muted);
         let hpx = (11.5 * s).round() as u32 | BOLD;
         let time_w = 44.0 * s;
-        let exp_w = self.text.width_bold("Expected", (11.5 * s).round()).max(time_w) + 16.0 * s;
+        let exp_w = self
+            .text
+            .width_bold("Expected", (11.5 * s).round())
+            .max(time_w)
+            + 16.0 * s;
         let wide = (470.0 * s).min(f.width * 0.42).round();
         let roomy = wide - 98.0 * s - time_w - exp_w >= 150.0 * s;
-        let w = if roomy { wide } else { (400.0 * s).min(f.width * 0.42).round() };
+        let w = if roomy {
+            wide
+        } else {
+            (400.0 * s).min(f.width * 0.42).round()
+        };
         let x = (f.width - w - 16.0 * s - beside).max(16.0 * s).round();
         let top = self.below_info(x, x + w, top, s).round();
         let pad = (16.0 * s).round();
@@ -837,15 +1106,40 @@ impl Ui {
         let next = t.rows.iter().position(|r| r.state == 1).unwrap_or(0);
         let first = next.saturating_sub(1).min(n.saturating_sub(shown));
         let h = (head_h + th_h + lh * shown as f32 + pad * 0.6).round();
-        self.hud_card(r, scene, [x, top, x + w, top + h], hud::RADIUS * s, self.text.backdrop, s);
+        self.hud_card(
+            r,
+            scene,
+            [x, top, x + w, top + h],
+            hud::RADIUS * s,
+            self.text.backdrop,
+            s,
+        );
         // the header: the line's sign, the terminus, how late
         let cy = top + pad + 11.0 * s;
-        let sign = self.text.label_op(r, scene, &t.line, (13.0 * s).round() as u32 | BOLD, [255, 255, 255, 0], 1.0);
+        let sign = self.text.label_op(
+            r,
+            scene,
+            &t.line,
+            (13.0 * s).round() as u32 | BOLD,
+            [255, 255, 255, 0],
+            1.0,
+        );
         let sw = (sign.w as f32 + 10.0 * s).max(30.0 * s).round();
         let sh = (22.0 * s).round();
-        self.text.rounded(r, scene, [x + pad, cy - sh * 0.5, x + pad + sw, cy + sh * 0.5], 4.0 * s, hud::LINE);
-        let (sx, sy) = ((x + pad + (sw - sign.w as f32) * 0.5).round(), (cy - sign.h as f32 * 0.5).round());
-        scene.overlays.push((sign.tex, [sx, sy, sx + sign.w as f32, sy + sign.h as f32]));
+        self.text.rounded(
+            r,
+            scene,
+            [x + pad, cy - sh * 0.5, x + pad + sw, cy + sh * 0.5],
+            4.0 * s,
+            hud::LINE,
+        );
+        let (sx, sy) = (
+            (x + pad + (sw - sign.w as f32) * 0.5).round(),
+            (cy - sign.h as f32 * 0.5).round(),
+        );
+        scene
+            .overlays
+            .push((sign.tex, [sx, sy, sx + sign.w as f32, sy + sign.h as f32]));
         let d = t.delay;
         let (dtext, dcol) = {
             let m = (d.abs() / 60.0) as i64;
@@ -853,52 +1147,151 @@ impl Ui {
             let sign = if d < 0.0 { "-" } else { "+" };
             (format!("{sign}{m}:{sec:02}"), hud::delay_color(d as f32))
         };
-        let dl = self.text.label_op(r, scene, &dtext, (13.0 * s).round() as u32 | BOLD, hud::text(dcol), 1.0);
+        let dl = self.text.label_op(
+            r,
+            scene,
+            &dtext,
+            (13.0 * s).round() as u32 | BOLD,
+            hud::text(dcol),
+            1.0,
+        );
         let dx = (x + w - pad - 7.0 * s - dl.w as f32).round();
-        self.text.rounded(r, scene, [dx - 7.0 * s, cy - dl.h as f32 * 0.5 - 2.0 * s, dx + dl.w as f32 + 7.0 * s, cy + dl.h as f32 * 0.5 + 2.0 * s], hud::RADIUS * s, hud::tint(dcol, 41));
-        scene.overlays.push((dl.tex, [dx, (cy - dl.h as f32 * 0.5).round(), dx + dl.w as f32, (cy - dl.h as f32 * 0.5).round() + dl.h as f32]));
+        self.text.rounded(
+            r,
+            scene,
+            [
+                dx - 7.0 * s,
+                cy - dl.h as f32 * 0.5 - 2.0 * s,
+                dx + dl.w as f32 + 7.0 * s,
+                cy + dl.h as f32 * 0.5 + 2.0 * s,
+            ],
+            hud::RADIUS * s,
+            hud::tint(dcol, 41),
+        );
+        scene.overlays.push((
+            dl.tex,
+            [
+                dx,
+                (cy - dl.h as f32 * 0.5).round(),
+                dx + dl.w as f32,
+                (cy - dl.h as f32 * 0.5).round() + dl.h as f32,
+            ],
+        ));
         let tx = x + pad + sw + 10.0 * s;
         let term = clip_to(&self.text, &t.terminus, 15.0 * s, dx - 10.0 * s - tx);
-        let tl = self.text.label_op(r, scene, &term, (15.0 * s).round() as u32 | BOLD, ink_1, 1.0);
-        scene.overlays.push((tl.tex, [tx.round(), (cy - tl.h as f32 * 0.5).round(), tx.round() + tl.w as f32, (cy - tl.h as f32 * 0.5).round() + tl.h as f32]));
+        let tl = self.text.label_op(
+            r,
+            scene,
+            &term,
+            (15.0 * s).round() as u32 | BOLD,
+            ink_1,
+            1.0,
+        );
+        scene.overlays.push((
+            tl.tex,
+            [
+                tx.round(),
+                (cy - tl.h as f32 * 0.5).round(),
+                tx.round() + tl.w as f32,
+                (cy - tl.h as f32 * 0.5).round() + tl.h as f32,
+            ],
+        ));
         let my = top + pad + 34.0 * s;
         let icon_px = (14.0 * s).round() as u32;
-        if let Some(ic) = self.text.icon(r, scene, "departure_board", icon_px, self.hud.muted) {
+        if let Some(ic) = self
+            .text
+            .icon(r, scene, "departure_board", icon_px, self.hud.muted)
+        {
             let iy = (my - icon_px as f32 * 0.5).round();
-            scene.overlays.push((ic, [x + pad, iy, x + pad + icon_px as f32, iy + icon_px as f32]));
+            scene.overlays.push((
+                ic,
+                [x + pad, iy, x + pad + icon_px as f32, iy + icon_px as f32],
+            ));
         }
-        let ml = self.text.label_op(r, scene, &t.meta, (12.0 * s).round() as u32, muted, 1.0);
+        let ml = self
+            .text
+            .label_op(r, scene, &t.meta, (12.0 * s).round() as u32, muted, 1.0);
         let mx = (x + pad + icon_px as f32 + 6.0 * s).round();
-        scene.overlays.push((ml.tex, [mx, (my - ml.h as f32 * 0.5).round(), mx + ml.w as f32, (my - ml.h as f32 * 0.5).round() + ml.h as f32]));
+        scene.overlays.push((
+            ml.tex,
+            [
+                mx,
+                (my - ml.h as f32 * 0.5).round(),
+                mx + ml.w as f32,
+                (my - ml.h as f32 * 0.5).round() + ml.h as f32,
+            ],
+        ));
         // the table's head
         let col_arr = x + pad;
         let col_stop = x + pad + 58.0 * s;
         let hy = top + head_h + th_h * 0.5;
         let col_exp = x + w - pad;
         let col_dep = if roomy { col_exp - exp_w } else { col_exp };
-        let heads = [(omsi_ui::tr("Arrives"), col_arr, false), (omsi_ui::tr("Bus stop"), col_stop, false), (omsi_ui::tr("Departs"), col_dep, true), (omsi_ui::tr("Expected"), col_exp, true)];
+        let heads = [
+            (omsi_ui::tr("Arrives"), col_arr, false),
+            (omsi_ui::tr("Bus stop"), col_stop, false),
+            (omsi_ui::tr("Departs"), col_dep, true),
+            (omsi_ui::tr("Expected"), col_exp, true),
+        ];
         for (txt, at, right) in heads.into_iter().take(if roomy { 4 } else { 3 }) {
             let l = self.text.label_op(r, scene, &txt, hpx, muted, 1.0);
             let lx = if right { at - l.w as f32 } else { at };
             let ly = (hy - l.h as f32 * 0.5).round();
-            scene.overlays.push((l.tex, [lx.round(), ly, lx.round() + l.w as f32, ly + l.h as f32]));
+            scene.overlays.push((
+                l.tex,
+                [lx.round(), ly, lx.round() + l.w as f32, ly + l.h as f32],
+            ));
         }
         // the rows
         for k in first..first + shown {
             let ry = top + head_h + th_h + lh * (k - first) as f32;
             let band = [x + 6.0 * s, ry, x + w - 6.0 * s, ry + lh - 2.0 * s];
             let (name, arr, dep, expected, state) = match t.rows.get(k) {
-                Some(row) => (row.name.clone(), row.arr.clone(), row.dep.clone(), if roomy { row.expected.clone() } else { String::new() }, row.state),
+                Some(row) => (
+                    row.name.clone(),
+                    row.arr.clone(),
+                    row.dep.clone(),
+                    if roomy {
+                        row.expected.clone()
+                    } else {
+                        String::new()
+                    },
+                    row.state,
+                ),
                 None => match t.next.as_ref() {
-                    Some((what, when)) => (format!("› {what}"), String::new(), when.clone(), String::new(), 3),
+                    Some((what, when)) => (
+                        format!("› {what}"),
+                        String::new(),
+                        when.clone(),
+                        String::new(),
+                        3,
+                    ),
                     None => continue,
                 },
             };
             if state == 1 {
-                self.text.rounded(r, scene, band, 4.0 * s, self.hud.shade(self.hud.accent, 0.16, self.text.backdrop));
-                self.text.rounded(r, scene, [band[0], band[1], band[0] + 3.0 * s, band[3]], 1.5 * s, self.hud.accent);
+                self.text.rounded(
+                    r,
+                    scene,
+                    band,
+                    4.0 * s,
+                    self.hud.shade(self.hud.accent, 0.16, self.text.backdrop),
+                );
+                self.text.rounded(
+                    r,
+                    scene,
+                    [band[0], band[1], band[0] + 3.0 * s, band[3]],
+                    1.5 * s,
+                    self.hud.accent,
+                );
             } else if (k - first) % 2 == 1 {
-                self.text.rounded(r, scene, band, 4.0 * s, self.hud.shade(self.hud.ink, 0.04, self.text.backdrop));
+                self.text.rounded(
+                    r,
+                    scene,
+                    band,
+                    4.0 * s,
+                    self.hud.shade(self.hud.ink, 0.04, self.text.backdrop),
+                );
             }
             let (ink, time_ink) = match state {
                 0 | 3 => (muted, muted),
@@ -907,19 +1300,39 @@ impl Ui {
             };
             let size = if state == 1 { px | BOLD } else { px };
             let cy = ry + (lh - 2.0 * s) * 0.5;
-            for (txt, at, right, col) in [(&arr, col_arr, false, time_ink), (&dep, col_dep, true, time_ink), (&expected, col_exp, true, hud::text(dcol))] {
+            for (txt, at, right, col) in [
+                (&arr, col_arr, false, time_ink),
+                (&dep, col_dep, true, time_ink),
+                (&expected, col_exp, true, hud::text(dcol)),
+            ] {
                 if txt.is_empty() {
                     continue;
                 }
                 let l = self.text.label_op(r, scene, txt, size, col, 1.0);
                 let lx = if right { at - l.w as f32 } else { at };
                 let ly = (cy - l.h as f32 * 0.5).round();
-                scene.overlays.push((l.tex, [lx.round(), ly, lx.round() + l.w as f32, ly + l.h as f32]));
+                scene.overlays.push((
+                    l.tex,
+                    [lx.round(), ly, lx.round() + l.w as f32, ly + l.h as f32],
+                ));
             }
-            let name = clip_to(&self.text, &name, px as f32, col_dep - time_w - 8.0 * s - col_stop);
+            let name = clip_to(
+                &self.text,
+                &name,
+                px as f32,
+                col_dep - time_w - 8.0 * s - col_stop,
+            );
             let l = self.text.label_op(r, scene, &name, size, ink, 1.0);
             let ly = (cy - l.h as f32 * 0.5).round();
-            scene.overlays.push((l.tex, [col_stop.round(), ly, col_stop.round() + l.w as f32, ly + l.h as f32]));
+            scene.overlays.push((
+                l.tex,
+                [
+                    col_stop.round(),
+                    ly,
+                    col_stop.round() + l.w as f32,
+                    ly + l.h as f32,
+                ],
+            ));
         }
         self.hud_grip(r, scene, 1, [x, top, x + w, top + h], size, f, s);
     }
@@ -940,20 +1353,43 @@ impl Ui {
         let icon_px = (18.0 * s).round() as u32;
         let text_x = pad_l + icon_px as f32 + 10.0 * s;
         let pad_r = 16.0 * s;
-        let max_text = (340.0 * s).min(f.width - 32.0 * s - text_x - pad_r).max(80.0 * s);
+        let max_text = (340.0 * s)
+            .min(f.width - 32.0 * s - text_x - pad_r)
+            .max(80.0 * s);
         // where the stack stands: over a navigator in the lower half (growing up), under one
         // in the upper half, or at the top middle; on the navigator's side of the window
         let (up, mut y, place) = match f.notice_anchor {
             Some(a) => {
                 let left = (a[0] + a[2]) * 0.5 < f.width * 0.5;
-                let place = if left { (a[0].max(8.0 * s), 0) } else { (a[2].min(f.width - 8.0 * s), 2) };
-                if a[1] > f.height * 0.5 { (true, a[1] - gap, place) } else { (false, a[3] + gap, place) }
+                let place = if left {
+                    (a[0].max(8.0 * s), 0)
+                } else {
+                    (a[2].min(f.width - 8.0 * s), 2)
+                };
+                if a[1] > f.height * 0.5 {
+                    (true, a[1] - gap, place)
+                } else {
+                    (false, a[3] + gap, place)
+                }
             }
-            None => (false, self.below_info(f.width * 0.5 - 200.0 * s, f.width * 0.5 + 200.0 * s, 70.0 * s, s), (f.width * 0.5, 1)),
+            None => (
+                false,
+                self.below_info(
+                    f.width * 0.5 - 200.0 * s,
+                    f.width * 0.5 + 200.0 * s,
+                    70.0 * s,
+                    s,
+                ),
+                (f.width * 0.5, 1),
+            ),
         };
         // (growing up, the oldest stands by the navigator and the newest on top; growing
         // down, the newest first)
-        let order: Vec<Notice> = if up { f.notices.to_vec() } else { f.notices.iter().rev().cloned().collect() };
+        let order: Vec<Notice> = if up {
+            f.notices.to_vec()
+        } else {
+            f.notices.iter().rev().cloned().collect()
+        };
         for n in &order {
             let p = n.alpha();
             if p <= 0.0 {
@@ -969,8 +1405,14 @@ impl Ui {
                 rows.truncate(6);
                 rows[5].push('…');
             }
-            let tw = rows.iter().map(|t| self.text.width_raw(t, px as f32)).fold(0.0f32, f32::max);
-            let w = (text_x + tw + pad_r).max(220.0 * s).min(f.width - 16.0 * s).round();
+            let tw = rows
+                .iter()
+                .map(|t| self.text.width_raw(t, px as f32))
+                .fold(0.0f32, f32::max);
+            let w = (text_x + tw + pad_r)
+                .max(220.0 * s)
+                .min(f.width - 16.0 * s)
+                .round();
             let h = (pad_y * 2.0 + lh * rows.len() as f32).round();
             let top = if up { y - h } else { y };
             if top < 0.0 || top + h > f.height {
@@ -988,17 +1430,29 @@ impl Ui {
             let k = (p * 16.0).round() / 16.0;
             let (rgb, icon) = n.kind.look();
             self.hud_card(r, scene, [x0, ty, x0 + w, ty + h], hud::RADIUS * s, k, s);
-            if let Some(t) = self.text.icon(r, scene, icon, icon_px, [rgb[0], rgb[1], rgb[2], (255.0 * k) as u8]) {
+            if let Some(t) = self.text.icon(
+                r,
+                scene,
+                icon,
+                icon_px,
+                [rgb[0], rgb[1], rgb[2], (255.0 * k) as u8],
+            ) {
                 let iy = (ty + pad_y + lh * 0.5 - icon_px as f32 * 0.5).round();
                 let ix = (x0 + pad_l).round();
-                scene.overlays.push((t, [ix, iy, ix + icon_px as f32, iy + icon_px as f32]));
+                scene
+                    .overlays
+                    .push((t, [ix, iy, ix + icon_px as f32, iy + icon_px as f32]));
             }
             for (i, row) in rows.iter().enumerate() {
-                let l = self.text.label_op(r, scene, row, px, hud::text(self.hud.ink), k);
+                let l = self
+                    .text
+                    .label_op(r, scene, row, px, hud::text(self.hud.ink), k);
                 let cy = ty + pad_y + lh * (i as f32 + 0.5);
                 let ly = (cy - l.h as f32 * 0.5).round();
                 let lx = (x0 + text_x).round();
-                scene.overlays.push((l.tex, [lx, ly, lx + l.w as f32, ly + l.h as f32]));
+                scene
+                    .overlays
+                    .push((l.tex, [lx, ly, lx + l.w as f32, ly + l.h as f32]));
             }
             let slot = (h + gap) * p;
             y = if up { y - slot } else { y + slot };
@@ -1075,7 +1529,8 @@ pub fn time_progress(u: f32) -> f32 {
     if u <= 1.0 {
         LOADING_EXPECTED_AT * u * (1.3 - 0.3 * u)
     } else {
-        LOADING_EXPECTED_AT + (LOADING_CREEP - LOADING_EXPECTED_AT) * (1.0 - 1.0 / (1.0 + (u - 1.0) * 3.0))
+        LOADING_EXPECTED_AT
+            + (LOADING_CREEP - LOADING_EXPECTED_AT) * (1.0 - 1.0 / (1.0 + (u - 1.0) * 3.0))
     }
 }
 
@@ -1089,7 +1544,11 @@ pub fn ease_progress(shown: f32, target: f32, ready: bool, dt: f32) -> f32 {
     if gap <= 0.0 {
         return shown;
     }
-    let (tau, floor, ceil) = if ready { (0.1, 1.0, 3.5) } else { (0.35, 0.12, 1.2) };
+    let (tau, floor, ceil) = if ready {
+        (0.1, 1.0, 3.5)
+    } else {
+        (0.35, 0.12, 1.2)
+    };
     (shown + (gap / tau).clamp(floor, ceil) * dt.clamp(0.0, 0.1)).min(target)
 }
 
@@ -1105,7 +1564,10 @@ impl Loading {
     /// A frame of the loading screen with the start area `real` of the way loaded.
     pub fn step(&mut self, real: f32, dt: f32) {
         if !self.drawn {
-            self.tip0 = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as usize).unwrap_or(0);
+            self.tip0 = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as usize)
+                .unwrap_or(0);
         }
         self.drawn = true;
         let dt = dt.clamp(0.0, 1.0);
@@ -1117,7 +1579,8 @@ impl Loading {
                 self.elapsed += dt;
                 let by_time = time_progress(self.elapsed / self.expected_secs());
                 // (the count, when it is ahead, eased: it comes in jumps)
-                let by_count = ease_progress(self.shown, real.clamp(0.0, 1.0) * LOADING_CREEP, false, dt);
+                let by_count =
+                    ease_progress(self.shown, real.clamp(0.0, 1.0) * LOADING_CREEP, false, dt);
                 self.shown = self.shown.max(by_time).max(by_count);
             }
             Some(_) if self.run_fresh => self.run_fresh = false,
@@ -1132,7 +1595,11 @@ impl Loading {
     }
 
     fn expected_secs(&self) -> f32 {
-        if self.expected > 0.5 { self.expected } else { LOADING_FIRST_GUESS }
+        if self.expected > 0.5 {
+            self.expected
+        } else {
+            LOADING_FIRST_GUESS
+        }
     }
 
     /// The world is there: the rest of the bar in `LOADING_RUN` seconds.
@@ -1186,11 +1653,19 @@ pub struct LoadTimes;
 impl LoadTimes {
     fn path() -> Option<std::path::PathBuf> {
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-        Some(std::path::PathBuf::from(home).join(".openomsi").join("cache").join("load-times.json"))
+        Some(
+            std::path::PathBuf::from(home)
+                .join(".openomsi")
+                .join("cache")
+                .join("load-times.json"),
+        )
     }
 
     fn read() -> serde_json::Map<String, serde_json::Value> {
-        Self::path().and_then(|p| std::fs::read_to_string(p).ok()).and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+        Self::path()
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default()
     }
 
     /// The expected time of loading `map`: the average of its last loads (none: never loaded).
@@ -1202,11 +1677,23 @@ impl LoadTimes {
     pub fn record(map: &str, secs: f32) {
         let Some(p) = Self::path() else { return };
         let mut all = Self::read();
-        let mut last: Vec<f32> = all.get(map).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_f64()).map(|x| x as f32).collect()).unwrap_or_default();
+        let mut last: Vec<f32> = all
+            .get(map)
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_f64())
+                    .map(|x| x as f32)
+                    .collect()
+            })
+            .unwrap_or_default();
         last.push(secs);
         let keep = last.len().saturating_sub(3);
         last.drain(..keep);
-        let last: Vec<f64> = last.iter().map(|x| (*x as f64 * 100.0).round() / 100.0).collect();
+        let last: Vec<f64> = last
+            .iter()
+            .map(|x| (*x as f64 * 100.0).round() / 100.0)
+            .collect();
         all.insert(map.to_string(), serde_json::json!(last));
         if let Some(dir) = p.parent() {
             let _ = std::fs::create_dir_all(dir);
@@ -1219,7 +1706,13 @@ impl LoadTimes {
 
 /// The average of the loads kept for a map.
 fn expected_of(v: &serde_json::Value) -> Option<f32> {
-    let t: Vec<f32> = v.as_array()?.iter().filter_map(|x| x.as_f64()).map(|x| x as f32).filter(|x| x.is_finite() && *x > 0.0).collect();
+    let t: Vec<f32> = v
+        .as_array()?
+        .iter()
+        .filter_map(|x| x.as_f64())
+        .map(|x| x as f32)
+        .filter(|x| x.is_finite() && *x > 0.0)
+        .collect();
     (!t.is_empty()).then(|| t.iter().sum::<f32>() / t.len() as f32)
 }
 
@@ -1228,7 +1721,11 @@ fn wrap(tc: &TextCache, text: &str, px: f32, width: f32) -> Vec<String> {
     let mut out = Vec::new();
     let mut line = String::new();
     for word in text.split_whitespace() {
-        let try_line = if line.is_empty() { word.to_string() } else { format!("{line} {word}") };
+        let try_line = if line.is_empty() {
+            word.to_string()
+        } else {
+            format!("{line} {word}")
+        };
         if tc.width(&try_line, px) > width && !line.is_empty() {
             out.push(std::mem::take(&mut line));
             line = word.to_string();
@@ -1271,9 +1768,19 @@ fn clip_to(tc: &TextCache, text: &str, px: f32, width: f32) -> String {
 fn wrap_rows(text: &str, width: f32, indent: f32, measure: &impl Fn(&str) -> f32) -> Vec<String> {
     let mut rows: Vec<String> = Vec::new();
     let mut cur = String::new();
-    let room = |rows: &Vec<String>| if rows.is_empty() { width } else { width - indent };
+    let room = |rows: &Vec<String>| {
+        if rows.is_empty() {
+            width
+        } else {
+            width - indent
+        }
+    };
     for word in text.split(' ') {
-        let joined = if cur.is_empty() { word.to_string() } else { format!("{cur} {word}") };
+        let joined = if cur.is_empty() {
+            word.to_string()
+        } else {
+            format!("{cur} {word}")
+        };
         if measure(&joined) <= room(&rows) {
             cur = joined;
             continue;
@@ -1416,14 +1923,39 @@ mod tests {
 
     #[test]
     fn a_server_notice_is_read_and_fades() {
-        let (id, n) = Notice::parse("a1b2 5 warn Service 15/5: departure at 06:07 | depot").unwrap();
+        let (id, n) =
+            Notice::parse("a1b2 5 warn Service 15/5: departure at 06:07 | depot").unwrap();
         assert_eq!(id, "a1b2");
-        assert_eq!((n.kind, n.text.as_str(), n.total, n.left), (NoticeKind::Warn, "Service 15/5: departure at 06:07 | depot", 5.0, 5.0));
+        assert_eq!(
+            (n.kind, n.text.as_str(), n.total, n.left),
+            (
+                NoticeKind::Warn,
+                "Service 15/5: departure at 06:07 | depot",
+                5.0,
+                5.0
+            )
+        );
         // seconds held to 2 .. 30, an unknown kind is information
         assert_eq!(Notice::parse("x 0.5 info hi").unwrap().1.total, 2.0);
-        assert_eq!(Notice::parse("x 600 whatever hi").unwrap().1, Notice { kind: NoticeKind::Info, text: "hi".into(), left: 30.0, total: 30.0 });
+        assert_eq!(
+            Notice::parse("x 600 whatever hi").unwrap().1,
+            Notice {
+                kind: NoticeKind::Info,
+                text: "hi".into(),
+                left: 30.0,
+                total: 30.0
+            }
+        );
         // no text, no seconds, nothing: not a notice
-        for bad in ["", "x", "x 5", "x 5 info", "x 5 info   ", "x five info hi", "x NaN info hi"] {
+        for bad in [
+            "",
+            "x",
+            "x 5",
+            "x 5 info",
+            "x 5 info   ",
+            "x five info hi",
+            "x NaN info hi",
+        ] {
             assert!(Notice::parse(bad).is_none(), "{bad}");
         }
         // fades in, stays, fades out (eased)
@@ -1433,13 +1965,23 @@ mod tests {
         assert_eq!(n.alpha(), 1.0);
         n.left = 0.2;
         assert!((n.alpha() - 0.5).abs() < 1e-6);
-        assert_eq!(Notice::parse("x 5 action hi").unwrap().1.kind, NoticeKind::Action);
+        assert_eq!(
+            Notice::parse("x 5 action hi").unwrap().1.kind,
+            NoticeKind::Action
+        );
         // four at most: the oldest fade out to make room
         let mut list = Vec::new();
         for k in 0..6 {
-            push_notice(&mut list, Notice::parse(&format!("{k} 5 info n{k}")).unwrap().1);
+            push_notice(
+                &mut list,
+                Notice::parse(&format!("{k} 5 info n{k}")).unwrap().1,
+            );
         }
-        let live: Vec<&str> = list.iter().filter(|n| n.left > NOTICE_OUT).map(|n| n.text.as_str()).collect();
+        let live: Vec<&str> = list
+            .iter()
+            .filter(|n| n.left > NOTICE_OUT)
+            .map(|n| n.text.as_str())
+            .collect();
         assert_eq!(live, ["n2", "n3", "n4", "n5"]);
         // the same text again stands once, for its time again, without fading in anew
         let mut list = vec![Notice::new(NoticeKind::Action, "Doors are open")];
@@ -1455,8 +1997,17 @@ mod tests {
     fn a_note_becomes_a_notification_once_when_it_starts() {
         let mut w = NoteWatch::default();
         let mut list = Vec::new();
-        let brake = |v: f32| vec![(note_key(&format!("Air pressure is low ({v:.1} bar)")), format!("Air pressure is low ({v:.1} bar)"), NoticeKind::Action)];
-        assert_eq!(note_key("Parking brake is on  (. releases it)"), "Parking brake is on");
+        let brake = |v: f32| {
+            vec![(
+                note_key(&format!("Air pressure is low ({v:.1} bar)")),
+                format!("Air pressure is low ({v:.1} bar)"),
+                NoticeKind::Action,
+            )]
+        };
+        assert_eq!(
+            note_key("Parking brake is on  (. releases it)"),
+            "Parking brake is on"
+        );
         for k in 0..100 {
             // (the pressure in the text changes, the condition is the same)
             w.frame(0.016, &brake(4.0 + k as f32 * 0.01), &mut list);
@@ -1490,7 +2041,10 @@ mod tests {
         // half the time: about half the bar
         assert!((time_progress(0.5) - 0.53).abs() < 0.03);
         // a load of 4 s expected, the count standing at none: the bar goes on evenly
-        let mut l = Loading { expected: 4.0, ..Default::default() };
+        let mut l = Loading {
+            expected: 4.0,
+            ..Default::default()
+        };
         let mut shown = Vec::new();
         for _ in 0..240 {
             l.step(0.0, 1.0 / 60.0);
@@ -1561,14 +2115,33 @@ mod tests {
         assert_eq!(wrap_rows("Anton: hello", 200.0, 20.0, &m), ["Anton: hello"]);
         assert_eq!(wrap_rows("", 200.0, 20.0, &m), [""]);
         // between words; the rows after the first are 20 px narrower
-        let rows = wrap_rows("Admin (private): take tour 13/1 at 04:47 from the depot", 200.0, 20.0, &m);
-        assert_eq!(rows, ["Admin (private):", "take tour 13/1 at", "04:47 from the", "depot"]);
+        let rows = wrap_rows(
+            "Admin (private): take tour 13/1 at 04:47 from the depot",
+            200.0,
+            20.0,
+            &m,
+        );
+        assert_eq!(
+            rows,
+            [
+                "Admin (private):",
+                "take tour 13/1 at",
+                "04:47 from the",
+                "depot"
+            ]
+        );
         assert!(rows[0].chars().count() <= 20 && rows[1..].iter().all(|r| r.chars().count() <= 18));
         // nothing lost: the words come back in order
-        assert_eq!(rows.join(" "), "Admin (private): take tour 13/1 at 04:47 from the depot");
+        assert_eq!(
+            rows.join(" "),
+            "Admin (private): take tour 13/1 at 04:47 from the depot"
+        );
         // a word longer than a row is cut inside
         let rows = wrap_rows("x: https://example.org/a/very/long/link", 100.0, 20.0, &m);
-        assert_eq!(rows, ["x:", "https://", "example.", "org/a/ve", "ry/long/", "link"]);
+        assert_eq!(
+            rows,
+            ["x:", "https://", "example.", "org/a/ve", "ry/long/", "link"]
+        );
         assert_eq!(rows.concat(), "x:https://example.org/a/very/long/link");
         // a box narrower than a character still ends (a character a row)
         assert_eq!(wrap_rows("abc", 5.0, 0.0, &m), ["a", "b", "c"]);
@@ -1581,8 +2154,10 @@ mod tests {
                 let pages_top = (72.0 + 6.0) * scale;
                 let back_top = (height - PAD - 6.0 - 38.0) * scale;
                 for pages in [7, 8, 10] {
-                    let step = vr_settings_sidebar_step(back_top - 6.0 * scale - pages_top, pages, scale);
-                    let last_bottom = pages_top + (pages - 1) as f32 * step + (step - 4.0 * scale).max(1.0);
+                    let step =
+                        vr_settings_sidebar_step(back_top - 6.0 * scale - pages_top, pages, scale);
+                    let last_bottom =
+                        pages_top + (pages - 1) as f32 * step + (step - 4.0 * scale).max(1.0);
                     assert!(last_bottom < back_top);
                 }
             }
@@ -1606,7 +2181,11 @@ mod tests {
     fn scripts_inter_lacks_come_from_the_system() {
         let f = FontVec::try_from_vec(INTER.to_vec()).unwrap();
         for t in ["继续", "繼續", "계속", "ดำเนินการต่อ"] {
-            if t.chars().next().and_then(omsi_ui::text::fallback_font).is_none() {
+            if t.chars()
+                .next()
+                .and_then(omsi_ui::text::fallback_font)
+                .is_none()
+            {
                 continue;
             }
             for c in t.chars() {
@@ -1614,7 +2193,11 @@ mod tests {
                 assert!(!std::ptr::eq(g, &f) && g.glyph_id(c).0 != 0, "{t}: {c}");
             }
             let img = render_text(&f, t, 20.0, [255, 255, 255, 220]);
-            let ink = img.rgba.chunks(4).filter(|p| p[3] > 128 && p[0] > 128).count();
+            let ink = img
+                .rgba
+                .chunks(4)
+                .filter(|p| p[3] > 128 && p[0] > 128)
+                .count();
             assert!(ink > 30, "{t}: {ink}");
         }
     }
@@ -1655,7 +2238,10 @@ mod tests {
         // (it ignored the setting: 1.5 drew the menu as 1.0 while the HUD grew)
         assert_eq!(super::menu_scale_for(1.0, 1.0, 1280.0, 720.0, false), 1.0);
         let s = super::menu_scale_for(1.0, 1.5, 1280.0, 720.0, false);
-        assert!(s > 1.1 && s < 1.5 && 880.0 * s + 24.0 <= 1280.0 && 600.0 * s <= 720.0 * 0.94 + 0.01, "{s}");
+        assert!(
+            s > 1.1 && s < 1.5 && 880.0 * s + 24.0 <= 1280.0 && 600.0 * s <= 720.0 * 0.94 + 0.01,
+            "{s}"
+        );
         assert_eq!(super::menu_scale_for(1.0, 1.5, 3840.0, 2160.0, false), 1.5);
         // never smaller than it always was, and the headset keeps its own size
         assert_eq!(super::menu_scale_for(1.0, 1.5, 800.0, 500.0, false), 1.0);
@@ -1664,15 +2250,27 @@ mod tests {
 
     #[test]
     fn destinations_split_into_code_and_name() {
-        assert_eq!(super::code_and_name(" 13  BETRIEBSFAHRT"), Some(("13", "BETRIEBSFAHRT")));
-        assert_eq!(super::code_and_name("1001  Blanko.tga"), Some(("1001", "Blanko.tga")));
+        assert_eq!(
+            super::code_and_name(" 13  BETRIEBSFAHRT"),
+            Some(("13", "BETRIEBSFAHRT"))
+        );
+        assert_eq!(
+            super::code_and_name("1001  Blanko.tga"),
+            Some(("1001", "Blanko.tga"))
+        );
         assert_eq!(super::code_and_name("Route number: 5..."), None);
         assert_eq!(super::code_and_name("Line 76  (1 tours)"), None);
     }
 
     #[test]
     fn chat_filter_stars_out_swearing() {
-        assert_ne!(filter_chat("you are a fucking idiot"), "you are a fucking idiot");
-        assert_eq!(filter_chat("next stop Rathaus Spandau"), "next stop Rathaus Spandau");
+        assert_ne!(
+            filter_chat("you are a fucking idiot"),
+            "you are a fucking idiot"
+        );
+        assert_eq!(
+            filter_chat("next stop Rathaus Spandau"),
+            "next stop Rathaus Spandau"
+        );
     }
 }

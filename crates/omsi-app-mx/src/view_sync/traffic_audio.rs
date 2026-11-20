@@ -30,21 +30,25 @@ fn sound_plan(
     if let Some(plan) = plans.get(def.path.as_path()) {
         return plan.clone();
     }
-    let plan = def.sound_ai.as_ref().or(def.sound.as_ref()).and_then(|rel| {
-        let path = omsi_cfg::resolve_path(def.dir(), rel);
-        let cfg = cfgs
-            .entry(path.clone())
-            .or_insert_with(|| {
-                omsi_vehicle::SoundCfg::load(&path)
-                    .map_err(|e| log::warn!("{e}"))
-                    .ok()
-                    .map(Arc::new)
-            })
-            .clone()?;
-        let dir = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
-        let clips = omsi_audio::SoundSet::clip_paths(&cfg, &dir);
-        Some(Arc::new(SoundPlan { cfg, dir, clips }))
-    });
+    let plan = def
+        .sound_ai
+        .as_ref()
+        .or(def.sound.as_ref())
+        .and_then(|rel| {
+            let path = omsi_cfg::resolve_path(def.dir(), rel);
+            let cfg = cfgs
+                .entry(path.clone())
+                .or_insert_with(|| {
+                    omsi_vehicle::SoundCfg::load(&path)
+                        .map_err(|e| log::warn!("{e}"))
+                        .ok()
+                        .map(Arc::new)
+                })
+                .clone()?;
+            let dir = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+            let clips = omsi_audio::SoundSet::clip_paths(&cfg, &dir);
+            Some(Arc::new(SoundPlan { cfg, dir, clips }))
+        });
     plans.insert(def.path.clone(), plan.clone());
     plan
 }
@@ -85,7 +89,8 @@ impl Traffic {
         let near = 250.0;
         // what the sounds read of the cars, taken from the traffic (`SoundFrame`)
         let mut frame = std::mem::take(&mut self.sound_frame);
-        self.sim.snapshot_sounds(&mut frame, listener, near * 1.2, street_cond, riding);
+        self.sim
+            .snapshot_sounds(&mut frame, listener, near * 1.2, street_cond, riding);
         let mut triggers = Vec::new();
         for c in frame.cars() {
             // (the bus ridden in is heard from inside, by `update_riding_audio`)
@@ -102,7 +107,9 @@ impl Traffic {
                     // an articulated bus's rear section sounds too (its engine, on a pusher)
                     let mut parts = Vec::new();
                     for (i, t) in c.part_types.iter().enumerate() {
-                        if let Some(part) = sound_plan(&mut self.sound_plans, &mut self.sound_cfgs, &t.def) {
+                        if let Some(part) =
+                            sound_plan(&mut self.sound_plans, &mut self.sound_cfgs, &t.def)
+                        {
                             parts.push((i, part));
                         }
                     }
@@ -111,10 +118,21 @@ impl Traffic {
                         && parts.iter().all(|(_, part)| audio.clips_ready(&part.clips));
                     if ready {
                         let number = &c.number;
-                        let mut ss = omsi_audio::SoundSet::new_exterior(audio, &plan.cfg.chosen_for(number), &plan.dir);
+                        let mut ss = omsi_audio::SoundSet::new_exterior(
+                            audio,
+                            &plan.cfg.chosen_for(number),
+                            &plan.dir,
+                        );
                         ss.master = volume;
                         for (i, part) in &parts {
-                            ss.add_part(*i, omsi_audio::SoundSet::new_exterior(audio, &part.cfg.chosen_for(number), &part.dir));
+                            ss.add_part(
+                                *i,
+                                omsi_audio::SoundSet::new_exterior(
+                                    audio,
+                                    &part.cfg.chosen_for(number),
+                                    &part.dir,
+                                ),
+                            );
                         }
                         triggers.push((c.id, ss.curve_triggers().into_iter().collect()));
                         self.sounds.insert(c.id, ss);
@@ -127,7 +145,12 @@ impl Traffic {
                 let vars = frame.vars(c);
                 let var = |n: &str| c.var_slot(n).and_then(|i| vars.get(i).copied());
                 let at_fire = |t: &str, n: &str| -> Option<f32> {
-                    let vals = &c.fired_vars.iter().rev().find(|(k, _)| k.eq_ignore_ascii_case(t))?.1;
+                    let vals = &c
+                        .fired_vars
+                        .iter()
+                        .rev()
+                        .find(|(k, _)| k.eq_ignore_ascii_case(t))?
+                        .1;
                     c.var_slot(n).and_then(|i| vals.get(i).copied())
                 };
                 ss.update_fired(audio, &var, &xf, &c.fired, &at_fire);
@@ -150,22 +173,41 @@ impl Traffic {
     /// whose own sound set answers `ev_AI_Horn` was heard by it already; every other one
     /// sounds OMSI's own AI horn (`Sounds/AI_Cars`, the lorry's for the heavy ones) where it
     /// stands - the stock cars have nothing on that trigger, and the AI's honking was never heard.
-    fn play_horns(&mut self, audio: &omsi_audio::AudioEngine, frame: &omsi_sim::view_events::SoundFrame, listener: DVec3, muffled: bool, volume: f32) {
+    fn play_horns(
+        &mut self,
+        audio: &omsi_audio::AudioEngine,
+        frame: &omsi_sim::view_events::SoundFrame,
+        listener: DVec3,
+        muffled: bool,
+        volume: f32,
+    ) {
         for (heavy, position, ty) in &frame.honks {
             if (*position - listener).length() > 250.0 {
                 continue;
             }
             let plan = sound_plan(&mut self.sound_plans, &mut self.sound_cfgs, &ty.def);
-            if plan.as_ref().is_some_and(|p| p.cfg.sounds.iter().any(|s| s.triggers.iter().any(|t| t.trim().eq_ignore_ascii_case("ev_AI_Horn")))) {
+            if plan.as_ref().is_some_and(|p| {
+                p.cfg.sounds.iter().any(|s| {
+                    s.triggers
+                        .iter()
+                        .any(|t| t.trim().eq_ignore_ascii_case("ev_AI_Horn"))
+                })
+            }) {
                 continue;
             }
-            let file = if *heavy { "Sounds/AI_Cars/Hupe_Lkw.wav" } else { "Sounds/AI_Cars/hupe.wav" };
+            let file = if *heavy {
+                "Sounds/AI_Cars/Hupe_Lkw.wav"
+            } else {
+                "Sounds/AI_Cars/hupe.wav"
+            };
             let path = plan
                 .as_ref()
                 .and_then(|p| own_horn(&p.cfg).map(|f| omsi_cfg::resolve_path(&p.dir, f)))
                 .filter(|p| omsi_cfg::vfs::is_file(p))
                 .unwrap_or_else(|| omsi_cfg::resolve_path(&self.sim.root, file));
-            let Some(clip) = audio.load_clip(&path) else { continue };
+            let Some(clip) = audio.load_clip(&path) else {
+                continue;
+            };
             let at = *position + DVec3::Z * 0.8;
             audio.play(
                 clip,
@@ -186,7 +228,12 @@ impl Traffic {
     /// The AI bus ridden in on foot: its full `[sound]` set from inside ([viewpoint] 2, the
     /// outside sounds through what it has open - its own `Snd_OutsideVol`), instead of its
     /// `[sound_ai]` heard as from the street (#1286: a passenger heard next to nothing).
-    fn update_riding_audio(&mut self, audio: &omsi_audio::AudioEngine, riding: Option<u64>, volume: f32) {
+    fn update_riding_audio(
+        &mut self,
+        audio: &omsi_audio::AudioEngine,
+        riding: Option<u64>,
+        volume: f32,
+    ) {
         if self.riding_sounds.as_ref().map(|r| r.0) != riding {
             if let Some((_, mut s)) = self.riding_sounds.take() {
                 s.stop_all(audio);
@@ -207,19 +254,45 @@ impl Traffic {
             let mut load = |def: &omsi_vehicle::Vehicle| {
                 let rel = def.sound.clone().or_else(|| def.sound_ai.clone())?;
                 let path = omsi_cfg::resolve_path(def.dir(), &rel);
-                let cfg = cfgs.entry(path.clone()).or_insert_with(|| omsi_vehicle::SoundCfg::load(&path).map_err(|e| log::warn!("{e}")).ok().map(Arc::new)).clone()?;
-                Some((cfg, path.parent().map(|p| p.to_path_buf()).unwrap_or_default()))
+                let cfg = cfgs
+                    .entry(path.clone())
+                    .or_insert_with(|| {
+                        omsi_vehicle::SoundCfg::load(&path)
+                            .map_err(|e| log::warn!("{e}"))
+                            .ok()
+                            .map(Arc::new)
+                    })
+                    .clone()?;
+                Some((
+                    cfg,
+                    path.parent().map(|p| p.to_path_buf()).unwrap_or_default(),
+                ))
             };
-            let Some((cfg, dir)) = load(&c.vehicle.ty.def) else { return };
-            let parts: Vec<_> = c.vehicle.trailers.iter().enumerate().filter_map(|(i, t)| load(&t.ty.def).map(|p| (i, p))).collect();
-            if !audio.clips_ready(&omsi_audio::SoundSet::clip_paths(&cfg, &dir)) || !parts.iter().all(|(_, (c, d))| audio.clips_ready(&omsi_audio::SoundSet::clip_paths(c, d))) {
+            let Some((cfg, dir)) = load(&c.vehicle.ty.def) else {
+                return;
+            };
+            let parts: Vec<_> = c
+                .vehicle
+                .trailers
+                .iter()
+                .enumerate()
+                .filter_map(|(i, t)| load(&t.ty.def).map(|p| (i, p)))
+                .collect();
+            if !audio.clips_ready(&omsi_audio::SoundSet::clip_paths(&cfg, &dir))
+                || !parts
+                    .iter()
+                    .all(|(_, (c, d))| audio.clips_ready(&omsi_audio::SoundSet::clip_paths(c, d)))
+            {
                 return;
             }
             let number = c.vehicle.number();
             let mut ss = omsi_audio::SoundSet::new(audio, &cfg.chosen_for(&number), &dir);
             ss.master = volume;
             for (i, (pc, pd)) in &parts {
-                ss.add_part(*i, omsi_audio::SoundSet::new(audio, &pc.chosen_for(&number), pd));
+                ss.add_part(
+                    *i,
+                    omsi_audio::SoundSet::new(audio, &pc.chosen_for(&number), pd),
+                );
             }
             self.riding_sounds = Some((id, ss));
         }
@@ -235,11 +308,21 @@ impl Traffic {
             omsi_audio::soundset::set_outside_open(Some(v.var("Snd_OutsideVol").unwrap_or(0.0)));
             let xf = v.world_transform();
             let at_fire = |t: &str, n: &str| -> Option<f32> {
-                let vals = &fired_vars.iter().rev().find(|(k, _)| k.eq_ignore_ascii_case(t))?.1;
+                let vals = &fired_vars
+                    .iter()
+                    .rev()
+                    .find(|(k, _)| k.eq_ignore_ascii_case(t))?
+                    .1;
                 v.var_slot(n).and_then(|i| vals.get(i).copied())
             };
             ss.update_fired(audio, &|n| v.var(n), &xf, &fired, &at_fire);
-            ss.update_parts(audio, &|n| v.var(n), &|i| v.trailers.get(i).map(|t| t.world_transform()), &fired, &at_fire);
+            ss.update_parts(
+                audio,
+                &|n| v.var(n),
+                &|i| v.trailers.get(i).map(|t| t.world_transform()),
+                &fired,
+                &at_fire,
+            );
             for (t, f) in &fired_files {
                 ss.play_file_trigger(audio, t, f, &|n| v.var(n), &xf);
             }

@@ -46,7 +46,9 @@ impl Kind {
 
 /// The definitions of the bus's parts, front first.
 pub(crate) fn part_defs(v: &omsi_sim::VehicleInstance) -> Vec<&omsi_vehicle::Vehicle> {
-    std::iter::once(&v.ty.def).chain(v.trailers.iter().map(|t| &t.ty.def)).collect()
+    std::iter::once(&v.ty.def)
+        .chain(v.trailers.iter().map(|t| &t.ty.def))
+        .collect()
 }
 
 fn modified(p: &std::path::Path) -> Option<std::time::SystemTime> {
@@ -55,7 +57,9 @@ fn modified(p: &std::path::Path) -> Option<std::time::SystemTime> {
 
 /// The files of the bus that are looked at for changes (loose files: one in an archive does
 /// not change while the game runs).
-pub(crate) fn watched_files(v: &omsi_sim::VehicleInstance) -> Vec<(Kind, PathBuf, Option<std::time::SystemTime>)> {
+pub(crate) fn watched_files(
+    v: &omsi_sim::VehicleInstance,
+) -> Vec<(Kind, PathBuf, Option<std::time::SystemTime>)> {
     let mut out: Vec<(Kind, PathBuf)> = Vec::new();
     for def in part_defs(v) {
         let at = |rel: &Option<String>| rel.as_ref().map(|r| omsi_cfg::resolve_path(def.dir(), r));
@@ -67,16 +71,30 @@ pub(crate) fn watched_files(v: &omsi_sim::VehicleInstance) -> Vec<(Kind, PathBuf
     }
     let s = &v.ty.def.scripts;
     out.extend(s.constfiles.iter().map(|p| (Kind::Constfiles, p.clone())));
-    out.extend(s.scripts.iter().chain(&s.varlists).chain(&s.stringvarlists).map(|p| (Kind::Scripts, p.clone())));
+    out.extend(
+        s.scripts
+            .iter()
+            .chain(&s.varlists)
+            .chain(&s.stringvarlists)
+            .map(|p| (Kind::Scripts, p.clone())),
+    );
     out.sort_by(|a, b| a.1.cmp(&b.1));
     out.dedup_by(|a, b| a.1 == b.1);
-    out.into_iter().filter(|(_, p)| p.is_file()).map(|(k, p)| { let t = modified(&p); (k, p, t) }).collect()
+    out.into_iter()
+        .filter(|(_, p)| p.is_file())
+        .map(|(k, p)| {
+            let t = modified(&p);
+            (k, p, t)
+        })
+        .collect()
 }
 
 impl App {
     /// Once a second while the tools are open: the files that changed, read again.
     pub(crate) fn devtools_watch_files(&mut self) {
-        let Some(d) = self.devtools.as_mut() else { return };
+        let Some(d) = self.devtools.as_mut() else {
+            return;
+        };
         if d.last_check.elapsed().as_secs_f32() < 1.0 {
             return;
         }
@@ -112,14 +130,21 @@ impl App {
             Some(p) => {
                 let at = std::time::Instant::now();
                 let r = match kind {
-                    Kind::Paths => reload_cabin(p, self.session.humans.as_mut(), self.devtools.as_deref_mut()),
+                    Kind::Paths => reload_cabin(
+                        p,
+                        self.session.humans.as_mut(),
+                        self.devtools.as_deref_mut(),
+                    ),
                     Kind::Sound => match self.sound.audio.as_ref() {
                         Some(a) => {
                             if let Some(mut s) = p.sounds.take() {
                                 s.stop_all(a);
                             }
                             p.load_sounds(a);
-                            Ok(format!("{} sounds", p.sounds.as_ref().map(|s| s.len()).unwrap_or(0)))
+                            Ok(format!(
+                                "{} sounds",
+                                p.sounds.as_ref().map(|s| s.len()).unwrap_or(0)
+                            ))
                         }
                         None => Err("no sound".to_string()),
                     },
@@ -128,25 +153,53 @@ impl App {
                         .and_then(|def| p.vehicle.reload_definition(def))
                         .map(|()| {
                             p.mirrors_dirty = true;
-                            format!("{} mirrors, {} driver views", p.vehicle.ty.def.cameras_reflexion.len(), p.vehicle.ty.def.cameras_driver.len())
+                            format!(
+                                "{} mirrors, {} driver views",
+                                p.vehicle.ty.def.cameras_reflexion.len(),
+                                p.vehicle.ty.def.cameras_driver.len()
+                            )
                         }),
                     Kind::Model => {
                         let def = &p.vehicle.ty.def;
-                        match def.model.as_ref().map(|m| omsi_cfg::resolve_path(def.dir(), m)) {
-                            Some(path) => omsi_model::Model::load(&path).map_err(|e| e.to_string()).and_then(|m| p.vehicle.reload_model(m)).map(|()| "animations, lights and visibility taken over".to_string()),
+                        match def
+                            .model
+                            .as_ref()
+                            .map(|m| omsi_cfg::resolve_path(def.dir(), m))
+                        {
+                            Some(path) => omsi_model::Model::load(&path)
+                                .map_err(|e| e.to_string())
+                                .and_then(|m| p.vehicle.reload_model(m))
+                                .map(|()| {
+                                    "animations, lights and visibility taken over".to_string()
+                                }),
                             None => Err("the bus has no model".to_string()),
                         }
                     }
-                    Kind::Constfiles if self.devtools.as_ref().is_some_and(|d| d.scripts_changed) => Err("a script changed since: place the bus anew".to_string()),
+                    Kind::Constfiles
+                        if self.devtools.as_ref().is_some_and(|d| d.scripts_changed) =>
+                    {
+                        Err("a script changed since: place the bus anew".to_string())
+                    }
                     Kind::Constfiles => {
                         let program = p.vehicle.recompile(&self.args.root);
-                        p.vehicle.reload_program(program).map(|()| "constants and curves taken over".to_string())
+                        p.vehicle
+                            .reload_program(program)
+                            .map(|()| "constants and curves taken over".to_string())
                     }
-                    Kind::Scripts => Err("scripts are not read again: place the bus anew".to_string()),
+                    Kind::Scripts => {
+                        Err("scripts are not read again: place the bus anew".to_string())
+                    }
                 };
-                let name = Kind::BUTTONS.iter().find(|b| b.0 == kind).map(|b| b.1).unwrap_or("Scripts");
+                let name = Kind::BUTTONS
+                    .iter()
+                    .find(|b| b.0 == kind)
+                    .map(|b| b.1)
+                    .unwrap_or("Scripts");
                 match r {
-                    Ok(what) => format!("Reloaded {name} in {:.0} ms: {what}", at.elapsed().as_secs_f64() * 1000.0),
+                    Ok(what) => format!(
+                        "Reloaded {name} in {:.0} ms: {what}",
+                        at.elapsed().as_secs_f64() * 1000.0
+                    ),
                     Err(why) => format!("Reload failed for {name}: {why}"),
                 }
             }
@@ -154,7 +207,10 @@ impl App {
         // (the overlays and the list of files follow what the bus has now)
         if let (Some(d), Some(p)) = (self.devtools.as_mut(), self.player.as_ref()) {
             if kind == Kind::Bus || kind == Kind::Paths {
-                d.parts = part_defs(&p.vehicle).iter().map(|def| super::overlay::PartFiles::load(def)).collect();
+                d.parts = part_defs(&p.vehicle)
+                    .iter()
+                    .map(|def| super::overlay::PartFiles::load(def))
+                    .collect();
             }
             d.files = watched_files(&p.vehicle);
         }
@@ -170,23 +226,42 @@ impl App {
 /// paths.cfg and `[passengercabin]` of the bus (and its coupled parts) read again: the
 /// people's cabin of the bus made anew. While people are aboard a cabin with fewer places,
 /// doors or path points than before is not taken (they stand on what would be gone).
-fn reload_cabin(p: &mut crate::player::Player, humans: Option<&mut crate::humans::Humans>, d: Option<&mut DevTools>) -> Result<String, String> {
+fn reload_cabin(
+    p: &mut crate::player::Player,
+    humans: Option<&mut crate::humans::Humans>,
+    d: Option<&mut DevTools>,
+) -> Result<String, String> {
     if let Some(d) = d {
-        d.parts = part_defs(&p.vehicle).iter().map(|def| super::overlay::PartFiles::load(def)).collect();
+        d.parts = part_defs(&p.vehicle)
+            .iter()
+            .map(|def| super::overlay::PartFiles::load(def))
+            .collect();
     }
-    let Some(h) = humans else { return Ok("Cabin drawn anew (no passengers in this game)".into()) };
-    let key: Vec<PathBuf> = part_defs(&p.vehicle).iter().map(|d| d.path.clone()).collect();
+    let Some(h) = humans else {
+        return Ok("Cabin drawn anew (no passengers in this game)".into());
+    };
+    let key: Vec<PathBuf> = part_defs(&p.vehicle)
+        .iter()
+        .map(|d| d.path.clone())
+        .collect();
     let old = h.cabins.remove(&key).flatten();
     let new = h.cabin_for(&p.vehicle);
     let aboard = h.people_in(omsi_sim::people::BusId::Player);
     let fewer = match (&old, &new) {
-        (Some(o), Some(n)) => n.seats.len() < o.seats.len() || n.entries.len() < o.entries.len() || n.exits.len() < o.exits.len() || n.graph.points.len() < o.graph.points.len(),
+        (Some(o), Some(n)) => {
+            n.seats.len() < o.seats.len()
+                || n.entries.len() < o.entries.len()
+                || n.exits.len() < o.exits.len()
+                || n.graph.points.len() < o.graph.points.len()
+        }
         (Some(_), None) => true,
         _ => false,
     };
     if aboard > 0 && fewer {
         h.cabins.insert(key, old);
-        return Err(format!("Cannot reload cabin: {aboard} people aboard and the new cabin has fewer places, doors or points - let them off first"));
+        return Err(format!(
+            "Cannot reload cabin: {aboard} people aboard and the new cabin has fewer places, doors or points - let them off first"
+        ));
     }
     let Some(c) = new else {
         h.player_cabin = None;
@@ -198,7 +273,13 @@ fn reload_cabin(p: &mut crate::player::Player, humans: Option<&mut crate::humans
     h.exit_req.resize(c.exits.len().max(1), false);
     h.entry_busy.resize(c.entries.len(), false);
     h.exit_busy.resize(c.exits.len(), false);
-    let what = format!("Cabin reloaded: {} path points, {} places, {} entries, {} exits", c.graph.points.len(), c.seats.len(), c.entries.len(), c.exits.len());
+    let what = format!(
+        "Cabin reloaded: {} path points, {} places, {} entries, {} exits",
+        c.graph.points.len(),
+        c.seats.len(),
+        c.entries.len(),
+        c.exits.len()
+    );
     h.player_cabin = Some(c);
     Ok(what)
 }

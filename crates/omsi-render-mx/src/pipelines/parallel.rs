@@ -9,8 +9,14 @@ fn threads() -> usize {
     if crate::gl_backend() || omsi_cfg::flags::OMSI_SERIAL_PIPELINES.is_set() {
         return 1;
     }
-    let most = if cfg!(any(target_os = "android", target_os = "ios")) { 4 } else { 8 };
-    std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, most)
+    let most = if cfg!(any(target_os = "android", target_os = "ios")) {
+        4
+    } else {
+        8
+    };
+    std::thread::available_parallelism()
+        .map_or(1, |n| n.get())
+        .clamp(1, most)
 }
 
 /// Run `jobs` on a few threads (one on OpenGL), their results in order. A job that panics -
@@ -59,7 +65,13 @@ pub(crate) fn compile_all<'a, T: Send>(_device: &mx::Device, jobs: Vec<Job<'a, T
     if let Some(p) = panicked.into_inner().unwrap_or_else(|e| e.into_inner()) {
         std::panic::resume_unwind(p);
     }
-    made.into_iter().map(|m| m.into_inner().unwrap_or_else(|e| e.into_inner()).expect("every pipeline job ran")).collect()
+    made.into_iter()
+        .map(|m| {
+            m.into_inner()
+                .unwrap_or_else(|e| e.into_inner())
+                .expect("every pipeline job ran")
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -70,7 +82,9 @@ mod tests {
         let instance = mx::Instance::with_backends(mx::Backends::NOOP);
         let adapter = instance.default_adapter().unwrap();
         adapter
-            .request_device(&mx::DeviceDescriptor::default()).unwrap().0
+            .request_device(&mx::DeviceDescriptor::default())
+            .unwrap()
+            .0
     }
 
     #[test]
@@ -79,12 +93,17 @@ mod tests {
         let jobs: Vec<Job<usize>> = (0..97usize)
             .map(|i| -> Job<usize> {
                 Box::new(move || {
-                    std::thread::sleep(std::time::Duration::from_micros(((i * 37) % 11) as u64 * 100));
+                    std::thread::sleep(std::time::Duration::from_micros(
+                        ((i * 37) % 11) as u64 * 100,
+                    ));
                     i * 3
                 })
             })
             .collect();
-        assert_eq!(compile_all(&device, jobs), (0..97).map(|i| i * 3).collect::<Vec<_>>());
+        assert_eq!(
+            compile_all(&device, jobs),
+            (0..97).map(|i| i * 3).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -108,6 +127,7 @@ mod tests {
             refused
                 .as_ref()
                 .is_err_and(|e| e.starts_with("mX: a shader")),
-            "{refused:?}");
+            "{refused:?}"
+        );
     }
 }

@@ -18,7 +18,8 @@ pub(crate) fn keep_whole(whole: bool) {
 
 /// The logger of the game: env_logger's, every line it is given with the public addresses cut.
 pub(crate) fn init() {
-    let inner = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).build();
+    let inner =
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).build();
     let max = inner.filter();
     if log::set_boxed_logger(Box::new(Masked(inner))).is_ok() {
         log::set_max_level(max);
@@ -76,12 +77,15 @@ pub(crate) fn mask(text: &str) -> Cow<'_, str> {
     while i < text.len() {
         let c = bytes[i] as char;
         // (a run starts where a word does not: "v1.2.3.4" is no address)
-        let starts = addressy(c) && (i == 0 || !(bytes[i - 1] as char).is_alphanumeric() && bytes[i - 1] != b'.');
+        let starts = addressy(c)
+            && (i == 0 || !(bytes[i - 1] as char).is_alphanumeric() && bytes[i - 1] != b'.');
         if !starts {
             i += 1;
             continue;
         }
-        let end = text[i..].find(|c: char| !addressy(c)).map_or(text.len(), |n| i + n);
+        let end = text[i..]
+            .find(|c: char| !addressy(c))
+            .map_or(text.len(), |n| i + n);
         let run = &text[i..end];
         if let Some((len, masked)) = address(run) {
             if let Some(masked) = masked {
@@ -126,7 +130,11 @@ fn address(run: &str) -> Option<(usize, Option<String>)> {
 fn masked(ip: IpAddr) -> Option<String> {
     match ip {
         IpAddr::V4(v) => {
-            let local = v.is_loopback() || v.is_private() || v.is_link_local() || v.is_unspecified() || v.is_broadcast();
+            let local = v.is_loopback()
+                || v.is_private()
+                || v.is_link_local()
+                || v.is_unspecified()
+                || v.is_broadcast();
             (!local).then(|| {
                 let [a, b, c, _] = v.octets();
                 format!("{a}.{b}.{c}.x")
@@ -138,7 +146,10 @@ fn masked(ip: IpAddr) -> Option<String> {
             }
             let s = v.segments();
             // (loopback, unspecified, unique local fc00::/7, link-local fe80::/10)
-            let local = v.is_loopback() || v.is_unspecified() || (s[0] & 0xfe00) == 0xfc00 || (s[0] & 0xffc0) == 0xfe80;
+            let local = v.is_loopback()
+                || v.is_unspecified()
+                || (s[0] & 0xfe00) == 0xfc00
+                || (s[0] & 0xffc0) == 0xfe80;
             (!local).then(|| format!("{:x}:{:x}:{:x}::x", s[0], s[1], s[2]))
         }
     }
@@ -151,12 +162,30 @@ mod tests {
     #[test]
     fn public_addresses_keep_their_network_only() {
         let cases = [
-            ("LAN: player 3 now talks from 203.0.113.77:51234", "LAN: player 3 now talks from 203.0.113.x:51234"),
-            ("this computer is 198.51.100.9 on the internet (STUN).", "this computer is 198.51.100.x on the internet (STUN)."),
-            ("gateway: player WebSocket from [2001:db8:85a3:1:2:3:4:5]:443 on 0.0.0.0:27025", "gateway: player WebSocket from [2001:db8:85a3::x]:443 on 0.0.0.0:27025"),
-            ("peer ::ffff:203.0.113.5 joined", "peer ::ffff:203.0.113.x joined"),
-            ("from 203.0.113.1, 203.0.113.2", "from 203.0.113.x, 203.0.113.x"),
-            ("addr:203.0.113.5 face:198.51.100.7:443", "addr:203.0.113.x face:198.51.100.x:443"),
+            (
+                "LAN: player 3 now talks from 203.0.113.77:51234",
+                "LAN: player 3 now talks from 203.0.113.x:51234",
+            ),
+            (
+                "this computer is 198.51.100.9 on the internet (STUN).",
+                "this computer is 198.51.100.x on the internet (STUN).",
+            ),
+            (
+                "gateway: player WebSocket from [2001:db8:85a3:1:2:3:4:5]:443 on 0.0.0.0:27025",
+                "gateway: player WebSocket from [2001:db8:85a3::x]:443 on 0.0.0.0:27025",
+            ),
+            (
+                "peer ::ffff:203.0.113.5 joined",
+                "peer ::ffff:203.0.113.x joined",
+            ),
+            (
+                "from 203.0.113.1, 203.0.113.2",
+                "from 203.0.113.x, 203.0.113.x",
+            ),
+            (
+                "addr:203.0.113.5 face:198.51.100.7:443",
+                "addr:203.0.113.x face:198.51.100.x:443",
+            ),
         ];
         for (line, want) in cases {
             assert_eq!(mask(line), want);
@@ -175,9 +204,27 @@ mod tests {
                 assert_eq!(masked.line(), Some(42));
             });
         };
-        check(&log::Record::builder().args(format_args!("peer 203.0.113.5")).level(log::Level::Warn).target("mobile").module_path(Some("game")).file(Some("game.rs")).line(Some(42)).build());
+        check(
+            &log::Record::builder()
+                .args(format_args!("peer 203.0.113.5"))
+                .level(log::Level::Warn)
+                .target("mobile")
+                .module_path(Some("game"))
+                .file(Some("game.rs"))
+                .line(Some(42))
+                .build(),
+        );
         let address = "203.0.113.5";
-        check(&log::Record::builder().args(format_args!("peer {address}")).level(log::Level::Warn).target("mobile").module_path(Some("game")).file(Some("game.rs")).line(Some(42)).build());
+        check(
+            &log::Record::builder()
+                .args(format_args!("peer {address}"))
+                .level(log::Level::Warn)
+                .target("mobile")
+                .module_path(Some("game"))
+                .file(Some("game.rs"))
+                .line(Some(42))
+                .build(),
+        );
     }
 
     #[test]
@@ -190,7 +237,10 @@ mod tests {
             "version v1.2.3.4 and 1.2.3.4.5, mac aa:bb:cc:dd:ee:ff, tile 3.5",
             "no address at all",
         ] {
-            assert!(matches!(mask(line), std::borrow::Cow::Borrowed(_)), "{line}");
+            assert!(
+                matches!(mask(line), std::borrow::Cow::Borrowed(_)),
+                "{line}"
+            );
         }
     }
 }

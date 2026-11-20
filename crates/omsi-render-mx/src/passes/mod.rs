@@ -10,9 +10,9 @@ mod effects;
 mod ground;
 mod headlamp_shadow;
 mod main_pass;
-mod temporal;
 mod post;
 mod precip_map;
+mod temporal;
 pub(crate) use precip_map::*;
 mod prepass;
 mod setup;
@@ -22,7 +22,9 @@ mod submit;
 
 pub(crate) use batch::DrawPlan;
 pub(crate) use ground::GroundPlan;
-pub(crate) use headlamp_shadow::{headlamp_shadow, own_headlamp, VehicleBox, HEADLAMP_SHADOW_REACH};
+pub(crate) use headlamp_shadow::{
+    HEADLAMP_SHADOW_REACH, VehicleBox, headlamp_shadow, own_headlamp,
+};
 pub(crate) use shadow::{CabinMotion, LampTiles};
 pub(crate) use shadow_plan::ShadowPlan;
 
@@ -181,7 +183,10 @@ pub(crate) struct FrameCtx<'a> {
 impl FrameCtx<'_> {
     /// where the 3D picture is drawn: the scaled target, or the window's own
     pub(crate) fn scene_view(&self) -> &mx::TextureView {
-        self.scene_target.as_ref().map(|t| &t.0).unwrap_or(self.target)
+        self.scene_target
+            .as_ref()
+            .map(|t| &t.0)
+            .unwrap_or(self.target)
     }
 }
 
@@ -201,7 +206,10 @@ pub(crate) struct StageClock {
 
 impl StageClock {
     pub(crate) fn new(with_overlays: bool) -> StageClock {
-        StageClock { t: std::time::Instant::now(), with_overlays }
+        StageClock {
+            t: std::time::Instant::now(),
+            with_overlays,
+        }
     }
 
     pub(crate) fn stage(&mut self, r: &Renderer, window: &'static str, mirror: &'static str) {

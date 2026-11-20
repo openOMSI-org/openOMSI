@@ -6,7 +6,10 @@ use crate::App;
 /// The map's timetable as the menu reads it: the running one, else the book of a session
 /// without timetable traffic (`SessionState::timetable_book`).
 pub(crate) fn timetable(app: &App) -> Option<&crate::schedule::Schedule> {
-    app.session.schedule.as_ref().or(app.session.timetable_book.as_ref())
+    app.session
+        .schedule
+        .as_ref()
+        .or(app.session.timetable_book.as_ref())
 }
 
 /// A duty picked from the timetable book: from now on the timetable runs for the player's

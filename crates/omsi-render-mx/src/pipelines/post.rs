@@ -12,16 +12,26 @@ pub(crate) struct Post {
     pub adapt_bg: [mx::BindGroup; 2],
 }
 
-pub(crate) fn build(device: &mx::Device,
+pub(crate) fn build(
+    device: &mx::Device,
     format: mx::TextureFormat,
-    hdr_format: mx::TextureFormat, white_texture: &GpuTexture) -> Post {
+    hdr_format: mx::TextureFormat,
+    white_texture: &GpuTexture,
+) -> Post {
     // --- enhanced graphics: the post passes (glow, metering, adaptation, tone curve, FXAA)
     log::info!("renderer: compiling the post passes shaders");
-    let post_shader = compile_shader(device, mx::ShaderModuleDescriptor {
-        label: Some("post"),
-        source: &*(include_str!("../post.wgsl")),
-    });
-    let post_buf = uniform_buffer(device, "post params", std::mem::size_of::<PostUniform>() as u64);
+    let post_shader = compile_shader(
+        device,
+        mx::ShaderModuleDescriptor {
+            label: Some("post"),
+            source: &*(include_str!("../post.wgsl")),
+        },
+    );
+    let post_buf = uniform_buffer(
+        device,
+        "post params",
+        std::mem::size_of::<PostUniform>() as u64,
+    );
     let post_sampler = clamped_linear_sampler(device);
     let post_pipeline = |entry: &str, format: mx::TextureFormat| {
         no_vertex_pipeline(entry, &post_shader, entry, &[target(format, None)]).create(device)
@@ -94,5 +104,12 @@ pub(crate) fn build(device: &mx::Device,
             ],
         })
     });
-    Post { pipelines: post,  buf: post_buf, sampler: post_sampler, meter_view, adapt_views, adapt_bg }
+    Post {
+        pipelines: post,
+        buf: post_buf,
+        sampler: post_sampler,
+        meter_view,
+        adapt_views,
+        adapt_bg,
+    }
 }

@@ -36,7 +36,9 @@ pub fn instance() -> mx::Instance {
                 serial_compiler_overrides(&existing),
             );
         }
-        log::info!("ANGLE: native shader worker jobs disabled; renderer compilation uses a managed {COMPILER_STACK_MB} MB stack");
+        log::info!(
+            "ANGLE: native shader worker jobs disabled; renderer compilation uses a managed {COMPILER_STACK_MB} MB stack"
+        );
     }
     // (on Windows mX's OpenGL is ANGLE's libEGL.dll, shipped beside the game)
     mx::Instance::with_backends(mx::Backends::GL)
@@ -64,7 +66,9 @@ where
             std::thread::Builder::new()
                 .name("ANGLE shader compiler".into())
                 .stack_size(COMPILER_STACK_MB << 20)
-                .spawn_scoped(scope, move || crate::with_auxiliary_context(context, operation))
+                .spawn_scoped(scope, move || {
+                    crate::with_auxiliary_context(context, operation)
+                })
                 .expect("ANGLE shader compiler thread")
                 .join()
                 .unwrap_or_else(|panic| std::panic::resume_unwind(panic))

@@ -10,12 +10,17 @@ pub struct NightMode {
     pub slots: usize,
 }
 
-pub use omsi_sim::scenery::InUse;
 pub use omsi_map::calendar::DayKind;
+pub use omsi_sim::scenery::InUse;
 
 /// A scripted object's dynamic texture change: its type, the variants chosen, its mesh
 /// instances and the slots' switches.
-type TextureUpdate = (Arc<ObjectType>, Vec<usize>, Vec<usize>, Vec<((usize, usize), bool)>);
+type TextureUpdate = (
+    Arc<ObjectType>,
+    Vec<usize>,
+    Vec<usize>,
+    Vec<((usize, usize), bool)>,
+);
 
 /// Where a frame's scenery scripts went (seconds), for OMSI_PROFILE: waiting for the script
 /// list (the tile loader places objects under the same lock), gathering what the scripts are
@@ -72,7 +77,12 @@ pub(crate) fn view_of(views: &[ScriptedView], key: u64) -> Option<usize> {
 
 /// Add the glow of the lamps scenery scripts switch within `range` of the camera, each as
 /// bright as its variable was at the last step, by day as well as by night.
-pub(crate) fn push_script_lamp_glows(views: &[ScriptedView], camera_pos: DVec3, range: f64, out: &mut Vec<omsi_render::Corona>) {
+pub(crate) fn push_script_lamp_glows(
+    views: &[ScriptedView],
+    camera_pos: DVec3,
+    range: f64,
+    out: &mut Vec<omsi_render::Corona>,
+) {
     let near = |v: &&ScriptedView| v.pos.distance(camera_pos) <= range;
     for view in views.iter().filter(near) {
         for lamp in view.script_lamps.iter().filter(|l| l.level > 0.0) {
@@ -113,26 +123,52 @@ impl ScriptedSet {
         for lamp in &mut script_lamps {
             lamp.level = inst.var(&lamp.variable).unwrap_or(0.0);
         }
-        let (program, mesh_xf, mesh_visible) = (inst.program.clone(), inst.mesh_transforms.clone(), inst.mesh_visible.clone());
-        let mut s = omsi_sim::scenery::SceneryObject::new(key, map_id, pos, tile, inst, ty.sco.night_map_mode);
+        let (program, mesh_xf, mesh_visible) = (
+            inst.program.clone(),
+            inst.mesh_transforms.clone(),
+            inst.mesh_visible.clone(),
+        );
+        let mut s = omsi_sim::scenery::SceneryObject::new(
+            key,
+            map_id,
+            pos,
+            tile,
+            inst,
+            ty.sco.night_map_mode,
+        );
         s.controller = controller;
         s.light_index = light_index;
         s.light_parent = light_parent;
         s.var_parent = var_parent.or((arrivals && ty.sco.is_bus_stop).then_some(map_id));
         s.arrivals = arrivals;
-        s.text_vars = texts.iter().map(|(_, st)| st.def.variable.trim().to_string()).collect();
+        s.text_vars = texts
+            .iter()
+            .map(|(_, st)| st.def.variable.trim().to_string())
+            .collect();
         s.text_last = vec![None; texts.len()];
         s.has_pages = !htmls.is_empty();
-        s.needs_vars = !variants.is_empty() || !alpha_slots.is_empty() || !ty.dynamic_textures.is_empty() || ty.sco.sound.is_some();
+        s.needs_vars = !variants.is_empty()
+            || !alpha_slots.is_empty()
+            || !ty.dynamic_textures.is_empty()
+            || ty.sco.sound.is_some();
         // (lamps it switches read its variables too)
         s.needs_vars |= !script_lamps.is_empty();
         if !ty.sco.scripts.lua.is_empty() {
             let sc = &ty.sco.scripts;
             s.lua = Some(Arc::new(omsi_sim::scenery::ObjectLua {
                 files: sc.lua.clone(),
-                range: if sc.lua_range > 0.0 { (sc.lua_range as f64).min(omsi_sim::scenery::SCRIPT_RANGE) } else { 250.0 },
+                range: if sc.lua_range > 0.0 {
+                    (sc.lua_range as f64).min(omsi_sim::scenery::SCRIPT_RANGE)
+                } else {
+                    250.0
+                },
                 rate: sc.lua_rate,
-                type_name: ty.sco.path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+                type_name: ty
+                    .sco
+                    .path
+                    .file_stem()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
             }));
             // (the way its +y axis points: compass degrees, north 0 and east 90)
             s.heading = xf.y_axis.x.atan2(xf.y_axis.y).to_degrees();
@@ -181,7 +217,8 @@ impl ScriptedSet {
     /// simulation's next step).
     pub fn drop_tile(&mut self, key: (i32, i32), audio: Option<&omsi_audio::AudioEngine>) {
         // (the tile's lamps' scripts go with it too, whether or not it had scripted objects)
-        self.inbox.push(omsi_sim::scenery::SceneryChange::DropTile(key));
+        self.inbox
+            .push(omsi_sim::scenery::SceneryChange::DropTile(key));
         if !self.views.iter().any(|v| v.tile == key) {
             return;
         }
@@ -200,10 +237,20 @@ impl ScriptedSet {
 impl World {
     /// Light or darken the night textures of the objects with a `[NightMapMode]` timetable
     /// for this hour of the day (0..24).
-    pub fn update_night_modes(&self, renderer: &Renderer, scene: &mut Scene, clock: &omsi_sim::SimClock, brightness: f32) {
+    pub fn update_night_modes(
+        &self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        clock: &omsi_sim::SimClock,
+        brightness: f32,
+    ) {
         let day = self.day_kind(clock);
         for m in self.night_modes.lock().iter() {
-            let v = if m.use_.lit(clock.time, day, brightness) { 1.0 } else { 0.0 };
+            let v = if m.use_.lit(clock.time, day, brightness) {
+                1.0
+            } else {
+                0.0
+            };
             renderer.set_slot_night(scene, m.inst, &vec![v; m.slots]);
         }
     }
@@ -227,9 +274,15 @@ impl World {
     /// Working day, holiday and school holidays at `clock`'s date, from the map's
     /// `Holidays.txt`.
     pub fn day_kind(&self, clock: &omsi_sim::SimClock) -> DayKind {
-        let cal = self.calendar.get_or_init(|| omsi_map::Calendar::load(&self.map_dir.join("Holidays.txt")).unwrap_or_default());
+        let cal = self.calendar.get_or_init(|| {
+            omsi_map::Calendar::load(&self.map_dir.join("Holidays.txt")).unwrap_or_default()
+        });
         let date = clock.date_code();
-        DayKind { workday: clock.weekday() < 5, holiday: cal.is_holiday(date), school_holiday: cal.in_holiday_range(date) }
+        DayKind {
+            workday: clock.weekday() < 5,
+            holiday: cal.is_holiday(date),
+            school_holiday: cal.in_holiday_range(date),
+        }
     }
 
     /// Switch the `NightlightA` material variants of static objects.
@@ -248,14 +301,23 @@ impl World {
 
     /// Whether switch object `id` is set to its path `path` (None: no such switch, or the
     /// path has no `[switchdir]`).
-    pub fn switch_set_to(&self, scenery: &mut omsi_sim::scenery::SceneryState, id: i64, path: u16) -> Option<bool> {
+    pub fn switch_set_to(
+        &self,
+        scenery: &mut omsi_sim::scenery::SceneryState,
+        id: i64,
+        path: u16,
+    ) -> Option<bool> {
         self.scenery_sync(scenery);
         scenery.switch_set_to(id, path)
     }
 
     /// Set the railway signals: `aspects` gives each signal object's `Signal` (see
     /// [`omsi_sim::scenery::SceneryState::set_signals`]), for the routes of the map.
-    pub fn set_signals(&self, scenery: &mut omsi_sim::scenery::SceneryState, aspects: &HashMap<i64, f32>) {
+    pub fn set_signals(
+        &self,
+        scenery: &mut omsi_sim::scenery::SceneryState,
+        aspects: &HashMap<i64, f32>,
+    ) {
         if self.signal_routes.is_empty() {
             return;
         }
@@ -293,12 +355,16 @@ impl World {
             }
             let local = (origin - v.pos).as_vec3();
             for mi in 0..v.instances.len() {
-                let Some((data, o3d_mats, overrides)) = v.ty.meshes.get(mi) else { continue };
+                let Some((data, o3d_mats, overrides)) = v.ty.meshes.get(mi) else {
+                    continue;
+                };
                 if !v.mesh_visible.get(mi).copied().unwrap_or(true) {
                     continue;
                 }
                 let xf = v.xf * v.mesh_xf.get(mi).copied().unwrap_or(Mat4::IDENTITY);
-                let Some(hit) = omsi_geometry::ray_mesh_hit(local, dir, data, &xf) else { continue };
+                let Some(hit) = omsi_geometry::ray_mesh_hit(local, dir, data, &xf) else {
+                    continue;
+                };
                 if hit.t > reach || best.as_ref().is_some_and(|b| b.0 <= hit.t) {
                     continue;
                 }
@@ -306,7 +372,9 @@ impl World {
                 let slot = data.slot_of(hit.index) as usize;
                 let page = overrides
                     .iter()
-                    .filter(|m| !m.item && omsi_sim::vehicle::override_slot(o3d_mats, m) == Some(slot))
+                    .filter(|m| {
+                        !m.item && omsi_sim::vehicle::override_slot(o3d_mats, m) == Some(slot)
+                    })
                     .find_map(|m| m.use_script_texture)
                     .map(|n| n.max(0) as usize)
                     .filter(|n| v.htmls.iter().any(|(i, _)| i == n));
@@ -339,7 +407,13 @@ impl World {
     }
 
     /// Finds the closest scenery object mesh carrying a `[mouseevent]` under a ray.
-    pub fn scenery_object_hit(&self, origin: DVec3, dir: glam::Vec3, reach: f32, spread: f32) -> Option<SceneryHit> {
+    pub fn scenery_object_hit(
+        &self,
+        origin: DVec3,
+        dir: glam::Vec3,
+        reach: f32,
+        spread: f32,
+    ) -> Option<SceneryHit> {
         let scripted = self.scripted.lock();
         let mut best: Option<SceneryHit> = None;
         let right = glam::Vec3::new(-dir.y, dir.x, 0.0).normalize_or_zero();
@@ -361,12 +435,23 @@ impl World {
             }
             let local = (origin - v.pos).as_vec3();
             for mi in 0..v.ty.meshes.len() {
-                let Some((data, _, _)) = v.ty.meshes.get(mi) else { continue };
+                let Some((data, _, _)) = v.ty.meshes.get(mi) else {
+                    continue;
+                };
                 if !v.mesh_visible.get(mi).copied().unwrap_or(true) {
                     continue;
                 }
-                let Some(&def_idx) = v.ty.mesh_def_index.get(mi) else { continue };
-                let Some(event) = v.ty.model.meshes.get(def_idx).and_then(|m| m.mouse_event.as_ref()) else { continue };
+                let Some(&def_idx) = v.ty.mesh_def_index.get(mi) else {
+                    continue;
+                };
+                let Some(event) =
+                    v.ty.model
+                        .meshes
+                        .get(def_idx)
+                        .and_then(|m| m.mouse_event.as_ref())
+                else {
+                    continue;
+                };
                 let xf = v.xf * v.mesh_xf.get(mi).copied().unwrap_or(Mat4::IDENTITY);
                 for d in &dirs {
                     if let Some(t) = omsi_geometry::ray_mesh(local, *d, data, &xf) {
@@ -387,25 +472,48 @@ impl World {
     }
 
     /// Click down on a scenery object's `[mouseevent]` switch or button.
-    pub fn scenery_object_click(&self, scenery: &mut omsi_sim::scenery::SceneryState, map_id: i64, event: &str) -> bool {
+    pub fn scenery_object_click(
+        &self,
+        scenery: &mut omsi_sim::scenery::SceneryState,
+        map_id: i64,
+        event: &str,
+    ) -> bool {
         self.scenery_sync(scenery);
         scenery.object_click(map_id, event)
     }
 
     /// Mouse dragged while holding down a scenery object switch.
-    pub fn scenery_object_drag(&self, scenery: &mut omsi_sim::scenery::SceneryState, map_id: i64, event: &str, dx: f32, dy: f32) -> bool {
+    pub fn scenery_object_drag(
+        &self,
+        scenery: &mut omsi_sim::scenery::SceneryState,
+        map_id: i64,
+        event: &str,
+        dx: f32,
+        dy: f32,
+    ) -> bool {
         self.scenery_sync(scenery);
         scenery.object_drag(map_id, event, dx, dy)
     }
 
     /// Mouse button released from a scenery object switch (`<event>_off`).
-    pub fn scenery_object_release(&self, scenery: &mut omsi_sim::scenery::SceneryState, map_id: i64, event: &str) -> bool {
+    pub fn scenery_object_release(
+        &self,
+        scenery: &mut omsi_sim::scenery::SceneryState,
+        map_id: i64,
+        event: &str,
+    ) -> bool {
         self.scenery_sync(scenery);
         scenery.object_release(map_id, event)
     }
 
     /// Mouse wheel notch over a scenery object switch.
-    pub fn scenery_object_wheel(&self, scenery: &mut omsi_sim::scenery::SceneryState, map_id: i64, event: &str, amount: f32) -> bool {
+    pub fn scenery_object_wheel(
+        &self,
+        scenery: &mut omsi_sim::scenery::SceneryState,
+        map_id: i64,
+        event: &str,
+        amount: f32,
+    ) -> bool {
         self.scenery_sync(scenery);
         scenery.object_wheel(map_id, event, amount)
     }
@@ -429,7 +537,11 @@ impl World {
         let (fx, fy) = ((u - x0 as f64) as f32, (v - y0 as f64) as f32);
         let px = |x: usize, y: usize| {
             let i = (y * w + x) * 4;
-            glam::Vec3::new(img.rgba[i] as f32, img.rgba[i + 1] as f32, img.rgba[i + 2] as f32) / 255.0
+            glam::Vec3::new(
+                img.rgba[i] as f32,
+                img.rgba[i + 1] as f32,
+                img.rgba[i + 2] as f32,
+            ) / 255.0
         };
         let top = px(x0, y0).lerp(px(x1, y0), fx);
         let bottom = px(x0, y1).lerp(px(x1, y1), fx);
@@ -446,7 +558,9 @@ impl World {
         }
         let ts = tile_size();
         let centre = ((eye.x / ts).floor() as i32, (eye.y / ts).floor() as i32);
-        let generation = self.light_maps_generation.load(std::sync::atomic::Ordering::Relaxed);
+        let generation = self
+            .light_maps_generation
+            .load(std::sync::atomic::Ordering::Relaxed);
         let mut last = self.light_map_atlas.lock();
         if *last == Some((centre, generation)) {
             return;
@@ -458,16 +572,26 @@ impl World {
             for col in 0..n {
                 // column from the west, row from the north
                 let key = (centre.0 - n / 2 + col, centre.1 + n / 2 - row);
-                renderer.set_light_map_tile((col as u32, row as u32), maps.get(&key).map(|a| a.as_ref()));
+                renderer.set_light_map_tile(
+                    (col as u32, row as u32),
+                    maps.get(&key).map(|a| a.as_ref()),
+                );
             }
         }
-        let sw = ((centre.0 - n / 2) as f64 * ts, (centre.1 - n / 2) as f64 * ts);
+        let sw = (
+            (centre.0 - n / 2) as f64 * ts,
+            (centre.1 - n / 2) as f64 * ts,
+        );
         renderer.set_light_map_place(sw.0, sw.1, n as f64 * ts);
     }
 
     /// Throw the points the trains need (`Traffic::switch_requests`): see
     /// [`omsi_sim::scenery::SceneryState::set_switches`].
-    pub fn set_switches(&self, scenery: &mut omsi_sim::scenery::SceneryState, requests: &[(i64, u16)]) {
+    pub fn set_switches(
+        &self,
+        scenery: &mut omsi_sim::scenery::SceneryState,
+        requests: &[(i64, u16)],
+    ) {
         if requests.is_empty() {
             return;
         }
@@ -477,7 +601,12 @@ impl World {
 
     /// Move the particles of the placed objects within 1.5 km of `center`, their variables
     /// read from the object's script (the fireworks' frequency).
-    pub fn update_particles(&self, dt: f32, center: DVec3, scripts: &omsi_sim::scenery::SceneryOutputs) {
+    pub fn update_particles(
+        &self,
+        dt: f32,
+        center: DVec3,
+        scripts: &omsi_sim::scenery::SceneryOutputs,
+    ) {
         let mut objs = self.particle_objects.lock();
         if objs.is_empty() {
             return;
@@ -485,10 +614,21 @@ impl World {
         // (an environment switch read once per process)
         static DEBUG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         if *DEBUG.get_or_init(|| omsi_cfg::flags::OMSI_DEBUG_PARTICLES.is_set()) {
-            let mut near: Vec<(f64, &ParticleObject)> = objs.values().flatten().map(|po| ((po.pos - center).length(), po)).collect();
+            let mut near: Vec<(f64, &ParticleObject)> = objs
+                .values()
+                .flatten()
+                .map(|po| ((po.pos - center).length(), po))
+                .collect();
             near.sort_by(|a, b| a.0.total_cmp(&b.0));
             for (d, po) in near.iter().take(3) {
-                log::info!("particle object {} at ({:.1}, {:.1}, {:.1}), {d:.0} m: {} particles", po.map_id, po.pos.x, po.pos.y, po.pos.z, po.set.particles().count());
+                log::info!(
+                    "particle object {} at ({:.1}, {:.1}, {:.1}), {d:.0} m: {} particles",
+                    po.map_id,
+                    po.pos.x,
+                    po.pos.y,
+                    po.pos.z,
+                    po.set.particles().count()
+                );
             }
         }
         // (the scripted object whose variables an emitter reads: the first of its id, as a
@@ -576,7 +716,16 @@ impl World {
         }
         times.inputs += step.inputs;
         times.scripts += step.scripts;
-        let updated = self.scenery_apply(scenery.outputs(), renderer, scene, dt, center, audio, muffled, times);
+        let updated = self.scenery_apply(
+            scenery.outputs(),
+            renderer,
+            scene,
+            dt,
+            center,
+            audio,
+            muffled,
+            times,
+        );
         self.lamp_sounds(&mut scenery.lamps, center, audio, muffled, times);
         updated
     }
@@ -661,8 +810,12 @@ impl World {
         for lamp in self.light_objects.lock().iter() {
             // (only the lamps that have a sound, and near enough to hear: a city map has
             // nearly a thousand lamps, and going through all of them took 1.8 ms a frame)
-            let Some(path) = lamp.sound.as_ref() else { continue };
-            let Some(script) = lamp.script.and_then(|k| lamps.get_mut(k)) else { continue };
+            let Some(path) = lamp.sound.as_ref() else {
+                continue;
+            };
+            let Some(script) = lamp.script.and_then(|k| lamps.get_mut(k)) else {
+                continue;
+            };
             let dist = (lamp.pos - center).length();
             if dist >= SOUND_REACH_MAX as f64 {
                 if let (Some(a), Some(mut ss)) = (audio, lamp.sounds.lock().take()) {
@@ -676,7 +829,17 @@ impl World {
             let inst = &*script;
             if let Some(a) = audio {
                 let mut sounds = lamp.sounds.lock();
-                self.object_sounds(a, &mut sounds, path, dist, muffled, lamp.pos, lamp.xf, &|n| inst.var(n), &fired);
+                self.object_sounds(
+                    a,
+                    &mut sounds,
+                    path,
+                    dist,
+                    muffled,
+                    lamp.pos,
+                    lamp.xf,
+                    &|n| inst.var(n),
+                    &fired,
+                );
             }
         }
         times.lamps += t.elapsed().as_secs_f64();
@@ -696,10 +859,18 @@ impl World {
     ) -> (usize, Vec<TextureUpdate>) {
         let mut updated = 0;
         let mut texture_updates: Vec<TextureUpdate> = Vec::new();
-        let arrows = self.help_arrows_shown.load(std::sync::atomic::Ordering::Relaxed);
+        let arrows = self
+            .help_arrows_shown
+            .load(std::sync::atomic::Ordering::Relaxed);
         let mut scripted = self.scripted.lock();
         let views = &mut scripted.views;
-        let omsi_sim::scenery::SceneryOutputs { cmds, vars, transforms, visible, .. } = out;
+        let omsi_sim::scenery::SceneryOutputs {
+            cmds,
+            vars,
+            transforms,
+            visible,
+            ..
+        } = out;
         for cmd in cmds.iter_mut() {
             let s = match cmd {
                 omsi_sim::scenery::SceneryCmd::Silence(key) => {
@@ -713,7 +884,9 @@ impl World {
                 }
                 omsi_sim::scenery::SceneryCmd::Show(s) => s,
             };
-            let Some(i) = view_of(views, s.key) else { continue };
+            let Some(i) = view_of(views, s.key) else {
+                continue;
+            };
             let v = &mut views[i];
             let (dist, nightlight) = (s.dist, s.nightlight);
             let vars = &vars[s.vars.0 as usize..s.vars.1 as usize];
@@ -723,19 +896,35 @@ impl World {
             // `Refresh_Strings`, a board whose string was still empty at its first frame
             // stayed blank for good (#367)
             for (k, text) in &s.texts {
-                let Some((tex, st)) = v.texts.get_mut(*k) else { continue };
+                let Some((tex, st)) = v.texts.get_mut(*k) else {
+                    continue;
+                };
                 if st.update(text) {
                     let (w, h) = (st.def.width.max(1) as u32, st.def.height.max(1) as u32);
                     if let Some(rgba) = st.pending.take() {
                         // OMSI_DUMP_SCENERY_TEXT=<dir>: the pictures as drawn
                         if let Some(dir) = omsi_cfg::flags::OMSI_DUMP_SCENERY_TEXT.os() {
-                            let path = std::path::Path::new(&dir).join(format!("text_{}.png", v.map_id));
-                            log::info!("scenery text of object {}: {text:?} -> {}", v.map_id, path.display());
+                            let path =
+                                std::path::Path::new(&dir).join(format!("text_{}.png", v.map_id));
+                            log::info!(
+                                "scenery text of object {}: {text:?} -> {}",
+                                v.map_id,
+                                path.display()
+                            );
                             if let Some(img) = image::RgbaImage::from_raw(w, h, rgba.clone()) {
                                 let _ = img.save(&path);
                             }
                         }
-                        renderer.update_texture_mips(scene, *tex, &Image { width: w, height: h, rgba, has_alpha: true });
+                        renderer.update_texture_mips(
+                            scene,
+                            *tex,
+                            &Image {
+                                width: w,
+                                height: h,
+                                rgba,
+                                has_alpha: true,
+                            },
+                        );
                     }
                 }
             }
@@ -743,7 +932,16 @@ impl World {
             // the simulation drove them, here come their pictures)
             for (index, w, h, rgba) in s.pages.drain(..) {
                 if let Some((_, tex)) = v.htmls.iter().find(|(i, _)| *i == index) {
-                    renderer.update_texture(scene, *tex, &Image { width: w, height: h, rgba, has_alpha: true });
+                    renderer.update_texture(
+                        scene,
+                        *tex,
+                        &Image {
+                            width: w,
+                            height: h,
+                            rgba,
+                            has_alpha: true,
+                        },
+                    );
                 }
             }
             // [sound] of scenery objects: crossing bells, ambient loops
@@ -755,38 +953,79 @@ impl World {
                 let ty = v.ty.clone();
                 let path = ty.sound_path.get_or_init(|| {
                     let rel = ty.sco.sound.as_ref()?;
-                    let dir = ty.sco.path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+                    let dir = ty
+                        .sco
+                        .path
+                        .parent()
+                        .map(|p| p.to_path_buf())
+                        .unwrap_or_default();
                     Some(omsi_cfg::resolve_path(&dir, rel))
                 });
                 if let Some(path) = path {
-                    self.object_sounds(a, &mut v.sounds, path, dist, muffled, v.pos, v.xf, &var, &fired);
+                    self.object_sounds(
+                        a,
+                        &mut v.sounds,
+                        path,
+                        dist,
+                        muffled,
+                        v.pos,
+                        v.xf,
+                        &var,
+                        &fired,
+                    );
                 }
             }
             let switch_value = |name: &str| {
                 if name.trim().eq_ignore_ascii_case("NightlightA") {
                     nightlight
                 } else {
-                    name.trim().parse::<f32>().ok().or_else(|| var(name)).unwrap_or(0.0)
+                    name.trim()
+                        .parse::<f32>()
+                        .ok()
+                        .or_else(|| var(name))
+                        .unwrap_or(0.0)
                 }
             };
             for (inst, slot, base, item, name) in &v.variants {
-                renderer.set_material(scene, *inst, *slot, if change_picks_item(switch_value(name)) { *item } else { *base });
+                renderer.set_material(
+                    scene,
+                    *inst,
+                    *slot,
+                    if change_picks_item(switch_value(name)) {
+                        *item
+                    } else {
+                        *base
+                    },
+                );
             }
             for lamp in &mut v.script_lamps {
                 lamp.level = var(&lamp.variable).unwrap_or(0.0);
             }
             if !v.ty.dynamic_textures.is_empty() {
                 let selection = scenery_texture_selection(&v.ty, &var);
-                let switches = v.variants.iter().map(|(inst, slot, _, _, name)| ((*inst, *slot), change_picks_item(switch_value(name)))).collect();
+                let switches = v
+                    .variants
+                    .iter()
+                    .map(|(inst, slot, _, _, name)| {
+                        ((*inst, *slot), change_picks_item(switch_value(name)))
+                    })
+                    .collect();
                 texture_updates.push((v.ty.clone(), selection, v.instances.clone(), switches));
             }
-            let (xfs, shown) = (&transforms[s.meshes.0 as usize..s.meshes.1 as usize], &visible[s.meshes.0 as usize..s.meshes.1 as usize]);
+            let (xfs, shown) = (
+                &transforms[s.meshes.0 as usize..s.meshes.1 as usize],
+                &visible[s.meshes.0 as usize..s.meshes.1 as usize],
+            );
             for (k, ((inst, xf), &visible)) in v.instances.iter().zip(xfs).zip(shown).enumerate() {
                 let visible = visible && (arrows || !v.ty.sco.is_help_arrow);
                 renderer.set_transform(scene, *inst, v.pos, v.xf * *xf);
                 // (the slots its `[alphascale]` variables fade, see `ScriptedObject::alpha_slots`)
                 let value = |n: &str| n.trim().parse::<f32>().ok().or_else(|| var(n));
-                let alpha = v.alpha_slots.get(k).filter(|l| !l.alpha.is_empty() || !l.uv.is_empty()).map(|l| (l.values(&value).0, l.uv_values(&value)));
+                let alpha = v
+                    .alpha_slots
+                    .get(k)
+                    .filter(|l| !l.alpha.is_empty() || !l.uv.is_empty())
+                    .map(|l| (l.values(&value).0, l.uv_values(&value)));
                 let p = &mut scene.instances[*inst];
                 match alpha {
                     Some(a) => {
@@ -818,42 +1057,47 @@ impl World {
     /// The dynamic texture changes the scripts asked for this frame. Scenery placement takes
     /// the GPU-cache lock before the script list, so they are applied after the script-list
     /// lock is released, to keep that lock order consistent.
-    fn apply_texture_updates(&self, renderer: &Renderer, scene: &mut Scene, texture_updates: Vec<TextureUpdate>) {
-    for (ty, selection, instances, switches) in texture_updates {
-        let variant = {
-            let mut gpu = self.gpu.lock();
-            gpu.dynamic_texture_variant(
-                renderer,
-                scene,
-                Arc::as_ptr(&ty) as usize,
-                &selection,
-                &self.root,
-                &HashMap::new(),
-            )
-        };
-        if let Some(rows) = variant {
-            for (mi, row) in rows.iter().enumerate() {
-                let Some(&mesh_inst) = instances.get(mi) else {
-                    continue;
-                };
-                for (slot, pair) in row.iter().enumerate() {
-                    let Some((base, item)) = pair else { continue };
-                    // (the last switch of a slot, as a map collected from them kept it)
-                    let item_on = switches
-                        .iter()
-                        .rev()
-                        .find(|(k, _)| *k == (mesh_inst, slot))
-                        .is_some_and(|&(_, on)| on);
-                    renderer.set_material(
-                        scene,
-                        mesh_inst,
-                        slot,
-                        if item_on { *item } else { *base },
-                    );
+    fn apply_texture_updates(
+        &self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        texture_updates: Vec<TextureUpdate>,
+    ) {
+        for (ty, selection, instances, switches) in texture_updates {
+            let variant = {
+                let mut gpu = self.gpu.lock();
+                gpu.dynamic_texture_variant(
+                    renderer,
+                    scene,
+                    Arc::as_ptr(&ty) as usize,
+                    &selection,
+                    &self.root,
+                    &HashMap::new(),
+                )
+            };
+            if let Some(rows) = variant {
+                for (mi, row) in rows.iter().enumerate() {
+                    let Some(&mesh_inst) = instances.get(mi) else {
+                        continue;
+                    };
+                    for (slot, pair) in row.iter().enumerate() {
+                        let Some((base, item)) = pair else { continue };
+                        // (the last switch of a slot, as a map collected from them kept it)
+                        let item_on = switches
+                            .iter()
+                            .rev()
+                            .find(|(k, _)| *k == (mesh_inst, slot))
+                            .is_some_and(|&(_, on)| on);
+                        renderer.set_material(
+                            scene,
+                            mesh_inst,
+                            slot,
+                            if item_on { *item } else { *base },
+                        );
+                    }
                 }
             }
         }
-    }
     }
 
     /// Play a scenery object's `[sound]` (the config at `path`) while the listener is within
@@ -882,7 +1126,12 @@ impl World {
                 .sound_cfgs
                 .lock()
                 .entry(path.to_path_buf())
-                .or_insert_with(|| omsi_vehicle::SoundCfg::load(path).map_err(|e| log::warn!("{e}")).ok().map(Arc::new))
+                .or_insert_with(|| {
+                    omsi_vehicle::SoundCfg::load(path)
+                        .map_err(|e| log::warn!("{e}"))
+                        .ok()
+                        .map(Arc::new)
+                })
                 .clone(),
         };
         let reach = cfg.as_deref().map_or(SOUND_REACH_MIN, sound_reach);
@@ -896,7 +1145,12 @@ impl World {
             if let Some(cfg) = cfg {
                 let sdir = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
                 if a.clips_ready(&omsi_audio::SoundSet::clip_paths(&cfg, &sdir)) {
-                    log::info!("scenery sound {}: {} sounds ({:.0} m away)", path.display(), cfg.sounds.len(), dist);
+                    log::info!(
+                        "scenery sound {}: {} sounds ({:.0} m away)",
+                        path.display(),
+                        cfg.sounds.len(),
+                        dist
+                    );
                     let mut ss = omsi_audio::SoundSet::new_scenery(a, &cfg, &sdir);
                     ss.master = self.settings.sound_scenery();
                     *sounds = Some(ss);
@@ -905,7 +1159,8 @@ impl World {
         }
         if let Some(ss) = sounds.as_mut() {
             // (the last fifth of the reach fades it out, so that it never stops at once)
-            ss.master = self.settings.sound_scenery() * ((reach - dist as f32) / (0.2 * reach)).clamp(0.0, 1.0);
+            ss.master = self.settings.sound_scenery()
+                * ((reach - dist as f32) / (0.2 * reach)).clamp(0.0, 1.0);
             // scenery (a fountain, machinery, a level crossing bell): heard through the
             // player's own bodywork and glass just like any other sound from outside the cabin
             ss.set_muffled(muffled);

@@ -12,11 +12,20 @@ impl RadioPanel {
     pub(crate) fn panel(&self, app: &crate::App, pal: Palette) -> Panel {
         let radio = &app.sound.radio;
         let (station, song) = radio.now_playing();
-        let playing = if station.is_empty() { tr("The radio is off").into_owned() } else if song.is_empty() { station } else { format!("{station} - {song}") };
+        let playing = if station.is_empty() {
+            tr("The radio is off").into_owned()
+        } else if song.is_empty() {
+            station
+        } else {
+            format!("{station} - {song}")
+        };
         let mut children = vec![
             title(&tr("Radio")),
             text(&playing, 14.0, Weight::Medium),
-            note(&tr("Volume {}").replace("{}", &format!("{:.0} %", radio.volume() * 100.0)), pal),
+            note(
+                &tr("Volume {}").replace("{}", &format!("{:.0} %", radio.volume() * 100.0)),
+                pal,
+            ),
             grow_row(vec![
                 button("power", &tr("On / off"), Some("power_settings_new")),
                 button("previous", &tr("Previous"), Some("chevron_left")),
@@ -41,7 +50,10 @@ pub(crate) fn open(app: &mut crate::App) {
 
 pub(crate) fn click(app: &mut crate::App, id: &str) {
     let msg = match id {
-        "power" => app.sound.radio.toggle_power(app.player.as_ref().map(|p| &p.vehicle)),
+        "power" => app
+            .sound
+            .radio
+            .toggle_power(app.player.as_ref().map(|p| &p.vehicle)),
         "previous" => app.sound.radio.previous_station(),
         "next" => app.sound.radio.next_station(),
         "up" | "down" => {

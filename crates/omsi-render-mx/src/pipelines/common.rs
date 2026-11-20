@@ -5,45 +5,77 @@ use crate::DEPTH_FORMAT;
 /// A native compiler can abort before mX returns an error. Record both sides of each
 /// operation so the last unfinished one identifies the module/entry point, not just "sky"
 /// (at debug level: two lines a shader and a pipeline; the texts are only made when logged).
-fn logged<T>(begin: impl FnOnce() -> String, end: impl FnOnce() -> String, op: impl FnOnce() -> T) -> T {
+fn logged<T>(
+    begin: impl FnOnce() -> String,
+    end: impl FnOnce() -> String,
+    op: impl FnOnce() -> T,
+) -> T {
     let level = log::Level::Debug;
     if !log::log_enabled!(level) {
         return op();
     }
     let thread = std::thread::current();
     let started = std::time::Instant::now();
-    log::log!(level, "renderer: {}, thread {:?} ({})", begin(), thread.id(), thread.name().unwrap_or("unnamed"));
+    log::log!(
+        level,
+        "renderer: {}, thread {:?} ({})",
+        begin(),
+        thread.id(),
+        thread.name().unwrap_or("unnamed")
+    );
     let done = op();
-    log::log!(level, "renderer: {}, thread {:?}, {:.1} ms", end(), thread.id(), started.elapsed().as_secs_f64() * 1000.0);
+    log::log!(
+        level,
+        "renderer: {}, thread {:?}, {:.1} ms",
+        end(),
+        thread.id(),
+        started.elapsed().as_secs_f64() * 1000.0
+    );
     done
 }
 
-pub(crate) fn compile_shader(device: &mx::Device,
+pub(crate) fn compile_shader(
+    device: &mx::Device,
     descriptor: mx::ShaderModuleDescriptor<'_>,
 ) -> mx::ShaderModule {
     let label = descriptor.label.unwrap_or("unnamed").to_string();
-    logged(|| format!("shader begin {label}"), || format!("shader end {label}"), || {
+    logged(
+        || format!("shader begin {label}"),
+        || format!("shader end {label}"),
+        || {
             device
                 .create_shader_module(&descriptor)
                 .expect("mX: a shader")
-        },)
+        },
+    )
 }
 
-pub(crate) fn compile_pipeline(device: &mx::Device,
+pub(crate) fn compile_pipeline(
+    device: &mx::Device,
     descriptor: &mx::RenderPipelineDescriptor<'_>,
 ) -> mx::RenderPipeline {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let fragment = descriptor.fragment.as_ref();
-    let begin = || format!("pipeline begin #{id} {}, vs {}, fs {}, {}x MSAA, constants {:?}",
-        descriptor.label.unwrap_or("unnamed"), descriptor.vertex.entry_point.unwrap_or("auto"),
-        fragment.and_then(|f| f.entry_point).unwrap_or("none"), descriptor.multisample.count,
-        fragment.map(|f| f.constants));
-    logged(begin, || format!("pipeline end #{id}"), || {
+    let begin = || {
+        format!(
+            "pipeline begin #{id} {}, vs {}, fs {}, {}x MSAA, constants {:?}",
+            descriptor.label.unwrap_or("unnamed"),
+            descriptor.vertex.entry_point.unwrap_or("auto"),
+            fragment.and_then(|f| f.entry_point).unwrap_or("none"),
+            descriptor.multisample.count,
+            fragment.map(|f| f.constants)
+        )
+    };
+    logged(
+        begin,
+        || format!("pipeline end #{id}"),
+        || {
             device
                 .create_render_pipeline(descriptor)
                 .expect("mX: a render pipeline")
-        },)
+        },
+    )
 }
 
 /// A pipeline that draws without vertex buffers (a triangle over the screen, or quads the
@@ -66,7 +98,16 @@ pub(crate) fn no_vertex_pipeline<'a>(
     fs: &'a str,
     targets: &'a [Option<mx::ColorTargetState>],
 ) -> NoVertexPipeline<'a> {
-    NoVertexPipeline { label,  module, vs: "vs_main", fs, targets, depth_stencil: None, samples: 1, strip: false }
+    NoVertexPipeline {
+        label,
+        module,
+        vs: "vs_main",
+        fs,
+        targets,
+        depth_stencil: None,
+        samples: 1,
+        strip: false,
+    }
 }
 
 impl<'a> NoVertexPipeline<'a> {
@@ -75,7 +116,10 @@ impl<'a> NoVertexPipeline<'a> {
     }
 
     pub(crate) fn depth(self, depth_stencil: mx::DepthStencilState) -> Self {
-        NoVertexPipeline { depth_stencil: Some(depth_stencil), ..self }
+        NoVertexPipeline {
+            depth_stencil: Some(depth_stencil),
+            ..self
+        }
     }
 
     /// Quads as triangle strips of four vertices, not lists of six (the vertex shader makes
@@ -89,33 +133,40 @@ impl<'a> NoVertexPipeline<'a> {
     }
 
     pub(crate) fn create(self, device: &mx::Device) -> mx::RenderPipeline {
-        compile_pipeline(device, &mx::RenderPipelineDescriptor {
-            label: Some(self.label),
-            vertex: mx::VertexState {
+        compile_pipeline(
+            device,
+            &mx::RenderPipelineDescriptor {
+                label: Some(self.label),
+                vertex: mx::VertexState {
                     constants: &[],
-                module: self.module,
-                entry_point: Some(self.vs),
-                buffers: &[],
-            },
-            primitive: mx::PrimitiveState {
-                topology: if self.strip { mx::PrimitiveTopology::TriangleStrip } else { mx::PrimitiveTopology::TriangleList },
-                cull_mode: None,
-                front_face: mx::FrontFace::Ccw,
-                ..Default::default()
-            },
-            depth_stencil: self.depth_stencil,
-            multisample: mx::MultisampleState {
-                count: self.samples,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(mx::FragmentState {
+                    module: self.module,
+                    entry_point: Some(self.vs),
+                    buffers: &[],
+                },
+                primitive: mx::PrimitiveState {
+                    topology: if self.strip {
+                        mx::PrimitiveTopology::TriangleStrip
+                    } else {
+                        mx::PrimitiveTopology::TriangleList
+                    },
+                    cull_mode: None,
+                    front_face: mx::FrontFace::Ccw,
+                    ..Default::default()
+                },
+                depth_stencil: self.depth_stencil,
+                multisample: mx::MultisampleState {
+                    count: self.samples,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(mx::FragmentState {
                     constants: &[],
-                module: self.module,
-                entry_point: Some(self.fs),
-                targets: self.targets,
-            }),
-        })
+                    module: self.module,
+                    entry_point: Some(self.fs),
+                    targets: self.targets,
+                }),
+            },
+        )
     }
 }
 
@@ -131,15 +182,23 @@ pub(crate) fn depth_test(compare: mx::CompareFunction) -> mx::DepthStencilState 
 }
 
 /// One colour target, every channel written.
-pub(crate) fn target(format: mx::TextureFormat,
+pub(crate) fn target(
+    format: mx::TextureFormat,
     blend: Option<mx::BlendState>,
 ) -> Option<mx::ColorTargetState> {
-    Some(mx::ColorTargetState { format, blend, write_mask: mx::ColorWrites::ALL, })
+    Some(mx::ColorTargetState {
+        format,
+        blend,
+        write_mask: mx::ColorWrites::ALL,
+    })
 }
 
 /// A material texture sampler: linear, mip-mapped, anisotropic, `address` on all axes.
-pub(crate) fn texture_sampler(device: &mx::Device,
-    address: mx::AddressMode, anisotropy: u16) -> mx::Sampler {
+pub(crate) fn texture_sampler(
+    device: &mx::Device,
+    address: mx::AddressMode,
+    anisotropy: u16,
+) -> mx::Sampler {
     device
         .create_sampler(&mx::SamplerDescriptor {
             address_mode_u: address,
@@ -177,4 +236,3 @@ pub(crate) fn uniform_buffer(device: &mx::Device, label: &str, size: u64) -> mx:
         })
         .expect("mX: a buffer")
 }
-

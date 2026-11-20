@@ -572,8 +572,19 @@ impl Renderer {
         extra: MaterialExtra,
     ) -> MaterialId {
         self.add_material_inner(
-            scene, texture, alpha, color, unlit, transmap, None, nightmap, lightmap, envmap,
-            emissive, extra.moisture, extra,
+            scene,
+            texture,
+            alpha,
+            color,
+            unlit,
+            transmap,
+            None,
+            nightmap,
+            lightmap,
+            envmap,
+            emissive,
+            extra.moisture,
+            extra,
         )
     }
 
@@ -618,7 +629,11 @@ impl Renderer {
         // so its sign is free: negative marks the variant that shows settled snow, which
         // the shader draws itself from the mask (`snow_on_pane`) instead of water drops.
         let mut bounds = bounds;
-        bounds[3] = if snow { -bounds[3].abs() } else { bounds[3].abs() };
+        bounds[3] = if snow {
+            -bounds[3].abs()
+        } else {
+            bounds[3].abs()
+        };
         self.copy_material(scene, base, texture, Some((mask, drops, bounds)))
     }
 
@@ -682,7 +697,11 @@ impl Renderer {
             .map(|maps| maps.flags)
             .unwrap_or([0.0; 4]);
         if uniform.ambient[3] < 1.5 {
-            uniform.ambient[3] = if texture.is_none() { -1.0 } else { snow_texture_flag(scene, texture) };
+            uniform.ambient[3] = if texture.is_none() {
+                -1.0
+            } else {
+                snow_texture_flag(scene, texture)
+            };
         }
         let slot = |t: Option<TextureId>| {
             t.and_then(|t| scene.textures.get(t).map(|g| (t, g.generation)))
@@ -911,7 +930,11 @@ impl Renderer {
         let bump = extra.bump.filter(|_| envmap.is_some());
         // a rain film's reflection slot holds the picture behind the glass: its drops show
         // the street through themselves, bent and upside down, as real drops do
-        let envmap = if extra.rain_film { Some((self.glass_slot(scene), 0.0)) } else { envmap };
+        let envmap = if extra.rain_film {
+            Some((self.glass_slot(scene), 0.0))
+        } else {
+            envmap
+        };
         let address = self.address_next.replace(TexAddressing::Wrap);
         let lm_mapped = self.light_map_next.replace(false);
         let mode = match alpha {
@@ -925,7 +948,11 @@ impl Renderer {
         let mirror = unlit
             && texture
                 .and_then(|t| scene.textures.get(t))
-                .is_some_and(|t| t.texture.usage().contains(mx::TextureUsages::RENDER_ATTACHMENT));
+                .is_some_and(|t| {
+                    t.texture
+                        .usage()
+                        .contains(mx::TextureUsages::RENDER_ATTACHMENT)
+                });
         let uniform = MaterialUniform {
             wipe_bounds: [0.0; 4],
             color,
@@ -933,12 +960,28 @@ impl Renderer {
                 mode,
                 // 1 unlit (0.9 a mirror's own picture); 0.25 lit by everything but the map's
                 // lamps; 0.15 a tree, not lit by the map's lamps in the vanilla picture
-                if mirror { 0.9 } else if unlit { 1.0 } else if lm_mapped { 0.35 } else if extra.no_map_lights { 0.25 } else if extra.tree { 0.15 } else { 0.0 },
+                if mirror {
+                    0.9
+                } else if unlit {
+                    1.0
+                } else if lm_mapped {
+                    0.35
+                } else if extra.no_map_lights {
+                    0.25
+                } else if extra.tree {
+                    0.15
+                } else {
+                    0.0
+                },
                 // a [matl_transmap] whose file is missing still takes the alpha stage: Omsi.exe
                 // sets a NULL texture there, which D3D9 samples as alpha 1, so the slot is as
                 // opaque as its transmap says - not as see-through as the diffuse texture's
                 // alpha, a reflection mask on car bodies (traffic half transparent)
-                if transmap.is_some() || extra.transmap_declared { 1.0 } else { 0.0 },
+                if transmap.is_some() || extra.transmap_declared {
+                    1.0
+                } else {
+                    0.0
+                },
                 if transmap.map(|t| t.1).unwrap_or(false) {
                     1.0
                 } else {
@@ -959,20 +1002,53 @@ impl Renderer {
                 // ([matl_glow]'s mask rides in the light map's slot, but the material is
                 // not a light-mapped one: `params2.x` stays off so the classic picture is as
                 // it was - the enhanced one draws the glow, see `MaterialExtra::glow`)
-                if lightmap.is_some() && extra.glow <= 0.0 { 1.0 } else { 0.0 },
+                if lightmap.is_some() && extra.glow <= 0.0 {
+                    1.0
+                } else {
+                    0.0
+                },
                 envmap.map(|e| e.1).unwrap_or(0.0),
                 moisture,
                 // bit 1: a [matl_envmap_mask]; bit 2: a [matl_transmap]; bit 4: a vehicle's
                 // part that may be metal; bit 8: a body, never foliage; bit 16: the active
                 // night texture supplies a clear vehicle material's coverage
                 (if env_mask.is_some() { 1.0 } else { 0.0 })
-                    + if extra.transmap_declared || transmap.is_some() { 2.0 } else { 0.0 }
+                    + if extra.transmap_declared || transmap.is_some() {
+                        2.0
+                    } else {
+                        0.0
+                    }
                     + if extra.metal_ok { 4.0 } else { 0.0 }
                     + if extra.solid { 8.0 } else { 0.0 }
-                    + if extra.night_alpha && alpha == AlphaMode::Blend && nightmap.is_some()
-                        && !extra.transmap_declared && transmap.is_none() { 16.0 } else { 0.0 },
+                    + if extra.night_alpha
+                        && alpha == AlphaMode::Blend
+                        && nightmap.is_some()
+                        && !extra.transmap_declared
+                        && transmap.is_none()
+                    {
+                        16.0
+                    } else {
+                        0.0
+                    },
             ],
-            emissive: [emissive[0], emissive[1], emissive[2], if extra.rain_film { 2.0 } else if extra.glass { 1.0 } else if extra.led && extra.led_sign { -3.0 } else if extra.led { -2.0 } else if extra.display { -1.0 } else { 0.0 }],
+            emissive: [
+                emissive[0],
+                emissive[1],
+                emissive[2],
+                if extra.rain_film {
+                    2.0
+                } else if extra.glass {
+                    1.0
+                } else if extra.led && extra.led_sign {
+                    -3.0
+                } else if extra.led {
+                    -2.0
+                } else if extra.display {
+                    -1.0
+                } else {
+                    0.0
+                },
+            ],
             specular: extra.specular,
             bump: [
                 bump.map(|b| b.1).unwrap_or(0.0),
@@ -980,9 +1056,15 @@ impl Renderer {
                 if extra.no_z_write { 1.0 } else { 0.0 },
                 if extra.no_z_check { 1.0 } else { 0.0 },
             ],
-            pbr: texture.and_then(|t| scene.pbr_maps.get(&t)).map(|m| m.flags).unwrap_or([0.0; 4]),
+            pbr: texture
+                .and_then(|t| scene.pbr_maps.get(&t))
+                .map(|m| m.flags)
+                .unwrap_or([0.0; 4]),
             flags: {
-                let b = extra.border.unwrap_or([0.0; 4]).map(|c| (c.clamp(0.0, 1.0) * 255.0).round());
+                let b = extra
+                    .border
+                    .unwrap_or([0.0; 4])
+                    .map(|c| (c.clamp(0.0, 1.0) * 255.0).round());
                 [
                     if extra.screen { 1.0 } else { 0.0 },
                     if extra.border.is_some() {
@@ -999,12 +1081,32 @@ impl Renderer {
             ambient: {
                 let a = extra.ambient.unwrap_or([color[0], color[1], color[2]]);
                 // (w -1: no texture - the Enhanced shading lights it by its diffuse colour)
-                [a[0], a[1], a[2], if extra.water { 2.0 } else if texture.is_none() { -1.0 } else { snow_texture_flag(scene, texture) }]
+                [
+                    a[0],
+                    a[1],
+                    a[2],
+                    if extra.water {
+                        2.0
+                    } else if texture.is_none() {
+                        -1.0
+                    } else {
+                        snow_texture_flag(scene, texture)
+                    },
+                ]
             },
             sway: extra.sway.map_or([0.0; 4], |s| [1.0, s[0], s[1], s[2]]),
             // (no mask bound - its file missing - no glow: the slot would shine all over)
             // (y: an LED panel's share of its glow, see `MaterialExtra::led_glow`)
-            glow: [if lightmap.is_some() { extra.glow.max(0.0) } else { 0.0 }, extra.led_glow.map_or(1.0, |g| g.clamp(0.0, 1.0)), 0.0, 0.0],
+            glow: [
+                if lightmap.is_some() {
+                    extra.glow.max(0.0)
+                } else {
+                    0.0
+                },
+                extra.led_glow.map_or(1.0, |g| g.clamp(0.0, 1.0)),
+                0.0,
+                0.0,
+            ],
         };
         let slot = |t: Option<TextureId>| {
             t.and_then(|t| scene.textures.get(t).map(|g| (t, g.generation)))

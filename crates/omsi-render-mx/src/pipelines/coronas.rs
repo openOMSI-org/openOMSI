@@ -44,9 +44,11 @@ pub(crate) struct Coronas {
 impl Coronas {
     /// The coronas' and the smoke's bind groups and shader, and the corona sprite (its
     /// bind group holds it).
-    pub(crate) fn new(device: &mx::Device,
+    pub(crate) fn new(
+        device: &mx::Device,
         queue: &mx::Queue,
-        _scene: &SceneBase,) -> (Coronas, GpuTexture) {
+        _scene: &SceneBase,
+    ) -> (Coronas, GpuTexture) {
         // corona sprite: soft radial falloff
         let cs = 64u32;
         let mut corona_img = omsi_texture::Image {
@@ -81,7 +83,12 @@ impl Coronas {
             ],
         });
         // a soft grey puff until the app hands over the game's own `Texture/rauch.tga`
-        let mut puff = omsi_texture::Image { width: cs, height: cs, rgba: vec![0; (cs * cs * 4) as usize], has_alpha: true };
+        let mut puff = omsi_texture::Image {
+            width: cs,
+            height: cs,
+            rgba: vec![0; (cs * cs * 4) as usize],
+            has_alpha: true,
+        };
         for y in 0..cs {
             for x in 0..cs {
                 let dx = (x as f32 + 0.5) / cs as f32 * 2.0 - 1.0;
@@ -95,16 +102,25 @@ impl Coronas {
         let smoke_bind_group = device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("smoke"),
             entries: &[
-                mx::BindGroupEntry { binding: 0, resource: mx::BindingResource::TextureView(&puff_texture.view), },
-                mx::BindGroupEntry { binding: 1, resource: mx::BindingResource::Sampler(&corona_sampler), },
+                mx::BindGroupEntry {
+                    binding: 0,
+                    resource: mx::BindingResource::TextureView(&puff_texture.view),
+                },
+                mx::BindGroupEntry {
+                    binding: 1,
+                    resource: mx::BindingResource::Sampler(&corona_sampler),
+                },
             ],
         });
         drop(puff_texture);
         log::info!("renderer: compiling the coronas shaders");
-        let corona_shader = compile_shader(device, mx::ShaderModuleDescriptor {
-            label: Some("corona"),
-            source: &*(corona_shader_source()),
-        });
+        let corona_shader = compile_shader(
+            device,
+            mx::ShaderModuleDescriptor {
+                label: Some("corona"),
+                source: &*(corona_shader_source()),
+            },
+        );
         let coronas = Coronas {
             sampler: corona_sampler,
             bind_group: corona_bind_group,
@@ -114,8 +130,13 @@ impl Coronas {
         (coronas, corona_texture)
     }
 
-    pub(crate) fn pipeline_for(&self, device: &mx::Device,
-        f: mx::TextureFormat, fs: &str, blend: mx::BlendState, msaa: u32,
+    pub(crate) fn pipeline_for(
+        &self,
+        device: &mx::Device,
+        f: mx::TextureFormat,
+        fs: &str,
+        blend: mx::BlendState,
+        msaa: u32,
         surfaces: bool,
     ) -> mx::RenderPipeline {
         let corona_vertex = mx::VertexBufferLayout {
@@ -123,35 +144,47 @@ impl Coronas {
             step_mode: mx::VertexStepMode::Instance,
             attributes: &CORONA_ATTRIBUTES,
         };
-        compile_pipeline(device, &mx::RenderPipelineDescriptor {
-            label: Some("corona"),
-            vertex: mx::VertexState {
+        compile_pipeline(
+            device,
+            &mx::RenderPipelineDescriptor {
+                label: Some("corona"),
+                vertex: mx::VertexState {
                     constants: &[],
-                module: &self.shader,
-                entry_point: Some(if fs == "fs_enhanced" { "vs_enhanced" } else { "vs_main" }),
-                buffers: &[corona_vertex],
-            },
-            primitive: mx::PrimitiveState {
+                    module: &self.shader,
+                    entry_point: Some(if fs == "fs_enhanced" {
+                        "vs_enhanced"
+                    } else {
+                        "vs_main"
+                    }),
+                    buffers: &[corona_vertex],
+                },
+                primitive: mx::PrimitiveState {
                     topology: mx::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                front_face: mx::FrontFace::Ccw,
-                ..Default::default()
-            },
-            depth_stencil: Some(depth_test(mx::CompareFunction::GreaterEqual)),
+                    cull_mode: None,
+                    front_face: mx::FrontFace::Ccw,
+                    ..Default::default()
+                },
+                depth_stencil: Some(depth_test(mx::CompareFunction::GreaterEqual)),
                 multisample: mx::MultisampleState {
-                count: msaa,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(mx::FragmentState {
+                    count: msaa,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(mx::FragmentState {
                     constants: &[],
-                module: &self.shader,
-                entry_point: Some(fs),
-                targets: &color_targets_for(f, Some(blend), mx::ColorWrites::COLOR, false, false,
+                    module: &self.shader,
+                    entry_point: Some(fs),
+                    targets: &color_targets_for(
+                        f,
+                        Some(blend),
+                        mx::ColorWrites::COLOR,
+                        false,
+                        false,
                         surfaces,
                     ),
-            }),
-        })
+                }),
+            },
+        )
     }
 }
 
@@ -172,40 +205,92 @@ const PREMULTIPLIED_SNOW: mx::BlendState = mx::BlendState {
     color: mx::BlendComponent {
         src_factor: mx::BlendFactor::One,
         dst_factor: mx::BlendFactor::OneMinusSrcAlpha,
-        operation: mx::BlendOperation::Add, },
+        operation: mx::BlendOperation::Add,
+    },
     alpha: mx::BlendComponent::REPLACE,
 };
 
 impl Precip {
     pub(crate) fn snow(device: &mx::Device, roof: &mx::TextureView) -> Precip {
-        Precip::new(device,  roof, "snow", "vs_snow", snow_shader_source(), std::mem::size_of::<SnowUniform>(), false)
+        Precip::new(
+            device,
+            roof,
+            "snow",
+            "vs_snow",
+            snow_shader_source(),
+            std::mem::size_of::<SnowUniform>(),
+            false,
+        )
     }
 
     pub(crate) fn rain(device: &mx::Device, roof: &mx::TextureView) -> Precip {
-        Precip::new(device,  roof, "rain", "vs_rain", rain_shader_source(), std::mem::size_of::<RainUniform>(), true)
+        Precip::new(
+            device,
+            roof,
+            "rain",
+            "vs_rain",
+            rain_shader_source(),
+            std::mem::size_of::<RainUniform>(),
+            true,
+        )
     }
 
     /// (`roof`: the precipitation's roof map, `passes::precip_map`)
-    fn new(device: &mx::Device,
-        roof: &mx::TextureView, label: &'static str, vs: &'static str, source: String, size: usize, strip: bool) -> Precip {
-        let shader = compile_shader(device, mx::ShaderModuleDescriptor { label: Some(label), source: &*source, });
+    fn new(
+        device: &mx::Device,
+        roof: &mx::TextureView,
+        label: &'static str,
+        vs: &'static str,
+        source: String,
+        size: usize,
+        strip: bool,
+    ) -> Precip {
+        let shader = compile_shader(
+            device,
+            mx::ShaderModuleDescriptor {
+                label: Some(label),
+                source: &*source,
+            },
+        );
         let buf = uniform_buffer(device, label, size as u64);
         let bind_group = device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some(label),
             entries: &[
-                mx::BindGroupEntry { binding: 0, resource: buf.as_entire_binding() },
-                mx::BindGroupEntry { binding: 1, resource: mx::BindingResource::TextureView(roof), },
+                mx::BindGroupEntry {
+                    binding: 0,
+                    resource: buf.as_entire_binding(),
+                },
+                mx::BindGroupEntry {
+                    binding: 1,
+                    resource: mx::BindingResource::TextureView(roof),
+                },
             ],
         });
-        Precip { shader, buf, bind_group,  label, vs, strip }
+        Precip {
+            shader,
+            buf,
+            bind_group,
+            label,
+            vs,
+            strip,
+        }
     }
 
-    pub(crate) fn pipeline_for(&self, device: &mx::Device,
-        f: mx::TextureFormat, fs: &str, msaa: u32,
+    pub(crate) fn pipeline_for(
+        &self,
+        device: &mx::Device,
+        f: mx::TextureFormat,
+        fs: &str,
+        msaa: u32,
         surfaces: bool,
     ) -> mx::RenderPipeline {
         log::info!("renderer: compiling the {} shader ({fs})", self.label);
-        let targets = color_targets_for(f, Some(PREMULTIPLIED_SNOW), mx::ColorWrites::COLOR, false, false,
+        let targets = color_targets_for(
+            f,
+            Some(PREMULTIPLIED_SNOW),
+            mx::ColorWrites::COLOR,
+            false,
+            false,
             surfaces,
         );
         no_vertex_pipeline(self.label, &self.shader, fs, &targets)

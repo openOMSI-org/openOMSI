@@ -14,14 +14,28 @@ fn the_full_tank_is_on_until_turned_off() {
 /// saves) is the one read back - with or without the key in the file before.
 #[test]
 fn switched_in_the_game_it_stays_switched() {
-    let read: [(&str, fn(&super::Settings) -> bool); 2] = [("full_tank", |s| s.full_tank), ("trip_summary", |s| s.trip_summary)];
+    let read: [(&str, fn(&super::Settings) -> bool); 2] = [
+        ("full_tank", |s| s.full_tank),
+        ("trip_summary", |s| s.trip_summary),
+    ];
     for (key, value) in read {
-        for old in ["", "full_tank=1\ntrip_summary=1\n", "full_tank=0\ntrip_summary=0\n"] {
+        for old in [
+            "",
+            "full_tank=1\ntrip_summary=1\n",
+            "full_tank=0\ntrip_summary=0\n",
+        ] {
             for on in [false, true] {
                 let mut v = omsi_launcher_lib::settings_from_text(Some(old));
-                crate::game_lists::apply_pending(&mut v, &[(key.to_string(), (on as u8).to_string())]);
+                crate::game_lists::apply_pending(
+                    &mut v,
+                    &[(key.to_string(), (on as u8).to_string())],
+                );
                 let saved = omsi_launcher_lib::settings_to_text(&v, Some(old));
-                assert_eq!(value(&super::Settings::from_text(&saved)), on, "{key} switched to {on} over {old:?}:\n{saved}");
+                assert_eq!(
+                    value(&super::Settings::from_text(&saved)),
+                    on,
+                    "{key} switched to {on} over {old:?}:\n{saved}"
+                );
                 assert_eq!(saved.matches(&format!("{key}=")).count(), 1, "{saved}");
             }
         }
