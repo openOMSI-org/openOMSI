@@ -119,11 +119,12 @@ fn each_bogie_feels_its_own_track() {
     );
 }
 
-/// Round a bend each car's body leans out on its own springs, the joints go with the cars
-/// around them, the bogies stay on the rails, and the rear car's two files rock as one.
+/// Round a bend the NF6D's cars stay level as in Omsi.exe: its `[rail_body_osc]` switches
+/// the body's motions off (no lever, decay 10000), so no car leans on the class's springs.
+/// The joints and the bogies keep their roles, and the rear car's two files move as one.
 #[test]
 #[ignore = "needs an OMSI 2 install with the NF6D add-on (OMSI_ROOT)"]
-fn the_cars_rock_and_the_bogies_do_not() {
+fn the_nf6ds_cars_stay_level_as_its_file_says() {
     let mut v = nf6d();
     frames(&mut v, 5);
     v.rail_sway = true;
@@ -163,15 +164,18 @@ fn the_cars_rock_and_the_bogies_do_not() {
     let part = |n: &str| list.iter().find(|p| p.0 == n).unwrap();
     assert_eq!(part("NF6D_C").2, SwayRole::Body);
     assert!(
-        part("NF6D_C").1 < -0.3 && part("NF6D_C").1 > -1.5,
-        "the middle car leans out, a little: {}",
+        part("NF6D_C").1.abs() < 0.2,
+        "the middle car rides the rails' cross-level only: {}",
         part("NF6D_C").1
     );
     assert_eq!(part("NF6D_Gelenk_ACH").2, SwayRole::Joint);
     assert_eq!(part("NF6D_DrehgestellV").2, SwayRole::Gear);
     assert_eq!(part("NF6D_DrehgestellV").1, 0.0);
     assert_eq!(part("NF6D_B").1, part("NF6D_B_User").1, "one car");
-    assert!(roll_seen < 0.0);
+    assert!(
+        roll_seen.abs() < 0.2,
+        "the rear car does not lean: {roll_seen}"
+    );
 }
 
 /// A destination picked from openOMSI's list (as `game_lists` does it) reaches both cabs'

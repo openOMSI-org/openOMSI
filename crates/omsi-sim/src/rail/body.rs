@@ -45,6 +45,9 @@ pub struct BodyParams {
     pub quality: f32,
     /// Track in a bend is canted (a railway's outer rail is raised; street track is flat).
     pub canted: bool,
+    /// Heave, pitch and roll that the car's file switches off: the body follows the rails in
+    /// them without a swing of its own, and leans only by its file's lever.
+    pub rigid: [bool; 3],
 }
 
 impl BodyParams {
@@ -72,21 +75,42 @@ impl BodyParams {
             roll_damping: damping,
             quality,
             canted,
+            rigid: [false; 3],
         }
     }
 
-    /// The class's car with the roll its file gives: `[rail_body_osc]` is the lever, then the
-    /// roll's angular frequency (rad/s) and its decay `d` (a swing dies as e^(-d t / 2),
-    /// Omsi.exe 0x7f2a18). Many files switch it off (the NF6D's `0 1 10000`: no lever, gone
-    /// at once): those cars ride on the class's springs.
+    /// The class's car with the motions its file gives: `[rail_body_osc]` is the lever, then
+    /// angular frequency (rad/s) and decay `d` (a swing dies as e^(-d t / 2), Omsi.exe
+    /// 0x7f2a18) of the roll, the pitch and the heave. A motion whose decay is 4 times its
+    /// frequency or more, or that has no frequency, is switched off: gone at once, the body
+    /// follows the rails in it (the NF6D's `0`, then `1 10000` three times: no lever, no
+    /// motion of its own at all). A file without `[rail_body_osc]` rides on the class's
+    /// springs.
     pub fn for_car(def: &omsi_vehicle::Vehicle, class: RailClass, bogie_span: f32) -> BodyParams {
         let mut p = BodyParams::of(class, bogie_span);
-        if let Some([arm, omega, d, ..]) = def.rail_body_osc {
-            if arm > 0.0 && omega > 0.0 && d >= 0.0 && d < 4.0 * omega {
-                p.roll_arm = arm;
-                p.roll_hz = omega / std::f32::consts::TAU;
-                p.roll_damping = d / (2.0 * omega);
-            }
+        let Some([arm, osc @ ..]) = def.rail_body_osc else {
+            return p;
+        };
+        let swings = |omega: f32, d: f32| omega > 0.0 && d >= 0.0 && d < 4.0 * omega;
+        let tau = std::f32::consts::TAU;
+        p.roll_arm = arm.max(0.0);
+        let [roll, pitch, heave] = [0, 1, 2].map(|k| (osc[2 * k], osc[2 * k + 1]));
+        if swings(roll.0, roll.1) {
+            p.roll_hz = roll.0 / tau;
+            p.roll_damping = roll.1 / (2.0 * roll.0);
+        } else {
+            p.rigid[2] = true;
+            p.roll_hz = roll.0.max(0.0) / tau;
+        }
+        if swings(pitch.0, pitch.1) {
+            p.pitch_hz = pitch.0 / tau;
+        } else {
+            p.rigid[1] = true;
+        }
+        if swings(heave.0, heave.1) {
+            p.heave_hz = heave.0 / tau;
+        } else {
+            p.rigid[0] = true;
         }
         p
     }
@@ -236,6 +260,19 @@ impl Body {
             self.th += self.thv * h;
             self.phv += aph * h;
             self.ph += self.phv * h;
+            // a motion the file switches off follows the rails, the roll leaning by the
+            // file's lever as far as its spring holds it (none without a lever or spring)
+            if p.rigid[0] {
+                (self.z, self.zv) = (u[0], du[0]);
+                a_vert = 0.0;
+            }
+            if p.rigid[1] {
+                (self.th, self.thv) = (u[1], du[1]);
+            }
+            if p.rigid[2] {
+                let lean = if wr > 0.0 { m_roll / (wr * wr) } else { 0.0 };
+                (self.ph, self.phv) = (u[2] + lean, du[2]);
+            }
         }
         // what is felt: the body's integrated vertical acceleration (the springs act on the
         // body's motion relative to the rails, base excitation included) plus the lean's share
@@ -273,6 +310,55 @@ mod tests {
             quality: 0.0,
             ..tram()
         }
+    }
+
+    /// A file that switches its body's motions off (the NF6D's `[rail_body_osc]`: no lever,
+    /// decay 10000 against a frequency of 1) gets no lean, dip or bounce of its own, not the
+    /// class's springs; the same car without the section leans in a bend.
+    #[test]
+    fn a_body_its_file_switches_off_does_not_lean_or_rock() {
+        let mut def = omsi_vehicle::Vehicle {
+            rail_body_osc: Some([0.0, 1.0, 10000.0, 1.0, 10000.0, 1.0, 10000.0]),
+            ..Default::default()
+        };
+        let off = BodyParams {
+            quality: 0.0,
+            ..BodyParams::for_car(&def, RailClass::Tram, 8.0)
+        };
+        assert_eq!(off.rigid, [true; 3]);
+        let out = settle(&mut Body::new(1), &off, 8.0, 8.0, -1.3, 8.0 / 50.0);
+        assert!(
+            out.roll_deg.abs() < 1e-4 && out.pitch_deg.abs() < 1e-4 && out.heave.abs() < 1e-6,
+            "{out:?}"
+        );
+        // on uneven track it rides the rails: its roll is their cross-level
+        let rough = BodyParams::for_car(&def, RailClass::Tram, 8.0);
+        let mut b = Body::new(1);
+        let out = settle(&mut b, &rough, 4.0, 8.0, 0.0, 0.0);
+        assert!(out.roll_deg.abs() < 0.2, "{out:?}");
+        def.rail_body_osc = None;
+        let class = BodyParams {
+            quality: 0.0,
+            ..BodyParams::for_car(&def, RailClass::Tram, 8.0)
+        };
+        let leans = settle(&mut Body::new(1), &class, 8.0, 8.0, 0.0, 8.0 / 50.0);
+        assert!(leans.roll_deg < -0.8, "{leans:?}");
+    }
+
+    /// A file's own swing is taken: its lever, roll, pitch and heave frequencies.
+    #[test]
+    fn a_body_its_file_lets_swing_takes_the_files_springs() {
+        let def = omsi_vehicle::Vehicle {
+            rail_body_osc: Some([0.6, 6.0, 3.0, 8.0, 4.0, 7.0, 3.5]),
+            ..Default::default()
+        };
+        let p = BodyParams::for_car(&def, RailClass::Tram, 8.0);
+        assert_eq!(p.rigid, [false; 3]);
+        let tau = std::f32::consts::TAU;
+        assert!((p.roll_arm - 0.6).abs() < 1e-6);
+        assert!((p.roll_hz - 6.0 / tau).abs() < 1e-6);
+        assert!((p.pitch_hz - 8.0 / tau).abs() < 1e-6);
+        assert!((p.heave_hz - 7.0 / tau).abs() < 1e-6);
     }
 
     #[test]
@@ -408,13 +494,16 @@ mod tests {
         );
         assert_eq!(own.roll_arm, 0.1);
         assert!((own.roll_hz - 0.955).abs() < 0.01 && (own.roll_damping - 0.5).abs() < 1e-6);
-        // the NF6D's rides on the class's springs
+        // the NF6D's switches it off (see `a_body_its_file_switches_off_does_not_lean_or_rock`);
+        // a car without the section rides on the class's springs
         let off = BodyParams::for_car(
             &car([0.0, 1.0, 10000.0, 1.0, 10000.0, 1.0, 10000.0]),
             RailClass::Tram,
             8.0,
         );
-        assert_eq!(off, BodyParams::of(RailClass::Tram, 8.0));
+        assert_eq!(off.rigid, [true; 3]);
+        let class = BodyParams::for_car(&Default::default(), RailClass::Tram, 8.0);
+        assert_eq!(class, BodyParams::of(RailClass::Tram, 8.0));
         // both lean, and the street tram of the class by what a real one does: 0.1 to 0.3 of
         // a radian per g
         let lean = |p: BodyParams| {
@@ -429,8 +518,8 @@ mod tests {
             .roll_deg
             .abs()
         };
-        assert!(lean(own) > 0.1 && lean(own) < lean(off));
-        let per_g = lean(off).to_radians() / (1.28 / G);
+        assert!(lean(own) > 0.1 && lean(own) < lean(class));
+        let per_g = lean(class).to_radians() / (1.28 / G);
         assert!((0.1..=0.3).contains(&per_g), "{per_g}");
     }
 
