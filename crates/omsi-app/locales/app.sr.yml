@@ -4378,3 +4378,8 @@
 "At most 5": "Najviše 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Fascikle objekata i splajnova koje ne koristi nijedna druga mapa brišu se zajedno s njim: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Fascikle objekata i splajnova koje druga mapa još koristi ostaju: {n}."
+"Load a situation...": "Učitaj situaciju..."
+"Enter saves, Esc cancels": "Enter čuva, Esc otkazuje"
+"Save under a name...": "Sačuvaj pod imenom..."
+"No saved situation of this map yet": "Još nema sačuvanih situacija za ovu mapu"
+"Saved as \"{}\"": "Sačuvano kao „{}“"

@@ -3610,3 +3610,8 @@
 "At most 5": "最多5辆"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地图都未使用的物体和样条文件夹会一并删除：{n} 个，{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "其他地图仍在使用的物体和样条文件夹会保留：{n} 个。"
+"Load a situation...": "加载场景..."
+"Enter saves, Esc cancels": "Enter 保存,Esc 取消"
+"Save under a name...": "以名称保存..."
+"No saved situation of this map yet": "这张地图还没有已保存的场景"
+"Saved as \"{}\"": "已保存为“{}”"

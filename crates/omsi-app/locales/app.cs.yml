@@ -3233,3 +3233,8 @@
 "At most 5": "Nejvýše 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Složky objektů a splajnů, které nepoužívá žádná jiná mapa, se smažou spolu s ním: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Složky objektů a splajnů, které ještě používá jiná mapa, zůstanou: {n}."
+"Load a situation...": "Načíst situaci..."
+"Enter saves, Esc cancels": "Enter uloží, Esc zruší"
+"Save under a name...": "Uložit pod názvem..."
+"No saved situation of this map yet": "Pro tuto mapu zatím není uložená žádná situace"
+"Saved as \"{}\"": "Uloženo jako „{}“"

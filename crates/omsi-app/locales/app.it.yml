@@ -3236,3 +3236,8 @@
 "At most 5": "Al massimo 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Le cartelle di oggetti e spline che nessun'altra mappa usa vengono eliminate insieme: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Le cartelle di oggetti e spline che un'altra mappa usa ancora vengono mantenute: {n}."
+"Load a situation...": "Carica una situazione..."
+"Enter saves, Esc cancels": "Invio salva, Esc annulla"
+"Save under a name...": "Salva con un nome..."
+"No saved situation of this map yet": "Ancora nessuna situazione salvata di questa mappa"
+"Saved as \"{}\"": "Salvato come «{}»"

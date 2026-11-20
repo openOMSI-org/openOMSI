@@ -4378,3 +4378,8 @@
 "At most 5": "最多 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地圖都未使用的物件與樣條資料夾會一併刪除：{n} 個，{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "其他地圖仍在使用的物件與樣條資料夾會保留：{n} 個。"
+"Load a situation...": "載入情境..."
+"Enter saves, Esc cancels": "Enter 儲存,Esc 取消"
+"Save under a name...": "另存名稱..."
+"No saved situation of this map yet": "這張地圖還沒有已儲存的情境"
+"Saved as \"{}\"": "已儲存為「{}」"

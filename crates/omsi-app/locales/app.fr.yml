@@ -4378,3 +4378,8 @@
 "At most 5": "Au plus 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Les dossiers d'objets et de splines qu'aucune autre carte n'utilise sont supprimés avec lui : {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Les dossiers d'objets et de splines qu'une autre carte utilise encore restent : {n}."
+"Load a situation...": "Charger une situation..."
+"Enter saves, Esc cancels": "Entrée enregistre, Échap annule"
+"Save under a name...": "Enregistrer sous un nom..."
+"No saved situation of this map yet": "Aucune situation enregistrée pour cette carte"
+"Saved as \"{}\"": "Enregistré sous « {} »"
