@@ -989,7 +989,9 @@ pub struct HostConfig {
 }
 
 impl HostConfig {
-    /// The host next to the running program and, off Windows, `wine` from the path.
+    /// The host next to the running program and, off Windows, `wine` from the path; the
+    /// plugins switched off in the launcher and where the session's status goes, both in
+    /// `~/.openomsi` (`omsi_lan::data_dir`, the launcher's `data_dir`).
     pub fn detect() -> HostConfig {
         let exe_dir = std::env::current_exe()
             .ok()
@@ -1031,10 +1033,14 @@ impl HostConfig {
                         .find(|p| p.is_file())
                 })
         };
+        let data = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(|h| PathBuf::from(h).join(".openomsi"));
         HostConfig {
             host32,
             runner,
-            ..Default::default()
+            off: data.as_deref().map(status::read_off).unwrap_or_default(),
+            status_file: data.map(|d| d.join(status::STATUS_FILE)),
         }
     }
 }
