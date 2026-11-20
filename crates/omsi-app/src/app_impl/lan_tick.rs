@@ -75,7 +75,7 @@ impl App {
                 }
             }
         }
-        super::lan_accident::exchange(lan, self.session.traffic.as_mut(), dt);
+        super::accident::exchange(lan, self.session.traffic.as_mut(), dt);
         let setup_ms = lan_tick_started.elapsed().as_secs_f64() * 1000.0;
         let phase = std::time::Instant::now();
         let sent = {
@@ -184,18 +184,18 @@ impl App {
         if self.plugin_lan_message(from, text) {
             return;
         }
+        if super::accident::on_command(
+            self.net.lan.as_mut(),
+            self.session.traffic.as_mut(),
+            from,
+            text,
+        ) {
+            return;
+        }
         let Some(command) = Command::parse(from, text) else {
             log::info!("LAN: command '{text}' from player {from} not taken");
             return;
         };
-        if super::lan_accident::on_command(
-            self.net.lan.as_mut(),
-            self.session.traffic.as_mut(),
-            from,
-            &command,
-        ) {
-            return;
-        }
         match command {
             // a switch worked by a passenger of ours: only by one who is in our bus
             Command::Trigger(ev) => {

@@ -214,29 +214,7 @@ impl App {
                 );
             }
         }
-        if let Some(p) = self.player.as_ref() {
-            let lit = |n: &str| p.vehicle.var(n).is_some_and(|v| v > 0.5);
-            let both = lit("lights_blinker_l") && lit("lights_blinker_r");
-            self.menus.game_panels.hazard_watch.step(dt, both);
-        }
-        // (the personnel file's third `[crashs]` count is leaving the scene)
-        if let Some(t) = self.session.traffic.as_mut() {
-            let (new, fled) = (t.take_accidents(), t.take_fled());
-            if fled > 0 {
-                self.session.career.crashes[2] += fled as i32;
-                self.service_msg = Some((
-                    "You left the scene of the accident without calling the police".into(),
-                    8.0,
-                ));
-            } else if new > 0 {
-                self.service_msg = Some((
-                    "Accident! Stop, switch on the hazard lights and call the police".into(),
-                    8.0,
-                ));
-            }
-        }
-        self.menus.game_panels.accident_open =
-            self.session.traffic.as_ref().is_some_and(|t| t.accident_open());
+        self.accident_frame(dt);
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

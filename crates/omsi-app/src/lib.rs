@@ -74,7 +74,6 @@ mod rail_drive;
 use omsi_scene::driver;
 use omsi_scene::export;
 pub(crate) use omsi_scene::hud;
-mod hazard;
 mod humans;
 use omsi_career::journey;
 use omsi_input::keys;
