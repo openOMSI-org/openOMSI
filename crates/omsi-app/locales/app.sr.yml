@@ -4378,3 +4378,5 @@
 "At most 5": "Najviše 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Fascikle objekata i splajnova koje ne koristi nijedna druga mapa brišu se zajedno s njim: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Fascikle objekata i splajnova koje druga mapa još koristi ostaju: {n}."
+"Lights in fog at full resolution": "Svetla u magli u punoj rezoluciji"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in fog": "Enhanced: svetlo lampi i farova u magli, kiši i snegu računa se za svaki piksel - bez stepenica i pruga duž ograda, drveća i daleke zemlje; u magli košta malo vremena po kadru"

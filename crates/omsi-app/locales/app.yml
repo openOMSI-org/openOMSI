@@ -8761,3 +8761,7 @@ _version: 2
   en: "Folders of objects and splines that no other map uses go with it: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.":
   en: "Folders of objects and splines that another map still uses stay: {n}."
+"Lights in fog at full resolution":
+  en: "Lights in fog at full resolution"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in fog":
+  en: "Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in fog"

@@ -3218,3 +3218,5 @@
 "At most 5": "Не больш за 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Тэчкі аб'ектаў і сплайнаў, якія не выкарыстоўвае ніводная іншая мапа, выдаляюцца разам з ім: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Тэчкі аб'ектаў і сплайнаў, якія яшчэ выкарыстоўвае іншая мапа, застаюцца: {n}."
+"Lights in fog at full resolution": "Агні ў тумане ў поўным разрозненні"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in fog": "Enhanced: святло ліхтароў і фар у тумане, дажджы і снезе разлічваецца для кожнага пікселя - без прыступак і палос уздоўж платоў, дрэў і далёкай зямлі; у тумане крыху павялічвае час кадра"

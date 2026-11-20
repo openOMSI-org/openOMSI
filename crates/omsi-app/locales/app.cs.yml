@@ -3233,3 +3233,5 @@
 "At most 5": "Nejvýše 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Složky objektů a splajnů, které nepoužívá žádná jiná mapa, se smažou spolu s ním: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Složky objektů a splajnů, které ještě používá jiná mapa, zůstanou: {n}."
+"Lights in fog at full resolution": "Světla v mlze v plném rozlišení"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in fog": "Enhanced: světlo lamp a světlometů v mlze, dešti a sněhu počítané pro každý pixel - žádné schody ani pruhy podél plotů, stromů a vzdálené země; v mlze stojí trochu času snímku"

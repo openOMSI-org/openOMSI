@@ -70,7 +70,7 @@ impl Renderer {
                     // the fog, no shafts to see - and the half-size pass works out only the
                     // row with how much of the sun is seen)
                     let glare_only = !fog_lamps && !shafts;
-                    let u = FogLampUniform { inv_view_proj: vp_mat.inverse().to_cols_array_2d(), size: [width as f32, height as f32, if glare_only { 2.0 } else if glare { 1.0 } else { 0.0 }, droplets] };
+                    let u = FogLampUniform { inv_view_proj: vp_mat.inverse().to_cols_array_2d(), size: [width as f32, height as f32, if glare_only { 2.0 } else if glare { 1.0 } else { 0.0 }, droplets], opts: [if self.options.fog_full_res { 1.0 } else { 0.0 }, 0.0, 0.0, 0.0] };
                     self.queue.write_buffer(&self.lights.fog_lamps_buf, 0, bytemuck::bytes_of(&u));
                     let h = &self.targets.hdr_targets[&(width, height)];
                     let view = h.puddles.as_ref().filter(|_| puddles_on).map_or(&h.view, |p| &p.view);

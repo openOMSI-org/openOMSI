@@ -3610,3 +3610,5 @@
 "At most 5": "最多5辆"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地图都未使用的物体和样条文件夹会一并删除：{n} 个，{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "其他地图仍在使用的物体和样条文件夹会保留：{n} 个。"
+"Lights in fog at full resolution": "雾中灯光全分辨率"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in fog": "Enhanced: 雾、雨、雪中路灯和前灯的光逐像素计算 - 围栏、树木和远处地面不再出现阶梯或条纹；雾中会略微增加每帧时间"

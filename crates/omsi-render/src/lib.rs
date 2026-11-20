@@ -382,6 +382,8 @@ pub struct RenderOptions {
     /// The glare round bright lights and the lamps' halo in the night air (the settings'
     /// `light_glow`).
     pub light_glow: bool,
+    /// The lamps' light in fog worked out per pixel, not gathered from half size (`fog_full_res`).
+    pub fog_full_res: bool,
     pub puddle_reflections: bool,
     pub max_scene: Option<(u32, u32)>,
     pub detailed_trees: bool,
@@ -418,6 +420,7 @@ impl Default for RenderOptions {
             light_shadows: 1,
             cloud_shadows: false,
             light_glow: false,
+            fog_full_res: false,
             puddle_reflections: true,
             max_scene: None,
             detailed_trees: false,

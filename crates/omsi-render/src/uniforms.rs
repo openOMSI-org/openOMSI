@@ -163,6 +163,8 @@ pub(crate) struct EnhancedUniform {
 pub(crate) struct FogLampUniform {
     pub(crate) inv_view_proj: [[f32; 4]; 4],
     pub(crate) size: [f32; 4],
+    /// x: 1 with `RenderOptions::fog_full_res` (fog_lamps.wgsl `full_size_air_light`).
+    pub(crate) opts: [f32; 4],
 }
 
 #[repr(C)]

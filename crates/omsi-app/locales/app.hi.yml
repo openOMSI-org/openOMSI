@@ -3218,3 +3218,5 @@
 "At most 5": "अधिकतम 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "जिन ऑब्जेक्ट और स्प्लाइन फ़ोल्डरों को कोई दूसरा मैप इस्तेमाल नहीं करता, वे भी साथ में हट जाते हैं: {n}, {size}।"
 "Folders of objects and splines that another map still uses stay: {n}.": "जिन ऑब्जेक्ट और स्प्लाइन फ़ोल्डरों को कोई दूसरा मैप अब भी इस्तेमाल करता है, वे बने रहते हैं: {n}।"
+"Lights in fog at full resolution": "कोहरे में रोशनी पूर्ण रिज़ॉल्यूशन पर"
+"Enhanced: the lamps' and headlamps' light in fog, rain and snow worked out for every pixel - no steps or stripes along fences, trees and far ground; costs some frame time in fog": "Enhanced: कोहरे, बारिश और बर्फ़ में लैंप और हेडलैंप की रोशनी हर पिक्सेल के लिए गणना की जाती है - बाड़ों, पेड़ों और दूर की ज़मीन पर कोई सीढ़ियाँ या धारियाँ नहीं; कोहरे में फ़्रेम समय थोड़ा बढ़ता है"
