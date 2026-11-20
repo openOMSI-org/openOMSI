@@ -47,6 +47,7 @@ objc2-metal = { version = "0.3.2", default-features = false, features = ["std", 
 libc.workspace = true
 
 [dev-dependencies]
+image.workspace = true
 naga = { workspace = true, features = ["spv-out", "glsl-out", "hlsl-out"] }
 env_logger.workspace = true
 

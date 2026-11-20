@@ -147,6 +147,7 @@ fn ray_traced_frames_raise_no_device_error() {
         lum.iter().max().copied().unwrap_or(0),
     );
     println!("picture luminance {lo}..{hi}");
+    save_picture("rt_smoke", 320, 180, &last);
     assert!(
         errors.is_empty(),
         "device errors:\n{}",
@@ -332,4 +333,19 @@ fn a_map_sized_scene_traces_without_device_errors() {
         "device errors:\n{}",
         errors.join("\n---\n")
     );
+}
+
+/// RENDER_SMOKE_PNG=<folder>: the last frame written there as PNG (CI keeps it, to compare
+/// the backends and the two renderers by eye)
+fn save_picture(name: &str, w: u32, h: u32, rgba: &[u8]) {
+    let Some(dir) = std::env::var_os("RENDER_SMOKE_PNG") else {
+        return;
+    };
+    let dir = std::path::PathBuf::from(dir);
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join(format!("{name}.png"));
+    match image::RgbaImage::from_raw(w, h, rgba.to_vec()).map(|img| img.save(&path)) {
+        Some(Ok(())) => println!("picture written to {}", path.display()),
+        other => println!("no picture written to {}: {other:?}", path.display()),
+    }
 }
