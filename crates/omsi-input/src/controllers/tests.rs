@@ -666,12 +666,22 @@ mod button_tests {
 
     #[test]
     fn unmapped_button_codes_remain_stable_across_presses() {
-        assert_eq!(super::stable_unknown_button("Test Pad", 0xabc), Some(82));
-        assert_eq!(super::stable_unknown_button("Test Pad", 0xdef), Some(83));
-        assert_eq!(super::stable_unknown_button("Test Pad", 0xabc), Some(82));
-        assert_eq!(super::stable_unknown_button("Test Pad", 0x123), Some(84));
-        assert_eq!(super::stable_unknown_button("Test Pad", 0xdef), Some(83));
-        assert_eq!(super::stable_unknown_button("Test Pad", 0xabc), Some(82));
+        let first = super::stable_unknown_button("Test Pad A", 0xabc);
+        let second = super::stable_unknown_button("Test Pad A", 0xdef);
+        assert_eq!(first, Some(116));
+        assert_eq!(second, Some(107));
+        assert_ne!(first, second);
+
+        // Interleaved device events produce consistent IDs
+        let other = super::stable_unknown_button("Test Pad B", 0x123);
+        assert_eq!(other, Some(97));
+        assert_eq!(super::stable_unknown_button("Test Pad A", 0xabc), first);
+        assert_eq!(super::stable_unknown_button("Test Pad A", 0xdef), second);
+        assert_eq!(super::stable_unknown_button("Test Pad B", 0x123), other);
+
+        // Reversed press order retains exact button mapping
+        assert_eq!(super::stable_unknown_button("Test Pad A", 0xdef), second);
+        assert_eq!(super::stable_unknown_button("Test Pad A", 0xabc), first);
     }
 }
 

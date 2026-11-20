@@ -2704,20 +2704,10 @@ pub fn button_number(pad: &gilrs::Gamepad, code: gilrs::ev::Code) -> Option<usiz
     code_button(code.into_u32()).or_else(|| stable_unknown_button(pad.name(), code.into_u32()))
 }
 
-fn stable_unknown_button(device: &str, code: u32) -> Option<usize> {
-    static UNKNOWN: std::sync::Mutex<Vec<(String, u32)>> = std::sync::Mutex::new(Vec::new());
-    let mut table = UNKNOWN.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(pos) = table.iter().position(|(d, c)| d == device && *c == code) {
-        Some((82 + pos).min(HAT_BUTTONS - 1))
-    } else {
-        let count = table.iter().filter(|(d, _)| d == device).count();
-        if count < (HAT_BUTTONS - 82) {
-            table.push((device.to_string(), code));
-            Some(82 + count)
-        } else {
-            None
-        }
-    }
+fn stable_unknown_button(_device: &str, code: u32) -> Option<usize> {
+    let lo = (code & 0xFFFF) as usize;
+    let range = HAT_BUTTONS - 82;
+    Some(82 + (lo % range))
 }
 
 #[cfg(any(target_os = "linux", test))]
