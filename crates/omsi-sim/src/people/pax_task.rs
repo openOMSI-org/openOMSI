@@ -665,9 +665,17 @@ impl PeopleSim {
         // (with rear door boarding the door they stand at is what counts, #4055: one other
         // door being open does not send them away, but their own staying shut for
         // `DOOR_GIVE_UP` takes them back to the open ones - see `choose_entry`)
+        let walking_to_open_fallback = p.st == 1
+            && open
+            && p.door_since
+                .is_some_and(|s| self.time - s > DOOR_GIVE_UP * 0.5);
         let at_shut_door =
             p.st == 2 && (!bn.entry_open.iter().any(|o| *o) || (self.rear_door_boarding && !open));
-        let (since, give_up) = shut_door_wait(p.door_since, self.time, at_shut_door);
+        let (since, give_up) = if walking_to_open_fallback {
+            (p.door_since, false)
+        } else {
+            shut_door_wait(p.door_since, self.time, at_shut_door)
+        };
         self.pax_mut(i).unwrap().door_since = since;
         if give_up {
             if let Some(k) = p.seat {
