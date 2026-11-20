@@ -8761,3 +8761,51 @@ _version: 2
   en: "Folders of objects and splines that no other map uses go with it: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.":
   en: "Folders of objects and splines that another map still uses stay: {n}."
+"Lighting":
+  en: "Lighting"
+"Weather & effects":
+  en: "Weather & effects"
+"Mouse":
+  en: "Mouse"
+"Information on screen":
+  en: "Information on screen"
+"Support & reset":
+  en: "Support & reset"
+"Favourite settings":
+  en: "Favourite settings"
+"Game preferences":
+  en: "Game preferences"
+"Search all settings":
+  en: "Search all settings"
+"{n} options":
+  en: "{n} options"
+"Search results":
+  en: "Search results"
+"Remove from favourites: {name}":
+  en: "Remove from favourites: {name}"
+"Add to favourites: {name}":
+  en: "Add to favourites: {name}"
+"Remove from favourite settings":
+  en: "Remove from favourite settings"
+"Add to favourite settings":
+  en: "Add to favourite settings"
+"No favourite settings yet":
+  en: "No favourite settings yet"
+"Try a setting name or its English key.":
+  en: "Try a setting name or its English key."
+"Use the star beside a setting to keep it here.":
+  en: "Use the star beside a setting to keep it here."
+"About this setting":
+  en: "About this setting"
+"Save current graphics settings":
+  en: "Save current graphics settings"
+"Profiles only store graphics settings; window size and fullscreen are kept.":
+  en: "Profiles only store graphics settings; window size and fullscreen are kept."
+"Setting help":
+  en: "Setting help"
+"View help for {name}":
+  en: "View help for {name}"
+"Select Help beside a setting to see what it does.":
+  en: "Select Help beside a setting to see what it does."
+"No additional description is available for this setting.":
+  en: "No additional description is available for this setting."
