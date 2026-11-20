@@ -347,6 +347,7 @@ fn action_hint(id: &str) -> &'static str {
         "plugin" => "Open this add-on's tools",
         "skipstop" | "endduty" => "Manage the current tour",
         "tobus" => "Return to your own vehicle",
+        "police" => "Report the accident you were in",
         "photo" | "shot" => "Capture the current scene",
         "players" | "copycode" | "admin" => "Manage the multiplayer session",
         _ => "Open this tool",
