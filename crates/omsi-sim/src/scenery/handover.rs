@@ -99,12 +99,13 @@ impl SceneryState {
         }
     }
 
-    /// Whether switch object `id` is set to its path `path` (None: no such switch).
+    /// Whether switch object `id` is set to its path `path` (None: unknown switch or path).
     pub fn switch_set_to(&self, id: i64, path: u16) -> Option<bool> {
         let o = self.get(self.find(id)?);
+        let direction = *o.switch_dirs.get(path as usize)?;
         let val = switch_var_value(&o.inst)?;
-        if let Some(Some(d)) = o.switch_dirs.get(path as usize) {
-            Some((val - *d as f32).abs() < 0.5)
+        if let Some(d) = direction {
+            Some((val - d as f32).abs() < 0.5)
         } else if o.switch_dirs.iter().any(|d| d.is_some()) {
             let any_other_active = o
                 .switch_dirs
@@ -122,8 +123,14 @@ impl SceneryState {
     pub fn set_switches(&mut self, requests: &[(i64, u16)]) {
         for &(id, path) in requests {
             let Some(o) = self.find_mut(id) else { continue };
-            let target_d = if let Some(Some(d)) = o.switch_dirs.get(path as usize) {
-                *d as f32
+            let Some(&direction) = o.switch_dirs.get(path as usize) else {
+                continue;
+            };
+            let target_d = if let Some(d) = direction {
+                d as f32
+            } else if o.switch_dirs.contains(&Some(0)) {
+                // Zero selects an explicit branch here; the script has no known default value.
+                continue;
             } else if o.switch_dirs.iter().any(|d| d.is_some()) {
                 0.0
             } else {
@@ -317,6 +324,31 @@ mod tests {
         let other = SceneryInbox::default();
         s.take_inbox(&other);
         assert!(s.is_empty());
+    }
+
+    #[test]
+    fn invalid_switch_path_is_ignored() {
+        let inbox = SceneryInbox::default();
+        let mut s = SceneryState::default();
+        inbox.push(SceneryChange::Add(object(&inbox, 1, (0, 0))));
+        s.take_inbox(&inbox);
+        s.set_switches(&[(1, 1)]);
+        assert_eq!(s.switch_set_to(1, 2), None);
+        s.set_switches(&[(1, 2)]);
+        assert_eq!(s.switch_set_to(1, 1), Some(true));
+    }
+
+    #[test]
+    fn untagged_switch_path_does_not_select_an_explicit_zero_direction() {
+        let inbox = SceneryInbox::default();
+        let mut s = SceneryState::default();
+        let mut switch = object(&inbox, 1, (0, 0));
+        switch.switch_dirs = vec![None, Some(0), Some(1)];
+        inbox.push(SceneryChange::Add(switch));
+        s.take_inbox(&inbox);
+        s.set_switches(&[(1, 2), (1, 0)]);
+        assert_eq!(s.switch_set_to(1, 1), Some(false));
+        assert_eq!(s.switch_set_to(1, 2), Some(true));
     }
 
     /// A lamp's script is found by its key, whatever order the loader's threads handed the
