@@ -605,6 +605,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **The next arrow shows in the pause menu's Line and shift page**: the button beside the start time (and the next arrow of the vehicle pages) was an empty square, as the game had no `arrow_forward` icon to draw on it.
 - **A broken sound file is named in the log**: when no sound can be read from a file under a
   sound's name (a cut-off download, a web page), the warning now gives its path, its size and its
   first bytes. Before, the log only had the line `probe reach EOF at n bytes` with no file name,
@@ -615,6 +616,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   Only the trip itself is paged now, every page of a new trip goes out quickly, and the client
   keeps the last complete trip until the new one is whole. Both players need this version
   (LAN protocol 18) (#3957).
+- **Graphics in the processor (Intel UHD, AMD APUs) no longer run out of memory on big maps**:
+  their texture allowance came from what the driver may hand out in all, up to 30 % of it,
+  which on a 16 GB machine was 2.2 GB of textures beside a big map and the game itself, and the
+  device was lost. It is now a tenth of the machine's memory at most (at least 1000 MB)
+  (#2720).
 - **Pixel XC list rows no longer cut off**: on the MZKP SOR NBG 12, the direction and line lists
   of the Pixel XC display showed each row's text sliced along its middle. The text strip of
   every row is skewed a tenth of a millimetre over its tile, and was not taken as printed on

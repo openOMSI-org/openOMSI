@@ -19,3 +19,6 @@ fn 305 crates/omsi-app::run_input_script crates/omsi-app/src/input_script.rs
 fn 327 crates/omsi-net::receive crates/omsi-net/src/lib.rs
 fn 381 crates/omsi-render::plan_shadow_casters crates/omsi-render/src/passes/shadow_plan.rs
 fn 369 crates/omsi-render::prepare_ray_tracing crates/omsi-render/src/rt.rs
+fn 559 crates/omsi-navigator::draw crates/omsi-navigator/src/panel.rs
+fn 442 crates/omsi-navigator::draw_cards crates/omsi-navigator/src/panel/cards.rs
+fn 304 crates/omsi-navigator::frame crates/omsi-navigator/src/lib.rs
