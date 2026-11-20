@@ -38,14 +38,12 @@ fn is_place_var(name: &str) -> bool {
     PLACE_IN_TRAIN.iter().any(|p| p.eq_ignore_ascii_case(name))
 }
 
-/// Whether a coupled part needs a [`CarRun`]: its program reads its place in the train, or
-/// an animation, visibility or lamp of its model does.
+/// Whether a coupled part needs a [`CarRun`]: it has scripts of its own (a frame, and no
+/// `[scriptshare]` with the car in front), its program reads its place in the train, or an
+/// animation, visibility or lamp of its model does. Omsi.exe runs every car's own scripts,
+/// with or without control cables: its motor, brakes and the rest.
 pub(super) fn uses_place_in_train(ty: &VehicleType) -> bool {
-    // (a car with a frame of its own and plugs of control cables reads what the cars ahead
-    // send down them)
-    let wired = !ty.def.script_share
-        && !ty.program.frame.is_empty()
-        && !(ty.def.control_cable_front.is_empty() && ty.def.control_cable_back.is_empty());
+    let wired = !ty.def.script_share && !ty.program.frame.is_empty();
     let read_by_program = PLACE_IN_TRAIN
         .iter()
         .filter_map(|n| ty.program.var(n))
