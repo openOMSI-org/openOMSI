@@ -407,6 +407,15 @@ impl PeopleSim {
         }
     }
 
+    /// The key [`Self::cabins`] keeps the cabin of `v` under: its parts' files and which of
+    /// them are turned round.
+    pub fn cabin_key_of(v: &VehicleInstance) -> Vec<(PathBuf, bool)> {
+        cabin_key(&train_parts(v))
+            .into_iter()
+            .map(|(p, t)| (p.to_path_buf(), t))
+            .collect()
+    }
+
     /// [`Self::cabin_for`] where it was made already (None also where it is not yet).
     pub fn cabin_made(&self, v: &VehicleInstance) -> Option<Arc<Cabin>> {
         let parts = train_parts(v);
