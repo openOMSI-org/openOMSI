@@ -32,7 +32,11 @@ impl Eye {
     pub fn widened(mut self, extent: Option<(f64, f64)>) -> Eye {
         if let Some((tan_x, tan_y)) = extent {
             let half_diag = tan_x.hypot(tan_y).atan();
-            self.cos_half = self.cos_half.min((half_diag + 10f64.to_radians()).min(89f64.to_radians()).cos());
+            self.cos_half = self.cos_half.min(
+                (half_diag + 10f64.to_radians())
+                    .min(89f64.to_radians())
+                    .cos(),
+            );
         }
         self
     }
@@ -67,8 +71,7 @@ pub enum BusId {
     Ai(u64),
 }
 
-impl BusId {
-}
+impl BusId {}
 
 #[derive(Debug, Clone)]
 pub enum State {
@@ -143,6 +146,10 @@ pub struct Person {
     /// Seconds without getting nearer the goal while wanting to move; seconds left
     /// passing through others.
     pub stuck: f32,
+    /// Seconds spent wanting to walk and not moving at all, kept across the slip-pasts
+    /// above: a pedestrian the crowd cannot be blamed for (the pavement's own paths, a
+    /// bus standing over the crossing) is deleted here once it adds up (#3790).
+    pub stuck_total: f32,
     pub ghost: f32,
     /// Seconds a standing vehicle has stood in the way (see the crowd step).
     pub car_wait: f32,
@@ -216,8 +223,13 @@ pub const OFF_PATH: f64 = 0.1;
 /// The corridor a walker at `pos` keeps to: none while they are still well off it. Eased
 /// into it at up to 0.6 m/s (twice a step) on top of walking there, the people getting off
 /// a bus slid sideways from its door to the pavement at twice their pace (#1033, #1079).
-pub fn path_corridor(pos: DVec2, corridor: Option<(DVec2, DVec2, f64)>) -> Option<(DVec2, DVec2, f64)> {
-    corridor.filter(|&(a, b, dev)| (crowd::clamp_to_corridor(pos, a, b, dev) - pos).length() <= OFF_PATH)
+pub fn path_corridor(
+    pos: DVec2,
+    corridor: Option<(DVec2, DVec2, f64)>,
+) -> Option<(DVec2, DVec2, f64)> {
+    corridor.filter(|&(a, b, dev)| {
+        (crowd::clamp_to_corridor(pos, a, b, dev) - pos).length() <= OFF_PATH
+    })
 }
 
 pub fn arrive(from: DVec2, to: DVec2, pace: f64) -> DVec2 {
@@ -506,15 +518,15 @@ pub fn map_human_types(root: &Path, list: &[String]) -> Vec<Arc<HumanType>> {
             format!("Humans/{rel}")
         };
         let path = omsi_cfg::resolve_path(root, &rel);
-        let ty = loaded.entry(path.to_string_lossy().to_lowercase()).or_insert_with(|| {
-            match HumanType::load(&path) {
+        let ty = loaded
+            .entry(path.to_string_lossy().to_lowercase())
+            .or_insert_with(|| match HumanType::load(&path) {
                 Ok(t) => Some(Arc::new(t)),
                 Err(e) => {
                     log::warn!("map human {}: {e:#}", path.display());
                     None
                 }
-            }
-        });
+            });
         if let Some(t) = ty {
             picked.push(t.clone());
         }

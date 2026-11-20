@@ -7,6 +7,13 @@ use super::*;
 const STEP_AWAY_S: f32 = 3.0;
 /// ...and is gone this long after getting off, looked at or not (Omsi.exe: at once).
 const GONE_AFTER_S: f32 = 10.0;
+/// Seconds a pedestrian may spend wanting to walk and not moving a step before it is
+/// deleted (#3790: the issue asks for one or two minutes). The pavement's own paths can
+/// leave somebody trampling in one place - a zebra whose kerb is too close, a lamp post on
+/// the line - and a bus standing over the crossing does the same, with no crowd to blame.
+/// The slip-past below gets people through a crowd; it never gets them out of a place no
+/// step leaves, and OMSI's people walked in place there for good.
+pub(crate) const STUCK_GONE_S: f32 = 120.0;
 
 /// Continue from a stop in the middle or at either end of a pavement lane.
 /// A zero-length first leg at the start of a lane must not turn into another
@@ -23,7 +30,11 @@ fn pavement_continuation(leg: Leg, lane_len: f32, pick: u64) -> Leg {
     } else {
         0.0
     };
-    Leg { lane: leg.lane, a: leg.b, b: end }
+    Leg {
+        lane: leg.lane,
+        a: leg.b,
+        b: end,
+    }
 }
 
 impl PeopleSim {
@@ -32,7 +43,12 @@ impl PeopleSim {
     /// step that would enter one, keeping the part of it along the wall. Somebody already
     /// inside one (a waiting place the map put in a shelter's box) is left alone - pushed
     /// out, they jumped. People used to walk through everything but the vehicles.
-    pub fn keep_out_of_walls(&mut self, world: &dyn World, who: &[usize], ground: &mut [(usize, Walker)]) {
+    pub fn keep_out_of_walls(
+        &mut self,
+        world: &dyn World,
+        who: &[usize],
+        ground: &mut [(usize, Walker)],
+    ) {
         const R: f64 = 0.22;
         const CELL: f64 = 12.0;
         let collision = world.collision();
@@ -56,10 +72,22 @@ impl PeopleSim {
                 continue;
             }
             let z = self.people[i].position.z;
-            let key = ((p0.x / CELL).floor() as i32, (p0.y / CELL).floor() as i32, z.floor() as i32);
-            let made = cells.get(&key).is_some_and(|(at, _)| now - at <= 2.0 && now >= *at);
+            let key = (
+                (p0.x / CELL).floor() as i32,
+                (p0.y / CELL).floor() as i32,
+                z.floor() as i32,
+            );
+            let made = cells
+                .get(&key)
+                .is_some_and(|(at, _)| now - at <= 2.0 && now >= *at);
             if !made {
-                let places = places.get_or_insert_with(|| world.waiting_places().iter().map(|w| w.1.truncate()).collect());
+                let places = places.get_or_insert_with(|| {
+                    world
+                        .waiting_places()
+                        .iter()
+                        .map(|w| w.1.truncate())
+                        .collect()
+                });
                 let c = DVec2::new((key.0 as f64 + 0.5) * CELL, (key.1 as f64 + 0.5) * CELL);
                 let probe = crate::collision::Obb {
                     center: c,
@@ -73,14 +101,29 @@ impl PeopleSim {
                     id: -1,
                 };
                 let near = collision.obstacles_near(&probe);
-                let reach = near.iter().map(|o| (o.center - c).length() + o.half.length() + 1.0).fold(0.0, f64::max);
-                let local: Vec<DVec2> = places.iter().copied().filter(|q| (*q - c).length() < reach).collect();
-                let walls = near.into_iter()
+                let reach = near
+                    .iter()
+                    .map(|o| (o.center - c).length() + o.half.length() + 1.0)
+                    .fold(0.0, f64::max);
+                let local: Vec<DVec2> = places
+                    .iter()
+                    .copied()
+                    .filter(|q| (*q - c).length() < reach)
+                    .collect();
+                let walls = near
+                    .into_iter()
                     .filter(|o| {
                         // a shelter given as one solid box has its waiting places inside:
                         // people go in there
-                        let b = Block { center: o.center, half: o.half, heading: o.heading, vel: DVec2::ZERO };
-                        !local.iter().any(|q| (*q - o.center).length() < o.half.length() + 1.0 && b.near(*q, 0.3))
+                        let b = Block {
+                            center: o.center,
+                            half: o.half,
+                            heading: o.heading,
+                            vel: DVec2::ZERO,
+                        };
+                        !local.iter().any(|q| {
+                            (*q - o.center).length() < o.half.length() + 1.0 && b.near(*q, 0.3)
+                        })
                     })
                     .map(|o| {
                         (
@@ -103,7 +146,10 @@ impl PeopleSim {
                 if *z0 > z + 1.6 || *z1 < z + 0.5 {
                     continue;
                 }
-                if (w.pos - b.center).length_squared() >= b.half.length_squared() || !b.near(w.pos, 0.0) || b.near(p0, -0.01) {
+                if (w.pos - b.center).length_squared() >= b.half.length_squared()
+                    || !b.near(w.pos, 0.0)
+                    || b.near(p0, -0.01)
+                {
                     continue;
                 }
                 let (q, inside) = b.closest(w.pos);
@@ -112,7 +158,24 @@ impl PeopleSim {
                 }
                 // onto the wall's face, keeping the step along it
                 if omsi_cfg::flags::OMSI_DEBUG_WALLS.is_set() {
-                    log::info!("t={:.1} pax {} ({}) kept out of a wall ({:.1} x {:.1} m, heights {:.1}..{:.1}) at ({:.2}, {:.2}), its centre ({:.2}, {:.2}), want ({:.2}, {:.2}) vel ({:.2}, {:.2})", self.time, self.people[i].label(), self.people[i].state.name(), b.half.x * 2.0, b.half.y * 2.0, z0 - z, z1 - z, w.pos.x, w.pos.y, b.center.x, b.center.y, w.want.x, w.want.y, w.vel.x, w.vel.y);
+                    log::info!(
+                        "t={:.1} pax {} ({}) kept out of a wall ({:.1} x {:.1} m, heights {:.1}..{:.1}) at ({:.2}, {:.2}), its centre ({:.2}, {:.2}), want ({:.2}, {:.2}) vel ({:.2}, {:.2})",
+                        self.time,
+                        self.people[i].label(),
+                        self.people[i].state.name(),
+                        b.half.x * 2.0,
+                        b.half.y * 2.0,
+                        z0 - z,
+                        z1 - z,
+                        w.pos.x,
+                        w.pos.y,
+                        b.center.x,
+                        b.center.y,
+                        w.want.x,
+                        w.want.y,
+                        w.vel.x,
+                        w.vel.y
+                    );
                 }
                 let n = (q - w.pos).try_normalize().unwrap_or(DVec2::ZERO);
                 w.pos = q + n * 0.005;
@@ -153,23 +216,46 @@ impl PeopleSim {
     /// than 0.45 m from every path link, not on a seat): through a seat back or a wall.
     pub fn check_walls(&self) {
         for p in &self.people {
-            let Place::Bus(bus, local) = p.place else { continue };
+            let Place::Bus(bus, local) = p.place else {
+                continue;
+            };
             if matches!(&p.state, State::Pax(x) if x.task == Task::SittingInBus || x.st == 9) {
                 continue;
             }
-            let Some(bn) = self.last_buses.iter().find(|b| b.id == bus) else { continue };
+            let Some(bn) = self.last_buses.iter().find(|b| b.id == bus) else {
+                continue;
+            };
             let pts = &bn.cabin.graph.points;
             let mut best = f32::INFINITY;
             for &(a, b, _) in &bn.cabin.links {
-                let (Some(pa), Some(pb)) = (pts.get(a.max(0) as usize), pts.get(b.max(0) as usize)) else { continue };
+                let (Some(pa), Some(pb)) = (pts.get(a.max(0) as usize), pts.get(b.max(0) as usize))
+                else {
+                    continue;
+                };
                 let ab = *pb - *pa;
-                let t = if ab.length_squared() > 1e-6 { ((local - *pa).dot(ab) / ab.length_squared()).clamp(0.0, 1.0) } else { 0.0 };
+                let t = if ab.length_squared() > 1e-6 {
+                    ((local - *pa).dot(ab) / ab.length_squared()).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
                 let q = *pa + ab * t;
                 best = best.min((q.truncate() - local.truncate()).length() + (q.z - local.z).abs());
             }
-            let near_seat = bn.cabin.seats.iter().any(|s| (s.floor - local).truncate().length() < 0.35 || (s.pos - local).truncate().length() < 0.35);
+            let near_seat = bn.cabin.seats.iter().any(|s| {
+                (s.floor - local).truncate().length() < 0.35
+                    || (s.pos - local).truncate().length() < 0.35
+            });
             if best > 0.45 && !near_seat && !bn.cabin.links.is_empty() {
-                log::warn!("t={:.1} person {} in bus {:?} off the walkways by {best:.2} m at ({:.2}, {:.2}, {:.2}), state {}", self.time, p.id, bus, local.x, local.y, local.z, p.state.name());
+                log::warn!(
+                    "t={:.1} person {} in bus {:?} off the walkways by {best:.2} m at ({:.2}, {:.2}, {:.2}), state {}",
+                    self.time,
+                    p.id,
+                    bus,
+                    local.x,
+                    local.y,
+                    local.z,
+                    p.state.name()
+                );
             }
         }
     }
@@ -192,15 +278,35 @@ impl PeopleSim {
         let standing = matches!(self.people[i].state, State::Standing);
         let pos2 = self.people[i].position.truncate();
         // somebody walking on towards ground that is not loaded goes
-        if self.people[i].place == Place::Ground && self.people[i].vel.length_squared() > 1e-4 && !world.has_ground(pos2.x, pos2.y) {
+        if self.people[i].place == Place::Ground
+            && self.people[i].vel.length_squared() > 1e-4
+            && !world.has_ground(pos2.x, pos2.y)
+        {
             remove.push(i);
             return Want::stand(None, Activity::Stand);
         }
         if strolling {
+            // a pedestrian that has wanted to walk for two minutes and has not moved a step
+            // is deleted where it stands: nothing in the crowd keeps it there any more
+            // (#3790 - the slip-past moved people through each other, never off a kerb)
+            if self.people[i].stuck_total > STUCK_GONE_S {
+                if debug_pax() {
+                    log::info!(
+                        "t={:.1} pax {} has wanted to walk for {:.0} s without moving a step: deleted",
+                        self.time,
+                        self.people[i].label(),
+                        self.people[i].stuck_total
+                    );
+                }
+                self.people[i].why = "stuck for two minutes";
+                remove.push(i);
+                return Want::stand(None, Activity::Stand);
+            }
             let seen = self.seen(self.people[i].position);
             // (a stroller goes only once well out of everybody's range and out of sight -
             // not somebody put out to run for a bus, `runners`, which may be that far off)
-            let far = !self.put_out(self.people[i].id) && self.far_from_players(self.people[i].position, STROLL_RADIUS * 2.0);
+            let far = !self.put_out(self.people[i].id)
+                && self.far_from_players(self.people[i].position, STROLL_RADIUS * 2.0);
             let Some(net) = net else {
                 remove.push(i);
                 return Want::stand(None, Activity::Stand);
@@ -209,8 +315,17 @@ impl PeopleSim {
                 remove.push(i);
                 return Want::stand(None, Activity::Stand);
             }
-            let State::Strolling(w) = &mut self.people[i].state else { unreachable!() };
-            let rest = PedWalk { legs: Vec::new(), leg: w.leg, s: w.s, roam: w.roam, side: w.side, held: w.held };
+            let State::Strolling(w) = &mut self.people[i].state else {
+                unreachable!()
+            };
+            let rest = PedWalk {
+                legs: Vec::new(),
+                leg: w.leg,
+                s: w.s,
+                roam: w.roam,
+                side: w.side,
+                held: w.held,
+            };
             let mut walk = std::mem::replace(w, rest);
             let w = self.walk_want(i, &mut walk, net, traffic, cars, dt);
             self.people[i].state = State::Strolling(walk);
@@ -223,12 +338,17 @@ impl PeopleSim {
             // lane in reach looked every frame)
             let look = self.people[i].t_state % 1.0 < dt.max(1e-3);
             if let Some((net, leg)) = net.filter(|_| look).and_then(|net| {
-                self.ped.as_ref()
+                self.ped
+                    .as_ref()
                     .and_then(|ped| ped.nearest(net, self.people[i].position, 16.0))
                     .filter(|&(lane, at, _)| {
                         let (target, _) = net.lanes[lane].at(at);
                         net.lanes[lane].length() > 0.35
-                            && !crosses_street(net, self.people[i].position.truncate(), target.truncate())
+                            && !crosses_street(
+                                net,
+                                self.people[i].position.truncate(),
+                                target.truncate(),
+                            )
                     })
                     .map(|(lane, at, _)| (net, Leg { lane, a: at, b: at }))
             }) {
@@ -244,9 +364,14 @@ impl PeopleSim {
             let p = &self.people[i];
             if p.t_state < STEP_AWAY_S {
                 let h = p.heading.to_radians();
-                return Want { vel: DVec2::new(h.sin(), h.cos()) * p.pace.clamp(0.5, 1.5), ..Want::stand(Some(p.heading), Activity::Stand) };
+                return Want {
+                    vel: DVec2::new(h.sin(), h.cos()) * p.pace.clamp(0.5, 1.5),
+                    ..Want::stand(Some(p.heading), Activity::Stand)
+                };
             }
-            if p.t_state > GONE_AFTER_S || (!self.seen(p.position) && self.far_from_players(p.position, STROLL_RADIUS)) {
+            if p.t_state > GONE_AFTER_S
+                || (!self.seen(p.position) && self.far_from_players(p.position, STROLL_RADIUS))
+            {
                 remove.push(i);
             }
             Want::stand(None, Activity::Stand)
@@ -266,7 +391,13 @@ impl PeopleSim {
                 return Want::stand(None, Activity::Stand);
             }
             let pace = self.people[i].pace;
-            Want { vel: arrive(here, goal, pace), face: None, give: 0.35, corridor: None, idle: Activity::Stand }
+            Want {
+                vel: arrive(here, goal, pace),
+                face: None,
+                give: 0.35,
+                corridor: None,
+                idle: Activity::Stand,
+            }
         } else {
             Want::stand(None, Activity::Stand)
         }
@@ -480,7 +611,10 @@ impl PeopleSim {
         if !next.from_end(net) && !ped.as_deref().is_some_and(|p| p.is_tap(next.lane, next.a)) {
             return Ok(());
         }
-        if let Some(p) = ped.as_deref_mut().filter(|p| p.taps.contains_key(&next.lane)) {
+        if let Some(p) = ped
+            .as_deref_mut()
+            .filter(|p| p.taps.contains_key(&next.lane))
+        {
             if !p.crosses_on(net, next) {
                 return Ok(());
             }
@@ -512,8 +646,18 @@ impl PeopleSim {
         // takes, never less): a steady stream does not hold them for ever, but nobody walks
         // out in front of a car that is about to be there (after 45 s they used to ignore
         // the cars altogether)
-        let margin = if held > 45.0 { 0.0 } else if held > 20.0 { 1.0 } else { 2.5 };
-        let crossings = if ped.taps.contains_key(&next.lane) { ped.crossings_on(net, next) } else { ped.crossings(net, next.lane).to_vec() };
+        let margin = if held > 45.0 {
+            0.0
+        } else if held > 20.0 {
+            1.0
+        } else {
+            2.5
+        };
+        let crossings = if ped.taps.contains_key(&next.lane) {
+            ped.crossings_on(net, next)
+        } else {
+            ped.crossings(net, next.lane).to_vec()
+        };
         for x in crossings {
             for (p, v, half) in cars {
                 let rel = x - *p;
@@ -556,11 +700,17 @@ impl PeopleSim {
         let time = self.time;
         let p = &mut self.people[i];
         let speed = w.vel.length();
+        let actual_speed =
+            (w.pos - DVec2::new(p.position.x, p.position.y)).length() as f32 / dt.max(0.001);
         // somebody pressed against somebody else for seconds slips past them
-        if want.vel.length() > 0.2 && speed < 0.08 {
+        // (the second count is the one the map's own geometry runs up: it is not cleared by
+        // the slip-past, only by a step; see `STUCK_GONE_S`)
+        if want.vel.length() > 0.2 && actual_speed < 0.08 {
             p.stuck += dt;
-        } else if speed > 0.2 {
+            p.stuck_total += dt;
+        } else if actual_speed > 0.2 {
             p.stuck = 0.0;
+            p.stuck_total = 0.0;
         }
         p.detour = (p.detour - dt).max(0.0);
         if p.ghost > 0.0 {
@@ -691,16 +841,40 @@ mod pavement_recovery_tests {
 
     #[test]
     fn passenger_leaving_from_either_lane_end_keeps_walking() {
-        let start = pavement_continuation(Leg { lane: 7, a: 0.0, b: 0.0 }, 20.0, 0);
+        let start = pavement_continuation(
+            Leg {
+                lane: 7,
+                a: 0.0,
+                b: 0.0,
+            },
+            20.0,
+            0,
+        );
         assert_eq!((start.a, start.b), (0.0, 20.0));
-        let end = pavement_continuation(Leg { lane: 7, a: 20.0, b: 20.0 }, 20.0, 0);
+        let end = pavement_continuation(
+            Leg {
+                lane: 7,
+                a: 20.0,
+                b: 20.0,
+            },
+            20.0,
+            0,
+        );
         assert_eq!((end.a, end.b), (20.0, 0.0));
     }
 
     #[test]
     fn passenger_leaving_midway_takes_a_nonzero_path() {
         for pick in 0..2 {
-            let leg = pavement_continuation(Leg { lane: 2, a: 7.0, b: 7.0 }, 20.0, pick);
+            let leg = pavement_continuation(
+                Leg {
+                    lane: 2,
+                    a: 7.0,
+                    b: 7.0,
+                },
+                20.0,
+                pick,
+            );
             assert!(leg.len() >= 7.0);
         }
     }

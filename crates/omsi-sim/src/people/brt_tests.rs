@@ -60,6 +60,7 @@ pub(crate) fn setup(name: &str, trailer: Option<f32>) -> (PeopleSim, BusNow) {
         age: 40.0,
         stuck: 0.0,
         ghost: 0.0,
+        stuck_total: 0.0,
         car_wait: 0.0,
         detour: 0.0,
         detour_side: 0.0,
