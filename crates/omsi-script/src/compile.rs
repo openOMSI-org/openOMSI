@@ -955,18 +955,24 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    #[rustfmt::skip]
     fn same_frame_block(&self, left: BlockId, right: BlockId) -> bool {
         let (left, right) = (left as usize, right as usize);
-        if self.p.blocks[left].ops != self.p.blocks[right].ops {
-            return false;
+        let (b_l, b_r) = (&self.p.blocks[left], &self.p.blocks[right]);
+        if b_l.ops.len() != b_r.ops.len() { return false; }
+        for (op1, op2) in b_l.ops.iter().zip(&b_r.ops) {
+            match (op1, op2) {
+                (Op::PushStr(i1), Op::PushStr(i2)) => {
+                    if self.p.strings.get(*i1 as usize) != self.p.strings.get(*i2 as usize) { return false; }
+                }
+                _ if op1 != op2 => return false,
+                _ => {}
+            }
         }
         // Unresolved calls still have identical placeholder ops.
         let calls = |id| {
             let start = self.pending.partition_point(|(block, _, _)| *block < id);
-            self.pending[start..]
-                .iter()
-                .take_while(move |(block, _, _)| *block == id)
-                .map(|(_, op, name)| (op, name))
+            self.pending[start..].iter().take_while(move |(block, _, _)| *block == id).map(|(_, op, name)| (op, name))
         };
         calls(left).eq(calls(right))
     }
@@ -1395,29 +1401,25 @@ mod tests {
     }
 
     #[test]
+    #[rustfmt::skip]
     fn frame_blocks_compare_pending_macro_calls_before_deduplicating() {
         for kind in ["frame", "frame_ai"] {
-            let p = program_of(&format!(
-                "{{{kind}}}\n(M.L.first)\n{{end}}\n\
-                 {{{kind}}}\n(M.L.second)\n{{end}}\n\
-                 {{{kind}}}\n(M.L.first)\n{{end}}\n\
-                 {{macro:first}}\n1 (S.L.a)\n{{end}}\n\
-                 {{macro:second}}\n2 (S.L.b)\n{{end}}\n"
-            ));
-            let frames = match kind {
-                "frame" => &p.frame,
-                _ => &p.frame_ai,
-            };
+            let p = program_of(&format!("{{{kind}}}\n(M.L.first)\n{{end}}\n{{{kind}}}\n(M.L.second)\n{{end}}\n{{{kind}}}\n(M.L.first)\n{{end}}\n{{macro:first}}\n1 (S.L.a)\n{{end}}\n{{macro:second}}\n2 (S.L.b)\n{{end}}\n"));
+            let frames = match kind { "frame" => &p.frame, _ => &p.frame_ai };
             assert_eq!(frames.len(), 2, "{kind}");
             let (f0, f1) = (frames[0] as usize, frames[1] as usize);
             assert_ne!(p.blocks[f0].ops, p.blocks[f1].ops);
+
+            let p_str = program_of(&format!("{{{kind}}}\n\"x\" (S.$.name)\n{{end}}\n{{{kind}}}\n\"x\" (S.$.name)\n{{end}}\n{{{kind}}}\n\"y\" (S.$.name)\n{{end}}\n"));
+            let s_frames = match kind { "frame" => &p_str.frame, _ => &p_str.frame_ai };
+            assert_eq!(s_frames.len(), 2, "string literals {kind}");
         }
     }
 
     #[test]
+    #[rustfmt::skip]
     fn script_vars_track_varlists_distinct_from_builtins() {
-        let dir =
-            std::env::temp_dir().join(format!("omsi-script-test-vars-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("omsi-script-test-vars-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let vl = dir.join("varlist.txt");
         std::fs::write(&vl, "door_0\nPAX_Entry0_Open\n").unwrap();
