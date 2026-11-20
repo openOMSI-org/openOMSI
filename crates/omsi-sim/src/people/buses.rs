@@ -3,6 +3,15 @@
 
 use super::*;
 
+/// The first door leaf of a bus's exits, past its front door's: exits in standard OMSI city
+/// buses (2 or more front door leaves) begin at door_2 (middle door), while coaches with a
+/// single front door leaf begin at door_1. Exits must not be offset by the number of entries,
+/// because buses with all doors configured as entries (e.g. 3-door buses with 6 entries)
+/// still place middle-door exits at door_2/3 and rear-door exits at door_4/5.
+fn exit_door_base(n_entry: usize) -> usize {
+    if n_entry <= 1 { 1 } else { 2 }
+}
+
 impl PeopleSim {
     /// Whether the bus script reports `name`: it writes it (`PAX_*` are engine variables every
     /// vehicle has, so stock scripts set them without a varlist entry) or declares it.
@@ -87,7 +96,7 @@ impl PeopleSim {
     /// entry or exit, including buses whose front door is not an entry. Only an AI bus that
     /// says nothing of any door is taken to open them all while it boards.
     pub(super) fn reports_doors(v: &VehicleInstance, n_entry: usize, n_exit: usize) -> bool {
-        let base = if n_entry <= 1 { 1 } else { 2 };
+        let base = exit_door_base(n_entry);
         [("Entry", n_entry, 0), ("Exit", n_exit, base)]
             .into_iter()
             .any(|(kind, count, offset)| {
@@ -105,11 +114,7 @@ impl PeopleSim {
         n_exit: usize,
     ) -> (Vec<bool>, Vec<bool>) {
         let door_val = |k: usize| -> bool { v.door_anim(k).unwrap_or(0.0) > 0.5 };
-        // Exits in standard OMSI city buses (2 or more front door leaves) begin at door_2 (middle door),
-        // while coaches with a single front door leaf begin at door_1. Exits must not be offset by
-        // n_entry, because buses with all doors configured as entries (e.g. 3-door buses with 6 entries)
-        // still place middle-door exits at door_2/3 and rear-door exits at door_4/5.
-        let exit_door_base = if n_entry <= 1 { 1 } else { 2 };
+        let exit_door_base = exit_door_base(n_entry);
         let states = |kind: &str, n: usize, door: &dyn Fn(usize) -> bool| -> Vec<bool> {
             let mut out: Vec<bool> = Vec::with_capacity(n);
             for i in 0..n {
@@ -137,16 +142,31 @@ impl PeopleSim {
 
     /// [`Self::doors_open`] for the doors of `cabin`: one in a section that runs its own
     /// scripts (a train car, the NF6D's middle part) is open by that car's own
-    /// `PAX_Entry<n>_Open` / `PAX_Exit<n>_Open` (else its `door_<n>`), counted among its own
-    /// doors.
+    /// `PAX_Entry<n>_Open` / `PAX_Exit<n>_Open`, counted among its own doors. Without those
+    /// it follows the section's own door leaves as [`Self::doors_open`] numbers them: entry
+    /// `n` by `door_<n>`, exit `n` by the leaf past the section's front entry leaves.
     pub fn doors_open_cabin(v: &VehicleInstance, cabin: &Cabin) -> (Vec<bool>, Vec<bool>) {
         let (mut entry, mut exit) = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
         let own = |door: &Door, kind: &str| -> Option<bool> {
             let (part, n) = door.part;
-            let run = v.trailers.get(part.checked_sub(1)?)?.run.as_deref()?;
-            run.own(&format!("PAX_{kind}{n}_Open"))
-                .or_else(|| run.own(&format!("door_{n}")))
-                .map(|x| x > 0.5)
+            let car = v.trailers.get(part.checked_sub(1)?)?;
+            let run = car.run.as_deref()?;
+            // (every program has the `PAX_*_Open` variables: they count where the car's
+            // scripts declare or write them, as the leading vehicle's do)
+            let p = &car.ty.program;
+            let says =
+                |name: &str| p.has_script_var(name) || p.var(name).is_some_and(|id| p.stores(id));
+            let open = format!("PAX_{kind}{n}_Open");
+            if says(&open) {
+                return run.own(&open).map(|x| x > 0.5);
+            }
+            let leaf = if kind == "Exit" {
+                let entries = cabin.entries.iter().filter(|d| d.part.0 == part).count();
+                exit_door_base(entries) + n
+            } else {
+                n
+            };
+            run.own(&format!("door_{leaf}")).map(|x| x > 0.5)
         };
         for (open, door) in entry.iter_mut().zip(&cabin.entries) {
             if let Some(o) = own(door, "Entry") {
