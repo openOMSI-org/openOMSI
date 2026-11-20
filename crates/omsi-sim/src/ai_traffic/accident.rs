@@ -14,8 +14,6 @@ use crate::vehicle::DynamicImpact;
 pub const LOCAL: u32 = 0;
 /// Seconds between two sendings of a message that has not been answered.
 pub const RESEND: f32 = 0.5;
-/// Seconds a client keeps sending a hit: a car gone by then is gone on the host as well.
-const HIT_GIVE_UP: f32 = 10.0;
 /// The hits of each client the host remembers having carried out.
 const HITS_REMEMBERED: usize = 256;
 
@@ -49,26 +47,130 @@ pub enum AccidentMsg {
     },
 }
 
+impl AccidentMsg {
+    /// The message as a LAN command. A hit names its car by `-2 - obstacle_id`, the id the
+    /// host's traffic table gives it (a client's mirrored car has that id); None for a hit
+    /// that names none.
+    pub fn command(&self) -> Option<String> {
+        Some(match *self {
+            AccidentMsg::Hit { seq, hit } => {
+                let car = u32::try_from(-2 - hit.obstacle_id).ok()?;
+                let (p, d) = (hit.point, hit.push);
+                format!(
+                    "crash {seq} {car} {:.3} {:.3} {:.3} {:.4} {:.4} {:.4} {:.3} {:.1} {:.1}",
+                    p.x, p.y, p.z, d.x, d.y, d.z, hit.speed, hit.energy, hit.mass
+                )
+            }
+            AccidentMsg::HitSeen { seq } => format!("crash-seen {seq}"),
+            AccidentMsg::Police { seq } => format!("police {seq}"),
+            AccidentMsg::PoliceSeen { seq } => format!("police-seen {seq}"),
+            AccidentMsg::State {
+                seq,
+                open,
+                new,
+                fled,
+            } => format!("accident {seq} {} {new} {fled}", u8::from(open)),
+            AccidentMsg::StateSeen { seq } => format!("accident-seen {seq}"),
+        })
+    }
+
+    /// A LAN command read back; the host's own messages are taken only from the host. A
+    /// hit's `obstacle_id` is `-2 -` the car's traffic id.
+    pub fn parse(text: &str, from_host: bool) -> Option<AccidentMsg> {
+        let (verb, arg) = text.split_once(' ')?;
+        let n: Vec<f64> = arg
+            .split_whitespace()
+            .map(|x| x.parse::<f64>().ok().filter(|v| v.is_finite()))
+            .collect::<Option<_>>()?;
+        let seq = |v: f64| (v >= 0.0 && v <= u32::MAX as f64).then_some(v as u32);
+        let host = |m: AccidentMsg| from_host.then_some(m);
+        match (verb, n.as_slice()) {
+            ("crash", &[s, car, px, py, pz, dx, dy, dz, speed, energy, mass])
+                if speed >= 0.0 && energy >= 0.0 && mass >= 0.0 =>
+            {
+                Some(AccidentMsg::Hit {
+                    seq: seq(s)?,
+                    hit: DynamicImpact {
+                        obstacle_id: -2 - seq(car)? as i64,
+                        point: DVec3::new(px, py, pz),
+                        push: DVec3::new(dx, dy, dz),
+                        speed: speed as f32,
+                        energy: energy as f32,
+                        mass: mass as f32,
+                    },
+                })
+            }
+            ("police", &[s]) => Some(AccidentMsg::Police { seq: seq(s)? }),
+            ("accident-seen", &[s]) => Some(AccidentMsg::StateSeen { seq: seq(s)? }),
+            ("crash-seen", &[s]) => host(AccidentMsg::HitSeen { seq: seq(s)? }),
+            ("police-seen", &[s]) => host(AccidentMsg::PoliceSeen { seq: seq(s)? }),
+            ("accident", &[s, open, new, fled]) => host(AccidentMsg::State {
+                seq: seq(s)?,
+                open: open > 0.5,
+                new: seq(new)?,
+                fled: seq(fled)?,
+            }),
+            _ => None,
+        }
+    }
+}
+
+/// Whether a bus's hazard lights flash, for "Call the police". A bus without a hazard
+/// switch only shows its lamps, dark half of the time: read at one frame, hazards that are
+/// on looked off in every dark phase.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct HazardWatch {
+    since_both: Option<f32>,
+}
+
+/// Longer than an indicator's dark phase (about half a second in the stock scripts).
+pub const HAZARD_HOLD: f32 = 1.5;
+
+impl HazardWatch {
+    /// One frame of `dt` seconds: whether both indicator lamps are lit now.
+    pub fn step(&mut self, dt: f32, both_lit: bool) {
+        self.since_both = if both_lit {
+            Some(0.0)
+        } else {
+            self.since_both
+                .map(|t| t + dt.max(0.0))
+                .filter(|t| *t <= HAZARD_HOLD)
+        };
+    }
+
+    /// On: the script's hazard switch (`switch`) where it has one, else both lamps lit
+    /// together within the last `HAZARD_HOLD` seconds.
+    pub fn on(&self, switch: Option<f32>) -> bool {
+        match switch {
+            Some(s) => s > 0.5,
+            None => self.since_both.is_some(),
+        }
+    }
+}
+
+/// OMSI 2 (manual 2.11): the police are called with the bus standing and its hazard lights on.
+pub fn police_may_be_called(
+    hazard_switch: Option<f32>,
+    speed_kmh: f32,
+    watch: &HazardWatch,
+) -> bool {
+    watch.on(hazard_switch) && speed_kmh.abs() < 1.0
+}
+
 #[derive(Debug)]
 struct Outgoing<T> {
     msg: T,
-    /// Seconds to the next sending, and since the first.
+    /// Seconds to the next sending.
     wait: f32,
-    age: f32,
 }
 
 impl<T> Outgoing<T> {
     fn new(msg: T) -> Self {
-        Outgoing {
-            msg,
-            wait: 0.0,
-            age: 0.0,
-        }
+        Outgoing { msg, wait: 0.0 }
     }
 
     /// Whether to send it in this step of `dt` seconds.
     fn due(&mut self, dt: f32) -> bool {
-        self.age += dt;
         self.wait -= dt;
         if self.wait > 0.0 {
             return false;
@@ -236,10 +338,15 @@ impl TrafficSim {
         self.take_off(i, control::Removal::Unloaded)
     }
 
+    /// The LAN session began or ended: what was owed to the other side goes with it.
+    pub fn accident_session_changed(&mut self) {
+        self.accident.clients.clear();
+        self.accident.host = Host::default();
+    }
+
     /// Client: what to send the host in this step of `dt` seconds.
     pub fn accident_to_host(&mut self, dt: f32) -> Vec<AccidentMsg> {
         let host = &mut self.accident.host;
-        host.hits.retain(|h| h.age < HIT_GIVE_UP);
         let mut out: Vec<AccidentMsg> = host
             .hits
             .iter_mut()

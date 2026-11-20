@@ -31,7 +31,11 @@ impl TrafficSim {
         self.berths.release_car(c.id);
         self.removals[cause as usize] += 1;
         if self.debug_population {
-            log::info!("population t={:.1}: car {} taken off ({cause:?})", self.time, c.id);
+            log::info!(
+                "population t={:.1}: car {} taken off ({cause:?})",
+                self.time,
+                c.id
+            );
         }
         c
     }
@@ -41,7 +45,10 @@ impl TrafficSim {
     /// (see [`TrafficSim::space_taken_back`]). The cars are taken in the order they stand
     /// in the list, as the view sync took them one by one.
     pub fn take_parked(&mut self) -> Option<(AiCar, ParkPlan)> {
-        let i = self.cars.iter().position(|c| c.park.is_some_and(|p| p.done))?;
+        let i = self
+            .cars
+            .iter()
+            .position(|c| c.park.is_some_and(|p| p.done))?;
         let plan = self.cars[i].park?;
         Some((self.take_off(i, Removal::Finished), plan))
     }
@@ -49,7 +56,10 @@ impl TrafficSim {
     /// The parked object is back in the space of `plan`: a car of the traffic may park
     /// there no more, it is one of the lane's parked cars again.
     pub fn space_taken_back(&mut self, plan: &ParkPlan) {
-        self.parked.entry(plan.lane).or_default().push((plan.s, plan.lat));
+        self.parked
+            .entry(plan.lane)
+            .or_default()
+            .push((plan.s, plan.lat));
     }
 
     /// Take the car of id `id` off the road (`cause`), if it is on it.
@@ -86,7 +96,10 @@ impl TrafficSim {
         let n = new.len();
         if n > 0 {
             let added = self.net.extend(new, 1.5);
-            log::debug!("traffic: {n} lanes added for timetable routes that drive a one-way path the other way ({:?})", added);
+            log::debug!(
+                "traffic: {n} lanes added for timetable routes that drive a one-way path the other way ({:?})",
+                added
+            );
         }
         n
     }
@@ -121,8 +134,14 @@ impl TrafficSim {
         let pts: Vec<DVec3> = (0..=n)
             .map(|i| {
                 let t = i as f64 / n as f64;
-                let (h00, h10, h01, h11) = (2.0 * t * t * t - 3.0 * t * t + 1.0, t * t * t - 2.0 * t * t + t, -2.0 * t * t * t + 3.0 * t * t, t * t * t - t * t);
-                let xy = p0.truncate() * h00 + t0 * len_t * h10 + p1.truncate() * h01 + t1 * len_t * h11;
+                let (h00, h10, h01, h11) = (
+                    2.0 * t * t * t - 3.0 * t * t + 1.0,
+                    t * t * t - 2.0 * t * t + t,
+                    -2.0 * t * t * t + 3.0 * t * t,
+                    t * t * t - t * t,
+                );
+                let xy =
+                    p0.truncate() * h00 + t0 * len_t * h10 + p1.truncate() * h01 + t1 * len_t * h11;
                 DVec3::new(xy.x, xy.y, p0.z + (p1.z - p0.z) * t)
             })
             .collect();
@@ -132,14 +151,24 @@ impl TrafficSim {
         l.density = 0.0;
         l.no_cars = true;
         let added = self.net.extend(vec![l], 1.5);
-        log::debug!("traffic: a {len:.0} m connector lane {} from lane {a} to lane {b} for a timetable route", added.start);
+        log::debug!(
+            "traffic: a {len:.0} m connector lane {} from lane {a} to lane {b} for a timetable route",
+            added.start
+        );
         Some(added.start)
     }
 
     /// Hand timetable bus `ci` the next trip of its tour: its route from the lane it is on
     /// (`route[0]` is that lane, `s` where it is on it) and the trip's stops. It stays where
     /// it stands; a stop right there is served in place (its layover).
-    pub fn reroute(&mut self, ci: usize, route: Vec<usize>, s: f32, stops: Vec<(usize, f32, f32, f64, i64, f32)>, layover: bool) {
+    pub fn reroute(
+        &mut self,
+        ci: usize,
+        route: Vec<usize>,
+        s: f32,
+        stops: Vec<(usize, f32, f32, f64, i64, f32)>,
+        layover: bool,
+    ) {
         let net = &self.net;
         let car = &mut self.cars[ci];
         let lane = car.state.lane;
@@ -152,7 +181,10 @@ impl TrafficSim {
         car.state.ahead.clear();
         car.state.plan_next(net);
         car.gone = false;
-        let stops = stops.into_iter().map(super::bus_service::Stop::from_tuple).collect();
+        let stops = stops
+            .into_iter()
+            .map(super::bus_service::Stop::from_tuple)
+            .collect();
         let id = car.id;
         self.berths.release_car(id);
         let car = &mut self.cars[ci];
@@ -197,7 +229,12 @@ impl TrafficSim {
     /// The AI on the roads: (cars, buses, cars asleep far from everybody, parked cars).
     pub fn counts(&self) -> (usize, usize, usize, usize) {
         let buses = self.cars.iter().filter(|c| c.is_bus()).count();
-        (self.cars.len() - buses, buses, self.dormant.len(), self.parked.values().map(Vec::len).sum())
+        (
+            self.cars.len() - buses,
+            buses,
+            self.dormant.len(),
+            self.parked.values().map(Vec::len).sum(),
+        )
     }
 
     /// Front, rear and side collision zones of AI vehicles (for the player's collisions),
@@ -220,9 +257,9 @@ impl TrafficSim {
                 let v = glam::DVec2::new(h.sin(), h.cos()) * c.state.speed as f64;
                 let (mass, id) = (c.vehicle.physics.mass_kg, c.id);
                 let rear = c.vehicle.trailers.iter().filter_map(move |t| {
-                    t.ty.def.bounding_box.map(|bb| {
-                        impact_zones(bb, t.position, t.body_heading(), v, mass, id)
-                    })
+                    t.ty.def
+                        .bounding_box
+                        .map(|bb| impact_zones(bb, t.position, t.body_heading(), v, mass, id))
                 });
                 std::iter::once(impact_zones(
                     bb,
@@ -308,7 +345,11 @@ impl TrafficSim {
     /// Keep a scheduled bus at its stop for at least `secs` more with the doors open:
     /// passengers are still queueing at a door or stepping in.
     /// The passengers' wishes for the timetable buses' next stops (see `stop_wishes`).
-    pub fn set_stop_wishes(&mut self, alighting: hashbrown::HashSet<u64>, waiting: hashbrown::HashSet<i64>) {
+    pub fn set_stop_wishes(
+        &mut self,
+        alighting: hashbrown::HashSet<u64>,
+        waiting: hashbrown::HashSet<i64>,
+    ) {
         self.stop_wishes = Some((alighting, waiting));
     }
 

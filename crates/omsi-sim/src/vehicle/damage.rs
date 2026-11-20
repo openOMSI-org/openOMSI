@@ -72,7 +72,11 @@ impl VehicleInstance {
             return;
         }
 
-        let bb = self.ty.def.bounding_box.unwrap_or([2.5, 12.0, 3.0, 0.0, 0.0, 1.5]);
+        let bb = self
+            .ty
+            .def
+            .bounding_box
+            .unwrap_or([2.5, 12.0, 3.0, 0.0, 0.0, 1.5]);
         let zone = impact_zone(point, bb);
         let zone_id = match zone {
             ImpactZone::Front => 1.0,
@@ -93,7 +97,9 @@ impl VehicleInstance {
 
         let mut nearest: Option<(f32, usize)> = None;
         for (i, mesh) in self.ty.meshes.iter().enumerate() {
-            let Some(transform) = self.mesh_transforms.get(i) else { continue };
+            let Some(transform) = self.mesh_transforms.get(i) else {
+                continue;
+            };
             if !mesh.skin.is_empty()
                 || is_shadow_mesh(&self.ty, i)
                 || is_glass_mesh(&self.ty, mesh)
@@ -104,7 +110,9 @@ impl VehicleInstance {
                 continue;
             }
             let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
-            let Some(&(mesh_lo, mesh_hi)) = self.ty.mesh_boxes.get(i) else { continue };
+            let Some(&(mesh_lo, mesh_hi)) = self.ty.mesh_boxes.get(i) else {
+                continue;
+            };
             for x in [mesh_lo.x, mesh_hi.x] {
                 for y in [mesh_lo.y, mesh_hi.y] {
                     for z in [mesh_lo.z, mesh_hi.z] {
@@ -184,7 +192,11 @@ impl VehicleInstance {
         }
         for (i, _) in nearby {
             self.glass_broken[i] = true;
-            self.broken_glass.push(BrokenGlass { mesh: i, point, energy });
+            self.broken_glass.push(BrokenGlass {
+                mesh: i,
+                point,
+                energy,
+            });
         }
     }
 
@@ -200,14 +212,27 @@ impl VehicleInstance {
 }
 
 pub(super) fn is_glass_mesh(ty: &VehicleType, mesh: &VehicleMesh) -> bool {
-    let Some(def) = ty.model.meshes.get(mesh.def_index) else { return false };
+    let Some(def) = ty.model.meshes.get(mesh.def_index) else {
+        return false;
+    };
     let looks_like_glass = |text: &str| {
         let text = text.to_ascii_lowercase();
-        ["glass", "glas", "fenster", "scheibe", "window", "windshield", "windscreen"]
-            .iter()
-            .any(|word| text.contains(word))
+        [
+            "glass",
+            "glas",
+            "fenster",
+            "scheibe",
+            "window",
+            "windshield",
+            "windscreen",
+        ]
+        .iter()
+        .any(|word| text.contains(word))
     };
-    if def.mesh_ident.as_deref().is_some_and(|name| looks_like_glass(name))
+    if def
+        .mesh_ident
+        .as_deref()
+        .is_some_and(|name| looks_like_glass(name))
         || looks_like_glass(&def.file)
         || looks_like_glass(&mesh.file.to_string_lossy())
     {
@@ -232,7 +257,10 @@ mod tests {
         assert_eq!(impact_zone(Vec3::new(0.0, -1.1, 0.5), bb), ImpactZone::Rear);
         assert_eq!(impact_zone(Vec3::new(-0.8, 0.0, 0.5), bb), ImpactZone::Left);
         assert_eq!(impact_zone(Vec3::new(0.8, 0.0, 0.5), bb), ImpactZone::Right);
-        assert_eq!(impact_zone(Vec3::new(0.0, 0.0, 0.5), bb), ImpactZone::Centre);
+        assert_eq!(
+            impact_zone(Vec3::new(0.0, 0.0, 0.5), bb),
+            ImpactZone::Centre
+        );
     }
 
     #[test]
@@ -241,12 +269,7 @@ mod tests {
             coupling_test_type(None),
             VehicleHost::new(Default::default()),
         );
-        v.receive_dynamic_impact(
-            Vec3::new(-0.7, 0.0, 0.6),
-            Vec3::X,
-            4.0,
-            20_000.0,
-        );
+        v.receive_dynamic_impact(Vec3::new(-0.7, 0.0, 0.6), Vec3::X, 4.0, 20_000.0);
         assert!(v.collided);
         assert_eq!(v.host.coll_pos, [-0.7, 0.0, 0.6]);
         assert_eq!(v.host.coll_energy, 20.0);
@@ -260,7 +283,10 @@ mod tests {
     fn an_ai_car_hit_from_behind_is_dented_inwards() {
         let mut ty = coupling_test_type(None);
         let ty_mut = Arc::get_mut(&mut ty).unwrap();
-        ty_mut.model.meshes.push(omsi_model::MeshDef { file: "body.o3d".into(), ..Default::default() });
+        ty_mut.model.meshes.push(omsi_model::MeshDef {
+            file: "body.o3d".into(),
+            ..Default::default()
+        });
         ty_mut.meshes.push(VehicleMesh {
             def_index: 0,
             data: MeshData::default(),
@@ -306,10 +332,9 @@ mod tests {
                 skin: Vec::new(),
                 keep_winding: false,
             });
-            ty_mut.mesh_boxes.push((
-                Vec3::new(x - 0.5, -0.5, 1.0),
-                Vec3::new(x + 0.5, 0.5, 2.0),
-            ));
+            ty_mut
+                .mesh_boxes
+                .push((Vec3::new(x - 0.5, -0.5, 1.0), Vec3::new(x + 0.5, 0.5, 2.0)));
         }
         let mut v = VehicleInstance::new(ty, VehicleHost::new(Default::default()));
         let impact = Vec3::new(0.0, 0.0, 1.5);
