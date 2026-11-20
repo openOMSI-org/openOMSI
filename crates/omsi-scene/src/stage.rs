@@ -1,6 +1,7 @@
 //! Choosing, preparing and staging tiles.
 use super::*;
 
+#[rustfmt::skip]
 impl World {
     /// Every tile of global.cfg's `[map]` list whose file exists, with its index in that list
     /// (repeaters and timetable tracks name a tile by that index).

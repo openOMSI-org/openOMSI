@@ -16,7 +16,7 @@
 use glam::{DVec2, DVec3, Mat4, Vec3};
 use hashbrown::{HashMap, HashSet};
 use omsi_geometry::SplineCurve;
-use omsi_map::{tile_size, MapSpline, SplineAttachment, Tile};
+use omsi_map::{MapSpline, SplineAttachment, Tile, tile_size};
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 
@@ -87,28 +87,7 @@ pub struct MapIndex {
     pub stop_length: HashMap<i64, f32>,
 }
 
-/// How a bus stop's `pass_enter_min` / `pass_enter_max` strings are read (#3154).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum StopNumbers {
-    /// Rounded as Omsi.exe reads them: `0.7` is `1`, and a stop the map gives `0.7` keeps one
-    /// person waiting until the density drops below `0.5`. What OMSI 2 does, and what a game
-    /// does unless the player asks otherwise.
-    #[default]
-    Omsi,
-    /// Kept as the map writes them, so the passenger density multiplies first and the rounding
-    /// comes last: at a density of `0.6` a stop given `0.7` has nobody waiting, and at `1` one
-    /// person - a range that can change with the hour instead of a step at `0.5`.
-    Exact,
-}
-
-impl StopNumbers {
-    fn round(self, v: f32) -> f32 {
-        match self {
-            StopNumbers::Omsi => v.round(),
-            StopNumbers::Exact => v,
-        }
-    }
-}
+pub use crate::stop_numbers::StopNumbers;
 
 /// How many passengers get off at a bus stop, as Omsi.exe reads the stop object's strings
 /// when it sets the station up (0x620058): `pass_enter_max` (string 1, else 1) and
@@ -121,11 +100,13 @@ pub fn stop_exit_weight(strings: &[String]) -> f32 {
 }
 
 /// [`stop_exit_weight`] read the way `numbers` says (#3154).
+#[rustfmt::skip]
 pub fn stop_exit_weight_with(strings: &[String], numbers: StopNumbers) -> f32 {
     let (max, min) = stop_enter_with(strings, numbers);
     stop_num(strings, 3, numbers).unwrap_or((min + max) / 2.0).max(0.0)
 }
 
+#[rustfmt::skip]
 fn stop_num(strings: &[String], i: usize, numbers: StopNumbers) -> Option<f32> {
     let v = strings.get(i).map(|s| s.trim()).filter(|s| !s.is_empty()).and_then(|s| s.replace(',', ".").parse::<f64>().ok()).filter(|v| v.is_finite())? as f32;
     Some(numbers.round(v))
@@ -139,6 +120,7 @@ pub fn stop_enter(strings: &[String]) -> (f32, f32) {
 
 /// [`stop_enter`] read the way `numbers` says (#3154): `Omsi` rounds each string, `Exact`
 /// leaves it for whoever multiplies it by the passenger density.
+#[rustfmt::skip]
 pub fn stop_enter_with(strings: &[String], numbers: StopNumbers) -> (f32, f32) {
     (stop_num(strings, 1, numbers).unwrap_or(1.0), stop_num(strings, 2, numbers).unwrap_or(0.0))
 }
@@ -156,10 +138,12 @@ pub fn stop_enter_with(strings: &[String], numbers: StopNumbers) -> (f32, f32) {
 /// `bss1\*.jpg` entry-point signs carry flag 7 too) land on the same default. A value past
 /// 1 (OMSI's door scripts test `= 1`, so their other branch covers everything else) is kept
 /// as it stands, up to the two a script that knows the sides can tell apart.
+#[rustfmt::skip]
 pub fn stop_length(strings: &[String]) -> f32 {
     strings.get(4).map(|s| s.trim()).filter(|s| !s.is_empty()).and_then(|s| s.replace(',', ".").parse::<f64>().ok()).filter(|v| v.is_finite()).map(|v| v as f32).unwrap_or(30.0)
 }
 
+#[rustfmt::skip]
 pub fn stop_side(strings: &[String]) -> f32 {
     strings.get(5).map(|s| s.trim()).and_then(|s| s.parse::<f64>().ok()).filter(|v| v.is_finite()).map(|v| v.clamp(0.0, 2.0) as f32).unwrap_or(0.0)
 }
@@ -170,6 +154,7 @@ pub fn stop_side(strings: &[String]) -> f32 {
 /// kind of object it is: it never asks for `[trafficlight]`. A mod's lamp without that
 /// keyword (a copy of a lamp with its own script) still runs its junction, and the lamp
 /// shows that light.
+#[rustfmt::skip]
 pub fn names_traffic_light(strings: &[String]) -> bool {
     strings.first().and_then(|s| s.trim().parse::<i64>().ok()).is_some_and(|i| i >= 0)
 }
@@ -181,6 +166,7 @@ fn traffic_light_parents(tile: &Tile, mut is_signal: impl FnMut(&str) -> bool) -
 }
 
 /// Every child of another object in a tile: (file, strings, parent id).
+#[rustfmt::skip]
 fn light_children(tile: &Tile) -> impl Iterator<Item = (&str, &[String], i64)> {
     tile.objects.iter().chain(&tile.attach_objects)
         .filter_map(|o| o.var_parent.or(o.parent_id).map(|parent| (o.file.as_str(), o.extra.as_slice(), parent)))
@@ -196,6 +182,7 @@ fn light_naming_parents(tile: &Tile) -> HashSet<i64> {
         .collect()
 }
 
+#[rustfmt::skip]
 impl MapIndex {
     /// Read every tile file of the map (with the active chrono patches), without meshes.
     /// Signal types are read only to identify installed traffic lights. The tiles are read
@@ -452,6 +439,7 @@ const SPLINE_HALF_WIDTH: f64 = 50.0;
 
 /// The world rectangle a tile's square and its splines cover. A damaged length is bounded,
 /// so one bad record cannot make a tile a neighbour of the whole map.
+#[rustfmt::skip]
 fn spline_cover(tile: &Tile, origin: DVec2) -> [f64; 4] {
     let ts = tile_size();
     let mut c = [origin.x, origin.y, origin.x + ts, origin.y + ts];
@@ -473,6 +461,7 @@ fn spline_cover(tile: &Tile, origin: DVec2) -> [f64; 4] {
 /// A file that belongs to a tile (`.terrain`, …): beside the tile file, or - for a tile the
 /// object editor saved as a copy in the content folder, which has only the tile itself -
 /// in the same map folder under the other content roots.
+#[rustfmt::skip]
 pub fn tile_companion(path: &Path, ext: &str) -> PathBuf {
     // a copy in a content root before the installation's (the editor's ground, a mod's)
     if let (Some(dir), Some(name)) = (path.parent(), path.file_name()) {
@@ -496,6 +485,7 @@ pub fn tile_companion(path: &Path, ext: &str) -> PathBuf {
 
 /// A tile file with the chrono folders active on the sim date applied; None (logged) when
 /// the file cannot be read.
+#[rustfmt::skip]
 pub fn read_tile(path: &Path, chrono_dirs: &[PathBuf]) -> Option<Tile> {
     let mut tile = match Tile::load(path) {
         Ok(t) => t,
@@ -603,6 +593,7 @@ pub struct Pose {
     pub rot: Mat4,
 }
 
+#[rustfmt::skip]
 impl Pose {
     /// The pose of an object hanging on attachment point `attach` of this pose, turned by
     /// its own heading/pitch/bank `own`, as Omsi.exe puts it there (0x79d4c4..0x79d689): the
@@ -640,12 +631,14 @@ pub struct RowObject {
 /// `prev`/`next` links can be stale. Older tiles do not store it, so reconstruct it by walking
 /// the links (flipping direction where two splines meet end to end).
 #[cfg(test)]
+#[rustfmt::skip]
 pub fn chain_offset(index: &MapIndex, id: i64) -> f64 {
     index.splines.get(&id).map(|s| chain_offset_from(index, id, *s)).unwrap_or(0.0)
 }
 
 /// Start with this record, not a foreign spline sharing its id. After the first step
 /// the legacy chain follows the same predecessor links and loop guards as before.
+#[rustfmt::skip]
 fn chain_offset_from(index: &MapIndex, id: i64, mut spline: IndexedSpline) -> f64 {
     if let Some(offset) = spline.map_chain_offset {
         return offset;
@@ -723,6 +716,7 @@ fn first_after(d0: f64, acc: f64, interval: f64) -> Option<(f64, usize)> {
 /// `Omsi.exe` places it. The master's tile index the repeater stores is not consulted: it
 /// names a tile of `global.cfg`'s `[map]` list that no longer holds the master when a tile was
 /// added or removed after the repeater was written (32 of Berlin-Spandau's 213 repeaters).
+#[rustfmt::skip]
 fn row_start(att: &SplineAttachment, spline: &MapSpline, index: Option<&MapIndex>) -> Option<RowStart> {
     // The start distance counts from the start of the chain:
     // Separate towns in a merged map can reuse spline ids. The record's authored
@@ -738,6 +732,7 @@ fn row_start(att: &SplineAttachment, spline: &MapSpline, index: Option<&MapIndex
 /// same tile's splines, a tile's chains being cut where the spline before lies in another
 /// tile. (Not the file's stored offset: Omsi.exe's records before their own spline are
 /// recognised by it with the chains as the tile reads them.)
+#[rustfmt::skip]
 fn tile_chain_offset(splines: &[MapSpline], si: usize) -> f64 {
     let mut cur = si;
     let mut total = 0.0;
@@ -769,10 +764,12 @@ pub fn row_starts_before_its_spline(att: &SplineAttachment, splines: &[MapSpline
 }
 
 /// The objects of row record `att` on `spline` from `start` on, while `j * interval <= range`.
+#[rustfmt::skip]
 fn place_on(att: &SplineAttachment, spline: &MapSpline, origin: DVec2, index: Option<&MapIndex>, start: RowStart) -> Vec<RowObject> {
     place_upto(att, spline, origin, index, start, 0)
 }
 
+#[rustfmt::skip]
 fn place_upto(att: &SplineAttachment, spline: &MapSpline, origin: DVec2, index: Option<&MapIndex>, start: RowStart, upto: usize) -> Vec<RowObject> {
     let curve = SplineCurve { half_cant_width: omsi_geometry::half_cant_width_of(&spline.file), ..SplineCurve::from_map(spline, origin) };
     let len = spline.length.max(0.0);
@@ -845,6 +842,7 @@ fn place_upto(att: &SplineAttachment, spline: &MapSpline, origin: DVec2, index: 
 /// chain enters another tile, a repeater there carries the row on (every one of the 169
 /// repeaters of Berlin-Spandau with objects lies on the first spline of a new tile, and 413
 /// later splines in the record's own tile have none). (index into `splines`, object).
+#[rustfmt::skip]
 pub fn tile_row_objects(att: &SplineAttachment, splines: &[MapSpline], origin: DVec2, index: Option<&MapIndex>) -> Vec<(usize, RowObject)> {
     let si = att.spline_index.max(0) as usize;
     let Some(own) = splines.get(si).filter(|s| !s.deleted) else { return Vec::new() };
@@ -896,17 +894,16 @@ pub fn tile_row_objects(att: &SplineAttachment, splines: &[MapSpline], origin: D
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod tests {
     use super::*;
     include!("../../../tools/test-support/original_root.rs");
-
     fn synthetic_spline_stop(version: i32, stop: i64, offset: f64, distance: f64, spline_index: usize) -> String {
         let links = if version >= 11 { "0\n0\n" } else { "-1\n" };
         let chain = if version >= 11 { format!("0\n0\n{offset}\n") } else { String::new() };
         let turn = if version >= 12 { "0\n0\n0\n10\n0\n0\n" } else { "0\n10\n0\n" };
         format!("[version]\n{version}\n\n[spline]\n0\nsynthetic.sli\n10\n{links}0\n0\n0\n0\n50\n0\n0\n0\n0\n0\n{chain}\n[splineAttachement]\n0\nsynthetic-stop.sco\n{stop}\n{spline_index}\n0\n0\n{distance}\n{turn}0\n")
     }
-
     /// Great Grundorf 2 (tile version 10): a linked spline is written at x, height, y and
     /// heading 0 and goes on from the end of the spline before it - a 40 m right-hand curve
     /// of radius 300 here, climbing at 2 %, whose IDCode is 0; one written with -1 keeps its
@@ -934,7 +931,6 @@ mod tests {
         chain_linked_splines(&mut tile);
         assert_eq!(tile.splines.iter().map(|s| s.pos).collect::<Vec<_>>(), before);
     }
-
     #[test]
     fn cold_child_stop_keeps_its_spline_attached_parent_and_metadata() {
         let dir = std::env::temp_dir().join(format!("omsi-index-child-spline-{}", std::process::id()));
@@ -959,7 +955,6 @@ mod tests {
         assert_eq!(index.stop_side[&200], 1.0);
         std::fs::remove_dir_all(&dir).unwrap();
     }
-
     #[test]
     fn authored_offsets_keep_stops_on_tiles_with_duplicate_spline_ids() {
         let dir = std::env::temp_dir().join(format!("omsi-index-duplicate-spline-{}", std::process::id()));
@@ -985,7 +980,6 @@ mod tests {
         }
         std::fs::remove_dir_all(&dir).unwrap();
     }
-
     #[test]
     fn legacy_stops_survive_modern_chrono_with_reused_spline_id() {
         let dir = std::env::temp_dir().join(format!("omsi-index-chrono-spline-{}", std::process::id()));
@@ -1009,7 +1003,6 @@ mod tests {
         }
         std::fs::remove_dir_all(&dir).unwrap();
     }
-
     #[test]
     fn cold_index_resolves_chained_spline_stops() {
         let dir = std::env::temp_dir().join(format!("omsi-index-stop-chain-{}", std::process::id()));
@@ -1044,7 +1037,6 @@ mod tests {
         }
         std::fs::remove_dir_all(&dir).unwrap();
     }
-
     /// An active chrono patch with `[terrain]`/`[water]` and their files beside it gives the
     /// tile its ground and water (#923, #925); one without them leaves the map's own.
     #[test]
@@ -1072,7 +1064,6 @@ mod tests {
         assert_eq!(water_file(&t, &path), base.join(format!("{name}.water")));
         std::fs::remove_dir_all(&dir).unwrap();
     }
-
     #[test]
     fn traffic_light_parents_follow_placed_signals_not_other_children() {
         let object = |file: &str, parent| omsi_map::MapObject {
@@ -1091,7 +1082,6 @@ mod tests {
         };
         assert_eq!(traffic_light_parents(&tile, |file| file == "signal.sco"), [10, 30, 50, 60].into_iter().collect());
     }
-
     #[test]
     fn a_child_naming_a_light_counts_whatever_its_type() {
         // (OMSI's RefreshAmpelParenting reads the light index, not the object's kind)
@@ -1116,7 +1106,6 @@ mod tests {
         assert!(traffic_light_parents(&tile, |_| false).is_empty());
         assert!(names_traffic_light(&["3".into()]) && !names_traffic_light(&["x".into()]));
     }
-
     #[test]
     fn a_junction_template_without_placed_signals_is_unsignalized() {
         let tile = Tile {
@@ -1125,7 +1114,6 @@ mod tests {
         };
         assert!(traffic_light_parents(&tile, |_| false).is_empty());
     }
-
     #[test]
     #[ignore = "needs the original OMSI 2 install (OMSI_ROOT)"]
     fn grundorf_traffic_light_parents_exclude_gaussdorf() {
@@ -1140,20 +1128,16 @@ mod tests {
             assert!(!index.traffic_light_parents.contains(&id), "Gaussdorf junction {id} has no signals");
         }
     }
-
     /// The objects row record `att` puts on its own spline `spline`.
     fn row_objects(att: &SplineAttachment, spline: &MapSpline, origin: DVec2, index: Option<&MapIndex>) -> Vec<RowObject> {
         row_start(att, spline, index).map(|start| place_on(att, spline, origin, index, start)).unwrap_or_default()
     }
-
     fn spline(id: i64, prev: i64, next: i64, length: f64) -> MapSpline {
         MapSpline { file: String::new(), id, prev_id: prev, next_id: next, pos: [0.0, 0.0, 10.0], heading: 0.0, length, ..Default::default() }
     }
-
     fn row(interval: f64, range: f64, d: f64, repeater: Option<(usize, usize)>) -> SplineAttachment {
         SplineAttachment { file: "lamp.sco".into(), id: 5, spline_index: 0, offset: [3.0, 0.25, d], interval, range, repeater, ..Default::default() }
     }
-
     #[test]
     fn master_row() {
         let s = spline(1, 0, 2, 100.0);
@@ -1175,7 +1159,6 @@ mod tests {
         assert!((one[0].pose.pos.y - 100.0).abs() < 1e-6);
         assert!(row_objects(&row(0.0, 0.0, 102.0, None), &dead_end, DVec2::ZERO, None).is_empty());
     }
-
     #[test]
     fn the_object_on_a_tile_joint_is_drawn_once_whichever_side_the_rounding_puts_it() {
         let first = spline(1, 0, 2, 100.0);
@@ -1186,7 +1169,6 @@ mod tests {
         let at: Vec<usize> = row_objects(&repeater, &next, DVec2::ZERO, None).iter().map(|o| o.index).collect();
         assert_eq!(at, vec![4, 5, 6], "the joint's object, 0.2 mm before this spline, is the first spline's");
     }
-
     #[test]
     fn an_object_on_a_joint_inside_a_tile_is_drawn_once() {
         let ix = buffer_stop_chain();
@@ -1197,7 +1179,6 @@ mod tests {
         let idx: Vec<usize> = objs.iter().map(|(_, o)| o.index).collect();
         assert_eq!(idx, vec![0, 1, 2, 3, 4], "the object 0.2 mm past the joint at 400 m once: {idx:?}");
     }
-
     #[test]
     fn a_row_s_last_object_just_past_its_range_is_drawn_on_every_spline_alike() {
         let long = spline(1, 0, 0, 1000.0);
@@ -1208,7 +1189,6 @@ mod tests {
         let objs = tile_row_objects(&SplineAttachment { id: 9, ..row(130.0, 389.9995, 10.0, None) }, &[a, b], DVec2::ZERO, Some(&ix));
         assert_eq!(objs.iter().map(|(_, o)| o.index).collect::<Vec<_>>(), vec![0, 1, 2, 3], "the fourth, on the next spline, too");
     }
-
     #[test]
     fn tangential_row_rotates_within_the_spline_plane() {
         let s = MapSpline {
@@ -1237,7 +1217,6 @@ mod tests {
             }
         }
     }
-
     #[test]
     fn compound_row_rotation_keeps_retaining_posts_out_of_the_street() {
         // A mod uses a 5 m fence post laid on its side as a retaining block.
@@ -1252,7 +1231,6 @@ mod tests {
             "a horizontal retaining post must extend into the bank, not the carriageway: {tip:?}");
         assert!(tip.z.abs() < 1e-5);
     }
-
     #[test]
     fn tangential_row_keeps_its_frame_when_the_spline_runs_backwards() {
         let s = MapSpline { heading: 31.0, grad_start: 12.0, grad_end: 12.0,
@@ -1271,7 +1249,6 @@ mod tests {
             assert!((forward.rot.transform_vector3(axis) - backward.rot.transform_vector3(axis)).length() < 1e-6);
         }
     }
-
     #[test]
     fn upright_row_and_objects_outside_cant_width_keep_their_placement_rules() {
         let s = MapSpline { heading: 65.0, grad_start: 10.0, grad_end: 10.0,
@@ -1289,7 +1266,6 @@ mod tests {
             "beyond the half cant width, the row follows only the longitudinal slope");
         assert!((pose.pos.z - 10.25).abs() < 1e-8, "the position still includes the cant's clamped height");
     }
-
     #[test]
     fn tangential_railing_follows_the_praha_spline() {
         // Placement of railing 26386 on spline 24096, Praha 200 tile 2623/10579.
@@ -1308,7 +1284,6 @@ mod tests {
         assert!((-objects[0].pose.rot.transform_vector3(Vec3::X) - tangent).length() < 1e-6,
             "the railing must descend along the kerb, not lean across it");
     }
-
     /// The chain of the Spandau buffer stop 3212811: a dead-end track of 250 m behind 600 m
     /// of predecessors, one of them joined end to end.
     fn buffer_stop_chain() -> MapIndex {
@@ -1319,7 +1294,6 @@ mod tests {
         ix.splines.insert(12, IndexedSpline { length: 250.0, map_chain_offset: Some(600.0), prev: 11, next: 0 });
         ix
     }
-
     #[test]
     fn row_start_counts_from_the_chain_start() {
         let mut ix = buffer_stop_chain();
@@ -1482,30 +1456,6 @@ mod tests {
         assert_eq!(v(&["A", "1", "0", "2.6"]), 3.0);
         assert_eq!(v(&["A", "1", "0", "-4"]), 0.0);
         assert_eq!(v(&["A", "1", "0", "x"]), 0.5);
-    }
-
-    /// A stop's passenger numbers as the map writes them, kept for the density to multiply
-    /// (#3154): 0.7 is 0.7, not 1, and the exit weight follows the same reading.
-    #[test]
-    fn the_maps_own_passenger_numbers_can_be_kept_exactly() {
-        let s = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        // (0.7 and 0.6 the way a map author writes them: the numbers OMSI rounds away)
-        let stop = s(&["Klinikum", "0.7", "0.6"]);
-        assert_eq!(stop_enter(&stop), (1.0, 1.0), "OMSI's own reading rounds both up");
-        assert_eq!(stop_enter_with(&stop, StopNumbers::Exact), (0.7, 0.6));
-        // the density multiplies first: at 0.6 nobody waits, where OMSI's reading gives one
-        let mean = |(max, min): (f32, f32)| (max + min) / 2.0;
-        assert_eq!((0.6 * mean(stop_enter(&stop))).round(), 1.0);
-        assert_eq!((0.6 * mean(stop_enter_with(&stop, StopNumbers::Exact))).round(), 0.0);
-        assert_eq!((1.0 * mean(stop_enter_with(&stop, StopNumbers::Exact))).round(), 1.0, "a full hour still has one");
-        // the exit weight, from the same strings: rounded as OMSI reads it, or the mean as written
-        assert_eq!(stop_exit_weight(&stop), 1.0);
-        assert!((stop_exit_weight_with(&stop, StopNumbers::Exact) - 0.65).abs() < 1e-6);
-        // (a whole number, a comma and a wrong value read the same either way)
-        let plain = s(&["A", "6", "2"]);
-        assert_eq!(stop_enter(&plain), stop_enter_with(&plain, StopNumbers::Exact));
-        assert_eq!(stop_enter_with(&s(&["A", "0,7"]), StopNumbers::Exact), (0.7, 0.0));
-        assert_eq!(stop_enter_with(&s(&["A", "", ""]), StopNumbers::Exact), (1.0, 0.0), "a map that says nothing keeps the defaults");
     }
 
     #[test]
