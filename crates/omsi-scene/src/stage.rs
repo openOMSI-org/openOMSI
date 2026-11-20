@@ -1,6 +1,7 @@
 //! Choosing, preparing and staging tiles.
 use super::*;
 
+#[rustfmt::skip]
 impl World {
     /// Every tile of global.cfg's `[map]` list whose file exists, with its index in that list
     /// (repeaters and timetable tracks name a tile by that index).
@@ -197,7 +198,14 @@ impl World {
         if let Some(ix) = g.as_ref() {
             return ix.clone();
         }
-        let mut built = MapIndex::build(&self.map_tiles(), &self.chrono_dirs(), &self.root);
+        // (#3154) a stop's passenger numbers: rounded as OMSI reads them, unless the player
+        // asked for the map's own numbers to multiply by the density first
+        let numbers = if self.settings.stop_numbers_exact() {
+            omsi_world::map_index::StopNumbers::Exact
+        } else {
+            omsi_world::map_index::StopNumbers::Omsi
+        };
+        let mut built = MapIndex::build_with(&self.map_tiles(), &self.chrono_dirs(), &self.root, numbers);
         // the index's object positions go to `object_positions` (kept once, not twice: 345 000
         // objects on Ahlheim took 30 MB in each)
         let objects = std::mem::take(&mut built.objects);
