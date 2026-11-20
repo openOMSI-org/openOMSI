@@ -3386,6 +3386,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     }
     // Human posing; the original OMSI behavior remains the default.
     v["passenger_animation"] = json!("original");
+    // A fare paid without a ticket (#2742); off, as OMSI has always sold tickets
+    v["pax_no_ticket"] = json!(false);
     v["photo_mode"] = json!("simple");
     // the people as drawn: the content's own, or the Rocketbox avatars (this computer only)
     v["character_models"] = json!("original");
@@ -4243,6 +4245,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "mirror_particles"
             | "ai_wait_timed_stops_only"
             | "pax_bad_driving"
+            | "pax_no_ticket"
             | "passenger_connections"
             | "passenger_hailing"
             | "passenger_full_bus_reaction"
@@ -5022,6 +5025,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("pax_short_rides_stand", false)
     ));
     text.push_str(&format!("auto_announce={}\n", b("auto_announce", false)));
+    text.push_str(&format!("pax_no_ticket={}\n", b("pax_no_ticket", false)));
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
         f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0),
