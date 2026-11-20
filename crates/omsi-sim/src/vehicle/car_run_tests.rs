@@ -513,6 +513,28 @@ fn cars_without_place_variables_need_no_run() {
     assert!(uses_place_in_train(&unit_car()));
 }
 
+/// A car with scripts of its own but no control cables and no place variables runs them:
+/// its own motor and brakes are not left standing because nothing links it to the others.
+#[test]
+fn a_car_with_its_own_scripts_and_no_cables_runs_them() {
+    let mut car = cable_car("1 (S.L.SLR_y)");
+    let t = Arc::get_mut(&mut car).unwrap();
+    t.def.control_cable_front.clear();
+    t.def.control_cable_back.clear();
+    assert!(uses_place_in_train(&car), "its own frame needs a run");
+    let mut shared = cable_car("1 (S.L.SLR_y)");
+    Arc::get_mut(&mut shared).unwrap().def.script_share = true;
+    assert!(
+        !uses_place_in_train(&shared),
+        "a car sharing the scripts in front has none"
+    );
+    let lead = super::super::tests::coupling_test_type(None);
+    let mut v = VehicleInstance::new(lead, VehicleHost::new(Default::default()));
+    v.attach_trailer_ex(car, false);
+    run_frames(&mut v, 3);
+    assert_eq!(v.trailers[0].run_var("SLR_y"), Some(1.0), "its frame ran");
+}
+
 #[test]
 fn a_car_brakes_with_its_own_brakeforce_once_and_never_with_the_leads() {
     let mut lead = VehicleInstance::new(
