@@ -38,12 +38,12 @@
 //! neighbourhood changed and nobody uses it, a stop whose tile went takes its people with
 //! it, and nobody stands or walks where the ground is not loaded.
 
+use crate::VehicleInstance;
 use crate::ai_traffic::TrafficSim;
 use crate::crowd::{self, Block, CrowdParams, PathGraph, Walker};
 use crate::human::{Activity, HumanType};
 use crate::human_omsi::{AnimInput, OmsiAnim};
 use crate::traffic::{LaneKind, Network};
-use crate::VehicleInstance;
 use glam::{DVec2, DVec3, Mat4, Vec3};
 use hashbrown::{HashMap, HashSet};
 use omsi_vehicle::PassengerCabin;
@@ -53,46 +53,48 @@ use std::sync::Arc;
 // The simulation: the people and what they do. It does not draw: what the renderer has to
 // follow it writes down (`bodies`), and omsi-app's `humans` view replays that at the end
 // of the public calls that make people (`tick`, `populate`, `avatar`, ...).
-pub mod model;
-pub mod cabin;
-pub mod pednet;
-pub mod spawn;
-pub mod populate;
-pub mod buses;
-pub mod door_requests;
 pub mod bus_view;
+pub mod buses;
+pub mod cabin;
+pub mod door_requests;
+pub mod model;
+pub mod pednet;
+pub mod populate;
+pub mod spawn;
 pub use bus_view::{CabinView, PlayerBusView};
-pub mod tick;
-pub mod walk;
-pub mod report;
 pub mod avatar;
 pub mod mirror;
+pub mod report;
 pub mod scratch;
+pub mod tick;
+pub mod walk;
 // The passengers, as Omsi.exe runs them.
 pub mod pax;
-pub mod pax_stops;
-pub mod pax_tick;
-pub mod pax_task;
 pub mod pax_driver;
+pub mod pax_stops;
+pub mod pax_task;
+pub mod pax_tick;
 pub mod runners;
 pub mod ticket_hook;
 // What the renderer has to follow, the money on the desk and what the people need of the map.
-pub mod bodies;
-pub mod pose_facts;
-pub mod money;
-pub mod world;
-#[cfg(test)]
-mod tests;
-#[cfg(test)]
-mod population_limit_tests;
-#[cfg(test)]
-mod ticket_hook_tests;
 #[cfg(test)]
 mod bad_driving_tests;
+pub mod bodies;
 #[cfg(test)]
 mod desk_ticket_tests;
 #[cfg(test)]
 mod destination_tests;
+pub mod money;
+#[cfg(test)]
+mod population_limit_tests;
+pub mod pose_facts;
+#[cfg(test)]
+mod stuck_tests;
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+mod ticket_hook_tests;
+pub mod world;
 
 use avatar::*;
 use cabin::*;
@@ -104,13 +106,13 @@ use runners::*;
 // The module's API, at the paths it always had in omsi-app (some only returned, never named
 // outside).
 pub use avatar::{AvatarCmd, SeatSpot};
-pub use door_requests::DoorRequest;
 pub use bodies::{BodyOp, BodyOps};
-pub use mirror::{placed_bus_id, remote_bus_id, remote_bus_player, LanPerson, MirrorPose};
+pub use door_requests::DoorRequest;
+pub use mirror::{LanPerson, MirrorPose, placed_bus_id, remote_bus_id, remote_bus_player};
 pub use model::{BusId, DoorWants, Eye, Footfall, PeopleSim, Person, Place, State, VoiceLine};
 pub use money::Money;
-pub use pose_facts::PoseFacts;
 pub use pax::DutyTrip;
+pub use pose_facts::PoseFacts;
 pub use ticket_hook::{TicketAsk, TicketChange};
 pub use world::World;
 
@@ -140,7 +142,6 @@ const JOINT_BLEND: f32 = 0.5;
 fn debug_pax() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| {
-        omsi_cfg::flags::OMSI_DEBUG_PAX.is_set()
-            || omsi_cfg::flags::OMSI_DEBUG_HUMANS.is_set()
+        omsi_cfg::flags::OMSI_DEBUG_PAX.is_set() || omsi_cfg::flags::OMSI_DEBUG_HUMANS.is_set()
     })
 }
