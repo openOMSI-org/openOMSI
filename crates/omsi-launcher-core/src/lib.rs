@@ -7,40 +7,60 @@
 //! `install` runs mod installs as background jobs, `index` caches the content lists and
 //! tells the page when they changed, `instances` keeps track of the games started.
 
+#[rustfmt::skip]
 pub mod ai_lists;
+#[rustfmt::skip]
 pub mod crash;
+#[rustfmt::skip]
 pub mod depot;
+#[rustfmt::skip]
 pub mod index;
+#[rustfmt::skip]
 pub mod install;
+#[rustfmt::skip]
 pub mod instances;
+#[rustfmt::skip]
 pub mod storage;
+#[rustfmt::skip]
 pub mod mods;
+#[rustfmt::skip]
 pub mod map_uses;
+#[rustfmt::skip]
 pub mod optimise;
+#[rustfmt::skip]
 mod hof_sync;
+#[rustfmt::skip]
 mod file_dialog;
+#[rustfmt::skip]
 pub mod i18n;
+#[rustfmt::skip]
 mod graphics_profiles;
+#[rustfmt::skip]
 mod graphics_profile_transfer;
 #[cfg(test)]
+#[rustfmt::skip]
 mod graphics_profile_transfer_tests;
 pub use graphics_profile_transfer::{export_graphics_profile, import_graphics_profile};
 pub use graphics_profiles::*;
+#[rustfmt::skip]
 mod situations;
-pub use situations::{delete_situation, last_situation, rename_situation, saved_situations, SavedSituation};
+pub use situations::{
+    SavedSituation, delete_situation, last_situation, rename_situation, saved_situations,
+};
 
 pub use file_dialog::{pick_file, pick_folder, pick_graphics_profile, pick_hofs, pick_mod};
-pub use hof_sync::{add_shared_hofs, share_map_hofs, MapHofOffer};
+pub use hof_sync::{MapHofOffer, add_shared_hofs, share_map_hofs};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------------------------------
 // configuration: where the game and the OMSI content are
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[rustfmt::skip]
 pub struct Config {
     /// The OMSI 2 folder (maps, Vehicles, ...).
     pub root: String,
@@ -50,13 +70,16 @@ pub struct Config {
     pub profile: String,
 }
 
+#[rustfmt::skip]
 fn home() -> PathBuf {
     std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default()
 }
 
+#[rustfmt::skip]
 pub fn data_dir() -> PathBuf {
     // (made once: asked for dozens of times a second - the launcher's frames, its polls - and
     // made each time, two system calls for a folder that was there)
+#[rustfmt::skip]
     static MADE: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
     let d = home().join(".openomsi");
     let mut made = MADE.lock().unwrap_or_else(|e| e.into_inner());
@@ -66,18 +89,21 @@ pub fn data_dir() -> PathBuf {
     d
 }
 
+#[rustfmt::skip]
 fn config_path() -> PathBuf {
     data_dir().join("launcher.json")
 }
 
 /// A complete installation of the original OMSI 2 (the same test the game makes: it refuses
 /// to start on anything else).
+#[rustfmt::skip]
 fn is_omsi_root(p: &Path) -> bool {
     omsi_cfg::missing_original_essentials(p).is_empty()
 }
 
 /// Where the game binary is: the configured path, next to the launcher, or the
 /// development build in the source tree.
+#[rustfmt::skip]
 fn find_game(configured: &str) -> Option<PathBuf> {
     let mut cands: Vec<PathBuf> = Vec::new();
     // the game that came with this launcher first: a path remembered from an older
@@ -118,10 +144,12 @@ fn find_game(configured: &str) -> Option<PathBuf> {
 }
 
 /// The last search for the OMSI folder: (the places given first, what was found).
+#[rustfmt::skip]
 static FOUND: std::sync::Mutex<Option<(Vec<PathBuf>, Option<PathBuf>)>> = std::sync::Mutex::new(None);
 
 /// The OMSI folder: configured, remembered by the game, or found in any usual place
 /// (beside the program, Steam libraries, Wine bottles, the user's folders).
+#[rustfmt::skip]
 fn find_root(configured: &str) -> Option<PathBuf> {
     let mut first: Vec<PathBuf> = Vec::new();
     if !configured.trim().is_empty() {
@@ -150,6 +178,7 @@ fn find_root(configured: &str) -> Option<PathBuf> {
     r
 }
 
+#[rustfmt::skip]
 pub fn load_config() -> Config {
     let mut c: Config = std::fs::read_to_string(config_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
     if let Some(r) = find_root(&c.root) {
@@ -172,6 +201,7 @@ pub fn load_config() -> Config {
 
 /// What the player's own OMSI 2 remembers in its `options.cfg`: the settings in the
 /// launcher's keys, the map and the driver played last.
+#[rustfmt::skip]
 pub struct OmsiOptions {
     pub settings: Value,
     /// `maps/<name>/global.cfg`, as the launcher names maps.
@@ -181,6 +211,7 @@ pub struct OmsiOptions {
 }
 
 /// Read the original's `options.cfg` (never written: the game keeps its own settings).
+#[rustfmt::skip]
 pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
     let o = omsi_content::options::Options::load(&root.join("options.cfg")).ok()?;
     let mut v = json!({});
@@ -251,6 +282,7 @@ pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
     })
 }
 
+#[rustfmt::skip]
 pub fn save_config(c: &Config) -> Result<()> {
     std::fs::write(config_path(), serde_json::to_vec_pretty(c)?)?;
     // the folder is looked for again: a folder that was not a complete OMSI 2 when it was
@@ -261,17 +293,20 @@ pub fn save_config(c: &Config) -> Result<()> {
 }
 
 /// The OMSI 2 folder the launcher works with (configured or found).
+#[rustfmt::skip]
 pub fn root_dir() -> Result<PathBuf> {
     root()
 }
 
 /// The game program a duty is started with (see `find_game`).
+#[rustfmt::skip]
 pub fn game_binary() -> Option<PathBuf> {
     find_game(&load_config().game)
 }
 
 /// Where a content path (`maps/Grundorf/picture.jpg`) is: the content folder and the
 /// archives first, then the OMSI 2 folder.
+#[rustfmt::skip]
 pub fn content_path(rel: &str) -> Result<PathBuf> {
     resolve_content(rel)
 }
@@ -280,6 +315,7 @@ pub fn content_path(rel: &str) -> Result<PathBuf> {
 /// model the AI drives on it): of a depot group each vehicle type with a bus that runs
 /// that day - the file, the first such bus's repaint and fleet number -, else the group's
 /// vehicles, the most likely first. (file, paint, number)
+#[rustfmt::skip]
 pub fn tour_buses(map: &str, group: &str, date: &str) -> Vec<(String, String, String)> {
     let want = group.trim();
     let (Ok(dir), Some(day)) = (resolve_content(map), omsi_map::ailists::date_code(date)) else { return Vec::new() };
@@ -306,6 +342,7 @@ pub fn tour_buses(map: &str, group: &str, date: &str) -> Vec<(String, String, St
 /// The depot file a bus uses on `map` on `date`: the map's own buses' of that day (chrono
 /// scenarios move it - Berlin's 1994 depot has 137, 1986's 92), one of the bus's carrying
 /// the line driven, its own of that name or named like the map, else the first (#896).
+#[rustfmt::skip]
 pub fn default_hof(map: Option<&MapInfo>, bus: Option<&VehicleInfo>, date: &str, line: Option<&str>) -> String {
     let on_date = map.and_then(|m| {
         let dir = resolve_content(&m.file).ok()?;
@@ -349,6 +386,7 @@ pub fn default_hof(map: Option<&MapInfo>, bus: Option<&VehicleInfo>, date: &str,
         .unwrap_or_default()
 }
 
+#[rustfmt::skip]
 pub(crate) fn root() -> Result<PathBuf> {
     let c = load_config();
     let r = PathBuf::from(&c.root);
@@ -366,6 +404,7 @@ pub(crate) fn root() -> Result<PathBuf> {
 }
 
 /// The `upscaler=` setting as the game reads it: unknown words are the standard upscaler.
+#[rustfmt::skip]
 pub fn upscaler_word(s: &str) -> &'static str {
     match s.trim().to_ascii_lowercase().as_str() {
         "fsr1" => "fsr1",
@@ -379,6 +418,7 @@ pub fn upscaler_word(s: &str) -> &'static str {
 /// The game's own content folder: the folder of the game binary, laid out like OMSI 2
 /// (Vehicles, maps, Sceneryobjects ...). Installed mods live here; the game searches it
 /// before the original installation.
+#[rustfmt::skip]
 pub fn content_dir() -> Option<PathBuf> {
     // the same rules as the game: $OMSI_CONTENT, else the folder of the game binary (beside
     // the bundle when the binary sits inside a macOS .app)
@@ -405,7 +445,9 @@ pub fn content_dir() -> Option<PathBuf> {
 /// Tell the OMSI readers about the content folder, the archives used in place in its
 /// `Archives` folder and the OMSI folder (in that order, as the game has them), so a path
 /// inside one is also looked for in the others (a repaint's `.cti`, a map in an archive).
+#[rustfmt::skip]
 fn register_roots(content: &Path) {
+#[rustfmt::skip]
     static DONE: std::sync::Once = std::sync::Once::new();
     let content = content.to_path_buf();
     DONE.call_once(|| {
@@ -422,6 +464,7 @@ fn register_roots(content: &Path) {
 /// Mount the archives in `<content>/Archives` that are not mounted yet (an install may
 /// have put one there, or the user did), each as a content root in front of the OMSI
 /// folder. Archives that went away stay mounted until the launcher restarts.
+#[rustfmt::skip]
 fn mount_archives(content: &Path) {
     let dir = content.join(install::ARCHIVES);
     let Ok(rd) = std::fs::read_dir(&dir) else { return };
@@ -434,6 +477,7 @@ fn mount_archives(content: &Path) {
 }
 
 /// Mount one archive of the content folder for the lists.
+#[rustfmt::skip]
 pub(crate) fn mount_archive(zip: &Path) {
     match omsi_cfg::vfs::mount_zip(zip) {
         Ok(m) => match find_root(&load_config_raw().root) {
@@ -447,6 +491,7 @@ pub(crate) fn mount_archive(zip: &Path) {
 }
 
 /// The archives of the content folder that are mounted, in name order.
+#[rustfmt::skip]
 fn archive_roots(content: &Path) -> Vec<PathBuf> {
     let dir = content.join(install::ARCHIVES);
     let mut v: Vec<PathBuf> = omsi_cfg::vfs::mounts().iter().map(|m| m.path().to_path_buf()).filter(|p| p.starts_with(&dir) && p.exists()).collect();
@@ -454,12 +499,14 @@ fn archive_roots(content: &Path) -> Vec<PathBuf> {
     v
 }
 
+#[rustfmt::skip]
 fn load_config_raw() -> Config {
     std::fs::read_to_string(config_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
 }
 
 /// `rel` (a path as the game takes it, `Vehicles/Foo/foo.bus`) in the content folder if it
 /// is there, else in the OMSI folder.
+#[rustfmt::skip]
 fn resolve_content(rel: &str) -> Result<PathBuf> {
     let root = root()?;
     for b in bases() {
@@ -476,6 +523,7 @@ fn resolve_content(rel: &str) -> Result<PathBuf> {
 
 /// The folders the lists are made of: the content folder first, then the archives used in
 /// place (mounted as folders), then the OMSI folder.
+#[rustfmt::skip]
 fn bases() -> Vec<PathBuf> {
     let mut v = Vec::new();
     if let Some(c) = content_dir() {
@@ -491,6 +539,7 @@ fn bases() -> Vec<PathBuf> {
 
 /// Entries of `rel` (e.g. "Vehicles") across the content folder and the OMSI 2 folder;
 /// a name in the content folder hides the same name in the installation.
+#[rustfmt::skip]
 fn merged_entries(rel: &str) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -508,6 +557,7 @@ fn merged_entries(rel: &str) -> Vec<PathBuf> {
 
 /// Folders of `rel` by name across the content folder and the OMSI folder: each name with
 /// all its copies, the content folder's first (a mod may add files to a stock folder).
+#[rustfmt::skip]
 fn merged_folders(rel: &str) -> Vec<(String, Vec<PathBuf>)> {
     let mut out: Vec<(String, Vec<PathBuf>)> = Vec::new();
     let mut at: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
@@ -537,6 +587,7 @@ fn merged_folders(rel: &str) -> Vec<(String, Vec<PathBuf>)> {
 
 /// Is `p` in the content folder (a mod) rather than the OMSI folder?
 /// (An archive used in place lies in the content folder's `Archives` too.)
+#[rustfmt::skip]
 fn in_content(p: &Path) -> bool {
     content_dir().map(|c| p.starts_with(c)).unwrap_or(false)
 }
@@ -546,6 +597,7 @@ fn in_content(p: &Path) -> bool {
 // an OMSI 2 installation by hand
 
 #[derive(Serialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct ModsStatus {
     pub content_dir: String,
     /// (folder, number of entries)
@@ -572,6 +624,7 @@ pub struct ModsStatus {
 /// background; `mode` is "auto" (unpack, or use a .zip in place when it does not fit; .7z
 /// and .rar are always unpacked),
 /// "extract" or "inplace".
+#[rustfmt::skip]
 pub fn start_install(src: &Path, mode: &str) -> Result<install::Progress> {
     let content = content_dir().ok_or_else(|| anyhow!(i18n::tr("no game binary configured, so no content folder")))?;
     if !src.exists() {
@@ -583,17 +636,20 @@ pub fn start_install(src: &Path, mode: &str) -> Result<install::Progress> {
 }
 
 /// How big the mod at `src` is unpacked, what is free, and whether it can be used in place.
+#[rustfmt::skip]
 pub fn inspect_mod(src: &Path) -> Result<install::SourceInfo> {
     let content = content_dir().ok_or_else(|| anyhow!(i18n::tr("no game binary configured, so no content folder")))?;
     install::inspect(&content, root().ok().as_deref(), src)
 }
 
 /// Install the mod at `src` and wait for it (the terminal), printing the progress.
+#[rustfmt::skip]
 pub fn install_mod_blocking(src: &Path, mode: &str, cancel_after_ms: Option<u64>) -> Result<install::Progress> {
     let content = content_dir().ok_or_else(|| anyhow!(i18n::tr("no game binary configured, so no content folder")))?;
     Ok(install::run_blocking(content, root().ok(), src.to_path_buf(), install::InstallMode::parse(mode), cancel_after_ms.map(std::time::Duration::from_millis), true))
 }
 
+#[rustfmt::skip]
 fn inbox_entries(content: &Path) -> Vec<PathBuf> {
     let inbox = content.join("Mods");
     let Ok(rd) = std::fs::read_dir(&inbox) else { return Vec::new() };
@@ -611,6 +667,7 @@ fn inbox_entries(content: &Path) -> Vec<PathBuf> {
 }
 
 /// (size, newest time, files) of a file or a folder tree.
+#[rustfmt::skip]
 fn tree_signature(p: &Path) -> (u64, u64, u64) {
     let Ok(md) = std::fs::symlink_metadata(p) else { return (0, 0, 0) };
     let t = md.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos() as u64).unwrap_or(0);
@@ -630,7 +687,9 @@ fn tree_signature(p: &Path) -> (u64, u64, u64) {
 /// The inbox watcher: something dropped into Mods/ is installed once it has stopped
 /// growing (the same size and time on two looks at least two seconds apart); packs in
 /// Mods/waiting are installed once their bus is. Returns the sources of the jobs started.
+#[rustfmt::skip]
 fn watch_inbox(content: &Path) -> Vec<String> {
+#[rustfmt::skip]
     struct Seen {
         sig: (u64, u64, u64),
         at: std::time::Instant,
@@ -639,6 +698,7 @@ fn watch_inbox(content: &Path) -> Vec<String> {
         /// at again only now and then).
         checked: std::time::Instant,
     }
+#[rustfmt::skip]
     static SEEN: std::sync::Mutex<Option<std::collections::HashMap<PathBuf, Seen>>> = std::sync::Mutex::new(None);
     // a mod deleted from Mods/installed is taken out of the lists (#819)
     let gone = install::uninstall_removed(content);
@@ -697,6 +757,7 @@ fn watch_inbox(content: &Path) -> Vec<String> {
 
 /// Install everything in the inbox (and the waiting packs whose bus is there) now, and
 /// wait (the terminal's `mods`).
+#[rustfmt::skip]
 pub fn install_inbox_blocking() -> Vec<install::Progress> {
     let Some(content) = content_dir() else { return Vec::new() };
     let mut out = Vec::new();
@@ -710,6 +771,7 @@ pub fn install_inbox_blocking() -> Vec<install::Progress> {
     out
 }
 
+#[rustfmt::skip]
 pub fn mods_status() -> Result<ModsStatus> {
     let content = content_dir().ok_or_else(|| anyhow!(i18n::tr("no game binary configured, so no content folder")))?;
     let cleaned = install::cleanup_stale(&data_dir(), Some(&content));
@@ -744,17 +806,20 @@ pub fn mods_status() -> Result<ModsStatus> {
 }
 
 /// Switch the mod `id` of the content folder off or on (see `mods::set_enabled`); its name.
+#[rustfmt::skip]
 pub fn mod_set_enabled(id: &str, on: bool) -> Result<String> {
     let content = content_dir().ok_or_else(|| anyhow!(i18n::tr("no game binary configured, so no content folder")))?;
     mods::set_enabled(&content, id, on)
 }
 
 /// Delete the mod `id` of the content folder (see `mods::remove`); its name.
+#[rustfmt::skip]
 pub fn mod_remove(id: &str) -> Result<String> {
     let content = content_dir().ok_or_else(|| anyhow!(i18n::tr("no game binary configured, so no content folder")))?;
     mods::remove(&content, id)
 }
 
+#[rustfmt::skip]
 pub fn mod_remove_preview(id: &str) -> Result<map_uses::Plan> {
     let content = content_dir().ok_or_else(|| anyhow!(i18n::tr("no game binary configured, so no content folder")))?;
     mods::remove_preview(&content, id)
@@ -763,6 +828,7 @@ pub fn mod_remove_preview(id: &str) -> Result<map_uses::Plan> {
 /// What the page asks every few seconds: whether the content changed (then it asks for the
 /// lists again), the install jobs and the running games. It also starts the inbox installs.
 #[derive(Serialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct Poll {
     pub stamp: String,
     pub jobs: Vec<install::Progress>,
@@ -774,6 +840,7 @@ pub struct Poll {
     pub started: Vec<String>,
 }
 
+#[rustfmt::skip]
 pub fn poll() -> Result<Poll> {
     let content = content_dir();
     let started = content.as_deref().map(watch_inbox).unwrap_or_default();
@@ -788,6 +855,7 @@ pub fn poll() -> Result<Poll> {
 // content lists
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct MapInfo {
     pub name: String,
     pub friendly: String,
@@ -811,6 +879,7 @@ pub struct MapInfo {
 
 /// The span of years a map's `[years]` allows: none for `0 0`; no first year when the first
 /// is 0, no last when the last is 0 or before the first.
+#[rustfmt::skip]
 fn year_span_of(g: &omsi_map::GlobalCfg) -> Option<(i32, i32)> {
     match g.years {
         (first, last) if first <= 0 && last <= 0 => None,
@@ -822,6 +891,7 @@ fn year_span_of(g: &omsi_map::GlobalCfg) -> Option<(i32, i32)> {
     }
 }
 
+#[rustfmt::skip]
 fn is_leap_year(y: i32) -> bool {
     (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
 }
@@ -830,6 +900,7 @@ fn is_leap_year(y: i32) -> bool {
 /// allows so that its AI lists, chrono and timetables fit: the same day in the nearest
 /// allowed year (29 February becomes the 28th where that year has none). A date inside the
 /// span, or one that is no date, is kept.
+#[rustfmt::skip]
 pub fn fit_date_to_years(date: &str, span: Option<(i32, i32)>) -> String {
     let mut fields = date.trim().splitn(3, '-').map(|f| f.trim().parse::<i32>());
     let (Some((from, to)), Some(Ok(year)), Some(Ok(month)), Some(Ok(day))) = (span, fields.next(), fields.next(), fields.next()) else {
@@ -846,6 +917,7 @@ pub fn fit_date_to_years(date: &str, span: Option<(i32, i32)>) -> String {
 /// The `--date` of a duty: the date the player chose as it stands. Only a date taken from
 /// the machine's calendar (`use_real_date`) is fitted to the map's `[years]` - an old saved
 /// duty or a manually picked year must not be moved behind the player's back.
+#[rustfmt::skip]
 fn date_for_game(date: &str, real_date: bool, span: Option<(i32, i32)>) -> String {
     if real_date {
         fit_date_to_years(date, span)
@@ -855,11 +927,13 @@ fn date_for_game(date: &str, real_date: bool, span: Option<(i32, i32)>) -> Strin
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct EntryInfo {
     pub index: i32,
     pub name: String,
 }
 
+#[rustfmt::skip]
 pub fn list_maps() -> Result<Vec<MapInfo>> {
     root()?;
     let lang = content_language();
@@ -885,6 +959,7 @@ pub fn list_maps() -> Result<Vec<MapInfo>> {
 
 /// Say in launcher.log where a list that came out empty was looked for: each folder of
 /// `rel` and how many entries it has (a player whose lists stay empty sends the log).
+#[rustfmt::skip]
 fn log_empty(rel: &str, what: &str) {
     let places: Vec<String> = bases()
         .iter()
@@ -901,6 +976,7 @@ fn log_empty(rel: &str, what: &str) {
 
 /// The map in `d` and the files its entry is read from beyond the stamped ones (the tiles,
 /// when their entry objects are its entry points).
+#[rustfmt::skip]
 fn read_map(d: &Path, folder: &str, lang: &str) -> (Option<MapInfo>, Vec<PathBuf>) {
     let mut g = match omsi_map::GlobalCfg::load(&d.join("global.cfg")) {
         Ok(g) => g,
@@ -943,6 +1019,7 @@ fn read_map(d: &Path, folder: &str, lang: &str) -> (Option<MapInfo>, Vec<PathBuf
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct VehicleInfo {
     pub name: String,
     pub manufacturer: String,
@@ -974,6 +1051,7 @@ pub struct VehicleInfo {
 
 /// Why `vehicle` may not run on `map`, or `None` when it may (a map that names no transport
 /// mode takes every vehicle). The game checks the same rule when it starts.
+#[rustfmt::skip]
 pub fn transport_refusal(map: &MapInfo, vehicle: &VehicleInfo) -> Option<String> {
     let modes = |v: &[String]| -> omsi_cfg::transport::ModeSet { v.iter().filter_map(|n| omsi_cfg::transport::TransportMode::from_name(n)).collect() };
     match omsi_cfg::transport::admit(modes(&map.transport), modes(&vehicle.transport), false) {
@@ -983,11 +1061,13 @@ pub fn transport_refusal(map: &MapInfo, vehicle: &VehicleInfo) -> Option<String>
 }
 
 /// Names in older vehicle packs use underscores as spaces.
+#[rustfmt::skip]
 pub fn display_bus_name(name: &str) -> String {
     name.replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// The displayed vehicle type, using its file name when [friendlyname] leaves it empty.
+#[rustfmt::skip]
 pub fn vehicle_type_label(type_name: &str, path: &Path) -> String {
     if type_name.trim().is_empty() {
         display_bus_name(&path.file_stem().unwrap_or_default().to_string_lossy())
@@ -997,6 +1077,7 @@ pub fn vehicle_type_label(type_name: &str, path: &Path) -> String {
 }
 
 /// The vehicle packs whose parts a model file names and that are installed nowhere.
+#[rustfmt::skip]
 fn missing_packs_of(model: &Path) -> Vec<String> {
     let Ok(text) = omsi_cfg::vfs::read(model) else { return Vec::new() };
     let text = omsi_cfg::codepage::decode(&text);
@@ -1025,6 +1106,7 @@ fn missing_packs_of(model: &Path) -> Vec<String> {
 
 /// `[item]` names of every `.cti` in the model's `[CTC]` folders (in every content root):
 /// the paint schemes, and the folders they were read from.
+#[rustfmt::skip]
 fn paint_schemes(vehicle: &omsi_vehicle::Vehicle) -> (Vec<String>, Vec<PathBuf>) {
     let mut names: Vec<String> = Vec::new();
     let mut dirs_read: Vec<PathBuf> = Vec::new();
@@ -1070,6 +1152,7 @@ fn paint_schemes(vehicle: &omsi_vehicle::Vehicle) -> (Vec<String>, Vec<PathBuf>)
 
 /// The `[name]`s of the depot files in the top-level `HOFs/` folder of every content root
 /// (shared by all vehicles; a higher-priority root's file hides the same file name lower down).
+#[rustfmt::skip]
 fn shared_depot_names() -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut names = Vec::new();
@@ -1091,6 +1174,7 @@ fn shared_depot_names() -> Vec<String> {
 }
 
 /// One line into ~/.openomsi/launcher.log.
+#[rustfmt::skip]
 fn log_line(line: &str) {
     use std::io::Write;
     let p = data_dir().join("launcher.log");
@@ -1100,14 +1184,17 @@ fn log_line(line: &str) {
     }
 }
 
+#[rustfmt::skip]
 pub fn list_vehicles() -> Result<Vec<VehicleInfo>> {
     list_vehicles_progress(|_, _, _| {})
 }
 
 /// The depot files (by `[name]`) beside bus or map file `bus` (relative to `root`) whose IBIS
 /// trips carry line `line`, the fullest first, read once per file and line.
+#[rustfmt::skip]
 pub fn depot_names_with_line(root: &Path, bus: &str, line: &str) -> Vec<String> {
     type Cache = std::collections::HashMap<(PathBuf, String, String), Vec<String>>;
+#[rustfmt::skip]
     static CACHE: std::sync::LazyLock<std::sync::Mutex<Cache>> = std::sync::LazyLock::new(Default::default);
     let key = (root.to_path_buf(), bus.to_string(), line.to_string());
     if let Some(v) = CACHE.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
@@ -1133,8 +1220,10 @@ pub fn depot_names_with_line(root: &Path, bus: &str, line: &str) -> Vec<String> 
 /// Whether the depot file called `name`, wherever it is installed (the bus's own folder,
 /// another bus's, the shared `HOFs/`), carries line `line`; None when there is no such file.
 /// Read once per name and line.
+#[rustfmt::skip]
 pub fn depot_has_line(name: &str, line: &str) -> Option<bool> {
     type Cache = std::collections::HashMap<(String, String), Option<bool>>;
+#[rustfmt::skip]
     static CACHE: std::sync::LazyLock<std::sync::Mutex<Cache>> = std::sync::LazyLock::new(Default::default);
     let key = (name.trim().to_ascii_lowercase(), line.to_string());
     if let Some(v) = CACHE.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
@@ -1149,6 +1238,7 @@ pub fn depot_has_line(name: &str, line: &str) -> Option<bool> {
 /// held, how many folders are done and how many there are: a big installation's first
 /// reading (thousands of vehicle folders, nothing in the cache yet) takes minutes, and the
 /// page showed nothing at all until the last folder was read.
+#[rustfmt::skip]
 pub fn list_vehicles_progress(progress: impl Fn(&[VehicleInfo], usize, usize)) -> Result<Vec<VehicleInfo>> {
     use rayon::prelude::*;
     root()?;
@@ -1211,11 +1301,13 @@ pub fn list_vehicles_progress(progress: impl Fn(&[VehicleInfo], usize, usize)) -
 
 /// The buses of one vehicle folder (all its copies; a bus file in the content folder hides
 /// the one of the same name in the OMSI folder), and the folders read besides its own.
+#[rustfmt::skip]
 fn read_vehicle_folder(folder: &str, dirs: &[PathBuf], lang: &str) -> (Vec<VehicleInfo>, Vec<PathBuf>) {
     // Every file of the folder and of the folders in it, however deep: OMSI's bus list looks
     // for `*.bus` and `*.ovh` under Vehicles to any depth (Omsi.exe 0x67bdf9, the search
     // with depth 255) - `Vehicles\Pack\Variant\x.bus` was not listed here (#137). A file of
     // the content folder hides the one at the same place in the installation.
+#[rustfmt::skip]
     fn walk(d: &Path, rel: &str, depth: u32, out: &mut Vec<(String, PathBuf)>) {
         let mut list = omsi_cfg::vfs::list_dir(d).unwrap_or_default();
         list.sort();
@@ -1293,6 +1385,7 @@ fn read_vehicle_folder(folder: &str, dirs: &[PathBuf], lang: &str) -> (Vec<Vehic
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct WeatherInfo {
     pub name: String,
     pub file: String,
@@ -1307,11 +1400,14 @@ pub struct WeatherInfo {
 }
 
 pub use omsi_content::weather_choice::metar_airports;
+#[rustfmt::skip]
 mod airports;
 pub use airports::nearest_airport;
+#[rustfmt::skip]
 mod custom_weather;
-pub use custom_weather::{custom_weather, CustomWeather};
+pub use custom_weather::{CustomWeather, custom_weather};
 
+#[rustfmt::skip]
 pub fn list_weather() -> Result<Vec<WeatherInfo>> {
     root()?;
     let mut out = Vec::new();
@@ -1336,6 +1432,7 @@ pub fn list_weather() -> Result<Vec<WeatherInfo>> {
 /// interface's language - the English one where OMSI has none in that language (the
 /// interface's tables translate it further) - else its file's name. OMSI's own angle brackets
 /// ("<Best Weather>", which sort it first in its list) are left out.
+#[rustfmt::skip]
 pub fn weather_name(f: &Path) -> String {
     weather_name_in(f, content_language())
 }
@@ -1343,8 +1440,10 @@ pub fn weather_name(f: &Path) -> String {
 /// OMSI 2's own weathers by their English names (its `_ENG.dsc`), which the interface's
 /// tables translate for the languages OMSI has no descriptions in; listed here so the
 /// translation check knows them as texts the program shows.
+#[rustfmt::skip]
 pub const STOCK_WEATHER_NAMES: [&str; 9] = ["Best Weather", "Ground Fog", "Twilight Fog", "Iciness", "Rainy", "Summerlike", "Heavy Snowfall", "Storm", "Freezing Wetness"];
 
+#[rustfmt::skip]
 fn weather_name_in(f: &Path, lang: &str) -> String {
     let stem = f.file_stem().map(|s| s.to_string_lossy().trim_start_matches('#').to_string()).unwrap_or_default();
     find_dsc(f, lang)
@@ -1353,6 +1452,7 @@ fn weather_name_in(f: &Path, lang: &str) -> String {
         .unwrap_or(stem)
 }
 
+#[rustfmt::skip]
 fn read_weather(f: &Path, lang: &str) -> Option<WeatherInfo> {
     let w = omsi_content::weather::Weather::load(f).ok()?;
     // (the `[name]` of the file is not part of the description: "Ground Fog Heavy ground fog ...")
@@ -1367,6 +1467,7 @@ fn read_weather(f: &Path, lang: &str) -> Option<WeatherInfo> {
 
 /// The content language of the settings (`language=`, English by default): which
 /// `<file>_<LANG>.dsc` names and describes maps, buses and weathers.
+#[rustfmt::skip]
 fn content_language() -> &'static str {
     let text = std::fs::read_to_string(data_dir().join("settings.cfg")).ok();
     language_code(settings_from_text(text.as_deref())["language"].as_str().unwrap_or("ENG"))
@@ -1375,6 +1476,7 @@ fn content_language() -> &'static str {
 /// The description files OMSI reads for `file` (`global.cfg` -> `global_ENG.dsc`), in the
 /// order they are tried: the language itself, then English for a language that has none
 /// (German is the files' own language, so German falls back to the file itself).
+#[rustfmt::skip]
 fn dsc_candidates(file: &Path, lang: &str) -> Vec<PathBuf> {
     let stem = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let mut langs = vec![lang];
@@ -1385,11 +1487,13 @@ fn dsc_candidates(file: &Path, lang: &str) -> Vec<PathBuf> {
 }
 
 /// A `.dsc` file: the `[name]` / `[friendlyname]` lines and the `[description]` text.
+#[rustfmt::skip]
 struct Dsc {
     name: Vec<String>,
     description: String,
 }
 
+#[rustfmt::skip]
 fn parse_dsc(text: &str) -> Dsc {
     let mut name = Vec::new();
     let mut desc: Vec<&str> = Vec::new();
@@ -1416,12 +1520,14 @@ fn parse_dsc(text: &str) -> Dsc {
     Dsc { name, description: desc.join("\n").trim().to_string() }
 }
 
+#[rustfmt::skip]
 fn find_dsc(file: &Path, lang: &str) -> Option<Dsc> {
     dsc_candidates(file, lang).iter().find_map(|p| omsi_cfg::vfs::read(p).ok()).map(|b| parse_dsc(&encoding_latin1(&b)))
 }
 
 /// OMSI's text files are Latin-1, except that some description files were saved as
 /// UTF-16 with a byte-order mark.
+#[rustfmt::skip]
 fn encoding_latin1(b: &[u8]) -> String {
     if b.len() >= 2 && b[0] == 0xFF && b[1] == 0xFE {
         let u: Vec<u16> = b[2..].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
@@ -1438,6 +1544,7 @@ fn encoding_latin1(b: &[u8]) -> String {
 // timetable: lines, tours, trips and the roadbook
 
 #[derive(Serialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct StopInfo {
     pub name: String,
     pub arr: f64,
@@ -1447,6 +1554,7 @@ pub struct StopInfo {
 /// One trip of a tour, as OMSI's timetable dialog lists it: when it leaves, from where to
 /// where, on which line, and the trip's (route's) own name.
 #[derive(Serialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct TripInfo {
     /// The trip file's name ("4 Liman-ZS"): the name the map gives the route.
     pub name: String,
@@ -1464,6 +1572,7 @@ pub struct TripInfo {
 }
 
 #[derive(Serialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct TourInfo {
     /// Selection identity within a line; the displayed number may repeat on other days.
     pub id: String,
@@ -1483,6 +1592,7 @@ pub struct TourInfo {
 }
 
 #[derive(Serialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct LineInfo {
     pub name: String,
     pub user_allowed: bool,
@@ -1492,9 +1602,11 @@ pub struct LineInfo {
     pub tours: Vec<TourInfo>,
 }
 
+#[rustfmt::skip]
 impl LineInfo {
     /// Older saved choices contain just the tour number. Prefer today's variant when
     /// upgrading those choices, while exact IDs keep an explicit other-day selection.
+#[rustfmt::skip]
     pub fn tour(&self, selection: &str) -> Option<&TourInfo> {
         self.tours
             .iter()
@@ -1506,11 +1618,13 @@ impl LineInfo {
 
 /// The date the game starts on without `--date` (its clock's default, day 150 of 1989), and
 /// the launcher's own default date.
+#[rustfmt::skip]
 pub const DEFAULT_DATE: &str = "1989-05-30";
 
 /// A trip as a map picture needs it: the map's own road pieces the trip drives, in order,
 /// and its stops.
 #[derive(Clone, Debug, Default, PartialEq)]
+#[rustfmt::skip]
 pub struct TripPath {
     /// The road pieces it drives, in order (the shared piece of two links appears once).
     pub route: Vec<RoadPiece>,
@@ -1523,6 +1637,7 @@ pub struct TripPath {
 /// `LaneKey` (`schedule::steps_of` builds the same three fields), so the launcher's map
 /// picture can find the very lane the game would drive the trip on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[rustfmt::skip]
 pub struct RoadPiece {
     pub tile_x: i32,
     pub tile_y: i32,
@@ -1534,6 +1649,7 @@ pub struct RoadPiece {
 /// The route of trip `trip` of the map `map` on `date`: its road pieces and its stops.
 /// The trip's own track (`.ttr`) when it names one - trains, ferries, and the type-1 trips
 /// of mod maps - else the station links between its stops, as the game walks them.
+#[rustfmt::skip]
 pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
     let map_dir = resolve_content(map)?.parent().map(|p| p.to_path_buf()).context("map folder")?;
     let date = if date.trim().is_empty() { DEFAULT_DATE } else { date.trim() };
@@ -1570,6 +1686,7 @@ pub fn trip_path(map: &str, date: &str, trip: &str) -> Result<TripPath> {
 
 /// The road pieces a run of stops drives by the map's station links (consecutive links
 /// repeat the piece they share).
+#[rustfmt::skip]
 fn link_route(data: &omsi_timetable::TimetableData, stops: &[i64], at: &dyn Fn(f64) -> Option<(i32, i32)>) -> Vec<RoadPiece> {
     let mut route: Vec<RoadPiece> = Vec::new();
     for w in stops.windows(2) {
@@ -1589,11 +1706,13 @@ fn link_route(data: &omsi_timetable::TimetableData, stops: &[i64], at: &dyn Fn(f
 }
 
 /// Active Chrono directories for `map_dir` when `date` parses.
+#[rustfmt::skip]
 pub fn chrono_dirs_for_date(map_dir: &Path, date: &str) -> Vec<PathBuf> {
     omsi_map::date_code(date.trim()).map(|c| omsi_map::active_chrono_dirs(map_dir, c)).unwrap_or_default()
 }
 
 /// Timetable data for `map_dir`, layering active Chrono events when `date` parses.
+#[rustfmt::skip]
 pub fn timetable_for_date(map_dir: &Path, date: &str) -> omsi_timetable::TimetableData {
     let chrono = chrono_dirs_for_date(map_dir, date);
     let off = omsi_map::chrono_deactivated_lines(&chrono);
@@ -1602,6 +1721,7 @@ pub fn timetable_for_date(map_dir: &Path, date: &str) -> omsi_timetable::Timetab
 
 /// A run of stops - a trip being made in the timetable editor - as a map picture needs it:
 /// the road pieces the map's station links drive between them.
+#[rustfmt::skip]
 pub fn chain_path(map: &str, date: &str, stops: &[i64]) -> Result<TripPath> {
     let map_dir = resolve_content(map)?.parent().map(|p| p.to_path_buf()).context("map folder")?;
     let data = timetable_for_date(&map_dir, date);
@@ -1613,11 +1733,13 @@ pub fn chain_path(map: &str, date: &str, stops: &[i64]) -> Result<TripPath> {
 /// The lines of a map's timetable on `date` (`YYYY-MM-DD`, the game's default when empty):
 /// the chrono folders active that day add their lines and take theirs off, as the game does
 /// - Spandau's 1991 timetable change replaces line "5 & 5N" and sixteen others.
+#[rustfmt::skip]
 pub fn list_lines(map: &str, date: &str) -> Result<Vec<LineInfo>> {
     let map_dir = resolve_content(map)?.parent().map(|p| p.to_path_buf()).context("map folder")?;
     lines_on(&map_dir, date)
 }
 
+#[rustfmt::skip]
 fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
     let date = if date.trim().is_empty() { DEFAULT_DATE } else { date.trim() };
     let code = omsi_map::date_code(date).with_context(|| i18n::trf("'{date}' is not a date (YYYY-MM-DD)", &[("date", &date)]))?;
@@ -1710,9 +1832,11 @@ fn lines_on(map_dir: &Path, date: &str) -> Result<Vec<LineInfo>> {
     Ok(out)
 }
 
+#[rustfmt::skip]
 mod date_codes;
 use date_codes::{add_days, day_before, days_of, weekday};
 
+#[rustfmt::skip]
 fn natural_key(s: &str) -> (u64, String) {
     let digits: String = s.chars().take_while(|c| c.is_ascii_digit()).collect();
     (digits.parse().unwrap_or(u64::MAX), s.to_ascii_lowercase())
@@ -1721,6 +1845,7 @@ fn natural_key(s: &str) -> (u64, String) {
 /// What the driver types into the IBIS for a line, from the bus's depot file: the line
 /// code, and for each destination the route code and the terminus code.
 #[derive(Serialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct IbisInfo {
     pub hof: String,
     pub line_code: String,
@@ -1729,6 +1854,7 @@ pub struct IbisInfo {
 }
 
 #[derive(Serialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct IbisRoute {
     pub code: String,
     pub route: String,
@@ -1737,6 +1863,7 @@ pub struct IbisRoute {
     pub terminus: String,
 }
 
+#[rustfmt::skip]
 pub fn ibis_info(bus: &str, hof_name: &str, line: &str, terminus: &str, stops: &[String]) -> Result<IbisInfo> {
     let bus_path = resolve_content(bus)?;
     let dir = bus_path.parent().context("bus folder")?;
@@ -1767,6 +1894,7 @@ pub fn ibis_info(bus: &str, hof_name: &str, line: &str, terminus: &str, stops: &
 // profiles: the driver's personnel file plus the sessions the game writes
 
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[rustfmt::skip]
 pub struct Session {
     pub time: u64,
     pub driver: String,
@@ -1790,6 +1918,7 @@ pub struct Session {
 }
 
 #[derive(Serialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct Profile {
     pub name: String,
     pub file: String,
@@ -1812,6 +1941,7 @@ pub struct Profile {
     pub exists: bool,
 }
 
+#[rustfmt::skip]
 fn sessions() -> Vec<Session> {
     let dir = data_dir().join("sessions");
     let mut out: Vec<Session> = std::fs::read_dir(&dir).map(|rd| rd.flatten().filter_map(|e| std::fs::read_to_string(e.path()).ok()).filter_map(|t| serde_json::from_str::<Session>(&t).ok()).collect()).unwrap_or_default();
@@ -1821,12 +1951,14 @@ fn sessions() -> Vec<Session> {
 
 /// Experience: a point per hundred metres, five per stop served on time, two per ticket,
 /// minus twenty per crash and fifty per pedestrian; the level grows with the square root.
+#[rustfmt::skip]
 fn xp_of(s: &Session) -> i64 {
     let on_time = (s.stops - s.early - s.late).max(0) as i64;
     let xp = (s.metres / 100.0) as i64 + on_time * 5 + s.tickets as i64 * 2 + (s.seconds / 60.0) as i64 - s.crashes as i64 * 20 - s.hurt as i64 * 50 - s.jolts as i64;
     xp.max(0)
 }
 
+#[rustfmt::skip]
 fn level_of(xp: i64) -> (i64, i64) {
     let level = ((xp as f64 / 250.0).sqrt().floor() as i64) + 1;
     let next = (level * level) as i64 * 250;
@@ -1835,12 +1967,14 @@ fn level_of(xp: i64) -> (i64, i64) {
 
 /// Where a driver's personnel file is written: the content folder's `Drivers` (the
 /// original installation is only ever read).
+#[rustfmt::skip]
 fn driver_write_path(root: &Path, name: &str) -> PathBuf {
     content_dir().unwrap_or_else(|| root.to_path_buf()).join("Drivers").join(format!("{name}.odr"))
 }
 
 /// Where a driver's personnel file is read: the content folder's copy once the game has
 /// written one, else the original installation's (the stock `OMSI-Fan.odr`).
+#[rustfmt::skip]
 fn driver_read_path(root: &Path, name: &str) -> PathBuf {
     let own = driver_write_path(root, name);
     if own.exists() {
@@ -1850,6 +1984,7 @@ fn driver_read_path(root: &Path, name: &str) -> PathBuf {
     }
 }
 
+#[rustfmt::skip]
 pub fn list_profiles() -> Result<Vec<String>> {
     let root = root()?;
     let odr_names = |dir: PathBuf| -> Vec<String> { std::fs::read_dir(dir).map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("odr")).unwrap_or(false)).filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().to_string())).collect()).unwrap_or_default() };
@@ -1867,6 +2002,7 @@ pub fn list_profiles() -> Result<Vec<String>> {
     Ok(names)
 }
 
+#[rustfmt::skip]
 pub fn get_profile(name: &str) -> Result<Profile> {
     let root = root()?;
     let name = name.trim();
@@ -1892,6 +2028,7 @@ pub fn get_profile(name: &str) -> Result<Profile> {
 
 /// Create the personnel file for a new driver (OMSI's own `.odr` format), so that the game
 /// can add every run to it.
+#[rustfmt::skip]
 pub fn create_profile(name: &str, sex: &str) -> Result<Profile> {
     let root = root()?;
     let name = name.trim();
@@ -1914,6 +2051,7 @@ pub fn create_profile(name: &str, sex: &str) -> Result<Profile> {
 
 /// Remove only the history belonging to this driver. Unreadable or malformed records
 /// have no trustworthy owner and are kept, as are records belonging to other drivers.
+#[rustfmt::skip]
 fn delete_profile_sessions(dir: &Path, name: &str) -> Result<()> {
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
@@ -1940,6 +2078,7 @@ fn delete_profile_sessions(dir: &Path, name: &str) -> Result<()> {
 
 /// Delete the personnel file and its run history. A driver who exists only in the
 /// original installation is left there: the original is never written.
+#[rustfmt::skip]
 pub fn delete_profile(name: &str) -> Result<()> {
     let name = name.trim();
     if name.is_empty() || name.contains(['/', '\\', ':']) {
@@ -1956,6 +2095,7 @@ pub fn delete_profile(name: &str) -> Result<()> {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod profile_cleanup_tests;
 
 // ---------------------------------------------------------------------------------------
@@ -1963,15 +2103,18 @@ mod profile_cleanup_tests;
 // the page has saved one (the game reads that first), else the original installation's,
 // which is never written
 
+#[rustfmt::skip]
 pub fn adopt_own_inputs() {
     let game = load_config_raw().game;
     omsi_cfg::adopt_own_inputs(Some(Path::new(game.trim())).filter(|p| !p.as_os_str().is_empty()));
 }
 
+#[rustfmt::skip]
 fn keyboard_cfg_write_path() -> Result<PathBuf> {
     omsi_cfg::own_input("keyboard.cfg").ok_or_else(|| anyhow!("no home folder to keep the key bindings in"))
 }
 
+#[rustfmt::skip]
 fn keyboard_cfg_read_path() -> Result<PathBuf> {
     match omsi_cfg::input_in_use("keyboard.cfg") {
         Some(p) => Ok(p),
@@ -1979,10 +2122,12 @@ fn keyboard_cfg_read_path() -> Result<PathBuf> {
     }
 }
 
+#[rustfmt::skip]
 fn binding_to_json(b: &omsi_content::input::KeyBinding) -> Value {
     json!({ "action": b.action, "scan_code": b.scan_code, "modifier": b.modifier })
 }
 
+#[rustfmt::skip]
 fn binding_from_json(v: &Value) -> Option<omsi_content::input::KeyBinding> {
     Some(omsi_content::input::KeyBinding {
         action: v.get("action")?.as_str()?.to_string(),
@@ -1991,6 +2136,7 @@ fn binding_from_json(v: &Value) -> Option<omsi_content::input::KeyBinding> {
     })
 }
 
+#[rustfmt::skip]
 pub fn get_keybindings() -> Result<Value> {
     let path = keyboard_cfg_read_path()?;
     let k = omsi_content::input::KeyboardCfg::load(&path)?.with_game_defaults().with_vr_defaults();
@@ -2000,6 +2146,7 @@ pub fn get_keybindings() -> Result<Value> {
 /// Replace the bindings with the page's list. Written to a temp file and read back through
 /// the same loader the game uses before it replaces the real file, so a page bug never
 /// leaves the player with a `keyboard.cfg` the game itself cannot parse.
+#[rustfmt::skip]
 pub fn save_keybindings(v: &Value) -> Result<()> {
     let list = |k: &str| -> Vec<omsi_content::input::KeyBinding> { v.get(k).and_then(|x| x.as_array()).map(|a| a.iter().filter_map(binding_from_json).collect()).unwrap_or_default() };
     let k = omsi_content::input::KeyboardCfg { game: list("game"), vehicles: list("vehicles") };
@@ -2017,6 +2164,7 @@ pub fn save_keybindings(v: &Value) -> Result<()> {
 // ---------------------------------------------------------------------------------------
 // settings (the game's ~/.openomsi/settings.cfg)
 
+#[rustfmt::skip]
 pub fn get_settings() -> Result<Value> {
     let text = std::fs::read_to_string(data_dir().join("settings.cfg")).ok();
     let mut v = settings_from_text(text.as_deref());
@@ -2042,15 +2190,18 @@ pub fn get_settings() -> Result<Value> {
 /// dropped when the file is written again (the game takes the last line of them, so a kept
 /// `lang=` would undo the page's `language=`).
 // (`navigator_opacity`: the opacity was the navigator's before it was the whole interface's)
+#[rustfmt::skip]
 const SETTING_ALIASES: &[(&str, &str)] = &[("af", "anisotropy"), ("ambient_occlusion", "ssao"), ("fractal", "detail_textures"), ("lang", "language"), ("texmemlimit", "texture_memory"), ("navigator_opacity", "ui_opacity"), ("gear_buttons_hold", "momentary_gears")];
 
 /// Keys of before that are dropped when the file is written again: `texture_memory=` (and
 /// OMSI's `texmemlimit=`, its alias) was the textures' budget, which `video_memory=` - all
 /// the game holds on the card - replaced; kept, a 401 or a 1000 meant for the textures would
 /// be taken for something else by whoever reads it next.
+#[rustfmt::skip]
 const RETIRED_SETTINGS: &[&str] = &["texture_memory", "nav_light"];
 
 /// A window size as the settings keep it: "WxH" in pixels (each 320..16384), else "auto".
+#[rustfmt::skip]
 pub fn resolution_text(v: &str) -> String {
     let v = v.trim().to_ascii_lowercase().replace(' ', "").replace(['*', '×'], "x");
     match v.split_once('x').map(|(w, h)| (w.trim().parse::<u32>(), h.trim().parse::<u32>())) {
@@ -2059,16 +2210,18 @@ pub fn resolution_text(v: &str) -> String {
     }
 }
 
+#[rustfmt::skip]
 fn setting_key(k: &str) -> String {
     let k = k.trim().to_ascii_lowercase();
     SETTING_ALIASES.iter().find(|(alias, _)| *alias == k).map(|(_, key)| key.to_string()).unwrap_or(k)
 }
 
 // (the language table lives in omsi-cfg, below the input crate that needs it too)
-pub use omsi_cfg::lang::{language_code, language_iso, LANGUAGES};
+pub use omsi_cfg::lang::{LANGUAGES, language_code, language_iso};
 
 /// `vanilla` (as OMSI 2), `vanilla_plus`, `enhanced` or `enhanced_plus`, from the ways a file
 /// may spell them (as the game's `settings::graphics_mode`).
+#[rustfmt::skip]
 pub fn graphics_mode(v: &str) -> &'static str {
     match v.trim().to_ascii_lowercase().replace(['-', ' '], "_").as_str() {
         "enhanced_plus" | "enhanced+" | "enhancedplus" | "enhanced_+" | "2" => "enhanced_plus",
@@ -2081,6 +2234,7 @@ pub fn graphics_mode(v: &str) -> &'static str {
 /// The graphics mode a settings page's `v` draws with, ray tracing counted as a mode of its own:
 /// `vanilla`, `vanilla_plus`, `enhanced`, or `enhanced_plus` for Enhanced with Real-Time Ray
 /// Tracing on (what the code that tunes for the traced picture asks).
+#[rustfmt::skip]
 pub fn effective_mode(v: &Value) -> &'static str {
     let g = graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus"));
     if g == "enhanced" && v.get("ray_tracing").and_then(|x| x.as_bool()).unwrap_or(false) { "enhanced_plus" } else { g }
@@ -2094,6 +2248,7 @@ pub fn effective_mode(v: &Value) -> &'static str {
 /// mirrors drawn as the picture, Ultra Real-Time Ray Tracing on top of all of it. Each is a step up in cost and the
 /// light's own shadows (cached tiles, a handful of passes) are far from the dearest of them. The
 /// texture memory is left as it is.
+#[rustfmt::skip]
 pub fn graphics_presets() -> [(&'static str, Value); 6] {
     // per level: Low, Medium, High, Extra, Max, Ultra
     let graphics = ["vanilla", "vanilla_plus", "enhanced", "enhanced", "enhanced", "enhanced"];
@@ -2135,6 +2290,7 @@ pub fn graphics_presets() -> [(&'static str, Value); 6] {
 }
 
 /// Normalize vehicle smoke visibility for the game, launcher and saved profiles.
+#[rustfmt::skip]
 pub fn vehicle_smoke(x: &str) -> &'static str {
     match x.trim().to_ascii_lowercase().as_str() {
         "player" | "player_only" => "player",
@@ -2144,16 +2300,19 @@ pub fn vehicle_smoke(x: &str) -> &'static str {
 }
 
 /// The wet roads' reflections: `off` or `low`, else `high` (as the game reads its `puddles`).
+#[rustfmt::skip]
 pub fn puddles(x: &str) -> &'static str {
     match x.trim().to_ascii_lowercase().as_str() { "off" | "0" | "none" => "off", "low" => "low", _ => "high" }
 }
 
 /// The enhanced clouds' quality: `low`, else `high` (as the game's `settings::cloud_quality`).
+#[rustfmt::skip]
 fn cloud_quality(x: &str) -> &'static str {
     if x.trim().eq_ignore_ascii_case("low") { "low" } else { "high" }
 }
 
 /// Which lights cast shadows: `off` or `all`, else `street` (as the game's `settings::light_shadows`).
+#[rustfmt::skip]
 fn light_shadows(x: &str) -> &'static str {
     match x.trim().to_ascii_lowercase().as_str() {
         "off" | "0" | "none" | "false" => "off",
@@ -2163,6 +2322,7 @@ fn light_shadows(x: &str) -> &'static str {
 }
 
 /// The street-scale light: `on` or `off`, else `auto` (as the game's `settings::street_light`).
+#[rustfmt::skip]
 fn street_light(x: &str) -> &'static str {
     match x.trim().to_ascii_lowercase().as_str() {
         "on" | "1" | "true" => "on",
@@ -2172,6 +2332,7 @@ fn street_light(x: &str) -> &'static str {
 }
 
 /// The rain's quality: `medium` or `low`, else `high` (as the game's `settings::rain_quality`).
+#[rustfmt::skip]
 fn rain_quality(x: &str) -> &'static str {
     match x.trim().to_ascii_lowercase().as_str() {
         "medium" => "medium",
@@ -2182,6 +2343,7 @@ fn rain_quality(x: &str) -> &'static str {
 
 /// How often the mirrors are drawn: `off`, `eco` or `full`, also from OMSI's
 /// `performance_realreflexions` (none, economy, full).
+#[rustfmt::skip]
 fn mirror_refresh(x: &str) -> &'static str {
     match x.trim().to_ascii_lowercase().as_str() {
         "off" | "none" => "off",
@@ -2193,6 +2355,7 @@ fn mirror_refresh(x: &str) -> &'static str {
 
 /// How the mirrors are shaded in the Enhanced pictures: `standard` (the plain light) or
 /// `enhanced` (as the window's picture).
+#[rustfmt::skip]
 fn mirror_quality(x: &str) -> &'static str {
     if x.trim().eq_ignore_ascii_case("enhanced") {
         "enhanced"
@@ -2201,6 +2364,7 @@ fn mirror_quality(x: &str) -> &'static str {
     }
 }
 
+#[rustfmt::skip]
 pub fn perf_overlay_mode(value: &str) -> &'static str {
     match value.trim().to_ascii_lowercase().as_str() {
         "compact" | "1" | "true" | "on" => "compact",
@@ -2211,6 +2375,7 @@ pub fn perf_overlay_mode(value: &str) -> &'static str {
 
 /// Where the head's pose comes from (`head_tracking_source`): "opentrack", "tobii" (a Tobii
 /// eye tracker read natively) or "auto" (both, opentrack's first).
+#[rustfmt::skip]
 pub fn head_tracking_source(v: &str) -> &'static str {
     match v.trim().to_ascii_lowercase().as_str() {
         "opentrack" | "udp" => "opentrack",
@@ -2222,11 +2387,13 @@ pub fn head_tracking_source(v: &str) -> &'static str {
 /// A Tobii tracker's smoothing (`head_tracking_smoothing`, 0 to 1, 0.5) and dead zone
 /// (`head_tracking_dead_zone`, 0 to 1 degrees, 0.1), in twentieths (none, or one out of its
 /// reach: the default).
+#[rustfmt::skip]
 pub fn head_tracking_value(key: &str, v: Option<f64>) -> f64 {
     let default = if key == "head_tracking_smoothing" { 0.5 } else { 0.1 };
     v.filter(|x| x.is_finite() && (0.0..=1.0).contains(x)).map(|x| (x * 20.0).round() / 20.0).unwrap_or(default)
 }
 
+#[rustfmt::skip]
 fn ui_theme_from_text(text: &str) -> &'static str {
     let (mut theme, mut legacy_nav_light) = (None, None);
     for line in text.lines() {
@@ -2246,6 +2413,7 @@ fn ui_theme_from_text(text: &str) -> &'static str {
 }
 
 /// Dynamic and map-placed arrows, each falling back to the former shared setting.
+#[rustfmt::skip]
 pub fn route_arrows_from_text(text: &str) -> (bool, bool) {
     let mut legacy = false;
     let mut dynamic = None;
@@ -2265,12 +2433,14 @@ pub fn route_arrows_from_text(text: &str) -> (bool, bool) {
 }
 
 /// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
+#[rustfmt::skip]
 pub fn settings_from_text(text: Option<&str>) -> Value {
     settings_from_text_on(text, cfg!(any(target_os = "android", target_os = "ios")))
 }
 
 // Voice chat in multiplayer: off until switched on (the microphone is then used with a
 // talk key held, or open).
+#[rustfmt::skip]
 fn voice_defaults(v: &mut Value) {
     v["voice_enabled"] = json!(false);
     v["voice_mode"] = json!("ptt");
@@ -2286,6 +2456,7 @@ fn voice_defaults(v: &mut Value) {
 }
 
 // Keep independent opt-in defaults shared by desktop and phone settings.
+#[rustfmt::skip]
 fn passenger_defaults(v: &mut Value) {
     v["passenger_connections"] = json!(false);
     v["passenger_transfer_percent"] = json!(20.0);
@@ -2295,6 +2466,7 @@ fn passenger_defaults(v: &mut Value) {
 }
 
 /// Initial values shared by desktop and phone, kept outside the long settings parser.
+#[rustfmt::skip]
 fn graphics_and_interface_defaults(v: &mut Value) {
     v["upscaler"] = json!("default");
     v["upscale_quality"] = json!("quality");
@@ -2316,6 +2488,7 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["vehicle_smoke"] = json!("all");
 }
 
+#[rustfmt::skip]
 pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
     graphics_and_interface_defaults(&mut v);
@@ -2616,6 +2789,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
 
 /// OMSI's tutorials (`Tutorials/menu_<n>_<LANG>.html`): per lesson its title and what
 /// it teaches, in the settings' language.
+#[rustfmt::skip]
 pub fn tutorials() -> Vec<(usize, String, String)> {
     let Ok(r) = root() else { return Vec::new() };
     let lang = content_language();
@@ -2650,6 +2824,7 @@ pub use omsi_content::tutorial::decode_html_entities;
 /// OMSI's option presets (`option_presets/*.oop`): their names and what they say, in the
 /// settings' own keys (maxFPS, performance_minObjSize/maxObjDist, texFilter, texmemlimit,
 /// performance_reflTexSize).
+#[rustfmt::skip]
 pub fn option_presets() -> Vec<(String, Value)> {
     let Ok(r) = root() else { return Vec::new() };
     let mut out = Vec::new();
@@ -2678,6 +2853,7 @@ pub fn option_presets() -> Vec<(String, Value)> {
     out
 }
 
+#[rustfmt::skip]
 pub fn save_settings(v: &Value) -> Result<()> {
     let p = data_dir().join("settings.cfg");
     let old = std::fs::read_to_string(&p).ok();
@@ -2688,6 +2864,7 @@ pub fn save_settings(v: &Value) -> Result<()> {
 /// The `settings.cfg` text for the page's values `v`; the lines of the `old` file that the
 /// page does not manage (keys of newer games, hand-written switches) are kept.
 /// The `units` setting's value: `metric`, `uk` or `us` (the game's `units` module).
+#[rustfmt::skip]
 fn units_setting(v: &str) -> &'static str {
     match v.trim().to_ascii_lowercase().as_str() {
         "uk" | "british" => "uk",
@@ -2696,6 +2873,7 @@ fn units_setting(v: &str) -> &'static str {
     }
 }
 
+#[rustfmt::skip]
 pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let b = |k: &str, d: bool| v.get(k).and_then(|x| x.as_bool()).unwrap_or(d) as u8;
     // a number, also as the string a select gives
@@ -2996,6 +3174,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
 // the 3D preview and launching the game
 
 /// Ask the game to write the bus as glTF (cached by bus and paint) and return the path.
+#[rustfmt::skip]
 pub fn bus_preview(bus: &str, paint: &str) -> Result<String> {
     let c = load_config();
     let game = find_game(&c.game).context("the game binary was not found (set it under Setup)")?;
@@ -3021,226 +3200,12 @@ pub fn bus_preview(bus: &str, paint: &str) -> Result<String> {
     Ok(out.to_string_lossy().to_string())
 }
 
-#[derive(Deserialize, Default, Debug, Clone)]
-pub struct Duty {
-    pub map: String,
-    pub bus: String,
-    pub paint: Option<String>,
-    /// The number plate (registration) the player typed: it wins over the plate the bus's
-    /// `[number]` list or the map's `registrations.txt` gives it (empty: as the content says).
-    #[serde(default)]
-    pub plate: Option<String>,
-    /// The fleet number picked from the bus's `[number]` list (none: its first).
-    #[serde(default)]
-    pub number: Option<String>,
-    pub hof: Option<String>,
-    pub entry: Option<i32>,
-    pub line: Option<String>,
-    pub tour: Option<String>,
-    /// The trip of the tour to start with: its departure (HH:MM) or its place in the tour.
-    #[serde(default)]
-    pub trip: Option<String>,
-    #[serde(default)]
-    pub whole_tour: bool,
-    /// HH:MM
-    pub time: String,
-    /// YYYY-MM-DD
-    pub date: Option<String>,
-    pub weather: Option<String>,
-    pub traffic: Option<u32>,
-    pub passengers: Option<bool>,
-    pub schedule: Option<bool>,
-    pub autostart: Option<bool>,
-    pub comfortable_cabin_on_start: Option<bool>,
-    /// Start as a pedestrian beside the bus (which is then left out): a bus is placed or
-    /// taken over from the game menu later.
-    #[serde(default)]
-    pub on_foot: Option<bool>,
-    pub profile: Option<String>,
-    /// LAN play: "host", or "join:<session code | ip[:port] | port | empty = search>".
-    pub lan: Option<String>,
-    /// The name the other LAN players see (default: the profile).
-    pub lan_name: Option<String>,
-    /// Discovered web gateway to try if the initial UDP join gets no answer (Auto only).
-    pub lan_ws_fallback: Option<String>,
-    /// Explicit per-launch authorization for server-defined vehicle content.
-    #[serde(default)]
-    pub allow_server_fleet: bool,
-    /// Season override: spring / summer / autumn / winter, with a phase `-early` / `-late`
-    /// (`autumn-late`; none = the middle; empty = by date).
-    pub season: Option<String>,
-    /// One of OMSI's tutorials (1..4): its own situation, nothing else of the duty.
-    #[serde(default)]
-    pub tutorial: Option<usize>,
-    /// A situation file to continue (the map's `laststn.osn`): nothing else of the duty.
-    #[serde(default)]
-    pub situation: Option<String>,
-    /// The depot bus driven: it starts with the wear it was left with (see [`depot`]).
-    #[serde(default)]
-    pub depot: Option<String>,
-}
-
-/// The command line a duty becomes.
-pub fn duty_args(d: &Duty) -> Result<Vec<String>> {
-    let root = root()?;
-    duty_args_for_root(d, &root)
-}
-
-// The installation is validated by duty_args; argument tests supply their own path.
-fn duty_args_for_root(d: &Duty, root: &Path) -> Result<Vec<String>> {
-    duty_args_with_settings(d, root, &get_settings().unwrap_or_default())
-}
-
-fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Result<Vec<String>> {
-    let mut start = vec!["--root".into(), root.to_string_lossy().to_string(), "--no-menu".into()];
-    if st.get("disable_plugins").and_then(Value::as_bool).unwrap_or(true) {
-        start.push("--no-plugins".into());
-    }
-    if let Some(t) = d.tutorial {
-        start.extend(["--tutorial".into(), t.to_string()]);
-        return Ok(start);
-    }
-    if let Some(sit) = d.situation.as_deref().filter(|s| !s.trim().is_empty()) {
-        let mut a = start;
-        a.extend(["--situation".into(), sit.to_string()]);
-        if let Some(p) = d.profile.as_deref().filter(|p| !p.trim().is_empty()) {
-            a.extend(["--driver".into(), format!("Drivers/{}.odr", p.trim())]);
-        }
-        // the traffic and the people as for any other start: a situation file keeps the
-        // vehicles the player placed, not how busy the streets are (OMSI takes that from its
-        // options), and without these a continued session had the timetable buses alone -
-        // no cars, nobody at the stops (#136)
-        a.extend(["--traffic".into(), d.traffic.unwrap_or(30).to_string()]);
-        if d.passengers.unwrap_or(true) {
-            a.push("--passengers".into());
-        }
-        return Ok(a);
-    }
-    let mut a = start;
-    a.extend(["--map".into(), d.map.clone(), "--bus".into(), d.bus.clone(), "--time".into(), if d.time.trim().is_empty() { "09:00".into() } else { d.time.trim().to_string() }]);
-    if let Some(p) = d.paint.as_deref().filter(|p| !p.trim().is_empty()) {
-        a.extend(["--paint".into(), p.trim().to_string()]);
-    }
-    if let Some(pl) = d.plate.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
-        a.extend(["--plate".into(), pl.to_string()]);
-    }
-    if let Some(n) = d.number.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
-        a.extend(["--number".into(), n.to_string()]);
-    }
-    if let Some(id) = d.depot.as_deref().map(str::trim).filter(|i| !i.is_empty()) {
-        a.extend(["--depot".into(), id.to_string()]);
-    }
-    // (a vehicle file taken for a depot from a broken ailists.cfg by older launchers is none)
-    if let Some(h) = d.hof.as_deref().filter(|h| !h.trim().is_empty() && !h.to_ascii_lowercase().contains(".bus") && !h.to_ascii_lowercase().contains(".ovh")) {
-        a.extend(["--hof".into(), h.trim().to_string()]);
-    }
-    // the entry point's place in the map's list; -1: the one nearest to the duty's first
-    // stop (a free drive takes the list's first then)
-    match d.entry {
-        Some(e) if e < 0 => {
-            if d.line.as_deref().map(|l| !l.trim().is_empty()).unwrap_or(false) {
-                a.push("--auto-entry".into());
-            }
-        }
-        Some(e) => a.extend(["--entry".into(), e.to_string()]),
-        None => {}
-    }
-    // OMSI's [useActTime] / [useActDate] / [useActYear]: the machine's clock and calendar
-    // instead of the duty's (the year only on its own switch - a map's timetable is for
-    // its years)
-    let on = |k: &str| st.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
-    let now = local_now();
-    if let (true, Some((_, _, _, h, m))) = (on("use_real_time"), now) {
-        if let Some(i) = a.iter().position(|x| x == "--time") {
-            a[i + 1] = format!("{h:02}:{m:02}");
-        }
-        // (a duty picked for later starts now, not ten minutes before its first trip)
-        a.push("--keep-time".into());
-    }
-    let mut date = d.date.as_deref().map(|x| x.trim().to_string()).filter(|x| !x.is_empty());
-    if let (true, Some((y, mo, dd, _, _))) = (on("use_real_date"), now) {
-        let year = if on("use_real_year") { y } else { date.as_deref().and_then(|x| x.split('-').next()?.parse::<i32>().ok()).unwrap_or(y) };
-        date = Some(format!("{year:04}-{mo:02}-{dd:02}"));
-    }
-    if let Some(dt) = date {
-        // (only the machine's calendar is fitted to the map's [years], so that its AI lists,
-        // chrono and timetables fit; the date the player chose in the launcher stays)
-        let real_date = on("use_real_date") && !on("use_real_year");
-        let span = if real_date {
-            let file = root.join(&d.map);
-            let file = if file.is_file() { file } else { resolve_content(&d.map).unwrap_or(file) };
-            omsi_map::GlobalCfg::load(&file).ok().and_then(|g| year_span_of(&g))
-        } else {
-            None
-        };
-        a.extend(["--date".into(), date_for_game(&dt, real_date, span)]);
-    }
-    if let Some(w) = d.weather.as_deref().filter(|x| !x.trim().is_empty()) {
-        a.extend(["--weather".into(), w.trim().to_string()]);
-    }
-    a.extend(["--traffic".into(), d.traffic.unwrap_or(30).to_string()]);
-    if d.passengers.unwrap_or(true) {
-        a.push("--passengers".into());
-    }
-    // (a duty needs the timetable even with the timetable buses switched off: the game
-    // then runs it for the player alone, #1762)
-    let schedule = d.schedule.unwrap_or(true) || d.line.is_some();
-    if schedule {
-        a.push("--schedule".into());
-        if d.schedule == Some(false) {
-            a.push("--no-timetable-buses".into());
-        }
-    }
-    if let (Some(l), true) = (d.line.as_deref().filter(|x| !x.trim().is_empty()), schedule) {
-        a.extend(["--line".into(), l.trim().to_string()]);
-        if let Some(t) = d.tour.as_deref().filter(|x| !x.trim().is_empty()) {
-            a.extend(["--tour".into(), t.trim().to_string()]);
-            if let Some(tr) = d.trip.as_deref().filter(|x| !x.trim().is_empty()) {
-                a.extend(["--trip".into(), tr.trim().to_string()]);
-                if d.whole_tour {
-                    a.push("--whole-tour".into());
-                }
-            }
-        }
-    }
-    if d.autostart.unwrap_or(false) {
-        a.push("--autostart".into());
-    }
-    if d.comfortable_cabin_on_start.unwrap_or(false) {
-        a.push("--comfortable-cabin-on-start".into());
-    }
-    if d.on_foot.unwrap_or(false) {
-        a.push("--on-foot".into());
-    }
-    let profile = d.profile.clone().filter(|p| !p.trim().is_empty()).unwrap_or_else(|| load_config().profile);
-    if let Some(season) = d.season.as_deref().map(str::trim).filter(|x| !x.is_empty() && !x.eq_ignore_ascii_case("auto")) {
-        a.extend(["--season".into(), season.to_ascii_lowercase()]);
-    }
-    if let Some(lan) = d.lan.as_deref().map(str::trim).filter(|l| !l.is_empty() && !l.eq_ignore_ascii_case("off")) {
-        if lan.eq_ignore_ascii_case("host") {
-            // 0: the default port, or the next free one when a session runs here already
-            a.extend(["--lan-host".into(), "0".into()]);
-        } else if let Some(target) = lan.strip_prefix("join:") {
-            let target = target.trim();
-            omsi_net::describe_join(target).map_err(|e| anyhow!("LAN join: {e}"))?;
-            a.extend(["--lan-join".into(), if target.is_empty() { "auto".into() } else { target.to_string() }]);
-            if let Some(url) = d.lan_ws_fallback.as_deref().filter(|url| !url.is_empty()) { a.extend(["--lan-ws-fallback".into(), url.to_string()]); }
-            if d.allow_server_fleet { a.push("--allow-server-fleet".into()); }
-        } else {
-            return Err(anyhow!("LAN play: '{lan}' is neither host nor join:<code or address>"));
-        }
-        let name = d.lan_name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| profile.clone());
-        if !name.trim().is_empty() {
-            a.extend(["--lan-name".into(), name.trim().to_string()]);
-        }
-    }
-    if !profile.trim().is_empty() {
-        a.extend(["--driver".into(), format!("Drivers/{}.odr", profile.trim())]);
-    }
-    Ok(a)
-}
+#[rustfmt::skip]
+pub mod duty;
+pub use duty::*;
 
 #[derive(Serialize, Clone, Debug)]
+#[rustfmt::skip]
 pub struct Launched {
     pub pid: u32,
     pub log: String,
@@ -3250,6 +3215,7 @@ pub struct Launched {
 }
 
 /// Start a game for the duty. Any number may run at once; each writes its own log.
+#[rustfmt::skip]
 pub fn launch(d: &Duty) -> Result<Launched> {
     if IN_PROCESS_GAMES {
         let args = duty_args(d)?;
@@ -3267,6 +3233,7 @@ pub fn launch(d: &Duty) -> Result<Launched> {
 }
 
 /// What a LAN join field means (or what is wrong with it), and the sessions hosted here.
+#[rustfmt::skip]
 pub fn check_join(text: &str) -> Value {
     match omsi_net::describe_join(text) {
         Ok(d) => json!({ "ok": true, "text": i18n::tr(&d), "local": instances::local_hosts() }),
@@ -3278,6 +3245,7 @@ pub fn check_join(text: &str) -> Value {
 // small services for the window
 
 /// A line into ~/.openomsi/launcher.log.
+#[rustfmt::skip]
 pub fn log_to_file(line: &str) {
     use std::io::Write;
     let p = data_dir().join("launcher.log");
@@ -3289,6 +3257,7 @@ pub fn log_to_file(line: &str) {
 
 /// What interrupted installs left behind (and the old unzip folder): cleaned up once when
 /// the launcher opens.
+#[rustfmt::skip]
 pub fn cleanup() {
     for line in install::cleanup_stale(&data_dir(), content_dir().as_deref()) {
         log_to_file(&format!("cleanup: {line}"));
@@ -3298,20 +3267,24 @@ pub fn cleanup() {
 /// A phone runs one program: the launcher hands the game's command line over here and the
 /// same process plays it in the same window (see the app's `android.rs`) instead of starting
 /// another process.
+#[rustfmt::skip]
 static IN_PROCESS: std::sync::Mutex<Option<Vec<String>>> = std::sync::Mutex::new(None);
 
 /// The command line of a game the launcher asked for (taken once).
+#[rustfmt::skip]
 pub fn take_in_process_launch() -> Option<Vec<String>> {
     IN_PROCESS.lock().unwrap_or_else(|e| e.into_inner()).take()
 }
 
 /// Whether games run inside the launcher's own process (a phone, an iPhone, an iPad: an app
 /// there may not start programs).
+#[rustfmt::skip]
 pub const IN_PROCESS_GAMES: bool = cfg!(any(target_os = "android", target_os = "ios"));
 
-pub use instances::{list as list_instances, log_tail, stop as stop_instance, Instance};
+pub use instances::{Instance, list as list_instances, log_tail, stop as stop_instance};
 
 /// Terminal access to the same functions: `--cli lines '{"map":"maps/Grundorf/global.cfg"}'`.
+#[rustfmt::skip]
 pub fn cli(cmd: &str, arg: &str) -> Result<Value> {
     let a: Value = serde_json::from_str(arg).unwrap_or(json!({}));
     let s = |k: &str| a.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -3406,12 +3379,12 @@ pub fn cli(cmd: &str, arg: &str) -> Result<Value> {
     })
 }
 
-
 #[cfg(test)]
 mod tests;
 
 /// The machine's local date and time: (year, month, day, hour, minute).
 #[cfg(unix)]
+#[rustfmt::skip]
 pub fn local_now() -> Option<(i32, i32, i32, i32, i32)> {
     // SAFETY: time and localtime_r only write the struct handed to them
     unsafe {
@@ -3425,6 +3398,7 @@ pub fn local_now() -> Option<(i32, i32, i32, i32, i32)> {
 }
 
 #[cfg(windows)]
+#[rustfmt::skip]
 pub fn local_now() -> Option<(i32, i32, i32, i32, i32)> {
     // SAFETY: GetLocalTime only fills the struct handed to it
     let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
@@ -3432,22 +3406,28 @@ pub fn local_now() -> Option<(i32, i32, i32, i32, i32)> {
 }
 
 #[cfg(not(any(unix, windows)))]
+#[rustfmt::skip]
 pub fn local_now() -> Option<(i32, i32, i32, i32, i32)> {
     None
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod omsi_options_tests;
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod right_stick_look_tests;
 #[cfg(test)]
+#[rustfmt::skip]
 mod head_tracking_tests;
 
 #[cfg(test)]
 #[path = "passenger_connections_tests.rs"]
+#[rustfmt::skip]
 mod passenger_connections_tests;
 
 #[cfg(test)]
 #[path = "passenger_settings_tests.rs"]
+#[rustfmt::skip]
 mod passenger_settings_tests;
