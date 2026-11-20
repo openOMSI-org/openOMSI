@@ -667,7 +667,16 @@ impl PeopleSim {
         // `DOOR_GIVE_UP` takes them back to the open ones - see `choose_entry`)
         let at_shut_door =
             p.st == 2 && (!bn.entry_open.iter().any(|o| *o) || (self.rear_door_boarding && !open));
-        let (since, give_up) = shut_door_wait(p.door_since, self.time, at_shut_door);
+        let falling_back = self.rear_door_boarding
+            && p.st == 1
+            && p.door_since
+                .is_some_and(|since| self.time - since > DOOR_GIVE_UP * 0.5)
+            && bn.entry_open.iter().any(|o| *o);
+        let (since, give_up) = if falling_back {
+            (p.door_since, false)
+        } else {
+            shut_door_wait(p.door_since, self.time, at_shut_door)
+        };
         self.pax_mut(i).unwrap().door_since = since;
         if give_up {
             if let Some(k) = p.seat {
