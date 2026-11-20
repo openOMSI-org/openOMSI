@@ -67,6 +67,29 @@ export function movedMost(rest, now, exclude) {
   return best;
 }
 
+const PEDAL_REST = 0.9;
+const PEDAL_FUNC = { throttle: 1, brake: 2, clutch: 3 };
+
+/** Same rule as `wheel_defaults::axes_for`: the known axes, or null when the pedals at rest are not that list. */
+export function knownAxes(preset, rest) {
+  const pedals = preset?.pedals || [];
+  if (!pedals.length) return null;
+  const resting = [];
+  for (let k = 0; k < 8; k++) if (rest[k] != null && Math.abs(rest[k]) >= PEDAL_REST) resting.push(k);
+  if (resting.some((k) => !pedals.some((p) => p.axis === k))) return null;
+  if (pedals.some((p) => !p.optional && (rest[p.axis] == null || Math.abs(rest[p.axis]) < PEDAL_REST))) return null;
+  const axes = Array(8).fill(null);
+  const wheel = preset.wheel;
+  if (wheel != null && rest[wheel] != null && Math.abs(rest[wheel]) < PEDAL_REST) axes[wheel] = [0, false];
+  for (const p of pedals) {
+    const v = rest[p.axis];
+    const code = PEDAL_FUNC[p.function];
+    if (v != null && Math.abs(v) >= PEDAL_REST && code != null) axes[p.axis] = [code, v > 0];
+  }
+  if (!axes.some((a) => a && a[0] === 0) && rest[0] != null && Math.abs(rest[0]) < PEDAL_REST) axes[0] = [0, false];
+  return axes;
+}
+
 export function wizardResult(rest, at) {
   const axes = Array(8).fill(null);
   const steer = at[0] ? movedMost(rest, at[0], []) : null;
@@ -92,16 +115,29 @@ export function SetupWizard({ device, live, paused, onClose, onDone }) {
   const [step, setStep] = useState(0);
   const [rest, setRest] = useState(null);
   const [at, setAt] = useState([]);
+  const [known, setKnown] = useState(null);
   const [error, setError] = useState('');
   const cur = snapshot(live);
   const used = at.map((a) => (a && rest ? movedMost(rest, a, [])?.[0] : null)).filter((k) => k != null);
   const steerUsed = at[0] && rest ? movedMost(rest, at[0], [])?.[0] : null;
   const exclude = step === 3 ? (steerUsed != null ? [steerUsed] : []) : used;
   const found = step > 0 && step <= 4 && rest ? movedMost(rest, cur, exclude) : null;
-  const result = rest ? wizardResult(rest, at) : null;
+  const result = known || (rest ? wizardResult(rest, at) : null);
   const steerAxis = result ? result.findIndex((a) => a && a[0] === 0) : -1;
   const feedback = step === STEPS.length && live?.ff && !live?.gamepad && steerAxis >= 0;
   const close = () => (stopTest(busy), feedback ? onDone(result, null) : onClose());
+
+  function useKnown() {
+    setError('');
+    if (!live?.axes?.length) return setError('The device shows no axis yet: move the wheel and the pedals a little, let go, and press Next again.');
+    const axes = knownAxes(live.preset, cur);
+    if (!axes) return setError('The known setup does not match these axes. Press Next to set the wheel up by hand.');
+    setRest(cur);
+    setKnown(axes);
+    const steers = axes.findIndex((a) => a && a[0] === 0);
+    if (live?.ff && !live?.gamepad && steers >= 0) setStep(STEPS.length);
+    else onDone(axes, null);
+  }
 
   function next(skip) {
     setError('');
@@ -128,6 +164,13 @@ export function SetupWizard({ device, live, paused, onClose, onDone }) {
 
   function back() {
     setError('');
+    if (known) {
+      setKnown(null);
+      setRest(null);
+      setAt([]);
+      setStep(0);
+      return;
+    }
     if (step === 1) setRest(null);
     else if (step > 1) setAt(at.slice(0, -1));
     setStep(step - 1);
@@ -165,6 +208,7 @@ export function SetupWizard({ device, live, paused, onClose, onDone }) {
               ${step > 0 && html`<${Button} kind="ghost" icon="left" label="Back" onClick=${back} />`}
             </div>
             <div class="row">
+              ${step === 0 && live?.preset?.pedals?.length > 0 && html`<${Button} label="Use the known setup" onClick=${useKnown} />`}
               ${step >= 1 && html`<${Button} label="Skip" onClick=${() => next(true)} />`}
               <${Button} kind="primary" icon="right" label=${step === STEPS.length - 1 && total === STEPS.length ? 'Finish' : 'Next'} disabled=${!live} onClick=${() => next(false)} />
             </div>

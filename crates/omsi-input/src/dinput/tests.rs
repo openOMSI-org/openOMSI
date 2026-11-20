@@ -1,11 +1,12 @@
 use super::*;
 
 #[test]
-fn only_the_g923_has_its_force_flipped() {
+fn a_listed_wheel_has_its_force_flipped() {
     assert!(force_flipped_for(Some((0x046D, 0xC266)))); // G923 PlayStation/PC
     assert!(force_flipped_for(Some((0x046D, 0xC26E)))); // G923 Xbox
     assert!(!force_flipped_for(Some((0x046D, 0xC24F)))); // G29
-    assert!(!force_flipped_for(Some((0x044F, 0xB66E)))); // Thrustmaster T300
+    assert!(!force_flipped_for(Some((0x044F, 0xB66E)))); // Thrustmaster T300, PC mode
+    assert!(!force_flipped_for(Some((0x044F, 0xB65E))));
     assert!(!force_flipped_for(Some(VJOY_HARDWARE_ID)));
     assert!(!force_flipped_for(None));
 }
