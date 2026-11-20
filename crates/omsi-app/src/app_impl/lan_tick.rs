@@ -5,6 +5,7 @@ use super::*;
 impl App {
     /// LAN play, once a frame: send our bus, take in the others', and keep a drawn
     /// vehicle for each of them.
+    #[rustfmt::skip]
     pub(crate) fn tick_lan(&mut self, dt: f32) {
         let lan_tick_started = std::time::Instant::now();
         if self.net.lan.is_none() {
@@ -120,6 +121,8 @@ impl App {
         let receive_ms = receive_started.elapsed().as_secs_f64() * 1000.0;
         let phase = std::time::Instant::now();
         if let (Some(w), Some(r), Some(scene)) = (self.world.as_deref(), self.renderer.as_ref(), self.scene.as_mut()) {
+            self.gfx.sim_view.lan.fps = self.perf.fps;
+            self.gfx.sim_view.lan.others_detail = self.settings.others_detail;
             crate::view_sync::apply_lan(&mut self.net.remotes, &mut self.gfx.sim_view.lan, w, r, scene, self.sound.audio.as_ref(), &frame, dt);
             self.gfx.sim_view.lan.sync_freetex(lan, &self.net.remotes, r, scene, &self.args.root);
         }
@@ -148,6 +151,7 @@ impl App {
 
     /// A command another player's game sent ours (`LanSession::command`): read by the session
     /// (`omsi_lan::commands::Command`), carried out here.
+    #[rustfmt::skip]
     pub(crate) fn lan_command(&mut self, from: u32, text: &str) {
         use omsi_lan::commands::Command;
         if let Some(request) = text.strip_prefix("pax_request ") {
@@ -235,6 +239,7 @@ impl App {
 
     /// The host's world as LAN play asks for it: its clock (set or caught up with) and its
     /// weather, for everything that keeps a clock of its own.
+    #[rustfmt::skip]
     pub(crate) fn apply_world_update(&mut self, u: lan::WorldUpdate) {
         match u {
             lan::WorldUpdate::Clock {
@@ -277,6 +282,7 @@ impl App {
 }
 
 /// A key as LAN play's chat line takes it (see `lan::ChatKey`).
+#[rustfmt::skip]
 pub(crate) fn chat_key_of(code: winit::keyboard::KeyCode) -> lan::ChatKey {
     use std::hash::{Hash, Hasher};
     use winit::keyboard::KeyCode;
@@ -293,6 +299,7 @@ pub(crate) fn chat_key_of(code: winit::keyboard::KeyCode) -> lan::ChatKey {
 
 impl crate::Args {
     /// What LAN play takes from the command line (see `omsi_lan::config::LanConfig`).
+    #[rustfmt::skip]
     pub(crate) fn lan_config(&self) -> omsi_lan::config::LanConfig {
         omsi_lan::config::LanConfig {
             root: self.root.clone(),
@@ -323,6 +330,7 @@ impl crate::Args {
 
     /// Take back what LAN play changed (a joining player's map, date, time and weather, and
     /// the spawn choices a new map drops).
+    #[rustfmt::skip]
     pub(crate) fn take_lan_config(&mut self, c: &omsi_lan::config::LanConfig) {
         self.map = c.map.clone();
         self.weather = c.weather.clone();
@@ -347,14 +355,17 @@ pub(crate) struct AppLanHost<'a> {
 }
 
 impl omsi_lan::host::LanHost for AppLanHost<'_> {
+    #[rustfmt::skip]
     fn world(&self) -> Option<std::sync::Arc<omsi_sim::world_data::WorldData>> {
         self.world.map(|w| w.data())
     }
 
+    #[rustfmt::skip]
     fn world_lanes(&self) -> Vec<omsi_sim::traffic::Lane> {
         self.world.map(|w| w.traffic_inbox.peek(omsi_sim::world_data::TrafficArrivals::lanes_of)).unwrap_or_default()
     }
 
+    #[rustfmt::skip]
     fn remote_vehicle(
         &self,
         args: &omsi_lan::config::LanConfig,
@@ -410,18 +421,22 @@ impl omsi_lan::host::LanHost for AppLanHost<'_> {
         (vehicle, hof)
     }
 
+    #[rustfmt::skip]
     fn set_destination(&self, v: &mut omsi_sim::VehicleInstance, hof: Option<&omsi_vehicle::Hof>, line: &str, destination: &str) {
         crate::schedule::set_ai_destination(v, hof, line, destination, &[]);
     }
 
+    #[rustfmt::skip]
     fn version(&self) -> String {
         omsi_platform::VERSION.into()
     }
 
+    #[rustfmt::skip]
     fn publish_vehicles(&self, only: Vec<String>) {
         crate::lan::publish_vehicles(self.args.root.clone(), only);
     }
 
+    #[rustfmt::skip]
     fn season_folders(&self, cfg: &omsi_lan::config::LanConfig) -> Option<(Option<String>, Option<String>)> {
         let world = self.world?;
         let mut theirs = self.args.clone();
@@ -429,14 +444,17 @@ impl omsi_lan::host::LanHost for AppLanHost<'_> {
         Some((crate::season_folder(&theirs, &world.global).1, omsi_texture::season_folder()))
     }
 
+    #[rustfmt::skip]
     fn weather_without_file(&self, w: &str) -> bool {
         crate::weather_model::is_natural(Some(w)) || w == "cycle" || crate::weather_setup::custom_weather(Some(w)).is_some()
     }
 
+    #[rustfmt::skip]
     fn weather_report(&self, w: &str) -> Option<bool> {
         w.starts_with(crate::weather_setup::REPORT).then(|| crate::weather_setup::from_report(w).is_some())
     }
 
+    #[rustfmt::skip]
     fn depot_of(&self, cfg: &omsi_lan::config::LanConfig, ty: &omsi_sim::VehicleType) -> Option<std::sync::Arc<omsi_vehicle::Hof>> {
         crate::find_hof_named(cfg.hof.as_deref(), self.world?, ty)
     }
