@@ -3256,6 +3256,22 @@ pub fn route_arrows_from_text(text: &str) -> (bool, bool) {
 }
 
 /// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
+/// #3124: the door set the passengers board through, as the settings file spells it.
+fn entry_doors_setting(door: Option<&str>) -> &'static str {
+    match door
+        .map(|s| s.trim().to_ascii_lowercase().replace([' ', '-', '/'], "_"))
+        .as_deref()
+    {
+        Some("first") | Some("front") | Some("front_door") | Some("first_door") => "first",
+        Some("first_two") | Some("first2") | Some("front_two") | Some("front2") | Some("both") => {
+            "first_two"
+        }
+        Some("last") | Some("rear") | Some("back") | Some("rear_door") | Some("last_door")
+        | Some("back_door") => "last",
+        _ => "as_bus",
+    }
+}
+
 pub fn settings_from_text(text: Option<&str>) -> Value {
     settings_from_text_on(text, cfg!(any(target_os = "android", target_os = "ios")))
 }
@@ -3386,6 +3402,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     }
     // Human posing; the original OMSI behavior remains the default.
     v["passenger_animation"] = json!("original");
+    // Which doors the passengers get in through (#3124): as the vehicle says
+    v["pax_entry_doors"] = json!("as_bus");
     v["photo_mode"] = json!("simple");
     // the people as drawn: the content's own, or the Rocketbox avatars (this computer only)
     v["character_models"] = json!("original");
@@ -3821,6 +3839,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                     "original"
                 })
             }
+            "pax_entry_doors" => v[&k] = json!(entry_doors_setting(Some(val))),
             "character_models" => {
                 v[&k] = json!(if val.eq_ignore_ascii_case("improved") {
                     "improved"
@@ -5022,6 +5041,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("pax_short_rides_stand", false)
     ));
     text.push_str(&format!("auto_announce={}\n", b("auto_announce", false)));
+    text.push_str(&format!(
+        "pax_entry_doors={}\n",
+        entry_doors_setting(v.get("pax_entry_doors").and_then(|x| x.as_str()))
+    ));
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
         f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0),

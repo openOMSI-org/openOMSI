@@ -32,7 +32,11 @@ impl Eye {
     pub fn widened(mut self, extent: Option<(f64, f64)>) -> Eye {
         if let Some((tan_x, tan_y)) = extent {
             let half_diag = tan_x.hypot(tan_y).atan();
-            self.cos_half = self.cos_half.min((half_diag + 10f64.to_radians()).min(89f64.to_radians()).cos());
+            self.cos_half = self.cos_half.min(
+                (half_diag + 10f64.to_radians())
+                    .min(89f64.to_radians())
+                    .cos(),
+            );
         }
         self
     }
@@ -67,8 +71,7 @@ pub enum BusId {
     Ai(u64),
 }
 
-impl BusId {
-}
+impl BusId {}
 
 #[derive(Debug, Clone)]
 pub enum State {
@@ -216,8 +219,13 @@ pub const OFF_PATH: f64 = 0.1;
 /// The corridor a walker at `pos` keeps to: none while they are still well off it. Eased
 /// into it at up to 0.6 m/s (twice a step) on top of walking there, the people getting off
 /// a bus slid sideways from its door to the pavement at twice their pace (#1033, #1079).
-pub fn path_corridor(pos: DVec2, corridor: Option<(DVec2, DVec2, f64)>) -> Option<(DVec2, DVec2, f64)> {
-    corridor.filter(|&(a, b, dev)| (crowd::clamp_to_corridor(pos, a, b, dev) - pos).length() <= OFF_PATH)
+pub fn path_corridor(
+    pos: DVec2,
+    corridor: Option<(DVec2, DVec2, f64)>,
+) -> Option<(DVec2, DVec2, f64)> {
+    corridor.filter(|&(a, b, dev)| {
+        (crowd::clamp_to_corridor(pos, a, b, dev) - pos).length() <= OFF_PATH
+    })
 }
 
 pub fn arrive(from: DVec2, to: DVec2, pace: f64) -> DVec2 {
@@ -426,6 +434,9 @@ pub struct PeopleSim {
     /// Optional visual-only response to an approaching full bus.
     pub visual_full_bus_reaction: bool,
     pub bad_driving: bool,
+    /// Which doors the passengers may get in through (#3124): as the vehicle says, the
+    /// front one only, the first two, or the rear one. Set by the app from the settings.
+    pub entry_doors: crate::people::entry_doors::EntryDoors,
     /// How passengers board (`boarding` in the settings): `auto` - pay and take the
     /// ticket by themselves after a moment; `pay` - wait at the desk for the driver to
     /// sell it (and show a pass after `PAY_PATIENCE`); `walk` - no cash desk at all.
@@ -506,15 +517,15 @@ pub fn map_human_types(root: &Path, list: &[String]) -> Vec<Arc<HumanType>> {
             format!("Humans/{rel}")
         };
         let path = omsi_cfg::resolve_path(root, &rel);
-        let ty = loaded.entry(path.to_string_lossy().to_lowercase()).or_insert_with(|| {
-            match HumanType::load(&path) {
+        let ty = loaded
+            .entry(path.to_string_lossy().to_lowercase())
+            .or_insert_with(|| match HumanType::load(&path) {
                 Ok(t) => Some(Arc::new(t)),
                 Err(e) => {
                     log::warn!("map human {}: {e:#}", path.display());
                     None
                 }
-            }
-        });
+            });
         if let Some(t) = ty {
             picked.push(t.clone());
         }
