@@ -2704,10 +2704,109 @@ pub fn button_number(pad: &gilrs::Gamepad, code: gilrs::ev::Code) -> Option<usiz
     code_button(code.into_u32()).or_else(|| stable_unknown_button(pad.name(), code.into_u32()))
 }
 
-fn stable_unknown_button(_device: &str, code: u32) -> Option<usize> {
-    let lo = (code & 0xFFFF) as usize;
-    let range = HAT_BUTTONS - 82;
-    Some(82 + (lo % range))
+fn slots_file() -> Option<std::path::PathBuf> {
+    omsi_cfg::own_input("button_slots.cfg")
+}
+
+fn load_slots_from(path: &std::path::Path) -> Vec<(String, Vec<u32>)> {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let mut out: Vec<(String, Vec<u32>)> = Vec::new();
+    for line in content.lines() {
+        let Some((dev, code_str)) = line.split_once('|') else {
+            continue;
+        };
+        let Ok(code) = u32::from_str_radix(code_str.trim(), 16) else {
+            continue;
+        };
+        if let Some(entry) = out.iter_mut().find(|(n, _)| n == dev.trim()) {
+            if !entry.1.contains(&code) {
+                entry.1.push(code);
+            }
+        } else {
+            out.push((dev.trim().to_string(), vec![code]));
+        }
+    }
+    out
+}
+
+fn append_slot_to(path: &std::path::Path, device: &str, code: u32) {
+    use std::io::Write;
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = writeln!(f, "{}|{:x}", device.trim(), code);
+    }
+}
+
+pub fn stable_unknown_button(device: &str, code: u32) -> Option<usize> {
+    stable_unknown_button_in(None, device, code)
+}
+
+pub fn stable_unknown_button_in(
+    file: Option<&std::path::Path>,
+    device: &str,
+    code: u32,
+) -> Option<usize> {
+    static SLOTS: std::sync::Mutex<Option<Vec<(String, Vec<u32>)>>> = std::sync::Mutex::new(None);
+    let code_lo = code & 0xFFFF;
+    let mut slots_guard = SLOTS.lock().unwrap_or_else(|e| e.into_inner());
+    let path = file.map(|p| p.to_path_buf()).or_else(slots_file);
+    if slots_guard.is_none() || file.is_some() {
+        let initial = path.as_deref().map(load_slots_from).unwrap_or_default();
+        if file.is_none() {
+            *slots_guard = Some(initial);
+        } else {
+            let mut list = initial;
+            let entry = match list.iter_mut().find(|(n, _)| n == device) {
+                Some(e) => &mut e.1,
+                None => {
+                    list.push((device.to_string(), Vec::new()));
+                    &mut list.last_mut().unwrap().1
+                }
+            };
+            let pos = match entry.iter().position(|&c| c == code_lo) {
+                Some(i) => i,
+                None => {
+                    let i = entry.len();
+                    entry.push(code_lo);
+                    if let Some(ref p) = path {
+                        append_slot_to(p, device, code_lo);
+                    }
+                    i
+                }
+            };
+            let slot = 82 + pos;
+            return (slot < HAT_BUTTONS).then_some(slot);
+        }
+    }
+    let slots = slots_guard.as_mut().unwrap();
+    let entry = match slots.iter_mut().find(|(n, _)| n == device) {
+        Some(e) => &mut e.1,
+        None => {
+            slots.push((device.to_string(), Vec::new()));
+            &mut slots.last_mut().unwrap().1
+        }
+    };
+    let pos = match entry.iter().position(|&c| c == code_lo) {
+        Some(i) => i,
+        None => {
+            let i = entry.len();
+            entry.push(code_lo);
+            if let Some(ref p) = path {
+                append_slot_to(p, device, code_lo);
+            }
+            i
+        }
+    };
+    let slot = 82 + pos;
+    (slot < HAT_BUTTONS).then_some(slot)
 }
 
 #[cfg(any(target_os = "linux", test))]

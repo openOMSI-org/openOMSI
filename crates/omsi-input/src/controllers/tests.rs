@@ -666,22 +666,55 @@ mod button_tests {
 
     #[test]
     fn unmapped_button_codes_remain_stable_across_presses() {
-        let first = super::stable_unknown_button("Test Pad A", 0xabc);
-        let second = super::stable_unknown_button("Test Pad A", 0xdef);
-        assert_eq!(first, Some(116));
-        assert_eq!(second, Some(107));
+        let tmp =
+            std::env::temp_dir().join(format!("test_button_slots_{}.cfg", std::process::id()));
+        let _ = std::fs::remove_file(&tmp);
+
+        let first = super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xabc);
+        let second = super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xdef);
+        let collision_candidate = super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xaea);
+        assert_eq!(first, Some(82));
+        assert_eq!(second, Some(83));
+        assert_eq!(collision_candidate, Some(84));
         assert_ne!(first, second);
+        assert_ne!(first, collision_candidate);
+        assert_ne!(second, collision_candidate);
 
-        // Interleaved device events produce consistent IDs
-        let other = super::stable_unknown_button("Test Pad B", 0x123);
-        assert_eq!(other, Some(97));
-        assert_eq!(super::stable_unknown_button("Test Pad A", 0xabc), first);
-        assert_eq!(super::stable_unknown_button("Test Pad A", 0xdef), second);
-        assert_eq!(super::stable_unknown_button("Test Pad B", 0x123), other);
+        // Interleaved device events produce consistent per-device IDs
+        let other = super::stable_unknown_button_in(Some(&tmp), "Test Pad B", 0x123);
+        assert_eq!(other, Some(82));
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xabc),
+            first
+        );
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xdef),
+            second
+        );
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xaea),
+            collision_candidate
+        );
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad B", 0x123),
+            other
+        );
 
-        // Reversed press order retains exact button mapping
-        assert_eq!(super::stable_unknown_button("Test Pad A", 0xdef), second);
-        assert_eq!(super::stable_unknown_button("Test Pad A", 0xabc), first);
+        // Restart simulation: fresh lookups in reverse order retain exact persisted button mappings
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xaea),
+            collision_candidate
+        );
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xdef),
+            second
+        );
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xabc),
+            first
+        );
+
+        let _ = std::fs::remove_file(&tmp);
     }
 }
 
