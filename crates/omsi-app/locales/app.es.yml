@@ -4378,3 +4378,6 @@
 "At most 5": "Como máximo 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Las carpetas de objetos y splines que no usa ningún otro mapa se eliminan con él: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Las carpetas de objetos y splines que otro mapa aún usa se conservan: {n}."
+
+"sent to the plugins": "enviado a los plugins"
+"no plugin is listening for commands": "ningún plugin está escuchando comandos"

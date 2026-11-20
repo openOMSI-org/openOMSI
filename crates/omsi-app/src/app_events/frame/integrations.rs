@@ -93,6 +93,18 @@ impl App {
                 ui.set_themes(list, &self.settings.ui_theme_pack);
             }
         }
+        // (#2536) a `/`-line the player typed: the plugins' while one of them hears it, and
+        // not said to the session (the app's chat send asks the same question)
+        self.net.remotes.take_commands = !plugins.is_empty() && plugins.hears("chat_command");
+        if self.net.remotes.take_commands {
+            for text in std::mem::take(&mut self.net.remotes.plugin_commands) {
+                crate::plugins::queue_event_ex(
+                    &mut self.integrations.plugin_events_ex,
+                    "chat_command",
+                    vec![omsi_plugin::api::Value::Str(text)],
+                );
+            }
+        }
         if !plugins.is_empty() && !self.paused {
             let keys = std::mem::take(&mut self.integrations.plugin_keys);
             let events = std::mem::take(&mut self.integrations.plugin_events);

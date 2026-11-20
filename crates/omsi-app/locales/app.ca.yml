@@ -4072,3 +4072,6 @@
 "At most 5": "Com a màxim 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Les carpetes d'objectes i splines que cap altre mapa no fa servir se suprimeixen amb ell: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Les carpetes d'objectes i splines que un altre mapa encara fa servir es conserven: {n}."
+
+"sent to the plugins": "enviat als connectors"
+"no plugin is listening for commands": "cap connector no escolta ordres"
