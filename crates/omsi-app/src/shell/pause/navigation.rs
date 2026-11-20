@@ -14,12 +14,23 @@ pub(crate) enum Category {
 }
 
 impl Category {
-    pub const ALL: [Self; 8] = [Self::Home, Self::Driving, Self::World, Self::Saves, Self::Capture, Self::Settings, Self::Online, Self::Plugins];
+    pub const ALL: [Self; 8] = [
+        Self::Home,
+        Self::Driving,
+        Self::World,
+        Self::Saves,
+        Self::Capture,
+        Self::Settings,
+        Self::Online,
+        Self::Plugins,
+    ];
 
     pub fn of(id: &str) -> Option<Self> {
         Some(match id {
             "resume" | "quit" => return None,
-            "tobus" | "map" | "streets" | "duty" | "skipstop" | "endduty" => Self::Driving,
+            "tobus" | "map" | "streets" | "duty" | "skipstop" | "endduty" | "police" => {
+                Self::Driving
+            }
             "vehicle" | "world" => Self::World,
             "save" | "saveslot" | "load" => Self::Saves,
             "shot" | "photo" => Self::Capture,
@@ -72,20 +83,33 @@ impl Category {
         ids.iter()
             .enumerate()
             .filter_map(|(i, id)| {
-                let included =
-                    if self == Self::Home { matches!(*id, "tobus" | "camera" | "map" | "save" | "duty" | "players") } else { Self::of(id) == Some(self) };
+                let included = if self == Self::Home {
+                    matches!(
+                        *id,
+                        "tobus" | "camera" | "map" | "save" | "duty" | "players"
+                    )
+                } else {
+                    Self::of(id) == Some(self)
+                };
                 included.then_some(i)
             })
             .collect()
     }
 
     pub fn available(ids: &[&str]) -> Vec<Self> {
-        Self::ALL.into_iter().filter(|c| *c == Self::Home || !c.indices(ids).is_empty()).collect()
+        Self::ALL
+            .into_iter()
+            .filter(|c| *c == Self::Home || !c.indices(ids).is_empty())
+            .collect()
     }
 
     #[cfg(test)]
     pub fn focus_indices(self, ids: &[&str]) -> Vec<usize> {
-        let mut indices: Vec<usize> = ids.iter().position(|id| *id == "resume").into_iter().collect();
+        let mut indices: Vec<usize> = ids
+            .iter()
+            .position(|id| *id == "resume")
+            .into_iter()
+            .collect();
         indices.extend(self.indices(ids));
         indices.extend(ids.iter().position(|id| *id == "quit"));
         indices
@@ -119,6 +143,7 @@ mod tests {
             ("duty", Category::Driving),
             ("skipstop", Category::Driving),
             ("endduty", Category::Driving),
+            ("police", Category::Driving),
             ("vehicle", Category::World),
             ("world", Category::World),
             ("save", Category::Saves),
