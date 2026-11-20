@@ -1,6 +1,7 @@
 //! Textures, object types and the ground on the GPU; the tile upload pipeline.
 use super::*;
 
+#[rustfmt::skip]
 impl World {
     /// Texture names (with their search folders) a prepared tile will ask for that are not
     /// on the GPU yet.
@@ -114,7 +115,7 @@ impl World {
             }
         }
         // the painted ground layers (and their detail textures) of the tile, the masks moved to `paint` once cut
-        let ground_dirs = vec![self.root.clone()];
+        let ground_dirs = self.ground_dirs();
         let layers = p.paint_masks.iter().map(|m| m.0).chain(p.paint.iter().map(|m| m.0)).chain(p.wall_paint.iter().map(|m| m.0));
         for layer in layers {
             if let Some(gt) = self.global.ground_textures.get(layer) {
@@ -140,6 +141,10 @@ impl World {
             .collect()
     }
 
+    pub(super) fn ground_dirs(&self) -> Vec<PathBuf> {
+        vec![self.root.clone(), self.map_dir.clone()]
+    }
+
     /// The materials every tile shares: the plain ground, the water, the tree quad - made
     /// again when the season's textures changed (a snow weather came while driving: the tiles
     /// read again took the summer grass of the first ones, and the ground stayed green).
@@ -149,7 +154,7 @@ impl World {
             return;
         }
         let none: HashMap<PathBuf, Arc<TextureData>> = HashMap::new();
-        let ground_dirs = vec![self.root.clone()];
+        let ground_dirs = self.ground_dirs();
         let ground0 = self
             .global
             .ground_textures

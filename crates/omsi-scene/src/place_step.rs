@@ -15,6 +15,7 @@ macro_rules! instance {
 /// The materials and meshes every tile shares (see [`GroundGpu`]), copied out of the GPU
 /// cache for one [`World::place_step`].
 #[derive(Clone, Copy)]
+#[rustfmt::skip]
 struct GroundIds {
     ground_id: Option<TextureId>,
     ground_mat: MaterialId,
@@ -29,6 +30,7 @@ struct GroundIds {
 /// One object of a tile being placed: where it stands, what it is and what its type has
 /// on the GPU.
 #[derive(Clone, Copy)]
+#[rustfmt::skip]
 struct ObjectCx<'o> {
     ot: &'o Arc<ObjectType>,
     pos: DVec3,
@@ -55,6 +57,7 @@ struct ObjectCx<'o> {
 
 /// What placing one object made: its instances, and what its lamp or its script drives.
 #[derive(Default)]
+#[rustfmt::skip]
 struct ObjectMade {
     lamp_instances: Vec<(usize, Option<(String, f32)>)>,
     lamp_slots: Vec<LampSlots>,
@@ -70,6 +73,7 @@ struct ObjectMade {
     html_mats: HashMap<usize, MaterialId>,
 }
 
+#[rustfmt::skip]
 impl World {
     /// Place a tile whose textures and object types are on the GPU - the ground, then the
     /// splines, the trees and the objects - until `deadline` (always a little: at least the
@@ -302,7 +306,7 @@ impl World {
         lm: Option<TextureId>,
     ) {
         let images: &HashMap<PathBuf, Arc<TextureData>> = &p.images;
-        let ground_dirs = vec![self.root.clone()];
+        let ground_dirs = self.ground_dirs();
         // The painted ground: every further [groundtex] the editor's brush put on this
         // tile is the same tile mesh once more, blended in through its own mask - which
         // is how OMSI's car parks get their asphalt, its side streets their cobbles and

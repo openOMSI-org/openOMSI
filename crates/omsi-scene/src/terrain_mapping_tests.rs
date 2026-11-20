@@ -128,7 +128,13 @@ fn mapped_splines_and_objects_use_uncut_base_while_ground_keeps_paint() {
         // Both upload paths must agree: a spatially batched mapped spline and one
         // left in the per-spline path (OMSI_NO_GROUND_SPLINE_BATCHING).
         ground_splines: batch_ground_splines(vec![Arc::new(triangle(0.5))]),
-        splines: vec![(Arc::new(triangle(1.0)), spline, false, DVec3::ZERO, Default::default())],
+        splines: vec![(
+            Arc::new(triangle(1.0)),
+            spline,
+            false,
+            DVec3::ZERO,
+            Default::default(),
+        )],
         objects: vec![PlacedObject {
             ot: object,
             pos: DVec3::ZERO,
@@ -235,22 +241,31 @@ fn a_maps_own_route_arrow_shows_only_with_the_route_arrows() {
         "arrow.sco",
         "[groups]\n1\nUtilities\n[friendlyname]\nRoute Arrow Left\n[helparrow]\n[nocollision]\n[mesh]\narrow.x\n",
     );
-    fixture.write("arrow.x", r#"xof 0303txt 0032
+    fixture.write(
+        "arrow.x",
+        r#"xof 0303txt 0032
         Mesh arrow {
             3; 0;0;2;, 1;0;2;, 0;1;2;;
             1; 3;0,1,2;;
             MeshMaterialList {1;1;0;; Material {1;1;1;1;;0;0;0;0;;0;0;0;;}}
         }
-    "#);
+    "#,
+    );
     let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
-    let object = world.object_type("arrow.sco").expect("synthetic route arrow must load");
+    let object = world
+        .object_type("arrow.sco")
+        .expect("synthetic route arrow must load");
     assert!(object.sco.is_help_arrow);
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        omsi_render::RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
+        omsi_render::RenderOptions {
+            msaa: 1,
+            shadow_size: 1024,
+            ..Default::default()
+        },
     ))
     .expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -290,17 +305,39 @@ fn a_maps_own_route_arrow_shows_only_with_the_route_arrows() {
     while !world.upload_step(&renderer, &mut scene, &mut upload, None) {}
     while !world.place_step(&renderer, &mut scene, &mut upload, None) {}
     world.commit_upload(upload, &mut LoadStats::default());
-    let arrows = world.help_arrows.lock().get(&(0, 0)).cloned().unwrap_or_default();
+    let arrows = world
+        .help_arrows
+        .lock()
+        .get(&(0, 0))
+        .cloned()
+        .unwrap_or_default();
     assert!(!arrows.is_empty(), "the arrow is put up with its tile");
-    let shown = |scene: &Scene| arrows.iter().map(|i| scene.instances[*i].visible).collect::<Vec<_>>();
-    assert!(shown(&scene).iter().all(|v| !v), "hidden while the route arrows are off");
+    let shown = |scene: &Scene| {
+        arrows
+            .iter()
+            .map(|i| scene.instances[*i].visible)
+            .collect::<Vec<_>>()
+    };
+    assert!(
+        shown(&scene).iter().all(|v| !v),
+        "hidden while the route arrows are off"
+    );
     assert!(arrows.iter().all(|i| !scene.instances[*i].casts_shadow));
     world.show_help_arrows(&renderer, &mut scene, true);
-    assert!(shown(&scene).iter().all(|v| *v), "drawn once they are switched on");
+    assert!(
+        shown(&scene).iter().all(|v| *v),
+        "drawn once they are switched on"
+    );
     world.show_help_arrows(&renderer, &mut scene, false);
-    assert!(shown(&scene).iter().all(|v| !v), "hidden again once they are off");
+    assert!(
+        shown(&scene).iter().all(|v| !v),
+        "hidden again once they are off"
+    );
     world.unload_tile(&renderer, &mut scene, (0, 0), None);
-    assert!(world.help_arrows.lock().is_empty(), "the tile's arrows go with it");
+    assert!(
+        world.help_arrows.lock().is_empty(),
+        "the tile's arrows go with it"
+    );
 }
 
 #[test]
@@ -308,12 +345,22 @@ fn a_cut_tile_still_asks_for_its_painted_ground_textures() {
     let fixture = Fixture::new();
     fixture.write("global.cfg", "[name]\nGround paint textures\n");
     for name in ["base.png", "paint.png", "wall.png"] {
-        image::save_buffer(fixture.0.join(name), &[0, 255, 0, 255], 1, 1, image::ColorType::Rgba8).unwrap();
+        image::save_buffer(
+            fixture.0.join(name),
+            &[0, 255, 0, 255],
+            1,
+            1,
+            image::ColorType::Rgba8,
+        )
+        .unwrap();
     }
     let mut world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
     world.global.ground_textures = ["base.png", "paint.png", "wall.png"]
         .into_iter()
-        .map(|texture| omsi_map::global::GroundTex { texture: texture.into(), ..Default::default() })
+        .map(|texture| omsi_map::global::GroundTex {
+            texture: texture.into(),
+            ..Default::default()
+        })
         .collect();
     // (the masks as `cut_paint` leaves them: moved out of `paint_masks`)
     let prepared = Prepared {
@@ -334,7 +381,72 @@ fn a_cut_tile_still_asks_for_its_painted_ground_textures() {
         cut: None,
         images: Arc::new(HashMap::new()),
     };
-    let names: Vec<String> = world.wanted_textures(&prepared).into_iter().map(|(n, _)| n).collect();
+    let names: Vec<String> = world
+        .wanted_textures(&prepared)
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
     assert!(names.iter().any(|n| n == "paint.png"), "{names:?}");
     assert!(names.iter().any(|n| n == "wall.png"), "{names:?}");
+}
+
+#[test]
+fn ground_dirs_searches_root_then_map_dir() {
+    let fixture = Fixture::new();
+    fixture.write("global.cfg", "[name]\nGround dirs\n");
+    let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    let dirs = world.ground_dirs();
+    assert_eq!(dirs.len(), 2);
+    assert_eq!(dirs[0], world.root);
+    assert_eq!(dirs[1], world.map_dir);
+}
+
+#[test]
+fn ground_texture_under_map_folder_only_is_wanted_and_found() {
+    let fixture = Fixture::new();
+    fixture.write("global.cfg", "[name]\nMap only ground texture\n");
+    let map_tex = "local_grass.png";
+    image::save_buffer(
+        fixture.0.join(map_tex),
+        &[34, 139, 34, 255],
+        1,
+        1,
+        image::ColorType::Rgba8,
+    )
+    .unwrap();
+    let root = fixture.0.join("fake_root");
+    std::fs::create_dir_all(&root).unwrap();
+    let mut world = World::open(&root, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    world.global.ground_textures = vec![omsi_map::global::GroundTex {
+        texture: map_tex.into(),
+        ..Default::default()
+    }];
+    let prepared = Prepared {
+        tx: 0,
+        ty: 0,
+        terrain: None,
+        hole_walls: MeshData::default(),
+        paint_masks: Vec::new(),
+        paint: vec![(0, TextureData::from_image(Image::solid([255; 4])), 1.0)],
+        wall_paint: Vec::new(),
+        water: None,
+        ground_splines: batch_ground_splines(Vec::new()),
+        splines: Vec::new(),
+        objects: Vec::new(),
+        trees: Vec::new(),
+        origin: DVec3::ZERO,
+        light_map: None,
+        cut: None,
+        images: Arc::new(HashMap::new()),
+    };
+    let names: Vec<String> = world
+        .wanted_textures(&prepared)
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
+    assert!(
+        names.contains(&map_tex.to_string()),
+        "texture in map folder must be wanted: {names:?}"
+    );
+    let _ = std::fs::remove_dir_all(&root);
 }
