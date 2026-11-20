@@ -458,13 +458,7 @@ impl App {
             }
             for (name, down) in actions {
                 if !down || (self.menus.game_menu.is_none() && self.menus.chooser.is_none()) {
-                    if (name.eq_ignore_ascii_case("bus_20h-switch")
-                        || name.eq_ignore_ascii_case("haltestellenbremse")
-                        || name.eq_ignore_ascii_case("doors_release"))
-                        && p.vehicle.physics.velocity_kmh().abs() < 1.0
-                    {
-                        p.axes.brake = 0.0;
-                    }
+                    let was_interlocked = omsi_sim::input::is_stop_brake_interlocked(&p.vehicle);
                     // a button on a pedal (the clutch, a throttle or brake button) works the
                     // pedal as its key does; `action` only fires the bus's triggers (#2029)
                     if let Some(a) = omsi_sim::engine_action(&name) {
@@ -472,6 +466,11 @@ impl App {
                         continue;
                     }
                     p.action(&name, down);
+                    omsi_sim::input::maybe_release_held_brake(
+                        &p.vehicle,
+                        &mut p.axes,
+                        was_interlocked,
+                    );
                 }
             }
         }

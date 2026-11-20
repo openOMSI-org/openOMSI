@@ -171,3 +171,94 @@ fn vr_menu_release_keeps_a_short_drag_and_stops_automatic_motion() {
     assert!(moving.auto_drag.is_none());
     assert_eq!(moving.vehicle.var("releases"), Some(2.0));
 }
+
+#[test]
+fn stop_brake_interlock_releases_held_brake_only_when_disengaging() {
+    let mut vehicle = crate::schedule::tests::script_test_vehicle(
+        "{trigger:bus_20h-switch}\n(L.L.bremse_halte_sw) ! (S.L.bremse_halte_sw)\n{end}\n\
+         {trigger:cp_stop_brake_toggle}\n(L.L.bremse_halte_sw) ! (S.L.bremse_halte_sw)\n{end}\n",
+        "bremse_halte_sw\n",
+        "",
+    );
+    let ty = Arc::make_mut(&mut vehicle.ty);
+    ty.model.meshes.push(omsi_model::MeshDef {
+        mouse_event: Some("cp_stop_brake_toggle".into()),
+        ..Default::default()
+    });
+    ty.meshes.push(omsi_sim::vehicle::VehicleMesh {
+        def_index: 0,
+        data: Default::default(),
+        file: Default::default(),
+        materials: vec![],
+        overrides: vec![],
+        pivot: glam::Mat4::IDENTITY,
+        viewpoint: 0,
+        skin: vec![],
+        keep_winding: false,
+    });
+    vehicle.mesh_props.resize_with(1, Default::default);
+    let ty = vehicle.ty.clone();
+    let render = scene::VehicleRender {
+        window_wipers: None,
+    };
+    let mut p = Player {
+        uid: 1,
+        vehicle,
+        render,
+        trailer_renders: vec![],
+        axes: omsi_sim::KeyboardAxes::default(),
+        analog: crate::controllers::Analog::default(),
+        cam_choice: (0, 0),
+        bindings: vec![],
+        sounds: None,
+        pressed_mesh: None,
+        pressed_trailer_mesh: None,
+        occlude_controls: false,
+        drawn_outside: false,
+        press_info: (true, 0.0),
+        auto_drag: None,
+        startup: None,
+        startup_at: None,
+        sell_ticket: false,
+        give_change: false,
+        momentary_gears: false,
+        from_keyboard: false,
+        auto_clutch: false,
+        auto_gearbox: false,
+        door_buttons: Default::default(),
+    };
+
+    // 1. Keyboard engaging preserves held brake:
+    p.axes.brake = 1.0;
+    let was = omsi_sim::input::is_stop_brake_interlocked(&p.vehicle);
+    assert!(!was);
+    p.action("bus_20h-switch", true);
+    omsi_sim::input::maybe_release_held_brake(&p.vehicle, &mut p.axes, was);
+    assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(1.0));
+    assert_eq!(p.axes.brake, 1.0);
+
+    // 2. Keyboard disengaging releases held brake:
+    let was = omsi_sim::input::is_stop_brake_interlocked(&p.vehicle);
+    assert!(was);
+    p.action("bus_20h-switch", true);
+    omsi_sim::input::maybe_release_held_brake(&p.vehicle, &mut p.axes, was);
+    assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(0.0));
+    assert_eq!(p.axes.brake, 0.0);
+
+    // 3. Cab control (mouse click) engaging preserves held brake:
+    p.axes.brake = 1.0;
+    let was = omsi_sim::input::is_stop_brake_interlocked(&p.vehicle);
+    p.vehicle.trigger("cp_stop_brake_toggle");
+    p.vehicle.update_scripts_only(0.0);
+    omsi_sim::input::maybe_release_held_brake(&p.vehicle, &mut p.axes, was);
+    assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(1.0));
+    assert_eq!(p.axes.brake, 1.0);
+
+    // 4. Cab control (mouse click) disengaging releases held brake:
+    let was = omsi_sim::input::is_stop_brake_interlocked(&p.vehicle);
+    p.vehicle.trigger("cp_stop_brake_toggle");
+    p.vehicle.update_scripts_only(0.0);
+    omsi_sim::input::maybe_release_held_brake(&p.vehicle, &mut p.axes, was);
+    assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(0.0));
+    assert_eq!(p.axes.brake, 0.0);
+}
