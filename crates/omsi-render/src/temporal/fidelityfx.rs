@@ -41,37 +41,37 @@ use windows::Win32::Graphics::Dxgi::Common::*;
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR};
 
 
-type FfxContext = *mut c_void;
+pub(super) type FfxContext = *mut c_void;
 
 #[repr(C)]
-struct Header {
-    kind: u64,
-    next: *const Header,
+pub(super) struct Header {
+    pub(super) kind: u64,
+    pub(super) next: *const Header,
 }
 
 impl Header {
-    const fn new(kind: u64) -> Header {
+    pub(super) const fn new(kind: u64) -> Header {
         Header { kind, next: std::ptr::null() }
     }
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
-struct Dimensions {
-    width: u32,
-    height: u32,
+pub(super) struct Dimensions {
+    pub(super) width: u32,
+    pub(super) height: u32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
-struct Coords {
-    x: f32,
-    y: f32,
+pub(super) struct Coords {
+    pub(super) x: f32,
+    pub(super) y: f32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
-struct ResourceDescription {
+pub(super) struct ResourceDescription {
     kind: u32,
     format: u32,
     width: u32,
@@ -84,20 +84,20 @@ struct ResourceDescription {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Resource {
+pub(super) struct Resource {
     resource: *mut c_void,
     description: ResourceDescription,
     state: u32,
 }
 
 impl Resource {
-    const NONE: Resource = Resource { resource: std::ptr::null_mut(), description: ResourceDescription { kind: 0, format: 0, width: 0, height: 0, depth: 0, mip_count: 0, flags: 0, usage: 0 }, state: 0 };
+    pub(super) const NONE: Resource = Resource { resource: std::ptr::null_mut(), description: ResourceDescription { kind: 0, format: 0, width: 0, height: 0, depth: 0, mip_count: 0, flags: 0, usage: 0 }, state: 0 };
 }
 
 #[repr(C)]
-struct CreateBackendDx12 {
-    header: Header,
-    device: *mut c_void,
+pub(super) struct CreateBackendDx12 {
+    pub(super) header: Header,
+    pub(super) device: *mut c_void,
 }
 
 #[repr(C)]
@@ -109,9 +109,9 @@ struct CreateBackendVk {
 }
 
 #[repr(C)]
-struct CreateVersion {
-    header: Header,
-    version: u32,
+pub(super) struct CreateVersion {
+    pub(super) header: Header,
+    pub(super) version: u32,
 }
 
 #[repr(C)]
@@ -161,7 +161,7 @@ const _: () = {
     assert!(std::mem::offset_of!(DispatchUpscale, flags) == 428);
 };
 
-const CREATE_BACKEND_DX12: u64 = 0x0000_0002;
+pub(super) const CREATE_BACKEND_DX12: u64 = 0x0000_0002;
 const CREATE_BACKEND_VK: u64 = 0x0100_0003;
 const CREATE_UPSCALE: u64 = 0x0001_0000;
 const DISPATCH_UPSCALE: u64 = 0x0001_0001;
@@ -179,8 +179,8 @@ const FORMAT_R32_FLOAT: u32 = 28;
 const FORMAT_R16G16B16A16_FLOAT: u32 = 4;
 const FORMAT_R10G10B10A2_UNORM: u32 = 17;
 const FORMAT_R16_FLOAT: u32 = 21;
-const STATE_RENDER_TARGET: u32 = 1 << 8;
-const STATE_DEPTH_ATTACHMENT: u32 = 1 << 9;
+pub(super) const STATE_RENDER_TARGET: u32 = 1 << 8;
+pub(super) const STATE_DEPTH_ATTACHMENT: u32 = 1 << 9;
 const USAGE_UAV: u32 = 1 << 1;
 const USAGE_DEPTHTARGET: u32 = 1 << 2;
 const TYPE_TEXTURE2D: u32 = 2;
@@ -188,12 +188,16 @@ const TYPE_TEXTURE2D: u32 = 2;
 type FnCreateContext = unsafe extern "C" fn(*mut FfxContext, *const Header, *const c_void) -> u32;
 type FnDestroyContext = unsafe extern "C" fn(*mut FfxContext, *const c_void) -> u32;
 type FnDispatch = unsafe extern "C" fn(*mut FfxContext, *const Header) -> u32;
+type FnConfigure = unsafe extern "C" fn(*mut FfxContext, *const Header) -> u32;
+type FnQuery = unsafe extern "C" fn(*mut FfxContext, *mut Header) -> u32;
 
-struct Api {
+pub(super) struct Api {
     _module: HMODULE,
-    create_context: FnCreateContext,
-    destroy_context: FnDestroyContext,
-    dispatch: FnDispatch,
+    pub(super) create_context: FnCreateContext,
+    pub(super) destroy_context: FnDestroyContext,
+    pub(super) dispatch: FnDispatch,
+    pub(super) configure: FnConfigure,
+    pub(super) query: FnQuery,
 }
 
 // (function pointers into a DLL loaded for the process's lifetime)
@@ -222,11 +226,13 @@ fn load_api(gpu: Gpu) -> Result<Api> {
         create_context: get(module, c"ffxCreateContext")?,
         destroy_context: get(module, c"ffxDestroyContext")?,
         dispatch: get(module, c"ffxDispatch")?,
+        configure: get(module, c"ffxConfigure")?,
+        query: get(module, c"ffxQuery")?,
         _module: module,
     })
 }
 
-fn api(gpu: Gpu) -> Result<&'static Api> {
+pub(super) fn api(gpu: Gpu) -> Result<&'static Api> {
     let cell = match gpu {
         Gpu::Dx12 => &API_DX12,
         Gpu::Vulkan => &API_VK,
@@ -242,7 +248,7 @@ fn api(gpu: Gpu) -> Result<&'static Api> {
     .ok_or_else(|| anyhow!("AMD's FidelityFX loader DLL ({}) could not be opened", loader_name(gpu)))
 }
 
-fn check(what: &str, r: u32) -> Result<()> {
+pub(super) fn check(what: &str, r: u32) -> Result<()> {
     // (FfxApiReturnCodes; newer DLLs may return codes the headers do not list yet)
     const NAMES: [&str; 8] = ["ok", "error", "unknown description type", "runtime error", "no provider", "out of memory", "invalid parameter", "not supported by this provider"];
     if r == 0 {
@@ -303,7 +309,7 @@ fn resource_on(gpu: Gpu, t: &wgpu::Texture, state: u32) -> Result<Resource> {
     }
 }
 
-fn resource(t: &wgpu::Texture, state: u32) -> Result<Resource> {
+pub(super) fn resource(t: &wgpu::Texture, state: u32) -> Result<Resource> {
     let hal = unsafe { t.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 resource under an FSR 3 texture"))?;
     let raw = unsafe { hal.raw_resource() }.clone();
     drop(hal);

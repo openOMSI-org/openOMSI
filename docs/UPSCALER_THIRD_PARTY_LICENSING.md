@@ -1,6 +1,6 @@
 # Third-party temporal upscaler licensing — decision record
 
-**Status: AMD 2.4.0's four FSR DLLs are expressly MIT-listed and bundled.
+**Status: AMD 2.4.0's five FSR DLLs are expressly MIT-listed and bundled.
 NVIDIA runtime DLLs are NOT bundled with openOMSI releases; the Windows
 launcher offers an optional, player-initiated direct download from NVIDIA
 only after the player acknowledges NVIDIA's terms. This does NOT independently
@@ -13,27 +13,30 @@ from NVIDIA or every openOMSI rights holder.
   AGPLv3-licensed. Its license is not changed or excepted by bundling vendor
   binaries.
 - NVIDIA: Streamline 2.14.1; `sl.interposer.dll`, `sl.common.dll`,
-  `sl.dlss.dll` and `nvngx_dlss.dll`.
+  `sl.dlss.dll` and `nvngx_dlss.dll`; for DLSS frame generation `sl.dlss_g.dll`,
+  `nvngx_dlssg.dll`, `sl.reflex.dll` and `sl.pcl.dll` (Reflex with its own
+  `reflex.license.txt`).
 - AMD: FidelityFX SDK 2.4.0, commit
   `7539ae8b6568ad29ed78a753404351daf3b5cca7`:
   `amd_fidelityfx_loader_dx12.dll`, `amd_fidelityfx_upscaler_dx12.dll`,
-  `amd_fidelityfx_loader_vk.dll`, `amd_fidelityfx_upscaler_vk.dll`.
+  `amd_fidelityfx_loader_vk.dll`, `amd_fidelityfx_upscaler_vk.dll`,
+  `amd_fidelityfx_framegeneration_dx12.dll`.
 
-## AMD: the four exact binary files have an MIT exception
+## AMD: the five exact binary files have an MIT exception
 
 Read the *whole* pinned `Kits/FidelityFX/docs/license.md`, not just its
 opening paragraph. The first section sets a restrictive binary-only license
 for files **not** excepted below. Beginning at `These source files`, however,
-it lists **all four exact signedbin DLLs** above, then states those listed
+it lists **all five exact signedbin DLLs** above, then states those listed
 files `are subject to the following license`: the MIT grant.
 
-This **explicit exception** means these four signed DLLs can be redistributed
+This **explicit exception** means these five signed DLLs can be redistributed
 together with the AGPLv3 openOMSI distribution under their MIT terms, with
 copyright/permission notice preserved. This conclusion is limited to those
-four filenames at the pinned commit — it does not cover every binary, SDK
+five filenames at the pinned commit — it does not cover every binary, SDK
 tool, library or future version.
 
-The Windows x64 workflow checks the MIT exception list, copies only the four
+The Windows x64 workflow checks the MIT exception list, copies only the five
 allowlisted DLLs, includes the complete SDK license, a short mapping notice
 and the SDK's third-party notices. AMD packaging is on by default.
 
@@ -60,7 +63,7 @@ interaction with AGPLv3 needs an affirmative, case-specific determination.
 The proprietary NGX DLL is *not* generally covered by the Streamline MIT
 license. Neither openOMSI's AGPLv3 nor its retained historical MIT notice
 changes the licensing of any vendor binary. NVIDIA's binaries keep their
-original NVIDIA terms; AMD's four specifically MIT-listed binaries keep
+original NVIDIA terms; AMD's five specifically MIT-listed binaries keep
 their original AMD MIT terms. No openOMSI source code is being removed from
 AGPLv3 by this distribution notice. Because openOMSI's optional DLSS integration dynamically loads this
 DLL, merely placing it beside `openomsi.exe` or calling it a separate file
@@ -72,7 +75,7 @@ cannot be granted unilaterally for other authors' contributions.
 **Current project configuration:** the Windows x64 release workflow does
 **not** bundle NVIDIA DLLs. The launcher, at the player's request only,
 downloads the pinned official NVIDIA SDK archive, verifies its checksum and
-the four allowed signed DLLs, and installs the vendor's original license
+the eight allowed signed DLLs, and installs the vendor's original license
 files. This opt-in installer does not itself grant an AGPL linking exception,
 establish compatibility, sublicense NVIDIA's DLLs, or shift liability to
 NVIDIA. Acceptance is not transfer of ownership. NVIDIA's open-source Streamline core and proprietary

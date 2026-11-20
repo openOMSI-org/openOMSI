@@ -19,6 +19,19 @@ fn the_settings_words_read_back() {
 }
 
 #[test]
+fn the_frame_generation_words_read_back() {
+    assert_eq!(FrameGenerationKind::parse("fsr3"), Some(FrameGenerationKind::Fsr3));
+    assert_eq!(FrameGenerationKind::parse(" DLSS2X "), Some(FrameGenerationKind::Dlss(2)));
+    assert_eq!(FrameGenerationKind::parse("dlss3x"), Some(FrameGenerationKind::Dlss(3)));
+    assert_eq!(FrameGenerationKind::parse("dlss4x"), Some(FrameGenerationKind::Dlss(4)));
+    for word in ["off", "", "dlss8x", "fsr4"] {
+        assert_eq!(FrameGenerationKind::parse(word), None, "{word}");
+    }
+    // (no frame generation without DLSS or FSR 3 drawing the picture)
+    assert_eq!(FrameGenerationKind::runnable("fsr3", None, "dx12"), None);
+}
+
+#[test]
 fn the_picture_size_follows_the_published_ratios() {
     assert_eq!(fallback_render_size(TemporalQuality::Native, (2560, 1440)), (2560, 1440));
     assert_eq!(fallback_render_size(TemporalQuality::Performance, (3840, 2160)), (1920, 1080));

@@ -275,13 +275,21 @@ impl Renderer {
     }
 
     fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
-        // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
-        // without one in the new options it is dropped here, with its context and textures)
         // (frame generation reads the depth, the motion and the pictures before the HUD at the
-        // window's present, after wgpu is done with them: its work is waited for before they go)
+        // window's present, after wgpu is done with them - on Windows on the vendor's queues:
+        // its work is waited for before they go)
         if let Some(g) = &self.frame_generation {
+            #[cfg(windows)]
+            {
+                g.pause();
+                g.hold(self.temporal_generation_inputs());
+                let _ = crate::wait_gpu(&self.device, None);
+            }
+            #[cfg(not(windows))]
             g.wait();
         }
+        // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
+        // without one in the new options it is dropped here, with its context and textures)
         let upscaler = self.temporal_runtime().or_else(|| self.temporal_kept.take()).filter(|_| options.temporal.is_some());
         // Release render targets before building their replacements. Keeping the old
         // targets alive while the new renderer is built can turn a recoverable OOM into
@@ -808,6 +816,7 @@ impl Renderer {
         }
         let puddles_on = self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
         self.encode_fog_lamps(&mut enc.picture, scene, &f, vp_mat, puddles_on, &mut timers);
+        self.encode_temporal_glass_mask(&mut enc.picture, scene, &f, &plan);
         self.encode_temporal_late_motion(&mut enc.picture, scene, &f, &plan);
         self.encode_temporal_mask(&mut enc.picture, scene, &f, &plan);
         self.encode_rain_film(&mut enc.picture, scene, &f, &plan.rain_batches, puddles_on);

@@ -2022,8 +2022,9 @@ pub fn get_settings() -> Result<Value> {
     let mut v = settings_from_text(text.as_deref());
     // (what the page may offer beside the upscalers that are always there; not a setting)
     let game_dir = find_game(&load_config_raw().game).and_then(|g| g.parent().map(Path::to_path_buf));
+    // (a Mac's frame generation needs no file: offered before the game is found too)
+    v["frame_generation_choices"] = json!(omsi_cfg::upscaler_files::frame_generation_choices(game_dir.as_deref().unwrap_or(Path::new(""))));
     v["temporal_upscalers"] = json!(game_dir.map_or_else(omsi_cfg::upscaler_files::of_the_system, |d| omsi_cfg::upscaler_files::available(&d)));
-    v["frame_generators"] = json!(omsi_cfg::upscaler_files::frame_generation_choices());
     // no settings of our own yet: start from what the player set in OMSI 2
     if text.is_none() {
         if let Some(o) = root().ok().and_then(|r| omsi_options(&r)) {

@@ -109,10 +109,10 @@ impl App {
                 let size = crate::platform::surface_size(&window);
                 if let Some(r) = self.renderer.as_ref() {
                     let vsync = self.settings.vsync && !self.vr_active();
-                    self.gfx.surface = SurfaceState::new_with(&self.gfx.instance, window.clone(), r, size.width.max(1), size.height.max(1), vsync).ok();
+                    self.gfx.surface = SurfaceState::new_with(&self.gfx.instance, window.clone(), r, size.width.max(1), size.height.max(1), vsync, self.settings.frame_generation_kind()).ok();
                     self.last = Instant::now();
                 } else if let Some(ws) = self.gfx.starting.as_ref().filter(|ws| ws.start.early()) {
-                    self.gfx.surface = SurfaceState::early(&self.gfx.instance, window.clone(), &ws.start.device, ws.start.format, size.width.max(1), size.height.max(1), self.settings.vsync).ok();
+                    self.gfx.surface = SurfaceState::early(&self.gfx.instance, window.clone(), &ws.start.device, ws.start.format, size.width.max(1), size.height.max(1), self.settings.vsync, self.settings.frame_generation_kind()).ok();
                 }
             }
             return;
@@ -245,7 +245,7 @@ impl App {
         // is there
         let early = start.early().then(|| {
             let size = crate::platform::surface_size(&window);
-            SurfaceState::early(&self.gfx.instance, window.clone(), &start.device, start.format, size.width, size.height, self.settings.vsync).ok()
+            SurfaceState::early(&self.gfx.instance, window.clone(), &start.device, start.format, size.width, size.height, self.settings.vsync, self.settings.frame_generation_kind()).ok()
         }).flatten();
         let had_surface = early.is_some();
         self.gfx.surface = early;
@@ -345,7 +345,7 @@ impl App {
         let adopted = self.gfx.surface.as_mut().is_some_and(|s| s.adopt(&renderer, device));
         if !adopted && (self.gfx.surface.is_some() || !had_surface) {
             self.gfx.surface = None;
-            match SurfaceState::new_with(&self.gfx.instance, window.clone(), &renderer, size.width, size.height, vsync) {
+            match SurfaceState::new_with(&self.gfx.instance, window.clone(), &renderer, size.width, size.height, vsync, self.settings.frame_generation_kind()) {
                 Ok(s) => self.gfx.surface = Some(s),
                 Err(e) => {
                     fatal_message(&omsi_ui::tr("The game's window cannot be drawn into: {e:#}").replace("{e:#}", &format!("{e:#}")));
@@ -354,6 +354,7 @@ impl App {
                 }
             }
         }
+        renderer.set_frame_generation(self.gfx.surface.as_ref().and_then(|s| s.frame_generation()));
         if let Some(surface) = self.gfx.surface.as_mut() {
             if surface.config.width != size.width.max(1) || surface.config.height != size.height.max(1) {
                 surface.resize(&renderer, size.width, size.height);
@@ -863,9 +864,9 @@ impl App {
             // to full screen, without a resize event) is made again, as the game's own
             // frames do: left as it was, every later frame of the loading screen failed
             // the same way and its picture stood still until the map was there (#776)
-            reconfigure = matches!(acquired, wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost);
-            if let wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) = acquired
+            reconfigure = matches!(acquired, omsi_render::Acquired::Outdated | omsi_render::Acquired::Lost);
+            if let omsi_render::Acquired::Success(frame)
+            | omsi_render::Acquired::Suboptimal(frame) = acquired
             {
                 let view = s.view(&renderer.device, &frame);
                 // the tiles loaded so far stay out of the picture: the camera looks at nothing

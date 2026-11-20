@@ -165,7 +165,8 @@ pub struct Renderer {
     temporal_failed: bool,
     temporal_window: bool,
     temporal_kept: Option<temporal::Runtime>,
-    /// The window's frame generation, while it has one (`SurfaceState::set_frame_generation`).
+    /// The window's frame generation, while it has one: on Windows while its swap chain is
+    /// frame generation's, on a Mac `SurfaceState::set_frame_generation`'s.
     frame_generation: Option<temporal::FrameGeneration>,
     /// The frame's numbers, waiting for `temporal_present` at the end of it.
     temporal_pending: Option<TemporalFrame>,
@@ -698,8 +699,18 @@ impl Renderer {
             && self.scene_size(width, height) != (width, height)
     }
 
-    /// The window's frame generation ([`SurfaceState::set_frame_generation`]): upscaled frames
-    /// hand it what it makes the in-between frames from.
+    /// The upscaler the window's picture goes through now, as the frame rate names it: DLSS or
+    /// FSR 3 while it runs, FSR 1 while it scales the picture up, else None (the standard one).
+    pub fn upscaler_in_use(&self, width: u32, height: u32) -> Option<&'static str> {
+        match self.options.temporal.filter(|_| self.temporal_pipes.is_some() && !self.temporal_failed) {
+            Some(t) => Some(t.upscaler.label()),
+            None => self.fsr_active(width, height).then_some("FSR 1"),
+        }
+    }
+
+    /// The window's frame generation: upscaled frames hand it what it makes the in-between
+    /// frames from (on Windows `switch_frame_generation`'s, on a Mac
+    /// [`SurfaceState::set_frame_generation`]'s).
     pub fn set_frame_generation(&mut self, frame_generation: Option<temporal::FrameGeneration>) {
         self.frame_generation = frame_generation;
     }

@@ -9,6 +9,9 @@ use std::path::{Path, PathBuf};
 const DLSS: [&str; 4] = ["sl.interposer.dll", "sl.common.dll", "sl.dlss.dll", "nvngx_dlss.dll"];
 const FSR3_DX12: [&str; 2] = ["amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_upscaler_dx12.dll"];
 const FSR3_VULKAN: [&str; 2] = ["amd_fidelityfx_loader_vk.dll", "amd_fidelityfx_upscaler_vk.dll"];
+const FRAME_GENERATION: [&str; 2] = ["amd_fidelityfx_loader_dx12.dll", "amd_fidelityfx_framegeneration_dx12.dll"];
+/// What NVIDIA DLSS frame generation needs beside DLSS's own (from the same Streamline SDK).
+pub const DLSS_FRAME_GENERATION: [&str; 4] = ["sl.dlss_g.dll", "nvngx_dlssg.dll", "sl.reflex.dll", "sl.pcl.dll"];
 /// Where macOS 13 and newer have MetalFX (the folder is there, its code is in the system's cache).
 const METALFX: &str = "/System/Library/Frameworks/MetalFX.framework";
 /// Where macOS tells its version.
@@ -103,6 +106,21 @@ pub fn label(upscaler: &str) -> &'static str {
     }
 }
 
+/// Whether AMD FSR 3 frame generation can run from `dir` (Windows, DirectX 12).
+pub fn frame_generation_available(dir: &Path) -> bool {
+    cfg!(windows) && FRAME_GENERATION.iter().all(|f| dir.join(f).is_file())
+}
+
+/// Whether NVIDIA DLSS frame generation can run from `dir`: DLSS's DLLs, frame generation's,
+/// and an RTX card (Windows, DirectX 12; NVIDIA's runtime still checks for an RTX 40 or 50).
+pub fn dlss_frame_generation_available(dir: &Path) -> bool {
+    dlss_frame_generation_files(dir) && rtx_present()
+}
+
+fn dlss_frame_generation_files(dir: &Path) -> bool {
+    cfg!(windows) && DLSS.iter().chain(&DLSS_FRAME_GENERATION).all(|f| dir.join(f).is_file())
+}
+
 pub fn quality_word(s: &str) -> &'static str {
     match s.trim().to_ascii_lowercase().as_str() {
         "native" => "native",
@@ -164,18 +182,25 @@ pub fn metalfx_frames_present() -> bool {
     *PRESENT.get_or_init(|| metalfx_present() && std::fs::read_to_string(SYSTEM_VERSION).ok().and_then(|p| macos_major(&p)).is_some_and(|v| v >= 26))
 }
 
-/// The frame generation this machine can run, as the menus offer it: `metalfx` on a Mac.
-pub fn frame_generation_choices() -> Vec<&'static str> {
-    generators(metalfx_frames_present())
+/// The frame generation that can run, as the menus offer it: `fsr3` and `dlss` from the
+/// vendors' DLLs in `dir` on Windows, `metalfx` on a Mac (part of macOS, no file).
+pub fn frame_generation_choices(dir: &Path) -> Vec<&'static str> {
+    choices(frame_generation_available(dir), dlss_frame_generation_available(dir), metalfx_frames_present())
 }
 
-fn generators(metalfx: bool) -> Vec<&'static str> {
-    metalfx.then_some("metalfx").into_iter().collect()
+fn choices(amd: bool, nvidia: bool, metalfx: bool) -> Vec<&'static str> {
+    [("fsr3", amd), ("dlss", nvidia), ("metalfx", metalfx)].into_iter().filter(|(_, ok)| *ok).map(|(k, _)| k).collect()
 }
 
 /// The frame generation choices of a menu, from `frame_generation_choices`.
 pub fn frame_generation_menu(choices: &[&str]) -> Vec<(&'static str, &'static str)> {
     let mut menu = vec![("off", "Off")];
+    if choices.contains(&"fsr3") {
+        menu.push(("fsr3", "AMD FSR 3"));
+    }
+    if choices.contains(&"dlss") {
+        menu.extend([("dlss2x", "NVIDIA DLSS 2x"), ("dlss3x", "NVIDIA DLSS 3x (RTX 50)"), ("dlss4x", "NVIDIA DLSS 4x (RTX 50)")]);
+    }
     if choices.contains(&"metalfx") {
         menu.push(("metalfx", label("metalfx")));
     }
@@ -184,7 +209,11 @@ pub fn frame_generation_menu(choices: &[&str]) -> Vec<(&'static str, &'static st
 
 /// The Frame generation row's help text, as the in-game menu shows it.
 pub fn frame_generation_help() -> &'static str {
-    "Shows a generated frame between every two drawn ones: smoother motion for a little more input lag. Needs Apple MetalFX upscaling and works best from 30 drawn frames a second; with V-sync the game draws half the display's rate"
+    if cfg!(target_os = "macos") {
+        "Shows a generated frame between every two drawn ones: smoother motion for a little more input lag. Needs Apple MetalFX upscaling and works best from 30 drawn frames a second; with V-sync the game draws half the display's rate"
+    } else {
+        "AMD FSR 3 (any card) or NVIDIA DLSS (with DLSS upscaling; 3x and 4x on an RTX 50) adds generated frames between the drawn ones: smoother motion, slightly more input lag; DirectX 12 only"
+    }
 }
 
 /// The upscalers that can run from the game's folder, as a menu lists them.
@@ -280,6 +309,21 @@ mod tests {
     }
 
     #[test]
+    fn dlss_frame_generation_needs_its_files() {
+        let dir = scratch("dlssg");
+        for f in DLSS {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        assert!(!dlss_frame_generation_files(&dir), "DLSS alone");
+        for f in DLSS_FRAME_GENERATION {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        assert_eq!(dlss_frame_generation_files(&dir), cfg!(windows));
+        assert!(!frame_generation_available(&dir), "no AMD DLL");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn rtx_name_is_not_enough_without_nvidias_vendor() {
         assert!(rtx_candidate(0x10de, "NVIDIA GeForce RTX 4060"));
         assert!(rtx_candidate(0x10de, "NVIDIA GeForce RTX 2080 Ti"));
@@ -298,14 +342,18 @@ mod tests {
             assert_eq!(frame_generation_word(word), "off");
         }
         // (the Windows words of #3763 are kept, not turned into `off` by a Mac build)
-        assert_eq!([frame_generation_word("FSR3"), frame_generation_word("dlss"), frame_generation_word("dlss4x")], ["fsr3", "dlss2x", "dlss4x"]);
-        assert_eq!(generators(true), ["metalfx"]);
-        assert!(generators(false).is_empty());
+        assert_eq!([frame_generation_word("FSR3"), frame_generation_word("dlss"), frame_generation_word("DLSS4X")], ["fsr3", "dlss2x", "dlss4x"]);
+        assert_eq!(choices(true, true, false), ["fsr3", "dlss"]);
+        assert_eq!(choices(false, false, true), ["metalfx"]);
+        assert!(choices(false, false, false).is_empty());
         assert_eq!(frame_generation_menu(&[]), [("off", "Off")]);
+        assert_eq!(frame_generation_menu(&["fsr3"]).len(), 2);
+        assert_eq!(frame_generation_menu(&["dlss"]).iter().map(|c| c.0).collect::<Vec<_>>(), ["off", "dlss2x", "dlss3x", "dlss4x"]);
         assert_eq!(frame_generation_menu(&["metalfx"]), [("off", "Off"), ("metalfx", "Apple MetalFX (experimental)")]);
         // (never where MetalFX itself is not: Windows, Linux, a Mac with an Intel chip)
         assert!(!metalfx_frames_present() || metalfx_present());
-        assert_eq!(frame_generation_choices().is_empty(), !metalfx_frames_present());
+        let none = std::path::Path::new("");
+        assert_eq!(frame_generation_choices(none).contains(&"metalfx"), metalfx_frames_present());
     }
 
     #[test]

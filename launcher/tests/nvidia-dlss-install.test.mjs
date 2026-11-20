@@ -40,11 +40,13 @@ test('installer downloads only official Streamline and verifies SDK hash and sig
   assert.match(packager, /O=NVIDIA Corporation/);
   assert.match(backend, /System32.*powershell\.exe/);
   assert.match(installer, /Move-Item -LiteralPath \$BackupFile/);
-  for (const name of ['sl.interposer.dll', 'sl.common.dll', 'sl.dlss.dll', 'nvngx_dlss.dll']) {
+  for (const name of ['sl.interposer.dll', 'sl.common.dll', 'sl.dlss.dll', 'nvngx_dlss.dll', 'sl.dlss_g.dll', 'nvngx_dlssg.dll', 'sl.reflex.dll', 'sl.pcl.dll']) {
     assert.ok(installer.includes(name), `installer needs ${name}`);
     assert.ok(backend.includes(name), `backend needs ${name}`);
   }
   assert.match(installer, /nvngx_dlss\.license\.txt/);
+  assert.match(installer, /reflex\.license\.txt/);
+  assert.match(packager, /bin\/x64\/reflex/);
 });
 
 test('installer is Windows only and checks RTX and the game folder', () => {

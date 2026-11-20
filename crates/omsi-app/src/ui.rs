@@ -343,10 +343,8 @@ pub struct Frame<'a> {
     /// What the driver has to act on (why the bus does not move, a passenger's wish, the
     /// change due, a service done), top left.
     pub notes: &'a [String],
-    /// The frame rate, top right (the `show_fps` setting).
-    pub fps: Option<f32>,
-    /// The frames frame generation added to them in that second: the corner then reads `90 fps (45 + FG)`.
-    pub fps_generated: f32,
+    /// The frame rate, top right (the `show_fps` setting): its text (`fps_label`).
+    pub fps: Option<String>,
     pub perf: Option<&'a crate::perf_overlay::PerfOverlay>,
     pub perf_detailed: bool,
     pub perf_touch: Option<Option<f32>>,
@@ -663,9 +661,9 @@ impl Ui {
         // --- the notifications: cards over the navigator (under it when it is in a top
         // corner; at the top middle without it)
         self.draw_notices(r, scene, f, s);
-        if let Some(fps) = f.fps {
+        if let Some(fps) = f.fps.as_deref() {
             // (on a small flat card, as the other plates: over a bright sky bare text was hard to read)
-            let l = self.text.label_op(r, scene, &if f.fps_generated >= 1.0 { format!("{:.0} fps ({fps:.0} + FG)", fps + f.fps_generated) } else { format!("{fps:.0} fps") }, (12.0 * s).round() as u32, hud::text(self.hud.dim), 1.0);
+            let l = self.text.label_op(r, scene, fps, (12.0 * s).round() as u32, hud::text(self.hud.dim), 1.0);
             let x = (f.width - l.w as f32 - 14.0 * s).round();
             let y = (10.0 * s).round();
             self.hud_card(r, scene, [x - 8.0 * s, y, x + l.w as f32 + 8.0 * s, y + l.h as f32], hud::RADIUS * s, self.text.backdrop, s);
