@@ -1404,16 +1404,13 @@ mod tests {
                  {{macro:first}}\n1 (S.L.a)\n{{end}}\n\
                  {{macro:second}}\n2 (S.L.b)\n{{end}}\n"
             ));
-            let frames = if kind == "frame" {
-                &p.frame
-            } else {
-                &p.frame_ai
+            let frames = match kind {
+                "frame" => &p.frame,
+                _ => &p.frame_ai,
             };
             assert_eq!(frames.len(), 2, "{kind}");
-            assert_ne!(
-                p.blocks[frames[0] as usize].ops,
-                p.blocks[frames[1] as usize].ops
-            );
+            let (f0, f1) = (frames[0] as usize, frames[1] as usize);
+            assert_ne!(p.blocks[f0].ops, p.blocks[f1].ops);
         }
     }
 
