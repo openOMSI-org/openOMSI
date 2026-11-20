@@ -349,6 +349,20 @@ fn build_walls(
         if let Some(roads) = roads {
             road_splits(edge, lo, hi, roads, &mut split);
         }
+        // and where it enters or leaves an opening, so a wall stops exactly at a tunnel
+        // mouth however narrow it is and wherever along the segment it lies
+        for ring in open {
+            for i in 0..ring.len() {
+                let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                edge.intersections(
+                    Edge {
+                        a: a.extend(edge.a.z),
+                        b: b.extend(edge.a.z),
+                    },
+                    &mut split,
+                );
+            }
+        }
         // x/y cell boundaries and x-y=k*cell diagonals are precisely the terrain edges.
         for (a, b) in [
             (edge.a.x, edge.b.x),
@@ -509,6 +523,31 @@ mod tests {
             assert!(
                 (area(&mesh) - expected).abs() < 0.01,
                 "only a continuous road at the cutter's rim opens a wall"
+            );
+        }
+    }
+
+    /// A narrow opening across a long wall segment cuts exactly its own width out of the
+    /// wall, whether it lies over the segment's middle or off to one side of it.
+    #[test]
+    fn a_narrow_opening_across_a_long_wall_cuts_only_its_own_width() {
+        let t = terrain(1, |_, _| 10.0);
+        let rims = vec![rect(20.0, 20.0, 40.0, 40.0, 0.1)];
+        let whole = area(&build_walls(&rims, &t, None, &[]));
+        for x in [30.0, 23.0] {
+            let open = vec![vec![
+                DVec2::new(x - 1.0, 15.0),
+                DVec2::new(x + 1.0, 15.0),
+                DVec2::new(x + 1.0, 25.0),
+                DVec2::new(x - 1.0, 25.0),
+            ]];
+            let mesh = build_walls(&rims, &t, None, &open);
+            valid(&mesh);
+            let expected = whole - 2.0 * 9.9;
+            assert!(
+                (area(&mesh) - expected).abs() < 0.01,
+                "an opening 2 m wide at x {x} takes 2 m of wall: {} vs {expected}",
+                area(&mesh)
             );
         }
     }
