@@ -237,6 +237,7 @@ fn hit_on(host: &TrafficSim, id: u64, seq: u32) -> AccidentMsg {
     let at = car(host, id).vehicle.position;
     AccidentMsg::Hit {
         seq,
+        done: 0,
         hit: DynamicImpact {
             obstacle_id: -2 - id as i64,
             point: at + DVec3::new(-1.0, 1.5, 0.5),
@@ -384,7 +385,11 @@ fn the_messages_read_back_from_their_commands() {
         mass: 12_000.0,
     };
     for msg in [
-        AccidentMsg::Hit { seq: 7, hit },
+        AccidentMsg::Hit {
+            seq: 7,
+            done: 5,
+            hit,
+        },
         AccidentMsg::HitSeen { seq: 7 },
         AccidentMsg::Police { seq: 8 },
         AccidentMsg::PoliceSeen { seq: 8 },
@@ -407,14 +412,16 @@ fn the_messages_read_back_from_their_commands() {
     assert_eq!(
         AccidentMsg::Hit {
             seq: 1,
+            done: 0,
             hit: nameless
         }
         .command(),
         None
     );
     for bad in [
-        "crash 1 1 0 0 0 1 0 0 nan 1 1",
-        "crash 1 1 inf 0 0 1 0 0 1 1 1",
+        "crash 1 0 1 0 0 0 1 0 0 nan 1 1",
+        "crash 1 0 1 inf 0 0 1 0 0 1 1 1",
+        "crash 1 1 0 0 0 1 0 0 1 1 1",
         "crash 1 0 0",
         "police",
         "police x",
@@ -476,4 +483,54 @@ fn the_scripts_hazard_switch_decides_where_there_is_one() {
         HazardWatch::default().on(Some(1.0)),
         "switch on, lamps dark"
     );
+}
+
+/// The host keeps the number of every hit the client may still send, however many others
+/// come after it: a hit whose answer is lost while hundreds of later ones are answered, and
+/// a copy of it delayed past the client's next word, are carried out once.
+#[test]
+fn a_hit_answered_late_is_carried_out_once_after_hundreds_of_others() {
+    let f = Fixture::new();
+    let mut s = Session::new(&f);
+    let first = hit_on(&s.host, s.car, 1);
+    assert_eq!(
+        s.host.accident_from_player(CLIENT, first),
+        Some(AccidentMsg::HitSeen { seq: 1 })
+    );
+    assert!(s.loose());
+    let rest = |s: &mut Session| {
+        for _ in 0..200 {
+            s.host.advance(DT, None);
+        }
+        car(&s.host, s.car).vehicle.position
+    };
+    let at = rest(&mut s);
+    // the answer to hit 1 is lost: the client sends the others with "none answered"
+    for seq in 2..=600 {
+        let mut msg = hit_on(&s.host, s.car, seq);
+        if let AccidentMsg::Hit { hit, .. } = &mut msg {
+            hit.obstacle_id = -2 - 999_999;
+        }
+        assert_eq!(
+            s.host.accident_from_player(CLIENT, msg),
+            Some(AccidentMsg::HitSeen { seq })
+        );
+    }
+    assert_eq!(
+        s.host.accident_from_player(CLIENT, first),
+        Some(AccidentMsg::HitSeen { seq: 1 }),
+        "the copy is answered"
+    );
+    assert_eq!(rest(&mut s), at, "and not carried out again");
+
+    // all answered now; a copy of hit 1 sent before that arrives after the client said so
+    let mut next = hit_on(&s.host, s.car, 601);
+    if let AccidentMsg::Hit { done, .. } = &mut next {
+        *done = 600;
+    }
+    s.host.accident_from_player(CLIENT, next);
+    let pushed = rest(&mut s);
+    assert!(pushed.distance(at) > 0.01, "a new hit is carried out");
+    s.host.accident_from_player(CLIENT, first);
+    assert_eq!(rest(&mut s), pushed, "the late copy is not");
 }

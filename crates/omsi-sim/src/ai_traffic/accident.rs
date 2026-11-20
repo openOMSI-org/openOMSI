@@ -14,15 +14,15 @@ use crate::vehicle::DynamicImpact;
 pub const LOCAL: u32 = 0;
 /// Seconds between two sendings of a message that has not been answered.
 pub const RESEND: f32 = 0.5;
-/// The hits of each client the host remembers having carried out.
-const HITS_REMEMBERED: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AccidentMsg {
     /// Client → host: a hit on one of the host's cars (`obstacle_id` names it the way the
-    /// receiving game knows it).
+    /// receiving game knows it). `done`: every hit of the client's numbered up to it has
+    /// been answered, so none of them comes again.
     Hit {
         seq: u32,
+        done: u32,
         hit: DynamicImpact,
     },
     HitSeen {
@@ -53,11 +53,11 @@ impl AccidentMsg {
     /// that names none.
     pub fn command(&self) -> Option<String> {
         Some(match *self {
-            AccidentMsg::Hit { seq, hit } => {
+            AccidentMsg::Hit { seq, done, hit } => {
                 let car = u32::try_from(-2 - hit.obstacle_id).ok()?;
                 let (p, d) = (hit.point, hit.push);
                 format!(
-                    "crash {seq} {car} {:.3} {:.3} {:.3} {:.4} {:.4} {:.4} {:.3} {:.1} {:.1}",
+                    "crash {seq} {done} {car} {:.3} {:.3} {:.3} {:.4} {:.4} {:.4} {:.3} {:.1} {:.1}",
                     p.x, p.y, p.z, d.x, d.y, d.z, hit.speed, hit.energy, hit.mass
                 )
             }
@@ -85,11 +85,12 @@ impl AccidentMsg {
         let seq = |v: f64| (v >= 0.0 && v <= u32::MAX as f64).then_some(v as u32);
         let host = |m: AccidentMsg| from_host.then_some(m);
         match (verb, n.as_slice()) {
-            ("crash", &[s, car, px, py, pz, dx, dy, dz, speed, energy, mass])
+            ("crash", &[s, done, car, px, py, pz, dx, dy, dz, speed, energy, mass])
                 if speed >= 0.0 && energy >= 0.0 && mass >= 0.0 =>
             {
                 Some(AccidentMsg::Hit {
                     seq: seq(s)?,
+                    done: seq(done)?,
                     hit: DynamicImpact {
                         obstacle_id: -2 - seq(car)? as i64,
                         point: DVec3::new(px, py, pz),
@@ -191,7 +192,11 @@ struct Client {
     seq: u32,
     seen: u32,
     wait: f32,
-    hits: std::collections::VecDeque<u32>,
+    /// The hits carried out: all up to `done`, and those numbered after it. The client
+    /// sends no hit again once it is answered, and tells which are (`AccidentMsg::Hit`), so
+    /// the numbers kept are those of hits it may still send.
+    done: u32,
+    hits: std::collections::BTreeSet<u32>,
     police: u32,
 }
 
@@ -347,12 +352,15 @@ impl TrafficSim {
     /// Client: what to send the host in this step of `dt` seconds.
     pub fn accident_to_host(&mut self, dt: f32) -> Vec<AccidentMsg> {
         let host = &mut self.accident.host;
+        // (hits are answered in any order: the oldest unanswered one bounds those that are)
+        let done = host.hits.iter().map(|h| h.msg.0).min().map_or(0, |s| s - 1);
         let mut out: Vec<AccidentMsg> = host
             .hits
             .iter_mut()
             .filter_map(|h| {
                 h.due(dt).then_some(AccidentMsg::Hit {
                     seq: h.msg.0,
+                    done,
                     hit: h.msg.1,
                 })
             })
@@ -400,13 +408,13 @@ impl TrafficSim {
     /// as this game knows it.
     pub fn accident_from_player(&mut self, player: u32, msg: AccidentMsg) -> Option<AccidentMsg> {
         match msg {
-            AccidentMsg::Hit { seq, hit } => {
+            AccidentMsg::Hit { seq, done, hit } => {
                 let client = self.accident.clients.entry(player).or_default();
-                if !client.hits.contains(&seq) {
-                    client.hits.push_back(seq);
-                    if client.hits.len() > HITS_REMEMBERED {
-                        client.hits.pop_front();
-                    }
+                if done > client.done {
+                    client.done = done;
+                    client.hits = client.hits.split_off(&done.saturating_add(1));
+                }
+                if seq > client.done && client.hits.insert(seq) {
                     self.player_impacts_by(vec![hit], player, seq);
                 }
                 Some(AccidentMsg::HitSeen { seq })
