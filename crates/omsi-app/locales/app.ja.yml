@@ -3272,3 +3272,5 @@
 "At most 5": "最大5台"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "他のどのマップも使っていないオブジェクトとスプラインのフォルダも一緒に削除されます：{n} 個、{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "他のマップがまだ使っているオブジェクトとスプラインのフォルダは残ります：{n} 個。"
+"Draw other players' buses in less detail when far away": "遠くにある他のプレイヤーのバスを低いディテールで描画"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "マルチプレイヤー: 120 m以上離れているか20 FPS未満の場合、他のプレイヤーのバスは車体を維持しつつ運転手と行先表示を非表示にします。26 FPSを超えると完全に復帰します"

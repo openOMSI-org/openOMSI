@@ -3483,3 +3483,5 @@
 "At most 5": "Maks. 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Foldery obiektów i splajnów, których nie używa żadna inna mapa, są usuwane razem z nim: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Foldery obiektów i splajnów, których używa jeszcze inna mapa, zostają: {n}."
+"Draw other players' buses in less detail when far away": "Rysuj autobusy innych graczy z mniejszą liczbą detali z daleka"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Tryb wieloosobowy: powyżej 120 m oraz gdy liczba klatek na sekundę spada poniżej 20, autobusy innych graczy zachowują karoserię, lecz tracą sylwetki kierowców i wyświetlacze kierunkowe, których nikt stamtąd nie czyta; wracają w pełni powyżej 26 kl./s"

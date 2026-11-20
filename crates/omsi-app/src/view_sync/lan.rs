@@ -44,6 +44,7 @@ pub(crate) struct LanView {
     /// Whether the frame rate has this game struggling, for how finely the others are drawn.
     budget: omsi_lan::others::Budget,
     pub(crate) fps: f32,
+    pub(crate) others_detail: bool,
 }
 
 impl LanView {
@@ -155,7 +156,7 @@ pub(crate) fn apply_lan(
     }
     // draw them like AI traffic
     let struggling = view.budget.step(view.fps);
-    let enabled = true;
+    let enabled = view.others_detail;
     for (id, rv) in game.remotes.iter_mut() {
         let Some(v) = view.remotes.get_mut(id) else {
             continue;
@@ -214,6 +215,7 @@ pub(crate) fn apply_lan(
         // whoever stands in it (the outside and the AI meshes together fought over the
         // same surfaces - the flicker and the black patches in the saloon), opaque slots
         // never faded by an alpha variable the AI scripts left at 0, the bellows skinned
+        let inside = frame.inside_of == Some(*id);
         crate::player::sync_vehicle_transforms(
             r,
             scene,
@@ -250,8 +252,8 @@ fn made(w: &World, r: &Renderer, scene: &mut Scene, rv: &RemoteVehicle) -> Remot
         trailer_renders,
         sounds: Vec::new(),
         inside_sounds: None,
-        reduced: false,
         driver: None,
+        reduced: false,
         driver_for: None,
     };
     if !rv.stand_in && !rv.fallback {
