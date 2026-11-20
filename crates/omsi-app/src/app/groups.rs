@@ -64,6 +64,9 @@ pub(crate) struct NetState {
     /// Set only by the dedicated server's teleport capability response.
     /// None means an older server or a player-hosted LAN session.
     pub(crate) dedicated_teleport: Option<bool>,
+    /// The buses the session we host drives, from `--session-buses` (#1464), parsed once:
+    /// empty, every bus.
+    pub(crate) session_buses: Option<Vec<String>>,
     pub(crate) mods_server: Option<omsi_lan::mods::Server>,
     pub(crate) remotes: lan::LanGame,
     /// The shared world: the host's traffic and people, sent (host) or mirrored (client).

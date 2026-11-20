@@ -12,7 +12,7 @@ export const CHOICE_DEFAULTS = {
   time: 9 * 60, start_trip: null, date: '1989-05-30',
   season: 'auto', phase: 'mid', own_date: null,
   weather: '', traffic: 30, passengers: true, schedule: true, autostart: false, comfortable_cabin_on_start: false, on_foot: false,
-  lan_mode: 'off', lan_addr: '', lan_ws_fallback: null, version: 2,
+  lan_mode: 'off', lan_addr: '', lan_ws_fallback: null, session_buses: '', version: 2,
 };
 
 export async function boot() {

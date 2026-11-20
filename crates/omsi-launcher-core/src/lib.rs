@@ -3066,6 +3066,10 @@ pub struct Duty {
     /// Explicit per-launch authorization for server-defined vehicle content.
     #[serde(default)]
     pub allow_server_fleet: bool,
+    /// A hosted session's buses (#1464): the ones its players may drive, `;`-separated, bus
+    /// files or folders. Empty: every bus.
+    #[serde(default)]
+    pub session_buses: Option<String>,
     /// Season override: spring / summer / autumn / winter, with a phase `-early` / `-late`
     /// (`autumn-late`; none = the middle; empty = by date).
     pub season: Option<String>,
@@ -3220,6 +3224,10 @@ fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Result<Vec<Stri
         if lan.eq_ignore_ascii_case("host") {
             // 0: the default port, or the next free one when a session runs here already
             a.extend(["--lan-host".into(), "0".into()]);
+            // (#1464) the buses this session drives
+            if let Some(buses) = d.session_buses.as_deref().filter(|b| !b.trim().is_empty()) {
+                a.extend(["--session-buses".into(), buses.trim().to_string()]);
+            }
         } else if let Some(target) = lan.strip_prefix("join:") {
             let target = target.trim();
             omsi_net::describe_join(target).map_err(|e| anyhow!("LAN join: {e}"))?;
