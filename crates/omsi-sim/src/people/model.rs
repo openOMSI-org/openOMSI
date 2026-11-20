@@ -32,7 +32,11 @@ impl Eye {
     pub fn widened(mut self, extent: Option<(f64, f64)>) -> Eye {
         if let Some((tan_x, tan_y)) = extent {
             let half_diag = tan_x.hypot(tan_y).atan();
-            self.cos_half = self.cos_half.min((half_diag + 10f64.to_radians()).min(89f64.to_radians()).cos());
+            self.cos_half = self.cos_half.min(
+                (half_diag + 10f64.to_radians())
+                    .min(89f64.to_radians())
+                    .cos(),
+            );
         }
         self
     }
@@ -67,8 +71,7 @@ pub enum BusId {
     Ai(u64),
 }
 
-impl BusId {
-}
+impl BusId {}
 
 #[derive(Debug, Clone)]
 pub enum State {
@@ -216,8 +219,13 @@ pub const OFF_PATH: f64 = 0.1;
 /// The corridor a walker at `pos` keeps to: none while they are still well off it. Eased
 /// into it at up to 0.6 m/s (twice a step) on top of walking there, the people getting off
 /// a bus slid sideways from its door to the pavement at twice their pace (#1033, #1079).
-pub fn path_corridor(pos: DVec2, corridor: Option<(DVec2, DVec2, f64)>) -> Option<(DVec2, DVec2, f64)> {
-    corridor.filter(|&(a, b, dev)| (crowd::clamp_to_corridor(pos, a, b, dev) - pos).length() <= OFF_PATH)
+pub fn path_corridor(
+    pos: DVec2,
+    corridor: Option<(DVec2, DVec2, f64)>,
+) -> Option<(DVec2, DVec2, f64)> {
+    corridor.filter(|&(a, b, dev)| {
+        (crowd::clamp_to_corridor(pos, a, b, dev) - pos).length() <= OFF_PATH
+    })
 }
 
 pub fn arrive(from: DVec2, to: DVec2, pace: f64) -> DVec2 {
@@ -232,6 +240,10 @@ pub fn arrive(from: DVec2, to: DVec2, pace: f64) -> DVec2 {
 
 /// Seconds after one passenger's greeting or complaint before anybody says another.
 pub const CHAT_PAUSE: f64 = 12.0;
+
+/// How late the player's bus may be before its boarding passengers say so (s): five
+/// minutes, as Omsi.exe had it. The map or the player may allow more (#2718).
+pub const LATE_TOLERANCE: f64 = 300.0;
 
 /// A cell of `PeopleSim::wall_cells`: when it was made, and its walls with their heights.
 pub type WallCell = (f64, Vec<(Block, f64, f64)>);
@@ -341,9 +353,12 @@ pub struct PeopleSim {
     pub density: f32,
     /// The clock's time of day in seconds (set by the app): day tickets sell by it.
     pub time_of_day: f64,
-    /// How late the player's bus is on its duty (s; set by the app): over five minutes,
+    /// How late the player's bus is on its duty (s; set by the app): over `late_tolerance`,
     /// boarding passengers may say so.
     pub delay: f64,
+    /// How late the bus may be before they say so (s): [`LATE_TOLERANCE`] unless the
+    /// settings say otherwise (#2718). Zero turns the complaint off.
+    pub late_tolerance: f64,
     /// The game's folder (the ticket pack's voices are found from it).
     pub root: std::path::PathBuf,
     /// What passengers said since the app last collected it (see `take_voice_lines`).
@@ -506,15 +521,15 @@ pub fn map_human_types(root: &Path, list: &[String]) -> Vec<Arc<HumanType>> {
             format!("Humans/{rel}")
         };
         let path = omsi_cfg::resolve_path(root, &rel);
-        let ty = loaded.entry(path.to_string_lossy().to_lowercase()).or_insert_with(|| {
-            match HumanType::load(&path) {
+        let ty = loaded
+            .entry(path.to_string_lossy().to_lowercase())
+            .or_insert_with(|| match HumanType::load(&path) {
                 Ok(t) => Some(Arc::new(t)),
                 Err(e) => {
                     log::warn!("map human {}: {e:#}", path.display());
                     None
                 }
-            }
-        });
+            });
         if let Some(t) = ty {
             picked.push(t.clone());
         }

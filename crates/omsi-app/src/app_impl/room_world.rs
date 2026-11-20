@@ -130,6 +130,7 @@ impl App {
             humans.visual_hailing =
                 self.settings.passenger_hailing && self.settings.passenger_animation == "enhanced";
             humans.bad_driving = self.settings.pax_bad_driving;
+            humans.late_tolerance = (self.settings.pax_late_tolerance_min as f64 * 60.0).max(0.0);
             humans.boarding = self.settings.boarding.clone();
             humans.stand_chance = self.settings.standing_chance;
             humans.short_rides_stand = self.settings.pax_short_rides_stand;
