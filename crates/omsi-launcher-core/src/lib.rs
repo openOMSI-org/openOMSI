@@ -3456,6 +3456,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
         ("mouse_sens", json!(1.0)),
         ("graphics_api", json!("auto")),
         ("ctrl_off", json!("")),
+        ("ctrl_deadzone_axes", json!("")),
         ("steering_linear", json!(false)),
         ("old_steering", json!(false)),
         ("red_steer_spd", json!(false)),
@@ -3830,6 +3831,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             }
             "units" => v[&k] = json!(units_setting(val)),
             "ctrl_off" => v[&k] = json!(val),
+            // the axes with a dead zone of their own (#1344): read by the game with the same parser
+            "ctrl_deadzone_axes" => v[&k] = json!(val.replace(['\n', '\r'], " ").trim()),
             "metar_station" => {
                 v[&k] = json!(
                     val.chars()
@@ -4738,6 +4741,14 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!(
         "right_stick_look={}\n",
         b("right_stick_look", true)
+    ));
+    text.push_str(&format!(
+        "ctrl_deadzone_axes={}\n",
+        v.get("ctrl_deadzone_axes")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .replace(['\n', '\r'], " ")
+            .trim()
     ));
     text.push_str(&format!(
         "pad_steer_linear={}\n",

@@ -19,18 +19,21 @@ use crate::gamepad_profile::{self, PadKind};
 use gilrs::{Axis, EventType, Gilrs};
 use std::path::Path;
 
+#[rustfmt::skip]
 mod held;
 use held::HeldButtons;
+#[rustfmt::skip]
 mod ffb;
-pub use ffb::{FfInput, FfTune};
-use ffb::{tuned_wheel_force, Micro, ScriptVib, FF_FADE};
 #[cfg(windows)]
 use ffb::VIB_SHARE;
 #[cfg(test)]
 use ffb::wheel_force;
+use ffb::{FF_FADE, Micro, ScriptVib, tuned_wheel_force};
+pub use ffb::{FfInput, FfTune};
 
 /// What one axis of a device does.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[rustfmt::skip]
 pub enum Func {
     Steering,
     Throttle,
@@ -43,6 +46,7 @@ pub enum Func {
     LookY,
 }
 
+#[rustfmt::skip]
 impl Func {
     /// The file's number of the function (-1 none).
     pub fn code(f: Option<Func>) -> i32 {
@@ -76,6 +80,7 @@ impl Func {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+#[rustfmt::skip]
 pub struct DeviceCfg {
     pub name: String,
     /// The line after the name (kept as the file has it).
@@ -99,6 +104,7 @@ pub struct DeviceCfg {
     pub more: Vec<(usize, String)>,
 }
 
+#[rustfmt::skip]
 impl DeviceCfg {
     pub fn steers(&self) -> bool {
         self.axes.iter().flatten().any(|(f, _)| *f == Func::Steering)
@@ -123,6 +129,7 @@ impl DeviceCfg {
 
 /// The `gamectrler.cfg` in use: the newer of `~/.openomsi/Inputs`' (written by the launcher)
 /// and the content folder's, before OMSI 2's own.
+#[rustfmt::skip]
 pub fn cfg_path(root: &Path) -> std::path::PathBuf {
     omsi_cfg::input_in_use("gamectrler.cfg")
         .or_else(|| omsi_cfg::find_in_roots("Inputs/gamectrler.cfg").map(|(_, p)| p))
@@ -130,10 +137,12 @@ pub fn cfg_path(root: &Path) -> std::path::PathBuf {
 }
 
 /// `Inputs/gamectrler.cfg`: the configured devices.
+#[rustfmt::skip]
 pub fn read_cfg(root: &Path) -> Vec<DeviceCfg> {
     read_cfg_checked(root).unwrap_or_default()
 }
 
+#[rustfmt::skip]
 pub fn read_cfg_checked(root: &Path) -> Result<Vec<DeviceCfg>, String> {
     let path = cfg_path(root);
     let text = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -153,6 +162,7 @@ pub fn read_cfg_checked(root: &Path) -> Result<Vec<DeviceCfg>, String> {
     Ok(devices)
 }
 
+#[rustfmt::skip]
 pub fn parse_cfg(text: &str) -> Vec<DeviceCfg> {
     let lines: Vec<&str> = text.lines().map(str::trim).collect();
     let mut out: Vec<DeviceCfg> = Vec::new();
@@ -233,6 +243,7 @@ pub fn parse_cfg(text: &str) -> Vec<DeviceCfg> {
 }
 
 /// The file's text for `devices`, as OMSI writes it (CR LF).
+#[rustfmt::skip]
 pub fn cfg_text(devices: &[DeviceCfg]) -> String {
     let mut t = String::new();
     for d in devices {
@@ -275,6 +286,7 @@ pub fn cfg_text(devices: &[DeviceCfg]) -> String {
 
 /// The analog controls a controller gives this frame (None: that one is not on it).
 #[derive(Debug, Clone, Copy, Default)]
+#[rustfmt::skip]
 pub struct Analog {
     pub steering: Option<f32>,
     /// The steering is a gamepad's stick (not a wheel): see `gamepad_steering`.
@@ -287,6 +299,7 @@ pub struct Analog {
     pub look: [f32; 2],
 }
 
+#[rustfmt::skip]
 impl Analog {
     /// Automatic gamepad camera input leaves explicitly assigned look axes and driving
     /// controls alone, including when the automatic right-stick input is switched off.
@@ -298,15 +311,18 @@ impl Analog {
 }
 
 /// Below this a steering value counts as the wheel at its centre (see `stick_steers`).
+#[rustfmt::skip]
 const CENTRE_SNAP: f32 = 0.03;
 
 /// How far the X axis of a device nobody set up must leave its centre before it steers.
+#[rustfmt::skip]
 const FREE_AXIS_MOVED: f32 = 0.15;
 
 /// Whether the X axis (at `x`) of a device nobody set up steers: once it has left where it
 /// rests (`rest`, None until known) round the centre, and from then on (`moved` keeps the
 /// devices that have). An X axis resting at an end is no steering: a pedal, or a stray axis
 /// of a macro keypad, which held the bus at full lock from the start (#868).
+#[rustfmt::skip]
 fn free_axis_steers(moved: &mut Vec<String>, name: &str, x: f32, rest: Option<f32>) -> bool {
     if moved.iter().any(|n| n == name) {
         return true;
@@ -324,6 +340,7 @@ fn free_axis_steers(moved: &mut Vec<String>, name: &str, x: f32, rest: Option<f3
 
 /// The X axis of a device nobody set up as it steers: from where it rests (`rest`). One
 /// resting off its centre held the bus that far off straight ahead (#868).
+#[rustfmt::skip]
 fn free_axis_from_rest(x: f32, rest: Option<f32>) -> f32 {
     (x - rest.unwrap_or(0.0)).clamp(-1.0, 1.0)
 }
@@ -333,6 +350,7 @@ fn free_axis_from_rest(x: f32, rest: Option<f32>) -> f32 {
 /// virtual pad nobody set up (its X axis lends the steering) held the wheel at its centre and
 /// the stick did nothing (#1165). Now the stick steers unless a set-up device has the wheel,
 /// whenever it is pushed further than that device or the device lies at its centre.
+#[rustfmt::skip]
 fn stick_steers(current: Option<f32>, set_up: bool, x: f32) -> bool {
     match current {
         None => true,
@@ -341,6 +359,7 @@ fn stick_steers(current: Option<f32>, set_up: bool, x: f32) -> bool {
 }
 
 /// An axis that turns the head: nothing round its centre, then the rest of the way.
+#[rustfmt::skip]
 pub fn look_axis(v: f32) -> f32 {
     const DEAD: f32 = 0.12;
     if v.abs() <= DEAD { 0.0 } else { v.signum() * (v.abs() - DEAD) / (1.0 - DEAD) }
@@ -351,6 +370,7 @@ pub fn look_axis(v: f32) -> f32 {
 /// the side was the full lock at any speed. As the bus games take it: a gentler curve
 /// (squared), and less of the lock the faster the bus goes (the whole of it standing, a
 /// third of it at 50 km/h, a fifth at 90 km/h).
+#[rustfmt::skip]
 pub fn gamepad_steering(x: f32, kmh: f32) -> f32 {
     let x = x.clamp(-1.0, 1.0);
     let curve = x * x.abs();
@@ -362,11 +382,13 @@ pub fn gamepad_steering(x: f32, kmh: f32) -> f32 {
 /// all the way takes the same time to turn the wheel at any speed - at one pace the wheel
 /// swung to its (smaller) place at speed four times as quickly, and a bus that answers a
 /// turn of its wheel the more the faster it goes darted at the smallest push (#2014).
+#[rustfmt::skip]
 pub fn gamepad_reach(kmh: f32) -> f32 {
     let v = if kmh.is_finite() { kmh.abs() } else { 0.0 };
     1.0 / (1.0 + (v - 10.0).max(0.0) / 20.0)
 }
 
+#[rustfmt::skip]
 fn mapped_device_is_gamepad(mapped: bool, force_feedback_wheel: bool) -> bool {
     mapped && !force_feedback_wheel
 }
@@ -374,11 +396,13 @@ fn mapped_device_is_gamepad(mapped: bool, force_feedback_wheel: bool) -> bool {
 /// A gamepad stick's dead zone: nothing round its centre, then the rest of the way from
 /// nothing - it used to cut off below 0.08 and jump straight to 0.08 past it.
 #[cfg_attr(not(test), allow(dead_code))]
+#[rustfmt::skip]
 pub fn stick_deadzone(x: f32) -> f32 {
     stick_deadzone_with(x, 0.08)
 }
 
 /// `stick_deadzone` with the dead zone of the settings (`pad_deadzone`).
+#[rustfmt::skip]
 pub fn stick_deadzone_with(x: f32, dead: f32) -> f32 {
     let dead = dead.clamp(0.0, 0.4);
     if x.abs() <= dead { 0.0 } else { x.signum() * ((x.abs() - dead) / (1.0 - dead)).min(1.0) }
@@ -387,6 +411,7 @@ pub fn stick_deadzone_with(x: f32, dead: f32) -> f32 {
 /// `current` eased towards `target` over a time constant `tau` (s), the same whatever the
 /// frame rate; `tau` 0 is the target at once. A stick's few hundredths of wobble round
 /// where the thumb rests went into the bus's curvature frame by frame.
+#[rustfmt::skip]
 pub fn smooth_toward(current: f32, target: f32, dt: f32, tau: f32) -> f32 {
     if tau <= 0.0 || !current.is_finite() {
         return target;
@@ -396,6 +421,93 @@ pub fn smooth_toward(current: f32, target: f32, dt: f32, tau: f32) -> f32 {
 
 /// Bus steering follows its characteristic, dead zone and range; feedback follows the physical
 /// wheel position, so it can keep returning even inside the input dead zone.
+/// A dead zone for each axis the settings can give one to (#1344): an old pedal whose
+/// potentiometer trembles at rest wants its own, while the wheel is smooth, and the other way
+/// round. An axis with none set here follows the setting for all of them (`ctrl_deadzone`).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[rustfmt::skip]
+pub struct Zones {
+    pub steer: Option<f32>,
+    pub throttle: Option<f32>,
+    pub brake: Option<f32>,
+    pub clutch: Option<f32>,
+}
+
+#[rustfmt::skip]
+impl Zones {
+    /// The widest a dead zone may be, as the general setting has it.
+    pub const MAX: f32 = 0.3;
+
+    /// Read from the settings' `throttle=0.12;brake=0.08` (`steering`, `gas` and
+    /// `throttlebrake` are the other names it knows; a decimal comma is read as such, the
+    /// entries being told apart by the semicolon only). What cannot be read, and what is not an
+    /// axis it knows, is left out.
+    pub fn parse(s: &str) -> Zones {
+        let mut z = Zones::default();
+        for part in s.split(';') {
+            let Some((name, v)) = part.split_once('=') else { continue };
+            let Ok(v) = v.trim().replace(',', ".").parse::<f32>() else { continue };
+            if !v.is_finite() {
+                continue;
+            }
+            let v = v.clamp(0.0, Self::MAX);
+            match name.trim().to_ascii_lowercase().as_str() {
+                "steer" | "steering" | "wheel" => z.steer = Some(v),
+                "throttle" | "gas" | "throttlebrake" => z.throttle = Some(v),
+                "brake" => z.brake = Some(v),
+                "clutch" => z.clutch = Some(v),
+                _ => {}
+            }
+        }
+        z
+    }
+
+    /// The settings' form of them, the axes it has something for only.
+    pub fn write(&self) -> String {
+        let mut out: Vec<String> = Vec::new();
+        for (name, v) in [("steer", self.steer), ("throttle", self.throttle), ("brake", self.brake), ("clutch", self.clutch)] {
+            if let Some(v) = v {
+                out.push(format!("{name}={}", trim_zone(v.clamp(0.0, Self::MAX))));
+            }
+        }
+        out.join(";")
+    }
+
+    /// The dead zone of what the axis `f` does: its own, or `all` - the setting for the axes
+    /// without one.
+    pub fn of(&self, f: Func, all: f32) -> f32 {
+        let own = match f {
+            Func::Steering => self.steer,
+            Func::Throttle => self.throttle,
+            Func::Brake => self.brake,
+            Func::Clutch => self.clutch,
+            Func::ThrottleBrake => self.throttle.or(self.brake),
+            Func::LookX | Func::LookY => None,
+        };
+        own.unwrap_or(all).clamp(0.0, Self::MAX)
+    }
+}
+
+/// A zone as the settings write it: two places, no trailing zeros (`0.12`, `0`, `0.075`).
+#[rustfmt::skip]
+fn trim_zone(v: f32) -> String {
+    let s = format!("{v:.3}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s.is_empty() { "0".to_string() } else { s.to_string() }
+}
+
+/// An axis' value with its dead zone taken off, as the axis loop applies it: round the
+/// wheel's centre, or at a pedal's rest (#1344).
+#[rustfmt::skip]
+pub fn axis_zone(v: f32, f: Func, dz: f32) -> f32 {
+    let dz = dz.clamp(0.0, Zones::MAX);
+    match f {
+        Func::ThrottleBrake => v.signum() * ((v.abs() - dz).max(0.0) / (1.0 - dz)),
+        _ => ((v + 1.0 - 2.0 * dz).max(0.0) / (1.0 - dz)) - 1.0,
+    }
+}
+
+#[rustfmt::skip]
 fn wheel_steering(axis: f32, reversed: bool, flags: i32, deadzone: f32, gain: f32) -> (f32, f32) {
     let position = if reversed { -axis } else { axis };
     let shaped = axis_shape((position + 1.0) * 0.5, flags) * 2.0 - 1.0;
@@ -408,6 +520,7 @@ fn wheel_steering(axis: f32, reversed: bool, flags: i32, deadzone: f32, gain: f3
 /// knows it as a gamepad (a known layout of sticks and triggers), and whether it can push
 /// back (force feedback).
 #[derive(Debug, Clone)]
+#[rustfmt::skip]
 pub struct Connected {
     pub name: String,
     pub hardware_id: Option<(u16, u16)>,
@@ -422,11 +535,13 @@ pub struct Connected {
 
 /// The first button number of the hat switches' directions (4 hats x up, right, down, left).
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 pub const HAT_BUTTONS: usize = 128;
 
 /// The devices of every kind: gilrs (gamepads everywhere; on macOS and Linux every device),
 /// and on Windows DirectInput for everything a gamepad is not (`crate::dinput`) - many wheels
 /// never show up in the system's newer interface that gilrs uses there.
+#[rustfmt::skip]
 pub struct Devices {
     pub gilrs: Option<Gilrs>,
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
@@ -464,6 +579,7 @@ pub struct Devices {
     pad_buttons: Vec<(String, gilrs::Button, bool)>,
 }
 
+#[rustfmt::skip]
 impl Devices {
     /// `hwnd`: the window (Windows: the devices belong to it); `ff`: take them for force
     /// feedback (the game, not the launcher).
@@ -846,6 +962,7 @@ impl Devices {
 
 /// What a latching switch fires when it comes out: a turn signal set goes off, the parking
 /// brake set is released, anything else (a toggle) fires once more and so switches back.
+#[rustfmt::skip]
 fn latch_release(action: &str) -> String {
     match action.to_ascii_lowercase().as_str() {
         "blinker_left_set" | "blinker_right_set" => "blinker_off".to_string(),
@@ -859,6 +976,7 @@ fn latch_release(action: &str) -> String {
 /// (one that appears while the game runs) and then indexes past its own list of them
 /// (gilrs#206) - it ended the game, through the window procedure, at `gamepad.rs:474`.
 /// Only that one event is lost: the controller works once its `Connected` comes.
+#[rustfmt::skip]
 fn next_event_caught<T>(mut next: impl FnMut() -> Option<T>) -> Option<T> {
     loop {
         match omsi_cfg::panic_guard::catch(&mut next) {
@@ -877,6 +995,7 @@ fn next_event_caught<T>(mut next: impl FnMut() -> Option<T>) -> Option<T> {
 /// product), or the same name - gilrs's (an SDL mapping's, "PS5 Controller") or the
 /// system's (`pad_names`: both).
 #[cfg(any(target_os = "macos", test))]
+#[rustfmt::skip]
 fn same_hid_device(hid_name: &str, hid_id: Option<(u16, u16)>, pad_names: [&str; 2], pad_id: Option<(u16, u16)>) -> bool {
     (hid_id.is_some() && hid_id == pad_id) || pad_names.iter().any(|n| names_match(hid_name, n))
 }
@@ -887,6 +1006,7 @@ fn same_hid_device(hid_name: &str, hid_id: Option<(u16, u16)>, pad_names: [&str;
 /// round when an SDL mapping names it the D-pad's (`mapped_y`). On Linux gilrs also maps
 /// DPadY with up positive, so `mapped_y` inverts it.
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
+#[rustfmt::skip]
 fn hat_axis(code: u32, value: f32, mapped_y: bool) -> Option<(usize, f32)> {
     // (the two kinds of code cannot meet: gilrs's axes on Linux are all of evdev's EV_ABS, 3)
     match (code >> 16, code & 0xFFFF) {
@@ -904,33 +1024,40 @@ fn hat_axis(code: u32, value: f32, mapped_y: bool) -> Option<(usize, f32)> {
 /// macOS: the code of an axis (the axes `mac_hid` reads, and a hat), which gilrs hands on
 /// as a button when an SDL mapping makes it one - a gamepad's analog trigger.
 #[cfg_attr(not(any(target_os = "macos", test)), allow(dead_code))]
+#[rustfmt::skip]
 fn mac_axis_code(code: u32) -> bool {
     matches!((code >> 16, code & 0xFFFF), (1, 0x30..=0x3A) | (2, 0xBA | 0xBB | 0xC4 | 0xC5 | 0xC6 | 0xC8))
 }
 
 /// A PlayStation pad (the Xbox ones are the system's own gamepads, see `xinput_name`).
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 fn sony_pad(name: &str, id: Option<(u16, u16)>) -> bool {
     matches!(PadKind::detect(name, id), Some(PadKind::Ps4 | PadKind::Ps5))
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 fn xbox_direct_input_pad(id: Option<(u16, u16)>, ff_capable: bool) -> bool {
     !ff_capable && matches!(id, Some((0x045e, 0x02e0 | 0x02ea | 0x02fd | 0x0b00 | 0x0b05 | 0x0b12 | 0x0b13 | 0x0b20 | 0x0b21 | 0x0b22)))
 }
 
+#[rustfmt::skip]
 fn use_gilrs_buttons(direct_input: bool, system_gamepad: bool) -> bool {
     !direct_input || system_gamepad
 }
 
+#[rustfmt::skip]
 pub fn is_system_gamepad(name: &str, is_di_device: bool) -> bool {
     is_system_gamepad_kind(name, false, is_di_device)
 }
 
+#[rustfmt::skip]
 fn is_system_gamepad_kind(name: &str, wgi_gamepad: bool, is_di_device: bool) -> bool {
     !is_di_device && (xinput_name(name) || wgi_gamepad)
 }
 
+#[rustfmt::skip]
 impl Devices {
     #[cfg(windows)]
     fn xinput_active(&self) -> bool {
@@ -1007,6 +1134,7 @@ impl Devices {
 }
 
 #[cfg(windows)]
+#[rustfmt::skip]
 fn wgi_button_indices(pad: &gilrs::Gamepad<'_>) -> [usize; 14] {
     let mut out = crate::xinput::DEFAULT_INDICES;
     for (slot, &(_, btn, default_idx)) in crate::xinput::BUTTON_MAP.iter().enumerate() {
@@ -1019,6 +1147,7 @@ fn wgi_button_indices(pad: &gilrs::Gamepad<'_>) -> [usize; 14] {
 }
 
 #[cfg(windows)]
+#[rustfmt::skip]
 fn wgi_button_count(pad: &gilrs::Gamepad<'_>) -> usize {
     wgi_button_indices(pad)[..10]
         .iter()
@@ -1031,6 +1160,7 @@ fn wgi_button_count(pad: &gilrs::Gamepad<'_>) -> usize {
 }
 
 #[cfg(windows)]
+#[rustfmt::skip]
 fn xinput_axes(pad: &gilrs::Gamepad<'_>, state: &crate::xinput::GamepadState) -> Vec<(usize, f32)> {
     let neg_clean = |v: f32| if v == 0.0 { 0.0 } else { -v };
     let lx = crate::xinput::normalize_thumb(state.thumb_lx);
@@ -1054,6 +1184,7 @@ fn xinput_axes(pad: &gilrs::Gamepad<'_>, state: &crate::xinput::GamepadState) ->
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 fn push_xinput_edges(
     gilrs_edges: &[(String, usize, bool)],
     name: &str,
@@ -1071,6 +1202,7 @@ fn push_xinput_edges(
 }
 
 #[cfg(windows)]
+#[rustfmt::skip]
 fn di_slice_matches_pad(devices: &[crate::dinput::Device], included: &[bool], pad: &gilrs::Gamepad<'_>) -> bool {
     let id = pad.vendor_id().zip(pad.product_id());
     devices
@@ -1080,6 +1212,7 @@ fn di_slice_matches_pad(devices: &[crate::dinput::Device], included: &[bool], pa
 }
 
 #[cfg(windows)]
+#[rustfmt::skip]
 fn di_list_matches_pad(devices: &[&crate::dinput::Device], pad: &gilrs::Gamepad<'_>) -> bool {
     let id = pad.vendor_id().zip(pad.product_id());
     devices
@@ -1089,6 +1222,7 @@ fn di_list_matches_pad(devices: &[&crate::dinput::Device], pad: &gilrs::Gamepad<
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 enum SystemPadMatch {
     None,
     Named,
@@ -1096,17 +1230,20 @@ enum SystemPadMatch {
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 fn gilrs_is_wgi_gamepad(pad: &gilrs::Gamepad<'_>) -> bool {
     // WGI assigns Uuid::nil() only to Gamepad instances, not RawGameController devices.
     cfg!(windows) && pad.uuid() == [0u8; 16]
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 fn gilrs_is_system_gamepad(pad: &gilrs::Gamepad<'_>) -> bool {
     xinput_name(pad.name()) || gilrs_is_wgi_gamepad(pad)
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 fn xinput_windows_twin(
     dev_name: &str,
     dev_id: Option<(u16, u16)>,
@@ -1122,6 +1259,7 @@ fn xinput_windows_twin(
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 fn step_system_pad(
     acc: SystemPadMatch,
     dev_name: &str,
@@ -1144,6 +1282,7 @@ fn step_system_pad(
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 fn match_system_pad<'a>(
     dev_name: &str,
     dev_id: Option<(u16, u16)>,
@@ -1155,6 +1294,7 @@ fn match_system_pad<'a>(
 }
 
 #[cfg(windows)]
+#[rustfmt::skip]
 fn matched_system_pad(
     gilrs: Option<&gilrs::Gilrs>,
     dev_name: &str,
@@ -1175,12 +1315,14 @@ fn matched_system_pad(
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 fn contains_ascii_ignore_case(haystack: &str, needle: &[u8]) -> bool {
     haystack.as_bytes().windows(needle.len()).any(|w| w.eq_ignore_ascii_case(needle))
 }
 
 /// A DirectInput name of an Xbox-type pad (which gilrs lists with the system's layout).
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 fn xinput_name(name: &str) -> bool {
     contains_ascii_ignore_case(name, b"xbox")
         || contains_ascii_ignore_case(name, b"xinput")
@@ -1188,6 +1330,7 @@ fn xinput_name(name: &str) -> bool {
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 fn include_di_device(
     name: &str,
     ff_capable: bool,
@@ -1202,6 +1345,7 @@ fn include_di_device(
 }
 
 /// The handle of `window` for DirectInput (Windows; elsewhere nothing is needed).
+#[rustfmt::skip]
 pub fn window_handle(window: &winit::window::Window) -> Option<isize> {
     #[cfg(windows)]
     {
@@ -1216,8 +1360,8 @@ pub fn window_handle(window: &winit::window::Window) -> Option<isize> {
     None
 }
 
-
 /// Save to `~/.openomsi/Inputs`. The original OMSI installation is read-only.
+#[rustfmt::skip]
 pub fn save_cfg(devices: &[DeviceCfg]) -> Result<std::path::PathBuf, String> {
     let path = omsi_cfg::own_input("gamectrler.cfg").ok_or("No home folder was found to keep the controllers in")?;
     save_cfg_to(&path, devices)?;
@@ -1225,6 +1369,7 @@ pub fn save_cfg(devices: &[DeviceCfg]) -> Result<std::path::PathBuf, String> {
     Ok(path)
 }
 
+#[rustfmt::skip]
 fn save_cfg_to(path: &Path, devices: &[DeviceCfg]) -> Result<(), String> {
     let text = cfg_text(devices);
     if cfg_text(&parse_cfg(&text)) != text {
@@ -1242,14 +1387,17 @@ fn save_cfg_to(path: &Path, devices: &[DeviceCfg]) -> Result<(), String> {
 }
 
 /// Scale only the configured gamepad, rather than borrowing a wheel's vibration setting.
+#[rustfmt::skip]
 fn rumble_scale(cfg: &[DeviceCfg], name: &str) -> f32 {
     find_device_cfg(cfg, name).and_then(|d| d.ff_scale).map(|s| s.1).unwrap_or(1.0).clamp(0.0, 2.0)
 }
 
+#[rustfmt::skip]
 pub fn wheel_set_up(cfg: &[DeviceCfg], connected: &[Connected]) -> bool {
     connected.iter().any(|c| !c.gamepad && c.ff_capable && find_device_cfg(cfg, &c.name).is_some_and(DeviceCfg::steers))
 }
 
+#[rustfmt::skip]
 fn takes_feedback(steer: &Option<(String, f32, bool)>, ff: bool) -> bool {
     steer.as_ref().is_none_or(|s| ff && !s.2)
 }
@@ -1258,6 +1406,7 @@ fn takes_feedback(steer: &Option<(String, f32, bool)>, ff: bool) -> bool {
 /// are assigned, the explicit layout takes complete ownership of them.
 /// Keep the steering's device kind with the value that actually won arbitration.
 /// A centred gamepad beside a wheel must not give the wheel gamepad smoothing.
+#[rustfmt::skip]
 fn set_steering(out: &mut Analog, value: f32, stick: bool) {
     if out.steering.is_none_or(|old| value.abs() > old.abs()) {
         out.steering = Some(value);
@@ -1265,12 +1414,14 @@ fn set_steering(out: &mut Analog, value: f32, stick: bool) {
     }
 }
 
+#[rustfmt::skip]
 fn custom_gamepad_axes(cfg: &[DeviceCfg], name: &str) -> bool {
     find_device_cfg(cfg, name).is_some_and(|d| d.axes.iter().any(Option::is_some))
 }
 
 /// XInput exposes triggers as buttons in gilrs. Supply their full -1..1 travel in
 /// unused slider slots so they can also be assigned as independent pedals.
+#[rustfmt::skip]
 fn gamepad_triggers(axes: &mut Vec<(usize, f32)>, left: f32, right: f32) {
     for (slot, value) in [(6, left), (7, right)] {
         if !axes.iter().any(|(k, _)| *k == slot) {
@@ -1279,6 +1430,7 @@ fn gamepad_triggers(axes: &mut Vec<(usize, f32)>, left: f32, right: f32) {
     }
 }
 
+#[rustfmt::skip]
 pub struct Controllers {
     /// Each wheel's suspension travel, settled over a tenth of a second (see `wheel_bump`).
     settled: Vec<f32>,
@@ -1292,6 +1444,9 @@ pub struct Controllers {
     pub enabled: bool,
     /// The settings' dead zone round the centre of a set-up device's axes (0..0.3).
     pub deadzone: f32,
+    /// The axes that have a dead zone of their own instead (Settings: `ctrl_deadzone_axes`,
+    /// #1344).
+    pub zones: Zones,
     /// Automatic right-stick camera movement (Settings: `right_stick_look`).
     pub right_stick_look: bool,
     /// The dead zone round a gamepad stick's centre (Settings: `pad_deadzone`).
@@ -1362,6 +1517,7 @@ pub struct Controllers {
     wheel_tried: Option<(String, std::time::Instant)>,
 }
 
+#[rustfmt::skip]
 impl Controllers {
     pub fn configuration(&self) -> Vec<DeviceCfg> { self.cfg.clone() }
 
@@ -1428,7 +1584,7 @@ impl Controllers {
     }
 
     fn with_devices(devices: Devices, cfg: Vec<DeviceCfg>) -> Controllers {
-        Controllers { settled: Vec::new(), devices, focused: true, background: false, cfg, held: HeldButtons::default(), editing: false, raw_buttons: Vec::new(), repeating: Vec::new(), deadzone: 0.0, right_stick_look: true, pad_deadzone: 0.08, pad_presets: true, pedal_throttle: 1.0, pedal_brake: 1.0, disabled: Vec::new(), ff_invert: false, ff_enabled: true, ff_road: 1.0, ff_engine: 1.0, ff_fade: FF_FADE, steer_gain: 1.0, enabled: true, actions: Vec::new(), announced: Vec::new(), moved: Vec::new(), notice: None, rests: Default::default(), auto_saved: None, cfg_unread: false, steer: None, ff_t: 0.0, ff_smooth: 0.0, ff_lateral: 0.0, ff_bump: 0.0, ff_bump_age: 0.0, ff_micro: Micro::default(), ff_vib: ScriptVib::default(), ff_rumble: 0.0, ff_source_logged: None, rumble: Vec::new(), #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel: None, #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel_tried: None }
+        Controllers { settled: Vec::new(), devices, focused: true, background: false, cfg, held: HeldButtons::default(), editing: false, raw_buttons: Vec::new(), repeating: Vec::new(), deadzone: 0.0, zones: Zones::default(), right_stick_look: true, pad_deadzone: 0.08, pad_presets: true, pedal_throttle: 1.0, pedal_brake: 1.0, disabled: Vec::new(), ff_invert: false, ff_enabled: true, ff_road: 1.0, ff_engine: 1.0, ff_fade: FF_FADE, steer_gain: 1.0, enabled: true, actions: Vec::new(), announced: Vec::new(), moved: Vec::new(), notice: None, rests: Default::default(), auto_saved: None, cfg_unread: false, steer: None, ff_t: 0.0, ff_smooth: 0.0, ff_lateral: 0.0, ff_bump: 0.0, ff_bump_age: 0.0, ff_micro: Micro::default(), ff_vib: ScriptVib::default(), ff_rumble: 0.0, ff_source_logged: None, rumble: Vec::new(), #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel: None, #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel_tried: None }
     }
 
     /// Whether this device steers the bus (set up so, or steering now): the photo mode's camera takes none for its gamepad (a wheel turned it).
@@ -1540,7 +1696,7 @@ impl Controllers {
                         let Some((f, inverted)) = d.axes[k] else { continue };
                         if matches!(f, Func::Steering) {
                             steering_set_up = true;
-                            let (steering, position) = wheel_steering(v, inverted, d.axis_flags[k], dz, self.steer_gain);
+                            let (steering, position) = wheel_steering(v, inverted, d.axis_flags[k], self.zones.of(Func::Steering, dz), self.steer_gain);
                             set_steering(&mut out, steering, c.gamepad);
                             if !c.gamepad && takes_feedback(&steer, c.ff) {
                                 steer = Some((c.name.clone(), position, c.ff));
@@ -1558,10 +1714,7 @@ impl Controllers {
                         // the characteristic set up for the axis (gamectrler.cfg flags)
                         let v = axis_shape((v + 1.0) * 0.5, d.axis_flags[k]) * 2.0 - 1.0;
                         // the dead zone: round the wheel's centre, or at a pedal's rest
-                        let v = match f {
-                            Func::ThrottleBrake => v.signum() * ((v.abs() - dz).max(0.0) / (1.0 - dz)),
-                            _ => ((v + 1.0 - 2.0 * dz).max(0.0) / (1.0 - dz)) - 1.0,
-                        };
+                        let v = axis_zone(v, f, self.zones.of(f, dz));
                         // a pedal travels the whole range, -1 up to 1 down
                         let pedal = crate::pedal::pedal_ends(((v + 1.0) * 0.5).clamp(0.0, 1.0));
                         match f {
@@ -1902,6 +2055,7 @@ impl Controllers {
 
 /// A control several set-up devices give: the first one set wins, unless a later one is
 /// moved further (two wheels, or pedals on their own device).
+#[rustfmt::skip]
 fn set(slot: &mut Option<f32>, v: f32) {
     match slot {
         Some(old) if old.abs() >= v.abs() => {}
@@ -1915,6 +2069,7 @@ fn set(slot: &mut Option<f32>, v: f32) {
 /// 2: steering, accelerator, brake, clutch as Windows' HID driver places them), the evdev
 /// ABS codes on Linux (ABS_X..ABS_RZ, then THROTTLE and RUDDER as the sliders), the axis
 /// index on Windows. Axes of no known slot take the free ones in their order.
+#[rustfmt::skip]
 pub fn di_slots(axes: &[(u32, f32)]) -> Vec<(usize, f32)> {
     let known = |code: u32| -> Option<usize> {
         let (hi, lo) = (code >> 16, code & 0xFFFF);
@@ -1976,15 +2131,18 @@ pub fn di_slots(axes: &[(u32, f32)]) -> Vec<(usize, f32)> {
 /// the first free slot, X, the stray axis of a macro keypad steered the bus (#868).
 /// ABS_MISC and the codes after it are kept: Linux puts a device's vendor-defined analog
 /// axes there.
+#[rustfmt::skip]
 fn controller_abs(code: u32) -> bool {
     matches!(code & 0xFFFF, 0x00..=0x0F | 0x28..=0x2E)
 }
 
 /// OMSI stores DirectInput's product name; the system's may differ in spacing and case.
+#[rustfmt::skip]
 fn normalized_device_name(s: &str) -> String {
     s.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect()
 }
 
+#[rustfmt::skip]
 pub fn names_match(a: &str, b: &str) -> bool {
     // (letters of any script: a name of Cyrillic or Chinese letters only was empty here and
     // matched nothing)
@@ -1995,11 +2153,13 @@ pub fn names_match(a: &str, b: &str) -> bool {
 /// The connected device this name is set up as - its exact name first: an Xbox-type pad's
 /// gilrs lists too, as a plain "Controller" with no axis or button at all (see
 /// `mac_game_controller`), and that name is a substring of (so fuzzy-matches) this device's.
+#[rustfmt::skip]
 pub fn find_connected<'a>(connected: &'a [Connected], name: &str) -> Option<&'a Connected> {
     connected.iter().find(|c| c.name == name).or_else(|| connected.iter().find(|c| names_match(&c.name, name)))
 }
 
 /// An exact device name wins over a shorter alias elsewhere in the same OMSI file.
+#[rustfmt::skip]
 fn find_device_cfg<'a>(cfg: &'a [DeviceCfg], name: &str) -> Option<&'a DeviceCfg> {
     let exact = normalized_device_name(name);
     cfg.iter().find(|d| !exact.is_empty() && normalized_device_name(&d.name) == exact)
@@ -2007,16 +2167,19 @@ fn find_device_cfg<'a>(cfg: &'a [DeviceCfg], name: &str) -> Option<&'a DeviceCfg
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
+#[rustfmt::skip]
 fn force_axis_reversed(cfg: Option<&DeviceCfg>, axis: Option<usize>) -> bool {
     axis.and_then(|axis| cfg.and_then(|d| d.axes.get(axis).copied().flatten()))
         .is_some_and(|(function, reversed)| function == Func::Steering && reversed)
 }
 
+#[rustfmt::skip]
 fn feedback_inverted(cfg: Option<&DeviceCfg>, global: bool, axis_reversed: bool) -> bool {
     cfg.and_then(|d| d.ff_invert).unwrap_or(global) ^ axis_reversed
 }
 
 #[cfg_attr(windows, allow(dead_code))]
+#[rustfmt::skip]
 fn calibrated_steering_reversed(cfg: Option<&DeviceCfg>) -> bool {
     // Linux previously applied the global sign directly; preserve it for uncalibrated wheels.
     cfg.filter(|d| d.ff_invert.is_some())
@@ -2033,6 +2196,7 @@ fn calibrated_steering_reversed(cfg: Option<&DeviceCfg>) -> bool {
 /// triggers, axis codes, into button events too: they are pedals, not numbered buttons), and
 /// on macOS for an axis' code (a DualSense's L2 and R2 came in as buttons 1 and 2, the
 /// numbers of its square and cross: their place among the codes; they are axes).
+#[rustfmt::skip]
 pub fn button_number(pad: &gilrs::Gamepad, code: gilrs::ev::Code) -> Option<usize> {
     #[cfg(target_os = "linux")]
     if evdev_axis_code(code.into_u32()) {
@@ -2056,11 +2220,13 @@ pub fn button_number(pad: &gilrs::Gamepad, code: gilrs::ev::Code) -> Option<usiz
 }
 
 #[cfg(any(target_os = "linux", test))]
+#[rustfmt::skip]
 fn evdev_axis_code(code: u32) -> bool {
     code >> 16 == 3
 }
 
 #[cfg(target_os = "linux")]
+#[rustfmt::skip]
 fn with_declared<R>(name: &str, f: impl FnOnce(&[u32]) -> R) -> Option<R> {
     static DECLARED: std::sync::Mutex<Vec<(String, Option<Vec<u32>>)>> = std::sync::Mutex::new(Vec::new());
     let mut cache = DECLARED.lock().unwrap_or_else(|e| e.into_inner());
@@ -2071,27 +2237,32 @@ fn with_declared<R>(name: &str, f: impl FnOnce(&[u32]) -> R) -> Option<R> {
 }
 
 #[cfg(target_os = "linux")]
+#[rustfmt::skip]
 fn declared_button_index(name: &str, code: u32) -> Option<usize> {
     with_declared(name, |codes| button_index(codes, code & 0xFFFF)).flatten()
 }
 
 /// The button number of an evdev key code of a device read from evdev (`evdev_buttons`).
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+#[rustfmt::skip]
 pub fn evdev_button_number(name: &str, code: u32) -> Option<usize> {
     declared_button_index(name, code).or_else(|| code_button(code))
 }
 
 #[cfg(target_os = "linux")]
+#[rustfmt::skip]
 pub fn declared_button_count(name: &str) -> usize {
     with_declared(name, button_count).unwrap_or(0)
 }
 
 #[cfg(any(target_os = "linux", test))]
+#[rustfmt::skip]
 fn button_count(declared: &[u32]) -> usize {
     declared.iter().filter_map(|c| button_index(declared, *c).or_else(|| code_button(*c))).map(|n| n + 1).max().unwrap_or(0).min(128)
 }
 
 #[cfg(target_os = "linux")]
+#[rustfmt::skip]
 fn declared_buttons(name: &str) -> Option<Vec<u32>> {
     let mut nodes: Vec<std::path::PathBuf> = std::fs::read_dir("/sys/class/input").ok()?.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("event"))).collect();
     nodes.sort();
@@ -2108,12 +2279,14 @@ fn declared_buttons(name: &str) -> Option<Vec<u32>> {
 }
 
 #[cfg(any(target_os = "linux", test))]
+#[rustfmt::skip]
 pub fn key_bitmap_buttons(bitmap: &str) -> Vec<u32> {
     let words: Vec<u64> = bitmap.split_whitespace().rev().filter_map(|w| u64::from_str_radix(w, 16).ok()).collect();
     (0x100..words.len() as u32 * 64).filter(|b| words[*b as usize / 64] >> (b % 64) & 1 != 0).collect()
 }
 
 #[cfg(any(target_os = "linux", test))]
+#[rustfmt::skip]
 fn button_index(declared: &[u32], code: u32) -> Option<usize> {
     // (the table's numbers when every button is in it - but not for a device whose buttons
     // are all BTN_TRIGGER_HAPPY ones: its first button is the table's 17th, and it listed
@@ -2125,6 +2298,7 @@ fn button_index(declared: &[u32], code: u32) -> Option<usize> {
     declared.iter().position(|c| *c == code)
 }
 
+#[rustfmt::skip]
 pub fn code_button(code: u32) -> Option<usize> {
     let (hi, lo) = (code >> 16, (code & 0xFFFF) as usize);
     if cfg!(target_os = "macos") {
@@ -2152,6 +2326,7 @@ pub fn code_button(code: u32) -> Option<usize> {
 /// An axis' characteristic from its gamectrler.cfg flags, on 0..1 (after the inversion),
 /// as Omsi.exe applies it (poll sub_6466b8): 2 extends the range by a quarter, 4 is
 /// degressive, 8 progressive, 0x10 makes either of them symmetric round the centre.
+#[rustfmt::skip]
 pub fn axis_shape(v: f32, flags: i32) -> f32 {
     use std::f32::consts::PI;
     let mut v = v;
@@ -2173,9 +2348,15 @@ pub fn axis_shape(v: f32, flags: i32) -> f32 {
 }
 
 /// The characteristics the set-up offers, with their flag bits (Omsi.exe's combo, 0x652ac4).
+#[rustfmt::skip]
 pub const AXIS_SHAPES: [(&str, i32); 5] = [("Linear", 0), ("Progressive", 8), ("Degressive", 4), ("Bi-progressive", 8 | 0x10), ("Bi-degressive", 4 | 0x10)];
 
 #[cfg(test)]
+#[rustfmt::skip]
+mod dead_zone_tests;
+
+#[cfg(test)]
+#[rustfmt::skip]
 mod axis_shape_tests {
     use super::axis_shape;
     #[test]
@@ -2190,6 +2371,7 @@ mod axis_shape_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod tests {
 
     #[test]
@@ -2426,6 +2608,7 @@ mod tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod slot_tests {
     use super::*;
 
@@ -2472,6 +2655,7 @@ mod slot_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod cfg_tests {
     #[test]
     fn feedback_keeps_the_physical_position_inside_the_steering_deadzone() {
@@ -2578,6 +2762,7 @@ mod cfg_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod button_tests {
     #[test]
     fn an_analog_trigger_is_no_numbered_button_on_linux() {
@@ -2639,6 +2824,7 @@ mod button_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod device_kind_tests {
     #[test]
     fn a_mapped_constant_force_wheel_is_not_a_gamepad() {
@@ -2649,6 +2835,7 @@ mod device_kind_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod stick_deadzone_tests {
     use super::stick_deadzone_with;
 
@@ -2662,6 +2849,7 @@ mod stick_deadzone_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod stick_steering_tests {
     #[test]
     fn an_idle_device_nobody_set_up_does_not_hold_the_sticks_steering() {
@@ -2675,6 +2863,7 @@ mod stick_steering_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod right_stick_look_tests {
     #[test]
     fn disabling_automatic_look_keeps_driving_controls_and_assigned_look() {
@@ -2704,4 +2893,5 @@ mod right_stick_look_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod hot_reload_tests;
