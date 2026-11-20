@@ -247,4 +247,13 @@ fn slash_commands_stay_private_when_no_listener_is_available() {
         game.chat.lines.last(),
         Some(&"* sent to the plugins".to_string())
     );
+
+    // Unloading the last listener resets take_commands:
+    game.take_commands = false;
+    chat_send(&mut lan, &mut game, "/login driver hunter2");
+    assert_eq!(game.plugin_commands.len(), 1);
+    assert_eq!(
+        game.chat.lines.last(),
+        Some(&"* no plugin is listening for commands".to_string())
+    );
 }
