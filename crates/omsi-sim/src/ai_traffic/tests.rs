@@ -311,7 +311,7 @@ mod junction_arrival_tests {
         // is empty; a car whose rear is 1 m into the second leaves only 3 m beyond the exit.
         let way = [(10, -20.0), (20, 5.0), (21, 7.0), (22, 10.0), (23, 40.0)];
         assert_eq!(
-            queued_exit_vehicle(&way, (20, 5.0), 8.0, [(21, 1.0, 0.0)]),
+            queued_exit_vehicle(&way, (20, 5.0), 8.0, [(21, 1.0, 0.0, 0.0, 0.9, 3.5)]),
             Some((3.0, 0.0, 21))
         );
     }
@@ -320,7 +320,7 @@ mod junction_arrival_tests {
     fn traffic_beyond_the_space_the_car_needs_does_not_close_the_exit() {
         let way = [(10, -20.0), (20, 5.0), (21, 7.0), (22, 10.0), (23, 40.0)];
         assert_eq!(
-            queued_exit_vehicle(&way, (20, 5.0), 8.0, [(22, 5.0, 0.0), (23, 0.0, 0.0)]),
+            queued_exit_vehicle(&way, (20, 5.0), 8.0, [(22, 5.0, 0.0, 0.0, 0.9, 3.5), (23, 0.0, 0.0, 0.0, 0.9, 3.5)]),
             None
         );
     }
@@ -333,7 +333,7 @@ mod junction_arrival_tests {
                 &way,
                 (20, 5.0),
                 10.0,
-                [(21, 4.0, 1.0), (20, 5.0, 0.5), (22, -1.0, 0.0)]
+                [(21, 4.0, 1.0, 0.0, 0.9, 3.5), (20, 5.0, 0.5, 0.0, 0.9, 3.5), (22, -1.0, 0.0, 0.0, 0.9, 3.5)]
             ),
             Some((4.0, 0.0, 22))
         );

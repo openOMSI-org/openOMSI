@@ -99,11 +99,10 @@ pub struct Lane {
     /// FUN_00710e98 and never written again), so a blockpath never holds anybody in the
     /// original either. No stock map places an object that has one.
     pub blocks: Vec<u16>,
-    /// `[crossingproblem]` (segment +0x1a2 in Omsi.exe): where this path and one crossing it
-    /// meet, a vehicle holding either of them blocks the other for as long as it holds it,
-    /// not only until it has passed the crossing point (the look-ahead FUN_00716970 skips its
-    /// "already past the crossing" test for such a pair, 0x718013). Spandau sets it on T
-    /// junctions whose paths run side by side rather than cleanly across each other.
+    /// `[crossingproblem]` (segment +0x1a2 in Omsi.exe): marks a path pair whose junction
+    /// geometry needs special handling. The AI keeps the conflict envelope at the measured
+    /// meeting area rather than treating the entire remaining approach lanes as occupied;
+    /// otherwise a vehicle far beyond the actual overlap can hold crossing traffic.
     pub crossing_problem: bool,
     /// Part of a roundabout's ring (see `rings::find_rings`).
     pub ring: bool,
