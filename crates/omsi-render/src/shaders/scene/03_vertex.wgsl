@@ -178,6 +178,18 @@ fn tree_sway(local: vec3<f32>, m: mat4x4<f32>) -> vec3<f32> {
 // Where a scene vertex lands on the screen: the main pass's and the depth passes' vertex
 // shaders (`vs_main`, `vs_depth`) both take it from here, so that their depths agree to the
 // last bit (the main pass tests against the depth the prepass left).
+fn depth_plane_normal(e: u32, fallback: vec3<f32>) -> vec3<f32> {
+    let encoded = vec2<f32>(models[e * 4u + 1u].w, models[e * 4u + 2u].w);
+    if (any(abs(encoded) > vec2<f32>(1.0))) {
+        return safe_normal(fallback);
+    }
+    var n = vec3<f32>(encoded, 1.0 - abs(encoded.x) - abs(encoded.y));
+    let fold = clamp(-n.z, 0.0, 1.0);
+    n.x += select(fold, -fold, n.x >= 0.0);
+    n.y += select(fold, -fold, n.y >= 0.0);
+    return normalize(n);
+}
+
 fn scene_clip(e: u32, wp: vec4<f32>, nw: vec3<f32>) -> vec4<f32> {
     // Road surfaces (splines, the objects lying on them, a shadow blob) are pulled towards
     // the eye along the line of sight - the picture does not move, only the depth - so that
@@ -244,28 +256,29 @@ fn scene_clip(e: u32, wp: vec4<f32>, nw: vec3<f32>) -> vec4<f32> {
     if (level <= 0.0) {
         return clip;
     }
-    if ((level_code & 4096u) != 0u) {
-        // Keep the depth step within half the measured gap.
-        let cap = f32((level_code >> 2u) & 1023u) * 1e-6;
-        let distance = length(cp - camera.cam_pos.xyz);
-        level = min(level, cap / max(3e-5 * distance, 1e-9));
-        if (level <= 0.0) {
-            return clip;
+    let plane_normal = depth_plane_normal(e, nw);
+    // Only a nearby surface on the viewer's side can be overtaken by the depth step.
+    let has_positive_cap = (level_code & 0x400000u) != 0u;
+    let has_negative_cap = (level_code & 0x800000u) != 0u;
+    if (has_positive_cap || has_negative_cap) {
+        let positive_view = dot(plane_normal, camera.cam_pos.xyz - cp) >= 0.0;
+        let has_view_cap = select(has_negative_cap, has_positive_cap, positive_view);
+        if (has_view_cap) {
+            let cap = select(
+                f32((level_code >> 12u) & 1023u),
+                f32((level_code >> 2u) & 1023u),
+                positive_view,
+            ) * 1e-6;
+            let distance = length(cp - camera.cam_pos.xyz);
+            level = min(level, cap / max(3e-5 * distance, 1e-9));
+            if (level <= 0.0) {
+                return clip;
+            }
         }
     }
     // (the depth of the eye's own point: n f / (f - n), about the near plane)
     let at_eye = (camera.view_proj * vec4<f32>(camera.cam_pos.xyz, 1.0)).z;
-    // Use geometric plane normals; lighting normals may be smoothed or authored independently.
-    let encoded = vec2<f32>(models[e * 4u + 1u].w, models[e * 4u + 2u].w);
-    var depth_n = nw;
-    if (all(abs(encoded) <= vec2<f32>(1.0))) {
-        var n = vec3<f32>(encoded, 1.0 - abs(encoded.x) - abs(encoded.y));
-        let t = clamp(-n.z, 0.0, 1.0);
-        n.x += select(t, -t, n.x >= 0.0);
-        n.y += select(t, -t, n.y >= 0.0);
-        depth_n = n;
-    }
-    let plane = max(abs(dot(safe_normal(depth_n), cp - camera.cam_pos.xyz)), 0.05 * length(cp - camera.cam_pos.xyz));
+    let plane = max(abs(dot(plane_normal, cp - camera.cam_pos.xyz)), 0.05 * length(cp - camera.cam_pos.xyz));
     let slant = level * 2e-5 * at_eye * clip.w / plane;
     return vec4<f32>(clip.x, clip.y, clip.z * (1.0 + level * 1e-5) + slant, clip.w);
 }
