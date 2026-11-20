@@ -37,11 +37,15 @@ pub struct SceneSettings {
     /// The session's weather lies as snow (`[snow]` in the `.owt`): the vehicles' panes wear
     /// it as they go onto the GPU.
     snow: AtomicBool,
+    /// The `pax_stop_numbers_exact` setting (#3154): a stop's `pass_enter_min/max` are kept as
+    /// the map writes them instead of rounded as OMSI reads them, so the passenger density
+    /// multiplies before the rounding. Read when the map index is built.
+    stop_numbers_exact: AtomicBool,
 }
 
 impl Default for SceneSettings {
     fn default() -> SceneSettings {
-        SceneSettings { sound_scenery: AtomicU32::new(1.0f32.to_bits()), mirror_size: AtomicU32::new(256), rain_quality: AtomicU8::new(2), snow: AtomicBool::new(false) }
+        SceneSettings { sound_scenery: AtomicU32::new(1.0f32.to_bits()), mirror_size: AtomicU32::new(256), rain_quality: AtomicU8::new(2), snow: AtomicBool::new(false), stop_numbers_exact: AtomicBool::new(false) }
     }
 }
 
@@ -60,6 +64,15 @@ impl SceneSettings {
 
     pub fn set_mirror_size(&self, v: u32) {
         self.mirror_size.store(v, Relaxed);
+    }
+
+    /// Stops' passenger numbers kept as the map writes them (#3154).
+    pub fn stop_numbers_exact(&self) -> bool {
+        self.stop_numbers_exact.load(Relaxed)
+    }
+
+    pub fn set_stop_numbers_exact(&self, v: bool) {
+        self.stop_numbers_exact.store(v, Relaxed);
     }
 
     pub fn rain_quality(&self) -> u8 {

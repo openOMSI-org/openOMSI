@@ -498,6 +498,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "precision_zoom" => s.precision_zoom,
         "zoom_hold_latch" => s.zoom_hold_latch,
         "flashlight_cursor" => s.flashlight_cursor,
+        "pax_stop_numbers_exact" => s.pax_stop_numbers_exact,
         "triple_screen" => s.triple.enabled,
         "triple_hud_center" => s.triple_hud_center,
         "triple_span" => s.triple_span,
@@ -895,6 +896,12 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
         "zoom_hold_latch" => {
             app.settings.zoom_hold_latch = on;
             Some(("zoom_hold_latch", bit))
+        }
+        "pax_stop_numbers_exact" => {
+            app.settings.pax_stop_numbers_exact = on;
+            // (the world's copy is read when the map index is built: a restart of the duty
+            // picks it up, the loaded map keeps the numbers it was read with)
+            Some(("pax_stop_numbers_exact", bit))
         }
         "flashlight_cursor" => {
             app.settings.flashlight_cursor = on;

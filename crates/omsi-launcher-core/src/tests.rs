@@ -613,3 +613,20 @@ upscale_quality=native
     assert_eq!(mac["upscaler"].as_str(), Some("metalfx"));
     assert!(super::settings_to_text(&mac, None).contains("upscaler=metalfx\n"));
 }
+
+#[test]
+fn the_maps_own_passenger_numbers_reach_the_world_through_the_settings_file() {
+    // (#3154) A stop the map gives 0.7 to keeps 0.7 people only when the player asks for it;
+    // the switch has to survive the launcher's own file both ways.
+    let fresh = super::settings_from_text(None);
+    assert_eq!(fresh["pax_stop_numbers_exact"], serde_json::json!(false), "OMSI 2's rounding is what a fresh file asks for");
+    let asked = super::settings_from_text(Some("pax_stop_numbers_exact=1\n"));
+    assert_eq!(asked["pax_stop_numbers_exact"], serde_json::json!(true));
+    let text = super::settings_to_text(&asked, None);
+    assert!(text.lines().any(|l| l.trim() == "pax_stop_numbers_exact=1"), "the file the game reads says it: {text}");
+    for off in ["0", "false", "off", "no"] {
+        let v = super::settings_from_text(Some(&format!("pax_stop_numbers_exact={off}\n")));
+        assert_eq!(v["pax_stop_numbers_exact"], serde_json::json!(false), "{off}");
+        assert!(super::settings_to_text(&v, None).lines().any(|l| l.trim() == "pax_stop_numbers_exact=0"));
+    }
+}

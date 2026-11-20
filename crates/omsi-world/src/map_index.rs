@@ -87,6 +87,29 @@ pub struct MapIndex {
     pub stop_length: HashMap<i64, f32>,
 }
 
+/// How a bus stop's `pass_enter_min` / `pass_enter_max` strings are read (#3154).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StopNumbers {
+    /// Rounded as Omsi.exe reads them: `0.7` is `1`, and a stop the map gives `0.7` keeps one
+    /// person waiting until the density drops below `0.5`. What OMSI 2 does, and what a game
+    /// does unless the player asks otherwise.
+    #[default]
+    Omsi,
+    /// Kept as the map writes them, so the passenger density multiplies first and the rounding
+    /// comes last: at a density of `0.6` a stop given `0.7` has nobody waiting, and at `1` one
+    /// person - a range that can change with the hour instead of a step at `0.5`.
+    Exact,
+}
+
+impl StopNumbers {
+    fn round(self, v: f32) -> f32 {
+        match self {
+            StopNumbers::Omsi => v.round(),
+            StopNumbers::Exact => v,
+        }
+    }
+}
+
 /// How many passengers get off at a bus stop, as Omsi.exe reads the stop object's strings
 /// when it sets the station up (0x620058): `pass_enter_max` (string 1, else 1) and
 /// `pass_enter_min` (string 2, else 0) rounded, and `pass_exit` (string 3) rounded - or,
@@ -94,18 +117,30 @@ pub struct MapIndex {
 /// off among the stops ahead by these numbers (0x61baa8), so a stop with twice the number
 /// takes twice the riders; the stock maps put 10 on every stop.
 pub fn stop_exit_weight(strings: &[String]) -> f32 {
-    let (max, min) = stop_enter(strings);
-    stop_num(strings, 3).unwrap_or((min + max) / 2.0).max(0.0)
+    stop_exit_weight_with(strings, StopNumbers::Omsi)
 }
 
-fn stop_num(strings: &[String], i: usize) -> Option<f32> {
-    strings.get(i).map(|s| s.trim()).filter(|s| !s.is_empty()).and_then(|s| s.replace(',', ".").parse::<f64>().ok()).filter(|v| v.is_finite()).map(|v| v.round() as f32)
+/// [`stop_exit_weight`] read the way `numbers` says (#3154).
+pub fn stop_exit_weight_with(strings: &[String], numbers: StopNumbers) -> f32 {
+    let (max, min) = stop_enter_with(strings, numbers);
+    stop_num(strings, 3, numbers).unwrap_or((min + max) / 2.0).max(0.0)
+}
+
+fn stop_num(strings: &[String], i: usize, numbers: StopNumbers) -> Option<f32> {
+    let v = strings.get(i).map(|s| s.trim()).filter(|s| !s.is_empty()).and_then(|s| s.replace(',', ".").parse::<f64>().ok()).filter(|v| v.is_finite())? as f32;
+    Some(numbers.round(v))
 }
 
 /// A bus stop's `pass_enter_max` (string 1, else 1) and `pass_enter_min` (string 2, else
 /// 0), rounded, as Omsi.exe sets the station up (0x620058): how many people wait there.
 pub fn stop_enter(strings: &[String]) -> (f32, f32) {
-    (stop_num(strings, 1).unwrap_or(1.0), stop_num(strings, 2).unwrap_or(0.0))
+    stop_enter_with(strings, StopNumbers::Omsi)
+}
+
+/// [`stop_enter`] read the way `numbers` says (#3154): `Omsi` rounds each string, `Exact`
+/// leaves it for whoever multiplies it by the passenger density.
+pub fn stop_enter_with(strings: &[String], numbers: StopNumbers) -> (f32, f32) {
+    (stop_num(strings, 1, numbers).unwrap_or(1.0), stop_num(strings, 2, numbers).unwrap_or(0.0))
 }
 
 /// The side a bus stop's platform lies on, as Omsi.exe reads it off the stop object's
@@ -168,6 +203,12 @@ impl MapIndex {
     /// (index in global.cfg's `[map]` list, x, y, file): repeaters and timetable tracks name
     /// a tile by that index, which a missing tile file must not shift.
     pub fn build(tiles: &[(usize, i32, i32, PathBuf)], chrono_dirs: &[PathBuf], root: &Path) -> MapIndex {
+        MapIndex::build_with(tiles, chrono_dirs, root, StopNumbers::Omsi)
+    }
+
+    /// [`MapIndex::build`], with the stops' passenger numbers read the way `numbers` says
+    /// (#3154).
+    pub fn build_with(tiles: &[(usize, i32, i32, PathBuf)], chrono_dirs: &[PathBuf], root: &Path, numbers: StopNumbers) -> MapIndex {
         /// What one tile adds besides its own index part: its rows (key, spline, start
         /// distance, interval), its repeaters (id, spline, the first object of the row on that
         /// spline, their own copy of the row's start distance and of its interval), and parent
@@ -262,15 +303,15 @@ impl MapIndex {
                     let ground = terrain.as_ref().map(|t| t.sample(o.pos[0].clamp(0.0, tile_size()) as f32, o.pos[1].clamp(0.0, tile_size()) as f32) as f64).unwrap_or(0.0);
                     part.objects.insert(o.id, ((*tx, *ty), DVec3::new(origin.x + o.pos[0], origin.y + o.pos[1], o.pos[2] + ground), o.rot));
                     if o.extra.len() >= 2 {
-                        part.stop_weights.insert(o.id, stop_exit_weight(&o.extra));
-                        part.stop_enter.insert(o.id, stop_enter(&o.extra));
+                        part.stop_weights.insert(o.id, stop_exit_weight_with(&o.extra, numbers));
+                        part.stop_enter.insert(o.id, stop_enter_with(&o.extra, numbers));
                         part.stop_side.insert(o.id, stop_side(&o.extra));
                         part.stop_length.insert(o.id, stop_length(&o.extra));
                     }
                 }
                 for a in tile.spline_attachments.iter().filter(|a| a.repeater.is_none() && a.strings.len() >= 2) {
-                    part.stop_weights.insert(a.id, stop_exit_weight(&a.strings));
-                    part.stop_enter.insert(a.id, stop_enter(&a.strings));
+                    part.stop_weights.insert(a.id, stop_exit_weight_with(&a.strings, numbers));
+                    part.stop_enter.insert(a.id, stop_enter_with(&a.strings, numbers));
                     part.stop_side.insert(a.id, stop_side(&a.strings));
                     part.stop_length.insert(a.id, stop_length(&a.strings));
                 }
@@ -304,8 +345,8 @@ impl MapIndex {
                 let Some(parent) = o.parent_id.and_then(|id| part.objects.get(&id).copied()) else { continue };
                 part.objects.entry(o.id).or_insert((parent.0, parent.1, [parent.2[0] + o.rot[0], 0.0, 0.0]));
                 if o.extra.len() >= 2 {
-                    part.stop_weights.insert(o.id, stop_exit_weight(&o.extra));
-                    part.stop_enter.insert(o.id, stop_enter(&o.extra));
+                    part.stop_weights.insert(o.id, stop_exit_weight_with(&o.extra, numbers));
+                    part.stop_enter.insert(o.id, stop_enter_with(&o.extra, numbers));
                     part.stop_side.insert(o.id, stop_side(&o.extra));
                     part.stop_length.insert(o.id, stop_length(&o.extra));
                 }
@@ -1441,6 +1482,30 @@ mod tests {
         assert_eq!(v(&["A", "1", "0", "2.6"]), 3.0);
         assert_eq!(v(&["A", "1", "0", "-4"]), 0.0);
         assert_eq!(v(&["A", "1", "0", "x"]), 0.5);
+    }
+
+    /// A stop's passenger numbers as the map writes them, kept for the density to multiply
+    /// (#3154): 0.7 is 0.7, not 1, and the exit weight follows the same reading.
+    #[test]
+    fn the_maps_own_passenger_numbers_can_be_kept_exactly() {
+        let s = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        // (0.7 and 0.6 the way a map author writes them: the numbers OMSI rounds away)
+        let stop = s(&["Klinikum", "0.7", "0.6"]);
+        assert_eq!(stop_enter(&stop), (1.0, 1.0), "OMSI's own reading rounds both up");
+        assert_eq!(stop_enter_with(&stop, StopNumbers::Exact), (0.7, 0.6));
+        // the density multiplies first: at 0.6 nobody waits, where OMSI's reading gives one
+        let mean = |(max, min): (f32, f32)| (max + min) / 2.0;
+        assert_eq!((0.6 * mean(stop_enter(&stop))).round(), 1.0);
+        assert_eq!((0.6 * mean(stop_enter_with(&stop, StopNumbers::Exact))).round(), 0.0);
+        assert_eq!((1.0 * mean(stop_enter_with(&stop, StopNumbers::Exact))).round(), 1.0, "a full hour still has one");
+        // the exit weight, from the same strings: rounded as OMSI reads it, or the mean as written
+        assert_eq!(stop_exit_weight(&stop), 1.0);
+        assert!((stop_exit_weight_with(&stop, StopNumbers::Exact) - 0.65).abs() < 1e-6);
+        // (a whole number, a comma and a wrong value read the same either way)
+        let plain = s(&["A", "6", "2"]);
+        assert_eq!(stop_enter(&plain), stop_enter_with(&plain, StopNumbers::Exact));
+        assert_eq!(stop_enter_with(&s(&["A", "0,7"]), StopNumbers::Exact), (0.7, 0.0));
+        assert_eq!(stop_enter_with(&s(&["A", "", ""]), StopNumbers::Exact), (1.0, 0.0), "a map that says nothing keeps the defaults");
     }
 
     #[test]

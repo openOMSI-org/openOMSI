@@ -169,6 +169,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "zoom_hold_amount", "Zoom on a key", "How far the view zooms while the zoom key is held (Controls: Zoom while held)", &|v| format!("{}x", format!("{:.2}", 1.0 / v.max(0.15)).trim_end_matches('0').trim_end_matches('.'))),
         switch_row(app, "zoom_hold_latch", "Zoom key stays", "One press zooms in, the next zooms out; off: only while the key is held"),
         switch_row(app, "flashlight_cursor", "Flashlight follows the cursor", "With the cursor free (on foot, or in the cab while the mouse does not steer) the flashlight lights where it points; otherwise straight ahead"),
+        switch_row(app, "pax_stop_numbers_exact", "Read the map's passenger numbers exactly", "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding"),
         slider_row(app, "fov", "Field of view", "Vertical field of view; in triple screen Default uses physical measurements, an override moves the virtual eye", &|v| if v < 20.0 { "Default".to_string() } else { format!("{v:.0}°") }),
         slider_row(app, "seat 1", "Seat forward and back", "Adjust the driver's seat position forward or backward", &cm),
         slider_row(app, "seat 2", "Seat height", "Adjust the driver's seat height", &cm),
