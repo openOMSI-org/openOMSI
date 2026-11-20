@@ -133,10 +133,25 @@ impl Stuck {
     }
 
     /// One frame of the crowd's result: `moved` metres of real progress per frame (0 = held
-    /// in place by whatever the map put there).
+    /// in place by whatever the map put there). Even when collision handling assigns a
+    /// non-zero tangential velocity, zero displacement correctly counts toward the timeout.
     fn frame(&mut self, moved: f64) {
-        let mut walker = Walker::new(DVec2::new(0.0, 2.0), 0.25, 0);
-        walker.vel = DVec2::new(0.0, moved);
+        let cur = DVec2::new(
+            self.sim.people[self.i].position.x,
+            self.sim.people[self.i].position.y,
+        );
+        let step = if moved == 0.0 {
+            DVec2::ZERO
+        } else {
+            let sign = if cur.y >= 3.0 { -1.0 } else { 1.0 };
+            DVec2::new(0.0, sign * 0.025)
+        };
+        let mut walker = Walker::new(cur + step, 0.25, 0);
+        walker.vel = if moved == 0.0 {
+            DVec2::new(0.8, 0.5)
+        } else {
+            DVec2::new(0.0, if step.y > 0.0 { 0.75 } else { -0.75 })
+        };
         let (world, net, i) = (&self.world, &self.net, self.i);
         self.sim.apply(
             i,

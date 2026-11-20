@@ -700,13 +700,15 @@ impl PeopleSim {
         let time = self.time;
         let p = &mut self.people[i];
         let speed = w.vel.length();
+        let actual_speed =
+            (w.pos - DVec2::new(p.position.x, p.position.y)).length() as f32 / dt.max(0.001);
         // somebody pressed against somebody else for seconds slips past them
         // (the second count is the one the map's own geometry runs up: it is not cleared by
         // the slip-past, only by a step; see `STUCK_GONE_S`)
-        if want.vel.length() > 0.2 && speed < 0.08 {
+        if want.vel.length() > 0.2 && actual_speed < 0.08 {
             p.stuck += dt;
             p.stuck_total += dt;
-        } else if speed > 0.2 {
+        } else if actual_speed > 0.2 {
             p.stuck = 0.0;
             p.stuck_total = 0.0;
         }
