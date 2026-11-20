@@ -116,6 +116,8 @@ mod population_limit_tests;
 #[rustfmt::skip]
 mod ticket_hook_tests;
 #[cfg(test)]
+mod section_door_tests;
+#[cfg(test)]
 #[rustfmt::skip]
 mod bad_driving_tests;
 #[cfg(test)]
