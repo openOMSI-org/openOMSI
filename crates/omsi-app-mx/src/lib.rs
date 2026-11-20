@@ -29,7 +29,7 @@ use omsi_xr::openxr;
 pub mod android;
 #[cfg(target_os = "android")]
 #[allow(dead_code)]
-mod android_launcher;
+pub mod android_launcher;
 #[cfg(target_os = "ios")]
 mod apple;
 #[cfg(any(target_os = "macos", target_os = "ios"))]

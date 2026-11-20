@@ -23,13 +23,47 @@ static SAFER_TRIED: AtomicBool = AtomicBool::new(false);
 /// Where the app keeps what a person puts on the phone for it.
 pub const SHARED: &str = "/storage/emulated/0/openOMSI";
 
+/// mX Graphics, read once for the process: `android_main` and the launcher page's bridge
+/// (`android_launcher`) go to the same game, whichever of them asks first.
+static MX: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+/// Whether this process runs the game on mX (see [`MX`]); asked by the launcher page's
+/// bridge, which can be called before `android_main` has read the settings.
+pub(crate) fn mx_selected() -> bool {
+    *MX.get_or_init(|| files_dir().is_some_and(|home| crate::startup::mx_graphics_in(&home)))
+}
+
+/// The app's internal data folder (`Context.getFilesDir`, what `AndroidApp::internal_data_path`
+/// gives `android_main`), asked through JNI.
+fn files_dir() -> Option<PathBuf> {
+    use jni::objects::{JObject, JString};
+    let ctx = ndk_context::android_context();
+    // SAFETY: the VM and the activity ndk_context was given live as long as the program
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.ok()?;
+    let mut env = vm.attach_current_thread().ok()?;
+    let activity = std::mem::ManuallyDrop::new(unsafe { JObject::from_raw(ctx.context().cast()) });
+    let dir = env
+        .call_method(&*activity, "getFilesDir", "()Ljava/io/File;", &[])
+        .and_then(|v| v.l());
+    let path = dir.and_then(|d| {
+        env.call_method(&d, "getAbsolutePath", "()Ljava/lang/String;", &[])
+            .and_then(|v| v.l())
+    });
+    let Ok(path) = path else {
+        let _ = env.exception_clear();
+        return None;
+    };
+    let path: String = env.get_string(&JString::from(path)).ok()?.into();
+    Some(PathBuf::from(path))
+}
+
 #[unsafe(no_mangle)]
 fn android_main(app: AndroidApp) {
     // mX Graphics on: the game is mX's, wgpu is not touched
-    if app
-        .internal_data_path()
-        .is_some_and(|home| crate::startup::mx_graphics_in(&home))
-    {
+    if *MX.get_or_init(|| {
+        app.internal_data_path()
+            .is_some_and(|home| crate::startup::mx_graphics_in(&home))
+    }) {
         return openomsi_game_mx::android::android_main(app);
     }
     crate::view_sync::install_sim_decoder();

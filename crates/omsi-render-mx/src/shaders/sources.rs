@@ -267,7 +267,7 @@ pub(crate) fn materials_from_heap(src: &str) -> String {
         ("s_tile", "mx_samplers[mx_mat.tile_sampler]"),
     ];
     // (a checkout with CRLF line ends, as on Windows, has them in the included source too)
-    let mut out = src.replace("\r\n", "\n");
+    let mut out = src.replace('\r', "");
     // the bound declarations go
     for (k, (name, _)) in BOUND.iter().enumerate() {
         let ty = if name.starts_with("s_") {
@@ -685,7 +685,7 @@ mod materials_from_heap_tests {
     /// are still found and taken out
     #[test]
     fn the_bound_materials_go_with_either_line_end() {
-        let joined = super::scene_shader_bound_forms(false, false, false);
+        let joined = super::scene_shader_bound_forms(false, false, false).replace('\r', "");
         for src in [joined.clone(), joined.replace('\n', "\r\n")] {
             let out = super::materials_from_heap(&src);
             assert!(!out.contains("var t_diffuse: texture_2d<f32>;"));

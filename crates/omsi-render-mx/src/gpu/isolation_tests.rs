@@ -1,8 +1,28 @@
 use super::*;
 use std::sync::atomic::Ordering::Relaxed;
 
+/// The options a main renderer of the no-op device publishes (the adapter's texture budget,
+/// its name), published before a test reads them: the other tests' renderers, opened
+/// meanwhile on other threads, publish the same, so only the auxiliary renderer could
+/// change them.
+fn publish_main_options() {
+    let main = mx::Instance::with_backends(mx::Backends::NOOP)
+        .default_adapter()
+        .unwrap();
+    drop(
+        pollster::block_on(Renderer::open_on(
+            main,
+            None,
+            None,
+            RenderOptions::default(),
+        ))
+        .unwrap(),
+    );
+}
+
 #[test]
 fn auxiliary_adapter_state_does_not_change_the_game() {
+    publish_main_options();
     let before = GL_BACKEND.load(Relaxed);
     let budget = ADAPTER_TEXTURE_MB.load(Relaxed);
     with_auxiliary_renderer(|| {
@@ -70,21 +90,7 @@ fn auxiliary_adapter_state_is_restored_after_failure() {
 
 #[test]
 fn auxiliary_adapter_state_device_open_does_not_publish_metadata() {
-    // (the options a main renderer of the no-op device publishes, published first: the other
-    // tests' renderers, opened meanwhile on other threads, publish the same, so only the
-    // auxiliary renderer could change them)
-    let main = mx::Instance::with_backends(mx::Backends::NOOP)
-        .default_adapter()
-        .unwrap();
-    drop(
-        pollster::block_on(Renderer::open_on(
-            main,
-            None,
-            None,
-            RenderOptions::default(),
-        ))
-        .unwrap(),
-    );
+    publish_main_options();
     let gpu_options = omsi_texture::gpu_options();
     let texture = ADAPTER_TEXTURE_MB.load(Relaxed);
     let vram = ADAPTER_VRAM_MB.load(Relaxed);
