@@ -260,7 +260,7 @@ pub struct PeopleSim {
     pub wall_cells: HashMap<(i32, i32, i32), WallCell>,
     pub wall_key: (usize, usize, usize, f64),
     /// Passenger cabins by vehicle files (the front vehicle and its coupled parts).
-    pub cabins: HashMap<Vec<PathBuf>, Option<Arc<Cabin>>>,
+    pub cabins: HashMap<Vec<(PathBuf, bool)>, Option<Arc<Cabin>>>,
     pub player_cabin: Option<Arc<Cabin>>,
     pub player_next_stop: Option<RequestStop>,
     /// Which places of each bus are taken.
