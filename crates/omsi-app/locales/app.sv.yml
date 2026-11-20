@@ -3824,3 +3824,6 @@
 "At most 5": "Högst 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Mappar med objekt och splines som ingen annan karta använder tas bort samtidigt: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Mappar med objekt och splines som en annan karta fortfarande använder blir kvar: {n}."
+
+"sent to the plugins": "skickat till insticksprogrammen"
+"no plugin is listening for commands": "inget insticksprogram lyssnar på kommandon"

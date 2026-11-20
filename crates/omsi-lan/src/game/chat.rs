@@ -176,8 +176,10 @@ pub fn chat_send(lan: &mut LanSession, game: &mut LanGame, text: &str) {
             }
             game.chat.push("* sent to the plugins".into());
         }
-        // (no plugin hears `chat_command`: a `/`-line is chat, as it always was)
-        ChatLine::Command(line) => chat_say(lan, game, &line),
+        ChatLine::Command(_) => {
+            game.chat
+                .push("* no plugin is listening for commands".into());
+        }
         ChatLine::Say(said) => chat_say(lan, game, &said),
     }
 }

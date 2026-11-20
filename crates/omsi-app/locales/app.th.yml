@@ -2926,3 +2926,6 @@
 "At most 5": "สูงสุด 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "โฟลเดอร์วัตถุและสไปลน์ที่ไม่มีแผนที่อื่นใช้จะถูกลบไปด้วย: {n} โฟลเดอร์, {size}"
 "Folders of objects and splines that another map still uses stay: {n}.": "โฟลเดอร์วัตถุและสไปลน์ที่แผนที่อื่นยังใช้อยู่จะยังคงอยู่: {n} โฟลเดอร์"
+
+"sent to the plugins": "ส่งไปยังปลั๊กอินแล้ว"
+"no plugin is listening for commands": "ไม่มีปลั๊กอินใดที่รอรับคำสั่ง"
