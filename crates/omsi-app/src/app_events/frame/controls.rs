@@ -3,6 +3,8 @@
 
 use super::*;
 
+#[rustfmt::skip]
+#[rustfmt::skip]
 impl App {
     /// The tutorial's pages, then the game controllers: their axes this frame (returned with
     /// their buttons' key actions), the cursor hidden while they drive, their force feedback.
@@ -20,6 +22,7 @@ impl App {
         ctl.set_background(self.settings.ctrl_background);
         ctl.set_focus(self.input.window_focused || self.settings.ctrl_background);
         ctl.deadzone = self.settings.ctrl_deadzone;
+        ctl.zones = crate::controllers::Zones::parse(&self.settings.ctrl_deadzone_axes);
         ctl.right_stick_look = self.settings.right_stick_look;
         ctl.pad_deadzone = self.settings.pad_deadzone;
         ctl.pad_presets = self.settings.pad_buttons;
@@ -352,6 +355,8 @@ impl App {
 
 /// Whether the steering keys have the wheel over a gamepad's stick at `x` (its place past the
 /// dead zone): the stick at rest while the keys' own wheel (`keys_steering`) is turned.
+#[rustfmt::skip]
+#[rustfmt::skip]
 fn controller_notice(text: &str, tr: impl Fn(&str) -> String) -> String {
     const UNSET: &str = " is not set up: it steers; set up its pedals and buttons in the launcher (Controls → Game controllers)";
     if let Some(name) = text.strip_suffix(UNSET) {
@@ -367,6 +372,8 @@ fn controller_notice(text: &str, tr: impl Fn(&str) -> String) -> String {
     text.to_owned()
 }
 
+#[rustfmt::skip]
+#[rustfmt::skip]
 fn gear_step(name: &str) -> Option<bool> {
     if name.eq_ignore_ascii_case("gear_up") {
         Some(true)
@@ -377,11 +384,15 @@ fn gear_step(name: &str) -> Option<bool> {
     }
 }
 
+#[rustfmt::skip]
+#[rustfmt::skip]
 fn keys_steer_over_idle_stick(x: f32, keys_steering: f32) -> bool {
     x == 0.0 && keys_steering != 0.0
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
+#[rustfmt::skip]
 mod tests {
     use super::{controller_notice, gear_step, keys_steer_over_idle_stick};
 
