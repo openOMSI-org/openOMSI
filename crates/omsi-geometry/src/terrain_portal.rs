@@ -26,7 +26,7 @@ pub struct Portal {
 
 /// The upright opening a hole mesh is, if it is one: every face of it mostly upright. It runs
 /// as a map's tiles load, so every step is linear in the mesh: each vertex is taken once
-/// however many triangles share it, and the ends of the foot are found in two sweeps.
+/// however many triangles share it, and the ends of the foot are found in two sweeps along its bottom edge.
 pub fn hole_portal(mesh: &MeshData, transform: &Mat4, origin: DVec3) -> Option<Portal> {
     let world = |i: u32| {
         origin
@@ -62,16 +62,11 @@ pub fn hole_portal(mesh: &MeshData, transform: &Mat4, origin: DVec3) -> Option<P
     let mean = |it: Vec<&DVec3>| it.iter().copied().sum::<DVec3>() / it.len().max(1) as f64;
     let feet: Vec<&DVec3> = points.iter().filter(|p| p.z <= low + band).collect();
     let tops: Vec<&DVec3> = points.iter().filter(|p| p.z >= high - band).collect();
-    // (a foot lies along one line in plan: the point farthest from any of it is one end, and
-    // the point farthest from that one is the other)
-    let farthest = |from: DVec3| {
-        feet.iter().copied().fold((from, 0.0), |(best, wide), p| {
-            let d = (*p - from).truncate().length();
-            if d > wide { (*p, d) } else { (best, wide) }
-        })
-    };
-    let a = farthest(*feet[0]).0;
-    let (b, wide) = farthest(a);
+    // (the foot is the sheet's bottom edge; where the mesh shows none, its lowest quarter)
+    let bottom = bottom_edge(mesh, &world);
+    let ([a, b], wide) = farthest_pair(&bottom.iter().collect::<Vec<_>>())
+        .filter(|(_, wide)| *wide >= 1.0)
+        .or_else(|| farthest_pair(&feet))?;
     if wide < 1.0 {
         return None;
     }
@@ -81,6 +76,52 @@ pub fn hole_portal(mesh: &MeshData, transform: &Mat4, origin: DVec3) -> Option<P
         top: high,
         lean,
     })
+}
+
+/// The ends of points that lie along one line in plan, and how far apart they are: the point
+/// farthest from any of them is one end, and the point farthest from that one is the other.
+fn farthest_pair(points: &[&DVec3]) -> Option<([DVec3; 2], f64)> {
+    let farthest = |from: DVec3| {
+        points.iter().copied().fold((from, 0.0), |(best, wide), p| {
+            let d = (*p - from).truncate().length();
+            if d > wide { (*p, d) } else { (best, wide) }
+        })
+    };
+    let a = farthest(**points.first()?).0;
+    let (b, wide) = farthest(a);
+    Some(([a, b], wide))
+}
+
+/// The points of the sheet's bottom edge: the ends of each edge on the mesh's rim (in one
+/// triangle only) whose triangle rises from it, not the sides or the top. A leaning sheet's
+/// lowest quarter is a strip in plan, and its farthest points lie on opposite sides of the
+/// strip; its bottom edge is a line. Edges are matched by where their ends are, so a vertex
+/// split for its texture does not make a rim inside the sheet.
+fn bottom_edge(mesh: &MeshData, world: &dyn Fn(u32) -> DVec3) -> Vec<DVec3> {
+    let key = |i: u32| mesh.positions[i as usize].to_array().map(f32::to_bits);
+    let mut edges: std::collections::HashMap<_, (u32, u32, u32, u32)> =
+        std::collections::HashMap::with_capacity(mesh.indices.len());
+    for t in mesh.indices.chunks_exact(3) {
+        for (a, b, c) in [(t[0], t[1], t[2]), (t[1], t[2], t[0]), (t[2], t[0], t[1])] {
+            let (ka, kb) = (key(a), key(b));
+            let k = if ka < kb { (ka, kb) } else { (kb, ka) };
+            edges.entry(k).or_insert((a, b, c, 0)).3 += 1;
+        }
+    }
+    let mut out = Vec::new();
+    for &(a, b, c, n) in edges.values() {
+        let [pa, pb, pc] = [world(a), world(b), world(c)];
+        let e = pb - pa;
+        if n != 1 || e.length_squared() <= 0.0 {
+            continue;
+        }
+        // (the way into the triangle from its edge, within its plane)
+        let inward = (pc - pa) - e * ((pc - pa).dot(e) / e.length_squared());
+        if inward.normalize_or_zero().z > 0.5 {
+            out.extend([pa, pb]);
+        }
+    }
+    out
 }
 
 /// The ends of the opening's foot and its middle (plan), and the way into the hill: the way it
@@ -248,16 +289,14 @@ mod tests {
     /// outer corners, each vertex shared by up to six triangles counted once, found in linear
     /// work (a grid of 100 000 vertices; comparing every pair of the foot's would take some
     /// 10^9 steps).
-    #[test]
-    fn a_subdivided_sheet_finds_the_ends_of_its_foot() {
-        let (across, up) = (2000usize, 50usize);
+    /// A sheet of `across` × `up` vertices, each at `at(x, z)` for x and z from 0 to 1.
+    fn grid(across: usize, up: usize, at: impl Fn(f32, f32) -> Vec3) -> MeshData {
         let positions = (0..up)
             .flat_map(|j| {
-                (0..across).map(move |i| {
-                    let (x, z) = (i as f32 / (across - 1) as f32, j as f32 / (up - 1) as f32);
-                    Vec3::new(-3.5 + 7.0 * x, 0.2 + 0.7 * z, 4.75 * z)
-                })
+                (0..across)
+                    .map(move |i| (i as f32 / (across - 1) as f32, j as f32 / (up - 1) as f32))
             })
+            .map(|(x, z)| at(x, z))
             .collect();
         let at = |i: usize, j: usize| (j * across + i) as u32;
         let indices = (0..up - 1)
@@ -274,26 +313,69 @@ mod tests {
                 })
             })
             .collect();
-        let mesh = MeshData {
+        MeshData {
             positions,
             indices,
             ..Default::default()
-        };
+        }
+    }
+
+    /// Whether the foot's two ends are `a` and `b` (in plan, either way round).
+    fn foot_is(p: &Portal, a: DVec2, b: DVec2) -> bool {
+        let [f, g] = p.foot.map(|f| f.truncate());
+        let near = |u: DVec2, v: DVec2| u.distance(v) < 1e-4;
+        (near(f, a) && near(g, b)) || (near(f, b) && near(g, a))
+    }
+
+    #[test]
+    fn a_subdivided_sheet_finds_the_ends_of_its_foot() {
+        let mesh = grid(2000, 50, |x, z| {
+            Vec3::new(-3.5 + 7.0 * x, 0.2 + 0.7 * z, 4.75 * z)
+        });
         let p = hole_portal(&mesh, &Mat4::IDENTITY, DVec3::ZERO).expect("upright");
-        let mut xs = p.foot.map(|f| f.x);
-        xs.sort_by(f64::total_cmp);
         assert!(
-            (xs[0] + 3.5).abs() < 1e-5 && (xs[1] - 3.5).abs() < 1e-5,
+            foot_is(&p, DVec2::new(-3.5, 0.2), DVec2::new(3.5, 0.2)),
             "{:?}",
             p.foot
         );
-        // (both in the lowest quarter of its height, the band the foot is taken from)
-        assert!(
-            p.foot.iter().all(|f| f.z < 4.75 * 0.25 + 1e-5),
-            "{:?}",
-            p.foot
-        );
+        assert!(p.foot.iter().all(|f| f.z.abs() < 1e-5), "{:?}", p.foot);
         assert!((p.top - 4.75).abs() < 1e-5 && p.lean.y > 0.0);
+    }
+
+    #[test]
+    fn a_leaning_sheet_has_its_foot_on_its_bottom_edge() {
+        // (leaning 2 m over its 4.75 m, turned 30° in plan: its lowest quarter is a strip
+        // 0.5 m deep, and the corners of that strip lie 7.02 m apart, wider than the foot)
+        let turn = Mat4::from_rotation_z(30f32.to_radians());
+        let mesh = grid(40, 20, |x, z| Vec3::new(-3.5 + 7.0 * x, 2.0 * z, 4.75 * z));
+        let p = hole_portal(&mesh, &turn, DVec3::new(100.0, 50.0, 0.0)).expect("upright");
+        let corner = |x: f32| {
+            DVec2::new(100.0, 50.0)
+                + turn
+                    .transform_point3(Vec3::new(x, 0.0, 0.0))
+                    .truncate()
+                    .as_dvec2()
+        };
+        assert!(foot_is(&p, corner(-3.5), corner(3.5)), "{:?}", p.foot);
+        let outline = portal_outline(&p, &|_| Some(0.0));
+        assert!(
+            ((outline[0] - outline[1]).length() - 7.0).abs() < 1e-3,
+            "the cut is as wide as the mouth: {outline:?}"
+        );
+    }
+
+    #[test]
+    fn a_sheet_with_a_sloping_bottom_has_its_foot_along_its_bottom_edge() {
+        // (its bottom falls 1 m from left to right, so only one corner is at the lowest height)
+        let mesh = grid(30, 20, |x, z| {
+            Vec3::new(-3.5 + 7.0 * x, 0.2 + 1.0 * z, 5.0 * z - x * (1.0 - z))
+        });
+        let p = hole_portal(&mesh, &Mat4::IDENTITY, DVec3::ZERO).expect("upright");
+        assert!(
+            foot_is(&p, DVec2::new(-3.5, 0.2), DVec2::new(3.5, 0.2)),
+            "{:?}",
+            p.foot
+        );
     }
 
     #[test]
