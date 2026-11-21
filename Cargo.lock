@@ -237,7 +237,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot 0.12.5",
  "percent-encoding",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
  "x11rb",
 ]
 
@@ -1788,7 +1788,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2166,7 +2166,7 @@ dependencies = [
  "vec_map",
  "wasm-bindgen",
  "web-sys",
- "windows 0.62.2",
+ "windows 0.54.0",
 ]
 
 [[package]]
@@ -2286,7 +2286,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.21",
- "windows 0.62.2",
+ "windows 0.54.0",
 ]
 
 [[package]]
@@ -3206,19 +3206,25 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 [[package]]
 name = "mx"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
+ "mx-dx11",
  "mx-dx12",
+ "mx-gl",
  "mx-metal",
+ "mx-noop",
  "mx-shader",
  "mx-types",
  "mx-vulkan",
+ "parking_lot 0.12.5",
+ "raw-window-handle",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
-name = "mx-dx12"
+name = "mx-dx11"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "log",
  "mx-shader",
@@ -3231,9 +3237,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "mx-dx12"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
+dependencies = [
+ "log",
+ "mx-shader",
+ "mx-types",
+ "parking_lot 0.12.5",
+ "raw-window-handle",
+ "thiserror 2.0.21",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+]
+
+[[package]]
+name = "mx-gl"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
+dependencies = [
+ "glow",
+ "khronos-egl",
+ "libloading 0.8.9",
+ "log",
+ "mx-shader",
+ "mx-types",
+ "parking_lot 0.12.5",
+ "raw-window-handle",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "mx-metal"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "log",
  "mx-shader",
@@ -3251,9 +3288,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "mx-noop"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
+dependencies = [
+ "mx-shader",
+ "mx-types",
+ "parking_lot 0.12.5",
+ "raw-window-handle",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "mx-shader"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "naga 30.0.2",
  "naga-types",
@@ -3263,16 +3312,33 @@ dependencies = [
 [[package]]
 name = "mx-types"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
 ]
 
 [[package]]
+name = "mx-upscale"
+version = "0.1.0"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
+dependencies = [
+ "anyhow",
+ "ash",
+ "libc",
+ "log",
+ "mx",
+ "objc2 0.6.5",
+ "objc2-metal 0.3.2",
+ "parking_lot 0.12.5",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+]
+
+[[package]]
 name = "mx-vulkan"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "ash",
  "gpu-allocator",
@@ -3316,8 +3382,7 @@ dependencies = [
 [[package]]
 name = "naga"
 version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd0dd362bf26c0ffdd143df6da66a25d287e196eff482f117771010b207ad163"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
@@ -3920,6 +3985,7 @@ dependencies = [
  "ndk-context",
  "objc2 0.6.5",
  "omsi-admin",
+ "omsi-app-mx",
  "omsi-audio",
  "omsi-career",
  "omsi-cfg",
@@ -3976,10 +4042,92 @@ dependencies = [
  "steamworks",
  "ureq",
  "wgpu",
- "wgpu-mx",
  "windows 0.62.2",
  "winit",
  "winresource",
+ "zip",
+]
+
+[[package]]
+name = "omsi-app-mx"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "android_logger",
+ "anyhow",
+ "arboard",
+ "clap",
+ "env_logger",
+ "gilrs",
+ "glam",
+ "hashbrown 0.17.1",
+ "image",
+ "jni 0.21.1",
+ "jpeg-encoder",
+ "libc",
+ "log",
+ "mimalloc",
+ "mx",
+ "ndk-context",
+ "objc2 0.6.5",
+ "omsi-admin",
+ "omsi-audio",
+ "omsi-career",
+ "omsi-cfg",
+ "omsi-content",
+ "omsi-geometry",
+ "omsi-guard",
+ "omsi-htmlengine",
+ "omsi-input",
+ "omsi-lan",
+ "omsi-launcher-api",
+ "omsi-launcher-core",
+ "omsi-launcher-model",
+ "omsi-map",
+ "omsi-mapdraw-mx",
+ "omsi-model",
+ "omsi-mt-mx",
+ "omsi-multiplayer-ui-mx",
+ "omsi-navigator-mx",
+ "omsi-net",
+ "omsi-o3d",
+ "omsi-photo-mx",
+ "omsi-platform",
+ "omsi-plugin",
+ "omsi-plugin-ui-mx",
+ "omsi-remote",
+ "omsi-render-mx",
+ "omsi-scene-mx",
+ "omsi-scenery",
+ "omsi-script",
+ "omsi-settings-ui-mx",
+ "omsi-sim",
+ "omsi-soundscape",
+ "omsi-srcscan",
+ "omsi-texture",
+ "omsi-timetable",
+ "omsi-transit",
+ "omsi-trolley",
+ "omsi-ui-mx",
+ "omsi-vehicle",
+ "omsi-voice",
+ "omsi-weather",
+ "omsi-world",
+ "omsi-xr-mx",
+ "parking_lot 0.13.0",
+ "png",
+ "pollster 1.0.1",
+ "rayon",
+ "rfd",
+ "ring",
+ "rust-i18n",
+ "rustrict",
+ "serde",
+ "serde_json",
+ "steamworks",
+ "ureq",
+ "windows 0.62.2",
+ "winit",
  "zip",
 ]
 
@@ -4262,6 +4410,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-mapdraw-mx"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "hashbrown 0.17.1",
+ "log",
+ "omsi-cfg",
+ "omsi-map",
+ "omsi-sim",
+ "omsi-ui-mx",
+]
+
+[[package]]
 name = "omsi-model"
 version = "0.1.0"
 dependencies = [
@@ -4284,12 +4445,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-mt-mx"
+version = "0.1.0"
+dependencies = [
+ "ct2rs",
+ "log",
+ "omsi-cfg",
+ "omsi-ui-mx",
+ "parking_lot 0.13.0",
+ "serde_json",
+ "sha2",
+ "ureq",
+]
+
+[[package]]
 name = "omsi-multiplayer-ui"
 version = "0.1.0"
 dependencies = [
  "glam",
  "omsi-admin",
  "omsi-ui",
+]
+
+[[package]]
+name = "omsi-multiplayer-ui-mx"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "omsi-admin",
+ "omsi-ui-mx",
 ]
 
 [[package]]
@@ -4311,6 +4495,27 @@ dependencies = [
  "omsi-timetable",
  "omsi-ui",
  "wgpu",
+]
+
+[[package]]
+name = "omsi-navigator-mx"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "hashbrown 0.17.1",
+ "log",
+ "mx",
+ "omsi-cfg",
+ "omsi-lan",
+ "omsi-map",
+ "omsi-mapdraw-mx",
+ "omsi-model",
+ "omsi-render-mx",
+ "omsi-scene-mx",
+ "omsi-sim",
+ "omsi-texture",
+ "omsi-timetable",
+ "omsi-ui-mx",
 ]
 
 [[package]]
@@ -4351,6 +4556,15 @@ version = "0.1.0"
 dependencies = [
  "glam",
  "omsi-render",
+ "rayon",
+]
+
+[[package]]
+name = "omsi-photo-mx"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "omsi-render-mx",
  "rayon",
 ]
 
@@ -4404,6 +4618,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-plugin-ui-mx"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "hashbrown 0.17.1",
+ "image",
+ "log",
+ "mx",
+ "omsi-cfg",
+ "omsi-plugin",
+ "omsi-render-mx",
+ "omsi-ui-mx",
+ "pollster 1.0.1",
+]
+
+[[package]]
 name = "omsi-remote"
 version = "0.1.0"
 dependencies = [
@@ -4435,6 +4665,7 @@ dependencies = [
  "glam",
  "glow",
  "hashbrown 0.17.1",
+ "image",
  "libc",
  "log",
  "naga 29.0.4",
@@ -4447,9 +4678,33 @@ dependencies = [
  "rayon",
  "wgpu",
  "wgpu-hal",
- "wgpu-mx",
  "windows 0.62.2",
  "windows-core 0.62.2",
+ "winit",
+]
+
+[[package]]
+name = "omsi-render-mx"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ash",
+ "bitflags 2.13.2",
+ "bytemuck",
+ "env_logger",
+ "glam",
+ "hashbrown 0.17.1",
+ "image",
+ "log",
+ "mx",
+ "mx-upscale",
+ "naga 30.0.2",
+ "omsi-cfg",
+ "omsi-geometry",
+ "omsi-texture",
+ "pollster 1.0.1",
+ "rayon",
+ "windows 0.62.2",
  "winit",
 ]
 
@@ -4494,6 +4749,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-scene-mx"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "anyhow",
+ "glam",
+ "hashbrown 0.17.1",
+ "image",
+ "log",
+ "mx",
+ "omsi-audio",
+ "omsi-cfg",
+ "omsi-content",
+ "omsi-geometry",
+ "omsi-htmlengine",
+ "omsi-htmlpage",
+ "omsi-map",
+ "omsi-model",
+ "omsi-o3d",
+ "omsi-render-mx",
+ "omsi-scenery",
+ "omsi-script",
+ "omsi-sim",
+ "omsi-soundscape",
+ "omsi-texture",
+ "omsi-transit",
+ "omsi-trolley",
+ "omsi-ui-mx",
+ "omsi-vehicle",
+ "omsi-weather",
+ "omsi-world",
+ "parking_lot 0.13.0",
+ "png",
+ "pollster 1.0.1",
+ "rayon",
+ "serde_json",
+ "zip",
+]
+
+[[package]]
 name = "omsi-scenery"
 version = "0.1.0"
 dependencies = [
@@ -4531,6 +4826,14 @@ name = "omsi-settings-ui"
 version = "0.1.0"
 dependencies = [
  "omsi-ui",
+ "winit",
+]
+
+[[package]]
+name = "omsi-settings-ui-mx"
+version = "0.1.0"
+dependencies = [
+ "omsi-ui-mx",
  "winit",
 ]
 
@@ -4648,6 +4951,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-ui-mx"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "bytemuck",
+ "glam",
+ "half",
+ "hashbrown 0.17.1",
+ "image",
+ "log",
+ "mx",
+ "naga 30.0.2",
+ "omsi-cfg",
+ "pollster 1.0.1",
+ "resvg",
+ "winit",
+]
+
+[[package]]
 name = "omsi-vehicle"
 version = "0.1.0"
 dependencies = [
@@ -4714,6 +5036,23 @@ dependencies = [
  "serde_json",
  "wgpu",
  "wgpu-hal",
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "omsi-xr-mx"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glam",
+ "log",
+ "mx",
+ "omsi-cfg",
+ "omsi-render-mx",
+ "openxr",
+ "pollster 1.0.1",
+ "serde",
+ "serde_json",
  "windows 0.62.2",
 ]
 
@@ -5595,7 +5934,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6368,7 +6707,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7435,21 +7774,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "wgpu-mx"
-version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=a5185eb9288f0d7e56c3d18658df69dc928c7ca0#a5185eb9288f0d7e56c3d18658df69dc928c7ca0"
-dependencies = [
- "log",
- "mx",
- "mx-types",
- "naga 29.0.4",
- "parking_lot 0.12.5",
- "raw-window-handle",
- "wgpu",
- "wgpu-types",
-]
-
-[[package]]
 name = "wgpu-naga-bridge"
 version = "29.0.4"
 source = "git+https://github.com/openOMSI-Project/wgpu-openomsi?rev=4eb06e5bf8062be2978d93e95556a4dd83f1d3b8#4eb06e5bf8062be2978d93e95556a4dd83f1d3b8"
@@ -7489,7 +7813,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

@@ -3890,6 +3890,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 v[&k] = json!(match val.to_ascii_lowercase().as_str() {
                     "vulkan" => "vulkan",
                     "dx12" => "dx12",
+                    "dx11" => "dx11",
                     "gl" => "gl",
                     "angle" => "angle",
                     _ => "auto",
@@ -4617,6 +4618,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         {
             "vulkan" => "vulkan",
             "dx12" => "dx12",
+            "dx11" => "dx11",
             "gl" => "gl",
             "angle" => "angle",
             _ => "auto",
