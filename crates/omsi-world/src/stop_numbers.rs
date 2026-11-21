@@ -15,10 +15,10 @@ pub enum StopNumbers {
 }
 
 impl StopNumbers {
-    pub(crate) fn round(self, v: f32) -> f32 {
+    pub(crate) fn round(self, v: f64) -> f32 {
         match self {
-            StopNumbers::Omsi => v.round(),
-            StopNumbers::Exact => v,
+            StopNumbers::Omsi => v.round() as f32,
+            StopNumbers::Exact => v as f32,
         }
     }
 }
@@ -64,6 +64,12 @@ mod tests {
         assert_eq!(
             stop_enter_with(&s(&["A", "", ""]), StopNumbers::Exact),
             (1.0, 0.0)
+        );
+        let border = s(&["Border", "0.49999999", "0.0"]);
+        assert_eq!(
+            stop_enter(&border),
+            (0.0, 0.0),
+            "0.49999999 rounds to zero in OMSI mode"
         );
     }
 }

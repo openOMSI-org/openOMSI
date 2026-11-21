@@ -108,7 +108,7 @@ pub fn stop_exit_weight_with(strings: &[String], numbers: StopNumbers) -> f32 {
 
 #[rustfmt::skip]
 fn stop_num(strings: &[String], i: usize, numbers: StopNumbers) -> Option<f32> {
-    let v = strings.get(i).map(|s| s.trim()).filter(|s| !s.is_empty()).and_then(|s| s.replace(',', ".").parse::<f64>().ok()).filter(|v| v.is_finite())? as f32;
+    let v = strings.get(i).map(|s| s.trim()).filter(|s| !s.is_empty()).and_then(|s| s.replace(',', ".").parse::<f64>().ok()).filter(|v| v.is_finite())?;
     Some(numbers.round(v))
 }
 
