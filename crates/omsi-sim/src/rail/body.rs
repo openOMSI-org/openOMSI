@@ -44,10 +44,46 @@ impl BodyParams {
         let span = bogie_span.clamp(4.0, 24.0);
         match class {
             // rubber-spring bogies, hydraulic dampers, the rails of a street
-            RailClass::Tram => BodyParams { h_cg: 0.95, bogie_span: span, spring_gauge: 1.5, heave_hz: 1.25, pitch_hz: 1.45, roll_hz: 1.15, damping: 0.3, r_pitch: span * 0.35, r_roll: 1.0, quality: 1.8, canted: false },
-            RailClass::Metro => BodyParams { h_cg: 1.1, bogie_span: span, spring_gauge: 1.9, heave_hz: 1.0, pitch_hz: 1.15, roll_hz: 0.95, damping: 0.3, r_pitch: span * 0.35, r_roll: 1.1, quality: 1.0, canted: true },
+            RailClass::Tram => BodyParams {
+                h_cg: 0.95,
+                bogie_span: span,
+                spring_gauge: 1.5,
+                heave_hz: 1.25,
+                pitch_hz: 1.45,
+                roll_hz: 1.15,
+                damping: 0.3,
+                r_pitch: span * 0.35,
+                r_roll: 1.0,
+                quality: 1.8,
+                canted: false,
+            },
+            RailClass::Metro => BodyParams {
+                h_cg: 1.1,
+                bogie_span: span,
+                spring_gauge: 1.9,
+                heave_hz: 1.0,
+                pitch_hz: 1.15,
+                roll_hz: 0.95,
+                damping: 0.3,
+                r_pitch: span * 0.35,
+                r_roll: 1.1,
+                quality: 1.0,
+                canted: true,
+            },
             // air or coil springs, a long soft ride, anti-roll bars stiffen the roll
-            RailClass::Train => BodyParams { h_cg: 1.5, bogie_span: span, spring_gauge: 2.0, heave_hz: 0.9, pitch_hz: 1.0, roll_hz: 1.0, damping: 0.35, r_pitch: span * 0.35, r_roll: 1.2, quality: 1.0, canted: true },
+            RailClass::Train => BodyParams {
+                h_cg: 1.5,
+                bogie_span: span,
+                spring_gauge: 2.0,
+                heave_hz: 0.9,
+                pitch_hz: 1.0,
+                roll_hz: 1.0,
+                damping: 0.35,
+                r_pitch: span * 0.35,
+                r_roll: 1.2,
+                quality: 1.0,
+                canted: true,
+            },
         }
     }
 }
@@ -101,7 +137,18 @@ impl Body {
             x ^= x << 17;
             *p = (x >> 11) as f64 / (1u64 << 53) as f64 * std::f64::consts::TAU;
         }
-        Body { z: 0.0, zv: 0.0, th: 0.0, thv: 0.0, ph: 0.0, phv: 0.0, s: 0.0, u_prev: None, phase, out: BodyOut::default() }
+        Body {
+            z: 0.0,
+            zv: 0.0,
+            th: 0.0,
+            thv: 0.0,
+            ph: 0.0,
+            phv: 0.0,
+            s: 0.0,
+            u_prev: None,
+            phase,
+            out: BodyOut::default(),
+        }
     }
 
     /// Height of one rail (m) at distance `s` along the track: components over the
@@ -119,7 +166,14 @@ impl Body {
 
     /// One step. `a_long` is the car's acceleration along the track, `yaw_rate` how fast its
     /// heading turns to the right (rad/s, negative to the left), both known to the caller.
-    pub fn step(&mut self, p: &BodyParams, dt: f32, speed: f32, a_long: f32, yaw_rate: f32) -> BodyOut {
+    pub fn step(
+        &mut self,
+        p: &BodyParams,
+        dt: f32,
+        speed: f32,
+        a_long: f32,
+        yaw_rate: f32,
+    ) -> BodyOut {
         let dt = dt.clamp(0.0, 0.1);
         if dt <= 0.0 {
             return self.out;
@@ -141,10 +195,20 @@ impl Body {
             self.s += (speed * h) as f64;
             let half = p.bogie_span as f64 * 0.5 * sgn as f64;
             let (sf, sr) = (self.s + half, self.s - half);
-            let (fl, fr) = (self.rail_height(sf, 0, p.quality), self.rail_height(sf, 1, p.quality));
-            let (rl, rr) = (self.rail_height(sr, 0, p.quality), self.rail_height(sr, 1, p.quality));
+            let (fl, fr) = (
+                self.rail_height(sf, 0, p.quality),
+                self.rail_height(sf, 1, p.quality),
+            );
+            let (rl, rr) = (
+                self.rail_height(sr, 0, p.quality),
+                self.rail_height(sr, 1, p.quality),
+            );
             // base motion at the springs: mean height, pitch of the line of the bogies, cross-level
-            let u = [(fl + fr + rl + rr) * 0.25, (((fl + fr) - (rl + rr)) * 0.5) / p.bogie_span * sgn, (((fl + rl) - (fr + rr)) * 0.5) / p.spring_gauge];
+            let u = [
+                (fl + fr + rl + rr) * 0.25,
+                (((fl + fr) - (rl + rr)) * 0.5) / p.bogie_span * sgn,
+                (((fl + rl) - (fr + rr)) * 0.5) / p.spring_gauge,
+            ];
             let du = match self.u_prev {
                 Some(q) => [(u[0] - q[0]) / h, (u[1] - q[1]) / h, (u[2] - q[2]) / h],
                 None => [0.0; 3],
@@ -200,7 +264,10 @@ mod tests {
     }
 
     fn smooth() -> BodyParams {
-        BodyParams { quality: 0.0, ..tram() }
+        BodyParams {
+            quality: 0.0,
+            ..tram()
+        }
     }
 
     #[test]
@@ -208,8 +275,16 @@ mod tests {
         let p = smooth();
         let brake = settle(&mut Body::new(1), &p, 6.0, 10.0, -1.3, 0.0);
         let pull = settle(&mut Body::new(1), &p, 6.0, 10.0, 1.2, 0.0);
-        assert!(brake.pitch_deg < -0.05 && brake.pitch_deg > -0.8, "{}", brake.pitch_deg);
-        assert!(pull.pitch_deg > 0.05 && pull.pitch_deg < 0.8, "{}", pull.pitch_deg);
+        assert!(
+            brake.pitch_deg < -0.05 && brake.pitch_deg > -0.8,
+            "{}",
+            brake.pitch_deg
+        );
+        assert!(
+            pull.pitch_deg > 0.05 && pull.pitch_deg < 0.8,
+            "{}",
+            pull.pitch_deg
+        );
     }
 
     #[test]
@@ -217,19 +292,45 @@ mod tests {
         let p = smooth();
         // 8 m/s round a 50 m bend: 1.28 m/s² sideways
         let out = settle(&mut Body::new(1), &p, 8.0, 8.0, 0.0, 8.0 / 50.0);
-        assert!(out.roll_deg < -0.8 && out.roll_deg > -4.0, "{}", out.roll_deg);
+        assert!(
+            out.roll_deg < -0.8 && out.roll_deg > -4.0,
+            "{}",
+            out.roll_deg
+        );
         let left = settle(&mut Body::new(1), &p, 8.0, 8.0, 0.0, -8.0 / 50.0);
-        assert!((left.roll_deg + out.roll_deg).abs() < 0.05, "mirror image: {} {}", left.roll_deg, out.roll_deg);
+        assert!(
+            (left.roll_deg + out.roll_deg).abs() < 0.05,
+            "mirror image: {} {}",
+            left.roll_deg,
+            out.roll_deg
+        );
     }
 
     #[test]
     fn a_railway_cant_takes_most_of_a_mild_bends_lean_away() {
         let street = BodyParams::of(RailClass::Tram, 8.0);
-        let line = BodyParams { quality: 0.0, ..BodyParams::of(RailClass::Train, 8.0) };
-        let flat = settle(&mut Body::new(1), &BodyParams { quality: 0.0, ..street }, 8.0, 20.0, 0.0, 20.0 / 800.0);
+        let line = BodyParams {
+            quality: 0.0,
+            ..BodyParams::of(RailClass::Train, 8.0)
+        };
+        let flat = settle(
+            &mut Body::new(1),
+            &BodyParams {
+                quality: 0.0,
+                ..street
+            },
+            8.0,
+            20.0,
+            0.0,
+            20.0 / 800.0,
+        );
         let canted = settle(&mut Body::new(1), &line, 8.0, 20.0, 0.0, 20.0 / 800.0);
         assert!(flat.roll_deg.abs() > 0.3);
-        assert!(canted.roll_deg.abs() < 0.02, "a bend of 800 m at 72 km/h is balanced by its cant: {}", canted.roll_deg);
+        assert!(
+            canted.roll_deg.abs() < 0.02,
+            "a bend of 800 m at 72 km/h is balanced by its cant: {}",
+            canted.roll_deg
+        );
     }
 
     #[test]
@@ -276,8 +377,16 @@ mod tests {
         for _ in 0..4000 {
             out = b.step(&p, 0.01, 0.0, 0.0, 0.0);
         }
-        assert!(out.heave.abs() > 1e-4, "the rails here are uneven: {}", out.heave);
-        assert!(out.a_vert.abs() < 1e-3, "settled on its springs: {}", out.a_vert);
+        assert!(
+            out.heave.abs() > 1e-4,
+            "the rails here are uneven: {}",
+            out.heave
+        );
+        assert!(
+            out.a_vert.abs() < 1e-3,
+            "settled on its springs: {}",
+            out.a_vert
+        );
     }
 
     #[test]

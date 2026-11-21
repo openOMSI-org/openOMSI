@@ -8,6 +8,19 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Rail vehicles no longer crash into scenery beside the track**: on the rails a tram or a train
+  meets scenery only in the strip over the track (0.7 m either side of its middle), so a buffer
+  stop still stops it while the platforms and tunnel walls its one flat collision box swung into
+  in bends no longer do. Other vehicles meet its whole body, side impacts included.
+- **An AI tram's rear section follows the bend from the moment it appears**: the track behind a tram
+  put on its rails is laid out from the lanes before it, so a KT4D's rear section no longer stands
+  across the track until the tram has driven its own length.
+- **Trams roll through tight curves**: a street tram's curve resistance is its own (about 10 N/kN
+  in a 25 m curve) instead of a main-line car's, and the curve is taken over 12 m of track, so the
+  kink where a switch's lanes meet no longer reads as the sharpest curve there is. A contact shoe on
+  a car with a pantograph (the NF6D's) no longer makes it a metro car.
+- **Mirrors on every car of a train**: a coupled car's `reflexionN` mirrors show its own mirror
+  cameras, numbered on from car to car, instead of the first car's.
 - **mX Graphics (Experimental)** on a Mac: Settings → Graphics → Display → *mX Graphics (Experimental)* draws the game on Metal with [mX](https://github.com/openOMSI-org/mX), openOMSI's own graphics library, instead of wgpu, from the next start. The picture is meant to be the same. It is an early step: the game's shaders do not use mX's bindless textures yet, and in the tests so far it spent less processor time on a frame than wgpu and the same time on the graphics chip. Ray tracing and frame generation stay off with it; where mX cannot open the graphics chip, the game draws with wgpu as before. Off by default. mX's Direct3D 12 and Vulkan have not drawn the game on a real graphics card yet, so Windows and Linux do not offer the switch; `OMSI_MX=on` tries them for one run (without DLSS, FSR 3 and VR), and `OMSI_MX=off` turns mX off for a run on a Mac.
 - **Plugins see the AI vehicles' size**: `omsi.traffic.list()`, `get`, `nearest` and `ahead`
   give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,

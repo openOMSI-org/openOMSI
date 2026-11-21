@@ -1,5 +1,5 @@
 //! Connections from a terrain cut to the authored three-dimensional cutter rim.
-use super::{outline_crosses_itself, tile_size, DVec2, DVec3, DriveGrid, MeshData, Terrain};
+use super::{DVec2, DVec3, DriveGrid, MeshData, Terrain, outline_crosses_itself, tile_size};
 
 const EPS: f64 = 1e-8;
 
@@ -164,7 +164,11 @@ fn triangle(mesh: &mut MeshData, mut p: [DVec3; 3], inward: DVec2, side: f64) {
 /// Keep a terrain cut open where a road continues across its rim. A tunnel's cutter
 /// can end at road height even though the terrain above it reaches the tunnel roof;
 /// connecting those two heights would put a grass curtain across the carriageway.
-pub fn terrain_hole_walls_with_roads(rims: &[Vec<DVec3>], terrain: &Terrain, roads: &DriveGrid) -> MeshData {
+pub fn terrain_hole_walls_with_roads(
+    rims: &[Vec<DVec3>],
+    terrain: &Terrain,
+    roads: &DriveGrid,
+) -> MeshData {
     build_walls(rims, terrain, Some(roads))
 }
 
@@ -185,7 +189,9 @@ fn road_splits(edge: Edge, lo: f64, hi: f64, roads: &DriveGrid, split: &mut Vec<
     for y in bin(a.y.min(b.y))..=bin(a.y.max(b.y)) {
         for x in bin(a.x.min(b.x))..=bin(a.x.max(b.x)) {
             let k = y * roads.cells + x;
-            nearby.extend_from_slice(&roads.items[roads.start[k] as usize..roads.start[k + 1] as usize]);
+            nearby.extend_from_slice(
+                &roads.items[roads.start[k] as usize..roads.start[k + 1] as usize],
+            );
         }
     }
     nearby.sort_unstable();
@@ -196,7 +202,13 @@ fn road_splits(edge: Edge, lo: f64, hi: f64, roads: &DriveGrid, split: &mut Vec<
         }
         let tri = roads.tris[i as usize];
         for j in 0..3 {
-            edge.intersections(Edge { a: tri[j].as_dvec3(), b: tri[(j + 1) % 3].as_dvec3() }, split);
+            edge.intersections(
+                Edge {
+                    a: tri[j].as_dvec3(),
+                    b: tri[(j + 1) % 3].as_dvec3(),
+                },
+                split,
+            );
         }
     }
 }
@@ -206,7 +218,9 @@ fn road_crosses_rim(roads: &DriveGrid, at: DVec3, normal: DVec2) -> bool {
     // higher up (a bridge over an excavation) must not erase the excavation wall.
     const RIM_REACH: f32 = 0.25;
     let road_at = |p: DVec2| {
-        roads.probe(p.x as f32, p.y as f32, at.z as f32 + RIM_REACH).below
+        roads
+            .probe(p.x as f32, p.y as f32, at.z as f32 + RIM_REACH)
+            .below
             .is_some_and(|z| (z - at.z as f32).abs() <= RIM_REACH)
     };
     // Sample beyond the wheel query's seam tolerance. A road ending at the rim,
@@ -384,7 +398,7 @@ fn build_walls(rims: &[Vec<DVec3>], terrain: &Terrain, roads: Option<&DriveGrid>
 mod tests {
     use super::*;
     use crate::{
-        hole_mesh_outlines, hole_mesh_rims, spline_hole_outlines, spline_hole_rims, SplineCurve,
+        SplineCurve, hole_mesh_outlines, hole_mesh_rims, spline_hole_outlines, spline_hole_rims,
     };
     use glam::{Mat4, Vec3};
     use omsi_map::MapSpline;
@@ -424,8 +438,10 @@ mod tests {
 
     fn road(x0: f32, y0: f32, x1: f32, y1: f32, z: f32) -> DriveGrid {
         let [a, b, c, d] = [
-            Vec3::new(x0, y0, z), Vec3::new(x1, y0, z),
-            Vec3::new(x1, y1, z), Vec3::new(x0, y1, z),
+            Vec3::new(x0, y0, z),
+            Vec3::new(x1, y0, z),
+            Vec3::new(x1, y1, z),
+            Vec3::new(x0, y1, z),
         ];
         let mut grid = DriveGrid::default();
         grid.push([a, b, c]);
@@ -444,8 +460,11 @@ mod tests {
             let mesh = terrain_hole_walls_with_roads(&rims, &t, &roads);
             valid(&mesh);
             let expected = (80.0 - 2.0 * width as f64) * 9.9;
-            assert!((area(&mesh) - expected).abs() < 0.01,
-                "a generated wall must not cap either end of the road: {} vs {expected}", area(&mesh));
+            assert!(
+                (area(&mesh) - expected).abs() < 0.01,
+                "a generated wall must not cap either end of the road: {} vs {expected}",
+                area(&mesh)
+            );
         }
     }
 
@@ -454,11 +473,16 @@ mod tests {
         let t = terrain(1, |_, _| 10.0);
         let rims = vec![rect(20.0, 20.0, 40.0, 40.0, 0.1)];
         let expected = area(&terrain_hole_walls(&rims, &t));
-        for roads in [road(25.0, 10.0, 35.0, 20.0, 0.1), road(25.0, 10.0, 35.0, 50.0, 5.0)] {
+        for roads in [
+            road(25.0, 10.0, 35.0, 20.0, 0.1),
+            road(25.0, 10.0, 35.0, 50.0, 5.0),
+        ] {
             let mesh = terrain_hole_walls_with_roads(&rims, &t, &roads);
             valid(&mesh);
-            assert!((area(&mesh) - expected).abs() < 0.01,
-                "only a continuous road at the cutter's rim opens a wall");
+            assert!(
+                (area(&mesh) - expected).abs() < 0.01,
+                "only a continuous road at the cutter's rim opens a wall"
+            );
         }
     }
 
@@ -694,12 +718,10 @@ mod tests {
         );
         for (mesh, seam) in [(&left, s as f32), (&right, 0.0)] {
             valid(mesh);
-            assert!(!mesh
-                .indices
-                .chunks_exact(3)
-                .any(|t| t
-                    .iter()
-                    .all(|i| (mesh.positions[*i as usize].x - seam).abs() < 1e-4)));
+            assert!(!mesh.indices.chunks_exact(3).any(|t| {
+                t.iter()
+                    .all(|i| (mesh.positions[*i as usize].x - seam).abs() < 1e-4)
+            }));
         }
         let seam = |mesh: &MeshData, x: f32| {
             let mut pts: Vec<_> = mesh

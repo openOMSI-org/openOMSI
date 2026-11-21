@@ -75,7 +75,11 @@ impl World {
         let chrono_dirs = self.chrono_dirs();
         let mut g = self.parklist.lock();
         if !g.contains_key(&index) {
-            let filename = if index == 0 { "parklist_p.txt".to_string() } else { format!("parklist_p_{index}.txt") };
+            let filename = if index == 0 {
+                "parklist_p.txt".to_string()
+            } else {
+                format!("parklist_p_{index}.txt")
+            };
             let text = parklist_file(&self.map_dir, &chrono_dirs, &filename)
                 .and_then(|p| omsi_cfg::vfs::read(&p).ok())
                 .map(|b| omsi_cfg::decode_text(&b))
@@ -106,8 +110,20 @@ impl World {
             }
             let end = ((first + count) as usize).min(data.indices.len());
             for tri in data.indices[(first as usize).min(end)..end].chunks_exact(3) {
-                let (Some(&a), Some(&b), Some(&c)) = (data.positions.get(tri[0] as usize), data.positions.get(tri[1] as usize), data.positions.get(tri[2] as usize)) else { continue };
-                let (Some(&ua), Some(&ub), Some(&uc)) = (data.uvs.get(tri[0] as usize), data.uvs.get(tri[1] as usize), data.uvs.get(tri[2] as usize)) else { continue };
+                let (Some(&a), Some(&b), Some(&c)) = (
+                    data.positions.get(tri[0] as usize),
+                    data.positions.get(tri[1] as usize),
+                    data.positions.get(tri[2] as usize),
+                ) else {
+                    continue;
+                };
+                let (Some(&ua), Some(&ub), Some(&uc)) = (
+                    data.uvs.get(tri[0] as usize),
+                    data.uvs.get(tri[1] as usize),
+                    data.uvs.get(tri[2] as usize),
+                ) else {
+                    continue;
+                };
                 for uv in [ua, ub, uc] {
                     umin = umin.min(uv.x);
                     umax = umax.max(uv.x);
@@ -152,7 +168,15 @@ impl World {
         if g.len() <= i {
             g.resize(i + 1, None);
         }
-        g[i] = larger_glass(g[i], MirrorGlass { centre: centre / vertices.max(1.0), du, dv, uv_area });
+        g[i] = larger_glass(
+            g[i],
+            MirrorGlass {
+                centre: centre / vertices.max(1.0),
+                du,
+                dv,
+                uv_area,
+            },
+        );
     }
 
     /// Render texture of mirror `i` (created on first use, as large as the `mirror_size`
@@ -190,6 +214,30 @@ pub(super) fn larger_glass(old: Option<MirrorGlass>, new: MirrorGlass) -> Option
     Some(old.filter(|o| o.uv_area >= new.uv_area).unwrap_or(new))
 }
 
+#[cfg(test)]
+mod own_mirror_tests {
+    /// Every car's mirrors show its own cameras, a number past them stays the train's.
+    #[test]
+    fn a_cars_mirror_is_its_own_camera_in_the_trains_numbering() {
+        assert_eq!(super::own_mirror(0, 0, 2), 0, "the head car");
+        assert_eq!(
+            super::own_mirror(1, 2, 2),
+            3,
+            "the second car's second mirror"
+        );
+        assert_eq!(
+            super::own_mirror(5, 2, 2),
+            5,
+            "a screen showing another car's camera"
+        );
+        assert_eq!(
+            super::own_mirror(0, 2, 0),
+            0,
+            "a car with no camera of its own"
+        );
+    }
+}
+
 /// `reflexionN.bmp`: the texture drawn by reflection camera N of the vehicle.
 pub(super) fn mirror_index(name: &str) -> Option<usize> {
     let n = name.trim().to_ascii_lowercase();
@@ -198,11 +246,21 @@ pub(super) fn mirror_index(name: &str) -> Option<usize> {
     digits.parse().ok()
 }
 
+/// The train's mirror picture a car's `reflexionN.bmp` shows. The train numbers its cameras
+/// on from car to car (`render_mirrors`); a number past the car's own is a screen showing
+/// another car's camera.
+pub(super) fn own_mirror(n: usize, base: usize, own: usize) -> usize {
+    if n < own { base + n } else { n }
+}
+
 /// A light map that is white all over (the LED panels' `vmatrix_leer_led_LM.png`, one white
 /// pixel): the surface is all its own light. A flipdot panel carries the same `\S:n` mask,
 /// but its light map is a picture of the lamps over it (`vmatrix_leer_LM.bmp`).
 pub(super) fn is_white_lightmap(rgba: &[u8]) -> bool {
-    !rgba.is_empty() && rgba.chunks_exact(4).all(|p| p[0] >= 242 && p[1] >= 242 && p[2] >= 242)
+    !rgba.is_empty()
+        && rgba
+            .chunks_exact(4)
+            .all(|p| p[0] >= 242 && p[1] >= 242 && p[2] >= 242)
 }
 
 /// A texel is solid from here on (0.90 of full): the parked Hong Kong buses' paint is
@@ -235,7 +293,10 @@ pub(super) enum BlendFade {
 /// come straight over it and eat its picture (the parked Hong Kong buses). Alpha-tested, the
 /// solid part of the object writes depth and the cut-away part is discarded, which is the
 /// picture Omsi.exe shows.
-pub(super) fn blend_alpha(alpha: omsi_render::AlphaMode, fade: Option<BlendFade>) -> omsi_render::AlphaMode {
+pub(super) fn blend_alpha(
+    alpha: omsi_render::AlphaMode,
+    fade: Option<BlendFade>,
+) -> omsi_render::AlphaMode {
     use omsi_render::AlphaMode;
     match (alpha, fade) {
         (AlphaMode::Blend, Some(BlendFade::Solid)) => AlphaMode::Opaque,
@@ -253,7 +314,8 @@ pub(super) fn blend_alpha(alpha: omsi_render::AlphaMode, fade: Option<BlendFade>
 /// buses (`Sceneryobjects\M3 Obj\Citybus\5xx.sco` and its kin) showed as a bus with its
 /// picture eaten away by the scenery round it.
 pub(super) fn picture_blend_fade(path: &Path) -> BlendFade {
-    static MEMO: std::sync::OnceLock<Mutex<HashMap<PathBuf, BlendFade>>> = std::sync::OnceLock::new();
+    static MEMO: std::sync::OnceLock<Mutex<HashMap<PathBuf, BlendFade>>> =
+        std::sync::OnceLock::new();
     let memo = MEMO.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(v) = memo.lock().get(path) {
         return *v;
@@ -298,7 +360,9 @@ pub(super) fn lightmap_is_white(name: &str, dirs: &[&Path]) -> Option<bool> {
     if let Some(w) = cache.lock().get(&path) {
         return Some(*w);
     }
-    let w = omsi_texture::decode_file(&path).ok().map(|i| is_white_lightmap(&i.rgba))?;
+    let w = omsi_texture::decode_file(&path)
+        .ok()
+        .map(|i| is_white_lightmap(&i.rgba))?;
     cache.lock().insert(path, w);
     Some(w)
 }
@@ -480,17 +544,30 @@ pub struct LampSlots {
 
 impl LampSlots {
     /// The `[alphascale]` and `[matl_lightmap]` variables of a mesh's material slots.
-    pub fn of_mesh(o3d_mats: &[omsi_o3d::Material], overrides: &[MaterialDef], count: usize) -> LampSlots {
-        let mut l = LampSlots { count, ..Default::default() };
+    pub fn of_mesh(
+        o3d_mats: &[omsi_o3d::Material],
+        overrides: &[MaterialDef],
+        count: usize,
+    ) -> LampSlots {
+        let mut l = LampSlots {
+            count,
+            ..Default::default()
+        };
         for o in overrides.iter().filter(|o| !o.item) {
-            let Some(slot) = omsi_sim::vehicle::override_slot(o3d_mats, o) else { continue };
+            let Some(slot) = omsi_sim::vehicle::override_slot(o3d_mats, o) else {
+                continue;
+            };
             if let Some(v) = o.alphascale.as_ref().filter(|v| !v.trim().is_empty()) {
                 l.alpha.push((slot, v.trim().to_string()));
             }
             if let Some((_, v)) = &o.lightmap {
                 l.light.push((slot, v.trim().to_string()));
             }
-            let trans = |v: &Option<String>| v.as_ref().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+            let trans = |v: &Option<String>| {
+                v.as_ref()
+                    .map(|v| v.trim().to_string())
+                    .filter(|v| !v.is_empty())
+            };
             if o.texcoord_trans_x.is_some() || o.texcoord_trans_y.is_some() {
                 l.uv.push((slot, trans(&o.texcoord_trans_x), trans(&o.texcoord_trans_y)));
             }
@@ -499,7 +576,14 @@ impl LampSlots {
     }
 
     pub fn uv_values(&self, value: &dyn Fn(&str) -> Option<f32>) -> Vec<[f32; 2]> {
-        let mut uv = vec![[0.0; 2]; if self.uv.is_empty() { 0 } else { self.count.max(1) }];
+        let mut uv = vec![
+            [0.0; 2];
+            if self.uv.is_empty() {
+                0
+            } else {
+                self.count.max(1)
+            }
+        ];
         for (slot, x, y) in &self.uv {
             if let Some(u) = uv.get_mut(*slot) {
                 if let Some(x) = x {
@@ -530,7 +614,10 @@ impl LampSlots {
             }
         }
         for (slot, v) in &self.light {
-            if let (Some(l), Some(x)) = (light.get_mut(*slot), (!v.is_empty()).then(|| value(v)).flatten()) {
+            if let (Some(l), Some(x)) = (
+                light.get_mut(*slot),
+                (!v.is_empty()).then(|| value(v)).flatten(),
+            ) {
                 *l = if x >= 0.5 { 1.0 } else { 0.0 };
             }
         }
@@ -768,11 +855,23 @@ pub(super) const SPLINE_OVERHEAD: f32 = 2.0;
 /// Parkinglot\Parkbox(bus).sco`) lie 5 mm over a road at 10 cm. The roads here are pulled
 /// towards the eye by their depth bias instead, and an object lying that close over one
 /// went under it: a depot's parking bays were all gone (#1009).
-pub(super) fn paint_at_foot(sco: &SceneryObject, meshes: &[(MeshData, Vec<omsi_o3d::Material>, Vec<MaterialDef>)]) -> bool {
-    if sco.render_type.is_ground_layer() || sco.surface || meshes.is_empty() || meshes.iter().any(|(m, _, _)| m.positions.is_empty()) {
+pub(super) fn paint_at_foot(
+    sco: &SceneryObject,
+    meshes: &[(MeshData, Vec<omsi_o3d::Material>, Vec<MaterialDef>)],
+) -> bool {
+    if sco.render_type.is_ground_layer()
+        || sco.surface
+        || meshes.is_empty()
+        || meshes.iter().any(|(m, _, _)| m.positions.is_empty())
+    {
         return false;
     }
-    let (lo, hi) = meshes.iter().flat_map(|(m, _, _)| m.positions.iter()).fold((f32::MAX, f32::MIN), |(lo, hi), p| (lo.min(p.z), hi.max(p.z)));
+    let (lo, hi) = meshes
+        .iter()
+        .flat_map(|(m, _, _)| m.positions.iter())
+        .fold((f32::MAX, f32::MIN), |(lo, hi), p| {
+            (lo.min(p.z), hi.max(p.z))
+        });
     lo >= -0.05 && hi <= 0.25 && hi - lo <= 0.05
 }
 
@@ -780,16 +879,18 @@ pub(super) fn spline_paint_slots(def: &omsi_scenery::sli::Spline) -> Vec<usize> 
     // Painted profiles compose after the roads commit depth, like plain-object
     // paint. A stripe can share a spline with asphalt: classifying the whole
     // cross-section left those edge lines in the camera-dependent blend sort.
-    if !def.paths.is_empty() || !def.rail_enh.is_empty() || !def.third_rail.is_empty()
-    {
+    if !def.paths.is_empty() || !def.rail_enh.is_empty() || !def.third_rail.is_empty() {
         return Vec::new();
     }
     // (a blended strip, or a cut-out one - the dashes of a centre line are often an
     // alpha-tested texture - lying on the road itself: not the top of a kerb)
     let painted = |p: &omsi_scenery::sli::SplineProfile| {
         let alpha = def.textures.get(p.texture).map_or(0, |t| t.alpha);
-        if p.points.len() < 2 || !(alpha == 1 || alpha == 2)
-            || p.points.iter().any(|q| !q.x.is_finite() || !q.z.is_finite())
+        if p.points.len() < 2
+            || !(alpha == 1 || alpha == 2)
+            || p.points
+                .iter()
+                .any(|q| !q.x.is_finite() || !q.z.is_finite())
         {
             return false;
         }
@@ -827,7 +928,11 @@ pub(super) fn spline_paint_slots(def: &omsi_scenery::sli::Spline) -> Vec<usize> 
     for p in &def.profiles {
         // Never move asphalt that happens to use the stripe's material too.
         if !slots.contains(&p.texture)
-            && def.profiles.iter().filter(|q| q.texture == p.texture).all(&painted)
+            && def
+                .profiles
+                .iter()
+                .filter(|q| q.texture == p.texture)
+                .all(&painted)
         {
             slots.push(p.texture);
         }
@@ -844,25 +949,43 @@ pub(super) fn spline_render_phase(def: &omsi_scenery::sli::Spline) -> RenderPhas
     }
 }
 
-pub(super) fn split_spline_paint(src: &MeshData, def: &omsi_scenery::sli::Spline) -> (MeshData, MeshData) {
+pub(super) fn split_spline_paint(
+    src: &MeshData,
+    def: &omsi_scenery::sli::Spline,
+) -> (MeshData, MeshData) {
     let slots = spline_paint_slots(def);
-    if slots.is_empty() { return (src.clone(), MeshData::default()); }
+    if slots.is_empty() {
+        return (src.clone(), MeshData::default());
+    }
     let part = |paint| {
-        let mut out = MeshData { one_sided: src.one_sided, ..Default::default() };
+        let mut out = MeshData {
+            one_sided: src.one_sided,
+            ..Default::default()
+        };
         let mut vertices = HashMap::new();
         for &(start, count, slot) in &src.ranges {
-            if slots.contains(&(slot as usize)) != paint { continue; }
+            if slots.contains(&(slot as usize)) != paint {
+                continue;
+            }
             let first = out.indices.len() as u32;
             for &k in &src.indices[start as usize..(start + count) as usize] {
                 let v = *vertices.entry(k).or_insert_with(|| {
                     out.positions.push(src.positions[k as usize]);
-                    out.normals.push(src.normals.get(k as usize).copied().unwrap_or(glam::Vec3::Z));
-                    out.uvs.push(src.uvs.get(k as usize).copied().unwrap_or(glam::Vec2::ZERO));
+                    out.normals.push(
+                        src.normals
+                            .get(k as usize)
+                            .copied()
+                            .unwrap_or(glam::Vec3::Z),
+                    );
+                    out.uvs
+                        .push(src.uvs.get(k as usize).copied().unwrap_or(glam::Vec2::ZERO));
                     out.positions.len() as u32 - 1
                 });
                 out.indices.push(v);
             }
-            if count > 0 { out.ranges.push((first, count, slot)); }
+            if count > 0 {
+                out.ranges.push((first, count, slot));
+            }
         }
         out
     };
@@ -884,12 +1007,20 @@ pub(super) fn scenery_render_phase(kind: omsi_scenery::sco::RenderType) -> Rende
 
 /// Does every profile of the spline hang `SPLINE_OVERHEAD` or more over its line?
 pub(super) fn overhead_only(def: &omsi_scenery::sli::Spline) -> bool {
-    !def.profiles.is_empty() && def.profiles.iter().all(|p| !p.points.is_empty() && p.points.iter().all(|q| q.z >= SPLINE_OVERHEAD))
+    !def.profiles.is_empty()
+        && def
+            .profiles
+            .iter()
+            .all(|p| !p.points.is_empty() && p.points.iter().all(|q| q.z >= SPLINE_OVERHEAD))
 }
 
 /// Where parking list `filename` is read from: the newest of the active chrono folders
 /// that has it, else the map's folder (see `World::parked_car_types`).
-pub(super) fn parklist_file(map_dir: &Path, chrono_dirs: &[PathBuf], filename: &str) -> Option<PathBuf> {
+pub(super) fn parklist_file(
+    map_dir: &Path,
+    chrono_dirs: &[PathBuf],
+    filename: &str,
+) -> Option<PathBuf> {
     chrono_dirs
         .iter()
         .rev()
@@ -903,7 +1034,10 @@ pub(super) fn parklist_file(map_dir: &Path, chrono_dirs: &[PathBuf], filename: &
 /// sub_79c8b8 - `StrToInt`, 0 when that fails or there is none). 0 is `parklist_p.txt`,
 /// n is `parklist_p_n.txt`.
 pub(super) fn parklist_index(strings: &[String]) -> usize {
-    strings.first().and_then(|s| s.trim().parse::<usize>().ok()).unwrap_or(0)
+    strings
+        .first()
+        .and_then(|s| s.trim().parse::<usize>().ok())
+        .unwrap_or(0)
 }
 
 /// A tile read and tessellated, its objects typed but not yet standing on the ground. Kept
@@ -1077,7 +1211,13 @@ pub struct Prepared {
     /// Spline meshes are local to the tile origin.
     /// Spline meshes (local to the tile origin), their type, whether they cast a shadow,
     /// their blend sort origin and their depth step (`spline_layers`).
-    pub(super) splines: Vec<(Arc<MeshData>, Arc<SplineType>, bool, DVec3, crate::spline_layers::SplineLayer)>,
+    pub(super) splines: Vec<(
+        Arc<MeshData>,
+        Arc<SplineType>,
+        bool,
+        DVec3,
+        crate::spline_layers::SplineLayer,
+    )>,
     /// Terrain-mapped spline faces pooled across types within spatial cells.
     pub(super) ground_splines: Vec<Arc<MeshData>>,
     pub(super) objects: Vec<PlacedObject>,
@@ -1196,10 +1336,17 @@ pub(super) struct TexEntry {
 impl TexEntry {
     pub(super) fn uploaded(id: TextureId, data: &TextureData, scene: &Scene) -> Self {
         let mut entry = Self {
-            id, alpha: data.has_alpha, users: 1,
+            id,
+            alpha: data.has_alpha,
+            users: 1,
             texels: data.width as u64 * data.height as u64,
-            bytes: 0, full_bytes: data.gpu_bytes(), format: data.format, dropped: 0, retry_after: None,
-            squeezed: false, near_restore: false,
+            bytes: 0,
+            full_bytes: data.gpu_bytes(),
+            format: data.format,
+            dropped: 0,
+            retry_after: None,
+            squeezed: false,
+            near_restore: false,
         };
         entry.record_upload(data, scene);
         entry
@@ -1230,7 +1377,8 @@ pub(super) struct TypeGpu {
     pub(super) variants: Vec<(usize, usize, MaterialId, MaterialId, String)>,
     /// Dynamic texture overrides, made only for combinations that placed scripts use.
     /// Rows align with LOD 0 meshes and material slots; each entry holds (base, item).
-    pub(super) dynamic_texture_variants: HashMap<Vec<usize>, Arc<Vec<Vec<Option<(MaterialId, MaterialId)>>>>>,
+    pub(super) dynamic_texture_variants:
+        HashMap<Vec<usize>, Arc<Vec<Vec<Option<(MaterialId, MaterialId)>>>>>,
     /// Lower LODs: (min size, max size, meshes).
     pub(super) lods: Vec<(f32, f32, Vec<(MeshId, Vec<MaterialId>)>)>,
     pub(super) materials: Vec<MaterialId>,
