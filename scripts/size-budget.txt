@@ -15,7 +15,7 @@ file 2881 crates/omsi-app-mx/src/settings.rs
 file 2016 crates/omsi-app-mx/src/touch.rs
 file 2276 crates/omsi-app-mx/src/ui.rs
 file 2122 crates/omsi-app-mx/src/ui/menu.rs
-file 2876 crates/omsi-app/src/settings.rs
+file 1502 crates/omsi-app/src/settings.rs
 file 1724 crates/omsi-app/src/ui.rs
 file 2981 crates/omsi-input/src/controllers.rs
 file 2704 crates/omsi-lan/src/game.rs
@@ -78,8 +78,6 @@ fn 324 crates/omsi-app-mx::toggle_set crates/omsi-app-mx/src/game_lists/options.
 fn 634 crates/omsi-app-mx::touch_layout_in crates/omsi-app-mx/src/touch.rs
 fn 379 crates/omsi-app-mx::window_event crates/omsi-app-mx/src/app_events.rs
 fn 435 crates/omsi-app-mx::world_pages crates/omsi-app-mx/src/game_lists/menu_pages.rs
-fn 315 crates/omsi-app::assemble_app crates/omsi-app/src/lib.rs
-fn 899 crates/omsi-app::from_text crates/omsi-app/src/settings.rs
 fn 305 crates/omsi-app::run_input_script crates/omsi-app/src/input_script.rs
 fn 610 crates/omsi-navigator-mx::city crates/omsi-navigator-mx/src/city_map.rs
 fn 557 crates/omsi-navigator-mx::draw crates/omsi-navigator-mx/src/panel.rs

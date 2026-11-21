@@ -698,8 +698,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
         crate::steam::Steam::start()
     };
     let instance = graphics_instance();
-    let vr_nav_profiles =
-        crate::vr_navigator::Profiles::load(crate::vr_navigator::profiles_path().as_deref());
+    let vr_nav_profiles = crate::vr_navigator::Profiles::load(crate::vr_navigator::profiles_path().as_deref());
     let ui = ui::Ui::new();
     let rain = rain::Rain::new();
     let cabin_air = crate::condensation::CabinAir::new();
