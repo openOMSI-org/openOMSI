@@ -644,7 +644,7 @@ mod tests {
 
     #[test]
     fn stop_brake_interlock_handles_both_switch_variables() {
-        let vehicle = crate::timetable_run::tests::script_test_vehicle(
+        let mut vehicle = crate::timetable_run::tests::script_test_vehicle(
             "",
             "bremse_halte_sw\nbus_stop_brake\nbremse_halte\n",
             "",
