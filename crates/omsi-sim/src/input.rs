@@ -178,10 +178,12 @@ impl KeyboardAxes {
             1.0
         };
         if self.throttle_key {
-            self.brake = 0.0;
+            if !self.brake_key {
+                self.brake = 0.0;
+            }
             self.throttle = (self.throttle + 2.0 * k * dt).min(top);
         } else {
-            if self.throttle > 0.05 {
+            if self.throttle > 0.05 && !self.brake_key {
                 self.brake = 0.0;
             }
             self.throttle = (self.throttle - dt).max(0.0);
@@ -609,6 +611,29 @@ mod tests {
         };
         c.update(0.01);
         assert_eq!(c.brake, 0.0);
+    }
+
+    #[test]
+    fn actively_held_brake_is_preserved_across_frames_under_throttle_key() {
+        let mut a = KeyboardAxes {
+            pedal_hold: true,
+            throttle_key: true,
+            brake_key: true,
+            ..Default::default()
+        };
+        for _ in 0..30 {
+            a.update(0.01);
+        }
+        assert!(
+            (a.brake - 0.3).abs() < 1e-3,
+            "brake builds to 0.3: {}",
+            a.brake
+        );
+        assert_eq!(a.throttle, 0.0, "throttle cut while brake held");
+
+        a.brake_key = false;
+        a.update(0.01);
+        assert_eq!(a.brake, 0.0, "brake released on throttle demand");
     }
 
     /// The centring key brings the wheel back in a straight line at OMSI's pace, not at once.
