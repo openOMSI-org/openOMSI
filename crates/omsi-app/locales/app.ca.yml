@@ -4072,6 +4072,14 @@
 "At most 5": "Com a màxim 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Les carpetes d'objectes i splines que cap altre mapa no fa servir se suprimeixen amb ell: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Les carpetes d'objectes i splines que un altre mapa encara fa servir es conserven: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Un perfil desa totes les tecles i tots els ajustos dels controladors. Abans de cada sortida, el llançador canvia al perfil propi de l'autobús o al perfil per defecte."
+"Rename the profile": "Canvia el nom del perfil"
+"Delete this profile?": "Vols suprimir aquest perfil?"
+"Default for every bus": "Per defecte per a tots els autobusos"
+"Use for {bus}": "Fes-lo servir per a {bus}"
+"Profile {name} in use": "Perfil {name} en ús"
 
 "sent to the plugins": "enviat als connectors"
 "no plugin is listening for commands": "cap connector no escolta ordres"
+"plugin command queue is full": "la cua d'ordres dels connectors és plena"
+

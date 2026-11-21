@@ -257,3 +257,27 @@ fn slash_commands_stay_private_when_no_listener_is_available() {
         Some(&"* no plugin is listening for commands".to_string())
     );
 }
+
+#[test]
+fn slash_command_queue_limit_reports_error_and_drops_excess() {
+    let mut lan = LanSession::join_addr(Vec::new(), None, "Driver", Default::default()).unwrap();
+    let mut game = LanGame::default();
+    game.take_commands = true;
+
+    for i in 0..32 {
+        chat_send(&mut lan, &mut game, &format!("/cmd {i}"));
+        assert_eq!(
+            game.chat.lines.last(),
+            Some(&"* sent to the plugins".to_string())
+        );
+    }
+    assert_eq!(game.plugin_commands.len(), 32);
+
+    // 33rd command exceeds the queue limit of 32:
+    chat_send(&mut lan, &mut game, "/cmd 32");
+    assert_eq!(game.plugin_commands.len(), 32);
+    assert_eq!(
+        game.chat.lines.last(),
+        Some(&"* plugin command queue is full".to_string())
+    );
+}

@@ -1,19 +1,20 @@
-//! Report and dismiss a known fatal Steam API dialog created by a native OMSI plugin.
+//! Report and dismiss known blocking dialogs created by native OMSI plugins.
 //!
-//! Native `.opl` DLLs may show a modal MessageBox from their own initialization code.
+//! Native `.opl` DLLs may show a modal MessageBox from their own initialization code
+//! (e.g. uninitialized Steam API or missing optional OmniNavigation config).
 //! Such a window is not connected to the game's logger and can block PluginStart
 //! forever. This monitor runs inside the isolated 32-bit host, before LoadLibrary.
 //!
 //! Do not close arbitrary plugin windows (including licensing/configuration dialogs):
-//! only the specific unrecoverable "Unable to initialize Steam API" error is handled.
+//! only specific unrecoverable or missing-config dialogs that freeze loading are handled.
 
 use std::collections::HashSet;
 use std::time::Duration;
 use windows_sys::Win32::Foundation::HWND;
 use windows_sys::Win32::System::Threading::GetCurrentProcessId;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    EnumChildWindows, EnumWindows, GetWindowTextLengthW, GetWindowTextW,
-    GetWindowThreadProcessId, PostMessageW, WM_CLOSE,
+    EnumChildWindows, EnumWindows, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
+    PostMessageW, WM_CLOSE,
 };
 
 unsafe extern "system" fn collect_window(hwnd: HWND, data: isize) -> i32 {
@@ -33,7 +34,13 @@ fn windows() -> Vec<HWND> {
 fn children(hwnd: HWND) -> Vec<HWND> {
     let mut out = Vec::new();
     // SAFETY: collect_window only uses the pointer during this synchronous call.
-    unsafe { EnumChildWindows(hwnd, Some(collect_window), &mut out as *mut Vec<HWND> as isize) };
+    unsafe {
+        EnumChildWindows(
+            hwnd,
+            Some(collect_window),
+            &mut out as *mut Vec<HWND> as isize,
+        )
+    };
     out
 }
 
@@ -51,6 +58,21 @@ fn window_text(hwnd: HWND) -> String {
 fn is_steam_api_error(text: &str) -> bool {
     text.to_ascii_lowercase()
         .contains("unable to initialize steam api")
+}
+
+fn is_omninavigation_error(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("omninavigation.cfg") || lower.contains("omsinavigation.cfg")
+}
+
+fn is_dismissible_plugin_error(text: &str) -> Option<&'static str> {
+    if is_steam_api_error(text) {
+        Some("Steam API error")
+    } else if is_omninavigation_error(text) {
+        Some("OmniNavigation config error")
+    } else {
+        None
+    }
 }
 
 /// Start before loading the DLL: its DllMain might show the dialog, too.
@@ -76,12 +98,12 @@ pub fn watch(dll: &str) {
                             message.push_str(&label);
                         }
                     }
-                    if !is_steam_api_error(&message) {
+                    let Some(kind) = is_dismissible_plugin_error(&message) else {
                         continue;
-                    }
+                    };
                     handled.insert(hwnd as usize);
                     eprintln!(
-                        "omsi-plugin-host: {dll}: native plugin Steam API error dialog: {}; dismissing it",
+                        "omsi-plugin-host: {dll}: native plugin {kind} dialog: {}; dismissing it",
                         message.trim()
                     );
                     // SAFETY: only windows of this helper's own process are touched.
@@ -89,7 +111,7 @@ pub fn watch(dll: &str) {
                     // than terminating the process or modifying plugin code.
                     if unsafe { PostMessageW(hwnd, WM_CLOSE, 0, 0) } == 0 {
                         eprintln!(
-                            "omsi-plugin-host: {dll}: could not dismiss Steam API error dialog: {}",
+                            "omsi-plugin-host: {dll}: could not dismiss {kind} dialog: {}",
                             std::io::Error::last_os_error()
                         );
                     }
@@ -101,7 +123,7 @@ pub fn watch(dll: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::is_steam_api_error;
+    use super::{is_dismissible_plugin_error, is_steam_api_error};
 
     #[test]
     fn matches_the_reported_steam_error_only() {
@@ -112,5 +134,22 @@ mod tests {
         assert!(!is_steam_api_error("Plugin settings"));
         assert!(!is_steam_api_error("Enter your Steam license key"));
         assert!(!is_steam_api_error("Unable to initialize the graphics API"));
+    }
+
+    #[test]
+    fn matches_omninavigation_missing_cfg_dialog() {
+        assert_eq!(
+            is_dismissible_plugin_error("omninavigation.cfg not found!"),
+            Some("OmniNavigation config error")
+        );
+        assert_eq!(
+            is_dismissible_plugin_error("omsinavigation.cfg not found!"),
+            Some("OmniNavigation config error")
+        );
+        assert_eq!(
+            is_dismissible_plugin_error("STFD: Omninavigation.cfg not found"),
+            Some("OmniNavigation config error")
+        );
+        assert_eq!(is_dismissible_plugin_error("OmniNavigation settings"), None);
     }
 }

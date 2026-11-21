@@ -173,8 +173,11 @@ pub fn chat_send(lan: &mut LanSession, game: &mut LanGame, text: &str) {
         ChatLine::Command(line) if game.take_commands => {
             if game.plugin_commands.len() < 32 {
                 game.plugin_commands.push(line);
+                game.chat.push("* sent to the plugins".into());
+            } else {
+                game.chat
+                    .push("* plugin command queue is full".into());
             }
-            game.chat.push("* sent to the plugins".into());
         }
         ChatLine::Command(_) => {
             game.chat

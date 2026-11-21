@@ -4378,6 +4378,14 @@
 "At most 5": "Como máximo 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Las carpetas de objetos y splines que no usa ningún otro mapa se eliminan con él: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Las carpetas de objetos y splines que otro mapa aún usa se conservan: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Un perfil guarda todas las teclas y todos los ajustes de los mandos. Antes de cada viaje, el lanzador cambia al perfil propio del autobús o al perfil predeterminado."
+"Rename the profile": "Cambiar el nombre del perfil"
+"Delete this profile?": "¿Borrar este perfil?"
+"Default for every bus": "Predeterminado para todos los autobuses"
+"Use for {bus}": "Usar para {bus}"
+"Profile {name} in use": "Perfil {name} en uso"
 
 "sent to the plugins": "enviado a los plugins"
 "no plugin is listening for commands": "ningún plugin está escuchando comandos"
+"plugin command queue is full": "la cola de comandos de los complementos está llena"
+

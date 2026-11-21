@@ -2925,6 +2925,14 @@
 "At most 5": "Hanggang 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Kasamang buburahin ang mga folder ng object at spline na hindi ginagamit ng ibang mapa: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Mananatili ang mga folder ng object at spline na ginagamit pa ng ibang mapa: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Iniingatan ng profile ang lahat ng key at lahat ng setting ng controller. Bago ang bawat biyahe, lumilipat ang launcher sa sariling profile ng bus, o sa default."
+"Rename the profile": "Palitan ang pangalan ng profile"
+"Delete this profile?": "Burahin ang profile na ito?"
+"Default for every bus": "Default para sa bawat bus"
+"Use for {bus}": "Gamitin para sa {bus}"
+"Profile {name} in use": "Ginagamit ang profile na {name}"
 
 "sent to the plugins": "ipinadala sa mga plugin"
 "no plugin is listening for commands": "walang plugin na nakikinig para sa mga utos"
+"plugin command queue is full": "puno na ang command queue ng mga plugin"
+

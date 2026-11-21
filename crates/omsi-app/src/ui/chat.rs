@@ -16,6 +16,7 @@ const NOTICE_KEYS: &[&str] = &[
     "asked the server for its administration",
     "sent to the plugins",
     "no plugin is listening for commands",
+    "plugin command queue is full",
     "the host ended the session",
     "the host has gone quiet; trying to reach it again",
     "the host has not answered for {:.0} s - the session is over (playing on alone; still trying, or type /reconnect)",
@@ -178,6 +179,10 @@ mod tests {
         );
         assert_eq!(translate("* Alice left"), "* Alice 已離開");
         assert_eq!(translate("* reconnecting ..."), "* 正在重新連線...");
+        assert_eq!(
+            translate("* plugin command queue is full"),
+            "* 外掛程式指令佇列已滿"
+        );
         let away = crate::_rust_i18n_try_translate("zh-tw", "the host sent you away: {reason}")
             .unwrap()
             .replace("{reason}", "banned");

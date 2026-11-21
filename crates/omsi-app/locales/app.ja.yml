@@ -3272,6 +3272,14 @@
 "At most 5": "最大5台"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "他のどのマップも使っていないオブジェクトとスプラインのフォルダも一緒に削除されます：{n} 個、{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "他のマップがまだ使っているオブジェクトとスプラインのフォルダは残ります：{n} 個。"
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "プロファイルにはすべてのキーとすべてのコントローラー設定が入ります。運転のたびに、ランチャーはそのバス専用のプロファイルか既定のプロファイルに切り替えます。"
+"Rename the profile": "プロファイル名を変更"
+"Delete this profile?": "このプロファイルを削除しますか?"
+"Default for every bus": "すべてのバスの既定"
+"Use for {bus}": "{bus} で使う"
+"Profile {name} in use": "プロファイル {name} を使用中"
 
 "sent to the plugins": "プラグインに送信されました"
 "no plugin is listening for commands": "コマンドを受信しているプラグインはありません"
+"plugin command queue is full": "プラグインのコマンドキューがいっぱいです"
+
