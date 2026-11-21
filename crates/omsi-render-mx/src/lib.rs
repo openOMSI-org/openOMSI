@@ -21,7 +21,7 @@ pub mod clouds;
 mod cookies;
 pub use cookies::{COOKIE_LAYERS, Cookie};
 mod gpu_memory;
-pub use gpu_memory::{Ceiling, GpuMemory, card_vram_mb};
+pub use gpu_memory::{Ceiling, GpuMemory, card_vram_mb, set_system_memory_mb};
 mod device_selection;
 mod passes;
 use gpu_memory::adapter_vram_mb;

@@ -672,6 +672,18 @@ pub(crate) fn picture_lighting(
     lighting
 }
 
+/// The pitch and roll `body_rotation` turns the body by, as sin, cos, sin, cos: a body
+/// turned round by a negative `[boogies]` leans the other way in its own frame.
+fn pane_tilt(v: &omsi_sim::VehicleInstance) -> [f32; 4] {
+    let turn = if omsi_sim::vehicle::body_reversed(&v.ty.def, false) {
+        -1.0
+    } else {
+        1.0
+    };
+    let (p, b) = ((turn * v.pitch).to_radians(), (turn * v.bank).to_radians());
+    [p.sin(), p.cos(), b.sin(), b.cos()]
+}
+
 /// What the lighting needs of the bus the camera may be in (`inside`: its box keeps the
 /// weather out, its floor and its rear sections' hold no puddles) and of the settings.
 pub(crate) fn dress_lighting(
@@ -680,11 +692,19 @@ pub(crate) fn dress_lighting(
     inside: Option<&omsi_sim::VehicleInstance>,
     settings: &crate::settings::Settings,
 ) {
-    lighting.inside =
-        inside.and_then(|v| v.ty.def.bounding_box.map(|bb| (v.position, v.heading, bb)));
+    // (the box is in the model frame: a body a negative [boogies] turns round has it the
+    // other way round on its path)
+    lighting.inside = inside.and_then(|v| {
+        v.ty.def
+            .bounding_box
+            .map(|bb| (v.position, v.body_heading(), bb))
+    });
     lighting.inside_rotation = inside
         .filter(|v| v.ty.def.bounding_box.is_some())
         .map(|v| v.body_rotation());
+    lighting.pane_tilt = inside
+        .filter(|v| v.ty.def.bounding_box.is_some())
+        .map_or([0.0, 1.0, 0.0, 1.0], pane_tilt);
     let puddle_surface = lighting
         .inside
         .and_then(|(o, _, _)| world.and_then(|w| w.puddle_surface(o)));
@@ -783,3 +803,7 @@ fn switch_rules(
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "steps_tests.rs"]
+mod tests;

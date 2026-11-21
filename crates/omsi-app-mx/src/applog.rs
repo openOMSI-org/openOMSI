@@ -26,6 +26,8 @@ pub(crate) fn log_system(settings: &crate::settings::Settings) {
     let ram = crate::memory::physical_memory()
         .map(|b| b / 1_000_000)
         .unwrap_or(0);
+    // before the graphics device opens: a shared chip's texture cap comes from it (#2720)
+    omsi_render::set_system_memory_mb(ram);
     log::info!(
         "system: {} {} ({}), {cpus} threads, {ram} MB memory",
         std::env::consts::OS,

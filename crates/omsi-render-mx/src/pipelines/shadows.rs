@@ -140,14 +140,10 @@ pub(crate) fn build(
                     },
                 }),
                 multisample: Default::default(),
-                fragment: Some(mx::FragmentState {
+                fragment: (kind == PIPE_ALPHA_TEST).then(|| mx::FragmentState {
                     constants: &[],
                     module: &scene.shader,
-                    entry_point: Some(if kind == PIPE_ALPHA_TEST {
-                        "fs_shadow_test"
-                    } else {
-                        "fs_shadow"
-                    }),
+                    entry_point: Some("fs_shadow_test"),
                     targets: &[],
                 }),
             },

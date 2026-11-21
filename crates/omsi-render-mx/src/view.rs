@@ -184,6 +184,10 @@ pub struct Lighting {
     /// light they scatter is 1 - e^-depth): windscreen, side windows, rear window, and how
     /// far the defroster has cleared the windscreen (0..1; enhanced path).
     pub condensation: [f32; 4],
+    /// The pitch and roll of `inside` as sin, cos, sin, cos (its `body_rotation`'s): the
+    /// condensation is laid on its panes in the bus's own frame, so it stays on the glass on
+    /// a hill (#3958). Level: `[0, 1, 0, 1]`.
+    pub pane_tilt: [f32; 4],
     pub fog_base: Option<f64>,
     pub envir_tint: [Vec3; 3],
     /// How bright an LED panel's dots burn (`MaterialExtra::led`; the settings' 16 levels
@@ -294,6 +298,7 @@ impl Default for Lighting {
             snowfall: 0.0,
             wind: Vec3::ZERO,
             condensation: [0.0; 4],
+            pane_tilt: [0.0, 1.0, 0.0, 1.0],
             lamp_shadows: false,
             wetness: 0.0,
             snow: 0.0,

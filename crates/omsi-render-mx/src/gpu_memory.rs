@@ -226,12 +226,38 @@ fn budget_mb(mem: Option<&mx::AdapterMemory>) -> Option<u64> {
     (budget > 0).then_some(budget)
 }
 
+/// The machine's memory (MB) the program told (`set_system_memory_mb`); 0: not told.
+static SYSTEM_MB: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The machine's memory in MB, for the texture allowance of a graphics chip that shares it.
+pub fn set_system_memory_mb(mb: u64) {
+    SYSTEM_MB.store(mb, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn system_memory_mb() -> Option<u64> {
+    Some(SYSTEM_MB.load(std::sync::atomic::Ordering::Relaxed)).filter(|m| *m > 0)
+}
+
+/// A shared chip's texture cap (MB): a tenth of the RAM, at least 1000 (#2720).
+fn shared_cap_mb(ram: Option<u64>) -> Option<u64> {
+    ram.map(|r| (r / 10).max(1000))
+}
+
 /// Conservative texture allowance in MB, distinct from physical VRAM.
 /// Low-memory discrete GPUs need room for render targets and driver allocations.
 pub(super) fn texture_allowance_mb(
     info: &mx::AdapterInfo,
     vram: Option<u64>,
     mem: Option<&mx::AdapterMemory>,
+) -> u64 {
+    allowance_with_ram(info, vram, mem, system_memory_mb())
+}
+
+fn allowance_with_ram(
+    info: &mx::AdapterInfo,
+    vram: Option<u64>,
+    mem: Option<&mx::AdapterMemory>,
+    ram: Option<u64>,
 ) -> u64 {
     let discrete_allowance = |fallback| {
         vram.filter(|v| *v >= 512).map_or(fallback, |v| {
@@ -253,9 +279,10 @@ pub(super) fn texture_allowance_mb(
         // the discrete branch's 3/10 share now, up to 4000)
         mx::DeviceType::IntegratedGpu | mx::DeviceType::VirtualGpu => {
             let guess = 1000;
-            budget_mb(mem)
+            let from_budget = budget_mb(mem)
                 .filter(|b| *b >= 2_600)
-                .map_or(guess, |b| (b * 3 / 10).min(4_000))
+                .map_or(guess, |b| (b * 3 / 10).min(4_000));
+            shared_cap_mb(ram).map_or(from_budget, |c| from_budget.min(c))
         }
         _ => discrete_allowance(800),
     }
@@ -595,8 +622,8 @@ impl Renderer {
 #[cfg(all(test, not(target_os = "android")))]
 mod tests {
     use super::{
-        Ceiling, GpuMemory, Picture, Seen, ceiling_for, chip_name, dxgi_names_card, one_card,
-        picture, shared_chip_by_name,
+        Ceiling, GpuMemory, Picture, Seen, allowance_with_ram, ceiling_for, chip_name,
+        dxgi_names_card, one_card, picture, shared_cap_mb, shared_chip_by_name,
     };
     use mx::{Backend, DeviceType};
 
@@ -702,6 +729,33 @@ mod tests {
         assert_eq!(
             picture(Backend::Dx12, DeviceType::IntegratedGpu, "", Some(8192)),
             Picture::Weak
+        );
+    }
+
+    #[test]
+    fn a_shared_chip_takes_a_tenth_of_the_machines_memory_at_most() {
+        // #2720: UHD 730, 16.8 GB, a DX12 budget of ~7.4 GB
+        assert_eq!(shared_cap_mb(Some(16_849)), Some(1_684));
+        assert_eq!(shared_cap_mb(Some(8_000)), Some(1_000));
+        assert_eq!(shared_cap_mb(Some(65_536)), Some(6_553));
+        assert_eq!(shared_cap_mb(None), None);
+        let igpu = mx::AdapterInfo {
+            name: String::new(),
+            vendor: 0,
+            device: 0,
+            device_type: mx::DeviceType::IntegratedGpu,
+            driver: String::new(),
+            backend: mx::Backend::Dx12,
+        };
+        assert_eq!(allowance_with_ram(&igpu, None, None, Some(16_849)), 1_000);
+        let mem = mx::AdapterMemory {
+            budget_bytes: Some(7_400 << 20),
+            ..Default::default()
+        };
+        assert_eq!(allowance_with_ram(&igpu, None, Some(&mem), None), 2_220);
+        assert_eq!(
+            allowance_with_ram(&igpu, None, Some(&mem), Some(16_849)),
+            1_684
         );
     }
 

@@ -137,7 +137,6 @@ pub(crate) fn arrays_as_textures(src: &str, path: ArrayPath) -> String {
         "draw_list",
         "draw_list_at",
     );
-
     if path == ArrayPath::LightTextures {
         let lights = format!(
             "var lights_tex: texture_2d<f32>;\nfn lights_texel(t: u32) -> vec4<f32> {{ return textureLoad(lights_tex, vec2<u32>(t % {w}u, t / {w}u), 0); }}\nfn lights_at(i: u32) -> PointLight {{ return PointLight(lights_texel(i * 4u), lights_texel(i * 4u + 1u), lights_texel(i * 4u + 2u), lights_texel(i * 4u + 3u)); }}"

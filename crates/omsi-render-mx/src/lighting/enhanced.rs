@@ -1034,6 +1034,7 @@ impl Renderer {
             flash3: [flash.seed, 0.0, 0.0, 0.0],
             cloud_f1,
             cloud_f2,
+            pane_tilt: lighting.pane_tilt,
             moon_light: st
                 .moon_light
                 .extend(if lighting.casts_moon_shadows() {
