@@ -15,7 +15,6 @@ macro_rules! instance {
 /// The materials and meshes every tile shares (see [`GroundGpu`]), copied out of the GPU
 /// cache for one [`World::place_step`].
 #[derive(Clone, Copy)]
-#[rustfmt::skip]
 struct GroundIds {
     ground_id: Option<TextureId>,
     ground_mat: MaterialId,
@@ -30,7 +29,6 @@ struct GroundIds {
 /// One object of a tile being placed: where it stands, what it is and what its type has
 /// on the GPU.
 #[derive(Clone, Copy)]
-#[rustfmt::skip]
 struct ObjectCx<'o> {
     ot: &'o Arc<ObjectType>,
     pos: DVec3,
@@ -57,7 +55,6 @@ struct ObjectCx<'o> {
 
 /// What placing one object made: its instances, and what its lamp or its script drives.
 #[derive(Default)]
-#[rustfmt::skip]
 struct ObjectMade {
     lamp_instances: Vec<(usize, Option<(String, f32)>)>,
     lamp_slots: Vec<LampSlots>,
