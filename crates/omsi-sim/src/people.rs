@@ -51,8 +51,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 // The simulation: the people and what they do. It does not draw: what the renderer has to
-// follow it writes down (\odies\), and omsi-app's \humans\ view replays that at the end
-// of the public calls that make people (\	ick\, \populate\, \vatar\, ...).
+// follow it writes down (`bodies`), and omsi-app's `humans` view replays that at the end
+// of the public calls that make people (`tick`, `populate`, `avatar`, ...).
 #[rustfmt::skip]
 pub mod model;
 #[rustfmt::skip]

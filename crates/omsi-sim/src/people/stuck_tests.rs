@@ -86,7 +86,20 @@ struct Stuck {
 
 impl Stuck {
     fn new() -> Stuck {
-        let world = Bare::default();
+        let mut world = Bare::default();
+        let mut collision = crate::collision::CollisionWorld::default();
+        collision.add(crate::collision::Obb {
+            center: DVec2::new(0.0, 2.5),
+            half: DVec2::new(50.0, 0.25),
+            heading: 0.0,
+            z0: -1.0,
+            z1: 3.0,
+            velocity: DVec2::ZERO,
+            mass: 0.0,
+            pole: None,
+            id: 1,
+        });
+        world.collision = Arc::new(collision);
         let net = pavement();
         let mut sim = PeopleSim::new(Path::new("/nonexistent"), 40);
         // one figure to put on the pavement (the map's own `.hum`s are not here)
@@ -133,24 +146,26 @@ impl Stuck {
     }
 
     /// One frame of the crowd's result: `moved` metres of real progress per frame (0 = held
-    /// in place by whatever the map put there). Even when collision handling assigns a
-    /// non-zero tangential velocity, zero displacement correctly counts toward the timeout.
+    /// in place by the wall via `keep_out_of_walls`).
     fn frame(&mut self, moved: f64) {
         let cur = DVec2::new(
             self.sim.people[self.i].position.x,
             self.sim.people[self.i].position.y,
         );
-        let step = if moved == 0.0 {
-            DVec2::ZERO
+        let walker = if moved == 0.0 {
+            let mut w = Walker::new(cur + self.want.vel * self.dt as f64, 0.25, 0);
+            w.want = self.want.vel;
+            w.vel = self.want.vel;
+            let mut ground = [(0, w)];
+            self.sim
+                .keep_out_of_walls(&self.world, &[self.i], &mut ground);
+            ground[0].1
         } else {
             let sign = if cur.y >= 3.0 { -1.0 } else { 1.0 };
-            DVec2::new(0.0, sign * 0.025)
-        };
-        let mut walker = Walker::new(cur + step, 0.25, 0);
-        walker.vel = if moved == 0.0 {
-            DVec2::new(0.8, 0.5)
-        } else {
-            DVec2::new(0.0, if step.y > 0.0 { 0.75 } else { -0.75 })
+            let step = DVec2::new(0.0, sign * 0.025);
+            let mut w = Walker::new(cur + step, 0.25, 0);
+            w.vel = DVec2::new(0.0, if step.y > 0.0 { 0.75 } else { -0.75 });
+            w
         };
         let (world, net, i) = (&self.world, &self.net, self.i);
         self.sim.apply(
