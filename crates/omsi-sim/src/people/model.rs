@@ -242,7 +242,7 @@ pub fn arrive(from: DVec2, to: DVec2, pace: f64) -> DVec2 {
 pub const CHAT_PAUSE: f64 = 12.0;
 
 /// How late the player's bus may be before its boarding passengers say so (s): five
-/// minutes, as Omsi.exe had it. The map or the player may allow more (#2718).
+/// minutes, as Omsi.exe had it. The player may allow more (#2718).
 pub const LATE_TOLERANCE: f64 = 300.0;
 /// How still a bus has to stand before the stop's passengers walk to it, when
 /// [`PeopleSim::board_when_stopped`] is on (m/s; #2757).

@@ -1036,8 +1036,6 @@ upscale_quality=native
 
 #[test]
 fn how_late_the_bus_may_be_is_kept_in_the_settings_file() {
-    // (#2718) in minutes, five by default as OMSI has always had it; an hour, say, where the
-    // timetable is a suggestion, and nought where the passengers are never to complain.
     let fresh = super::settings_from_text(None);
     assert_eq!(fresh["pax_late_tolerance_min"], serde_json::json!(5.0));
     for (written, kept) in [

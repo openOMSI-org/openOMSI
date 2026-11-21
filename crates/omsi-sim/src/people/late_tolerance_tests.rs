@@ -1,13 +1,11 @@
 //! #2718: how late the player's bus may be before boarding passengers complain about it -
-//! OMSI's five minutes by default, more where the map or the player allows it, none at all
-//! where the setting is zero.
+//! OMSI's five minutes by default, more where the player allows it, none at all where the
+//! setting is zero.
 
 use super::model::LATE_TOLERANCE;
 use super::ticket_hook_tests::{boarding, human_type, player_bus};
 use super::*;
 
-/// A ticket pack whose passengers complain about everything and chat about nothing, so that
-/// what an alighting says here is the lateness complaint and nothing else.
 fn pack() -> omsi_content::tickets::TicketPack {
     let t = |name: &str, value: f32| omsi_content::tickets::Ticket {
         name: name.into(),
@@ -25,8 +23,6 @@ fn pack() -> omsi_content::tickets::TicketPack {
     }
 }
 
-/// A passenger stepping into the player's bus, with the bus `delay` seconds late and a
-/// tolerance of `tolerance` seconds (None: whatever the sim starts with).
 fn stepping_in(tag: &str, delay: f64, tolerance: Option<f64>) -> (PeopleSim, BusNow) {
     let ty = human_type(tag);
     let bus = player_bus(tag);
