@@ -8,7 +8,22 @@ use super::*;
 /// are numbered: not by `door_0`, its entry's, so an open entry leaves a shut exit shut.
 #[test]
 fn a_sections_exit_follows_its_own_exit_leaf() {
-    let dir = std::env::temp_dir().join(format!("omsi-humans-exit-leaf-{}", std::process::id()));
+    section_doors_follow_their_leaves("door_");
+}
+
+/// The same with the leaves spelt `door0`, `door1`, as some cars' scripts name them: the
+/// section's own leaves count, not the leading vehicle's doors.
+#[test]
+fn a_sections_doors_spelt_without_the_underscore_follow_their_leaves() {
+    section_doors_follow_their_leaves("door");
+}
+
+fn section_doors_follow_their_leaves(leaf: &str) {
+    let dir = std::env::temp_dir().join(format!(
+        "omsi-humans-exit-leaf-{}-{}",
+        leaf.len(),
+        std::process::id()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     let write = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
     write(
@@ -20,7 +35,10 @@ fn a_sections_exit_follows_its_own_exit_leaf() {
         ),
     );
     write("model.cfg", "");
-    write("vars.txt", "train_me_reverse\nturned\ndoor_0\ndoor_1\n");
+    write(
+        "vars.txt",
+        &format!("train_me_reverse\nturned\n{leaf}0\n{leaf}1\n"),
+    );
     // (reads its place in the train, so it runs its own scripts)
     write(
         "main.osc",
@@ -43,7 +61,8 @@ fn a_sections_exit_follows_its_own_exit_leaf() {
         .run
         .as_deref_mut()
         .expect("the second car runs itself");
-    assert!(run.set_own("door_0", 1.0) && run.set_own("door_1", 0.0));
+    let (entry_leaf, exit_leaf) = (format!("{leaf}0"), format!("{leaf}1"));
+    assert!(run.set_own(&entry_leaf, 1.0) && run.set_own(&exit_leaf, 0.0));
     let (entry, exit) = PeopleSim::doors_open_cabin(&v, &cabin);
     assert!(entry[1], "its entry leaf is open");
     assert!(
@@ -54,7 +73,7 @@ fn a_sections_exit_follows_its_own_exit_leaf() {
         .run
         .as_deref_mut()
         .unwrap()
-        .set_own("door_1", 1.0);
+        .set_own(&exit_leaf, 1.0);
     assert!(
         PeopleSim::doors_open_cabin(&v, &cabin).1[1],
         "and opens with its exit leaf"

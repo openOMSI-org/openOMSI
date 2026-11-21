@@ -144,7 +144,8 @@ impl PeopleSim {
     /// scripts (a train car, the NF6D's middle part) is open by that car's own
     /// `PAX_Entry<n>_Open` / `PAX_Exit<n>_Open`, counted among its own doors. Without those
     /// it follows the section's own door leaves as [`Self::doors_open`] numbers them: entry
-    /// `n` by `door_<n>`, exit `n` by the leaf past the section's front entry leaves.
+    /// `n` by `door_<n>` (or `door<n>`), exit `n` by the leaf past the section's front entry
+    /// leaves.
     pub fn doors_open_cabin(v: &VehicleInstance, cabin: &Cabin) -> (Vec<bool>, Vec<bool>) {
         let (mut entry, mut exit) = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
         let own = |door: &Door, kind: &str| -> Option<bool> {
@@ -166,7 +167,10 @@ impl PeopleSim {
             } else {
                 n
             };
-            run.own(&format!("door_{leaf}")).map(|x| x > 0.5)
+            // (`door_<n>`, else `door<n>`, as the door animations are found)
+            run.own(&format!("door_{leaf}"))
+                .or_else(|| run.own(&format!("door{leaf}")))
+                .map(|x| x > 0.5)
         };
         for (open, door) in entry.iter_mut().zip(&cabin.entries) {
             if let Some(o) = own(door, "Entry") {
