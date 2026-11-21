@@ -134,6 +134,9 @@ pub struct TrailerPart {
     /// [`CarRun`]: super::CarRun
     pub(super) runs_itself: bool,
     pub run: Option<Box<super::CarRun>>,
+    /// Its own variables from a situation, taken when its scripts start (see
+    /// `VehicleInstance::restore_car_states`).
+    pub(super) saved: Option<omsi_content::situation::SituationCar>,
     /// The part's own `[scripttexture]` pictures, which its own scripts draw (the NF6D's
     /// rear cab's destination matrix): made with its [`CarRun`](super::CarRun) for a part
     /// that does not share its scripts. Empty otherwise (it shows the leading vehicle's).
@@ -427,6 +430,7 @@ impl TrailerPart {
             coupled_at: [true, false],
             runs_itself: super::car_run::uses_place_in_train(&ty),
             run: None,
+            saved: None,
             script_textures: Vec::new(),
             ty,
         }
@@ -1017,7 +1021,9 @@ impl TrailerPart {
                         .map(|(w, h)| crate::scripttex::ScriptTexture::new(*w, *h))
                         .collect();
                 }
-                let run = super::CarRun::start(&self.ty, main, place, &mut self.script_textures);
+                let mut run =
+                    super::CarRun::start(&self.ty, main, place, &mut self.script_textures);
+                super::car_state::take_saved(&mut self.saved, &mut run);
                 let slot_of =
                     |n: &str| omsi_script::compile::with_lower(n, |k| run.names.get(k).copied());
                 self.animators = part_animators(&self.ty, &slot_of);

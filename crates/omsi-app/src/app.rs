@@ -768,6 +768,7 @@ impl App {
                         paint: o.paint.clone(),
                         situation_vars: o.vars.clone(),
                         situation_strvars: o.strvars.clone(),
+                        situation_cars: o.cars.clone(),
                         situation_odometer_km: o.odometer_km,
                         situation_others: Vec::new(),
                         line: None,
