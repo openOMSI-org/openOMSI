@@ -175,8 +175,7 @@ pub fn chat_send(lan: &mut LanSession, game: &mut LanGame, text: &str) {
                 game.plugin_commands.push(line);
                 game.chat.push("* sent to the plugins".into());
             } else {
-                game.chat
-                    .push("* plugin command queue is full".into());
+                game.chat.push("* plugin command queue is full".into());
             }
         }
         ChatLine::Command(_) => {
