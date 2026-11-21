@@ -4973,7 +4973,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("road_snow={}\n", b("road_snow", false)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));
     text.push_str(&format!("mx_graphics={}\n", b("mx_graphics", false)));
-    text.push_str(&format!("rear_door_boarding={}\n", b("rear_door_boarding", false)));
+    text.push_str(&format!(
+        "rear_door_boarding={}\n",
+        b("rear_door_boarding", false)
+    ));
     text.push_str(&format!(
         "mirror_hud_every_frame={}\n",
         b("mirror_hud_every_frame", false)
