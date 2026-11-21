@@ -237,7 +237,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot 0.12.5",
  "percent-encoding",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
  "x11rb",
 ]
 
@@ -1788,7 +1788,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2166,7 +2166,7 @@ dependencies = [
  "vec_map",
  "wasm-bindgen",
  "web-sys",
- "windows 0.62.2",
+ "windows 0.54.0",
 ]
 
 [[package]]
@@ -2286,7 +2286,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.21",
- "windows 0.62.2",
+ "windows 0.54.0",
 ]
 
 [[package]]
@@ -3206,7 +3206,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 [[package]]
 name = "mx"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=7826813fc92ac08a62b4dec9b189d189308d962b#7826813fc92ac08a62b4dec9b189d189308d962b"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "mx-dx11",
  "mx-dx12",
@@ -3224,7 +3224,7 @@ dependencies = [
 [[package]]
 name = "mx-dx11"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=7826813fc92ac08a62b4dec9b189d189308d962b#7826813fc92ac08a62b4dec9b189d189308d962b"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "log",
  "mx-shader",
@@ -3239,7 +3239,7 @@ dependencies = [
 [[package]]
 name = "mx-dx12"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=7826813fc92ac08a62b4dec9b189d189308d962b#7826813fc92ac08a62b4dec9b189d189308d962b"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "log",
  "mx-shader",
@@ -3254,7 +3254,7 @@ dependencies = [
 [[package]]
 name = "mx-gl"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=7826813fc92ac08a62b4dec9b189d189308d962b#7826813fc92ac08a62b4dec9b189d189308d962b"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "glow",
  "khronos-egl",
@@ -3270,7 +3270,7 @@ dependencies = [
 [[package]]
 name = "mx-metal"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=7826813fc92ac08a62b4dec9b189d189308d962b#7826813fc92ac08a62b4dec9b189d189308d962b"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "log",
  "mx-shader",
@@ -3290,7 +3290,7 @@ dependencies = [
 [[package]]
 name = "mx-noop"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=7826813fc92ac08a62b4dec9b189d189308d962b#7826813fc92ac08a62b4dec9b189d189308d962b"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "mx-shader",
  "mx-types",
@@ -3302,7 +3302,7 @@ dependencies = [
 [[package]]
 name = "mx-shader"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=7826813fc92ac08a62b4dec9b189d189308d962b#7826813fc92ac08a62b4dec9b189d189308d962b"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "naga 30.0.2",
  "naga-types",
@@ -3312,7 +3312,7 @@ dependencies = [
 [[package]]
 name = "mx-types"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=7826813fc92ac08a62b4dec9b189d189308d962b#7826813fc92ac08a62b4dec9b189d189308d962b"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
@@ -3321,7 +3321,7 @@ dependencies = [
 [[package]]
 name = "mx-upscale"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=7826813fc92ac08a62b4dec9b189d189308d962b#7826813fc92ac08a62b4dec9b189d189308d962b"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "anyhow",
  "ash",
@@ -3338,7 +3338,7 @@ dependencies = [
 [[package]]
 name = "mx-vulkan"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=7826813fc92ac08a62b4dec9b189d189308d962b#7826813fc92ac08a62b4dec9b189d189308d962b"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "ash",
  "gpu-allocator",
@@ -3382,7 +3382,7 @@ dependencies = [
 [[package]]
 name = "naga"
 version = "30.0.2"
-source = "git+https://github.com/openOMSI-org/mX?rev=7826813fc92ac08a62b4dec9b189d189308d962b#7826813fc92ac08a62b4dec9b189d189308d962b"
+source = "git+https://github.com/openOMSI-org/mX?rev=1af945fe02d7fd8f16f74e1de1a4f113f0d77231#1af945fe02d7fd8f16f74e1de1a4f113f0d77231"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
@@ -5934,7 +5934,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6707,7 +6707,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7813,7 +7813,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
