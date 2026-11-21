@@ -1,9 +1,8 @@
 //! #2712: the stops of the map fill in free drive, where no trip of the timetable is due
 //! anywhere - as OMSI's passengers turned up whatever the player was driving.
 
-use super::*;
 use super::free_drive::{FreeDriveFill, stop_served};
-use std::collections::{HashMap, HashSet};
+use super::*;
 
 #[derive(Default)]
 struct FlatWorld {
@@ -136,10 +135,16 @@ fn populating_stop_in_free_drive_with_no_due_trips_assigns_valid_destination() {
     let (mut h, _) = pax_stops::brt_tests::setup("free-drive-populate", None);
     h.types = vec![h.people[0].ty.clone()];
     h.pool_types = 1;
+    h.people.clear();
     h.map_humans_done = true;
     h.free_drive_fill = FreeDriveFill::Auto;
     h.duty = None; // Free drive
-    h.stop_targets = Some(vec![42]); // Timetable targets exists, but no trips due at stop 42
+    let mut targets = HashMap::new();
+    targets.insert(
+        42,
+        vec![("Centrum".into(), HashSet::from(["Centrum".into()]))],
+    );
+    h.stop_targets = Some(targets); // Timetable targets exist, but no trips due at stop 42
     h.due_dests = Some(HashMap::new()); // Empty: no trips due at stop 42
 
     let stop = h.stops.get_mut(&42).unwrap();
@@ -172,7 +177,10 @@ fn populating_stop_in_free_drive_with_no_due_trips_assigns_valid_destination() {
         })
         .collect();
 
-    assert!(!waiting_pax.is_empty(), "passengers should spawn in free drive");
+    assert!(
+        !waiting_pax.is_empty(),
+        "passengers should spawn in free drive"
+    );
     // Verify destination and line are assigned, not filtered to None
     for p in &waiting_pax {
         assert_eq!(p.dest.as_deref(), Some("Centrum"));
