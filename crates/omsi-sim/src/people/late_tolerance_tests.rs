@@ -1,7 +1,3 @@
-//! #2718: how late the player's bus may be before boarding passengers complain about it -
-//! OMSI's five minutes by default, more where the player allows it, none at all where the
-//! setting is zero.
-
 use super::model::LATE_TOLERANCE;
 use super::ticket_hook_tests::{boarding, human_type, player_bus};
 use super::*;
