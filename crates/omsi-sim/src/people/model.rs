@@ -244,6 +244,9 @@ pub const CHAT_PAUSE: f64 = 12.0;
 /// How late the player's bus may be before its boarding passengers say so (s): five
 /// minutes, as Omsi.exe had it. The map or the player may allow more (#2718).
 pub const LATE_TOLERANCE: f64 = 300.0;
+/// How still a bus has to stand before the stop's passengers walk to it, when
+/// [`PeopleSim::board_when_stopped`] is on (m/s; #2757).
+pub const BOARD_STOPPED_SPEED: f64 = 0.2;
 
 /// A cell of `PeopleSim::wall_cells`: when it was made, and its walls with their heights.
 pub type WallCell = (f64, Vec<(Block, f64, f64)>);
@@ -449,6 +452,9 @@ pub struct PeopleSim {
     /// (`standing_chance` in the settings).
     pub stand_chance: f32,
     pub short_rides_stand: bool,
+    /// Nobody walks to a bus that is still rolling in, nor to its shut doors: they wait at
+    /// the stop until it stands still with a door open (#2757). Off as OMSI had it.
+    pub board_when_stopped: bool,
     /// The driver pressed the ticket key (`ticket_give`): sell the requested ticket.
     pub give_ticket: bool,
     /// The key that sells a ticket, as the HUD names it.
