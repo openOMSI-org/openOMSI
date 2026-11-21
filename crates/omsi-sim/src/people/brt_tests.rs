@@ -190,6 +190,47 @@ fn brt_rear_door_boarding_returns_to_an_open_door_when_the_nearest_stays_shut() 
 }
 
 #[test]
+fn brt_ticket_buyers_preserve_selling_door_when_fallback_triggers_and_noticketsale_door_is_open() {
+    let (mut h, mut bus) = setup("rear-boarding-ticket-fallback", None);
+    let world = crate::world_data::WorldData::default();
+    let bus_ix: HashMap<BusId, usize> = [(bus.id, 0)].into_iter().collect();
+
+    // Passenger needs to buy a ticket; door 1 is {noticketsale} (open), door 2 is selling (shut)
+    h.pax_mut(0).unwrap().ticket = TICKET_BUY;
+    h.rear_door_boarding = true;
+    bus.entry_open[1] = true;
+    bus.entry_open[2] = false;
+
+    // Initially chooses selling door 2
+    assert_eq!(choose(&mut h, &bus), 2, "initial choice is selling door");
+
+    // Timeout triggers fallback, but ticket buyer still avoids {noticketsale} door 1
+    h.pax_mut(0).unwrap().door_since = Some(h.time - DOOR_GIVE_UP * 0.6);
+    assert_eq!(choose(&mut h, &bus), 2, "ticket buyer stays at selling door after fallback");
+
+    // Multi-tick regression: continues targeting selling door over multiple ticks
+    for _ in 0..5 {
+        h.time += 0.1;
+        h.pax_task(
+            0,
+            0.1,
+            &world,
+            std::slice::from_ref(&bus),
+            &bus_ix,
+            &HashMap::new(),
+            None,
+            &mut false,
+            &mut Vec::new(),
+        );
+        assert_eq!(
+            h.pax(0).unwrap().door,
+            Some(2),
+            "stays directed to selling door despite open noticketsale door"
+        );
+    }
+}
+
+#[test]
 fn brt_side_configuration_respects_both_traffic_hands() {
     for left in [false, true] {
         let kerb = if left { -1.0 } else { 1.0 };

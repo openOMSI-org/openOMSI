@@ -987,16 +987,35 @@ impl Cabin {
         open: &[bool],
         rear_boarding: bool,
     ) -> Option<usize> {
-        let first = if rear_boarding {
-            self.omsi_nearest(p, list, avoid, false, Some(flags), None)
+        let has_ticket_door = avoid
+            && list
+                .iter()
+                .enumerate()
+                .any(|(k, pt)| pt.is_some() && flags.get(k).is_some_and(|f| !f.0));
+        let search_list: Vec<_> = if has_ticket_door {
+            list.iter()
+                .enumerate()
+                .map(|(k, pt)| {
+                    if flags.get(k).is_some_and(|f| f.0) {
+                        None
+                    } else {
+                        *pt
+                    }
+                })
+                .collect()
         } else {
-            self.omsi_nearest(p, list, avoid, false, Some(flags), Some(open))
+            list.to_vec()
+        };
+        let first = if rear_boarding {
+            self.omsi_nearest(p, &search_list, avoid, false, Some(flags), None)
+        } else {
+            self.omsi_nearest(p, &search_list, avoid, false, Some(flags), Some(open))
         };
         // A filtered list can begin with a door on the opposite side (None): with every
         // matching door still shut, `omsi_nearest`'s rigid-bus fallback returns the first
         // slot. The search again without the open mask keeps the ticket-sale filter and the
         // nearest platform-facing door.
-        first.or_else(|| self.omsi_nearest(p, list, avoid, false, Some(flags), None))
+        first.or_else(|| self.omsi_nearest(p, &search_list, avoid, false, Some(flags), None))
     }
 
     /// The validator nearest `p` (bus frame, the height weighed as in `omsi_nearest`): the
