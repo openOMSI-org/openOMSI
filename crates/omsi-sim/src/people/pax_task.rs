@@ -395,7 +395,14 @@ impl PeopleSim {
         };
         let pt = bn
             .cabin
-            .omsi_nearest(here, &search_list, is_buying, false, Some(&flags), Some(&open))
+            .omsi_nearest(
+                here,
+                &search_list,
+                is_buying,
+                false,
+                Some(&flags),
+                Some(&open),
+            )
             .or_else(|| {
                 bn.cabin
                     .omsi_nearest(here, &search_list, is_buying, false, Some(&flags), None)

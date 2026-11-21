@@ -3422,6 +3422,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // stop, as in OMSI; #1773)
     v["ai_wait_timed_stops_only"] = json!(false);
     v["pax_bad_driving"] = json!(true);
+    v["pax_free_drive"] = json!("auto");
     v["pax_board_when_stopped"] = json!(false);
     passenger_defaults(&mut v);
     // the arrival half of the stops of a depot file that keeps two recordings per stop
@@ -3841,6 +3842,13 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 })
             }
             "pax_entry_doors" => v[&k] = json!(entry_doors_setting(Some(val))),
+            "pax_free_drive" => {
+                v[&k] = json!(match val.trim().to_ascii_lowercase().as_str() {
+                    "on" | "1" | "yes" | "true" | "always" => "on",
+                    "off" | "0" | "no" | "false" | "never" => "off",
+                    _ => "auto",
+                })
+            }
             "character_models" => {
                 v[&k] = json!(if val.eq_ignore_ascii_case("improved") {
                     "improved"
@@ -5025,6 +5033,21 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("full_tank", true)
     ));
     text.push_str(&format!("pax_bad_driving={}\n", b("pax_bad_driving", true)));
+    text.push_str(&format!(
+        "pax_free_drive={}\n",
+        match v
+            .get("pax_free_drive")
+            .and_then(|x| x.as_str())
+            .unwrap_or("auto")
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "on" | "1" | "yes" | "true" | "always" => "on",
+            "off" | "0" | "no" | "false" | "never" => "off",
+            _ => "auto",
+        }
+    ));
     text.push_str(&format!(
         "pax_board_when_stopped={}\n",
         b("pax_board_when_stopped", false)
