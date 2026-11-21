@@ -78,7 +78,7 @@ fn the_panes_frame_is_the_drawn_body_of_a_reversed_tram() {
 
 #[test]
 fn ticketless_fares_do_not_count_as_tickets_sold_in_career() {
-    let mut career = omsi_career::Career::default();
+    let mut career = omsi_career::career::Career::default();
     let mut humans = crate::humans::Humans {
         sim: omsi_sim::people::PeopleSim::new(std::path::Path::new("/nonexistent"), 200),
     };
@@ -88,5 +88,8 @@ fn ticketless_fares_do_not_count_as_tickets_sold_in_career() {
 
     career_from_humans(&mut career, &humans);
     assert_eq!(career.tickets.0, 0, "tickets sold in career remains 0");
-    assert_eq!(career.tickets.1, 3.5, "cash collected from ticketless fare is recorded");
+    assert_eq!(
+        career.tickets.1, 3.5,
+        "cash collected from ticketless fare is recorded"
+    );
 }
