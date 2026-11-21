@@ -266,10 +266,12 @@ impl KeyboardAxes {
 }
 
 pub fn is_stop_brake_interlocked(v: &crate::VehicleInstance) -> bool {
-    if let Some(sw) = v.var("bremse_halte_sw").or_else(|| v.var("bus_stop_brake")) {
-        sw > 0.5
+    let sw1 = v.var("bremse_halte_sw");
+    let sw2 = v.var("bus_stop_brake");
+    if sw1.is_some() || sw2.is_some() {
+        sw1.is_some_and(|s| s > 0.5) || sw2.is_some_and(|s| s > 0.5)
     } else {
-        v.var("bremse_halte").unwrap_or(0.0) > 0.5
+        v.var("bremse_halte").is_some_and(|s| s > 0.5)
     }
 }
 
@@ -638,6 +640,32 @@ mod tests {
         a.brake_key = false;
         a.update(0.01);
         assert_eq!(a.brake, 0.0, "brake released on throttle demand");
+    }
+
+    #[test]
+    fn stop_brake_interlock_handles_both_switch_variables() {
+        let vehicle = crate::timetable_run::tests::script_test_vehicle(
+            "",
+            "bremse_halte_sw\nbus_stop_brake\nbremse_halte\n",
+            "",
+        );
+        let mut axes = KeyboardAxes {
+            brake: 1.0,
+            ..Default::default()
+        };
+
+        // Neither engaged
+        assert!(!is_stop_brake_interlocked(&vehicle));
+
+        // bus_stop_brake engaged while bremse_halte_sw is 0
+        vehicle.set_var("bus_stop_brake", 1.0);
+        let was = is_stop_brake_interlocked(&vehicle);
+        assert!(was);
+
+        // Disengaging bus_stop_brake releases held brake
+        vehicle.set_var("bus_stop_brake", 0.0);
+        maybe_release_held_brake(&vehicle, &mut axes, was);
+        assert_eq!(axes.brake, 0.0);
     }
 
     /// The centring key brings the wheel back in a straight line at OMSI's pace, not at once.
