@@ -41,6 +41,7 @@ static MX: AtomicBool = AtomicBool::new(false);
 
 /// The Swift app's `main`: never returns (UIKit's run loop runs the app from here on).
 #[unsafe(no_mangle)]
+#[rustfmt::skip]
 pub extern "C" fn openomsi_ios_main() {
     // HOME is the app's container on iOS: its root may not be written, its Library may
     let container = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
@@ -67,9 +68,7 @@ pub extern "C" fn openomsi_ios_main() {
         let backtrace = std::backtrace::Backtrace::force_capture();
         let text = format!("the game stopped on an error (build {BUILD}): {info}\n{backtrace}");
         log::error!("{text}");
-        omsi_platform::diagnostics::panicked(omsi_platform::diagnostics::panic_report(
-            info, &backtrace,
-        ));
+        omsi_platform::diagnostics::panicked(omsi_platform::diagnostics::panic_report(info, &backtrace));
         for f in &crash_files {
             let _ = std::fs::write(f, &text);
         }
@@ -92,11 +91,7 @@ pub extern "C" fn openomsi_ios_main() {
         }
     }
     omsi_cfg::migrate_legacy_data_dir();
-    let seed = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(1)
-        % 1_000_000_000;
+    let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1) % 1_000_000_000;
     omsi_script::set_session_seed(seed);
     // the original installation and the content roots, as a bare start finds them (the Swift
     // launcher reads them through `apple_bridge`)
@@ -132,28 +127,27 @@ pub extern "C" fn openomsi_ios_scene_ready() {
 /// The log to the console (Xcode's, the Mac's Console app) and to `game.log` in the app's
 /// data folder; the previous run's is kept as `game-prev.log` for the launcher's crash
 /// report (`previous_run_crash`), as on Android.
+#[rustfmt::skip]
 fn init_log() {
     let dir = omsi_launcher_lib::data_dir();
     let (now, prev) = (dir.join("game.log"), dir.join("game-prev.log"));
     let _ = std::fs::rename(&now, &prev);
     let file = std::fs::File::create(&now).ok();
-    let logger = TeeLogger {
-        file: Mutex::new(file),
-    };
+    let logger = TeeLogger { file: Mutex::new(file) };
     if log::set_boxed_logger(Box::new(logger)).is_ok() {
         log::set_max_level(log::LevelFilter::Info);
     }
 }
 
+#[rustfmt::skip]
 struct TeeLogger {
     file: Mutex<Option<std::fs::File>>,
 }
 
+#[rustfmt::skip]
 impl log::Log for TeeLogger {
     fn enabled(&self, m: &log::Metadata) -> bool {
-        m.level() <= log::Level::Info
-            && !m.target().starts_with("wgpu_hal")
-            && !m.target().starts_with("naga")
+        m.level() <= log::Level::Info && !m.target().starts_with("wgpu_hal") && !m.target().starts_with("naga")
     }
 
     fn log(&self, r: &log::Record) {
@@ -162,10 +156,7 @@ impl log::Log for TeeLogger {
         }
         crate::logmask::with_record(r, |r| {
             use std::io::Write;
-            let secs = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs_f64())
-                .unwrap_or(0.0);
+            let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
             // (the desktop's env_logger layout: the launcher's `crash_of` reads it)
             let line = format!("[{secs:.3} {:<5} {}] {}", r.level(), r.target(), r.args());
             eprintln!("{line}");
@@ -185,42 +176,28 @@ impl log::Log for TeeLogger {
 
 /// When the app's previous run closed while a drive was going: what it said last and the
 /// end of its log, for the launcher's crash dialog (see `android::previous_run_crash`).
+#[rustfmt::skip]
 pub(crate) fn previous_run_crash() -> Option<(String, String)> {
     let p = omsi_launcher_lib::data_dir().join("game-prev.log");
     let text = std::fs::read_to_string(&p).ok()?;
     let lines: Vec<&str> = text.lines().collect();
-    let start = lines
-        .iter()
-        .rposition(|l| l.contains("starting the game:"))?;
-    if lines[start..]
-        .iter()
-        .any(|l| l.contains("game ends") || l.contains("session ended"))
-    {
+    let start = lines.iter().rposition(|l| l.contains("starting the game:"))?;
+    if lines[start..].iter().any(|l| l.contains("game ends") || l.contains("session ended")) {
         return None;
     }
     // sent to the background and not brought back: iOS ended the app there (or the player
     // swiped it away) - no crash, whatever the game was doing
-    let back = lines[start..]
-        .iter()
-        .rposition(|l| l.contains("app in the background"));
-    let front = lines[start..]
-        .iter()
-        .rposition(|l| l.contains("app in front"));
+    let back = lines[start..].iter().rposition(|l| l.contains("app in the background"));
+    let front = lines[start..].iter().rposition(|l| l.contains("app in front"));
     if back.is_some() && back > front {
         return None;
     }
     if let Some(c) = launcher::crash_of(&p) {
         return Some(c);
     }
-    let last = lines
-        .last()
-        .map(|l| l.split_once("] ").map(|x| x.1).unwrap_or(l))
-        .unwrap_or("");
+    let last = lines.last().map(|l| l.split_once("] ").map(|x| x.1).unwrap_or(l)).unwrap_or("");
     let tail = lines[lines.len().saturating_sub(150)..].join("\n");
-    Some((
-        format!("the game closed without a word while it was running (the last it said: {last})"),
-        tail,
-    ))
+    Some((format!("the game closed without a word while it was running (the last it said: {last})"), tail))
 }
 
 const README: &str = "openOMSI\n\
@@ -240,6 +217,7 @@ struct Shell {
 }
 
 /// A window for the game, put on the Swift app's scene in front of the Swift launcher.
+#[rustfmt::skip]
 fn new_window(event_loop: &ActiveEventLoop) -> Option<Arc<Window>> {
     let attrs = Window::default_attributes()
         .with_title("openOMSI")
@@ -247,14 +225,8 @@ fn new_window(event_loop: &ActiveEventLoop) -> Option<Arc<Window>> {
         // second swipe, and the home bar keeps out of the picture)
         .with_prefers_home_indicator_hidden(true)
         .with_prefers_status_bar_hidden(true)
-        .with_preferred_screen_edges_deferring_system_gestures(
-            winit::platform::ios::ScreenEdge::ALL,
-        )
-        .with_valid_orientations(if crate::apple::is_phone() {
-            ValidOrientations::Landscape
-        } else {
-            ValidOrientations::LandscapeAndPortrait
-        });
+        .with_preferred_screen_edges_deferring_system_gestures(winit::platform::ios::ScreenEdge::ALL)
+        .with_valid_orientations(if crate::apple::is_phone() { ValidOrientations::Landscape } else { ValidOrientations::LandscapeAndPortrait });
     let window = match event_loop.create_window(attrs) {
         Ok(w) => Arc::new(w),
         Err(e) => {
@@ -266,6 +238,7 @@ fn new_window(event_loop: &ActiveEventLoop) -> Option<Arc<Window>> {
     Some(window)
 }
 
+#[rustfmt::skip]
 impl Shell {
     /// After every event: a game the launcher asked for starts, a game that ended gives the
     /// screen back.
@@ -289,13 +262,9 @@ impl Shell {
             }
             return;
         }
-        let Some(line) = omsi_launcher_lib::take_in_process_launch() else {
-            return;
-        };
+        let Some(line) = omsi_launcher_lib::take_in_process_launch() else { return };
         log::info!("starting the game: {}", line.join(" "));
-        let mut argv: Vec<String> = std::iter::once("openomsi".to_string())
-            .chain(line)
-            .collect();
+        let mut argv: Vec<String> = std::iter::once("openomsi".to_string()).chain(line).collect();
         // (`OMSI_APPLE_EXIT_AFTER=secs`: the session ends by itself, for checking the way back
         // to the launcher without a person at it)
         if let Ok(s) = std::env::var("OMSI_APPLE_EXIT_AFTER") {
@@ -321,10 +290,7 @@ impl Shell {
             }
             Err(e) => {
                 log::error!("the game could not start: {e:#}");
-                crate::apple_bridge::game_status(&format!(
-                    "{}: {e:#}",
-                    omsi_ui::tr("The game could not start")
-                ));
+                crate::apple_bridge::game_status(&format!("{}: {e:#}", omsi_ui::tr("The game could not start")));
                 crate::apple_bridge::game_ended();
                 return;
             }
@@ -339,6 +305,7 @@ impl Shell {
     }
 }
 
+#[rustfmt::skip]
 impl ApplicationHandler for Shell {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         log::info!("app in front");
@@ -367,12 +334,7 @@ impl ApplicationHandler for Shell {
         self.switch(event_loop);
     }
 
-    fn device_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        id: winit::event::DeviceId,
-        event: DeviceEvent,
-    ) {
+    fn device_event(&mut self, event_loop: &ActiveEventLoop, id: winit::event::DeviceId, event: DeviceEvent) {
         if let Some(g) = self.game.as_mut() {
             g.device_event(event_loop, id, event);
         }
