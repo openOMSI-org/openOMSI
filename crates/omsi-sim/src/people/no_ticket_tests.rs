@@ -133,7 +133,10 @@ fn a_fare_without_a_ticket_goes_straight_to_the_change() {
     assert!((h.ticket_cash - value).abs() < 1e-6, "{}", h.ticket_cash);
     assert_eq!(h.tickets_sold, 0, "no tickets sold for ticketless fares");
     assert_eq!(h.fares_no_ticket, 1, "one fare, no ticket");
-    assert!(h.take_sales().is_empty(), "take_sales has no tickets for ticketless fares");
+    assert!(
+        h.take_sales().is_empty(),
+        "take_sales has no tickets for ticketless fares"
+    );
     assert!(
         !h.take_sale_events()
             .iter()

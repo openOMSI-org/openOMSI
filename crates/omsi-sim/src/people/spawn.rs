@@ -160,6 +160,7 @@ impl PeopleSim {
             stroll_timer: 0.0,
             defer_populate: false,
             exact_fare: true,
+            free_drive_fill: crate::people::free_drive::FreeDriveFill::Auto,
             transfer_percent: 0.0,
             visual_hailing: false,
             visual_full_bus_reaction: false,
