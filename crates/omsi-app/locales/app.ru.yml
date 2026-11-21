@@ -4377,5 +4377,13 @@
 "At most 5": "Не больше 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Папки объектов и сплайнов, которые не использует ни одна другая карта, удаляются вместе с ним: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Папки объектов и сплайнов, которые ещё использует другая карта, остаются: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Профиль хранит все клавиши и все настройки контроллеров. Перед каждой поездкой лаунчер переключается на собственный профиль автобуса или на профиль по умолчанию."
+"Rename the profile": "Переименовать профиль"
+"Delete this profile?": "Удалить этот профиль?"
+"Default for every bus": "По умолчанию для всех автобусов"
+"Use for {bus}": "Использовать для {bus}"
+"Profile {name} in use": "Используется профиль {name}"
+
 "Draw other players' buses in less detail when far away": "Меньше деталей у автобусов других игроков издалека"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Сетевая игра: дальше 120 м и при частоте ниже 20 кадров/с автобусы других игроков сохраняют кузов, но скрывают водителей и маршрутоуказатели; при FPS выше 26 они возвращаются полностью"
+

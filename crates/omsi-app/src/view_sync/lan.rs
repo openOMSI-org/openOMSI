@@ -172,11 +172,12 @@ pub(crate) fn apply_lan(
         let reduced = omsi_lan::others::detail(enabled, distance, inside, struggling)
             == omsi_lan::others::Detail::Reduced;
         if reduced && !v.reduced {
-            // (made again if the bus comes back into full detail)
-            if let Some(mut d) = v.driver.take() {
+            // (#2538) Retain the driver figure in v.driver to avoid reallocating meshes, materials,
+            // and scene instances on repeated transitions across the distance or FPS threshold.
+            // Hide its scene instances while detail is reduced.
+            if let Some(d) = v.driver.as_mut() {
                 d.hide(r, scene);
             }
-            v.driver_for = None;
         }
         v.reduced = reduced;
         if !reduced
@@ -184,6 +185,8 @@ pub(crate) fn apply_lan(
             && !rv.stand_in
             && !omsi_net::is_parked(*id)
         {
+            // (#2538) Allocate a new driver figure only when the figure identity changes,
+            // reusing the retained figure across detail transitions.
             v.driver_for = Some(rv.last.figure.clone());
             if let Some(mut d) = v.driver.take() {
                 d.hide(r, scene);

@@ -4379,5 +4379,13 @@
 "At most 5": "No máximo 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "As pastas de objetos e splines que nenhum outro mapa usa são excluídas junto com ele: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "As pastas de objetos e splines que outro mapa ainda usa são mantidas: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Um perfil guarda todas as teclas e todas as configurações dos controles. Antes de cada viagem, o launcher troca para o perfil próprio do ônibus ou para o padrão."
+"Rename the profile": "Renomear o perfil"
+"Delete this profile?": "Excluir este perfil?"
+"Default for every bus": "Padrão para todos os ônibus"
+"Use for {bus}": "Usar para {bus}"
+"Profile {name} in use": "Perfil {name} em uso"
+
 "Draw other players' buses in less detail when far away": "Desenhar ônibus de outros jogadores com menos detalhes de longe"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Multijogador: além de 120 m e abaixo de 20 FPS, os ônibus de outros jogadores mantêm a carroceria, mas perdem os motoristas e letreiros; voltam ao normal acima de 26 FPS"
+

@@ -3610,5 +3610,13 @@
 "At most 5": "最多5辆"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地图都未使用的物体和样条文件夹会一并删除：{n} 个，{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "其他地图仍在使用的物体和样条文件夹会保留：{n} 个。"
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "配置文件保存所有按键和所有控制器设置。每次驾驶前,启动器会切换到该公交车专属的配置文件或默认配置文件。"
+"Rename the profile": "重命名配置文件"
+"Delete this profile?": "要删除这个配置文件吗?"
+"Default for every bus": "所有公交车的默认"
+"Use for {bus}": "用于 {bus}"
+"Profile {name} in use": "正在使用配置文件 {name}"
+
 "Draw other players' buses in less detail when far away": "在远距离以较低细节绘制其他玩家的巴士"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "多人游戏：距离超过120米或帧率低于20时，其他玩家的巴士保留车身但隐藏司机和目的地显示屏；帧率高于26时恢复完整细节"
+

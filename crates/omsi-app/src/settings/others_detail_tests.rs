@@ -133,4 +133,41 @@ fn others_detail_integration_off_and_on() {
         detail(on_settings.others_detail, 10.0, false, recovered_struggling),
         Detail::Full
     );
+
+    // Repeated transitions across 120 m boundary and FPS thresholds:
+    for i in 0..50 {
+        let distance = if i % 2 == 0 {
+            REDUCE_BEYOND - 10.0
+        } else {
+            REDUCE_BEYOND + 10.0
+        };
+        let expected = if i % 2 == 0 {
+            Detail::Full
+        } else {
+            Detail::Reduced
+        };
+        assert_eq!(
+            detail(on_settings.others_detail, distance, false, false),
+            expected
+        );
+    }
+
+    for i in 0..50 {
+        let struggling = if i % 2 == 0 {
+            on_budget.step(60.0);
+            false
+        } else {
+            on_budget.step(LOW_FPS - 1.0);
+            true
+        };
+        let expected = if struggling {
+            Detail::Reduced
+        } else {
+            Detail::Full
+        };
+        assert_eq!(
+            detail(on_settings.others_detail, 50.0, false, struggling),
+            expected
+        );
+    }
 }

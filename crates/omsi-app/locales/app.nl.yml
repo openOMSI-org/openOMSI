@@ -3590,5 +3590,13 @@
 "At most 5": "Maximaal 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Mappen met objecten en splines die geen andere kaart gebruikt, worden mee verwijderd: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Mappen met objecten en splines die een andere kaart nog gebruikt, blijven staan: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Een profiel bewaart alle toetsen en alle controllerinstellingen. Voor elke rit schakelt de launcher naar het eigen profiel van de bus, of naar het standaardprofiel."
+"Rename the profile": "Profiel hernoemen"
+"Delete this profile?": "Dit profiel verwijderen?"
+"Default for every bus": "Standaard voor elke bus"
+"Use for {bus}": "Gebruiken voor {bus}"
+"Profile {name} in use": "Profiel {name} in gebruik"
+
 "Draw other players' buses in less detail when far away": "Bussen van andere spelers in de verte met minder details tekenen"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Multiplayer: voorbij 120 m en onder 20 FPS behouden bussen van anderen hun carrosserie maar verliezen chauffeurs en lijnfilms; boven 26 FPS keren ze volledig terug"
+

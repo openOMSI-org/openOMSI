@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 /// Version of the settings file (`version=`); files without it are version 1.
 #[cfg(test)]
+#[rustfmt::skip]
 pub const SETTINGS_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -66,6 +67,9 @@ pub struct Settings {
     /// Passengers pay the exact fare (no change to give at the cash desk).
     pub exact_fare: bool,
     pub pax_bad_driving: bool,
+    /// The stop's passengers walk to the bus only once it stands still with a door open
+    /// (#2757); off, they set off as soon as it is listed and rolling in, as OMSI had it.
+    pub pax_board_when_stopped: bool,
     /// At each stop of a depot file that keeps two recordings per stop, the game presses the
     /// IBIS's "next stop" key so that the arrival recording is heard as well (see
     /// `auto_announce`).
@@ -577,7 +581,6 @@ pub struct Settings {
 
 #[rustfmt::skip]
 impl Default for Settings {
-#[rustfmt::skip]
     fn default() -> Self {
         // a phone's graphics chip and battery: 2x MSAA (cheap on a tiled GPU), no
         // ambient occlusion, a smaller shadow map and mirrors, a shorter view
@@ -587,13 +590,13 @@ impl Default for Settings {
 
 /// A dedicated server's AI limits (`server.cfg`'s `ai_unsched_factor`, `ai_max_scheduled`,
 /// `ai_max_parked`, `ai_max_humans`), as `settings.cfg` lines read after the machine's own.
+#[rustfmt::skip]
 pub(crate) static SERVER_AI_LIMITS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 #[rustfmt::skip]
 impl Settings {
     /// HUD coordinates occupy the centre panel by default; world picking always
     /// keeps the full window's physical coordinates.
-#[rustfmt::skip]
     pub fn hud_viewport(&self, size: (u32, u32)) -> [f32; 4] {
         if self.triple.enabled && self.triple_hud_center && !self.vr_requested() && size.0 >= 3 {
             // (the centre panel, as the renderer draws it)
@@ -603,36 +606,30 @@ impl Settings {
             [0.0, 0.0, size.0 as f32, size.1 as f32]
         }
     }
-#[rustfmt::skip]
     pub fn is_light_theme(&self) -> bool {
         self.ui_theme == "light"
     }
-#[rustfmt::skip]
     pub(crate) fn phone() -> Self {
         Self { msaa: 2, anisotropy: 4, ssao: false, shadow_size: 1024, mirror_size: 128, max_fps: 60, max_obj_dist: 900.0, pax_density: 0.7, navigator_corner: "top-center".into(), ..Self::desktop() }
     }
     /// The defaults of a computer.
-#[rustfmt::skip]
     fn desktop() -> Self {
-        Self { msaa: 4, anisotropy: 8, ssao: true, shadows: true, shadow_size: 2048, shadow_blobs: true, lamp_shadows: true, navigator: true, ui_opacity: 0.85, ui_theme: "dark".into(), notes: true, notes_driving: true, notes_script: true, notes_trip: true, notes_tickets: true, ui_scale: 1.0, pause_quick_actions: "default".into(), ui_theme_pack: String::new(), ui_scale_window: true, navigator_corner: "bottom-left".into(), boarding: "auto".into(), passenger_animation: "original".into(), passenger_hailing: false, passenger_full_bus_reaction: false, pax_short_rides_stand: false, passenger_connections: false, passenger_transfer_percent: 20.0, units: "metric".into(), photo_mode: "simple".into(), character_models: "original".into(), standing_chance: 0.05, ambient: true, vol_ambient: 0.8, radio_fx: Default::default(), detail_textures: true, exact_fare: true, pax_bad_driving: true, auto_announce: false, enhanced: false, graphics: "vanilla_plus".into(), triple: Default::default(), triple_span: true, triple_hud_center: true, vr: false, vr_scale: 0.65, vr_head_smoothing_ms: 0.0, vr_mirror_rate: 16.0, vr_desktop_mirror: true, fullscreen: false, vsync: true, volume: 0.6, drive_keys: "simple".into(), touch_door_mode: "standard".into(), touch_pedal_length: 1.0, touch_pedal_deadzone: 0.15, post_aa: "fxaa".into(), render_scale: 0.0, upscaler: "default".into(), upscale_quality: "quality".into(), frame_generation: "off".into(), fsr_quality: "quality".into(), fsr_sharpness: 0.8, language: "ENG".into(), pax_voices: "all".into(), nav_dynamic_arrows: false, nav_map_arrows: false, nav_ai: true, nav_ai_cars: true, nav_surface: true, nav_light: false, nav_3d: true, nav_classic_2d: false, nav_widget: true, milezero: false, nav_size: 1.0, get_up: false, trip_summary: true, full_tank: true, sim_thread: false, texture_compression: true, gpu_texture_compression: true, video_memory: 0, auto_clutch: true, momentary_gears: false, auto_shift: false, min_obj_size: 0.013, max_obj_dist: -1.0, max_fps: 0, chat: true, chat_size: 1.0, tooltips: true, name_tags: true, show_fps: false, perf_overlay: "off".into(), clouds: true, cloud_quality: "high".into(), street_light: "off".into(), ray_tracing_on: false, light_shadows: "off".into(), cloud_shadows: false, light_glow: false, rain_quality: "high".into(), vehicle_smoke: "all".into(), puddles: "high".into(), windy_trees: true, detailed_trees: true, road_snow: false, pax_density: 1.0, vol_ai: 1.0, vol_scenery: 1.0, mirror_size: 256, mirror_hud: 0, mirror_hud_every_frame: false, mirror_refresh: "full".into(), mirror_quality: "standard".into(), mirror_shadows: false, mirror_particles: false, doppler: true, driver: true, maintenance: 0, ai_unsched_factor: 1.0, ai_reaction: 1.0, ai_max_scheduled: 0, ai_max_parked: 0, ai_max_humans: 200, parked_buses_drawn: -1, ai_wait_timed_stops_only: false, collision_vehicles: true, collision_objects: true, collision_pedestrians: true, realistic_road_physics: false, head_movement: true, driverview_smooth: true, hands_in_cab: false, driver_like_omsi: false, alt_view: true, precision_zoom: false, zoom_hold_amount: 0.5, zoom_hold_latch: false, flashlight_cursor: false, others_detail: false, time_speed: 1.0, time_sync: false, metar_sync: false, metar_station: String::new(), machine_translation: false, shadow_casters: "all".into(), ctrl_deadzone: 0.0, right_stick_look: true, ctrl_background: false, pad_steer_smooth: 120.0, pad_steer_linear: false, pad_steer_speed: 2.0, pad_deadzone: 0.08, pad_type: "auto".into(), pad_buttons: true, arrows_switch_cams: true, ctrl_off: String::new(), steering_linear: false, old_steering: false, red_steer_spd: false, reflections: 1.0, road_glare: 1.0, traffic_headlights: 1.0, led_glow: 6, led_mips: 1.3, night_brightness: 0.0, mouse_sens: 1.0, mouse_pedal_strength: 1.0, graphics_api: "auto".into(), mx_graphics: false, ff_invert: false, ff_enabled: true, ff_road_vib: 1.0, ff_engine_vib: 1.0, ff_fade: 0.28, brake_hold: true, mouse_steering: false, mouse_right_off: false, mouse_smooth: true, mouse_hold: true, mouse_pedals: true, key_pedal_speed: 1.0, look_sens: 1.0, look_smoothing_ms: 0.0, blinker_cancel: true, wheel_range: 900.0, wheel_lock: 0.0, cab_wheel_rotation: 0, fov: 0.0, camera_collision: true, steer_look: false, steer_look_angle: 30.0, steer_look_response: 0.25, head_idle: 0.0, head_idle_pace: 1.0, pedal_throttle: 1.0, pedal_brake: 1.0, seat: [0.0; 3], seat_pitch_deg: 0.0, head_tracking: false, head_tracking_port: 4242, head_tracking_invert: String::new(), head_tracking_yaw_sens: 100.0, head_tracking_pitch_sens: 100.0, head_tracking_roll_sens: 100.0, head_tracking_x_sens: 100.0, head_tracking_y_sens: 100.0, head_tracking_z_sens: 100.0, head_tracking_invert_yaw: false, head_tracking_invert_pitch: false, head_tracking_invert_roll: false, head_tracking_invert_x: false, head_tracking_invert_y: false, head_tracking_invert_z: false, head_tracking_source: "auto".into(), tobii_edges: false, head_tracking_smoothing: 0.5, head_tracking_dead_zone: 0.1, discord_status: false, discord_app_id: String::new(), discord_show: Default::default(), voice_enabled: false, voice_mode: "ptt".into(), voice_mic_gain: 1.0, voice_threshold_db: -45.0, voice_input_device: String::new(), voice_volume: 1.0, voice_volume_nearby: 1.0, voice_volume_radio: 1.0, voice_range: 75.0, voice_talker_list: true, voice_all_off: false, info_bar: false, hud_sizes: [1.0; 3], remote_cockpit: false, remote_cockpit_port: 8642 }
+        Self { msaa: 4, anisotropy: 8, ssao: true, shadows: true, shadow_size: 2048, shadow_blobs: true, lamp_shadows: true, navigator: true, ui_opacity: 0.85, ui_theme: "dark".into(), notes: true, notes_driving: true, notes_script: true, notes_trip: true, notes_tickets: true, ui_scale: 1.0, pause_quick_actions: "default".into(), ui_theme_pack: String::new(), ui_scale_window: true, navigator_corner: "bottom-left".into(), boarding: "auto".into(), passenger_animation: "original".into(), passenger_hailing: false, passenger_full_bus_reaction: false, pax_short_rides_stand: false, passenger_connections: false, passenger_transfer_percent: 20.0, units: "metric".into(), photo_mode: "simple".into(), character_models: "original".into(), standing_chance: 0.05, ambient: true, vol_ambient: 0.8, radio_fx: Default::default(), detail_textures: true, exact_fare: true, pax_bad_driving: true, pax_board_when_stopped: false, auto_announce: false, enhanced: false, graphics: "vanilla_plus".into(), triple: Default::default(), triple_span: true, triple_hud_center: true, vr: false, vr_scale: 0.65, vr_head_smoothing_ms: 0.0, vr_mirror_rate: 16.0, vr_desktop_mirror: true, fullscreen: false, vsync: true, volume: 0.6, drive_keys: "simple".into(), touch_door_mode: "standard".into(), touch_pedal_length: 1.0, touch_pedal_deadzone: 0.15, post_aa: "fxaa".into(), render_scale: 0.0, upscaler: "default".into(), upscale_quality: "quality".into(), frame_generation: "off".into(), fsr_quality: "quality".into(), fsr_sharpness: 0.8, language: "ENG".into(), pax_voices: "all".into(), nav_dynamic_arrows: false, nav_map_arrows: false, nav_ai: true, nav_ai_cars: true, nav_surface: true, nav_light: false, nav_3d: true, nav_classic_2d: false, nav_widget: true, milezero: false, nav_size: 1.0, get_up: false, trip_summary: true, full_tank: true, sim_thread: false, texture_compression: true, gpu_texture_compression: true, video_memory: 0, auto_clutch: true, momentary_gears: false, auto_shift: false, min_obj_size: 0.013, max_obj_dist: -1.0, max_fps: 0, chat: true, chat_size: 1.0, tooltips: true, name_tags: true, show_fps: false, perf_overlay: "off".into(), clouds: true, cloud_quality: "high".into(), street_light: "off".into(), ray_tracing_on: false, light_shadows: "off".into(), cloud_shadows: false, light_glow: false, rain_quality: "high".into(), vehicle_smoke: "all".into(), puddles: "high".into(), windy_trees: true, detailed_trees: true, road_snow: false, pax_density: 1.0, vol_ai: 1.0, vol_scenery: 1.0, mirror_size: 256, mirror_hud: 0, mirror_hud_every_frame: false, mirror_refresh: "full".into(), mirror_quality: "standard".into(), mirror_shadows: false, mirror_particles: false, doppler: true, driver: true, maintenance: 0, ai_unsched_factor: 1.0, ai_reaction: 1.0, ai_max_scheduled: 0, ai_max_parked: 0, ai_max_humans: 200, parked_buses_drawn: -1, ai_wait_timed_stops_only: false, collision_vehicles: true, collision_objects: true, collision_pedestrians: true, realistic_road_physics: false, head_movement: true, driverview_smooth: true, hands_in_cab: false, driver_like_omsi: false, alt_view: true, precision_zoom: false, zoom_hold_amount: 0.5, zoom_hold_latch: false, flashlight_cursor: false, others_detail: false, time_speed: 1.0, time_sync: false, metar_sync: false, metar_station: String::new(), machine_translation: false, shadow_casters: "all".into(), ctrl_deadzone: 0.0, right_stick_look: true, ctrl_background: false, pad_steer_smooth: 120.0, pad_steer_linear: false, pad_steer_speed: 2.0, pad_deadzone: 0.08, pad_type: "auto".into(), pad_buttons: true, arrows_switch_cams: true, ctrl_off: String::new(), steering_linear: false, old_steering: false, red_steer_spd: false, reflections: 1.0, road_glare: 1.0, traffic_headlights: 1.0, led_glow: 6, led_mips: 1.3, night_brightness: 0.0, mouse_sens: 1.0, mouse_pedal_strength: 1.0, graphics_api: "auto".into(), mx_graphics: false, ff_invert: false, ff_enabled: true, ff_road_vib: 1.0, ff_engine_vib: 1.0, ff_fade: 0.28, brake_hold: true, mouse_steering: false, mouse_right_off: false, mouse_smooth: true, mouse_hold: true, mouse_pedals: true, key_pedal_speed: 1.0, look_sens: 1.0, look_smoothing_ms: 0.0, blinker_cancel: true, wheel_range: 900.0, wheel_lock: 0.0, cab_wheel_rotation: 0, fov: 0.0, camera_collision: true, steer_look: false, steer_look_angle: 30.0, steer_look_response: 0.25, head_idle: 0.0, head_idle_pace: 1.0, pedal_throttle: 1.0, pedal_brake: 1.0, seat: [0.0; 3], seat_pitch_deg: 0.0, head_tracking: false, head_tracking_port: 4242, head_tracking_invert: String::new(), head_tracking_yaw_sens: 100.0, head_tracking_pitch_sens: 100.0, head_tracking_roll_sens: 100.0, head_tracking_x_sens: 100.0, head_tracking_y_sens: 100.0, head_tracking_z_sens: 100.0, head_tracking_invert_yaw: false, head_tracking_invert_pitch: false, head_tracking_invert_roll: false, head_tracking_invert_x: false, head_tracking_invert_y: false, head_tracking_invert_z: false, head_tracking_source: "auto".into(), tobii_edges: false, head_tracking_smoothing: 0.5, head_tracking_dead_zone: 0.1, discord_status: false, discord_app_id: String::new(), discord_show: Default::default(), voice_enabled: false, voice_mode: "ptt".into(), voice_mic_gain: 1.0, voice_threshold_db: -45.0, voice_input_device: String::new(), voice_volume: 1.0, voice_volume_nearby: 1.0, voice_volume_radio: 1.0, voice_range: 75.0, voice_talker_list: true, voice_all_off: false, info_bar: false, hud_sizes: [1.0; 3], remote_cockpit: false, remote_cockpit_port: 8642 }
     }
 }
 
 #[rustfmt::skip]
 impl Settings {
-#[rustfmt::skip]
     pub fn perf_overlay_on(&self) -> bool {
         self.perf_overlay != "off"
     }
 
     /// The launcher setting, with the old environment switch kept for existing VR runs.
-#[rustfmt::skip]
     pub fn vr_requested(&self) -> bool {
         cfg!(windows) && (self.vr || omsi_cfg::flags::OMSI_OPENXR.is_set())
     }
 
     /// `~/.openomsi/settings.cfg` (or `%USERPROFILE%` on Windows).
-#[rustfmt::skip]
     pub fn path() -> Option<PathBuf> {
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
         Some(PathBuf::from(home).join(".openomsi").join("settings.cfg"))
@@ -640,13 +637,11 @@ impl Settings {
 
     /// The window's size in pixels the settings ask for (`resolution=WxH`, #904); None:
     /// automatic (fitted to the screen, the whole of it under gamescope).
-#[rustfmt::skip]
     pub fn resolution() -> Option<(u32, u32)> {
         let text = std::fs::read_to_string(Self::path()?).ok()?;
         resolution_of(&text)
     }
 
-#[rustfmt::skip]
     pub fn load() -> Settings {
         let Some(p) = Self::path() else { return Settings::default() };
         let mut text = std::fs::read_to_string(&p).unwrap_or_default();
@@ -681,7 +676,6 @@ impl Settings {
     }
 
     /// One of the Tobii head-tracking lines, the pause menu's shortcuts or the interface theme of the settings file (`from_text`).
-#[rustfmt::skip]
     fn read_extra(&mut self, k: &str, v: &str) {
         match k {
             "head_tracking_source" => self.head_tracking_source = omsi_launcher_lib::head_tracking_source(v).to_string(),
@@ -697,7 +691,6 @@ impl Settings {
             }
         }
     }
-#[rustfmt::skip]
     fn read_voice(&mut self, k: &str, v: &str) {
         match k {
             "voice_enabled" => self.voice_enabled = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
@@ -717,7 +710,6 @@ impl Settings {
     /// The settings a `settings.cfg` text describes (anything missing keeps its default).
     /// The upscaler's lines of settings.cfg (`from_text`): unknown values fall back to the
     /// standard upscaler, the Quality preset and 80 % sharpening.
-#[rustfmt::skip]
     fn read_upscaler(&mut self, k: &str, v: &str) {
         match k {
             "upscaler" => self.upscaler = omsi_launcher_lib::upscaler_word(v).into(),
@@ -733,7 +725,6 @@ impl Settings {
 
     /// The lit LEDs' glow and mipmaps, the night's brightness and the graphics interface
     /// (`from_text`): an unreadable number keeps the default.
-#[rustfmt::skip]
     fn read_graphics(&mut self, k: &str, v: &str) {
         let v = v.trim();
         match k {
@@ -746,7 +737,6 @@ impl Settings {
         }
     }
 
-#[rustfmt::skip]
     pub fn from_text(text: &str) -> Settings {
         let mut s = Settings::default();
         let mut version = 0u32;
@@ -781,6 +771,7 @@ impl Settings {
                 "detail_textures" | "fractal" => s.detail_textures = b(v),
                 "exact_fare" => s.exact_fare = b(v),
                 "pax_bad_driving" => s.pax_bad_driving = b(v),
+                "pax_board_when_stopped" => s.pax_board_when_stopped = b(v),
                 "auto_announce" => s.auto_announce = b(v),
                 "enhanced" => s.enhanced = b(v),
                 "graphics" | "renderer" => graphics = Some(graphics_mode(v).to_string()),
@@ -1047,7 +1038,6 @@ impl Settings {
 
     /// One of Enhanced's light options as a settings file says it (`ray_tracing`, `light_shadows`,
     /// `cloud_shadows`, `light_glow`).
-#[rustfmt::skip]
     fn set_light_option(&mut self, key: &str, v: &str) {
         let on = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes");
         match key {
@@ -1058,7 +1048,6 @@ impl Settings {
         }
     }
 
-#[rustfmt::skip]
     fn settle_after_reading(&mut self, graphics: Option<String>, version: u32) {
         // `graphics` decides; a file without it (older builds) says only `enhanced`, and
         // its vanilla renderer is what is now called Vanilla+
@@ -1098,7 +1087,6 @@ impl Settings {
     /// launcher's settings page writes it - so this is here for the round-trip test that
     /// every key read is written back.
     #[cfg(test)]
-#[rustfmt::skip]
     pub fn to_text(&self) -> String {
         let mut text = format!(
             "# openOMSI settings\nversion={}\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nshadow_blobs={}\nlamp_shadows={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nvr={}\nvr_scale={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\npost_aa={}\nrender_scale={}\nlanguage={}\ntexture_compression={}\nvideo_memory={}\nauto_clutch={}\nmomentary_gears={}\nmin_obj_size={}\nmax_obj_dist={}\nmax_fps={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\nmirror_hud={}\nmirror_refresh={}\ndoppler={}\ndriver={}\ndriverview_smooth={}\n",
@@ -1119,6 +1107,7 @@ impl Settings {
         text.push_str(&format!("road_glare={}\ntraffic_headlights={}\n", self.road_glare, self.traffic_headlights));
         text.push_str(&format!("mouse_pedal_strength={}\n", self.mouse_pedal_strength));
         text.push_str(&format!("pax_bad_driving={}\n", self.pax_bad_driving as u8));
+        text.push_str(&format!("pax_board_when_stopped={}\n", self.pax_board_when_stopped as u8));
         text.push_str(&format!("auto_announce={}\n", self.auto_announce as u8));
         text.push_str(&format!(
             "triple_hud_center={}\ntriple_fov_deg={}\nfov={}\n",
@@ -1179,20 +1168,17 @@ impl Settings {
 
     /// Real-Time Ray Tracing, with Enhanced graphics: ray-traced sun shadows, ambient occlusion
     /// and reflections (and the graded look that goes with them).
-#[rustfmt::skip]
     pub fn ray_tracing(&self) -> bool {
         self.graphics == "enhanced" && self.ray_tracing_on
     }
 
     /// The graphics mode the renderer runs in, ray tracing counted as a mode of its own: `vanilla`,
     /// `vanilla_plus`, `enhanced` or `enhanced_plus` (Enhanced with Real-Time Ray Tracing).
-#[rustfmt::skip]
     pub fn mode(&self) -> &'static str {
         if self.ray_tracing() { "enhanced_plus" } else { graphics_mode(&self.graphics) }
     }
 
     /// Windy trees, unless `OMSI_WINDY_TREES=0`/`1` says otherwise (A/B renders).
-#[rustfmt::skip]
     pub fn windy_trees(&self) -> bool {
         match omsi_cfg::flags::OMSI_WINDY_TREES.var() {
             Some(v) => v.trim() != "0",
@@ -1201,14 +1187,12 @@ impl Settings {
     }
 
     /// Vanilla graphics: the picture as OMSI 2 draws it.
-#[rustfmt::skip]
     pub fn classic(&self) -> bool {
         self.graphics == "vanilla"
     }
 
     /// How far objects are drawn (m, 0 = no limit): `max_obj_dist`, or when that is `auto`
     /// the visible distance the launcher sets, else the original's 900 m.
-#[rustfmt::skip]
     pub fn object_distance(&self) -> f32 {
         if self.max_obj_dist >= 0.0 {
             self.max_obj_dist
@@ -1218,7 +1202,6 @@ impl Settings {
     }
 
     /// `auto` or the fraction, as the file and the log write it.
-#[rustfmt::skip]
     pub fn render_scale_text(&self) -> String {
         if self.render_scale > 0.0 { format!("{}", self.render_scale) } else { "auto".into() }
     }
@@ -1226,7 +1209,6 @@ impl Settings {
     /// Lighter graphics after the graphics device was lost `n` times this session: no
     /// multisampling, no SSAO, smaller shadow and mirror maps, fewer textures kept; a second
     /// loss also a smaller picture and no shadows.
-#[rustfmt::skip]
     pub fn apply_safe_gpu(&mut self, n: u32) {
         self.msaa = 1;
         self.ssao = false;
@@ -1260,7 +1242,6 @@ impl Settings {
 
     /// The render scale the picture is drawn at: FSR 1's quality's, or the render scale's (0:
     /// automatic, the frame-rate governor's).
-#[rustfmt::skip]
     pub fn scene_render_scale(&self) -> f32 {
         if self.upscaler != "fsr1" {
             return self.render_scale;
@@ -1279,7 +1260,6 @@ impl Settings {
         if self.render_scale > 0.0 { preset.min(self.render_scale) } else { preset }
     }
 
-#[rustfmt::skip]
     pub fn temporal_upscaling(&self) -> Option<omsi_render::Temporal> {
         let upscaler = omsi_render::TemporalUpscaler::parse(&self.upscaler).filter(|_| !self.vr_requested() && !self.triple.enabled)?;
         let files = omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir());
@@ -1288,13 +1268,11 @@ impl Settings {
 
     /// Frame generation as asked for, with the upscaler it works with chosen (asked every frame:
     /// no file is looked at; whether the Mac can run it is found when it starts).
-#[rustfmt::skip]
     pub fn frame_generation(&self) -> bool {
         let upscaler = omsi_render::TemporalUpscaler::parse(&self.upscaler).filter(|_| !self.vr_requested() && !self.triple.enabled);
         omsi_render::FrameGenerationKind::parse(&self.frame_generation).is_some_and(|k| upscaler == Some(k.upscaler()))
     }
 
-#[rustfmt::skip]
     pub fn render_options(&self) -> omsi_render::RenderOptions {
         let fsr1 = self.upscaler == "fsr1";
         let render_scale = self.scene_render_scale();
@@ -1389,12 +1367,12 @@ pub fn view_distance() -> Option<f64> {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod tests;
 
 #[rustfmt::skip]
 impl Settings {
     /// The player's bus's `wearlifespan` for the maintenance condition (OMSI's table).
-#[rustfmt::skip]
     pub fn wear_lifespan(&self) -> f32 {
         [1.5e6, 0.01, 0.1, 1.0, 10.0][self.maintenance.min(4) as usize]
     }
@@ -1520,7 +1498,6 @@ pub fn fullscreen_scene_cap(fullscreen: bool, spanned: bool, resolution: Option<
 #[rustfmt::skip]
 mod resolution_tests {
     #[test]
-#[rustfmt::skip]
     fn the_window_size_is_read_from_the_settings() {
         assert_eq!(super::resolution_of("msaa=4\nresolution=1280x800\n"), Some((1280, 800)));
         assert_eq!(super::resolution_of("resolution=auto\n"), None);
@@ -1529,7 +1506,6 @@ mod resolution_tests {
     }
 
     #[test]
-#[rustfmt::skip]
     fn the_scene_cap_follows_fullscreen_both_ways() {
         let set = Some((1280, 720));
         assert_eq!(super::fullscreen_scene_cap(true, false, set), set);
@@ -1540,13 +1516,17 @@ mod resolution_tests {
 }
 
 #[cfg(test)]
-mod full_tank_tests;
-#[cfg(test)]
+#[rustfmt::skip]
 mod right_stick_look_tests;
 #[cfg(test)]
-mod road_snow_tests;
-#[cfg(test)]
+#[rustfmt::skip]
 mod sim_thread_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod full_tank_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod road_snow_tests;
 
 /// The driver's seat per bus (`~/.openomsi/seats.cfg`, a line `bus|x|y|z|pitch` each, the
 /// bus by its `.bus` file relative to the installation, lower case). The seat set in the
@@ -1554,6 +1534,7 @@ mod sim_thread_tests;
 /// somewhere else than its `.bus` file does (#1355). A bus that has none takes the
 /// settings' own seat, which is where a seat set before this lives on.
 #[path = "settings/bus_seats.rs"]
+#[rustfmt::skip]
 pub mod bus_seats;
 
 #[cfg(test)]
@@ -1562,4 +1543,5 @@ mod others_detail_tests;
 
 #[cfg(test)]
 #[path = "settings/passenger_connections_tests.rs"]
+#[rustfmt::skip]
 mod passenger_connections_tests;

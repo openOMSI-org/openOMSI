@@ -3233,5 +3233,13 @@
 "At most 5": "Nejvýše 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Složky objektů a splajnů, které nepoužívá žádná jiná mapa, se smažou spolu s ním: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Složky objektů a splajnů, které ještě používá jiná mapa, zůstanou: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Profil uchovává všechny klávesy a všechna nastavení ovladačů. Před každou jízdou launcher přepne na vlastní profil autobusu, nebo na výchozí."
+"Rename the profile": "Přejmenovat profil"
+"Delete this profile?": "Smazat tento profil?"
+"Default for every bus": "Výchozí pro všechny autobusy"
+"Use for {bus}": "Použít pro {bus}"
+"Profile {name} in use": "Používá se profil {name}"
+
 "Draw other players' buses in less detail when far away": "Vykreslovat autobusy ostatních hráčů v dálce méně detailně"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Více hráčů: nad 120 m a při méně než 20 FPS si autobusy ostatních hráčů zachovávají karoserii, ale ztrácejí postavy řidičů a panely; plně se vrátí nad 26 FPS"
+
