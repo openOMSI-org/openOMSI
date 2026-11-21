@@ -2,7 +2,6 @@
 //! (a zebra whose kerb is too close, a bus standing over the crossing), while one that the
 //! crowd only held up for a moment goes on walking.
 
-use super::walk::STUCK_GONE_S;
 use super::*;
 use std::path::Path;
 
@@ -78,7 +77,6 @@ fn pavement() -> Network {
 struct Stuck {
     sim: PeopleSim,
     world: Bare,
-    net: Network,
     traffic: crate::ai_traffic::TrafficSim,
     dt: f32,
 }
@@ -102,7 +100,7 @@ impl Stuck {
         let net = pavement();
         let mut sim = PeopleSim::new(Path::new("/nonexistent"), 40);
         sim.players_only = true;
-        sim.max_humans = 1;
+        sim.max_people = 1;
         // one figure to put on the pavement (the map's own `.hum`s are not here)
         // (a folder of its own: the tests of this file run side by side)
         let stamp = std::time::SystemTime::now()
@@ -127,10 +125,17 @@ impl Stuck {
             State::Strolling(PedWalk::new(vec![leg], true, 0.0)),
         )
         .expect("a person to walk");
+        let random = crate::ai_traffic::RandomTypes {
+            types: Vec::new(),
+            groups: Vec::new(),
+            group_curves: false,
+            group_uvg: Vec::new(),
+            uvg_defaults: Vec::new(),
+        };
         let traffic = crate::ai_traffic::TrafficSim::assemble(
             Path::new("/nonexistent"),
-            net.clone(),
-            0,
+            net,
+            random,
             Vec::new(),
             HashMap::new(),
             (Vec::new(), Vec::new()),
@@ -141,7 +146,6 @@ impl Stuck {
         Stuck {
             sim,
             world,
-            net,
             traffic,
             dt: 1.0 / 30.0,
         }
