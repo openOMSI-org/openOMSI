@@ -36,17 +36,36 @@ impl TrafficSim {
     pub fn set_lan_seed(&mut self, seed: u64) {
         self.rng = seed | 1;
         self.scheme_salt = seed;
-        self.scheme_sets.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        self.scheme_sets
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 
     pub fn ai_schemes(&self, ty: &VehicleType) -> Vec<usize> {
         let mut sets = self.scheme_sets.lock().unwrap_or_else(|e| e.into_inner());
         sets.entry(ty.def.path.clone())
             .or_insert_with(|| {
-                let parts: Vec<String> = ty.def.path.components().map(|c| c.as_os_str().to_string_lossy().to_lowercase()).collect();
-                let from = parts.iter().rposition(|p| p == "vehicles").unwrap_or(parts.len().saturating_sub(1));
-                let fnv = parts[from..].join("/").bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3));
-                spread_schemes(ty.paint_schemes.len(), omsi_script::mix_seed(self.scheme_salt ^ fnv))
+                let parts: Vec<String> = ty
+                    .def
+                    .path
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+                    .collect();
+                let from = parts
+                    .iter()
+                    .rposition(|p| p == "vehicles")
+                    .unwrap_or(parts.len().saturating_sub(1));
+                let fnv = parts[from..]
+                    .join("/")
+                    .bytes()
+                    .fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+                        (h ^ b as u64).wrapping_mul(0x0100_0000_01b3)
+                    });
+                spread_schemes(
+                    ty.paint_schemes.len(),
+                    omsi_script::mix_seed(self.scheme_salt ^ fnv),
+                )
             })
             .clone()
     }
@@ -73,7 +92,13 @@ impl TrafficSim {
         (unsched_factor, max_scheduled): (f32, u32),
         target: usize,
     ) -> TrafficSim {
-        let RandomTypes { types, groups, group_curves, group_uvg, uvg_defaults } = random;
+        let RandomTypes {
+            types,
+            groups,
+            group_curves,
+            group_uvg,
+            uvg_defaults,
+        } = random;
         let parked: HashMap<usize, Vec<(f32, f32)>> = HashMap::new();
         let light_log = omsi_cfg::flags::OMSI_DEBUG_LIGHTS.var().map(String::from);
         let light_prev = lights.iter().map(|c| vec![-100; c.lights.len()]).collect();
@@ -181,6 +206,7 @@ impl TrafficSim {
             lan_centers: Vec::new(),
             lan_eyes: Vec::new(),
             retired: Vec::new(),
+            accident: Default::default(),
             honked: Vec::new(),
             stats: stats::TrafficStats::from_env(),
             scenery_through: Vec::new(),

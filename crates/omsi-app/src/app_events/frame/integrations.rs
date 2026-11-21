@@ -214,6 +214,7 @@ impl App {
                 );
             }
         }
+        self.accident_frame(dt);
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

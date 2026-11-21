@@ -8773,3 +8773,15 @@ _version: 2
   en: "Use for {bus}"
 "Profile {name} in use":
   en: "Profile {name} in use"
+"Call the police":
+  en: "Call the police"
+"No accident to report":
+  en: "No accident to report"
+"Stop and switch on the hazard lights first":
+  en: "Stop and switch on the hazard lights first"
+"The police have taken up the accident":
+  en: "The police have taken up the accident"
+"You left the scene of the accident without calling the police":
+  en: "You left the scene of the accident without calling the police"
+"Accident! Stop, switch on the hazard lights and call the police":
+  en: "Accident! Stop, switch on the hazard lights and call the police"
