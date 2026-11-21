@@ -8,10 +8,13 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
-- **Rail vehicles no longer crash into scenery beside the track**: on the rails a tram or a train
-  meets scenery only in the strip over the track (0.7 m either side of its middle), so a buffer
-  stop still stops it while the platforms and tunnel walls its one flat collision box swung into
-  in bends no longer do. Other vehicles meet its whole body, side impacts included.
+- **Rail vehicles no longer crash into platforms they clear**: on the rails each car of a tram or a
+  train meets scenery with its own box, where that car stands on the track, in bends too. Above the
+  top of a platform (0.35 m over the rails for a tram, 1.0 m for a train, 1.15 m for a metro) the box
+  is the car's whole width, so a pole or a wall beside the body stops it. Below that only the strip
+  over the track's middle counts (0.7 m either side), as the real body overhangs a platform's edge:
+  a buffer stop still stops it, the platform no longer does. Other vehicles meet the leading car's
+  whole body, side impacts included.
 - **An AI tram's rear section follows the bend from the moment it appears**: the track behind a tram
   put on its rails is laid out from the lanes before it, so a KT4D's rear section no longer stands
   across the track until the tram has driven its own length.

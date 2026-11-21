@@ -128,7 +128,7 @@ fn in_a_bend_each_car_meets_what_stands_beside_its_own_body() {
     };
     let middle = DVec3::new(0.0, -5.0, 0.0) - fwd * 5.0;
     (v.trailers[0].position, v.trailers[0].heading) = (middle, h);
-    let boxes = v.scenery_boxes(bb, (v.position, v.body_heading()), DVec3::ZERO);
+    let boxes = v.scenery_boxes(Some(bb), (v.position, v.body_heading()), DVec3::ZERO);
     let lead = crate::collision::Obb::from_box(bb, v.position, v.body_heading());
     let beside = middle + right * 1.0;
     let pole = crate::collision::Obb::point(beside + DVec3::Z * 1.5, 0.025);
@@ -145,6 +145,61 @@ fn in_a_bend_each_car_meets_what_stands_beside_its_own_body() {
         !boxes.iter().any(|b| platform.overlaps(b)),
         "a platform's edge under the second car's body"
     );
+}
+
+/// The strip under the body lies on the track's middle, whatever way the car's box is set off
+/// to the side: a box 0.8 m to the right still meets something low on the track, and not a
+/// platform's edge 0.8 m to the right of the track under it.
+#[test]
+fn the_strip_lies_on_the_track_though_the_box_is_set_off_to_the_side() {
+    let crashes = |obstacle: crate::collision::Obb| {
+        let mut v = vehicle(|d| {
+            d.bounding_box = Some([2.0, 2.0, 2.0, 0.8, 3.0, 1.0]);
+            d.rolling_resistance = 0.0;
+        });
+        let mut world = crate::collision::CollisionWorld::default();
+        world.add(obstacle);
+        v.collision = Some(Arc::new(world));
+        v.set_rail_env(Some(env(None, None)));
+        v.set_speed(2.0);
+        v.step_physics(0.1);
+        v.crashes
+    };
+    let low = crate::collision::Obb::point(DVec3::new(0.0, 4.15, 0.1), 0.025);
+    let platform = crate::collision::Obb::from_box(
+        [2.2, 2.9, 0.3, 0.0, 0.0, 0.15],
+        DVec3::new(1.9, 5.55, 0.0),
+        0.0,
+    );
+    assert_eq!(crashes(low), 1, "something low on the track");
+    assert_eq!(crashes(platform), 0, "a platform's edge beside it");
+}
+
+/// A coupled car with a box meets scenery though the leading car has none: something low on
+/// the track, in front of the second car where the leading car stands, stops the train.
+#[test]
+fn a_coupled_car_meets_scenery_though_the_leading_car_has_no_box() {
+    let bb = [2.4, 10.0, 3.0, 0.0, 0.0, 1.5];
+    let ty = |bb: Option<[f32; 6]>| {
+        let mut ty = (*coupling_test_type(Some(1.0))).clone();
+        ty.def.bounding_box = bb;
+        ty.def.rolling_resistance = 0.0;
+        Arc::new(ty)
+    };
+    let mut v = VehicleInstance::new(ty(None), VehicleHost::new(Default::default()));
+    v.attach_trailer_ex(ty(Some(bb)), false);
+    v.set_rail_env(Some(env(None, None)));
+    // the second car straight behind the first's rear coupling, its front at y = -5
+    (v.trailers[0].position, v.trailers[0].heading) = (DVec3::new(0.0, -10.0, 0.0), 0.0);
+    let mut world = crate::collision::CollisionWorld::default();
+    world.add(crate::collision::Obb::point(
+        DVec3::new(0.0, -4.9, 0.1),
+        0.025,
+    ));
+    v.collision = Some(Arc::new(world));
+    v.set_speed(2.0);
+    v.step_physics(0.1);
+    assert_eq!(v.crashes, 1);
 }
 
 /// A car that drives into the side of a standing tram hits it: against other vehicles a rail
