@@ -3483,3 +3483,13 @@
 "At most 5": "Maks. 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Foldery obiektów i splajnów, których nie używa żadna inna mapa, są usuwane razem z nim: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Foldery obiektów i splajnów, których używa jeszcze inna mapa, zostają: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Profil przechowuje wszystkie klawisze i wszystkie ustawienia kontrolerów. Przed każdą jazdą launcher przełącza się na profil autobusu albo na domyślny."
+"Rename the profile": "Zmień nazwę profilu"
+"Delete this profile?": "Usunąć ten profil?"
+"Default for every bus": "Domyślny dla każdego autobusu"
+"Use for {bus}": "Używaj dla {bus}"
+"Profile {name} in use": "Używany profil: {name}"
+
+"Buses of this session": "Autobusy tej sesji"
+"every bus": "każdy autobus"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Autobusy, którymi mogą jeździć gracze, rozdzielone średnikiem ; : foldery (np. MAN_SD200) lub pliki (np. Vehicles/MAN_SD200/MAN_SD77.bus). Gracz w innym pojeździe zostanie odrzucony. Puste: każdy autobus."

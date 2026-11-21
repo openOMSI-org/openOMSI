@@ -97,10 +97,31 @@ impl App {
             if self.net.session_buses.is_none() {
                 self.net.session_buses = Some(self.args.session_bus_list());
             }
-            omsi_lan::server_cfg::enforce_vehicles_with(
-                lan,
-                self.net.session_buses.as_deref().unwrap_or_default(),
-            );
+            let list = self.net.session_buses.as_deref().unwrap_or_default();
+            if !list.is_empty() {
+                let mut changed = false;
+                for p in lan.peers() {
+                    if p.has_info
+                        && !p.pose.bus.is_empty()
+                        && self.net.session_buses_checked.get(&p.pose.id).map(|s| s.as_str())
+                            != Some(&p.pose.bus)
+                    {
+                        changed = true;
+                        break;
+                    }
+                }
+                if changed {
+                    self.net.session_buses_checked.retain(|id, _| lan.has_peer(*id));
+                    omsi_lan::server_cfg::enforce_vehicles_with(lan, list);
+                    for p in lan.peers() {
+                        if p.has_info && !p.pose.bus.is_empty() {
+                            self.net
+                                .session_buses_checked
+                                .insert(p.pose.id, p.pose.bus.clone());
+                        }
+                    }
+                }
+            }
             if let Some(t) = self.session.traffic.as_mut() {
                 // (the sounds of a car go by its id in the traffic table, as the clients know it)
                 for c in &mut t.sim.cars {

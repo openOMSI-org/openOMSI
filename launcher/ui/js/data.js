@@ -564,6 +564,7 @@ export async function duty(extra = {}) {
     lan: c.lan_mode === 'host' ? 'host' : c.lan_mode === 'join' ? `join:${c.lan_addr.trim()}` : 'off',
     lan_name: null,
     lan_ws_fallback: c.lan_mode === 'join' ? c.lan_ws_fallback || null : null,
+    session_buses: c.lan_mode === 'host' ? c.session_buses?.trim() || null : null,
     season: seasonWord || null,
     tutorial: null,
     situation: null,

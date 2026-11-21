@@ -2926,3 +2926,13 @@
 "At most 5": "Maksimum 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Folder objek dan spline yang tidak digunakan oleh peta lain turut dipadam: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Folder objek dan spline yang masih digunakan oleh peta lain kekal: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Profil menyimpan setiap kekunci dan setiap tetapan pengawal. Sebelum setiap pemanduan, pelancar bertukar kepada profil bas itu sendiri atau profil lalai."
+"Rename the profile": "Namakan semula profil"
+"Delete this profile?": "Padam profil ini?"
+"Default for every bus": "Lalai untuk setiap bas"
+"Use for {bus}": "Guna untuk {bus}"
+"Profile {name} in use": "Profil {name} sedang digunakan"
+
+"Buses of this session": "Bas sesi ini"
+"every bus": "semua bas"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Bas yang boleh dipandu oleh pemain, dipisahkan oleh ;. Kosong: semua bas."

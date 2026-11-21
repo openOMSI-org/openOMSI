@@ -65,6 +65,9 @@ struct Enhanced {
     // xy what takes a world point to cloud space, z the height of the plane it is taken on,
     // w the share of the sun the main pass has taken off already for the clouds over the camera
     cloud_f2: vec4<f32>,
+    // the player's bus's pitch and roll: sin, cos of each (its panes' condensation sits on
+    // the glass on a slope, `pane_local`)
+    pane_tilt: vec4<f32>,
 };
 @group(0) @binding(11) var<uniform> enh: Enhanced;
 @group(0) @binding(13) var s_lin: sampler;

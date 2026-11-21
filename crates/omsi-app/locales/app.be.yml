@@ -3218,3 +3218,13 @@
 "At most 5": "Не больш за 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Тэчкі аб'ектаў і сплайнаў, якія не выкарыстоўвае ніводная іншая мапа, выдаляюцца разам з ім: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Тэчкі аб'ектаў і сплайнаў, якія яшчэ выкарыстоўвае іншая мапа, застаюцца: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Профіль захоўвае ўсе клавішы і ўсе налады кантролераў. Перад кожнай паездкай лаўнчар пераключаецца на ўласны профіль аўтобуса або на профіль па змаўчанні."
+"Rename the profile": "Перайменаваць профіль"
+"Delete this profile?": "Выдаліць гэты профіль?"
+"Default for every bus": "Па змаўчанні для ўсіх аўтобусаў"
+"Use for {bus}": "Выкарыстоўваць для {bus}"
+"Profile {name} in use": "Выкарыстоўваецца профіль {name}"
+
+"Buses of this session": "Аўтобусы гэтай сесіі"
+"every bus": "любы аўтобус"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Аўтобусы для гульцоў, падзеленыя праз ;. Пуста: любы аўтобус."

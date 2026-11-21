@@ -643,19 +643,19 @@ pub fn parse_vehicles(text: &str) -> Vec<String> {
 /// name the bus's folder instead of its file (`Vehicles/MAN_SD200`, `MAN_SD200`: every bus in
 /// it, #1464).
 pub fn allows(list: &[String], file: &str) -> bool {
+    if list.is_empty() {
+        return true;
+    }
     let norm = |s: &str| s.trim().replace('\\', "/").to_ascii_lowercase();
     let f = norm(file);
-    let folder = |s: &str| s.rsplit_once('/').map(|(d, _)| d).unwrap_or("").to_string();
-    list.is_empty()
-        || list.iter().map(|v| norm(v)).any(|v| {
-            f == v
-                || f.ends_with(&format!("/{v}"))
-                // (a folder: the bus in it, not one further down)
-                || (!v.ends_with(".bus") && {
-                    let dir = folder(&f);
-                    dir == v || dir.ends_with(&format!("/{v}"))
-                })
-        })
+    let folder = f.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+    list.iter().any(|v| {
+        let v = norm(v);
+        f == v
+            || f.ends_with(&format!("/{v}"))
+            // (a folder: the bus in it, not one further down)
+            || (!v.ends_with(".bus") && (folder == v || folder.ends_with(&format!("/{v}"))))
+    })
 }
 
 /// A session's `vehicles` list holds: a player who drives another bus (put down in the game's

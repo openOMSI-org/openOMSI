@@ -4377,3 +4377,13 @@
 "At most 5": "მაქსიმუმ 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "ობიექტებისა და სპლაინების საქაღალდეები, რომლებსაც სხვა რუკა არ იყენებს, მასთან ერთად წაიშლება: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "ობიექტებისა და სპლაინების საქაღალდეები, რომლებსაც სხვა რუკა ჯერ კიდევ იყენებს, რჩება: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "პროფილი ინახავს ყველა კლავიშს და კონტროლერის ყველა პარამეტრს. ყოველი მგზავრობის წინ ლაუნჩერი გადადის ავტობუსის საკუთარ პროფილზე ან ნაგულისხმევზე."
+"Rename the profile": "პროფილის გადარქმევა"
+"Delete this profile?": "წავშალო ეს პროფილი?"
+"Default for every bus": "ნაგულისხმევი ყველა ავტობუსისთვის"
+"Use for {bus}": "გამოიყენე {bus}-ისთვის"
+"Profile {name} in use": "გამოიყენება პროფილი {name}"
+
+"Buses of this session": "ამ სესიის ავტობუსები"
+"every bus": "ყველა ავტობუსი"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "ავტობუსები მოთამაშეებისთვის, გამოყოფილი ;-ით. ცარიელი: ყველა ავტობუსი."

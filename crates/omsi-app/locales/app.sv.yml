@@ -3824,3 +3824,13 @@
 "At most 5": "Högst 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Mappar med objekt och splines som ingen annan karta använder tas bort samtidigt: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Mappar med objekt och splines som en annan karta fortfarande använder blir kvar: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "En profil sparar alla tangenter och alla handkontrollsinställningar. Före varje körning byter startprogrammet till bussens egen profil eller till standardprofilen."
+"Rename the profile": "Byt namn på profilen"
+"Delete this profile?": "Radera den här profilen?"
+"Default for every bus": "Standard för alla bussar"
+"Use for {bus}": "Använd för {bus}"
+"Profile {name} in use": "Profilen {name} används"
+
+"Buses of this session": "Bussar för denna session"
+"every bus": "alla bussar"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Bussar som spelare får köra, separerade med ; : mappar eller bussfiler. Tomt: alla bussar."

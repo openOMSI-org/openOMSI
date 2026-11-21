@@ -8761,3 +8761,22 @@ _version: 2
   en: "Folders of objects and splines that no other map uses go with it: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.":
   en: "Folders of objects and splines that another map still uses stay: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.":
+  en: "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one."
+"Rename the profile":
+  en: "Rename the profile"
+"Delete this profile?":
+  en: "Delete this profile?"
+"Default for every bus":
+  en: "Default for every bus"
+"Use for {bus}":
+  en: "Use for {bus}"
+"Profile {name} in use":
+  en: "Profile {name} in use"
+
+"Buses of this session":
+  en: "Buses of this session"
+"every bus":
+  en: "every bus"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.":
+  en: "The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus."

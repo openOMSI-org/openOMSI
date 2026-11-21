@@ -3233,3 +3233,13 @@
 "At most 5": "Nejvýše 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Složky objektů a splajnů, které nepoužívá žádná jiná mapa, se smažou spolu s ním: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Složky objektů a splajnů, které ještě používá jiná mapa, zůstanou: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Profil uchovává všechny klávesy a všechna nastavení ovladačů. Před každou jízdou launcher přepne na vlastní profil autobusu, nebo na výchozí."
+"Rename the profile": "Přejmenovat profil"
+"Delete this profile?": "Smazat tento profil?"
+"Default for every bus": "Výchozí pro všechny autobusy"
+"Use for {bus}": "Použít pro {bus}"
+"Profile {name} in use": "Používá se profil {name}"
+
+"Buses of this session": "Autobusy této relace"
+"every bus": "každý autobus"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Autobusy povolené pro hráče, oddělené středníkem ; : složky nebo soubory .bus. Hráč s jiným autobusem bude odpojen. Prázdné: každý autobus."
