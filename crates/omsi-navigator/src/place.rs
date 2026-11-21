@@ -74,8 +74,12 @@ impl PlaceView {
                 None => {
                     let img = pkg
                         .picture(&m.icon)
-                        .and_then(|b| omsi_texture::decode_bytes(&b, std::path::Path::new(&m.icon)).ok())
-                        .filter(|i| i.width > 0 && i.height > 0 && i.width <= 1024 && i.height <= 1024);
+                        .and_then(|b| {
+                            omsi_texture::decode_bytes(&b, std::path::Path::new(&m.icon)).ok()
+                        })
+                        .filter(|i| {
+                            i.width > 0 && i.height > 0 && i.width <= 1024 && i.height <= 1024
+                        });
                     match img {
                         Some(i) => {
                             files.push(m.icon.clone());
@@ -93,7 +97,11 @@ impl PlaceView {
         }
         let mut labels = pkg.labels();
         labels.sort_by(|a, b| b.rank.cmp(&a.rank));
-        let mut view = PlaceView { labels, has_location: pkg.has_location(), ..Default::default() };
+        let mut view = PlaceView {
+            labels,
+            has_location: pkg.has_location(),
+            ..Default::default()
+        };
         if images.is_empty() {
             return view;
         }
@@ -107,12 +115,24 @@ impl PlaceView {
                 for row in 0..i.height {
                     let from = (row * i.width * 4) as usize;
                     let to = (((y0 + row) * w + x0) * 4) as usize;
-                    rgba[to..to + (i.width * 4) as usize].copy_from_slice(&i.rgba[from..from + (i.width * 4) as usize]);
+                    rgba[to..to + (i.width * 4) as usize]
+                        .copy_from_slice(&i.rgba[from..from + (i.width * 4) as usize]);
                 }
             }
-            rects.push(([x0 as f32 / w as f32, y0 as f32 / h as f32, (x0 + i.width) as f32 / w as f32, (y0 + i.height) as f32 / h as f32], i.height as f32 / i.width as f32));
+            rects.push((
+                [
+                    x0 as f32 / w as f32,
+                    y0 as f32 / h as f32,
+                    (x0 + i.width) as f32 / w as f32,
+                    (y0 + i.height) as f32 / h as f32,
+                ],
+                i.height as f32 / i.width as f32,
+            ));
         }
-        view.markers = used.into_iter().filter(|(_, k)| pos.get(*k).is_some_and(Option::is_some)).collect();
+        view.markers = used
+            .into_iter()
+            .filter(|(_, k)| pos.get(*k).is_some_and(Option::is_some))
+            .collect();
         view.sheet = Some(Sheet { w, h, rgba, rects });
         log::info!("map package: {} icons on the map", view.markers.len());
         view
@@ -121,16 +141,45 @@ impl PlaceView {
     /// A marker's picture centred at `center` (pixels), `scale` times its width: six vertices for a drawing with
     /// the sheet as texture.
     fn push_icon(&self, marker: usize, center: Vec2, scale: f32, out: &mut Vec<Vertex>) {
-        let Some((m, k)) = self.markers.get(marker) else { return };
-        let Some((uv, aspect)) = self.sheet.as_ref().and_then(|s| s.rects.get(*k)) else { return };
+        let Some((m, k)) = self.markers.get(marker) else {
+            return;
+        };
+        let Some((uv, aspect)) = self.sheet.as_ref().and_then(|s| s.rects.get(*k)) else {
+            return;
+        };
         let (w, h) = (m.width_px * scale, m.width_px * scale * aspect);
-        let (x0, y0, x1, y1) = (center.x - w * 0.5, center.y - h * 0.5, center.x + w * 0.5, center.y + h * 0.5);
-        let v = |x: f32, y: f32, u: f32, t: f32| Vertex { pos: [x, y, 0.0], uv: [u, t], color: [1.0; 4], mode: [0.0, 1.0], ..Default::default() };
-        out.extend([v(x0, y0, uv[0], uv[1]), v(x1, y0, uv[2], uv[1]), v(x1, y1, uv[2], uv[3]), v(x0, y0, uv[0], uv[1]), v(x1, y1, uv[2], uv[3]), v(x0, y1, uv[0], uv[3])]);
+        let (x0, y0, x1, y1) = (
+            center.x - w * 0.5,
+            center.y - h * 0.5,
+            center.x + w * 0.5,
+            center.y + h * 0.5,
+        );
+        let v = |x: f32, y: f32, u: f32, t: f32| Vertex {
+            pos: [x, y, 0.0],
+            uv: [u, t],
+            color: [1.0; 4],
+            mode: [0.0, 1.0],
+            ..Default::default()
+        };
+        out.extend([
+            v(x0, y0, uv[0], uv[1]),
+            v(x1, y0, uv[2], uv[1]),
+            v(x1, y1, uv[2], uv[3]),
+            v(x0, y0, uv[0], uv[1]),
+            v(x1, y1, uv[2], uv[3]),
+            v(x0, y1, uv[0], uv[3]),
+        ]);
     }
 
     /// The sheet as a texture of the navigator's own GPU state (once), and what to draw with it.
-    pub(super) fn upload(&mut self, gpu: &mut Gpu, device: &wgpu::Device, queue: &wgpu::Queue, buffer: usize, verts: &[Vertex]) -> (u32, usize) {
+    pub(super) fn upload(
+        &mut self,
+        gpu: &mut Gpu,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        buffer: usize,
+        verts: &[Vertex],
+    ) -> (u32, usize) {
         if self.tex.is_none() {
             if let Some(sheet) = self.sheet.as_ref() {
                 self.tex = Some(gpu.add_image(device, queue, sheet.w, sheet.h, &sheet.rgba));
@@ -144,13 +193,21 @@ impl PlaceView {
 impl Navigator {
     /// The package, when it is on and says where one is (municipalities or named streets).
     fn locating(&self) -> Option<&Package> {
-        self.surface.as_deref().filter(|_| self.show_surface && self.place.has_location)
+        self.surface
+            .as_deref()
+            .filter(|_| self.show_surface && self.place.has_location)
     }
 
     /// Where the bus is: the municipality and the street (with its limits) from the package.
     pub(super) fn update_place(&mut self, bus: DVec2) {
         let at = (bus.x, bus.y);
-        let found = self.locating().map(|sf| (sf.locate(at), sf.street_info(at, 30.0).map_or((0, 0), |s| (s.speed, s.heavy))));
+        let found = self.locating().map(|sf| {
+            (
+                sf.locate(at),
+                sf.street_info(at, 30.0)
+                    .map_or((0, 0), |s| (s.speed, s.heavy)),
+            )
+        });
         let ((city, street), limit) = found.unwrap_or(((None, None), (0, 0)));
         (self.place.city, self.place.street, self.place.limit) = (city, street, limit);
     }
@@ -176,14 +233,42 @@ impl Navigator {
             _ => String::new(),
         };
         if !text.is_empty() {
-            ui.icon(&mut self.atlas, "location_on", Vec2::new(pad + 7.0 * s, row.center().y), 15.0 * s, TEXT_DIM);
-            let text = self.fonts.fit(&text, 12.5 * s, Weight::Medium, row.w - 2.0 * pad - 24.0 * s);
-            ui.text_in(&mut self.atlas, &self.fonts, &text, 12.5 * s, Weight::Medium, Rect::new(pad + 22.0 * s, row.y, row.w - 2.0 * pad - 22.0 * s, row.h), Align::Left, TEXT);
+            ui.icon(
+                &mut self.atlas,
+                "location_on",
+                Vec2::new(pad + 7.0 * s, row.center().y),
+                15.0 * s,
+                TEXT_DIM,
+            );
+            let text = self.fonts.fit(
+                &text,
+                12.5 * s,
+                Weight::Medium,
+                row.w - 2.0 * pad - 24.0 * s,
+            );
+            ui.text_in(
+                &mut self.atlas,
+                &self.fonts,
+                &text,
+                12.5 * s,
+                Weight::Medium,
+                Rect::new(pad + 22.0 * s, row.y, row.w - 2.0 * pad - 22.0 * s, row.h),
+                Align::Left,
+                TEXT,
+            );
         }
     }
 
     /// The icons within reach of the small map's view, as vertices for the sheet's texture.
-    pub(super) fn minimap_icons(&self, vpm: Mat4, vp: [f32; 4], anchor: DVec2, bus: DVec2, map: Rect, s: f32) -> Vec<Vertex> {
+    pub(super) fn minimap_icons(
+        &self,
+        vpm: Mat4,
+        vp: [f32; 4],
+        anchor: DVec2,
+        bus: DVec2,
+        map: Rect,
+        s: f32,
+    ) -> Vec<Vertex> {
         let mut out = Vec::new();
         if !self.show_surface {
             return out;
@@ -202,7 +287,12 @@ impl Navigator {
     }
 
     /// The icons in the window of the city map.
-    pub(super) fn city_icons(&self, to_screen: &dyn Fn(DVec3) -> Vec2, win: Rect, s: f32) -> Vec<Vertex> {
+    pub(super) fn city_icons(
+        &self,
+        to_screen: &dyn Fn(DVec3) -> Vec2,
+        win: Rect,
+        s: f32,
+    ) -> Vec<Vertex> {
         let mut out = Vec::new();
         if !self.show_surface {
             return out;
@@ -222,13 +312,34 @@ impl PlaceView {
     /// when zoomed in, where the streets' names take over) and the districts, terminals and towns, the more
     /// important ones from further away.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn draw_names(&self, ui: &mut Painter, atlas: &mut Atlas, fonts: &Fonts, pkg: &Package, light: bool, mpp: f64, taken: &mut Vec<Rect>, win: Rect, s: f32, to_screen: &dyn Fn(DVec3) -> Vec2) {
+    pub(super) fn draw_names(
+        &self,
+        ui: &mut Painter,
+        atlas: &mut Atlas,
+        fonts: &Fonts,
+        pkg: &Package,
+        light: bool,
+        mpp: f64,
+        taken: &mut Vec<Rect>,
+        win: Rect,
+        s: f32,
+        to_screen: &dyn Fn(DVec3) -> Vec2,
+    ) {
         let (w, h) = (win.w, win.h);
-        let col = if light { Color::rgba(70, 58, 44, 0.26) } else { Color::WHITE.alpha(0.15) };
+        let col = if light {
+            Color::rgba(70, 58, 44, 0.26)
+        } else {
+            Color::WHITE.alpha(0.15)
+        };
         for r in pkg.regions().iter().filter(|r| r.box_w > 0.0) {
             let p = to_screen(DVec3::new(r.label.0, r.label.1, 0.0));
             let (bw, bh) = ((r.box_w / mpp) as f32, (r.box_h / mpp) as f32);
-            if bh > 110.0 * s || p.x + bw * 0.5 < 0.0 || p.x - bw * 0.5 > w || p.y + bh < 0.0 || p.y - bh > h {
+            if bh > 110.0 * s
+                || p.x + bw * 0.5 < 0.0
+                || p.x - bw * 0.5 > w
+                || p.y + bh < 0.0
+                || p.y - bh > h
+            {
                 continue;
             }
             let name = r.name.to_uppercase();
@@ -242,9 +353,26 @@ impl PlaceView {
             if px < 12.0 * s {
                 continue;
             }
-            ui.text(atlas, fonts, &name, px, Weight::Bold, p + Vec2::new(0.0, px * 0.36), Align::Center, col);
+            ui.text(
+                atlas,
+                fonts,
+                &name,
+                px,
+                Weight::Bold,
+                p + Vec2::new(0.0, px * 0.36),
+                Align::Center,
+                col,
+            );
         }
-        let min_rank = if mpp > 60.0 { 200 } else if mpp > 25.0 { 140 } else if mpp > 10.0 { 100 } else { 0 };
+        let min_rank = if mpp > 60.0 {
+            200
+        } else if mpp > 25.0 {
+            140
+        } else if mpp > 10.0 {
+            100
+        } else {
+            0
+        };
         let px = 13.0 * s;
         for l in &self.labels {
             if l.rank < min_rank {
@@ -254,7 +382,11 @@ impl PlaceView {
             if !win.pad(40.0 * s, 30.0 * s).contains(p) {
                 continue;
             }
-            let weight = if l.kind == 0 { Weight::Medium } else { Weight::Bold };
+            let weight = if l.kind == 0 {
+                Weight::Medium
+            } else {
+                Weight::Bold
+            };
             let name = fonts.fit(&l.name, px, weight, 220.0 * s);
             let tw = fonts.width(&name, px, weight);
             let bb = Rect::new(p.x - tw * 0.5, p.y - px * 0.7, tw, px * 1.3);
@@ -262,19 +394,59 @@ impl PlaceView {
                 continue;
             }
             taken.push(bb);
-            let (halo, ink_dim, ink) = if light { (Color::hex(0xf4f1ea).alpha(0.9), Color::hex(0x5b564c), Color::hex(0x2d2a25)) } else { (Color::rgba(15, 15, 15, 0.9), TEXT_DIM, TEXT) };
+            let (halo, ink_dim, ink) = if light {
+                (
+                    Color::hex(0xf4f1ea).alpha(0.9),
+                    Color::hex(0x5b564c),
+                    Color::hex(0x2d2a25),
+                )
+            } else {
+                (Color::rgba(15, 15, 15, 0.9), TEXT_DIM, TEXT)
+            };
             let at = p + Vec2::new(0.0, px * 0.35);
-            for o in [Vec2::new(1.0, 0.0), Vec2::new(-1.0, 0.0), Vec2::new(0.0, 1.0), Vec2::new(0.0, -1.0)] {
-                ui.text(atlas, fonts, &name, px, weight, at + o * s, Align::Center, halo);
+            for o in [
+                Vec2::new(1.0, 0.0),
+                Vec2::new(-1.0, 0.0),
+                Vec2::new(0.0, 1.0),
+                Vec2::new(0.0, -1.0),
+            ] {
+                ui.text(
+                    atlas,
+                    fonts,
+                    &name,
+                    px,
+                    weight,
+                    at + o * s,
+                    Align::Center,
+                    halo,
+                );
             }
-            ui.text(atlas, fonts, &name, px, weight, at, Align::Center, if l.kind == 0 { ink_dim } else { ink });
+            ui.text(
+                atlas,
+                fonts,
+                &name,
+                px,
+                weight,
+                at,
+                Align::Center,
+                if l.kind == 0 { ink_dim } else { ink },
+            );
         }
     }
 
     /// Where the bus is, under the header of the city map: the municipality, the street, and the street's limit as
     /// a road sign (and the heavy vehicles', smaller, when it is another).
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn draw_chips(&self, ui: &mut Painter, atlas: &mut Atlas, fonts: &Fonts, head: Rect, w: f32, pad: f32, s: f32) {
+    pub(super) fn draw_chips(
+        &self,
+        ui: &mut Painter,
+        atlas: &mut Atlas,
+        fonts: &Fonts,
+        head: Rect,
+        w: f32,
+        pad: f32,
+        s: f32,
+    ) {
         // the words are in the catalog (crates/omsi-app/locales/app.yml): looked up before they are put into a sentence
         let (you_are_on, heavy) = (omsi_ui::tr("You are on"), omsi_ui::tr("heavy"));
         let mut y = head.bottom() + 10.0 * s;
@@ -282,27 +454,78 @@ impl PlaceView {
             let tw = fonts.width(&c, 12.5 * s, Weight::Bold) + 20.0 * s;
             let r = Rect::new(pad, y, tw, 24.0 * s);
             ui.rounded(r, 3.0 * s, Color::rgba(10, 12, 16, 0.88));
-            ui.text_in(atlas, fonts, &c, 12.5 * s, Weight::Bold, r, Align::Center, TEXT);
+            ui.text_in(
+                atlas,
+                fonts,
+                &c,
+                12.5 * s,
+                Weight::Bold,
+                r,
+                Align::Center,
+                TEXT,
+            );
             y += 28.0 * s;
         }
-        let Some(st) = self.street.as_ref() else { return };
-        let t = fonts.fit(&format!("{}: {}", you_are_on, st), 12.0 * s, Weight::Medium, w * 0.45);
+        let Some(st) = self.street.as_ref() else {
+            return;
+        };
+        let t = fonts.fit(
+            &format!("{}: {}", you_are_on, st),
+            12.0 * s,
+            Weight::Medium,
+            w * 0.45,
+        );
         let tw = fonts.width(&t, 12.0 * s, Weight::Medium) + 20.0 * s;
         let r = Rect::new(pad, y, tw, 22.0 * s);
         ui.rounded(r, 3.0 * s, Color::rgba(10, 12, 16, 0.82));
-        ui.text_in(atlas, fonts, &t, 12.0 * s, Weight::Medium, r, Align::Center, TEXT);
+        ui.text_in(
+            atlas,
+            fonts,
+            &t,
+            12.0 * s,
+            Weight::Medium,
+            r,
+            Align::Center,
+            TEXT,
+        );
         let mut sx = pad + tw + 8.0 * s;
         for (v, rad) in [(self.limit.0, 17.0 * s), (self.limit.1, 12.5 * s)] {
             if v == 0 {
                 continue;
             }
             let c = Vec2::new(sx + rad, r.center().y);
-            ui.rounded(Rect::new(c.x - rad, c.y - rad, 2.0 * rad, 2.0 * rad), rad, Color::rgba(205, 30, 36, 1.0));
-            ui.rounded(Rect::new(c.x - rad * 0.74, c.y - rad * 0.74, 1.48 * rad, 1.48 * rad), rad * 0.74, Color::WHITE);
-            ui.text_in(atlas, fonts, &v.to_string(), rad * 0.95, Weight::Bold, Rect::new(c.x - rad, c.y - rad, 2.0 * rad, 2.0 * rad), Align::Center, Color::rgba(15, 15, 15, 1.0));
+            ui.rounded(
+                Rect::new(c.x - rad, c.y - rad, 2.0 * rad, 2.0 * rad),
+                rad,
+                Color::rgba(205, 30, 36, 1.0),
+            );
+            ui.rounded(
+                Rect::new(c.x - rad * 0.74, c.y - rad * 0.74, 1.48 * rad, 1.48 * rad),
+                rad * 0.74,
+                Color::WHITE,
+            );
+            ui.text_in(
+                atlas,
+                fonts,
+                &v.to_string(),
+                rad * 0.95,
+                Weight::Bold,
+                Rect::new(c.x - rad, c.y - rad, 2.0 * rad, 2.0 * rad),
+                Align::Center,
+                Color::rgba(15, 15, 15, 1.0),
+            );
             sx += 2.0 * rad + 6.0 * s;
             if rad < 14.0 * s {
-                ui.text(atlas, fonts, &heavy, 10.5 * s, Weight::Medium, Vec2::new(sx, c.y + 4.0 * s), Align::Left, TEXT_DIM);
+                ui.text(
+                    atlas,
+                    fonts,
+                    &heavy,
+                    10.5 * s,
+                    Weight::Medium,
+                    Vec2::new(sx, c.y + 4.0 * s),
+                    Align::Left,
+                    TEXT_DIM,
+                );
             }
         }
     }
