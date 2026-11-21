@@ -124,11 +124,7 @@ pub const DARK: Palette = Palette {
 };
 
 pub fn palette(light: bool) -> &'static Palette {
-    if light {
-        &LIGHT
-    } else {
-        &DARK
-    }
+    if light { &LIGHT } else { &DARK }
 }
 
 /// Traffic on a road: free (the route's own blue), slow, heavy, standing.

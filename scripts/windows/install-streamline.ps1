@@ -29,7 +29,8 @@ $RunningGame = @(Get-CimInstance Win32_Process -Filter "Name = 'openomsi.exe'" |
 if ($RunningGame.Count -gt 0) {
     throw 'Close openOMSI before installing NVIDIA DLSS files'
 }
-if (((Get-Item -LiteralPath $ResolvedGame -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+$GameItem = Get-Item -LiteralPath $ResolvedGame -Force
+if ($GameItem.LinkType -or ($GameItem.Target -and $GameItem.Target.Count -gt 0)) {
     throw 'For safety, installation through a reparse-point game directory is disabled'
 }
 
@@ -72,7 +73,7 @@ try {
         $Target = Join-Path $ResolvedGame $Name
         if (Test-Path -LiteralPath $Target) {
             $Existing = Get-Item -LiteralPath $Target -Force
-            if (($Existing.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $Existing.PSIsContainer) {
+            if ($Existing.LinkType -or ($Existing.Target -and $Existing.Target.Count -gt 0) -or $Existing.PSIsContainer) {
                 throw ('Refusing to replace a link or directory: ' + $Name)
             }
             Move-Item -LiteralPath $Target -Destination (Join-Path $Backup $Name) -ErrorAction Stop

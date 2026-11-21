@@ -13,10 +13,7 @@ use crate::*;
 /// the bus in these views.
 pub(crate) fn debug_view() -> f32 {
     static VIEW: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
-    *VIEW.get_or_init(|| {
-        omsi_cfg::flags::OMSI_DEBUG_ENHANCED.parse()
-            .unwrap_or(0.0)
-    })
+    *VIEW.get_or_init(|| omsi_cfg::flags::OMSI_DEBUG_ENHANCED.parse().unwrap_or(0.0))
 }
 
 /// The metering: the share of the metered difference that is corrected, its target (log2 of
@@ -94,7 +91,10 @@ pub(crate) fn bounce_history(
     if !ok {
         return (Mat4::ZERO.to_cols_array_2d(), 0.0);
     }
-    ((vp * Mat4::from_translation((ro - pro).as_vec3()) * view.inverse()).to_cols_array_2d(), 1.0)
+    (
+        (vp * Mat4::from_translation((ro - pro).as_vec3()) * view.inverse()).to_cols_array_2d(),
+        1.0,
+    )
 }
 
 pub(crate) const WIDE_AO_REACH: f32 = 18.0;
@@ -145,14 +145,22 @@ pub(crate) fn cloud_levels(lighting: &Lighting, cam_rel: Vec3, ro: DVec3) -> [f3
     }
 }
 
-pub(crate) fn cloud_sun_transmittance(shape: &[u8], lighting: &Lighting, cam_rel: Vec3, ro: DVec3) -> f32 {
+pub(crate) fn cloud_sun_transmittance(
+    shape: &[u8],
+    lighting: &Lighting,
+    cam_rel: Vec3,
+    ro: DVec3,
+) -> f32 {
     let [bottom, top] = cloud_levels(lighting, cam_rel, ro);
     let s = lighting.sun_dir.normalize_or_zero();
     if s.z <= 0.02 || shape.len() < (clouds::SHAPE_SIZE / 2).pow(2) as usize * 4 {
         return 1.0;
     }
     let coverage = super::cloud_field::shadow_coverage(lighting.cloud_density);
-    let origin = glam::Vec2::new(ro.x.rem_euclid(CLOUD_ORIGIN_PERIOD) as f32, ro.y.rem_euclid(CLOUD_ORIGIN_PERIOD) as f32);
+    let origin = glam::Vec2::new(
+        ro.x.rem_euclid(CLOUD_ORIGIN_PERIOD) as f32,
+        ro.y.rem_euclid(CLOUD_ORIGIN_PERIOD) as f32,
+    );
     let drift = glam::Vec2::new(lighting.cloud_offset[0], lighting.cloud_offset[1]) * 2500.0;
     let t0 = (bottom - cam_rel.z).max(0.0) / s.z;
     let t1 = ((top - cam_rel.z).max(0.0) / s.z).min(t0 + 12_000.0);
@@ -160,7 +168,13 @@ pub(crate) fn cloud_sun_transmittance(shape: &[u8], lighting: &Lighting, cam_rel
     let ds = (t1 - t0) / steps as f32;
     let side = glam::Vec2::new(-s.y, s.x).normalize_or_zero();
     let mut sum = 0.0;
-    let offsets = [glam::Vec2::ZERO, side * 40.0, -side * 40.0, glam::Vec2::new(s.x, s.y).normalize_or_zero() * 40.0, -glam::Vec2::new(s.x, s.y).normalize_or_zero() * 40.0];
+    let offsets = [
+        glam::Vec2::ZERO,
+        side * 40.0,
+        -side * 40.0,
+        glam::Vec2::new(s.x, s.y).normalize_or_zero() * 40.0,
+        -glam::Vec2::new(s.x, s.y).normalize_or_zero() * 40.0,
+    ];
     for off in offsets {
         let mut od = 0.0f32;
         for k in 0..steps {
@@ -225,8 +239,18 @@ pub(crate) fn lamp_sky_glow(scene: &Scene, cam_rel: Vec3) -> f32 {
 /// the sides of a narrow view - the meter read a moonless night while the picture was full
 /// of lit streets, and the eye's adaptation to that dark lifted every lamp's light to
 /// white (the modded maps' lamps, spaced and placed differently from the stock ones, most).
-pub(crate) fn view_lamp_light(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, camera: &Camera, aspect: f32, ground: Option<f32>, seen: &dyn Fn(DVec3) -> f32) -> f32 {
-    let ground = ground.filter(|g| g.is_finite() && *g < cam_rel.z - 0.3).unwrap_or(cam_rel.z - 1.6);
+pub(crate) fn view_lamp_light(
+    lights: &[PointLight],
+    ro: DVec3,
+    cam_rel: Vec3,
+    camera: &Camera,
+    aspect: f32,
+    ground: Option<f32>,
+    seen: &dyn Fn(DVec3) -> f32,
+) -> f32 {
+    let ground = ground
+        .filter(|g| g.is_finite() && *g < cam_rel.z - 0.3)
+        .unwrap_or(cam_rel.z - 1.6);
     let (f, r, u) = (camera.forward(), camera.right(), camera.up());
     let ty = (camera.fov_deg.to_radians() * 0.5).tan();
     let tx = ty * aspect.max(0.1);
@@ -265,7 +289,11 @@ pub(crate) fn view_lamp_light(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, c
         }
         let p = (l.position - ro).as_vec3();
         let lum = 0.2126 * l.color[0] + 0.7152 * l.color[1] + 0.0722 * l.color[2];
-        let core = if l.core > 0.0 { l.core } else { l.radius * 0.125 };
+        let core = if l.core > 0.0 {
+            l.core
+        } else {
+            l.radius * 0.125
+        };
         for (pi, x) in points.iter().enumerate() {
             let to = *x - p;
             let d2 = to.length_squared();
@@ -280,11 +308,16 @@ pub(crate) fn view_lamp_light(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, c
                 // profile (lamp_air.wgsl `headlamp`)
                 let g = Vec3::new(x.x, x.y, p.z - 0.8) - p;
                 let gd2 = g.length_squared();
-                headlamp_profile(g / gd2.sqrt().max(1e-3), l.direction, l.beam > 0.0) / gd2.max(0.3) * window
+                headlamp_profile(g / gd2.sqrt().max(1e-3), l.direction, l.beam > 0.0) / gd2.max(0.3)
+                    * window
             } else {
                 let mut e = core * core / (d2 * d2 + core.powi(4)).sqrt() * window;
                 if l.direction.length_squared() > 1e-6 {
-                    e *= atmosphere::smoothstep(l.cone[1], l.cone[0], t.dot(l.direction.normalize()));
+                    e *= atmosphere::smoothstep(
+                        l.cone[1],
+                        l.cone[0],
+                        t.dot(l.direction.normalize()),
+                    );
                 } else if l.housed {
                     e *= 0.05 + 0.95 * atmosphere::smoothstep(-0.1, 0.3, -t.z);
                 }
@@ -299,7 +332,8 @@ pub(crate) fn view_lamp_light(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, c
     // floor is a moonless night's light, which every point has.
     let floor = 2e-6f32;
     let log_sum: f32 = per_point.iter().map(|v| (v + floor).ln()).sum();
-    (log_sum / per_point.len() as f32).exp() - floor + glare_veil(lights, ro, cam_rel, camera.forward(), seen)
+    (log_sum / per_point.len() as f32).exp() - floor
+        + glare_veil(lights, ro, cam_rel, camera.forward(), seen)
 }
 
 /// The lamps' and headlights' glare in view as the illuminance whose mid grey has the same
@@ -309,13 +343,27 @@ pub(crate) fn view_lamp_light(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, c
 /// off the line of sight squared (degrees), summed over the sources (CIE 146). Metered on
 /// the ground between the lamps alone, a village full of street lamps in view read as a
 /// moonless night, and the eye's adaptation to that dark lifted every lamp's light to white.
-pub(crate) fn glare_veil(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, forward: Vec3, seen: &dyn Fn(DVec3) -> f32) -> f32 {
-    let veil: f32 = glare_sources(lights, ro, cam_rel, forward).into_iter().map(|(at, v)| v * seen(at)).sum();
+pub(crate) fn glare_veil(
+    lights: &[PointLight],
+    ro: DVec3,
+    cam_rel: Vec3,
+    forward: Vec3,
+    seen: &dyn Fn(DVec3) -> f32,
+) -> f32 {
+    let veil: f32 = glare_sources(lights, ro, cam_rel, forward)
+        .into_iter()
+        .map(|(at, v)| v * seen(at))
+        .sum();
     // (the luminance of a mid-grey surface, 18 %, under this illuminance)
     veil * std::f32::consts::PI / 0.18 / 1e4
 }
 
-pub(crate) fn glare_sources(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, forward: Vec3) -> Vec<(DVec3, f32)> {
+pub(crate) fn glare_sources(
+    lights: &[PointLight],
+    ro: DVec3,
+    cam_rel: Vec3,
+    forward: Vec3,
+) -> Vec<(DVec3, f32)> {
     let f = forward.normalize_or(Vec3::Y);
     let mut sources = Vec::new();
     for l in lights {
@@ -335,7 +383,11 @@ pub(crate) fn glare_sources(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, for
             continue;
         }
         let lum = 0.2126 * l.color[0] + 0.7152 * l.color[1] + 0.0722 * l.color[2];
-        let core = if l.core > 0.0 { l.core } else { l.radius * 0.125 };
+        let core = if l.core > 0.0 {
+            l.core
+        } else {
+            l.radius * 0.125
+        };
         // towards the eye: from the lamp
         let t = -to_lamp / dist;
         let k = if l.beam != 0.0 {
@@ -363,9 +415,13 @@ pub(crate) fn headlamp_profile(t: Vec3, dir: Vec3, low: bool) -> f32 {
         return 0.0;
     }
     let across = (t.x * fwd.y - t.y * fwd.x).abs() / ahead;
-    let wide = 0.12 * atmosphere::smoothstep(1.0, 0.45, across) + 0.88 * (-across * across / 0.06).exp();
+    let wide =
+        0.12 * atmosphere::smoothstep(1.0, 0.45, across) + 0.88 * (-across * across / 0.06).exp();
     // (about the horizon of the vehicle's floor, which `dir` lies in: see `lamp_air.wgsl`)
-    let (rise, tilt) = (t.z / t.truncate().length().max(1e-3), dir.z / dir.truncate().length().max(1e-3));
+    let (rise, tilt) = (
+        t.z / t.truncate().length().max(1e-3),
+        dir.z / dir.truncate().length().max(1e-3),
+    );
     let drop = (tilt - rise) / (1.0 + rise * tilt).max(1e-3);
     let mut up = (0.06 / drop.abs().max(1e-4)).powf(3.4).min(1.0);
     if low {
@@ -404,7 +460,10 @@ pub(crate) fn sun_through_fog(sigma: f32, sun_z: f32) -> f32 {
 
 /// What the enhanced sky is computed from for this light, and how much of the sun the
 /// clouds let through (the sky shader's `lights.w`, which lights the clouds and the disc).
-pub(crate) fn enhanced_sky_input(lighting: &Lighting, city_glow: f32) -> (atmosphere::SkyInput, f32) {
+pub(crate) fn enhanced_sky_input(
+    lighting: &Lighting,
+    city_glow: f32,
+) -> (atmosphere::SkyInput, f32) {
     let s = lighting.sun_dir.normalize_or_zero();
     // haze: the weather's visibility below a few kilometres thickens the aerosol
     let visibility = 2.3 / lighting.fog_density.max(1e-6);
@@ -425,7 +484,8 @@ pub(crate) fn enhanced_sky_input(lighting: &Lighting, city_glow: f32) -> (atmosp
     // the same layer. With the whole of it, an overcast day lit the street with a sun no
     // one saw, and a dense fog glowed white all round the sun (#1106).
     let closed = atmosphere::smoothstep(0.85, 1.0, lighting.cloud_density);
-    let reaching = sun_visibility * (1.0 - closed) * sun_through_fog(enhanced_weather_fog(lighting), s.z);
+    let reaching =
+        sun_visibility * (1.0 - closed) * sun_through_fog(enhanced_weather_fog(lighting), s.z);
     let input = atmosphere::SkyInput {
         sun_dir: s,
         sun_visibility: reaching,
@@ -435,11 +495,17 @@ pub(crate) fn enhanced_sky_input(lighting: &Lighting, city_glow: f32) -> (atmosp
         ground_albedo: 0.2 + 0.45 * lighting.snow.clamp(0.0, 1.0),
         tint: lighting.envir_tint,
         // (rain and mist are water: as grey as the droplets are large)
-        angstrom: day.angstrom * (1.0 - 0.6 * lighting.rain.clamp(0.0, 1.0)) * (1.0 - 0.5 * ((haze - 3.0) / 3.0).clamp(0.0, 1.0)),
+        angstrom: day.angstrom
+            * (1.0 - 0.6 * lighting.rain.clamp(0.0, 1.0))
+            * (1.0 - 0.5 * ((haze - 3.0) / 3.0).clamp(0.0, 1.0)),
         aerosol_height: day.aerosol_height,
         strat_aod: day.strat_aod,
         veil: lighting.veil.clamp(0.0, 3.0),
-        cumulus: if lighting.enhanced { (lighting.cloud_density.min(0.84)) * (1.0 - closed) } else { 0.0 },
+        cumulus: if lighting.enhanced {
+            (lighting.cloud_density.min(0.84)) * (1.0 - closed)
+        } else {
+            0.0
+        },
         moon_dir: lighting.moon_dir,
         moon_illum: lighting.moon_illum,
         city_glow,
@@ -479,7 +545,11 @@ pub(crate) fn day_air(lighting: &Lighting) -> DayAir {
     static FIXED: std::sync::OnceLock<Option<Vec<f32>>> = std::sync::OnceLock::new();
     let fixed = FIXED.get_or_init(|| {
         let v = omsi_cfg::flags::OMSI_DAY_AIR.var()?;
-        Some(v.split(',').filter_map(|x| x.trim().parse::<f32>().ok()).collect())
+        Some(
+            v.split(',')
+                .filter_map(|x| x.trim().parse::<f32>().ok())
+                .collect(),
+        )
     });
     let hash = |k: u32| {
         let mut x = lighting.day_seed.wrapping_mul(0x9E37_79B9) ^ k.wrapping_mul(0x85EB_CA6B);
@@ -503,9 +573,19 @@ pub(crate) fn day_air(lighting: &Lighting) -> DayAir {
     let deepest = (500.0 + 1500.0 * summer) * (0.7 + 0.6 * hash(4));
     // how far the day has mixed it: by the sun's height in the morning (azimuth east of
     // south), all of it from the afternoon on (the residual layer stays into the night)
-    let sun_alt = lighting.sun_dir.normalize_or_zero().z.max(0.0).asin().to_degrees();
+    let sun_alt = lighting
+        .sun_dir
+        .normalize_or_zero()
+        .z
+        .max(0.0)
+        .asin()
+        .to_degrees();
     let morning = lighting.sun_azimuth < std::f32::consts::PI;
-    let grown = if morning { 0.35 + 0.65 * atmosphere::smoothstep(0.0, 35.0, sun_alt) } else { 1.0 };
+    let grown = if morning {
+        0.35 + 0.65 * atmosphere::smoothstep(0.0, 35.0, sun_alt)
+    } else {
+        1.0
+    };
     let mut aerosol_height = (deepest * grown).max(250.0);
     // mostly a clean stratosphere; one day in a dozen or so a vivid one
     let mut strat_aod = 0.002 + 0.004 * hash(5) + 0.03 * hash(6).powi(8);
@@ -515,7 +595,12 @@ pub(crate) fn day_air(lighting: &Lighting) -> DayAir {
         aerosol_height = f.get(2).copied().unwrap_or(aerosol_height);
         strat_aod = f.get(3).copied().unwrap_or(strat_aod);
     }
-    DayAir { haze, angstrom, aerosol_height, strat_aod }
+    DayAir {
+        haze,
+        angstrom,
+        aerosol_height,
+        strat_aod,
+    }
 }
 
 /// Has the sky moved on far enough from `a` to be computed again? The sun by a tenth of a
@@ -546,13 +631,20 @@ pub(crate) fn sky_input_differs(a: &atmosphere::SkyInput, b: &atmosphere::SkyInp
 }
 
 /// A sky job for the sky's helper thread: the input, and where its sky goes.
-type SkyJob = (atmosphere::SkyInput, std::sync::mpsc::Sender<atmosphere::SkyState>);
+type SkyJob = (
+    atmosphere::SkyInput,
+    std::sync::mpsc::Sender<atmosphere::SkyState>,
+);
 
 /// Compute a sky on the sky's helper thread, one for the game's life (a thread started
 /// for every new sky - every half minute of sun and with every change of the weather -
 /// cost its start and its stack's mapping on the frame thread each time).
-fn sky_worker_compute(input: atmosphere::SkyInput, tx: std::sync::mpsc::Sender<atmosphere::SkyState>) {
-    static WORKER: std::sync::OnceLock<Option<std::sync::mpsc::Sender<SkyJob>>> = std::sync::OnceLock::new();
+fn sky_worker_compute(
+    input: atmosphere::SkyInput,
+    tx: std::sync::mpsc::Sender<atmosphere::SkyState>,
+) {
+    static WORKER: std::sync::OnceLock<Option<std::sync::mpsc::Sender<SkyJob>>> =
+        std::sync::OnceLock::new();
     let worker = WORKER.get_or_init(|| {
         let (jobs, rx) = std::sync::mpsc::channel::<SkyJob>();
         std::thread::Builder::new()
@@ -611,7 +703,23 @@ impl Renderer {
             },
         );
         if omsi_cfg::flags::OMSI_DEBUG_SKY.is_set() {
-            log::info!("sky: sun {:?} (altitude {:.1}°) sky {:?} ground {:?} exposure {:.3} table scale {:.4} haze {:.2} overcast {:.2} rain {:.2} sun visibility {:.2} moon {:?} (altitude {:.1}°, lit {:.2}) city glow {:.2}", st.sun, st.input.sun_dir.z.asin().to_degrees(), st.sky_horizontal, st.ground, st.exposure, st.lut_scale, st.input.haze, st.input.overcast, st.input.rain, st.input.sun_visibility, st.moon_light, st.input.moon_dir.normalize_or_zero().z.asin().to_degrees(), st.input.moon_illum, st.input.city_glow);
+            log::info!(
+                "sky: sun {:?} (altitude {:.1}°) sky {:?} ground {:?} exposure {:.3} table scale {:.4} haze {:.2} overcast {:.2} rain {:.2} sun visibility {:.2} moon {:?} (altitude {:.1}°, lit {:.2}) city glow {:.2}",
+                st.sun,
+                st.input.sun_dir.z.asin().to_degrees(),
+                st.sky_horizontal,
+                st.ground,
+                st.exposure,
+                st.lut_scale,
+                st.input.haze,
+                st.input.overcast,
+                st.input.rain,
+                st.input.sun_visibility,
+                st.moon_light,
+                st.input.moon_dir.normalize_or_zero().z.asin().to_degrees(),
+                st.input.moon_illum,
+                st.input.city_glow
+            );
         }
         if let Some(p) = self.tone.probe.as_mut() {
             p.sched.sky_new = true;
@@ -622,10 +730,21 @@ impl Renderer {
     /// The enhanced path's light for this frame: the sky (recomputed when the sun or the
     /// weather has moved on), the exposure following it, the sky table and the uniform.
     /// Returns whether the reflection probe is to be drawn this frame.
-    pub(crate) fn prepare_enhanced(&mut self, lighting: &Lighting, cam_rel: Vec3, ro: DVec3, dt: f32) -> bool {
-        let (input, sun_visibility) = enhanced_sky_input(lighting, self.sky.city_glow.unwrap_or(1.0));
+    pub(crate) fn prepare_enhanced(
+        &mut self,
+        lighting: &Lighting,
+        cam_rel: Vec3,
+        ro: DVec3,
+        dt: f32,
+    ) -> bool {
+        let (input, sun_visibility) =
+            enhanced_sky_input(lighting, self.sky.city_glow.unwrap_or(1.0));
         // (a sky taken in by an earlier frame: the probe's turn has come)
-        let sky_new = self.tone.probe.as_mut().is_some_and(|p| std::mem::take(&mut p.sched.sky_new));
+        let sky_new = self
+            .tone
+            .probe
+            .as_mut()
+            .is_some_and(|p| std::mem::take(&mut p.sched.sky_new));
         // A new sky takes a few milliseconds: it is computed on a helper thread and taken in
         // when it is ready. A picture on its own, and the first frame, wait for it.
         if let Some((_, rx)) = &self.sky.sky_job {
@@ -638,11 +757,11 @@ impl Renderer {
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
             }
         }
-        let pending = self
-            .sky.sky_job
+        let pending = self.sky.sky_job.as_ref().map(|j| j.0).or(self
+            .sky
+            .sky_state
             .as_ref()
-            .map(|j| j.0)
-            .or(self.sky.sky_state.as_ref().map(|st| st.input));
+            .map(|st| st.input));
         if pending
             .map(|i| sky_input_differs(&i, &input))
             .unwrap_or(true)
@@ -666,7 +785,11 @@ impl Renderer {
             } else {
                 1.0
             };
-            let k = if self.instant_exposure || dt <= 0.0 { 1.0 } else { 1.0 - (-dt / 0.7).exp() };
+            let k = if self.instant_exposure || dt <= 0.0 {
+                1.0
+            } else {
+                1.0 - (-dt / 0.7).exp()
+            };
             if omsi_cfg::flags::OMSI_DEBUG_SKY.is_set() {
                 // (what share of the sky's directions are clear, against the cover asked for)
                 let mut clear = 0;
@@ -681,7 +804,10 @@ impl Renderer {
                     }
                     n += 1;
                 }
-                log::info!("cloud sun: {now:.3} here, {clear} of {n} directions clear (cover {:.2})", lighting.cloud_density);
+                log::info!(
+                    "cloud sun: {now:.3} here, {clear} of {n} directions clear (cover {:.2})",
+                    lighting.cloud_density
+                );
             }
             let t = self.sky.cloud_sun.map(|c| c + (now - c) * k).unwrap_or(now);
             self.sky.cloud_sun = Some(t);
@@ -712,7 +838,9 @@ impl Renderer {
             None => st.e_rest,
         };
         let full = atmosphere::exposure_for(st.e_sun + e_rest).max(1e-6).ln();
-        let shaded = atmosphere::exposure_for(st.e_sun * cloud_t + e_rest).max(1e-6).ln();
+        let shaded = atmosphere::exposure_for(st.e_sun * cloud_t + e_rest)
+            .max(1e-6)
+            .ln();
         let target = full + (shaded - full) * CLOUD_SHADE_ADAPT;
         let log_exposure = match self.tone.exposure {
             // (the eye takes to brighter light within a second, to the dark over several:
@@ -799,7 +927,13 @@ impl Renderer {
                     // this frame's uniform has its eye)
                     if let Some(e) = p.sched.staging_eye.take() {
                         if omsi_cfg::flags::OMSI_DEBUG_SKY.is_set() {
-                            log::info!("sky cube: new eye {:.0},{:.0},{:.0} ({:.0} m from the camera now)", e.x, e.y, e.z, (e - cam_w).length());
+                            log::info!(
+                                "sky cube: new eye {:.0},{:.0},{:.0} ({:.0} m from the camera now)",
+                                e.x,
+                                e.y,
+                                e.z,
+                                (e - cam_w).length()
+                            );
                         }
                         p.cube_eye = Some(e);
                         p.sched.swap = true;
@@ -823,7 +957,13 @@ impl Renderer {
         };
         let u = EnhancedUniform {
             // (self-lit surfaces at their own brightness after the metering, see ExposureLog)
-            exposure: [pre, 2f32.powf(-self.tone.exposure_log.as_ref().map(|l| l.ev).unwrap_or(0.0)).clamp(0.7, 1.6), pre * WINDOW_RADIANCE, 1.6],
+            exposure: [
+                pre,
+                2f32.powf(-self.tone.exposure_log.as_ref().map(|l| l.ev).unwrap_or(0.0))
+                    .clamp(0.7, 1.6),
+                pre * WINDOW_RADIANCE,
+                1.6,
+            ],
             sun: (st.sun * cloud_t).extend(SUN_RADIUS).to_array(),
             sh,
             ground: st.ground.extend(st.lut_scale).to_array(),
@@ -839,19 +979,36 @@ impl Renderer {
             sun_disc: st.sun_disc.extend(dt).to_array(),
             debug: [
                 debug_view(),
-                omsi_cfg::flags::OMSI_PUDDLE_F0.parse::<f32>()
-                    .filter(|v| v.is_finite()).unwrap_or(0.08).clamp(0.02, 0.2),
-                omsi_cfg::flags::OMSI_ENV_PHOTO.parse()
-                    .unwrap_or(1.0),
+                omsi_cfg::flags::OMSI_PUDDLE_F0
+                    .parse::<f32>()
+                    .filter(|v| v.is_finite())
+                    .unwrap_or(0.08)
+                    .clamp(0.02, 0.2),
+                omsi_cfg::flags::OMSI_ENV_PHOTO.parse().unwrap_or(1.0),
                 // the tone curve's contrast, which self-lit pictures undo (`display_level`)
                 tone_contrast(log_exposure),
             ],
-            eye: eye_off.extend(if lighting.low_clouds { CLOUD_STEPS_LOW } else { CLOUD_STEPS } as f32).to_array(),
+            eye: eye_off
+                .extend(if lighting.low_clouds {
+                    CLOUD_STEPS_LOW
+                } else {
+                    CLOUD_STEPS
+                } as f32)
+                .to_array(),
             // x how bright an LED panel's dots burn (see `MaterialExtra::led`; the settings'
             // 16 levels give 0 = off .. 3.75), y whether the LED panels' `\S:n` masks keep
             // their mip chain (0: at full resolution, the dots stay visible when small)
-            led: [lighting.led_glow, lighting.led_mips, if self.options.light_glow { 1.0 } else { 0.0 }, 0.0],
-            moon: lighting.moon_dir.normalize_or_zero().extend(MOON_RADIUS).to_array(),
+            led: [
+                lighting.led_glow,
+                lighting.led_mips,
+                if self.options.light_glow { 1.0 } else { 0.0 },
+                0.0,
+            ],
+            moon: lighting
+                .moon_dir
+                .normalize_or_zero()
+                .extend(MOON_RADIUS)
+                .to_array(),
             // (w of the first: the veil's optical depth, which the sky draws as the high
             // layer; of the second: how far the veil spreads the sun, which softens shadows)
             cloud_sun: {
@@ -865,13 +1022,29 @@ impl Renderer {
             flash: [flash.light, flash.dir[0], flash.dir[1], flash.elevation],
             flash2: {
                 let (c, s) = (flash.elevation.cos(), flash.elevation.sin());
-                [flash.dir[0] * c, flash.dir[1] * c, s, flash.bolt * flash.channel]
+                [
+                    flash.dir[0] * c,
+                    flash.dir[1] * c,
+                    s,
+                    flash.bolt * flash.channel,
+                ]
             },
             flash3: [flash.seed, 0.0, 0.0, 0.0],
             cloud_f1,
             cloud_f2,
-            moon_light: st.moon_light.extend(if lighting.casts_moon_shadows() { 1.0 } else { 0.0 }).to_array(),
-            moon_disc: st.moon_disc.extend((1.0 - 0.18 * (st.input.haze - 1.0).max(0.0)).clamp(0.2, 1.0) * 0.55).to_array(),
+            pane_tilt: lighting.pane_tilt,
+            moon_light: st
+                .moon_light
+                .extend(if lighting.casts_moon_shadows() {
+                    1.0
+                } else {
+                    0.0
+                })
+                .to_array(),
+            moon_disc: st
+                .moon_disc
+                .extend((1.0 - 0.18 * (st.input.haze - 1.0).max(0.0)).clamp(0.2, 1.0) * 0.55)
+                .to_array(),
         };
         self.queue
             .write_buffer(&self.tone.enh_buf, 0, bytemuck::bytes_of(&u));
@@ -935,7 +1108,10 @@ pub(crate) fn shortfall_adaptation(log2_pre: f32, brighten: f32, gain: f32) -> (
     const GENTLE: f32 = 1.6;
     let day = 1.0 - atmosphere::smoothstep(0.5, 3.0, log2_pre);
     let reach = GENTLE.min(brighten) + (brighten - GENTLE).max(0.0) * day;
-    (reach * (1.0 - atmosphere::smoothstep(3.0, 7.0, log2_pre)), gain + (METER_SHORTFALL_GAIN - gain) * day)
+    (
+        reach * (1.0 - atmosphere::smoothstep(3.0, 7.0, log2_pre)),
+        gain + (METER_SHORTFALL_GAIN - gain) * day,
+    )
 }
 /// How fast the eye follows a darker and a brighter picture (s): light adaptation of the
 /// cones takes about a second (a dazzle after a tunnel's mouth passes in that time), dark
@@ -971,10 +1147,19 @@ mod beam_tests {
             // the same point on a road rising at the bus's pitch, seen from the pitched lamp
             let t = (pitched * ahead + Vec3::new(0.0, -p.sin(), p.cos()) * -down).normalize();
             let ramp = headlamp_profile(t, pitched, true);
-            assert!((flat - ramp).abs() < 1e-3 * flat.max(1.0), "{ahead} m: {flat} level, {ramp} on the ramp");
+            assert!(
+                (flat - ramp).abs() < 1e-3 * flat.max(1.0),
+                "{ahead} m: {flat} level, {ramp} on the ramp"
+            );
             assert!(flat > 0.1);
         }
         // above the floor's horizon the low beam is cut off either way
-        assert!(headlamp_profile((pitched * 30.0 + Vec3::new(0.0, -p.sin(), p.cos()) * 1.0).normalize(), pitched, true) < 0.05);
+        assert!(
+            headlamp_profile(
+                (pitched * 30.0 + Vec3::new(0.0, -p.sin(), p.cos()) * 1.0).normalize(),
+                pitched,
+                true
+            ) < 0.05
+        );
     }
 }

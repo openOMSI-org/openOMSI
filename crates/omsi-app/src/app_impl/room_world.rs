@@ -130,6 +130,7 @@ impl App {
             humans.visual_hailing =
                 self.settings.passenger_hailing && self.settings.passenger_animation == "enhanced";
             humans.bad_driving = self.settings.pax_bad_driving;
+            humans.board_when_stopped = self.settings.pax_board_when_stopped;
             humans.boarding = self.settings.boarding.clone();
             humans.rear_door_boarding = self.settings.rear_door_boarding;
             humans.stand_chance = self.settings.standing_chance;

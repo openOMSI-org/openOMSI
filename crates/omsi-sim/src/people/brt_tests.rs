@@ -478,3 +478,26 @@ fn full_bus_detection_respects_all_four_settings_combinations() {
         }
     }
 }
+
+#[test]
+fn rhd_bus_with_left_entries_serves_ordinary_kerb_stop() {
+    let (mut h, bus) = setup("rhd-bus", None);
+    // Convert stop 42 to an ordinary kerb stop (side 0) on right-hand traffic (left = false)
+    h.stops.get_mut(&42).unwrap().side = 0;
+    // Bus with only left entries (RHD bus)
+    let mut rhd_bus = bus;
+    Arc::get_mut(&mut rhd_bus.cabin)
+        .unwrap()
+        .entries
+        .retain(|d| d.side < 0.0);
+    assert!(!rhd_bus.cabin.entries.is_empty());
+    assert!(rhd_bus.cabin.entries.iter().all(|d| d.side < 0.0));
+
+    h.register_buses(std::slice::from_ref(&rhd_bus), 0.0);
+    let ix = [(rhd_bus.id, 0)].into_iter().collect();
+    assert_eq!(
+        h.bus_for(0, 42, std::slice::from_ref(&rhd_bus), &ix),
+        Some((rhd_bus.id, Fit::Any)),
+        "an RHD bus with only left entries can board at an ordinary kerb stop (#4062)"
+    );
+}

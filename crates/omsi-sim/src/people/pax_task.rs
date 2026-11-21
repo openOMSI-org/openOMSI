@@ -458,6 +458,15 @@ impl PeopleSim {
                     }
                     self.pax_mut(i).unwrap().shunned = None;
                 }
+                // (#2757) with the setting on they hold where they are until the bus stands
+                // still with a door open: nobody walks into a bus still rolling in, nor
+                // anywhere near it that means crossing in front of it
+                if self.board_when_stopped
+                    && (bn.speed.abs() > super::model::BOARD_STOPPED_SPEED
+                        || !bn.entry_open.iter().any(|o| *o))
+                {
+                    return;
+                }
                 self.pax_mut(i).unwrap().bus = Some(b);
                 // still rolling in, or standing in the stop's box: to the gather point
                 if bn.speed.abs() <= 2.0 && !self.in_stop_box(stop, b) {
