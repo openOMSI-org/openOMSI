@@ -14,11 +14,14 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 mod menu;
-pub use menu::{MenuItem, MAX_MENU_ITEMS, MAX_MENU_LABEL};
+pub use menu::{MAX_MENU_ITEMS, MAX_MENU_LABEL, MenuItem};
 mod theme;
-pub use theme::{themes_for_load, ThemeInfo};
+pub use theme::{ThemeInfo, themes_for_load};
 mod dock;
 pub use dock::Dock;
+mod read;
+use read::patch;
+pub use read::{ToastSpec, panel_from_source, parse_panel, parse_toast};
 
 /// `omsi.ui.version`: raised when something is added a plugin may want to test for.
 /// 2: images, checkboxes, sliders, text fields, tabs, charts, tables, draggable panels.
@@ -178,7 +181,23 @@ pub struct Panel {
 
 impl Default for Panel {
     fn default() -> Panel {
-        Panel { anchor: Anchor::TopLeft, x: 0.0, y: 0.0, width: 300.0, padding: 12.0, gap: 6.0, background: None, radius: 12.0, accent: None, visible: true, clickable: false, draggable: false, grab: false, frame: false, children: Vec::new() }
+        Panel {
+            anchor: Anchor::TopLeft,
+            x: 0.0,
+            y: 0.0,
+            width: 300.0,
+            padding: 12.0,
+            gap: 6.0,
+            background: None,
+            radius: 12.0,
+            accent: None,
+            visible: true,
+            clickable: false,
+            draggable: false,
+            grab: false,
+            frame: false,
+            children: Vec::new(),
+        }
     }
 }
 
@@ -197,12 +216,22 @@ impl Element {
     /// Whether a click on it is a `ui_click`: a button's or a tile's always, others' with an id and
     /// `clickable = true`.
     pub fn takes_clicks(&self) -> bool {
-        matches!(self.kind, Kind::Button { .. } | Kind::Tile { off: false, .. }) || (self.clickable && self.id.is_some())
+        matches!(
+            self.kind,
+            Kind::Button { .. } | Kind::Tile { off: false, .. }
+        ) || (self.clickable && self.id.is_some())
     }
 
     /// Whether the mouse changes its value (a checkbox, a slider, a field, tabs).
     pub fn is_control(&self) -> bool {
-        self.id.is_some() && matches!(self.kind, Kind::Checkbox { .. } | Kind::Slider { .. } | Kind::Input { .. } | Kind::Tabs { .. })
+        self.id.is_some()
+            && matches!(
+                self.kind,
+                Kind::Checkbox { .. }
+                    | Kind::Slider { .. }
+                    | Kind::Input { .. }
+                    | Kind::Tabs { .. }
+            )
     }
 
     /// Its value as `ui.value` and `ui_change` give it.
@@ -250,40 +279,114 @@ pub struct Stop {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
-    Text { text: String, size: f32, weight: Weight, align: Align, wrap: bool },
+    Text {
+        text: String,
+        size: f32,
+        weight: Weight,
+        align: Align,
+        wrap: bool,
+    },
     /// A Material Symbols name of the game's icons; one it has not draws nothing.
-    Icon { name: String, size: f32 },
-    Row { children: Vec<Element>, gap: f32, align: RowAlign },
+    Icon {
+        name: String,
+        size: f32,
+    },
+    Row {
+        children: Vec<Element>,
+        gap: f32,
+        align: RowAlign,
+    },
     /// `segments` (shares and colours, side by side): a bar of several parts in place of
     /// `value`'s one.
-    Bar { value: f32, height: f32, background: Option<Rgba>, segments: Vec<(f32, Rgba)> },
-    Badge { text: String, text_color: Option<Rgba>, weight: Weight },
+    Bar {
+        value: f32,
+        height: f32,
+        background: Option<Rgba>,
+        segments: Vec<(f32, Rgba)>,
+    },
+    Badge {
+        text: String,
+        text_color: Option<Rgba>,
+        weight: Weight,
+    },
     Divider,
-    Space { size: f32 },
-    Button { text: String, icon: Option<String> },
-    Tile { text: String, icon: String, focus: bool, off: bool },
+    Space {
+        size: f32,
+    },
+    Button {
+        text: String,
+        icon: Option<String>,
+    },
+    Tile {
+        text: String,
+        icon: String,
+        focus: bool,
+        off: bool,
+    },
     /// A picture of the plugin's folder (PNG, JPEG, BMP, TGA); `path` None: no such file.
-    Image { path: Option<PathBuf>, width: f32, height: f32 },
-    Checkbox { text: String, checked: bool },
-    Slider { value: f32, min: f32, max: f32, step: f32 },
+    Image {
+        path: Option<PathBuf>,
+        width: f32,
+        height: f32,
+    },
+    Checkbox {
+        text: String,
+        checked: bool,
+    },
+    Slider {
+        value: f32,
+        min: f32,
+        max: f32,
+        step: f32,
+    },
     /// A text field: clicked, it takes what is typed until Enter, Esc or a click elsewhere.
-    Input { text: String, placeholder: String, max: usize },
-    Tabs { tabs: Vec<String>, selected: usize },
+    Input {
+        text: String,
+        placeholder: String,
+        max: usize,
+    },
+    Tabs {
+        tabs: Vec<String>,
+        selected: usize,
+    },
     /// Values over time, as a line or as bars; `min`/`max` None: the values' own.
-    Chart { values: Vec<f32>, min: Option<f32>, max: Option<f32>, height: f32, style: ChartStyle, fill: bool },
+    Chart {
+        values: Vec<f32>,
+        min: Option<f32>,
+        max: Option<f32>,
+        height: f32,
+        style: ChartStyle,
+        fill: bool,
+    },
     /// Columns of texts: the header row bold; `widths` shares of the width (none: alike),
     /// `aligns` each column's alignment (none: left), `inks` a colour of each cell's own
     /// (row by row; none: the element's).
-    Table { columns: Vec<String>, rows: Vec<Vec<String>>, widths: Vec<f32>, size: f32, aligns: Vec<Align>, inks: Vec<Vec<Option<Rgba>>> },
+    Table {
+        columns: Vec<String>,
+        rows: Vec<Vec<String>>,
+        widths: Vec<f32>,
+        size: f32,
+        aligns: Vec<Align>,
+        inks: Vec<Vec<Option<Rgba>>>,
+    },
     /// Its children stacked in a tinted box with a stripe on the left (the element's colour).
-    Box { children: Vec<Element>, gap: f32 },
+    Box {
+        children: Vec<Element>,
+        gap: f32,
+    },
     /// Stops on a rail: the ones behind the bus grey, the one it heads for marked, a time on
     /// the right (and before it when the bus will be there).
-    Stops { stops: Vec<Stop>, size: f32 },
+    Stops {
+        stops: Vec<Stop>,
+        size: f32,
+    },
     /// The navigator's map, in a panel that fills its frame: `height` (0: as high as the
     /// navigator's own map, 0.8 times its width), `cards` the navigator's cards over it (the
     /// next turn, the clock, the speed, the next stop). Elsewhere empty room.
-    Map { height: f32, cards: bool },
+    Map {
+        height: f32,
+        cards: bool,
+    },
 }
 
 /// A notification card of `omsi.ui.toast`.
@@ -369,7 +472,23 @@ impl Default for UiState {
     fn default() -> Self {
         let (themes, theme_now) = theme::for_load();
         // (until the game has drawn a frame: a 1080p screen)
-        UiState { panels: Vec::new(), toasts: Vec::new(), clicks: Vec::new(), changes: Vec::new(), focus: None, shown: true, screen: [1920.0, 1080.0, 1.0], serial: 0, typing: None, menu: Vec::new(), menu_picks: Vec::new(), dock: None, themes, theme_now, theme_ask: None }
+        UiState {
+            panels: Vec::new(),
+            toasts: Vec::new(),
+            clicks: Vec::new(),
+            changes: Vec::new(),
+            focus: None,
+            shown: true,
+            screen: [1920.0, 1080.0, 1.0],
+            serial: 0,
+            typing: None,
+            menu: Vec::new(),
+            menu_picks: Vec::new(),
+            dock: None,
+            themes,
+            theme_now,
+            theme_ask: None,
+        }
     }
 }
 
@@ -380,14 +499,20 @@ impl UiState {
     }
 
     fn find(&mut self, owner: u64, id: &str) -> Option<&mut PanelEntry> {
-        self.panels.iter_mut().find(|p| p.owner == owner && p.id == id)
+        self.panels
+            .iter_mut()
+            .find(|p| p.owner == owner && p.id == id)
     }
 
     /// Create or replace a plugin's panel. The same panel again changes nothing (a plugin
     /// that sets its panels on a timer redraws nothing while they stay the same).
     pub fn set(&mut self, owner: u64, id: &str, panel: Panel) -> Result<(), String> {
         check_id("the panel id", id)?;
-        if let Some(i) = self.panels.iter().position(|p| p.owner == owner && p.id == id) {
+        if let Some(i) = self
+            .panels
+            .iter()
+            .position(|p| p.owner == owner && p.id == id)
+        {
             if self.panels[i].panel != panel {
                 let revision = self.next_serial();
                 let e = &mut self.panels[i];
@@ -400,7 +525,13 @@ impl UiState {
             return Err(format!("a plugin has at most {MAX_PANELS} panels"));
         }
         let revision = self.next_serial();
-        self.panels.push(PanelEntry { owner, id: id.to_string(), panel, revision, moved: (0.0, 0.0) });
+        self.panels.push(PanelEntry {
+            owner,
+            id: id.to_string(),
+            panel,
+            revision,
+            moved: (0.0, 0.0),
+        });
         Ok(())
     }
 
@@ -409,8 +540,13 @@ impl UiState {
         let n = self.panels.len();
         self.panels.retain(|p| !(p.owner == owner && p.id == id));
         self.clicks.retain(|c| !(c.owner == owner && c.panel == id));
-        self.changes.retain(|c| !(c.owner == owner && c.panel == id));
-        if self.typing.as_ref().is_some_and(|t| t.owner == owner && t.panel == id) {
+        self.changes
+            .retain(|c| !(c.owner == owner && c.panel == id));
+        if self
+            .typing
+            .as_ref()
+            .is_some_and(|t| t.owner == owner && t.panel == id)
+        {
             self.typing = None;
         }
         self.panels.len() != n
@@ -441,7 +577,11 @@ impl UiState {
 
     /// The ids of a plugin's panels.
     pub fn ids(&self, owner: u64) -> Vec<String> {
-        self.panels.iter().filter(|p| p.owner == owner).map(|p| p.id.clone()).collect()
+        self.panels
+            .iter()
+            .filter(|p| p.owner == owner)
+            .map(|p| p.id.clone())
+            .collect()
     }
 
     /// A plugin's panel.
@@ -466,10 +606,20 @@ impl UiState {
 
     /// Change keys of one element of a panel (`ui.update`): what an element of its type
     /// takes, read as `set` reads them. Err when there is no such panel or element.
-    pub fn update(&mut self, owner: u64, id: &str, element: &str, fields: &Value, folder: Option<&Path>) -> Result<(), String> {
+    pub fn update(
+        &mut self,
+        owner: u64,
+        id: &str,
+        element: &str,
+        fields: &Value,
+        folder: Option<&Path>,
+    ) -> Result<(), String> {
         let serial = self.next_serial();
-        let e = self.find(owner, id).ok_or_else(|| format!("no panel \"{id}\""))?;
-        let el = find_element(&mut e.panel.children, element).ok_or_else(|| format!("no element \"{element}\" in panel \"{id}\""))?;
+        let e = self
+            .find(owner, id)
+            .ok_or_else(|| format!("no panel \"{id}\""))?;
+        let el = find_element(&mut e.panel.children, element)
+            .ok_or_else(|| format!("no element \"{element}\" in panel \"{id}\""))?;
         let before = el.clone();
         patch(el, fields, folder)?;
         if *el != before {
@@ -480,12 +630,19 @@ impl UiState {
 
     /// Whether `element` of a plugin's panel is a text field (a click on it starts typing).
     pub fn is_field(&self, owner: u64, id: &str, element: &str) -> bool {
-        self.panels.iter().find(|p| p.owner == owner && p.id == id).and_then(|e| find_in(&e.panel.children, element)).is_some_and(|e| matches!(e.kind, Kind::Input { .. }))
+        self.panels
+            .iter()
+            .find(|p| p.owner == owner && p.id == id)
+            .and_then(|e| find_in(&e.panel.children, element))
+            .is_some_and(|e| matches!(e.kind, Kind::Input { .. }))
     }
 
     /// The value of a checkbox, slider, field or tabs.
     pub fn value(&self, owner: u64, id: &str, element: &str) -> Option<Value> {
-        let e = self.panels.iter().find(|p| p.owner == owner && p.id == id)?;
+        let e = self
+            .panels
+            .iter()
+            .find(|p| p.owner == owner && p.id == id)?;
         find_in(&e.panel.children, element).map(Element::value)
     }
 
@@ -498,8 +655,23 @@ impl UiState {
             }
         }
         let serial = self.next_serial();
-        let ToastSpec { text, title, icon, color, seconds } = spec;
-        self.toasts.push(Toast { owner, serial, text, title, icon, color, seconds, age: 0.0 });
+        let ToastSpec {
+            text,
+            title,
+            icon,
+            color,
+            seconds,
+        } = spec;
+        self.toasts.push(Toast {
+            owner,
+            serial,
+            text,
+            title,
+            icon,
+            color,
+            seconds,
+            age: 0.0,
+        });
     }
 
     /// The panels have the mouse (`on`, asked by plugin `owner`) or let it go. They cannot
@@ -569,21 +741,33 @@ impl UiState {
         if self.clicks.len() >= MAX_CLICKS {
             self.clicks.remove(0);
         }
-        self.clicks.push(Click { owner, panel: panel.to_string(), element: element.map(str::to_string) });
+        self.clicks.push(Click {
+            owner,
+            panel: panel.to_string(),
+            element: element.map(str::to_string),
+        });
     }
 
     /// A click on a control; false when `el` is none.
     fn control_click(&mut self, owner: u64, panel: &str, el: &str) -> bool {
         let serial = self.next_serial();
-        let Some(e) = self.find(owner, panel) else { return false };
-        let Some(c) = find_element(&mut e.panel.children, el) else { return false };
+        let Some(e) = self.find(owner, panel) else {
+            return false;
+        };
+        let Some(c) = find_element(&mut e.panel.children, el) else {
+            return false;
+        };
         let value = match &mut c.kind {
             Kind::Checkbox { checked, .. } => {
                 *checked = !*checked;
                 Value::Bool(*checked)
             }
             Kind::Input { .. } => {
-                self.typing = Some(Typing { owner, panel: panel.to_string(), element: el.to_string() });
+                self.typing = Some(Typing {
+                    owner,
+                    panel: panel.to_string(),
+                    element: el.to_string(),
+                });
                 return true;
             }
             _ => return false,
@@ -595,27 +779,46 @@ impl UiState {
 
     fn push_change(&mut self, owner: u64, panel: &str, element: &str, value: Value) {
         // (a slider dragged: only its latest value waits)
-        if let Some(c) = self.changes.iter_mut().find(|c| c.owner == owner && c.panel == panel && c.element == element) {
+        if let Some(c) = self
+            .changes
+            .iter_mut()
+            .find(|c| c.owner == owner && c.panel == panel && c.element == element)
+        {
             c.value = value;
             return;
         }
         if self.changes.len() >= MAX_CLICKS {
             self.changes.remove(0);
         }
-        self.changes.push(Change { owner, panel: panel.to_string(), element: element.to_string(), value });
+        self.changes.push(Change {
+            owner,
+            panel: panel.to_string(),
+            element: element.to_string(),
+            value,
+        });
     }
 
     /// The game sets a control's value (a slider at `fraction` of its range, a tab chosen):
     /// changed, it is a change for the plugin.
     pub fn set_control(&mut self, owner: u64, panel: &str, element: &str, fraction: f32) {
         let serial = self.next_serial();
-        let Some(e) = self.find(owner, panel) else { return };
-        let Some(c) = find_element(&mut e.panel.children, element) else { return };
+        let Some(e) = self.find(owner, panel) else {
+            return;
+        };
+        let Some(c) = find_element(&mut e.panel.children, element) else {
+            return;
+        };
         let value = match &mut c.kind {
-            Kind::Slider { value, min, max, step } => {
+            Kind::Slider {
+                value,
+                min,
+                max,
+                step,
+            } => {
                 let mut v = *min + fraction.clamp(0.0, 1.0) * (*max - *min);
                 if *step > 0.0 {
-                    v = (*min + ((v - *min) / *step).round() * *step).clamp(min.min(*max), max.max(*min));
+                    v = (*min + ((v - *min) / *step).round() * *step)
+                        .clamp(min.min(*max), max.max(*min));
                 }
                 if v == *value {
                     return;
@@ -647,9 +850,18 @@ impl UiState {
     pub fn type_text(&mut self, text: Option<&str>) {
         let Some(t) = self.typing.clone() else { return };
         let serial = self.next_serial();
-        let Some(e) = self.find(t.owner, &t.panel) else { return };
-        let Some(c) = find_element(&mut e.panel.children, &t.element) else { return };
-        let Kind::Input { text: have, max, .. } = &mut c.kind else { return };
+        let Some(e) = self.find(t.owner, &t.panel) else {
+            return;
+        };
+        let Some(c) = find_element(&mut e.panel.children, &t.element) else {
+            return;
+        };
+        let Kind::Input {
+            text: have, max, ..
+        } = &mut c.kind
+        else {
+            return;
+        };
         match text {
             Some(s) => {
                 for ch in s.chars().filter(|c| !c.is_control()) {
@@ -675,7 +887,11 @@ impl UiState {
                 self.clicks.remove(0);
             }
             // (Enter in a field is a click on it: the plugin takes the text)
-            self.clicks.push(Click { owner: t.owner, panel: t.panel, element: Some(t.element) });
+            self.clicks.push(Click {
+                owner: t.owner,
+                panel: t.panel,
+                element: Some(t.element),
+            });
         }
     }
 
@@ -692,7 +908,9 @@ impl UiState {
         if self.clicks.is_empty() {
             return Vec::new();
         }
-        let (mine, rest) = std::mem::take(&mut self.clicks).into_iter().partition(|c| c.owner == owner);
+        let (mine, rest) = std::mem::take(&mut self.clicks)
+            .into_iter()
+            .partition(|c| c.owner == owner);
         self.clicks = rest;
         mine
     }
@@ -702,7 +920,9 @@ impl UiState {
         if self.changes.is_empty() {
             return Vec::new();
         }
-        let (mine, rest) = std::mem::take(&mut self.changes).into_iter().partition(|c| c.owner == owner);
+        let (mine, rest) = std::mem::take(&mut self.changes)
+            .into_iter()
+            .partition(|c| c.owner == owner);
         self.changes = rest;
         mine
     }
@@ -746,738 +966,5 @@ fn check_id(what: &str, id: &str) -> Result<(), String> {
     Ok(())
 }
 
-// --- the tables --------------------------------------------------------------------------
-
-/// A table's rows of texts, and each cell's own colour (row by row; empty: none has one).
-type TableRows = (Vec<Vec<String>>, Vec<Vec<Option<Rgba>>>);
-
-/// Read a panel table. Unknown keys are left alone and elements of an unknown type skipped,
-/// so a plugin written for a later game still shows here; a key of the wrong kind is an
-/// error that says where it is. `folder`: the plugin's own, where its images are.
-pub fn parse_panel(t: &Value, folder: Option<&Path>) -> Result<Panel, String> {
-    let r = Reader { t, path: String::new(), folder };
-    if !t.is_table() {
-        return Err("the panel is a table".into());
-    }
-    let mut count = 0;
-    Ok(Panel {
-        anchor: match r.string("anchor")? {
-            None => Anchor::TopLeft,
-            Some(a) => Anchor::parse(&a).ok_or_else(|| format!("anchor: \"{a}\" is no anchor (top_left, top, top_right, left, center, right, bottom_left, bottom, bottom_right)"))?,
-        },
-        x: r.number("x", 0.0, -10000.0, 10000.0)?,
-        y: r.number("y", 0.0, -10000.0, 10000.0)?,
-        width: r.number("width", 300.0, 40.0, 4000.0)?,
-        padding: r.number("padding", 12.0, 0.0, 64.0)?,
-        gap: r.number("gap", 6.0, 0.0, 64.0)?,
-        background: r.color("background")?,
-        radius: r.number("radius", 12.0, 0.0, 64.0)?,
-        accent: r.color("accent")?,
-        visible: r.boolean("visible", true)?,
-        clickable: r.boolean("clickable", false)?,
-        draggable: r.boolean("draggable", false)?,
-        grab: r.boolean("grab", false)?,
-        frame: r.boolean("frame", false)?,
-        children: r.children("children", 0, &mut count)?,
-    })
-}
-
-/// What `omsi.ui.toast(text, opts)` asks for.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ToastSpec {
-    pub text: String,
-    pub title: Option<String>,
-    pub icon: Option<String>,
-    pub color: Option<Rgba>,
-    pub seconds: f32,
-}
-
-/// Read `omsi.ui.toast`'s text and options (`seconds`, `title`, `icon`, `color`) with the
-/// same limits and messages as a panel's.
-pub fn parse_toast(text: &Value, opts: Option<&Value>) -> Result<ToastSpec, String> {
-    let text = match text {
-        Value::Str(_) | Value::Int(_) | Value::Num(_) => text.to_text().unwrap_or_default(),
-        _ => return Err("the text of a notification is a text".to_string()),
-    };
-    if text.chars().count() > MAX_TEXT {
-        return Err(format!("the text is longer than {MAX_TEXT} characters"));
-    }
-    let mut spec = ToastSpec { text, title: None, icon: None, color: None, seconds: 5.0 };
-    if let Some(t) = opts {
-        let r = Reader { t, path: "opts".into(), folder: None };
-        spec.title = r.string("title")?;
-        spec.icon = r.string("icon")?;
-        spec.color = r.color("color")?;
-        spec.seconds = r.number("seconds", 5.0, 1.0, 60.0)?;
-    }
-    Ok(spec)
-}
-
-/// A panel written as a plugin writes it - a Lua table constructor, `{ width = 300, ... }` -
-/// read in a Lua state of its own: for the game's tests and pictures of panels.
-pub fn panel_from_source(src: &str) -> Result<Panel, String> {
-    let lua = mlua::Lua::new();
-    let t: mlua::Value = lua.load(format!("return {src}")).eval().map_err(|e| e.to_string())?;
-    parse_panel(&crate::lua::to_value(&t)?, None)
-}
-
-/// Change the keys `fields` gives of an element (`ui.update`).
-fn patch(e: &mut Element, fields: &Value, folder: Option<&Path>) -> Result<(), String> {
-    let r = Reader { t: fields, path: e.id.clone().unwrap_or_default(), folder };
-    if let Some(c) = r.color("color")? {
-        e.color = Some(c);
-    }
-    let visible = r.boolean("visible", true)?;
-    let has = |k: &str| fields.get(k).is_some_and(|v| !v.is_nil());
-    match &mut e.kind {
-        Kind::Text { text, .. } | Kind::Badge { text, .. } | Kind::Button { text, .. } | Kind::Checkbox { text, .. } if has("text") => {
-            *text = r.string("text")?.unwrap_or_default();
-        }
-        Kind::Input { text, .. } if has("text") => *text = r.string("text")?.unwrap_or_default(),
-        _ => {}
-    }
-    match &mut e.kind {
-        Kind::Bar { value, segments, .. } if has("value") || has("segments") => {
-            if has("value") {
-                *value = r.number("value", 0.0, 0.0, 1.0)?;
-            }
-            if has("segments") {
-                *segments = r.segments("segments")?;
-            }
-        }
-        Kind::Stops { stops, .. } if has("stops") => *stops = r.stops("stops")?,
-        Kind::Slider { value, min, max, .. } if has("value") => *value = r.number("value", *min, min.min(*max), max.max(*min))?,
-        Kind::Checkbox { checked, .. } if has("checked") => *checked = r.boolean("checked", false)?,
-        Kind::Tabs { selected, tabs } if has("selected") => *selected = (r.number("selected", 1.0, 1.0, tabs.len().max(1) as f32)? as usize).saturating_sub(1),
-        Kind::Icon { name, .. } if has("name") => *name = r.string("name")?.unwrap_or_default(),
-        Kind::Chart { values, .. } if has("values") => *values = r.numbers("values")?,
-        Kind::Table { rows, inks, aligns, .. } if has("rows") || has("aligns") => {
-            if has("rows") {
-                (*rows, *inks) = r.rows("rows")?;
-            }
-            if has("aligns") {
-                *aligns = r.aligns("aligns")?;
-            }
-        }
-        Kind::Image { path, .. } if has("src") => *path = r.image("src")?,
-        _ => {}
-    }
-    // (an element hidden by an update stays in the panel, empty: `visible = true` brings it back)
-    if !visible {
-        e.kind = match &e.kind {
-            Kind::Text { size, weight, align, wrap, .. } => Kind::Text { text: String::new(), size: *size, weight: *weight, align: *align, wrap: *wrap },
-            k => k.clone(),
-        };
-    }
-    Ok(())
-}
-
-/// Reads the keys of one table; `path` says where it is for the error messages.
-struct Reader<'a> {
-    t: &'a Value,
-    path: String,
-    folder: Option<&'a Path>,
-}
-
-impl Reader<'_> {
-    fn get(&self, key: &str) -> &Value {
-        self.t.get(key).unwrap_or(&Value::Nil)
-    }
-
-    fn at(&self, key: &str) -> String {
-        if self.path.is_empty() {
-            key.to_string()
-        } else {
-            format!("{}.{key}", self.path)
-        }
-    }
-
-    fn number(&self, key: &str, default: f32, min: f32, max: f32) -> Result<f32, String> {
-        let v = match self.get(key) {
-            Value::Nil => return Ok(default),
-            Value::Int(i) => *i as f64,
-            Value::Num(n) if n.is_finite() => *n,
-            _ => return Err(format!("{}: a number is expected", self.at(key))),
-        };
-        Ok((v as f32).clamp(min, max))
-    }
-
-    fn opt_number(&self, key: &str) -> Result<Option<f32>, String> {
-        match self.get(key) {
-            Value::Nil => Ok(None),
-            _ => self.number(key, 0.0, f32::MIN, f32::MAX).map(Some),
-        }
-    }
-
-    fn boolean(&self, key: &str, default: bool) -> Result<bool, String> {
-        match self.get(key) {
-            Value::Nil => Ok(default),
-            Value::Bool(b) => Ok(*b),
-            _ => Err(format!("{}: true or false is expected", self.at(key))),
-        }
-    }
-
-    /// A text (numbers are written as Lua writes them), at most `MAX_TEXT` characters.
-    fn string(&self, key: &str) -> Result<Option<String>, String> {
-        let s = match self.get(key) {
-            Value::Nil => return Ok(None),
-            v @ (Value::Str(_) | Value::Int(_) | Value::Num(_)) => v.to_text().unwrap_or_default(),
-            _ => return Err(format!("{}: a text is expected", self.at(key))),
-        };
-        if s.chars().count() > MAX_TEXT {
-            return Err(format!("{}: longer than {MAX_TEXT} characters", self.at(key)));
-        }
-        Ok(Some(s))
-    }
-
-    fn color(&self, key: &str) -> Result<Option<Rgba>, String> {
-        match self.string(key)? {
-            None => Ok(None),
-            Some(s) => Rgba::parse(&s).map(Some).ok_or_else(|| format!("{}: \"{s}\" is no colour (\"#RRGGBB\" or \"#RRGGBBAA\")", self.at(key))),
-        }
-    }
-
-    fn list(&self, key: &str) -> Result<&[Value], String> {
-        match self.get(key) {
-            Value::Nil => Ok(&[]),
-            Value::List(l) => Ok(l),
-            Value::Map(m) if m.is_empty() => Ok(&[]),
-            _ => Err(format!("{}: a list is expected", self.at(key))),
-        }
-    }
-
-    fn texts(&self, key: &str) -> Result<Vec<String>, String> {
-        let l = self.list(key)?;
-        if l.len() > MAX_POINTS {
-            return Err(format!("{}: at most {MAX_POINTS} entries", self.at(key)));
-        }
-        l.iter()
-            .enumerate()
-            .map(|(i, v)| {
-                let s = v.to_text().ok_or_else(|| format!("{}[{}]: a text is expected", self.at(key), i + 1))?;
-                Ok(s.chars().take(MAX_TEXT).collect())
-            })
-            .collect()
-    }
-
-    fn numbers(&self, key: &str) -> Result<Vec<f32>, String> {
-        let l = self.list(key)?;
-        if l.len() > MAX_POINTS {
-            return Err(format!("{}: at most {MAX_POINTS} values", self.at(key)));
-        }
-        l.iter().enumerate().map(|(i, v)| v.as_f64().filter(|n| n.is_finite()).map(|n| n as f32).ok_or_else(|| format!("{}[{}]: a number is expected", self.at(key), i + 1))).collect()
-    }
-
-    /// A table's rows, and the colours of the cells that have their own (none at all: an
-    /// empty list). A cell is a text, or `{ text = "+3:12", color = "#FF5F57" }`.
-    fn rows(&self, key: &str) -> Result<TableRows, String> {
-        let l = self.list(key)?;
-        let mut cells = 0;
-        let mut out = Vec::new();
-        let mut inks = Vec::new();
-        for (i, row) in l.iter().enumerate() {
-            let r = Reader { t: row, path: format!("{}[{}]", self.at(key), i + 1), folder: None };
-            let Value::List(c) = row else { return Err(format!("{}: a row is a list of texts", r.path)) };
-            let mut cols = Vec::with_capacity(c.len());
-            let mut colors = Vec::with_capacity(c.len());
-            for (j, v) in c.iter().enumerate() {
-                let (text, ink) = if v.is_table() {
-                    let cell = Reader { t: v, path: format!("{}[{}]", r.path, j + 1), folder: None };
-                    (cell.string("text")?.unwrap_or_default(), cell.color("color")?)
-                } else {
-                    (v.to_text().unwrap_or_default(), None)
-                };
-                cols.push(text.chars().take(MAX_TEXT).collect());
-                colors.push(ink);
-            }
-            cells += cols.len();
-            if cells > MAX_POINTS {
-                return Err(format!("{}: a table has at most {MAX_POINTS} cells", self.at(key)));
-            }
-            out.push(cols);
-            inks.push(colors);
-        }
-        if inks.iter().flatten().all(Option::is_none) {
-            inks.clear();
-        }
-        Ok((out, inks))
-    }
-
-    /// A table's column alignments: `{ "left", "right", "center" }`.
-    fn aligns(&self, key: &str) -> Result<Vec<Align>, String> {
-        self.texts(key)?
-            .iter()
-            .map(|a| match a.as_str() {
-                "left" => Ok(Align::Left),
-                "center" => Ok(Align::Center),
-                "right" => Ok(Align::Right),
-                _ => Err(format!("{}: \"{a}\" is no alignment (left, center, right)", self.at(key))),
-            })
-            .collect()
-    }
-
-    fn weight(&self, default: Weight) -> Result<Weight, String> {
-        Ok(match self.string("weight")?.as_deref() {
-            None => default,
-            Some("regular") => Weight::Regular,
-            Some("medium") => Weight::Medium,
-            Some("bold") => Weight::Bold,
-            Some(w) => return Err(format!("{}: \"{w}\" is no weight (regular, medium, bold)", self.at("weight"))),
-        })
-    }
-
-    /// A bar's parts: `{ { value = 0.6, color = "#34B26E" }, ... }`.
-    fn segments(&self, key: &str) -> Result<Vec<(f32, Rgba)>, String> {
-        let l = self.list(key)?;
-        if l.len() > 16 {
-            return Err(format!("{}: at most 16 parts", self.at(key)));
-        }
-        l.iter()
-            .enumerate()
-            .map(|(i, t)| {
-                let r = Reader { t, path: format!("{}[{}]", self.at(key), i + 1), folder: None };
-                if !t.is_table() {
-                    return Err(format!("{}: a part is a table", r.path));
-                }
-                Ok((r.number("value", 0.0, 0.0, 1e9)?, r.color("color")?.unwrap_or(Rgba([232, 160, 48, 255]))))
-            })
-            .collect()
-    }
-
-    /// A list of stops: `{ { name = "Rathaus", time = "07:45", expected = "07:49",
-    /// expected_color = "#FF5F57", state = "now", tag = "terminus" }, ... }`.
-    fn stops(&self, key: &str) -> Result<Vec<Stop>, String> {
-        let l = self.list(key)?;
-        if l.len() > MAX_POINTS / 4 {
-            return Err(format!("{}: at most {} stops", self.at(key), MAX_POINTS / 4));
-        }
-        l.iter()
-            .enumerate()
-            .map(|(i, t)| {
-                let r = Reader { t, path: format!("{}[{}]", self.at(key), i + 1), folder: None };
-                if !t.is_table() {
-                    return Err(format!("{}: a stop is a table", r.path));
-                }
-                Ok(Stop {
-                    name: r.string("name")?.unwrap_or_default(),
-                    time: r.string("time")?.unwrap_or_default(),
-                    expected: r.string("expected")?.unwrap_or_default(),
-                    expected_color: r.color("expected_color")?,
-                    state: match r.string("state")?.as_deref() {
-                        None | Some("ahead") => StopState::Ahead,
-                        Some("now") => StopState::Now,
-                        Some("done") => StopState::Done,
-                        Some(s) => return Err(format!("{}: \"{s}\" is no state (done, now, ahead)", r.at("state"))),
-                    },
-                    tag: r.string("tag")?.unwrap_or_default(),
-                })
-            })
-            .collect()
-    }
-
-    /// An image of the plugin's folder: the file when it is there.
-    fn image(&self, key: &str) -> Result<Option<PathBuf>, String> {
-        let Some(src) = self.string(key)? else { return Ok(None) };
-        let Some(folder) = self.folder else { return Ok(None) };
-        let p = crate::api::paths::inside(folder, &src).map_err(|e| format!("{}: {e}", self.at(key)))?;
-        Ok(p.is_file().then_some(p))
-    }
-
-    fn children(&self, key: &str, depth: usize, count: &mut usize) -> Result<Vec<Element>, String> {
-        let list = match self.get(key) {
-            Value::Nil => return Ok(Vec::new()),
-            Value::List(l) => l.as_slice(),
-            Value::Map(m) if m.is_empty() => &[],
-            _ => return Err(format!("{}: a list of elements is expected", self.at(key))),
-        };
-        if depth >= MAX_DEPTH {
-            return Err(format!("{}: rows go at most {MAX_DEPTH} deep", self.at(key)));
-        }
-        let mut out = Vec::new();
-        for (i, t) in list.iter().enumerate() {
-            let path = format!("{}[{}]", self.at(key), i + 1);
-            if !t.is_table() {
-                return Err(format!("{path}: an element is a table"));
-            }
-            *count += 1;
-            if *count > MAX_ELEMENTS {
-                return Err(format!("a panel has at most {MAX_ELEMENTS} elements"));
-            }
-            if let Some(e) = (Reader { t, path, folder: self.folder }).element(depth, count)? {
-                out.push(e);
-            }
-        }
-        Ok(out)
-    }
-
-    /// One element; None when it is hidden or of a type this game does not know.
-    fn element(&self, depth: usize, count: &mut usize) -> Result<Option<Element>, String> {
-        let ty = self.string("type")?.ok_or_else(|| format!("{}: no type", self.path))?;
-        let id = self.string("id")?;
-        if let Some(id) = id.as_deref() {
-            check_id(&self.at("id"), id)?;
-        }
-        let text = || self.string("text").map(Option::unwrap_or_default);
-        let needs_id = |what: &str| -> Result<(), String> {
-            match id {
-                Some(_) => Ok(()),
-                None => Err(format!("{}: a {what} needs an id", self.path)),
-            }
-        };
-        let kind = match ty.as_str() {
-            "text" => Kind::Text {
-                text: text()?,
-                size: self.number("size", 14.0, 6.0, 96.0)?,
-                weight: self.weight(Weight::Regular)?,
-                align: match self.string("align")?.as_deref() {
-                    None | Some("left") => Align::Left,
-                    Some("center") => Align::Center,
-                    Some("right") => Align::Right,
-                    Some(a) => return Err(format!("{}: \"{a}\" is no alignment (left, center, right)", self.at("align"))),
-                },
-                wrap: self.boolean("wrap", true)?,
-            },
-            "icon" => Kind::Icon { name: self.string("name")?.unwrap_or_default(), size: self.number("size", 20.0, 6.0, 128.0)? },
-            "row" => Kind::Row {
-                children: self.children("children", depth + 1, count)?,
-                gap: self.number("gap", 8.0, 0.0, 64.0)?,
-                align: match self.string("align")?.as_deref() {
-                    None | Some("start") => RowAlign::Start,
-                    Some("center") => RowAlign::Center,
-                    Some("end") => RowAlign::End,
-                    Some("between") => RowAlign::Between,
-                    Some(a) => return Err(format!("{}: \"{a}\" is no alignment (start, center, end, between)", self.at("align"))),
-                },
-            },
-            "bar" => Kind::Bar { value: self.number("value", 0.0, 0.0, 1.0)?, height: self.number("height", 6.0, 1.0, 64.0)?, background: self.color("background")?, segments: self.segments("segments")? },
-            "badge" => Kind::Badge { text: text()?, text_color: self.color("text_color")?, weight: self.weight(Weight::Medium)? },
-            "box" => Kind::Box { children: self.children("children", depth + 1, count)?, gap: self.number("gap", 4.0, 0.0, 64.0)? },
-            "stops" => Kind::Stops { stops: self.stops("stops")?, size: self.number("size", 13.0, 6.0, 48.0)? },
-            "divider" => Kind::Divider,
-            "map" => Kind::Map { height: self.number("height", 0.0, 0.0, 4000.0)?, cards: self.boolean("cards", true)? },
-            "space" => Kind::Space { size: self.number("size", 8.0, 0.0, 1000.0)? },
-            "button" => {
-                needs_id("button")?;
-                Kind::Button { text: text()?, icon: self.string("icon")? }
-            }
-            "image" => Kind::Image { path: self.image("src")?, width: self.number("width", 64.0, 1.0, 4000.0)?, height: self.number("height", 64.0, 1.0, 4000.0)? },
-            "checkbox" => {
-                needs_id("checkbox")?;
-                Kind::Checkbox { text: text()?, checked: self.boolean("checked", false)? }
-            }
-            "slider" => {
-                needs_id("slider")?;
-                let min = self.number("min", 0.0, -1e9, 1e9)?;
-                let max = self.number("max", 1.0, -1e9, 1e9)?;
-                Kind::Slider { value: self.number("value", min, min.min(max), max.max(min))?, min, max, step: self.number("step", 0.0, 0.0, 1e9)? }
-            }
-            "input" => {
-                needs_id("text field")?;
-                let max = self.number("max", 100.0, 1.0, MAX_TEXT as f32)? as usize;
-                Kind::Input { text: text()?.chars().take(max).collect(), placeholder: self.string("placeholder")?.unwrap_or_default(), max }
-            }
-            "tabs" => {
-                needs_id("tabs element")?;
-                let tabs = self.texts("tabs")?;
-                let n = tabs.len().max(1) as f32;
-                Kind::Tabs { selected: (self.number("selected", 1.0, 1.0, n)? as usize).saturating_sub(1), tabs }
-            }
-            "chart" => Kind::Chart {
-                values: self.numbers("values")?,
-                min: self.opt_number("min")?,
-                max: self.opt_number("max")?,
-                height: self.number("height", 48.0, 8.0, 1000.0)?,
-                style: match self.string("style")?.as_deref() {
-                    None | Some("line") => ChartStyle::Line,
-                    Some("bars") => ChartStyle::Bars,
-                    Some(s) => return Err(format!("{}: \"{s}\" is no chart style (line, bars)", self.at("style"))),
-                },
-                fill: self.boolean("fill", false)?,
-            },
-            "table" => {
-                let (rows, inks) = self.rows("rows")?;
-                Kind::Table { columns: self.texts("columns")?, rows, widths: self.numbers("widths")?, size: self.number("size", 13.0, 6.0, 48.0)?, aligns: self.aligns("aligns")?, inks }
-            }
-            // (an element of a later version of the API: left out)
-            _ => return Ok(None),
-        };
-        let e = Element { id, color: self.color("color")?, grow: self.boolean("grow", false)?, clickable: self.boolean("clickable", false)?, kind };
-        Ok(self.boolean("visible", true)?.then_some(e))
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn panel(src: &str) -> Result<Panel, String> {
-        panel_from_source(src)
-    }
-
-    #[test]
-    fn colours() {
-        assert_eq!(Rgba::parse("#F47F30"), Some(Rgba([0xF4, 0x7F, 0x30, 255])));
-        assert_eq!(Rgba::parse("#14161acc"), Some(Rgba([0x14, 0x16, 0x1A, 0xCC])));
-        for bad in ["F47F30", "#F47F3", "#GGGGGG", "#F47F30C", "#ÄÄÄ"] {
-            assert_eq!(Rgba::parse(bad), None, "{bad}");
-        }
-    }
-
-    /// Version 4: boxes, stop lists, bars of parts, a badge's weight, tables with aligned
-    /// columns and cells of their own colour.
-    #[test]
-    fn boxes_stops_bars_of_parts_and_tables_are_read() {
-        let p = panel(
-            r##"{ children = {
-                { type = "box", color = "#F58620", children = { { type = "text", text = "Next 08:10", id = "next" } } },
-                { type = "stops", stops = { { name = "Markt", time = "08:05", expected = "08:09", expected_color = "#FF5F57", state = "now" }, { name = "Rathaus", time = "08:12", tag = "terminus" } } },
-                { type = "bar", segments = { { value = 2, color = "#2A75F7" }, { value = 5 } } },
-                { type = "table", aligns = { "left", "right" }, rows = { { "Zoo", { text = "+3:12", color = "#FF5F57" } }, { "Markt", "12:05" } } },
-                { type = "table", rows = { { "Zoo", "12:01" } } },
-                { type = "badge", text = "62", weight = "bold" },
-            } }"##,
-        )
-        .unwrap();
-        let Kind::Box { children, .. } = &p.children[0].kind else { panic!("{:?}", p.children[0]) };
-        assert_eq!(children.len(), 1);
-        let Kind::Stops { stops, size } = &p.children[1].kind else { panic!("{:?}", p.children[1]) };
-        assert_eq!((stops[0].state, stops[1].state, stops[1].tag.as_str(), *size), (StopState::Now, StopState::Ahead, "terminus", 13.0));
-        assert_eq!(stops[0].expected_color, Rgba::parse("#FF5F57"));
-        let Kind::Bar { segments, .. } = &p.children[2].kind else { panic!("{:?}", p.children[2]) };
-        assert_eq!(segments, &[(2.0, Rgba([0x2A, 0x75, 0xF7, 255])), (5.0, Rgba([232, 160, 48, 255]))]);
-        let Kind::Table { rows, aligns, inks, .. } = &p.children[3].kind else { panic!("{:?}", p.children[3]) };
-        assert_eq!(rows, &[vec!["Zoo".to_string(), "+3:12".into()], vec!["Markt".into(), "12:05".into()]]);
-        assert_eq!(aligns, &[Align::Left, Align::Right]);
-        assert_eq!(inks, &[vec![None, Rgba::parse("#FF5F57")], vec![None, None]]);
-        // (a table without a coloured cell keeps no colours)
-        let Kind::Table { inks, .. } = &p.children[4].kind else { panic!("{:?}", p.children[4]) };
-        assert!(inks.is_empty());
-        assert!(matches!(p.children[5].kind, Kind::Badge { weight: Weight::Bold, .. }));
-        // an element in a box is found by its id, as one in a row
-        let mut ui = UiState::default();
-        ui.set(1, "p", p).unwrap();
-        ui.update(1, "p", "next", &Value::map([("text", "Next 08:20".into())]), None).unwrap();
-        assert!(matches!(&ui.get(1, "p").unwrap().panel.children[0].kind, Kind::Box { children, .. } if matches!(&children[0].kind, Kind::Text { text, .. } if text == "Next 08:20")));
-        // a table's alignments and a bar's parts change in place too, with its rows or value
-        let mut p = panel(r##"{ children = { { type = "table", id = "t", rows = { { "a", "b" } } }, { type = "bar", id = "b", value = 0.5 } } }"##).unwrap();
-        p.children[0].id = Some("t".into());
-        ui.set(1, "q", p).unwrap();
-        let cells = Value::List(vec![Value::List(vec!["x".into(), "y".into()])]);
-        ui.update(1, "q", "t", &Value::map([("aligns", Value::List(vec!["left".into(), "right".into()])), ("rows", cells)]), None).unwrap();
-        let parts = Value::List(vec![Value::map([("value", 1i64.into())])]);
-        ui.update(1, "q", "b", &Value::map([("value", 0.25.into()), ("segments", parts)]), None).unwrap();
-        let q = &ui.get(1, "q").unwrap().panel;
-        assert!(matches!(&q.children[0].kind, Kind::Table { aligns, rows, .. } if aligns == &[Align::Left, Align::Right] && rows[0][1] == "y"));
-        assert!(matches!(&q.children[1].kind, Kind::Bar { value, segments, .. } if *value == 0.25 && segments.len() == 1));
-        for (src, want) in [
-            (r#"{ children = { { type = "table", aligns = { "middle" } } } }"#, "children[1].aligns: \"middle\" is no alignment"),
-            (r#"{ children = { { type = "stops", stops = { { state = "gone" } } } } }"#, "children[1].stops[1].state: \"gone\" is no state"),
-            (r#"{ children = { { type = "bar", segments = { 1 } } } }"#, "children[1].segments[1]: a part is a table"),
-        ] {
-            let e = panel(src).unwrap_err();
-            assert!(e.contains(want), "{src}: {e}");
-        }
-    }
-
-    #[test]
-    fn a_panel_for_the_navigators_board() {
-        let p = panel(r##"{ anchor = "navigator", children = { { type = "text", text = "Next: Markt" } } }"##).unwrap();
-        assert_eq!((p.anchor, p.anchor.factors()), (Anchor::Navigator, (0.0, 0.0)));
-        // the game says where the board is, or that there is none
-        let mut ui = UiState::default();
-        assert_eq!(ui.dock(), None);
-        let d = Dock { width: 360.0, room: 420.0, height: 96.0, owner: Some(7), frame: false };
-        ui.set_dock(Some(d));
-        assert_eq!(ui.dock(), Some(d));
-    }
-
-    #[test]
-    fn a_panel_that_fills_the_navigators_frame_with_its_map() {
-        let p = panel(r##"{ anchor = "navigator", frame = true, children = {
-            { type = "text", text = "Line 5" },
-            { type = "map", height = 180, cards = false },
-            { type = "map" },
-        } }"##)
-        .unwrap();
-        assert!(p.frame && !Panel::default().frame);
-        assert_eq!(p.children[1].kind, Kind::Map { height: 180.0, cards: false });
-        // (no height: the navigator's own map's; its cards over it)
-        assert_eq!(p.children[2].kind, Kind::Map { height: 0.0, cards: true });
-        assert!(panel(r##"{ frame = "yes" }"##).unwrap_err().contains("frame"));
-    }
-
-    #[test]
-    fn a_panel_is_read_with_its_defaults() {
-        let p = panel(
-            r##"{ anchor = "bottom_right", x = 16, width = 340, accent = "#F47F30", children = {
-                { type = "text", text = "Linie 42", size = 18, weight = "bold" },
-                { type = "row", align = "between", children = {
-                    { type = "icon", name = "schedule" },
-                    { type = "text", text = 12.5, grow = true },
-                    { type = "badge", text = "+2", color = "#2E7D32" },
-                } },
-                { type = "bar", value = 1.7 },
-                { type = "text", text = "hidden", visible = false },
-                { type = "sparkles", text = "from a later version" },
-                { type = "button", id = "pause", text = "Pause", icon = "pause" },
-            } }"##,
-        )
-        .unwrap();
-        assert_eq!(p.anchor, Anchor::BottomRight);
-        assert_eq!((p.x, p.y, p.width, p.padding, p.gap, p.radius), (16.0, 0.0, 340.0, 12.0, 6.0, 12.0));
-        assert_eq!(p.accent, Some(Rgba([0xF4, 0x7F, 0x30, 255])));
-        assert!(p.visible && !p.clickable && !p.grab && p.background.is_none());
-        assert!(panel("{ grab = true }").unwrap().grab);
-        // (a click from a grab starts no typing: the game asks which parts are fields)
-        let mut ui = UiState::default();
-        ui.set(1, "p", panel(r#"{ children = { { type = "input", id = "name" }, { type = "button", id = "ok", text = "OK" } } }"#).unwrap()).unwrap();
-        assert!(ui.is_field(1, "p", "name") && !ui.is_field(1, "p", "ok") && !ui.is_field(2, "p", "name"));
-        // (the hidden text and the unknown type are left out)
-        assert_eq!(p.children.len(), 4);
-        assert_eq!(p.children[0].kind, Kind::Text { text: "Linie 42".into(), size: 18.0, weight: Weight::Bold, align: Align::Left, wrap: true });
-        let Kind::Row { children, gap, align } = &p.children[1].kind else { panic!("{:?}", p.children[1]) };
-        assert_eq!((*gap, *align, children.len()), (8.0, RowAlign::Between, 3));
-        assert!(children[1].grow);
-        assert_eq!(children[1].kind, Kind::Text { text: "12.5".into(), size: 14.0, weight: Weight::Regular, align: Align::Left, wrap: true });
-        // (held to its range)
-        assert_eq!(p.children[2].kind, Kind::Bar { value: 1.0, height: 6.0, background: None, segments: Vec::new() });
-        assert!(p.children[3].takes_clicks() && !p.children[0].takes_clicks());
-    }
-
-    #[test]
-    fn mistakes_say_where_they_are() {
-        let cases = [
-            (r#"{ width = "wide" }"#, "width: a number is expected"),
-            (r#"{ anchor = "middle" }"#, "anchor: \"middle\" is no anchor"),
-            (r#"{ background = "red" }"#, "background: \"red\" is no colour"),
-            (r#"{ children = { { type = "button", text = "Go" } } }"#, "children[1]: a button needs an id"),
-            (r#"{ children = { { type = "row", children = { { type = "text", size = {} } } } } }"#, "children[1].children[1].size: a number is expected"),
-            (r#"{ children = { { text = "no type" } } }"#, "children[1]: no type"),
-            (r#"{ children = { "text" } }"#, "children[1]: an element is a table"),
-            (r#"{ children = { { type = "text", text = string.rep("x", 501) } } }"#, "children[1].text: longer than 500 characters"),
-            (r#"{ children = { { type = "text", weight = "heavy" } } }"#, "is no weight"),
-            (r#"{ children = { { type = "slider", value = 2 } } }"#, "a slider needs an id"),
-            (r#"{ children = { { type = "chart", values = { 1, "x" } } } }"#, "children[1].values[2]: a number is expected"),
-        ];
-        for (src, want) in cases {
-            let e = panel(src).unwrap_err();
-            assert!(e.contains(want), "{src}: {e}");
-        }
-        // too many elements, rows counted with what is in them
-        let e = panel("(function() local c = {} for i = 1, 101 do c[i] = { type = 'row', children = { { type = 'space' } } } end return { children = c } end)()").unwrap_err();
-        assert!(e.contains("at most 200 elements"), "{e}");
-        // a row holding itself ends at the depth limit
-        let e = panel("(function() local r = { type = 'row' } r.children = { r } return { children = { r } } end)()").unwrap_err();
-        assert!(e.contains("deep"), "{e}");
-    }
-
-    #[test]
-    fn panels_belong_to_their_plugin() {
-        let p = panel("{}").unwrap();
-        let mut ui = UiState::default();
-        for i in 0..MAX_PANELS {
-            ui.set(1, &format!("p{i}"), p.clone()).unwrap();
-        }
-        assert!(ui.set(1, "one too many", p.clone()).unwrap_err().contains("at most 16 panels"));
-        // replacing one is no new panel; another plugin has its own sixteen
-        ui.set(1, "p0", p.clone()).unwrap();
-        ui.set(2, "p0", p.clone()).unwrap();
-        assert!(ui.set(1, "", p.clone()).is_err());
-        assert_eq!(ui.panels().len(), MAX_PANELS + 1);
-        assert!(ui.remove(1, "p3") && !ui.remove(1, "p3"));
-        ui.clear(1);
-        assert_eq!(ui.panels().iter().map(|p| p.owner).collect::<Vec<_>>(), [2]);
-    }
-
-    #[test]
-    fn the_same_panel_again_is_no_change() {
-        let mut ui = UiState::default();
-        ui.set(1, "trip", panel(r#"{ children = { { type = "text", text = "a" } } }"#).unwrap()).unwrap();
-        let first = ui.panels()[0].revision;
-        ui.set(1, "trip", panel(r#"{ children = { { type = "text", text = "a" } } }"#).unwrap()).unwrap();
-        assert_eq!(ui.panels()[0].revision, first);
-        ui.set(1, "trip", panel(r#"{ children = { { type = "text", text = "b" } } }"#).unwrap()).unwrap();
-        assert_ne!(ui.panels()[0].revision, first);
-    }
-
-    #[test]
-    fn toasts_go_by_themselves_and_make_room() {
-        let mut ui = UiState::default();
-        for i in 0..MAX_TOASTS + 2 {
-            ui.toast(1, parse_toast(&Value::Str(format!("t{i}")), None).unwrap());
-        }
-        let opts = Value::map([("seconds", 1i64.into()), ("title", "Pay".into()), ("icon", "payments".into()), ("color", "#2E7D32".into())]);
-        let spec = parse_toast(&Value::Int(42), Some(&opts)).unwrap();
-        assert_eq!(spec, ToastSpec { text: "42".into(), title: Some("Pay".into()), icon: Some("payments".into()), color: Some(Rgba([0x2E, 0x7D, 0x32, 255])), seconds: 1.0 });
-        ui.toast(2, spec);
-        let bad = Value::map([("seconds", "long".into())]);
-        assert_eq!(parse_toast(&Value::Int(1), Some(&bad)).unwrap_err(), "opts.seconds: a number is expected");
-        assert_eq!(ui.toasts().len(), MAX_TOASTS + 1);
-        assert_eq!(ui.toasts()[0].text, "t2");
-        ui.tick(2.0);
-        assert!(ui.toasts().iter().all(|t| t.owner == 1));
-        ui.tick(3.5);
-        assert!(ui.toasts().is_empty());
-    }
-
-    #[test]
-    fn focus_clicks_and_owners() {
-        let mut ui = UiState::default();
-        ui.set(7, "menu", Panel { anchor: Anchor::Center, width: 200.0, clickable: true, ..Panel::default() }).unwrap();
-        assert!(ui.set_focus(7, true) && ui.focused());
-        ui.release_focus();
-        assert!(!ui.focused());
-        // hidden under the game's menu, the panels let the mouse go and cannot have it
-        assert!(ui.set_focus(7, true));
-        ui.set_shown(false);
-        assert!(!ui.focused() && !ui.set_focus(7, true));
-        ui.set_shown(true);
-        assert!(ui.set_focus(7, true));
-        ui.click(7, "menu", Some("ok"));
-        ui.click(8, "x", None);
-        assert_eq!(ui.take_clicks(7), [Click { owner: 7, panel: "menu".into(), element: Some("ok".into()) }]);
-        assert!(ui.take_clicks(7).is_empty());
-        // another plugin stops: the mouse stays; the one that asked for it stops: it goes
-        ui.remove_owner(8);
-        assert!(ui.focused());
-        ui.click(8, "x", None);
-        ui.remove_owner(7);
-        assert!(ui.panels().is_empty() && !ui.focused());
-        assert_eq!(ui.take_clicks(8).len(), 1);
-    }
-
-    #[test]
-    fn controls_change_and_tell_their_plugin() {
-        let mut ui = UiState::default();
-        let p = panel(
-            r#"{ children = {
-                { type = "checkbox", id = "rain", text = "Rain" },
-                { type = "row", children = { { type = "slider", id = "vol", min = 0, max = 10, step = 1, value = 3 } } },
-                { type = "input", id = "name", max = 5 },
-                { type = "tabs", id = "tab", tabs = { "A", "B", "C" } },
-                { type = "chart", values = { 1, 2, 3 }, style = "bars" },
-                { type = "table", columns = { "Stop", "Time" }, rows = { { "Zoo", "12:01" } } },
-            } }"#,
-        )
-        .unwrap();
-        ui.set(1, "p", p).unwrap();
-        ui.click(1, "p", Some("rain"));
-        ui.set_control(1, "p", "vol", 0.72);
-        ui.set_control(1, "p", "tab", 0.5);
-        ui.click(1, "p", Some("name"));
-        assert_eq!(ui.typing().map(|t| t.element.as_str()), Some("name"));
-        ui.type_text(Some("Hello world"));
-        ui.type_text(None);
-        ui.stop_typing(true);
-        let changes: Vec<(String, Value)> = ui.take_changes(1).into_iter().map(|c| (c.element, c.value)).collect();
-        assert_eq!(changes, [("rain".to_string(), Value::Bool(true)), ("vol".into(), Value::Num(7.0)), ("tab".into(), Value::Int(2)), ("name".into(), Value::Str("Hell".into()))]);
-        // (Enter in the field is a click on it; the checkbox's click was its change)
-        assert_eq!(ui.take_clicks(1).len(), 1);
-        assert_eq!(ui.value(1, "p", "vol"), Some(Value::Num(7.0)));
-        ui.update(1, "p", "rain", &Value::map([("checked", false.into())]), None).unwrap();
-        assert_eq!(ui.value(1, "p", "rain"), Some(Value::Bool(false)));
-        assert!(ui.update(1, "p", "nothing", &Value::map([]), None).is_err());
-        ui.drag(1, "p", 5.0, -2.0);
-        assert_eq!(ui.get(1, "p").unwrap().moved, (5.0, -2.0));
-    }
-}
+mod tests;

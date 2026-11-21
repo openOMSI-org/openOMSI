@@ -35,33 +35,71 @@ impl PeopleSim {
         let p = self.pax(i)?;
         // Only stationary waiting passengers can signal: once they start moving to
         // a door, turning the whole pose would slide their feet sideways.
-        if p.inside.is_some() || p.task != Task::WaitingForBus { return None; }
+        if p.inside.is_some() || p.task != Task::WaitingForBus {
+            return None;
+        }
         let stop = p.stop?;
         let s = self.stops.get(&stop)?;
         let heading = s.heading.to_radians();
         let forward = DVec2::new(heading.sin(), heading.cos());
         // Resolve passenger route information once, before scanning candidate buses.
         let (_, termini) = s.lines.get(p.line?)?;
-        buses.iter().filter(|b| {
-            if matches!(b.takes, Takes::Nobody) { return false; }
-            let d = b.pos - s.pos;
-            if !Self::visual_hail_range(d,forward) || (b.pos-self.people[i].position).length_squared()>60.0*60.0
-                || b.fwd().dot(forward) <= 0.0 || b.served.is_some_and(|id| id != stop) { return false; }
-            if b.route.as_ref().is_some_and(|r| r.is_last_stop(s)) { return false; }
-            b.terminus.as_deref().is_some_and(|term|
-                fit(stop, s, p.dest.as_deref(), termini, term, &b.takes)
-                    .or_else(|| b.route.as_ref().and_then(|r| r.takes_waiting_for(termini))).is_some())
-        }).min_by(|a,b| (a.pos-self.people[i].position).length_squared()
-            .total_cmp(&(b.pos-self.people[i].position).length_squared()))
+        buses
+            .iter()
+            .filter(|b| {
+                if matches!(b.takes, Takes::Nobody) {
+                    return false;
+                }
+                let d = b.pos - s.pos;
+                if !Self::visual_hail_range(d, forward)
+                    || (b.pos - self.people[i].position).length_squared() > 60.0 * 60.0
+                    || b.fwd().dot(forward) <= 0.0
+                    || b.served.is_some_and(|id| id != stop)
+                {
+                    return false;
+                }
+                if b.route.as_ref().is_some_and(|r| r.is_last_stop(s)) {
+                    return false;
+                }
+                b.terminus.as_deref().is_some_and(|term| {
+                    fit(stop, s, p.dest.as_deref(), termini, term, &b.takes)
+                        .or_else(|| b.route.as_ref().and_then(|r| r.takes_waiting_for(termini)))
+                        .is_some()
+                })
+            })
+            .min_by(|a, b| {
+                (a.pos - self.people[i].position)
+                    .length_squared()
+                    .total_cmp(&(b.pos - self.people[i].position).length_squared())
+            })
             .map(|b| (b.id, b.speed.abs() > 0.08, b.pos))
     }
 
     /// Respect the map's side setting, as the vehicle's AI door scripts do.
     /// At two-sided stops, use this passenger's side rather than the stop box.
-    pub(super) fn preferred_entry_side(&self, stop: i64, bn: &BusNow, position: DVec3) -> Option<f32> {
+    pub(super) fn preferred_entry_side(
+        &self,
+        stop: i64,
+        bn: &BusNow,
+        position: DVec3,
+    ) -> Option<f32> {
         let s = self.stops.get(&stop)?;
         let left = LEFT_HAND.load(std::sync::atomic::Ordering::Relaxed);
-        boarding_side(s.side, left, bn.to_local(position).x)
+        let wanted = boarding_side(s.side, left, bn.to_local(position).x);
+        if s.side == 0
+            && wanted.is_some_and(|w| {
+                !bn.cabin
+                    .entries
+                    .iter()
+                    .any(|d| d.point.is_some() && d.side == w)
+            })
+        {
+            // Ordinary kerb stops (side 0) must allow buses with entries only on the opposite
+            // side (e.g. RHD buses on LHD maps, or LHT maps without a global [lht] tag) to serve
+            // passengers through their existing doors (#4062).
+            return None;
+        }
+        wanted
     }
 
     /// The passenger of person `i`, if it is one.
@@ -104,7 +142,10 @@ impl PeopleSim {
                     continue;
                 }
                 let sh = s.heading.to_radians();
-                let (s_fwd, s_right) = (DVec2::new(sh.sin(), sh.cos()), DVec2::new(sh.cos(), -sh.sin()));
+                let (s_fwd, s_right) = (
+                    DVec2::new(sh.sin(), sh.cos()),
+                    DVec2::new(sh.cos(), -sh.sin()),
+                );
                 let same_way = bn.fwd().dot(s_fwd) > 0.0;
                 // Without a route, use the nearest stop ahead, not the one just left.
                 if wants_request && same_way && d.truncate().dot(s_fwd) <= 25.0 {
@@ -137,7 +178,11 @@ impl PeopleSim {
                 // (0x61f3e3); one in free drive only lets its riders off. So does one at the
                 // last stop of the IBIS route it is set to, whatever the destination shown.
                 let ends_route = bn.route.as_ref().is_some_and(|r| r.is_last_stop(s));
-                match if ends_route { AtStop::Empties } else { at_stop(*id, s, bn.terminus.as_deref(), &bn.takes) } {
+                match if ends_route {
+                    AtStop::Empties
+                } else {
+                    at_stop(*id, s, bn.terminus.as_deref(), &bn.takes)
+                } {
                     AtStop::Empties => {
                         reg.all_exit = true;
                         continue;
@@ -170,28 +215,53 @@ impl PeopleSim {
     /// sub_61c33c: the bus at stop `stop` person `i` gets into, and why: with a line record,
     /// the nearest of the buses listed whose terminus goes there - else the nearest whose
     /// duty takes them there (`fit`); without, the first listed.
-    pub fn bus_for(&self, i: usize, stop: i64, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) -> Option<(BusId, Fit)> {
+    pub fn bus_for(
+        &self,
+        i: usize,
+        stop: i64,
+        buses: &[BusNow],
+        bus_ix: &HashMap<BusId, usize>,
+    ) -> Option<(BusId, Fit)> {
         let s = self.stops.get(&stop)?;
         let p = self.pax(i)?;
         match p.line.and_then(|k| s.lines.get(k)) {
             None => s.buses.iter().find_map(|(id, _)| {
-                if p.transfer_from == Some(*id) { return None; }
+                if p.transfer_from == Some(*id) {
+                    return None;
+                }
                 let bn = bus_ix.get(id).map(|k| &buses[*k])?;
                 let side = self.preferred_entry_side(stop, bn, self.people[i].position);
-                bn.cabin.entries.iter().any(|door| door.point.is_some() && entry_on_platform(side, door.side))
+                bn.cabin
+                    .entries
+                    .iter()
+                    .any(|door| door.point.is_some() && entry_on_platform(side, door.side))
                     .then_some((*id, Fit::Any))
             }),
             Some((_, termini)) => best_bus(s.buses.iter().filter_map(|(id, _)| {
-                if p.transfer_from == Some(*id) { return None; }
+                if p.transfer_from == Some(*id) {
+                    return None;
+                }
                 let bn = bus_ix.get(id).map(|k| &buses[*k])?;
                 let side = self.preferred_entry_side(stop, bn, self.people[i].position);
-                if !bn.cabin.entries.iter().any(|door| door.point.is_some() && entry_on_platform(side, door.side)) {
+                if !bn
+                    .cabin
+                    .entries
+                    .iter()
+                    .any(|door| door.point.is_some() && entry_on_platform(side, door.side))
+                {
                     return None;
                 }
                 // (or the destination of another route of its service ending where its own
                 // does: a circular's people wait for the stop it ends at)
-                let f = fit(stop, s, p.dest.as_deref(), termini, bn.terminus.as_deref()?, &bn.takes)
-                    .or_else(|| bn.route.as_ref().and_then(|r| r.takes_waiting_for(termini)))?;
+                let f = fit(
+                    stop,
+                    s,
+                    p.dest.as_deref(),
+                    termini,
+                    bn.terminus.as_deref()?,
+                    &bn.takes,
+                )
+                .or_else(|| bn.route.as_ref().and_then(|r| r.takes_waiting_for(termini)))?;
                 Some((*id, f, (bn.pos - self.people[i].position).length()))
             })),
         }
@@ -218,17 +288,25 @@ impl PeopleSim {
     /// bench's own, which a pavement beside it must not lift.
     pub fn waits_seated(&self, i: usize) -> bool {
         let Some(p) = self.pax(i) else { return false };
-        let spot = p.stop.and_then(|s| self.stops.get(&s)).zip(p.spot).and_then(|(s, k)| s.spots.get(k));
+        let spot = p
+            .stop
+            .and_then(|s| self.stops.get(&s))
+            .zip(p.spot)
+            .and_then(|(s, k)| s.spots.get(k));
         spot.is_some_and(|sp| sp.height != 0.0)
     }
 
     /// Whether the bus stands in the stop's box (the flag of its entry, sub_61ee18).
     pub fn in_stop_box(&self, stop: i64, bus: BusId) -> bool {
-        self.stops.get(&stop).is_some_and(|s| s.buses.iter().any(|b| b.0 == bus && b.1))
+        self.stops
+            .get(&stop)
+            .is_some_and(|s| s.buses.iter().any(|b| b.0 == bus && b.1))
     }
 
     pub fn listed_at(&self, stop: i64, bus: BusId) -> bool {
-        self.stops.get(&stop).is_some_and(|s| s.buses.iter().any(|b| b.0 == bus))
+        self.stops
+            .get(&stop)
+            .is_some_and(|s| s.buses.iter().any(|b| b.0 == bus))
     }
 
     /// sub_7e910c: a free place of the bus (none free: nobody gets on). `off`: the places
@@ -241,9 +319,15 @@ impl PeopleSim {
         if seats.len() < n {
             seats.resize(n, false);
         }
-        let (sit, stand): (Vec<usize>, Vec<usize>) =
-            (0..n).filter(|k| !seats[*k] && !off.get(*k).copied().unwrap_or(false)).partition(|k| places[*k].seated);
-        let free = if stand.is_empty() || (!sit.is_empty() && self.rand_f() as f32 >= self.stand_chance) { sit } else { stand };
+        let (sit, stand): (Vec<usize>, Vec<usize>) = (0..n)
+            .filter(|k| !seats[*k] && !off.get(*k).copied().unwrap_or(false))
+            .partition(|k| places[*k].seated);
+        let free =
+            if stand.is_empty() || (!sit.is_empty() && self.rand_f() as f32 >= self.stand_chance) {
+                sit
+            } else {
+                stand
+            };
         if free.is_empty() {
             return None;
         }
@@ -252,11 +336,28 @@ impl PeopleSim {
         Some(k)
     }
 
-    pub fn reserve_by_a_door(&mut self, bus: BusId, places: &[Seat], off: &[bool], doors: &[Door]) -> Option<usize> {
+    pub fn reserve_by_a_door(
+        &mut self,
+        bus: BusId,
+        places: &[Seat],
+        off: &[bool],
+        doors: &[Door],
+    ) -> Option<usize> {
         let taken = self.seats.get(&bus);
-        let free = |k: usize| !taken.is_some_and(|t| t.get(k).copied().unwrap_or(false)) && !off.get(k).copied().unwrap_or(false);
-        let gap = |s: &Seat| doors.iter().filter(|d| d.point.is_some() && d.group == s.group).map(|d| d.inside.truncate().distance(s.pos.truncate())).fold(f32::INFINITY, f32::min);
-        let k = (0..places.len()).filter(|&k| !places[k].seated && free(k)).min_by(|&a, &b| gap(&places[a]).total_cmp(&gap(&places[b])))?;
+        let free = |k: usize| {
+            !taken.is_some_and(|t| t.get(k).copied().unwrap_or(false))
+                && !off.get(k).copied().unwrap_or(false)
+        };
+        let gap = |s: &Seat| {
+            doors
+                .iter()
+                .filter(|d| d.point.is_some() && d.group == s.group)
+                .map(|d| d.inside.truncate().distance(s.pos.truncate()))
+                .fold(f32::INFINITY, f32::min)
+        };
+        let k = (0..places.len())
+            .filter(|&k| !places[k].seated && free(k))
+            .min_by(|&a, &b| gap(&places[a]).total_cmp(&gap(&places[b])))?;
         if !gap(&places[k]).is_finite() {
             return None;
         }
@@ -272,7 +373,9 @@ impl PeopleSim {
     /// sub_5ce4e0: stamp (stamper_prop) or buy (ticketbuy_prop) at a bus that has a
     /// validator / a cash desk, else nothing to do; the ticket bought (sub_5ce2dc).
     pub fn decide_pax_ticket(&mut self, i: usize, bn: &BusNow) -> (u8, u8) {
-        let Some(tp) = self.tickets.clone() else { return (TICKET_NONE, 0) };
+        let Some(tp) = self.tickets.clone() else {
+            return (TICKET_NONE, 0);
+        };
         let mut r = self.rand_f() as f32;
         if !bn.cabin.stampers.is_empty() {
             if r < tp.stamper_prop {
@@ -281,7 +384,10 @@ impl PeopleSim {
             r -= tp.stamper_prop;
         }
         // (the sale also needs the option on, `boarding` not "walk")
-        if bn.cabin.sale.is_some() && r < tp.ticketbuy_prop && !self.boarding.eq_ignore_ascii_case("walk") {
+        if bn.cabin.sale.is_some()
+            && r < tp.ticketbuy_prop
+            && !self.boarding.eq_ignore_ascii_case("walk")
+        {
             let age = self.people[i].age;
             if let Some(t) = self.pick_ticket(age) {
                 return (TICKET_BUY, (t + 1).min(255) as u8);
@@ -310,14 +416,24 @@ impl PeopleSim {
             .stops
             .iter()
             .filter(|(_, o)| (o.pos - pos).length() < reach)
-            .flat_map(|(_, o)| o.spots.iter().zip(&o.taken).filter(|(_, t)| **t).map(|(sp, _)| sp.pos))
+            .flat_map(|(_, o)| {
+                o.spots
+                    .iter()
+                    .zip(&o.taken)
+                    .filter(|(_, t)| **t)
+                    .map(|(sp, _)| sp.pos)
+            })
             .collect();
         let s = self.stops.get(&stop)?;
         let free: Vec<usize> = s
             .taken
             .iter()
             .enumerate()
-            .filter(|(k, t)| !**t && !elsewhere.iter().any(|q| (*q - s.spots[*k].pos).truncate().length() < 0.4))
+            .filter(|(k, t)| {
+                !**t && !elsewhere
+                    .iter()
+                    .any(|q| (*q - s.spots[*k].pos).truncate().length() < 0.4)
+            })
             .map(|(k, _)| k)
             .collect();
         if free.is_empty() {
