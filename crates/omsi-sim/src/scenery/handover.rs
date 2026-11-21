@@ -103,7 +103,12 @@ impl SceneryState {
     pub fn switch_set_to(&self, id: i64, path: u16) -> Option<bool> {
         let o = self.get(self.find(id)?);
         let direction = *o.switch_dirs.get(path as usize)?;
-        let val = switch_var_value(&o.inst)?;
+        let val = match &o.switch_vars {
+            Some(vars) => vars
+                .first()
+                .and_then(|&i| o.inst.state.vars.get(i as usize).copied()),
+            None => switch_var_value(&o.inst),
+        }?;
         if let Some(d) = direction {
             Some((val - d as f32).abs() < 0.5)
         } else if o.switch_dirs.iter().any(|d| d.is_some()) {
@@ -136,11 +141,20 @@ impl SceneryState {
             } else {
                 path as f32
             };
+            let vars = o.switch_vars.get_or_insert_with(|| {
+                SWITCH_VARS
+                    .iter()
+                    .filter_map(|&name| o.inst.program.var(name))
+                    .collect()
+            });
             let mut changed = false;
-            for &var in SWITCH_VARS {
-                let was = o.inst.var(var);
-                if o.inst.set_var(var, target_d) && was != Some(target_d) {
-                    changed = true;
+            for &var_id in vars.iter() {
+                let idx = var_id as usize;
+                if let Some(val) = o.inst.state.vars.get_mut(idx) {
+                    if *val != target_d {
+                        *val = target_d;
+                        changed = true;
+                    }
                 }
             }
             if changed && omsi_cfg::flags::OMSI_DEBUG_SWITCHES.is_set() {
