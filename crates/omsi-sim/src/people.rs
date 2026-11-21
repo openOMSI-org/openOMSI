@@ -51,50 +51,85 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 // The simulation: the people and what they do. It does not draw: what the renderer has to
-// follow it writes down (`bodies`), and omsi-app's `humans` view replays that at the end
-// of the public calls that make people (`tick`, `populate`, `avatar`, ...).
-pub mod bus_view;
-pub mod buses;
-pub mod cabin;
-pub mod door_requests;
+// follow it writes down (\odies\), and omsi-app's \humans\ view replays that at the end
+// of the public calls that make people (\	ick\, \populate\, \vatar\, ...).
+#[rustfmt::skip]
 pub mod model;
+#[rustfmt::skip]
+pub mod cabin;
+#[rustfmt::skip]
 pub mod pednet;
-pub mod populate;
+#[rustfmt::skip]
 pub mod spawn;
+#[rustfmt::skip]
+pub mod populate;
+#[rustfmt::skip]
+pub mod buses;
+#[rustfmt::skip]
+pub mod door_requests;
+#[rustfmt::skip]
+pub mod bus_view;
 pub use bus_view::{CabinView, PlayerBusView};
-pub mod avatar;
-pub mod mirror;
-pub mod report;
-pub mod scratch;
+#[rustfmt::skip]
 pub mod tick;
+#[rustfmt::skip]
 pub mod walk;
+#[rustfmt::skip]
+pub mod report;
+#[rustfmt::skip]
+pub mod avatar;
+#[rustfmt::skip]
+pub mod mirror;
+#[rustfmt::skip]
+pub mod scratch;
 // The passengers, as Omsi.exe runs them.
+#[rustfmt::skip]
 pub mod pax;
-pub mod pax_driver;
+#[rustfmt::skip]
 pub mod pax_stops;
-pub mod pax_task;
+#[rustfmt::skip]
 pub mod pax_tick;
+#[rustfmt::skip]
+pub mod pax_task;
+#[rustfmt::skip]
+pub mod pax_driver;
+#[rustfmt::skip]
 pub mod runners;
+#[rustfmt::skip]
 pub mod ticket_hook;
 // What the renderer has to follow, the money on the desk and what the people need of the map.
-#[cfg(test)]
-mod bad_driving_tests;
+#[rustfmt::skip]
 pub mod bodies;
-#[cfg(test)]
-mod desk_ticket_tests;
-#[cfg(test)]
-mod destination_tests;
-pub mod money;
-#[cfg(test)]
-mod population_limit_tests;
+#[rustfmt::skip]
 pub mod pose_facts;
+#[rustfmt::skip]
+pub mod money;
+#[rustfmt::skip]
+pub mod world;
 #[cfg(test)]
-mod stuck_tests;
-#[cfg(test)]
+#[rustfmt::skip]
 mod tests;
 #[cfg(test)]
+#[rustfmt::skip]
+mod population_limit_tests;
+#[cfg(test)]
+#[rustfmt::skip]
 mod ticket_hook_tests;
-pub mod world;
+#[cfg(test)]
+#[rustfmt::skip]
+mod bad_driving_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod desk_ticket_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod destination_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod stuck_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod board_when_stopped_tests;
 
 use avatar::*;
 use cabin::*;

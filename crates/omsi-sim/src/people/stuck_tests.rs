@@ -232,3 +232,30 @@ fn a_pedestrian_standing_still_on_purpose_is_not_the_maps_fault() {
     assert_eq!(s.sim.people[s.i].stuck_total, 0.0);
     assert!(s.decide().is_empty());
 }
+
+#[test]
+fn onboard_passenger_stuck_counter_uses_bus_local_coordinates() {
+    let mut s = Stuck::new();
+    let bus_id = BusId::Player;
+    let local_pos = Vec3::new(0.5, 2.0, 0.0);
+    s.sim.people[s.i].place = Place::Bus(bus_id, local_pos);
+    s.sim.people[s.i].position = DVec3::new(500.0, 1000.0, 0.0);
+
+    let w = Walker::new(DVec2::new(local_pos.x as f64, local_pos.y as f64), 0.25, 0);
+    s.sim.apply(
+        s.i,
+        &w,
+        &s.want,
+        s.dt,
+        &s.world,
+        Some(&s.net),
+        &[],
+        &HashMap::new(),
+    );
+
+    assert!(
+        (s.sim.people[s.i].stuck - s.dt).abs() < 1e-4,
+        "onboard stuck counter should build up: {}",
+        s.sim.people[s.i].stuck
+    );
+}
