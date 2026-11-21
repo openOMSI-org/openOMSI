@@ -13,6 +13,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,
   the .bus/.ovh `[boundingbox]`), so a blind-spot or distance plugin knows where a truck's or an
   articulated bus's body really is, not only its origin (#3936).
+- **"Place a vehicle..." names and pictures as in the launcher**: a maker's buses are grouped into models as the launcher's bus picker groups them (*Citaro* with *C2*, *C2 G*, *C2 K* under it) instead of type names with folder and file beside them; the picture's second line is the bus's description, not its file's path; a maker's line shows its first bus; and the standard paint is called by the name the bus gives it, as in the launcher.
 - **Controls profiles**: the launcher's Controls page has profiles, each with every key and
   every controller setting: *Duplicate* makes a new one of the current settings, the list
   switches between them, and they can be renamed and deleted. One can be the *default for every

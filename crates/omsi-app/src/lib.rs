@@ -738,6 +738,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             vehicle_list: Vec::new(),
             dropdown: None,
             vehicle_meta: std::collections::HashMap::new(),
+            vehicle_about: std::collections::HashMap::new(),
             hud: None,
             navigator: None,
             menu: None,
