@@ -726,7 +726,6 @@ impl State {
     }
 
     /// The duty as the backend takes it.
-#[rustfmt::skip]
     pub fn duty(&self) -> core::Duty {
         let c = &self.choice;
         let lan = match c.lan_mode.as_str() {

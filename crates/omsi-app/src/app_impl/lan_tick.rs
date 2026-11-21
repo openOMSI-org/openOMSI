@@ -87,10 +87,6 @@ impl App {
             drawn: self.world.is_some() && self.renderer.is_some() && self.scene.is_some(),
         };
         let config = self.args.lan_config();
-        let host = AppLanHost {
-            args: &self.args,
-            world: self.world.as_deref(),
-        };
         if lan.role == omsi_net::Role::Host {
             // (#1464) the buses this session drives: a player who drives another is sent away
             // and told the list, as a dedicated server does with its server.cfg's `vehicles`
@@ -99,11 +95,24 @@ impl App {
             }
             let list = self.net.session_buses.as_deref().unwrap_or_default();
             if !list.is_empty() {
+                if let Some(host_bus) = self.args.bus.as_deref().filter(|b| !b.is_empty()) {
+                    if !omsi_lan::server_cfg::allows(list, host_bus) {
+                        log::warn!(
+                            "session: host bus {host_bus} is not in session_buses list: removed"
+                        );
+                        self.args.bus = None;
+                        self.player = None;
+                    }
+                }
                 let mut changed = false;
                 for p in lan.peers() {
                     if p.has_info
                         && !p.pose.bus.is_empty()
-                        && self.net.session_buses_checked.get(&p.pose.id).map(|s| s.as_str())
+                        && self
+                            .net
+                            .session_buses_checked
+                            .get(&p.pose.id)
+                            .map(|s| s.as_str())
                             != Some(&p.pose.bus)
                     {
                         changed = true;
@@ -111,7 +120,9 @@ impl App {
                     }
                 }
                 if changed {
-                    self.net.session_buses_checked.retain(|id, _| lan.has_peer(*id));
+                    self.net
+                        .session_buses_checked
+                        .retain(|id, _| lan.peers().any(|p| p.pose.id == *id));
                     omsi_lan::server_cfg::enforce_vehicles_with(lan, list);
                     for p in lan.peers() {
                         if p.has_info && !p.pose.bus.is_empty() {
@@ -195,6 +206,10 @@ impl App {
         }
         let receive_started = std::time::Instant::now();
         let mirror_audio_ms = phase.elapsed().as_secs_f64() * 1000.0;
+        let host = AppLanHost {
+            args: &self.args,
+            world: self.world.as_deref(),
+        };
         let updates = lan::tick_receive(
             lan,
             &mut self.net.remotes,
@@ -619,5 +634,34 @@ impl omsi_lan::host::LanHost for AppLanHost<'_> {
         ty: &omsi_sim::VehicleType,
     ) -> Option<std::sync::Arc<omsi_vehicle::Hof>> {
         crate::find_hof_named(cfg.hof.as_deref(), self.world?, ty)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hosted_session_enforces_session_buses_on_host_own_bus() {
+        use clap::Parser;
+        let mut app = crate::assemble_app(Args::parse_from(["openomsi"]), Default::default());
+        let host = omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap();
+        app.net.lan = Some(host);
+        app.args.session_buses = Some("Vehicles/MAN_SD200/MAN_SD77.bus".into());
+
+        // Disallowed host bus is cleared
+        app.args.bus = Some("Vehicles/Forbidden/Forbidden.bus".into());
+        app.tick_lan(0.016);
+        assert_eq!(app.args.bus, None, "disallowed host bus is cleared");
+        assert!(app.player.is_none());
+
+        // Allowed host bus is kept
+        app.args.bus = Some("Vehicles/MAN_SD200/MAN_SD77.bus".into());
+        app.tick_lan(0.016);
+        assert_eq!(
+            app.args.bus.as_deref(),
+            Some("Vehicles/MAN_SD200/MAN_SD77.bus"),
+            "allowed host bus is kept"
+        );
     }
 }
