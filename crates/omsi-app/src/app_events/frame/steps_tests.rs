@@ -93,4 +93,8 @@ fn ticketless_fares_do_not_count_as_tickets_sold_in_career() {
         "cash collected from ticketless fare is recorded"
     );
     assert_eq!((humans.tickets_sold, humans.ticket_cash as f64), (0, 3.5));
+    assert!(
+        humans.sim.take_sales().is_empty(),
+        "take_sales queue for plugins is empty on ticketless fares"
+    );
 }

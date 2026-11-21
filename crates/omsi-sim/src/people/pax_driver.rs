@@ -359,9 +359,9 @@ impl PeopleSim {
             } else {
                 self.tickets_sold += 1;
                 *taken_ticket = true;
+                self.sales.push((name, value));
             }
             self.ticket_cash += value;
-            self.sales.push((name, value));
             if let Some(ticket_type) = p.taking_ticket {
                 if !self.no_ticket {
                     self.sale_events
