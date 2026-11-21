@@ -191,6 +191,12 @@ impl RailDrive {
         RailDrive { lane: self.lane, s: self.s, along: self.along, trail: Default::default(), u: self.u, body: omsi_sim::rail::Body::default(), last_heading: None }
     }
 
+    /// Net metres along the tracks since the vehicle was put on them: backing up takes them
+    /// off, below zero too (not an odometer).
+    pub(crate) fn travelled(&self) -> f64 {
+        self.u
+    }
+
     /// The contact wire above the track at the pantograph: at the standard height of the
     /// vehicle's class, kept within what its pantograph reaches (a wire it cannot touch would
     /// strand it on a map that draws none), staggered across the track as a real wire is so
@@ -342,7 +348,6 @@ impl RailDrive {
         v.set_controls(c);
         // the trail, and the coupled parts on it: store the rail centerline position at u,
         // so that trailing cars and bogies are placed on the track and not chord-inset
-        self.u += ds as f64;
         if self.trail.back().map(|b| (self.u - b.0).abs() > 0.1).unwrap_or(true) {
             // (backing up takes the trail back with it)
             while self.trail.back().is_some_and(|b| b.0 > self.u) {
@@ -391,6 +396,7 @@ impl RailDrive {
                     None => {
                         // the end of the track: the vehicle stops at its buffer
                         self.s = len;
+                        self.travel(ds, t - len);
                         return false;
                     }
                 }
@@ -405,15 +411,25 @@ impl RailDrive {
                     }
                     None => {
                         self.s = 0.0;
+                        self.travel(ds, t);
                         return false;
                     }
                 }
             } else {
                 self.s = t;
+                d = 0.0;
                 break;
             }
         }
+        self.travel(ds, d);
         true
+    }
+
+    /// Counts what was moved of `ds` (the vehicle's forward) into the distance travelled: all
+    /// of it but the `short` metres along the lane it did not get.
+    fn travel(&mut self, ds: f32, short: f32) {
+        let short = if self.along { short } else { -short };
+        self.u += (ds - short) as f64;
     }
 
     /// What the track under the vehicle is like for its dynamics: the grade in the direction
@@ -715,3 +731,7 @@ mod tests {
         assert_eq!(lane, 1);
     }
 }
+
+#[cfg(test)]
+#[path = "rail_drive/travelled_tests.rs"]
+mod travelled_tests;

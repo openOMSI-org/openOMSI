@@ -735,6 +735,14 @@ impl PluginIo for Io<'_> {
             [c.throttle, c.brake, c.clutch, c.steering]
         })
     }
+    fn bus_track(&self) -> Option<op::TrackPos> {
+        let app = self.app()?;
+        let r = app.player.as_ref()?.rail.as_ref()?;
+        let lane = app.session.traffic.as_ref().and_then(|t| t.net.lanes.get(r.lane));
+        let lane_length = lane.map_or(0.0, |l| l.length());
+        let travelled = r.travelled();
+        Some(op::TrackPos { lane: r.lane, s: r.s, lane_length, forward: r.along, travelled })
+    }
     fn bus_steer(&self) -> Option<(f32, f32)> {
         self.veh().map(|v| (v.physics.steer_deg, v.physics.max_steer_deg))
     }
