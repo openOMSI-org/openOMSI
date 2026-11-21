@@ -18,6 +18,7 @@ mod graphics_profiles;
 mod hof_sync;
 pub mod i18n;
 pub mod index;
+pub mod input_profiles;
 pub mod install;
 pub mod instances;
 pub mod map_uses;
@@ -5488,6 +5489,11 @@ pub fn launch(d: &Duty) -> Result<Launched> {
         .clone()
         .filter(|p| !p.trim().is_empty())
         .unwrap_or(c.profile);
+    if let Some(p) =
+        input_profiles::for_bus(&d.bus).context("the controls profile could not be switched")?
+    {
+        log_to_file(&format!("controls profile {p} for {}", d.bus));
+    }
     let s = instances::start(&game, &args, d, &profile)?;
     Ok(Launched {
         pid: s.pid,
