@@ -148,6 +148,43 @@ impl PeopleSim {
     /// leaves.
     pub fn doors_open_cabin(v: &VehicleInstance, cabin: &Cabin) -> (Vec<bool>, Vec<bool>) {
         let (mut entry, mut exit) = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
+        let (own_entry, own_exit) = Self::section_doors(v, cabin);
+        for (open, own) in entry.iter_mut().zip(own_entry) {
+            if let Some(o) = own {
+                *open = o;
+            }
+        }
+        for (open, own) in exit.iter_mut().zip(own_exit) {
+            if let Some(o) = own {
+                *open = o;
+            }
+        }
+        (entry, exit)
+    }
+
+    /// The doors of an AI vehicle that has stood at a stop for `since` seconds: as its
+    /// scripts say where the leading vehicle reports its doors ([`Self::doors_open_cabin`]).
+    /// Where it does not, a section running its own scripts that says has its doors as it
+    /// says, and the rest open once it has stood 2.5 s, as a bus whose script does not say.
+    pub(super) fn ai_doors_open(
+        v: &VehicleInstance,
+        cabin: &Cabin,
+        since: f64,
+    ) -> (Vec<bool>, Vec<bool>) {
+        if Self::reports_doors(v, cabin.entries.len(), cabin.exits.len()) {
+            return Self::doors_open_cabin(v, cabin);
+        }
+        let (entry, exit) = Self::section_doors(v, cabin);
+        let fill = |own: Vec<Option<bool>>| -> Vec<bool> {
+            own.into_iter().map(|o| o.unwrap_or(since > 2.5)).collect()
+        };
+        (fill(entry), fill(exit))
+    }
+
+    /// The doors of the sections that run their own scripts, as those scripts say (each
+    /// entry and exit of `cabin`): None for a door of the leading vehicle, or of a section
+    /// that says nothing of it.
+    fn section_doors(v: &VehicleInstance, cabin: &Cabin) -> (Vec<Option<bool>>, Vec<Option<bool>>) {
         let own = |door: &Door, kind: &str| -> Option<bool> {
             let (part, n) = door.part;
             let car = v.trailers.get(part.checked_sub(1)?)?;
@@ -172,17 +209,10 @@ impl PeopleSim {
                 .or_else(|| run.own(&format!("door{leaf}")))
                 .map(|x| x > 0.5)
         };
-        for (open, door) in entry.iter_mut().zip(&cabin.entries) {
-            if let Some(o) = own(door, "Entry") {
-                *open = o;
-            }
-        }
-        for (open, door) in exit.iter_mut().zip(&cabin.exits) {
-            if let Some(o) = own(door, "Exit") {
-                *open = o;
-            }
-        }
-        (entry, exit)
+        (
+            cabin.entries.iter().map(|d| own(d, "Entry")).collect(),
+            cabin.exits.iter().map(|d| own(d, "Exit")).collect(),
+        )
     }
 
     /// The stop the player's duty is due at next: (stop object, its timetable name, where it
@@ -446,23 +476,15 @@ impl PeopleSim {
                     None => 0.0,
                 };
                 let open = stop.is_some();
-                let (mut entry_open, mut exit_open) = (
-                    vec![false; cabin.entries.len()],
-                    vec![false; cabin.exits.len()],
-                );
-                if open {
-                    if Self::reports_doors(&c.vehicle, cabin.entries.len(), cabin.exits.len()) {
-                        let (e, x) = Self::doors_open_cabin(&c.vehicle, &cabin);
-                        entry_open = e;
-                        exit_open = x;
-                    } else if since > 2.5 {
-                        // the script does not say: the doors are open while the bus boards
-                        entry_open
-                            .iter_mut()
-                            .chain(exit_open.iter_mut())
-                            .for_each(|o| *o = true);
-                    }
-                }
+                // (where the scripts do not say, the doors are open while the bus boards)
+                let (entry_open, exit_open) = if open {
+                    Self::ai_doors_open(&c.vehicle, &cabin, since)
+                } else {
+                    (
+                        vec![false; cabin.entries.len()],
+                        vec![false; cabin.exits.len()],
+                    )
+                };
                 let walk_open = (!c.is_bus()).then(|| Self::doors_open_cabin(&c.vehicle, &cabin));
                 self.seats
                     .entry(BusId::Ai(c.id))
