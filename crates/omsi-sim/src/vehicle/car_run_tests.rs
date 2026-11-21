@@ -719,3 +719,43 @@ fn the_cables_keep_their_working_storage_from_frame_to_frame() {
         "no cable, nothing built"
     );
 }
+
+/// What a key in the rear cab stored is kept in a situation and taken back by a train made
+/// again, before its cars' scripts have started and after: saving and loading a tram does not
+/// reset its rear cab. The head car's values stay its own.
+#[test]
+fn a_rear_cabs_switch_is_saved_and_taken_back() {
+    let train = || {
+        let head = cable_car("1 (S.L.Link)");
+        let tail = cable_car_with("1 (S.L.Link)", "{trigger:press}\n5 (S.L.SLW_x)\n{end}");
+        let mut v = VehicleInstance::new(head, crate::host::VehicleHost::new(Default::default()));
+        v.attach_trailer_ex(tail, true);
+        v
+    };
+    let mut v = train();
+    run_frames(&mut v, 2);
+    v.active_cab = Some(0);
+    assert!(v.trigger("press"));
+    run_frames(&mut v, 3);
+    let saved = v.car_states();
+    assert_eq!(saved.len(), 1);
+    assert_eq!(saved[0].car, 0);
+    assert!(saved[0].vars.iter().any(|(n, x)| n.eq_ignore_ascii_case("SLW_x") && *x == 5.0));
+    assert!(
+        !saved[0].vars.iter().any(|(n, _)| n.eq_ignore_ascii_case("SLR_x")),
+        "what the leading vehicle gives it is not its own"
+    );
+    for started in [false, true] {
+        let mut again = train();
+        if started {
+            run_frames(&mut again, 2);
+            assert_eq!(again.trailers[0].run_var("SLW_x"), Some(0.0));
+            assert!(again.restore_car_states(&saved) > 0);
+        } else {
+            assert_eq!(again.restore_car_states(&saved), 0, "taken when its scripts start");
+        }
+        run_frames(&mut again, 3);
+        assert_eq!(again.trailers[0].run_var("SLW_x"), Some(5.0), "started first: {started}");
+        assert_eq!(again.var("SLW_x"), Some(0.0), "the head car's stays its own");
+    }
+}

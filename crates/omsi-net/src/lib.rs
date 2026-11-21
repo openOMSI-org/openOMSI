@@ -203,6 +203,9 @@ const STATE_RATE: (f32, f32) = (40.0, 40.0);
 // Variable deltas, key frames and long-string fragments use at most 32 datagrams/s. They must not
 // consume the pose/world budget (otherwise normal driving drops recovery slices).
 const VAR_RATE: (f32, f32) = (60.0, 60.0);
+// The coupled cars' own variables have a budget of their own, so a train's cars cannot
+// starve the leading vehicle's.
+const CAR_VAR_RATE: (f32, f32) = (60.0, 60.0);
 // Animation snapshots must not consume recovery/string or movement budgets. The
 // burst fits every possible u16-indexed animation input, split across datagrams.
 const ANIMATION_RATE: (f32, f32) = (25.0, 320.0);
@@ -1128,6 +1131,7 @@ enum PeerTraffic {
     Message,
     Chat,
     SoundAcks,
+    CarVariables,
 }
 
 /// A token bucket: `rate` a second, at most `burst` at once.
@@ -1173,6 +1177,7 @@ pub struct Peer {
     state_at: Instant,
     states: Bucket,
     variables: Bucket,
+    car_variables: Bucket,
     animations: Bucket,
     textures: Bucket,
     sounds: Bucket,
@@ -1184,7 +1189,7 @@ pub struct Peer {
     /// Datagrams of this player the host threw away (too many at once).
     pub dropped: u32,
     /// Rate-limit rejections by PeerTraffic category (no payloads stored).
-    drop_counts: [u32; 10],
+    drop_counts: [u32; 11],
     /// The nonce of the player's hellos (host side).
     nonce: Option<u64>,
     secret: [u8; 16],
@@ -1220,6 +1225,7 @@ impl Peer {
             state_at: now,
             states: Bucket::new(STATE_RATE.1),
             variables: Bucket::new(VAR_RATE.1),
+            car_variables: Bucket::new(CAR_VAR_RATE.1),
             animations: Bucket::new(ANIMATION_RATE.1),
             textures: Bucket::new(TEXTURE_RATE.1),
             sounds: Bucket::new(SOUND_RATE.1),
@@ -1229,7 +1235,7 @@ impl Peer {
             chat: Bucket::new(CHAT_RATE.1),
             sound_acks: Bucket::new(SOUND_ACK_RATE.1),
             dropped: 0,
-            drop_counts: [0; 10],
+            drop_counts: [0; 11],
             history: std::collections::VecDeque::new(),
             nonce: None,
             secret: admission::random_bytes(),
@@ -1373,6 +1379,10 @@ pub struct LanSession {
     schemas_in: Vec<vars::VarsIn>,
     vars_in: Vec<vars::VarsIn>,
     var_receiver: vars::VarReceiver,
+    /// The coupled cars' own variables (`vars::CAR_VARS_MAGIC`), ours out and theirs in.
+    car_sender: vars::VarSender,
+    car_receiver: vars::VarReceiver,
+    cars_in: Vec<vars::VarsIn>,
     ai_context_in: Vec<Vec<u8>>,
     script_textures: scripttex::Sync,
     freetex_packets: Vec<Vec<u8>>,
@@ -1531,6 +1541,9 @@ impl LanSession {
             own_place: None,
             vars_in: Vec::new(),
             var_receiver: vars::VarReceiver::default(),
+            car_sender: vars::VarSender::default(),
+            car_receiver: vars::VarReceiver::default(),
+            cars_in: Vec::new(),
             ai_context_in: Vec::new(),
             descs: Vec::new(),
             wants: Vec::new(),
@@ -2310,6 +2323,7 @@ impl LanSession {
         self.sounds.retain_peers(&peers);
         self.var_receiver.retain_peers(&peers);
         self.schema_receiver.retain_peers(&peers);
+        self.car_receiver.retain_peers(&peers);
         if self.connected {
             for packet in self.sounds.tick(PROTOCOL as u8, self.my_id, dt) {
                 self.route_sound(&packet);
@@ -2338,7 +2352,7 @@ impl LanSession {
                 continue;
             };
             log::warn!(
-                "LAN: player {id} timed out after {:.1} s without an accepted datagram (loading={}, rate-limited total={}, state={}, variables={}, animations={}, textures={}, sounds={}, voice={}, tack={}, messages={}, chat={}, sound acks={})",
+                "LAN: player {id} timed out after {:.1} s without an accepted datagram (loading={}, rate-limited total={}, state={}, variables={}, animations={}, textures={}, sounds={}, voice={}, tack={}, messages={}, chat={}, sound acks={}, car variables={})",
                 now.duration_since(p.last_seen).as_secs_f32(),
                 !p.has_pose,
                 p.dropped,
@@ -2351,7 +2365,8 @@ impl LanSession {
                 p.drop_counts[6],
                 p.drop_counts[7],
                 p.drop_counts[8],
-                p.drop_counts[9]
+                p.drop_counts[9],
+                p.drop_counts[10]
             );
             gone.push(id);
             self.gone_lately.push((p.nonce, p.pose.name.clone(), id, now));
@@ -2637,7 +2652,13 @@ impl LanSession {
             if data[0] == var_schema::MAGIC {
                 let mut packet = data.to_vec();
                 packet[0] = vars::VARS_MAGIC;
-                self.on_variable_packet(&packet, from, true);
+                self.on_variable_packet(&packet, from, session_sync::Channel::Schema);
+                continue;
+            }
+            if data[0] == vars::CAR_VARS_MAGIC {
+                let mut packet = data.to_vec();
+                packet[0] = vars::VARS_MAGIC;
+                self.on_variable_packet(&packet, from, session_sync::Channel::Cars);
                 continue;
             }
             if data[0] == vars::VARS_MAGIC {
@@ -2850,6 +2871,7 @@ impl LanSession {
         let ok = match traffic {
             PeerTraffic::State => peer.states.take(rate),
             PeerTraffic::Variables => peer.variables.take(rate),
+            PeerTraffic::CarVariables => peer.car_variables.take(rate),
             PeerTraffic::Animations => peer.animations.take(rate),
             PeerTraffic::Textures => peer.textures.take(rate),
             PeerTraffic::Sounds => peer.sounds.take(rate),
@@ -3058,6 +3080,7 @@ impl LanSession {
             self.sounds.retain_peers(&keep);
             self.var_receiver.retain_peers(&keep);
             self.schema_receiver.retain_peers(&keep);
+            self.car_receiver.retain_peers(&keep);
             gone.push(id);
             self.gone_lately.push((p.nonce, p.pose.name.clone(), id, Instant::now()));
             if self.role == Role::Host {
@@ -3294,9 +3317,11 @@ impl LanSession {
                 self.peers.clear();
                 self.vars_in.clear();
                 self.schemas_in.clear();
+                self.cars_in.clear();
                 self.sounds = sounds::Sync::default();
                 self.var_receiver = vars::VarReceiver::default();
                 self.schema_receiver = vars::VarReceiver::default();
+                self.car_receiver = vars::VarReceiver::default();
                 self.reset_peer_sync(1);
                 self.connected = false;
             }
