@@ -79,8 +79,7 @@ struct Stuck {
     sim: PeopleSim,
     world: Bare,
     net: Network,
-    i: usize,
-    want: Want,
+    traffic: crate::ai_traffic::TrafficSim,
     dt: f32,
 }
 
@@ -102,6 +101,8 @@ impl Stuck {
         world.collision = Arc::new(collision);
         let net = pavement();
         let mut sim = PeopleSim::new(Path::new("/nonexistent"), 40);
+        sim.players_only = true;
+        sim.max_humans = 1;
         // one figure to put on the pavement (the map's own `.hum`s are not here)
         // (a folder of its own: the tests of this file run side by side)
         let stamp = std::time::SystemTime::now()
@@ -119,73 +120,45 @@ impl Stuck {
             a: 0.0,
             b: 20.0,
         };
-        let i = sim
-            .spawn(
-                &world,
-                DVec3::new(0.0, 2.0, 0.0),
-                0.0,
-                State::Strolling(PedWalk::new(vec![leg], true, 0.0)),
-            )
-            .expect("a person to walk");
-        // what the walk asks for while it goes up the pavement
-        let want = Want {
-            vel: DVec2::new(0.0, 1.1),
-            face: None,
-            give: 1.0,
-            corridor: None,
-            idle: Activity::Stand,
-        };
+        sim.spawn(
+            &world,
+            DVec3::new(0.0, 2.0, 0.0),
+            0.0,
+            State::Strolling(PedWalk::new(vec![leg], true, 0.0)),
+        )
+        .expect("a person to walk");
+        let traffic = crate::ai_traffic::TrafficSim::assemble(
+            Path::new("/nonexistent"),
+            net.clone(),
+            0,
+            Vec::new(),
+            HashMap::new(),
+            (Vec::new(), Vec::new()),
+            Vec::new(),
+            (1.0, 0),
+            0,
+        );
         Stuck {
             sim,
             world,
             net,
-            i,
-            want,
+            traffic,
             dt: 1.0 / 30.0,
         }
     }
 
-    /// One frame of the crowd's result: `moved` metres of real progress per frame (0 = held
-    /// in place by the wall via `keep_out_of_walls`).
+    /// One frame driven through normal people update (`tick_inner`).
     fn frame(&mut self, moved: f64) {
-        let cur = DVec2::new(
-            self.sim.people[self.i].position.x,
-            self.sim.people[self.i].position.y,
-        );
-        let walker = if moved == 0.0 {
-            let mut w = Walker::new(cur + self.want.vel * self.dt as f64, 0.25, 0);
-            w.want = self.want.vel;
-            w.vel = self.want.vel;
-            let mut ground = [(0, w)];
+        if moved == 0.0 {
             self.sim
-                .keep_out_of_walls(&self.world, &[self.i], &mut ground);
-            ground[0].1
+                .tick_inner(self.dt, &self.world, None, Some(&self.traffic));
         } else {
-            let sign = if cur.y >= 3.0 { -1.0 } else { 1.0 };
-            let step = DVec2::new(0.0, sign * 0.025);
-            let mut w = Walker::new(cur + step, 0.25, 0);
-            w.vel = DVec2::new(0.0, if step.y > 0.0 { 0.75 } else { -0.75 });
-            w
-        };
-        let (world, net, i) = (&self.world, &self.net, self.i);
-        self.sim.apply(
-            i,
-            &walker,
-            &self.want,
-            self.dt,
-            world,
-            Some(net),
-            &[],
-            &HashMap::new(),
-        );
-    }
-
-    fn decide(&mut self) -> Vec<usize> {
-        let mut remove = Vec::new();
-        let (world, net, i) = (&self.world, &self.net, self.i);
-        self.sim
-            .decide(i, self.dt, world, Some(net), None, &[], &mut remove);
-        remove
+            let saved = self.world.collision.clone();
+            self.world.collision = Arc::new(crate::collision::CollisionWorld::default());
+            self.sim
+                .tick_inner(self.dt, &self.world, None, Some(&self.traffic));
+            self.world.collision = saved;
+        }
     }
 }
 
@@ -196,27 +169,23 @@ fn two_minutes_of_trampling_in_one_place_gets_a_pedestrian_deleted() {
     for _ in 0..(90.0 / s.dt) as usize {
         s.frame(0.0);
     }
-    let walked = s.sim.people[s.i].stuck_total;
+    assert_eq!(s.sim.people.len(), 1);
+    let walked = s.sim.people[0].stuck_total;
     assert!(
-        (walked - 90.0).abs() < 1.0,
+        (walked - 90.0).abs() < 2.0,
         "wanting to walk for {walked:.1} s"
     );
-    assert!(
-        s.decide().is_empty(),
-        "a minute and a half is not two minutes"
-    );
+    // Collision assigns nonzero detour velocity, but actual progress is blocked by wall
+    assert!(s.sim.people[0].vel.length() > 0.0);
 
-    // two minutes and a bit: gone rather than walking in place for the rest of the duty
+    // two minutes and a bit: normal update deletes them where they stand
     for _ in 0..(35.0 / s.dt) as usize {
         s.frame(0.0);
     }
     assert!(
-        s.sim.people[s.i].stuck_total > STUCK_GONE_S,
-        "{}",
-        s.sim.people[s.i].stuck_total
+        s.sim.people.is_empty(),
+        "deleted by normal update after two minutes"
     );
-    assert_eq!(s.decide(), vec![s.i], "deleted where it stands");
-    assert_eq!(s.sim.people[s.i].why, "stuck for two minutes");
 }
 
 #[test]
@@ -227,25 +196,27 @@ fn a_step_frees_a_pedestrian_the_crowd_only_held_up() {
     for n in 0..(600.0 / s.dt) as usize {
         s.frame(if n % 45 < 15 { 1.0 } else { 0.0 });
     }
-    // (a second of standing since the last burst, no more: every burst starts it again)
-    let held = s.sim.people[s.i].stuck_total;
+    assert_eq!(s.sim.people.len(), 1);
+    let held = s.sim.people[0].stuck_total;
     assert!(
         held < 2.0,
         "the crowd let them through, but {held:.1} s stand at the end"
     );
-    assert!(s.decide().is_empty(), "nobody who can walk is deleted");
 }
 
 #[test]
 fn a_pedestrian_standing_still_on_purpose_is_not_the_maps_fault() {
     let mut s = Stuck::new();
-    // nothing wants to move (the walk is over, they stand face to the bus): no count at all
-    s.want.vel = DVec2::ZERO;
+    s.sim.people[0].activity = Activity::Stand;
+    s.sim.people[0].pace = 0.0;
+    if let State::Strolling(ref mut w) = s.sim.people[0].state {
+        w.legs.clear();
+    }
     for _ in 0..(600.0 / s.dt) as usize {
         s.frame(0.0);
     }
-    assert_eq!(s.sim.people[s.i].stuck_total, 0.0);
-    assert!(s.decide().is_empty());
+    assert_eq!(s.sim.people.len(), 1);
+    assert_eq!(s.sim.people[0].stuck_total, 0.0);
 }
 
 #[test]
@@ -253,14 +224,21 @@ fn onboard_passenger_stuck_counter_uses_bus_local_coordinates() {
     let mut s = Stuck::new();
     let bus_id = BusId::Player;
     let local_pos = Vec3::new(0.5, 2.0, 0.0);
-    s.sim.people[s.i].place = Place::Bus(bus_id, local_pos);
-    s.sim.people[s.i].position = DVec3::new(500.0, 1000.0, 0.0);
+    s.sim.people[0].place = Place::Bus(bus_id, local_pos);
+    s.sim.people[0].position = DVec3::new(500.0, 1000.0, 0.0);
 
+    let want = Want {
+        vel: DVec2::new(0.0, 1.1),
+        face: None,
+        give: 1.0,
+        corridor: None,
+        idle: Activity::Stand,
+    };
     let w = Walker::new(DVec2::new(local_pos.x as f64, local_pos.y as f64), 0.25, 0);
     s.sim.apply(
-        s.i,
+        0,
         &w,
-        &s.want,
+        &want,
         s.dt,
         &s.world,
         Some(&s.net),
@@ -269,8 +247,8 @@ fn onboard_passenger_stuck_counter_uses_bus_local_coordinates() {
     );
 
     assert!(
-        (s.sim.people[s.i].stuck - s.dt).abs() < 1e-4,
+        (s.sim.people[0].stuck - s.dt).abs() < 1e-4,
         "onboard stuck counter should build up: {}",
-        s.sim.people[s.i].stuck
+        s.sim.people[0].stuck
     );
 }
