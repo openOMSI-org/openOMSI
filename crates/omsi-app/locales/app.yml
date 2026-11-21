@@ -8773,3 +8773,7 @@ _version: 2
   en: "Use for {bus}"
 "Profile {name} in use":
   en: "Profile {name} in use"
+"Driving end {number} of {count}: {name}":
+  en: "Driving end {number} of {count}: {name}"
+"At the wheel in the other cab":
+  en: "At the wheel in the other cab"

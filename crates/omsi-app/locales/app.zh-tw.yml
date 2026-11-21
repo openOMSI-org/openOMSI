@@ -4384,3 +4384,5 @@
 "Default for every bus": "所有公車的預設"
 "Use for {bus}": "用於 {bus}"
 "Profile {name} in use": "使用中的設定檔:{name}"
+"Driving end {number} of {count}: {name}": "駕駛室 {number}/{count}：{name}"
+"At the wheel in the other cab": "在另一端駕駛室駕駛"

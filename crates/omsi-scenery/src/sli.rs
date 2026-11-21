@@ -104,13 +104,19 @@ impl Spline {
     }
 
     pub fn parse(file: &CfgFile) -> Spline {
-        let mut s = Spline { path: file.path.clone(), ..Default::default() };
+        let mut s = Spline {
+            path: file.path.clone(),
+            ..Default::default()
+        };
         let mut r = file.reader();
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
                 "length" => s.length = r.f32(),
                 "texture" => {
-                    s.textures.push(SplineTexture { file: r.str().to_string(), ..Default::default() });
+                    s.textures.push(SplineTexture {
+                        file: r.str().to_string(),
+                        ..Default::default()
+                    });
                 }
                 "scaletexbylength" => {
                     // (a flag of the last texture, Omsi.exe 0x5ac01f)
@@ -120,7 +126,12 @@ impl Spline {
                     }
                 }
                 "patchwork_chain" => {
-                    let pc = PatchworkChain { segment_length: r.f32(), chain: r.word().to_string(), weights: r.word().to_string(), invertable: r.word().to_string() };
+                    let pc = PatchworkChain {
+                        segment_length: r.f32(),
+                        chain: r.word().to_string(),
+                        weights: r.word().to_string(),
+                        invertable: r.word().to_string(),
+                    };
                     if let Some(t) = s.textures.last_mut() {
                         t.patchwork = Some(pc);
                     }
@@ -133,15 +144,28 @@ impl Spline {
                 }
                 "heightprofile" => {
                     let v = r.f32s::<4>();
-                    s.height_profiles.push(HeightProfile { x0: v[0], x1: v[1], z0: v[2], z1: v[3] });
+                    s.height_profiles.push(HeightProfile {
+                        x0: v[0],
+                        x1: v[1],
+                        z0: v[2],
+                        z1: v[3],
+                    });
                 }
                 "profile" => {
-                    s.profiles.push(SplineProfile { texture: r.usize(), points: Vec::new() });
+                    s.profiles.push(SplineProfile {
+                        texture: r.usize(),
+                        points: Vec::new(),
+                    });
                 }
                 "profilepnt" => {
                     let v = r.f32s::<4>();
                     if let Some(p) = s.profiles.last_mut() {
-                        p.points.push(SplineProfilePoint { x: v[0], z: v[1], u: v[2], v_scale: v[3] });
+                        p.points.push(SplineProfilePoint {
+                            x: v[0],
+                            z: v[1],
+                            u: v[2],
+                            v_scale: v[3],
+                        });
                     }
                 }
                 "path" => {
@@ -150,7 +174,13 @@ impl Spline {
                     let z = r.f32();
                     let width = r.f32();
                     let direction = r.i32();
-                    s.paths.push(PathDef { kind, start: [x, 0.0, z], width, direction, ..Default::default() });
+                    s.paths.push(PathDef {
+                        kind,
+                        start: [x, 0.0, z],
+                        width,
+                        direction,
+                        ..Default::default()
+                    });
                 }
                 "path_2" => {
                     let kind = r.i32();
@@ -159,10 +189,21 @@ impl Spline {
                     let width = r.f32();
                     let direction = r.i32();
                     let extra = r.f32();
-                    s.paths.push(PathDef { kind, start: [x, 0.0, z], width, direction, params: vec![extra], ..Default::default() });
+                    s.paths.push(PathDef {
+                        kind,
+                        start: [x, 0.0, z],
+                        width,
+                        direction,
+                        params: vec![extra],
+                        ..Default::default()
+                    });
                 }
-                "rail_enh" => s.rail_enh.push(RailEnh { values: r.f32s::<8>() }),
-                "third_rail" => s.third_rail.push(ThirdRail { values: r.f32s::<6>() }),
+                "rail_enh" => s.rail_enh.push(RailEnh {
+                    values: r.f32s::<8>(),
+                }),
+                "third_rail" => s.third_rail.push(ThirdRail {
+                    values: r.f32s::<6>(),
+                }),
                 "halfcantwidth" => s.half_cant_width = Some(r.f32()),
                 "onlyeditor" => s.only_editor = true,
                 // (a point goes to the last profile begun, Omsi.exe 0x5ad923: none begun, it

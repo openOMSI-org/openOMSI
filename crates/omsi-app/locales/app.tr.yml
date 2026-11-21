@@ -3237,3 +3237,5 @@
 "Default for every bus": "Her otobüs için varsayılan"
 "Use for {bus}": "{bus} için kullan"
 "Profile {name} in use": "{name} profili kullanılıyor"
+"Driving end {number} of {count}: {name}": "Sürücü kabini {number}/{count}: {name}"
+"At the wheel in the other cab": "Diğer kabinde kumanda başında"

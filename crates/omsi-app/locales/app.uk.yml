@@ -3331,3 +3331,5 @@
 "Default for every bus": "Типовий для всіх автобусів"
 "Use for {bus}": "Використовувати для {bus}"
 "Profile {name} in use": "Використовується профіль {name}"
+"Driving end {number} of {count}: {name}": "Кабіна {number} з {count}: {name}"
+"At the wheel in the other cab": "За контролером в іншій кабіні"

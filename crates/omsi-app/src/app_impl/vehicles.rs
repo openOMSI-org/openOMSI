@@ -14,10 +14,27 @@ impl App {
         // (the file under its content root, as the vehicle lists name it: a whole path was
         // taken for one under the game's folder)
         let file = &p.vehicle.ty.def.path;
-        let bus = omsi_cfg::content_roots().iter().chain(std::iter::once(&self.args.root)).find_map(|r| file.strip_prefix(r).ok()).unwrap_or(file).to_string_lossy().replace('\\', "/");
-        let paint = p.vehicle.host.paint_scheme.flatten().and_then(|i| p.vehicle.ty.paint_schemes.get(i)).map(|s| s.name.clone());
+        let bus = omsi_cfg::content_roots()
+            .iter()
+            .chain(std::iter::once(&self.args.root))
+            .find_map(|r| file.strip_prefix(r).ok())
+            .unwrap_or(file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let paint = p
+            .vehicle
+            .host
+            .paint_scheme
+            .flatten()
+            .and_then(|i| p.vehicle.ty.paint_schemes.get(i))
+            .map(|s| s.name.clone());
         // (the depot file by its file name, as `find_hof` looks for it)
-        let hof = p.vehicle.host.hof.as_deref().map(omsi_vehicle::hof::Hof::depot_name);
+        let hof = p
+            .vehicle
+            .host
+            .hof
+            .as_deref()
+            .map(omsi_vehicle::hof::Hof::depot_name);
         let identity = (p.vehicle.number(), p.vehicle.ident());
         let idle = self.menus.pending_placement.is_none();
         self.menus.swap_pending = true;
@@ -34,28 +51,63 @@ impl App {
         if quitting {
             self.menus.pending_placement = None;
         }
-        let Some(sw) = &self.session.depot_prev else { return };
+        let Some(sw) = &self.session.depot_prev else {
+            return;
+        };
         let swapped_in = self.menus.swapped_in;
-        let now = self.player.as_ref().map(|p| (p.uid, swapped_in == Some(p.uid) && self.args.bus.as_deref().is_some_and(|b| crate::depot_bus::is_this_bus(&p.vehicle, b))));
-        let Some(landed) = crate::depot_bus::switch_landed(self.menus.pending_placement.is_some(), Some(sw.old_uid), now) else { return };
-        let Some(sw) = self.session.depot_prev.take() else { return };
+        let now = self.player.as_ref().map(|p| {
+            (
+                p.uid,
+                swapped_in == Some(p.uid)
+                    && self
+                        .args
+                        .bus
+                        .as_deref()
+                        .is_some_and(|b| crate::depot_bus::is_this_bus(&p.vehicle, b)),
+            )
+        });
+        let Some(landed) = crate::depot_bus::switch_landed(
+            self.menus.pending_placement.is_some(),
+            Some(sw.old_uid),
+            now,
+        ) else {
+            return;
+        };
+        let Some(sw) = self.session.depot_prev.take() else {
+            return;
+        };
         if landed {
             if let Some((old, outing, wear)) = sw.record {
                 crate::depot_bus::record_wear(&old, &outing, wear);
             }
             self.session.depot_base = sw.base;
         } else {
-            log::warn!("depot bus {:?}: not driven, back to {:?}", self.args.depot, sw.prev.0);
+            log::warn!(
+                "depot bus {:?}: not driven, back to {:?}",
+                self.args.depot,
+                sw.prev.0
+            );
             (self.args.depot, self.args.bus) = sw.prev;
         }
     }
 
     pub(crate) fn repaint_driven(&mut self, scheme: Option<usize>) {
         if self.net.lan.is_some() {
-            self.service_msg = Some((omsi_ui::tr("In a LAN session the livery is chosen before the bus is placed").into_owned(), 3.0));
+            self.service_msg = Some((
+                omsi_ui::tr("In a LAN session the livery is chosen before the bus is placed")
+                    .into_owned(),
+                3.0,
+            ));
             return;
         }
-        let (Some(p), Some(w), Some(r), Some(scene)) = (self.player.as_mut(), self.world.clone(), self.renderer.as_ref(), self.scene.as_mut()) else { return };
+        let (Some(p), Some(w), Some(r), Some(scene)) = (
+            self.player.as_mut(),
+            self.world.clone(),
+            self.renderer.as_ref(),
+            self.scene.as_mut(),
+        ) else {
+            return;
+        };
         let ty = p.vehicle.ty.clone();
         let scheme = scheme.filter(|i| *i < ty.paint_schemes.len());
         if p.vehicle.host.paint_scheme.flatten() == scheme {
@@ -63,20 +115,51 @@ impl App {
         }
         let render = w.add_vehicle(r, scene, &ty, scheme);
         let own = p.vehicle.trailers.len().saturating_sub(p.hand_coupled);
-        let trailers: Vec<_> = p.vehicle.trailers.iter().enumerate().map(|(k, t)| w.add_vehicle_part(r, scene, &t.ty, scheme.filter(|i| k < own && *i < t.ty.paint_schemes.len()), &render)).collect();
+        let trailers: Vec<_> = p
+            .vehicle
+            .trailers
+            .iter()
+            .enumerate()
+            .map(|(k, t)| {
+                w.add_vehicle_part(
+                    r,
+                    scene,
+                    &t.ty,
+                    scheme.filter(|i| k < own && *i < t.ty.paint_schemes.len()),
+                    &render,
+                )
+            })
+            .collect();
         let mut old = std::mem::replace(&mut p.render, render);
         crate::view_sync::vehicle_damage::carry_damage(r, scene, &mut old, &mut p.render);
         w.release_vehicle(r, scene, old);
         for t in std::mem::replace(&mut p.trailer_renders, trailers) {
             w.release_vehicle(r, scene, t);
         }
-        p.vehicle.text_textures.iter_mut().for_each(|t| t.last_text = None);
-        p.vehicle.trailers.iter_mut().flat_map(|t| t.text_textures.iter_mut()).for_each(|t| t.last_text = None);
-        p.vehicle.host.script_textures.iter_mut().for_each(|t| t.dirty = true);
+        p.vehicle
+            .text_textures
+            .iter_mut()
+            .for_each(|t| t.last_text = None);
+        p.vehicle
+            .trailers
+            .iter_mut()
+            .flat_map(|t| t.text_textures.iter_mut())
+            .for_each(|t| t.last_text = None);
+        p.vehicle
+            .host
+            .script_textures
+            .iter_mut()
+            .for_each(|t| t.dirty = true);
         p.vehicle.repaint(scheme);
         self.args.paint = scheme.map(|i| i.to_string());
-        let name = scheme.map_or_else(|| omsi_ui::tr("Default paint").into_owned(), |i| ty.paint_schemes[i].name.clone());
-        self.service_msg = Some((omsi_ui::i18n::tr_fill("Livery: {name}", &[("{name}", &name)]), 3.0));
+        let name = scheme.map_or_else(
+            || omsi_ui::tr("Default paint").into_owned(),
+            |i| ty.paint_schemes[i].name.clone(),
+        );
+        self.service_msg = Some((
+            omsi_ui::i18n::tr_fill("Livery: {name}", &[("{name}", &name)]),
+            3.0,
+        ));
     }
 
     pub(crate) fn take_depot_bus(&mut self, id: &str) {
@@ -88,8 +171,21 @@ impl App {
         let before = (self.args.depot.clone(), self.args.bus.clone());
         let driven = self.player.as_ref().map(|p| p.uid);
         let record = match (before.0.clone(), self.player.as_ref()) {
-            (Some(old), Some(p)) if crate::depot_bus::drives(&p.vehicle.ty.def.path.to_string_lossy(), crate::depot_bus::bus_of(&old).as_deref()) => {
-                Some((old, crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base), crate::depot_bus::wear(&p.vehicle)))
+            (Some(old), Some(p))
+                if crate::depot_bus::drives(
+                    &p.vehicle.ty.def.path.to_string_lossy(),
+                    crate::depot_bus::bus_of(&old).as_deref(),
+                ) =>
+            {
+                Some((
+                    old,
+                    crate::depot_bus::outing_since(
+                        &self.session.career,
+                        &self.args,
+                        &self.session.depot_base,
+                    ),
+                    crate::depot_bus::wear(&p.vehicle),
+                ))
             }
             _ => None,
         };
@@ -100,7 +196,11 @@ impl App {
             self.menus.swapped_in = None;
         }
         self.menus.swap_pending = driven.is_some();
-        self.place_vehicle(&b.bus, Some(b.paint.clone()).filter(|p| !p.trim().is_empty()), None);
+        self.place_vehicle(
+            &b.bus,
+            Some(b.paint.clone()).filter(|p| !p.trim().is_empty()),
+            None,
+        );
         if let Some(pending) = self.menus.pending_placement.as_mut().filter(|_| idle) {
             pending.args.number = Some(b.number.clone()).filter(|n| !n.trim().is_empty());
             pending.args.plate = Some(b.plate.clone()).filter(|n| !n.trim().is_empty());
@@ -111,8 +211,21 @@ impl App {
             return;
         };
         let c = &self.session.career;
-        let base = omsi_launcher_lib::depot::Outing { metres: c.metres, seconds: c.seconds, stops: c.stops[0], tickets: c.tickets.0, takings: c.tickets.1, crashes: c.crashes[0], ..Default::default() };
-        self.session.depot_prev = Some(crate::depot_bus::DepotSwitch { prev: (before.0, before.1), old_uid, record, base });
+        let base = omsi_launcher_lib::depot::Outing {
+            metres: c.metres,
+            seconds: c.seconds,
+            stops: c.stops[0],
+            tickets: c.tickets.0,
+            takings: c.tickets.1,
+            crashes: c.crashes[0],
+            ..Default::default()
+        };
+        self.session.depot_prev = Some(crate::depot_bus::DepotSwitch {
+            prev: (before.0, before.1),
+            old_uid,
+            record,
+            base,
+        });
     }
 
     /// The vehicle is read and its meshes and textures made on a worker thread; the next
@@ -125,17 +238,36 @@ impl App {
         }
         // (in the driven vehicle's place, see `swap_pending`)
         let swap = std::mem::take(&mut self.menus.swap_pending) && self.player.is_some();
-        let name = self.menus.vehicle_list.iter().find(|v| v.1 == bus).map(|v| v.0.clone()).unwrap_or_else(|| bus.to_string());
+        let name = self
+            .menus
+            .vehicle_list
+            .iter()
+            .find(|v| v.1 == bus)
+            .map(|v| v.0.clone())
+            .unwrap_or_else(|| bus.to_string());
         // (a server's own buses only - its `vehicles` list, #1183 - whoever asks: the lists,
         // a plugin, the input script)
         if crate::lan::server_offers().is_some_and(|o| !crate::lan::offers(&o, bus)) {
-            self.service_msg = Some((omsi_ui::i18n::tr_fill("The server does not offer {name}", &[("{name}", &name)]), 4.0));
+            self.service_msg = Some((
+                omsi_ui::i18n::tr_fill("The server does not offer {name}", &[("{name}", &name)]),
+                4.0,
+            ));
             return;
         }
         let bus = bus.to_string();
-        let (Some(w), Some(r), Some(cam)) = (self.world.clone(), self.renderer.as_ref(), self.camera.as_ref()) else { return };
+        let (Some(w), Some(r), Some(cam)) = (
+            self.world.clone(),
+            self.renderer.as_ref(),
+            self.camera.as_ref(),
+        ) else {
+            return;
+        };
         let (x, y, heading) = match (self.view.as_str(), self.player.as_ref()) {
-            (_, Some(p)) if swap => (p.vehicle.position.x, p.vehicle.position.y, p.vehicle.heading),
+            (_, Some(p)) if swap => (
+                p.vehicle.position.x,
+                p.vehicle.position.y,
+                p.vehicle.heading,
+            ),
             ("free", _) | (_, None) => {
                 let f = cam.forward();
                 let flat = glam::DVec2::new(f.x as f64, f.y as f64).normalize_or_zero();
@@ -149,22 +281,41 @@ impl App {
                 (at.x, at.y, p.vehicle.heading)
             }
         };
-        let one = placement_args(&self.args, bus.clone(), format!("{x},{y},{heading}"), paint, hof);
+        let one = placement_args(
+            &self.args,
+            bus.clone(),
+            format!("{x},{y},{heading}"),
+            paint,
+            hof,
+        );
         let prefetch = w.placement_prefetch(r);
         let worker_args = one.clone();
         let (tx, receiver) = std::sync::mpsc::channel();
-        let worker = std::thread::Builder::new().name("vehicle-placement".into()).spawn(move || {
-            let start = Instant::now();
-            let result = crate::spawn::PreparedPlayer::load(&worker_args).map(|mut prepared| {
-                prepared.prefetch(prefetch, worker_args.paint.as_deref());
-                prepared
+        let worker = std::thread::Builder::new()
+            .name("vehicle-placement".into())
+            .spawn(move || {
+                let start = Instant::now();
+                let result =
+                    crate::spawn::PreparedPlayer::load(&worker_args).map(|mut prepared| {
+                        prepared.prefetch(prefetch, worker_args.paint.as_deref());
+                        prepared
+                    });
+                log::info!(
+                    "vehicle placement: read in {:.3} s",
+                    start.elapsed().as_secs_f64()
+                );
+                let _ = tx.send(result);
             });
-            log::info!("vehicle placement: read in {:.3} s", start.elapsed().as_secs_f64());
-            let _ = tx.send(result);
-        });
         match worker {
             Ok(_) => {
-                log::info!("placing {bus} at ({x:.1}, {y:.1}){}", if swap { " in the driven vehicle's place" } else { "" });
+                log::info!(
+                    "placing {bus} at ({x:.1}, {y:.1}){}",
+                    if swap {
+                        " in the driven vehicle's place"
+                    } else {
+                        ""
+                    }
+                );
                 self.menus.pending_placement = Some(crate::spawn::PendingPlacement {
                     receiver,
                     world: w,
@@ -196,35 +347,62 @@ impl App {
     }
 
     pub(crate) fn walk_to(&mut self, at: glam::DVec2) {
-        if self.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
-            self.service_msg = Some((omsi_ui::tr("In a LAN session the city map does not move you").into_owned(), 3.0));
+        if self
+            .net
+            .lan
+            .as_ref()
+            .is_some_and(|l| l.role == omsi_net::Role::Client)
+        {
+            self.service_msg = Some((
+                omsi_ui::tr("In a LAN session the city map does not move you").into_owned(),
+                3.0,
+            ));
             return;
         }
         let top = glam::DVec3::new(at.x, at.y, 3000.0);
         let street_height = || {
             let p = glam::DVec3::new(at.x, at.y, 0.0);
-            let nets = [self.session.traffic.as_ref().map(|t| &t.net), self.menus.navigator.as_ref().and_then(|n| n.map_net())];
-            nets.into_iter().flatten().find_map(|net| net.nearest_lane(p, omsi_sim::traffic::LaneKind::Street).filter(|(_, _, d)| *d <= 300.0).map(|(l, s, _)| net.lanes[l].at(s).0.z))
+            let nets = [
+                self.session.traffic.as_ref().map(|t| &t.net),
+                self.menus.navigator.as_ref().and_then(|n| n.map_net()),
+            ];
+            nets.into_iter().flatten().find_map(|net| {
+                net.nearest_lane(p, omsi_sim::traffic::LaneKind::Street)
+                    .filter(|(_, _, d)| *d <= 300.0)
+                    .map(|(l, s, _)| net.lanes[l].at(s).0.z)
+            })
         };
-        let ground = self.world.clone().and_then(|w| crate::placing::ground_hit(&w, top, glam::DVec3::NEG_Z, 6000.0)).or_else(|| street_height().map(|z| glam::DVec3::new(at.x, at.y, z)));
+        let ground = self
+            .world
+            .clone()
+            .and_then(|w| crate::placing::ground_hit(&w, top, glam::DVec3::NEG_Z, 6000.0))
+            .or_else(|| street_height().map(|z| glam::DVec3::new(at.x, at.y, z)));
         let Some(g) = ground else {
             self.service_msg = Some((omsi_ui::tr("No ground to stand on there").into_owned(), 3.0));
             return;
         };
         if self.session.on_foot.is_none() && self.player.is_none() {
-            self.service_msg = Some((omsi_ui::tr("There is no bus of your own to get up from").into_owned(), 3.0));
+            self.service_msg = Some((
+                omsi_ui::tr("There is no bus of your own to get up from").into_owned(),
+                3.0,
+            ));
             return;
         }
         if self.session.on_foot.is_none() {
             self.get_up();
         }
-        let Some(f) = self.session.on_foot.as_mut() else { return };
+        let Some(f) = self.session.on_foot.as_mut() else {
+            return;
+        };
         f.pos = g;
         f.vel = glam::DVec2::ZERO;
         (f.lift, f.vz) = (0.0, 0.0);
         (f.seat, f.inside, f.transit, f.arrive) = (None, None, None, None);
         (f.footing, f.bus_turn) = (None, None);
-        self.service_msg = Some((omsi_ui::tr("You are on foot where the map was clicked").into_owned(), 3.0));
+        self.service_msg = Some((
+            omsi_ui::tr("You are on foot where the map was clicked").into_owned(),
+            3.0,
+        ));
     }
 
     /// Put the bus on the street nearest the world point `at` (the city map's Ctrl+click),
@@ -239,15 +417,19 @@ impl App {
         // whole map: a street far off on a big map was "no street" until the bus had been
         // flown there (#235). (the height of the point does not matter: the nearest by the
         // ground plan)
-        let nets = [self.session.traffic.as_ref().map(|t| &t.net), self.menus.navigator.as_ref().and_then(|n| n.map_net())];
-        let Some((net, (lane, s, _))) = nets
-            .into_iter()
-            .flatten()
-            .find_map(|net| {
-                let along = facing.and_then(|h| net.lane_along(p, h, omsi_sim::traffic::LaneKind::Street, 25.0, 75.0));
-                along.or_else(|| net.nearest_lane(p, omsi_sim::traffic::LaneKind::Street)).filter(|(_, _, d)| *d <= 300.0).map(|f| (net, f))
-            })
-        else {
+        let nets = [
+            self.session.traffic.as_ref().map(|t| &t.net),
+            self.menus.navigator.as_ref().and_then(|n| n.map_net()),
+        ];
+        let Some((net, (lane, s, _))) = nets.into_iter().flatten().find_map(|net| {
+            let along = facing.and_then(|h| {
+                net.lane_along(p, h, omsi_sim::traffic::LaneKind::Street, 25.0, 75.0)
+            });
+            along
+                .or_else(|| net.nearest_lane(p, omsi_sim::traffic::LaneKind::Street))
+                .filter(|(_, _, d)| *d <= 300.0)
+                .map(|f| (net, f))
+        }) else {
             self.service_msg = Some(("No street near that point".into(), 3.0));
             return;
         };
@@ -255,7 +437,10 @@ impl App {
         let (pos, heading) = l.at(s);
         let heading = heading as f64;
         if crate::admin::request_teleport(self, pos, heading) {
-            self.service_msg = Some((omsi_ui::tr("The bus stands where the map was clicked").into_owned(), 3.0));
+            self.service_msg = Some((
+                omsi_ui::tr("The bus stands where the map was clicked").into_owned(),
+                3.0,
+            ));
             self.service_event("teleport", "player", None);
         }
     }
@@ -273,7 +458,14 @@ crate::app::stage_ctx!(
 
 impl SwitchCx<'_, '_> {
     fn switch_vehicle(self) {
-        switch_vehicle(self.player, self.people, self.view, self.ui, self.sound, self.common.settings);
+        switch_vehicle(
+            self.player,
+            self.people,
+            self.view,
+            self.ui,
+            self.sound,
+            self.common.settings,
+        );
     }
 }
 
@@ -282,17 +474,33 @@ impl SwitchCx<'_, '_> {
 fn replace_driven_vehicle(q: Player, cx: &mut PlacementCx) {
     let uid = q.uid;
     cx.player.placed.insert(0, q);
-    switch_vehicle(cx.player, cx.people, cx.view, cx.ui, cx.sound, cx.common.settings);
+    switch_vehicle(
+        cx.player,
+        cx.people,
+        cx.view,
+        cx.ui,
+        cx.sound,
+        cx.common.settings,
+    );
     if !cx.player.player.as_ref().is_some_and(|p| p.uid == uid) {
         return;
     }
-    let Some(mut old) = cx.player.placed.pop() else { return };
+    let Some(mut old) = cx.player.placed.pop() else {
+        return;
+    };
     if let (Some(a), Some(mut ss)) = (cx.sound.audio.as_ref(), old.sounds.take()) {
         ss.stop_all(a);
     }
-    if let (Some(w), Some(r), Some(scene)) = (cx.world.world.clone(), cx.gfx.renderer.as_ref(), cx.gfx.scene.as_mut()) {
+    if let (Some(w), Some(r), Some(scene)) = (
+        cx.world.world.clone(),
+        cx.gfx.renderer.as_ref(),
+        cx.gfx.scene.as_mut(),
+    ) {
         if let Some(h) = cx.people.humans.as_mut() {
-            h.evict(crate::humans::BusId::Ai(crate::humans::placed_bus_id(old.uid)), &w);
+            h.evict(
+                crate::humans::BusId::Ai(crate::humans::placed_bus_id(old.uid)),
+                &w,
+            );
         }
         if let Some(mut d) = old.driver.take() {
             d.hide(r, scene);
@@ -310,7 +518,9 @@ fn replace_driven_vehicle(q: Player, cx: &mut PlacementCx) {
 /// failed leaves everything as it was.
 pub(crate) fn placement(mut cx: PlacementCx) {
     use std::sync::mpsc::TryRecvError;
-    let Some(mut pending) = cx.menus.menus.pending_placement.take() else { return };
+    let Some(mut pending) = cx.menus.menus.pending_placement.take() else {
+        return;
+    };
     let prepared = match pending.receiver.try_recv() {
         Err(TryRecvError::Empty) => {
             cx.menus.menus.pending_placement = Some(pending);
@@ -328,27 +538,50 @@ pub(crate) fn placement(mut cx: PlacementCx) {
         }
         Ok(Ok(prepared)) => prepared,
     };
-    if cx.world.world.as_ref().is_none_or(|w| !Arc::ptr_eq(w, &pending.world)) {
+    if cx
+        .world
+        .world
+        .as_ref()
+        .is_none_or(|w| !Arc::ptr_eq(w, &pending.world))
+    {
         return;
     }
     if let Some(uid) = pending.replace {
-        let Some(p) = cx.player.player.as_ref().filter(|p| p.uid == uid) else { return };
+        let Some(p) = cx.player.player.as_ref().filter(|p| p.uid == uid) else {
+            return;
+        };
         // (where the bus driven stands now: it may have moved while the other was read)
         if pending.taken.is_none() {
-            pending.args.spawn = Some(format!("{},{},{}", p.vehicle.position.x, p.vehicle.position.y, p.vehicle.heading));
+            pending.args.spawn = Some(format!(
+                "{},{},{}",
+                p.vehicle.position.x, p.vehicle.position.y, p.vehicle.heading
+            ));
         }
     }
-    let (Some(r), Some(scene)) = (cx.gfx.renderer.as_ref(), cx.gfx.scene.as_mut()) else { return };
+    let (Some(r), Some(scene)) = (cx.gfx.renderer.as_ref(), cx.gfx.scene.as_mut()) else {
+        return;
+    };
     let start = Instant::now();
-    let result = crate::spawn::spawn_player_prepared(&pending.args, &pending.world, r, scene, prepared);
-    log::info!("vehicle placement: put into the world in {:.3} s", start.elapsed().as_secs_f64());
+    let result =
+        crate::spawn::spawn_player_prepared(&pending.args, &pending.world, r, scene, prepared);
+    log::info!(
+        "vehicle placement: put into the world in {:.3} s",
+        start.elapsed().as_secs_f64()
+    );
     match result {
         Ok(Some(q)) if pending.replace.is_some() => {
-            let name = format!("{} {}", q.vehicle.ty.def.manufacturer, q.vehicle.ty.def.type_name);
+            let name = format!(
+                "{} {}",
+                q.vehicle.ty.def.manufacturer, q.vehicle.ty.def.type_name
+            );
             cx.menus.menus.swapped_in = Some(q.uid);
             replace_driven_vehicle(q, &mut cx);
             if let Some(id) = pending.taken {
-                cx.menus.menus.parked_transfer.iter_mut().for_each(|t| t.took(id));
+                cx.menus
+                    .menus
+                    .parked_transfer
+                    .iter_mut()
+                    .for_each(|t| t.took(id));
                 crate::on_foot::sit_at_the_wheel(cx.people, cx.view, cx.ui, cx.player);
             }
             *cx.ui.service_msg = Some(if pending.reload {
@@ -361,15 +594,29 @@ pub(crate) fn placement(mut cx: PlacementCx) {
             let uid = q.uid;
             cx.player.placed.push(q);
             if let Some(id) = pending.taken {
-                cx.menus.menus.parked_transfer.iter_mut().for_each(|t| t.took(id));
-                return crate::on_foot::take_placed(cx.player.placed.len() - 1, cx.player, cx.people, cx.view, cx.ui, cx.sound, cx.common.settings);
+                cx.menus
+                    .menus
+                    .parked_transfer
+                    .iter_mut()
+                    .for_each(|t| t.took(id));
+                return crate::on_foot::take_placed(
+                    cx.player.placed.len() - 1,
+                    cx.player,
+                    cx.people,
+                    cx.view,
+                    cx.ui,
+                    cx.sound,
+                    cx.common.settings,
+                );
             }
             // (then put down with the mouse, where the player wants it)
             crate::placing::begin_placing(cx.menus.menus, cx.ui.service_msg, uid, pending.heading);
             *cx.ui.service_msg = Some(("Vehicle loaded".into(), 4.0));
         }
         Ok(None) => {}
-        Err(e) => *cx.ui.service_msg = Some((format!("Could not place {} ({e:#})", pending.name), 5.0)),
+        Err(e) => {
+            *cx.ui.service_msg = Some((format!("Could not place {} ({e:#})", pending.name), 5.0))
+        }
     }
 }
 
@@ -405,16 +652,28 @@ fn switch_vehicle(
     }
     next.vehicle.host.auto_clutch = if settings.auto_clutch { 1.0 } else { 0.0 };
     player.placed.push(now);
-    let name = format!("{} {}", next.vehicle.ty.def.manufacturer, next.vehicle.ty.def.type_name);
+    let name = format!(
+        "{} {}",
+        next.vehicle.ty.def.manufacturer, next.vehicle.ty.def.type_name
+    );
     if let Some(cam) = view.camera.as_ref() {
         *view.camera = Some(next.camera(view.view, cam));
     }
     *player.player = Some(next);
     view.cam.look = (0.0, 0.0);
-    *ui.service_msg = Some((omsi_ui::i18n::tr_fill("Now driving: {name}", &[("{name}", &name.trim())]), 4.0));
+    *ui.service_msg = Some((
+        omsi_ui::i18n::tr_fill("Now driving: {name}", &[("{name}", &name.trim())]),
+        4.0,
+    ));
 }
 
-pub(crate) fn placement_args(args: &Args, bus: String, spawn: String, paint: Option<String>, hof: Option<String>) -> Args {
+pub(crate) fn placement_args(
+    args: &Args,
+    bus: String,
+    spawn: String,
+    paint: Option<String>,
+    hof: Option<String>,
+) -> Args {
     Args {
         bus: Some(bus),
         spawn: Some(spawn),
@@ -444,15 +703,40 @@ mod identity_tests {
 
     #[test]
     fn fresh_placement_does_not_inherit_previous_vehicle_identity() {
-        let mut args = Args::parse_from(["openomsi", "--bus", "Vehicles/old.bus", "--number", "4711", "--plate", "OLD 123", "--depot", "old-depot"]);
+        let mut args = Args::parse_from([
+            "openomsi",
+            "--bus",
+            "Vehicles/old.bus",
+            "--number",
+            "4711",
+            "--plate",
+            "OLD 123",
+            "--depot",
+            "old-depot",
+        ]);
         args.situation = Some("saved.osn".into());
-        args.situation_strvars = vec![("number".into(), "9999".into()), ("ident".into(), "SAVED 123".into())];
+        args.situation_strvars = vec![
+            ("number".into(), "9999".into()),
+            ("ident".into(), "SAVED 123".into()),
+        ];
         args.situation_vars = vec![("engine".into(), 1.0)];
         args.situation_odometer_km = Some(1234.0);
         for bus in ["Vehicles/new.bus", "Vehicles/old.bus"] {
-            let placed = placement_args(&args, bus.into(), "1,2,90".into(), Some("new-paint".into()), Some("new-hof".into()));
-            assert_eq!(placed.number, None, "a new instance uses its own fleet list");
-            assert_eq!(placed.plate, None, "a new instance uses its own registration rules");
+            let placed = placement_args(
+                &args,
+                bus.into(),
+                "1,2,90".into(),
+                Some("new-paint".into()),
+                Some("new-hof".into()),
+            );
+            assert_eq!(
+                placed.number, None,
+                "a new instance uses its own fleet list"
+            );
+            assert_eq!(
+                placed.plate, None,
+                "a new instance uses its own registration rules"
+            );
             assert_eq!(placed.depot, args.depot);
             assert!(!placed.is_resuming());
             assert!(placed.situation_strvars.is_empty());

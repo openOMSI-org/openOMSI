@@ -3223,3 +3223,5 @@
 "Default for every bus": "Барлық автобус үшін әдепкі"
 "Use for {bus}": "{bus} үшін пайдалану"
 "Profile {name} in use": "{name} профилі қолданылуда"
+"Driving end {number} of {count}: {name}": "Кабина {number}/{count}: {name}"
+"At the wheel in the other cab": "Басқа кабинадағы басқару пультінде"

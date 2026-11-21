@@ -24,9 +24,11 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_DEBUG_AI_WIDE` | bool | off | use | sim | Log every tenth of a second an AI car standing over 1.5 m beside its way. |
 | `OMSI_DEBUG_ANIM` | text | - | once | sim | Log the animations of the meshes whose file name contains this text. |
 | `OMSI_DEBUG_BOARDS` | bool | off | use | sim | Log boarding at bus stops. |
+| `OMSI_DEBUG_CABLES` | bool | off | use | sim | Log every control cable value a train car reads when it changes. |
 | `OMSI_DEBUG_CAMERA` | num | 1 | once | scene | Camera arm log: 1 the types and what stops the arm, 2 also every frame. |
 | `OMSI_DEBUG_CAR` | num | - | use | sim | Log the state of the AI car with this id every step. |
 | `OMSI_DEBUG_CAREER` | bool | off | use | career | Log the jolts the career scoring counts. |
+| `OMSI_DEBUG_CAR_VARS` | text | - | use | sim | Log each change, per car of a train, of the script variables and strings whose name contains one of these comma-separated texts. |
 | `OMSI_DEBUG_COLLISION` | bool | off | use | app, scene | Log the player's collision state. |
 | `OMSI_DEBUG_CONES` | bool | off | use | render, scene | Log the light coronas and beams prepared per frame. |
 | `OMSI_DEBUG_CULL` | num | off | frame | render | Log what near and in the picture is left out of the draw list, and why. |

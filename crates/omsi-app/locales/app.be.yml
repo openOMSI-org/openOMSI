@@ -3224,3 +3224,5 @@
 "Default for every bus": "Па змаўчанні для ўсіх аўтобусаў"
 "Use for {bus}": "Выкарыстоўваць для {bus}"
 "Profile {name} in use": "Выкарыстоўваецца профіль {name}"
+"Driving end {number} of {count}: {name}": "Кабіна {number} з {count}: {name}"
+"At the wheel in the other cab": "За кантролерам у іншай кабіне"
