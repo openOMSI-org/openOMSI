@@ -271,6 +271,11 @@ pub struct VehicleInstance {
     /// The train is on the rails under the player: each of its cars rocks on its own springs
     /// (see `sway`).
     pub rail_sway: bool,
+    /// `retrail`'s working storage for the sway, kept from frame to frame: each part's
+    /// roll, and the cars laid so far (their origin behind the vehicle's, their bank).
+    /// Untouched while `rail_sway` is off.
+    pub(super) sway_rolls: Vec<Option<f32>>,
+    pub(super) sway_cars: Vec<(f64, f32)>,
     /// The coupled part (its index in `trailers`) whose driver's cab the player sits in, the
     /// NF6D's rear cab: the keys and switches go to that part's own scripts (see `trigger`).
     /// None in the leading vehicle's cab.

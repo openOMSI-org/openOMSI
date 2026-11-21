@@ -321,6 +321,8 @@ impl VehicleInstance {
             cables: Default::default(),
             turned: false,
             rail_sway: false,
+            sway_rolls: Vec::new(),
+            sway_cars: Vec::new(),
             active_cab: None,
             program_ids: std::sync::OnceLock::new(),
             trolley,

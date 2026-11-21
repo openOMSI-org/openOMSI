@@ -628,12 +628,15 @@ impl VehicleInstance {
                 body_reversed(&self.ty.def, false),
                 trailers[0].coupling_back.y,
             );
-            let rolls: Vec<Option<f32>> = if self.rail_sway {
-                trailers.iter_mut().map(|t| t.body_roll()).collect()
-            } else {
-                Vec::new()
-            };
-            let mut cars = vec![(0.0f64, self.bank)];
+            // (kept from frame to frame, and left alone without the sway)
+            let mut rolls = std::mem::take(&mut self.sway_rolls);
+            let mut cars = std::mem::take(&mut self.sway_cars);
+            if self.rail_sway {
+                rolls.clear();
+                rolls.extend(trailers.iter_mut().map(|t| t.body_roll()));
+                cars.clear();
+                cars.push((0.0, self.bank));
+            }
             for i in 0..trailers.len() {
                 // (the part's rear coupling is the one the next part hangs on, in this part's frame)
                 let rear = trailers.get(i + 1).map(|n| n.coupling_back.y);
@@ -701,6 +704,8 @@ impl VehicleInstance {
                 }
                 lead = Some((t.position, t.body_rotation(), t.heading));
             }
+            self.sway_rolls = rolls;
+            self.sway_cars = cars;
         } else {
             let (mut prev_c, mut b_prev) = (self.position, 0.0f64);
             for t in &mut trailers {
