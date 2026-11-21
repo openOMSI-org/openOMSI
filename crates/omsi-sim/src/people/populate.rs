@@ -377,7 +377,12 @@ impl PeopleSim {
             return (None, None);
         };
         // (of the trips due here soon, `due_dests`; their weights made a whole again)
-        let due = self.due_dests.as_ref().map(|d| d.get(&id));
+        let free = self.free_drive_fill.fills(self.duty.is_some());
+        let due = if free {
+            None
+        } else {
+            self.due_dests.as_ref().map(|d| d.get(&id))
+        };
         let dests: Vec<(&String, f32)> = match due {
             Some(set) => {
                 let kept: Vec<(&String, f32)> = stop

@@ -1059,3 +1059,24 @@ fn whether_the_stops_fill_in_free_drive_is_kept_in_the_settings_file() {
             .any(|l| l.trim() == "pax_free_drive=off")
     );
 }
+
+#[test]
+fn whether_the_stops_passengers_wait_for_a_standing_bus_is_kept_in_the_settings_file() {
+    // (#2757) off by default - OMSI's own passengers set off as the bus rolls in - and kept
+    // both ways through the launcher's file.
+    let fresh = super::settings_from_text(None);
+    assert_eq!(fresh["pax_board_when_stopped"], serde_json::json!(false));
+    let asked = super::settings_from_text(Some("pax_board_when_stopped=1\n"));
+    assert_eq!(asked["pax_board_when_stopped"], serde_json::json!(true));
+    let text = super::settings_to_text(&asked, None);
+    assert!(
+        text.lines().any(|l| l.trim() == "pax_board_when_stopped=1"),
+        "{text}"
+    );
+    let off = super::settings_from_text(Some("pax_board_when_stopped=0\n"));
+    assert!(
+        super::settings_to_text(&off, None)
+            .lines()
+            .any(|l| l.trim() == "pax_board_when_stopped=0")
+    );
+}

@@ -133,6 +133,7 @@ impl App {
             humans.free_drive_fill = omsi_sim::people::free_drive::FreeDriveFill::from_setting(
                 &self.settings.pax_free_drive,
             );
+            humans.board_when_stopped = self.settings.pax_board_when_stopped;
             humans.boarding = self.settings.boarding.clone();
             humans.stand_chance = self.settings.standing_chance;
             humans.short_rides_stand = self.settings.pax_short_rides_stand;
