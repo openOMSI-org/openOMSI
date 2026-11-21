@@ -17,7 +17,8 @@
 # came near it. A base file that was not rustfmt-clean counts as rustfmt would write it: the
 # format check makes every changed file clean, and the lines that adds are no new code.
 #
-# Needs python3 (3.8+), git and the checkout; without rustfmt every file counts as it is.
+# Needs python3 (3.8+), git and the checkout; without rustfmt (or $RUSTFMT) every file counts as
+# it is. scripts/arch-guard-test.sh tests the growth limit.
 set -euo pipefail
 
 repo="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
@@ -92,7 +93,7 @@ def show(rev, path):
 def formatted(text):
     """`text` as rustfmt (with the repository's rustfmt.toml) writes it, or None without rustfmt or on a parse error."""
     try:
-        r = subprocess.run(["rustfmt", "--emit", "stdout", "--config-path", repo], input=text,
+        r = subprocess.run([os.environ.get("RUSTFMT", "rustfmt"), "--emit", "stdout", "--config-path", repo], input=text,
                            capture_output=True, encoding="utf-8", errors="replace")
     except OSError:
         return None
