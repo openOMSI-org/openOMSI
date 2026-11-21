@@ -1,30 +1,17 @@
-//! #3124: which doors of the player's bus the passengers may get in through.
-//!
-//! OMSI leaves it to the vehicle: a passenger walks to the nearest entry that is open (or
-//! has a button), on the platform's side, and one who must buy a ticket keeps to the doors
-//! that sell tickets. That is right for most buses, but some lines board at one door only -
-//! the front one with the driver selling, or the rear one with a machine - and a map has no
-//! way of saying so. This is the setting that says it.
+//! Which doors of the player's bus passengers may board through (#3124).
 
 /// Which entries a boarding passenger may use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EntryDoors {
-    /// As the vehicle says (what OMSI does): any entry that is open or has a button, the
-    /// nearest of them, `{noticketsale}` doors left to those who need no ticket.
     #[default]
     AsBus,
-    /// The front door only (the first entry of the cabin).
     First,
-    /// The front and the middle door - the first two entries.
     FirstTwo,
-    /// The rear door only (the last entry of the cabin).
     Last,
 }
 
 impl EntryDoors {
-    /// The setting's spelling: `as_bus` (also `bus`, `vehicle`, `omsi`), `first`, `first_two`
-    /// (also `front`, `front_two`, `both`), `last` (also `rear`, `back`). Anything else stays
-    /// as the bus says - what the game has always done.
+    /// Parse entry doors setting.
     pub fn from_setting(mode: &str) -> EntryDoors {
         let m = mode
             .trim()
@@ -38,7 +25,7 @@ impl EntryDoors {
         }
     }
 
-    /// The spelling the settings file keeps (the one `from_setting` reads back).
+    /// Setting string representation.
     pub fn writing(&self) -> &'static str {
         match self {
             EntryDoors::AsBus => "as_bus",
@@ -48,8 +35,7 @@ impl EntryDoors {
         }
     }
 
-    /// Whether the entry at index `k` of a cabin of `count` entries may be used. `AsBus`
-    /// lets every entry through - the vehicle's own flags still decide the rest.
+    /// Whether entry index `k` of a cabin with `count` entries may be used.
     pub fn allows(&self, k: usize, count: usize) -> bool {
         match self {
             EntryDoors::AsBus => true,
@@ -90,12 +76,7 @@ mod tests {
         for rear in ["last", "rear", "back", "rear door"] {
             assert_eq!(EntryDoors::from_setting(rear), EntryDoors::Last, "{rear:?}");
         }
-        assert_eq!(
-            EntryDoors::default(),
-            EntryDoors::AsBus,
-            "a file that says nothing stays as OMSI"
-        );
-        // (what is written is read back as itself)
+        assert_eq!(EntryDoors::default(), EntryDoors::AsBus);
         for d in [
             EntryDoors::AsBus,
             EntryDoors::First,
@@ -113,7 +94,6 @@ mod tests {
         assert_eq!(three(EntryDoors::First), vec![0]);
         assert_eq!(three(EntryDoors::FirstTwo), vec![0, 1]);
         assert_eq!(three(EntryDoors::Last), vec![2]);
-        // a bus of one door: the front and the rear one are the same door
         for d in [EntryDoors::First, EntryDoors::FirstTwo, EntryDoors::Last] {
             assert_eq!(
                 (0..1).filter(|k| d.allows(*k, 1)).collect::<Vec<_>>(),
@@ -121,14 +101,12 @@ mod tests {
                 "{d:?}"
             );
         }
-        // a bus of two: the rear one is the second, which "first two" also has
         assert_eq!(
             (0..2)
                 .filter(|k| EntryDoors::Last.allows(*k, 2))
                 .collect::<Vec<_>>(),
             vec![1]
         );
-        // no entries at all (a cabin that lost its doors): nothing is let through but AsBus
         for d in [EntryDoors::First, EntryDoors::FirstTwo, EntryDoors::Last] {
             assert!((0..0).filter(|k| d.allows(*k, 0)).count() == 0, "{d:?}");
         }

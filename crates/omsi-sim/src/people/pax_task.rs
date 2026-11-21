@@ -347,9 +347,17 @@ impl PeopleSim {
         let is_player = bn.id == BusId::Player;
         let doors = self.entry_doors;
         let entry_count = bn.cabin.entries.len();
-        let list: Vec<_> = bn
-            .cabin
-            .in_group(bn.cabin.entry_points(), group)
+        let group_entries = bn.cabin.in_group(bn.cabin.entry_points(), group);
+        let has_allowed = group_entries.iter().enumerate().any(|(k, point)| {
+            point.is_some()
+                && bn
+                    .cabin
+                    .entries
+                    .get(k)
+                    .is_some_and(|door| entry_on_platform(side, door.side))
+                && doors.allows(k, entry_count)
+        });
+        let list: Vec<_> = group_entries
             .into_iter()
             .enumerate()
             .map(|(k, point)| {
@@ -358,7 +366,7 @@ impl PeopleSim {
                     .entries
                     .get(k)
                     .is_some_and(|door| entry_on_platform(side, door.side))
-                    && (!is_player || doors.allows(k, entry_count))
+                    && (!is_player || !has_allowed || doors.allows(k, entry_count))
                 {
                     point
                 } else {
@@ -370,30 +378,21 @@ impl PeopleSim {
         let open: Vec<bool> = (0..list.len())
             .map(|k| bn.entry_open.get(k).copied().unwrap_or(false))
             .collect();
-        // A filtered list can begin with a door on the opposite side (None).
-        // With every matching door still shut, omsi_nearest's rigid-bus fallback
-        // returns the first slot, which might be None. Retry without the open mask
-        // to keep ticket-sale restrictions and the nearest platform-facing target.
-        let pt = bn
-            .cabin
-            .omsi_nearest(
-                here,
-                &list,
-                p.ticket == TICKET_BUY,
-                false,
-                Some(&flags),
-                Some(&open),
-            )
-            .or_else(|| {
-                bn.cabin.omsi_nearest(
-                    here,
-                    &list,
-                    p.ticket == TICKET_BUY,
-                    false,
-                    Some(&flags),
-                    None,
-                )
-            });
+        let is_buying = p.ticket == TICKET_BUY;
+        let has_ticket_door = list
+            .iter()
+            .enumerate()
+            .any(|(k, pt)| pt.is_some() && flags.get(k).is_some_and(|f| !f.0));
+        let pt = if is_buying && !has_ticket_door {
+            None
+        } else {
+            bn.cabin
+                .omsi_nearest(here, &list, is_buying, false, Some(&flags), Some(&open))
+                .or_else(|| {
+                    bn.cabin
+                        .omsi_nearest(here, &list, is_buying, false, Some(&flags), None)
+                })
+        };
         let p = self.pax_mut(i).unwrap();
         if let Some(q) = pt.and_then(|k| bn.cabin.graph.points.get(k)) {
             p.target = q.as_dvec3();
