@@ -1447,6 +1447,7 @@ pub struct Controllers {
     /// The axes that have a dead zone of their own instead (Settings: `ctrl_deadzone_axes`,
     /// #1344).
     pub zones: Zones,
+    zones_spec: String,
     /// Automatic right-stick camera movement (Settings: `right_stick_look`).
     pub right_stick_look: bool,
     /// The dead zone round a gamepad stick's centre (Settings: `pad_deadzone`).
@@ -1584,7 +1585,16 @@ impl Controllers {
     }
 
     fn with_devices(devices: Devices, cfg: Vec<DeviceCfg>) -> Controllers {
-        Controllers { settled: Vec::new(), devices, focused: true, background: false, cfg, held: HeldButtons::default(), editing: false, raw_buttons: Vec::new(), repeating: Vec::new(), deadzone: 0.0, zones: Zones::default(), right_stick_look: true, pad_deadzone: 0.08, pad_presets: true, pedal_throttle: 1.0, pedal_brake: 1.0, disabled: Vec::new(), ff_invert: false, ff_enabled: true, ff_road: 1.0, ff_engine: 1.0, ff_fade: FF_FADE, steer_gain: 1.0, enabled: true, actions: Vec::new(), announced: Vec::new(), moved: Vec::new(), notice: None, rests: Default::default(), auto_saved: None, cfg_unread: false, steer: None, ff_t: 0.0, ff_smooth: 0.0, ff_lateral: 0.0, ff_bump: 0.0, ff_bump_age: 0.0, ff_micro: Micro::default(), ff_vib: ScriptVib::default(), ff_rumble: 0.0, ff_source_logged: None, rumble: Vec::new(), #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel: None, #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel_tried: None }
+        Controllers { settled: Vec::new(), devices, focused: true, background: false, cfg, held: HeldButtons::default(), editing: false, raw_buttons: Vec::new(), repeating: Vec::new(), deadzone: 0.0, zones: Zones::default(), zones_spec: String::new(), right_stick_look: true, pad_deadzone: 0.08, pad_presets: true, pedal_throttle: 1.0, pedal_brake: 1.0, disabled: Vec::new(), ff_invert: false, ff_enabled: true, ff_road: 1.0, ff_engine: 1.0, ff_fade: FF_FADE, steer_gain: 1.0, enabled: true, actions: Vec::new(), announced: Vec::new(), moved: Vec::new(), notice: None, rests: Default::default(), auto_saved: None, cfg_unread: false, steer: None, ff_t: 0.0, ff_smooth: 0.0, ff_lateral: 0.0, ff_bump: 0.0, ff_bump_age: 0.0, ff_micro: Micro::default(), ff_vib: ScriptVib::default(), ff_rumble: 0.0, ff_source_logged: None, rumble: Vec::new(), #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel: None, #[cfg(all(target_os = "linux", target_pointer_width = "64"))] wheel_tried: None }
+    }
+
+    /// Update parsed per-axis dead zones only when the raw setting string changes.
+    pub fn set_zones(&mut self, spec: &str) {
+        if self.zones_spec != spec {
+            self.zones = Zones::parse(spec);
+            self.zones_spec.clear();
+            self.zones_spec.push_str(spec);
+        }
     }
 
     /// Whether this device steers the bus (set up so, or steering now): the photo mode's camera takes none for its gamepad (a wheel turned it).
