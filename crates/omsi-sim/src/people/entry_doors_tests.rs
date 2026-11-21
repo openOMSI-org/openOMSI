@@ -328,3 +328,27 @@ fn passengers_in_disconnected_cabin_section_preserve_reachable_doors() {
     h.entry_doors = EntryDoors::First;
     assert_eq!(door_chosen(&mut h, &bus), Some(1));
 }
+
+#[test]
+fn ticket_buyers_avoid_open_noticketsale_doors_when_selling_door_is_shut() {
+    let (mut h, mut bus) = bus_with_cabin_entries(
+        "shut-selling-open-nosale",
+        "[entry]\n0\n\n[entry]\n1\n{noticketsale}\n\n[exit]\n1\n\n",
+    );
+    h.pax_mut(0).unwrap().ticket = TICKET_BUY;
+    bus.entry_open = vec![false, true];
+    h.entry_doors = EntryDoors::AsBus;
+    assert_eq!(door_chosen(&mut h, &bus), Some(0));
+}
+
+#[test]
+fn ai_bus_ticket_buyers_keep_fallback_when_all_doors_are_noticketsale() {
+    let (mut h, mut bus) = bus_with_cabin_entries(
+        "ai-all-nosale",
+        "[entry]\n0\n{noticketsale}\n\n[entry]\n1\n{noticketsale}\n\n[exit]\n1\n\n",
+    );
+    bus.id = BusId::Ai(3);
+    h.pax_mut(0).unwrap().bus = Some(BusId::Ai(3));
+    h.pax_mut(0).unwrap().ticket = TICKET_BUY;
+    assert!(door_chosen(&mut h, &bus).is_some());
+}

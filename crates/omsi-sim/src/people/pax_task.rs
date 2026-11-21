@@ -379,20 +379,27 @@ impl PeopleSim {
             .map(|k| bn.entry_open.get(k).copied().unwrap_or(false))
             .collect();
         let is_buying = p.ticket == TICKET_BUY;
-        let has_ticket_door = list
-            .iter()
-            .enumerate()
-            .any(|(k, pt)| pt.is_some() && flags.get(k).is_some_and(|f| !f.0));
-        let pt = if is_buying && !has_ticket_door {
-            None
-        } else {
-            bn.cabin
-                .omsi_nearest(here, &list, is_buying, false, Some(&flags), Some(&open))
-                .or_else(|| {
-                    bn.cabin
-                        .omsi_nearest(here, &list, is_buying, false, Some(&flags), None)
+        let search_list: Vec<_> = if is_player && is_buying {
+            list.iter()
+                .enumerate()
+                .map(|(k, pt)| {
+                    if flags.get(k).is_some_and(|f| f.0) {
+                        None
+                    } else {
+                        *pt
+                    }
                 })
+                .collect()
+        } else {
+            list.clone()
         };
+        let pt = bn
+            .cabin
+            .omsi_nearest(here, &search_list, is_buying, false, Some(&flags), Some(&open))
+            .or_else(|| {
+                bn.cabin
+                    .omsi_nearest(here, &search_list, is_buying, false, Some(&flags), None)
+            });
         let p = self.pax_mut(i).unwrap();
         if let Some(q) = pt.and_then(|k| bn.cabin.graph.points.get(k)) {
             p.target = q.as_dvec3();

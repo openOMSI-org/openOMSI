@@ -1,6 +1,5 @@
 //! Which doors of the player's bus passengers may board through (#3124).
 
-/// Which entries a boarding passenger may use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EntryDoors {
     #[default]
@@ -11,7 +10,6 @@ pub enum EntryDoors {
 }
 
 impl EntryDoors {
-    /// Parse entry doors setting.
     pub fn from_setting(mode: &str) -> EntryDoors {
         let m = mode
             .trim()
@@ -25,7 +23,6 @@ impl EntryDoors {
         }
     }
 
-    /// Setting string representation.
     pub fn writing(&self) -> &'static str {
         match self {
             EntryDoors::AsBus => "as_bus",
@@ -35,7 +32,6 @@ impl EntryDoors {
         }
     }
 
-    /// Whether entry index `k` of a cabin with `count` entries may be used.
     pub fn allows(&self, k: usize, count: usize) -> bool {
         match self {
             EntryDoors::AsBus => true,

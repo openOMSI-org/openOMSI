@@ -1,0 +1,3 @@
+fix(sim): filter ineligible ticket doors before search and preserve fallback for AI buses (#3124)
+
+Signed-off-by: szambonurek-88 <szymonzolsztyna@gmail.com>
