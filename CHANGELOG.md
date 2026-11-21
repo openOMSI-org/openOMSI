@@ -13,6 +13,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,
   the .bus/.ovh `[boundingbox]`), so a blind-spot or distance plugin knows where a truck's or an
   articulated bus's body really is, not only its origin (#3936).
+- **Cruise control**: Num0 holds the speed the bus drives at (above 5 km/h), working the
+  throttle and the brake the bus's scripts read, so a bus with a strong engine brake no longer
+  has to be pumped along on the keys. The brake switches it off; pressing the throttle further
+  wins while it is held. Buses that use Num0 themselves keep it; `cruise_control` can be bound
+  in keyboard.cfg's `[game]`. Plugins get `omsi.bus.cruise()` and `omsi.bus.set_cruise(kmh)`
+  (#3976).
 - **Controls profiles**: the launcher's Controls page has profiles, each with every key and
   every controller setting: *Duplicate* makes a new one of the current settings, the list
   switches between them, and they can be renamed and deleted. One can be the *default for every

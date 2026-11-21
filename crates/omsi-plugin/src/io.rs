@@ -246,6 +246,15 @@ pub trait PluginIo {
     fn bus_controls(&self) -> Option<[f32; 4]> {
         None
     }
+    /// The speed the cruise control holds (km/h), while it is on.
+    fn bus_cruise(&self) -> Option<f32> {
+        None
+    }
+    /// Cruise control on at `kmh` (`None`: off); false where there is no bus, or `kmh` or the
+    /// bus's speed is below 5 km/h.
+    fn bus_set_cruise(&mut self, _kmh: Option<f32>) -> bool {
+        false
+    }
     /// The front wheels' angle and the most they turn, degrees (right +).
     fn bus_steer(&self) -> Option<(f32, f32)> {
         None
