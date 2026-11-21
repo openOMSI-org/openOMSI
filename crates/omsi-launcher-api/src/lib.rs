@@ -1168,6 +1168,32 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         }
         "optimise_restore" => optimise_restore(),
         "keybindings_get" => keybindings_get(),
+        "input_profiles" => Ok(core::input_profiles::list()),
+        "input_profile_create" => core::input_profiles::create(&arg::<String>(args, "name")?)
+            .map(|_| core::input_profiles::list())
+            .map_err(err),
+        "input_profile_switch" => core::input_profiles::switch(&arg::<String>(args, "name")?)
+            .map(|_| core::input_profiles::list())
+            .map_err(err),
+        "input_profile_rename" => {
+            core::input_profiles::rename(&arg::<String>(args, "old")?, &arg::<String>(args, "new")?)
+                .map(|_| core::input_profiles::list())
+                .map_err(err)
+        }
+        "input_profile_delete" => core::input_profiles::delete(&arg::<String>(args, "name")?)
+            .map(|_| core::input_profiles::list())
+            .map_err(err),
+        "input_profile_default" => {
+            core::input_profiles::set_default(arg::<Option<String>>(args, "name")?.as_deref())
+                .map(|_| core::input_profiles::list())
+                .map_err(err)
+        }
+        "input_profile_assign" => core::input_profiles::assign(
+            &arg::<String>(args, "bus")?,
+            arg::<Option<String>>(args, "name")?.as_deref(),
+        )
+        .map(|_| core::input_profiles::list())
+        .map_err(err),
         "keybindings_save" => keybindings_save(arg::<Value>(args, "bindings")?),
         "radio_stations" => radio_stations(),
         "radio_stations_save" => radio_stations_save(arg::<Vec<Value>>(args, "list")?),

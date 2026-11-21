@@ -166,12 +166,23 @@ fn matl_glow_light(buv: vec2<f32>, col: vec3<f32>) -> vec3<f32> {
 var<private> glass_fog: f32;
 // The screen mask's r for a pane scattering all the light (post.wgsl `MIST_MASK`).
 const MIST_MASK: f32 = 0.24;
+// Heading, pitch and roll: with the heading alone the film slid along the glass on a hill (#3958).
+fn pane_local(world: vec3<f32>) -> vec3<f32> {
+    let d = world - camera.inside_a.xyz;
+    let sh = camera.inside_a.w;
+    let ch = camera.inside_b.x;
+    let v = vec3<f32>(d.x * ch - d.y * sh, d.x * sh + d.y * ch, d.z);
+    let t = enh.pane_tilt;
+    let p = vec3<f32>(v.x, v.y * t.y + v.z * t.x, v.z * t.y - v.y * t.x);
+    let b = vec3<f32>(p.x * t.w - p.z * t.z, p.y, p.z * t.w + p.x * t.z);
+    return b - camera.inside_c.xyz;
+}
 fn pane_condensation(world: vec3<f32>) -> f32 {
-    if (camera.inside_c.w < 0.5 || near_player_vehicle(world) < 0.5) {
+    let l = pane_local(world);
+    let h = camera.inside_b.yzw;
+    if (camera.inside_c.w < 0.5 || any(abs(l) >= h + vec3<f32>(0.25))) {
         return 0.0;
     }
-    let l = fn_box_local(world);
-    let h = camera.inside_b.yzw;
     let fy = l.y / max(h.y, 0.1);
     let fz = l.z / max(h.z, 0.1);
     let fx = l.x / max(h.x, 0.1);

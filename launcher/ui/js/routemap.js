@@ -407,7 +407,15 @@ function surfaceOf(map, date) {
 
 function load(map, date, trip, mode = '') {
   const key = `${map}|${date}|${trip}|${mode}`;
-  if (!cache.has(key)) cache.set(key, readRouteMap(map, date, trip, false, mode).then(onRoute, (e) => ({ error: e.message })));
+  if (!cache.has(key)) {
+    cache.set(
+      key,
+      readRouteMap(map, date, trip, false, mode).then(onRoute, (e) => {
+        cache.delete(key);
+        return { error: e.message };
+      }),
+    );
+  }
   return cache.get(key);
 }
 

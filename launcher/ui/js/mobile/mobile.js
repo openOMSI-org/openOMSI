@@ -136,6 +136,7 @@ function MobileDrive() {
       <div class="m-group">
         ${row('map', 'map', 'Map', mapLabel, joined ? t('Set by {server}', { server: srv.name || c.lan_addr }) : null, joined)}
         ${row('bus', 'bus', 'Bus', v ? v.name : s.vehicles || !s.boot?.root ? '-' : html`<${Spinner} />`)}
+        ${v && row('number', 'ticket', 'Fleet number', c.number || t('Automatic'))}
         ${v && row('paint', 'sun', 'Paint', c.paint || v.default_paint || t('Standard'))}
         ${v && row('plate', 'badge', 'Number plate', c.plate || t('Automatic'))}
       </div>
@@ -177,8 +178,8 @@ const rt = (c) => (realTime() || realDate() ? t('Follows the computer\'s clock (
 
 /** A full-screen sheet: a title bar with Back, and what to choose from. */
 function Sheet({ which, close }) {
-  const titles = { map: 'Choose a map', bus: 'Choose a bus', paint: 'Paint', line: 'Line', tour: 'Tour', trip: 'Trips of the tour', entry: 'Start at', time: 'Time and date', weather: 'Weather', plate: 'Number plate' };
-  const Body = { map: MapSheet, bus: BusSheet, paint: PaintSheet, line: LineSheet, tour: TourSheet, trip: TripSheet, entry: EntrySheet, time: TimeSheet, weather: WeatherSheet, plate: PlateSheet }[which];
+  const titles = { map: 'Choose a map', bus: 'Choose a bus', paint: 'Paint', number: 'Fleet number', line: 'Line', tour: 'Tour', trip: 'Trips of the tour', entry: 'Start at', time: 'Time and date', weather: 'Weather', plate: 'Number plate' };
+  const Body = { map: MapSheet, bus: BusSheet, paint: PaintSheet, number: NumberSheet, line: LineSheet, tour: TourSheet, trip: TripSheet, entry: EntrySheet, time: TimeSheet, weather: WeatherSheet, plate: PlateSheet }[which];
   useEffect(() => {
     // the phone's Back closes the sheet
     const k = (e) => (e.key === 'Escape' || e.key === 'GoBack' || e.key === 'BrowserBack') && close();
@@ -317,6 +318,20 @@ function TimeSheet() {
 function PlateSheet() {
   const c = useStore().choice;
   return html`<input class="m-search" value=${c.plate || ''} placeholder=${t('Automatic')} onInput=${(e) => choose({ plate: e.currentTarget.value })} />`;
+}
+
+/** The bus's fleet number (its prefix): typed, or one of the numbers the bus itself lists. Set
+ * before the session starts it reaches every vehicle, even one that cannot change it any more
+ * once it stands on the map (#4056). */
+function NumberSheet({ close }) {
+  const s = useStore();
+  const v = curBus();
+  const numbers = v?.numbers || [];
+  const number = s.choice.number || '';
+  return html`<div>
+    <input class="m-search" value=${number} placeholder=${t('Automatic')} onInput=${(e) => choose({ number: e.currentTarget.value })} />
+    ${numbers.map(([n, p]) => pick(number === n, () => (choose({ number: n }), close()), html`<span class="m-pick-text"><b>${n}</b>${p && html`<small>${p}</small>`}</span>`))}
+  </div>`;
 }
 
 function WeatherSheet({ close }) {

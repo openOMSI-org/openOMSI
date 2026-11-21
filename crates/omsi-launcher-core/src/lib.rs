@@ -18,6 +18,7 @@ mod graphics_profiles;
 mod hof_sync;
 pub mod i18n;
 pub mod index;
+pub mod input_profiles;
 pub mod install;
 pub mod instances;
 pub mod map_uses;
@@ -3314,7 +3315,17 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
     graphics_and_interface_defaults(&mut v);
     if phone {
-        for (k, d) in [("msaa", json!(2)), ("anisotropy", json!(4)), ("ssao", json!(false)), ("shadow_size", json!(1024)), ("mirror_size", json!(128)), ("max_fps", json!(60)), ("max_obj_dist", json!("900")), ("pax_density", json!(0.7)), ("navigator_corner", json!("top-center"))] {
+        for (k, d) in [
+            ("msaa", json!(2)),
+            ("anisotropy", json!(4)),
+            ("ssao", json!(false)),
+            ("shadow_size", json!(1024)),
+            ("mirror_size", json!(128)),
+            ("max_fps", json!(60)),
+            ("max_obj_dist", json!("900")),
+            ("pax_density", json!(0.7)),
+            ("navigator_corner", json!("top-center")),
+        ] {
             v[k] = d;
         }
     }
@@ -3322,7 +3333,9 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["touch_pedal_length"] = json!(1.0);
     v["touch_pedal_deadzone"] = json!(0.15);
     // (the game's menus switch these: saved through this page's writer, unknown they were dropped)
-    for k in ["full_tank", "trip_summary"] { v[k] = json!(true); }
+    for k in ["full_tank", "trip_summary"] {
+        v[k] = json!(true);
+    }
     v["triple_screen"] = json!(false);
     v["triple_span"] = json!(true);
     v["triple_hud_center"] = json!(true);
@@ -3341,7 +3354,16 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["mirror_quality"] = json!("standard");
     v["vr_desktop_mirror"] = json!(true);
     v["discord_status"] = json!(false); // (it tells friends the map, bus and line: only when asked)
-    for k in ["discord_map", "discord_bus", "discord_line", "discord_stop", "discord_players", "discord_buttons"] { v[k] = json!(true); }
+    for k in [
+        "discord_map",
+        "discord_bus",
+        "discord_line",
+        "discord_stop",
+        "discord_players",
+        "discord_buttons",
+    ] {
+        v[k] = json!(true);
+    }
     // Only fresh installs opt in; existing settings files retain enabled plugins.
     v["disable_plugins"] = json!(text.is_none());
     // a Tobii eye tracker read natively, beside opentrack (the game's menu switches these)
@@ -3390,11 +3412,111 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // the arrival half of the stops of a depot file that keeps two recordings per stop
     v["auto_announce"] = json!(false);
     // OMSI's own options
-    for (k, d) in [("maintenance", json!(0)), ("ai_unsched_factor", json!(100)), ("ai_reaction", json!(100)), ("standing_chance", json!(5)), ("ai_max_scheduled", json!(0)), ("ai_max_parked", json!(0)), ("ai_max_humans", json!(200)), ("parked_buses_drawn", json!(-1)), ("use_real_time", json!(false)), ("use_real_date", json!(false)), ("use_real_year", json!(false)), ("collision_vehicles", json!(true)), ("collision_objects", json!(true)), ("collision_pedestrians", json!(true)), ("realistic_road_physics", json!(false)), ("head_movement", json!(true)), ("driverview_smooth", json!(true)), ("hands_in_cab", json!(false)), ("driver_like_omsi", json!(false)), ("alt_view", json!(true)), ("precision_zoom", json!(false))] {
+    for (k, d) in [
+        ("maintenance", json!(0)),
+        ("ai_unsched_factor", json!(100)),
+        ("ai_reaction", json!(100)),
+        ("standing_chance", json!(5)),
+        ("ai_max_scheduled", json!(0)),
+        ("ai_max_parked", json!(0)),
+        ("ai_max_humans", json!(200)),
+        ("parked_buses_drawn", json!(-1)),
+        ("use_real_time", json!(false)),
+        ("use_real_date", json!(false)),
+        ("use_real_year", json!(false)),
+        ("collision_vehicles", json!(true)),
+        ("collision_objects", json!(true)),
+        ("collision_pedestrians", json!(true)),
+        ("realistic_road_physics", json!(false)),
+        ("head_movement", json!(true)),
+        ("driverview_smooth", json!(true)),
+        ("hands_in_cab", json!(false)),
+        ("driver_like_omsi", json!(false)),
+        ("alt_view", json!(true)),
+        ("precision_zoom", json!(false)),
+    ] {
         v[k] = d;
     }
     // openOMSI's own: what passengers say, OMSI's route arrows, getting up from the seat
-    for (k, d) in [("pax_voices", json!("all")), ("nav_ai", json!(true)), ("nav_ai_cars", json!(true)), ("nav_surface", json!(true)), ("nav_light", json!(false)), ("nav_3d", json!(true)), ("nav_classic_2d", json!(false)), ("nav_widget", json!(true)), ("nav_size", json!(1.0)), ("get_up", json!(false)), ("time_speed", json!("1")), ("time_sync", json!(false)), ("metar_sync", json!(false)), ("metar_station", json!("")), ("machine_translation", json!(false)), ("shadow_casters", json!("all")), ("shadow_blobs", json!(true)), ("reflections", json!(1.0)), ("mouse_sens", json!(1.0)), ("graphics_api", json!("auto")), ("ctrl_off", json!("")), ("steering_linear", json!(false)), ("old_steering", json!(false)), ("red_steer_spd", json!(false)), ("ff_invert", json!(false)), ("ff_enabled", json!(true)), ("brake_hold", json!(true)), ("auto_clutch", json!(true)), ("momentary_gears", json!(false)), ("auto_shift", json!(false)), ("wheel_range", json!(900.0)), ("wheel_lock", json!(0.0)), ("cab_wheel_rotation", json!(0)), ("fov", json!(0.0)), ("camera_collision", json!(true)), ("right_stick_look", json!(true)), ("steer_look", json!(false)), ("pedal_throttle", json!(1.0)), ("pedal_brake", json!(1.0)), ("seat_x", json!(0.0)), ("seat_y", json!(0.0)), ("seat_z", json!(0.0)), ("seat_pitch_deg", json!(0.0)), ("head_tracking", json!(false)), ("head_tracking_yaw_sens", json!(100.0)), ("head_tracking_pitch_sens", json!(100.0)), ("head_tracking_roll_sens", json!(100.0)), ("head_tracking_x_sens", json!(100.0)), ("head_tracking_y_sens", json!(100.0)), ("head_tracking_z_sens", json!(100.0)), ("head_tracking_invert_yaw", json!(false)), ("head_tracking_invert_pitch", json!(false)), ("head_tracking_invert_roll", json!(false)), ("head_tracking_invert_x", json!(false)), ("head_tracking_invert_y", json!(false)), ("head_tracking_invert_z", json!(false)), ("led_glow", json!(6)), ("led_mips", json!(1.3)), ("night_brightness", json!(0.0)), ("ui_scale", json!(1.0)), ("ui_scale_window", json!(true)), ("chat_size", json!(1.0)), ("notes", json!(true)), ("notes_driving", json!(true)), ("notes_script", json!(true)), ("notes_trip", json!(true)), ("notes_tickets", json!(true)), ("mouse_steering", json!(false)), ("mouse_right_off", json!(false)), ("mouse_smooth", json!(true)), ("mouse_hold", json!(true)), ("mouse_pedals", json!(true)), ("key_pedal_speed", json!(1.0)), ("blinker_cancel", json!(true)), ("ff_road_vib", json!(1.0)), ("ff_engine_vib", json!(1.0)), ("ff_fade", json!(0.28))] {
+    for (k, d) in [
+        ("pax_voices", json!("all")),
+        ("nav_ai", json!(true)),
+        ("nav_ai_cars", json!(true)),
+        ("nav_surface", json!(true)),
+        ("nav_light", json!(false)),
+        ("nav_3d", json!(true)),
+        ("nav_classic_2d", json!(false)),
+        ("nav_widget", json!(true)),
+        ("nav_size", json!(1.0)),
+        ("get_up", json!(false)),
+        ("time_speed", json!("1")),
+        ("time_sync", json!(false)),
+        ("metar_sync", json!(false)),
+        ("metar_station", json!("")),
+        ("machine_translation", json!(false)),
+        ("shadow_casters", json!("all")),
+        ("shadow_blobs", json!(true)),
+        ("reflections", json!(1.0)),
+        ("mouse_sens", json!(1.0)),
+        ("graphics_api", json!("auto")),
+        ("ctrl_off", json!("")),
+        ("steering_linear", json!(false)),
+        ("old_steering", json!(false)),
+        ("red_steer_spd", json!(false)),
+        ("ff_invert", json!(false)),
+        ("ff_enabled", json!(true)),
+        ("brake_hold", json!(true)),
+        ("auto_clutch", json!(true)),
+        ("momentary_gears", json!(false)),
+        ("auto_shift", json!(false)),
+        ("wheel_range", json!(900.0)),
+        ("wheel_lock", json!(0.0)),
+        ("cab_wheel_rotation", json!(0)),
+        ("fov", json!(0.0)),
+        ("camera_collision", json!(true)),
+        ("right_stick_look", json!(true)),
+        ("steer_look", json!(false)),
+        ("pedal_throttle", json!(1.0)),
+        ("pedal_brake", json!(1.0)),
+        ("seat_x", json!(0.0)),
+        ("seat_y", json!(0.0)),
+        ("seat_z", json!(0.0)),
+        ("seat_pitch_deg", json!(0.0)),
+        ("head_tracking", json!(false)),
+        ("head_tracking_yaw_sens", json!(100.0)),
+        ("head_tracking_pitch_sens", json!(100.0)),
+        ("head_tracking_roll_sens", json!(100.0)),
+        ("head_tracking_x_sens", json!(100.0)),
+        ("head_tracking_y_sens", json!(100.0)),
+        ("head_tracking_z_sens", json!(100.0)),
+        ("head_tracking_invert_yaw", json!(false)),
+        ("head_tracking_invert_pitch", json!(false)),
+        ("head_tracking_invert_roll", json!(false)),
+        ("head_tracking_invert_x", json!(false)),
+        ("head_tracking_invert_y", json!(false)),
+        ("head_tracking_invert_z", json!(false)),
+        ("led_glow", json!(6)),
+        ("led_mips", json!(1.3)),
+        ("night_brightness", json!(0.0)),
+        ("ui_scale", json!(1.0)),
+        ("ui_scale_window", json!(true)),
+        ("chat_size", json!(1.0)),
+        ("notes", json!(true)),
+        ("notes_driving", json!(true)),
+        ("notes_script", json!(true)),
+        ("notes_trip", json!(true)),
+        ("notes_tickets", json!(true)),
+        ("mouse_steering", json!(false)),
+        ("mouse_right_off", json!(false)),
+        ("mouse_smooth", json!(true)),
+        ("mouse_hold", json!(true)),
+        ("mouse_pedals", json!(true)),
+        ("key_pedal_speed", json!(1.0)),
+        ("blinker_cancel", json!(true)),
+        ("ff_road_vib", json!(1.0)),
+        ("ff_engine_vib", json!(1.0)),
+        ("ff_fade", json!(0.28)),
+    ] {
         v[k] = d;
     }
     v["steer_look_angle"] = json!(30.0);
@@ -3417,7 +3539,14 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // updates from the GitHub releases: looked for when the launcher starts (and during a
     // session, said over the navigator), installed after asking (or at once); and whether
     // the game is counted on the website's "playing now"
-    for (k, d) in [("update_check", json!(true)), ("update_auto", json!(false)), ("update_notify", json!(true)), ("update_channel", json!("stable")), ("presence", json!(true)), ("hardware_id", json!(true))] {
+    for (k, d) in [
+        ("update_check", json!(true)),
+        ("update_auto", json!(false)),
+        ("update_notify", json!(true)),
+        ("update_channel", json!("stable")),
+        ("presence", json!(true)),
+        ("hardware_id", json!(true)),
+    ] {
         v[k] = d;
     }
     let (dynamic_arrows, map_arrows) = route_arrows_from_text(text.unwrap_or_default());
@@ -3432,26 +3561,124 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
         if line.starts_with('#') || line.starts_with(';') {
             continue;
         }
-        let Some((k, val)) = line.split_once('=') else { continue };
+        let Some((k, val)) = line.split_once('=') else {
+            continue;
+        };
         let (k, val) = (setting_key(k), val.trim());
         let b = |x: &str| matches!(x.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes");
         match k.as_str() {
             "pause_quick_actions" | "ui_theme_pack" => v[&k] = json!(val),
             "anisotropy" => v[&k] = json!(val.parse::<i64>().unwrap_or(8).clamp(1, 16)),
             "msaa" | "shadow_size" => v[&k] = json!(val.parse::<i64>().unwrap_or(0)),
-            "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "vol_ambient" | "min_obj_size" | "radio_speaker" | "radio_hiss" | "radio_dropouts" => v[&k] = json!(val.parse::<f64>().unwrap_or(0.0)),
-            "pax_density" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| if x > 5.0 { x / 100.0 } else { x }).unwrap_or(1.0)),
-            "triple_fov_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
-            "triple_width_mm" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(200.0, 2000.0)).unwrap_or(600.0)),
-            "triple_distance_mm" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(200.0, 3000.0)).unwrap_or(650.0)),
-            "triple_bezel_mm" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 100.0)).unwrap_or(0.0)),
-            "triple_left_angle_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 90.0)).unwrap_or(45.0)),
-            "triple_right_angle_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 90.0)).unwrap_or(45.0)),
-            "triple_eye_height_mm" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-500.0, 500.0)).unwrap_or(0.0)),
-            "vr_scale" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.5, 1.0)).unwrap_or(0.65)),
-            "vr_head_smoothing_ms" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 30.0) as i64).unwrap_or(0)),
-            "vr_mirror_rate" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-1.0, 360.0) as i64).unwrap_or(16)),
-            "mirror_size" => v[&k] = json!(val.parse::<i64>().map(|x| if x == 0 { 0 } else { x.clamp(64, 2048) }).unwrap_or(256)),
+            "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "vol_ambient" | "min_obj_size"
+            | "radio_speaker" | "radio_hiss" | "radio_dropouts" => {
+                v[&k] = json!(val.parse::<f64>().unwrap_or(0.0))
+            }
+            "pax_density" => {
+                v[&k] = json!(
+                    val.trim_end_matches('%')
+                        .parse::<f64>()
+                        .map(|x| if x > 5.0 { x / 100.0 } else { x })
+                        .unwrap_or(1.0)
+                )
+            }
+            "triple_fov_deg" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) })
+                        .unwrap_or(0.0)
+                )
+            }
+            "triple_width_mm" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(200.0, 2000.0))
+                        .unwrap_or(600.0)
+                )
+            }
+            "triple_distance_mm" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(200.0, 3000.0))
+                        .unwrap_or(650.0)
+                )
+            }
+            "triple_bezel_mm" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 100.0))
+                        .unwrap_or(0.0)
+                )
+            }
+            "triple_left_angle_deg" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 90.0))
+                        .unwrap_or(45.0)
+                )
+            }
+            "triple_right_angle_deg" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 90.0))
+                        .unwrap_or(45.0)
+                )
+            }
+            "triple_eye_height_mm" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(-500.0, 500.0))
+                        .unwrap_or(0.0)
+                )
+            }
+            "vr_scale" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.5, 1.0))
+                        .unwrap_or(0.65)
+                )
+            }
+            "vr_head_smoothing_ms" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 30.0) as i64)
+                        .unwrap_or(0)
+                )
+            }
+            "vr_mirror_rate" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(-1.0, 360.0) as i64)
+                        .unwrap_or(16)
+                )
+            }
+            "mirror_size" => {
+                v[&k] = json!(
+                    val.parse::<i64>()
+                        .map(|x| if x == 0 { 0 } else { x.clamp(64, 2048) })
+                        .unwrap_or(256)
+                )
+            }
             "mirror_refresh" => v[&k] = json!(mirror_refresh(val)),
             "mirror_quality" => v[&k] = json!(mirror_quality(val)),
             "cloud_quality" => v[&k] = json!(cloud_quality(val)),
@@ -3464,48 +3691,230 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "puddles" => v[&k] = json!(puddles(val)),
             "upscaler" => v[&k] = json!(upscaler_word(val)),
             "upscale_quality" => v[&k] = json!(omsi_cfg::upscaler_files::quality_word(val)),
-            "frame_generation" => v[&k] = json!(omsi_cfg::upscaler_files::frame_generation_word(val)),
-            "fsr_quality" => v[&k] = json!(match val.to_ascii_lowercase().as_str() {
-                "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
-                "custom" => "custom", "auto" => "auto", _ => "quality",
-            }),
-            "fsr_sharpness" => v[&k] = json!(val.parse::<f64>().ok()
-                .filter(|x| x.is_finite()).unwrap_or(0.8).clamp(0.0, 1.0)),
-            "gpu_texture_compression" => v[&k] = json!(!matches!(val.trim().to_ascii_lowercase().as_str(), "0" | "off" | "no" | "false" | "disabled")),
+            "frame_generation" => {
+                v[&k] = json!(omsi_cfg::upscaler_files::frame_generation_word(val))
+            }
+            "fsr_quality" => {
+                v[&k] = json!(match val.to_ascii_lowercase().as_str() {
+                    "ultra" => "ultra",
+                    "balanced" => "balanced",
+                    "performance" => "performance",
+                    "custom" => "custom",
+                    "auto" => "auto",
+                    _ => "quality",
+                })
+            }
+            "fsr_sharpness" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .unwrap_or(0.8)
+                        .clamp(0.0, 1.0)
+                )
+            }
+            "gpu_texture_compression" => {
+                v[&k] = json!(!matches!(
+                    val.trim().to_ascii_lowercase().as_str(),
+                    "0" | "off" | "no" | "false" | "disabled"
+                ))
+            }
             "max_fps" => v[&k] = json!(val.parse::<f64>().map(|x| x as i64).unwrap_or(0)),
-            "max_obj_dist" => v[&k] = if val.eq_ignore_ascii_case("auto") { json!("auto") } else { json!(val.parse::<f64>().map(|m| (m.round() as i64).to_string()).unwrap_or_else(|_| "auto".into())) },
-            "ssao" | "shadows" | "shadow_blobs" | "lamp_shadows" | "navigator" | "enhanced" | "triple_screen" | "triple_span" | "triple_hud_center" | "vr" | "vr_desktop_mirror" | "fullscreen" | "vsync" | "exact_fare" | "detail_textures" | "texture_compression" | "chat" | "tooltips" | "name_tags" | "show_fps" | "clouds" | "doppler" | "driver" | "use_real_time" | "use_real_date" | "use_real_year" | "collision_vehicles" | "collision_objects" | "collision_pedestrians" | "realistic_road_physics" | "head_movement" | "driverview_smooth" | "hands_in_cab" | "alt_view" | "precision_zoom" => v[&k] = json!(b(val)),
-            "maintenance" | "ai_unsched_factor" | "ai_reaction" | "ai_max_scheduled" | "standing_chance" => v[&k] = json!(val.trim_end_matches('%').parse::<f64>().map(|x| x.max(0.0) as i64).unwrap_or(0)),
+            "max_obj_dist" => {
+                v[&k] = if val.eq_ignore_ascii_case("auto") {
+                    json!("auto")
+                } else {
+                    json!(
+                        val.parse::<f64>()
+                            .map(|m| (m.round() as i64).to_string())
+                            .unwrap_or_else(|_| "auto".into())
+                    )
+                }
+            }
+            "ssao"
+            | "shadows"
+            | "shadow_blobs"
+            | "lamp_shadows"
+            | "navigator"
+            | "enhanced"
+            | "triple_screen"
+            | "triple_span"
+            | "triple_hud_center"
+            | "vr"
+            | "vr_desktop_mirror"
+            | "fullscreen"
+            | "vsync"
+            | "exact_fare"
+            | "detail_textures"
+            | "texture_compression"
+            | "chat"
+            | "tooltips"
+            | "name_tags"
+            | "show_fps"
+            | "clouds"
+            | "doppler"
+            | "driver"
+            | "use_real_time"
+            | "use_real_date"
+            | "use_real_year"
+            | "collision_vehicles"
+            | "collision_objects"
+            | "collision_pedestrians"
+            | "realistic_road_physics"
+            | "head_movement"
+            | "driverview_smooth"
+            | "hands_in_cab"
+            | "alt_view"
+            | "precision_zoom" => v[&k] = json!(b(val)),
+            "maintenance" | "ai_unsched_factor" | "ai_reaction" | "ai_max_scheduled"
+            | "standing_chance" => {
+                v[&k] = json!(
+                    val.trim_end_matches('%')
+                        .parse::<f64>()
+                        .map(|x| x.max(0.0) as i64)
+                        .unwrap_or(0)
+                )
+            }
             // (-1: no parked cars at all, #864)
-            "ai_max_parked" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(0)),
-            "ai_max_humans" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200)),
-            "parked_buses_drawn" => v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(-1)),
-            "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices" => v[&k] = json!(val),
-            "touch_door_mode" => v[&k] = json!(if val.eq_ignore_ascii_case("direct") { "direct" } else { "standard" }),
-            "update_channel" => v[&k] = json!(if val.eq_ignore_ascii_case("beta") { "beta" } else { "stable" }),
-            "photo_mode" => v[&k] = json!(if val.eq_ignore_ascii_case("advanced") { "advanced" } else { "simple" }),
-            "passenger_transfer_percent" => v[&k] = json!(val.parse::<f64>().ok().filter(|x|x.is_finite()).unwrap_or(20.0).clamp(0.0,100.0)),
-            "passenger_animation" => v[&k] = json!(if val.eq_ignore_ascii_case("enhanced") { "enhanced" } else { "original" }),
-            "character_models" => v[&k] = json!(if val.eq_ignore_ascii_case("improved") { "improved" } else { "original" }),
+            "ai_max_parked" => {
+                v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(0))
+            }
+            "ai_max_humans" => {
+                v[&k] = json!(val.parse::<f64>().map(|x| x.max(1.0) as i64).unwrap_or(200))
+            }
+            "parked_buses_drawn" => {
+                v[&k] = json!(val.parse::<f64>().map(|x| x.max(-1.0) as i64).unwrap_or(-1))
+            }
+            "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices" => {
+                v[&k] = json!(val)
+            }
+            "touch_door_mode" => {
+                v[&k] = json!(if val.eq_ignore_ascii_case("direct") {
+                    "direct"
+                } else {
+                    "standard"
+                })
+            }
+            "update_channel" => {
+                v[&k] = json!(if val.eq_ignore_ascii_case("beta") {
+                    "beta"
+                } else {
+                    "stable"
+                })
+            }
+            "photo_mode" => {
+                v[&k] = json!(if val.eq_ignore_ascii_case("advanced") {
+                    "advanced"
+                } else {
+                    "simple"
+                })
+            }
+            "passenger_transfer_percent" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .unwrap_or(20.0)
+                        .clamp(0.0, 100.0)
+                )
+            }
+            "passenger_animation" => {
+                v[&k] = json!(if val.eq_ignore_ascii_case("enhanced") {
+                    "enhanced"
+                } else {
+                    "original"
+                })
+            }
+            "character_models" => {
+                v[&k] = json!(if val.eq_ignore_ascii_case("improved") {
+                    "improved"
+                } else {
+                    "original"
+                })
+            }
             "units" => v[&k] = json!(units_setting(val)),
             "ctrl_off" => v[&k] = json!(val),
-            "metar_station" => v[&k] = json!(val.chars().filter(|c| c.is_ascii_alphabetic()).take(4).collect::<String>().to_ascii_uppercase()),
+            "metar_station" => {
+                v[&k] = json!(
+                    val.chars()
+                        .filter(|c| c.is_ascii_alphabetic())
+                        .take(4)
+                        .collect::<String>()
+                        .to_ascii_uppercase()
+                )
+            }
             "discord_app_id" => v[&k] = json!(val),
-            "voice_mode" => v[&k] = json!(if val.eq_ignore_ascii_case("open") { "open" } else { "ptt" }),
+            "voice_mode" => {
+                v[&k] = json!(if val.eq_ignore_ascii_case("open") {
+                    "open"
+                } else {
+                    "ptt"
+                })
+            }
             "voice_input_device" => v[&k] = json!(val),
-            "voice_mic_gain" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.0)),
-            "voice_volume" | "voice_volume_nearby" | "voice_volume_radio" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 2.0)).unwrap_or(1.0)),
-            "voice_threshold_db" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-80.0, -10.0).round() as i64).unwrap_or(-45)),
-            "voice_range" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(5.0, 1000.0).round() as i64).unwrap_or(75)),
+            "voice_mic_gain" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 4.0))
+                        .unwrap_or(1.0)
+                )
+            }
+            "voice_volume" | "voice_volume_nearby" | "voice_volume_radio" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 2.0))
+                        .unwrap_or(1.0)
+                )
+            }
+            "voice_threshold_db" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(-80.0, -10.0).round() as i64)
+                        .unwrap_or(-45)
+                )
+            }
+            "voice_range" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(5.0, 1000.0).round() as i64)
+                        .unwrap_or(75)
+                )
+            }
             "voice_enabled" | "voice_talker_list" | "voice_all_off" => v[&k] = json!(b(val)),
             "resolution" | "window_size" => v["resolution"] = json!(resolution_text(val)),
-            "graphics_api" => v[&k] = json!(match val.to_ascii_lowercase().as_str() { "vulkan" => "vulkan", "dx12" => "dx12", "gl" => "gl", "angle" => "angle", _ => "auto" }),
-            "shadow_casters" => v[&k] = json!(if val.eq_ignore_ascii_case("omsi") { "omsi" } else { "all" }),
+            "graphics_api" => {
+                v[&k] = json!(match val.to_ascii_lowercase().as_str() {
+                    "vulkan" => "vulkan",
+                    "dx12" => "dx12",
+                    "gl" => "gl",
+                    "angle" => "angle",
+                    _ => "auto",
+                })
+            }
+            "shadow_casters" => {
+                v[&k] = json!(if val.eq_ignore_ascii_case("omsi") {
+                    "omsi"
+                } else {
+                    "all"
+                })
+            }
             "ctrl_deadzone" => v[&k] = json!(val.parse::<f64>().unwrap_or(0.0).clamp(0.0, 0.3)),
             "mouse_sens" => v[&k] = json!(val.parse::<f64>().unwrap_or(1.0).clamp(0.1, 3.0)),
             "key_pedal_speed" => v[&k] = json!(val.parse::<f64>().unwrap_or(1.0).clamp(0.25, 2.0)),
-            "touch_pedal_length" => v[&k] = json!(val.parse::<f64>().unwrap_or(1.0).clamp(0.8, 1.6)),
-            "touch_pedal_deadzone" => v[&k] = json!(val.parse::<f64>().unwrap_or(0.15).clamp(0.0, 0.4)),
+            "touch_pedal_length" => {
+                v[&k] = json!(val.parse::<f64>().unwrap_or(1.0).clamp(0.8, 1.6))
+            }
+            "touch_pedal_deadzone" => {
+                v[&k] = json!(val.parse::<f64>().unwrap_or(0.15).clamp(0.0, 0.4))
+            }
             "mouse_pedal_strength" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -3515,56 +3924,353 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                         .clamp(0.25, 4.0)
                 )
             }
-            "ui_scale" | "nav_size" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(if k == "ui_scale" { 0.5 } else { 0.6 }, 2.0)),
-            "chat_size" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.5, 3.0)),
+            "ui_scale" | "nav_size" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .unwrap_or(1.0)
+                        .clamp(if k == "ui_scale" { 0.5 } else { 0.6 }, 2.0)
+                )
+            }
+            "chat_size" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .unwrap_or(1.0)
+                        .clamp(0.5, 3.0)
+                )
+            }
             "wheel_range" => v[&k] = json!(val.parse::<f64>().unwrap_or(900.0).clamp(90.0, 2880.0)),
-            "wheel_lock" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 45.0 { 0.0 } else { x.min(2880.0) }).unwrap_or(0.0)),
+            "wheel_lock" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .map(|x| if x < 45.0 { 0.0 } else { x.min(2880.0) })
+                        .unwrap_or(0.0)
+                )
+            }
             // (the cab's steering wheel model, degrees lock to lock; 0 = the bus's own animation)
-            "cab_wheel_rotation" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite() && *x >= 90.0).map(|x| (x.round() as i64).clamp(180, 1800)).unwrap_or(0)),
-            "fov" => v[&k] = json!(val.parse::<f64>().map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) }).unwrap_or(0.0)),
-            "pad_steer_speed" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.8, 5.0)).unwrap_or(2.0)),
-            "pad_deadzone" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 0.4)).unwrap_or(0.08)),
-            "pad_type" => v[&k] = json!(match val.trim().to_ascii_lowercase().as_str() { "xbox" => "xbox", "ps4" => "ps4", "ps5" => "ps5", _ => "auto" }),
-            "camera_collision" | "right_stick_look" | "ctrl_background" | "pad_steer_linear" | "pad_buttons" | "arrows_switch_cams" | "steer_look" | "head_tracking" | "head_tracking_invert_yaw" | "head_tracking_invert_pitch" | "head_tracking_invert_roll" | "head_tracking_invert_x" | "head_tracking_invert_y" | "head_tracking_invert_z" | "discord_status" | "discord_map" | "discord_bus" | "discord_line" | "discord_stop" | "discord_players" | "discord_buttons" | "remote_cockpit" | "launcher_rest" | "cross_platform_launcher" => v[&k] = json!(b(val)),
+            "cab_wheel_rotation" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite() && *x >= 90.0)
+                        .map(|x| (x.round() as i64).clamp(180, 1800))
+                        .unwrap_or(0)
+                )
+            }
+            "fov" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) })
+                        .unwrap_or(0.0)
+                )
+            }
+            "pad_steer_speed" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.8, 5.0))
+                        .unwrap_or(2.0)
+                )
+            }
+            "pad_deadzone" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 0.4))
+                        .unwrap_or(0.08)
+                )
+            }
+            "pad_type" => {
+                v[&k] = json!(match val.trim().to_ascii_lowercase().as_str() {
+                    "xbox" => "xbox",
+                    "ps4" => "ps4",
+                    "ps5" => "ps5",
+                    _ => "auto",
+                })
+            }
+            "camera_collision"
+            | "right_stick_look"
+            | "ctrl_background"
+            | "pad_steer_linear"
+            | "pad_buttons"
+            | "arrows_switch_cams"
+            | "steer_look"
+            | "head_tracking"
+            | "head_tracking_invert_yaw"
+            | "head_tracking_invert_pitch"
+            | "head_tracking_invert_roll"
+            | "head_tracking_invert_x"
+            | "head_tracking_invert_y"
+            | "head_tracking_invert_z"
+            | "discord_status"
+            | "discord_map"
+            | "discord_bus"
+            | "discord_line"
+            | "discord_stop"
+            | "discord_players"
+            | "discord_buttons"
+            | "remote_cockpit"
+            | "launcher_rest"
+            | "cross_platform_launcher" => v[&k] = json!(b(val)),
             // (how much of the mip chain an LED panel is held at, 0..4; a file from before
             // it was a number says 1 or 0)
-            "led_mips" => v[&k] = json!(val.trim().parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.3)),
+            "led_mips" => {
+                v[&k] = json!(
+                    val.trim()
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 4.0))
+                        .unwrap_or(1.3)
+                )
+            }
             "led_glow" => v[&k] = json!(val.parse::<i64>().map(|x| x.clamp(0, 15)).unwrap_or(6)),
-            "remote_cockpit_port" => v[&k] = json!(val.trim().parse::<u16>().ok().filter(|p| *p > 0).unwrap_or(8642)),
-            "night_brightness" => v[&k] = json!(val.trim().parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 3.0)).unwrap_or(0.0)),
-            "reflections" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map_or_else(|| if b(val) { 1.0 } else { 0.0 }, |x| x.clamp(0.0, 1.0))),
-            "road_glare" | "traffic_headlights" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.0, 2.0)),
-            "look_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.1, 2.0)).unwrap_or(1.0)),
-            "look_smoothing_ms" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 200.0)).unwrap_or(0.0)),
-            "zoom_hold_amount" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.15, 1.0)).unwrap_or(0.5)),
+            "remote_cockpit_port" => {
+                v[&k] = json!(
+                    val.trim()
+                        .parse::<u16>()
+                        .ok()
+                        .filter(|p| *p > 0)
+                        .unwrap_or(8642)
+                )
+            }
+            "night_brightness" => {
+                v[&k] = json!(
+                    val.trim()
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 3.0))
+                        .unwrap_or(0.0)
+                )
+            }
+            "reflections" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map_or_else(|| if b(val) { 1.0 } else { 0.0 }, |x| x.clamp(0.0, 1.0))
+                )
+            }
+            "road_glare" | "traffic_headlights" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .unwrap_or(1.0)
+                        .clamp(0.0, 2.0)
+                )
+            }
+            "look_sens" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.1, 2.0))
+                        .unwrap_or(1.0)
+                )
+            }
+            "look_smoothing_ms" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 200.0))
+                        .unwrap_or(0.0)
+                )
+            }
+            "zoom_hold_amount" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.15, 1.0))
+                        .unwrap_or(0.5)
+                )
+            }
             "zoom_hold_latch" => v[&k] = json!(b(val)),
             "flashlight_cursor" => v[&k] = json!(b(val)),
-            "pad_steer_smooth" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 300.0)).unwrap_or(120.0)),
-            "steer_look_angle" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 60.0)).unwrap_or(30.0)),
-            "steer_look_response" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.05, 1.0)).unwrap_or(0.25)),
-            "head_idle" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 1.0)).unwrap_or(0.0)),
-            "head_idle_pace" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.5, 2.0)).unwrap_or(1.0)),
-            "pedal_throttle" | "pedal_brake" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(0.25, 4.0)).unwrap_or(1.0)),
-            "ff_road_vib" | "ff_engine_vib" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.0)),
-            "ff_fade" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(0.0, 1.5)).unwrap_or(0.28)),
-            "seat_x" | "seat_y" | "seat_z" => v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(-1.5, 1.5)).unwrap_or(0.0)),
-            "seat_pitch_deg" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(0.0).clamp(-45.0, 45.0)),
-            "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_x_sens" | "head_tracking_y_sens" | "head_tracking_z_sens" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 100.0)).unwrap_or(100.0)),
+            "pad_steer_smooth" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 300.0))
+                        .unwrap_or(120.0)
+                )
+            }
+            "steer_look_angle" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 60.0))
+                        .unwrap_or(30.0)
+                )
+            }
+            "steer_look_response" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.05, 1.0))
+                        .unwrap_or(0.25)
+                )
+            }
+            "head_idle" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 1.0))
+                        .unwrap_or(0.0)
+                )
+            }
+            "head_idle_pace" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.5, 2.0))
+                        .unwrap_or(1.0)
+                )
+            }
+            "pedal_throttle" | "pedal_brake" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .map(|x| x.clamp(0.25, 4.0))
+                        .unwrap_or(1.0)
+                )
+            }
+            "ff_road_vib" | "ff_engine_vib" => {
+                v[&k] = json!(val.parse::<f64>().map(|x| x.clamp(0.0, 4.0)).unwrap_or(1.0))
+            }
+            "ff_fade" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .map(|x| x.clamp(0.0, 1.5))
+                        .unwrap_or(0.28)
+                )
+            }
+            "seat_x" | "seat_y" | "seat_z" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .map(|x| x.clamp(-1.5, 1.5))
+                        .unwrap_or(0.0)
+                )
+            }
+            "seat_pitch_deg" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .unwrap_or(0.0)
+                        .clamp(-45.0, 45.0)
+                )
+            }
+            "head_tracking_yaw_sens"
+            | "head_tracking_pitch_sens"
+            | "head_tracking_roll_sens"
+            | "head_tracking_x_sens"
+            | "head_tracking_y_sens"
+            | "head_tracking_z_sens" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .map(|x| x.clamp(0.0, 100.0))
+                        .unwrap_or(100.0)
+                )
+            }
             "full_tank" | "trip_summary" => v[&k] = json!(b(val)),
-            "nav_ai" | "nav_ai_cars" | "nav_surface" | "nav_3d" | "nav_widget" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window" | "notes" | "notes_driving" | "notes_script" | "notes_trip" | "notes_tickets" | "machine_translation" | "update_check" | "update_auto" | "update_notify" | "presence" | "hardware_id" | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "mouse_hold" | "mouse_pedals" | "blinker_cancel" => v[&k] = json!(b(val)),
+            "nav_ai"
+            | "nav_ai_cars"
+            | "nav_surface"
+            | "nav_3d"
+            | "nav_widget"
+            | "get_up"
+            | "time_sync"
+            | "metar_sync"
+            | "ui_scale_window"
+            | "notes"
+            | "notes_driving"
+            | "notes_script"
+            | "notes_trip"
+            | "notes_tickets"
+            | "machine_translation"
+            | "update_check"
+            | "update_auto"
+            | "update_notify"
+            | "presence"
+            | "hardware_id"
+            | "steering_linear"
+            | "old_steering"
+            | "red_steer_spd"
+            | "ff_invert"
+            | "ff_enabled"
+            | "brake_hold"
+            | "auto_clutch"
+            | "momentary_gears"
+            | "auto_shift"
+            | "mouse_steering"
+            | "mouse_right_off"
+            | "mouse_smooth"
+            | "mouse_hold"
+            | "mouse_pedals"
+            | "blinker_cancel" => v[&k] = json!(b(val)),
             "nav_light" => v[&k] = json!(b(val)),
             "nav_classic_2d" => v[&k] = json!(b(val)),
             "info_bar" | "disable_plugins" => v[&k] = json!(b(val)),
-            "info_size" | "timetable_size" | "perf_size" => v[&k] = json!(val.parse::<f64>().ok().filter(|x| x.is_finite()).unwrap_or(1.0).clamp(0.6, 2.0)),
+            "info_size" | "timetable_size" | "perf_size" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .unwrap_or(1.0)
+                        .clamp(0.6, 2.0)
+                )
+            }
             "perf_overlay" => v[&k] = json!(perf_overlay_mode(val)),
             "sim_thread" => v[&k] = json!(b(val)),
             "mx_graphics" => v[&k] = json!(b(val)),
             "mirror_hud" => v[&k] = json!(val.trim().parse::<u8>().map(|x| x.min(7)).unwrap_or(0)),
-            "windy_trees" | "detailed_trees" | "road_snow" | "mirror_hud_every_frame" | "mirror_shadows" | "mirror_particles" | "ai_wait_timed_stops_only" | "pax_bad_driving" | "passenger_connections" | "passenger_hailing" | "passenger_full_bus_reaction" | "pax_short_rides_stand" | "auto_announce" | "ambient" => v[&k] = json!(b(val)),
+            "windy_trees"
+            | "detailed_trees"
+            | "road_snow"
+            | "mirror_hud_every_frame"
+            | "mirror_shadows"
+            | "mirror_particles"
+            | "ai_wait_timed_stops_only"
+            | "pax_bad_driving"
+            | "passenger_connections"
+            | "passenger_hailing"
+            | "passenger_full_bus_reaction"
+            | "pax_short_rides_stand"
+            | "auto_announce"
+            | "ambient" => v[&k] = json!(b(val)),
             "head_tracking_source" => v[&k] = json!(head_tracking_source(val)),
             "tobii_edges" => v[&k] = json!(b(val)),
-            "head_tracking_smoothing" | "head_tracking_dead_zone" => v[&k] = json!(head_tracking_value(&k, val.parse::<f64>().ok())),
-            "time_speed" => v[&k] = json!(val.trim_start_matches(['x', 'X']).parse::<f64>().map(|x| x.clamp(1.0, 30.0)).map(|x| if x.fract() == 0.0 { format!("{}", x as i64) } else { x.to_string() }).unwrap_or_else(|_| "1".into())),
+            "head_tracking_smoothing" | "head_tracking_dead_zone" => {
+                v[&k] = json!(head_tracking_value(&k, val.parse::<f64>().ok()))
+            }
+            "time_speed" => {
+                v[&k] = json!(
+                    val.trim_start_matches(['x', 'X'])
+                        .parse::<f64>()
+                        .map(|x| x.clamp(1.0, 30.0))
+                        .map(|x| if x.fract() == 0.0 {
+                            format!("{}", x as i64)
+                        } else {
+                            x.to_string()
+                        })
+                        .unwrap_or_else(|_| "1".into())
+                )
+            }
             "language" => v[&k] = json!(language_code(val)),
             "graphics" | "renderer" => graphics = Some(graphics_mode(val)),
             // whole metres, as the page's select has them ("1500"); anything else (auto) is
@@ -3587,7 +4293,11 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     }
     // a file without `graphics` (older builds) says only `enhanced`; its vanilla renderer is
     // what is now Vanilla+
-    let g = graphics.unwrap_or(if v["enhanced"] == json!(true) { "enhanced" } else { "vanilla_plus" });
+    let g = graphics.unwrap_or(if v["enhanced"] == json!(true) {
+        "enhanced"
+    } else {
+        "vanilla_plus"
+    });
     // (a file of the days of Enhanced+ names it as a mode: it is Enhanced with ray tracing on)
     let g = if g == "enhanced_plus" {
         v["ray_tracing"] = json!(true);
@@ -3731,7 +4441,17 @@ fn units_setting(v: &str) -> &'static str {
 pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let b = |k: &str, d: bool| v.get(k).and_then(|x| x.as_bool()).unwrap_or(d) as u8;
     // a number, also as the string a select gives
-    let n = |k: &str, d: i64| v.get(k).and_then(|x| x.as_i64().or_else(|| x.as_f64().or_else(|| x.as_str().and_then(|s| s.trim().parse::<f64>().ok())).map(|f| f as i64))).unwrap_or(d);
+    let n = |k: &str, d: i64| {
+        v.get(k)
+            .and_then(|x| {
+                x.as_i64().or_else(|| {
+                    x.as_f64()
+                        .or_else(|| x.as_str().and_then(|s| s.trim().parse::<f64>().ok()))
+                        .map(|f| f as i64)
+                })
+            })
+            .unwrap_or(d)
+    };
     let f = |k: &str, d: f64| v.get(k).and_then(|x| x.as_f64()).unwrap_or(d);
     let legacy_arrows = b("nav_arrows", false) != 0;
     let dynamic_arrows = b("nav_dynamic_arrows", legacy_arrows);
@@ -3745,16 +4465,34 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         n("shadow_size", 2048),
         b("navigator", true),
         f("ui_opacity", 0.85),
-        v.get("navigator_corner").and_then(|x| x.as_str()).unwrap_or("bottom-left"),
+        v.get("navigator_corner")
+            .and_then(|x| x.as_str())
+            .unwrap_or("bottom-left"),
         v.get("boarding").and_then(|x| x.as_str()).unwrap_or("auto"),
         b("detail_textures", true),
         b("exact_fare", true),
-        matches!(graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")), "enhanced" | "enhanced_plus") as u8,
-        match graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")) { "enhanced_plus" => "enhanced", g => g },
+        matches!(
+            graphics_mode(
+                v.get("graphics")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("vanilla_plus")
+            ),
+            "enhanced" | "enhanced_plus"
+        ) as u8,
+        match graphics_mode(
+            v.get("graphics")
+                .and_then(|x| x.as_str())
+                .unwrap_or("vanilla_plus")
+        ) {
+            "enhanced_plus" => "enhanced",
+            g => g,
+        },
         b("fullscreen", false),
         b("vsync", true),
         f("volume", 0.6),
-        v.get("drive_keys").and_then(|x| x.as_str()).unwrap_or("simple"),
+        v.get("drive_keys")
+            .and_then(|x| x.as_str())
+            .unwrap_or("simple"),
         // "auto" or a fraction, as a string (the page's select) or a number
         match v.get("render_scale") {
             Some(Value::String(s)) if !s.trim().is_empty() => s.trim().to_string(),
@@ -3763,7 +4501,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         },
         // metres, or "auto" (the game's 1200 m)
         match v.get("view_distance") {
-            Some(Value::String(s)) if s.trim().parse::<f64>().map(|m| m > 0.0).unwrap_or(false) => s.trim().to_string(),
+            Some(Value::String(s)) if s.trim().parse::<f64>().map(|m| m > 0.0).unwrap_or(false) =>
+                s.trim().to_string(),
             Some(Value::Number(x)) if x.as_f64().map(|m| m > 0.0).unwrap_or(false) => x.to_string(),
             _ => "auto".to_string(),
         },
@@ -3778,7 +4517,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         f("pax_density", 1.0),
         f("vol_ai", 1.0),
         f("vol_scenery", 1.0),
-        match n("mirror_size", 256) { 0 => 0, x => x.clamp(64, 2048) },
+        match n("mirror_size", 256) {
+            0 => 0,
+            x => x.clamp(64, 2048),
+        },
         b("doppler", true),
         b("driver", true),
         n("max_fps", 0).max(0),
@@ -3789,7 +4531,15 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             _ => "auto".to_string(),
         },
     );
-    let ui_theme = if v.get("ui_theme").and_then(|x| x.as_str()).is_some_and(|x| x.eq_ignore_ascii_case("light")) { "light" } else { "dark" };
+    let ui_theme = if v
+        .get("ui_theme")
+        .and_then(|x| x.as_str())
+        .is_some_and(|x| x.eq_ignore_ascii_case("light"))
+    {
+        "light"
+    } else {
+        "dark"
+    };
     let text = format!("{text}ui_theme={ui_theme}\n");
     // OMSI's own options (options.cfg): maintenance ([wear_lifespan]), the AI counts and
     // the share of random traffic, the real clock and calendar, collisions, head movement
@@ -3818,20 +4568,38 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     );
     let text = format!(
         "{text}nav_dynamic_arrows={dynamic_arrows}\nnav_map_arrows={map_arrows}\npax_voices={}\nnav_ai={}\nnav_ai_cars={}\nnav_surface={}\nnav_3d={}\nnav_classic_2d={}\nnav_widget={}\nnav_size={}\nget_up={}\ntime_speed={}\nmachine_translation={}\nshadow_casters={}\nshadow_blobs={}\nlamp_shadows={}\nctrl_deadzone={}\nupdate_check={}\nupdate_auto={}\nupdate_notify={}\npresence={}\nhardware_id={}\nreflections={}\nmouse_sens={}\nmouse_pedal_strength={}\ngraphics_api={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nff_invert={}\nwheel_range={}\nwheel_lock={}\ncab_wheel_rotation={}\nfov={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\nseat_pitch_deg={}\nsteer_look={}\nhead_tracking={}\nhead_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\nff_enabled={}\nbrake_hold={}\nauto_clutch={}\nmomentary_gears={}\nauto_shift={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nnotes_driving={}\nnotes_script={}\nnotes_trip={}\nnotes_tickets={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nmouse_hold={}\nblinker_cancel={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",
-        match v.get("pax_voices").and_then(|x| x.as_str()).unwrap_or("all") {
+        match v
+            .get("pax_voices")
+            .and_then(|x| x.as_str())
+            .unwrap_or("all")
+        {
             "tickets" => "tickets",
             "off" => "off",
             _ => "all",
         },
-        b("nav_ai", true), b("nav_ai_cars", true), b("nav_surface", true), b("nav_3d", true), b("nav_classic_2d", false), b("nav_widget", true), f("nav_size", 1.0).clamp(0.6, 2.0),
+        b("nav_ai", true),
+        b("nav_ai_cars", true),
+        b("nav_surface", true),
+        b("nav_3d", true),
+        b("nav_classic_2d", false),
+        b("nav_widget", true),
+        f("nav_size", 1.0).clamp(0.6, 2.0),
         b("get_up", false),
         match v.get("time_speed") {
-            Some(Value::String(x)) => x.trim().parse::<f64>().map(|x| x.clamp(1.0, 30.0)).unwrap_or(1.0),
+            Some(Value::String(x)) => x
+                .trim()
+                .parse::<f64>()
+                .map(|x| x.clamp(1.0, 30.0))
+                .unwrap_or(1.0),
             Some(Value::Number(x)) => x.as_f64().unwrap_or(1.0).clamp(1.0, 30.0),
             _ => 1.0,
         },
         b("machine_translation", false),
-        if v.get("shadow_casters").and_then(|x| x.as_str()) == Some("omsi") { "omsi" } else { "all" },
+        if v.get("shadow_casters").and_then(|x| x.as_str()) == Some("omsi") {
+            "omsi"
+        } else {
+            "all"
+        },
         b("shadow_blobs", true),
         b("lamp_shadows", true),
         f("ctrl_deadzone", 0.0).clamp(0.0, 0.3),
@@ -3840,24 +4608,39 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("update_notify", true),
         b("presence", true),
         b("hardware_id", true),
-        v.get("reflections").and_then(|x| x.as_f64().or_else(|| x.as_bool().map(|on| if on { 1.0 } else { 0.0 }))).unwrap_or(1.0).clamp(0.0, 1.0),
+        v.get("reflections")
+            .and_then(|x| x
+                .as_f64()
+                .or_else(|| x.as_bool().map(|on| if on { 1.0 } else { 0.0 })))
+            .unwrap_or(1.0)
+            .clamp(0.0, 1.0),
         f("mouse_sens", 1.0).clamp(0.1, 3.0),
         f("mouse_pedal_strength", 1.0).clamp(0.25, 4.0),
-        match v.get("graphics_api").and_then(|x| x.as_str()).unwrap_or("auto") {
+        match v
+            .get("graphics_api")
+            .and_then(|x| x.as_str())
+            .unwrap_or("auto")
+        {
             "vulkan" => "vulkan",
             "dx12" => "dx12",
             "gl" => "gl",
             "angle" => "angle",
             _ => "auto",
         },
-        v.get("ctrl_off").and_then(|x| x.as_str()).unwrap_or("").replace(['\n', '\r'], " "),
+        v.get("ctrl_off")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .replace(['\n', '\r'], " "),
         b("steering_linear", false),
         b("old_steering", false),
         b("red_steer_spd", false),
         b("ff_invert", false),
         f("wheel_range", 900.0).clamp(90.0, 2880.0),
         f("wheel_lock", 0.0).clamp(0.0, 2880.0),
-        match n("cab_wheel_rotation", 0) { x if x < 90 => 0, x => x.clamp(180, 1800) },
+        match n("cab_wheel_rotation", 0) {
+            x if x < 90 => 0,
+            x => x.clamp(180, 1800),
+        },
         f("fov", 0.0).clamp(0.0, 120.0),
         b("camera_collision", true),
         f("pedal_throttle", 1.0).clamp(0.25, 4.0),
@@ -3905,26 +4688,113 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         f("ff_engine_vib", 1.0).clamp(0.0, 4.0),
         f("ff_fade", 0.28).clamp(0.0, 1.5),
     );
-    let vr_scale = v.get("vr_scale").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.65).clamp(0.5, 1.0);
-    let vr_head_smoothing_ms = v.get("vr_head_smoothing_ms").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(0.0).clamp(0.0, 30.0);
-    let vr_mirror_rate = v.get("vr_mirror_rate").and_then(|x| x.as_f64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).filter(|x| x.is_finite()).unwrap_or(16.0).clamp(-1.0, 360.0);
-    let remote_port = v.get("remote_cockpit_port").and_then(|x| x.as_u64().or_else(|| x.as_str().and_then(|s| s.trim().parse().ok()))).filter(|p| (1..=65535).contains(p)).unwrap_or(8642);
-    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\ndiscord_status={}\ndiscord_map={}\ndiscord_bus={}\ndiscord_line={}\ndiscord_stop={}\ndiscord_players={}\ndiscord_buttons={}\nremote_cockpit={}\nremote_cockpit_port={remote_port}\nlauncher_rest={}\ncross_platform_launcher={}\n", b("vr", false), b("vr_desktop_mirror", true), b("discord_status", false), b("discord_map", true), b("discord_bus", true), b("discord_line", true), b("discord_stop", true), b("discord_players", true), b("discord_buttons", true), b("remote_cockpit", false), b("launcher_rest", true), b("cross_platform_launcher", false));
+    let vr_scale = v
+        .get("vr_scale")
+        .and_then(|x| {
+            x.as_f64()
+                .or_else(|| x.as_str().and_then(|s| s.parse().ok()))
+        })
+        .filter(|x| x.is_finite())
+        .unwrap_or(0.65)
+        .clamp(0.5, 1.0);
+    let vr_head_smoothing_ms = v
+        .get("vr_head_smoothing_ms")
+        .and_then(|x| {
+            x.as_f64()
+                .or_else(|| x.as_str().and_then(|s| s.parse().ok()))
+        })
+        .filter(|x| x.is_finite())
+        .unwrap_or(0.0)
+        .clamp(0.0, 30.0);
+    let vr_mirror_rate = v
+        .get("vr_mirror_rate")
+        .and_then(|x| {
+            x.as_f64()
+                .or_else(|| x.as_str().and_then(|s| s.parse().ok()))
+        })
+        .filter(|x| x.is_finite())
+        .unwrap_or(16.0)
+        .clamp(-1.0, 360.0);
+    let remote_port = v
+        .get("remote_cockpit_port")
+        .and_then(|x| {
+            x.as_u64()
+                .or_else(|| x.as_str().and_then(|s| s.trim().parse().ok()))
+        })
+        .filter(|p| (1..=65535).contains(p))
+        .unwrap_or(8642);
+    let text = format!(
+        "{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\ndiscord_status={}\ndiscord_map={}\ndiscord_bus={}\ndiscord_line={}\ndiscord_stop={}\ndiscord_players={}\ndiscord_buttons={}\nremote_cockpit={}\nremote_cockpit_port={remote_port}\nlauncher_rest={}\ncross_platform_launcher={}\n",
+        b("vr", false),
+        b("vr_desktop_mirror", true),
+        b("discord_status", false),
+        b("discord_map", true),
+        b("discord_bus", true),
+        b("discord_line", true),
+        b("discord_stop", true),
+        b("discord_players", true),
+        b("discord_buttons", true),
+        b("remote_cockpit", false),
+        b("launcher_rest", true),
+        b("cross_platform_launcher", false)
+    );
     // what the page does not manage (keys of newer games, hand-written ones) stays as it
     // was in the file; other spellings of the keys just written go
     let mut text = text;
-    text.push_str(&format!("right_stick_look={}\n", b("right_stick_look", true)));
-    text.push_str(&format!("pad_steer_linear={}\n", b("pad_steer_linear", false)));
-    text.push_str(&format!("ctrl_background={}\n", b("ctrl_background", false)));
-    text.push_str(&format!("pad_steer_speed={}\npad_deadzone={}\npad_buttons={}\n", f("pad_steer_speed", 2.0).clamp(0.8, 5.0), f("pad_deadzone", 0.08).clamp(0.0, 0.4), b("pad_buttons", true)));
-    text.push_str(&format!("pad_type={}\n", match v.get("pad_type").and_then(|x| x.as_str()).unwrap_or("auto") { t @ ("xbox" | "ps4" | "ps5") => t, _ => "auto" }));
-    text.push_str(&format!("touch_door_mode={}\n", if v.get("touch_door_mode").and_then(|x| x.as_str()) == Some("direct") { "direct" } else { "standard" }));
-    text.push_str(&format!("update_channel={}\n", if v.get("update_channel").and_then(|x| x.as_str()) == Some("beta") { "beta" } else { "stable" }));
-    text.push_str(&format!("arrows_switch_cams={}\n", b("arrows_switch_cams", true)));
+    text.push_str(&format!(
+        "right_stick_look={}\n",
+        b("right_stick_look", true)
+    ));
+    text.push_str(&format!(
+        "pad_steer_linear={}\n",
+        b("pad_steer_linear", false)
+    ));
+    text.push_str(&format!(
+        "ctrl_background={}\n",
+        b("ctrl_background", false)
+    ));
+    text.push_str(&format!(
+        "pad_steer_speed={}\npad_deadzone={}\npad_buttons={}\n",
+        f("pad_steer_speed", 2.0).clamp(0.8, 5.0),
+        f("pad_deadzone", 0.08).clamp(0.0, 0.4),
+        b("pad_buttons", true)
+    ));
+    text.push_str(&format!(
+        "pad_type={}\n",
+        match v.get("pad_type").and_then(|x| x.as_str()).unwrap_or("auto") {
+            t @ ("xbox" | "ps4" | "ps5") => t,
+            _ => "auto",
+        }
+    ));
+    text.push_str(&format!(
+        "touch_door_mode={}\n",
+        if v.get("touch_door_mode").and_then(|x| x.as_str()) == Some("direct") {
+            "direct"
+        } else {
+            "standard"
+        }
+    ));
+    text.push_str(&format!(
+        "update_channel={}\n",
+        if v.get("update_channel").and_then(|x| x.as_str()) == Some("beta") {
+            "beta"
+        } else {
+            "stable"
+        }
+    ));
+    text.push_str(&format!(
+        "arrows_switch_cams={}\n",
+        b("arrows_switch_cams", true)
+    ));
     text.push_str(&format!("disable_plugins={}\n", b("disable_plugins", true)));
     // voice chat (the game clamps again when it reads them)
     {
-        let text_of = |k: &str, d: &str| v.get(k).and_then(|x| x.as_str()).map(|x| x.replace(['\n', '\r'], " ").trim().to_string()).unwrap_or_else(|| d.to_string());
+        let text_of = |k: &str, d: &str| {
+            v.get(k)
+                .and_then(|x| x.as_str())
+                .map(|x| x.replace(['\n', '\r'], " ").trim().to_string())
+                .unwrap_or_else(|| d.to_string())
+        };
         text.push_str(&format!(
             "voice_enabled={}\nvoice_mode={}\nvoice_mic_gain={}\nvoice_threshold_db={}\nvoice_input_device={}\nvoice_volume={}\nvoice_volume_nearby={}\nvoice_volume_radio={}\nvoice_range={}\nvoice_talker_list={}\nvoice_all_off={}\n",
             b("voice_enabled", false),
@@ -3940,56 +4810,258 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             b("voice_all_off", false),
         ));
     }
-    text.push_str(&format!("pause_quick_actions={}\n", v.get("pause_quick_actions").and_then(|x| x.as_str()).unwrap_or("default").replace(['\r', '\n'], "")));
-    text.push_str(&format!("ui_theme_pack={}\n", v.get("ui_theme_pack").and_then(|x| x.as_str()).filter(|x| !x.trim().is_empty()).unwrap_or("openomsi").replace(['\r', '\n'], "")));
+    text.push_str(&format!(
+        "pause_quick_actions={}\n",
+        v.get("pause_quick_actions")
+            .and_then(|x| x.as_str())
+            .unwrap_or("default")
+            .replace(['\r', '\n'], "")
+    ));
+    text.push_str(&format!(
+        "ui_theme_pack={}\n",
+        v.get("ui_theme_pack")
+            .and_then(|x| x.as_str())
+            .filter(|x| !x.trim().is_empty())
+            .unwrap_or("openomsi")
+            .replace(['\r', '\n'], "")
+    ));
     text.push_str(&format!("mouse_pedals={}\n", b("mouse_pedals", true)));
-    text.push_str(&format!("key_pedal_speed={}\n", f("key_pedal_speed", 1.0).clamp(0.25, 2.0)));
-    text.push_str(&format!("touch_pedal_length={}\ntouch_pedal_deadzone={}\n", f("touch_pedal_length", 1.0).clamp(0.8, 1.6), f("touch_pedal_deadzone", 0.15).clamp(0.0, 0.4)));
-    text.push_str(&format!("resolution={}\n", resolution_text(v.get("resolution").and_then(|x| x.as_str()).unwrap_or("auto"))));
-    text.push_str(&format!("gpu_texture_compression={}\n", b("gpu_texture_compression", true)));
-    text.push_str(&format!("cloud_quality={}\n", cloud_quality(v.get("cloud_quality").and_then(|x| x.as_str()).unwrap_or("high"))));
-    text.push_str(&format!("street_light={}\n", street_light(v.get("street_light").and_then(|x| x.as_str()).unwrap_or("off"))));
-    text.push_str(&format!("ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\n", b("ray_tracing", false) | (graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")) == "enhanced_plus") as u8, light_shadows(v.get("light_shadows").and_then(|x| x.as_str()).unwrap_or("off")), b("cloud_shadows", false), b("light_glow", false)));
-    text.push_str(&format!("rain_quality={}\n", rain_quality(v.get("rain_quality").and_then(|x| x.as_str()).unwrap_or("high"))));
-    text.push_str(&format!("vehicle_smoke={}\n", vehicle_smoke(v.get("vehicle_smoke").and_then(|x| x.as_str()).unwrap_or("all"))));
-    text.push_str(&format!("puddles={}\n", puddles(v.get("puddles").and_then(|x| x.as_str()).unwrap_or("high"))));
-    text.push_str(&format!("road_glare={}\ntraffic_headlights={}\n", f("road_glare", 1.0).clamp(0.0, 2.0), f("traffic_headlights", 1.0).clamp(0.0, 2.0)));
-    text.push_str(&format!("mirror_refresh={}\n", mirror_refresh(v.get("mirror_refresh").and_then(|x| x.as_str()).unwrap_or("full"))));
-    text.push_str(&format!("mirror_quality={}\n", mirror_quality(v.get("mirror_quality").and_then(|x| x.as_str()).unwrap_or("standard"))));
-    text.push_str(&format!("zoom_hold_amount={}\nzoom_hold_latch={}\n", f("zoom_hold_amount", 0.5).clamp(0.15, 1.0), b("zoom_hold_latch", false)));
-    text.push_str(&format!("flashlight_cursor={}\n", b("flashlight_cursor", false)));
+    text.push_str(&format!(
+        "key_pedal_speed={}\n",
+        f("key_pedal_speed", 1.0).clamp(0.25, 2.0)
+    ));
+    text.push_str(&format!(
+        "touch_pedal_length={}\ntouch_pedal_deadzone={}\n",
+        f("touch_pedal_length", 1.0).clamp(0.8, 1.6),
+        f("touch_pedal_deadzone", 0.15).clamp(0.0, 0.4)
+    ));
+    text.push_str(&format!(
+        "resolution={}\n",
+        resolution_text(
+            v.get("resolution")
+                .and_then(|x| x.as_str())
+                .unwrap_or("auto")
+        )
+    ));
+    text.push_str(&format!(
+        "gpu_texture_compression={}\n",
+        b("gpu_texture_compression", true)
+    ));
+    text.push_str(&format!(
+        "cloud_quality={}\n",
+        cloud_quality(
+            v.get("cloud_quality")
+                .and_then(|x| x.as_str())
+                .unwrap_or("high")
+        )
+    ));
+    text.push_str(&format!(
+        "street_light={}\n",
+        street_light(
+            v.get("street_light")
+                .and_then(|x| x.as_str())
+                .unwrap_or("off")
+        )
+    ));
+    text.push_str(&format!(
+        "ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\n",
+        b("ray_tracing", false)
+            | (graphics_mode(
+                v.get("graphics")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("vanilla_plus")
+            ) == "enhanced_plus") as u8,
+        light_shadows(
+            v.get("light_shadows")
+                .and_then(|x| x.as_str())
+                .unwrap_or("off")
+        ),
+        b("cloud_shadows", false),
+        b("light_glow", false)
+    ));
+    text.push_str(&format!(
+        "rain_quality={}\n",
+        rain_quality(
+            v.get("rain_quality")
+                .and_then(|x| x.as_str())
+                .unwrap_or("high")
+        )
+    ));
+    text.push_str(&format!(
+        "vehicle_smoke={}\n",
+        vehicle_smoke(
+            v.get("vehicle_smoke")
+                .and_then(|x| x.as_str())
+                .unwrap_or("all")
+        )
+    ));
+    text.push_str(&format!(
+        "puddles={}\n",
+        puddles(v.get("puddles").and_then(|x| x.as_str()).unwrap_or("high"))
+    ));
+    text.push_str(&format!(
+        "road_glare={}\ntraffic_headlights={}\n",
+        f("road_glare", 1.0).clamp(0.0, 2.0),
+        f("traffic_headlights", 1.0).clamp(0.0, 2.0)
+    ));
+    text.push_str(&format!(
+        "mirror_refresh={}\n",
+        mirror_refresh(
+            v.get("mirror_refresh")
+                .and_then(|x| x.as_str())
+                .unwrap_or("full")
+        )
+    ));
+    text.push_str(&format!(
+        "mirror_quality={}\n",
+        mirror_quality(
+            v.get("mirror_quality")
+                .and_then(|x| x.as_str())
+                .unwrap_or("standard")
+        )
+    ));
+    text.push_str(&format!(
+        "zoom_hold_amount={}\nzoom_hold_latch={}\n",
+        f("zoom_hold_amount", 0.5).clamp(0.15, 1.0),
+        b("zoom_hold_latch", false)
+    ));
+    text.push_str(&format!(
+        "flashlight_cursor={}\n",
+        b("flashlight_cursor", false)
+    ));
     text.push_str(&format!("look_sens={}\nlook_smoothing_ms={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\n", f("look_sens", 1.0).clamp(0.1, 2.0), f("look_smoothing_ms", 0.0).clamp(0.0, 200.0), f("steer_look_angle", 30.0).clamp(0.0, 60.0), f("steer_look_response", 0.25).clamp(0.05, 1.0), f("head_idle", 0.0).clamp(0.0, 1.0), f("head_idle_pace", 1.0).clamp(0.5, 2.0), b("time_sync", false), b("metar_sync", false), v.get("metar_station").and_then(|x| x.as_str()).unwrap_or("").chars().filter(|c| c.is_ascii_alphabetic()).take(4).collect::<String>().to_ascii_uppercase()));
-    text.push_str(&format!("pad_steer_smooth={}\n", f("pad_steer_smooth", 120.0).clamp(0.0, 300.0)));
+    text.push_str(&format!(
+        "pad_steer_smooth={}\n",
+        f("pad_steer_smooth", 120.0).clamp(0.0, 300.0)
+    ));
     let triple_fov = f("triple_fov_deg", 0.0);
-    text.push_str(&format!("triple_hud_center={}\ntriple_fov_deg={}\n", b("triple_hud_center", true), if triple_fov < 20.0 { 0.0 } else { triple_fov.min(120.0) }));
-    text.push_str(&format!("triple_screen={}\ntriple_span={}\n", b("triple_screen", false), b("triple_span", true)));
-    text.push_str(&format!("triple_width_mm={}\ntriple_distance_mm={}\ntriple_bezel_mm={}\n", f("triple_width_mm", 600.0).clamp(200.0, 2000.0), f("triple_distance_mm", 650.0).clamp(200.0, 3000.0), f("triple_bezel_mm", 0.0).clamp(0.0, 100.0)));
-    text.push_str(&format!("info_bar={}\nperf_overlay={}\n", b("info_bar", false), perf_overlay_mode(&v.get("perf_overlay").map(|x| x.as_str().map_or_else(|| x.to_string(), str::to_string)).unwrap_or_default())));
-    text.push_str(&format!("info_size={}\ntimetable_size={}\nperf_size={}\n", f("info_size", 1.0).clamp(0.6, 2.0), f("timetable_size", 1.0).clamp(0.6, 2.0), f("perf_size", 1.0).clamp(0.6, 2.0)));
+    text.push_str(&format!(
+        "triple_hud_center={}\ntriple_fov_deg={}\n",
+        b("triple_hud_center", true),
+        if triple_fov < 20.0 {
+            0.0
+        } else {
+            triple_fov.min(120.0)
+        }
+    ));
+    text.push_str(&format!(
+        "triple_screen={}\ntriple_span={}\n",
+        b("triple_screen", false),
+        b("triple_span", true)
+    ));
+    text.push_str(&format!(
+        "triple_width_mm={}\ntriple_distance_mm={}\ntriple_bezel_mm={}\n",
+        f("triple_width_mm", 600.0).clamp(200.0, 2000.0),
+        f("triple_distance_mm", 650.0).clamp(200.0, 3000.0),
+        f("triple_bezel_mm", 0.0).clamp(0.0, 100.0)
+    ));
+    text.push_str(&format!(
+        "info_bar={}\nperf_overlay={}\n",
+        b("info_bar", false),
+        perf_overlay_mode(
+            &v.get("perf_overlay")
+                .map(|x| x.as_str().map_or_else(|| x.to_string(), str::to_string))
+                .unwrap_or_default()
+        )
+    ));
+    text.push_str(&format!(
+        "info_size={}\ntimetable_size={}\nperf_size={}\n",
+        f("info_size", 1.0).clamp(0.6, 2.0),
+        f("timetable_size", 1.0).clamp(0.6, 2.0),
+        f("perf_size", 1.0).clamp(0.6, 2.0)
+    ));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("detailed_trees={}\n", b("detailed_trees", true)));
     text.push_str(&format!("road_snow={}\n", b("road_snow", false)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));
     text.push_str(&format!("mx_graphics={}\n", b("mx_graphics", false)));
-    text.push_str(&format!("mirror_hud_every_frame={}\n", b("mirror_hud_every_frame", false)));
-    text.push_str(&format!("mirror_shadows={}\nmirror_particles={}\n", b("mirror_shadows", false), b("mirror_particles", false)));
+    text.push_str(&format!(
+        "mirror_hud_every_frame={}\n",
+        b("mirror_hud_every_frame", false)
+    ));
+    text.push_str(&format!(
+        "mirror_shadows={}\nmirror_particles={}\n",
+        b("mirror_shadows", false),
+        b("mirror_particles", false)
+    ));
     text.push_str(&format!("mirror_hud={}\n", n("mirror_hud", 0).clamp(0, 7)));
-    text.push_str(&format!("standing_chance={}\n", n("standing_chance", 5).clamp(0, 100)));
-    text.push_str(&format!("ambient={}\nvol_ambient={}\n", b("ambient", true), f("vol_ambient", 0.8).clamp(0.0, 1.0)));
-    text.push_str(&format!("radio_speaker={}\nradio_hiss={}\nradio_dropouts={}\n", f("radio_speaker", 0.0).clamp(0.0, 1.0), f("radio_hiss", 0.0).clamp(0.0, 1.0), f("radio_dropouts", 0.0).clamp(0.0, 1.0)));
-    text.push_str(&format!("ai_wait_timed_stops_only={}\n", b("ai_wait_timed_stops_only", false)));
-    text.push_str(&format!("trip_summary={}\nfull_tank={}\n", b("trip_summary", true), b("full_tank", true)));
+    text.push_str(&format!(
+        "standing_chance={}\n",
+        n("standing_chance", 5).clamp(0, 100)
+    ));
+    text.push_str(&format!(
+        "ambient={}\nvol_ambient={}\n",
+        b("ambient", true),
+        f("vol_ambient", 0.8).clamp(0.0, 1.0)
+    ));
+    text.push_str(&format!(
+        "radio_speaker={}\nradio_hiss={}\nradio_dropouts={}\n",
+        f("radio_speaker", 0.0).clamp(0.0, 1.0),
+        f("radio_hiss", 0.0).clamp(0.0, 1.0),
+        f("radio_dropouts", 0.0).clamp(0.0, 1.0)
+    ));
+    text.push_str(&format!(
+        "ai_wait_timed_stops_only={}\n",
+        b("ai_wait_timed_stops_only", false)
+    ));
+    text.push_str(&format!(
+        "trip_summary={}\nfull_tank={}\n",
+        b("trip_summary", true),
+        b("full_tank", true)
+    ));
     text.push_str(&format!("pax_bad_driving={}\n", b("pax_bad_driving", true)));
-    text.push_str(&format!("passenger_connections={}\npassenger_transfer_percent={}\n", b("passenger_connections",false), f("passenger_transfer_percent",20.0).clamp(0.0,100.0)));
-    text.push_str(&format!("passenger_hailing={}\n", b("passenger_hailing", false)));
-    text.push_str(&format!("passenger_full_bus_reaction={}\n", b("passenger_full_bus_reaction", false)));
-    text.push_str(&format!("pax_short_rides_stand={}\n", b("pax_short_rides_stand", false)));
+    text.push_str(&format!(
+        "passenger_connections={}\npassenger_transfer_percent={}\n",
+        b("passenger_connections", false),
+        f("passenger_transfer_percent", 20.0).clamp(0.0, 100.0)
+    ));
+    text.push_str(&format!(
+        "passenger_hailing={}\n",
+        b("passenger_hailing", false)
+    ));
+    text.push_str(&format!(
+        "passenger_full_bus_reaction={}\n",
+        b("passenger_full_bus_reaction", false)
+    ));
+    text.push_str(&format!(
+        "pax_short_rides_stand={}\n",
+        b("pax_short_rides_stand", false)
+    ));
     text.push_str(&format!("auto_announce={}\n", b("auto_announce", false)));
-    text.push_str(&format!("triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_right_angle_deg", 45.0).clamp(0.0, 90.0), f("triple_eye_height_mm", 0.0).clamp(-500.0, 500.0)));
-    text.push_str(&format!("photo_mode={}\n", if v.get("photo_mode").and_then(|x| x.as_str()) == Some("advanced") { "advanced" } else { "simple" }));
-    text.push_str(&format!("passenger_animation={}\n", if v.get("passenger_animation").and_then(|x| x.as_str()) == Some("enhanced") { "enhanced" } else { "original" }));
-    text.push_str(&format!("character_models={}\n", if v.get("character_models").and_then(|x| x.as_str()) == Some("improved") { "improved" } else { "original" }));
-    text.push_str(&format!("units={}\n", units_setting(v.get("units").and_then(|x| x.as_str()).unwrap_or("metric"))));
+    text.push_str(&format!(
+        "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
+        f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0),
+        f("triple_right_angle_deg", 45.0).clamp(0.0, 90.0),
+        f("triple_eye_height_mm", 0.0).clamp(-500.0, 500.0)
+    ));
+    text.push_str(&format!(
+        "photo_mode={}\n",
+        if v.get("photo_mode").and_then(|x| x.as_str()) == Some("advanced") {
+            "advanced"
+        } else {
+            "simple"
+        }
+    ));
+    text.push_str(&format!(
+        "passenger_animation={}\n",
+        if v.get("passenger_animation").and_then(|x| x.as_str()) == Some("enhanced") {
+            "enhanced"
+        } else {
+            "original"
+        }
+    ));
+    text.push_str(&format!(
+        "character_models={}\n",
+        if v.get("character_models").and_then(|x| x.as_str()) == Some("improved") {
+            "improved"
+        } else {
+            "original"
+        }
+    ));
+    text.push_str(&format!(
+        "units={}\n",
+        units_setting(v.get("units").and_then(|x| x.as_str()).unwrap_or("metric"))
+    ));
     text.push_str(&format!(
         "head_tracking_source={}\ntobii_edges={}\nhead_tracking_smoothing={}\nhead_tracking_dead_zone={}\n",
         head_tracking_source(v.get("head_tracking_source").and_then(|x| x.as_str()).unwrap_or("auto")),
@@ -3997,24 +5069,48 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         head_tracking_value("head_tracking_smoothing", v.get("head_tracking_smoothing").and_then(|x| x.as_f64())),
         head_tracking_value("head_tracking_dead_zone", v.get("head_tracking_dead_zone").and_then(|x| x.as_f64())),
     ));
-    text.push_str(&format!("upscaler={}\nupscale_quality={}\nframe_generation={}\nfsr_quality={}\nfsr_sharpness={}\n",
+    text.push_str(&format!(
+        "upscaler={}\nupscale_quality={}\nframe_generation={}\nfsr_quality={}\nfsr_sharpness={}\n",
         upscaler_word(v.get("upscaler").and_then(|x| x.as_str()).unwrap_or("")),
-        omsi_cfg::upscaler_files::quality_word(v.get("upscale_quality").and_then(|x| x.as_str()).unwrap_or("")),
-        omsi_cfg::upscaler_files::frame_generation_word(v.get("frame_generation").and_then(|x| x.as_str()).unwrap_or("")),
-        match v.get("fsr_quality").and_then(|x| x.as_str()).unwrap_or("quality") {
-            "ultra" => "ultra", "balanced" => "balanced", "performance" => "performance",
-            "custom" => "custom", "auto" => "auto", _ => "quality",
+        omsi_cfg::upscaler_files::quality_word(
+            v.get("upscale_quality")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+        ),
+        omsi_cfg::upscaler_files::frame_generation_word(
+            v.get("frame_generation")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+        ),
+        match v
+            .get("fsr_quality")
+            .and_then(|x| x.as_str())
+            .unwrap_or("quality")
+        {
+            "ultra" => "ultra",
+            "balanced" => "balanced",
+            "performance" => "performance",
+            "custom" => "custom",
+            "auto" => "auto",
+            _ => "quality",
         },
         f("fsr_sharpness", 0.8).clamp(0.0, 1.0),
     ));
-    let written: Vec<String> = text.lines().filter_map(|l| l.split_once('=')).map(|(k, _)| k.trim().to_ascii_lowercase()).collect();
+    let written: Vec<String> = text
+        .lines()
+        .filter_map(|l| l.split_once('='))
+        .map(|(k, _)| k.trim().to_ascii_lowercase())
+        .collect();
     for line in old.unwrap_or("").lines() {
         let t = line.trim();
         if t.is_empty() || t.starts_with('#') || t.starts_with(';') {
             continue;
         }
         match t.split_once('=') {
-            Some((k, _)) if !written.contains(&setting_key(k)) && !RETIRED_SETTINGS.contains(&setting_key(k).as_str()) => {
+            Some((k, _))
+                if !written.contains(&setting_key(k))
+                    && !RETIRED_SETTINGS.contains(&setting_key(k).as_str()) =>
+            {
                 text.push_str(t);
                 text.push('\n');
             }
@@ -4397,6 +5493,11 @@ pub fn launch(d: &Duty) -> Result<Launched> {
         .clone()
         .filter(|p| !p.trim().is_empty())
         .unwrap_or(c.profile);
+    if let Some(p) =
+        input_profiles::for_bus(&d.bus).context("the controls profile could not be switched")?
+    {
+        log_to_file(&format!("controls profile {p} for {}", d.bus));
+    }
     let s = instances::start(&game, &args, d, &profile)?;
     Ok(Launched {
         pid: s.pid,
