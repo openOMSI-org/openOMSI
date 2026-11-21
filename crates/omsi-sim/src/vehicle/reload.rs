@@ -27,7 +27,11 @@ impl VehicleInstance {
     /// changed (the scripts' wheel variables are laid out per axle).
     pub fn reload_definition(&mut self, mut def: Vehicle) -> Result<(), String> {
         if def.axles.len() != self.ty.def.axles.len() {
-            return Err(format!("the axles changed ({} to {}): place the bus anew", self.ty.def.axles.len(), def.axles.len()));
+            return Err(format!(
+                "the axles changed ({} to {}): place the bus anew",
+                self.ty.def.axles.len(),
+                def.axles.len()
+            ));
         }
         // the box cut down to the model, as `VehicleType::load` does it
         if let (Some(bb), Some((lo, hi))) = (def.bounding_box.as_mut(), self.ty.model_box()) {
@@ -65,7 +69,8 @@ impl VehicleInstance {
         // the rigid body: made from the new file, put where the old one was and moving as
         // it moved
         if let Some(old) = self.rigid.take() {
-            let mut rb = crate::rigid::RigidBody::from_definition(&self.ty.def, &self.ty.hub_heights(0));
+            let mut rb =
+                crate::rigid::RigidBody::from_definition(&self.ty.def, &self.ty.hub_heights(0));
             rb.orientation = old.orientation;
             rb.position = old.position + (old.orientation * (rb.cog - old.cog)).as_dvec3();
             rb.velocity = old.velocity;
@@ -102,7 +107,12 @@ impl VehicleInstance {
     /// same order (the meshes on the graphics card stay), with its animations, visibility
     /// variables and lights. Anything else waits for the bus to be placed anew.
     pub fn reload_model(&mut self, model: Model) -> Result<(), String> {
-        let files = |m: &Model| m.meshes.iter().map(|d| d.file.to_ascii_lowercase()).collect::<Vec<_>>();
+        let files = |m: &Model| {
+            m.meshes
+                .iter()
+                .map(|d| d.file.to_ascii_lowercase())
+                .collect::<Vec<_>>()
+        };
         if files(&model) != files(&self.ty.model) {
             return Err("its meshes changed: place the bus anew to see them".into());
         }
@@ -114,7 +124,13 @@ impl VehicleInstance {
             .iter()
             .map(|m| MeshAnimator::new(&ty.model.meshes[m.def_index], m.pivot, |n| program.var(n)))
             .collect();
-        crate::anim::link_parents(&mut animators, &ty.meshes.iter().map(|m| &ty.model.meshes[m.def_index]).collect::<Vec<_>>());
+        crate::anim::link_parents(
+            &mut animators,
+            &ty.meshes
+                .iter()
+                .map(|m| &ty.model.meshes[m.def_index])
+                .collect::<Vec<_>>(),
+        );
         self.animators = animators;
         // (the cab wheel scaled again: the new animators have the model's factors)
         self.apply_cab_wheel_rotation();
@@ -147,7 +163,11 @@ impl VehicleInstance {
             return Err("the variables changed: place the bus anew".into());
         }
         if !program.errors.is_empty() {
-            return Err(format!("{} errors compiling: {}", program.errors.len(), program.errors[0]));
+            return Err(format!(
+                "{} errors compiling: {}",
+                program.errors.len(),
+                program.errors[0]
+            ));
         }
         self.retyped(|ty| ty.program = Arc::new(program));
         Ok(())
@@ -160,7 +180,17 @@ mod tests {
 
     fn bus() -> VehicleInstance {
         let mut def = Vehicle::default();
-        def.axles = vec![omsi_vehicle::Axle { long: 3.0, ..Default::default() }, omsi_vehicle::Axle { long: -3.0, driven: true, ..Default::default() }];
+        def.axles = vec![
+            omsi_vehicle::Axle {
+                long: 3.0,
+                ..Default::default()
+            },
+            omsi_vehicle::Axle {
+                long: -3.0,
+                driven: true,
+                ..Default::default()
+            },
+        ];
         def.mass = 12.0;
         def.bounding_box = Some([2.5, 12.0, 3.0, 0.0, 0.0, 1.5]);
         let ty = Arc::new(VehicleType {
@@ -198,13 +228,23 @@ mod tests {
         v.reload_definition(def.clone()).unwrap();
         assert_eq!(v.ty.def.bounding_box, Some([2.5, 10.0, 3.0, 0.0, 0.5, 1.5]));
         assert_eq!(v.ty.def.cameras_reflexion.len(), 1);
-        assert_eq!(other.def.cameras_reflexion.len(), 0, "the type of the others stays");
+        assert_eq!(
+            other.def.cameras_reflexion.len(),
+            0,
+            "the type of the others stays"
+        );
         assert_eq!(v.physics.mass_kg, 15_000.0);
         assert_eq!(v.physics.speed, 5.0);
         let rb = v.rigid.as_ref().unwrap();
-        assert_eq!((rb.mass, rb.velocity, rb.wheels[0].spin), (15_000.0, Vec3::new(0.0, 5.0, 0.0), 12.0));
+        assert_eq!(
+            (rb.mass, rb.velocity, rb.wheels[0].spin),
+            (15_000.0, Vec3::new(0.0, 5.0, 0.0), 12.0)
+        );
         assert_eq!(rb.orientation, pose.1);
-        assert!((rb.position - pose.0).length() < 1e-6, "same centre of gravity");
+        assert!(
+            (rb.position - pose.0).length() < 1e-6,
+            "same centre of gravity"
+        );
         // one axle less: refused, nothing changed
         def.axles.pop();
         assert!(v.reload_definition(def).is_err());
@@ -219,7 +259,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("omsi_reload_vars_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("vars.txt"), "extra_var\n").unwrap();
-        let other = compile(&CompileInput { varlists: vec![dir.join("vars.txt")], ..Default::default() });
+        let other = compile(&CompileInput {
+            varlists: vec![dir.join("vars.txt")],
+            ..Default::default()
+        });
         let _ = std::fs::remove_dir_all(&dir);
         assert!(v.reload_program(other).is_err());
     }
