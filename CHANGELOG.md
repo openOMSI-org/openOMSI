@@ -13,6 +13,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,
   the .bus/.ovh `[boundingbox]`), so a blind-spot or distance plugin knows where a truck's or an
   articulated bus's body really is, not only its origin (#3936).
+- **Controls profiles**: the launcher's Controls page has profiles, each with every key and
+  every controller setting: *Duplicate* makes a new one of the current settings, the list
+  switches between them, and they can be renamed and deleted. One can be the *default for every
+  bus*, and a bus can have its own (*Use for* the bus chosen on the Drive page): before each
+  drive the launcher switches to the bus's profile, or to the default one (#3921).
 - **Frame generation on a Mac**: with Apple MetalFX upscaling on, Settings → Graphics → *Frame generation* shows a generated frame between every two drawn ones (Apple's MetalFX frame interpolator; a Mac with Apple silicon on macOS 26 or newer), for smoother motion at the price of a little more input lag. Where fewer than 30 frames a second are drawn with it (Apple's advice), it is turned off for the drive, as SSAO and the shadows are. The frame rate's corner then reads e.g. `90 fps (45 + FG)`. Off by default, experimental.
 - **Apple MetalFX upscaling on a Mac**: Settings → Graphics → Upscaling offers *Apple MetalFX* on a Mac with Apple silicon (macOS 13 or newer), with the same quality levels as NVIDIA DLSS and AMD FSR 3 on Windows: the picture is drawn smaller and brought up to the window with the help of the last frames, in place of the anti-aliasing and the render scale, from the next start. It is part of macOS, so there is nothing to install. Where the Mac's graphics chip scales up less than Ultra performance asks for, the picture is drawn at the smallest size it takes.
 - **Rename a save**: the pencil beside a save slot in the launcher's *Continue* list gives it a name of your own, without editing its `.osn` file in the map's `Saves` folder. Saving over that slot in the game keeps the name (#3849).
@@ -621,6 +626,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   which on a 16 GB machine was 2.2 GB of textures beside a big map and the game itself, and the
   device was lost. It is now a tenth of the machine's memory at most (at least 1000 MB)
   (#2720).
+- **Fogged-up windows stay on the glass on a slope**: the condensation on the bus's panes was
+  laid out level with the world, so going up or down a hill it slid down or up the glass, and
+  the defroster's cleared fan with it. It now follows the bus's pitch and roll (#3958).
 - **Pixel XC list rows no longer cut off**: on the MZKP SOR NBG 12, the direction and line lists
   of the Pixel XC display showed each row's text sliced along its middle. The text strip of
   every row is skewed a tenth of a millimetre over its tile, and was not taken as printed on
