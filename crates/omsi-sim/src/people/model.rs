@@ -419,6 +419,10 @@ pub struct PeopleSim {
     /// The player's duty (`set_duty`): its trip, the stop of it the duty is due at, and
     /// whether the trip has reached its last stop. A fallback for unrecognized signs.
     pub duty: Option<(Arc<DutyTrip>, usize, bool)>,
+    /// Whether the stops of the map fill in free drive (`pax_free_drive`, #2712): `auto`
+    /// fills them while the player has no duty, as OMSI's passengers turned up whatever was
+    /// being driven.
+    pub free_drive_fill: crate::people::free_drive::FreeDriveFill,
     /// Buses whose validator somebody used since the app last looked (`take_stamped`), with
     /// the index of that `[stamper]` in the bus's cabin.
     pub stamped: Vec<(BusId, Option<usize>)>,

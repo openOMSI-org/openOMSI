@@ -1063,6 +1063,32 @@ fn how_late_the_bus_may_be_is_kept_in_the_settings_file() {
 }
 
 #[test]
+fn whether_the_stops_fill_in_free_drive_is_kept_in_the_settings_file() {
+    // (#2712) `auto` by default - the stops fill while the player has no duty, as OMSI's own
+    // passengers turned up whatever was being driven - and the other two spellings kept.
+    let fresh = super::settings_from_text(None);
+    assert_eq!(fresh["pax_free_drive"], serde_json::json!("auto"));
+    for (written, kept) in [
+        ("on", "on"),
+        ("1", "on"),
+        ("yes", "on"),
+        ("off", "off"),
+        ("0", "off"),
+        ("nonsense", "auto"),
+        ("", "auto"),
+    ] {
+        let v = super::settings_from_text(Some(&format!("pax_free_drive={written}\n")));
+        assert_eq!(v["pax_free_drive"], serde_json::json!(kept), "{written:?}");
+    }
+    let off = super::settings_from_text(Some("pax_free_drive=off\n"));
+    assert!(
+        super::settings_to_text(&off, None)
+            .lines()
+            .any(|l| l.trim() == "pax_free_drive=off")
+    );
+}
+
+#[test]
 fn whether_the_stops_passengers_wait_for_a_standing_bus_is_kept_in_the_settings_file() {
     // (#2757) off by default - OMSI's own passengers set off as the bus rolls in - and kept
     // both ways through the launcher's file.

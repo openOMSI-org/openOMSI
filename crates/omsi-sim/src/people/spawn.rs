@@ -161,6 +161,7 @@ impl PeopleSim {
             defer_populate: false,
             exact_fare: true,
             late_tolerance: crate::people::model::LATE_TOLERANCE,
+            free_drive_fill: crate::people::free_drive::FreeDriveFill::Auto,
             transfer_percent: 0.0,
             visual_hailing: false,
             visual_full_bus_reaction: false,
