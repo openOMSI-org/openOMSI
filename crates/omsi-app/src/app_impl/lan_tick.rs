@@ -12,6 +12,7 @@ impl App {
             self.net.speed_limit_welcome = None;
             self.net.dedicated_teleport = None;
         }
+        self.enforce_host_session_bus();
         let walker = self.walker_pose();
         let radio_keyed = self.voice_radio_keyed();
         self.tell_took_parked(dt);
@@ -95,15 +96,6 @@ impl App {
             }
             let list = self.net.session_buses.as_deref().unwrap_or_default();
             if !list.is_empty() {
-                if let Some(host_bus) = self.args.bus.as_deref().filter(|b| !b.is_empty()) {
-                    if !omsi_lan::server_cfg::allows(list, host_bus) {
-                        log::warn!(
-                            "session: host bus {host_bus} is not in session_buses list: removed"
-                        );
-                        self.args.bus = None;
-                        self.player = None;
-                    }
-                }
                 let mut changed = false;
                 for p in lan.peers() {
                     if p.has_info
@@ -274,6 +266,49 @@ impl App {
                 apply_ms,
                 tail_ms
             );
+        }
+    }
+
+    fn enforce_host_session_bus(&mut self) {
+        if self
+            .net
+            .lan
+            .as_ref()
+            .is_some_and(|l| l.role == omsi_net::Role::Host)
+        {
+            if self.net.session_buses.is_none() {
+                self.net.session_buses = Some(self.args.session_bus_list());
+            }
+            let list = self.net.session_buses.as_deref().unwrap_or_default();
+            if !list.is_empty() {
+                let driven_bus = self
+                    .player
+                    .as_ref()
+                    .map(|p| p.vehicle.ty.def.path.to_string_lossy().to_string())
+                    .filter(|s| !s.is_empty());
+                let host_bus = driven_bus
+                    .as_deref()
+                    .or(self.args.bus.as_deref())
+                    .filter(|b| !b.is_empty());
+                if let Some(host_bus) = host_bus {
+                    if !omsi_lan::server_cfg::allows(list, host_bus) {
+                        log::warn!(
+                            "session: host bus {host_bus} is not in session_buses list: removed"
+                        );
+                        self.args.bus = None;
+                        let names: Vec<&str> = list
+                            .iter()
+                            .map(|v| v.rsplit('/').next().unwrap_or(v))
+                            .collect();
+                        let reason =
+                            format!("only these buses can be driven here ({})", names.join(", "));
+                        if self.player.is_some() {
+                            self.remove_driven_vehicle();
+                        }
+                        self.service_msg = Some((reason, 4.0));
+                    }
+                }
+            }
         }
     }
 
@@ -638,30 +673,5 @@ impl omsi_lan::host::LanHost for AppLanHost<'_> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn hosted_session_enforces_session_buses_on_host_own_bus() {
-        use clap::Parser;
-        let mut app = crate::assemble_app(Args::parse_from(["openomsi"]), Default::default());
-        let host = omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap();
-        app.net.lan = Some(host);
-        app.args.session_buses = Some("Vehicles/MAN_SD200/MAN_SD77.bus".into());
-
-        // Disallowed host bus is cleared
-        app.args.bus = Some("Vehicles/Forbidden/Forbidden.bus".into());
-        app.tick_lan(0.016);
-        assert_eq!(app.args.bus, None, "disallowed host bus is cleared");
-        assert!(app.player.is_none());
-
-        // Allowed host bus is kept
-        app.args.bus = Some("Vehicles/MAN_SD200/MAN_SD77.bus".into());
-        app.tick_lan(0.016);
-        assert_eq!(
-            app.args.bus.as_deref(),
-            Some("Vehicles/MAN_SD200/MAN_SD77.bus"),
-            "allowed host bus is kept"
-        );
-    }
-}
+#[path = "lan_tick_tests.rs"]
+mod tests;
