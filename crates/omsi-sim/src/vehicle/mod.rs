@@ -26,6 +26,7 @@ pub use cab_wheel::{CAB_WHEEL_MIN_FACTOR, cab_wheel_scale, is_cab_wheel_anim};
 mod cabs;
 pub use cabs::{cabin_of, part_cab_seat};
 mod car_run;
+mod car_state;
 mod contact;
 mod coupling;
 mod drive;
