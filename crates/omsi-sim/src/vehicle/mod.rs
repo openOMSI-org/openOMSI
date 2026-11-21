@@ -1,15 +1,15 @@
 //! A road vehicle: its type (definition + compiled scripts + model) and instances.
 
-use crate::particles::ParticleSet;
-use crate::anim::{pivot_from_mesh, MeshAnimator};
+use crate::anim::{MeshAnimator, pivot_from_mesh};
 use crate::host::VehicleHost;
+use crate::particles::ParticleSet;
 use crate::physics::{Controls, VehiclePhysics};
 use anyhow::{Context, Result};
 use glam::{DVec3, Mat4, Quat, Vec3, Vec4};
 use hashbrown::HashMap;
-use omsi_geometry::{mesh_from_o3d, MeshData};
+use omsi_geometry::{MeshData, mesh_from_o3d};
 use omsi_model::{MaterialDef, Model};
-use omsi_script::{compile, CompileInput, Program, State, Vm};
+use omsi_script::{CompileInput, Program, State, Vm, compile};
 use omsi_vehicle::Vehicle;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -22,17 +22,19 @@ pub use pax_vars::PaxVars;
 mod reload;
 pub use damage::{BrokenGlass, DynamicImpact, VehicleDent};
 mod cab_wheel;
-pub use cab_wheel::{cab_wheel_scale, is_cab_wheel_anim, CAB_WHEEL_MIN_FACTOR};
+pub use cab_wheel::{CAB_WHEEL_MIN_FACTOR, cab_wheel_scale, is_cab_wheel_anim};
+mod cabs;
+pub use cabs::{cabin_of, part_cab_seat};
 mod car_run;
 mod contact;
 mod coupling;
 mod drive;
 mod instance;
+mod panto;
 mod pose;
 mod program_ids;
 mod props;
 mod radio;
-mod panto;
 mod rail;
 mod trailer;
 mod trolley;
@@ -42,17 +44,17 @@ mod vars;
 mod visuals;
 pub(crate) mod weather;
 
+pub use car_run::CarRun;
 pub use contact::*;
 pub use coupling::*;
-pub use car_run::CarRun;
 #[cfg(test)]
 use drive::*;
-pub use pose::*;
-pub use rail::RailEnv;
-pub use props::*;
-pub use trailer::*;
 pub use panto::{Catenary, PantoGear};
-pub use trolley::{TrolleyGear, ROPE_RATE};
+pub use pose::*;
+pub use props::*;
+pub use rail::RailEnv;
+pub use trailer::*;
+pub use trolley::{ROPE_RATE, TrolleyGear};
 pub use types::*;
 use update::*;
 pub use weather::*;
@@ -254,10 +256,16 @@ pub struct VehicleInstance {
     pax_vars: std::sync::OnceLock<PaxVars>,
     /// The engine's own variables (see `engine_vars`), the same way.
     engine_ids: std::sync::OnceLock<engine_vars::EngineVarIds>,
-    /// What the control cables carry to the next car this frame (see `car_run`).
-    cable_bus: car_run::CableBus,
-    cable_back: car_run::CableBus,
-    cable_back_only: (usize, Vec<usize>),
+    /// The train's control cables (see `car_run::Cables`): the head car's `read` variables
+    /// take what is on them in `run_control_cables`.
+    cables: car_run::Cables,
+    /// The train is driven from a cab turned round in it: `train_me_reverse` of every car
+    /// is as seen from that end.
+    pub(super) turned: bool,
+    /// The coupled part (its index in `trailers`) whose driver's cab the player sits in, the
+    /// NF6D's rear cab: the keys and switches go to that part's own scripts (see `trigger`).
+    /// None in the leading vehicle's cab.
+    pub active_cab: Option<usize>,
     /// The program's own variables the engine uses every frame (see `program_ids`).
     program_ids: std::sync::OnceLock<program_ids::ProgramIds>,
     /// A trolleybus's poles and traction (see `trolley`); None for every other vehicle.

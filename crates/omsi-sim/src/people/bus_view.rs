@@ -54,8 +54,14 @@ impl PeopleSim {
     /// it, `set_cabin`).
     pub fn player_bus_view(&self, v: &VehicleInstance) -> PlayerBusView {
         let cabin = self.player_cabin.as_ref().map(|cabin| {
-            let (entry_open, exit_open) = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
-            CabinView { entry_open, exit_open, trailers: part_frames(v, cabin), places_off: places_off(v, cabin) }
+            let (entry_open, exit_open) =
+                Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
+            CabinView {
+                entry_open,
+                exit_open,
+                trailers: part_frames(v, cabin),
+                places_off: places_off(v, cabin),
+            }
         });
         // the destination shown: the row the display's scripts chose (target_index_int, as
         // Omsi.exe's people read it), else the depot file's row the IBIS was set to (the
@@ -65,9 +71,17 @@ impl PeopleSim {
         // See `shown_terminus_row`.
         let terminus = match (v.host.hof.as_ref(), v.var("target_index_int")) {
             (Some(hof), script) => {
-                let code = v.var("IBIS_TerminusCode").filter(|c| c.is_finite() && *c >= 0.0).map(|c| c.round() as i32);
-                let index = v.var("IBIS_TerminusIndex").filter(|i| i.is_finite() && *i >= 0.0).map(|i| i.round() as usize);
-                let script = script.filter(|i| i.is_finite() && *i >= 0.0).map(|i| i.round() as usize);
+                let code = v
+                    .var("IBIS_TerminusCode")
+                    .filter(|c| c.is_finite() && *c >= 0.0)
+                    .map(|c| c.round() as i32);
+                let index = v
+                    .var("IBIS_TerminusIndex")
+                    .filter(|i| i.is_finite() && *i >= 0.0)
+                    .map(|i| i.round() as usize);
+                let script = script
+                    .filter(|i| i.is_finite() && *i >= 0.0)
+                    .map(|i| i.round() as usize);
                 match shown_terminus_row(&hof.termini, code, index, script) {
                     Some(i) => Some(
                         hof.termini
@@ -83,14 +97,30 @@ impl PeopleSim {
             (None, None) => None,
             (None, Some(_)) => Some(None),
         };
-        let tt_stop = usize::try_from(v.host.tt_busstop_index).ok().and_then(|index| {
-            v.host.tt_stop_ids.get(index).map(|id| (*id, v.host.tt_stops.get(index).map(|stop| stop.0.clone())))
-        });
+        let tt_stop = usize::try_from(v.host.tt_busstop_index)
+            .ok()
+            .and_then(|index| {
+                v.host
+                    .tt_stop_ids
+                    .get(index)
+                    .map(|id| (*id, v.host.tt_stops.get(index).map(|stop| stop.0.clone())))
+            });
         // the IBIS route it is set to, where everybody gets off at the last stop
-        let route = v.host.hof.as_ref().zip(v.var("IBIS_RouteIndex").filter(|r| r.is_finite() && *r >= 0.0)).and_then(|(hof, r)| {
-            let at = v.var("IBIS_busstop").filter(|k| k.is_finite() && *k >= 0.0).map(|k| k.round() as usize);
-            SetRoute::from_depot(hof, r.round() as usize, at)
-        });
+        let route = v
+            .host
+            .hof
+            .as_ref()
+            .zip(
+                v.var("IBIS_RouteIndex")
+                    .filter(|r| r.is_finite() && *r >= 0.0),
+            )
+            .and_then(|(hof, r)| {
+                let at = v
+                    .var("IBIS_busstop")
+                    .filter(|k| k.is_finite() && *k >= 0.0)
+                    .map(|k| k.round() as usize);
+                SetRoute::from_depot(hof, r.round() as usize, at)
+            });
         PlayerBusView {
             position: v.position,
             heading: v.heading,
@@ -114,7 +144,12 @@ impl PeopleSim {
 /// The depot file's terminus row a bus shows: the row the display's script keeps (`script`,
 /// when it is a row of the list), else the row the IBIS was set to (`index`, when it is a
 /// row of the code the IBIS holds), else the first row of that code.
-pub(crate) fn shown_terminus_row(termini: &[omsi_vehicle::hof::Terminus], code: Option<i32>, index: Option<usize>, script: Option<usize>) -> Option<usize> {
+pub(crate) fn shown_terminus_row(
+    termini: &[omsi_vehicle::hof::Terminus],
+    code: Option<i32>,
+    index: Option<usize>,
+    script: Option<usize>,
+) -> Option<usize> {
     // Omsi.exe ties `target_index_int` to the vehicle's own terminus (0x7f64e8 -> its field
     // +0x7b4) and its people go by that: the display script's row first, where it is a row
     // of the depot file. Taking the IBIS's row before it (0.2.47) left the people of every
@@ -123,7 +158,13 @@ pub(crate) fn shown_terminus_row(termini: &[omsi_vehicle::hof::Terminus], code: 
     // The IBIS's row is for a script that keeps none, or one past the list.
     script
         .filter(|&i| i < termini.len())
-        .or_else(|| index.filter(|&i| termini.get(i).is_some_and(|t| code.is_none_or(|c| t.code == c))))
+        .or_else(|| {
+            index.filter(|&i| {
+                termini
+                    .get(i)
+                    .is_some_and(|t| code.is_none_or(|c| t.code == c))
+            })
+        })
         .or_else(|| code.and_then(|c| termini.iter().position(|t| t.code == c)))
         .or(script)
 }
