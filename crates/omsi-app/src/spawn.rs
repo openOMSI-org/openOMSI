@@ -5,6 +5,7 @@ use super::*;
 /// The vehicle file to spawn for `--bus`. The rear section of an articulated bus is never
 /// driven on its own (OMSI does not even list it): asked for one, the bus it belongs to is
 /// spawned, and a rear section that nothing couples is refused.
+#[rustfmt::skip]
 pub(crate) fn player_bus_path(root: &Path, bus: &str) -> Result<PathBuf> {
     let path = omsi_cfg::resolve_path(root, bus);
     let def = omsi_vehicle::Vehicle::load(&path)
@@ -30,11 +31,12 @@ pub(crate) fn player_bus_path(root: &Path, bus: &str) -> Result<PathBuf> {
     }
 }
 
-pub(crate) use omsi_vehicle::vehicle::{chain_has_part, next_coupled, MAX_COUPLED_PARTS};
+pub(crate) use omsi_vehicle::vehicle::{MAX_COUPLED_PARTS, chain_has_part, next_coupled};
 
 /// Load the `[couple_back]` chain behind `vehicle` (articulated rear sections, trailers),
 /// each file resolved from the folder of the part before it in whichever content root
 /// holds it.
+#[rustfmt::skip]
 pub(crate) fn load_coupled_parts(
     root: &Path,
     vehicle: &mut omsi_sim::VehicleInstance,
@@ -45,6 +47,7 @@ pub(crate) fn load_coupled_parts(
 
 /// The `[couple_back]` chain behind `lead` read from its files, each part with whether it
 /// is turned round: no vehicle, VM or scene is touched, so a worker thread can read it.
+#[rustfmt::skip]
 fn load_coupled_types(
     root: &Path,
     mut lead: Arc<omsi_sim::VehicleType>,
@@ -101,6 +104,7 @@ fn load_coupled_types(
 }
 
 /// Couple the parts `load_coupled_types` read behind `vehicle`.
+#[rustfmt::skip]
 fn attach_coupled_types(
     vehicle: &mut omsi_sim::VehicleInstance,
     loaded: Vec<(Arc<omsi_sim::VehicleType>, bool)>,
@@ -124,6 +128,7 @@ pub(crate) struct PreparedPlayer {
     fonts: Option<omsi_lan::mods::vehicles::SharedFonts>,
 }
 
+#[rustfmt::skip]
 impl PreparedPlayer {
     /// Read `--bus` and its coupled parts (on any thread).
     pub(crate) fn load(args: &Args) -> Result<Self> {
@@ -171,6 +176,7 @@ pub(crate) struct PendingPlacement {
 /// Choose the player's fleet number and registration before the script VM runs `{init}`.
 /// Manual plates win, free registrations come from the map, otherwise the selected number
 /// is paired with the bus's registration rules.
+#[rustfmt::skip]
 fn player_identity(
     args: &Args,
     world: &World,
@@ -229,6 +235,7 @@ fn player_identity(
     (number, ident)
 }
 
+#[rustfmt::skip]
 pub(crate) fn spawn_player(
     args: &Args,
     world: &World,
@@ -242,6 +249,7 @@ pub(crate) fn spawn_player(
 }
 
 /// `spawn_player` with the vehicle read already (`PreparedPlayer`).
+#[rustfmt::skip]
 pub(crate) fn spawn_player_prepared(
     args: &Args,
     world: &World,
@@ -496,6 +504,7 @@ pub(crate) fn spawn_player_prepared(
 
 /// The player's vehicle host: clock, wear, depot file, fonts, ticket pack, and the number,
 /// ident and paint scheme the scripts' {init} sees.
+#[rustfmt::skip]
 fn vehicle_host(args: &Args, world: &World, vt: &Arc<omsi_sim::VehicleType>) -> omsi_sim::VehicleHost {
     let mut host = omsi_sim::VehicleHost::new(start_clock(args));
     // the maintenance condition of the options (AI vehicles never wear)
@@ -532,6 +541,7 @@ fn vehicle_host(args: &Args, world: &World, vt: &Arc<omsi_sim::VehicleType>) -> 
 
 /// The vehicle put at the entry point `--entry` (or the map's first): on the road surface
 /// there, at the height the map recorded when the object came out on another level.
+#[rustfmt::skip]
 fn place_at_entry_point(args: &Args, world: &World, vehicle: &mut omsi_sim::VehicleInstance) {
     if let Some(ep) = world
         .global
@@ -588,6 +598,7 @@ fn place_at_entry_point(args: &Args, world: &World, vehicle: &mut omsi_sim::Vehi
 }
 
 /// The log lines of the rigid body just enabled: mass, inertia, and each axle's tyre and spring.
+#[rustfmt::skip]
 fn log_rigid_body(vehicle: &omsi_sim::VehicleInstance) {
     let rb = vehicle.rigid.as_ref().unwrap();
     log::info!(
@@ -618,6 +629,7 @@ fn log_rigid_body(vehicle: &omsi_sim::VehicleInstance) {
 }
 
 /// The player around a vehicle just set up, everything else at its start.
+#[rustfmt::skip]
 fn new_player(vehicle: omsi_sim::VehicleInstance, render: scene::VehicleRender, trailer_renders: Vec<scene::VehicleRender>, bindings: Vec<omsi_content::KeyBinding>, rail_bound: bool, vt: &Arc<omsi_sim::VehicleType>) -> Player {
     static NEXT_UID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let rail_placed_z = vehicle.position.z;
@@ -675,6 +687,9 @@ fn new_player(vehicle: omsi_sim::VehicleInstance, render: scene::VehicleRender, 
         blind_pick: None,
         ibis_typist: None,
         duty_typed: false,
+        duty_trip_pending: false,
+        ibis_shown: None,
+        ibis_auto_stop: crate::settings::Settings::load().ibis_auto_stop,
         ibis_holds: Default::default(),
         html_next_stop: None,
         ibis_background: false,
@@ -689,6 +704,7 @@ fn new_player(vehicle: omsi_sim::VehicleInstance, render: scene::VehicleRender, 
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 pub(crate) fn test_player(
     vehicle: omsi_sim::VehicleInstance,
     bindings: Vec<omsi_content::KeyBinding>,
@@ -722,6 +738,7 @@ mod cabin_input_tests;
 
 /// `OMSI_DEBUG_MESHES`: every mesh of the vehicle with its bounds, and per material slot (of the
 /// meshes whose file the flag names) which part of its texture it shows.
+#[rustfmt::skip]
 fn log_debug_meshes(vehicle: &omsi_sim::VehicleInstance) {
     if omsi_cfg::flags::OMSI_DEBUG_MESHES.is_set() {
         for (i, vm) in vehicle.ty.meshes.iter().enumerate() {
@@ -796,6 +813,7 @@ fn log_debug_meshes(vehicle: &omsi_sim::VehicleInstance) {
 }
 
 /// `OMSI_DEBUG_PROPS`: the meshes drawn see-through or hidden, and a few script variables.
+#[rustfmt::skip]
 fn log_debug_props(vehicle: &omsi_sim::VehicleInstance) {
     if omsi_cfg::flags::OMSI_DEBUG_PROPS.is_set() {
         for (i, vm) in vehicle.ty.meshes.iter().enumerate() {
@@ -854,6 +872,7 @@ fn log_debug_props(vehicle: &omsi_sim::VehicleInstance) {
 /// the model's own textures (the launcher's "Default paint"). Taking the first scheme then
 /// put another livery on a bus whose default was chosen. The game and the launcher's
 /// preview (`--export-glb`) both come here, so the preview shows what is driven.
+#[rustfmt::skip]
 pub(crate) fn paint_scheme(vt: &omsi_sim::VehicleType, paint: Option<&str>) -> Option<usize> {
     let asked = paint.map(str::trim).filter(|p| !p.is_empty());
     let found = asked.and_then(|p| {
@@ -874,6 +893,7 @@ pub(crate) fn paint_scheme(vt: &omsi_sim::VehicleType, paint: Option<&str>) -> O
 /// Where the map's `global.cfg` recorded an entry point (x, height, y within its tile), in
 /// world coordinates, taken in the tile of its object at `object` (Grundorf's records agree
 /// with their objects that way to a few decimetres).
+#[rustfmt::skip]
 pub(crate) fn recorded_entry_pos(ep: &omsi_map::global::EntryPoint, object: DVec3) -> Option<DVec3> {
     let s = omsi_map::tile_size();
     let (tx, ty) = ((object.x / s).floor(), (object.y / s).floor());
@@ -881,6 +901,7 @@ pub(crate) fn recorded_entry_pos(ep: &omsi_map::global::EntryPoint, object: DVec
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod preparation_tests {
     use super::*;
 

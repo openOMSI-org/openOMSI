@@ -537,10 +537,7 @@ pub(crate) fn duty_step(
         }
     }
     career.trip_driven(d.trip_run());
-    if d.take_trip_change() && p.duty_typed {
-        let (trip, stop) = d.trip_for_ibis();
-        p.set_duty_destination(trip, stop);
-    }
+    p.update_duty_ibis(d);
     let mut fonts = world.fonts.lock();
     if let Err(e) = crate::schedule_paper::update_vehicle(&mut p.vehicle, d, &mut fonts) {
         log::warn!("driver timetable paper: {e:#}");
