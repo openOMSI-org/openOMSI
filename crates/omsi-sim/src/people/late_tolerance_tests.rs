@@ -43,27 +43,20 @@ fn stepping_in(tag: &str, delay: f64, tolerance: Option<f64>) -> (PeopleSim, Bus
 #[test]
 fn five_minutes_late_is_still_omis_complaint() {
     let (mut h, bus) = stepping_in("default-late", 320.0, None);
-    assert_eq!(
-        h.late_tolerance, LATE_TOLERANCE,
-        "five minutes until the settings say otherwise"
-    );
+    assert_eq!(h.late_tolerance, LATE_TOLERANCE);
     h.greet_or_complain(0, &bus);
     let said = h.dialog.clone().unwrap_or_default();
     assert!(said.starts_with("TooLate_"), "said {said:?}");
-    assert_eq!(h.content, 0, "a complaint is not a content passenger");
+    assert_eq!(h.content, 0);
 }
 
 #[test]
 fn a_longer_tolerance_keeps_the_complaint_quiet() {
-    // ten minutes allowed, six late: the passenger says nothing about it
     let (mut h, bus) = stepping_in("tolerant", 360.0, Some(600.0));
     h.greet_or_complain(0, &bus);
-    assert_eq!(
-        h.dialog, None,
-        "no greeting either, the pack's people chat about nothing"
-    );
-    assert_eq!(h.content, 1, "content, since nothing was complained about");
-    // and the same bus, late by eleven minutes, complains again
+    assert_eq!(h.dialog, None);
+    assert_eq!(h.content, 1);
+
     let (mut h, bus) = stepping_in("tolerant-late", 660.0, Some(600.0));
     h.greet_or_complain(0, &bus);
     assert!(
@@ -78,5 +71,5 @@ fn a_tolerance_of_zero_turns_the_complaint_off() {
     let (mut h, bus) = stepping_in("no-complaint", 3_600.0, Some(0.0));
     h.greet_or_complain(0, &bus);
     assert_eq!(h.dialog, None);
-    assert_eq!(h.content, 1, "an hour late and nothing said");
+    assert_eq!(h.content, 1);
 }

@@ -133,8 +133,6 @@ impl PeopleSim {
                 }
             }
         }
-        // (#2718) late by the map's or the player's tolerance, not always OMSI's five
-        // minutes; a tolerance of zero turns the complaint off altogether
         if self.late_tolerance > 0.0 && self.delay > self.late_tolerance {
             complaint_seen = true;
             if code == 0 && (self.rand_f() as f32) < whinge {
