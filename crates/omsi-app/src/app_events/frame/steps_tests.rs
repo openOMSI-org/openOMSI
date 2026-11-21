@@ -92,4 +92,5 @@ fn ticketless_fares_do_not_count_as_tickets_sold_in_career() {
         career.tickets.1, 3.5,
         "cash collected from ticketless fare is recorded"
     );
+    assert_eq!((humans.tickets_sold, humans.ticket_cash as f64), (0, 3.5));
 }

@@ -358,13 +358,15 @@ impl PeopleSim {
                 self.fares_no_ticket += 1;
             } else {
                 self.tickets_sold += 1;
+                *taken_ticket = true;
             }
             self.ticket_cash += value;
             self.sales.push((name, value));
-            *taken_ticket = true;
             if let Some(ticket_type) = p.taking_ticket {
-                self.sale_events
-                    .push((bn.id, SaleEvent::PassengerTookTicket(ticket_type)));
+                if !self.no_ticket {
+                    self.sale_events
+                        .push((bn.id, SaleEvent::PassengerTookTicket(ticket_type)));
+                }
             }
             if auto {
                 if let Some(m) = self.money.as_mut() {

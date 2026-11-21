@@ -96,9 +96,10 @@ fn at_the_desk(tag: &str, no_ticket: bool) -> (PeopleSim, BusNow) {
     (h, bus)
 }
 
-fn step(h: &mut PeopleSim, bus: &BusNow) {
+fn step(h: &mut PeopleSim, bus: &BusNow) -> bool {
     let mut taken = false;
     h.desk_sale(0, 0.0, bus, None, &mut taken);
+    taken
 }
 
 #[test]
@@ -116,7 +117,8 @@ fn a_fare_without_a_ticket_goes_straight_to_the_change() {
         (paid - value).abs() < 1e-6,
         "the exact fare: {paid} of {value}"
     );
-    step(&mut h, &bus);
+    let taken = step(&mut h, &bus);
+    assert!(!taken, "taken_ticket remains false for ticketless fare");
     assert_eq!(
         h.pax(0).unwrap().sub,
         8,
@@ -147,4 +149,9 @@ fn with_a_ticket_the_sale_still_waits_for_it() {
     step(&mut h, &bus);
     assert_eq!(h.pax(0).unwrap().sub, 5, "the ticket comes out first");
     assert_eq!(h.fares_no_ticket, 0);
+    h.pax_mut(0).unwrap().sub = 6;
+    h.pax_mut(0).unwrap().timer = 0.0;
+    let taken = step(&mut h, &bus);
+    assert!(taken, "taken_ticket is true when ticket is sold");
+    assert_eq!(h.tickets_sold, 1);
 }
