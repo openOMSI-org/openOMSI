@@ -31,7 +31,7 @@ fn bus_with_three_doors(tag: &str) -> (PeopleSim, BusNow) {
     let mut h = PeopleSim::new(Path::new("/nonexistent"), 200);
     let mut pax = Pax::new(1.1, 0.5);
     pax.stop = Some(42);
-    pax.bus = Some(BusId::Ai(3));
+    pax.bus = Some(BusId::Player);
     // at the middle door, so the nearest one is not the front one
     pax.pos = DVec3::new(-3.0, 0.2, 0.0);
     h.people.push(Person {
@@ -86,7 +86,7 @@ fn bus_with_three_doors(tag: &str) -> (PeopleSim, BusNow) {
         },
     );
     let bus = BusNow {
-        id: BusId::Ai(3),
+        id: BusId::Player,
         next_stop: Some(RequestStop {
             id: 42,
             name: "Kerb".into(),
@@ -174,5 +174,25 @@ fn with_the_rear_door_only_a_shut_rear_door_is_still_the_one_asked_for() {
         door_chosen(&mut h, &bus),
         Some(2),
         "they wait at the door the line boards at"
+    );
+}
+
+#[test]
+fn ai_and_remote_buses_keep_their_own_doors_regardless_of_entry_doors_setting() {
+    let (mut h, mut bus) = bus_with_three_doors("ai-doors");
+    bus.id = BusId::Ai(5);
+    h.pax_mut(0).unwrap().bus = Some(BusId::Ai(5));
+    // Player's setting is front door only, but AI bus's passenger takes the nearest open middle door
+    h.entry_doors = EntryDoors::First;
+    assert_eq!(
+        door_chosen(&mut h, &bus),
+        Some(1),
+        "AI bus keeps the vehicle's own choice"
+    );
+    h.entry_doors = EntryDoors::Last;
+    assert_eq!(
+        door_chosen(&mut h, &bus),
+        Some(1),
+        "AI bus does not restrict to rear door"
     );
 }

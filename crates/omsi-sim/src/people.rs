@@ -129,6 +129,9 @@ mod destination_tests;
 #[cfg(test)]
 #[rustfmt::skip]
 mod entry_doors_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod board_when_stopped_tests;
 
 use avatar::*;
 use cabin::*;

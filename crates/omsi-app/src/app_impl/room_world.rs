@@ -133,6 +133,7 @@ impl App {
             humans.entry_doors = omsi_sim::people::entry_doors::EntryDoors::from_setting(
                 &self.settings.pax_entry_doors,
             );
+            humans.board_when_stopped = self.settings.pax_board_when_stopped;
             humans.boarding = self.settings.boarding.clone();
             humans.stand_chance = self.settings.standing_chance;
             humans.short_rides_stand = self.settings.pax_short_rides_stand;

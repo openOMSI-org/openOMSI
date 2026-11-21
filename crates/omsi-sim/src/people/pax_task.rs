@@ -342,7 +342,9 @@ impl PeopleSim {
         // on central BRT platforms this sent people straight through the bus.
         // (#3124) the doors the player's bus lets the passengers in through, and none
         // other - a line boarding at the front door only leaves the rest of them shut to
-        // the people, however near or however open they are
+        // the people, however near or however open they are. AI and remote buses keep
+        // their own door choices.
+        let is_player = bn.id == BusId::Player;
         let doors = self.entry_doors;
         let entry_count = bn.cabin.entries.len();
         let list: Vec<_> = bn
@@ -356,7 +358,7 @@ impl PeopleSim {
                     .entries
                     .get(k)
                     .is_some_and(|door| entry_on_platform(side, door.side))
-                    && doors.allows(k, entry_count)
+                    && (!is_player || doors.allows(k, entry_count))
                 {
                     point
                 } else {
@@ -475,6 +477,15 @@ impl PeopleSim {
                         return;
                     }
                     self.pax_mut(i).unwrap().shunned = None;
+                }
+                // (#2757) with the setting on they hold where they are until the bus stands
+                // still with a door open: nobody walks into a bus still rolling in, nor
+                // anywhere near it that means crossing in front of it
+                if self.board_when_stopped
+                    && (bn.speed.abs() > super::model::BOARD_STOPPED_SPEED
+                        || !bn.entry_open.iter().any(|o| *o))
+                {
+                    return;
                 }
                 self.pax_mut(i).unwrap().bus = Some(b);
                 // still rolling in, or standing in the stop's box: to the gather point
