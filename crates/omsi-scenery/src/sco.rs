@@ -24,7 +24,10 @@ impl RenderType {
     /// traffic light poles and the shelters of many mods say `3`, and taken as ground they
     /// cast no shadow and had the terrain cut away under them.
     pub fn is_ground_layer(self) -> bool {
-        matches!(self, RenderType::PreSurface | RenderType::Surface | RenderType::OnSurface)
+        matches!(
+            self,
+            RenderType::PreSurface | RenderType::Surface | RenderType::OnSurface
+        )
     }
 }
 
@@ -189,7 +192,10 @@ pub struct SceneryObject {
 
 fn read_list(r: &mut omsi_cfg::CfgReader, base: &Path) -> Vec<PathBuf> {
     let n = r.count();
-    (0..n).map(|_| omsi_cfg::resolve_path(base, r.str())).filter(|p| !p.as_os_str().is_empty()).collect()
+    (0..n)
+        .map(|_| omsi_cfg::resolve_path(base, r.str()))
+        .filter(|p| !p.as_os_str().is_empty())
+        .collect()
 }
 
 impl SceneryObject {
@@ -205,14 +211,20 @@ impl SceneryObject {
 
     /// Cutter filenames and their source folders. A separate model.cfg does not replace
     /// the object's own [terrainhole] declarations, which are not render-mesh overrides.
-    pub fn terrain_hole_sources<'a>(&'a self, model: &'a Model) -> impl Iterator<Item = (&'a Path, &'a str)> {
+    pub fn terrain_hole_sources<'a>(
+        &'a self,
+        model: &'a Model,
+    ) -> impl Iterator<Item = (&'a Path, &'a str)> {
         let model_dir = model.path.parent().unwrap_or_else(|| Path::new(""));
         let sco_dir = self.path.parent().unwrap_or_else(|| Path::new(""));
-        model.terrain_hole_meshes().map(move |f| (model_dir, f)).chain(
-            self.model_file.iter().flat_map(move |_| {
-                self.model.terrain_hole_meshes().map(move |f| (sco_dir, f))
-            }),
-        )
+        model
+            .terrain_hole_meshes()
+            .map(move |f| (model_dir, f))
+            .chain(
+                self.model_file
+                    .iter()
+                    .flat_map(move |_| self.model.terrain_hole_meshes().map(move |f| (sco_dir, f))),
+            )
     }
 
     pub fn load(path: &Path) -> Result<SceneryObject, omsi_cfg::CfgError> {
@@ -244,26 +256,56 @@ impl SceneryObject {
         // Normalize only this placement tag; indented mesh/animation commands must
         // retain their existing semantics, including disabled blocks.
         let normalized;
-        let file = if file.lines.iter().any(|line| line != "[surface]" && line.trim() == "[surface]") {
+        let file = if file
+            .lines
+            .iter()
+            .any(|line| line != "[surface]" && line.trim() == "[surface]")
+        {
             normalized = CfgFile {
                 path: file.path.clone(),
-                lines: file.lines.iter().map(|line| {
-                    if line.trim() == "[surface]" { "[surface]".to_string() } else { line.clone() }
-                }).collect(),
+                lines: file
+                    .lines
+                    .iter()
+                    .map(|line| {
+                        if line.trim() == "[surface]" {
+                            "[surface]".to_string()
+                        } else {
+                            line.clone()
+                        }
+                    })
+                    .collect(),
             };
             &normalized
         } else {
             file
         };
-        let mut o = SceneryObject { path: file.path.clone(), complexity: 0, model: Model { path: file.path.clone(), detail_factor: 1.0, tex_detail_factor: 1.0, ..Default::default() }, ..Default::default() };
+        let mut o = SceneryObject {
+            path: file.path.clone(),
+            complexity: 0,
+            model: Model {
+                path: file.path.clone(),
+                detail_factor: 1.0,
+                tex_detail_factor: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         let base = file.dir().to_path_buf();
         let mut r = file.reader().disabled_blocks();
-        let tokens: Vec<&str> = ATTACH_TOKENS.iter().chain(omsi_model::ANIM_TOKENS).copied().collect();
+        let tokens: Vec<&str> = ATTACH_TOKENS
+            .iter()
+            .chain(omsi_model::ANIM_TOKENS)
+            .copied()
+            .collect();
         while let Some(e) = r.next_entry(&tokens) {
             let k = match e {
                 Entry::Keyword(k) => k,
                 Entry::Token(t) if ATTACH_TOKENS.contains(&t) => {
-                    let values = if t == "attach_trans" { r.f32s::<3>().to_vec() } else { vec![r.f32()] };
+                    let values = if t == "attach_trans" {
+                        r.f32s::<3>().to_vec()
+                    } else {
+                        vec![r.f32()]
+                    };
                     if let Some(a) = o.attachments.last_mut() {
                         a.ops.push((t.to_string(), values));
                     }
@@ -295,7 +337,9 @@ impl SceneryObject {
                 // `[collisionmesh]` (the Staaken checkpoints on the Heerstraße among them)
                 // have no collision shape in OMSI and are driven through
                 "collision_mesh" => o.collision_mesh = Some(r.str().to_string()),
-                "crossing_heightdeformation" => o.crossing_height_deformation = Some(r.str().to_string()),
+                "crossing_heightdeformation" => {
+                    o.crossing_height_deformation = Some(r.str().to_string())
+                }
                 "nocollision" => o.no_collision = true,
                 // (and `[fixed]` with it, as Omsi.exe sets both at 0x7b6823)
                 "surface" => {
@@ -314,7 +358,11 @@ impl SceneryObject {
                     }
                 }
                 "traffic_lights_group" => o.traffic_lights_group = Some(r.f32()),
-                "traffic_light" => o.traffic_lights.push(TrafficLight { name: r.str().to_string(), phases: Vec::new(), approach_dist: None }),
+                "traffic_light" => o.traffic_lights.push(TrafficLight {
+                    name: r.str().to_string(),
+                    phases: Vec::new(),
+                    approach_dist: None,
+                }),
                 "phase" => {
                     let state = r.i32();
                     let duration = r.f32();
@@ -335,11 +383,26 @@ impl SceneryObject {
                 "splinehelper" => {
                     let spline = r.str().to_string();
                     let v = r.f32s::<6>();
-                    o.spline_helpers.push(SplineHelper { spline, x: v[0], y: v[1], z: v[2], heading: v[3], length: v[4], radius: v[5] });
+                    o.spline_helpers.push(SplineHelper {
+                        spline,
+                        x: v[0],
+                        y: v[1],
+                        z: v[2],
+                        heading: v[3],
+                        length: v[4],
+                        radius: v[5],
+                    });
                 }
                 "path" => {
                     let v = r.f32s::<12>();
-                    o.paths.push(PathDef { kind: v[8] as i32, start: [v[0], v[1], v[2]], end: [v[3], v[4], v[5]], width: v[9], direction: v[10] as i32, params: v.to_vec() });
+                    o.paths.push(PathDef {
+                        kind: v[8] as i32,
+                        start: [v[0], v[1], v[2]],
+                        end: [v[3], v[4], v[5]],
+                        width: v[9],
+                        direction: v[10] as i32,
+                        params: v.to_vec(),
+                    });
                     o.path_traffic_light.push(-1);
                     o.path_switch_dir.push(None);
                     o.path_blocks.push(Vec::new());
@@ -347,7 +410,14 @@ impl SceneryObject {
                 }
                 "path_2" => {
                     let v = r.f32s::<14>();
-                    o.paths.push(PathDef { kind: v[8] as i32, start: [v[0], v[1], v[2]], end: [v[3], v[4], v[5]], width: v[9], direction: v[10] as i32, params: v.to_vec() });
+                    o.paths.push(PathDef {
+                        kind: v[8] as i32,
+                        start: [v[0], v[1], v[2]],
+                        end: [v[3], v[4], v[5]],
+                        width: v[9],
+                        direction: v[10] as i32,
+                        params: v.to_vec(),
+                    });
                     o.path_traffic_light.push(-1);
                     o.path_switch_dir.push(None);
                     o.path_blocks.push(Vec::new());
@@ -404,8 +474,12 @@ impl SceneryObject {
                     let v = r.f32s::<4>();
                     o.tree = Some((t, v[0], v[1], v[2], v[3]));
                 }
-                "add_camera_reflexion" => o.reflexion_cameras.push(ReflexionCamera { values: r.f32s::<7>().to_vec() }),
-                "add_camera_reflexion_2" => o.reflexion_cameras.push(ReflexionCamera { values: r.f32s::<8>().to_vec() }),
+                "add_camera_reflexion" => o.reflexion_cameras.push(ReflexionCamera {
+                    values: r.f32s::<7>().to_vec(),
+                }),
+                "add_camera_reflexion_2" => o.reflexion_cameras.push(ReflexionCamera {
+                    values: r.f32s::<8>().to_vec(),
+                }),
                 "mass" => o.mass = Some(r.f32()),
                 "momentofintertia" => o.moment_of_inertia = Some(r.f32s::<3>()),
                 "cog" => o.cog = Some(r.f32s::<3>()),
@@ -426,13 +500,21 @@ impl SceneryObject {
                 "new_attachment" => o.attachments.push(Attachment::default()),
                 "maplight" => {
                     let v = r.f32s::<7>();
-                    o.map_lights.push(MapLight { pos: [v[0], v[1], v[2]], color: [v[3], v[4], v[5]], radius: v[6] });
+                    o.map_lights.push(MapLight {
+                        pos: [v[0], v[1], v[2]],
+                        color: [v[3], v[4], v[5]],
+                        radius: v[6],
+                    });
                 }
                 "rail_enh" => o.rail_enh.push(r.f32s::<8>()),
                 "third_rail" => o.third_rail.push(r.f32s::<6>()),
                 "triggerbox_new" => {
                     let v = r.f32s::<6>();
-                    o.trigger_boxes.push(TriggerBox { size: [v[0], v[1], v[2]], center: [v[3], v[4], v[5]], reverb: None });
+                    o.trigger_boxes.push(TriggerBox {
+                        size: [v[0], v[1], v[2]],
+                        center: [v[3], v[4], v[5]],
+                        reverb: None,
+                    });
                 }
                 "triggerbox_setreverb" => {
                     let a = r.f32();
@@ -459,7 +541,12 @@ impl SceneryObject {
 /// attachment wherever they stand after it: the stock `Timetable_Terminus_Pole_S.sco` lifts
 /// its point to 2.68 m with an `attach_trans` after its `[complexity]` block (read as part of
 /// the `[new_attachment]` block only, the timetable hung at the foot of the pole).
-pub const ATTACH_TOKENS: &[&str] = &["attach_trans", "attach_rot_x", "attach_rot_y", "attach_rot_z"];
+pub const ATTACH_TOKENS: &[&str] = &[
+    "attach_trans",
+    "attach_rot_x",
+    "attach_rot_y",
+    "attach_rot_z",
+];
 
 #[cfg(test)]
 mod tests {
@@ -467,7 +554,10 @@ mod tests {
 
     #[test]
     fn lua_scripts_of_an_object_are_read_with_range_and_rate() {
-        let o = SceneryObject::parse(&CfgFile::from_str("objects/gate.sco", "[mesh]\narm.o3d\n[lua_script]\ngate.lua\n[lua_range]\n120\n[lua_rate]\n20\n"));
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "objects/gate.sco",
+            "[mesh]\narm.o3d\n[lua_script]\ngate.lua\n[lua_range]\n120\n[lua_rate]\n20\n",
+        ));
         assert_eq!(o.scripts.lua.len(), 1);
         assert!(o.scripts.lua[0].ends_with("gate.lua"));
         assert_eq!((o.scripts.lua_range, o.scripts.lua_rate), (120.0, 20.0));
@@ -477,16 +567,25 @@ mod tests {
 
     #[test]
     fn a_count_larger_than_the_file_reads_only_what_is_there() {
-        let o = SceneryObject::parse(&CfgFile::from_str("objects/x.sco", "[groups]\n1000000000000\nA\nB\n"));
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "objects/x.sco",
+            "[groups]\n1000000000000\nA\nB\n",
+        ));
         assert_eq!(o.groups, ["A", "B"]);
-        let o = SceneryObject::parse(&CfgFile::from_str("objects/x.sco", "[groups]\n2\nA\nB\n[onlyeditor]\n"));
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "objects/x.sco",
+            "[groups]\n2\nA\nB\n[onlyeditor]\n",
+        ));
         assert_eq!(o.groups, ["A", "B"]);
         assert!(o.only_editor);
     }
 
     #[test]
     fn several_plain_visible_blocks_keep_the_last_as_omsi_does() {
-        let o = SceneryObject::parse(&CfgFile::from_str("objects/x.sco", "[mesh]\na.o3d\n[visible]\nExclamation\n1\n[visible]\nTrafficLightApproach\n1\n"));
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "objects/x.sco",
+            "[mesh]\na.o3d\n[visible]\nExclamation\n1\n[visible]\nTrafficLightApproach\n1\n",
+        ));
         let m = &o.model.meshes[0];
         let var = |e: f32, t: f32| move |n: &str| Some(if n == "Exclamation" { e } else { t });
         assert_eq!(m.visible_by(var(0.0, 1.0)), Some(true));
@@ -499,10 +598,15 @@ mod tests {
             "objects/cutting.sco",
             "[terrainhole]\ncut.o3d\n[mesh]\nvisible.o3d\n[terrainhole]\nend.o3d\n",
         ));
-        assert_eq!(inline.terrain_hole_sources(&inline.model).collect::<Vec<_>>(), [
-            (Path::new("objects"), "cut.o3d"),
-            (Path::new("objects"), "end.o3d"),
-        ]);
+        assert_eq!(
+            inline
+                .terrain_hole_sources(&inline.model)
+                .collect::<Vec<_>>(),
+            [
+                (Path::new("objects"), "cut.o3d"),
+                (Path::new("objects"), "end.o3d"),
+            ]
+        );
         let wrapper = SceneryObject::parse(&CfgFile::from_str(
             "objects/cutting.sco",
             "[terrainhole]\ncut.o3d\n[model]\nmodel/model.cfg\n",
@@ -511,10 +615,13 @@ mod tests {
             "objects/model/model.cfg",
             "[terrainhole]\nend.o3d\n[mesh]\nvisible.o3d\n",
         ));
-        assert_eq!(wrapper.terrain_hole_sources(&model).collect::<Vec<_>>(), [
-            (Path::new("objects/model"), "end.o3d"),
-            (Path::new("objects"), "cut.o3d"),
-        ]);
+        assert_eq!(
+            wrapper.terrain_hole_sources(&model).collect::<Vec<_>>(),
+            [
+                (Path::new("objects/model"), "end.o3d"),
+                (Path::new("objects"), "cut.o3d"),
+            ]
+        );
     }
 
     /// The stock timetable pole: the `attach_trans` after `[complexity]` belongs to the
@@ -526,8 +633,14 @@ mod tests {
         assert_eq!(o.complexity, 2);
         assert_eq!(o.model.meshes.len(), 1);
         assert_eq!(o.attachments.len(), 2);
-        assert_eq!(o.attachments[0].ops, vec![("attach_trans".to_string(), vec![0.042, 0.0, 2.68])]);
-        assert_eq!(o.attachments[1].ops, vec![("attach_rot_x".to_string(), vec![-10.0])]);
+        assert_eq!(
+            o.attachments[0].ops,
+            vec![("attach_trans".to_string(), vec![0.042, 0.0, 2.68])]
+        );
+        assert_eq!(
+            o.attachments[1].ops,
+            vec![("attach_rot_x".to_string(), vec![-10.0])]
+        );
     }
 
     #[test]
@@ -553,7 +666,10 @@ mod tests {
             ("0", RenderType::Normal),
         ] {
             let text = format!("[rendertype]\n{value}\n");
-            assert_eq!(SceneryObject::parse(&CfgFile::from_str("phase.sco", &text)).render_type, expected);
+            assert_eq!(
+                SceneryObject::parse(&CfgFile::from_str("phase.sco", &text)).render_type,
+                expected
+            );
         }
     }
 
@@ -581,12 +697,21 @@ mod tests {
     #[test]
     fn an_object_with_a_path_keeps_the_height_the_map_gives_it() {
         let path = "[path]\n0\n0\n0\n0\n0\n10\n0\n0\n0\n3.5\n0\n0\n";
-        let road = SceneryObject::parse(&CfgFile::from_str("road.sco", &format!("[mesh]\nroad.o3d\n{path}")));
+        let road = SceneryObject::parse(&CfgFile::from_str(
+            "road.sco",
+            &format!("[mesh]\nroad.o3d\n{path}"),
+        ));
         assert!(!road.abs_height && road.spline_helpers.is_empty());
-        assert!(road.absolute_height(), "a road piece without [splinehelper]");
+        assert!(
+            road.absolute_height(),
+            "a road piece without [splinehelper]"
+        );
         let house = SceneryObject::parse(&CfgFile::from_str("house.sco", "[mesh]\nhouse.o3d\n"));
         assert!(!house.absolute_height());
-        let lifted = SceneryObject::parse(&CfgFile::from_str("bridge.sco", "[absheight]\n[mesh]\nb.o3d\n"));
+        let lifted = SceneryObject::parse(&CfgFile::from_str(
+            "bridge.sco",
+            "[absheight]\n[mesh]\nb.o3d\n",
+        ));
         assert!(lifted.absolute_height());
     }
 
@@ -599,12 +724,18 @@ mod tests {
         assert_eq!(o.model.meshes.len(), 1);
         assert_eq!(o.model.meshes[0].file, "Weiche_L_Asphalt.o3d");
 
-        let o = SceneryObject::parse(&CfgFile::from_str("switch.sco", " \t[surface] \t\n0\n[mesh]\nswitch.o3d\n"));
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "switch.sco",
+            " \t[surface] \t\n0\n[mesh]\nswitch.o3d\n",
+        ));
         assert!(o.surface_explicit);
         assert!(!o.surface);
         assert_eq!(o.model.meshes.len(), 1);
 
-        let o = SceneryObject::parse(&CfgFile::from_str("switch.sco", "-<DISABLED>-\n\t[surface]\n1\n-<ENABLED>-\n[mesh]\nswitch.o3d\n"));
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "switch.sco",
+            "-<DISABLED>-\n\t[surface]\n1\n-<ENABLED>-\n[mesh]\nswitch.o3d\n",
+        ));
         assert!(!o.surface_explicit && !o.surface);
         assert_eq!(o.model.meshes.len(), 1);
     }

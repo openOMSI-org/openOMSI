@@ -3616,3 +3616,5 @@
 "Default for every bus": "所有公交车的默认"
 "Use for {bus}": "用于 {bus}"
 "Profile {name} in use": "正在使用配置文件 {name}"
+"Driving end {number} of {count}: {name}": "驾驶室 {number}/{count}：{name}"
+"At the wheel in the other cab": "在另一端驾驶室驾驶"
