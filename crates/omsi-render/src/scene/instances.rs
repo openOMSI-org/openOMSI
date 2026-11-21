@@ -366,7 +366,13 @@ impl Renderer {
     }
 
     /// Keep a slot's draw-order depth step at or below a caller's limit.
-    pub fn limit_slot_depth_level(&self, scene: &mut Scene, instance: usize, slot: usize, max_level: u8) {
+    pub fn limit_slot_depth_level(
+        &self,
+        scene: &mut Scene,
+        instance: usize,
+        slot: usize,
+        max_level: u8,
+    ) {
         if let Some(i) = scene.instances.get_mut(instance) {
             if let Some(current) = i.slot_levels.get_mut(slot) {
                 let max_level = max_level.min(crate::scene::overlay::MAX_LEVEL);
