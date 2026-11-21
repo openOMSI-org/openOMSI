@@ -754,6 +754,18 @@ fn switch_ahead(r: &RailDrive, net: &Network, from_rear: bool) -> Option<(f32, V
     net.points_ahead(lane, s, along != from_rear, SWITCH_REACH)
 }
 
+/// Whether the train's rear end leads: moving, the end it moves towards (`speed` is along the
+/// train's front, so backing from the rear cab runs front first); standing, the end of the
+/// cab it is driven from (`turned`: a cab in a car turned round, at the rear end).
+fn leads_from_rear(turned: bool, speed: f32) -> bool {
+    const MOVING: f32 = 0.1;
+    if speed.abs() > MOVING {
+        speed < 0.0
+    } else {
+        turned
+    }
+}
+
 /// `change_switch` (J): the points ahead of the train's leading end are set to their next
 /// branch, as a tram driver sets them from the cab (Berlin's and Essen's by a button, the
 /// map's own points otherwise only by a click on them). What it did, for the screen.
@@ -771,7 +783,7 @@ pub(crate) fn change_switch(
         .active_cab
         .and_then(|k| p.vehicle.trailers.get(k))
         .is_some_and(|t| t.reversed);
-    let from_rear = turned || p.vehicle.physics.speed < -0.1;
+    let from_rear = leads_from_rear(turned, p.vehicle.physics.speed);
     let Some((dist, branches)) = switch_ahead(r, net, from_rear) else {
         return omsi_ui::i18n::tr_fill(
             "No points within {reach} m ahead",
@@ -948,6 +960,25 @@ mod tests {
         assert!(wire_roughness(1.0, 15.0) > dry);
         assert!(wire_roughness(1.0, -5.0) > wire_roughness(1.0, 15.0));
         assert_eq!(wire_roughness(0.0, -5.0), dry, "dry frost is not ice");
+    }
+
+    #[test]
+    fn the_leading_end_is_the_one_the_train_moves_towards() {
+        assert!(
+            !leads_from_rear(false, 5.0),
+            "driving on from the front cab"
+        );
+        assert!(leads_from_rear(false, -2.0), "backing from the front cab");
+        assert!(leads_from_rear(true, -5.0), "driving on from the rear cab");
+        assert!(
+            !leads_from_rear(true, 2.0),
+            "backing from the rear cab: the front end leads"
+        );
+        assert!(leads_from_rear(true, 0.0), "standing: the rear cab's end");
+        assert!(
+            !leads_from_rear(false, 0.05),
+            "standing: the front cab's end"
+        );
     }
 
     #[test]
