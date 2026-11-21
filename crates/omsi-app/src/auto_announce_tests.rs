@@ -281,11 +281,46 @@ fn a_previously_unavailable_hof_is_retried_on_a_new_trip() {
     assert_eq!(a.layout_lookup(0, Some(&hof)), None);
 
     // A new trip clears the cached route layout
-    a.trip = Some(1);
-    a.layout = None;
+    a.new_trip(1, true);
 
     assert_eq!(
         a.layout_lookup(0, Some(&hof)),
         Some(TwoRecordings { first: 2, pairs: 3 })
     );
+}
+
+#[test]
+fn a_bus_without_the_counter_is_reported_without_pressing_a_key() {
+    struct NoCounterBus {
+        pressed: bool,
+    }
+    impl Ibis for NoCounterBus {
+        fn var(&self, _name: &str) -> Option<f32> {
+            None
+        }
+        fn trigger(&mut self, _name: &str) -> bool {
+            self.pressed = true;
+            true
+        }
+        fn recordings(&self) -> u64 {
+            0
+        }
+    }
+
+    let mut bus = NoCounterBus { pressed: false };
+    let mut a = AutoAnnounce::new();
+    a.at_stop = Some(true);
+    a.pairs = 1;
+    a.want = Some(Want {
+        entry: 1,
+        until: 10.0,
+        at_stop: true,
+        start: false,
+        recordings: None,
+    });
+    a.press_step(&mut bus, 1.0);
+    assert!(!bus.pressed);
+    assert!(a.off);
+    assert_eq!(a.take_note(), Some(announce::QuietReason::NoIbisKey));
+    assert!(a.want.is_none());
 }

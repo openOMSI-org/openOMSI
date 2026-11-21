@@ -107,36 +107,37 @@ impl AutoAnnounce {
         Self::default()
     }
 
+    /// Advance into a new trip: look again for depot files and keys.
+    pub(crate) fn new_trip(&mut self, trip_index: usize, at_stop: bool) {
+        self.off = false;
+        self.noted = false;
+        self.trip = Some(trip_index);
+        self.at_stop = Some(at_stop);
+        self.announced = None;
+        self.parked = None;
+        self.want = None;
+        self.watch = None;
+        self.layout = None;
+    }
+
     /// One frame of the player's duty, after it was updated: `now` is the seconds of play
     /// (`SimClock::run_time`, which never wraps - a night line runs past midnight).
     pub(crate) fn step(&mut self, d: &PlayerDuty, bus: &mut VehicleInstance, now: f64) {
         if self.trip != Some(d.trip_index) {
-            // (#3281) a key that was missing when the last trip started is looked for again: the
-            // game tries again for each trip instead of giving the bus up for the session
-            self.off = false;
-            self.noted = false;
+            // (a trip of its own: its first stop is due, and the counter stands where the
+            // previous trip left it; depot files and keys are looked for again - #3281)
+            self.new_trip(d.trip_index, d.at_stop());
         }
         if self.off {
             return;
-        }
-        if self.trip != Some(d.trip_index) {
-            // (a trip of its own: its first stop is due, and the counter stands where the
-            // previous trip left it)
-            self.trip = Some(d.trip_index);
-            self.at_stop = Some(d.at_stop());
-            self.announced = None;
-            self.parked = None;
-            self.want = None;
-            self.watch = None;
-            self.layout = None;
         }
         let at = d.at_stop();
         let left = self.at_stop.replace(at) == Some(true) && !at;
         let layout = self.layout_of(bus);
         self.pairs = layout.map_or(0, |l| l.pairs);
-        // (one line a trip: a depot file of one recording per stop leaves nothing to press for,
-        // and the player is told rather than left wondering - #3281)
-        if !self.noted && self.pairs == 0 && route(bus).is_some() {
+        // (one line a trip: a depot file confirmed to have one recording per stop leaves
+        // nothing to press for, and the player is told rather than left wondering - #3281)
+        if !self.noted && layout.is_some_and(|l| l.pairs == 0) && route(bus).is_some() {
             self.noted = true;
             self.note = announce::quiet(announce::Keys::Both, 0);
         }
@@ -314,6 +315,9 @@ impl AutoAnnounce {
             return;
         }
         let Some(at) = bus.var("IBIS_busstop") else {
+            // (a bus without the counter cannot be stepped on, reported without pressing a key)
+            self.off = true;
+            self.note = announce::quiet(announce::Keys::Neither, self.pairs.max(1));
             self.want = None;
             return;
         };
