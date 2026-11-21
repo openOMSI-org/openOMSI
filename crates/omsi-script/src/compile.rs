@@ -69,7 +69,10 @@ struct VarUse {
 
 impl VarUse {
     fn of(blocks: &[Block]) -> VarUse {
-        let mut u = VarUse { blocks: blocks.len(), ..Default::default() };
+        let mut u = VarUse {
+            blocks: blocks.len(),
+            ..Default::default()
+        };
         let set = |bits: &mut Vec<u64>, v: VarId| {
             let (w, b) = (v as usize / 64, v % 64);
             if bits.len() <= w {
@@ -89,7 +92,8 @@ impl VarUse {
     }
 
     fn has(bits: &[u64], v: VarId) -> bool {
-        bits.get(v as usize / 64).is_some_and(|w| w & (1 << (v % 64)) != 0)
+        bits.get(v as usize / 64)
+            .is_some_and(|w| w & (1 << (v % 64)) != 0)
     }
 }
 
@@ -99,7 +103,10 @@ impl Program {
     }
     /// The name of a variable (lower case); a linear search, for diagnostics.
     pub fn var_name(&self, id: VarId) -> Option<&str> {
-        self.var_index.iter().find(|(_, v)| **v == id).map(|(k, _)| k.as_str())
+        self.var_index
+            .iter()
+            .find(|(_, v)| **v == id)
+            .map(|(k, _)| k.as_str())
     }
     /// Every variable name the program knows (lower case).
     pub fn var_names(&self) -> Vec<String> {
@@ -184,7 +191,13 @@ impl Program {
         let mut seen = vec![false; self.blocks.len()];
         let mut todo = self.init.clone();
         while let Some(b) = todo.pop() {
-            let Some(block) = self.blocks.get(b as usize).filter(|_| !std::mem::replace(&mut seen[b as usize], true)) else { continue };
+            let Some(block) = self
+                .blocks
+                .get(b as usize)
+                .filter(|_| !std::mem::replace(&mut seen[b as usize], true))
+            else {
+                continue;
+            };
             for op in &block.ops {
                 match op {
                     Op::Store(v) if *v == var => return true,
@@ -200,7 +213,11 @@ impl Program {
     pub fn stores(&self, var: VarId) -> bool {
         match self.var_use() {
             Some(u) => VarUse::has(&u.stores, var),
-            None => self.blocks.iter().any(|b| b.ops.iter().any(|op| matches!(op, Op::Store(v) if *v == var))),
+            None => self.blocks.iter().any(|b| {
+                b.ops
+                    .iter()
+                    .any(|op| matches!(op, Op::Store(v) if *v == var))
+            }),
         }
     }
 
@@ -208,21 +225,30 @@ impl Program {
     pub fn reads(&self, var: VarId) -> bool {
         match self.var_use() {
             Some(u) => VarUse::has(&u.loads, var),
-            None => self.blocks.iter().any(|b| b.ops.iter().any(|op| matches!(op, Op::Load(v) if *v == var))),
+            None => self.blocks.iter().any(|b| {
+                b.ops
+                    .iter()
+                    .any(|op| matches!(op, Op::Load(v) if *v == var))
+            }),
         }
     }
 
     /// The variables' use, unless blocks were added since it was made (a program put
     /// together by hand in a test): then the callers scan as before.
     fn var_use(&self) -> Option<&VarUse> {
-        Some(self.var_use.get_or_init(|| VarUse::of(&self.blocks))).filter(|u| u.blocks == self.blocks.len())
+        Some(self.var_use.get_or_init(|| VarUse::of(&self.blocks)))
+            .filter(|u| u.blocks == self.blocks.len())
     }
 
     /// Whether any block of the program reads the system variable `sys` (`(L.S.name)`).
     pub fn reads_sys(&self, sys: SysVar) -> bool {
         match self.var_use() {
             Some(u) => u.sys_loads & (1 << (sys as u8)) != 0,
-            None => self.blocks.iter().any(|b| b.ops.iter().any(|op| matches!(op, Op::LoadSys(v) if *v == sys))),
+            None => self.blocks.iter().any(|b| {
+                b.ops
+                    .iter()
+                    .any(|op| matches!(op, Op::LoadSys(v) if *v == sys))
+            }),
         }
     }
 
@@ -233,11 +259,18 @@ impl Program {
         self.block_sets_rec(block, var, &mut seen)
     }
 
-    fn block_sets_rec(&self, block: BlockId, var: VarId, seen: &mut hashbrown::HashSet<BlockId>) -> bool {
+    fn block_sets_rec(
+        &self,
+        block: BlockId,
+        var: VarId,
+        seen: &mut hashbrown::HashSet<BlockId>,
+    ) -> bool {
         if !seen.insert(block) {
             return false;
         }
-        let Some(b) = self.blocks.get(block as usize) else { return false };
+        let Some(b) = self.blocks.get(block as usize) else {
+            return false;
+        };
         b.ops.iter().enumerate().any(|(i, op)| match op {
             Op::Store(v) if *v == var => {
                 // the value stored is what the instruction before the chain of stores pushed
@@ -255,11 +288,18 @@ impl Program {
         self.block_reads_rec(block, var, &mut seen)
     }
 
-    fn block_reads_rec(&self, block: BlockId, var: VarId, seen: &mut hashbrown::HashSet<BlockId>) -> bool {
+    fn block_reads_rec(
+        &self,
+        block: BlockId,
+        var: VarId,
+        seen: &mut hashbrown::HashSet<BlockId>,
+    ) -> bool {
         if !seen.insert(block) {
             return false;
         }
-        let Some(b) = self.blocks.get(block as usize) else { return false };
+        let Some(b) = self.blocks.get(block as usize) else {
+            return false;
+        };
         b.ops.iter().any(|op| match op {
             Op::Load(v) => *v == var,
             Op::Macro(m) => self.block_reads_rec(*m, var, seen),
@@ -277,8 +317,10 @@ impl Program {
     /// hold or a dashboard display is not enough on its own.
     pub fn manual_gearbox(&self) -> bool {
         let (Some(g1), Some(g2)) = (
-            self.trigger("kw_s_1").or_else(|| self.trigger("kw_s_1_fest")),
-            self.trigger("kw_s_2").or_else(|| self.trigger("kw_s_2_fest")),
+            self.trigger("kw_s_1")
+                .or_else(|| self.trigger("kw_s_1_fest")),
+            self.trigger("kw_s_2")
+                .or_else(|| self.trigger("kw_s_2_fest")),
         ) else {
             return false;
         };
@@ -287,7 +329,11 @@ impl Program {
         if self.trigger("automatic_D").is_none() || self.reads_sys(SysVar::AutoClutch) {
             return true;
         }
-        if ["Clutch", "clutch_pedal"].iter().filter_map(|n| self.var(n)).any(|v| self.block_reads(g1, v)) {
+        if ["Clutch", "clutch_pedal"]
+            .iter()
+            .filter_map(|n| self.var(n))
+            .any(|v| self.block_reads(g1, v))
+        {
             return true;
         }
         // A manual may set the selected/engaged gear in the gate triggers themselves and
@@ -304,8 +350,15 @@ impl Program {
     /// but 0): which key or switch of a vehicle turns its electrics on or cranks its
     /// engine, whatever the mod called it. The engine's own `ai_*` triggers are left out.
     pub fn triggers_setting(&self, name: &str) -> Vec<String> {
-        let Some(var) = self.var(name) else { return Vec::new() };
-        let mut out: Vec<String> = self.triggers.iter().filter(|(n, b)| !n.starts_with("ai_") && self.block_sets(**b, var)).map(|(n, _)| n.clone()).collect();
+        let Some(var) = self.var(name) else {
+            return Vec::new();
+        };
+        let mut out: Vec<String> = self
+            .triggers
+            .iter()
+            .filter(|(n, b)| !n.starts_with("ai_") && self.block_sets(**b, var))
+            .map(|(n, _)| n.clone())
+            .collect();
         out.sort();
         out
     }
@@ -370,9 +423,18 @@ pub struct CompileInput {
 
 fn read_list(path: &Path, errors: &mut Vec<ScriptError>) -> Vec<String> {
     match CfgFile::read(path) {
-        Ok(f) => f.lines.iter().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
+        Ok(f) => f
+            .lines
+            .iter()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect(),
         Err(e) => {
-            errors.push(ScriptError { file: path.to_path_buf(), line: 0, message: e.to_string() });
+            errors.push(ScriptError {
+                file: path.to_path_buf(),
+                line: 0,
+                message: e.to_string(),
+            });
             Vec::new()
         }
     }
@@ -404,20 +466,30 @@ pub fn compile(input: &CompileInput) -> Program {
         match ConstFile::load(path) {
             Ok(cf) => {
                 for e in cf.errors {
-                    errors.push(ScriptError { file: path.clone(), line: 0, message: e });
+                    errors.push(ScriptError {
+                        file: path.clone(),
+                        line: 0,
+                        message: e,
+                    });
                 }
                 for (n, v) in cf.consts {
                     // OMSI 2 keeps the first definition, within and across constfiles.
                     consts.entry(n.to_ascii_lowercase()).or_insert(v);
                 }
                 for c in cf.curves {
-                    if let hashbrown::hash_map::Entry::Vacant(entry) = curve_index.entry(c.name.to_ascii_lowercase()) {
+                    if let hashbrown::hash_map::Entry::Vacant(entry) =
+                        curve_index.entry(c.name.to_ascii_lowercase())
+                    {
                         entry.insert(p.curves.len() as u32);
                         p.curves.push(c);
                     }
                 }
             }
-            Err(e) => errors.push(ScriptError { file: path.clone(), line: 0, message: format!("cannot read constfile: {e}") }),
+            Err(e) => errors.push(ScriptError {
+                file: path.clone(),
+                line: 0,
+                message: format!("cannot read constfile: {e}"),
+            }),
         }
     }
     p.errors = errors;
@@ -432,11 +504,23 @@ pub fn compile(input: &CompileInput) -> Program {
                 }
                 files.push(f)
             }
-            Err(e) => p.errors.push(ScriptError { file: path.clone(), line: 0, message: e.to_string() }),
+            Err(e) => p.errors.push(ScriptError {
+                file: path.clone(),
+                line: 0,
+                message: e.to_string(),
+            }),
         }
     }
     let mut pending: Vec<(usize, usize, String)> = Vec::new(); // (block, op index, macro name)
-    let mut c = Compiler { p: &mut p, consts: &consts, curves: &curve_index, pending: &mut pending, missing_curve: None, declare_unknown: input.declare_unknown, file_frames: (0, 0) };
+    let mut c = Compiler {
+        p: &mut p,
+        consts: &consts,
+        curves: &curve_index,
+        pending: &mut pending,
+        missing_curve: None,
+        declare_unknown: input.declare_unknown,
+        file_frames: (0, 0),
+    };
     for f in &files {
         c.compile_file(f);
     }
@@ -447,7 +531,11 @@ pub fn compile(input: &CompileInput) -> Program {
             Some(id) => p.blocks[block].ops[op] = Op::Macro(id),
             None => {
                 let (file, line) = (p.blocks[block].file.clone(), p.blocks[block].line);
-                p.errors.push(ScriptError { file, line, message: format!("SC_ErrorInCommand_macroinvalid: macro \"{name}\" not found") });
+                p.errors.push(ScriptError {
+                    file,
+                    line,
+                    message: format!("SC_ErrorInCommand_macroinvalid: macro \"{name}\" not found"),
+                });
                 // A missing macro leaves the stack untouched in the original; emulate by
                 // replacing with a no-op pair.
                 p.blocks[block].ops[op] = Op::Jump((op + 1) as u32);
@@ -526,7 +614,13 @@ fn tokenize(line: &str) -> Vec<Tok> {
                     j += 1;
                 }
             }
-            out.push(Tok::Paren(chars[start..j.min(chars.len())].iter().collect::<String>().trim().to_string()));
+            out.push(Tok::Paren(
+                chars[start..j.min(chars.len())]
+                    .iter()
+                    .collect::<String>()
+                    .trim()
+                    .to_string(),
+            ));
             i = j + 1;
             continue;
         }
@@ -536,13 +630,24 @@ fn tokenize(line: &str) -> Vec<Tok> {
             while j < chars.len() && chars[j] != '}' {
                 j += 1;
             }
-            out.push(Tok::Brace(chars[start..j.min(chars.len())].iter().collect::<String>().trim().to_string()));
+            out.push(Tok::Brace(
+                chars[start..j.min(chars.len())]
+                    .iter()
+                    .collect::<String>()
+                    .trim()
+                    .to_string(),
+            ));
             i = j + 1;
             continue;
         }
         let start = i;
         let mut j = i;
-        while j < chars.len() && !chars[j].is_whitespace() && chars[j] != '(' && chars[j] != '{' && chars[j] != '"' {
+        while j < chars.len()
+            && !chars[j].is_whitespace()
+            && chars[j] != '('
+            && chars[j] != '{'
+            && chars[j] != '"'
+        {
             j += 1;
         }
         out.push(Tok::Word(chars[start..j].iter().collect()));
@@ -562,7 +667,11 @@ enum BlockKind {
 
 impl<'a> Compiler<'a> {
     fn err(&mut self, file: &Path, line: usize, msg: String) {
-        self.p.errors.push(ScriptError { file: file.to_path_buf(), line, message: msg });
+        self.p.errors.push(ScriptError {
+            file: file.to_path_buf(),
+            line,
+            message: msg,
+        });
     }
 
     fn compile_file(&mut self, f: &CfgFile) {
@@ -589,14 +698,24 @@ impl<'a> Compiler<'a> {
                     Tok::Brace(b) => {
                         let bl = b.to_ascii_lowercase();
                         match bl.as_str() {
-                            "init" | "frame" | "frame_ai" | _ if bl == "init" || bl == "frame" || bl == "frame_ai" || bl.starts_with("macro:") || bl.starts_with("trigger:") => {
+                            "init" | "frame" | "frame_ai" | _
+                                if bl == "init"
+                                    || bl == "frame"
+                                    || bl == "frame_ai"
+                                    || bl.starts_with("macro:")
+                                    || bl.starts_with("trigger:") =>
+                            {
                                 let (kind, name) = match bl.as_str() {
                                     "init" => (BlockKind::Init, bl.clone()),
                                     "frame" => (BlockKind::Frame, bl.clone()),
                                     "frame_ai" => (BlockKind::FrameAi, bl.clone()),
                                     _ => {
                                         let name = b[b.find(':').unwrap() + 1..].trim().to_string();
-                                        let kind = if bl.starts_with("macro:") { BlockKind::Macro(name.to_ascii_lowercase()) } else { BlockKind::Trigger(name.to_ascii_lowercase()) };
+                                        let kind = if bl.starts_with("macro:") {
+                                            BlockKind::Macro(name.to_ascii_lowercase())
+                                        } else {
+                                            BlockKind::Trigger(name.to_ascii_lowercase())
+                                        };
                                         (kind, name)
                                     }
                                 };
@@ -604,24 +723,59 @@ impl<'a> Compiler<'a> {
                                     // A block header directly after another header (no code yet)
                                     // makes both names refer to the same body - stock scripts
                                     // stack `{trigger:a}` `{trigger:b}` this way.
-                                    Some((kinds, block, _)) if block.ops.is_empty() => kinds.push(kind),
+                                    Some((kinds, block, _)) if block.ops.is_empty() => {
+                                        kinds.push(kind)
+                                    }
                                     Some(_) => {
                                         let (kinds, mut block, _) = cur.take().unwrap();
                                         let end = block.ops.len() as u32;
-                                        for idx in orphan_elses.drain(..).chain(early_ends.drain(..)).chain(extra_elses.drain(..).map(|(_, op)| op)) {
+                                        for idx in orphan_elses
+                                            .drain(..)
+                                            .chain(early_ends.drain(..))
+                                            .chain(extra_elses.drain(..).map(|(_, op)| op))
+                                        {
                                             patch(&mut block.ops[idx], end);
                                         }
-                                        log::debug!("{}:{}: {{{b}}} starts while block {} is open (implicit end)", f.path.display(), line_no, block.name);
-                                        self.finish_block(kinds, block, false);
-                                        cur = Some((vec![kind], Block { name, file: f.path.clone(), line: line_no, ..Default::default() }, Vec::new()));
+                                        log::debug!(
+                                            "{}:{}: {{{b}}} starts while block {} is open (implicit end)",
+                                            f.path.display(),
+                                            line_no,
+                                            block.name
+                                        );
+                                        self.finish_block(kinds, block);
+                                        cur = Some((
+                                            vec![kind],
+                                            Block {
+                                                name,
+                                                file: f.path.clone(),
+                                                line: line_no,
+                                                ..Default::default()
+                                            },
+                                            Vec::new(),
+                                        ));
                                     }
-                                    None => cur = Some((vec![kind], Block { name, file: f.path.clone(), line: line_no, ..Default::default() }, Vec::new())),
+                                    None => {
+                                        cur = Some((
+                                            vec![kind],
+                                            Block {
+                                                name,
+                                                file: f.path.clone(),
+                                                line: line_no,
+                                                ..Default::default()
+                                            },
+                                            Vec::new(),
+                                        ))
+                                    }
                                 }
                             }
                             "end" => {
                                 if cur.as_ref().is_some_and(|(_, _, ifs)| !ifs.is_empty()) {
                                     let (_, block, _) = cur.as_mut().unwrap();
-                                    log::debug!("{}:{}: {{end}} inside {{if}} leaves the block when reached", f.path.display(), line_no);
+                                    log::debug!(
+                                        "{}:{}: {{end}} inside {{if}} leaves the block when reached",
+                                        f.path.display(),
+                                        line_no
+                                    );
                                     early_ends.push(block.ops.len());
                                     block.ops.push(Op::Jump(u32::MAX));
                                 } else if let Some((kinds, mut block, ifs)) = cur.take() {
@@ -630,16 +784,24 @@ impl<'a> Compiler<'a> {
                                         patch(&mut block.ops[idx], end);
                                     }
                                     for (idx, _) in ifs {
-                                        log::debug!("{}:{}: {{end}} with open {{if}}", f.path.display(), line_no);
+                                        log::debug!(
+                                            "{}:{}: {{end}} with open {{if}}",
+                                            f.path.display(),
+                                            line_no
+                                        );
                                         patch(&mut block.ops[idx], end);
                                     }
                                     for (_, op) in extra_elses.drain(..) {
                                         patch(&mut block.ops[op], end);
                                     }
-                                    self.finish_block(kinds, block, true);
+                                    self.finish_block(kinds, block);
                                 } else {
                                     // Surplus {end} tokens are common in stock content; ignored.
-                                    log::debug!("{}:{}: {{end}} without block", f.path.display(), line_no);
+                                    log::debug!(
+                                        "{}:{}: {{end}} without block",
+                                        f.path.display(),
+                                        line_no
+                                    );
                                 }
                             }
                             "if" => {
@@ -650,7 +812,11 @@ impl<'a> Compiler<'a> {
                                     // (code between blocks is never run - Omsi.exe reads only
                                     // block headers there; the Procity's cockpit.osc has a
                                     // whole {if} {else} {endif} between two triggers)
-                                    log::debug!("{}:{}: {{if}} outside block", f.path.display(), line_no);
+                                    log::debug!(
+                                        "{}:{}: {{if}} outside block",
+                                        f.path.display(),
+                                        line_no
+                                    );
                                 }
                             }
                             "else" => {
@@ -658,7 +824,11 @@ impl<'a> Compiler<'a> {
                                     let depth = ifs.len();
                                     if let Some((idx, has_else)) = ifs.last_mut() {
                                         if *has_else {
-                                            log::debug!("{}:{}: double {{else}}", f.path.display(), line_no);
+                                            log::debug!(
+                                                "{}:{}: double {{else}}",
+                                                f.path.display(),
+                                                line_no
+                                            );
                                             extra_elses.push((depth, block.ops.len()));
                                             block.ops.push(Op::Jump(u32::MAX));
                                             continue;
@@ -671,12 +841,20 @@ impl<'a> Compiler<'a> {
                                         *idx = jmp;
                                         *has_else = true;
                                     } else {
-                                        log::debug!("{}:{}: {{else}} without {{if}}", f.path.display(), line_no);
+                                        log::debug!(
+                                            "{}:{}: {{else}} without {{if}}",
+                                            f.path.display(),
+                                            line_no
+                                        );
                                         orphan_elses.push(block.ops.len());
                                         block.ops.push(Op::Jump(u32::MAX));
                                     }
                                 } else {
-                                    log::debug!("{}:{}: {{else}} outside block", f.path.display(), line_no);
+                                    log::debug!(
+                                        "{}:{}: {{else}} outside block",
+                                        f.path.display(),
+                                        line_no
+                                    );
                                 }
                             }
                             "endif" => {
@@ -692,14 +870,22 @@ impl<'a> Compiler<'a> {
                                             }
                                         }
                                     } else {
-                                        log::debug!("{}:{}: {{endif}} without {{if}}", f.path.display(), line_no);
+                                        log::debug!(
+                                            "{}:{}: {{endif}} without {{if}}",
+                                            f.path.display(),
+                                            line_no
+                                        );
                                         let target = block.ops.len() as u32;
                                         for idx in orphan_elses.drain(..) {
                                             patch(&mut block.ops[idx], target);
                                         }
                                     }
                                 } else {
-                                    log::debug!("{}:{}: {{endif}} outside block", f.path.display(), line_no);
+                                    log::debug!(
+                                        "{}:{}: {{endif}} outside block",
+                                        f.path.display(),
+                                        line_no
+                                    );
                                 }
                             }
                             _ => self.err(&f.path, line_no, format!("unknown block token {{{b}}}")),
@@ -742,11 +928,15 @@ impl<'a> Compiler<'a> {
         }
         if let Some((kinds, mut block, _)) = cur.take() {
             let end = block.ops.len() as u32;
-            for idx in orphan_elses.drain(..).chain(early_ends.drain(..)).chain(extra_elses.drain(..).map(|(_, op)| op)) {
+            for idx in orphan_elses
+                .drain(..)
+                .chain(early_ends.drain(..))
+                .chain(extra_elses.drain(..).map(|(_, op)| op))
+            {
                 patch(&mut block.ops[idx], end);
             }
             log::debug!("{}: missing {{end}} at end of file", f.path.display());
-            self.finish_block(kinds, block, false);
+            self.finish_block(kinds, block);
         }
     }
 
@@ -756,30 +946,54 @@ impl<'a> Compiler<'a> {
         self.pending.push((block_idx, op_idx, name));
     }
 
-    fn finish_block(&mut self, mut kinds: Vec<BlockKind>, block: Block, ended: bool) {
+    fn finish_block(&mut self, mut kinds: Vec<BlockKind>, block: Block) {
         let id = self.p.blocks.len() as BlockId;
         self.p.blocks.push(block);
         kinds.dedup();
         for kind in kinds {
-            self.register(kind, id, ended);
+            self.register(kind, id);
         }
     }
 
-    fn register(&mut self, kind: BlockKind, id: BlockId, ended: bool) {
+    #[rustfmt::skip]
+    fn same_frame_block(&self, left: BlockId, right: BlockId) -> bool {
+        let (left, right) = (left as usize, right as usize);
+        let (b_l, b_r) = (&self.p.blocks[left], &self.p.blocks[right]);
+        if b_l.ops.len() != b_r.ops.len() { return false; }
+        for (op1, op2) in b_l.ops.iter().zip(&b_r.ops) {
+            match (op1, op2) {
+                (Op::PushStr(i1), Op::PushStr(i2)) => {
+                    if self.p.strings.get(*i1 as usize) != self.p.strings.get(*i2 as usize) { return false; }
+                }
+                _ if op1 != op2 => return false,
+                _ => {}
+            }
+        }
+        // Unresolved calls still have identical placeholder ops.
+        let calls = |id| {
+            let start = self.pending.partition_point(|(block, _, _)| *block < id);
+            self.pending[start..].iter().take_while(move |(block, _, _)| *block == id).map(|(_, op, name)| (op, name))
+        };
+        calls(left).eq(calls(right))
+    }
+
+    fn register(&mut self, kind: BlockKind, id: BlockId) {
         match kind {
             BlockKind::Init => self.p.init.push(id),
             BlockKind::Frame => {
-                self.p.frame.truncate(self.file_frames.0);
-                self.p.frame.push(id);
-                if !ended {
-                    self.file_frames.0 = self.p.frame.len();
+                let is_dup = self.p.frame[self.file_frames.0..]
+                    .iter()
+                    .any(|&prev| self.same_frame_block(prev, id));
+                if !is_dup {
+                    self.p.frame.push(id);
                 }
             }
             BlockKind::FrameAi => {
-                self.p.frame_ai.truncate(self.file_frames.1);
-                self.p.frame_ai.push(id);
-                if !ended {
-                    self.file_frames.1 = self.p.frame_ai.len();
+                let is_dup = self.p.frame_ai[self.file_frames.1..]
+                    .iter()
+                    .any(|&prev| self.same_frame_block(prev, id));
+                if !is_dup {
+                    self.p.frame_ai.push(id);
                 }
             }
             BlockKind::Macro(n) => {
@@ -795,7 +1009,11 @@ impl<'a> Compiler<'a> {
         // Form: X.Y.name  (Y may be '$')
         let b = inner.as_bytes();
         if b.len() < 5 || b[1] != b'.' || b[3] != b'.' {
-            self.err(file, line, format!("SC_ErrorInCommand: malformed access ({inner})"));
+            self.err(
+                file,
+                line,
+                format!("SC_ErrorInCommand: malformed access ({inner})"),
+            );
             return None;
         }
         let kind = b[0].to_ascii_uppercase();
@@ -806,22 +1024,36 @@ impl<'a> Compiler<'a> {
             (b'L', b'L') => match self.p.var(&lname) {
                 Some(id) => Some(Op::Load(id)),
                 None if self.declare_unknown => {
-                    log::debug!("{}:{line}: variable \"{name}\" declared as the script uses it", file.display());
+                    log::debug!(
+                        "{}:{line}: variable \"{name}\" declared as the script uses it",
+                        file.display()
+                    );
                     Some(Op::Load(self.p.declare_var(name)))
                 }
                 None => {
-                    self.err(file, line, format!("SC_ErrorInCommand_varinvalid: variable \"{name}\" not found"));
+                    self.err(
+                        file,
+                        line,
+                        format!("SC_ErrorInCommand_varinvalid: variable \"{name}\" not found"),
+                    );
                     Some(Op::Push(0.0))
                 }
             },
             (b'S', b'L') => match self.p.var(&lname) {
                 Some(id) => Some(Op::Store(id)),
                 None if self.declare_unknown => {
-                    log::debug!("{}:{line}: variable \"{name}\" declared as the script uses it", file.display());
+                    log::debug!(
+                        "{}:{line}: variable \"{name}\" declared as the script uses it",
+                        file.display()
+                    );
                     Some(Op::Store(self.p.declare_var(name)))
                 }
                 None => {
-                    self.err(file, line, format!("SC_ErrorInCommand_varinvalid: variable \"{name}\" not found"));
+                    self.err(
+                        file,
+                        line,
+                        format!("SC_ErrorInCommand_varinvalid: variable \"{name}\" not found"),
+                    );
                     None
                 }
             },
@@ -830,21 +1062,39 @@ impl<'a> Compiler<'a> {
             (b'L', b'S' | b'M') => match SysVar::from_name(name) {
                 Some(v) => Some(Op::LoadSys(v)),
                 None => {
-                    self.err(file, line, format!("SC_ErrorInCommand_varinvalid: system variable \"{name}\" not found"));
+                    self.err(
+                        file,
+                        line,
+                        format!(
+                            "SC_ErrorInCommand_varinvalid: system variable \"{name}\" not found"
+                        ),
+                    );
                     Some(Op::Push(0.0))
                 }
             },
             (b'S', b'S' | b'M') => match SysVar::from_name(name) {
                 Some(v) => Some(Op::StoreSys(v)),
                 None => {
-                    self.err(file, line, format!("SC_ErrorInCommand_varinvalid: system variable \"{name}\" not found"));
+                    self.err(
+                        file,
+                        line,
+                        format!(
+                            "SC_ErrorInCommand_varinvalid: system variable \"{name}\" not found"
+                        ),
+                    );
                     None
                 }
             },
             (b'L', b'$') => match self.p.str_var(&lname) {
                 Some(id) => Some(Op::LoadStr(id)),
                 None => {
-                    self.err(file, line, format!("SC_ErrorInCommand_varinvalid: string variable \"{name}\" not found"));
+                    self.err(
+                        file,
+                        line,
+                        format!(
+                            "SC_ErrorInCommand_varinvalid: string variable \"{name}\" not found"
+                        ),
+                    );
                     self.p.strings.push(String::new());
                     Some(Op::PushStr(self.p.strings.len() as u32 - 1))
                 }
@@ -852,21 +1102,35 @@ impl<'a> Compiler<'a> {
             (b'S', b'$') => match self.p.str_var(&lname) {
                 Some(id) => Some(Op::StoreStr(id)),
                 None => {
-                    self.err(file, line, format!("SC_ErrorInCommand_varinvalid: string variable \"{name}\" not found"));
+                    self.err(
+                        file,
+                        line,
+                        format!(
+                            "SC_ErrorInCommand_varinvalid: string variable \"{name}\" not found"
+                        ),
+                    );
                     None
                 }
             },
             (b'C', _) => match self.consts.get(&lname) {
                 Some(&v) => Some(Op::Const(v)),
                 None => {
-                    self.err(file, line, format!("SC_ErrorInCommand_constantinvalid: constant \"{name}\" not found"));
+                    self.err(
+                        file,
+                        line,
+                        format!("SC_ErrorInCommand_constantinvalid: constant \"{name}\" not found"),
+                    );
                     Some(Op::Push(0.0))
                 }
             },
             (b'F', _) => match self.curves.get(&lname) {
                 Some(&id) => Some(Op::Curve(id)),
                 None => {
-                    self.err(file, line, format!("SC_ErrorInCommand_functioninvalid: curve \"{name}\" not found"));
+                    self.err(
+                        file,
+                        line,
+                        format!("SC_ErrorInCommand_functioninvalid: curve \"{name}\" not found"),
+                    );
                     // A function takes its argument off the stack and gives its value back; one
                     // the constfiles do not define gives 0 like an empty curve. Pushing a 0 on
                     // top of the argument instead shifted the rest of the line: the O530
@@ -878,7 +1142,10 @@ impl<'a> Compiler<'a> {
                         Some(id) => id,
                         None => {
                             let id = self.p.curves.len() as u32;
-                            self.p.curves.push(Curve { name: String::new(), points: Vec::new() });
+                            self.p.curves.push(Curve {
+                                name: String::new(),
+                                points: Vec::new(),
+                            });
                             self.missing_curve = Some(id);
                             id
                         }
@@ -891,7 +1158,11 @@ impl<'a> Compiler<'a> {
             (b'T', b'F') => Some(Op::SoundTriggerFile(self.p.intern(name))),
             (b'T', _) => Some(Op::SoundTrigger(self.p.intern(name))),
             _ => {
-                self.err(file, line, format!("SC_ErrorInCommand: unknown access ({inner})"));
+                self.err(
+                    file,
+                    line,
+                    format!("SC_ErrorInCommand: unknown access ({inner})"),
+                );
                 None
             }
         }
@@ -927,7 +1198,10 @@ impl<'a> Compiler<'a> {
                 "StrToFloat" => Op::StrToFloat,
                 "__DigitsFirst" => Op::StrDigitsFirst,
                 _ => {
-                    log::debug!("{}:{line}: \"{w}\" is no string operator; skipped", file.display());
+                    log::debug!(
+                        "{}:{line}: \"{w}\" is no string operator; skipped",
+                        file.display()
+                    );
                     return None;
                 }
             };
@@ -935,7 +1209,9 @@ impl<'a> Compiler<'a> {
         }
         // a number as Delphi reads one: digits, a point, an exponent - never "inf" or "nan",
         // and nothing beyond the range of a float
-        let numeric = w.trim_start_matches(['-', '+']).starts_with(|c: char| c.is_ascii_digit() || c == '.');
+        let numeric = w
+            .trim_start_matches(['-', '+'])
+            .starts_with(|c: char| c.is_ascii_digit() || c == '.');
         if let Some(v) = w.parse::<f32>().ok().filter(|v| numeric && v.is_finite()) {
             return Some(Op::Push(v));
         }
@@ -975,9 +1251,17 @@ impl<'a> Compiler<'a> {
                 let b = w.as_bytes();
                 if b.len() == 2 && (b[0] == b'l' || b[0] == b's') && b[1].is_ascii_digit() {
                     let d = b[1] - b'0';
-                    return Some(if b[0] == b'l' { Op::LoadReg(d) } else { Op::StoreReg(d) });
+                    return Some(if b[0] == b'l' {
+                        Op::LoadReg(d)
+                    } else {
+                        Op::StoreReg(d)
+                    });
                 }
-                self.err(file, line, format!("SC_ErrorInCommand: unknown token \"{w}\""));
+                self.err(
+                    file,
+                    line,
+                    format!("SC_ErrorInCommand: unknown token \"{w}\""),
+                );
                 return None;
             }
         };
@@ -997,18 +1281,32 @@ mod tests {
     use super::*;
 
     fn program_of(script: &str) -> Program {
-        let dir = std::env::temp_dir().join(format!("omsi_gearbox_{}_{}", std::process::id(), script.len()));
+        let dir = std::env::temp_dir().join(format!(
+            "omsi_gearbox_{}_{}",
+            std::process::id(),
+            script.len()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let osc = dir.join("g.osc");
         std::fs::write(&osc, script).unwrap();
         // (the script's own variables are in a varlist, as a bus has them: a store to an
         // undeclared variable compiles to nothing)
-        let mut locals: Vec<&str> = ["(L.L.", "(S.L."].iter().flat_map(|p| script.split(p).skip(1)).filter_map(|t| t.split(')').next()).filter(|n| *n != "Clutch").collect();
+        let mut locals: Vec<&str> = ["(L.L.", "(S.L."]
+            .iter()
+            .flat_map(|p| script.split(p).skip(1))
+            .filter_map(|t| t.split(')').next())
+            .filter(|n| *n != "Clutch")
+            .collect();
         locals.sort_unstable();
         locals.dedup();
         let vars = dir.join("vars.txt");
         std::fs::write(&vars, locals.join("\n")).unwrap();
-        let p = compile(&CompileInput { builtin_vars: vec!["Clutch".into()], varlists: vec![vars], scripts: vec![osc], ..Default::default() });
+        let p = compile(&CompileInput {
+            builtin_vars: vec!["Clutch".into()],
+            varlists: vec![vars],
+            scripts: vec![osc],
+            ..Default::default()
+        });
         let _ = std::fs::remove_dir_all(&dir);
         p
     }
@@ -1016,18 +1314,25 @@ mod tests {
     #[test]
     fn a_manual_gearbox_is_told_from_an_automatic_with_gate_keys() {
         // the LiAZ KPP: gates, the first one asks for the clutch
-        let kpp = program_of("{trigger:kw_s_1} (L.L.Clutch) 1 = {if} 1 (S.L.g) {endif} {end}\n{trigger:kw_s_2} 2 (S.L.g) {end}\n");
+        let kpp = program_of(
+            "{trigger:kw_s_1} (L.L.Clutch) 1 = {if} 1 (S.L.g) {endif} {end}\n{trigger:kw_s_2} 2 (S.L.g) {end}\n",
+        );
         assert!(kpp.manual_gearbox());
         // a manual bus can share cockpit code that also exposes automatic R/N/D. Its gear
         // triggers select the actual gear directly, while the clutch is read later in the
         // gearbox frame instead of inside kw_s_1.
-        let shared = program_of("{trigger:automatic_D} 1 (S.L.d) {end}\n{trigger:automatic_N} 0 (S.L.d) {end}\n{trigger:automatic_R} -1 (S.L.d) {end}\n{trigger:kw_s_1} 1 (S.L.antrieb_getr_gang) {end}\n{trigger:kw_s_2} 2 (S.L.antrieb_getr_gang) {end}\n{macro:gearbox_frame} (L.L.Clutch) (S.L.clutch_now) {end}\n");
+        let shared = program_of(
+            "{trigger:automatic_D} 1 (S.L.d) {end}\n{trigger:automatic_N} 0 (S.L.d) {end}\n{trigger:automatic_R} -1 (S.L.d) {end}\n{trigger:kw_s_1} 1 (S.L.antrieb_getr_gang) {end}\n{trigger:kw_s_2} 2 (S.L.antrieb_getr_gang) {end}\n{macro:gearbox_frame} (L.L.Clutch) (S.L.clutch_now) {end}\n",
+        );
         assert!(shared.manual_gearbox());
         // an automatic with gear-hold keys and a torque converter's clutch elsewhere
-        let auto = program_of("{trigger:automatic_D} 1 (S.L.d) {end}\n{trigger:kw_s_1} 1 (S.L.hold) {end}\n{trigger:kw_s_2} 2 (S.L.hold) {end}\n{macro:conv} (L.L.Clutch) (S.L.c) {end}\n");
+        let auto = program_of(
+            "{trigger:automatic_D} 1 (S.L.d) {end}\n{trigger:kw_s_1} 1 (S.L.hold) {end}\n{trigger:kw_s_2} 2 (S.L.hold) {end}\n{macro:conv} (L.L.Clutch) (S.L.c) {end}\n",
+        );
         assert!(!auto.manual_gearbox());
         // gates and no automatic at all
-        let plain = program_of("{trigger:kw_s_1} 1 (S.L.g) {end}\n{trigger:kw_s_2} 2 (S.L.g) {end}\n");
+        let plain =
+            program_of("{trigger:kw_s_1} 1 (S.L.g) {end}\n{trigger:kw_s_2} 2 (S.L.g) {end}\n");
         assert!(plain.manual_gearbox());
         // a stock automatic: no gates
         assert!(!program_of("{trigger:automatic_D} 1 (S.L.d) {end}\n").manual_gearbox());
@@ -1036,9 +1341,15 @@ mod tests {
     #[test]
     fn an_end_inside_an_if_keeps_the_else_branch() {
         // Valiant Citybus doors: `{if} {end} {else} ... {endif}` - the else code must exist
-        let prog = program_of("{trigger:a}\n1 {if}\n{end}\n{else}\n2 (S.L.x)\n{endif}\n{end}\n{trigger:b} 3 (S.L.y) {end}\n");
+        let prog = program_of(
+            "{trigger:a}\n1 {if}\n{end}\n{else}\n2 (S.L.x)\n{endif}\n{end}\n{trigger:b} 3 (S.L.y) {end}\n",
+        );
         let id = *prog.triggers.get("a").unwrap();
-        assert!(prog.blocks[id as usize].ops.len() >= 6, "else branch was cut: {:?}", prog.blocks[id as usize].ops);
+        assert!(
+            prog.blocks[id as usize].ops.len() >= 6,
+            "else branch was cut: {:?}",
+            prog.blocks[id as usize].ops
+        );
         assert!(prog.triggers.contains_key("b"));
     }
 
@@ -1057,7 +1368,9 @@ mod tests {
                 Tok::Word("$+".into()),
             ]
         );
-        let t = tokenize("\"churafont CE (8-1)x3\" (M.V.GetFontIndex) (S.L.Font_(8-1)x3) (L.L.a)(L.L.b) ( L.L.c )");
+        let t = tokenize(
+            "\"churafont CE (8-1)x3\" (M.V.GetFontIndex) (S.L.Font_(8-1)x3) (L.L.a)(L.L.b) ( L.L.c )",
+        );
         assert_eq!(
             t,
             vec![
@@ -1072,16 +1385,39 @@ mod tests {
     }
 
     #[test]
-    fn a_file_keeps_one_frame_block_as_it_keeps_one_macro_of_a_name() {
-        let twice = program_of("{frame}\n1 (S.L.a)\n{end}\n{frame}\n2 (S.L.b)\n{end}\n");
-        assert_eq!(twice.frame.len(), 1);
+    fn a_file_deduplicates_identical_frame_blocks_and_keeps_distinct_ones() {
+        let dup = program_of("{frame}\n1 (S.L.a)\n{end}\n{frame}\n1 (S.L.a)\n{end}\n");
+        assert_eq!(dup.frame.len(), 1);
+        let distinct = program_of("{frame}\n1 (S.L.a)\n{end}\n{frame}\n2 (S.L.b)\n{end}\n");
+        assert_eq!(distinct.frame.len(), 2);
         let stacked = program_of("{frame}\n{frame}\n3 (S.L.c)\n{end}\n");
         assert_eq!(stacked.frame.len(), 1);
         let cut_short = program_of("{frame}\n1 (S.L.a)\n{frame}\n2 (S.L.b)\n{end}\n");
-        assert_eq!(cut_short.frame.len(), 2, "a frame block without its end, cut short by the next header, still runs");
+        assert_eq!(
+            cut_short.frame.len(),
+            2,
+            "a frame block without its end, cut short by the next header, still runs"
+        );
     }
 
     #[test]
+    #[rustfmt::skip]
+    fn frame_blocks_compare_pending_macro_calls_before_deduplicating() {
+        for kind in ["frame", "frame_ai"] {
+            let p = program_of(&format!("{{{kind}}}\n(M.L.first)\n{{end}}\n{{{kind}}}\n(M.L.second)\n{{end}}\n{{{kind}}}\n(M.L.first)\n{{end}}\n{{macro:first}}\n1 (S.L.a)\n{{end}}\n{{macro:second}}\n2 (S.L.b)\n{{end}}\n"));
+            let frames = match kind { "frame" => &p.frame, _ => &p.frame_ai };
+            assert_eq!(frames.len(), 2, "{kind}");
+            let (f0, f1) = (frames[0] as usize, frames[1] as usize);
+            assert_ne!(p.blocks[f0].ops, p.blocks[f1].ops);
+
+            let p_str = program_of(&format!("{{{kind}}}\n\"x\" (S.$.name)\n{{end}}\n{{{kind}}}\n\"x\" (S.$.name)\n{{end}}\n{{{kind}}}\n\"y\" (S.$.name)\n{{end}}\n"));
+            let s_frames = match kind { "frame" => &p_str.frame, _ => &p_str.frame_ai };
+            assert_eq!(s_frames.len(), 2, "string literals {kind}");
+        }
+    }
+
+    #[test]
+    #[rustfmt::skip]
     fn script_vars_track_varlists_distinct_from_builtins() {
         let dir = std::env::temp_dir().join(format!("omsi-script-test-vars-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -1114,11 +1450,18 @@ mod tests {
             assert_eq!(p.stores(v), scan(&p, true, v), "stores {n}");
             assert_eq!(p.reads(v), scan(&p, false, v), "reads {n}");
         }
-        assert!(p.stores(p.var("b").unwrap()) && !p.stores(p.var("a").unwrap()) && p.reads(p.var("c").unwrap()));
+        assert!(
+            p.stores(p.var("b").unwrap())
+                && !p.stores(p.var("a").unwrap())
+                && p.reads(p.var("c").unwrap())
+        );
         // (a variable past every one the bits hold)
         assert!(!p.stores(4000) && !p.reads(4000));
         let clutch = p.var("Clutch").unwrap();
-        p.blocks.push(Block { ops: vec![Op::Push(1.0), Op::Store(clutch)], ..Default::default() });
+        p.blocks.push(Block {
+            ops: vec![Op::Push(1.0), Op::Store(clutch)],
+            ..Default::default()
+        });
         assert!(p.stores(clutch));
     }
 
@@ -1126,12 +1469,20 @@ mod tests {
     #[test]
     fn reads_sys_answers_as_the_bytecode_scan() {
         let mut p = program_of("{frame}\n(L.S.Timegap) (L.S.AutoClutch) + (S.L.a)\n{end}\n");
-        let scan = |p: &Program, sys: SysVar| p.blocks.iter().flat_map(|b| &b.ops).any(|op| matches!(op, Op::LoadSys(v) if *v == sys));
+        let scan = |p: &Program, sys: SysVar| {
+            p.blocks
+                .iter()
+                .flat_map(|b| &b.ops)
+                .any(|op| matches!(op, Op::LoadSys(v) if *v == sys))
+        };
         for sys in SysVar::ALL {
             assert_eq!(p.reads_sys(sys), scan(&p, sys), "{sys:?}");
         }
         assert!(p.reads_sys(SysVar::AutoClutch) && !p.reads_sys(SysVar::SunAlt));
-        p.blocks.push(Block { ops: vec![Op::LoadSys(SysVar::SunAlt)], ..Default::default() });
+        p.blocks.push(Block {
+            ops: vec![Op::LoadSys(SysVar::SunAlt)],
+            ..Default::default()
+        });
         assert!(p.reads_sys(SysVar::SunAlt));
     }
 }

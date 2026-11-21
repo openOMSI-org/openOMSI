@@ -3218,3 +3218,12 @@
 "At most 5": "अधिकतम 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "जिन ऑब्जेक्ट और स्प्लाइन फ़ोल्डरों को कोई दूसरा मैप इस्तेमाल नहीं करता, वे भी साथ में हट जाते हैं: {n}, {size}।"
 "Folders of objects and splines that another map still uses stay: {n}.": "जिन ऑब्जेक्ट और स्प्लाइन फ़ोल्डरों को कोई दूसरा मैप अब भी इस्तेमाल करता है, वे बने रहते हैं: {n}।"
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "प्रोफ़ाइल में हर कुंजी और हर कंट्रोलर सेटिंग रहती है। हर ड्राइव से पहले लॉन्चर बस की अपनी प्रोफ़ाइल या डिफ़ॉल्ट प्रोफ़ाइल पर चला जाता है।"
+"Rename the profile": "प्रोफ़ाइल का नाम बदलें"
+"Delete this profile?": "यह प्रोफ़ाइल हटाएँ?"
+"Default for every bus": "हर बस के लिए डिफ़ॉल्ट"
+"Use for {bus}": "{bus} के लिए उपयोग करें"
+"Profile {name} in use": "प्रोफ़ाइल {name} उपयोग में है"
+
+"Read the map's passenger numbers exactly": "मानचित्र की यात्री संख्या को सटीक रूप से पढ़ें"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "यात्री: 0.7 वाला स्टॉप घनत्व से पहले 1 में बदलने के बजाय 0.7 रहता है; बंद: OMSI 2 का राउंडिंग"

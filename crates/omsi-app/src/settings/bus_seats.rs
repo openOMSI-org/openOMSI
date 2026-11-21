@@ -1,4 +1,3 @@
-//! Bus seats persistence.
 use std::path::PathBuf;
 
 fn path() -> Option<PathBuf> {

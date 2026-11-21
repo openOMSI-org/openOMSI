@@ -4378,3 +4378,12 @@
 "At most 5": "Au plus 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Les dossiers d'objets et de splines qu'aucune autre carte n'utilise sont supprimés avec lui : {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Les dossiers d'objets et de splines qu'une autre carte utilise encore restent : {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Un profil garde toutes les touches et tous les réglages des contrôleurs. Avant chaque conduite, le lanceur passe au profil propre du bus ou au profil par défaut."
+"Rename the profile": "Renommer le profil"
+"Delete this profile?": "Supprimer ce profil ?"
+"Default for every bus": "Par défaut pour tous les bus"
+"Use for {bus}": "Utiliser pour {bus}"
+"Profile {name} in use": "Profil {name} utilisé"
+
+"Read the map's passenger numbers exactly": "Lire exactement le nombre de passagers de la carte"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Passagers: un arrêt défini à 0,7 conserve 0,7 passager au lieu d'être arrondi à 1 avant la densité; désactivé: arrondi d'OMSI 2"

@@ -4378,3 +4378,12 @@
 "At most 5": "Najviše 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Fascikle objekata i splajnova koje ne koristi nijedna druga mapa brišu se zajedno s njim: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Fascikle objekata i splajnova koje druga mapa još koristi ostaju: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Profil čuva sve tastere i sva podešavanja kontrolera. Pre svake vožnje pokretač prelazi na sopstveni profil autobusa ili na podrazumevani."
+"Rename the profile": "Preimenuj profil"
+"Delete this profile?": "Obrisati ovaj profil?"
+"Default for every bus": "Podrazumevani za svaki autobus"
+"Use for {bus}": "Koristi za {bus}"
+"Profile {name} in use": "Koristi se profil {name}"
+
+"Read the map's passenger numbers exactly": "Тачно очитавање броја путника са мапе"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Путници: стајалиште са 0,7 задржава 0,7 људи уместо заокруживања на 1 пре густине; искључено: заокруживање из OMSI 2"

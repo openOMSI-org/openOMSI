@@ -3217,3 +3217,12 @@
 "At most 5": "Ең көбі 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Басқа ешбір карта пайдаланбайтын нысандар мен сплайндар қалталары онымен бірге жойылады: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Басқа карта әлі пайдаланатын нысандар мен сплайндар қалталары қалады: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Профиль барлық пернелер мен барлық контроллер баптауларын сақтайды. Әр сапар алдында лаунчер автобустың өз профиліне немесе әдепкі профильге ауысады."
+"Rename the profile": "Профиль атын өзгерту"
+"Delete this profile?": "Бұл профильді жою керек пе?"
+"Default for every bus": "Барлық автобус үшін әдепкі"
+"Use for {bus}": "{bus} үшін пайдалану"
+"Profile {name} in use": "{name} профилі қолданылуда"
+
+"Read the map's passenger numbers exactly": "Картадағы жолаушылар санын дәл оқу"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Жолаушылар: 0,7 көрсетілген аялдама тығыздықтан бұрын 1-ге дейін дөңгелектенбей 0,7 болып қалады; өшірулі: OMSI 2 дөңгелектеуі"

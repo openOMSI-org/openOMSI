@@ -3824,3 +3824,12 @@
 "At most 5": "Högst 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Mappar med objekt och splines som ingen annan karta använder tas bort samtidigt: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Mappar med objekt och splines som en annan karta fortfarande använder blir kvar: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "En profil sparar alla tangenter och alla handkontrollsinställningar. Före varje körning byter startprogrammet till bussens egen profil eller till standardprofilen."
+"Rename the profile": "Byt namn på profilen"
+"Delete this profile?": "Radera den här profilen?"
+"Default for every bus": "Standard för alla bussar"
+"Use for {bus}": "Använd för {bus}"
+"Profile {name} in use": "Profilen {name} används"
+
+"Read the map's passenger numbers exactly": "Läs kartans passagerarantal exakt"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Passagerare: en hållplats med 0,7 behåller 0,7 personer istället för avrundning till 1 före tätheten; av: OMSI 2-avrundning"

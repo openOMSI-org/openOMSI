@@ -3272,3 +3272,12 @@
 "At most 5": "最大5台"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "他のどのマップも使っていないオブジェクトとスプラインのフォルダも一緒に削除されます：{n} 個、{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "他のマップがまだ使っているオブジェクトとスプラインのフォルダは残ります：{n} 個。"
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "プロファイルにはすべてのキーとすべてのコントローラー設定が入ります。運転のたびに、ランチャーはそのバス専用のプロファイルか既定のプロファイルに切り替えます。"
+"Rename the profile": "プロファイル名を変更"
+"Delete this profile?": "このプロファイルを削除しますか?"
+"Default for every bus": "すべてのバスの既定"
+"Use for {bus}": "{bus} で使う"
+"Profile {name} in use": "プロファイル {name} を使用中"
+
+"Read the map's passenger numbers exactly": "マップの乗客数を正確に読み取る"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "乗客：0.7と設定された停留所は密度を掛ける前に1へ切り上げられず0.7人のまま保持されます。オフ：OMSI 2の丸め処理"

@@ -3610,3 +3610,12 @@
 "At most 5": "最多5辆"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地图都未使用的物体和样条文件夹会一并删除：{n} 个，{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "其他地图仍在使用的物体和样条文件夹会保留：{n} 个。"
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "配置文件保存所有按键和所有控制器设置。每次驾驶前,启动器会切换到该公交车专属的配置文件或默认配置文件。"
+"Rename the profile": "重命名配置文件"
+"Delete this profile?": "要删除这个配置文件吗?"
+"Default for every bus": "所有公交车的默认"
+"Use for {bus}": "用于 {bus}"
+"Profile {name} in use": "正在使用配置文件 {name}"
+
+"Read the map's passenger numbers exactly": "精确读取地图乘客数量"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "乘客：地图设置为0.7的站点在密度相乘前保留0.7人而不是向上取整为1；关闭：OMSI 2原有四舍五入"

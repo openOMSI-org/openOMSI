@@ -3325,3 +3325,12 @@
 "At most 5": "Не більше 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Теки об'єктів і сплайнів, які не використовує жодна інша мапа, видаляються разом із ним: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Теки об'єктів і сплайнів, які ще використовує інша мапа, залишаються: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Профіль зберігає всі клавіші й усі налаштування контролерів. Перед кожною поїздкою лаунчер перемикається на власний профіль автобуса або на типовий."
+"Rename the profile": "Перейменувати профіль"
+"Delete this profile?": "Видалити цей профіль?"
+"Default for every bus": "Типовий для всіх автобусів"
+"Use for {bus}": "Використовувати для {bus}"
+"Profile {name} in use": "Використовується профіль {name}"
+
+"Read the map's passenger numbers exactly": "Точне читання кількості пасажирів з карти"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Пасажири: зупинка з 0,7 зберігає 0,7 людини замість округлення до 1 перед множенням на щільність; вимк: округлення OMSI 2"

@@ -2926,3 +2926,12 @@
 "At most 5": "Maksimum 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Folder objek dan spline yang tidak digunakan oleh peta lain turut dipadam: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Folder objek dan spline yang masih digunakan oleh peta lain kekal: {n}."
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Profil menyimpan setiap kekunci dan setiap tetapan pengawal. Sebelum setiap pemanduan, pelancar bertukar kepada profil bas itu sendiri atau profil lalai."
+"Rename the profile": "Namakan semula profil"
+"Delete this profile?": "Padam profil ini?"
+"Default for every bus": "Lalai untuk setiap bas"
+"Use for {bus}": "Guna untuk {bus}"
+"Profile {name} in use": "Profil {name} sedang digunakan"
+
+"Read the map's passenger numbers exactly": "Baca bilangan penumpang peta dengan tepat"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Penumpang: perhentian bernilai 0.7 mengekalkan 0.7 orang dan bukannya dibulatkan ke 1; mati: pembulatan OMSI 2"
