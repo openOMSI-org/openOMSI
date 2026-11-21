@@ -13,6 +13,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,
   the .bus/.ovh `[boundingbox]`), so a blind-spot or distance plugin knows where a truck's or an
   articulated bus's body really is, not only its origin (#3936).
+- **Take control of an AI bus, as in OMSI 2**: in the map camera (F4), click a bus of the AI traffic and answer *Yes*: you drive it at once, even while it moves, with its passengers, its switches and displays as the AI left them, and its line and tour from the stop it was driving to. The bus you drove before stays where it is. As in OMSI 2, the bus is not changed while a timetable is active; not for a LAN client (#3974).
 - **Controls profiles**: the launcher's Controls page has profiles, each with every key and
   every controller setting: *Duplicate* makes a new one of the current settings, the list
   switches between them, and they can be renamed and deleted. One can be the *default for every
