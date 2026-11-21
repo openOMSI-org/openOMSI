@@ -47,7 +47,7 @@ impl World {
                 let selection = scenery_texture_selection(&o.ot, &|n| inst.var(n));
                 for (group, &index) in o.ot.dynamic_textures.iter().zip(&selection) {
                     for (_, file, dir) in group.choices.get(index).into_iter().flatten() {
-                        let mut dirs = o.ot.texture_dirs(&self.root);
+                        let mut dirs = self.object_texture_dirs(&o.ot);
                         dirs.insert(0, dir.clone());
                         push(file, &dirs, &mut names);
                     }
@@ -58,7 +58,7 @@ impl World {
                     for ov in overrides.iter().filter(|m| !m.item && m.freetex.is_some()) {
                         let Some((_, var)) = &ov.freetex else { continue };
                         if let Some(name) = resolve_scenery_freetex_name(var, ov, overrides, o.script.as_ref(), None, &o.strings) {
-                            push(name, &o.ot.texture_dirs(&self.root), &mut names);
+                            push(name, &self.object_texture_dirs(&o.ot), &mut names);
                         }
                     }
                 }
@@ -67,7 +67,7 @@ impl World {
             if have_types.contains(&(key as usize)) || !seen.insert(key) {
                 continue;
             }
-            let dirs = o.ot.texture_dirs(&self.root);
+            let dirs = self.object_texture_dirs(&o.ot);
             for (_, mats, overrides) in
                 o.ot.meshes
                     .iter()
@@ -103,14 +103,14 @@ impl World {
             if have_splines.contains(&(Arc::as_ptr(st) as usize)) {
                 continue;
             }
-            let dirs = texture_dirs(&self.root, &st.dir);
+            let dirs = self.texture_dirs(&self.root, &st.dir);
             for t in &st.def.textures {
                 push(&t.file, &dirs, &mut names);
             }
         }
         for (ot, tex, ..) in &p.trees {
             if !have_trees.contains(&tex.to_ascii_lowercase()) {
-                push(tex, &ot.texture_dirs(&self.root), &mut names);
+                push(tex, &self.object_texture_dirs(ot), &mut names);
             }
         }
         // the painted ground layers (and their detail textures) of the tile, the masks moved to `paint` once cut
@@ -283,7 +283,7 @@ impl World {
         if gpu.types.contains_key(&key) {
             return key;
         }
-        let dirs = ot.texture_dirs(&self.root);
+        let dirs = self.object_texture_dirs(ot);
         let mut t = TypeGpu {
             ot: ot.clone(),
             meshes: Vec::new(),

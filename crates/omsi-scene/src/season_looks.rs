@@ -71,7 +71,7 @@ impl World {
         let Some(look) = omsi_texture::mixed_look(plant_key(key, tile(pos.x), tile(pos.y))) else {
             return texture.to_string();
         };
-        let dirs = ot.texture_dirs(&self.root);
+        let dirs = self.object_texture_dirs(ot);
         let dirs_ref: Vec<&Path> = dirs.iter().map(|d| d.as_path()).collect();
         let (Some(now), Some(then)) = (
             omsi_texture::find_texture(texture, &dirs_ref),
@@ -90,7 +90,7 @@ impl World {
     /// each named by its full path so that the map's season does not apply to it again.
     /// None when none of its textures looks different then.
     pub(super) fn retexture_for_look(&self, ot: &mut ObjectType, look: Option<&str>) -> Option<()> {
-        let dirs = ot.texture_dirs(&self.root);
+        let dirs = self.object_texture_dirs(ot);
         let dirs_ref: Vec<&Path> = dirs.iter().map(|d| d.as_path()).collect();
         let mut names: HashMap<String, Option<String>> = HashMap::new();
         let mut renamed = |name: &str| -> Option<String> {

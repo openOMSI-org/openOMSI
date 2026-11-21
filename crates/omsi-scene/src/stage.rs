@@ -197,7 +197,9 @@ impl World {
         if let Some(ix) = g.as_ref() {
             return ix.clone();
         }
-        let mut built = MapIndex::build(&self.map_tiles(), &self.chrono_dirs(), &self.root);
+        // (through the map's publisher aliases, as the objects themselves are read)
+        let resolve = |f: &str| self.resolve_map_asset(f);
+        let mut built = MapIndex::build(&self.map_tiles(), &self.chrono_dirs(), &resolve);
         // the index's object positions go to `object_positions` (kept once, not twice: 345 000
         // objects on Ahlheim took 30 MB in each)
         let objects = std::mem::take(&mut built.objects);
@@ -208,7 +210,7 @@ impl World {
         let ix = Arc::new(built);
         // what the map names that is not installed: counted always, listed on request
         // (OMSI_CHECK_TYPES=1); loading leaves those objects out either way
-        let groups = ix.missing_files(&self.root);
+        let groups = ix.missing_files(&resolve);
         let files: usize = groups.iter().map(|g| g.1.len()).sum();
         if files > 0 {
             let records: usize = groups.iter().flat_map(|g| g.1.iter().map(|m| m.1)).sum();

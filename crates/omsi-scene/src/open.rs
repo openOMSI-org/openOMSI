@@ -31,6 +31,9 @@ impl<T: Clone> OnceByKey<T> {
 
 impl World {
     pub fn open(root: &Path, global_cfg: &Path, date: i32) -> Result<World> {
+        let publisher_mounts = omsi_cfg::publisher::validate_map(global_cfg.parent().unwrap_or(root))
+            .context("resolving publisher dependencies")?;
+        let publisher_texture_dirs = publisher_mounts.texture_dirs();
         let mut global = GlobalCfg::load(global_cfg)
             .with_context(|| format!("loading {}", global_cfg.display()))?;
         let map_dir = global.dir().to_path_buf();
@@ -145,6 +148,8 @@ impl World {
         }
         Ok(World {
             root: root.to_path_buf(),
+            _publisher_mounts: publisher_mounts,
+            publisher_texture_dirs,
             transit,
             trolley_net: Mutex::new(None),
             global,
@@ -261,7 +266,7 @@ impl World {
             // (read by another meanwhile)
             return t.clone();
         }
-        let path = omsi_cfg::resolve_path(&self.root, rel);
+        let path = self.resolve_map_asset(rel);
         let loaded = (|| -> Option<Arc<ObjectType>> {
             let mut sco = SceneryObject::load(&path)
                 .map_err(|e| log::warn!("{e}"))
@@ -549,14 +554,14 @@ impl World {
         if let Some(t) = self.spline_types.lock().get(key) {
             return t.clone();
         }
-        let path = omsi_cfg::resolve_path(&self.root, rel);
+        let path = self.resolve_map_asset(rel);
         let loaded = Spline::load(&path)
             .map_err(|e| log::warn!("{e}"))
             .ok()
             .map(|def| {
                 omsi_geometry::register_half_cant_width(rel, &def);
                 let dir = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
-                let dirs = texture_dirs(&self.root, &dir);
+                let dirs = self.texture_dirs(&self.root, &dir);
                 let dirs: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
                 let surf = def.textures.iter().map(|t| surf_map(&t.file, &dirs)).collect();
                 let surface = def.textures.iter().map(|t| surface_id(&t.file, &dirs)).collect();
@@ -576,7 +581,7 @@ impl World {
     /// all their traffic paths on invisible splines).
     pub fn navigation_map(&self) -> NavigationMap {
         let tiles: Vec<(i32, i32, PathBuf)> = self.map_tiles().into_iter().map(|(_, x, y, p)| (x, y, p)).collect();
-        navigation_map_of(&self.root, &tiles, &self.chrono_dirs())
+        navigation_map_scoped(&self.root, &self.map_dir, &self._publisher_mounts, &tiles, &self.chrono_dirs())
     }
 }
 
@@ -587,6 +592,41 @@ impl World {
 /// original's and a map that lacks one borrows the other installation's (`omsi_cfg::
 /// resolve_path`).
 pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[PathBuf]) -> NavigationMap {
+    let map_dir = map_dir_from_tiles(root, tiles);
+    let mounts = match omsi_cfg::publisher::validate_map(&map_dir) {
+        Ok(mounts) => mounts,
+        Err(error) => {
+            log::warn!("navigation publisher dependencies: {error}");
+            return NavigationMap { lanes: Vec::new(), road_surfaces: Vec::new(), places: HashMap::new(), signs: Vec::new(), names: Vec::new() };
+        }
+    };
+    navigation_map_scoped(root, &map_dir, &mounts, tiles, chrono_dirs)
+}
+
+fn map_dir_from_tiles(root: &Path, tiles: &[(i32, i32, PathBuf)]) -> PathBuf {
+    let Some(parent) = tiles.first().and_then(|tile| tile.2.parent()) else {
+        return root.to_path_buf();
+    };
+    let mut candidate = parent.to_path_buf();
+    // shortcut: map roots are within eight tile-path parents; widen if packaging adds deeper nesting.
+    for _ in 0..8 {
+        if omsi_cfg::vfs::is_file(&candidate.join("global.cfg")) {
+            return candidate;
+        }
+        if !candidate.pop() {
+            break;
+        }
+    }
+    parent.to_path_buf()
+}
+
+fn navigation_map_scoped(
+    root: &Path,
+    map_dir: &Path,
+    mounts: &omsi_cfg::publisher::DependencyMounts,
+    tiles: &[(i32, i32, PathBuf)],
+    chrono_dirs: &[PathBuf],
+) -> NavigationMap {
     use rayon::prelude::*;
     let t0 = std::time::Instant::now();
     // (each file read once: a tile that wants one being read waits for it, rather than
@@ -596,7 +636,7 @@ pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs
     let sco_of = |file: &str| -> Option<Arc<SceneryObject>> {
         let key = file.trim().to_ascii_lowercase().replace('\\', "/");
         let cell = scos.lock().entry(key).or_default().clone();
-        cell.get_or_init(|| SceneryObject::load(&omsi_cfg::resolve_path(root, file)).ok().map(Arc::new)).clone()
+        cell.get_or_init(|| SceneryObject::load(&super::world::map_asset_path(root, map_dir, mounts, file)).ok().map(Arc::new)).clone()
     };
     let slis: Mutex<HashMap<String, Once<Spline>>> = Mutex::new(HashMap::new());
     let sli_of = |file: &str| -> Option<Arc<Spline>> {
@@ -604,7 +644,7 @@ pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs
         let key = file.trim().to_ascii_lowercase().replace('\\', "/");
         let cell = slis.lock().entry(key).or_default().clone();
         cell.get_or_init(|| {
-            Spline::load(&omsi_cfg::resolve_path(root, file)).ok().map(|def| {
+            Spline::load(&super::world::map_asset_path(root, map_dir, mounts, file)).ok().map(|def| {
                 omsi_geometry::register_half_cant_width(file, &def);
                 Arc::new(def)
             })

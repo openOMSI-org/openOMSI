@@ -424,7 +424,7 @@ impl World {
         pl.next += 1;
         let skey = Arc::as_ptr(st) as usize;
         if !gpu.splines.contains_key(&skey) {
-            let dirs = texture_dirs(&self.root, &st.dir);
+            let dirs = self.texture_dirs(&self.root, &st.dir);
             let mut sg = SplineGpu {
                 _st: st.clone(),
                 materials: Vec::new(),
@@ -575,7 +575,7 @@ impl World {
         for (ot, texture, pos, height, width, heading) in &p.trees[pl.next..end] {
             let tkey = texture.to_ascii_lowercase();
             if !gpu.trees.contains_key(&tkey) {
-                let dirs = ot.texture_dirs(&self.root);
+                let dirs = self.object_texture_dirs(ot);
                 let found = gpu.texture(renderer, scene, texture, &dirs, images);
                 // (not repeated: the picture's bottom row, a wide trunk or grass, drew a line along the top of the card)
                 renderer.address_next.set(omsi_render::TexAddressing::Clamp);
@@ -963,7 +963,7 @@ impl World {
                 ) else {
                     continue;
                 };
-                let dirs = ot.texture_dirs(&self.root);
+                let dirs = self.object_texture_dirs(ot);
                 let Some((tex, path)) = gpu.texture(renderer, scene, name, &dirs, images) else { continue };
                 let Some(base) = mats.get(slot).and_then(|id| scene.materials.get(*id)) else {
                     gpu.release_texture(renderer, scene, &path);
@@ -1155,10 +1155,10 @@ impl World {
         let ObjectMade { lamp_instances, lamp_slots, object_variants, lamp_texts, .. } = made;
         let (parent, index, any_light) = lamp;
         let names: Mutex<Vec<LightSwitch>> = Mutex::new(Vec::new());
-        let lights = model_lights_owned(&ot.model, &|_| xf, pos, &|var| {
+        let lights = model_lights_owned_with_texture_dirs(&ot.model, &|_| xf, pos, &|var| {
             names.lock().push(LightSwitch::parse(var));
             1.0
-        }, &[]);
+        }, &[], &self.publisher_texture_dirs);
         let names = names.into_inner();
         let sources = model_light_sources(&ot.model);
         let (coronas, corona_mesh): (Vec<(omsi_render::Corona, String)>, Vec<(usize, glam::Vec3, glam::Vec3)>) = lights
@@ -1227,6 +1227,7 @@ impl World {
                 tkey,
                 &texture_selection,
                 &self.root,
+                &self.publisher_texture_dirs,
                 images,
             ) {
                 for (mi, row) in rows.iter().enumerate() {
@@ -1286,7 +1287,7 @@ impl World {
                 alpha_last.push((a, uv));
             }
         }
-        let script_lamps = if lamp.is_none() { crate::place::lamps_switched_by_script(ot, pos, xf) } else { Vec::new() };
+        let script_lamps = if lamp.is_none() { crate::place::lamps_switched_by_script(ot, pos, xf, &self.publisher_texture_dirs) } else { Vec::new() };
         // (a Lua script drives it: it is stepped every frame and kept for them)
         inst.lua_driven = !ot.sco.scripts.lua.is_empty();
         if inst.is_dynamic()

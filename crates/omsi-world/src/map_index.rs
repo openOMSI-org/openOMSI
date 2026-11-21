@@ -167,7 +167,8 @@ impl MapIndex {
     /// on the worker pool; a tile that cannot be read is logged and left out. `tiles` are
     /// (index in global.cfg's `[map]` list, x, y, file): repeaters and timetable tracks name
     /// a tile by that index, which a missing tile file must not shift.
-    pub fn build(tiles: &[(usize, i32, i32, PathBuf)], chrono_dirs: &[PathBuf], root: &Path) -> MapIndex {
+    /// `resolve` finds a file the map names as the world does (its publisher aliases first).
+    pub fn build(tiles: &[(usize, i32, i32, PathBuf)], chrono_dirs: &[PathBuf], resolve: &(dyn Fn(&str) -> PathBuf + Sync)) -> MapIndex {
         /// What one tile adds besides its own index part: its rows (key, spline, start
         /// distance, interval), its repeaters (id, spline, the first object of the row on that
         /// spline, their own copy of the row's start distance and of its interval), and parent
@@ -196,7 +197,7 @@ impl MapIndex {
                     let key = file.replace('/', "\\").to_ascii_lowercase();
                     let cell = signal_types.lock().entry(key).or_default().clone();
                     *cell.get_or_init(|| {
-                        let path = omsi_cfg::resolve_path(root, file);
+                        let path = resolve(file);
                         match omsi_scenery::SceneryObject::load(&path) {
                             Ok(sco) => sco.is_traffic_light,
                             Err(e) => {
@@ -321,7 +322,7 @@ impl MapIndex {
                 let file = &names[k as usize];
                 let key = file.replace('/', "\\").to_ascii_lowercase();
                 let has = *programs.entry(key).or_insert_with(|| {
-                    omsi_scenery::SceneryObject::load(&omsi_cfg::resolve_path(root, file))
+                    omsi_scenery::SceneryObject::load(&resolve(file))
                         .map(|sco| !sco.traffic_lights.is_empty())
                         .unwrap_or(false)
                 });
@@ -386,11 +387,11 @@ impl MapIndex {
     /// The files the map names that this installation (with its content folder and archives)
     /// does not have, grouped by the add-on folder they belong to (the folder under
     /// `Sceneryobjects` / `Splines`): (folder, [(file, records, a tile)]).
-    pub fn missing_files(&self, root: &Path) -> Vec<(String, Vec<(String, usize, (i32, i32))>)> {
+    pub fn missing_files(&self, resolve: &(dyn Fn(&str) -> PathBuf + Sync)) -> Vec<(String, Vec<(String, usize, (i32, i32))>)> {
         let named: Vec<(&String, &(usize, (i32, i32)))> = self.files.iter().collect();
         let mut missing: Vec<(String, usize, (i32, i32))> = named
             .into_par_iter()
-            .filter(|(f, _)| !omsi_cfg::vfs::is_file(&omsi_cfg::resolve_path(root, f)))
+            .filter(|(f, _)| !omsi_cfg::vfs::is_file(&resolve(f)))
             .map(|(f, (n, t))| (f.clone(), *n, *t))
             .collect();
         missing.sort();
@@ -895,6 +896,24 @@ mod tests {
     }
 
     #[test]
+    fn a_signal_behind_a_publisher_alias_is_a_traffic_light() {
+        // A light from a publisher pack is found only through the map's resolver.
+        let dir = std::env::temp_dir().join(format!("omsi-index-aliased-light-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("tile_3_-2.map");
+        let child = "\n[attachObj]\n0\nSceneryobjects\\Pack\\light.sco\n200\n100\n0\n0\n30\n0\n0\n0\n";
+        std::fs::write(&path, synthetic_spline_stop(14, 100, 600.0, 625.0, 0) + child).unwrap();
+        std::fs::write(dir.join("packed.sco"), "[trafficlight]\n").unwrap();
+        let alias = |f: &str| if f.to_ascii_lowercase().replace('/', "\\").ends_with("pack\\light.sco") { dir.join("packed.sco") } else { omsi_cfg::resolve_path(&dir, f) };
+        let index = MapIndex::build(&[(0, 3, -2, path.clone())], &[], &alias);
+        assert!(index.traffic_light_parents.contains(&100));
+        assert!(index.missing_files(&alias).iter().flat_map(|g| &g.1).all(|m| !m.0.to_ascii_lowercase().contains("light.sco")));
+        let plain = MapIndex::build(&[(0, 3, -2, path)], &[], &|f: &str| omsi_cfg::resolve_path(&dir, f));
+        assert!(!plain.traffic_light_parents.contains(&100));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn cold_child_stop_keeps_its_spline_attached_parent_and_metadata() {
         let dir = std::env::temp_dir().join(format!("omsi-index-child-spline-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -904,7 +923,7 @@ mod tests {
         let contents = synthetic_spline_stop(14, 100, 600.0, 625.0, 0)
             + "\n[attachObj]\n0\nsynthetic-child.sco\n200\n100\n0\n0\n30\n0\n0\n6\nChild stop\n7\n2\n11\n22.5\n1\n";
         std::fs::write(&path, contents).unwrap();
-        let index = MapIndex::build(&[(0, 3, -2, path)], &[], &dir);
+        let index = MapIndex::build(&[(0, 3, -2, path)], &[], &|f: &str| omsi_cfg::resolve_path(&dir, f));
         let expected = DVec3::new(3.0 * tile_size(), -2.0 * tile_size() + 25.0, 0.0);
         for id in [100, 200] {
             let (tile, pos, _) = index.objects.get(&id).expect("both parent and child must be indexed cold");
@@ -929,7 +948,7 @@ mod tests {
             // Neither must inherit the unrelated town's offset from the same spline id.
             std::fs::write(&first, synthetic_spline_stop(version, 100, 0.0, 25.0, 0)).unwrap();
             std::fs::write(&second, synthetic_spline_stop(14, 200, 600.0, 625.0, 0)).unwrap();
-            let index = MapIndex::build(&[(0, 0, 0, first.clone()), (1, 2, -1, second.clone())], &[], &dir);
+            let index = MapIndex::build(&[(0, 0, 0, first.clone()), (1, 2, -1, second.clone())], &[], &|f: &str| omsi_cfg::resolve_path(&dir, f));
             assert_eq!(index.splines[&10].map_chain_offset, Some(600.0));
             for (tile_index, stop, x, y, path) in [(0, 100, 0, 0, &first), (1, 200, 2, -1, &second)] {
                 let origin = DVec2::new(x as f64 * tile_size(), y as f64 * tile_size());
@@ -954,7 +973,7 @@ mod tests {
         std::fs::write(&path, synthetic_spline_stop(10, 100, 0.0, 25.0, 0)).unwrap();
         // Chrono attachment indices count in the combined spline list.
         std::fs::write(chrono.join("tile_0_0.map"), synthetic_spline_stop(14, 200, 600.0, 625.0, 1)).unwrap();
-        let index = MapIndex::build(&[(0, 0, 0, path.clone())], &[chrono.clone()], &dir);
+        let index = MapIndex::build(&[(0, 0, 0, path.clone())], &[chrono.clone()], &|f: &str| omsi_cfg::resolve_path(&dir, f));
         let tile = read_tile(&path, &[chrono]).unwrap();
         assert_eq!(tile.splines[0].map_chain_offset, None);
         assert_eq!(tile.splines[1].map_chain_offset, Some(600.0));
@@ -991,7 +1010,7 @@ mod tests {
                 spline(1, 0.0, 600.0, 0.0), spline(2, 600.0, 50.0, 600.0));
             let path = dir.join(format!("tile_3_-2_v{version}.map"));
             std::fs::write(&path, contents).unwrap();
-            let index = MapIndex::build(&[(0, 3, -2, path.clone())], &[], &dir);
+            let index = MapIndex::build(&[(0, 3, -2, path.clone())], &[], &|f: &str| omsi_cfg::resolve_path(&dir, f));
             let (_, pos, rot) = index.objects.get(&100).expect("the cold index must know the stop");
             assert!((*pos - DVec3::new(3.0 * tile_size() - 3.0, -2.0 * tile_size() + 625.0, 2.0)).length() < 1e-8);
             let tile = read_tile(&path, &[]).unwrap();
@@ -1092,7 +1111,7 @@ mod tests {
         let map_dir = root.join("maps/Grundorf");
         let global = omsi_map::GlobalCfg::load(&map_dir.join("global.cfg")).expect("Grundorf");
         let tiles = global.tiles.iter().map(|t| (t.index, t.x, t.y, map_dir.join(&t.file))).collect::<Vec<_>>();
-        let index = MapIndex::build(&tiles, &[], &root);
+        let index = MapIndex::build(&tiles, &[], &|f: &str| omsi_cfg::resolve_path(&root, f));
         assert_eq!(index.tiles_failed, 0);
         assert!(index.traffic_light_parents.contains(&4174), "the real signalized junction");
         for id in [759, 761] {

@@ -828,6 +828,7 @@ impl World {
                 Arc::as_ptr(&ty) as usize,
                 &selection,
                 &self.root,
+                &self.publisher_texture_dirs,
                 &HashMap::new(),
             )
         };
