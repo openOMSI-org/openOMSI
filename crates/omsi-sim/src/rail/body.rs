@@ -38,9 +38,12 @@ pub struct BodyParams {
     pub r_pitch: f32,
     pub r_roll: f32,
     /// How much the sideways acceleration turns the body (rad/s² per m/s²; Omsi.exe's lever
-    /// `wagenkasten_hebelarm_Z`) and the damping ratio of the roll alone.
+    /// `wagenkasten_hebelarm_Z`) and the damping ratios of the roll, the pitch and the heave
+    /// alone (the class's `damping`, or what the car's file gives).
     pub roll_arm: f32,
     pub roll_damping: f32,
+    pub pitch_damping: f32,
+    pub heave_damping: f32,
     /// How uneven the rails are, 1 for track in good order, 2 and more for old street track.
     pub quality: f32,
     /// Track in a bend is canted (a railway's outer rail is raised; street track is flat).
@@ -73,6 +76,8 @@ impl BodyParams {
             r_roll,
             roll_arm: h_cg / (r_roll * r_roll),
             roll_damping: damping,
+            pitch_damping: damping,
+            heave_damping: damping,
             quality,
             canted,
             rigid: [false; 3],
@@ -104,11 +109,13 @@ impl BodyParams {
         }
         if swings(pitch.0, pitch.1) {
             p.pitch_hz = pitch.0 / tau;
+            p.pitch_damping = pitch.1 / (2.0 * pitch.0);
         } else {
             p.rigid[1] = true;
         }
         if swings(heave.0, heave.1) {
             p.heave_hz = heave.0 / tau;
+            p.heave_damping = heave.1 / (2.0 * heave.0);
         } else {
             p.rigid[0] = true;
         }
@@ -216,7 +223,6 @@ impl Body {
         let sub = (dt / 0.004).ceil().clamp(1.0, 25.0) as usize;
         let h = dt / sub as f32;
         let (wz, wt, wr) = (6.2832 * p.heave_hz, 6.2832 * p.pitch_hz, 6.2832 * p.roll_hz);
-        let zeta = p.damping;
         let sgn = if speed >= 0.0 { 1.0 } else { -1.0 };
         let mut a_vert = 0.0;
         for _ in 0..sub {
@@ -243,12 +249,13 @@ impl Body {
             };
             self.u_prev = Some(u);
             // heave: base excitation through spring and damper
-            let az = -2.0 * zeta * wz * (self.zv - du[0]) - wz * wz * (self.z - u[0]);
+            let az = -2.0 * p.heave_damping * wz * (self.zv - du[0]) - wz * wz * (self.z - u[0]);
             a_vert = az;
             // pitch: the same, and the moment of the acceleration about the springs' plane
             // (static: theta = a h / (r^2 w^2), nose up under traction)
             let m_pitch = a_long * p.h_cg / (p.r_pitch * p.r_pitch);
-            let ath = -2.0 * zeta * wt * (self.thv - du[1]) - wt * wt * (self.th - u[1]) + m_pitch;
+            let ath = -2.0 * p.pitch_damping * wt * (self.thv - du[1]) - wt * wt * (self.th - u[1])
+                + m_pitch;
             // roll: leans away from the bend's centre (bank positive to the right, so a bend to
             // the right, a_side > 0, leans left)
             let m_roll = -a_side * p.roll_arm;
@@ -359,6 +366,53 @@ mod tests {
         assert!((p.roll_hz - 6.0 / tau).abs() < 1e-6);
         assert!((p.pitch_hz - 8.0 / tau).abs() < 1e-6);
         assert!((p.heave_hz - 7.0 / tau).abs() < 1e-6);
+        // (a swing dies as e^(-d t / 2): the damping ratio is d / 2ω)
+        assert!((p.roll_damping - 0.25).abs() < 1e-6);
+        assert!((p.pitch_damping - 0.25).abs() < 1e-6);
+        assert!((p.heave_damping - 0.25).abs() < 1e-6);
+    }
+
+    /// The pitch and the heave die away by the decay the car's file gives each of them: of
+    /// two cars alike but for it, the one with the higher decay comes to rest sooner, and
+    /// the swing left after a second is the file's e^(-d t / 2).
+    #[test]
+    fn a_body_its_file_damps_harder_stops_pitching_and_bouncing_sooner() {
+        let car = |d_pitch: f32, d_heave: f32| {
+            let def = omsi_vehicle::Vehicle {
+                rail_body_osc: Some([0.0, 6.0, 1.0, 8.0, d_pitch, 7.0, d_heave]),
+                ..Default::default()
+            };
+            BodyParams {
+                quality: 0.0,
+                ..BodyParams::for_car(&def, RailClass::Tram, 8.0)
+            }
+        };
+        // the largest swing in the second after one second, from a start tipped and lifted
+        let left = |p: &BodyParams| {
+            let mut b = Body::new(1);
+            (b.th, b.z) = (0.01, 0.01);
+            let (mut pitch, mut heave) = (0.0f32, 0.0f32);
+            for i in 0..200 {
+                b.step(p, 0.01, 0.0, 0.0, 0.0);
+                if i >= 100 {
+                    pitch = pitch.max(b.th.abs());
+                    heave = heave.max(b.z.abs());
+                }
+            }
+            (pitch / 0.01, heave / 0.01)
+        };
+        let (soft, hard) = (left(&car(1.0, 1.0)), left(&car(6.0, 6.0)));
+        assert!(hard.0 < soft.0 * 0.2, "pitch: {hard:?} against {soft:?}");
+        assert!(hard.1 < soft.1 * 0.2, "heave: {hard:?} against {soft:?}");
+        // e^(-1 · 1 / 2) = 0.61 and e^(-6 · 1 / 2) = 0.05 of the start, near enough
+        assert!(
+            (0.45..0.7).contains(&soft.0) && (0.45..0.7).contains(&soft.1),
+            "{soft:?}"
+        );
+        assert!(hard.0 < 0.08 && hard.1 < 0.08, "{hard:?}");
+        // and each motion by its own decay
+        let mixed = left(&car(6.0, 1.0));
+        assert!(mixed.0 < 0.08 && mixed.1 > 0.45, "{mixed:?}");
     }
 
     #[test]
