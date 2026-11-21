@@ -565,18 +565,18 @@ fn quietly_drawing(
 
 /// A train car's scripts with variables of its own (see the module).
 pub struct CarRun {
-    prog: Arc<Program>,
+    pub(super) prog: Arc<Program>,
     pub(super) state: State,
     machine: Vm,
     /// Name (lower case) to slot: the car's program's variables first, then the leading
     /// vehicle's that the program lacks.
     pub(super) names: Arc<HashMap<String, VarId>>,
     /// Per slot of the car's program: its scripts store there, so it is not refreshed.
-    local: Vec<bool>,
+    pub(super) local: Vec<bool>,
     /// (slot here, slot in the leading vehicle) refreshed every frame.
-    shared: Vec<(VarId, VarId)>,
+    pub(super) shared: Vec<(VarId, VarId)>,
     /// The leading vehicle's variable count `shared` was worked out for.
-    lead_len: Option<usize>,
+    pub(super) lead_len: Option<usize>,
     /// Slots of [`PLACE_IN_TRAIN`] here.
     place_slots: [Option<VarId>; 3],
     /// The car's control cables (see [`Plugs`]).
@@ -585,7 +585,7 @@ pub struct CarRun {
     has_cables: bool,
     /// `[scriptshare]`: the leading vehicle's variables are its variables, those its
     /// scripts hold too. It runs only to read its place in the train.
-    script_share: bool,
+    pub(super) script_share: bool,
     /// What its `read` variables take at its next frame (see [`Cables`]).
     lines: Vec<(VarId, f32)>,
     /// The sound triggers its scripts fired since the game last took them, for the car's own

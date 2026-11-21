@@ -21,6 +21,18 @@ pub struct SituationVehicle {
     pub string_vars: Vec<(String, String)>,
     pub timetable: Vec<String>,
     pub riders: usize,
+    /// The coupled cars that run scripts of their own (a tram's rear cab), each with its
+    /// own variables (`[openOMSI_car]`; Omsi.exe keeps one set for the whole train).
+    pub cars: Vec<SituationCar>,
+}
+
+/// One coupled car's own script variables in a saved vehicle (see `SituationVehicle::cars`).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SituationCar {
+    /// Its place among the vehicle's coupled parts (0: the first behind the leading one).
+    pub car: usize,
+    pub vars: Vec<(String, f64)>,
+    pub string_vars: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -101,6 +113,16 @@ impl Situation {
             t.push_str(&format!("\r\n[stringvars]\r\n{}\r\n", v.string_vars.len()));
             for (n, x) in &v.string_vars {
                 t.push_str(&format!("{n}\r\n{x}\r\n"));
+            }
+            for c in &v.cars {
+                t.push_str(&format!("\r\n[openOMSI_car]\r\n{}\r\n{}\r\n", c.car, c.vars.len()));
+                for (n, x) in &c.vars {
+                    t.push_str(&format!("{n}\r\n{x:.6}\r\n"));
+                }
+                t.push_str(&format!("{}\r\n", c.string_vars.len()));
+                for (n, x) in &c.string_vars {
+                    t.push_str(&format!("{n}\r\n{x}\r\n"));
+                }
             }
             if !v.timetable.is_empty() {
                 t.push_str("\r\n[settimetable]\r\n");
@@ -190,6 +212,15 @@ impl Situation {
                         veh.string_vars = vars;
                     }
                 }
+                "openomsi_car" => {
+                    let car = r.usize();
+                    let vars = (0..r.count()).map(|_| (r.str().to_string(), r.f64())).collect();
+                    let string_vars =
+                        (0..r.count()).map(|_| (r.str().to_string(), r.line().to_string())).collect();
+                    if let Some(veh) = s.vehicles.last_mut() {
+                        veh.cars.push(SituationCar { car, vars, string_vars });
+                    }
+                }
                 "settimetable" => {
                     let v: Vec<String> = (0..6).map(|_| r.str().to_string()).collect();
                     if let Some(veh) = s.vehicles.last_mut() {
@@ -225,6 +256,11 @@ mod tests {
                     .map(String::from)
                     .to_vec(),
                 riders: 23,
+                cars: vec![SituationCar {
+                    car: 1,
+                    vars: vec![("cabin_active".into(), 1.0), ("power".into(), 0.0)],
+                    string_vars: vec![("destination".into(), "  Depot  ".into())],
+                }],
                 ..Default::default()
             }],
             name: "Slot 3: Depot run, 09:00".into(),

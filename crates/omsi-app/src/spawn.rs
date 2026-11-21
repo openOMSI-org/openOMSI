@@ -516,6 +516,7 @@ pub(crate) fn spawn_player_prepared(
         let (numeric, textual) = p
             .vehicle
             .restore_script_state(&args.situation_vars, &args.situation_strvars);
+        let cars = p.vehicle.restore_car_states(&args.situation_cars);
         if let Some(km) = args.situation_odometer_km {
             p.vehicle.set_odometer_km(km);
         }
@@ -523,7 +524,7 @@ pub(crate) fn spawn_player_prepared(
             .map(|f| crate::situation::restore_script_textures(&f, &mut p.vehicle))
             .unwrap_or(0);
         log::info!(
-            "situation: {numeric} of {} variables, {textual} of {} strings and {pictures} script textures restored",
+            "situation: {numeric} of {} variables, {textual} of {} strings, {cars} values of coupled cars and {pictures} script textures restored",
             args.situation_vars.len(),
             args.situation_strvars.len()
         );
