@@ -1,3 +1,0 @@
-refactor(sim): trim explanatory comments and update tolerance doc (#2718)
-
-Signed-off-by: szambonurek-88 <szymonzolsztyna@gmail.com>
