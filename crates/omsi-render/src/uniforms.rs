@@ -156,6 +156,8 @@ pub(crate) struct EnhancedUniform {
     /// height of the plane the field is taken on, w the share of the sun the main pass has
     /// already taken off for the clouds over the camera
     pub(crate) cloud_f2: [f32; 4],
+    /// `Lighting::pane_tilt`: sin and cos of the `inside` bus's pitch, then of its roll
+    pub(crate) pane_tilt: [f32; 4],
 }
 
 #[repr(C)]
