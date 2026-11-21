@@ -1545,3 +1545,7 @@ pub mod bus_seats;
 #[path = "settings/passenger_connections_tests.rs"]
 #[rustfmt::skip]
 mod passenger_connections_tests;
+
+#[cfg(test)]
+#[path = "settings/pax_late_tolerance_tests.rs"]
+mod pax_late_tolerance_tests;
