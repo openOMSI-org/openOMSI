@@ -73,7 +73,9 @@ pub(crate) type EngineVarIds = [Option<VarId>; COUNT];
 
 impl VehicleInstance {
     fn ev_id(&self, ev: Ev) -> Option<VarId> {
-        self.engine_ids.get_or_init(|| NAMES.map(|n| omsi_script::compile::with_lower(n, |k| self.var_index.get(k).copied())))[ev as usize]
+        self.engine_ids.get_or_init(|| {
+            NAMES.map(|n| omsi_script::compile::with_lower(n, |k| self.var_index.get(k).copied()))
+        })[ev as usize]
     }
 
     /// The engine variable `ev`, as [`VehicleInstance::var`] its name.
@@ -111,8 +113,14 @@ mod tests {
         assert_eq!(NAMES[Ev::DirtNorm as usize], "Dirt_Norm");
         assert_eq!(NAMES[Ev::CabinRelHum as usize], "Cabinair_relHum");
         assert_eq!(NAMES[Ev::Ai as usize], "AI");
-        assert_eq!(NAMES[Ev::AiAtStationSide as usize], "AI_Scheduled_AtStation_Side");
-        assert_eq!(NAMES[Ev::PriorityWarning as usize], "TrafficPriorityWarningNeeded");
+        assert_eq!(
+            NAMES[Ev::AiAtStationSide as usize],
+            "AI_Scheduled_AtStation_Side"
+        );
+        assert_eq!(
+            NAMES[Ev::PriorityWarning as usize],
+            "TrafficPriorityWarningNeeded"
+        );
     }
 
     #[test]
@@ -177,7 +185,14 @@ mod tests {
     fn engine_vars_answer_as_by_name() {
         let ty = crate::vehicle::tests::coupling_test_type(None);
         let mut v = VehicleInstance::new(ty, VehicleHost::new(Default::default()));
-        let all = [Ev::DirtNorm, Ev::StreetCond, Ev::CabinTemp, Ev::Ai, Ev::AiAtStation, Ev::PriorityWarning];
+        let all = [
+            Ev::DirtNorm,
+            Ev::StreetCond,
+            Ev::CabinTemp,
+            Ev::Ai,
+            Ev::AiAtStation,
+            Ev::PriorityWarning,
+        ];
         for ev in all {
             assert_eq!(v.ev(ev), v.var(NAMES[ev as usize]));
         }

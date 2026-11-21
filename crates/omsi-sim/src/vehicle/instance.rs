@@ -94,7 +94,13 @@ impl VehicleInstance {
             state.vars[id as usize] = value;
         }
         let mut model_only_vars: Vec<String> = Vec::new();
-        for c in ty.model.meshes.iter().flat_map(|m| m.visible_groups()).flatten() {
+        for c in ty
+            .model
+            .meshes
+            .iter()
+            .flat_map(|m| m.visible_groups())
+            .flatten()
+        {
             let key = c.variable.to_ascii_lowercase();
             if !var_index.contains_key(&key) && !model_only_vars.contains(&key) {
                 model_only_vars.push(key);
@@ -184,7 +190,12 @@ impl VehicleInstance {
             })
             .collect();
         let v_surface = (0..physics.wheels.len())
-            .map(|a| [v(&format!("Axle_SurfaceID_{a}_L")), v(&format!("Axle_SurfaceID_{a}_R"))])
+            .map(|a| {
+                [
+                    v(&format!("Axle_SurfaceID_{a}_L")),
+                    v(&format!("Axle_SurfaceID_{a}_R")),
+                ]
+            })
             .collect();
         let rest_sag: Vec<(f32, f32)> = {
             let rb = crate::rigid::RigidBody::from_definition(&ty.def, &ty.hub_heights(0));
@@ -221,7 +232,10 @@ impl VehicleInstance {
         let mut instance = VehicleInstance {
             pending_destination: None,
             a_trans: OmsiFrames::default(),
-            particles: ParticleSet::new(ty.model.particle_systems(), std::ptr::addr_of!(host) as u64 ^ 0x9e37_79b9),
+            particles: ParticleSet::new(
+                ty.model.particle_systems(),
+                std::ptr::addr_of!(host) as u64 ^ 0x9e37_79b9,
+            ),
             light_fade: Vec::new(),
             v_springfactor,
             v_surface,
@@ -240,7 +254,14 @@ impl VehicleInstance {
             v_brakeforce: v("Brakeforce"),
             v_clutch: v("Clutch").or_else(|| v("clutch_pedal")),
             v_pax_req: (0..PAX_DOORS)
-                .flat_map(|i| [format!("PAX_Entry{i}_Req"), format!("PAX_Exit{i}_Req"), format!("PAX_Entry{i}_Busy"), format!("PAX_Exit{i}_Busy")])
+                .flat_map(|i| {
+                    [
+                        format!("PAX_Entry{i}_Req"),
+                        format!("PAX_Exit{i}_Req"),
+                        format!("PAX_Entry{i}_Busy"),
+                        format!("PAX_Exit{i}_Busy"),
+                    ]
+                })
                 .filter_map(|n| v(&n))
                 .collect(),
             v_cables: control_cables(&ty),
@@ -403,7 +424,11 @@ impl VehicleInstance {
 
     /// [`Self::text_texture_string`] without a copy.
     pub fn text_texture_str(&self, field: &str) -> &str {
-        self.ty.program.text_texture_var(field).map(|i| self.state.str_vars[i as usize].as_str()).unwrap_or("")
+        self.ty
+            .program
+            .text_texture_var(field)
+            .map(|i| self.state.str_vars[i as usize].as_str())
+            .unwrap_or("")
     }
 
     /// Re-render changed text textures; returns the indices with a pending image.
@@ -416,7 +441,12 @@ impl VehicleInstance {
         // (the field and the text are read where they are: both were copied for every text
         // texture every frame)
         for (i, t) in self.text_textures.iter_mut().enumerate() {
-            let text = self.ty.program.text_texture_var(&t.def.variable).map(|v| self.state.str_vars[v as usize].as_str()).unwrap_or("");
+            let text = self
+                .ty
+                .program
+                .text_texture_var(&t.def.variable)
+                .map(|v| self.state.str_vars[v as usize].as_str())
+                .unwrap_or("");
             if t.update(text) {
                 changed.push(i);
             }
@@ -457,14 +487,20 @@ impl VehicleInstance {
     /// Vectus had the standard doors' white frames where the original has black (#3183).
     /// A variable chosen over the scheme ([`Self::set_var_over_scheme`]) gets the value chosen.
     pub(crate) fn apply_scheme_vars_each_frame(&mut self) {
-        let Some(Some(i)) = self.host.paint_scheme else { return };
+        let Some(Some(i)) = self.host.paint_scheme else {
+            return;
+        };
         if let Some(s) = self.ty.paint_schemes.get(i) {
             if s.set_vars.is_empty() {
                 return;
             }
             let vars = s.set_vars.clone();
             for (var, v) in vars {
-                let v = self.scheme_overrides.iter().find(|(n, _)| n.eq_ignore_ascii_case(&var)).map_or(v, |(_, o)| *o);
+                let v = self
+                    .scheme_overrides
+                    .iter()
+                    .find(|(n, _)| n.eq_ignore_ascii_case(&var))
+                    .map_or(v, |(_, o)| *o);
                 self.set_var(&var, v);
             }
         }
@@ -474,7 +510,13 @@ impl VehicleInstance {
         let scheme = scheme.filter(|i| *i < self.ty.paint_schemes.len());
         let old = self.host.paint_scheme.flatten();
         for (k, v) in self.paint_base.clone() {
-            if scheme_sets(&self.ty, old, &k) && !scheme_sets(&self.ty, scheme, &k) && !self.scheme_overrides.iter().any(|(n, _)| n.eq_ignore_ascii_case(&k)) {
+            if scheme_sets(&self.ty, old, &k)
+                && !scheme_sets(&self.ty, scheme, &k)
+                && !self
+                    .scheme_overrides
+                    .iter()
+                    .any(|(n, _)| n.eq_ignore_ascii_case(&k))
+            {
                 self.set_var(&k, v);
             }
         }
@@ -498,43 +540,71 @@ impl VehicleInstance {
         if !self.set_var(name, v) {
             return false;
         }
-        self.scheme_overrides.retain(|(n, _)| !n.eq_ignore_ascii_case(name));
+        self.scheme_overrides
+            .retain(|(n, _)| !n.eq_ignore_ascii_case(name));
         self.scheme_overrides.push((name.to_string(), v));
         true
     }
 }
 
 pub(super) fn scheme_var_names(ty: &VehicleType) -> Vec<String> {
-    let mut names: Vec<String> = ty.paint_schemes.iter().flat_map(|s| &s.set_vars).map(|(n, _)| n.to_ascii_lowercase()).collect();
+    let mut names: Vec<String> = ty
+        .paint_schemes
+        .iter()
+        .flat_map(|s| &s.set_vars)
+        .map(|(n, _)| n.to_ascii_lowercase())
+        .collect();
     names.sort_unstable();
     names.dedup();
     names
 }
 
-fn scheme_values(ty: &VehicleType, var_index: &HashMap<String, omsi_script::VarId>, vars: &[f32]) -> Vec<(String, Option<f32>)> {
-    scheme_var_names(ty).into_iter().map(|k| {
-        let v = var_index.get(&k).map(|id| vars[*id as usize]);
-        (k, v)
-    }).collect()
+fn scheme_values(
+    ty: &VehicleType,
+    var_index: &HashMap<String, omsi_script::VarId>,
+    vars: &[f32],
+) -> Vec<(String, Option<f32>)> {
+    scheme_var_names(ty)
+        .into_iter()
+        .map(|k| {
+            let v = var_index.get(&k).map(|id| vars[*id as usize]);
+            (k, v)
+        })
+        .collect()
 }
 
-fn unpainted_values(program: &omsi_script::Program, before: Vec<(String, Option<f32>)>, var_index: &HashMap<String, omsi_script::VarId>, vars: &[f32]) -> Vec<(String, f32)> {
+fn unpainted_values(
+    program: &omsi_script::Program,
+    before: Vec<(String, Option<f32>)>,
+    var_index: &HashMap<String, omsi_script::VarId>,
+    vars: &[f32],
+) -> Vec<(String, f32)> {
     before
         .into_iter()
         .map(|(k, before)| {
-            let after_init = program.var(&k).filter(|id| program.init_stores(*id)).and_then(|_| var_index.get(&k)).map(|id| vars[*id as usize]);
+            let after_init = program
+                .var(&k)
+                .filter(|id| program.init_stores(*id))
+                .and_then(|_| var_index.get(&k))
+                .map(|id| vars[*id as usize]);
             (k, after_init.or(before).unwrap_or(0.0))
         })
         .collect()
 }
 
 pub(super) fn scheme_sets(ty: &VehicleType, scheme: Option<usize>, name: &str) -> bool {
-    scheme.and_then(|i| ty.paint_schemes.get(i)).is_some_and(|s| s.set_vars.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)))
+    scheme
+        .and_then(|i| ty.paint_schemes.get(i))
+        .is_some_and(|s| s.set_vars.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)))
 }
 
 pub(super) fn control_cables(ty: &VehicleType) -> Vec<(omsi_script::VarId, omsi_script::VarId)> {
     let v = |name: &str| ty.program.var(name);
-    let mut cables: Vec<_> = ty.def.control_cable_front.iter().chain(&ty.def.control_cable_back)
+    let mut cables: Vec<_> = ty
+        .def
+        .control_cable_front
+        .iter()
+        .chain(&ty.def.control_cable_back)
         .filter_map(|c| Some((v(c.lines.get(3)?)?, v(c.lines.get(2)?)?)))
         .collect();
     cables.sort_unstable();

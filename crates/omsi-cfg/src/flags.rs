@@ -80,13 +80,30 @@ pub struct Flag {
 }
 
 impl Flag {
-    const fn new(name: &'static str, ty: Ty, kind: Kind, read: Read, default: &'static str, doc: &'static str) -> Flag {
-        Flag { name, ty, kind, read, default, doc, value: OnceLock::new() }
+    const fn new(
+        name: &'static str,
+        ty: Ty,
+        kind: Kind,
+        read: Read,
+        default: &'static str,
+        doc: &'static str,
+    ) -> Flag {
+        Flag {
+            name,
+            ty,
+            kind,
+            read,
+            default,
+            doc,
+            value: OnceLock::new(),
+        }
     }
 
     /// The value, as `omsi_cfg::env::var_os` gives it, without a copy.
     pub fn os(&self) -> Option<&OsStr> {
-        self.value.get_or_init(|| crate::env::var_os(self.name)).as_deref()
+        self.value
+            .get_or_init(|| crate::env::var_os(self.name))
+            .as_deref()
     }
 
     /// Set at all (`env::var_os(..).is_some()`).
@@ -117,13 +134,19 @@ impl Flag {
 
 impl std::fmt::Debug for Flag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Flag").field("name", &self.name).field("ty", &self.ty).field("kind", &self.kind).finish()
+        f.debug_struct("Flag")
+            .field("name", &self.name)
+            .field("ty", &self.ty)
+            .field("kind", &self.kind)
+            .finish()
     }
 }
 
 /// The registered flag of this name.
 pub fn find(name: &str) -> Option<&'static Flag> {
-    ALL.binary_search_by(|f| f.name.cmp(name)).ok().map(|i| ALL[i])
+    ALL.binary_search_by(|f| f.name.cmp(name))
+        .ok()
+        .map(|i| ALL[i])
 }
 
 macro_rules! flags {
@@ -546,7 +569,9 @@ mod tests {
     }
 
     fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
-        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
         for e in rd.flatten() {
             let p = e.path();
             if p.is_dir() {
@@ -572,16 +597,26 @@ mod tests {
             if rel == Path::new("omsi-cfg/src/flags.rs") {
                 continue;
             }
-            let krate = rel.components().next().map(|c| c.as_os_str().to_string_lossy().into_owned()).unwrap_or_default();
+            let krate = rel
+                .components()
+                .next()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .unwrap_or_default();
             for line in std::fs::read_to_string(&f).unwrap_or_default().lines() {
                 let code = code_part(line);
                 for (pat, close) in [("\"OMSI_", true), ("flags::OMSI_", false)] {
                     let mut rest = code;
                     while let Some(i) = rest.find(pat) {
                         let name = &rest[i + pat.len() - 5..];
-                        let end = name.find(|c: char| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')).unwrap_or(name.len());
+                        let end = name
+                            .find(|c: char| {
+                                !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+                            })
+                            .unwrap_or(name.len());
                         if end > 5 && (!close || name[end..].starts_with('"')) {
-                            out.entry(name[..end].to_string()).or_default().insert(krate.clone());
+                            out.entry(name[..end].to_string())
+                                .or_default()
+                                .insert(krate.clone());
                         }
                         rest = &name[end..];
                     }
@@ -621,14 +656,36 @@ mod tests {
              Values are read once per process and cached (`omsi_cfg::env`): changing the environment of a running game has no\n\
              effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set before the game starts.\n\n",
         );
-        let kinds = [(Kind::Debug, "Debug output"), (Kind::Test, "Test hooks"), (Kind::Switch, "A/B and kill switches"), (Kind::Tuning, "Tuning"), (Kind::Setup, "Set-up"), (Kind::Build, "Build")];
+        let kinds = [
+            (Kind::Debug, "Debug output"),
+            (Kind::Test, "Test hooks"),
+            (Kind::Switch, "A/B and kill switches"),
+            (Kind::Tuning, "Tuning"),
+            (Kind::Setup, "Set-up"),
+            (Kind::Build, "Build"),
+        ];
         for (kind, title) in kinds {
-            s += &format!("## {title}\n\n| Name | Type | Default | Read | Crates | Description |\n|---|---|---|---|---|---|\n");
+            s += &format!(
+                "## {title}\n\n| Name | Type | Default | Read | Crates | Description |\n|---|---|---|---|---|---|\n"
+            );
             for f in ALL.iter().filter(|f| f.kind == kind) {
-                let c = crates.get(f.name).map(|c| c.iter().map(|k| k.trim_start_matches("omsi-")).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+                let c = crates
+                    .get(f.name)
+                    .map(|c| {
+                        c.iter()
+                            .map(|k| k.trim_start_matches("omsi-"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .unwrap_or_default();
                 let ty = format!("{:?}", f.ty).to_lowercase();
                 let read = format!("{:?}", f.read).to_lowercase();
-                s += &format!("| `{}` | {ty} | {} | {read} | {c} | {} |\n", f.name, f.default.replace('|', "\\|"), f.doc.replace('|', "\\|"));
+                s += &format!(
+                    "| `{}` | {ty} | {} | {read} | {c} | {} |\n",
+                    f.name,
+                    f.default.replace('|', "\\|"),
+                    f.doc.replace('|', "\\|")
+                );
             }
             s += "\n";
         }
@@ -648,9 +705,19 @@ mod tests {
     fn flags_match_source() {
         let src = names_in_source();
         let missing: Vec<&String> = src.keys().filter(|n| find(n).is_none()).collect();
-        assert!(missing.is_empty(), "OMSI_* names in the code but not in omsi_cfg::flags (add them there): {missing:?}");
-        let unused: Vec<&str> = ALL.iter().map(|f| f.name).filter(|n| !src.contains_key(*n)).collect();
-        assert!(unused.is_empty(), "flags no code names any more (remove them from omsi_cfg::flags): {unused:?}");
+        assert!(
+            missing.is_empty(),
+            "OMSI_* names in the code but not in omsi_cfg::flags (add them there): {missing:?}"
+        );
+        let unused: Vec<&str> = ALL
+            .iter()
+            .map(|f| f.name)
+            .filter(|n| !src.contains_key(*n))
+            .collect();
+        assert!(
+            unused.is_empty(),
+            "flags no code names any more (remove them from omsi_cfg::flags): {unused:?}"
+        );
     }
 
     #[test]
@@ -660,17 +727,32 @@ mod tests {
         if std::env::var_os("OMSI_FLAGS_BLESS").is_some() {
             std::fs::write(&path, &want).unwrap();
         }
-        let have = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");
-        assert!(have == want, "docs/DEBUG_FLAGS.md is out of date: OMSI_FLAGS_BLESS=1 cargo test -p omsi-cfg flags");
+        let have = std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .replace("\r\n", "\n");
+        assert!(
+            have == want,
+            "docs/DEBUG_FLAGS.md is out of date: OMSI_FLAGS_BLESS=1 cargo test -p omsi-cfg flags"
+        );
     }
 
     #[test]
     fn cached_as_env() {
         // the flag reads through `env`'s cache: what `env` saw first is what the flag sees
         unsafe { std::env::set_var("OMSI_FLAGS_TEST_PROBE", "2.5") };
-        let f = Flag::new("OMSI_FLAGS_TEST_PROBE", Ty::Num, Kind::Test, Read::Test, "-", "");
+        let f = Flag::new(
+            "OMSI_FLAGS_TEST_PROBE",
+            Ty::Num,
+            Kind::Test,
+            Read::Test,
+            "-",
+            "",
+        );
         let f: &'static Flag = Box::leak(Box::new(f));
-        assert_eq!(crate::env::var("OMSI_FLAGS_TEST_PROBE").as_deref(), Ok("2.5"));
+        assert_eq!(
+            crate::env::var("OMSI_FLAGS_TEST_PROBE").as_deref(),
+            Ok("2.5")
+        );
         unsafe { std::env::set_var("OMSI_FLAGS_TEST_PROBE", "7") };
         assert!(f.is_set());
         assert_eq!(f.var(), Some("2.5"));

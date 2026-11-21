@@ -21,11 +21,29 @@ fn a_stop_is_no_target_of_itself() {
 
 #[test]
 fn a_terminus_is_the_first_row_of_its_name() {
-    let t = |code: i32, id: &str, s: &[&str]| omsi_vehicle::hof::Terminus { code, texture_id: id.into(), terminus_stop: Some(id.into()), all_exit: false, strings: s.iter().map(|x| x.to_string()).collect() };
-    let hof = omsi_vehicle::Hof { termini: vec![t(0, "Depot", &[]), t(3, "61-Other", &["61-MaoFangChang"]), t(4, "61-Third", &[]), t(1, "61-MaoFangChang", &["61-MaoFangChang"]), t(2, "Wickenberg Nord", &[])], ..Default::default() };
+    let t = |code: i32, id: &str, s: &[&str]| omsi_vehicle::hof::Terminus {
+        code,
+        texture_id: id.into(),
+        terminus_stop: Some(id.into()),
+        all_exit: false,
+        strings: s.iter().map(|x| x.to_string()).collect(),
+    };
+    let hof = omsi_vehicle::Hof {
+        termini: vec![
+            t(0, "Depot", &[]),
+            t(3, "61-Other", &["61-MaoFangChang"]),
+            t(4, "61-Third", &[]),
+            t(1, "61-MaoFangChang", &["61-MaoFangChang"]),
+            t(2, "Wickenberg Nord", &[]),
+        ],
+        ..Default::default()
+    };
     assert_eq!(super::find_terminus(&hof, "61-MaoFangChang"), Some(3));
     assert_eq!(super::find_terminus(&hof, "  61-MaoFangChang "), Some(3));
-    let hof = omsi_vehicle::Hof { termini: vec![t(0, "A", &["Wickenberg"]), t(1, "B", &["Wickenberg"])], ..Default::default() };
+    let hof = omsi_vehicle::Hof {
+        termini: vec![t(0, "A", &["Wickenberg"]), t(1, "B", &["Wickenberg"])],
+        ..Default::default()
+    };
     assert_eq!(super::find_terminus(&hof, "wickenberg"), Some(0));
 }
 
@@ -33,9 +51,25 @@ fn a_terminus_is_the_first_row_of_its_name() {
 /// second line does (Spandau's Machandelweg, district RUHLEBEN, before U Ruhleben).
 #[test]
 fn a_terminus_is_found_by_its_own_sign_before_another_signs_second_line() {
-    let t = |code: i32, id: &str, s: &[&str]| omsi_vehicle::hof::Terminus { code, texture_id: id.into(), terminus_stop: Some(id.into()), strings: s.iter().map(|x| x.to_string()).collect(), ..Default::default() };
+    let t = |code: i32, id: &str, s: &[&str]| omsi_vehicle::hof::Terminus {
+        code,
+        texture_id: id.into(),
+        terminus_stop: Some(id.into()),
+        strings: s.iter().map(|x| x.to_string()).collect(),
+        ..Default::default()
+    };
     let hof = omsi_vehicle::Hof {
-        termini: vec![t(0, "Empty", &[""]), t(194, "Machandelweg", &["MACHANDELWEG", "RUHLEBEN", "MACHANDELWEG"]), t(282, "U Ruhleben", &["RUHLEBEN", "U-BAHNHOF"]), t(5, "Boerse", &["BOERSE", "RATHAUSMARKT"]), t(555, "RMarkt", &["", "RATHAUSMARKT"])],
+        termini: vec![
+            t(0, "Empty", &[""]),
+            t(
+                194,
+                "Machandelweg",
+                &["MACHANDELWEG", "RUHLEBEN", "MACHANDELWEG"],
+            ),
+            t(282, "U Ruhleben", &["RUHLEBEN", "U-BAHNHOF"]),
+            t(5, "Boerse", &["BOERSE", "RATHAUSMARKT"]),
+            t(555, "RMarkt", &["", "RATHAUSMARKT"]),
+        ],
         ..Default::default()
     };
     assert_eq!(super::find_terminus(&hof, "RUHLEBEN"), Some(2));
@@ -58,9 +92,17 @@ fn stock_depot_termini_are_found_by_their_sign_text() {
         let path = original_root().join("Vehicles/MAN_SD200").join(file);
         let hof = omsi_vehicle::Hof::load(&path).expect(file);
         for (i, row) in hof.termini.iter().enumerate() {
-            let Some(sign) = row.strings.iter().find(|s| !s.trim().is_empty()) else { continue };
+            let Some(sign) = row.strings.iter().find(|s| !s.trim().is_empty()) else {
+                continue;
+            };
             let found = super::find_terminus(&hof, sign).map(|k| hof.termini[k].code);
-            assert_eq!(found, Some(row.code), "{file} row {i} {} '{}'", row.code, sign.trim());
+            assert_eq!(
+                found,
+                Some(row.code),
+                "{file} row {i} {} '{}'",
+                row.code,
+                sign.trim()
+            );
         }
     }
 }
@@ -147,10 +189,33 @@ fn hafen_depot() -> omsi_vehicle::Hof {
     let routes: [(&str, &[&str]); 6] = [
         ("707", &["Markt", "Schule", "Park", "Ufer", "Hafen"]),
         ("701", &["Markt", "Schule", "Park", "Hafen"]),
-        ("702", &["Bhf Nordstadt", "F_Kirchweg", "Markt", "Schule", "Park", "Hafen"]),
+        (
+            "702",
+            &[
+                "Bhf Nordstadt",
+                "F_Kirchweg",
+                "Markt",
+                "Schule",
+                "Park",
+                "Hafen",
+            ],
+        ),
         ("703", &["Schule", "Park", "Hafen"]),
-        ("705", &["Bhf Nordstadt", "Markt", "Rathaus", "Schule", "Park", "Hafen"]),
-        ("706", &["Am Wald", "Kirchweg", "Markt", "Schule", "Park", "Hafen"]),
+        (
+            "705",
+            &[
+                "Bhf Nordstadt",
+                "Markt",
+                "Rathaus",
+                "Schule",
+                "Park",
+                "Hafen",
+            ],
+        ),
+        (
+            "706",
+            &["Am Wald", "Kirchweg", "Markt", "Schule", "Park", "Hafen"],
+        ),
     ];
     for (code, stops) in routes {
         hof.info_trips.push(omsi_vehicle::hof::InfoTrip {
@@ -175,7 +240,14 @@ fn the_route_follows_the_trips_stops() {
     };
     // the depot file spells the first stop another way, and with a one-letter prefix
     assert_eq!(
-        route(&["Nordstadt Bhf", "Kirchweg", "Markt", "Schule", "Park", "Hafen"]),
+        route(&[
+            "Nordstadt Bhf",
+            "Kirchweg",
+            "Markt",
+            "Schule",
+            "Park",
+            "Hafen"
+        ]),
         Some(2)
     );
     // a short working gets its own route, not the long ones it is part of
@@ -198,8 +270,8 @@ fn the_ibis_stands_at_the_trips_first_stop_on_a_route_that_begins_before_it() {
     let hof = hafen_depot();
     // no route begins at Kirchweg; 702 and 706 have the trip's stops after one more
     let stops = ["Kirchweg", "Markt", "Schule", "Park", "Hafen"];
-    let target = ibis_target(&hof, "7", "Hafen", &stops, Some((0, stops[0])))
-        .expect("line 7 target");
+    let target =
+        ibis_target(&hof, "7", "Hafen", &stops, Some((0, stops[0]))).expect("line 7 target");
     assert_eq!(target.route, Some(2));
     assert_eq!(target.stop, 1);
 }
@@ -288,7 +360,7 @@ fn trip_times_from_the_profile() {
             }),
             &link
         )
-            .duration,
+        .duration,
         1500.0
     );
 }
@@ -326,8 +398,8 @@ fn timetable_test_vehicle() -> crate::VehicleInstance {
 
 fn timetable_test_vehicle_with_door(door: &str) -> crate::VehicleInstance {
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     };
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -390,12 +462,20 @@ fn timetable_test_vehicle_with_door(door: &str) -> crate::VehicleInstance {
 
 /// A vehicle that declares the IBIS variables a destination is written to.
 pub(super) fn ibis_test_vehicle() -> crate::VehicleInstance {
-    script_test_vehicle("{frame}\n{end}\n", "IBIS_LinieKurs\nIBIS_TerminusIndex\nIBIS_TerminusCode\n", "IBIS_terminus_name\n")
+    script_test_vehicle(
+        "{frame}\n{end}\n",
+        "IBIS_LinieKurs\nIBIS_TerminusIndex\nIBIS_TerminusCode\n",
+        "IBIS_terminus_name\n",
+    )
 }
 
 /// A vehicle of the script `osc` that declares the variables `varlist` and the string
 /// variables `stringvarlist` (one a line).
-pub(crate) fn script_test_vehicle(osc: &str, varlist: &str, stringvarlist: &str) -> crate::VehicleInstance {
+pub(crate) fn script_test_vehicle(
+    osc: &str,
+    varlist: &str,
+    stringvarlist: &str,
+) -> crate::VehicleInstance {
     // (a folder of its own: tests run side by side)
     static MADE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = MADE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -437,8 +517,21 @@ pub(crate) fn script_test_vehicle(osc: &str, varlist: &str, stringvarlist: &str)
 /// the first of that name.
 #[test]
 fn a_destination_picked_from_the_list_is_that_one_of_its_name() {
-    let t = |code: i32, id: &str| omsi_vehicle::hof::Terminus { code, texture_id: id.into(), strings: vec!["ul. Xutorskaya".into()], ..Default::default() };
-    let hof = omsi_vehicle::Hof { termini: vec![t(92, "Xut_92"), t(120, "Xut_120"), t(123, "Xut_123"), t(124, "Xut_124")], ..Default::default() };
+    let t = |code: i32, id: &str| omsi_vehicle::hof::Terminus {
+        code,
+        texture_id: id.into(),
+        strings: vec!["ul. Xutorskaya".into()],
+        ..Default::default()
+    };
+    let hof = omsi_vehicle::Hof {
+        termini: vec![
+            t(92, "Xut_92"),
+            t(120, "Xut_120"),
+            t(123, "Xut_123"),
+            t(124, "Xut_124"),
+        ],
+        ..Default::default()
+    };
     let mut v = ibis_test_vehicle();
     set_player_destination_at(&mut v, &hof, "39", 1, &[]);
     assert_eq!(v.var("IBIS_TerminusCode"), Some(120.0));
@@ -461,8 +554,20 @@ fn a_destination_picked_from_the_list_is_that_one_of_its_name() {
 fn a_destination_picked_from_the_list_turns_the_roller_blind() {
     let osc = "{trigger:rollband_sync}\n{end}\n{trigger:ai_scheduled_settarget}\n(L.L.AI_target_index) (S.L.rlbnd_ziel_target)\n(L.$.SetLineTo) (S.$.rlbnd_line)\n{end}\n";
     let vars = "IBIS_LinieKurs\nIBIS_TerminusIndex\nIBIS_TerminusCode\nAI_target_index\nrlbnd_ziel_target\nelec_busbar_main_sw\n";
-    let t = |code: i32, id: &str| omsi_vehicle::hof::Terminus { code, texture_id: id.into(), strings: vec![id.to_uppercase()], ..Default::default() };
-    let hof = omsi_vehicle::Hof { termini: vec![t(0, "Empty"), t(205, "U Ruhleben"), t(154, "U Rathaus Spandau")], ..Default::default() };
+    let t = |code: i32, id: &str| omsi_vehicle::hof::Terminus {
+        code,
+        texture_id: id.into(),
+        strings: vec![id.to_uppercase()],
+        ..Default::default()
+    };
+    let hof = omsi_vehicle::Hof {
+        termini: vec![
+            t(0, "Empty"),
+            t(205, "U Ruhleben"),
+            t(154, "U Rathaus Spandau"),
+        ],
+        ..Default::default()
+    };
     let mut v = script_test_vehicle(osc, vars, "SetLineTo\nrlbnd_line\nIBIS_terminus_name\n");
     v.set_var("elec_busbar_main_sw", 1.0);
     let mut pick = set_player_destination_at(&mut v, &hof, "145", 2, &[]);
@@ -487,15 +592,28 @@ fn a_destination_picked_from_the_list_turns_the_roller_blind() {
     assert_eq!(pick, None);
     // a bus without a roller blind has nothing to turn
     let mut ibis = ibis_test_vehicle();
-    assert_eq!(set_player_destination_at(&mut ibis, &hof, "145", 1, &[]), None);
+    assert_eq!(
+        set_player_destination_at(&mut ibis, &hof, "145", 1, &[]),
+        None
+    );
 }
 
 #[test]
 fn a_destination_picked_from_the_list_updates_display_target() {
-    let osc = "{trigger:ai_scheduled_settarget}\n(L.L.AI_target_index) (S.L.display_target)\n{end}\n";
-    let vars = "IBIS_LinieKurs\nIBIS_TerminusIndex\nIBIS_TerminusCode\nAI_target_index\ndisplay_target\n";
-    let t = |code: i32, id: &str| omsi_vehicle::hof::Terminus { code, texture_id: id.into(), strings: vec![id.into()], ..Default::default() };
-    let hof = omsi_vehicle::Hof { termini: vec![t(100, "First"), t(200, "Second")], ..Default::default() };
+    let osc =
+        "{trigger:ai_scheduled_settarget}\n(L.L.AI_target_index) (S.L.display_target)\n{end}\n";
+    let vars =
+        "IBIS_LinieKurs\nIBIS_TerminusIndex\nIBIS_TerminusCode\nAI_target_index\ndisplay_target\n";
+    let t = |code: i32, id: &str| omsi_vehicle::hof::Terminus {
+        code,
+        texture_id: id.into(),
+        strings: vec![id.into()],
+        ..Default::default()
+    };
+    let hof = omsi_vehicle::Hof {
+        termini: vec![t(100, "First"), t(200, "Second")],
+        ..Default::default()
+    };
     let mut v = script_test_vehicle(osc, vars, "IBIS_terminus_name\n");
     set_player_destination_at(&mut v, &hof, "10", 1, &[]);
     assert_eq!(v.var("display_target"), Some(1.0));
@@ -509,9 +627,19 @@ fn a_destination_picked_from_the_list_updates_display_target() {
 fn a_route_picked_by_hand_keeps_the_roller_blinds_destination() {
     let osc = "{trigger:rollband_sync}\n{end}\n{trigger:ai_scheduled_settarget}\n(L.L.AI_target_index) (S.L.rlbnd_ziel_target)\n(L.$.SetLineTo) (S.$.rlbnd_line)\n{end}\n";
     let vars = "IBIS_LinieKurs\nIBIS_TerminusIndex\nIBIS_TerminusCode\nAI_target_index\nrlbnd_ziel_target\nrlbnd_steckschild_Termindex\nelec_busbar_main_sw\n";
-    let t = |code: i32, id: &str, sign: &str| omsi_vehicle::hof::Terminus { code, texture_id: id.into(), strings: vec![sign.into()], ..Default::default() };
+    let t = |code: i32, id: &str, sign: &str| omsi_vehicle::hof::Terminus {
+        code,
+        texture_id: id.into(),
+        strings: vec![sign.into()],
+        ..Default::default()
+    };
     let hof = omsi_vehicle::Hof {
-        termini: vec![t(0, "Empty", ""), t(205, "U Ruhleben", "U RUHLEBEN"), t(154, "U Rathaus Spandau", "U RATHAUS SPANDAU"), t(1001, "Falkensee Bhf", "FALKENSEE BHF")],
+        termini: vec![
+            t(0, "Empty", ""),
+            t(205, "U Ruhleben", "U RUHLEBEN"),
+            t(154, "U Rathaus Spandau", "U RATHAUS SPANDAU"),
+            t(1001, "Falkensee Bhf", "FALKENSEE BHF"),
+        ],
         ..Default::default()
     };
     let mut v = script_test_vehicle(osc, vars, "SetLineTo\nrlbnd_line\nIBIS_terminus_name\n");
@@ -534,7 +662,17 @@ fn a_route_picked_by_hand_keeps_the_roller_blinds_destination() {
     v.set_var("rlbnd_steckschild_Termindex", 0.0);
     assert_eq!(shown_destination(&v, &hof, None), Some(2));
     // a destination picked before the bus was switched on, not turned to yet
-    assert_eq!(shown_destination(&v, &hof, Some(&BlindPick { row: 1, line: "5".into() })), Some(1));
+    assert_eq!(
+        shown_destination(
+            &v,
+            &hof,
+            Some(&BlindPick {
+                row: 1,
+                line: "5".into()
+            })
+        ),
+        Some(1)
+    );
     // a bus without a roller blind: the IBIS's row
     let mut ibis = ibis_test_vehicle();
     ibis.set_var("IBIS_TerminusIndex", 1.0);
@@ -547,9 +685,22 @@ fn a_route_picked_by_hand_keeps_the_roller_blinds_destination() {
 /// route's destination, not the first row's code with no route.
 #[test]
 fn a_trip_to_a_destination_of_several_codes_types_its_own_route() {
-    let t = |code: i32, id: &str, name: &str| omsi_vehicle::hof::Terminus { code, texture_id: id.into(), terminus_stop: Some(id.into()), strings: vec![name.into()], ..Default::default() };
+    let t = |code: i32, id: &str, name: &str| omsi_vehicle::hof::Terminus {
+        code,
+        texture_id: id.into(),
+        terminus_stop: Some(id.into()),
+        strings: vec![name.into()],
+        ..Default::default()
+    };
     let mut hof = omsi_vehicle::Hof {
-        termini: vec![t(0, "Leerfeld", ""), t(92, "Xut_92", "ul. Xutorskaya"), t(120, "Xut_120", "ul. Xutorskaya"), t(123, "Xut_123", "ul. Xutorskaya"), t(124, "Xut_124", "ul. Xutorskaya"), t(50, "Vokzal", "Vokzal")],
+        termini: vec![
+            t(0, "Leerfeld", ""),
+            t(92, "Xut_92", "ul. Xutorskaya"),
+            t(120, "Xut_120", "ul. Xutorskaya"),
+            t(123, "Xut_123", "ul. Xutorskaya"),
+            t(124, "Xut_124", "ul. Xutorskaya"),
+            t(50, "Vokzal", "Vokzal"),
+        ],
         ..Default::default()
     };
     let routes: [(&str, &str, &str, &[&str]); 4] = [
@@ -559,32 +710,68 @@ fn a_trip_to_a_destination_of_several_codes_types_its_own_route() {
         ("4102", "41", "124", &["Vokzal", "Shkola", "ul. Xutorskaya"]),
     ];
     for (code, line, terminus, stops) in routes {
-        hof.info_trips.push(omsi_vehicle::hof::InfoTrip { code: code.into(), route: terminus.into(), line: line.into(), ..Default::default() });
-        hof.info_busstop_lists.push(stops.iter().map(|s| s.to_string()).collect());
+        hof.info_trips.push(omsi_vehicle::hof::InfoTrip {
+            code: code.into(),
+            route: terminus.into(),
+            line: line.into(),
+            ..Default::default()
+        });
+        hof.info_busstop_lists
+            .push(stops.iter().map(|s| s.to_string()).collect());
     }
     let target = |hof: &omsi_vehicle::Hof, line: &str, stops: &[&str]| {
         let t = ibis_target(hof, line, "ul. Xutorskaya", stops, None).expect("a target");
         (t.route, t.terminus_code, t.terminus_index)
     };
-    assert_eq!(target(&hof, "39", &["Vokzal", "Rynok", "ul. Xutorskaya"]), (Some(2), None, 2));
+    assert_eq!(
+        target(&hof, "39", &["Vokzal", "Rynok", "ul. Xutorskaya"]),
+        (Some(2), None, 2)
+    );
     // two routes of line 41 there, each to a row of its own
-    assert_eq!(target(&hof, "41", &["Park", "Shkola", "ul. Xutorskaya"]), (Some(1), None, 3));
-    assert_eq!(target(&hof, "41", &["Vokzal", "Shkola", "ul. Xutorskaya"]), (Some(2), None, 4));
+    assert_eq!(
+        target(&hof, "41", &["Park", "Shkola", "ul. Xutorskaya"]),
+        (Some(1), None, 3)
+    );
+    assert_eq!(
+        target(&hof, "41", &["Vokzal", "Shkola", "ul. Xutorskaya"]),
+        (Some(2), None, 4)
+    );
     // no route of the line goes there: the first row's code, typed in the destination mode
     assert_eq!(target(&hof, "7", &[]), (None, Some(92), 1));
     // set without typing (when the typing fails): the same row
     let mut v = ibis_test_vehicle();
-    set_player_destination_directly(&mut v, Some(&hof), "41", "ul. Xutorskaya", &["Vokzal", "Shkola", "ul. Xutorskaya"]);
-    assert_eq!((v.var("IBIS_TerminusCode"), v.var("IBIS_TerminusIndex")), (Some(124.0), Some(4.0)));
+    set_player_destination_directly(
+        &mut v,
+        Some(&hof),
+        "41",
+        "ul. Xutorskaya",
+        &["Vokzal", "Shkola", "ul. Xutorskaya"],
+    );
+    assert_eq!(
+        (v.var("IBIS_TerminusCode"), v.var("IBIS_TerminusIndex")),
+        (Some(124.0), Some(4.0))
+    );
     // an AI bus shows the first row of the name, as Omsi.exe's AI_target_index does
-    set_ai_destination(&mut v, Some(&hof), "41", "ul. Xutorskaya", &["Vokzal", "Shkola", "ul. Xutorskaya"]);
+    set_ai_destination(
+        &mut v,
+        Some(&hof),
+        "41",
+        "ul. Xutorskaya",
+        &["Vokzal", "Shkola", "ul. Xutorskaya"],
+    );
     assert_eq!(v.var("IBIS_TerminusIndex"), Some(1.0));
     // rows of one ident as well
     for term in &mut hof.termini[1..5] {
         term.texture_id = "ul. Xutorskaya".into();
     }
-    assert_eq!(target(&hof, "39", &["Vokzal", "Rynok", "ul. Xutorskaya"]), (Some(2), None, 2));
-    assert_eq!(target(&hof, "41", &["Vokzal", "Shkola", "ul. Xutorskaya"]), (Some(2), None, 4));
+    assert_eq!(
+        target(&hof, "39", &["Vokzal", "Rynok", "ul. Xutorskaya"]),
+        (Some(2), None, 2)
+    );
+    assert_eq!(
+        target(&hof, "41", &["Vokzal", "Shkola", "ul. Xutorskaya"]),
+        (Some(2), None, 4)
+    );
 }
 
 /// An AI group that names no depot file, or a terminus its depot file has no row for:
@@ -603,7 +790,11 @@ fn an_ai_bus_without_a_destination_still_gets_its_line_and_the_ai_trigger() {
     assert_eq!(v.var("elec_busbar_main_sw"), Some(1.0));
     // a terminus the depot file knows nothing of (AI_target_index stays as it was)
     let hof = omsi_vehicle::Hof {
-        termini: vec![omsi_vehicle::hof::Terminus { code: 92, texture_id: "Xut_92".into(), ..Default::default() }],
+        termini: vec![omsi_vehicle::hof::Terminus {
+            code: 92,
+            texture_id: "Xut_92".into(),
+            ..Default::default()
+        }],
         ..Default::default()
     };
     let mut v = script_test_vehicle(osc, vars, strings);
@@ -649,16 +840,20 @@ fn destination_picks_finish_the_current_transition_then_animate_the_latest() {
         "LW_req_voll\nshown_text\n",
     );
     let hof = omsi_vehicle::Hof {
-        termini: ["First destination", "Second destination", "Third destination"]
-            .into_iter()
-            .enumerate()
-            .map(|(i, name)| omsi_vehicle::hof::Terminus {
-                code: 100 + i as i32,
-                texture_id: name.into(),
-                strings: vec![name.into()],
-                ..Default::default()
-            })
-            .collect(),
+        termini: [
+            "First destination",
+            "Second destination",
+            "Third destination",
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(i, name)| omsi_vehicle::hof::Terminus {
+            code: 100 + i as i32,
+            texture_id: name.into(),
+            strings: vec![name.into()],
+            ..Default::default()
+        })
+        .collect(),
         ..Default::default()
     };
     v.host.hof = Some(std::sync::Arc::new(hof.clone()));
@@ -725,14 +920,16 @@ fn guarded_display_transitions_finish_before_the_latest_selection_starts() {
 {end}
 "#;
     let hof = omsi_vehicle::Hof {
-        termini: ["First", "Second", "Third"].into_iter().enumerate().map(|(i, name)| {
-            omsi_vehicle::hof::Terminus {
+        termini: ["First", "Second", "Third"]
+            .into_iter()
+            .enumerate()
+            .map(|(i, name)| omsi_vehicle::hof::Terminus {
                 code: 100 + i as i32,
                 texture_id: name.into(),
                 strings: vec![name.into()],
                 ..Default::default()
-            }
-        }).collect(),
+            })
+            .collect(),
         ..Default::default()
     };
     for player in [true, false] {
@@ -805,7 +1002,10 @@ fn queued_destinations_are_discarded_when_the_depot_or_script_state_changes() {
     let osc = "{trigger:ai_scheduled_settarget}\n(L.L.AI_target_index) (S.L.accepted_row)\n{end}\n{frame}\n{end}\n";
     let hof = omsi_vehicle::Hof {
         name: "Original depot".into(),
-        termini: vec![omsi_vehicle::hof::Terminus { code: 100, ..Default::default() }],
+        termini: vec![omsi_vehicle::hof::Terminus {
+            code: 100,
+            ..Default::default()
+        }],
         ..Default::default()
     };
     for restore in [false, true] {

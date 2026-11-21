@@ -16,7 +16,13 @@ impl VehicleInstance {
         }
         // (the lever is the first driver camera, whichever one is chosen: 0x7e21a0 and
         // 0x7e21c7 read Cameras_driver[0]'s position for the roll's and the pitch's share)
-        let seat = self.ty.def.cameras_driver.first().map(|c| c.pos).unwrap_or([0.0; 3]);
+        let seat = self
+            .ty
+            .def
+            .cameras_driver
+            .first()
+            .map(|c| c.pos)
+            .unwrap_or([0.0; 3]);
         let (acc_z, omega) = match &self.rigid {
             Some(rb) => (rb.accel_body.z - 9.81, rb.omega),
             None => (0.0, Vec3::ZERO),
@@ -59,7 +65,8 @@ impl VehicleInstance {
         // Off the road the wheels throw up the ground itself: earth and grass churned up
         // under the tyres spatter the sides, dust off dry ground, mud off wet - a few minutes
         // across a field leave the bus brown (`host.offroad`, the wheels' share off the road)
-        let off = self.host.offroad.clamp(0.0, 1.0) * (2.5e-3 + 6.0e-3 * rain.max(self.host.street_cond.clamp(0.0, 1.0)));
+        let off = self.host.offroad.clamp(0.0, 1.0)
+            * (2.5e-3 + 6.0e-3 * rain.max(self.host.street_cond.clamp(0.0, 1.0)));
         self.dirt = (self.dirt + dt * speed * (8.0e-5 + 1.2e-3 * rain + off)).clamp(0.0, 1.0);
         self.set_engine_ev(Ev::DirtNorm, self.dirt);
         // spray off a wet road, dust off a dry one
@@ -104,10 +111,15 @@ impl VehicleInstance {
             self.km_started = true;
             if self.host.km_base == 0.0 {
                 let (year, per_year) = self.ty.def.km_counter_init.unwrap_or((1980, 60000.0));
-                let years = ((self.host.clock.year - year) as f64 + self.host.clock.day_of_year as f64 / 365.0).max(0.0);
-                let seed = (std::ptr::addr_of!(self.host) as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 40;
+                let years = ((self.host.clock.year - year) as f64
+                    + self.host.clock.day_of_year as f64 / 365.0)
+                    .max(0.0);
+                let seed = (std::ptr::addr_of!(self.host) as u64)
+                    .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+                    >> 40;
                 let (r1, r2) = ((seed % 100) as f64, ((seed / 100) % 100) as f64);
-                self.host.km_base = r1 / 10.0 + 8.0 + years * per_year as f64 * (1.0 + 0.2 * (r2 - 50.0) / 50.0);
+                self.host.km_base =
+                    r1 / 10.0 + 8.0 + years * per_year as f64 * (1.0 + 0.2 * (r2 - 50.0) / 50.0);
             }
         }
         // (the sum is split, not the parts: 0.7 km + 0.5 km is 1 km 200 m, not 0 km 1200 m)
@@ -131,7 +143,9 @@ impl VehicleInstance {
             return;
         }
         let out = self.host.temperature;
-        let (mut t, mut hum, last) = self.cabin_air.unwrap_or((out.clamp(18.0, 25.0), 9.0, f32::NAN));
+        let (mut t, mut hum, last) =
+            self.cabin_air
+                .unwrap_or((out.clamp(18.0, 25.0), 9.0, f32::NAN));
         // a script of the bus's own wrote the cabin temperature: that is what it is now
         if let Some(cur) = self.ev(Ev::CabinTemp) {
             if !last.is_nan() && (cur - last).abs() > 1e-4 {
@@ -142,7 +156,11 @@ impl VehicleInstance {
         let upper = (out + 20.0).min(out.max(25.0)).max(lower);
         let target = t.clamp(lower, upper);
         t += (target - t) * (dt / 120.0).min(1.0);
-        let out_hum = if self.host.abs_humidity > 0.0 { self.host.abs_humidity } else { 9.0 };
+        let out_hum = if self.host.abs_humidity > 0.0 {
+            self.host.abs_humidity
+        } else {
+            9.0
+        };
         hum += (out_hum - hum) * (dt / 300.0).min(1.0);
         // relative humidity: against the saturation (Magnus) at the cabin temperature
 
@@ -269,7 +287,11 @@ impl VehicleInstance {
 
     /// `GetHeightAbovePoint` for a body standing at `pos` turned by `rot` on this vehicle's
     /// ground (a coupled car asks it for its own place).
-    pub(super) fn height_probe_at(&self, pos: DVec3, rot: Mat4) -> Option<car_run::GroundHeightProbe> {
+    pub(super) fn height_probe_at(
+        &self,
+        pos: DVec3,
+        rot: Mat4,
+    ) -> Option<car_run::GroundHeightProbe> {
         if self.ground.is_none() && self.contact.is_none() {
             return None;
         }
@@ -287,7 +309,10 @@ impl VehicleInstance {
 
     fn set_coupling_evs(&mut self) {
         self.set_engine_ev(Ev::TrainFrontCoupling, 0.0);
-        self.set_engine_ev(Ev::TrainBackCoupling, if self.trailers.is_empty() { 0.0 } else { 1.0 });
+        self.set_engine_ev(
+            Ev::TrainBackCoupling,
+            if self.trailers.is_empty() { 0.0 } else { 1.0 },
+        );
         self.set_engine_ev(Ev::TrainMeReverse, 0.0);
     }
 
@@ -489,9 +514,7 @@ impl VehicleInstance {
     /// Has the bus's script finished leaving its stop (doors shut, stop brake off)? True
     /// for vehicles whose scripts do not take part in that handshake.
     pub fn station_released(&self) -> bool {
-        self.ev(Ev::AiAtStation)
-            .map(|v| v > -0.5)
-            .unwrap_or(true)
+        self.ev(Ev::AiAtStation).map(|v| v > -0.5).unwrap_or(true)
     }
 
     /// An AI vehicle's coupled parts moved on with its body in every step of the traffic,
@@ -564,7 +587,10 @@ impl VehicleInstance {
             // (a coupling's y in the frame of the travel: the model's, turned with the body)
             let travel = |turned: bool, y: f32| if turned { -y as f64 } else { y as f64 };
             // how far the joint in front of the part lies behind this vehicle's origin
-            let mut joint = -travel(body_reversed(&self.ty.def, false), trailers[0].coupling_back.y);
+            let mut joint = -travel(
+                body_reversed(&self.ty.def, false),
+                trailers[0].coupling_back.y,
+            );
             for i in 0..trailers.len() {
                 // (the part's rear coupling is the one the next part hangs on, in this part's frame)
                 let rear = trailers.get(i + 1).map(|n| n.coupling_back.y);
@@ -573,13 +599,27 @@ impl VehicleInstance {
                 let origin = joint + travel(turned, t.coupling_front.y);
                 let (y_front, y_rear) = t.rail_ends();
                 if omsi_cfg::flags::OMSI_DEBUG_TRAILERS.is_set() {
-                    static SHOWN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                    static SHOWN: std::sync::atomic::AtomicU32 =
+                        std::sync::atomic::AtomicU32::new(0);
                     if SHOWN.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 6 {
-                        log::info!("rail part {i}: origin {origin:.2} m behind the lead's, joint before it {joint:.2}, running ends {y_front:.2} / {y_rear:.2}, front coupling {:.2}, back coupling {:.2} (declared: front {:?}, back {:?}, {} axles, boogies {:?})", t.coupling_front.y, t.coupling_back.y, t.ty.def.coupling_front.as_ref().map(|c| c.pos), t.ty.def.coupling_back.as_ref().map(|c| c.pos), t.ty.def.axles.len(), t.ty.def.boogies);
+                        log::info!(
+                            "rail part {i}: origin {origin:.2} m behind the lead's, joint before it {joint:.2}, running ends {y_front:.2} / {y_rear:.2}, front coupling {:.2}, back coupling {:.2} (declared: front {:?}, back {:?}, {} axles, boogies {:?})",
+                            t.coupling_front.y,
+                            t.coupling_back.y,
+                            t.ty.def.coupling_front.as_ref().map(|c| c.pos),
+                            t.ty.def.coupling_back.as_ref().map(|c| c.pos),
+                            t.ty.def.axles.len(),
+                            t.ty.def.boogies
+                        );
                     }
                 }
-                match (at_behind(origin - y_front as f64), at_behind(origin - y_rear as f64)) {
-                    (Some(front), Some(back)) => t.place_on_rails(self, dt, lead, (front, y_front), (back, y_rear)),
+                match (
+                    at_behind(origin - y_front as f64),
+                    at_behind(origin - y_rear as f64),
+                ) {
+                    (Some(front), Some(back)) => {
+                        t.place_on_rails(self, dt, lead, (front, y_front), (back, y_rear))
+                    }
                     _ => t.update(self, dt, lead),
                 }
                 if let Some(y) = rear {
@@ -590,7 +630,9 @@ impl VehicleInstance {
         } else {
             let (mut prev_c, mut b_prev) = (self.position, 0.0f64);
             for t in &mut trailers {
-                let (lp, lr) = lead.map(|(p, r, _)| (p, r)).unwrap_or((self.position, self.body_rotation()));
+                let (lp, lr) = lead
+                    .map(|(p, r, _)| (p, r))
+                    .unwrap_or((self.position, self.body_rotation()));
                 let c = t.coupling_point(lp, lr);
                 let b_c = b_prev + (c - prev_c).truncate().length();
                 if let Some(p) = at_behind(b_c + t.pivot_length() as f64) {
@@ -631,7 +673,10 @@ impl OmsiFrames {
         }
         // (a frame as long as OMSI's or longer is one of OMSI's)
         if dt >= Self::FRAME * 0.99 {
-            *self = OmsiFrames { out: a, ..Default::default() };
+            *self = OmsiFrames {
+                out: a,
+                ..Default::default()
+            };
             return a;
         }
         self.sum += a * dt;
