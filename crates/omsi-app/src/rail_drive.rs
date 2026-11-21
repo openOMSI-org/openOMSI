@@ -742,16 +742,64 @@ impl From<Option<bool>> for Thrown {
     }
 }
 
-/// The first points ahead of the train's leading end within `SWITCH_REACH` (the front end,
-/// or the rear end driven from the rear cab or backing; see `Network::points_ahead`).
-fn switch_ahead(r: &RailDrive, net: &Network, from_rear: bool) -> Option<(f32, Vec<(usize, f64)>)> {
+/// The first points ahead of the train's leading end within `SWITCH_REACH`, and how far
+/// from that end they are (the front end, or the rear end; see `leads_from_rear` and
+/// `Network::points_ahead`). `ends`: how far the train reaches ahead of the vehicle's origin
+/// and behind it ([`train_ends`]), so points under the train are not the ones ahead of it.
+/// `world`: the switches the track beyond the origin is found by, as it lies.
+fn switch_ahead(
+    r: &RailDrive,
+    net: &Network,
+    world: Option<(&World, &mut omsi_sim::scenery::SceneryState)>,
+    from_rear: bool,
+    (front, rear): (f64, f64),
+) -> Option<(f32, Vec<(usize, f64)>)> {
     let (lane, s, along) = if from_rear {
-        r.state_at(net, r.u - r.trail.reach_back)
-            .unwrap_or(r.spot())
+        // (the trail it has come along, else the track behind it as it lies)
+        r.state_at(net, r.u - rear).unwrap_or_else(|| {
+            let mut probe = RailDrive::at(r.spot());
+            probe.step(net, world, -rear as f32, 0);
+            probe.spot()
+        })
     } else {
-        r.spot()
+        let mut probe = RailDrive::at(r.spot());
+        probe.step(net, world, front as f32, 0);
+        probe.spot()
     };
     net.points_ahead(lane, s, along != from_rear, SWITCH_REACH)
+}
+
+/// How far a part's body reaches ahead of its origin and behind it along the way it runs
+/// (m): its couplings, where it has them, else its `[boundingbox]`; `reversed`: it is turned
+/// round in the train.
+fn body_ends(def: &omsi_vehicle::Vehicle, reversed: bool) -> (f64, f64) {
+    let bb = def
+        .bounding_box
+        .map(|b| ((b[4] + b[1] * 0.5) as f64, (b[1] * 0.5 - b[4]) as f64));
+    let front = def.coupling_front.as_ref().map(|c| c.pos[1] as f64);
+    let rear = def.coupling_back.as_ref().map(|c| -c.pos[1] as f64);
+    let (front, rear) = (
+        front.or(bb.map(|b| b.0)).unwrap_or(0.0).max(0.0),
+        rear.or(bb.map(|b| b.1)).unwrap_or(0.0).max(0.0),
+    );
+    if omsi_sim::vehicle::body_reversed(def, reversed) {
+        (rear, front)
+    } else {
+        (front, rear)
+    }
+}
+
+/// How far the train reaches ahead of the vehicle's origin and behind it (m): its own body's
+/// front, and behind, the farthest of its own body and its coupled parts as they stand, and no
+/// less than the trail they are laid on (`reach_back`).
+fn train_ends(v: &omsi_sim::VehicleInstance, reach_back: f64) -> (f64, f64) {
+    let (front, rear) = body_ends(&v.ty.def, false);
+    let behind = v
+        .trailers
+        .iter()
+        .map(|t| (t.position - v.position).truncate().length() + body_ends(&t.ty.def, t.reversed).1)
+        .fold(rear, f64::max);
+    (front, behind.max(reach_back))
 }
 
 /// Whether the train's rear end leads: moving, the end it moves towards (`speed` is along the
@@ -784,7 +832,10 @@ pub(crate) fn change_switch(
         .and_then(|k| p.vehicle.trailers.get(k))
         .is_some_and(|t| t.reversed);
     let from_rear = leads_from_rear(turned, p.vehicle.physics.speed);
-    let Some((dist, branches)) = switch_ahead(r, net, from_rear) else {
+    let ends = train_ends(&p.vehicle, r.trail.reach_back);
+    let Some((dist, branches)) =
+        switch_ahead(r, net, Some((world, &mut *scenery)), from_rear, ends)
+    else {
         return omsi_ui::i18n::tr_fill(
             "No points within {reach} m ahead",
             &[("{reach}", &SWITCH_REACH)],
@@ -979,6 +1030,90 @@ mod tests {
             !leads_from_rear(false, 0.05),
             "standing: the front cab's end"
         );
+    }
+
+    /// Points 40 m along the track, and points again 20 m on along each of their branches.
+    fn two_sets_of_points() -> Network {
+        use omsi_sim::traffic::LaneBuilder;
+        let rail = |pts: Vec<DVec3>| LaneBuilder::polyline(pts, LaneKind::Rail, 1.435);
+        let mut lanes = vec![
+            rail(vec![DVec3::new(0.0, -40.0, 0.0), DVec3::new(0.0, 0.0, 0.0)]),
+            rail(vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(-5.0, 20.0, 0.0)]),
+            rail(vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(5.0, 20.0, 0.0)]),
+        ];
+        for (x, from) in [(-5.0, 1), (5.0, 2)] {
+            let at = lanes.len();
+            lanes[from].next = vec![at, at + 1];
+            for dx in [-8.0, 8.0] {
+                lanes.push(rail(vec![
+                    DVec3::new(x, 20.0, 0.0),
+                    DVec3::new(x + dx, 50.0, 0.0),
+                ]));
+            }
+        }
+        lanes[0].next = vec![1, 2];
+        let net_prev = vec![vec![], vec![0], vec![0], vec![1], vec![1], vec![2], vec![2]];
+        Network {
+            lanes,
+            prev: net_prev,
+            ..Default::default()
+        }
+    }
+
+    /// A single-car tram standing across points, 3 m from its middle to them and its body
+    /// 7.5 m either way: J sets the points ahead of its front end, not those under it, and
+    /// says how far they are from that end. Turned round on the track and driven from its rear
+    /// end, the same from that end. With no reach of its own it found the points under it.
+    #[test]
+    fn a_single_car_straddling_points_sets_the_ones_beyond_its_end() {
+        let net = two_sets_of_points();
+        let branch_len = net.lanes[1].length();
+        let on = |along: bool| RailDrive {
+            lane: 0,
+            s: 37.0,
+            along,
+            trail: Default::default(),
+            u: 0.0,
+            body: Default::default(),
+            last_heading: None,
+        };
+        let def = omsi_vehicle::Vehicle {
+            coupling_front: Some(omsi_vehicle::vehicle::Coupling {
+                pos: [0.0, 7.5, 0.3],
+            }),
+            coupling_back: Some(omsi_vehicle::vehicle::Coupling {
+                pos: [0.0, -7.5, 0.3],
+            }),
+            ..Default::default()
+        };
+        let ends = body_ends(&def, false);
+        assert_eq!(ends, (7.5, 7.5));
+        for (along, from_rear) in [(true, false), (false, true)] {
+            let (dist, branches) =
+                switch_ahead(&on(along), &net, None, from_rear, ends).expect("the next points");
+            assert!(
+                branches.iter().all(|b| b.0 >= 3),
+                "the points beyond its end, not those under it: {branches:?}"
+            );
+            assert!(
+                (dist - (branch_len - 4.5)).abs() < 1e-3,
+                "from its end: {dist} (along {along})"
+            );
+            let (under, _) = switch_ahead(&on(along), &net, None, from_rear, (0.0, 0.0)).unwrap();
+            assert!((under - 3.0).abs() < 1e-3, "from its middle: {under}");
+        }
+    }
+
+    /// A part's ends: its couplings, else its box, turned with it.
+    #[test]
+    fn a_parts_ends_are_its_couplings_else_its_box() {
+        let boxed = omsi_vehicle::Vehicle {
+            bounding_box: Some([2.4, 14.0, 3.0, 0.0, 1.0, 1.5]),
+            ..Default::default()
+        };
+        assert_eq!(body_ends(&boxed, false), (8.0, 6.0));
+        assert_eq!(body_ends(&boxed, true), (6.0, 8.0));
+        assert_eq!(body_ends(&Default::default(), false), (0.0, 0.0));
     }
 
     #[test]
