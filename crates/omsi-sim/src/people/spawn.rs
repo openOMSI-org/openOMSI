@@ -166,6 +166,7 @@ impl PeopleSim {
             bad_driving: true,
             no_ticket: false,
             fares_no_ticket: 0,
+            board_when_stopped: false,
             boarding: "auto".into(),
             stand_chance: 0.05,
             short_rides_stand: false,

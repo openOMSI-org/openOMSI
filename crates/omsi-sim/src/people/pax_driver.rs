@@ -354,9 +354,10 @@ impl PeopleSim {
             let pp = self.pax_mut(i).unwrap();
             pp.reach = false;
             pp.taking_ticket = None;
-            self.tickets_sold += 1;
             if self.no_ticket {
                 self.fares_no_ticket += 1;
+            } else {
+                self.tickets_sold += 1;
             }
             self.ticket_cash += value;
             self.sales.push((name, value));

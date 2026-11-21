@@ -131,6 +131,7 @@ impl App {
                 self.settings.passenger_hailing && self.settings.passenger_animation == "enhanced";
             humans.bad_driving = self.settings.pax_bad_driving;
             humans.no_ticket = self.settings.pax_no_ticket;
+            humans.board_when_stopped = self.settings.pax_board_when_stopped;
             humans.boarding = self.settings.boarding.clone();
             humans.stand_chance = self.settings.standing_chance;
             humans.short_rides_stand = self.settings.pax_short_rides_stand;
