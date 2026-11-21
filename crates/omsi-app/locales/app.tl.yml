@@ -2931,3 +2931,5 @@
 "Default for every bus": "Default para sa bawat bus"
 "Use for {bus}": "Gamitin para sa {bus}"
 "Profile {name} in use": "Ginagamit ang profile na {name}"
+"Driving end {number} of {count}: {name}": "Kabina {number} sa {count}: {name}"
+"At the wheel in the other cab": "Nasa manibela sa kabilang kabina"

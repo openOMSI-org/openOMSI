@@ -3239,3 +3239,5 @@
 "Default for every bus": "Výchozí pro všechny autobusy"
 "Use for {bus}": "Použít pro {bus}"
 "Profile {name} in use": "Používá se profil {name}"
+"Driving end {number} of {count}: {name}": "Stanoviště {number} z {count}: {name}"
+"At the wheel in the other cab": "U řízení v druhém stanovišti"

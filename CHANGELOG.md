@@ -8,6 +8,29 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Third rail and curve squeal on trams and trains**: `[contact_shoe]`s read the `[third_rail]`
+  under them (`contactshoe_N_volt_rail` and the rest, which the NF6D's PZB takes its codes from),
+  and every car's bogies report the curve under them and when the wheels reach the flange
+  (`boogie_N_invradius`, `boogie_N_wheel_at_limit`), which is what starts the curve squeal. A
+  rail's curve is the map's own, not worked out of the path's samples.
+- **`GetHeightAbovePoint` as in Omsi.exe**: the ray starts 3 m over the point, meets a wire or a
+  wall top on a narrow height profile, and reads 1000 with nothing below it (it read 0, which held
+  the Zweiachser tram's pantograph at the top of its travel).
+- **Every car of a train rocks on its own springs**: each car's body leans out of bends by the force
+  on it and rocks on the rails, with `[rail_body_osc]`'s lever, frequency and decay where the file
+  gives them and the class's springs where it switches them off. Joints go with the cars around
+  them; bogies, couplings and wheel sets stay level. **This changes the default**: the lean is now
+  always on, also without the realistic rail physics (which still add the dip under braking and
+  the bounce), and a car shows half of the lean its springs work out (`ROLL_SHOWN`).
+- **Drive a tram from either cab**: in a train with a cab at each end (the NF6D) walk
+  to the other cab and take its wheel (G), or switch driving ends from the outside view with the
+  interior-camera keys. That cab's own scripts then take the keys, the switches and the indicator,
+  and its cameras, driver figure, sounds, roller blinds and destination displays are its own. Every
+  car with scripts of its own pulls and brakes, and the cars talk over their control cables as in
+  OMSI 2. Camera changes glide inside a coupled part too.
+- **Backing through points keeps the train together**: backing, the vehicle follows the track its
+  train lies on, and the train's rear end takes the way the points are set (or the rear cab's
+  indicator says) and throws them.
 - **mX Graphics (Experimental)** on a Mac: Settings → Graphics → Display → *mX Graphics (Experimental)* draws the game on Metal with [mX](https://github.com/openOMSI-org/mX), openOMSI's own graphics library, instead of wgpu, from the next start. The picture is meant to be the same. It is an early step: the game's shaders do not use mX's bindless textures yet, and in the tests so far it spent less processor time on a frame than wgpu and the same time on the graphics chip. Ray tracing and frame generation stay off with it; where mX cannot open the graphics chip, the game draws with wgpu as before. Off by default. mX's Direct3D 12 and Vulkan have not drawn the game on a real graphics card yet, so Windows and Linux do not offer the switch; `OMSI_MX=on` tries them for one run (without DLSS, FSR 3 and VR), and `OMSI_MX=off` turns mX off for a run on a Mac.
 - **Plugins see the AI vehicles' size**: `omsi.traffic.list()`, `get`, `nearest` and `ahead`
   give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,

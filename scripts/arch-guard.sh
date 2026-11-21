@@ -14,9 +14,10 @@
 # (added minus removed), its tests aside, against $BASE (the pull request's base; locally the
 # merge base with main): the app crate is the glue between the others, new subsystems get
 # crates of their own. A cap on the crate's total stopped every small pull request once main
-# came near it.
+# came near it. A base file that was not rustfmt-clean counts as rustfmt would write it: the
+# format check makes every changed file clean, and the lines that adds are no new code.
 #
-# Needs nothing but python3 (3.8+), git and the checkout.
+# Needs python3 (3.8+), git and the checkout; without rustfmt every file counts as it is.
 set -euo pipefail
 
 repo="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
@@ -82,6 +83,22 @@ def base_rev():
     return None
 
 
+def show(rev, path):
+    """The file `path` at `rev`, or None where it does not exist."""
+    r = subprocess.run(["git", "-C", repo, "show", f"{rev}:{path}"], capture_output=True, encoding="utf-8", errors="replace")
+    return r.stdout if r.returncode == 0 else None
+
+
+def formatted(text):
+    """`text` as rustfmt (with the repository's rustfmt.toml) writes it, or None without rustfmt or on a parse error."""
+    try:
+        r = subprocess.run(["rustfmt", "--emit", "stdout", "--config-path", repo], input=text,
+                           capture_output=True, encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
 def app_growth(base):
     """Lines of Rust a change adds to omsi-app (added minus removed), test files aside."""
     # (-z: a quoted or renamed path would not end in .rs; no renames: a test moved out counts)
@@ -92,7 +109,14 @@ def app_growth(base):
     for record in filter(None, out.split("\0")):
         added, removed, path = record.split("\t", 2)
         if path.endswith(".rs") and added != "-" and not TEST_FILE.search(path):
-            n += int(added) - int(removed)
+            grown = int(added) - int(removed)
+            # The format check makes every changed file rustfmt-clean, so what rustfmt alone adds
+            # to a base file that was not clean is no new code: count against the base as formatted.
+            old, new = show(base, path), show("HEAD", path)
+            old = formatted(old) if old is not None and new is not None else None
+            if old is not None:
+                grown = len(new.splitlines()) - len(old.splitlines())
+            n += grown
     return n
 
 

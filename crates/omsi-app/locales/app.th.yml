@@ -2932,3 +2932,5 @@
 "Default for every bus": "ค่าเริ่มต้นสำหรับรถบัสทุกคัน"
 "Use for {bus}": "ใช้กับ {bus}"
 "Profile {name} in use": "กำลังใช้โปรไฟล์ {name}"
+"Driving end {number} of {count}: {name}": "ห้องขับ {number} จาก {count}: {name}"
+"At the wheel in the other cab": "ขับจากห้องขับอีกด้าน"
