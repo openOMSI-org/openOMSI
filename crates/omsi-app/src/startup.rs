@@ -1,3 +1,4 @@
+#![rustfmt::skip]
 //! Start-up: finding the OMSI 2 installation, the graphics instance, the build, the allocator and the console.
 
 use super::*;
@@ -833,13 +834,11 @@ pub(crate) struct SessionSettings {
     pub(crate) sound_scenery: f32,
     pub(crate) mirror_size: u32,
     pub(crate) rain_quality: u8,
-    /// The `pax_stop_numbers_exact` setting (#3154), read when the map index is built.
-    pub(crate) pax_stop_numbers_exact: bool,
 }
 
 impl Default for SessionSettings {
     fn default() -> SessionSettings {
-        SessionSettings { enhanced_plus: false, enhanced: false, classic: false, clouds: true, sound_scenery: 1.0, mirror_size: 256, rain_quality: 2, pax_stop_numbers_exact: false }
+        SessionSettings { enhanced_plus: false, enhanced: false, classic: false, clouds: true, sound_scenery: 1.0, mirror_size: 256, rain_quality: 2 }
     }
 }
 
@@ -857,7 +856,6 @@ impl SessionSettings {
             sound_scenery: settings.vol_scenery,
             mirror_size: settings.mirror_size,
             rain_quality: crate::rain::quality_of(&settings.rain_quality),
-            pax_stop_numbers_exact: settings.pax_stop_numbers_exact,
         }
     }
 
@@ -889,7 +887,6 @@ impl SessionSettings {
         world.settings.set_sound_scenery(self.sound_scenery);
         world.settings.set_mirror_size(self.mirror_size);
         world.settings.set_rain_quality(self.rain_quality);
-        world.settings.set_stop_numbers_exact(self.pax_stop_numbers_exact);
     }
 
     /// The scene's graphics kind (Vanilla before Enhanced, as the showroom may ask both).
