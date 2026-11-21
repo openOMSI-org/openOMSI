@@ -351,6 +351,27 @@ mod tests {
         assert_eq!(s.switch_set_to(1, 2), Some(true));
     }
 
+    #[test]
+    fn switch_with_german_variable_and_untagged_paths_is_thrown_and_read_back() {
+        let inbox = SceneryInbox::default();
+        let mut s = SceneryState::default();
+        let mut p = omsi_script::Program::default();
+        p.declare_var("Weiche");
+        let inst = SceneryInstance::new(Arc::new(p), &[], crate::SimClock::default(), &[]);
+        let mut switch = SceneryObject::new(inbox.next_key(), 10, DVec3::ZERO, (0, 0), inst, 0);
+        switch.switch_dirs = vec![None, None];
+        inbox.push(SceneryChange::Add(switch));
+        s.take_inbox(&inbox);
+        assert_eq!(s.switch_set_to(10, 0), Some(true));
+        assert_eq!(s.switch_set_to(10, 1), Some(false));
+        s.set_switches(&[(10, 1)]);
+        assert_eq!(s.switch_set_to(10, 1), Some(true));
+        assert_eq!(s.switch_set_to(10, 0), Some(false));
+        s.set_switches(&[(10, 0)]);
+        assert_eq!(s.switch_set_to(10, 0), Some(true));
+        assert_eq!(s.switch_set_to(10, 1), Some(false));
+    }
+
     /// A lamp's script is found by its key, whatever order the loader's threads handed the
     /// lamps over in, and goes with its tile.
     #[test]
