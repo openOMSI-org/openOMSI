@@ -29,21 +29,21 @@ const DEAD: Supply = Supply {
     nominal: 600.0,
 };
 
-/// Scenery beside the track does not stop a rail vehicle, whose box only guesses at the body
-/// in a bend; a buffer stop on the track and another vehicle do, and scenery still stops a bus.
+/// On the rails a car's body meets scenery at its whole width from the top of a platform
+/// up: a pole beside the track inside the body is hit, as are a buffer stop and another
+/// vehicle; a platform's edge under the body, which the real car overhangs, is not.
 #[test]
-fn on_the_rails_only_what_stands_on_the_track_is_in_the_way() {
-    let crashes = |on_rails: bool, vehicle_ahead: bool, across: f64| {
+fn on_the_rails_the_body_hits_what_stands_beside_it_and_overhangs_a_platform() {
+    let crashes = |on_rails: bool, vehicle_ahead: bool, obstacle: crate::collision::Obb| {
         let mut v = vehicle(|d| {
             d.bounding_box = Some([2.0, 2.0, 2.0, 0.0, 3.0, 1.0]);
             d.rolling_resistance = 0.0;
         });
-        let ahead = crate::collision::Obb::point(DVec3::new(across, 4.15, 1.0), 0.025);
         let mut world = crate::collision::CollisionWorld::default();
         if vehicle_ahead {
-            v.dynamic_boxes.push(ahead);
+            v.dynamic_boxes.push(obstacle);
         } else {
-            world.add(ahead);
+            world.add(obstacle);
         }
         v.collision = Some(Arc::new(world));
         if on_rails {
@@ -53,18 +53,97 @@ fn on_the_rails_only_what_stands_on_the_track_is_in_the_way() {
         v.step_physics(0.1);
         v.crashes
     };
-    assert_eq!(
-        crashes(true, false, 0.9),
-        0,
-        "a wall beside the track, inside the body's box"
+    let pole =
+        |across: f64, z: f64| crate::collision::Obb::point(DVec3::new(across, 4.15, z), 0.025);
+    // a platform 30 cm high, its edge 0.8 m from the track's middle, just ahead of the car
+    let platform = crate::collision::Obb::from_box(
+        [2.2, 2.9, 0.3, 0.0, 0.0, 0.15],
+        DVec3::new(1.9, 5.55, 0.0),
+        0.0,
     );
-    assert_eq!(crashes(false, false, 0.9), 1, "the same wall and a bus");
-    assert_eq!(crashes(true, false, 0.0), 1, "a buffer stop on the track");
-    assert_eq!(crashes(true, true, 0.0), 1, "another vehicle on the track");
     assert_eq!(
-        crashes(true, true, 0.9),
+        crashes(true, false, pole(0.9, 1.0)),
         1,
-        "another vehicle at the body's side, outside the strip over the track"
+        "a pole beside the track, inside the body"
+    );
+    assert_eq!(
+        crashes(false, false, pole(0.9, 1.0)),
+        1,
+        "the same pole and a bus"
+    );
+    assert_eq!(
+        crashes(true, false, platform),
+        0,
+        "a platform's edge under the body"
+    );
+    assert_eq!(
+        crashes(false, false, platform),
+        1,
+        "the same platform and a bus"
+    );
+    assert_eq!(
+        crashes(true, false, pole(0.0, 1.0)),
+        1,
+        "a buffer stop on the track"
+    );
+    assert_eq!(
+        crashes(true, false, pole(0.0, 0.1)),
+        1,
+        "something low on the track"
+    );
+    assert_eq!(
+        crashes(true, true, pole(0.0, 1.0)),
+        1,
+        "another vehicle on the track"
+    );
+    assert_eq!(
+        crashes(true, true, pole(0.9, 1.0)),
+        1,
+        "another vehicle at the body's side"
+    );
+}
+
+/// In a bend each car meets scenery where it stands: a pole beside the second car's body,
+/// which the leading car's box does not reach, is in the way, and a platform's edge under
+/// that car is not.
+#[test]
+fn in_a_bend_each_car_meets_what_stands_beside_its_own_body() {
+    let bb = [2.4, 10.0, 3.0, 0.0, 0.0, 1.5];
+    let ty = {
+        let mut ty = (*coupling_test_type(Some(1.0))).clone();
+        ty.def.bounding_box = Some(bb);
+        Arc::new(ty)
+    };
+    let mut v = VehicleInstance::new(ty.clone(), VehicleHost::new(Default::default()));
+    v.attach_trailer_ex(ty, false);
+    v.set_rail_env(Some(env(None, None)));
+    // the second car 20° round the bend behind the first's rear coupling
+    let h = 340.0f64;
+    let (fwd, right) = {
+        let r = h.to_radians();
+        (
+            DVec3::new(r.sin(), r.cos(), 0.0),
+            DVec3::new(r.cos(), -r.sin(), 0.0),
+        )
+    };
+    let middle = DVec3::new(0.0, -5.0, 0.0) - fwd * 5.0;
+    (v.trailers[0].position, v.trailers[0].heading) = (middle, h);
+    let boxes = v.scenery_boxes(bb, (v.position, v.body_heading()), DVec3::ZERO);
+    let lead = crate::collision::Obb::from_box(bb, v.position, v.body_heading());
+    let beside = middle + right * 1.0;
+    let pole = crate::collision::Obb::point(beside + DVec3::Z * 1.5, 0.025);
+    assert!(
+        !pole.overlaps(&lead),
+        "the leading car's box does not reach it"
+    );
+    assert!(
+        boxes.iter().any(|b| pole.overlaps(b)),
+        "the second car's body does"
+    );
+    let platform = crate::collision::Obb::point(beside + DVec3::Z * 0.15, 0.15);
+    assert!(
+        !boxes.iter().any(|b| platform.overlaps(b)),
+        "a platform's edge under the second car's body"
     );
 }
 

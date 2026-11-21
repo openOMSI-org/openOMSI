@@ -27,33 +27,66 @@ pub(super) fn driven_wheels_speed(wheels: impl Iterator<Item = (f32, f32, bool)>
     (n > 0).then(|| sum / n as f32)
 }
 
-/// How far either side of the track's middle a rail vehicle meets scenery (m): just over the gauge.
+/// How far either side of the track's middle a rail vehicle meets scenery under its body
+/// (m): just over the gauge.
 const RAIL_STRIP: f64 = 0.7;
 
+/// How high over the rails a rail car's body clears a platform beside the track (m): the
+/// highest platform of its kind, a tram's kerb of up to 30 cm, a railway's 96 cm, a metro's
+/// level platform.
+fn platform_clear(class: Option<crate::rail::RailClass>) -> f64 {
+    match class {
+        Some(crate::rail::RailClass::Metro) => 1.15,
+        Some(crate::rail::RailClass::Train) => 1.0,
+        _ => 0.35,
+    }
+}
+
 impl VehicleInstance {
-    /// The body's collision box (`bb`, its `[boundingbox]`) standing at `pos` facing `heading`.
-    /// Against `scenery` on the rails, only the strip over the track: the body's one flat box
-    /// swings its ends in a bend into platforms and tunnel walls that clear the real car.
-    /// Against other vehicles always the whole body, so a car side-on to a tram hits it.
-    fn collision_box(
+    /// The boxes a vehicle meets scenery with: its body's collision box (`bb`, its
+    /// `[boundingbox]`) standing at `pos` facing `heading`. On the rails, each car's own box
+    /// where that car stands on the track (the trailing cars as they stood, moved by
+    /// `moved`), at its whole width from the top of a platform up, and below that only the
+    /// strip over the track: the car's body overhangs a platform, as the real one does, and
+    /// a pole or a wall beside the body is hit, in a bend too.
+    pub(super) fn scenery_boxes(
         &self,
         bb: [f32; 6],
-        pos: DVec3,
-        heading: f64,
-        scenery: bool,
-    ) -> crate::collision::Obb {
-        let b = crate::collision::Obb::from_box(bb, pos, heading);
-        match scenery && self.rail_env.is_some() {
-            true => crate::collision::Obb {
+        (pos, heading): (DVec3, f64),
+        moved: DVec3,
+    ) -> Vec<crate::collision::Obb> {
+        let whole = crate::collision::Obb::from_box(bb, pos, heading);
+        if self.rail_env.is_none() {
+            return vec![whole];
+        }
+        let clear = platform_clear(crate::rail::RailClass::of(&self.ty.def));
+        let parts = std::iter::once((whole, pos.z)).chain(self.trailers.iter().filter_map(|t| {
+            let bb = t.ty.def.bounding_box?;
+            let at = t.position + moved;
+            Some((
+                crate::collision::Obb::from_box(bb, at, t.body_heading()),
+                at.z,
+            ))
+        }));
+        let mut out = Vec::new();
+        for (b, rails) in parts {
+            out.push(crate::collision::Obb {
                 half: glam::DVec2::new(b.half.x.min(RAIL_STRIP), b.half.y),
                 ..b
-            },
-            false => b,
+            });
+            if b.z1 > rails + clear {
+                out.push(crate::collision::Obb {
+                    z0: b.z0.max(rails + clear),
+                    ..b
+                });
+            }
         }
+        out
     }
 
     /// The first obstacle the body runs into this step, from `prev` (its position and
-    /// heading before it), with the contact and whether it was already inside it.
+    /// heading before it), with the contact and whether it was already inside it. Other
+    /// vehicles meet the leading car's whole box; scenery meets [`Self::scenery_boxes`].
     fn first_hit(
         &self,
         bb: [f32; 6],
@@ -64,33 +97,42 @@ impl VehicleInstance {
             self.body_heading(),
             body_heading(&self.ty.def, prev.1, false),
         );
-        // [against other vehicles, against scenery]
-        let boxes = [false, true].map(|s| self.collision_box(bb, self.position, now, s));
+        let moved = self.position - prev.0;
+        let body = crate::collision::Obb::from_box(bb, self.position, now);
+        let prev_body = crate::collision::Obb::from_box(bb, prev.0, before);
+        // (each box this step with the same box before it)
+        let scenery_boxes = self
+            .scenery_boxes(bb, (self.position, now), moved)
+            .into_iter()
+            .zip(self.scenery_boxes(bb, (prev.0, before), DVec3::ZERO));
+        let mut candidates: Vec<(
+            crate::collision::Obb,
+            crate::collision::Obb,
+            crate::collision::Obb,
+        )> = Vec::new();
+        if let Some(cw) = self.collision.as_ref() {
+            for (b, b_prev) in scenery_boxes {
+                for o in cw.obstacles_near(&b) {
+                    candidates.push((o, b, b_prev));
+                }
+            }
+        }
+        for o in self.dynamic_boxes.iter().copied() {
+            candidates.push((o, body, prev_body));
+        }
         // an obstacle we were already inside before this step (spawned on it, pushed into
         // it) never blocks: only entering an obstacle does
-        let prev_boxes = [false, true].map(|s| self.collision_box(bb, prev.0, before, s));
-        let mut obstacles = self
-            .collision
-            .as_ref()
-            .map(|cw| cw.obstacles_near(&boxes[1]))
-            .unwrap_or_default();
-        let scenery = obstacles.len();
-        obstacles.extend(self.dynamic_boxes.iter().copied());
-        obstacles
-            .iter()
-            .copied()
-            .enumerate()
-            .find_map(|(i, obstacle)| {
-                let k = usize::from(i < scenery);
-                let (obb, prev_obb) = (&boxes[k], &prev_boxes[k]);
+        candidates
+            .into_iter()
+            .find_map(|(obstacle, obb, prev_obb)| {
                 let was_overlapping = if obstacle.mass > 0.0 {
                     let mut previous = obstacle;
                     previous.center -= obstacle.velocity * dt as f64;
-                    previous.overlaps(prev_obb)
+                    previous.overlaps(&prev_obb)
                 } else {
-                    obstacle.overlaps(prev_obb)
+                    obstacle.overlaps(&prev_obb)
                 };
-                if !obstacle.overlaps(obb)
+                if !obstacle.overlaps(&obb)
                     || (was_overlapping && obstacle.mass <= 0.0)
                     || (obstacle.id >= 0 && self.knocked.contains(&obstacle.id))
                 {
