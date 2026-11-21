@@ -177,7 +177,7 @@ fn stop_brake_interlock_releases_held_brake_only_when_disengaging() {
     let mut vehicle = crate::schedule::tests::script_test_vehicle(
         "{trigger:bus_20h-switch}\n(L.L.bremse_halte_sw) ! (S.L.bremse_halte_sw)\n{end}\n\
          {trigger:cp_stop_brake_toggle}\n(L.L.bremse_halte_sw) ! (S.L.bremse_halte_sw)\n{end}\n",
-        "bremse_halte_sw\n",
+        "bremse_halte_sw\nbremse_halte\n",
         "",
     );
     let ty = Arc::make_mut(&mut vehicle.ty);
@@ -208,13 +208,28 @@ fn stop_brake_interlock_releases_held_brake_only_when_disengaging() {
     assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(1.0));
     assert_eq!(p.axes.brake, 1.0);
 
-    // 2. Keyboard disengaging releases held brake:
+    // 2. Keyboard disengaging releases held brake even when bremse_halte is latched:
+    p.vehicle.set_var("bremse_halte", 1.0);
     let was = omsi_sim::input::is_stop_brake_interlocked(&p.vehicle);
     assert!(was);
     p.action("bus_20h-switch", true);
     omsi_sim::input::maybe_release_held_brake(&p.vehicle, &mut p.axes, was);
     assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(0.0));
+    assert_eq!(p.vehicle.var("bremse_halte"), Some(1.0));
     assert_eq!(p.axes.brake, 0.0);
+
+    // 2b. Keyboard disengaging preserves held brake if brake_key is actively held:
+    p.action("bus_20h-switch", true); // engage again
+    assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(1.0));
+    p.axes.brake = 0.8;
+    p.axes.brake_key = true;
+    let was = omsi_sim::input::is_stop_brake_interlocked(&p.vehicle);
+    assert!(was);
+    p.action("bus_20h-switch", true); // disengage
+    assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(0.0));
+    omsi_sim::input::maybe_release_held_brake(&p.vehicle, &mut p.axes, was);
+    assert_eq!(p.axes.brake, 0.8);
+    p.axes.brake_key = false;
 
     // 3. Cab control (mouse click) engaging preserves held brake:
     p.axes.brake = 1.0;

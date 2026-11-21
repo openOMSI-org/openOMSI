@@ -266,9 +266,11 @@ impl KeyboardAxes {
 }
 
 pub fn is_stop_brake_interlocked(v: &crate::VehicleInstance) -> bool {
-    v.var("bremse_halte_sw").unwrap_or(0.0) > 0.5
-        || v.var("bremse_halte").unwrap_or(0.0) > 0.5
-        || v.var("bus_stop_brake").unwrap_or(0.0) > 0.5
+    if let Some(sw) = v.var("bremse_halte_sw").or_else(|| v.var("bus_stop_brake")) {
+        sw > 0.5
+    } else {
+        v.var("bremse_halte").unwrap_or(0.0) > 0.5
+    }
 }
 
 pub fn maybe_release_held_brake(
@@ -277,7 +279,9 @@ pub fn maybe_release_held_brake(
     was_interlocked: bool,
 ) {
     if was_interlocked && !is_stop_brake_interlocked(v) && v.physics.velocity_kmh().abs() < 1.0 {
-        axes.brake = 0.0;
+        if !axes.brake_key {
+            axes.brake = 0.0;
+        }
     }
 }
 
