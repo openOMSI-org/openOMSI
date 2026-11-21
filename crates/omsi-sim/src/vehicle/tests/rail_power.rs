@@ -128,7 +128,9 @@ fn in_a_bend_each_car_meets_what_stands_beside_its_own_body() {
     };
     let middle = DVec3::new(0.0, -5.0, 0.0) - fwd * 5.0;
     (v.trailers[0].position, v.trailers[0].heading) = (middle, h);
-    let boxes = v.scenery_boxes(Some(bb), (v.position, v.body_heading()), DVec3::ZERO);
+    let boxes = v
+        .scenery_boxes(Some(bb), (v.position, v.body_heading()), DVec3::ZERO)
+        .collect::<Vec<_>>();
     let lead = crate::collision::Obb::from_box(bb, v.position, v.body_heading());
     let beside = middle + right * 1.0;
     let pole = crate::collision::Obb::point(beside + DVec3::Z * 1.5, 0.025);
@@ -294,4 +296,31 @@ fn a_rail_wheel_turns_once_with_the_rails() {
             w.turned - t
         );
     }
+}
+
+/// Off the rails a vehicle meets scenery with its one whole box, as on `main`, its trailers
+/// (an articulated bus's sections) included in it as before; on the rails each car with a box
+/// gives the strip over the track and the part above a platform.
+#[test]
+fn a_road_vehicle_meets_scenery_with_its_one_box() {
+    let bb = [2.4, 10.0, 3.0, 0.0, 0.0, 1.5];
+    let ty = {
+        let mut ty = (*coupling_test_type(Some(1.0))).clone();
+        ty.def.bounding_box = Some(bb);
+        Arc::new(ty)
+    };
+    let mut v = VehicleInstance::new(ty.clone(), VehicleHost::new(Default::default()));
+    v.attach_trailer_ex(ty, false);
+    let at = (v.position, v.body_heading());
+    let road: Vec<_> = v.scenery_boxes(Some(bb), at, DVec3::ZERO).collect();
+    let whole = crate::collision::Obb::from_box(bb, at.0, at.1);
+    assert!(
+        matches!(road.as_slice(), [b] if b.center == whole.center && b.half == whole.half
+            && (b.z0, b.z1) == (whole.z0, whole.z1)),
+        "{road:?}"
+    );
+    assert_eq!(v.scenery_boxes(None, at, DVec3::ZERO).count(), 0);
+    v.set_rail_env(Some(env(None, None)));
+    assert_eq!(v.scenery_boxes(Some(bb), at, DVec3::ZERO).count(), 4);
+    assert_eq!(v.scenery_boxes(None, at, DVec3::ZERO).count(), 2);
 }

@@ -50,53 +50,61 @@ impl VehicleInstance {
     /// that only the strip over the track, on the track's middle whatever way the box is set
     /// off to the side: the car's body overhangs a platform, as the real one does, and a pole
     /// or a wall beside the body is hit, in a bend too. A coupled car with a box counts though
-    /// the leading car has none.
+    /// the leading car has none. They are made as they are asked for, not kept in a list: this
+    /// runs every physics step for every vehicle with collisions.
     pub(super) fn scenery_boxes(
         &self,
         bb: Option<[f32; 6]>,
         (pos, heading): (DVec3, f64),
         moved: DVec3,
-    ) -> Vec<crate::collision::Obb> {
-        let Some(_) = self.rail_env else {
-            return bb
-                .map(|bb| crate::collision::Obb::from_box(bb, pos, heading))
-                .into_iter()
-                .collect();
+    ) -> impl Iterator<Item = crate::collision::Obb> + '_ {
+        let rail = self.rail_env.is_some();
+        let clear = if rail {
+            platform_clear(crate::rail::RailClass::of(&self.ty.def))
+        } else {
+            0.0
         };
-        let clear = platform_clear(crate::rail::RailClass::of(&self.ty.def));
-        let parts =
-            bb.map(|bb| (bb, pos, heading))
-                .into_iter()
-                .chain(self.trailers.iter().filter_map(|t| {
-                    Some((t.ty.def.bounding_box?, t.position + moved, t.body_heading()))
-                }));
-        let mut out = Vec::new();
-        for (bb, at, heading) in parts {
-            // (the strip lies on the track: the box's length, not its offset to the side)
-            let strip = [
-                bb[0].min(2.0 * RAIL_STRIP as f32),
-                bb[1],
-                bb[2],
-                0.0,
-                bb[4],
-                bb[5],
-            ];
-            out.push(crate::collision::Obb::from_box(strip, at, heading));
-            let b = crate::collision::Obb::from_box(bb, at, heading);
-            if b.z1 > at.z + clear {
-                out.push(crate::collision::Obb {
+        let trailers = self
+            .trailers
+            .iter()
+            .filter(move |_| rail)
+            .filter_map(move |t| {
+                Some((t.ty.def.bounding_box?, t.position + moved, t.body_heading()))
+            });
+        bb.map(|bb| (bb, pos, heading))
+            .into_iter()
+            .chain(trailers)
+            .flat_map(move |(bb, at, heading)| {
+                let b = crate::collision::Obb::from_box(bb, at, heading);
+                if !rail {
+                    return [Some(b), None];
+                }
+                // (the strip lies on the track: the box's length, not its offset to the side)
+                let strip = [
+                    bb[0].min(2.0 * RAIL_STRIP as f32),
+                    bb[1],
+                    bb[2],
+                    0.0,
+                    bb[4],
+                    bb[5],
+                ];
+                let upper = (b.z1 > at.z + clear).then(|| crate::collision::Obb {
                     z0: b.z0.max(at.z + clear),
                     ..b
                 });
-            }
-        }
-        out
+                [
+                    Some(crate::collision::Obb::from_box(strip, at, heading)),
+                    upper,
+                ]
+            })
+            .flatten()
     }
 
     /// The first obstacle the body runs into this step, from `prev` (its position and
     /// heading before it), with the contact and whether it was already inside it. Other
     /// vehicles meet the leading car's whole box (`bb`, None without one); scenery meets
-    /// [`Self::scenery_boxes`].
+    /// [`Self::scenery_boxes`]. Each obstacle is tried as it is found, the scenery near each
+    /// box first, then the other vehicles.
     fn first_hit(
         &self,
         bb: Option<[f32; 6]>,
@@ -109,33 +117,26 @@ impl VehicleInstance {
         );
         let moved = self.position - prev.0;
         // (each box this step with the same box before it)
-        let scenery_boxes = self
-            .scenery_boxes(bb, (self.position, now), moved)
-            .into_iter()
-            .zip(self.scenery_boxes(bb, (prev.0, before), DVec3::ZERO));
-        let mut candidates: Vec<(
-            crate::collision::Obb,
-            crate::collision::Obb,
-            crate::collision::Obb,
-        )> = Vec::new();
-        if let Some(cw) = self.collision.as_ref() {
-            for (b, b_prev) in scenery_boxes {
-                for o in cw.obstacles_near(&b) {
-                    candidates.push((o, b, b_prev));
-                }
-            }
-        }
-        if let Some(bb) = bb {
+        let scenery = self.collision.as_deref().into_iter().flat_map(move |cw| {
+            self.scenery_boxes(bb, (self.position, now), moved)
+                .zip(self.scenery_boxes(bb, (prev.0, before), DVec3::ZERO))
+                .flat_map(move |(b, b_prev)| {
+                    cw.obstacles_near(&b)
+                        .into_iter()
+                        .map(move |o| (o, b, b_prev))
+                })
+        });
+        let vehicles = bb.into_iter().flat_map(move |bb| {
             let body = crate::collision::Obb::from_box(bb, self.position, now);
             let prev_body = crate::collision::Obb::from_box(bb, prev.0, before);
-            for o in self.dynamic_boxes.iter().copied() {
-                candidates.push((o, body, prev_body));
-            }
-        }
+            self.dynamic_boxes
+                .iter()
+                .map(move |&o| (o, body, prev_body))
+        });
         // an obstacle we were already inside before this step (spawned on it, pushed into
         // it) never blocks: only entering an obstacle does
-        candidates
-            .into_iter()
+        scenery
+            .chain(vehicles)
             .find_map(|(obstacle, obb, prev_obb)| {
                 let was_overlapping = if obstacle.mass > 0.0 {
                     let mut previous = obstacle;
