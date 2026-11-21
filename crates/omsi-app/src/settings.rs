@@ -1546,3 +1546,7 @@ pub mod bus_seats;
 #[path = "settings/passenger_connections_tests.rs"]
 #[rustfmt::skip]
 mod passenger_connections_tests;
+
+#[cfg(test)]
+#[path = "settings/axis_dead_zones_tests.rs"]
+mod axis_dead_zones_tests;
