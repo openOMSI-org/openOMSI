@@ -11,20 +11,15 @@ fn shadow_caster_pos(e: u32, wp: vec4<f32>) -> vec4<f32> {
 }
 
 @vertex
-fn vs_shadow(in: VsIn) -> VsOut {
+fn vs_shadow(in: VsIn) -> ShadowOut {
     let e = draw_list[in.inst];
     let m = model_matrix(e);
     let wp = shadow_caster_pos(e, m * vec4<f32>(in.pos, 1.0) + vec4<f32>(tree_sway(in.pos, m), 0.0));
-    var out: VsOut;
+    var out: ShadowOut;
     out.clip = camera.light_view_proj * wp;
-    out.world = wp.xyz;
-    out.normal = in.normal;
-    out.spec_sun = vec3<f32>(0.0);
-    out.spec_sky = vec3<f32>(0.0);
     let pr = inst_params[e * 2u];
     out.uv = in.uv + pr.zw;
     out.params = pr;
-    out.params2 = inst_params[e * 2u + 1u];
     if (pr.y < 0.5) {
         out.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
     }
@@ -32,20 +27,15 @@ fn vs_shadow(in: VsIn) -> VsOut {
 }
 
 @vertex
-fn vs_shadow_close(in: VsIn) -> VsOut {
+fn vs_shadow_close(in: VsIn) -> ShadowOut {
     let e = draw_list[in.inst];
     let m = model_matrix(e);
     let wp = shadow_caster_pos(e, m * vec4<f32>(in.pos, 1.0) + vec4<f32>(tree_sway(in.pos, m), 0.0));
-    var out: VsOut;
+    var out: ShadowOut;
     out.clip = camera.light_view_proj_close * wp;
-    out.world = wp.xyz;
-    out.normal = in.normal;
-    out.spec_sun = vec3<f32>(0.0);
-    out.spec_sky = vec3<f32>(0.0);
     let pr = inst_params[e * 2u];
     out.uv = in.uv + pr.zw;
     out.params = pr;
-    out.params2 = inst_params[e * 2u + 1u];
     if (pr.y < 0.5) {
         out.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
     }
@@ -53,20 +43,15 @@ fn vs_shadow_close(in: VsIn) -> VsOut {
 }
 
 @vertex
-fn vs_shadow_far(in: VsIn) -> VsOut {
+fn vs_shadow_far(in: VsIn) -> ShadowOut {
     let e = draw_list[in.inst];
     let m = model_matrix(e);
     let wp = shadow_caster_pos(e, m * vec4<f32>(in.pos, 1.0) + vec4<f32>(tree_sway(in.pos, m), 0.0));
-    var out: VsOut;
+    var out: ShadowOut;
     out.clip = camera.light_view_proj_far * wp;
-    out.world = wp.xyz;
-    out.normal = in.normal;
-    out.spec_sun = vec3<f32>(0.0);
-    out.spec_sky = vec3<f32>(0.0);
     let pr = inst_params[e * 2u];
     out.uv = in.uv + pr.zw;
     out.params = pr;
-    out.params2 = inst_params[e * 2u + 1u];
     if (pr.y < 0.5) {
         out.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
     }
@@ -79,22 +64,17 @@ fn vs_shadow_far(in: VsIn) -> VsOut {
 const LAMP_ENTRY_BITS: u32 = 26u;
 
 @vertex
-fn vs_shadow_lamp(in: VsIn) -> VsOut {
+fn vs_shadow_lamp(in: VsIn) -> ShadowOut {
     let raw = draw_list[in.inst];
     let e = raw & ((1u << LAMP_ENTRY_BITS) - 1u);
     let k = raw >> LAMP_ENTRY_BITS;
     let m = model_matrix(e);
     let wp = m * vec4<f32>(in.pos, 1.0) + vec4<f32>(tree_sway(in.pos, m), 0.0);
-    var out: VsOut;
+    var out: ShadowOut;
     out.clip = camera.lamp_view_proj[k] * wp;
-    out.world = wp.xyz;
-    out.normal = in.normal;
-    out.spec_sun = vec3<f32>(0.0);
-    out.spec_sky = vec3<f32>(0.0);
     let pr = inst_params[e * 2u];
     out.uv = in.uv + pr.zw;
     out.params = pr;
-    out.params2 = inst_params[e * 2u + 1u];
     if (pr.y < 0.5) {
         out.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
     }
@@ -102,7 +82,7 @@ fn vs_shadow_lamp(in: VsIn) -> VsOut {
 }
 
 @fragment
-fn fs_shadow(in: FsIn) {
+fn fs_shadow(in: ShadowIn) {
 }
 
 // Reflection rays need the window surface as well as the opaque interior behind it.
@@ -127,7 +107,7 @@ fn fs_puddle_glass_depth(in: FsIn) {
 
 // (the shadow and rain maps, drawn at their own size: their textures' mips as they are)
 @fragment
-fn fs_shadow_test(in: FsIn) {
+fn fs_shadow_test(in: ShadowIn) {
     cutout_coverage(in.uv, in.params, 0.0, 1.0);
 }
 

@@ -8771,3 +8771,15 @@ _version: 2
   en: "No saved situation of this map yet"
 "Saved as \"{}\"":
   en: "Saved as \"{}\""
+"A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.":
+  en: "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one."
+"Rename the profile":
+  en: "Rename the profile"
+"Delete this profile?":
+  en: "Delete this profile?"
+"Default for every bus":
+  en: "Default for every bus"
+"Use for {bus}":
+  en: "Use for {bus}"
+"Profile {name} in use":
+  en: "Profile {name} in use"

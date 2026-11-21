@@ -31,8 +31,7 @@ impl Passing {
     /// the oncoming traffic (`half_width` its own half width).
     pub fn clear_at(&self, half_width: f32) -> f32 {
         self.until
-            + self.back
-                * crate::traffic::ramp_progress_for(self.side, half_width + ONCOMING_ROOM)
+            + self.back * crate::traffic::ramp_progress_for(self.side, half_width + ONCOMING_ROOM)
     }
 }
 
@@ -223,7 +222,10 @@ impl AiCar {
 
     /// The side's doors to open at the stop it is boarding at (`AI_Scheduled_AtStation_Side`).
     pub fn at_station_side(&self) -> f32 {
-        self.bus.as_ref().map(|b| b.at_station_side()).unwrap_or(0.0)
+        self.bus
+            .as_ref()
+            .map(|b| b.at_station_side())
+            .unwrap_or(0.0)
     }
 
     /// Standing at one of its stops (doors open, waiting for the departure, pulling out).
@@ -246,7 +248,10 @@ impl AiCar {
 
     /// Seconds it will still stand at its stop.
     pub fn standing_for(&self, day_time: f64) -> f32 {
-        self.bus.as_ref().map(|b| b.standing_for(day_time)).unwrap_or(0.0)
+        self.bus
+            .as_ref()
+            .map(|b| b.standing_for(day_time))
+            .unwrap_or(0.0)
     }
 }
 
@@ -272,7 +277,16 @@ pub fn car_foot(c: &AiCar, ahead: f32) -> Footprint {
     let h = c.vehicle.heading.to_radians();
     let (fwd, right) = (DVec2::new(h.sin(), h.cos()), DVec2::new(h.cos(), -h.sin()));
     let center = c.vehicle.position.truncate() + fwd * ((st.front + ahead - st.rear) * 0.5) as f64;
-    Footprint { car: usize::MAX, center, fwd, right, half_len: ((st.front + ahead + st.rear) * 0.5) as f64, half_w: c.half_width as f64, speed: st.speed, z: c.vehicle.position.z }
+    Footprint {
+        car: usize::MAX,
+        center,
+        fwd,
+        right,
+        half_len: ((st.front + ahead + st.rear) * 0.5) as f64,
+        half_w: c.half_width as f64,
+        speed: st.speed,
+        z: c.vehicle.position.z,
+    }
 }
 
 impl Footprint {
@@ -386,8 +400,18 @@ pub fn vehicle_bodies(v: &VehicleInstance) -> Vec<crate::collision::Obb> {
 /// bus - its saloon display stood on the first stop for the whole trip. `remaining` is the
 /// number of stops still to come.
 pub fn ibis_to_next_stop(v: &mut VehicleInstance, remaining: usize) {
-    let Some(ri) = v.var("IBIS_RouteIndex").filter(|r| *r >= 0.0) else { return };
-    let Some(n) = v.host.hof.as_ref().and_then(|h| h.info_busstop_lists.get(ri as usize)).map(|l| l.len()) else { return };
+    let Some(ri) = v.var("IBIS_RouteIndex").filter(|r| *r >= 0.0) else {
+        return;
+    };
+    let Some(n) = v
+        .host
+        .hof
+        .as_ref()
+        .and_then(|h| h.info_busstop_lists.get(ri as usize))
+        .map(|l| l.len())
+    else {
+        return;
+    };
     if n == 0 || v.var("IBIS_busstop").is_none() {
         return;
     }
@@ -409,7 +433,11 @@ pub const RAIL_TRAIL: f64 = 400.0;
 
 /// Note where an AI rail vehicle is: `odometer` (m) and the point of its way there. A jump
 /// (put somewhere else, turned round at a terminus) starts the trail afresh.
-pub fn record_rail_trail(trail: &mut std::collections::VecDeque<(f64, DVec3)>, odometer: f64, here: DVec3) {
+pub fn record_rail_trail(
+    trail: &mut std::collections::VecDeque<(f64, DVec3)>,
+    odometer: f64,
+    here: DVec3,
+) {
     if let Some(&(u, p)) = trail.back() {
         if (here - p).truncate().length() > (odometer - u).abs() + 2.0 {
             trail.clear();
@@ -431,7 +459,12 @@ pub fn record_rail_trail(trail: &mut std::collections::VecDeque<(f64, DVec3)>, o
 /// came along. (Its way knows only the lane it came off; farther back it runs straight on,
 /// and a train's last cars stood beside the track after a pair of points.) Where the trail
 /// does not reach - the last half metre, a vehicle just put there - the way.
-pub fn rail_behind(trail: &std::collections::VecDeque<(f64, DVec3)>, state: &AiState, net: &Network, d: f64) -> DVec3 {
+pub fn rail_behind(
+    trail: &std::collections::VecDeque<(f64, DVec3)>,
+    state: &AiState,
+    net: &Network,
+    d: f64,
+) -> DVec3 {
     let u = state.odometer as f64 - d;
     let newest = trail.back().map_or(f64::MIN, |b| b.0);
     if u >= newest {
@@ -487,7 +520,9 @@ pub fn extents(ty: &VehicleType, length: f32) -> (f32, f32, f32) {
         // without a `[boundingbox]` the model's own box, as Omsi.exe takes it (0x7b5da4):
         // the Berlin S-Bahn's cars, 18 m long, counted as 12 m ones
         _ => match ty.model_box() {
-            Some((lo, hi)) if hi.y - lo.y > 1.0 => (hi.y.max(0.5), (-lo.y).max(0.5), (hi.x.max(-lo.x)).max(0.5)),
+            Some((lo, hi)) if hi.y - lo.y > 1.0 => {
+                (hi.y.max(0.5), (-lo.y).max(0.5), (hi.x.max(-lo.x)).max(0.5))
+            }
             _ => (length * 0.5, length * 0.5, 0.9),
         },
     };
@@ -511,28 +546,55 @@ pub fn scale_reaction(reaction: f32, factor: f32) -> f32 {
 }
 
 /// The driver of a random car: how fast, how close, how patient (see `AiState`).
-pub fn personality(state: &mut AiState, seed: u64, heavy: bool) {
+pub fn personality(state: &mut AiState, seed: u64, heavy: bool, rowdy_factor: Option<(f32, f32)>) {
     let ru = |k: u32| ((seed >> k) & 0xff) as f32 / 255.0;
     let rg = |k: u64| random::draw_gaussian(seed, 50000 + k);
 
-    state.desire = if heavy {
+    let rowdy = rowdy_factor.map(|(a, b)| {
+        let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+        lo + (hi - lo) * ru(3)
+    });
+
+    state.desire = if let Some(r) = rowdy {
+        // OMSI 2: -1.0 -> 87%, 0.0 -> 110%, +1.0 -> 131%
+        let base = if r < 0.0 {
+            1.10 + r * 0.23
+        } else {
+            1.10 + r * 0.21
+        };
+        if heavy {
+            // A lorry or a bus keeps a slower cruise, with floor at 0.80 to hold timetable, capped at 1.0.
+            (0.93 + (base - 1.10) + 0.02 * rg(3)).clamp(0.80, 1.0)
+        } else {
+            (base + 0.02 * rg(3)).clamp(0.5, 2.0)
+        }
+    } else if heavy {
         (0.93 + 0.05 * rg(3)).clamp(0.8, 1.2)
     } else {
         (1.01 + 0.11 * rg(3)).clamp(0.7, 1.3)
     };
-    state.headway = 1.4 + 0.2 * rg(11);
-    state.min_gap = 1.6 + 1.4 * ru(19);
-    state.accel = if heavy {
-        0.8 + 0.4 * ru(27)
-    } else {
-        1.3 + 1.0 * ru(27)
-    };
-    state.decel = if heavy { 1.6 } else { 2.0 + 0.8 * ru(35) };
-    state.accept_gap = (4.0 + 1.0 * rg(43)).max(2.0);
-    state.reaction = (0.8 + 0.2 * rg(51)).max(0.2);
 
-    state.honk_factor = (1.0 + 0.2 * rg(8)).max(0.2);
-    state.amber_factor = (0.03 + 0.01 * rg(9)).max(0.0);
+    let r_bias = rowdy.map(|r| r.clamp(-1.5, 1.5)).unwrap_or(0.0);
+
+    state.headway = (1.4 - 0.15 * r_bias + 0.2 * rg(11)).max(0.8);
+    state.min_gap = (1.6 - 0.2 * r_bias + 1.4 * ru(19)).max(1.0);
+    state.accel = if heavy {
+        (0.8 + 0.4 * ru(27) + 0.15 * r_bias).max(0.5)
+    } else {
+        (1.3 + 1.0 * ru(27) + 0.25 * r_bias).max(0.6)
+    };
+    state.decel = if heavy {
+        1.6
+    } else {
+        (2.0 + 0.8 * ru(35) + 0.2 * r_bias).max(1.0)
+    };
+    state.accept_gap =
+        (4.0 - 0.4 * r_bias + 1.0 * rg(43)).max(if rowdy.is_some() { 1.5 } else { 2.0 });
+    state.reaction = (0.8 - 0.1 * r_bias + 0.2 * rg(51)).max(0.2);
+
+    state.honk_factor =
+        (1.0 - 0.25 * r_bias + 0.2 * rg(8)).max(if rowdy.is_some() { 0.1 } else { 0.2 });
+    state.amber_factor = (0.03 + 0.02 * r_bias + 0.01 * rg(9)).clamp(0.0, 0.2);
     // the hardest braking of ordinary driving: a lorry's or a bus's driver stays further
     // under the emergency stop's ceiling than a car's
     let r2 = (((seed >> 7) ^ (seed >> 41)) & 0xff) as f32 / 255.0;
@@ -549,7 +611,10 @@ pub const AIRCRAFT_KMH: f32 = 280.0;
 pub fn is_bicycle(def: &omsi_vehicle::Vehicle) -> bool {
     let path = def.path.to_string_lossy().to_ascii_lowercase();
     path.rsplit(['/', '\\']).take(2).any(|part| {
-        part.contains("fahrrad") || part.contains("bicycle") || part.contains("bicicleta") || matches!(part, "bike" | "bike.ovh")
+        part.contains("fahrrad")
+            || part.contains("bicycle")
+            || part.contains("bicicleta")
+            || matches!(part, "bike" | "bike.ovh")
     })
 }
 
@@ -567,7 +632,11 @@ mod bicycle_tests {
             "Vehicles/Bicicleta/bicicleta.ovh",
             "Vehicles\\Bicycle\\bike.ovh",
         ] {
-            let def = Vehicle { path: path.into(), mass: 0.3, ..Default::default() };
+            let def = Vehicle {
+                path: path.into(),
+                mass: 0.3,
+                ..Default::default()
+            };
             assert!(is_bicycle(&def), "{path}");
         }
     }
@@ -580,12 +649,81 @@ mod bicycle_tests {
             ("Vehicles/Motorcycles/Scooter.ovh", 0.3),
             ("Vehicles/Sedan/sedan.ovh", 0.95),
             ("/home/Bike/OMSI/Vehicles/Sedan/sedan.ovh", 0.95),
-            ("C:\\Bicycle\\OMSI\\Vehicles\\Motorcycles\\scooter.ovh", 0.125),
+            (
+                "C:\\Bicycle\\OMSI\\Vehicles\\Motorcycles\\scooter.ovh",
+                0.125,
+            ),
             ("/games/Fahrrad/OMSI/Vehicles/Sedan/sedan.ovh", 0.95),
         ] {
-            let def = Vehicle { path: path.into(), mass, ..Default::default() };
+            let def = Vehicle {
+                path: path.into(),
+                mass,
+                ..Default::default()
+            };
             assert!(!is_bicycle(&def), "{path} ({mass} t)");
         }
+    }
+}
+
+#[cfg(test)]
+mod personality_tests {
+    use super::personality;
+    use crate::traffic::AiState;
+
+    #[test]
+    fn rowdy_factor_influences_speed_desire_and_driving_personality() {
+        let mut slow_st = AiState::new(0, 0.0, 12345);
+        personality(&mut slow_st, 12345, false, Some((-1.0, -1.0)));
+        assert!(
+            (slow_st.desire - 0.87).abs() < 0.06,
+            "desire {:.3} expected ~0.87",
+            slow_st.desire
+        );
+
+        let mut neutral_st = AiState::new(0, 0.0, 12345);
+        personality(&mut neutral_st, 12345, false, Some((0.0, 0.0)));
+        assert!(
+            (neutral_st.desire - 1.10).abs() < 0.06,
+            "desire {:.3} expected ~1.10",
+            neutral_st.desire
+        );
+
+        let mut fast_st = AiState::new(0, 0.0, 12345);
+        personality(&mut fast_st, 12345, false, Some((1.0, 1.0)));
+        assert!(
+            (fast_st.desire - 1.31).abs() < 0.06,
+            "desire {:.3} expected ~1.31",
+            fast_st.desire
+        );
+
+        assert!(fast_st.desire > slow_st.desire);
+        assert!(fast_st.headway < slow_st.headway);
+        assert!(fast_st.accel > slow_st.accel);
+
+        let mut heavy_st = AiState::new(0, 0.0, 12345);
+        personality(&mut heavy_st, 12345, true, Some((0.0, 0.0)));
+        assert!(
+            (heavy_st.desire - 0.93).abs() < 0.06,
+            "desire {:.3} expected ~0.93",
+            heavy_st.desire
+        );
+        assert!(heavy_st.desire < neutral_st.desire);
+
+        let mut heavy_fast = AiState::new(0, 0.0, 12345);
+        personality(&mut heavy_fast, 12345, true, Some((1.0, 1.0)));
+        assert!(
+            heavy_fast.desire <= 1.0,
+            "heavy desire {:.3} should not exceed limit",
+            heavy_fast.desire
+        );
+
+        let mut heavy_slow = AiState::new(0, 0.0, 12345);
+        personality(&mut heavy_slow, 12345, true, Some((-1.0, -1.0)));
+        assert!(
+            heavy_slow.desire >= 0.80,
+            "heavy desire {:.3} should stay at or above 0.80 to hold timetable",
+            heavy_slow.desire
+        );
     }
 }
 
@@ -609,16 +747,23 @@ impl TrafficSim {
         bus: Option<BusSetup>,
     ) -> u64 {
         let mut state = AiState::new(lane, s, seed);
-        state.veh_type = if bus.is_some() { -1 } else { ty.def.ai_veh_type };
+        state.veh_type = if bus.is_some() {
+            -1
+        } else {
+            ty.def.ai_veh_type
+        };
         if bus.is_none() {
-            state.traffic_pool = self.types.iter().find(|t| Arc::ptr_eq(&t.0, &ty))
+            state.traffic_pool = self
+                .types
+                .iter()
+                .find(|t| Arc::ptr_eq(&t.0, &ty))
                 .and_then(|t| self.group_uvg[t.3])
                 .map(|pool| (pool, self.uvg_defaults.clone()));
         }
         state.plan_next(&self.net);
         // heavy vehicles (trucks, vans) cruise slower, which is what gets them overtaken
         let heavy = ty.def.mass > 6.0 || bus.is_some();
-        personality(&mut state, seed, heavy);
+        personality(&mut state, seed, heavy, ty.def.rowdy_factor);
         state.reaction = scale_reaction(state.reaction, self.reaction_factor);
         state.max_speed_kmh = if kind == LaneKind::Air {
             AIRCRAFT_KMH
