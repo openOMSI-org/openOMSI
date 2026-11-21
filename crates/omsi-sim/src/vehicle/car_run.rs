@@ -159,53 +159,43 @@ pub(super) struct Cables {
     logged: HashMap<(usize, VarId), f32>,
     /// What was last logged (`OMSI_DEBUG_CAR_VARS`), and how many times.
     watched: HashMap<(usize, bool, usize), (String, u32)>,
+    /// Working storage of [`run_cables`], kept from frame to frame: the coupled parts on the
+    /// wires and each car's `read` variables so far (the leading vehicle first).
+    wired: Vec<usize>,
+    reads: Vec<HashMap<VarId, f32>>,
 }
 
-/// A car on the wires for one run of [`run_cables`].
+/// A car on the wires for one run of [`run_cables`]; what its `read` variables hold so far is
+/// kept beside it, in [`Cables::reads`].
+#[derive(Clone, Copy)]
 struct WiredCar<'a> {
     plugs: &'a Plugs,
     vars: &'a [f32],
     /// Which variables are the car's own (None: all of them).
     own: Option<&'a [bool]>,
     reversed: bool,
-    /// The `read` variables so far.
-    read: HashMap<VarId, f32>,
 }
 
 impl WiredCar<'_> {
-    fn new<'a>(
-        plugs: &'a Plugs,
-        vars: &'a [f32],
-        own: Option<&'a [bool]>,
-        reversed: bool,
-    ) -> WiredCar<'a> {
-        let wires = plugs.iter().flatten().flatten();
-        let read = wires
-            .filter_map(|w| w.read)
-            .map(|slot| (slot, 0.0))
-            .collect();
-        WiredCar {
-            plugs,
-            vars,
-            own,
-            reversed,
-            read,
+    /// Every `read` variable of the car starts from 0.
+    fn start(&self, read: &mut HashMap<VarId, f32>) {
+        read.clear();
+        for slot in self.plugs.iter().flatten().flatten().filter_map(|w| w.read) {
+            read.insert(slot, 0.0);
         }
     }
 
-    fn value(&self, slot: VarId) -> f32 {
-        self.read
-            .get(&slot)
+    fn value(&self, read: &HashMap<VarId, f32>, slot: VarId) -> f32 {
+        read.get(&slot)
             .copied()
             .unwrap_or_else(|| self.vars.get(slot as usize).copied().unwrap_or(0.0))
     }
 
     /// Each `read` variable takes the car's own `write` variable. (A variable of the leading
     /// vehicle a car's scripts have not stored yet is not on the car's wire.)
-    fn own_wires(&mut self) {
-        let plugs = self.plugs;
-        for w in plugs.iter().flatten().flatten() {
-            let (Some(read), Some(write)) = (w.read, w.write) else {
+    fn own_wires(&self, read: &mut HashMap<VarId, f32>) {
+        for w in self.plugs.iter().flatten().flatten() {
+            let (Some(r), Some(write)) = (w.read, w.write) else {
                 continue;
             };
             if self
@@ -214,30 +204,35 @@ impl WiredCar<'_> {
             {
                 continue;
             }
-            let v = self.value(write).max(self.value(read));
-            self.read.insert(read, v);
+            let v = self.value(read, write).max(self.value(read, r));
+            read.insert(r, v);
         }
     }
 
-    fn live(&self, w: &Wire) -> bool {
-        w.read.is_some() && w.write.is_some() && w.link.is_none_or(|link| self.value(link) > 0.5)
+    fn live(&self, read: &HashMap<VarId, f32>, w: &Wire) -> bool {
+        w.read.is_some()
+            && w.write.is_some()
+            && w.link.is_none_or(|link| self.value(read, link) > 0.5)
     }
 }
 
 /// What `from`'s `read` variables hold goes into the ones of the car it is coupled to at its
 /// `end` (0: towards the first car, 1: towards the last).
-fn cross_coupling(from: &WiredCar, to: &mut WiredCar, end: usize) {
+fn cross_coupling(
+    (from, from_read): (&WiredCar, &HashMap<VarId, f32>),
+    (to, to_read): (&WiredCar, &mut HashMap<VarId, f32>),
+    end: usize,
+) {
     let side = |car: &WiredCar, toward_last: bool| usize::from(toward_last != car.reversed);
     let (near, far) = (side(from, end == 1), side(to, end == 0));
     for kind in 0..3 {
-        let plugs = to.plugs;
-        for (a, b) in from.plugs[near][kind].iter().zip(&plugs[far][2 - kind]) {
-            if from.live(a) && to.live(b) {
+        for (a, b) in from.plugs[near][kind].iter().zip(&to.plugs[far][2 - kind]) {
+            if from.live(from_read, a) && to.live(to_read, b) {
                 let (Some(here), Some(there)) = (a.read, b.read) else {
                     continue;
                 };
-                let v = from.value(here).max(to.value(there));
-                to.read.insert(there, v);
+                let v = from.value(from_read, here).max(to.value(to_read, there));
+                to_read.insert(there, v);
             }
         }
     }
@@ -245,7 +240,9 @@ fn cross_coupling(from: &WiredCar, to: &mut WiredCar, end: usize) {
 
 /// After the cars ran: what every car's `read` variables hold at its next frame (the leading
 /// vehicle: [`apply_lead_cables`]; a part: [`CarRun::frame`]). A part without wires or
-/// scripts of its own is not in the way. `parts`: the train's coupled parts.
+/// scripts of its own is not in the way. `parts`: the train's coupled parts. It runs every
+/// frame, so it keeps its working storage in `lead.cables` and builds nothing where no car
+/// has a cable.
 pub(super) fn run_cables(lead: &mut VehicleInstance, parts: &mut [TrailerPart]) {
     if let Some(want) = omsi_cfg::flags::OMSI_DEBUG_CAR_VARS.var() {
         let want: Vec<String> = want
@@ -271,51 +268,85 @@ pub(super) fn run_cables(lead: &mut VehicleInstance, parts: &mut [TrailerPart]) 
         lead.cables.watched = watched;
     }
     let id = Arc::as_ptr(&lead.ty.program) as usize;
-    let lead_plugs = match &lead.cables.lead_plugs {
-        Some((was, plugs)) if *was == id => plugs.clone(),
-        _ => Arc::new(plugs_of(&lead.ty.def, |n| lead.ty.program.var(n))),
+    if !matches!(&lead.cables.lead_plugs, Some((was, _)) if *was == id) {
+        let plugs = plugs_of(&lead.ty.def, |n| lead.ty.program.var(n));
+        lead.cables.lead_plugs = Some((id, Arc::new(plugs)));
+    }
+    let Cables {
+        lead_plugs,
+        values,
+        logged,
+        wired,
+        reads,
+        ..
+    } = &mut lead.cables;
+    let lead_plugs = &lead_plugs.as_ref().expect("made above").1;
+    wired.clear();
+    wired.extend(
+        (0..parts.len()).filter(|&k| parts[k].run.as_deref().is_some_and(|r| r.has_cables)),
+    );
+    // (no cable anywhere: nothing to put on a wire, nothing for any car to read)
+    let lead_wired = lead_plugs
+        .iter()
+        .flatten()
+        .flatten()
+        .any(|w| w.read.is_some());
+    if wired.is_empty() && !lead_wired {
+        values.clear();
+        return;
+    }
+    let (lead_vars, wired) = (&lead.state.vars, &*wired);
+    let car = |k: usize| -> WiredCar<'_> {
+        match k.checked_sub(1) {
+            None => WiredCar {
+                plugs: lead_plugs,
+                vars: lead_vars,
+                own: None,
+                reversed: false,
+            },
+            Some(i) => {
+                let part = &parts[wired[i]];
+                let run = part
+                    .run
+                    .as_deref()
+                    .expect("a wired part runs its own scripts");
+                WiredCar {
+                    plugs: &run.plugs,
+                    vars: &run.state.vars,
+                    own: Some(&run.local),
+                    reversed: part.reversed,
+                }
+            }
+        }
     };
-    let wired: Vec<usize> = (0..parts.len())
-        .filter(|&k| parts[k].run.as_deref().is_some_and(|r| r.has_cables))
-        .collect();
-    let mut cars = Vec::with_capacity(wired.len() + 1);
-    cars.push(WiredCar::new(&lead_plugs, &lead.state.vars, None, false));
-    for &k in &wired {
-        if let Some(run) = parts[k].run.as_deref() {
-            cars.push(WiredCar::new(
-                &run.plugs,
-                &run.state.vars,
-                Some(&run.local),
-                parts[k].reversed,
-            ));
-        }
+    let n = wired.len() + 1;
+    if reads.len() < n {
+        reads.resize_with(n, HashMap::new);
     }
-    for car in &mut cars {
-        car.own_wires();
+    for (k, read) in reads.iter_mut().take(n).enumerate() {
+        let c = car(k);
+        c.start(read);
+        c.own_wires(read);
     }
-    for i in 1..cars.len() {
-        let (done, rest) = cars.split_at_mut(i);
-        cross_coupling(&done[i - 1], &mut rest[0], 1);
+    for i in 1..n {
+        let (done, rest) = reads.split_at_mut(i);
+        cross_coupling((&car(i - 1), &done[i - 1]), (&car(i), &mut rest[0]), 1);
     }
-    for i in (1..cars.len()).rev() {
-        let (rest, done) = cars.split_at_mut(i);
-        cross_coupling(&done[0], &mut rest[i - 1], 0);
+    for i in (1..n).rev() {
+        let (rest, done) = reads.split_at_mut(i);
+        cross_coupling((&car(i), &done[0]), (&car(i - 1), &mut rest[i - 1]), 0);
     }
-    let mut read: Vec<Vec<(VarId, f32)>> = cars
-        .into_iter()
-        .map(|car| car.read.into_iter().collect())
-        .collect();
     if omsi_cfg::flags::OMSI_DEBUG_CABLES.is_set() {
-        log_wires(&mut lead.cables.logged, &lead.ty, parts, &wired, &read);
+        log_wires(logged, &lead.ty, parts, wired, &reads[..n]);
     }
-    let values = std::mem::take(&mut read[0]);
-    for (&k, lines) in wired.iter().zip(read.into_iter().skip(1)) {
+    values.clear();
+    values.extend(reads[0].iter().map(|(&slot, &v)| (slot, v)));
+    for (&k, read) in wired.iter().zip(&reads[1..n]) {
         if let Some(run) = parts[k].run.as_deref_mut() {
-            run.lines = lines;
+            run.lines.clear();
+            run.lines.extend(read.iter().map(|(&slot, &v)| (slot, v)));
         }
     }
-    lead.cables.lead_plugs = Some((id, lead_plugs));
-    lead.cables.values = values;
 }
 
 /// The changes a variable may log (`OMSI_DEBUG_CAR_VARS`): a timer changes every frame.
@@ -382,7 +413,7 @@ fn log_wires(
     lead: &VehicleType,
     parts: &[TrailerPart],
     wired: &[usize],
-    read: &[Vec<(VarId, f32)>],
+    read: &[HashMap<VarId, f32>],
 ) {
     for (car, lines) in read.iter().enumerate() {
         let ty = if car == 0 {
@@ -390,7 +421,7 @@ fn log_wires(
         } else {
             &parts[wired[car - 1]].ty
         };
-        for &(slot, value) in lines {
+        for (&slot, &value) in lines {
             if logged.insert((car, slot), value) != Some(value) {
                 let file = ty
                     .def

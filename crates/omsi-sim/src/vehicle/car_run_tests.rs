@@ -663,3 +663,59 @@ fn a_cable_without_a_link_variable_is_always_connected() {
         );
     }
 }
+
+/// The cables run every frame, so they keep their working storage: after the first frame a
+/// wired train makes no new read maps or result lists, and its cars still read each other.
+/// A coupled train without a cable builds none at all.
+#[test]
+fn the_cables_keep_their_working_storage_from_frame_to_frame() {
+    let mut v = VehicleInstance::new(
+        cable_car("1 (S.L.Link)"),
+        crate::host::VehicleHost::new(Default::default()),
+    );
+    v.attach_trailer_ex(cable_car("1 (S.L.Link)"), false);
+    v.attach_trailer_ex(cable_car("1 (S.L.Link) 2 (S.L.SLW_x)"), true);
+    run_frames(&mut v, 2);
+    let storage = |v: &VehicleInstance| {
+        let c = &v.cables;
+        let lines: Vec<_> = v
+            .trailers
+            .iter()
+            .filter_map(|t| t.run.as_deref())
+            .map(|r| r.lines.as_ptr())
+            .collect();
+        (
+            c.reads.len(),
+            c.reads.iter().map(|r| r.capacity()).collect::<Vec<_>>(),
+            c.wired.as_ptr(),
+            lines,
+        )
+    };
+    let before = storage(&v);
+    assert_eq!(before.0, 3, "a read map for each car");
+    run_frames(&mut v, 6);
+    assert_eq!(
+        storage(&v),
+        before,
+        "the same maps and lists, nothing made again"
+    );
+    assert_eq!(
+        v.var("SLR_x"),
+        Some(2.0),
+        "the head car reads the tail's write"
+    );
+    assert_eq!(
+        v.trailers[0].run_var("SLR_x"),
+        Some(2.0),
+        "and so does the car between"
+    );
+
+    let plain = || super::super::tests::coupling_test_type(Some(-4.0));
+    let mut v = VehicleInstance::new(plain(), crate::host::VehicleHost::new(Default::default()));
+    v.attach_trailer_ex(plain(), false);
+    run_frames(&mut v, 3);
+    assert!(
+        v.cables.reads.is_empty() && v.cables.values.is_empty(),
+        "no cable, nothing built"
+    );
+}
