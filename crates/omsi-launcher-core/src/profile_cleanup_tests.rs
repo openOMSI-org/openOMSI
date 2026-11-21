@@ -65,6 +65,9 @@ fn low_then_back_to_vanilla_plus_keeps_the_shadows() {
     apply_graphics_profile(low, &mut v);
     assert_eq!(effective_mode(&v), "vanilla");
     let saved = settings_from_text(Some(&settings_to_text(&v, None)));
+    assert_eq!(saved["shadow_size"], 512);
+    assert_eq!(saved["view_distance"], "300");
+    assert_eq!(saved["max_obj_dist"], "300");
     assert_eq!((&saved["shadows"], &saved["ssao"], &saved["detail_textures"], &saved["video_memory"]), (&json!(true), &json!(true), &json!(true), &json!(3000)));
     let mut back = saved.clone();
     apply_graphics_profile(&graphics_presets()[1].1, &mut back);

@@ -135,7 +135,7 @@ impl Renderer {
         update_ceiling(|c| *c = Some(if intel_vulkan_safe { gpu_memory::Ceiling { msaa: 1, ssao: false, shadow_size: most.shadow_size.min(2048), ..most } } else { most }));
         let shadow_size = options
             .shadow_size
-            .clamp(512, if intel_vulkan_safe { 2048 } else { 8192 });
+            .clamp(256, if intel_vulkan_safe { 2048 } else { 8192 });
         let mut limits = wgpu::Limits::default().using_resolution(adapter.limits());
         if intel_vulkan_safe {
             // Do not request every large limit the Intel driver advertises. In particular,
