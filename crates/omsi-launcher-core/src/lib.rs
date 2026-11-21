@@ -11,9 +11,11 @@ pub mod ai_lists;
 pub mod crash;
 pub mod depot;
 mod file_dialog;
+mod game_setting_options;
 mod graphics_profile_transfer;
 #[cfg(test)]
 mod graphics_profile_transfer_tests;
+pub use game_setting_options::game_setting_options;
 mod graphics_profiles;
 mod hof_sync;
 pub mod i18n;
