@@ -365,6 +365,19 @@ impl Renderer {
         }
     }
 
+    /// Keep a slot's draw-order depth step at or below a caller's limit.
+    pub fn limit_slot_depth_level(&self, scene: &mut Scene, instance: usize, slot: usize, max_level: u8) {
+        if let Some(i) = scene.instances.get_mut(instance) {
+            if let Some(current) = i.slot_levels.get_mut(slot) {
+                let max_level = max_level.min(crate::scene::overlay::MAX_LEVEL);
+                if *current > max_level {
+                    *current = max_level;
+                    Self::mark_changed(scene, instance);
+                }
+            }
+        }
+    }
+
     /// How much snow lies on the roof of an instance's vehicle (see [`Instance::roof_snow`]).
     pub fn set_roof_snow(&self, scene: &mut Scene, instance: usize, snow: Option<f32>) {
         if let Some(i) = scene.instances.get_mut(instance) {
