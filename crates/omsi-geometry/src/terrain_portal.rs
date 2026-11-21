@@ -24,7 +24,9 @@ pub struct Portal {
     pub lean: DVec2,
 }
 
-/// The upright opening a hole mesh is, if it is one: every face of it mostly upright.
+/// The upright opening a hole mesh is, if it is one: every face of it mostly upright. It runs
+/// as a map's tiles load, so every step is linear in the mesh: each vertex is taken once
+/// however many triangles share it, and the ends of the foot are found in two sweeps.
 pub fn hole_portal(mesh: &MeshData, transform: &Mat4, origin: DVec3) -> Option<Portal> {
     let world = |i: u32| {
         origin
@@ -33,17 +35,23 @@ pub fn hole_portal(mesh: &MeshData, transform: &Mat4, origin: DVec3) -> Option<P
                 .as_dvec3()
     };
     let (mut area, mut plan) = (0.0, 0.0);
-    let mut points: Vec<DVec3> = Vec::new();
+    let mut used = vec![false; mesh.positions.len()];
     for t in mesh.indices.chunks_exact(3) {
         let [a, b, c] = [world(t[0]), world(t[1]), world(t[2])];
         let n = (b - a).cross(c - a);
         area += n.length();
         plan += n.z.abs();
-        points.extend([a, b, c]);
+        for &i in t {
+            used[i as usize] = true;
+        }
     }
     if area <= 0.0 || plan > area * UPRIGHT {
         return None;
     }
+    let points: Vec<DVec3> = (0..mesh.positions.len() as u32)
+        .filter(|&i| used[i as usize])
+        .map(world)
+        .collect();
     let (low, high) = points
         .iter()
         .fold((f64::MAX, f64::MIN), |(l, h), p| (l.min(p.z), h.max(p.z)));
@@ -54,15 +62,16 @@ pub fn hole_portal(mesh: &MeshData, transform: &Mat4, origin: DVec3) -> Option<P
     let mean = |it: Vec<&DVec3>| it.iter().copied().sum::<DVec3>() / it.len().max(1) as f64;
     let feet: Vec<&DVec3> = points.iter().filter(|p| p.z <= low + band).collect();
     let tops: Vec<&DVec3> = points.iter().filter(|p| p.z >= high - band).collect();
-    let (mut a, mut b, mut wide) = (*feet[0], *feet[0], 0.0);
-    for p in &feet {
-        for q in &feet {
-            let d = (**p - **q).truncate().length();
-            if d > wide {
-                (a, b, wide) = (**p, **q, d);
-            }
-        }
-    }
+    // (a foot lies along one line in plan: the point farthest from any of it is one end, and
+    // the point farthest from that one is the other)
+    let farthest = |from: DVec3| {
+        feet.iter().copied().fold((from, 0.0), |(best, wide), p| {
+            let d = (*p - from).truncate().length();
+            if d > wide { (*p, d) } else { (best, wide) }
+        })
+    };
+    let a = farthest(*feet[0]).0;
+    let (b, wide) = farthest(a);
     if wide < 1.0 {
         return None;
     }
@@ -233,6 +242,58 @@ mod tests {
             "{clearing:?}"
         );
         assert_eq!((clearing[2], clearing[3]), (ring[2], ring[3]));
+    }
+
+    /// A hole mesh made of many small faces, as a detailed portal is: the foot's ends are its
+    /// outer corners, each vertex shared by up to six triangles counted once, found in linear
+    /// work (a grid of 100 000 vertices; comparing every pair of the foot's would take some
+    /// 10^9 steps).
+    #[test]
+    fn a_subdivided_sheet_finds_the_ends_of_its_foot() {
+        let (across, up) = (2000usize, 50usize);
+        let positions = (0..up)
+            .flat_map(|j| {
+                (0..across).map(move |i| {
+                    let (x, z) = (i as f32 / (across - 1) as f32, j as f32 / (up - 1) as f32);
+                    Vec3::new(-3.5 + 7.0 * x, 0.2 + 0.7 * z, 4.75 * z)
+                })
+            })
+            .collect();
+        let at = |i: usize, j: usize| (j * across + i) as u32;
+        let indices = (0..up - 1)
+            .flat_map(|j| {
+                (0..across - 1).flat_map(move |i| {
+                    [
+                        at(i, j),
+                        at(i + 1, j),
+                        at(i + 1, j + 1),
+                        at(i, j),
+                        at(i + 1, j + 1),
+                        at(i, j + 1),
+                    ]
+                })
+            })
+            .collect();
+        let mesh = MeshData {
+            positions,
+            indices,
+            ..Default::default()
+        };
+        let p = hole_portal(&mesh, &Mat4::IDENTITY, DVec3::ZERO).expect("upright");
+        let mut xs = p.foot.map(|f| f.x);
+        xs.sort_by(f64::total_cmp);
+        assert!(
+            (xs[0] + 3.5).abs() < 1e-5 && (xs[1] - 3.5).abs() < 1e-5,
+            "{:?}",
+            p.foot
+        );
+        // (both in the lowest quarter of its height, the band the foot is taken from)
+        assert!(
+            p.foot.iter().all(|f| f.z < 4.75 * 0.25 + 1e-5),
+            "{:?}",
+            p.foot
+        );
+        assert!((p.top - 4.75).abs() < 1e-5 && p.lean.y > 0.0);
     }
 
     #[test]
