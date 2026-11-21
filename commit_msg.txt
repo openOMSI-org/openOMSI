@@ -1,3 +1,0 @@
-fix(sim): avoid queuing ticket sales for ticketless fares (#2742)
-
-Signed-off-by: szambonurek-88 <szymonzolsztyna@gmail.com>
