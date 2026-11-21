@@ -453,9 +453,9 @@ mod hold_tests {
             arr: 0.0,
             dep: 0.0,
             position: None,
-            dir: StopDir::Forward,
+            dir: StopDir::default(),
             stops: true,
-            closed: false,
+            closed: None,
         };
         let trip1 = PlannedTrip {
             name: "Trip 1".into(),
