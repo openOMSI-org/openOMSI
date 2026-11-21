@@ -41,6 +41,45 @@ fn cone_offset(def: &Vehicle) -> f32 {
     }
 }
 
+/// The variables a contact shoe tells its car, in the order [`shoe_values`] gives them.
+const SHOE_VARS: [&str; 6] = [
+    "volt_rail",
+    "volt_veh",
+    "freq",
+    "rail_pos_x",
+    "rail_pos_z",
+    "rail_index",
+];
+/// Shoes whose variable names are made once, not each frame; a car with more names the rest
+/// as it goes.
+const NAMED_SHOES: usize = 16;
+
+/// `contactshoe_<i>_<what>` for each of [`SHOE_VARS`].
+fn shoe_names(i: usize) -> [String; 6] {
+    SHOE_VARS.map(|what| format!("contactshoe_{i}_{what}"))
+}
+
+/// The names of shoe `i`'s variables: made once for the first [`NAMED_SHOES`].
+fn named_shoe(i: usize, with: impl FnOnce(&[String; 6])) {
+    static NAMES: std::sync::OnceLock<Vec<[String; 6]>> = std::sync::OnceLock::new();
+    match NAMES
+        .get_or_init(|| (0..NAMED_SHOES).map(shoe_names).collect())
+        .get(i)
+    {
+        Some(names) => with(names),
+        None => with(&shoe_names(i)),
+    }
+}
+
+/// What a shoe's variables hold: the rail it touches (its voltage, which the car takes too,
+/// its frequency, where it is and its index), else 0 and index -1.
+fn shoe_values(touching: Option<(usize, &[f32; 6])>) -> [f32; 6] {
+    match touching {
+        Some((index, rail)) => [rail[3], rail[3], rail[4], rail[0], rail[1], index as f32],
+        None => [0.0, 0.0, 0.0, 0.0, 0.0, -1.0],
+    }
+}
+
 /// The variables of a car on `at` (its bogies 0 and 1), as Omsi.exe sets them: the curve at
 /// 0x7ddc27, the wheels at 0x7ddbb0, the shoes at 0x7df500. The wheels are the wheelset's resting
 /// place: Omsi.exe also rocks it on the track's faults, which does not change a curve.
@@ -62,30 +101,21 @@ fn track_vars(def: &Vehicle, at: &[BogieGround; 2], put: &mut dyn FnMut(&str, f3
         let Some(ground) = at.get(shoe[0] as usize) else {
             continue;
         };
-        let name = |what: &str| format!("contactshoe_{i}_{what}");
-        put(&name("volt_rail"), 0.0);
-        put(&name("volt_veh"), 0.0);
-        put(&name("freq"), 0.0);
-        put(&name("rail_pos_x"), 0.0);
-        put(&name("rail_pos_z"), 0.0);
-        put(&name("rail_index"), -1.0);
         let touches = |r: &[f32; 6]| {
             (shoe[1]..=shoe[2]).contains(&(ground.facing * r[0]))
                 && (shoe[3]..=shoe[4]).contains(&r[1])
         };
-        if let Some((index, rail)) = ground
+        let touching = ground
             .third_rails
             .iter()
             .enumerate()
-            .find(|(_, r)| touches(r))
-        {
-            put(&name("volt_rail"), rail[3]);
-            put(&name("volt_veh"), rail[3]);
-            put(&name("freq"), rail[4]);
-            put(&name("rail_pos_x"), rail[0]);
-            put(&name("rail_pos_z"), rail[1]);
-            put(&name("rail_index"), index as f32);
-        }
+            .find(|(_, r)| touches(r));
+        // (each variable written once, with the rail it touches or with nothing)
+        named_shoe(i, |names| {
+            for (name, value) in names.iter().zip(shoe_values(touching)) {
+                put(name, value);
+            }
+        });
     }
 }
 
@@ -167,6 +197,44 @@ mod tests {
 
     /// Its `Meterspur_normal_9001_PZB_Tunnel_aktiv.sli`.
     const PZB: [f32; 6] = [0.0, 0.535, 3.0, 9001.0, 0.0, 0.051];
+
+    /// Each frame a shoe's six variables are written once each, on the rail or off it, and a
+    /// car's shoes past the ones named once are still named by their own number.
+    #[test]
+    fn each_shoe_variable_is_written_once_a_frame() {
+        let rails = [PZB];
+        let mut def = nf6d();
+        def.contact_shoes = vec![def.contact_shoes[0]; NAMED_SHOES + 2];
+        for on_rail in [true, false] {
+            let ground = BogieGround::new(0.0, if on_rail { &rails } else { &[] }, true);
+            let mut writes: hashbrown::HashMap<String, u32> = hashbrown::HashMap::new();
+            track_vars(&def, &[ground, ground], &mut |n, _| {
+                *writes.entry(n.to_string()).or_default() += 1;
+            });
+            let shoes: Vec<_> = writes
+                .iter()
+                .filter(|(n, _)| n.starts_with("contactshoe_"))
+                .collect();
+            assert_eq!(shoes.len(), 6 * (NAMED_SHOES + 2), "on the rail: {on_rail}");
+            assert!(
+                shoes.iter().all(|(_, n)| **n == 1),
+                "on the rail: {on_rail}: {shoes:?}"
+            );
+            let last = NAMED_SHOES + 1;
+            assert!(writes.contains_key(&format!("contactshoe_{last}_rail_index")));
+        }
+        let v = vars(
+            &def,
+            &[
+                BogieGround::new(0.0, &rails, true),
+                BogieGround::new(0.0, &rails, true),
+            ],
+        );
+        assert_eq!(
+            v[&format!("contactshoe_{}_volt_rail", NAMED_SHOES + 1)],
+            9001.0
+        );
+    }
 
     #[test]
     fn a_shoe_reads_the_rail_it_touches() {
