@@ -454,7 +454,7 @@ pub(crate) fn duty_step(
     learn_loaded: bool,
     plugin_events: Option<&mut Vec<omsi_plugin::GameEvent>>,
     announce: bool,
-) {
+) -> Option<&'static str> {
     if let Some(stop) = p.html_next_stop.take() {
         if d.skip_to(stop) {
             let (trip, k) = d.trip_for_ibis();
@@ -468,11 +468,15 @@ pub(crate) fn duty_step(
     let served = d.update(&mut p.vehicle, time);
     // (the depot file's second recording of each stop, for the maps that keep two: a stock
     // IBIS steps on by itself only when a stop is left - see `auto_announce`)
+    let mut note = None;
     if announce {
         // (seconds of play, not the time of day: a night line runs past midnight, and a
         // clock that wraps would hold every press back until the same time the next day)
         let run = game_clock.unwrap_or(&p.vehicle.host.clock).run_time;
         p.announce.step(d, &mut p.vehicle, run);
+        // (#3281) where the game cannot announce, it says so once a trip rather than leaving the
+        // player to guess
+        note = p.announce.take_note();
     }
     // (also one ended between frames: the last stop skipped from the menu; a trip reopened
     // by a page counts from its start again, and its next end is told too)
@@ -545,6 +549,7 @@ pub(crate) fn duty_step(
     if let Err(e) = crate::schedule_paper::update_vehicle(&mut p.vehicle, d, &mut fonts) {
         log::warn!("driver timetable paper: {e:#}");
     }
+    note
 }
 
 /// The tyres' spray (see `puddles`): what every vehicle's tyres throw up from the water on
