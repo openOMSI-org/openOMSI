@@ -4078,3 +4078,6 @@
 "Default for every bus": "Per defecte per a tots els autobusos"
 "Use for {bus}": "Fes-lo servir per a {bus}"
 "Profile {name} in use": "Perfil {name} en ús"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Anuncis automàtics: el fitxer HOF d'aquesta ruta té un enregistrament per parada, no cal prémer res."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Anuncis automàtics: aquest autobús no té tecla IBIS de \"següent parada\", per tant manté els seus propis anuncis."
+"Automatic announcements are off.": "Els anuncis automàtics estan desactivats."

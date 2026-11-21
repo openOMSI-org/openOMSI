@@ -4383,3 +4383,6 @@
 "Default for every bus": "По умолчанию для всех автобусов"
 "Use for {bus}": "Использовать для {bus}"
 "Profile {name} in use": "Используется профиль {name}"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Автоматические объявления: HOF-файл этого маршрута содержит одну запись на остановку, нажимать не требуется."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Автоматические объявления: у этого автобуса нет клавиши IBIS «следующая остановка», поэтому объявления остаются его собственными."
+"Automatic announcements are off.": "Автоматические объявления выключены."

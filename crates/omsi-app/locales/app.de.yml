@@ -4384,3 +4384,6 @@
 "Default for every bus": "Standard für jeden Bus"
 "Use for {bus}": "Für {bus} verwenden"
 "Profile {name} in use": "Profil {name} in Verwendung"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Automatische Ansagen: Die HOF dieser Route hat eine Ansage pro Haltestelle, es muss nichts gedrückt werden."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Automatische Ansagen: Dieser Bus hat keine IBIS-\"Nächste Haltestelle\"-Taste, daher bleiben die Ansagen busintern."
+"Automatic announcements are off.": "Automatische Ansagen sind ausgeschaltet."

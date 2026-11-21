@@ -3596,3 +3596,6 @@
 "Default for every bus": "Standaard voor elke bus"
 "Use for {bus}": "Gebruiken voor {bus}"
 "Profile {name} in use": "Profiel {name} in gebruik"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Automatische afroepen: de HOF van deze lijn heeft één opname per halte, dus er hoeft niets te worden ingedrukt."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Automatische afroepen: deze bus heeft geen IBIS-\"volgende halte\"-toets, dus de eigen afroepen blijven actief."
+"Automatic announcements are off.": "Automatische afroepen zijn uitgeschakeld."

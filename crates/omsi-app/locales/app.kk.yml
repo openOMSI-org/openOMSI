@@ -3223,3 +3223,6 @@
 "Default for every bus": "Барлық автобус үшін әдепкі"
 "Use for {bus}": "{bus} үшін пайдалану"
 "Profile {name} in use": "{name} профилі қолданылуда"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Автоматты хабарландырулар: бұл бағыттың HOF файлында аялдамаға бір жазба бар, ештеңе басудың қажеті жоқ."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Автоматты хабарландырулар: бұл автобуста IBIS «келесі аялдама» пернесі жоқ, сондықтан оның хабарландырулары өздігінен қалады."
+"Automatic announcements are off.": "Автоматты хабарландырулар өшірулі."

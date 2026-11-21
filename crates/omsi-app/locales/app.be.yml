@@ -3224,3 +3224,6 @@
 "Default for every bus": "Па змаўчанні для ўсіх аўтобусаў"
 "Use for {bus}": "Выкарыстоўваць для {bus}"
 "Profile {name} in use": "Выкарыстоўваецца профіль {name}"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Аўтаматычныя абвесткі: HOF-файл гэтага маршруту змяшчае адзін запіс на прыпынак, націскаць нічога не трэба."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Аўтаматычныя абвесткі: гэты аўтобус не мае клавішы IBIS «наступны прыпынак», таму яго абвесткі застаюцца ўласнымі."
+"Automatic announcements are off.": "Аўтаматычныя абвесткі выключаны."

@@ -2931,3 +2931,6 @@
 "Default for every bus": "Default para sa bawat bus"
 "Use for {bus}": "Gamitin para sa {bus}"
 "Profile {name} in use": "Ginagamit ang profile na {name}"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Awtomatikong anunsyo: ang HOF ng rutang ito ay may isang recording bawat hintuan, kaya walang kailangang pindutin."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Awtomatikong anunsyo: ang bus na ito ay walang IBIS \"susunod na hintuan\" key, kaya sarili nitong anunsyo ang gagamitin."
+"Automatic announcements are off.": "Naka-off ang awtomatikong anunsyo."

@@ -4384,3 +4384,6 @@
 "Default for every bus": "Par défaut pour tous les bus"
 "Use for {bus}": "Utiliser pour {bus}"
 "Profile {name} in use": "Profil {name} utilisé"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Annonces automatiques : le fichier HOF de cet itinéraire comporte un enregistrement par arrêt, rien à déclencher."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Annonces automatiques : ce bus n'a pas de touche IBIS « arrêt suivant », ses annonces restent donc gérées en interne."
+"Automatic announcements are off.": "Les annonces automatiques sont désactivées."

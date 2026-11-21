@@ -3225,3 +3225,6 @@
 "Default for every bus": "Alapértelmezett minden buszhoz"
 "Use for {bus}": "Használat ehhez: {bus}"
 "Profile {name} in use": "{name} profil használatban"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Automatikus bemondások: ennek a vonalnak a HOF fájlja megállónként egy felvételt tartalmaz, így nincs mit megnyomni."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Automatikus bemondások: ennek a busznak nincs IBIS \"következő megálló\" billentyűje, így saját bemondásait használja."
+"Automatic announcements are off.": "Az automatikus bemondások ki vannak kapcsolva."

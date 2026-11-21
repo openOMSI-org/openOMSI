@@ -2983,3 +2983,6 @@
 "Default for every bus": "모든 버스의 기본값"
 "Use for {bus}": "{bus}에 사용"
 "Profile {name} in use": "프로필 {name} 사용 중"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "자동 안내 방송: 이 노선의 HOF는 정류장당 하나의 녹음만 유지하므로 누를 필요가 없습니다."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "자동 안내 방송: 이 버스에는 IBIS \"다음 정류장\" 키가 없으므로 자체 안내 방송을 유지합니다."
+"Automatic announcements are off.": "자동 안내 방송이 꺼져 있습니다."

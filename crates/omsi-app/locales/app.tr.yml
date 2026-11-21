@@ -3237,3 +3237,6 @@
 "Default for every bus": "Her otobüs için varsayılan"
 "Use for {bus}": "{bus} için kullan"
 "Profile {name} in use": "{name} profili kullanılıyor"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Otomatik anonslar: bu hattın HOF dosyasında durak başına bir kayıt var, basılacak bir şey yok."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Otomatik anonslar: bu otobüste IBIS \"sonraki durak\" tuşu yok, bu yüzden anonslar kendi kontrolünde kalır."
+"Automatic announcements are off.": "Otomatik anonslar kapalı."
