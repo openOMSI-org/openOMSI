@@ -228,6 +228,11 @@ impl RailDrive {
             .spot_at(u, (self.u, self.spot()), |s, d| RailDrive::look(net, s, d))
     }
 
+    /// Whether the trail reaches travelled distance `u`.
+    fn covers(&self, u: f64) -> bool {
+        self.trail.covers(u, self.u)
+    }
+
     /// Backing (`ds` < 0): the track beyond the train's rear end is found anew - the switches
     /// as they are set now (`blinker`: the rear cab's indicator), the points it takes thrown
     /// - and the vehicle moves back along the trail its train lies on. False at the end of
@@ -458,11 +463,6 @@ impl RailDrive {
             v.set_var("Axle_Steering_1_L", bogie_1_rad);
             v.set_var("Axle_Steering_1_R", bogie_1_rad);
 
-            let inv_r_f = bogie_0_rad / l.max(0.1);
-            let inv_r_r = bogie_1_rad / l.max(0.1);
-            v.set_var("boogie_0_invradius", inv_r_f);
-            v.set_var("boogie_1_invradius", inv_r_r);
-
             let bogie_midpoint = (pos_f + pos_r) * 0.5;
             let car_pos = if center_y.abs() > 0.001 {
                 let h_rad = h.to_radians();
@@ -486,30 +486,30 @@ impl RailDrive {
         v.heading = heading;
         v.pitch = pitch;
         v.bank = 0.0;
-        // the body rides on its springs: it leans out of bends, dips under braking and feels the
-        // rails' unevenness, instead of being nailed to the line between the bogies
-        if let (Some(class), true) = (
-            omsi_sim::rail::RailClass::of(&v.ty.def),
-            dt > 0.0 && omsi_sim::rail::realistic(),
-        ) {
+        // the body rides on its springs: it leans out of bends, as every car does in Omsi.exe;
+        // with the realistic physics it also dips under braking and bounces
+        v.rail_sway = true;
+        if let (Some(class), true) = (omsi_sim::rail::RailClass::of(&v.ty.def), dt > 0.0) {
             let span = bogie_dist.map_or(8.0, |l| l * 2.0);
             let yaw = self
                 .last_heading
                 .map_or(0.0, |h| angle_diff(heading, h).to_radians() / dt as f64)
                 as f32;
             let a_long = v.rail_outcome().map_or(0.0, |o| o.accel);
-            let params = omsi_sim::rail::BodyParams::of(class, span);
+            let params = omsi_sim::rail::BodyParams::for_car(&v.ty.def, class, span);
             let out = self
                 .body
                 .step(&params, dt, v.physics.speed, a_long, yaw.clamp(-1.0, 1.0));
-            v.pitch += out.pitch_deg;
-            v.bank = out.roll_deg;
-            v.position.z += out.heave as f64;
-            v.set_engine_var("rail_body_roll", out.roll_deg);
-            v.set_engine_var("rail_body_pitch", out.pitch_deg);
-            v.set_engine_var("rail_body_heave", out.heave);
-            v.set_engine_var("rail_accel_side", out.a_side);
-            v.set_engine_var("rail_accel_vert", out.a_vert);
+            v.bank = out.roll_deg * omsi_sim::rail::ROLL_SHOWN;
+            if omsi_sim::rail::realistic() {
+                v.pitch += out.pitch_deg;
+                v.position.z += out.heave as f64;
+                v.set_engine_var("rail_body_roll", out.roll_deg);
+                v.set_engine_var("rail_body_pitch", out.pitch_deg);
+                v.set_engine_var("rail_body_heave", out.heave);
+                v.set_engine_var("rail_accel_side", out.a_side);
+                v.set_engine_var("rail_accel_vert", out.a_vert);
+            }
         }
         self.last_heading = Some(heading);
         // the track steers: the wheel stays straight
@@ -540,6 +540,24 @@ impl RailDrive {
             });
             self.trail.reach_back = farthest.get().max(5.0) + 1.0;
         }
+        p.vehicle.feel_train_track(
+            center_y as f64,
+            bogie_dist.unwrap_or(0.0) as f64,
+            |rel, turned| {
+                let u = self.u + rel;
+                let (lane, s, along) = self
+                    .covers(u)
+                    .then(|| self.state_at(net, u))
+                    .flatten()
+                    .unwrap_or_else(|| RailDrive::look(net, self.spot(), rel as f32));
+                let lane = &net.lanes[lane];
+                omsi_sim::vehicle::BogieGround::new(
+                    lane.curvature_at(s),
+                    &lane.third_rails,
+                    along != turned,
+                )
+            },
+        );
     }
 
     /// Move along the rails by `ds` (the vehicle's forward); false at the end of the track.

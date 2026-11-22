@@ -33,6 +33,20 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   front of it, is joined into the passenger cabin turned round, so people get in and out by its own
   doors and ride in it; and the doors of a car that runs its own scripts (the NF6D's sections)
   open for the passengers and for the player on foot by that car's own `PAX_Entry<n>_Open`.
+- **Third rail and curve squeal on trams and trains**: `[contact_shoe]`s read the `[third_rail]`
+  under them (`contactshoe_N_volt_rail` and the rest, which the NF6D's PZB takes its codes from),
+  and every car's bogies report the curve under them and when the wheels reach the flange
+  (`boogie_N_invradius`, `boogie_N_wheel_at_limit`), which is what starts the curve squeal. A
+  rail's curve is the map's own, not worked out of the path's samples.
+- **`GetHeightAbovePoint` as in Omsi.exe**: the ray starts 3 m over the point, meets a wire or a
+  wall top on a narrow height profile, and reads 1000 with nothing below it (it read 0, which held
+  the Zweiachser tram's pantograph at the top of its travel).
+- **Every car of a train rocks on its own springs**: each car's body leans out of bends by the force
+  on it and rocks on the rails, with `[rail_body_osc]`'s lever, frequency and decay where the file
+  gives them and the class's springs where it switches them off. Joints go with the cars around
+  them; bogies, couplings and wheel sets stay level. **This changes the default**: the lean is now
+  always on, also without the realistic rail physics (which still add the dip under braking and
+  the bounce), and a car shows half of the lean its springs work out (`ROLL_SHOWN`).
 - **Drive a tram from either cab**: in a train with a cab at each end (the NF6D) walk
   to the other cab and take its wheel (G), or switch driving ends from the outside view with the
   interior-camera keys. That cab's own scripts then take the keys, the switches and the indicator,

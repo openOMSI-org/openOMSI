@@ -74,6 +74,110 @@ fn switched_on(rear: bool) -> VehicleInstance {
     v
 }
 
+/// A bogie frame in a bend squeals by its own `boogie_N_*`, while the one behind it still
+/// runs straight; the cab reads the code of the third rail under it.
+#[test]
+#[ignore = "needs an OMSI 2 install with the NF6D add-on (OMSI_ROOT)"]
+fn each_bogie_feels_its_own_track() {
+    let mut v = nf6d();
+    frames(&mut v, 10);
+    let rails = [[0.0, 0.535, 3.0, 9001.0, 0.0, 0.051]];
+    let bend = BogieGround::new(1.0 / 25.0, &[], true);
+    let straight = BogieGround::new(0.0, &[], true);
+    v.feel_track(&[BogieGround::new(0.0, &rails, true), straight]);
+    let frame = |name: &str| {
+        v.trailers
+            .iter()
+            .position(|t| t.ty.def.path.to_string_lossy().contains(name))
+            .unwrap()
+    };
+    let (front, rear) = (frame("DrehgestellV"), frame("DrehgestellH"));
+    assert!(
+        v.trailers[front].run.is_some(),
+        "the frame has scripts of its own"
+    );
+    v.trailers[front].feel_track(&[bend, bend]);
+    v.trailers[rear].feel_track(&[straight, straight]);
+    frames(&mut v, 100);
+    assert_eq!(
+        v.var("contactshoe_0_volt_rail"),
+        Some(9001.0),
+        "the rail's code in the head cab"
+    );
+    assert!(
+        v.trailers[front]
+            .run_var("rad_am_limit_traege")
+            .unwrap_or(0.0)
+            > 0.5,
+        "the frame in the bend: {:?}",
+        v.trailers[front].run_var("rad_am_limit_traege")
+    );
+    assert_eq!(
+        v.trailers[rear].run_var("rad_am_limit_traege"),
+        Some(0.0),
+        "the frame on the straight"
+    );
+}
+
+/// Round a bend the NF6D's cars stay level as in Omsi.exe: its `[rail_body_osc]` switches
+/// the body's motions off (no lever, decay 10000), so no car leans on the class's springs.
+/// The joints and the bogies keep their roles, and the rear car's two files move as one.
+#[test]
+#[ignore = "needs an OMSI 2 install with the NF6D add-on (OMSI_ROOT)"]
+fn the_nf6ds_cars_stay_level_as_its_file_says() {
+    let mut v = nf6d();
+    frames(&mut v, 5);
+    v.rail_sway = true;
+    v.set_speed(8.0);
+    // 50 m to the right, the head at the end of the arc
+    let radius = 50.0f64;
+    let arc = |s: f64| {
+        DVec3::new(
+            radius * (1.0 - (s / radius).cos()),
+            radius * (s / radius).sin(),
+            0.0,
+        )
+    };
+    let mut u = 200.0f64;
+    let mut roll_seen = 0.0f32;
+    for k in 0..800 {
+        u += 8.0 * 0.01;
+        v.retrail(0.01, &|d| Some(arc(u - d)));
+        if k > 300 {
+            roll_seen = roll_seen.min(v.trailers[3].bank);
+        }
+    }
+    let name = |t: &TrailerPart| {
+        t.ty.def
+            .path
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned()
+    };
+    let list: Vec<(String, f32, SwayRole)> = v
+        .trailers
+        .iter_mut()
+        .map(|t| (name(t), t.bank, t.sway_role()))
+        .collect();
+    eprintln!("{list:#?}");
+    let part = |n: &str| list.iter().find(|p| p.0 == n).unwrap();
+    assert_eq!(part("NF6D_C").2, SwayRole::Body);
+    assert!(
+        part("NF6D_C").1.abs() < 0.2,
+        "the middle car rides the rails' cross-level only: {}",
+        part("NF6D_C").1
+    );
+    assert_eq!(part("NF6D_Gelenk_ACH").2, SwayRole::Joint);
+    assert_eq!(part("NF6D_DrehgestellV").2, SwayRole::Gear);
+    assert_eq!(part("NF6D_DrehgestellV").1, 0.0);
+    assert_eq!(part("NF6D_B").1, part("NF6D_B_User").1, "one car");
+    assert!(
+        roll_seen.abs() < 0.2,
+        "the rear car does not lean: {roll_seen}"
+    );
+}
+
 /// A destination picked from openOMSI's list (as `game_lists` does it) reaches both cabs'
 /// matrices: the head cab's own (its rear cab used to zero the cable it reads in its
 /// {init}) and the rear cab's, line number included.

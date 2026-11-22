@@ -322,11 +322,20 @@ impl VehicleInstance {
         let contact = self.contact.clone();
         Some(std::sync::Arc::new(move |x, y, z| {
             let w = pos + rot.transform_point3(glam::Vec3::new(x, y, z)).as_dvec3();
+            let top = w.z + HEIGHT_RAY_START;
             let h = match &contact {
-                Some(c) => c.probe(w.x, w.y, w.z + 0.5).below,
-                None => g.as_ref().and_then(|g| g(w.x, w.y)),
+                Some(c) => {
+                    let p = c.probe(w.x, w.y, top);
+                    // (a narrow height profile high on a spline - a wall's top, a wire - is
+                    // no road, and the wheels' probe lists it over the road: a ray meets it)
+                    match p.above.filter(|a| *a <= top) {
+                        Some(a) => Some(p.below.map_or(a, |b| b.max(a))),
+                        None => p.below,
+                    }
+                }
+                None => g.as_ref().and_then(|g| g(w.x, w.y)).filter(|h| *h <= top),
             };
-            h.map_or(0.0, |h| (w.z - h) as f32)
+            h.map_or(NO_FACE_BELOW, |h| (w.z - h) as f32)
         }))
     }
 
@@ -619,6 +628,15 @@ impl VehicleInstance {
                 body_reversed(&self.ty.def, false),
                 trailers[0].coupling_back.y,
             );
+            // (kept from frame to frame, and left alone without the sway)
+            let mut rolls = std::mem::take(&mut self.sway_rolls);
+            let mut cars = std::mem::take(&mut self.sway_cars);
+            if self.rail_sway {
+                rolls.clear();
+                rolls.extend(trailers.iter_mut().map(|t| t.body_roll()));
+                cars.clear();
+                cars.push((0.0, self.bank));
+            }
             for i in 0..trailers.len() {
                 // (the part's rear coupling is the one the next part hangs on, in this part's frame)
                 let rear = trailers.get(i + 1).map(|n| n.coupling_back.y);
@@ -626,6 +644,13 @@ impl VehicleInstance {
                 let turned = body_reversed(&t.ty.def, t.reversed);
                 let origin = joint + travel(turned, t.coupling_front.y);
                 let (y_front, y_rear) = t.rail_ends();
+                // (bogie 0 is the one at the model's front: the rear one of a part turned round)
+                let (y0, y1) = if turned {
+                    (y_rear, y_front)
+                } else {
+                    (y_front, y_rear)
+                };
+                t.rail_bogies = Some([origin - y0 as f64, origin - y1 as f64]);
                 if omsi_cfg::flags::OMSI_DEBUG_TRAILERS.is_set() {
                     static SHOWN: std::sync::atomic::AtomicU32 =
                         std::sync::atomic::AtomicU32::new(0);
@@ -641,20 +666,46 @@ impl VehicleInstance {
                         );
                     }
                 }
+                let sway = self.rail_sway.then(|| {
+                    let before = rolls[..i]
+                        .iter()
+                        .rev()
+                        .flatten()
+                        .next()
+                        .copied()
+                        .unwrap_or(self.bank);
+                    let after = rolls[i + 1..]
+                        .iter()
+                        .flatten()
+                        .next()
+                        .copied()
+                        .unwrap_or(before);
+                    (
+                        cars.iter()
+                            .find(|c| super::sway::same_car(c.0, origin))
+                            .map(|c| c.1),
+                        (before + after) * 0.5,
+                    )
+                });
                 match (
                     at_behind(origin - y_front as f64),
                     at_behind(origin - y_rear as f64),
                 ) {
                     (Some(front), Some(back)) => {
-                        t.place_on_rails(self, dt, lead, (front, y_front), (back, y_rear))
+                        t.place_on_rails(self, dt, lead, (front, y_front), (back, y_rear), sway)
                     }
                     _ => t.update(self, dt, lead),
+                }
+                if self.rail_sway && t.body_roll().is_some() {
+                    cars.push((origin, t.bank));
                 }
                 if let Some(y) = rear {
                     joint = origin - travel(turned, y);
                 }
                 lead = Some((t.position, t.body_rotation(), t.heading));
             }
+            self.sway_rolls = rolls;
+            self.sway_cars = cars;
         } else {
             let (mut prev_c, mut b_prev) = (self.position, 0.0f64);
             for t in &mut trailers {
@@ -678,6 +729,11 @@ impl VehicleInstance {
         self.trailers = trailers;
     }
 }
+
+/// How far over the point `GetHeightAbovePoint`'s ray starts (m, Omsi.exe 0x7a0a88).
+const HEIGHT_RAY_START: f64 = 3.0;
+/// What `GetHeightAbovePoint` answers with no face under the point (Omsi.exe 0x7a086c).
+pub(crate) const NO_FACE_BELOW: f32 = 1000.0;
 
 /// OMSI's frames, a thirtieth of a second (`[maxFPS]` 30 in its options.cfg and every option
 /// preset but one): `A_Trans_*` is the body's velocity change over one of them (0x7d5124),

@@ -11,6 +11,7 @@ mod nf6d;
 mod rail_power;
 mod scripts_props;
 mod trams;
+mod zweiachser;
 
 #[test]
 fn velocity_is_the_driven_wheels_speed() {
@@ -907,6 +908,38 @@ fn a_single_railcar_retrails_without_trailers() {
     v.trailers.clear();
     v.retrail(1.0 / 30.0, &|d| Some(DVec3::new(0.0, -d, 0.0)));
     assert!(v.trailers.is_empty());
+}
+
+/// Laying a train on its track every frame makes nothing for the sway while it is off (an
+/// AI train), and with it on keeps the same storage from frame to frame.
+#[test]
+fn laying_a_train_keeps_the_sways_storage_and_makes_none_without_it() {
+    let mut v = synthetic_rail_consist();
+    let straight = |d: f64| Some(DVec3::new(0.0, -d, 0.0));
+    for _ in 0..5 {
+        v.retrail(1.0 / 30.0, &straight);
+    }
+    assert_eq!(
+        (v.sway_rolls.capacity(), v.sway_cars.capacity()),
+        (0, 0),
+        "nothing made without the sway"
+    );
+    v.rail_sway = true;
+    v.retrail(1.0 / 30.0, &straight);
+    let storage = |v: &VehicleInstance| {
+        (
+            v.sway_rolls.as_ptr(),
+            v.sway_rolls.len(),
+            v.sway_cars.as_ptr(),
+            v.sway_cars.capacity(),
+        )
+    };
+    let before = storage(&v);
+    assert_eq!(before.1, v.trailers.len(), "a roll for each part");
+    for _ in 0..10 {
+        v.retrail(1.0 / 30.0, &straight);
+    }
+    assert_eq!(storage(&v), before, "the same lists, nothing made again");
 }
 
 /// A paint scheme's folder gives only what its `.cti` names, each by its full name; a

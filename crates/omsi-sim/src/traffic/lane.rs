@@ -109,6 +109,9 @@ pub struct Lane {
     pub ring: bool,
     /// What a rail lane's track is: tram or railway, third rail, tunnel (see `rail::track`).
     pub track: Option<crate::rail::TrackInfo>,
+    /// The path's `[third_rail]`s, as the file lists them, their `x` to the right of the way
+    /// this lane runs (see `omsi_sim::vehicle::BogieGround`).
+    pub third_rails: Vec<[f32; 6]>,
 }
 
 /// Priority of a path without a `[rule] priority`.
@@ -446,6 +449,7 @@ impl LaneBuilder {
             crossing_problem: false,
             ring: false,
             track: None,
+            third_rails: Vec::new(),
         }
     }
 
