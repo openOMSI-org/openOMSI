@@ -218,6 +218,29 @@ fn the_trip_panel_runs_too() {
 }
 
 #[test]
+fn the_navigator_map_lays_three_cards_over_the_map() {
+    let mut p = load("ex-navmap", "navigator_map.lua");
+    let mut g = Game::new();
+    for _ in 0..3 {
+        p.frame(&mut g);
+    }
+    no_errors(&g);
+    let ui = p.ui.borrow();
+    let panel = &ui
+        .panels()
+        .iter()
+        .find(|e| e.id == "map")
+        .expect("the panel")
+        .panel;
+    assert!(panel.frame);
+    let omsi_plugin::ui::Kind::Map { cards, overlay, .. } = &panel.children[0].kind else {
+        panic!("{:?}", panel.children[0])
+    };
+    assert!(!cards);
+    assert_eq!(overlay.len(), 3);
+}
+
+#[test]
 fn reduced_tickets_change_the_full_fare() {
     let mut p = load("ex-reduced", "reduced_tickets.lua");
     let mut g = Game::new();

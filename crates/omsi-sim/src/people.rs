@@ -56,6 +56,8 @@ use std::sync::Arc;
 #[rustfmt::skip]
 pub mod model;
 #[rustfmt::skip]
+pub mod free_drive;
+#[rustfmt::skip]
 pub mod cabin;
 #[rustfmt::skip]
 pub mod pednet;
@@ -124,6 +126,12 @@ mod desk_ticket_tests;
 #[cfg(test)]
 #[rustfmt::skip]
 mod destination_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod late_tolerance_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod free_drive_tests;
 #[cfg(test)]
 #[rustfmt::skip]
 mod board_when_stopped_tests;
