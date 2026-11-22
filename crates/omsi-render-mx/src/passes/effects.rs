@@ -76,7 +76,7 @@ impl Renderer {
     // over the picture before its glow and metering (the window's picture; the mirrors
     // go without)
     pub(crate) fn encode_fog_lamps(
-        &self,
+        &mut self,
         encoder: &mut mx::CommandEncoder,
         scene: &Scene,
         f: &FrameCtx,
@@ -98,6 +98,21 @@ impl Renderer {
         let shafts = lighting.shadows
             && lighting.sun_dir.z > 0.0
             && self.shafts_seen(vp_mat, lighting.sun_dir);
+        // The volumetric fog first (vol_fog.rs): it exchanges the main pass's analytic air for
+        // the marched one, the sun's shafts in it, and the lamps' light is added over that.
+        // In clear air it is drawn only where the shafts can show.
+        let frame_ok = enhanced && prepass_on && with_overlays && masked_frame;
+        let vol_view =
+            (frame_ok && (enhanced_weather_fog(lighting) >= 1e-4 || shafts)).then(|| {
+                let h = &self.targets.hdr_targets[&(width, height)];
+                h.puddles
+                    .as_ref()
+                    .filter(|_| puddles_on)
+                    .map_or(&h.view, |p| &p.view)
+                    .clone()
+            });
+        let vol = self.encode_vol_fog(encoder, scene, f, vp_mat, vol_view.as_ref(), timers);
+        let shafts = shafts && !vol;
         // (the glare goes by how much of the sun is seen, which is none with the sun behind
         // the camera - fog_lamps.wgsl `sun_seen`: then there is no glare to add)
         // (the veil reaches 100 degrees round the sun - `sun_glare` - so the pass runs while
@@ -274,6 +289,10 @@ impl Renderer {
                     depth_or_array_layers: 1,
                 },
             );
+            // (the smaller levels, for the blur through a wet pane: `glass_mips`)
+            if let Some(mips) = self.targets.glass_mips.as_ref() {
+                mips.encode(encoder);
+            }
             let colours = [
                 Some(mx::RenderPassColorAttachment {
                     view,

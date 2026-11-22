@@ -299,7 +299,7 @@ impl Renderer {
             Some(c) => RenderOptions {
                 msaa: c.msaa_for(options.msaa),
                 ssao: options.ssao && c.ssao,
-                shadow_size: options.shadow_size.clamp(512, c.shadow_size),
+                shadow_size: options.shadow_size.clamp(256, c.shadow_size),
                 puddle_reflections: options.puddle_reflections && c.puddle_reflections,
                 ..options
             },
@@ -363,6 +363,7 @@ impl Renderer {
         self.targets.scale_targets.clear();
         self.targets.triple_targets = None;
         self.targets.glass_picture = None;
+        self.targets.glass_mips = None;
         self.targets.target_use.clear();
         let (mesh_pages, frame_generation) = (self.mesh_pages, self.frame_generation.take());
         *self = Renderer {
@@ -977,6 +978,7 @@ impl Renderer {
             );
         }
         self.encode_sky_cube(&mut enc.prepass, scene, &f, probe_redraw, &mut timers);
+        self.encode_clouds(&mut enc.prepass, scene, &f, vp_mat, &mut timers);
         self.encode_probe(&mut enc.prepass, scene, probe_redraw, &mut timers);
         let mut main_parts = self.encode_main_pass(
             &mut enc.picture,

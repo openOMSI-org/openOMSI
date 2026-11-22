@@ -312,7 +312,7 @@ pub(crate) fn array_layout_entry_on(
 }
 
 /// The camera group's textures only the enhanced path reads: the reflection probe, the sky
-/// table and the sky cube.
+/// table and the window's clouds.
 pub(crate) const ENHANCED_CAMERA_TEXTURES: [u32; 3] = [12, 14, 17];
 
 /// wgpu's OpenGL backend has sixteen texture units for a pipeline - for all its groups and
@@ -442,7 +442,7 @@ pub(crate) fn camera_layout_entries(
             visibility: crate::gpu::schema::ShaderStages::FRAGMENT,
             ty: crate::gpu::schema::BindingType::Texture {
                 sample_type: mx::TextureSampleType::Float { filterable: true },
-                view_dimension: mx::TextureViewDimension::Cube,
+                view_dimension: mx::TextureViewDimension::D2,
                 multisampled: false,
             },
             count: None,

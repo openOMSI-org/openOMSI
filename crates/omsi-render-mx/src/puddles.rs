@@ -51,9 +51,12 @@ pub(super) struct Uniform {
 
 pub(super) fn shader_source() -> String {
     [
-        include_str!("colour.wgsl"),
-        include_str!("puddle_common.wgsl"),
-        include_str!("puddle_reflection.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("colour.wgsl"), "colour.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("puddle_common.wgsl"), "puddle_common.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("puddle_reflection.wgsl"),
+            "puddle_reflection.wgsl",
+        ),
     ]
     .join("\n")
 }
