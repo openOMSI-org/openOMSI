@@ -25,9 +25,12 @@ pub(crate) struct GpuCorona {
     pub(crate) dir: [f32; 4],
     /// xyz: the up axis; w: rotating mode
     pub(crate) up: [f32; 4],
-    /// x: inner cone cosine, y: z offset, z: flags
+    /// x: inner cone cosine, y: z offset, z: flags (bit 16 marks a vehicle lamp)
     pub(crate) extra: [f32; 4],
 }
+
+// Internal sprite flag, above the model's effects and the generated star flag.
+const VEHICLE_LAMP: u8 = 16;
 
 /// A point light in world space (`[maplight]`, `[interiorlight]`, headlights).
 #[derive(Debug, Clone, Copy)]
@@ -149,7 +152,9 @@ pub(crate) fn smoke_sprite(p: &SmokeParticle, ro: DVec3) -> Option<GpuCorona> {
         return None;
     }
     // (drawn at 0.9 of its size, see `vs_main`)
-    if p.ground.is_some_and(|g| p.position.z + (p.size * 0.9) as f64 <= g) {
+    if p.ground
+        .is_some_and(|g| p.position.z + (p.size * 0.9) as f64 <= g)
+    {
         return None;
     }
     let (sin, cos) = p.spin.sin_cos();
@@ -159,7 +164,12 @@ pub(crate) fn smoke_sprite(p: &SmokeParticle, ro: DVec3) -> Option<GpuCorona> {
         size: p.size,
         color: [p.color[0], p.color[1], p.color[2], p.alpha.clamp(0.0, 1.0)],
         dir: [cos, sin, 0.0, 0.0],
-        up: [ground.map(|g| (g - ro.z) as f32).unwrap_or(0.0), if ground.is_some() { 1.0 } else { 0.0 }, p.z_offset.max(0.0), smoke_ground_fade(p.size)],
+        up: [
+            ground.map(|g| (g - ro.z) as f32).unwrap_or(0.0),
+            if ground.is_some() { 1.0 } else { 0.0 },
+            p.z_offset.max(0.0),
+            smoke_ground_fade(p.size),
+        ],
         extra: [-2.0, 0.0, 0.0, 3.0],
     })
 }
@@ -184,7 +194,11 @@ pub(crate) const SNOW_TRACK_TOKEN: u64 = 16;
 /// the game's side (`omsi_scene::road_snow::enabled`: no field kept, no frame's work, and
 /// the season's WinterSnowfall road textures as before). Known once the device is open.
 pub fn road_snow_supported() -> bool {
-    road_snow_supported_on(gl_backend(), omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set(), array_path())
+    road_snow_supported_on(
+        gl_backend(),
+        omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set(),
+        array_path(),
+    )
 }
 
 /// `road_snow_supported` on a device that is OpenGL (`gl`) or takes its layout (`gl_units`,
@@ -231,6 +245,8 @@ pub struct Corona {
     /// towards the viewer, seen from in front of the light; the angles and the visibility
     /// travel as for a cone.
     pub halo: bool,
+    /// Exterior vehicle lamp sprite eligible for compact glow.
+    pub vehicle_lamp: bool,
 }
 
 impl Default for Corona {
@@ -251,6 +267,7 @@ impl Default for Corona {
             beam: false,
             beam_width: 0.0,
             halo: false,
+            vehicle_lamp: false,
         }
     }
 }
@@ -292,9 +309,21 @@ impl LampAtlas {
         let tiles = if cube { LAMP_SHADOWS } else { CUBE_SLOTS.start };
         let layout = |tile: u32| {
             let cols = (shadow_size / tile).max(1);
-            LampAtlas { shadow_size, tile, cols, rows: (tiles as u32).div_ceil(cols), tiles }
+            LampAtlas {
+                shadow_size,
+                tile,
+                cols,
+                rows: (tiles as u32).div_ceil(cols),
+                tiles,
+            }
         };
-        let none = LampAtlas { shadow_size, tile: 64, cols: 1, rows: 0, tiles: 0 };
+        let none = LampAtlas {
+            shadow_size,
+            tile: 64,
+            cols: 1,
+            rows: 0,
+            tiles: 0,
+        };
         if !lamps {
             return none;
         }
@@ -327,7 +356,16 @@ impl LampAtlas {
     /// What the camera uniform's `lamp_atlas` holds: a tile's side, tiles to a row, the
     /// texture's height and how many tiles there are.
     pub(crate) fn uniform(&self) -> [f32; 4] {
-        [self.tile as f32, self.cols as f32, self.height() as f32, if self.rows > 0 { self.tiles as f32 } else { 0.0 }]
+        [
+            self.tile as f32,
+            self.cols as f32,
+            self.height() as f32,
+            if self.rows > 0 {
+                self.tiles as f32
+            } else {
+                0.0
+            },
+        ]
     }
 }
 
@@ -390,15 +428,35 @@ impl LampShadow {
     /// A light with no tile description yet but the slot: the rest to be filled in by the one
     /// that makes it (a world lamp looks straight down, 0.1 m to its reach).
     pub(crate) fn new(slot: usize) -> LampShadow {
-        LampShadow { slot, position: Vec3::ZERO, range: 0.0, owner: None, look: None, aim: None, own: None, hosts: false, near: 0.1, fov: LAMP_SHADOW_FOV, cabin: None, index: 0 }
+        LampShadow {
+            slot,
+            position: Vec3::ZERO,
+            range: 0.0,
+            owner: None,
+            look: None,
+            aim: None,
+            own: None,
+            hosts: false,
+            near: 0.1,
+            fov: LAMP_SHADOW_FOV,
+            cabin: None,
+            index: 0,
+        }
     }
 
     /// A sphere (centre, radius) that holds the reach of all of `lamps`; `None` for none.
     pub(crate) fn union_sphere(lamps: &[LampShadow]) -> Option<(Vec3, f32)> {
         let first = lamps.first()?;
-        let (lo, hi) = lamps.iter().fold((first.position, first.position), |(lo, hi), l| (lo.min(l.position), hi.max(l.position)));
+        let (lo, hi) = lamps
+            .iter()
+            .fold((first.position, first.position), |(lo, hi), l| {
+                (lo.min(l.position), hi.max(l.position))
+            });
         let centre = (lo + hi) * 0.5;
-        let radius = lamps.iter().map(|l| (l.position - centre).length() + l.range).fold(0.0, f32::max);
+        let radius = lamps
+            .iter()
+            .map(|l| (l.position - centre).length() + l.range)
+            .fold(0.0, f32::max);
         Some((centre, radius))
     }
 
@@ -417,14 +475,16 @@ impl LampShadow {
     /// A spot light's map: along its axis over its cone, depth 0..1 over its reach.
     fn aim_matrix(&self, aim: Vec3) -> Mat4 {
         let up = if aim.z.abs() > 0.98 { Vec3::Y } else { Vec3::Z };
-        Mat4::perspective_rh(self.fov.to_radians(), 1.0, self.near, self.range.max(1.0)) * Mat4::look_to_rh(self.position, aim, up)
+        Mat4::perspective_rh(self.fov.to_radians(), 1.0, self.near, self.range.max(1.0))
+            * Mat4::look_to_rh(self.position, aim, up)
     }
 
     /// What the tile's content is judged by: the matrix itself, but for a saloon lamp's
     /// tile the one in the vehicle's frame, which does not change as the vehicle moves.
     pub(crate) fn key_matrix(&self) -> Mat4 {
         if let Some(c) = &self.cabin {
-            let proj = Mat4::perspective_rh(self.fov.to_radians(), 1.0, self.near, self.range.max(1.0));
+            let proj =
+                Mat4::perspective_rh(self.fov.to_radians(), 1.0, self.near, self.range.max(1.0));
             return proj * Mat4::look_to_rh(c.lamp, -Vec3::Z, Vec3::Y);
         }
         if let Some(aim) = self.aim {
@@ -451,7 +511,10 @@ pub(crate) const VANILLA_CELL_CAP: usize = 8;
 fn cell_strength(intensity: f32, color: [f32; 3], r: f32, d2: f32) -> f32 {
     let r0 = r * 0.125;
     let d = d2.sqrt();
-    intensity * (color[0] + color[1] + color[2]) * (r0 * r0 / d2.max(0.01)).min(1.0) * (1.0 - d / r.max(0.01)).max(0.0)
+    intensity
+        * (color[0] + color[1] + color[2])
+        * (r0 * r0 / d2.max(0.01)).min(1.0)
+        * (1.0 - d / r.max(0.01)).max(0.0)
 }
 
 /// Does this path draw the light? (See `Renderer::prepare_lights`.)
@@ -489,7 +552,12 @@ pub(crate) fn gpu_light(l: &PointLight, p: Vec3) -> GpuPointLight {
     // A Direct3D spot's declared range; negative for the player's, shaded through the
     // camera uniform instead of the grid. Other spots use `position` as their source.
     let extra = match l.d3d_spot.filter(|_| spot && l.mode == LightMode::Vanilla) {
-        Some(s) => [l.cone[0], 0.0, if s.player { -s.range } else { s.range }, l.radius],
+        Some(s) => [
+            l.cone[0],
+            0.0,
+            if s.player { -s.range } else { s.range },
+            l.radius,
+        ],
         None => [l.cone[0], l.core, l.beam, l.radius],
     };
     GpuPointLight {
@@ -509,7 +577,13 @@ impl Renderer {
     /// by, whose radius it reads as 0, and the mirrors show no headlight pools. The three
     /// stand-in points stay out of it, or a street full of cars would fill the grid cells'
     /// sixteen places before the street lamps got theirs.
-    pub(crate) fn prepare_lights(&self, scene: &mut Scene, eye: &LightEye, enhanced: bool, lamp_shadows: bool) -> ([f32; 4], Vec<LampShadow>) {
+    pub(crate) fn prepare_lights(
+        &self,
+        scene: &mut Scene,
+        eye: &LightEye,
+        enhanced: bool,
+        lamp_shadows: bool,
+    ) -> ([f32; 4], Vec<LampShadow>) {
         // the lights that get a shadow map: the world's lamps lighting the camera's
         // surroundings most (by their strength over the distance), as many as there are
         // tiles, the headlamps of the vehicles in front of the camera and the lamps of the
@@ -532,7 +606,10 @@ impl Renderer {
             gpu_lights.push(gpu_light(l, (l.position - ro).as_vec3()));
         }
         // (the player's headlamps, which share a map of their own: see `passes::headlamp_shadow`)
-        let own = eye.vehicle.filter(|_| lamp_shadows && enhanced).map(|(b, _)| passes::VehicleBox::new(b, ro));
+        let own = eye
+            .vehicle
+            .filter(|_| lamp_shadows && enhanced)
+            .map(|(b, _)| passes::VehicleBox::new(b, ro));
         self.lights.cookies.begin_frame();
         // The grid is made in a room kept all unused but for the cells the last one filled,
         // which are cleared first: half a megabyte set and compared twice a frame (the
@@ -554,7 +631,11 @@ impl Renderer {
         counts.resize(cells, 0);
         let mut strength = std::mem::take(&mut scene.grid_strength);
         strength.resize(cells * LIGHT_CELL_CAP, 0.0);
-        let cap = if enhanced { LIGHT_CELL_CAP } else { VANILLA_CELL_CAP };
+        let cap = if enhanced {
+            LIGHT_CELL_CAP
+        } else {
+            VANILLA_CELL_CAP
+        };
         let squares = omsi_cfg::flags::OMSI_LIGHT_GRID_SQUARES.is_set();
         for l in &scene.lights {
             // Every light the grid reaches is in the list, the other path's too (a headlight
@@ -584,7 +665,11 @@ impl Renderer {
             // and 16 more for one of the player's headlamps, which read their shared map
             // (see `passes::headlamp_shadow`, enhanced.wgsl `light_marks`).
             let mut marks = 0.0;
-            if let Some(layer) = l.cookie.filter(|_| enhanced && l.mode == LightMode::Enhanced).and_then(|c| self.lights.cookies.layer(&c)) {
+            if let Some(layer) = l
+                .cookie
+                .filter(|_| enhanced && l.mode == LightMode::Enhanced)
+                .and_then(|c| self.lights.cookies.layer(&c))
+            {
                 marks += 1.0 + layer as f32;
             }
             let is_own = own.as_ref().is_some_and(|b| passes::own_headlamp(l, p, b));
@@ -607,8 +692,14 @@ impl Renderer {
                     let n = counts[cell] as usize;
                     // (its light at the cell's middle, or at its nearest point when the
                     // light stands in the cell)
-                    let cx = (origin[0] + (x as f32 + 0.5) * LIGHT_CELL - p.x).abs().max(0.0) - LIGHT_CELL * 0.5;
-                    let cy = (origin[1] + (y as f32 + 0.5) * LIGHT_CELL - p.y).abs().max(0.0) - LIGHT_CELL * 0.5;
+                    let cx = (origin[0] + (x as f32 + 0.5) * LIGHT_CELL - p.x)
+                        .abs()
+                        .max(0.0)
+                        - LIGHT_CELL * 0.5;
+                    let cy = (origin[1] + (y as f32 + 0.5) * LIGHT_CELL - p.y)
+                        .abs()
+                        .max(0.0)
+                        - LIGHT_CELL * 0.5;
                     let d2 = cx.max(0.0).powi(2) + cy.max(0.0).powi(2);
                     if d2 >= l.radius * l.radius && !squares {
                         continue;
@@ -618,7 +709,17 @@ impl Renderer {
                     // a junction full of traffic would leave its street lamps out)
                     let base = cell * LIGHT_CELL_CAP;
                     let spot = l.direction.length_squared() > 1e-6;
-                    let s = if spot && strength[base..base + n].iter().filter(|&&x| x == f32::MAX).count() < cap / 2 { f32::MAX } else { cell_strength(l.intensity, l.color, l.radius, d2) };
+                    let s = if spot
+                        && strength[base..base + n]
+                            .iter()
+                            .filter(|&&x| x == f32::MAX)
+                            .count()
+                            < cap / 2
+                    {
+                        f32::MAX
+                    } else {
+                        cell_strength(l.intensity, l.color, l.radius, d2)
+                    };
                     if n < cap {
                         if n == 0 {
                             scene.grid_filled.push(cell as u32);
@@ -626,17 +727,34 @@ impl Renderer {
                         grid[base + n] = idx;
                         strength[base + n] = s;
                         counts[cell] += 1;
-                    } else if let Some(weakest) = (0..cap).min_by(|&a, &b| strength[base + a].total_cmp(&strength[base + b])).filter(|&k| strength[base + k] < s) {
+                    } else if let Some(weakest) = (0..cap)
+                        .min_by(|&a, &b| strength[base + a].total_cmp(&strength[base + b]))
+                        .filter(|&k| strength[base + k] < s)
+                    {
                         // a full cell keeps the lights that light it most, not the first ones
                         grid[base + weakest] = idx;
                         strength[base + weakest] = s;
                     } else if omsi_cfg::flags::OMSI_DEBUG_LIGHT_GRID.is_set() {
-                        log::info!("light grid: cell ({x}, {y}) full, light at ({:.1}, {:.1}) radius {:.0} {} left out", p.x, p.y, l.radius, if l.direction.length_squared() > 0.5 { "spot" } else { "point" });
+                        log::info!(
+                            "light grid: cell ({x}, {y}) full, light at ({:.1}, {:.1}) radius {:.0} {} left out",
+                            p.x,
+                            p.y,
+                            l.radius,
+                            if l.direction.length_squared() > 0.5 {
+                                "spot"
+                            } else {
+                                "point"
+                            }
+                        );
                     }
                 }
             }
         }
-        let tiles = if lamp_shadows && enhanced { wants.tiles(scene, eye, own, &mut gpu_lights) } else { Vec::new() };
+        let tiles = if lamp_shadows && enhanced {
+            wants.tiles(scene, eye, own, &mut gpu_lights)
+        } else {
+            Vec::new()
+        };
         // (the beams' pictures the lamps found layers for, after the lights: see `cookies`)
         self.lights.cookies.append(&mut gpu_lights);
         scene.grid_counts = counts;
@@ -664,10 +782,22 @@ impl Renderer {
                 // (only the lights from the first that changed to the last: most stand still)
                 let unit = std::mem::size_of::<GpuPointLight>();
                 let old = &scene.last_lights;
-                let first = (0..lbytes.len() / unit).find(|k| old.get(k * unit..(k + 1) * unit) != Some(&lbytes[k * unit..(k + 1) * unit]));
+                let first = (0..lbytes.len() / unit).find(|k| {
+                    old.get(k * unit..(k + 1) * unit) != Some(&lbytes[k * unit..(k + 1) * unit])
+                });
                 if let Some(first) = first {
-                    let last = (first..lbytes.len() / unit).rev().find(|k| old.get(k * unit..(k + 1) * unit) != Some(&lbytes[k * unit..(k + 1) * unit])).unwrap_or(first);
-                    b.write(&self.queue, (first * unit) as u64, &lbytes[first * unit..(last + 1) * unit]);
+                    let last = (first..lbytes.len() / unit)
+                        .rev()
+                        .find(|k| {
+                            old.get(k * unit..(k + 1) * unit)
+                                != Some(&lbytes[k * unit..(k + 1) * unit])
+                        })
+                        .unwrap_or(first);
+                    b.write(
+                        &self.queue,
+                        (first * unit) as u64,
+                        &lbytes[first * unit..(last + 1) * unit],
+                    );
                 }
             }
             _ => {
@@ -679,7 +809,13 @@ impl Renderer {
             }
         }
         if scene.grid_buf.is_none() || scene.last_grid.len() != grid.len() {
-            let b = GpuArray::new(&self.device, "light grid", (grid.len() * 4) as u64, 4, false);
+            let b = GpuArray::new(
+                &self.device,
+                "light grid",
+                (grid.len() * 4) as u64,
+                4,
+                false,
+            );
             b.write(&self.queue, 0, bytemuck::cast_slice(&grid));
             scene.grid_buf = Some(b);
             scene.last_grid.clone_from(&grid);
@@ -713,7 +849,11 @@ impl Renderer {
             }
             for (a, z) in runs {
                 let r = a * LIGHT_CELL_CAP..z * LIGHT_CELL_CAP;
-                b.write(&self.queue, (r.start * 4) as u64, bytemuck::cast_slice(&scene.last_grid[r]));
+                b.write(
+                    &self.queue,
+                    (r.start * 4) as u64,
+                    bytemuck::cast_slice(&scene.last_grid[r]),
+                );
             }
             scene.grid_marks = marks;
             scene.grid_sent.clone_from(&scene.grid_filled);
@@ -735,12 +875,9 @@ impl Renderer {
         // the same keys gives the same order)
         let (mut sprites, mut order, mut data) = std::mem::take(&mut scene.smoke_scratch);
         sprites.clear();
-        sprites.extend(
-            scene
-                .smoke
-                .iter()
-                .filter_map(|p| smoke_sprite(p, ro).map(|g| (-(p.position - eye).length_squared(), g))),
-        );
+        sprites.extend(scene.smoke.iter().filter_map(|p| {
+            smoke_sprite(p, ro).map(|g| (-(p.position - eye).length_squared(), g))
+        }));
         order.clear();
         order.extend(sprites.iter().enumerate().map(|(i, (d, _))| (*d, i as u32)));
         order.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -796,10 +933,27 @@ impl Renderer {
             }
         }
         self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo { texture: &self.lights.lm_atlas, mip_level: 0, origin: wgpu::Origin3d { x: slot.0 * LM_TILE_PX, y: slot.1 * LM_TILE_PX, z: 0 }, aspect: wgpu::TextureAspect::All },
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.lights.lm_atlas,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: slot.0 * LM_TILE_PX,
+                    y: slot.1 * LM_TILE_PX,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
             &px,
-            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(LM_TILE_PX * 4), rows_per_image: None },
-            wgpu::Extent3d { width: LM_TILE_PX, height: LM_TILE_PX, depth_or_array_layers: 1 },
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(LM_TILE_PX * 4),
+                rows_per_image: None,
+            },
+            wgpu::Extent3d {
+                width: LM_TILE_PX,
+                height: LM_TILE_PX,
+                depth_or_array_layers: 1,
+            },
         );
     }
 
@@ -821,15 +975,22 @@ impl Renderer {
         // without snow keeps the token, 16 MB of the card less)
         let full = SNOW_TRACK_TEXELS as u64 * SNOW_TRACK_TEXELS as u64 * 4;
         if self.lights.snow_track.borrow().size() < full {
-            *self.lights.snow_track.borrow_mut() = self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("snow track field"),
-                size: full,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            self.lights.snow_track_made.set(self.lights.snow_track_made.get() + 1);
+            *self.lights.snow_track.borrow_mut() =
+                self.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("snow track field"),
+                    size: full,
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+            self.lights
+                .snow_track_made
+                .set(self.lights.snow_track_made.get() + 1);
         }
-        self.queue.write_buffer(&self.lights.snow_track.borrow(), offset, &rgba[..rows as usize * row_bytes]);
+        self.queue.write_buffer(
+            &self.lights.snow_track.borrow(),
+            offset,
+            &rgba[..rows as usize * row_bytes],
+        );
     }
 
     /// Where the light map atlas lies: its south-west corner (world x, y) and its side (m).
@@ -845,8 +1006,14 @@ impl Renderer {
             label: Some("corona picture"),
             layout: &self.lights.corona_layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&t.view) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.lights.corona_sampler) },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&t.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.lights.corona_sampler),
+                },
             ],
         });
         let i = id as usize;
@@ -882,8 +1049,14 @@ impl Renderer {
             label: Some("smoke"),
             layout: &self.lights.corona_layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&t.view) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.lights.corona_sampler) },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&t.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.lights.corona_sampler),
+                },
             ],
         });
     }
@@ -891,7 +1064,12 @@ impl Renderer {
     /// Upload this frame's coronas.
     /// `cab`: the box of the vehicle the camera is in, whose own flares Omsi.exe draws
     /// after the vehicle (0x6f0a2c -> 0x6f07bc), the others before it (0x6f0400/0x6f0418).
-    pub(crate) fn prepare_coronas(&self, scene: &mut Scene, night: f32, cab: Option<&(DVec3, f64, [f32; 6])>) {
+    pub(crate) fn prepare_coronas(
+        &self,
+        scene: &mut Scene,
+        night: f32,
+        cab: Option<&(DVec3, f64, [f32; 6])>,
+    ) {
         let ro = scene.render_origin;
         // (its lamps sit on the skin of its box: half a metre round it is the vehicle's)
         let cab = cab.map(|&(o, h, mut bb)| {
@@ -900,8 +1078,16 @@ impl Renderer {
             }
             (o, h, bb)
         });
-        let late = |c: &Corona| cab.as_ref().is_some_and(|b| point_in_vehicle_box(c.position, b));
-        let mut order: Vec<(bool, &Corona)> = scene.coronas.iter().filter(|c| c.brightness > 0.001).map(|c| (late(c), c)).collect();
+        let late = |c: &Corona| {
+            cab.as_ref()
+                .is_some_and(|b| point_in_vehicle_box(c.position, b))
+        };
+        let mut order: Vec<(bool, &Corona)> = scene
+            .coronas
+            .iter()
+            .filter(|c| c.brightness > 0.001)
+            .map(|c| (late(c), c))
+            .collect();
         order.sort_by_key(|(l, c)| (*l, c.texture));
         let mut runs: Vec<(u16, u32, u32, bool)> = Vec::new();
         for (k, &(l, c)) in order.iter().enumerate() {
@@ -912,7 +1098,13 @@ impl Renderer {
         }
         let order: Vec<&Corona> = order.into_iter().map(|(_, c)| c).collect();
         if omsi_cfg::flags::OMSI_DEBUG_CONES.is_set() {
-            log::info!("coronas: {} in {} runs {:?}, {} beams", order.len(), runs.len(), runs, order.iter().filter(|c| c.beam).count());
+            log::info!(
+                "coronas: {} in {} runs {:?}, {} beams",
+                order.len(),
+                runs.len(),
+                runs,
+                order.iter().filter(|c| c.beam).count()
+            );
         }
         scene.corona_runs = runs;
         let data: Vec<GpuCorona> = order
@@ -928,13 +1120,29 @@ impl Renderer {
                     // brightness (the shader takes the viewing angle and clamps it to 1)
                     c.brightness * (night * night + 0.8) * 0.6
                 };
+                let flags = c.flags | if c.vehicle_lamp { VEHICLE_LAMP } else { 0 };
                 GpuCorona {
                     pos: p.to_array(),
                     size: c.size,
                     color: [c.color[0], c.color[1], c.color[2], b],
                     dir: [c.direction.x, c.direction.y, c.direction.z, c.cone_cos],
                     up: [c.up.x, c.up.y, c.up.z, c.rotating as f32],
-                    extra: [c.inner_cos, if c.beam || c.halo { c.beam_width } else { c.z_offset }, c.flags as f32, if c.beam { 1.0 } else if c.halo { 2.0 } else { 0.0 }],
+                    extra: [
+                        c.inner_cos,
+                        if c.beam || c.halo {
+                            c.beam_width
+                        } else {
+                            c.z_offset
+                        },
+                        flags as f32,
+                        if c.beam {
+                            1.0
+                        } else if c.halo {
+                            2.0
+                        } else {
+                            0.0
+                        },
+                    ],
                 }
             })
             .collect();
@@ -1013,10 +1221,24 @@ mod road_snow_gate_tests {
     /// on OpenGL nor on its layout, nor without storage buffers in the fragment stage.
     #[test]
     fn the_road_snow_gate_leaves_out_opengl_and_devices_without_storage() {
-        for path in [ArrayPath::Storage, ArrayPath::VertexTextures, ArrayPath::NoStorage] {
-            assert!(!road_snow_supported_on(true, false, path), "{path:?} on OpenGL");
-            assert!(!road_snow_supported_on(false, true, path), "{path:?} with OMSI_GL_TEXTURE_UNITS");
-            assert_eq!(road_snow_supported_on(false, false, path), path != ArrayPath::NoStorage, "{path:?}");
+        for path in [
+            ArrayPath::Storage,
+            ArrayPath::VertexTextures,
+            ArrayPath::NoStorage,
+        ] {
+            assert!(
+                !road_snow_supported_on(true, false, path),
+                "{path:?} on OpenGL"
+            );
+            assert!(
+                !road_snow_supported_on(false, true, path),
+                "{path:?} with OMSI_GL_TEXTURE_UNITS"
+            );
+            assert_eq!(
+                road_snow_supported_on(false, false, path),
+                path != ArrayPath::NoStorage,
+                "{path:?}"
+            );
         }
     }
 
@@ -1027,12 +1249,27 @@ mod road_snow_gate_tests {
     #[test]
     fn the_scene_shader_and_the_layout_follow_the_road_snow_gate() {
         let gl = crate::shaders::scene_shader_text(true);
-        assert!(!gl.contains("snow_track_px") && !gl.contains("@binding(20)"), "the OpenGL module reads the field");
-        assert!(gl.contains("fn road_snow_dynamic()") && !gl.contains("snow_track.state"), "the OpenGL module draws the built-up snow");
+        assert!(
+            !gl.contains("snow_track_px") && !gl.contains("@binding(20)"),
+            "the OpenGL module reads the field"
+        );
+        assert!(
+            gl.contains("fn road_snow_dynamic()") && !gl.contains("snow_track.state"),
+            "the OpenGL module draws the built-up snow"
+        );
         let native = crate::shaders::scene_shader_text(false);
-        assert_eq!(native.contains("@group(0) @binding(20) var<storage, read> snow_track_px"), road_snow_supported());
-        for path in [ArrayPath::Storage, ArrayPath::VertexTextures, ArrayPath::NoStorage] {
-            let has_field = camera_layout_entries(path, false).iter().any(|e| e.binding == 20);
+        assert_eq!(
+            native.contains("@group(0) @binding(20) var<storage, read> snow_track_px"),
+            road_snow_supported()
+        );
+        for path in [
+            ArrayPath::Storage,
+            ArrayPath::VertexTextures,
+            ArrayPath::NoStorage,
+        ] {
+            let has_field = camera_layout_entries(path, false)
+                .iter()
+                .any(|e| e.binding == 20);
             assert_eq!(has_field, road_snow_supported(), "{path:?}");
         }
     }
@@ -1051,14 +1288,20 @@ mod atlas_tests {
             assert_eq!((a.tile, a.cols), (tile, size / tile), "{size}");
             assert_eq!(a.rows, if size == 8192 { 4 } else { 7 }, "{size}");
             let last = a.origin(LAMP_SHADOWS - 1);
-            assert!(last.0 + a.tile <= size && last.1 + a.tile <= a.height(), "{size}: the last tile lies in the texture");
+            assert!(
+                last.0 + a.tile <= size && last.1 + a.tile <= a.height(),
+                "{size}: the last tile lies in the texture"
+            );
         }
         let a = LampAtlas::new(2048, true, 16384, true);
         assert_eq!(a.height(), 2048 + 7 * 256);
         assert_eq!(a.uniform(), [256.0, 8.0, 3840.0, LAMP_SHADOWS as f32]);
         // without the cube maps' tiles - light_shadows off or street - it is the six rows of before
         let a = LampAtlas::new(2048, true, 16384, false);
-        assert_eq!((a.rows, a.height(), a.has_cubes()), (6, 2048 + 6 * 256, false));
+        assert_eq!(
+            (a.rows, a.height(), a.has_cubes()),
+            (6, 2048 + 6 * 256, false)
+        );
         assert_eq!(a.uniform(), [256.0, 8.0, 3584.0, CUBE_SLOTS.start as f32]);
     }
 
@@ -1067,9 +1310,15 @@ mod atlas_tests {
     #[test]
     fn the_atlas_fits_the_texture_or_leaves_the_tiles_out() {
         let plain = LampAtlas::new(2048, false, 16384, true);
-        assert_eq!((plain.rows, plain.height(), plain.uniform()[3]), (0, 2048, 0.0));
+        assert_eq!(
+            (plain.rows, plain.height(), plain.uniform()[3]),
+            (0, 2048, 0.0)
+        );
         let low = LampAtlas::new(2048, true, 2600, true);
-        assert!(low.rows > 0 && low.height() <= 2600 && low.tile < 256, "{low:?}");
+        assert!(
+            low.rows > 0 && low.height() <= 2600 && low.tile < 256,
+            "{low:?}"
+        );
         let none = LampAtlas::new(2048, true, 2048, true);
         assert_eq!((none.rows, none.uniform()[3]), (0, 0.0));
         // a device that reads 4096 texels at most: the far map is 2048 wide there (see `open`)
