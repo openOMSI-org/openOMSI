@@ -29,9 +29,9 @@ pub(crate) fn setup(name: &str, trailer: Option<f32>) -> (PeopleSim, BusNow) {
         coupling_front_character: trailer.map(|kind| [30.0, -10.0, 10.0, kind]),
         ..def.clone()
     };
-    let mut parts = vec![(&def, Vec3::ZERO, f32::INFINITY)];
+    let mut parts = vec![(&def, Vec3::ZERO, f32::INFINITY, false)];
     if trailer.is_some() {
-        parts.push((&rear, Vec3::new(0.0, -10.0, 0.0), -5.0));
+        parts.push((&rear, Vec3::new(0.0, -10.0, 0.0), -5.0, false));
     }
     let cabin = Arc::new(Cabin::load_train(&parts).unwrap());
     let ty = Arc::new(HumanType::load(&dir.join("person.hum")).unwrap());
@@ -228,6 +228,20 @@ fn brt_ticket_buyers_preserve_selling_door_when_fallback_triggers_and_noticketsa
             "stays directed to selling door despite open noticketsale door"
         );
     }
+}
+
+#[test]
+fn brt_ticket_buyers_fall_back_to_open_door_when_rear_boarding_is_disabled() {
+    let (mut h, mut bus) = setup("rear-boarding-disabled-ticket-fallback", None);
+
+    // Passenger needs to buy a ticket; door 1 is {noticketsale} (open), door 2 is selling (shut)
+    h.pax_mut(0).unwrap().ticket = TICKET_BUY;
+    h.rear_door_boarding = false;
+    bus.entry_open[1] = true;
+    bus.entry_open[2] = false;
+
+    // With rear door boarding off, passenger falls back to open {noticketsale} door
+    assert_eq!(choose(&mut h, &bus), 1, "falls back to open door when rear boarding is disabled");
 }
 
 #[test]

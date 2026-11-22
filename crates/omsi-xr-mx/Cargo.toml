@@ -1,0 +1,24 @@
+[package]
+name = "omsi-xr-mx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "openOMSI in a PC VR headset: the OpenXR session (Windows) and the cockpit navigator's placement"
+
+[dependencies]
+omsi-render = { package = "omsi-render-mx", path = "../omsi-render-mx" }
+glam.workspace = true
+anyhow.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+pollster.workspace = true
+
+# Windows: the OpenXR session on Direct3D 12, sharing mX's device (see `openxr`)
+[target.'cfg(windows)'.dependencies]
+omsi-cfg = { path = "../omsi-cfg" }
+mx.workspace = true
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common"] }
+openxr = { version = "0.22", default-features = false, features = ["static"] }

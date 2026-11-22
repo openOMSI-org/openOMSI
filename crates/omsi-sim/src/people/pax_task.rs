@@ -367,13 +367,18 @@ impl PeopleSim {
         // shut while another of the bus is open - a bus whose script never opens it - sends
         // the passenger back to the open doors after half the `DOOR_GIVE_UP` wait, so the
         // option cannot leave anybody standing at a door that will not open.
-        let rear = self.rear_door_boarding
-            && !p
-                .door_since
+        let fallback = self.rear_door_boarding
+            && p.door_since
                 .is_some_and(|since| self.time - since > DOOR_GIVE_UP * 0.5);
-        let pt = bn
-            .cabin
-            .entry_nearest(here, &list, p.ticket == TICKET_BUY, &flags, &open, rear);
+        let pt = bn.cabin.entry_nearest(
+            here,
+            &list,
+            p.ticket == TICKET_BUY,
+            &flags,
+            &open,
+            self.rear_door_boarding,
+            fallback,
+        );
         let p = self.pax_mut(i).unwrap();
         if let Some(q) = pt.and_then(|k| bn.cabin.graph.points.get(k)) {
             p.target = q.as_dvec3();

@@ -986,7 +986,12 @@ impl Cabin {
         flags: &[(bool, bool)],
         open: &[bool],
         rear_boarding: bool,
+        fallback: bool,
     ) -> Option<usize> {
+        if !rear_boarding {
+            let first = self.omsi_nearest(p, list, avoid, false, Some(flags), Some(open));
+            return first.or_else(|| self.omsi_nearest(p, list, avoid, false, Some(flags), None));
+        }
         let has_ticket_door = avoid
             && list
                 .iter()
@@ -1006,10 +1011,10 @@ impl Cabin {
         } else {
             list.to_vec()
         };
-        let first = if rear_boarding {
-            self.omsi_nearest(p, &search_list, avoid, false, Some(flags), None)
-        } else {
+        let first = if fallback {
             self.omsi_nearest(p, &search_list, avoid, false, Some(flags), Some(open))
+        } else {
+            self.omsi_nearest(p, &search_list, avoid, false, Some(flags), None)
         };
         // A filtered list can begin with a door on the opposite side (None): with every
         // matching door still shut, `omsi_nearest`'s rigid-bus fallback returns the first

@@ -25,37 +25,69 @@ impl World {
         let debug_physics = omsi_cfg::flags::OMSI_DEBUG_PHYSICS.is_set();
         let results: Vec<(Arc<TileSurface>, Option<Image>, Check, usize)> = prepared
             .par_iter_mut()
-            .map(|p| {
-                self.cut_tile(p, staged, layout, debug_raster, check_roads, debug)
-            })
+            .map(|p| self.cut_tile(p, staged, layout, debug_raster, check_roads, debug))
             .collect();
         let (mut holes, mut cells) = (0usize, 0usize);
         let mut where_: Vec<(f64, f64, f32)> = Vec::new();
         let (mut tris, mut wheel_meshes) = (0usize, 0usize);
         for (p, (ts, cut, check, wheels)) in prepared.iter_mut().zip(results) {
-            p.cut = cut.map(|c| if omsi_cfg::flags::OMSI_CUT_PLAIN.is_set() { omsi_texture::gpu::TextureData { gpu_mips: false, ..omsi_texture::gpu::TextureData::from_image(c) } } else { tile_texture(c, true) });
+            p.cut = cut.map(|c| {
+                if omsi_cfg::flags::OMSI_CUT_PLAIN.is_set() {
+                    omsi_texture::gpu::TextureData {
+                        gpu_mips: false,
+                        ..omsi_texture::gpu::TextureData::from_image(c)
+                    }
+                } else {
+                    tile_texture(c, true)
+                }
+            });
             tris += ts.drive.tris.len();
             wheel_meshes += wheels;
             // the wheel surfaces come and go with the tile (World::unload_tile)
-            self.data.update(|d| Arc::make_mut(&mut d.ground).surfaces.insert((p.tx, p.ty), ts));
+            self.data.update(|d| {
+                Arc::make_mut(&mut d.ground)
+                    .surfaces
+                    .insert((p.tx, p.ty), ts)
+            });
             holes += check.0;
             cells += check.1;
             where_.extend(check.2);
         }
         if debug_physics {
-            log::info!("wheel surfaces: {tris} faces on {} tiles from {wheel_meshes} meshes", prepared.len());
+            log::info!(
+                "wheel surfaces: {tris} faces on {} tiles from {wheel_meshes} meshes",
+                prepared.len()
+            );
         }
         if check_roads {
             where_.sort_by(|a, b| b.2.total_cmp(&a.2));
-            log::info!("ground-cut check: {holes} of {cells} covered ground points would be cut away with nothing under them ({:.2} %)", holes as f32 / cells.max(1) as f32 * 100.0);
+            log::info!(
+                "ground-cut check: {holes} of {cells} covered ground points would be cut away with nothing under them ({:.2} %)",
+                holes as f32 / cells.max(1) as f32 * 100.0
+            );
             let over = self.over_road.load(std::sync::atomic::Ordering::Relaxed);
-            log::info!("ground-over-road check: {over} of {cells} road points lie under the ground (3 cm to 1.5 m)");
+            log::info!(
+                "ground-over-road check: {over} of {cells} road points lie under the ground (3 cm to 1.5 m)"
+            );
             if let Ok(mut w) = self.over_road_at.lock() {
                 w.sort_by(|a, b| b.2.total_cmp(&a.2));
                 let by = |lo: f32, hi: f32| w.iter().filter(|p| p.2 >= lo && p.2 < hi).count();
-                log::info!("   by depth: 3-10 cm {}, 10-30 cm {}, 30-60 cm {}, 60 cm-1.5 m {}", by(0.0, 0.1), by(0.1, 0.3), by(0.3, 0.6), by(0.6, 9.0));
-                for (x, y, d, z) in w.iter().filter(|p| p.2 > 0.08 && p.2 < 0.3).step_by(97).take(6) {
-                    log::info!("   (shallow) ground {d:.2} m over the road at ({x:.1}, {y:.1}, {z:.1})");
+                log::info!(
+                    "   by depth: 3-10 cm {}, 10-30 cm {}, 30-60 cm {}, 60 cm-1.5 m {}",
+                    by(0.0, 0.1),
+                    by(0.1, 0.3),
+                    by(0.3, 0.6),
+                    by(0.6, 9.0)
+                );
+                for (x, y, d, z) in w
+                    .iter()
+                    .filter(|p| p.2 > 0.08 && p.2 < 0.3)
+                    .step_by(97)
+                    .take(6)
+                {
+                    log::info!(
+                        "   (shallow) ground {d:.2} m over the road at ({x:.1}, {y:.1}, {z:.1})"
+                    );
                 }
                 for (x, y, d, _) in w.iter().take(8) {
                     log::info!("   ground {d:.2} m over the road at ({x:.1}, {y:.1})");
@@ -81,12 +113,28 @@ impl World {
         let key = (p.tx, p.ty);
         let (tx, ty) = key;
         let (x0, y0) = (tx as f64 * tile_size(), ty as f64 * tile_size());
-        let (mut ts, mut hole_rims, wheel_meshes) = self.tile_surface(p, staged, layout, debug_raster);
+        let (mut ts, mut hole_rims, openings, wheel_meshes) =
+            self.tile_surface(p, staged, layout, debug_raster);
         // (before the paint is cut: under a road the ground's layer is never asked for)
         ts.sound = self.ground_sound(p, staged.get(&key).map(|q| q.as_ref()), &ts.drive);
         if omsi_cfg::flags::OMSI_DEBUG_SURFACES.is_set() {
-            let faces: Vec<String> = ts.drive.surface_examples().iter().map(|(id, n, m)| format!("{id}: {n} faces e.g. ({:.0}, {:.0}, {:.1})", x0 + m.x as f64, y0 + m.y as f64, m.z)).collect();
-            log::info!("tile ({tx}, {ty}): wheel faces by surface {}", faces.join(", "));
+            let faces: Vec<String> = ts
+                .drive
+                .surface_examples()
+                .iter()
+                .map(|(id, n, m)| {
+                    format!(
+                        "{id}: {n} faces e.g. ({:.0}, {:.0}, {:.1})",
+                        x0 + m.x as f64,
+                        y0 + m.y as f64,
+                        m.z
+                    )
+                })
+                .collect();
+            log::info!(
+                "tile ({tx}, {ty}): wheel faces by surface {}",
+                faces.join(", ")
+            );
         }
         let tile_terrain = self.data.peek().ground.terrains.get(&key).cloned();
         if let Some(terrain) = &tile_terrain {
@@ -104,7 +152,10 @@ impl World {
                     .map(|(&(x, y), t)| {
                         (
                             t.as_ref(),
-                            DVec2::new((x - tx) as f64 * tile_size(), (y - ty) as f64 * tile_size()),
+                            DVec2::new(
+                                (x - tx) as f64 * tile_size(),
+                                (y - ty) as f64 * tile_size(),
+                            ),
                         )
                     })
                     .collect();
@@ -122,7 +173,11 @@ impl World {
                             continue;
                         };
                         let offset = q.origin - origin;
-                        if !s.ty.def.terrain_hole_profiles.is_empty() || omsi_geometry::profile_in_cutting(profile, offset, terrain, &neighbors) {
+                        if !s.ty.def.terrain_hole_profiles.is_empty()
+                            || omsi_geometry::profile_in_cutting(
+                                profile, offset, terrain, &neighbors,
+                            )
+                        {
                             cuttings.push(&s.hole_rims);
                         } else {
                             profiles.push((profile, offset));
@@ -138,7 +193,9 @@ impl World {
                         q.splines
                             .iter()
                             .filter(|s| {
-                                s.cuts_terrain && !s.overlay && (s.drivable || s.terrain_profile.is_none())
+                                s.cuts_terrain
+                                    && !s.overlay
+                                    && (s.drivable || s.terrain_profile.is_none())
                             })
                             .map(move |s| (&s.shape, q.origin - origin))
                     })
@@ -159,7 +216,14 @@ impl World {
                     origin,
                 ));
                 if fit_started.elapsed().as_secs_f64() >= 0.5 {
-                    log::warn!("tile {},{}: spline terrain fitting took {:.2} s ({} profiles, {} road surfaces)", key.0, key.1, fit_started.elapsed().as_secs_f64(), profiles.len(), roads.len());
+                    log::warn!(
+                        "tile {},{}: spline terrain fitting took {:.2} s ({} profiles, {} road surfaces)",
+                        key.0,
+                        key.1,
+                        fit_started.elapsed().as_secs_f64(),
+                        profiles.len(),
+                        roads.len()
+                    );
                 }
             }
         }
@@ -168,15 +232,25 @@ impl World {
         }
         p.hole_walls = tile_terrain
             .as_ref()
-            .map(|terrain| omsi_geometry::terrain_hole_walls_with_roads(&hole_rims, terrain, &ts.drive))
+            .map(|terrain| {
+                omsi_geometry::terrain_hole_walls_with_roads(
+                    &hole_rims, terrain, &ts.drive, &openings,
+                )
+            })
             .unwrap_or_default();
         // How much of the ground the old cut rule ("anything below the terrain takes
         // it away") would have removed with nothing to put in its place: a hole in
         // the world you can see the sky through.
-        let check = ground_cut_check(&ts, check_roads, tile_terrain.as_ref(), x0, y0, (&self.over_road, &self.over_road_at));
-        let terrain_at = move |x: f32, y: f32| {
-            tile_terrain.as_ref().map(|t| t.sample(x, y)).unwrap_or(0.0)
-        };
+        let check = ground_cut_check(
+            &ts,
+            check_roads,
+            tile_terrain.as_ref(),
+            x0,
+            y0,
+            (&self.over_road, &self.over_road_at),
+        );
+        let terrain_at =
+            move |x: f32, y: f32| tile_terrain.as_ref().map(|t| t.sample(x, y)).unwrap_or(0.0);
         // the hole the roads cut into the ground, as an alpha image in tile space
         let cut = if ts.cuts_anything(&terrain_at, surface_flush()) {
             if debug {
@@ -186,7 +260,8 @@ impl World {
             if let Some(dir) = omsi_cfg::flags::OMSI_DUMP_CUT.var() {
                 let a: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
                 if let Some(img) = image::GrayImage::from_raw(ts.size as u32, ts.size as u32, a) {
-                    let _ = image::imageops::flip_vertical(&img).save(format!("{dir}/cut_{tx}_{ty}.png"));
+                    let _ = image::imageops::flip_vertical(&img)
+                        .save(format!("{dir}/cut_{tx}_{ty}.png"));
                 }
             }
             Some(Image {
@@ -213,7 +288,7 @@ impl World {
         staged: &HashMap<(i32, i32), Arc<StagedTile>>,
         layout: &TileLayout,
         debug_raster: Option<(f64, f64)>,
-    ) -> (TileSurface, Vec<Vec<DVec3>>, usize) {
+    ) -> (TileSurface, Vec<Vec<DVec3>>, Vec<Vec<DVec2>>, usize) {
         let key = (p.tx, p.ty);
         let (tx, ty) = key;
         let (x0, y0) = (tx as f64 * tile_size(), ty as f64 * tile_size());
@@ -224,33 +299,30 @@ impl World {
         order.sort_by_key(|q| (q.tx, q.ty));
         let mut ts = TileSurface::new(SURFACE_RASTER);
         let mut hole_rims = Vec::new();
+        let mut openings: Vec<Vec<DVec2>> = Vec::new();
         // meshes the wheels stand on, and of them low objects they climb
         let mut wheel_meshes = 0usize;
-        let report = |mesh: &MeshData,
-                      xf: &Mat4,
-                      o: DVec3,
-                      b: &[f64; 4],
-                      label: &dyn Fn() -> String| {
-            let Some((qx, qy)) = debug_raster else { return };
-            if qx < b[0] || qx > b[2] || qy < b[1] || qy > b[3] {
-                return;
-            }
-            let inside = mesh.indices.chunks_exact(3).any(|t| {
-                let w = |i: u32| {
-                    let v = xf.transform_point3(mesh.positions[i as usize]).as_dvec3() + o;
-                    (v.x, v.y)
-                };
-                let (a, bb, c) = (w(t[0]), w(t[1]), w(t[2]));
-                let s1 = (bb.0 - a.0) * (qy - a.1) - (bb.1 - a.1) * (qx - a.0);
-                let s2 = (c.0 - bb.0) * (qy - bb.1) - (c.1 - bb.1) * (qx - bb.0);
-                let s3 = (a.0 - c.0) * (qy - c.1) - (a.1 - c.1) * (qx - c.0);
-                (s1 >= 0.0 && s2 >= 0.0 && s3 >= 0.0)
-                    || (s1 <= 0.0 && s2 <= 0.0 && s3 <= 0.0)
-            });
-            if inside {
-                log::info!("point ({qx},{qy}) covered by {} (bounds {:?})", label(), b);
-            }
-        };
+        let report =
+            |mesh: &MeshData, xf: &Mat4, o: DVec3, b: &[f64; 4], label: &dyn Fn() -> String| {
+                let Some((qx, qy)) = debug_raster else { return };
+                if qx < b[0] || qx > b[2] || qy < b[1] || qy > b[3] {
+                    return;
+                }
+                let inside = mesh.indices.chunks_exact(3).any(|t| {
+                    let w = |i: u32| {
+                        let v = xf.transform_point3(mesh.positions[i as usize]).as_dvec3() + o;
+                        (v.x, v.y)
+                    };
+                    let (a, bb, c) = (w(t[0]), w(t[1]), w(t[2]));
+                    let s1 = (bb.0 - a.0) * (qy - a.1) - (bb.1 - a.1) * (qx - a.0);
+                    let s2 = (c.0 - bb.0) * (qy - bb.1) - (c.1 - bb.1) * (qx - bb.0);
+                    let s3 = (a.0 - c.0) * (qy - c.1) - (a.1 - c.1) * (qx - c.0);
+                    (s1 >= 0.0 && s2 >= 0.0 && s3 >= 0.0) || (s1 <= 0.0 && s2 <= 0.0 && s3 <= 0.0)
+                });
+                if inside {
+                    log::info!("point ({qx},{qy}) covered by {} (bounds {:?})", label(), b);
+                }
+            };
         // every road that reaches the tile; a railway embankment or a bridge deck is
         // a surface (the ground is cut under it) but not something the wheels stand
         // on: only splines that carry a road or footway path count as drivable
@@ -266,25 +338,12 @@ impl World {
                 report(&sp.shape, &Mat4::IDENTITY, q.origin, &sp.bounds, &|| {
                     format!("spline {}", sp.ty.def.path.display())
                 });
-                ts.rasterize_kind(
-                    &sp.shape,
-                    &Mat4::IDENTITY,
-                    q.origin,
-                    tx,
-                    ty,
-                    sp.drivable,
-                );
+                ts.rasterize_kind(&sp.shape, &Mat4::IDENTITY, q.origin, tx, ty, sp.drivable);
             }
             // what the wheels roll on: the splines' height profiles
             for (hp, b, surf) in &q.drive {
                 if !outside(b) {
-                    ts.add_spline_drive(
-                        hp,
-                        surf.as_ref(),
-                        q.origin,
-                        tx,
-                        ty,
-                    );
+                    ts.add_spline_drive(hp, surf.as_ref(), q.origin, tx, ty);
                     wheel_meshes += 1;
                 }
             }
@@ -305,16 +364,47 @@ impl World {
                 let Some(pose) = pose else { continue };
                 let ot = &o.ot;
                 // Editor-only helpers and trees do not cut terrain.
-                if ot.sco.tree.is_some()
-                    || ot.sco.only_editor
-                    || ot.sco.is_help_arrow
-                {
+                if ot.sco.tree.is_some() || ot.sco.only_editor || ot.sco.is_help_arrow {
                     continue;
                 }
                 for h in &ot.holes {
+                    // (a tunnel mouth's cut can reach a tile the sheet itself is not on)
+                    if let Some(portal) = omsi_geometry::hole_portal(h, &pose.rot, pose.pos) {
+                        let data = self.data.peek();
+                        let dz = p.origin.z;
+                        let ground = |q: DVec2| {
+                            let k = (
+                                (q.x / tile_size()).floor() as i32,
+                                (q.y / tile_size()).floor() as i32,
+                            );
+                            let t = data.ground.terrains.get(&k)?;
+                            Some(
+                                t.sample(
+                                    (q.x - k.0 as f64 * tile_size()) as f32,
+                                    (q.y - k.1 as f64 * tile_size()) as f32,
+                                ) as f64
+                                    + dz,
+                            )
+                        };
+                        if omsi_geometry::portal_is_buried(&portal, &ground) {
+                            continue;
+                        }
+                        let outline = omsi_geometry::portal_outline(&portal, &ground);
+                        ts.add_outline(&outline, tx, ty);
+                        let local = p.origin.truncate();
+                        openings.push(
+                            omsi_geometry::portal_clearing(&outline)
+                                .into_iter()
+                                .map(|q| q - local)
+                                .collect(),
+                        );
+                        continue;
+                    }
                     if !outside(&mesh_bounds(h, &pose.rot, pose.pos)) {
                         // (a stray junction left at height zero dug a 30 m pit: Spandau, tile 2382/11287)
-                        if hole_is_buried(h, &pose.rot, pose.pos, &|x, y| Self::base_ground(&src, x, y)) {
+                        if hole_is_buried(h, &pose.rot, pose.pos, &|x, y| {
+                            Self::base_ground(&src, x, y)
+                        }) {
                             continue;
                         }
                         ts.rasterize_hole(h, &pose.rot, pose.pos, tx, ty);
@@ -336,9 +426,7 @@ impl World {
                 }
                 // Laid on the ground (the terrain is cut under it): a `[surface]` object
                 // and one drawn as a ground layer (`[rendertype]`).
-                let surface =
-                    ot.sco.render_type.is_ground_layer()
-                        || ot.sco.surface;
+                let surface = ot.sco.render_type.is_ground_layer() || ot.sco.surface;
                 if !surface {
                     continue;
                 }
@@ -357,7 +445,11 @@ impl World {
                 // its first mesh). Every one of those lifted the wheels here: the bus
                 // hopped over markings, low collision meshes and whatever a surface
                 // object carried - bumps nobody could see.
-                let ground_mesh = ot.sco.surface.then(|| ot.mesh_def_index.iter().position(|&d| d == 0)).flatten();
+                let ground_mesh = ot
+                    .sco
+                    .surface
+                    .then(|| ot.mesh_def_index.iter().position(|&d| d == 0))
+                    .flatten();
                 for (k, mesh) in meshes.into_iter().enumerate() {
                     let b = mesh_bounds(mesh, &pose.rot, pose.pos);
                     if outside(&b) {
@@ -376,8 +468,16 @@ impl World {
                         // (its textures' `.surf` maps: cobbled junctions shake the bus too)
                         let dirs = ot.texture_dirs(&self.root);
                         let dirs: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
-                        let maps: Vec<_> = ot.meshes.get(k).map(|m| m.1.iter().map(|m| surf_map(&m.texture, &dirs)).collect()).unwrap_or_default();
-                        let ids: Vec<u8> = ot.meshes.get(k).map(|m| m.1.iter().map(|m| surface_id(&m.texture, &dirs)).collect()).unwrap_or_default();
+                        let maps: Vec<_> = ot
+                            .meshes
+                            .get(k)
+                            .map(|m| m.1.iter().map(|m| surf_map(&m.texture, &dirs)).collect())
+                            .unwrap_or_default();
+                        let ids: Vec<u8> = ot
+                            .meshes
+                            .get(k)
+                            .map(|m| m.1.iter().map(|m| surface_id(&m.texture, &dirs)).collect())
+                            .unwrap_or_default();
                         ts.add_drive_mesh_surf(
                             mesh,
                             &pose.rot,
@@ -392,7 +492,7 @@ impl World {
             }
         }
         ts.finish();
-        (ts, hole_rims, wheel_meshes)
+        (ts, hole_rims, openings, wheel_meshes)
     }
 
     // The textures of object types, splines and trees that are not on the GPU yet are
@@ -402,12 +502,20 @@ impl World {
         if prepared.len() <= 16 {
             for p in prepared.iter_mut() {
                 for o in p.objects.iter_mut() {
-                    let freetex = o.ot.meshes.iter().any(|(_, _, ov)| ov.iter().any(|m| !m.item && m.freetex.is_some()));
+                    let freetex =
+                        o.ot.meshes
+                            .iter()
+                            .any(|(_, _, ov)| ov.iter().any(|m| !m.item && m.freetex.is_some()));
                     if o.lamp.is_some() || (o.ot.dynamic_textures.is_empty() && !freetex) {
                         continue;
                     }
                     if let Some(program) = o.ot.program.clone() {
-                        o.script = Some(omsi_sim::scenery::SceneryInstance::new(program, &o.ot.mesh_defs(), self.script_clock(), &o.strings));
+                        o.script = Some(omsi_sim::scenery::SceneryInstance::new(
+                            program,
+                            &o.ot.mesh_defs(),
+                            self.script_clock(),
+                            &o.strings,
+                        ));
                     }
                 }
             }
@@ -423,7 +531,10 @@ impl World {
             let in_flight: Vec<(PathBuf, Arc<TextureData>)> = {
                 let mut known = self.decoded_in_flight.lock();
                 known.retain(|_, t| t.strong_count() > 0);
-                known.iter().filter_map(|(p, t)| Some((p.clone(), t.upgrade()?))).collect()
+                known
+                    .iter()
+                    .filter_map(|(p, t)| Some((p.clone(), t.upgrade()?)))
+                    .collect()
             };
             let in_flight: HashMap<PathBuf, Arc<TextureData>> = in_flight.into_iter().collect();
             let decoded: Vec<(PathBuf, Arc<TextureData>, bool)> = wanted
@@ -458,11 +569,25 @@ impl World {
                 prepared
                     .iter()
                     .flat_map(|p| &p.objects)
-                    .filter(|o| matches!(o.ot.sco.render_type, omsi_scenery::sco::RenderType::Surface | omsi_scenery::sco::RenderType::OnSurface))
-                    .filter(|o| !gpu.types.contains_key(&(Arc::as_ptr(&o.ot) as usize)) && seen.insert(Arc::as_ptr(&o.ot)))
+                    .filter(|o| {
+                        matches!(
+                            o.ot.sco.render_type,
+                            omsi_scenery::sco::RenderType::Surface
+                                | omsi_scenery::sco::RenderType::OnSurface
+                        )
+                    })
+                    .filter(|o| {
+                        !gpu.types.contains_key(&(Arc::as_ptr(&o.ot) as usize))
+                            && seen.insert(Arc::as_ptr(&o.ot))
+                    })
                     .flat_map(|o| {
                         let dirs = o.ot.texture_dirs(&self.root);
-                        o.ot.meshes.iter().flat_map(|m| &m.1).filter(|m| !is_null_texture(&m.texture)).map(move |m| (m.texture.clone(), dirs.clone())).collect::<Vec<_>>()
+                        o.ot.meshes
+                            .iter()
+                            .flat_map(|m| &m.1)
+                            .filter(|m| !is_null_texture(&m.texture))
+                            .map(move |m| (m.texture.clone(), dirs.clone()))
+                            .collect::<Vec<_>>()
                     })
                     .collect()
             };
@@ -487,7 +612,10 @@ fn ground_cut_check(
     tile_terrain: Option<&Arc<Terrain>>,
     x0: f64,
     y0: f64,
-    (over_road, over_road_at): (&std::sync::atomic::AtomicUsize, &std::sync::Mutex<Vec<(f64, f64, f32, f32)>>),
+    (over_road, over_road_at): (
+        &std::sync::atomic::AtomicUsize,
+        &std::sync::Mutex<Vec<(f64, f64, f32, f32)>>,
+    ),
 ) -> Check {
     let mut check: Check = (0, 0, Vec::new());
     if let (true, Some(t)) = (check_roads, tile_terrain.as_ref()) {
@@ -502,10 +630,24 @@ fn ground_cut_check(
                 check.1 += 1;
                 let th = t.sample((i as f32 + 0.5) * cell, (j as f32 + 0.5) * cell);
                 // the ground over a road: shows through it (Omsi.exe cuts nothing)
-                if ts.road_covered(k) && th > ts.road_height(k) + 0.03 && th < ts.road_height(k) + 1.5 && !ts.cut_at((i as f32 + 0.5) * cell, (j as f32 + 0.5) * cell, th, surface_flush()) {
+                if ts.road_covered(k)
+                    && th > ts.road_height(k) + 0.03
+                    && th < ts.road_height(k) + 1.5
+                    && !ts.cut_at(
+                        (i as f32 + 0.5) * cell,
+                        (j as f32 + 0.5) * cell,
+                        th,
+                        surface_flush(),
+                    )
+                {
                     over_road.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     if let Ok(mut w) = over_road_at.lock() {
-                        w.push((x0 + ((i as f32 + 0.5) * cell) as f64, y0 + ((j as f32 + 0.5) * cell) as f64, th - ts.road_height(k), th));
+                        w.push((
+                            x0 + ((i as f32 + 0.5) * cell) as f64,
+                            y0 + ((j as f32 + 0.5) * cell) as f64,
+                            th - ts.road_height(k),
+                            th,
+                        ));
                     }
                 }
                 let old_rule = th >= ts.low_height(k) - surface_flush();
@@ -530,19 +672,51 @@ fn ground_cut_check(
 impl World {
     /// What the ambience hears of a tile: the surface of its ground layers where they show,
     /// its trees and how many objects stand on it.
-    fn ground_sound(&self, p: &Prepared, q: Option<&StagedTile>, drive: &omsi_geometry::DriveGrid) -> omsi_geometry::GroundSound {
+    fn ground_sound(
+        &self,
+        p: &Prepared,
+        q: Option<&StagedTile>,
+        drive: &omsi_geometry::DriveGrid,
+    ) -> omsi_geometry::GroundSound {
         let root = [self.root.as_path()];
-        let ids: Vec<u8> = self.global.ground_textures.iter().map(|g| surface_id(&g.texture, &root)).collect();
+        let ids: Vec<u8> = self
+            .global
+            .ground_textures
+            .iter()
+            .map(|g| surface_id(&g.texture, &root))
+            .collect();
         // (a map without ground textures is a meadow)
         let base = ids.first().copied().unwrap_or(4);
         let layers: Vec<(u8, usize, usize, &[u8])> = p
             .paint_masks
             .iter()
-            .filter_map(|(layer, img)| Some((*ids.get(*layer)?, img.width as usize, img.height as usize, img.rgba.as_slice())))
+            .filter_map(|(layer, img)| {
+                Some((
+                    *ids.get(*layer)?,
+                    img.width as usize,
+                    img.height as usize,
+                    img.rgba.as_slice(),
+                ))
+            })
             .collect();
         let mut g = omsi_geometry::GroundSound::from_layers(GROUND_SOUND_CELLS, base, &layers);
         let (x0, y0) = (p.tx as f64 * tile_size(), p.ty as f64 * tile_size());
-        g.trees = p.trees.iter().map(|t| [(t.2.x - x0) as f32, (t.2.y - y0) as f32, t.3 as f32, if omsi_soundscape::catalog::is_conifer(&t.0.sco, &t.1) { 1.0 } else { 0.0 }]).collect();
+        g.trees = p
+            .trees
+            .iter()
+            .map(|t| {
+                [
+                    (t.2.x - x0) as f32,
+                    (t.2.y - y0) as f32,
+                    t.3 as f32,
+                    if omsi_soundscape::catalog::is_conifer(&t.0.sco, &t.1) {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                ]
+            })
+            .collect();
         g.objects = p.objects.len() as u32;
         self.sound_places(p, q, drive, &mut g);
         if omsi_cfg::flags::OMSI_DEBUG_SURFACES.is_set() {
@@ -553,10 +727,27 @@ impl World {
             for id in 0..=8u8 {
                 let cells: Vec<usize> = (0..n * n).filter(|k| g.ids[*k] == id).collect();
                 if let Some(k) = cells.get(cells.len() / 2) {
-                    seen.push(format!("{id}: {:.0} % e.g. ({:.0}, {:.0})", cells.len() as f32 * 100.0 / (n * n) as f32, x0 + (k % n) as f64 * cell + cell / 2.0, y0 + (k / n) as f64 * cell + cell / 2.0));
+                    seen.push(format!(
+                        "{id}: {:.0} % e.g. ({:.0}, {:.0})",
+                        cells.len() as f32 * 100.0 / (n * n) as f32,
+                        x0 + (k % n) as f64 * cell + cell / 2.0,
+                        y0 + (k / n) as f64 * cell + cell / 2.0
+                    ));
                 }
             }
-            log::info!("tile ({}, {}): ground surfaces {}; {} trees, {} objects; for the ambience {} buildings, {} known objects, {} lines, {} water cells (water {:?})", p.tx, p.ty, seen.join(", "), g.trees.len(), g.objects, g.buildings.len(), g.spots.len(), g.lines.len(), g.water.len(), p.water);
+            log::info!(
+                "tile ({}, {}): ground surfaces {}; {} trees, {} objects; for the ambience {} buildings, {} known objects, {} lines, {} water cells (water {:?})",
+                p.tx,
+                p.ty,
+                seen.join(", "),
+                g.trees.len(),
+                g.objects,
+                g.buildings.len(),
+                g.spots.len(),
+                g.lines.len(),
+                g.water.len(),
+                p.water
+            );
         }
         g
     }
@@ -574,14 +765,9 @@ fn cut_paint(p: &mut Prepared, cut: Option<&Image>) {
     p.paint = masks
         .into_iter()
         .filter_map(|(layer, img)| {
-            let (mut rgba, w, h) = smooth_paint_mask(
-                &img.rgba,
-                img.width as usize,
-                img.height as usize,
-            );
-            if !p.hole_walls.indices.is_empty()
-                && rgba.chunks_exact(4).any(|v| v[3] > 8)
-            {
+            let (mut rgba, w, h) =
+                smooth_paint_mask(&img.rgba, img.width as usize, img.height as usize);
+            if !p.hole_walls.indices.is_empty() && rgba.chunks_exact(4).any(|v| v[3] > 8) {
                 p.wall_paint.push((
                     layer,
                     tile_texture(
@@ -612,7 +798,12 @@ fn cut_paint(p: &mut Prepared, cut: Option<&Image>) {
                         // paint kept teeth over the hole the road left in the
                         // ground - drawn on top of the carriageway, a staircase
                         // of asphalt or cobbles reaching into the road.
-                        if bilinear_alpha(c, (i as f32 + 0.5) / w as f32, (j as f32 + 0.5) / h as f32) < 0.5 {
+                        if bilinear_alpha(
+                            c,
+                            (i as f32 + 0.5) / w as f32,
+                            (j as f32 + 0.5) / h as f32,
+                        ) < 0.5
+                        {
                             *a = 0;
                         }
                     }
@@ -645,20 +836,42 @@ impl World {
     /// wide as a house), the objects it knows by what their authors filed them as, the lanes,
     /// tracks, wires and tunnels along its splines, and where its water stands over the
     /// ground.
-    fn sound_places(&self, p: &Prepared, q: Option<&StagedTile>, drive: &omsi_geometry::DriveGrid, g: &mut omsi_geometry::GroundSound) {
+    fn sound_places(
+        &self,
+        p: &Prepared,
+        q: Option<&StagedTile>,
+        drive: &omsi_geometry::DriveGrid,
+        g: &mut omsi_geometry::GroundSound,
+    ) {
         use omsi_soundscape::catalog;
         let (x0, y0) = (p.tx as f64 * tile_size(), p.ty as f64 * tile_size());
         let local = |w: DVec3| [(w.x - x0) as f32, (w.y - y0) as f32, w.z as f32];
         // (the model's box per type: the same house stands many times)
-        let mut boxes: HashMap<*const ObjectType, Option<(glam::Vec3, glam::Vec3)>> = HashMap::new();
+        let mut boxes: HashMap<*const ObjectType, Option<(glam::Vec3, glam::Vec3)>> =
+            HashMap::new();
         for o in &p.objects {
             let kind = catalog::classify(&o.ot.sco);
             if let Some(k) = kind {
-                g.spots.push(omsi_geometry::SoundSpot { kind: k as u16, pos: local(o.pos), id: o.map_id });
+                g.spots.push(omsi_geometry::SoundSpot {
+                    kind: k as u16,
+                    pos: local(o.pos),
+                    id: o.map_id,
+                });
             }
-            let Some((lo, hi)) = *boxes.entry(Arc::as_ptr(&o.ot)).or_insert_with(|| model_box(&o.ot)) else { continue };
+            let Some((lo, hi)) = *boxes
+                .entry(Arc::as_ptr(&o.ot))
+                .or_insert_with(|| model_box(&o.ot))
+            else {
+                continue;
+            };
             // (placed: turned and scaled as the map has it)
-            let corners = [lo, hi, glam::Vec3::new(lo.x, hi.y, lo.z), glam::Vec3::new(hi.x, lo.y, hi.z)].map(|c| o.xf.transform_vector3(c));
+            let corners = [
+                lo,
+                hi,
+                glam::Vec3::new(lo.x, hi.y, lo.z),
+                glam::Vec3::new(hi.x, lo.y, hi.z),
+            ]
+            .map(|c| o.xf.transform_vector3(c));
             let (mut a, mut b) = (corners[0], corners[0]);
             for c in corners {
                 a = a.min(c);
@@ -672,12 +885,19 @@ impl World {
         }
         if let Some(q) = q {
             for (kind, speed, points) in &q.sound_lines {
-                g.lines.push(omsi_geometry::SoundLine { kind: *kind, speed: *speed, points: points.iter().map(|w| local(*w)).collect() });
+                g.lines.push(omsi_geometry::SoundLine {
+                    kind: *kind,
+                    speed: *speed,
+                    points: points.iter().map(|w| local(*w)).collect(),
+                });
             }
         }
         // the water: cells whose surface stands over the ground
         // (only where the ground is known: without it nothing says the water lies over it)
-        if let (Some(w), Some(terrain)) = (p.water, self.data.peek().ground.terrains.get(&(p.tx, p.ty)).cloned()) {
+        if let (Some(w), Some(terrain)) = (
+            p.water,
+            self.data.peek().ground.terrains.get(&(p.tx, p.ty)).cloned(),
+        ) {
             let level = (w[0] + w[1] + w[2] + w[3]) / 4.0;
             let n = WATER_CELLS;
             let cell = tile_size() as f32 / n as f32;
@@ -686,7 +906,9 @@ impl World {
                     let (x, y) = ((i as f32 + 0.5) * cell, (j as f32 + 0.5) * cell);
                     // (and nothing laid over it: under a road or a quay the ground often
                     // lies below the water's level, and no water is seen there)
-                    let covered = drive.surface_at(x, y, level + 30.0).is_some_and(|(z, _)| z > level - 1.0);
+                    let covered = drive
+                        .surface_at(x, y, level + 30.0)
+                        .is_some_and(|(z, _)| z > level - 1.0);
                     if terrain.sample(x, y) < level - 0.2 && !covered {
                         g.water.push([x, y]);
                     }
@@ -712,7 +934,9 @@ fn hole_is_buried(
     let (mut top, mut ground) = (f64::NEG_INFINITY, f64::INFINITY);
     for v in &hole.positions {
         let w = rot.transform_point3(*v).as_dvec3() + pos;
-        let Some(g) = ground_at(w.x, w.y) else { return false };
+        let Some(g) = ground_at(w.x, w.y) else {
+            return false;
+        };
         top = top.max(w.z);
         ground = ground.min(g);
     }
@@ -739,9 +963,24 @@ mod buried_hole_tests {
     fn a_cutter_thirty_metres_down_is_buried_and_a_shallow_one_is_not() {
         let ground = |_: f64, _: f64| Some(30.0);
         let at = |z: f64| DVec3::new(100.0, 100.0, z);
-        assert!(hole_is_buried(&square(0.0), &Mat4::IDENTITY, at(0.0), &ground));
-        assert!(!hole_is_buried(&square(0.0), &Mat4::IDENTITY, at(25.0), &ground));
-        assert!(!hole_is_buried(&square(0.0), &Mat4::IDENTITY, at(30.0), &ground));
+        assert!(hole_is_buried(
+            &square(0.0),
+            &Mat4::IDENTITY,
+            at(0.0),
+            &ground
+        ));
+        assert!(!hole_is_buried(
+            &square(0.0),
+            &Mat4::IDENTITY,
+            at(25.0),
+            &ground
+        ));
+        assert!(!hole_is_buried(
+            &square(0.0),
+            &Mat4::IDENTITY,
+            at(30.0),
+            &ground
+        ));
         let mut slope = square(0.0);
         slope.positions[0].z = 30.0;
         assert!(!hole_is_buried(&slope, &Mat4::IDENTITY, at(0.0), &ground));
@@ -750,13 +989,21 @@ mod buried_hole_tests {
     #[test]
     fn a_cutter_where_the_ground_is_not_known_is_not_taken_for_buried() {
         let nowhere = |_: f64, _: f64| None;
-        assert!(!hole_is_buried(&square(0.0), &Mat4::IDENTITY, DVec3::new(0.0, 0.0, -50.0), &nowhere));
+        assert!(!hole_is_buried(
+            &square(0.0),
+            &Mat4::IDENTITY,
+            DVec3::new(0.0, 0.0, -50.0),
+            &nowhere
+        ));
     }
 }
 
 /// The box of an object type's model (its first level of detail), in its own frame.
 fn model_box(ot: &ObjectType) -> Option<(glam::Vec3, glam::Vec3)> {
-    let mut points = ot.meshes.iter().flat_map(|(m, _, _)| m.positions.iter().copied());
+    let mut points = ot
+        .meshes
+        .iter()
+        .flat_map(|(m, _, _)| m.positions.iter().copied());
     let first = glam::Vec3::from(points.next()?);
     let (mut lo, mut hi) = (first, first);
     for p in points {
