@@ -29,6 +29,10 @@
 
 /// The first byte of a `VARS` datagram.
 pub const VARS_MAGIC: u8 = 0xB5;
+/// The first byte of a datagram of the coupled cars' own variables (a tram's rear cab, whose
+/// scripts keep values of their own): laid out as `VARS`, on a channel of its own so that
+/// its strings do not discard the leading vehicle's in flight. A game without it ignores it.
+pub const CAR_VARS_MAGIC: u8 = 0xBE;
 const HEADER: usize = 11;
 /// What one datagram holds at most (within `MAX_DATAGRAM`, with room to spare).
 const ROOM: usize = 1300;

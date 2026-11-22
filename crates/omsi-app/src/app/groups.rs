@@ -69,6 +69,8 @@ pub(crate) struct NetState {
     pub(crate) session_buses: Option<Vec<String>>,
     /// Peers whose vehicle has already been checked against `session_buses` (#1464).
     pub(crate) session_buses_checked: std::collections::HashMap<u32, String>,
+    /// The host's own vehicle checked against `session_buses` (#1464).
+    pub(crate) host_bus_checked: Option<String>,
     pub(crate) mods_server: Option<omsi_lan::mods::Server>,
     pub(crate) remotes: lan::LanGame,
     /// The shared world: the host's traffic and people, sent (host) or mirrored (client).

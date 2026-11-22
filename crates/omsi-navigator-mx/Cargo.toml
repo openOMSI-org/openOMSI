@@ -1,0 +1,23 @@
+[package]
+name = "omsi-navigator-mx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "openOMSI's navigator: the small route map and the full-screen city map - following the route and finding the way back, the traffic's congestion, the timetable's vehicles and the other players, the map package's places - drawn with omsi-ui into a texture of the renderer"
+
+[dependencies]
+omsi-cfg = { path = "../omsi-cfg" }
+omsi-lan = { path = "../omsi-lan" }
+omsi-map = { path = "../omsi-map" }
+omsi-mapdraw = { package = "omsi-mapdraw-mx", path = "../omsi-mapdraw-mx" }
+omsi-model = { path = "../omsi-model" }
+omsi-render = { package = "omsi-render-mx", path = "../omsi-render-mx" }
+omsi-scene = { package = "omsi-scene-mx", path = "../omsi-scene-mx" }
+omsi-sim = { path = "../omsi-sim" }
+omsi-texture = { path = "../omsi-texture" }
+omsi-timetable = { path = "../omsi-timetable" }
+omsi-ui = { package = "omsi-ui-mx", path = "../omsi-ui-mx" }
+glam.workspace = true
+hashbrown.workspace = true
+log.workspace = true
+mx.workspace = true

@@ -290,23 +290,33 @@ impl App {
                     .as_deref()
                     .or(self.args.bus.as_deref())
                     .filter(|b| !b.is_empty());
+                if host_bus == self.net.host_bus_checked.as_deref() {
+                    return;
+                }
                 if let Some(host_bus) = host_bus {
                     if !omsi_lan::server_cfg::allows(list, host_bus) {
                         log::warn!(
                             "session: host bus {host_bus} is not in session_buses list: removed"
                         );
                         self.args.bus = None;
+                        self.net.host_bus_checked = None;
                         let names: Vec<&str> = list
                             .iter()
                             .map(|v| v.rsplit('/').next().unwrap_or(v))
                             .collect();
-                        let reason =
-                            format!("only these buses can be driven here ({})", names.join(", "));
+                        let reason = omsi_ui::i18n::tr_fill(
+                            "only these buses can be driven here ({list})",
+                            &[("{list}", &names.join(", "))],
+                        );
                         if self.player.is_some() {
                             self.remove_driven_vehicle();
                         }
                         self.service_msg = Some((reason, 4.0));
+                    } else {
+                        self.net.host_bus_checked = Some(host_bus.to_string());
                     }
+                } else {
+                    self.net.host_bus_checked = None;
                 }
             }
         }
