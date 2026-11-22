@@ -8,6 +8,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Alt menu redone**: the quick menu's thirty tiles are flat, squarer and have pictograms of their own in the style of OMSI 2's menu (a bus with a plus, a cross or arrows for placing, removing and swapping it, a pump, a clock, a chequered flag...) in place of the generic symbols.
 - **Tunnel mouths are open**: a `[terrainhole]` standing upright, as in the Kartoffelphantom tram
   tunnels, is an opening: the ground is cut behind it up to where the hill is over it, and no wall
   stands across it. The walls of a cut in the ground show the ground's texture instead of streaks.
