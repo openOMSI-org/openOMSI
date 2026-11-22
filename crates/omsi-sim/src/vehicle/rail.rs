@@ -69,11 +69,18 @@ impl VehicleInstance {
             driven_weight += m * dn as f32 / n as f32;
         }
         let _ = (wheels, driven);
-        let aero = crate::rigid::realism::Aero::of(self.ty.def.bounding_box.map(|b| [b[0], b[1], b[2]]), mass_of(&self.ty.def));
+        let aero = crate::rigid::realism::Aero::of(
+            self.ty.def.bounding_box.map(|b| [b[0], b[1], b[2]]),
+            mass_of(&self.ty.def),
+        );
         Consist {
             class,
             mass,
-            driven_share: if mass > 0.0 { driven_weight / mass } else { 1.0 },
+            driven_share: if mass > 0.0 {
+                driven_weight / mass
+            } else {
+                1.0
+            },
             cars: 1 + self.trailers.len(),
             cd_a: aero.cd_a,
             length,
@@ -86,15 +93,41 @@ impl VehicleInstance {
     /// (the stock trains are scripted for the AI only).
     fn rail_script_forces(&mut self, m_wheel: f32, brakes: &[f32]) -> Option<Forces> {
         let own: f32 = brakes.iter().sum();
-        let towed: f32 = self.trailers.iter().flat_map(|t| t.v_brakes.iter()).map(|&id| self.get(id).max(0.0)).sum::<f32>()
-            + self.trailers.iter_mut().filter_map(|t| t.run.as_deref_mut()).map(|r| r.take_own_brakeforce()).sum::<f32>();
+        let towed: f32 = self
+            .trailers
+            .iter()
+            .flat_map(|t| t.v_brakes.iter())
+            .map(|&id| self.get(id).max(0.0))
+            .sum::<f32>()
+            + self
+                .trailers
+                .iter_mut()
+                .filter_map(|t| t.run.as_deref_mut())
+                .map(|r| r.take_own_brakeforce())
+                .sum::<f32>();
         let brake = own + towed;
         if m_wheel.abs() < 1.0 && brake < 1.0 {
             return None;
         }
-        let driven = self.ty.def.axles.iter().filter(|a| a.driven).map(|a| a.wheel_diameter / 2.0).collect::<Vec<_>>();
-        let radius = if driven.is_empty() { 0.45 } else { driven.iter().sum::<f32>() / driven.len() as f32 }.max(0.15);
-        Some(Forces { drive: m_wheel / radius, brake, track_brake: 0.0 })
+        let driven = self
+            .ty
+            .def
+            .axles
+            .iter()
+            .filter(|a| a.driven)
+            .map(|a| a.wheel_diameter / 2.0)
+            .collect::<Vec<_>>();
+        let radius = if driven.is_empty() {
+            0.45
+        } else {
+            driven.iter().sum::<f32>() / driven.len() as f32
+        }
+        .max(0.15);
+        Some(Forces {
+            drive: m_wheel / radius,
+            brake,
+            track_brake: 0.0,
+        })
     }
 
     pub(super) fn on_rails(&self) -> bool {
@@ -103,7 +136,13 @@ impl VehicleInstance {
 
     /// The speed along the rails after `dt` as the rail dynamics make it (`v0` the speed
     /// before): `None` for a vehicle that is not on a track.
-    fn rail_solve(&mut self, dt: f32, v0: f32, m_wheel: f32, brakes: &[f32]) -> Option<rail::Outcome> {
+    fn rail_solve(
+        &mut self,
+        dt: f32,
+        v0: f32,
+        m_wheel: f32,
+        brakes: &[f32],
+    ) -> Option<rail::Outcome> {
         let (env, class) = (self.rail_env?, RailClass::of(&self.ty.def)?);
         let consist = self.rail_consist(class);
         let cond = Conditions {
@@ -121,7 +160,15 @@ impl VehicleInstance {
         let powered = self.rail_powered();
         // (a sagging line weakens the motors)
         let sag = self.rail_supply().map_or(1.0, |s| s.drive_factor());
-        let from_scripts = from_scripts.map(|f| without_current(Forces { drive: f.drive * sag, ..f }, powered));
+        let from_scripts = from_scripts.map(|f| {
+            without_current(
+                Forces {
+                    drive: f.drive * sag,
+                    ..f
+                },
+                powered,
+            )
+        });
         if let Some(f) = from_scripts {
             self.note_traction_current(f.drive, v0);
         }
@@ -131,9 +178,18 @@ impl VehicleInstance {
             from_scripts.unwrap_or_default()
         } else {
             let reverse = self.var("rail_reverse").is_some_and(|r| r > 0.5);
-            let pedals = rail::dynamics::pedal_forces(class, consist.mass, c.throttle, c.brake, v0, reverse);
-            let f = self.rail_declared_forces(class, &consist, pedals, c.throttle, c.brake, v0, reverse, dt);
-            without_current(Forces { drive: f.drive * sag, ..f }, powered)
+            let pedals =
+                rail::dynamics::pedal_forces(class, consist.mass, c.throttle, c.brake, v0, reverse);
+            let f = self.rail_declared_forces(
+                class, &consist, pedals, c.throttle, c.brake, v0, reverse, dt,
+            );
+            without_current(
+                Forces {
+                    drive: f.drive * sag,
+                    ..f
+                },
+                powered,
+            )
         };
         let mut out = rail::step(&consist, &cond, &forces, v0, dt);
         if let Some(peak) = self.rail_couplers(&consist, &forces, &out, v0, dt) {
@@ -145,13 +201,35 @@ impl VehicleInstance {
                 self.rail_log = 0.0;
                 log::info!(
                     "rail: {} pantograph {:?} v {:.1} km/h a {:.2} m/s² | M_Wheel {:.0} Nm -> drive {:.0} N, brake {:.0} N ({}) | mass {:.0} kg, driven {:.2}, {} cars, adhesion {:.2} | spin {} slide {} resist {:.0} N",
-                    self.ty.def.path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default(),
+                    self.ty
+                        .def
+                        .path
+                        .file_name()
+                        .map(|n| n.to_string_lossy())
+                        .unwrap_or_default(),
                     self.pantograph_var().and_then(|v| self.var(v)),
-                    out.speed * 3.6, out.accel, m_wheel, forces.drive, forces.brake,
-                    if self.rail_scripted { "scripts" } else { "pedals" },
-                    consist.mass, consist.driven_share, consist.cars,
-                    rail::dynamics::adhesion(out.speed, cond.wetness, cond.temperature, cond.sanding),
-                    out.spinning, out.sliding, out.resistance
+                    out.speed * 3.6,
+                    out.accel,
+                    m_wheel,
+                    forces.drive,
+                    forces.brake,
+                    if self.rail_scripted {
+                        "scripts"
+                    } else {
+                        "pedals"
+                    },
+                    consist.mass,
+                    consist.driven_share,
+                    consist.cars,
+                    rail::dynamics::adhesion(
+                        out.speed,
+                        cond.wetness,
+                        cond.temperature,
+                        cond.sanding
+                    ),
+                    out.spinning,
+                    out.sliding,
+                    out.resistance
                 );
             }
         }
@@ -163,7 +241,17 @@ impl VehicleInstance {
     /// (`[rail_traction]`) in place of the class's typical pull, the brake system (`[rail_brake]`)
     /// in place of the class's typical braking. What the file leaves out stays the class's.
     #[allow(clippy::too_many_arguments)]
-    fn rail_declared_forces(&mut self, class: RailClass, consist: &Consist, pedals: Forces, throttle: f32, brake: f32, v: f32, reverse: bool, dt: f32) -> Forces {
+    fn rail_declared_forces(
+        &mut self,
+        class: RailClass,
+        consist: &Consist,
+        pedals: Forces,
+        throttle: f32,
+        brake: f32,
+        v: f32,
+        reverse: bool,
+        dt: f32,
+    ) -> Forces {
         let traction = self.ty.def.rail_traction.clone();
         let brake_spec = self.ty.def.rail_brake.clone();
         if traction.is_none() && brake_spec.is_none() {
@@ -180,16 +268,33 @@ impl VehicleInstance {
         if brake_spec.is_some() || traction.as_ref().is_some_and(|t| !t.regen.is_empty()) {
             let perf = class.performance();
             let spec = brake_spec.unwrap_or_default();
-            let rebuild = self.rail_brake_sys.as_ref().is_none_or(|b| b.cars() != consist.cars);
+            let rebuild = self
+                .rail_brake_sys
+                .as_ref()
+                .is_none_or(|b| b.cars() != consist.cars);
             if rebuild {
-                self.rail_brake_sys = Some(rail::brake::BrakeSystem::new(spec, consist.cars, consist.length, consist.mass, perf.service_brake, perf.emergency_brake));
+                self.rail_brake_sys = Some(rail::brake::BrakeSystem::new(
+                    spec,
+                    consist.cars,
+                    consist.length,
+                    consist.mass,
+                    perf.service_brake,
+                    perf.emergency_brake,
+                ));
             }
-            let electric_max = traction.as_ref().map(|t| t.electric_brake(v)).unwrap_or(0.0);
+            let electric_max = traction
+                .as_ref()
+                .map(|t| t.electric_brake(v))
+                .unwrap_or(0.0);
             if let Some(b) = self.rail_brake_sys.as_mut() {
                 let out = b.step(dt, handle, v, electric_max);
                 // (a tram's magnetic track brake still comes with its emergency stop)
                 f.brake = out.friction + out.electric;
-                f.track_brake = if class == RailClass::Tram && handle >= 0.9 { pedals.track_brake } else { 0.0 };
+                f.track_brake = if class == RailClass::Tram && handle >= 0.9 {
+                    pedals.track_brake
+                } else {
+                    0.0
+                };
             }
         }
         f
@@ -199,27 +304,56 @@ impl VehicleInstance {
     /// from how the drive, the brakes and the resistance divide over the cars. `None` for a
     /// single vehicle or a file without a coupler. A train that pulls a coupling apart is broken
     /// and its brakes come on.
-    fn rail_couplers(&mut self, consist: &Consist, forces: &Forces, out: &rail::Outcome, v0: f32, dt: f32) -> Option<f32> {
+    fn rail_couplers(
+        &mut self,
+        consist: &Consist,
+        forces: &Forces,
+        out: &rail::Outcome,
+        v0: f32,
+        dt: f32,
+    ) -> Option<f32> {
         let spec = self.ty.def.rail_coupler?;
         if consist.cars < 2 {
             return None;
         }
-        let parts: Vec<&omsi_vehicle::Vehicle> = std::iter::once(&self.ty.def).chain(self.trailers.iter().map(|t| &t.ty.def)).collect();
+        let parts: Vec<&omsi_vehicle::Vehicle> = std::iter::once(&self.ty.def)
+            .chain(self.trailers.iter().map(|t| &t.ty.def))
+            .collect();
         let masses: Vec<f32> = parts.iter().map(|d| d.mass_kg().max(500.0)).collect();
-        if self.rail_chain.as_ref().is_none_or(|c| c.mass.len() != masses.len()) {
+        if self
+            .rail_chain
+            .as_ref()
+            .is_none_or(|c| c.mass.len() != masses.len())
+        {
             self.rail_chain = Some(rail::chain::Chain::new(spec, masses.clone(), v0));
         }
         let total: f32 = masses.iter().sum();
         // the drive divides by the weight on each car's driven axles (the head if none is driven)
-        let weights: Vec<f32> = parts.iter().zip(&masses).map(|(d, m)| m * d.axles.iter().filter(|a| a.driven).count() as f32 / d.axles.len().max(1) as f32).collect();
+        let weights: Vec<f32> = parts
+            .iter()
+            .zip(&masses)
+            .map(|(d, m)| {
+                m * d.axles.iter().filter(|a| a.driven).count() as f32 / d.axles.len().max(1) as f32
+            })
+            .collect();
         let wsum: f32 = weights.iter().sum();
         let net = out.accel * total * 1.06;
         let drive_total = forces.drive;
         let rest = net - drive_total;
-        let ext: Vec<f32> = masses.iter().enumerate().map(|(i, m)| {
-            let d = if wsum > 0.0 { drive_total * weights[i] / wsum } else if i == 0 { drive_total } else { 0.0 };
-            d + rest * m / total
-        }).collect();
+        let ext: Vec<f32> = masses
+            .iter()
+            .enumerate()
+            .map(|(i, m)| {
+                let d = if wsum > 0.0 {
+                    drive_total * weights[i] / wsum
+                } else if i == 0 {
+                    drive_total
+                } else {
+                    0.0
+                };
+                d + rest * m / total
+            })
+            .collect();
         let chain = self.rail_chain.as_mut()?;
         let o = chain.step(dt, &ext);
         // (the lump's speed is the truth; the cars keep their differences from it)
@@ -227,15 +361,33 @@ impl VehicleInstance {
         chain.speed.iter_mut().for_each(|s| *s += shift);
         if chain.broken.is_some() && !self.rail_broken {
             self.rail_broken = true;
-            log::warn!("rail: {} broke in two at a coupling ({:.0} kN)", self.ty.def.path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default(), o.peak / 1000.0);
+            log::warn!(
+                "rail: {} broke in two at a coupling ({:.0} kN)",
+                self.ty
+                    .def
+                    .path
+                    .file_name()
+                    .map(|n| n.to_string_lossy())
+                    .unwrap_or_default(),
+                o.peak / 1000.0
+            );
         }
         Some(o.peak)
     }
 
     /// After the rigid body's step: the rail dynamics' speed. The wheels turn with it - a
     /// rail wheel does not slip as a road tyre does - and the body keeps to the line.
-    pub(super) fn rail_override(&mut self, rb: &mut crate::rigid::RigidBody, dt: f32, v0: f32, m_wheel: f32, brakes: &[f32]) {
-        let Some(out) = self.rail_solve(dt, v0, m_wheel, brakes) else { return };
+    pub(super) fn rail_override(
+        &mut self,
+        rb: &mut crate::rigid::RigidBody,
+        dt: f32,
+        v0: f32,
+        m_wheel: f32,
+        brakes: &[f32],
+    ) {
+        let Some(out) = self.rail_solve(dt, v0, m_wheel, brakes) else {
+            return;
+        };
         let fwd = rb.orientation.mul_vec3(glam::Vec3::Y);
         rb.velocity = fwd * out.speed;
         rb.omega = glam::Vec3::ZERO;
@@ -252,7 +404,13 @@ impl VehicleInstance {
 
     /// The same for the simple model, which a rail vehicle runs on (it is put on its track,
     /// not on the road): returns the distance covered this step.
-    pub(super) fn rail_override_simple(&mut self, dt: f32, v0: f32, m_wheel: f32, brakes: &[f32]) -> Option<f32> {
+    pub(super) fn rail_override_simple(
+        &mut self,
+        dt: f32,
+        v0: f32,
+        m_wheel: f32,
+        brakes: &[f32],
+    ) -> Option<f32> {
         let out = self.rail_solve(dt, v0, m_wheel, brakes)?;
         self.physics.speed = out.speed;
         self.physics.accel = glam::Vec3::new(0.0, out.accel, 0.0);
@@ -283,7 +441,11 @@ impl VehicleInstance {
         let was = self.pantograph_raised()?;
         // (a door script has a pair: `x` opens, `x_close` closes)
         let close = format!("{trigger}_close");
-        let name = if was && self.ty.program.trigger(&close).is_some() { close } else { trigger };
+        let name = if was && self.ty.program.trigger(&close).is_some() {
+            close
+        } else {
+            trigger
+        };
         self.trigger(&name);
         // (the leaves of a door script move on a few frames; what the trigger asked for)
         Some(!was)
@@ -294,7 +456,10 @@ impl VehicleInstance {
     pub fn rail_powered(&self) -> bool {
         // the pantograph as the wire sees it: raised AND touching a live wire. Where its travel
         // could not be measured the variable alone says (raised: 1).
-        let pantograph = !pantograph_binds(&self.ty.def) || self.pantograph_current().unwrap_or_else(|| self.pantograph_raised().unwrap_or(true));
+        let pantograph = !pantograph_binds(&self.ty.def)
+            || self
+                .pantograph_current()
+                .unwrap_or_else(|| self.pantograph_raised().unwrap_or(true));
         // and, where the map has a line, the line has current where the collector is
         pantograph && self.rail_supply().is_none_or(|s| s.live())
     }
@@ -316,7 +481,11 @@ pub(super) fn pantograph_binds(def: &omsi_vehicle::Vehicle) -> bool {
 /// The forces without current: no drive, forward or backward (a scripted car's negative torque
 /// pulls as much as a positive one); the brakes work as they did.
 pub(super) fn without_current(f: Forces, powered: bool) -> Forces {
-    if powered { f } else { Forces { drive: 0.0, ..f } }
+    if powered {
+        f
+    } else {
+        Forces { drive: 0.0, ..f }
+    }
 }
 
 #[cfg(test)]
@@ -325,9 +494,16 @@ mod tests {
 
     #[test]
     fn without_current_a_car_can_neither_drive_forward_nor_backward() {
-        let f = Forces { drive: -5000.0, brake: 3000.0, track_brake: 1000.0 };
+        let f = Forces {
+            drive: -5000.0,
+            brake: 3000.0,
+            track_brake: 1000.0,
+        };
         let off = without_current(f, false);
-        assert_eq!((off.drive, off.brake, off.track_brake), (0.0, 3000.0, 1000.0));
+        assert_eq!(
+            (off.drive, off.brake, off.track_brake),
+            (0.0, 3000.0, 1000.0)
+        );
         let fwd = without_current(Forces { drive: 5000.0, ..f }, false);
         assert_eq!(fwd.drive, 0.0);
         assert_eq!(without_current(f, true).drive, -5000.0);
@@ -340,8 +516,14 @@ mod tests {
         def.pantograph_var = Some("Panto_anim_oben".into());
         assert!(pantograph_binds(&def), "declared by the file");
         def.pantograph_detected = true;
-        assert!(!pantograph_binds(&def), "found from the model with no switch: never keeps the car from moving");
+        assert!(
+            !pantograph_binds(&def),
+            "found from the model with no switch: never keeps the car from moving"
+        );
         def.pantograph_trigger = Some("bus_door_0".into());
-        assert!(pantograph_binds(&def), "found with the switch that raises it");
+        assert!(
+            pantograph_binds(&def),
+            "found with the switch that raises it"
+        );
     }
 }

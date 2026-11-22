@@ -15,7 +15,14 @@ impl VehicleInstance {
     }
 
     pub(super) fn put_turn(&mut self, id: Option<omsi_script::VarId>, axle: usize, side: usize) {
-        let Some(w) = self.physics.wheels.get_mut(axle).and_then(|a| a.get_mut(side)) else { return };
+        let Some(w) = self
+            .physics
+            .wheels
+            .get_mut(axle)
+            .and_then(|a| a.get_mut(side))
+        else {
+            return;
+        };
         let step = w.turned - w.turned_put;
         w.turned_put = w.turned;
         if let Some(i) = id {
@@ -69,11 +76,20 @@ impl VehicleInstance {
     /// The door release to fire now: the bus's own, the C2's switch turned over, else `bus_dooraft`.
     pub fn door_release_trigger(&self) -> Option<&'static str> {
         let p = &self.ty.program;
-        if let Some(t) = ["bus_doorall", "CG_active", "C2_CP_doorall_1"].into_iter().find(|t| p.trigger(t).is_some()) {
+        if let Some(t) = ["bus_doorall", "CG_active", "C2_CP_doorall_1"]
+            .into_iter()
+            .find(|t| p.trigger(t).is_some())
+        {
             return Some(t);
         }
-        if p.trigger("C2_CP_Tuerfreigabe_1").is_some() && p.trigger("C2_CP_Tuerfreigabe_0").is_some() {
-            return Some(if self.var("C2_CP_Tuerfreigabe").is_some_and(|x| x > 0.5) { "C2_CP_Tuerfreigabe_0" } else { "C2_CP_Tuerfreigabe_1" });
+        if p.trigger("C2_CP_Tuerfreigabe_1").is_some()
+            && p.trigger("C2_CP_Tuerfreigabe_0").is_some()
+        {
+            return Some(if self.var("C2_CP_Tuerfreigabe").is_some_and(|x| x > 0.5) {
+                "C2_CP_Tuerfreigabe_0"
+            } else {
+                "C2_CP_Tuerfreigabe_1"
+            });
         }
         p.trigger("bus_dooraft").is_some().then_some("bus_dooraft")
     }
@@ -88,7 +104,10 @@ impl VehicleInstance {
 
     pub fn set_var(&mut self, name: &str, v: f32) -> bool {
         let slot = omsi_script::compile::with_lower(name, |k| {
-            self.var_index.get(k).copied().ok_or_else(|| self.model_only_vars.iter().any(|n| n == k))
+            self.var_index
+                .get(k)
+                .copied()
+                .ok_or_else(|| self.model_only_vars.iter().any(|n| n == k))
         });
         match slot {
             Ok(i) => self.state.vars[i as usize] = v,
@@ -145,7 +164,12 @@ impl VehicleInstance {
     /// sounds and messages the triggers asked for.
     pub fn trial_triggers(&mut self, names: &[&str]) -> Vec<f32> {
         let (state, vm) = (self.state.clone(), self.vm.clone());
-        let (fired, fired_files, messages, time_written) = (self.host.fired_triggers.len(), self.host.fired_file_triggers.len(), self.host.messages.clone(), self.host.time_written);
+        let (fired, fired_files, messages, time_written) = (
+            self.host.fired_triggers.len(),
+            self.host.fired_file_triggers.len(),
+            self.host.messages.clone(),
+            self.host.time_written,
+        );
         let last_message = self.host.last_message.clone();
         let fired_vars = self.host.fired_trigger_vars.len();
         let network_sounds = self.host.network_sound_triggers.len();
@@ -240,10 +264,16 @@ impl VehicleInstance {
 
 fn changer_value(name: &str) -> Option<f32> {
     let name = name.to_ascii_lowercase();
-    if let Some(cents) = name.strip_prefix("cashdesk_change_").filter(|c| c.len() == 4) {
+    if let Some(cents) = name
+        .strip_prefix("cashdesk_change_")
+        .filter(|c| c.len() == 4)
+    {
         return Some(cents.parse::<u32>().ok()? as f32 / 100.0);
     }
-    let (units, cents) = name.strip_prefix("cashdesk_changer_")?.split_once('_').filter(|(_, c)| c.len() == 2)?;
+    let (units, cents) = name
+        .strip_prefix("cashdesk_changer_")?
+        .split_once('_')
+        .filter(|(_, c)| c.len() == 2)?;
     Some(units.parse::<u32>().ok()? as f32 + cents.parse::<u32>().ok()? as f32 / 100.0)
 }
 
@@ -276,21 +306,39 @@ mod tests {
     }
 }
 
-
 #[cfg(test)]
 mod turn_tests {
     #[test]
     fn a_wheel_turn_counts_on_by_its_whole_step_and_from_a_script_s_reset() {
-        let mut v = crate::timetable_run::tests::script_test_vehicle("", "Wheel_Rotation_0_L\n", "");
+        let mut v =
+            crate::timetable_run::tests::script_test_vehicle("", "Wheel_Rotation_0_L\n", "");
         let id = v.ty.program.var("Wheel_Rotation_0_L");
-        let w = crate::physics::WheelState { long: 0.0, lat: 0.0, radius: 0.5, driven: true, rotation_deg: 0.0, turned: 0.0, turned_put: 0.0, rpm: 0.0, suspension: 0.0 };
+        let w = crate::physics::WheelState {
+            long: 0.0,
+            lat: 0.0,
+            radius: 0.5,
+            driven: true,
+            rotation_deg: 0.0,
+            turned: 0.0,
+            turned_put: 0.0,
+            rpm: 0.0,
+            suspension: 0.0,
+        };
         v.physics.wheels = vec![[w.clone(), w]];
         v.physics.wheels[0][0].turned += 3.3;
         v.put_turn(id, 0, 0);
-        assert!((v.get(id) - 3.3).abs() < 1e-5, "a step over half a turn counts forward: {}", v.get(id));
+        assert!(
+            (v.get(id) - 3.3).abs() < 1e-5,
+            "a step over half a turn counts forward: {}",
+            v.get(id)
+        );
         v.put(id, 0.0);
         v.physics.wheels[0][0].turned += 0.5;
         v.put_turn(id, 0, 0);
-        assert!((v.get(id) - 0.5).abs() < 1e-5, "a script's reset counts on from 0: {}", v.get(id));
+        assert!(
+            (v.get(id) - 0.5).abs() < 1e-5,
+            "a script's reset counts on from 0: {}",
+            v.get(id)
+        );
     }
 }

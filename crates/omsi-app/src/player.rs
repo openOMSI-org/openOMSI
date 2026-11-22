@@ -13,12 +13,14 @@ mod rp_speed_limit;
 
 pub(crate) use cameras::*;
 pub(crate) use doors::*;
-pub(crate) use picking::*;
 pub(crate) use mouse::AutoDrag;
+pub(crate) use picking::*;
 
 fn indicator_toggle_action(state: &mut u8, lever: Option<u8>, want: u8) -> &'static str {
     // Scripts can cancel the lever themselves after a turn; prefer their current state.
-    if let Some(lever) = lever { *state = lever; }
+    if let Some(lever) = lever {
+        *state = lever;
+    }
     if want == 3 {
         *state = if *state == 3 { 0 } else { 3 };
         "blinker_warn_toggle"
@@ -27,7 +29,11 @@ fn indicator_toggle_action(state: &mut u8, lever: Option<u8>, want: u8) -> &'sta
         "blinker_off"
     } else {
         *state = want;
-        if want == 1 { "blinker_left_set" } else { "blinker_right_set" }
+        if want == 1 {
+            "blinker_left_set"
+        } else {
+            "blinker_right_set"
+        }
     }
 }
 
@@ -54,8 +60,19 @@ pub(crate) fn steering_follows(view: &str, cam_choice: (usize, usize)) -> bool {
     view == "driver" && cam_choice.0 == 0
 }
 
-pub(crate) fn steering_view_yaw(current: f32, steering: f32, dt: f32, enabled: bool, angle: f32, response: f32) -> f32 {
-    let target = if enabled { steering.clamp(-1.0, 1.0) * angle.clamp(0.0, 60.0) } else { 0.0 };
+pub(crate) fn steering_view_yaw(
+    current: f32,
+    steering: f32,
+    dt: f32,
+    enabled: bool,
+    angle: f32,
+    response: f32,
+) -> f32 {
+    let target = if enabled {
+        steering.clamp(-1.0, 1.0) * angle.clamp(0.0, 60.0)
+    } else {
+        0.0
+    };
     current + (target - current) * (1.0 - (-dt.max(0.0) / response.clamp(0.05, 1.0)).exp())
 }
 
@@ -365,14 +382,22 @@ impl Player {
     pub(crate) fn door_key(&mut self, n: usize) -> Vec<String> {
         let groups = door_keys(&self.vehicle.ty);
         let fire: Vec<String> = if n == 0 {
-            let doors: Vec<&Vec<String>> = groups.iter().filter(|g| !(g.len() == 1 && g[0] == "bus_dooraft")).collect();
+            let doors: Vec<&Vec<String>> = groups
+                .iter()
+                .filter(|g| !(g.len() == 1 && g[0] == "bus_dooraft"))
+                .collect();
             let is_open = |v: &mut omsi_sim::VehicleInstance, g: &Vec<String>| {
                 g.iter().any(|t| match t.split_once('|') {
-                    Some((open, _)) => trigger_leaves(&v.ty.program, open).iter().any(|l| v.var(l).is_some_and(|x| x > 0.5)),
+                    Some((open, _)) => trigger_leaves(&v.ty.program, open)
+                        .iter()
+                        .any(|l| v.var(l).is_some_and(|x| x > 0.5)),
                     None => door_trigger_open(v, t) == Some(true),
                 })
             };
-            let open: Vec<bool> = doors.iter().map(|g| is_open(&mut self.vehicle, g)).collect();
+            let open: Vec<bool> = doors
+                .iter()
+                .map(|g| is_open(&mut self.vehicle, g))
+                .collect();
             let any_open = open.iter().any(|o| *o);
             let mut fire = Vec::new();
             for (g, o) in doors.iter().zip(&open) {
@@ -382,7 +407,9 @@ impl Player {
             }
             fire
         } else {
-            let Some(group) = groups.get(n - 1) else { return Vec::new() };
+            let Some(group) = groups.get(n - 1) else {
+                return Vec::new();
+            };
             let fire = door_group_to_fire(&mut self.vehicle, group);
             // the automatic rear doors of the stock Berlin buses (SD, NL): the key is their
             // release, and switched off with the doors open it shuts them now rather than
@@ -398,7 +425,15 @@ impl Player {
             }
             fire
         };
-        log::info!("door key {}: {}", if n == 0 { "all".to_string() } else { n.to_string() }, fire.join(" + "));
+        log::info!(
+            "door key {}: {}",
+            if n == 0 {
+                "all".to_string()
+            } else {
+                n.to_string()
+            },
+            fire.join(" + ")
+        );
         for name in &fire {
             self.vehicle.trigger(name);
         }
@@ -407,8 +442,16 @@ impl Player {
 
     /// `doors_release`: the bus's door release (`VehicleInstance::door_release_trigger`); the triggers fired.
     pub(crate) fn door_release(&mut self) -> Vec<String> {
-        let fired: Vec<String> = self.vehicle.door_release_trigger().map(str::to_string).into_iter().collect();
-        log::info!("door release: {}", fired.first().map_or("none on this bus", |s| s.as_str()));
+        let fired: Vec<String> = self
+            .vehicle
+            .door_release_trigger()
+            .map(str::to_string)
+            .into_iter()
+            .collect();
+        log::info!(
+            "door release: {}",
+            fired.first().map_or("none on this bus", |s| s.as_str())
+        );
         for name in &fired {
             self.vehicle.trigger(name);
         }
@@ -427,10 +470,20 @@ impl Player {
     }
 
     pub(crate) fn toggle_indicator(&mut self, want: u8) {
-        let lever = if self.vehicle.var("lights_sw_warnblinker").is_some_and(|v| v > 0.5) {
+        let lever = if self
+            .vehicle
+            .var("lights_sw_warnblinker")
+            .is_some_and(|v| v > 0.5)
+        {
             Some(3)
         } else {
-            self.vehicle.var("lights_sw_blinker").map(|v| match v.round() as i32 { 1 => 1, 2 => 2, _ => 0 })
+            self.vehicle
+                .var("lights_sw_blinker")
+                .map(|v| match v.round() as i32 {
+                    1 => 1,
+                    2 => 2,
+                    _ => 0,
+                })
         };
         let action = indicator_toggle_action(&mut self.blinker_key_state, lever, want);
         self.action(action, true);
@@ -443,16 +496,31 @@ impl Player {
         if pressed {
             log::info!("action: {name}");
         }
-        if name.eq_ignore_ascii_case("blinker_left_toggle") || name.eq_ignore_ascii_case("blinker_right_toggle") {
+        if name.eq_ignore_ascii_case("blinker_left_toggle")
+            || name.eq_ignore_ascii_case("blinker_right_toggle")
+        {
             if pressed {
-                self.toggle_indicator(if name.eq_ignore_ascii_case("blinker_left_toggle") { 1 } else { 2 });
+                self.toggle_indicator(if name.eq_ignore_ascii_case("blinker_left_toggle") {
+                    1
+                } else {
+                    2
+                });
             }
             return true;
         }
         let suffix = if pressed { "" } else { "_off" };
         if let Some(gate) = crate::hpattern::resolve(&self.vehicle.ty.program, name) {
-            if pressed { self.clutch_for_gate(&gate); }
-            if let Some(done) = crate::hpattern::action(&mut self.vehicle, &gate, pressed, self.momentary_gears && !self.from_keyboard) { return done; }
+            if pressed {
+                self.clutch_for_gate(&gate);
+            }
+            if let Some(done) = crate::hpattern::action(
+                &mut self.vehicle,
+                &gate,
+                pressed,
+                self.momentary_gears && !self.from_keyboard,
+            ) {
+                return done;
+            }
         }
         if omsi_input::actions::is_door_release(name) {
             if pressed {
@@ -496,7 +564,11 @@ impl Player {
             self.clutch_for_gate(name);
         }
         let headlights = pressed && name.eq_ignore_ascii_case("kw_scheinwerfer_toggle");
-        let lamps_before = if headlights { self.outside_lamps_lit() } else { 0 };
+        let lamps_before = if headlights {
+            self.outside_lamps_lit()
+        } else {
+            0
+        };
         if self.vehicle.trigger(&format!("{name}{suffix}")) {
             if headlights {
                 self.headlights_with_side_lights(lamps_before);
@@ -547,16 +619,33 @@ impl Player {
     /// pedal - every phone, with the automatic clutch on - could not put a gear in at all
     /// (#226). Scripts that read `AutoClutch` (the Sprinters' G32) work it themselves.
     pub(crate) fn clutch_for_gate(&mut self, name: &str) {
-        let Some(gate) = name.get(..5).filter(|p| p.eq_ignore_ascii_case("kw_s_")).map(|_| &name[5..]) else { return };
+        let Some(gate) = name
+            .get(..5)
+            .filter(|p| p.eq_ignore_ascii_case("kw_s_"))
+            .map(|_| &name[5..])
+        else {
+            return;
+        };
         let gate = gate.strip_suffix("_fest").unwrap_or(gate);
-        let is_gate = gate.eq_ignore_ascii_case("r") || gate.eq_ignore_ascii_case("n") || gate.parse::<u32>().is_ok();
+        let is_gate = gate.eq_ignore_ascii_case("r")
+            || gate.eq_ignore_ascii_case("n")
+            || gate.parse::<u32>().is_ok();
         if is_gate && self.vehicle.ty.program.trigger(name).is_some() {
-            let to = if gate.eq_ignore_ascii_case("r") { -1 } else { gate.parse::<i32>().unwrap_or(0) };
+            let to = if gate.eq_ignore_ascii_case("r") {
+                -1
+            } else {
+                gate.parse::<i32>().unwrap_or(0)
+            };
             self.gates.engaged(to, false);
         }
         let program = &self.vehicle.ty.program;
         // (a manual gearbox only: see `Program::manual_gearbox`)
-        if !is_gate || !program.manual_gearbox() || self.vehicle.host.auto_clutch < 0.5 || program.trigger(name).is_none() || program.reads_sys(omsi_script::SysVar::AutoClutch) {
+        if !is_gate
+            || !program.manual_gearbox()
+            || self.vehicle.host.auto_clutch < 0.5
+            || program.trigger(name).is_none()
+            || program.reads_sys(omsi_script::SysVar::AutoClutch)
+        {
             return;
         }
         self.vehicle.set_var("Clutch", 1.0);
@@ -574,11 +663,20 @@ impl Player {
     pub(crate) fn toggle_saloon_lights(&mut self) -> String {
         let on = self.saloon_lamps_lit() == 0;
         let done = self.set_saloon_lights(on);
-        log::info!("saloon lights {} ({})", if on { "on" } else { "off" }, done.join(", "));
+        log::info!(
+            "saloon lights {} ({})",
+            if on { "on" } else { "off" },
+            done.join(", ")
+        );
         if self.vehicle.ty.model.interior_lights.is_empty() {
             "This bus has no saloon lights".into()
         } else if !done.is_empty() {
-            (if on { "Saloon lights on" } else { "Saloon lights off" }).to_string()
+            (if on {
+                "Saloon lights on"
+            } else {
+                "Saloon lights off"
+            })
+            .to_string()
         } else if on {
             // the switches are thrown, but the lamps stay dark: no current
             "Saloon light switches on - no power (battery off?)".into()
@@ -667,7 +765,13 @@ impl Player {
     /// MANs' rotary switch) is left as it is: pressing its side-light key would only take
     /// lamps away, and that press is undone.
     fn headlights_with_side_lights(&mut self, before: usize) {
-        if !self.vehicle.ty.program.triggers.contains_key("kw_standlicht_toggle") {
+        if !self
+            .vehicle
+            .ty
+            .program
+            .triggers
+            .contains_key("kw_standlicht_toggle")
+        {
             return;
         }
         self.vehicle.update_scripts_only(0.0);
@@ -708,7 +812,9 @@ impl Player {
             return false;
         };
         let (up, down) = (format!("{base}_up"), format!("{base}_down"));
-        let has = |v: &omsi_sim::VehicleInstance, t: &str| v.ty.program.triggers.contains_key(&t.to_ascii_lowercase());
+        let has = |v: &omsi_sim::VehicleInstance, t: &str| {
+            v.ty.program.triggers.contains_key(&t.to_ascii_lowercase())
+        };
         if !has(&self.vehicle, &up) || !has(&self.vehicle, &down) {
             return false;
         }
@@ -719,7 +825,14 @@ impl Player {
         // up when nothing is lit, down when something is (a switch moved by the mouse, or lit
         // from the start, went on up for ever: the lights could not be switched off again)
         let lit = self.outside_lamps_lit() > 0;
-        let going_up = if base.to_ascii_lowercase().contains("schein") || base.to_ascii_lowercase().contains("licht") || base.to_ascii_lowercase().contains("light") { !lit } else { !self.toggled_up.contains(&key) };
+        let going_up = if base.to_ascii_lowercase().contains("schein")
+            || base.to_ascii_lowercase().contains("licht")
+            || base.to_ascii_lowercase().contains("light")
+        {
+            !lit
+        } else {
+            !self.toggled_up.contains(&key)
+        };
         let step = if going_up { &up } else { &down };
         for _ in 0..2 {
             self.vehicle.trigger(step);
@@ -746,7 +859,11 @@ impl Player {
             let repeat = self
                 .bindings
                 .iter()
-                .filter(|b| b.scan_code == scan && b.matches(modifiers) && b.modifier & omsi_content::input::KEY_HOLD != 0)
+                .filter(|b| {
+                    b.scan_code == scan
+                        && b.matches(modifiers)
+                        && b.modifier & omsi_content::input::KEY_HOLD != 0
+                })
                 .filter(|b| omsi_sim::engine_action(&b.action).is_none())
                 .map(|b| b.action.clone())
                 .collect();
@@ -781,8 +898,16 @@ impl Player {
         if let Some(s) = self.startup.as_ref() {
             // (one going on for long - a bus whose switches never get it there - is given up
             // and begun again, rather than saying the same for ever)
-            if self.startup_at.is_none_or(|t| t.elapsed().as_secs_f32() < 20.0) {
-                return if s.shutting_down() { "Switching the vehicle off ..." } else { "Putting the vehicle into service ..." }.to_string();
+            if self
+                .startup_at
+                .is_none_or(|t| t.elapsed().as_secs_f32() < 20.0)
+            {
+                return if s.shutting_down() {
+                    "Switching the vehicle off ..."
+                } else {
+                    "Putting the vehicle into service ..."
+                }
+                .to_string();
             }
             log::info!("auto-start given up after 20 s: begun again");
         }
@@ -822,7 +947,11 @@ impl Player {
     pub(crate) fn tick_startup(&mut self, dt: f32) -> bool {
         self.apply_html_requests();
         self.tick_ibis(dt);
-        schedule::turn_roller_blind(&mut self.vehicle, &mut self.blind_pick, self.startup.is_some());
+        schedule::turn_roller_blind(
+            &mut self.vehicle,
+            &mut self.blind_pick,
+            self.startup.is_some(),
+        );
         let Some(mut s) = self.startup.take() else {
             return false;
         };
@@ -863,7 +992,14 @@ impl Player {
         // lit and its headlights off): the light switch key once, where the headlights are
         // off (`Spot_Select` < 0, the stock scripts' "no spotlight")
         let headlights_off = self.vehicle.var("Spot_Select").is_some_and(|s| s < 0.0);
-        if headlights_off && self.vehicle.ty.program.trigger("kw_scheinwerfer_toggle").is_some() {
+        if headlights_off
+            && self
+                .vehicle
+                .ty
+                .program
+                .trigger("kw_scheinwerfer_toggle")
+                .is_some()
+        {
             self.action("kw_scheinwerfer_toggle", true);
             self.action("kw_scheinwerfer_toggle", false);
             log::info!("auto-start: headlights switched on after dark");
@@ -873,7 +1009,10 @@ impl Player {
         }
         let done = self.set_saloon_lights(true);
         if !done.is_empty() {
-            log::info!("auto-start: saloon lights switched on after dark ({})", done.join(", "));
+            log::info!(
+                "auto-start: saloon lights switched on after dark ({})",
+                done.join(", ")
+            );
         }
     }
 
@@ -889,14 +1028,23 @@ impl Player {
     pub(crate) fn move_head(&mut self, dt: f32, enabled: bool) {
         let dt = dt.clamp(0.0, 0.1);
         let a = self.vehicle.physics.accel;
-        let omega = self.vehicle.rigid.as_ref().map(|rb| rb.omega).unwrap_or(Vec3::ZERO);
+        let omega = self
+            .vehicle
+            .rigid
+            .as_ref()
+            .map(|rb| rb.omega)
+            .unwrap_or(Vec3::ZERO);
         let dw = omega - self.head_omega;
         self.head_omega = omega;
         if dt <= 0.0 {
             return;
         }
         let def = &self.vehicle.ty.def;
-        let eye = def.cameras_driver.get(self.driver_camera_slot()).map(|c| Vec3::new(c.pos[0], c.pos[1], c.pos[2])).unwrap_or(Vec3::ZERO);
+        let eye = def
+            .cameras_driver
+            .get(self.driver_camera_slot())
+            .map(|c| Vec3::new(c.pos[0], c.pos[1], c.pos[2]))
+            .unwrap_or(Vec3::ZERO);
         // (1 unless a frame is longer than 1/15 s)
         let stab = (1.0 / (15.0 * dt)).min(1.0);
         let spring = |p: f32, v: f32, kick: f32, k: f32, c: f32| -> (f32, f32) {
@@ -915,7 +1063,13 @@ impl Player {
             self.head_vel.z = 0.0;
         } else {
             let kick = -(a.z - 9.81) * dt + dw.y * eye.x + dw.x * eye.y;
-            let (mut p, mut v) = spring(self.head.z, self.head_vel.z, kick, 3000.0 / 150.0, 2000.0 / 150.0);
+            let (mut p, mut v) = spring(
+                self.head.z,
+                self.head_vel.z,
+                kick,
+                3000.0 / 150.0,
+                2000.0 / 150.0,
+            );
             if p.abs() > 0.1 {
                 p = p.clamp(-0.1, 0.1);
                 v = 0.0;
@@ -927,8 +1081,20 @@ impl Player {
             let moving = self.vehicle.physics.speed.abs().min(1.0);
             let kx = (-a.x * dt + dw.y * eye.z - dw.z * eye.y) * moving;
             let ky = (-a.y * dt - dw.x * eye.z + dw.z * eye.x) * moving;
-            let (px, vx) = spring(self.head.x, self.head_vel.x, kx, 3000.0 / 100.0, 2000.0 / 100.0);
-            let (py, vy) = spring(self.head.y, self.head_vel.y, ky, 3000.0 / 100.0, 2000.0 / 100.0);
+            let (px, vx) = spring(
+                self.head.x,
+                self.head_vel.x,
+                kx,
+                3000.0 / 100.0,
+                2000.0 / 100.0,
+            );
+            let (py, vy) = spring(
+                self.head.y,
+                self.head_vel.y,
+                ky,
+                3000.0 / 100.0,
+                2000.0 / 100.0,
+            );
             self.head.x = px;
             self.head_vel.x = vx;
             self.head.y = py;
@@ -969,10 +1135,18 @@ impl Player {
         // the number keys as well had its clutch pressed at every stop, and some went to
         // neutral when it stood, #234)
         let reads_clutch = program.var("Clutch").is_some_and(|v| program.reads(v));
-        if self.vehicle.host.auto_clutch < 0.5 || !has_manual_gate || !reads_clutch || program.reads_sys(omsi_script::SysVar::AutoClutch) {
+        if self.vehicle.host.auto_clutch < 0.5
+            || !has_manual_gate
+            || !reads_clutch
+            || program.reads_sys(omsi_script::SysVar::AutoClutch)
+        {
             return;
         }
-        let gear = self.vehicle.var("antrieb_getr_aktugang").or_else(|| self.vehicle.var("antrieb_getr_gang")).unwrap_or(0.0);
+        let gear = self
+            .vehicle
+            .var("antrieb_getr_aktugang")
+            .or_else(|| self.vehicle.var("antrieb_getr_gang"))
+            .unwrap_or(0.0);
         let kmh = self.vehicle.physics.velocity_kmh().abs();
         if gear.abs() > 0.5 && kmh < 12.0 {
             // it bites as the throttle goes down and only as far as the engine keeps its
@@ -980,7 +1154,9 @@ impl Player {
             // (a script that keeps its revs under another name: by the throttle alone - taken
             // as 0 revs the clutch never bit and the bus stood with it down, #260)
             let n = self.vehicle.var("engine_n").unwrap_or(2000.0);
-            let bite = ((throttle - 0.05) / 0.45).clamp(0.0, 1.0).min(((n - 850.0) / 700.0).clamp(0.0, 1.0));
+            let bite = ((throttle - 0.05) / 0.45)
+                .clamp(0.0, 1.0)
+                .min(((n - 850.0) / 700.0).clamp(0.0, 1.0));
             let bite = bite * bite * (3.0 - 2.0 * bite);
             let want = (1.0 - bite) * (1.0 - kmh / 12.0);
             self.axes.clutch = self.axes.clutch.max(want);
@@ -1022,7 +1198,13 @@ impl Player {
         true
     }
 
-    pub(crate) fn tick(&mut self, dt: f32, audio: Option<&omsi_audio::AudioEngine>, inside: bool, listener_follows_bus: bool) {
+    pub(crate) fn tick(
+        &mut self,
+        dt: f32,
+        audio: Option<&omsi_audio::AudioEngine>,
+        inside: bool,
+        listener_follows_bus: bool,
+    ) {
         self.tick_startup(dt);
         self.tick_auto_drag(dt);
         // (the script's trigger only, as Omsi.exe calls it: no alias, no log line a frame)
@@ -1042,8 +1224,15 @@ impl Player {
             self.axes.brake = 0.0;
         }
         self.auto_clutch_bite(a.throttle.unwrap_or(0.0).max(self.axes.throttle));
-        self.tick_auto_shift(dt, a.throttle.unwrap_or(0.0).max(self.axes.throttle), a.brake.unwrap_or(0.0).max(self.axes.brake));
-        let throttle = a.throttle.unwrap_or(self.axes.throttle).max(self.axes.throttle);
+        self.tick_auto_shift(
+            dt,
+            a.throttle.unwrap_or(0.0).max(self.axes.throttle),
+            a.brake.unwrap_or(0.0).max(self.axes.brake),
+        );
+        let throttle = a
+            .throttle
+            .unwrap_or(self.axes.throttle)
+            .max(self.axes.throttle);
         let brake = a.brake.unwrap_or(self.axes.brake).max(self.axes.brake);
         let (throttle, brake) = rp_speed_limit::controls(
             f64::from(self.vehicle.physics.velocity_kmh()),
@@ -1064,17 +1253,27 @@ impl Player {
                 _ => self.axes.steering,
             },
         });
-        let (lever, mark) = (self.vehicle.var("lights_sw_blinker"), self.vehicle.host.trigger_mark());
+        let (lever, mark) = (
+            self.vehicle.var("lights_sw_blinker"),
+            self.vehicle.host.trigger_mark(),
+        );
         self.vehicle.update(dt);
-        if let Some(keep) = kept_indicator(self.blinker_cancel, lever, self.vehicle.var("lights_sw_blinker")) {
+        if let Some(keep) = kept_indicator(
+            self.blinker_cancel,
+            lever,
+            self.vehicle.var("lights_sw_blinker"),
+        ) {
             self.vehicle.set_var("lights_sw_blinker", keep);
-            self.vehicle.host.drop_triggers_since(mark, is_blinker_cancel_trigger);
+            self.vehicle
+                .host
+                .drop_triggers_since(mark, is_blinker_cancel_trigger);
         }
         // OMSI_SUSP_TRACE_WINDOW=<csv>: each wheel's travel every frame of a window run
         // (the offscreen run has OMSI_SUSP_TRACE)
         if let Some(path) = omsi_cfg::flags::OMSI_SUSP_TRACE_WINDOW.os() {
             use std::io::Write;
-            static TRACE: std::sync::Mutex<Option<(std::fs::File, f64)>> = std::sync::Mutex::new(None);
+            static TRACE: std::sync::Mutex<Option<(std::fs::File, f64)>> =
+                std::sync::Mutex::new(None);
             let mut g = TRACE.lock().unwrap_or_else(|e| e.into_inner());
             if g.is_none() {
                 if let Ok(mut f) = std::fs::File::create(&path) {
@@ -1085,7 +1284,18 @@ impl Player {
             if let (Some((f, t)), Some(rb)) = (g.as_mut(), self.vehicle.rigid.as_ref()) {
                 *t += dt as f64;
                 for (k, w) in rb.wheels.iter().enumerate() {
-                    let _ = writeln!(f, "{:.4},{:.4},{:.4},{:.1},{k},{:.4},{:.3},{:.0},{:.4}", t, dt, rb.position.z, self.vehicle.physics.velocity_kmh(), w.compression, w.compression_rate, w.load, w.ground_z);
+                    let _ = writeln!(
+                        f,
+                        "{:.4},{:.4},{:.4},{:.1},{k},{:.4},{:.3},{:.0},{:.4}",
+                        t,
+                        dt,
+                        rb.position.z,
+                        self.vehicle.physics.velocity_kmh(),
+                        w.compression,
+                        w.compression_rate,
+                        w.load,
+                        w.ground_z
+                    );
                 }
             }
         }
@@ -1094,9 +1304,15 @@ impl Player {
 
     /// The bus's sounds after its step: the triggers it fired, its volume curves, the
     /// announcements (the window's frame and a recording run's step alike).
-    pub(crate) fn sound_step(&mut self, audio: Option<&omsi_audio::AudioEngine>, inside: bool, listener_follows_bus: bool) {
+    pub(crate) fn sound_step(
+        &mut self,
+        audio: Option<&omsi_audio::AudioEngine>,
+        inside: bool,
+        listener_follows_bus: bool,
+    ) {
         let fired: Vec<String> = std::mem::take(&mut self.vehicle.host.fired_triggers);
-        let fired_vars: Vec<(String, Vec<f32>)> = std::mem::take(&mut self.vehicle.host.fired_trigger_vars);
+        let fired_vars: Vec<(String, Vec<f32>)> =
+            std::mem::take(&mut self.vehicle.host.fired_trigger_vars);
         let fired_files: Vec<(String, String)> =
             std::mem::take(&mut self.vehicle.host.fired_file_triggers);
         for (t, f) in &fired_files {
@@ -1121,7 +1337,11 @@ impl Player {
             omsi_audio::soundset::set_outside_open(Some(v.var("Snd_OutsideVol").unwrap_or(0.0)));
             // (the last time a trigger fired this frame: its sounds start with that moment)
             let at_fire = |t: &str, n: &str| -> Option<f32> {
-                let vals = &fired_vars.iter().rev().find(|(k, _)| k.eq_ignore_ascii_case(t))?.1;
+                let vals = &fired_vars
+                    .iter()
+                    .rev()
+                    .find(|(k, _)| k.eq_ignore_ascii_case(t))?
+                    .1;
                 v.var_slot(n).and_then(|i| vals.get(i).copied())
             };
             ss.update_fired(a, &|n| v.var(n), &xf, &fired, &at_fire);
@@ -1185,13 +1405,21 @@ impl Player {
                         let path = omsi_cfg::resolve_path(t.ty.def.dir(), rel);
                         match omsi_vehicle::SoundCfg::load(&path) {
                             Ok(cfg) => {
-                                let dir = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+                                let dir =
+                                    path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
                                 log::info!(
                                     "sound config of coupled part {i} {}: {} sounds",
                                     path.display(),
                                     cfg.sounds.len()
                                 );
-                                ss.add_part(i, omsi_audio::SoundSet::new(audio, &cfg.chosen_for(&number), &dir));
+                                ss.add_part(
+                                    i,
+                                    omsi_audio::SoundSet::new(
+                                        audio,
+                                        &cfg.chosen_for(&number),
+                                        &dir,
+                                    ),
+                                );
                             }
                             Err(e) => log::warn!("{e}"),
                         }
@@ -1205,7 +1433,6 @@ impl Player {
             }
         }
     }
-
 }
 
 /// Mouse steering switched off: the wheel stays where the mouse left it and the keys go on
@@ -1276,13 +1503,25 @@ mod kept_indicator_tests {
 
     #[test]
     fn only_known_lever_snap_triggers_are_suppressed() {
-        for t in ["ev_lights_blinker_swoff", "EV_LIGHTS_BLINKER_SWOFF", "lights_blinker_swoff"] {
+        for t in [
+            "ev_lights_blinker_swoff",
+            "EV_LIGHTS_BLINKER_SWOFF",
+            "lights_blinker_swoff",
+        ] {
             assert!(super::is_blinker_cancel_trigger(t), "{t}");
         }
-        for k in ["ev_lights_blinker_off", "ev_lights_blinker_on", "ev_lights_blinker_swon"] {
+        for k in [
+            "ev_lights_blinker_off",
+            "ev_lights_blinker_on",
+            "ev_lights_blinker_swon",
+        ] {
             assert!(!super::is_blinker_cancel_trigger(k), "{k}");
         }
-        for k in ["ev_lights_blinker_sw_on", "ev_warnblinker_schalter", "ev_blinker_relais_aus"] {
+        for k in [
+            "ev_lights_blinker_sw_on",
+            "ev_warnblinker_schalter",
+            "ev_blinker_relais_aus",
+        ] {
             assert!(!super::is_blinker_cancel_trigger(k), "{k}");
         }
     }
@@ -1302,7 +1541,10 @@ mod orbit_pivot_tests {
         // heading 90: the forward offset swings sideways, height untouched
         // (a body_rotation pivot would also tilt it with pitch/bank).
         let q = orbit_pivot(DVec3::ZERO, 90.0, [1.0, 2.0, 1.2]);
-        assert!((q.x - 2.0).abs() < 1e-5 && (q.y + 1.0).abs() < 1e-5, "{q:?}");
+        assert!(
+            (q.x - 2.0).abs() < 1e-5 && (q.y + 1.0).abs() < 1e-5,
+            "{q:?}"
+        );
         assert!((q.z - 1.2).abs() < 1e-6, "{q:?}");
     }
 }
@@ -1401,10 +1643,22 @@ mod preset_tests {
     fn plain_left_right_steer_only_with_the_arrows_preset() {
         assert_eq!(fallback_action(KeyCode::ArrowLeft, "simple"), None);
         assert_eq!(fallback_action(KeyCode::ArrowRight, "simple"), None);
-        assert_eq!(fallback_action(KeyCode::ArrowUp, "simple"), Some(A::Throttle));
-        assert_eq!(fallback_action(KeyCode::KeyA, "simple"), Some(A::SteeringLeft));
-        assert_eq!(fallback_action(KeyCode::ArrowLeft, "arrows"), Some(A::SteeringLeft));
-        assert_eq!(fallback_action(KeyCode::ArrowRight, "arrows"), Some(A::SteeringRight));
+        assert_eq!(
+            fallback_action(KeyCode::ArrowUp, "simple"),
+            Some(A::Throttle)
+        );
+        assert_eq!(
+            fallback_action(KeyCode::KeyA, "simple"),
+            Some(A::SteeringLeft)
+        );
+        assert_eq!(
+            fallback_action(KeyCode::ArrowLeft, "arrows"),
+            Some(A::SteeringLeft)
+        );
+        assert_eq!(
+            fallback_action(KeyCode::ArrowRight, "arrows"),
+            Some(A::SteeringRight)
+        );
     }
 }
 
@@ -1417,7 +1671,10 @@ mod indicator_tests {
         for (side, on) in [(1, "blinker_left_set"), (2, "blinker_right_set")] {
             let mut state = 0;
             assert_eq!(indicator_toggle_action(&mut state, None, side), on);
-            assert_eq!(indicator_toggle_action(&mut state, None, side), "blinker_off");
+            assert_eq!(
+                indicator_toggle_action(&mut state, None, side),
+                "blinker_off"
+            );
             assert_eq!(state, 0);
         }
     }
@@ -1425,17 +1682,32 @@ mod indicator_tests {
     #[test]
     fn changing_side_and_automatic_cancellation_use_the_current_lever() {
         let mut state = 1;
-        assert_eq!(indicator_toggle_action(&mut state, Some(1), 2), "blinker_right_set");
-        assert_eq!(indicator_toggle_action(&mut state, Some(0), 2), "blinker_right_set");
-        assert_eq!(indicator_toggle_action(&mut state, Some(2), 2), "blinker_off");
+        assert_eq!(
+            indicator_toggle_action(&mut state, Some(1), 2),
+            "blinker_right_set"
+        );
+        assert_eq!(
+            indicator_toggle_action(&mut state, Some(0), 2),
+            "blinker_right_set"
+        );
+        assert_eq!(
+            indicator_toggle_action(&mut state, Some(2), 2),
+            "blinker_off"
+        );
     }
 
     #[test]
     fn hazards_keep_their_dedicated_toggle_trigger() {
         let mut state = 0;
-        assert_eq!(indicator_toggle_action(&mut state, Some(0), 3), "blinker_warn_toggle");
+        assert_eq!(
+            indicator_toggle_action(&mut state, Some(0), 3),
+            "blinker_warn_toggle"
+        );
         assert_eq!(state, 3);
-        assert_eq!(indicator_toggle_action(&mut state, Some(3), 3), "blinker_warn_toggle");
+        assert_eq!(
+            indicator_toggle_action(&mut state, Some(3), 3),
+            "blinker_warn_toggle"
+        );
         assert_eq!(state, 0);
     }
 }
@@ -1471,7 +1743,10 @@ mod steering_view_tests {
     fn follows_both_directions_without_snapping_or_overshooting() {
         let right = steering_view_yaw(0.0, 1.0, 0.016, true, 30.0, 0.25);
         assert!(right > 0.0 && right < 30.0);
-        assert_eq!(steering_view_yaw(0.0, -1.0, 0.016, true, 30.0, 0.25), -right);
+        assert_eq!(
+            steering_view_yaw(0.0, -1.0, 0.016, true, 30.0, 0.25),
+            -right
+        );
         let changed = steering_view_yaw(30.0, -1.0, 0.016, true, 30.0, 0.25);
         assert!(changed < 30.0 && changed > -30.0);
     }
@@ -1481,8 +1756,12 @@ mod steering_view_tests {
         let mut reference: Option<f32> = None;
         for fps in [5, 30, 60, 144] {
             let mut yaw = 0.0;
-            for _ in 0..fps { yaw = steering_view_yaw(yaw, 0.8, 1.0 / fps as f32, true, 40.0, 0.25); }
-            if let Some(reference) = reference { assert!((yaw - reference).abs() < 0.0001); }
+            for _ in 0..fps {
+                yaw = steering_view_yaw(yaw, 0.8, 1.0 / fps as f32, true, 40.0, 0.25);
+            }
+            if let Some(reference) = reference {
+                assert!((yaw - reference).abs() < 0.0001);
+            }
             reference = Some(yaw);
         }
     }
