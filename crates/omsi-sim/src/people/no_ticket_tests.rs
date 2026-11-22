@@ -50,7 +50,8 @@ fn player_bus(tag: &str) -> BusNow {
     )
     .unwrap();
     let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
-    let cabin = Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin"));
+    let cabin =
+        Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).expect("cabin"));
     std::fs::remove_dir_all(&dir).ok();
     assert!(cabin.sale.is_some(), "the cabin has its cash desk");
     BusNow {
