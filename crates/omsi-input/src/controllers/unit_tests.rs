@@ -1,3 +1,5 @@
+use super::*;
+
 #[cfg(test)]
 mod axis_shape_tests {
     use super::axis_shape;
