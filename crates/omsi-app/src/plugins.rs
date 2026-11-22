@@ -12,6 +12,10 @@ pub(crate) fn load(disabled: bool) -> Plugins {
         if disabled {
             log::info!("plugins disabled for this session (--no-plugins)");
         }
+        // (the launcher's list then shows no plugin as run in the last game; not from tests)
+        if !cfg!(test) {
+            omsi_plugin::status::write_none(omsi_plugin::status::game_data().as_deref());
+        }
         return Plugins::default();
     }
     // (never from content another machine sent: a LAN host's mods are data only)

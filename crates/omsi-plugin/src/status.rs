@@ -23,6 +23,19 @@ pub fn read_off(dir: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The game's data folder (`~/.openomsi`), where [`OFF_FILE`] and [`STATUS_FILE`] are.
+pub fn game_data() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(|h| PathBuf::from(h).join(".openomsi"))
+}
+
+/// A session that runs no plugin (plugins disabled): an empty report in `data` replaces the
+/// last session's, so the launcher no longer shows a plugin as run in the last game.
+pub fn write_none(data: Option<&Path>) {
+    Status::new(data.map(|d| d.join(STATUS_FILE))).write();
+}
+
 /// One plugin's line.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Entry {
@@ -189,6 +202,27 @@ mod tests {
         let back: Report = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
         assert_eq!(back.plugins[0].state, "switched_off");
         assert_eq!(back.plugins[1].error, "syntax error near 'end'");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_session_without_plugins_clears_the_last_report() {
+        let dir = std::env::temp_dir().join(format!("omsi-plugin-none-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut s = Status::new(Some(dir.join(STATUS_FILE)));
+        s.add(
+            "cruise",
+            Path::new("plugins/cruise.lua"),
+            "lua",
+            "loaded",
+            "",
+        );
+        s.write();
+        write_none(Some(&dir));
+        let back: Report =
+            serde_json::from_str(&std::fs::read_to_string(dir.join(STATUS_FILE)).unwrap()).unwrap();
+        assert!(back.plugins.is_empty());
+        assert!(back.at > 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

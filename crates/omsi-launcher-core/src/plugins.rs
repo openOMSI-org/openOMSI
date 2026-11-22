@@ -377,6 +377,22 @@ mod tests {
         d
     }
 
+    /// A game with plugins disabled writes an empty report: the list then shows no plugin as
+    /// run in the last game.
+    #[test]
+    fn after_a_game_without_plugins_none_shows_as_run() {
+        let data = tmp("data-none");
+        let plugins = tmp("plugins-none");
+        std::fs::write(plugins.join("cruise.lua"), "").unwrap();
+        let dirs = vec![plugins.clone()];
+        std::fs::write(data.join(STATUS_FILE), r#"{"at":5,"plugins":[{"name":"cruise.lua","path":"x","kind":"lua","state":"loaded"}]}"#).unwrap();
+        assert_eq!(status_in(&data, &dirs)["plugins"][0]["state"], "loaded");
+        std::fs::write(data.join(STATUS_FILE), r#"{"at":9,"plugins":[]}"#).unwrap();
+        let after = status_in(&data, &dirs);
+        assert_eq!(after["session"], 9);
+        assert_eq!(after["plugins"][0]["state"], Value::Null);
+    }
+
     #[test]
     fn lists_switches_and_saves_settings_as_the_game_reads_them() {
         let data = tmp("data");

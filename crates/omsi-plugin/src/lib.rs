@@ -1033,9 +1033,7 @@ impl HostConfig {
                         .find(|p| p.is_file())
                 })
         };
-        let data = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .map(|h| PathBuf::from(h).join(".openomsi"));
+        let data = status::game_data();
         HostConfig {
             host32,
             runner,
