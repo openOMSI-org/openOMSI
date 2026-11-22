@@ -31,10 +31,7 @@ export function ModsPage() {
   const mode = s.modMode || 'auto';
   const [q, setQ] = useState('');
   const [show, setShow] = useState('all');
-  const [busy, setBusy] = useState({});
-  // (a switch shows what was asked of it right away, until the list read after it says so
-  // itself: the read takes seconds on a big content folder, #4017)
-  const [want, setWant] = useState({});
+  const pending = s.pendingMods ?? {};
   const [open, setOpen] = useState(null);
   const [ask, confirm] = useConfirm();
   const read = () => cached('mods', 'mods_status');
@@ -97,17 +94,18 @@ export function ModsPage() {
     .filter(fits)
     .filter((m) => !q || `${m.name} ${m.paths.join(' ')}`.toLowerCase().includes(q.toLowerCase()))
     .sort((a, b) => (b.enabled ? 1 : 0) - (a.enabled ? 1 : 0) || a.name.localeCompare(b.name));
-  const busyWhile = async (m, f) => {
-    setBusy((b) => ({ ...b, [m.id]: true }));
-    await f();
-    setBusy((b) => ({ ...b, [m.id]: false }));
+  const busyWhile = async (id, operation, run) => {
+    if (Object.hasOwn(s.pendingMods ?? {}, id)) return;
+    set({ pendingMods: { ...s.pendingMods, [id]: operation } });
+    try {
+      return await run();
+    } finally {
+      const rest = { ...s.pendingMods };
+      delete rest[id];
+      set({ pendingMods: rest });
+    }
   };
-  const wish = (id, on) => setWant((w) => {
-    const { [id]: _, ...rest } = w;
-    return on === undefined ? rest : { ...rest, [id]: on };
-  });
-  const toggle = (m, on) => busyWhile(m, async () => {
-    wish(m.id, on);
+  const toggle = (m, on) => busyWhile(m.id, { on }, async () => {
     try {
       await call('mod_set_enabled', { id: m.id, on });
       toast(t(on ? '{name} switched on' : '{name} switched off', { name: m.name }), 'ok');
@@ -117,12 +115,10 @@ export function ModsPage() {
     } catch (e) {
       toast(t(e.message), 'error');
     }
-    wish(m.id);
   });
   const remove = async (m) => {
-    setBusy((b) => ({ ...b, [m.id]: true }));
-    const plan = await call('mod_remove_preview', { id: m.id }).catch((e) => (toast(t(e.message), 'error'), null));
-    setBusy((b) => ({ ...b, [m.id]: false }));
+    const plan = await busyWhile(m.id, {}, () =>
+      call('mod_remove_preview', { id: m.id }).catch((e) => (toast(t(e.message), 'error'), null)));
     if (!plan) return;
     const text = [
       t('{name} and its files are deleted from the content folder. Switch it off instead to keep it.', { name: m.name }),
@@ -130,7 +126,7 @@ export function ModsPage() {
       plan.kept.length > 0 && t('Folders of objects and splines that another map still uses stay: {n}.', { n: plan.kept.length }),
     ].filter(Boolean);
     if (!(await ask({ title: 'Delete this mod?', text, yes: 'Delete', danger: true }))) return;
-    await busyWhile(m, async () => {
+    await busyWhile(m.id, {}, async () => {
       try {
         await call('mod_remove', { id: m.id });
         toast(t('{name} deleted', { name: m.name }), 'ok');
@@ -190,9 +186,9 @@ export function ModsPage() {
                         <div class="title ellipsis" style=${m.enabled ? '' : 'opacity:.55'}>${m.name}</div>
                         <div class="sub">${[t(KIND[m.kind]?.[1] || 'Other'), holds, bytes(m.bytes), m.installed ? ago(m.installed) : !m.noted ? t('found in the content folder') : ''].filter(Boolean).join(' - ')}</div>
                       </div>
-                      ${busy[m.id] && html`<${Spinner} />`}
-                      <div onClick=${(e) => e.stopPropagation()}><${Toggle} checked=${m.id in want ? want[m.id] : m.enabled} disabled=${!!busy[m.id]} onChange=${(on) => toggle(m, on)} /></div>
-                      <${Button} small kind="ghost" icon="trash" disabled=${!!busy[m.id]} title="Delete this mod (asks first; switch it off instead to keep it)" onClick=${(e) => (e.stopPropagation(), remove(m))} />
+                      ${Object.hasOwn(pending, m.id) && html`<${Spinner} />`}
+                      <div onClick=${(e) => e.stopPropagation()}><${Toggle} checked=${(Object.hasOwn(pending, m.id) ? pending[m.id].on : undefined) ?? m.enabled} disabled=${Object.hasOwn(pending, m.id)} onChange=${(on) => toggle(m, on)} /></div>
+                      <${Button} small kind="ghost" icon="trash" disabled=${Object.hasOwn(pending, m.id)} title="Delete this mod (asks first; switch it off instead to keep it)" onClick=${(e) => (e.stopPropagation(), remove(m))} />
                     </div>
                     ${open === m.id && html`<div style="padding:4px 12px 12px 44px" class="small selectable stack">${tree.map(([folder, items]) => html`<div class="row" style="align-items:baseline;gap:12px">
                       <b class="muted" style="flex:none;min-width:96px">${folder}</b><span class="dim" style="min-width:0;overflow-wrap:anywhere">${items.join(', ')}</span>
