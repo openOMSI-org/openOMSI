@@ -456,8 +456,6 @@ export async function loadSituations() {
  * behind it (`fresh` = the command's answer is set into `S.cache[key]`). */
 export function cached(key, cmd, args) {
   const had = S.cache[key];
-  // (a failed read leaves `{ error }` in the cache and answers null, as it always did: the
-  // pages show the error from the cache)
   const p = reread(key, cmd, args).catch(() => null);
   return had !== undefined ? Promise.resolve(had) : p;
 }
@@ -465,14 +463,7 @@ export function cached(key, cmd, args) {
 const asked = {};
 const latest = {};
 
-/** Read `key` again and wait for the new answer (`S.reading[key]` while it comes). The last
- *  read asked for wins: an earlier one answering later is dropped, a later one is never
- *  dropped for an earlier one (#4016). The promise resolves once the cache holds an answer
- *  read after this call (a newer read's, when one was asked meanwhile), and rejects when that
- *  read failed: a failed read confirms nothing. The cache keeps the last good answer then (the
- *  page still shows it, with `S.readError[key]`), or holds `{ error }` when it had none. An answer
- *  written into the cache by a page itself while the read went on (a save, a scan) is newer
- *  than the read and stays. */
+/** Rejects on a failed read: a failed read confirms no install, switch or delete (#4016, #4017). */
 export function reread(key, cmd, args) {
   const n = (asked[key] = (asked[key] || 0) + 1);
   const before = S.cache[key];
@@ -499,9 +490,6 @@ export function reread(key, cmd, args) {
   return p;
 }
 
-/** `reread` until a read answers: what a page holds until the list says so itself (a mod
- *  being installed, a switch's new position) is not dropped on a failed read. The first
- *  failure is told; the read is asked again, less often each time (#4016, #4017). */
 export async function rereadUntil(key, cmd, args) {
   for (let wait = 1000, told = false; ; wait = Math.min(wait * 2, 30000)) {
     try {
@@ -702,11 +690,9 @@ export async function pollNow() {
     }
     if (changed || finished.length) {
       loadContent();
-      // (a mod just installed keeps its row on the Mods page until the list read after it
-      // has it: the read takes seconds on a big content folder, #4016)
+      // (the read takes seconds on a big content folder, #4016)
       const done = finished.filter((j) => j.state === 'done').map((j) => j.id);
       if (done.length) set({ settling: [...S.settling, ...done] });
-      // (only a read that answered settles them: a failed one is asked again)
       rereadUntil('mods', 'mods_status').then(() => done.length && set({ settling: S.settling.filter((id) => !done.includes(id)) }));
     }
   } catch {

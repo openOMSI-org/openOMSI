@@ -128,8 +128,7 @@ function Overview({ onCheck }) {
     setBusy(true);
     const before = lastKeys ?? new Set(problems(S).flatMap((g) => g.issues.map((i) => i.key)));
     try {
-      // (the list read as the Mods page's reads are: one asked before a switch or a delete
-      // answering after its read was asked is dropped, not taken as that read's answer)
+      // (through reread, so a scan asked before a switch or a delete cannot confirm it)
       const [, vehicles] = await Promise.all([reread('mods', 'mods_status'), call('vehicles'), pollNow()]);
       set({ vehicles, scannedAt: Date.now() / 1000 });
       // (as the content loading does: a bus taken away since must not stay the chosen one)

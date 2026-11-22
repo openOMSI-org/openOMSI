@@ -86,8 +86,6 @@ export function ModsPage() {
     if (!m.enabled) counts.off++;
   }
   const kind = counts[show] ? show : 'all';
-  // (the mods on their way, at the top of the whole list: being installed, or installed and
-  // not listed yet, #4016)
   const arriving = kind === 'all' && !q ? jobs.filter((j) => jobRunning(j) || s.settling.includes(j.id)) : [];
   const arrivingRows = arriving.map((j) => html`<div class="list-item" style="cursor:default">
     <${Icon} name="download" />
@@ -118,7 +116,6 @@ export function ModsPage() {
       await call('mod_set_enabled', { id: m.id, on });
       toast(t(on ? '{name} switched on' : '{name} switched off', { name: m.name }), 'ok');
       loadContent();
-      // (the switch keeps its new position until a read answers: a failed one is asked again)
       await rereadUntil('mods', 'mods_status');
     } catch (e) {
       toast(t(e.message), 'error');
@@ -139,7 +136,6 @@ export function ModsPage() {
         await call('mod_remove', { id: m.id });
         toast(t('{name} deleted', { name: m.name }), 'ok');
         loadContent();
-        // (its row stays, busy, until a list read after it no longer has it)
         await rereadUntil('mods', 'mods_status');
       } catch (e) {
         toast(t(e.message), 'error');
