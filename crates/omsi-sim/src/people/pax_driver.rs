@@ -283,6 +283,8 @@ impl PeopleSim {
             if p.timer > 0.0 {
                 return;
             }
+            // whether the fare keeps a ticket (#2742) - read before the passenger is borrowed
+            let keeps_ticket = !self.no_ticket;
             // the money on the desk (sub_7e8254)
             let point = bn.cabin.money_var.clone();
             let mut paid = value;
@@ -327,11 +329,13 @@ impl PeopleSim {
             self.paid = Some((paid, value));
             let pp = self.pax_mut(i).unwrap();
             pp.paid = paid;
-            pp.sub = 5;
+            // paid: after the ticket (5) - or, with a fare that keeps no ticket, at once
+            // where the change is counted (6), #2742
+            pp.sub = if keeps_ticket { 5 } else { 6 };
             pp.reach = false;
             pp.talking = false;
             pp.look_driver = false;
-            pp.timer = 10.0;
+            pp.timer = if keeps_ticket { 10.0 } else { 0.0 };
         } else if p.sub == 5 && tk_ok {
             // the ticket: the hand to where it comes out
             let pp = self.pax_mut(i).unwrap();
@@ -350,13 +354,19 @@ impl PeopleSim {
             let pp = self.pax_mut(i).unwrap();
             pp.reach = false;
             pp.taking_ticket = None;
-            self.tickets_sold += 1;
+            if self.no_ticket {
+                self.fares_no_ticket += 1;
+            } else {
+                self.tickets_sold += 1;
+                *taken_ticket = true;
+                self.sales.push((name, value));
+            }
             self.ticket_cash += value;
-            self.sales.push((name, value));
-            *taken_ticket = true;
             if let Some(ticket_type) = p.taking_ticket {
-                self.sale_events
-                    .push((bn.id, SaleEvent::PassengerTookTicket(ticket_type)));
+                if !self.no_ticket {
+                    self.sale_events
+                        .push((bn.id, SaleEvent::PassengerTookTicket(ticket_type)));
+                }
             }
             if auto {
                 if let Some(m) = self.money.as_mut() {

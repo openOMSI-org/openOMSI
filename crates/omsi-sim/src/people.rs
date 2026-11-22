@@ -128,6 +128,9 @@ mod desk_ticket_tests;
 mod destination_tests;
 #[cfg(test)]
 #[rustfmt::skip]
+mod no_ticket_tests;
+#[cfg(test)]
+#[rustfmt::skip]
 mod late_tolerance_tests;
 #[cfg(test)]
 #[rustfmt::skip]
