@@ -534,3 +534,41 @@ fn a_hit_answered_late_is_carried_out_once_after_hundreds_of_others() {
     s.host.accident_from_player(CLIENT, first);
     assert_eq!(rest(&mut s), pushed, "the late copy is not");
 }
+
+/// A session gives a departed player's id to the next one: the newcomer starts with its own
+/// numbers from 1, and the host takes none of its hits for the old player's, while the old
+/// player's accident ends with it.
+#[test]
+fn a_player_given_a_departed_players_id_starts_afresh() {
+    let f = Fixture::new();
+    let mut s = Session::new(&f);
+    s.host.accident_to_players(&[CLIENT], DT);
+    let mut old = hit_on(&s.host, s.car, 50);
+    if let AccidentMsg::Hit { done, .. } = &mut old {
+        *done = 49;
+    }
+    s.host.accident_from_player(CLIENT, old);
+    assert!(s.loose());
+    s.host
+        .accident_from_player(CLIENT, AccidentMsg::Police { seq: 60 });
+    assert!(!s.loose());
+    s.host
+        .accident_from_player(CLIENT, hit_on(&s.host, s.car, 70));
+    assert!(s.loose() && s.host.accident_open_by(CLIENT));
+
+    s.host.accident_to_players(&[], DT);
+    assert!(!s.loose(), "the accident ends with the player who left");
+    assert!(!s.host.accident_open_by(CLIENT));
+
+    s.host.accident_to_players(&[CLIENT], DT);
+    assert_eq!(
+        s.host
+            .accident_from_player(CLIENT, hit_on(&s.host, s.car, 1)),
+        Some(AccidentMsg::HitSeen { seq: 1 })
+    );
+    assert!(s.loose(), "the newcomer's first hit is carried out");
+    assert!(s.host.accident_open_by(CLIENT));
+    s.host
+        .accident_from_player(CLIENT, AccidentMsg::Police { seq: 2 });
+    assert!(!s.loose(), "and its first call clears it");
+}

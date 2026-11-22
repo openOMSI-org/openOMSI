@@ -226,6 +226,9 @@ pub struct Accidents {
     new: u32,
     fled: u32,
     clients: HashMap<u32, Client>,
+    /// Host: the players in the session at the last step. A session gives a player's id to
+    /// another once the first has left, so one that is gone takes its numbers with it.
+    online: Vec<u32>,
     host: Host,
 }
 
@@ -346,7 +349,17 @@ impl TrafficSim {
     /// The LAN session began or ended: what was owed to the other side goes with it.
     pub fn accident_session_changed(&mut self) {
         self.accident.clients.clear();
+        self.accident.online.clear();
         self.accident.host = Host::default();
+    }
+
+    /// Host: client `player` left the session. Its accidents end with it (its cars go back
+    /// onto their route), and whoever is given its id next starts afresh: none of its hits
+    /// or calls is taken for one already carried out.
+    fn accident_player_left(&mut self, player: u32) {
+        self.clear_accidents_by(player);
+        self.accident.by_car.retain(|_, b| b.0 != player);
+        self.accident.clients.remove(&player);
     }
 
     /// Client: what to send the host in this step of `dt` seconds.
@@ -437,7 +450,16 @@ impl TrafficSim {
     }
 
     /// Host: what to send each of `players` in this step of `dt` seconds.
+    /// A player that was among them at the last step and is not now has left.
     pub fn accident_to_players(&mut self, players: &[u32], dt: f32) -> Vec<(u32, AccidentMsg)> {
+        let gone: Vec<u32> = (self.accident.online.iter())
+            .filter(|p| !players.contains(p))
+            .copied()
+            .collect();
+        for player in gone {
+            self.accident_player_left(player);
+        }
+        self.accident.online = players.to_vec();
         let mut out = Vec::new();
         for &player in players {
             let open = self.accident_open_by(player);
