@@ -370,7 +370,7 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `7` (`6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
+`omsi.ui.version` is `8` (`7` before cards over the map, `6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
 element, `4` before `grab`, `3` before boxes, stop lists and the other
 elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
 test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
@@ -461,6 +461,31 @@ omsi.ui.set("phone", { anchor = "navigator", frame = true, grab = true, padding 
 } })
 ```
 
+With `overlay` (`omsi.ui.version` 8) the `map` element takes cards of the plugin's own over the
+map, in place of the navigator's or beside them: a list of small panels, each with a panel
+table's keys - `place` (the anchors, `navigator` aside; default `top_left`), `x` and `y` (the
+room kept from the map's edges, default 8), `width` (default: what is in it needs, never more
+than the map less `x` on both sides), `padding` (default 10), `gap` (6), `background` (default
+the game's card colour), `radius` (10) and `children` (any elements); a key of a card that the game does not know is left alone, so a
+plugin written for a later game still shows. A card is laid out at its
+place in the map and drawn with the panel, which lies over the map. It is held inside the map
+(never wider than it, never above its top); what still crosses the map's edge - the bottom of a
+card taller than the map - is left out: its background stops at the edge with its corners still
+rounded, and a text, an icon or a picture that does not wholly fit is not drawn. Its buttons
+and other clickable parts take clicks as in the panel; a press on the map beside them is still
+the navigator's. A `map` element outside a panel in the whole frame is empty room, and its cards
+are laid out in that room the same way. An older openOMSI leaves `overlay` out and shows the map
+without them; [`navigator_map.lua`](examples/plugins/navigator_map.lua) is a whole example.
+
+```lua
+omsi.ui.set("phone", { anchor = "navigator", frame = true, padding = 10, children = {
+  { type = "map", height = 360, cards = false, overlay = {
+    { place = "top_left", width = 220, children = { { type = "text", text = "Line 5 → Hauptbahnhof", weight = "bold" } } },
+    { place = "bottom_right", background = "#14161ACC", children = { { type = "text", text = "48 km/h" } } },
+  } },
+} })
+```
+
 #### Elements
 
 Every element can have an `id`, a `color` and `visible = false` (left out, no room kept).
@@ -475,7 +500,7 @@ Every element can have an `id`, a `color` and `visible = false` (left out, no ro
 | `box` (4) | `children`, `gap` (default 4), `color` (default amber) | its children stacked in a box tinted with `color`, a stripe of it on the left: a note, an advice |
 | `stops` (4) | `stops` (`{ { name, time, expected, expected_color, state, tag }, ... }`, up to 128), `size` (13), `color` (the rail, default amber) | stops on a rail, a row each: `state` `"done"` (behind the bus: grey), `"now"` (the one it heads for: marked, bold) or `"ahead"` (the default); `time` on the right, `expected` before it in `expected_color`, and `tag` (`"terminus"`) before them |
 | `divider` | `color` | a thin line (in a row: upright) |
-| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height |
+| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`), `overlay` (8: a list of cards, see [In the navigator](#in-the-navigator)) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`, and the plugin's `overlay` cards); elsewhere empty room of its height, with the `overlay` cards in it |
 | `space` | `size` (default 8) | empty room (in a row: across) |
 | `button` | `id` (needed), `text`, `icon`, `color` | a button 34 high, across the panel (in a row as wide as its label, or what it grows to); a click on it is `ui_click(panel id, button id)` |
 | `image` | `src` (a PNG, JPEG, BMP or TGA of the plugin's folder), `width`, `height` (default 64) | the picture, made smaller to fit the width it has |
@@ -492,7 +517,7 @@ button is. Texts are shown as they are: they are not translated into the game's 
 Keys the game does not know are left alone and an element of an unknown `type` is left out,
 so a plugin written for a later openOMSI still shows its panels here. A key of the wrong
 kind makes `set` return `false` and the reason. Limits, each plugin: 16 panels, 200
-elements in a panel (those in rows and boxes counted), 500 characters in a text, 64 in an id,
+elements in a panel (those in rows, boxes and cards over a map counted, and each card), 500 characters in a text, 64 in an id,
 rows and boxes 8 deep, 512 values in a chart or cells in a table.
 
 #### A line in the pause menu
@@ -538,6 +563,7 @@ Complete plugins to start from (each runs in the tests against a stand-in game):
 | Plugin | What it shows |
 | --- | --- |
 | [`trip_panel.lua`](examples/plugins/trip_panel.lua) | a panel with the line, the next stop and a button |
+| [`navigator_map.lua`](examples/plugins/navigator_map.lua) | the navigator's frame with its map and three cards of the plugin's own over it: the line, the next stop, the speed |
 | [`dispatcher/`](examples/plugins/dispatcher/main.lua) | a dispatcher and a small career: a draggable panel with tabs, the duty's next stops in a table, a chart of the delays, pay for stops and trips kept in the storage, today's duties offered and taken with a click, settings, hotkeys |
 | [`telemetry_hud.lua`](examples/plugins/telemetry_hud.lua) | a HUD: the speed with a chart of the last minute, gear, rpm, fuel, passengers, the speed limit and the traffic light ahead; a warning before a red light; the values as JSON over UDP for a program beside the game |
 | [`passenger_log.lua`](examples/plugins/passenger_log.lua) | every passenger boarding the bus in `game.log`: age, boarding stop and destination, the ticket they will ask for (`passenger_ticket`, `people.get`) |

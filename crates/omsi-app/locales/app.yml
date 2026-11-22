@@ -8811,3 +8811,25 @@ _version: 2
   en: "Use for {bus}"
 "Profile {name} in use":
   en: "Profile {name} in use"
+"Driving end {number} of {count}: {name}":
+  en: "Driving end {number} of {count}: {name}"
+"At the wheel in the other cab":
+  en: "At the wheel in the other cab"
+"There are no points to set from here":
+  en: "There are no points to set from here"
+"Not on rails":
+  en: "Not on rails"
+"No points within {reach} m ahead":
+  en: "No points within {reach} m ahead"
+"The points {dist} m ahead cannot be set":
+  en: "The points {dist} m ahead cannot be set"
+"The points {dist} m ahead do not move":
+  en: "The points {dist} m ahead do not move"
+"Points {dist} m ahead: {way}":
+  en: "Points {dist} m ahead: {way}"
+"straight on":
+  en: "straight on"
+"to the left":
+  en: "to the left"
+"to the right":
+  en: "to the right"

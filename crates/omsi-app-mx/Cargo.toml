@@ -1,0 +1,132 @@
+[package]
+name = "omsi-app-mx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The openOMSI application: loads a map and renders it"
+
+# The game is a library with a small `main` around it: the Android build takes the same
+# library as a shared object (`cargo rustc --lib --crate-type cdylib`, see
+# scripts/build-android.sh), which the phone's NativeActivity loads; the iPhone, iPad and
+# Mac apps link it as a static library (`--crate-type staticlib`, see scripts/build-apple.sh)
+# into the Swift app, whose launcher talks to it through `apple_bridge`.
+[lib]
+name = "openomsi_game_mx"
+path = "src/lib.rs"
+
+
+[dependencies]
+omsi-cfg = { path = "../omsi-cfg" }
+omsi-map = { path = "../omsi-map" }
+omsi-mapdraw = { package = "omsi-mapdraw-mx", path = "../omsi-mapdraw-mx" }
+omsi-navigator = { package = "omsi-navigator-mx", path = "../omsi-navigator-mx" }
+omsi-scenery = { path = "../omsi-scenery" }
+omsi-model = { path = "../omsi-model" }
+omsi-o3d = { path = "../omsi-o3d" }
+omsi-texture = { path = "../omsi-texture" }
+omsi-geometry = { path = "../omsi-geometry" }
+omsi-render = { package = "omsi-render-mx", path = "../omsi-render-mx" }
+omsi-photo = { package = "omsi-photo-mx", path = "../omsi-photo-mx" }
+omsi-mt = { package = "omsi-mt-mx", path = "../omsi-mt-mx" }
+omsi-sim = { path = "../omsi-sim" }
+omsi-transit = { path = "../omsi-transit" }
+omsi-trolley = { path = "../omsi-trolley" }
+omsi-htmlengine = { path = "../omsi-htmlengine" }
+omsi-plugin = { path = "../omsi-plugin" }
+omsi-vehicle = { path = "../omsi-vehicle" }
+omsi-content = { path = "../omsi-content" }
+omsi-timetable = { path = "../omsi-timetable" }
+omsi-script = { path = "../omsi-script" }
+omsi-audio = { path = "../omsi-audio" }
+omsi-voice = { path = "../omsi-voice" }
+mx.workspace = true
+winit.workspace = true
+glam.workspace = true
+pollster.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+log.workspace = true
+env_logger.workspace = true
+rayon.workspace = true
+omsi-net = { path = "../omsi-net" }
+omsi-platform = { path = "../omsi-platform" }
+omsi-guard = { path = "../omsi-guard" }
+omsi-admin = { path = "../omsi-admin" }
+omsi-lan = { path = "../omsi-lan" }
+omsi-remote = { path = "../omsi-remote" }
+omsi-input = { path = "../omsi-input" }
+omsi-xr = { package = "omsi-xr-mx", path = "../omsi-xr-mx" }
+omsi-plugin-ui = { package = "omsi-plugin-ui-mx", path = "../omsi-plugin-ui-mx" }
+omsi-weather = { path = "../omsi-weather" }
+omsi-career = { path = "../omsi-career" }
+omsi-soundscape = { path = "../omsi-soundscape" }
+omsi-world = { path = "../omsi-world" }
+omsi-scene = { package = "omsi-scene-mx", path = "../omsi-scene-mx" }
+omsi-ui = { package = "omsi-ui-mx", path = "../omsi-ui-mx" }
+omsi-settings-ui = { package = "omsi-settings-ui-mx", path = "../omsi-settings-ui-mx" }
+omsi-multiplayer-ui = { package = "omsi-multiplayer-ui-mx", path = "../omsi-multiplayer-ui-mx" }
+omsi-launcher-core = { path = "../omsi-launcher-core" }
+omsi-launcher-api = { path = "../omsi-launcher-api" }
+omsi-launcher-model = { path = "../omsi-launcher-model" }
+serde.workspace = true
+hashbrown.workspace = true
+parking_lot.workspace = true
+image.workspace = true
+png = "0.18"
+serde_json.workspace = true
+ab_glyph.workspace = true
+rustrict = "0.7"
+gilrs = "0.11"
+ureq.workspace = true
+ring.workspace = true
+rust-i18n = "4"
+# updates: the release archives from GitHub
+zip.workspace = true
+# the launcher preview's pictures: a JPEG encoder a few times faster than image's
+jpeg-encoder = { version = "0.7.1", features = ["simd"] }
+
+# the desktop's clipboard and file dialogs (a phone has neither in this form; an iPhone's
+# come from the Swift side, see `apple`)
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+arboard = { version = "3", default-features = false }
+rfd.workspace = true
+# the allocator of the desktop game (see main.rs). Its version 2: version 3, the crate's
+# default, counts bits with the POPCNT instruction wherever MSVC builds it, and a processor
+# without it (a Core 2) stopped on an illegal instruction before the game began (0xC000001D,
+# from 0.2.36 on, #2484); version 2 needs nothing past the x86-64 every Windows PC has.
+mimalloc = { version = "0.1.52", default-features = false, features = ["v2"] }
+
+# Steam's rich presence: only where `assets/steam_redist` has the library (the build script
+# sets `cfg(steam)` for the same targets and puts the library beside the binary)
+[target.'cfg(any(all(windows, target_arch = "x86_64"), all(target_os = "linux", target_arch = "x86_64"), target_os = "macos"))'.dependencies]
+steamworks = "0.13.1"
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+# Windows: the game controllers through DirectInput, as OMSI reads them (see `dinput`)
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Win32_Devices_HumanInterfaceDevice", "Win32_Foundation", "Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common", "Win32_Security", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+
+# the interface's machine translation (`mt`): CTranslate2 with Meta's NLLB model, as the
+# `trad` crate does it (Apple's Accelerate for the maths; Apple silicon only)
+# Android: winit's NativeActivity backend, the system log, and JNI for the few things only
+# Java offers (storage permission, the screen's cut-outs, vibration)
+[target.'cfg(target_os = "android")'.dependencies]
+winit = { workspace = true, features = ["android-native-activity"] }
+android_logger = "0.15"
+jni = "0.21"
+ndk-context = "0.1"
+
+[dev-dependencies]
+# Test-only access to the actual clickable control rectangles in the pause menu.
+omsi-ui = { package = "omsi-ui-mx", path = "../omsi-ui-mx", features = ["test-support"] }
+# the control names from a table (`ControlNames::from_table`) for the key picker's tests
+omsi-input = { path = "../omsi-input", features = ["test-support"] }
+# the stages' declared groups held against what their code reaches (`frame_stages/access_tests.rs`)
+omsi-srcscan = { path = "../omsi-srcscan" }
+
+# iPhone and iPad: the window the game draws in is put on the app's scene (UIKit's scene life
+# cycle, which the Swift app keeps) through the Objective-C runtime
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = { version = "0.6", default-features = false, features = ["std"] }

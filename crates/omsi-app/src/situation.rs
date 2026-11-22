@@ -208,6 +208,7 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
             args.paint = (*c >= 0.0).then(|| format!("{}", *c as i64));
         }
         args.situation_strvars = v.string_vars.clone();
+        args.situation_cars = v.cars.clone();
         log::info!(
             "situation: player {} at {:?} line {:?} tour {:?} hof {:?}, {} vars",
             v.file,
@@ -242,6 +243,7 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
                 paint,
                 vars: v.vars.iter().map(|(n, x)| (n.clone(), *x as f32)).collect(),
                 strvars: v.string_vars.clone(),
+                cars: v.cars.clone(),
                 odometer_km: saved_odometer_km(v, legacy_odometer_ids),
             }
         })
@@ -333,6 +335,7 @@ pub(crate) fn build_situation(
             string_vars,
             timetable: Vec::new(),
             riders: if mine { v.host.humans_count.max(0.0) as usize } else { 0 },
+            cars: v.car_states(),
         }
     };
     let mut vehicles = Vec::new();
