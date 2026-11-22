@@ -22,6 +22,7 @@ async function setup() {
             reads.push({ answer, fail });
             return p;
           }
+          if (cmd === 'mod_set_enabled') return true;
           if (cmd === 'poll') return poll;
           if (cmd === 'vehicles' && vehicles) return vehicles;
           if (cmd === 'maps' || cmd === 'weather') return [];
@@ -64,6 +65,22 @@ async function setup() {
   const text = (v) => (v == null || v === false || typeof v === 'function' ? '' : Array.isArray(v) ? v.map(text).join('')
     : typeof v === 'object' && v.strings ? v.strings.map((x, i) => x + text(v.vals[i])).join('') : String(v));
   const page = () => text(mods.namespace.ModsPage());
+  const modSwitch = () => {
+    function find(node) {
+      if (!node || typeof node !== 'object') return null;
+      const i = node.vals?.findIndex((value) => value?.name === 'Toggle') ?? -1;
+      if (i !== -1) {
+        const [checked, disabled, change] = node.vals.slice(i + 1);
+        return { checked, disabled, change };
+      }
+      for (const child of node.vals ?? (Array.isArray(node) ? node : [])) {
+        const match = find(child);
+        if (match) return match;
+      }
+      return null;
+    }
+    return find(mods.namespace.ModsPage());
+  };
   const flush = () => new Promise((r) => setImmediate(r));
   // runs the waits `rereadUntil` asked for (not the toasts' own timers)
   const retry = async () => {
@@ -85,7 +102,7 @@ async function setup() {
     const overview = find(tr.namespace.TroubleshootPage(), (f) => f.name === 'Overview');
     return find(overview({}), (f) => f.name === 'scan');
   };
-  return { state, data, page, reads, timers, flush, retry, scanButton, setPoll: (p) => { poll = p; }, setVehicles: (v) => { vehicles = v; } };
+  return { state, data, page, modSwitch, reads, timers, flush, retry, scanButton, setPoll: (p) => { poll = p; }, setVehicles: (v) => { vehicles = v; } };
 }
 
 const list = (...ids) => ({ installed: ids.map((id) => ({ id, name: id, enabled: true })) });
@@ -270,4 +287,21 @@ test('a Troubleshoot scan asked before a switch does not confirm it when the swi
   reads.at(-1).answer(list('a', 'b'));
   assert.deepEqual(await p, list('a', 'b'));
   assert.deepEqual(state.cache.mods, list('a', 'b'));
+});
+
+test('remounting Mods keeps a pending switch until the confirming read succeeds', async () => {
+  const { state, modSwitch, reads, flush, retry } = await setup();
+  state.cache = { mods: list('a') };
+  const changed = modSwitch().change(false);
+  await flush();
+  reads.at(-1).fail('content folder unreadable');
+  await flush();
+  const remounted = modSwitch();
+  assert.equal(remounted.checked, false);
+  assert.equal(remounted.disabled, true);
+  await retry();
+  reads.at(-1).answer({ installed: [{ id: 'a', name: 'a', enabled: false }] });
+  await changed;
+  assert.equal(modSwitch().checked, false);
+  assert.equal(modSwitch().disabled, false);
 });
