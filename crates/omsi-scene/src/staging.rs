@@ -811,6 +811,9 @@ pub(super) struct StagedSpline {
 /// terrain does not - a caster in one plane with what it falls on paints dark patches into
 /// it (the sun shadow's bias is 6 cm). Splines are surfaces and cast nothing otherwise.
 pub(super) const SPLINE_SHADOW_CLEARANCE: f32 = 0.75;
+/// A spline whose profiles rise this far (m) is a structure (a tunnel, a wall) and casts its
+/// shadow wherever it lies.
+pub(super) const SPLINE_STRUCTURE_HEIGHT: f32 = 2.0;
 /// A spline whose profiles all hang this far (m) over its line - wires, catenaries, a
 /// canopy - is no ground surface: it neither cuts the terrain nor carries anything.
 pub(super) const SPLINE_OVERHEAD: f32 = 2.0;

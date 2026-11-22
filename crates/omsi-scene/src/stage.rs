@@ -1,6 +1,12 @@
 //! Choosing, preparing and staging tiles.
 use super::*;
 
+/// How far the values reach from the lowest to the highest (a profile's width or height).
+fn span(values: impl Iterator<Item = f32>) -> f32 {
+    let (lo, hi) = values.fold((f32::MAX, f32::MIN), |(a, b), v| (a.min(v), b.max(v)));
+    hi - lo
+}
+
 impl World {
     /// Every tile of global.cfg's `[map]` list whose file exists, with its index in that list
     /// (repeaters and timetable tracks name a tile by that index).
@@ -865,21 +871,19 @@ impl World {
                 let aligned = s.terrain_align_flag || s.terrain_align.is_some();
                 // (a road the ground was pulled onto lies on it whatever the heights say; a
                 // wire - under a metre across - would only flicker in the shadow map)
-                let (lo_x, hi_x) = st
-                    .def
-                    .profiles
-                    .iter()
-                    .flat_map(|p| p.points.iter().map(|q| q.x))
-                    .fold((f32::MAX, f32::MIN), |(a, b), x| (a.min(x), b.max(x)));
-                let casts_shadow = !aligned && hi_x - lo_x >= 1.0 && {
-                    let step = mesh.positions.len().div_ceil(64).max(1);
-                    mesh.positions.iter().step_by(step).all(|p| {
-                        p.z - out.base_terrain.sample(
-                            p.x.clamp(0.0, tile_size() as f32),
-                            p.y.clamp(0.0, tile_size() as f32),
-                        ) > SPLINE_SHADOW_CLEARANCE
-                    })
-                };
+                let points = || st.def.profiles.iter().flat_map(|p| p.points.iter());
+                let structure = span(points().map(|q| q.z)) >= SPLINE_STRUCTURE_HEIGHT;
+                let casts_shadow = !aligned
+                    && span(points().map(|q| q.x)) >= 1.0
+                    && (structure || {
+                        let step = mesh.positions.len().div_ceil(64).max(1);
+                        mesh.positions.iter().step_by(step).all(|p| {
+                            p.z - out.base_terrain.sample(
+                                p.x.clamp(0.0, tile_size() as f32),
+                                p.y.clamp(0.0, tile_size() as f32),
+                            ) > SPLINE_SHADOW_CLEARANCE
+                        })
+                    });
                 if casts_shadow && debug_splines {
                     log::info!(
                         "tile {tx},{ty} spline {} {} stands clear of the ground: it casts a sun shadow",
