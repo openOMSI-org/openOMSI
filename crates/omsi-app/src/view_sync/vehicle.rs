@@ -65,6 +65,7 @@ pub fn sync_vehicle_part(
     main: &omsi_sim::VehicleInstance,
     part: &mut omsi_sim::vehicle::TrailerPart,
     render: &mut VehicleRender,
+    budget: &mut usize,
 ) {
     sync_interior_lamps(
         renderer,
@@ -72,10 +73,10 @@ pub fn sync_vehicle_part(
         &part.ty,
         part.position,
         part.body_rotation(),
-        |li| interior_lamp_on(&part.ty, li, |n| main.var(n)),
+        |li| interior_lamp_on(&part.ty, li, |n| part.run_var(n).or_else(|| main.var(n))),
         render,
     );
-    sync_materials(renderer, scene, main, render);
+    sync_materials(renderer, scene, &PartVars { part, main }, render);
     for i in part.update_text_textures(main) {
         if let (Some(Some(tex)), Some(img)) = (
             render.text_textures.get(i),
@@ -94,6 +95,50 @@ pub fn sync_vehicle_part(
             );
         }
     }
+    if render.shared_script || render.displays_far {
+        return;
+    }
+    let mut rebound = Vec::new();
+    for (i, st) in part.script_textures.iter_mut().enumerate() {
+        if let (Some(Some(tex)), true) = (render.script_textures.get(i), *budget > 0) {
+            *budget = budget.saturating_sub(upload_script_texture(
+                renderer,
+                scene,
+                *tex,
+                st,
+                &mut rebound,
+            ));
+        }
+    }
+    renderer.rebind_textures(scene, &rebound);
+}
+
+/// What script texture `st` drew since it last went up, into texture `tex` (with its
+/// mipmaps made anew where it has them: such a texture goes into `rebound`). How many bytes
+/// went up, 0 for none.
+fn upload_script_texture(
+    renderer: &Renderer,
+    scene: &mut Scene,
+    tex: omsi_render::TextureId,
+    st: &mut omsi_sim::scripttex::ScriptTexture,
+    rebound: &mut Vec<omsi_render::TextureId>,
+) -> usize {
+    let Some(rgba) = st.take_upload() else {
+        return 0;
+    };
+    let n = rgba.len();
+    let img = Image {
+        width: st.width,
+        height: st.height,
+        rgba,
+        has_alpha: true,
+    };
+    if !st.mipmaps {
+        renderer.update_texture(scene, tex, &img);
+    } else if renderer.update_texture_mips(scene, tex, &img) {
+        rebound.push(tex);
+    }
+    n
 }
 
 /// Resolve a vehicle `[matl_freetex]` name. OMSI add-ons often write paths such as
@@ -105,7 +150,9 @@ pub(crate) fn find_vehicle_freetex(name: &str, dirs: &[&Path]) -> Option<PathBuf
     }
     let normalized = name.trim().replace('\\', "/");
     let parts: Vec<&str> = normalized.split('/').filter(|p| !p.is_empty()).collect();
-    let texture = parts.iter().position(|p| p.eq_ignore_ascii_case("Texture"))?;
+    let texture = parts
+        .iter()
+        .position(|p| p.eq_ignore_ascii_case("Texture"))?;
     let rel = parts.get(texture + 1..)?.join("/");
     if rel.is_empty() {
         return None;
@@ -124,7 +171,11 @@ fn freetex_key_is(key: Option<&str>, name: &str, mask: Option<u32>) -> bool {
     let Some((head, rest)) = key.split_at_checked(name.len()) else {
         return false;
     };
-    if !head.iter().zip(name).all(|(k, n)| *k == n.to_ascii_lowercase()) {
+    if !head
+        .iter()
+        .zip(name)
+        .all(|(k, n)| *k == n.to_ascii_lowercase())
+    {
         return false;
     }
     match mask {
@@ -160,7 +211,33 @@ impl LookVars for omsi_sim::VehicleInstance {
     }
 
     fn str_var(&self, name: &str) -> &str {
-        self.ty.program.str_var(name).and_then(|i| self.state.str_vars.get(i as usize)).map_or("", |s| s.trim())
+        self.ty
+            .program
+            .str_var(name)
+            .and_then(|i| self.state.str_vars.get(i as usize))
+            .map_or("", |s| s.trim())
+    }
+}
+
+/// A coupled part's variables: its own where it runs its scripts, else the vehicle's it is
+/// coupled to.
+struct PartVars<'a> {
+    part: &'a omsi_sim::vehicle::TrailerPart,
+    main: &'a omsi_sim::VehicleInstance,
+}
+
+impl LookVars for PartVars<'_> {
+    fn var(&self, name: &str) -> Option<f32> {
+        self.part
+            .run_var(name)
+            .or_else(|| LookVars::var(self.main, name))
+    }
+
+    fn str_var(&self, name: &str) -> &str {
+        match self.part.run.as_deref().and_then(|r| r.get_str(name)) {
+            Some(s) => s.trim(),
+            None => LookVars::str_var(self.main, name),
+        }
     }
 }
 
@@ -175,19 +252,34 @@ pub(crate) struct CarVars<'a> {
 
 impl LookVars for CarVars<'_> {
     fn var(&self, name: &str) -> Option<f32> {
-        omsi_script::compile::with_lower(name, |k| self.index.get(k).copied()).and_then(|i| self.vars.get(i as usize).copied())
+        omsi_script::compile::with_lower(name, |k| self.index.get(k).copied())
+            .and_then(|i| self.vars.get(i as usize).copied())
     }
 
     fn str_var(&self, name: &str) -> &str {
-        self.ty.program.str_var(name).and_then(|i| self.strs.get(i as usize)).map_or("", |s| s.trim())
+        self.ty
+            .program
+            .str_var(name)
+            .and_then(|i| self.strs.get(i as usize))
+            .map_or("", |s| s.trim())
     }
 }
 
 /// Whether `[interiorlight]` `li` of `ty` is on: OMSI enables the lamp when its variable is
 /// 0.5 or more, there is no dimming.
-pub(crate) fn interior_lamp_on(ty: &omsi_sim::VehicleType, li: usize, var: impl Fn(&str) -> Option<f32>) -> bool {
+pub(crate) fn interior_lamp_on(
+    ty: &omsi_sim::VehicleType,
+    li: usize,
+    var: impl Fn(&str) -> Option<f32>,
+) -> bool {
     let il = &ty.model.interior_lights[li];
-    il.variable.trim().parse::<f32>().ok().or_else(|| var(&il.variable)).unwrap_or(0.0) >= 0.5
+    il.variable
+        .trim()
+        .parse::<f32>()
+        .ok()
+        .or_else(|| var(&il.variable))
+        .unwrap_or(0.0)
+        >= 0.5
 }
 
 pub(crate) fn sync_materials(
@@ -201,7 +293,12 @@ pub(crate) fn sync_materials(
         let mask = v.lights.as_ref().map(|l| {
             let mut mask = 0u32;
             for (k, (_, var)) in l.maps.iter().enumerate() {
-                let x = var.trim().parse::<f32>().ok().or_else(|| vehicle.var(var)).unwrap_or(0.0);
+                let x = var
+                    .trim()
+                    .parse::<f32>()
+                    .ok()
+                    .or_else(|| vehicle.var(var))
+                    .unwrap_or(0.0);
                 // (on at 0.5, as each map's texture stage is, 0x7fe51f: a variable a script
                 // dims through 0.1 lit the map at full)
                 if x >= 0.5 {
@@ -222,7 +319,11 @@ pub(crate) fn sync_materials(
             // (the string read in place and compared with the name it had last time: the
             // name was copied, lower-cased and formatted for every free texture of every
             // vehicle each frame, though it changes only when a display does)
-            let current = if f.remote.is_some() { f.remote_key.as_str() } else { vehicle.str_var(&f.var) };
+            let current = if f.remote.is_some() {
+                f.remote_key.as_str()
+            } else {
+                vehicle.str_var(&f.var)
+            };
             if freetex_key_is(f.current.as_deref(), current, None) {
                 continue;
             }
@@ -237,7 +338,11 @@ pub(crate) fn sync_materials(
                 } else {
                     let resolved = find_vehicle_freetex(current, &dirs);
                     if resolved.is_none() {
-                        log::warn!("vehicle [matl_freetex] '{}' = {:?}: texture not found", f.var, current);
+                        log::warn!(
+                            "vehicle [matl_freetex] '{}' = {:?}: texture not found",
+                            f.var,
+                            current
+                        );
                     }
                     resolved.and_then(|path| f.load_picture(renderer, scene, path))
                 };
@@ -269,7 +374,11 @@ pub(crate) fn sync_materials(
                     halves |= f.halves;
                 }
                 if let (Some(m), Some(l)) = (mask, v.lights.as_mut()) {
-                    let tex = if m == 0 { None } else { l.composite(renderer, scene, m) };
+                    let tex = if m == 0 {
+                        None
+                    } else {
+                        l.composite(renderer, scene, m)
+                    };
                     spec.set_lightmap(tex);
                     halves = u32::MAX;
                 }
@@ -299,7 +408,11 @@ pub(crate) fn sync_materials(
                 } else {
                     // none on: no light map at all (the set's own materials have the last
                     // map, lit whatever its variable said)
-                    let tex = if mask == 0 { None } else { l.composite(renderer, scene, mask) };
+                    let tex = if mask == 0 {
+                        None
+                    } else {
+                        l.composite(renderer, scene, mask)
+                    };
                     let mut spec = v.spec.clone();
                     spec.set_lightmap(tex);
                     let p = spec.build(renderer, scene, v.base_tex);
@@ -312,8 +425,18 @@ pub(crate) fn sync_materials(
         }
         if let Some(inst) = render.instances.get(v.mesh) {
             let m = v.material(|n| vehicle.var(n));
-            if omsi_cfg::flags::OMSI_DEBUG_VARIANTS.var().is_some_and(|f| !f.is_empty() && v.var.to_ascii_lowercase().contains(&f.to_ascii_lowercase())) {
-                log::info!("variant mesh {} slot {} var {} = {:?}: material {m} (base {}, item {})", v.mesh, v.slot, v.var, vehicle.var(&v.var), v.base, v.item);
+            if omsi_cfg::flags::OMSI_DEBUG_VARIANTS.var().is_some_and(|f| {
+                !f.is_empty() && v.var.to_ascii_lowercase().contains(&f.to_ascii_lowercase())
+            }) {
+                log::info!(
+                    "variant mesh {} slot {} var {} = {:?}: material {m} (base {}, item {})",
+                    v.mesh,
+                    v.slot,
+                    v.var,
+                    vehicle.var(&v.var),
+                    v.base,
+                    v.item
+                );
             }
             renderer.set_material(scene, *inst, v.slot, m);
         }
@@ -370,7 +493,14 @@ pub(crate) fn sync_interior_lamps(
         }
         let total: u32 = distinct.iter().map(|d| d.len() as u32).sum();
         if omsi_cfg::flags::OMSI_DEBUG_INTERIOR.is_set() {
-            log::info!("interior lamps of {}: {} lamps, {} instances, {} meshes lit by sets {:?}", ty.def.path.display(), n, render.instances.len(), sets.len(), distinct);
+            log::info!(
+                "interior lamps of {}: {} lamps, {} instances, {} meshes lit by sets {:?}",
+                ty.def.path.display(),
+                n,
+                render.instances.len(),
+                sets.len(),
+                distinct
+            );
         }
         if total == 0 {
             return blocks;
@@ -405,7 +535,11 @@ pub(crate) fn sync_interior_lamps(
                     // light at `range` metres, stronger closer in, a quarter at twice
                     radius: 100.0,
                     core: il.range.max(0.01),
-                    color: [il.color[0] / 255.0, il.color[1] / 255.0, il.color[2] / 255.0],
+                    color: [
+                        il.color[0] / 255.0,
+                        il.color[1] / 255.0,
+                        il.color[2] / 255.0,
+                    ],
                     intensity: if on { 1.0 } else { 0.0 },
                     ..Default::default()
                 },
@@ -457,21 +591,13 @@ pub fn sync_vehicle_textures(
                 if *budget == 0 {
                     continue;
                 }
-                let Some(rgba) = st.take_upload() else { continue };
-                *budget = budget.saturating_sub(rgba.len());
-                let img = Image {
-                    width: st.width,
-                    height: st.height,
-                    rgba,
-                    has_alpha: true,
-                };
-                if st.mipmaps {
-                    if renderer.update_texture_mips(scene, *tex, &img) {
-                        rebound.push(*tex);
-                    }
-                } else {
-                    renderer.update_texture(scene, *tex, &img);
-                }
+                *budget = budget.saturating_sub(upload_script_texture(
+                    renderer,
+                    scene,
+                    *tex,
+                    st,
+                    &mut rebound,
+                ));
             }
         }
     }
@@ -494,7 +620,10 @@ mod freetex_key_tests {
     fn matches_the_key_made_of_the_same_name() {
         for name in ["", "Anz_Linie.BMP", "x#0", "Ä_Ziel", "a/b\\c"] {
             for mask in [None, Some(0), Some(3), Some(10), Some(u32::MAX)] {
-                assert!(freetex_key_is(Some(&key(name, mask)), name, mask), "{name:?} {mask:?}");
+                assert!(
+                    freetex_key_is(Some(&key(name, mask)), name, mask),
+                    "{name:?} {mask:?}"
+                );
             }
         }
     }
@@ -508,7 +637,11 @@ mod freetex_key_tests {
                 for b in names {
                     for mb in masks {
                         let same = key(a, ma) == key(b, mb);
-                        assert_eq!(freetex_key_is(Some(&key(a, ma)), b, mb), same, "{a:?} {ma:?} / {b:?} {mb:?}");
+                        assert_eq!(
+                            freetex_key_is(Some(&key(a, ma)), b, mb),
+                            same,
+                            "{a:?} {ma:?} / {b:?} {mb:?}"
+                        );
                     }
                 }
             }
@@ -529,10 +662,7 @@ mod freetex_path_tests {
         std::fs::create_dir_all(wanted.parent().unwrap()).unwrap();
         std::fs::write(&wanted, b"x").unwrap();
         let dirs = [vehicle_texture.as_path()];
-        let found = find_vehicle_freetex(
-            r"..\Texture\mb_pmon\alerta_FalhaCambio.bmp",
-            &dirs,
-        );
+        let found = find_vehicle_freetex(r"..\Texture\mb_pmon\alerta_FalhaCambio.bmp", &dirs);
         assert_eq!(found.as_deref(), Some(wanted.as_path()));
         let _ = std::fs::remove_dir_all(root);
     }
