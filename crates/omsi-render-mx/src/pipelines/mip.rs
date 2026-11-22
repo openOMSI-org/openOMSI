@@ -25,7 +25,7 @@ pub(crate) fn build(device: &mx::Device) -> Mip {
         device,
         mx::ShaderModuleDescriptor {
             label: Some("mip"),
-            source: &*(include_str!("../mip.wgsl")),
+            source: &*(crate::shaders::hot_wgsl(include_str!("../mip.wgsl"), "mip.wgsl")),
         },
     );
     let mip_pipeline = no_vertex_pipeline(

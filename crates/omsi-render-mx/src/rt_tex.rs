@@ -1,11 +1,13 @@
-//! Enhanced+: what a reflected ray sees of the textures where it hits (rt.rs, rt_reflect.wgsl).
+//! Enhanced+: what a reflected ray sees of the textures where it hits, and which way the
+//! surface faces there (rt.rs, rt_reflect.wgsl).
 //!
 //! The rays carry no texture bindings of their own (there are thousands of textures, and no
 //! bindless arrays on every device), so each texture a traced geometry names gets a small
 //! copy - a tile of 30 x 30 texels inside a texel of border that repeats the opposite edge, so
 //! that filtering wraps - in one atlas, made with its mean colour (rt_avg.wgsl); and each
-//! traced mesh gets its triangles' texture coordinates in one buffer, copied once from its
-//! page's vertices and indices when it is first traced (rt_uv.wgsl). A hit's texel is then its
+//! traced mesh gets its triangles' texture coordinates and corner normals in one buffer,
+//! copied once from its page's vertices and indices when it is first traced (rt_uv.wgsl). A
+//! hit's texel is then its
 //! triangle's three coordinates mixed by the hit's barycentrics, addressed as its material
 //! addresses them, read from the texture's tile. Until a texture's tile or a mesh's
 //! coordinates are there, a hit shows the texture's mean colour, as all hits did before.
@@ -22,8 +24,8 @@ const PER_ROW: u32 = ATLAS_W / TILE;
 const MAX_TILES: usize = (PER_ROW * PER_ROW) as usize;
 /// Meshes whose coordinates are copied per frame at most (as many as structures are built).
 pub(super) const UV_BUDGET: usize = 320;
-/// Bytes per triangle in the coordinates' buffer (rt_uv.wgsl).
-const UV_TRI: u64 = 16;
+/// Bytes per triangle in the coordinates' buffer (rt_uv.wgsl: its coordinates, its normals).
+const UV_TRI: u64 = 32;
 /// A record without coordinates.
 pub(super) const NO_UV: u32 = u32::MAX;
 
@@ -125,7 +127,7 @@ impl TexStore {
         let module = device
             .create_shader_module(&mx::ShaderModuleDescriptor {
                 label: Some("rt texture coordinates"),
-                source: &*(include_str!("rt_uv.wgsl")),
+                source: &*(crate::shaders::hot_wgsl(include_str!("rt_uv.wgsl"), "rt_uv.wgsl")),
             })
             .expect("mX: a shader");
         let uv_pipeline = device

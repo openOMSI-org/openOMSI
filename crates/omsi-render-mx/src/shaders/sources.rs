@@ -378,7 +378,7 @@ fn replace_word(src: &str, word: &str, with: &str) -> String {
 fn scene_shader_bound_forms(gl: bool, amd_vulkan: bool, multisampled_shading: bool) -> String {
     let src = [
         include_str!("../colour.wgsl"),
-        shaders::SCENE,
+        shaders::scene_part(),
         if road_snow_supported_on(
             gl,
             omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set(),
@@ -392,7 +392,7 @@ fn scene_shader_bound_forms(gl: bool, amd_vulkan: bool, multisampled_shading: bo
         include_str!("../puddle_common.wgsl"),
         include_str!("../beam_shadow_none.wgsl"),
         include_str!("../lamp_air.wgsl"),
-        shaders::ENHANCED,
+        shaders::enhanced_part(),
     ]
     .join("\n");
     // Enhanced+: the enhanced pass writes the reflections' surfaces as well (`GBUF_FORMAT`)
@@ -475,6 +475,7 @@ pub(crate) fn sky_shader_source() -> String {
         include_str!("../sky.wgsl"),
         include_str!("../enhanced_common.wgsl"),
         include_str!("../sky_enhanced.wgsl"),
+        include_str!("../clouds_ss.wgsl"),
     ]
     .join("\n")
 }
@@ -496,7 +497,8 @@ pub(crate) fn rain_shader_source() -> String {
 }
 
 pub(crate) fn lean_rain(src: String) -> String {
-    const LAMPS: &str = "precip_light(in.pos, to_eye, false) * 0.3 + ";
+    const LAMPS: &str =
+        "        l = max(precip_light(in.pos, to_eye, true) - round, vec3<f32>(0.0)) * 1.5 + l;\n";
     debug_assert_eq!(src.matches(LAMPS).count(), 1);
     src.replace(LAMPS, "")
 }
@@ -548,6 +550,9 @@ pub(crate) struct SnowUniform {
     /// The roof map's matrix, and x 1 when there is one (`passes::PrecipMap::uniform`).
     pub(crate) roof: [[f32; 4]; 4],
     pub(crate) roof_on: [f32; 4],
+    /// Enhanced: where the veil's panels begin, how many, the gusts' strength, the picture's
+    /// height (px).
+    pub(crate) ext: [f32; 4],
 }
 
 /// The snowfall's flakes for a snowfall of strength `s` (0..1): how many each layer of
@@ -575,6 +580,15 @@ pub(crate) struct RainUniform {
     pub(crate) view: [f32; 4],
     pub(crate) roof: [[f32; 4]; 4],
     pub(crate) roof_on: [f32; 4],
+    /// Enhanced: where the veil's panels begin, how many, the gusts' strength, the quality.
+    pub(crate) ext: [f32; 4],
+}
+
+/// The enhanced rain's and snow's far veil (rain.wgsl, snow.wgsl `veil_corner`): twelve
+/// panels a ring, one ring on the `rain_quality` setting's low, two on medium, three on
+/// high.
+pub(crate) fn veil_panels(quality: u8) -> u32 {
+    12 * (quality.min(2) as u32 + 1)
 }
 
 /// How many drops each layer of rain.wgsl holds in a rain of strength `r` (0..1) at the
