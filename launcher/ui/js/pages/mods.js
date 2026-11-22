@@ -89,6 +89,14 @@ export function ModsPage() {
   // (the mods on their way, at the top of the whole list: being installed, or installed and
   // not listed yet, #4016)
   const arriving = kind === 'all' && !q ? jobs.filter((j) => jobRunning(j) || s.settling.includes(j.id)) : [];
+  const arrivingRows = arriving.map((j) => html`<div class="list-item" style="cursor:default">
+    <${Icon} name="download" />
+    <div class="grow" style="min-width:0">
+      <div class="title ellipsis" style="opacity:.7">${j.name}</div>
+      <div class="sub">${jobRunning(j) ? [t(j.state), jobPct(j) > 0 && `${jobPct(j).toFixed(0)} %`].filter(Boolean).join(' - ') : t('done')}</div>
+    </div>
+    <${Spinner} />
+  </div>`);
   const fits = (m) => (kind === 'all' ? true : kind === 'off' ? !m.enabled : (m.kind in counts ? m.kind : 'other') === kind);
   const mods = all
     .filter(fits)
@@ -162,18 +170,12 @@ export function ModsPage() {
           </div>`}
           ${status && s.reading.mods && html`<div class="row muted small" style="margin-bottom:8px"><${Spinner} /> ${t('Reading the content folder...')}</div>`}
           ${!status
-            ? html`<div class="row muted"><${Spinner} /> ${t('Reading the content folder...')}</div>`
+            ? html`<div class="row muted"><${Spinner} /> ${t('Reading the content folder...')}</div>
+                ${arriving.length > 0 && html`<div class="list" style="margin:8px -8px 0">${arrivingRows}</div>`}`
             : mods.length === 0 && arriving.length === 0
               ? html`<${Empty} icon="puzzle" text=${q || kind !== 'all' ? 'No mod matches.' : 'No mods yet. Choose a folder or an archive on the right, or drop one onto the window.'} />`
               : html`<div class="list" style="margin:0 -8px">
-                  ${arriving.map((j) => html`<div class="list-item" style="cursor:default">
-                    <${Icon} name="download" />
-                    <div class="grow" style="min-width:0">
-                      <div class="title ellipsis" style="opacity:.7">${j.name}</div>
-                      <div class="sub">${jobRunning(j) ? [t(j.state), jobPct(j) > 0 && `${jobPct(j).toFixed(0)} %`].filter(Boolean).join(' - ') : t('done')}</div>
-                    </div>
-                    <${Spinner} />
-                  </div>`)}
+                  ${arrivingRows}
                   ${mods.map((m) => {
                     const tree = modTree(m.paths);
                     // (the game's folders it holds and how many in each, as the game's own launcher said:

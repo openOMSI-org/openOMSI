@@ -305,3 +305,11 @@ test('remounting Mods keeps a pending switch until the confirming read succeeds'
   assert.equal(modSwitch().checked, false);
   assert.equal(modSwitch().disabled, false);
 });
+
+test('an install under way shows while the first list read is still out', async () => {
+  const { state, page } = await setup();
+  Object.assign(state, { cache: {}, poll: { jobs: [{ id: 'j1', name: 'New bus', state: 'extracting' }] } });
+  const shown = page();
+  assert.match(shown, /Reading the content folder/);
+  assert.match(shown, /New bus/);
+});
