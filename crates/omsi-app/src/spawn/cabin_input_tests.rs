@@ -260,4 +260,14 @@ fn clicking_control_shared_by_two_meshes_toggles_both_model_only_variables_both_
     assert_eq!(player.vehicle.var("sched"), Some(0.0));
     assert_eq!(player.vehicle.var("sched1"), Some(0.0));
     assert_eq!(player.vehicle.var("script_var"), Some(0.42));
+
+    for target in [1.0, 0.0] {
+        player.pressed_mesh = Some(0);
+        player.press_info = (false, 0.0);
+        player.release_precise();
+        assert_eq!(player.vehicle.var("sched"), Some(target));
+        assert_eq!(player.vehicle.var("sched1"), Some(target));
+        assert_eq!(player.vehicle.var("script_var"), Some(0.42));
+        assert!(player.auto_drag.is_none());
+    }
 }
