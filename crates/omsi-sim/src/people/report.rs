@@ -82,10 +82,15 @@ impl PeopleSim {
     /// `on_foot` into a list kept from frame to frame (the traffic asks every frame).
     pub fn on_foot_into(&self, out: &mut Vec<(DVec3, DVec2, bool)>) {
         out.clear();
-        out.extend(self.people.iter().filter(|p| p.place == Place::Ground).map(|p| {
-            let waiting = matches!(&p.state, State::Pax(x) if x.inside.is_none());
-            (p.position, p.vel, waiting)
-        }));
+        out.extend(
+            self.people
+                .iter()
+                .filter(|p| p.place == Place::Ground)
+                .map(|p| {
+                    let waiting = matches!(&p.state, State::Pax(x) if x.inside.is_none());
+                    (p.position, p.vel, waiting)
+                }),
+        );
     }
 
     pub fn strollers(&self) -> Vec<(usize, f32)> {
@@ -97,9 +102,14 @@ impl PeopleSim {
     /// `strollers` into a list kept from frame to frame (the traffic asks every frame).
     pub fn strollers_into(&self, out: &mut Vec<(usize, f32)>) {
         out.clear();
-        out.extend(self.people.iter().filter_map(|p| match &p.state {
-            State::Strolling(walk) => walk.legs.get(walk.leg).map(|leg| (leg.lane, leg.dist(walk.s))),
-            _ => None,
+        out.extend(self.people.iter().filter_map(|p| {
+            match &p.state {
+                State::Strolling(walk) => walk
+                    .legs
+                    .get(walk.leg)
+                    .map(|leg| (leg.lane, leg.dist(walk.s))),
+                _ => None,
+            }
         }));
     }
 
@@ -110,9 +120,16 @@ impl PeopleSim {
             exit_req: self.exit_req.clone(),
             entry_busy: self.entry_busy.clone(),
             exit_busy: self.exit_busy.clone(),
-            places: self.pax_places.get(&BusId::Player).cloned().unwrap_or_default(),
+            places: self
+                .pax_places
+                .get(&BusId::Player)
+                .cloned()
+                .unwrap_or_default(),
         };
-        Self::write_door_requests(b, &doors);
+        match self.cabin_made(b) {
+            Some(cabin) => Self::write_door_requests_cabin(b, &doors, &cabin),
+            None => Self::write_door_requests(b, &doors),
+        }
     }
 
     /// Who wants a timetable bus to stop, as Omsi.exe asks before it lets one pull in
@@ -145,7 +162,9 @@ impl PeopleSim {
         }
         for (request, remaining) in self.manual_door_requests.values() {
             if request.exit && *remaining > 0.0 {
-                if let BusId::Ai(id) = request.bus { alighting.insert(id); }
+                if let BusId::Ai(id) = request.bus {
+                    alighting.insert(id);
+                }
             }
         }
         (alighting, waiting)
@@ -165,9 +184,10 @@ impl PeopleSim {
         self.seats
             .iter()
             .filter_map(|(id, places)| match id {
-                BusId::Ai(id) if !places.is_empty() => {
-                    Some((*id, (aboard.get(id).copied().unwrap_or(0) as f32 / places.len() as f32).min(1.0)))
-                }
+                BusId::Ai(id) if !places.is_empty() => Some((
+                    *id,
+                    (aboard.get(id).copied().unwrap_or(0) as f32 / places.len() as f32).min(1.0),
+                )),
                 _ => None,
             })
             .collect()
@@ -213,7 +233,10 @@ impl PeopleSim {
         }
         self.people.iter().find(|p| matches!(&p.state, State::Pax(x) if x.inside == Some(BusId::Player) && x.ticket == TICKET_BUY && x.sub == 5))?;
         let (name, value) = self.request.clone()?;
-        Some(format!("Passenger waiting for a ticket: {name} {value:.2} - press {}", self.ticket_key))
+        Some(format!(
+            "Passenger waiting for a ticket: {name} {value:.2} - press {}",
+            self.ticket_key
+        ))
     }
 
     /// People sitting on each `[passpos]` of the player's bus, for `GetHumanCountOnSeat`
@@ -225,10 +248,17 @@ impl PeopleSim {
             return Vec::new();
         };
         let sitting = self.people.iter().filter_map(|p| match &p.state {
-            State::Pax(x) if x.inside == Some(BusId::Player) && x.task == Task::SittingInBus => x.seat,
+            State::Pax(x) if x.inside == Some(BusId::Player) && x.task == Task::SittingInBus => {
+                x.seat
+            }
             _ => None,
         });
-        let avatars = self.avatar_cmds.values().filter_map(|c| c.seat).filter(|s| s.0 == BusId::Player).map(|s| s.1);
+        let avatars = self
+            .avatar_cmds
+            .values()
+            .filter_map(|c| c.seat)
+            .filter(|s| s.0 == BusId::Player)
+            .map(|s| s.1);
         seat_numbers(&cabin.seats, sitting.chain(avatars))
     }
 
@@ -278,7 +308,10 @@ impl PeopleSim {
                 total / n as f64
             ));
             if !self.stage_stats.0.is_empty() {
-                out.push_str(&format!("; stages avg/longest ms: {}", self.stage_stats.line(n)));
+                out.push_str(&format!(
+                    "; stages avg/longest ms: {}",
+                    self.stage_stats.line(n)
+                ));
             }
         }
         out

@@ -160,11 +160,14 @@ impl PeopleSim {
             stroll_timer: 0.0,
             defer_populate: false,
             exact_fare: true,
+            late_tolerance: crate::people::model::LATE_TOLERANCE,
             free_drive_fill: crate::people::free_drive::FreeDriveFill::Auto,
             transfer_percent: 0.0,
             visual_hailing: false,
             visual_full_bus_reaction: false,
             bad_driving: true,
+            no_ticket: false,
+            fares_no_ticket: 0,
             board_when_stopped: false,
             boarding: "auto".into(),
             stand_chance: 0.05,
@@ -409,16 +412,35 @@ impl PeopleSim {
         }
     }
 
+    /// The key [`Self::cabins`] keeps the cabin of `v` under: its parts' files and which of
+    /// them are turned round.
+    pub fn cabin_key_of(v: &VehicleInstance) -> Vec<(PathBuf, bool)> {
+        cabin_key(&train_parts(v))
+            .into_iter()
+            .map(|(p, t)| (p.to_path_buf(), t))
+            .collect()
+    }
+
+    /// [`Self::cabin_for`] where it was made already (None also where it is not yet).
+    pub fn cabin_made(&self, v: &VehicleInstance) -> Option<Arc<Cabin>> {
+        let parts = train_parts(v);
+        let key = cabin_key(&parts);
+        self.cabins.get(&CabinKey(&key)).cloned().flatten()
+    }
+
     /// The cabin of a vehicle with the parts coupled behind it.
     pub fn cabin_for(&mut self, v: &VehicleInstance) -> Option<Arc<Cabin>> {
         let parts = train_parts(v);
         // (looked up by the parts' paths as they are: asked a few times a bus a frame, the
         // key was copied path by path for each question)
-        let paths: Vec<&Path> = parts.iter().map(|p| p.0.path.as_path()).collect();
-        if let Some(c) = self.cabins.get(&CabinKey(&paths)) {
+        let borrowed = cabin_key(&parts);
+        if let Some(c) = self.cabins.get(&CabinKey(&borrowed)) {
             return c.clone();
         }
-        let key: Vec<PathBuf> = paths.iter().map(|p| p.to_path_buf()).collect();
+        let key: Vec<(PathBuf, bool)> = borrowed
+            .iter()
+            .map(|(p, t)| (p.to_path_buf(), *t))
+            .collect();
         let cabin = Cabin::load_train(&parts).map(Arc::new);
         if let Some(c) = cabin.as_ref().filter(|c| c.parts.len() > 1) {
             log::info!(
@@ -880,14 +902,26 @@ impl PeopleSim {
     }
 }
 
-/// The key of [`PeopleSim::cabins`] borrowed: it hashes as the `Vec<PathBuf>` it stands for
-/// (a slice hashes its length and then its items, and a `PathBuf` as its `Path`).
-#[derive(Hash)]
-struct CabinKey<'a>(&'a [&'a Path]);
+/// A train's cabin key: each part's file and whether it runs turned round in the cabin. The
+/// same files coupled the other way round make another cabin (its doors and seats turned).
+fn cabin_key<'a>(parts: &[TrainPart<'a>]) -> Vec<(&'a Path, bool)> {
+    parts.iter().map(|p| (p.0.path.as_path(), p.3)).collect()
+}
 
-impl hashbrown::Equivalent<Vec<PathBuf>> for CabinKey<'_> {
-    fn equivalent(&self, key: &Vec<PathBuf>) -> bool {
-        self.0.len() == key.len() && self.0.iter().zip(key).all(|(a, b)| *a == b.as_path())
+/// The key of [`PeopleSim::cabins`] borrowed: it hashes as the `Vec<(PathBuf, bool)>` it
+/// stands for (a slice hashes its length and then its items, a pair its two halves in turn,
+/// and a `PathBuf` as its `Path`).
+#[derive(Hash)]
+struct CabinKey<'a>(&'a [(&'a Path, bool)]);
+
+impl hashbrown::Equivalent<Vec<(PathBuf, bool)>> for CabinKey<'_> {
+    fn equivalent(&self, key: &Vec<(PathBuf, bool)>) -> bool {
+        self.0.len() == key.len()
+            && self
+                .0
+                .iter()
+                .zip(key)
+                .all(|((a, s), (b, t))| *a == b.as_path() && s == t)
     }
 }
 
@@ -898,17 +932,110 @@ mod cabin_key_tests {
     /// A train's key borrowed finds what was kept under the owned one, and only that.
     #[test]
     fn a_borrowed_cabin_key_finds_the_owned_one() {
-        let mut map: HashMap<Vec<PathBuf>, u32> = HashMap::new();
+        let mut map: HashMap<Vec<(PathBuf, bool)>, u32> = HashMap::new();
         let (a, b) = (
             Path::new("Vehicles/MAN_SD200/MAN_SD80.bus"),
             Path::new("Vehicles/MAN_NL_NG/MAN_GN92_trail.bus"),
         );
-        map.insert(vec![a.to_path_buf()], 1);
-        map.insert(vec![a.to_path_buf(), b.to_path_buf()], 2);
-        assert_eq!(map.get(&CabinKey(&[a])), Some(&1));
-        assert_eq!(map.get(&CabinKey(&[a, b])), Some(&2));
-        assert_eq!(map.get(&CabinKey(&[b, a])), None);
+        map.insert(vec![(a.to_path_buf(), false)], 1);
+        map.insert(vec![(a.to_path_buf(), false), (b.to_path_buf(), false)], 2);
+        map.insert(vec![(a.to_path_buf(), false), (b.to_path_buf(), true)], 3);
+        assert_eq!(map.get(&CabinKey(&[(a, false)])), Some(&1));
+        assert_eq!(map.get(&CabinKey(&[(a, false), (b, false)])), Some(&2));
+        assert_eq!(map.get(&CabinKey(&[(a, false), (b, true)])), Some(&3));
+        assert_eq!(map.get(&CabinKey(&[(b, false), (a, false)])), None);
+        assert_eq!(map.get(&CabinKey(&[(a, true)])), None);
         assert_eq!(map.get(&CabinKey(&[])), None);
+    }
+
+    /// The same tram coupled to itself straight and back to back makes two cabins, whichever
+    /// train asks first: the turned car's doors and seats are not taken from the straight one.
+    #[test]
+    fn the_same_cars_coupled_either_way_round_have_cabins_of_their_own() {
+        let dir = std::env::temp_dir().join(format!("omsi-cabin-key-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
+        write(
+            "tram.bus",
+            "[model]
+model.cfg
+[script]
+1
+main.osc
+[passengercabin]
+cabin.cfg
+[paths]
+paths.cfg
+             [coupling_front]
+0
+7.5
+0.3
+
+[coupling_back]
+0
+-7.5
+0.3
+",
+        );
+        write("model.cfg", "");
+        write(
+            "main.osc",
+            "{init}
+{end}
+",
+        );
+        write(
+            "paths.cfg",
+            "[pathpnt]
+1.2
+3
+0.4
+[pathpnt]
+0
+-3
+0.5
+[pathlink]
+0
+1
+",
+        );
+        write(
+            "cabin.cfg",
+            "[entry]
+0
+[exit]
+0
+",
+        );
+        let ty = Arc::new(crate::VehicleType::load(&dir, &dir.join("tram.bus")).unwrap());
+        let train = |turned: bool| {
+            let mut v =
+                VehicleInstance::new(ty.clone(), crate::VehicleHost::new(Default::default()));
+            v.attach_trailer_ex(ty.clone(), turned);
+            v
+        };
+        let (straight, turned) = (train(false), train(true));
+        for order in [[&straight, &turned], [&turned, &straight]] {
+            let mut people = PeopleSim::new(&dir, 0);
+            for v in order {
+                let cabin = people.cabin_for(v).expect("cabin");
+                assert_eq!(cabin.parts.len(), 2);
+                assert_eq!(cabin.parts[1].turned, v.trailers[0].reversed);
+                // the second car's door: at its own front, which is the train's far end
+                // when it is turned round
+                let y = cabin.entries[1].inside.y;
+                if v.trailers[0].reversed {
+                    assert!(y < -15.0, "the turned car's door at the tail: {y}");
+                } else {
+                    assert!(
+                        y > -15.0,
+                        "the straight car's door ahead of its middle: {y}"
+                    );
+                }
+            }
+            assert_eq!(people.cabins.len(), 2);
+        }
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
 
