@@ -132,6 +132,14 @@ impl App {
             self.service_msg = Some((omsi_ui::i18n::tr_fill("The server does not offer {name}", &[("{name}", &name)]), 4.0));
             return;
         }
+        if self.net.lan.as_ref().is_some_and(|lan| lan.role == omsi_net::Role::Host) {
+            let list = self.net.session_buses.get_or_insert_with(|| self.args.session_bus_list());
+            if !omsi_lan::server_cfg::allows(list, bus) {
+                let names: Vec<_> = list.iter().map(|v| v.rsplit('/').next().unwrap_or(v)).collect();
+                self.service_msg = Some((format!("only these buses can be driven here ({})", names.join(", ")), 4.0));
+                return;
+            }
+        }
         let bus = bus.to_string();
         let (Some(w), Some(r), Some(cam)) = (self.world.clone(), self.renderer.as_ref(), self.camera.as_ref()) else { return };
         let (x, y, heading) = match (self.view.as_str(), self.player.as_ref()) {
