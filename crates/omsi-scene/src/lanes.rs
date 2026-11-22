@@ -18,9 +18,24 @@ pub(super) fn path_densities(rules: &[omsi_map::MapRule], path: usize) -> (f32, 
             None => per.push((g, v)),
         }
     }
-    let first = per.iter().find(|(g, _)| *g == 0).map(|e| e.1).unwrap_or(1.0);
+    let first = per
+        .iter()
+        .find(|(g, _)| *g == 0)
+        .map(|e| e.1)
+        .unwrap_or(1.0);
     let density = per.iter().map(|e| e.1).fold(first, f32::max);
     (density, per)
+}
+
+/// The curvature of a path `x` metres to the right of a spline of `radius` (m, > 0 turning
+/// right, 0 straight), in 1/m, positive turning right as the lane runs (`reversed`: against
+/// the spline).
+fn spline_curvature(radius: f64, x: f64, reversed: bool) -> f32 {
+    if radius == 0.0 {
+        return 0.0;
+    }
+    let k = (1.0 / (radius - x)) as f32;
+    if reversed { -k } else { k }
 }
 
 /// Lanes of one map spline: every `[path]` of the spline type runs along the curve at its
@@ -88,6 +103,12 @@ pub(super) fn spline_lanes(
         let priority = rule_of("priority");
         let mut push = |pts: Vec<DVec3>, reversed: bool| {
             let mut l = LaneBuilder::polyline(pts, kind, p.width);
+            // (the map's curve: worked out of the samples it is half as tight at the lane's
+            // ends, and none on a piece under 3 m)
+            if kind == LaneKind::Rail {
+                let k = spline_curvature(curve.radius, side * p.start[0] as f64, reversed);
+                l.curvature.iter_mut().for_each(|c| *c = k);
+            }
             if let Some(v) = priority {
                 l.priority = v;
             }
@@ -108,6 +129,19 @@ pub(super) fn spline_lanes(
             });
             l.reversed = reversed;
             l.offset = side as f32 * p.start[0];
+            // (a rail's x is across the path: seen the other way, it is on the other side; a
+            // mirrored spline has turned it over once already)
+            let across = if reversed != s.mirror { -1.0 } else { 1.0 };
+            l.third_rails = def
+                .third_rail
+                .iter()
+                .filter(|r| r.path == pi)
+                .map(|r| {
+                    let mut v = r.values;
+                    v[0] *= across;
+                    v
+                })
+                .collect();
             l.name = def
                 .path
                 .file_name()
@@ -130,7 +164,11 @@ pub(super) fn spline_lanes(
 
 /// The crossing light a placed child names (see `ScriptedObject::light_parent`): its
 /// `[varparent]` is a crossing whose program runs and its first string a light index.
-pub(super) fn light_child_of(crossings: &hashbrown::HashSet<i64>, var_parent: Option<i64>, strings: &[String]) -> Option<(i64, usize)> {
+pub(super) fn light_child_of(
+    crossings: &hashbrown::HashSet<i64>,
+    var_parent: Option<i64>,
+    strings: &[String],
+) -> Option<(i64, usize)> {
     let parent = var_parent.filter(|p| crossings.contains(p))?;
     if !omsi_world::map_index::names_traffic_light(strings) {
         return None;
@@ -207,9 +245,7 @@ pub(super) fn object_lanes(
             .last();
         let (density, group_density) = path_densities(rules, pi);
         let no_cars = rules.iter().any(|r| {
-            r.path_index == pi as i32
-                && r.kind.eq_ignore_ascii_case("no_cars")
-                && !r.kill
+            r.path_index == pi as i32 && r.kind.eq_ignore_ascii_case("no_cars") && !r.kill
         });
         let rule_bus = rule_of("bus").is_some();
         let rule_trucks = rule_of("trucks").is_some();
@@ -217,7 +253,16 @@ pub(super) fn object_lanes(
         // who goes first where this path meets another (`Network::must_yield`)
         let priority = rule_of("priority");
         let mut push = |reverse: bool| {
-            let mut l = LaneBuilder::arc_with_gradients(start, path_heading, length, radius, grad_start, grad_end, kind, p.width);
+            let mut l = LaneBuilder::arc_with_gradients(
+                start,
+                path_heading,
+                length,
+                radius,
+                grad_start,
+                grad_end,
+                kind,
+                p.width,
+            );
             if reverse {
                 let pts: Vec<DVec3> = l.points.iter().rev().copied().collect();
                 l = LaneBuilder::polyline(pts, kind, p.width);
@@ -241,9 +286,29 @@ pub(super) fn object_lanes(
                 id,
                 path: pi as u16,
             });
-            l.blocks = sco.path_blocks.get(pi).map(|b| b.iter().filter(|(n, _)| *n >= 0).map(|(n, _)| *n as u16).collect()).unwrap_or_default();
+            l.blocks = sco
+                .path_blocks
+                .get(pi)
+                .map(|b| {
+                    b.iter()
+                        .filter(|(n, _)| *n >= 0)
+                        .map(|(n, _)| *n as u16)
+                        .collect()
+                })
+                .unwrap_or_default();
             l.crossing_problem = sco.path_crossing_problem.get(pi).copied().unwrap_or(false);
             l.reversed = reverse;
+            let across = if reverse { -1.0 } else { 1.0 };
+            l.third_rails = sco
+                .third_rail
+                .iter()
+                .filter(|(path, _)| *path == pi)
+                .map(|(_, r)| {
+                    let mut v = *r;
+                    v[0] *= across;
+                    v
+                })
+                .collect();
             l.traffic_light = controller.and_then(|c| {
                 sco.path_traffic_light
                     .get(pi)
@@ -285,17 +350,34 @@ pub fn resolve_scenery_freetex_name<'a>(
 ) -> Option<&'a str> {
     let script_name = object_script.map(|s| s.str_var(var).trim()).unwrap_or("");
     let probe_name = freetex_probe.map(|p| p.str_var(var).trim()).unwrap_or("");
-    let declared = object_script.map(|s| s.program.str_var(var).is_some()).unwrap_or(false)
-        || freetex_probe.map(|p| p.program.str_var(var).is_some()).unwrap_or(false);
+    let declared = object_script
+        .map(|s| s.program.str_var(var).is_some())
+        .unwrap_or(false)
+        || freetex_probe
+            .map(|p| p.program.str_var(var).is_some())
+            .unwrap_or(false);
     if declared {
         // a name a script sets in {frame} is only in the probe's state at first (see the
         // caller), so both are read; neither having one leaves the slot's own texture
-        let name = if !script_name.is_empty() { script_name } else { probe_name };
+        let name = if !script_name.is_empty() {
+            script_name
+        } else {
+            probe_name
+        };
         let name = name.trim_matches('"');
         return (!name.is_empty()).then_some(name);
     }
-    let string_by_idx = var.parse::<usize>().ok().and_then(|idx| strings.get(idx)).map(|s| s.trim()).unwrap_or("");
-    let freetex_idx = overrides.iter().filter(|o| !o.item && o.freetex.is_some()).position(|o| std::ptr::eq(o, override_)).unwrap_or(0);
+    let string_by_idx = var
+        .parse::<usize>()
+        .ok()
+        .and_then(|idx| strings.get(idx))
+        .map(|s| s.trim())
+        .unwrap_or("");
+    let freetex_idx = overrides
+        .iter()
+        .filter(|o| !o.item && o.freetex.is_some())
+        .position(|o| std::ptr::eq(o, override_))
+        .unwrap_or(0);
     let string_by_order = strings.get(freetex_idx).map(|s| s.trim()).unwrap_or("");
     let name = if !string_by_idx.is_empty() {
         string_by_idx
@@ -305,9 +387,5 @@ pub fn resolve_scenery_freetex_name<'a>(
         return None;
     };
     let name = name.trim_matches('"');
-    if name.is_empty() {
-        None
-    } else {
-        Some(name)
-    }
+    if name.is_empty() { None } else { Some(name) }
 }

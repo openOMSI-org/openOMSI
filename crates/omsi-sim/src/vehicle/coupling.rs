@@ -43,7 +43,11 @@ pub(super) fn declared_coupling(def: &Vehicle, front: bool) -> Vec3 {
         .map(|c| Vec3::from(c.pos))
         // (a bogie frame names one coupling only and hangs by its origin at the other, see
         // `is_bogie_frame`)
-        .unwrap_or(if is_bogie_frame(def) { Vec3::ZERO } else { Vec3::new(0.0, if front { 4.0 } else { -4.0 }, 0.3) });
+        .unwrap_or(if is_bogie_frame(def) {
+            Vec3::ZERO
+        } else {
+            Vec3::new(0.0, if front { 4.0 } else { -4.0 }, 0.3)
+        });
     // Rail couplings are declared in the path frame. Express them in the model frame
     // so body_rotation can turn a negative-bogie body without moving its joints.
     if body_reversed(def, false) {
@@ -58,7 +62,10 @@ pub(super) fn declared_coupling(def: &Vehicle, front: bool) -> Vec3 {
 /// own origin. The coupling of the car it hangs from says where it stands, as it does for a
 /// car with `[boogies]`.
 pub(super) fn is_bogie_frame(def: &Vehicle) -> bool {
-    def.is_rail() && def.boogies.is_none() && def.axles.len() <= 1 && (def.coupling_front.is_some() != def.coupling_back.is_some())
+    def.is_rail()
+        && def.boogies.is_none()
+        && def.axles.len() <= 1
+        && (def.coupling_front.is_some() != def.coupling_back.is_some())
 }
 
 /// A rail vehicle that says where its couplings are (or where its bogies are, which sets them):
@@ -161,4 +168,43 @@ pub fn coupling_placement(
     let ch = car_h.to_radians();
     let origin = joint - DVec3::new(ch.sin(), ch.cos(), 0.0) * front as f64;
     (origin, car_h)
+}
+
+/// How far a part's body reaches ahead of its origin and behind it along the way it runs
+/// (m): its couplings, where it has them, else its `[boundingbox]`; `reversed`: it is turned
+/// round in the train.
+pub fn body_ends(def: &Vehicle, reversed: bool) -> (f64, f64) {
+    let bb = def
+        .bounding_box
+        .map(|b| ((b[4] + b[1] * 0.5) as f64, (b[1] * 0.5 - b[4]) as f64));
+    let front = def.coupling_front.as_ref().map(|c| c.pos[1] as f64);
+    let rear = def.coupling_back.as_ref().map(|c| -c.pos[1] as f64);
+    let (front, rear) = (
+        front.or(bb.map(|b| b.0)).unwrap_or(0.0).max(0.0),
+        rear.or(bb.map(|b| b.1)).unwrap_or(0.0).max(0.0),
+    );
+    if body_reversed(def, reversed) {
+        (rear, front)
+    } else {
+        (front, rear)
+    }
+}
+
+impl super::VehicleInstance {
+    /// How far the train reaches ahead of the vehicle's origin and behind it along the track
+    /// (m), from where to look for what lies beyond its ends: its own body's front, and
+    /// behind, the farthest of its own body and its coupled parts as they stand, and no less
+    /// than the trail they are laid on (`reach_back`).
+    pub fn train_ends(&self, reach_back: f64) -> (f64, f64) {
+        let (front, rear) = body_ends(&self.ty.def, false);
+        let behind = self
+            .trailers
+            .iter()
+            .map(|t| {
+                (t.position - self.position).truncate().length()
+                    + body_ends(&t.ty.def, t.reversed).1
+            })
+            .fold(rear, f64::max);
+        (front, behind.max(reach_back))
+    }
 }

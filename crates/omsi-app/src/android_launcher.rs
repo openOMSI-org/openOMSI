@@ -6,9 +6,9 @@
 //! and comes back when it ends. The bus preview and the city map are drawn by the launcher
 //! service on a thread of this process (`launcher::InProcess`).
 
+use jni::JNIEnv;
 use jni::objects::{GlobalRef, JByteArray, JClass, JObject, JString, JValue};
 use jni::sys::{jbyteArray, jstring};
-use jni::JNIEnv;
 use serde_json::Value;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -36,6 +36,7 @@ pub(crate) fn preview_rests(rests: bool) {
 }
 
 /// Call a static `void name(String...)` of `LauncherBridge` from any thread.
+#[rustfmt::skip]
 fn bridge(name: &str, args: &[&str]) {
     let Some(class) = BRIDGE.get() else { return };
     let ctx = ndk_context::android_context();
@@ -60,6 +61,7 @@ pub(crate) fn session_ended() {
 
 struct Phone;
 
+#[rustfmt::skip]
 impl omsi_launcher_api::Platform for Phone {
     fn emit(&self, event: &str, payload: Value) {
         bridge("emit", &[event, &payload.to_string()]);
@@ -94,7 +96,20 @@ fn take(env: &mut JNIEnv, s: &JString) -> String {
 /// `LauncherBridge.call(cmd, args)`: a command of the page (on the bridge's worker thread);
 /// "1" and the JSON answer, or "0" and the error.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_org_openomsi_game_LauncherBridge_call<'a>(mut env: JNIEnv<'a>, class: JClass<'a>, cmd: JString<'a>, args: JString<'a>) -> jstring {
+#[rustfmt::skip]
+pub extern "system" fn Java_org_openomsi_game_LauncherBridge_call<'a>(
+    mut env: JNIEnv<'a>,
+    class: JClass<'a>,
+    cmd: JString<'a>,
+    args: JString<'a>,
+) -> jstring {
+    // mX Graphics: the mX game's copy of this bridge answers, so that its session and its
+    // bus preview are the ones the page talks to
+    if super::android::mx_selected() {
+        return openomsi_game_mx::android_launcher::Java_org_openomsi_game_LauncherBridge_call(
+            env, class, cmd, args,
+        );
+    }
     if BRIDGE.get().is_none() {
         if let Ok(g) = env.new_global_ref(&class) {
             let _ = BRIDGE.set(g);
@@ -116,7 +131,20 @@ pub extern "system" fn Java_org_openomsi_game_LauncherBridge_call<'a>(mut env: J
 /// `LauncherBridge.bytes(cmd, args)`: a command answering bytes (the preview's pictures);
 /// the bytes after a 1, or a 0 and the error's text.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_org_openomsi_game_LauncherBridge_bytes<'a>(mut env: JNIEnv<'a>, _class: JClass<'a>, cmd: JString<'a>, args: JString<'a>) -> jbyteArray {
+#[rustfmt::skip]
+pub extern "system" fn Java_org_openomsi_game_LauncherBridge_bytes<'a>(
+    mut env: JNIEnv<'a>,
+    class: JClass<'a>,
+    cmd: JString<'a>,
+    args: JString<'a>,
+) -> jbyteArray {
+    // mX Graphics: the mX game's copy of this bridge answers, so that its session and its
+    // bus preview are the ones the page talks to
+    if super::android::mx_selected() {
+        return openomsi_game_mx::android_launcher::Java_org_openomsi_game_LauncherBridge_bytes(
+            env, class, cmd, args,
+        );
+    }
     let cmd = take(&mut env, &cmd);
     let args: Value = serde_json::from_str(&take(&mut env, &args)).unwrap_or(Value::Null);
     let out = match omsi_launcher_api::call_bytes(&cmd, &args, &Phone) {
