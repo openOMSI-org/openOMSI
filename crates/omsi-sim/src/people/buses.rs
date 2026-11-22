@@ -3,6 +3,15 @@
 
 use super::*;
 
+/// The first door leaf of a bus's exits, past its front door's: exits in standard OMSI city
+/// buses (2 or more front door leaves) begin at door_2 (middle door), while coaches with a
+/// single front door leaf begin at door_1. Exits must not be offset by the number of entries,
+/// because buses with all doors configured as entries (e.g. 3-door buses with 6 entries)
+/// still place middle-door exits at door_2/3 and rear-door exits at door_4/5.
+fn exit_door_base(n_entry: usize) -> usize {
+    if n_entry <= 1 { 1 } else { 2 }
+}
+
 impl PeopleSim {
     /// Whether the bus script reports `name`: it writes it (`PAX_*` are engine variables every
     /// vehicle has, so stock scripts set them without a varlist entry) or declares it.
@@ -54,12 +63,40 @@ impl PeopleSim {
         }
     }
 
+    /// [`Self::write_door_requests`], and for the doors of `cabin` in a section that runs its
+    /// own scripts (see [`Self::doors_open_cabin`]) into that car's own `PAX_Entry<n>_Req` /
+    /// `_Busy`, by its own count of its doors.
+    pub fn write_door_requests_cabin(v: &mut VehicleInstance, doors: &DoorWants, cabin: &Cabin) {
+        Self::write_door_requests(v, doors);
+        for (kind, list, flags, what) in [
+            ("Entry", &cabin.entries, &doors.entry_req, "Req"),
+            ("Exit", &cabin.exits, &doors.exit_req, "Req"),
+            ("Entry", &cabin.entries, &doors.entry_busy, "Busy"),
+            ("Exit", &cabin.exits, &doors.exit_busy, "Busy"),
+        ] {
+            for (door, on) in list.iter().zip(flags) {
+                let (part, n) = door.part;
+                let Some(run) = part
+                    .checked_sub(1)
+                    .and_then(|k| v.trailers.get_mut(k))
+                    .and_then(|t| t.run.as_deref_mut())
+                else {
+                    continue;
+                };
+                run.set_own(
+                    &format!("PAX_{kind}{n}_{what}"),
+                    if *on { 1.0 } else { 0.0 },
+                );
+            }
+        }
+    }
+
     /// Whether the bus says when its doors are open: any `PAX_Entry<i>_Open` /
     /// `PAX_Exit<i>_Open` its script reports, or any `door_<i>` / `door<i>` animation of an
     /// entry or exit, including buses whose front door is not an entry. Only an AI bus that
     /// says nothing of any door is taken to open them all while it boards.
     pub(super) fn reports_doors(v: &VehicleInstance, n_entry: usize, n_exit: usize) -> bool {
-        let base = if n_entry <= 1 { 1 } else { 2 };
+        let base = exit_door_base(n_entry);
         [("Entry", n_entry, 0), ("Exit", n_exit, base)]
             .into_iter()
             .any(|(kind, count, offset)| {
@@ -77,11 +114,7 @@ impl PeopleSim {
         n_exit: usize,
     ) -> (Vec<bool>, Vec<bool>) {
         let door_val = |k: usize| -> bool { v.door_anim(k).unwrap_or(0.0) > 0.5 };
-        // Exits in standard OMSI city buses (2 or more front door leaves) begin at door_2 (middle door),
-        // while coaches with a single front door leaf begin at door_1. Exits must not be offset by
-        // n_entry, because buses with all doors configured as entries (e.g. 3-door buses with 6 entries)
-        // still place middle-door exits at door_2/3 and rear-door exits at door_4/5.
-        let exit_door_base = if n_entry <= 1 { 1 } else { 2 };
+        let exit_door_base = exit_door_base(n_entry);
         let states = |kind: &str, n: usize, door: &dyn Fn(usize) -> bool| -> Vec<bool> {
             let mut out: Vec<bool> = Vec::with_capacity(n);
             for i in 0..n {
@@ -105,6 +138,81 @@ impl PeopleSim {
             door_val(if k > 7 && !has_door(k) { 7 } else { k })
         });
         (entry, exit)
+    }
+
+    /// [`Self::doors_open`] for the doors of `cabin`: one in a section that runs its own
+    /// scripts (a train car, the NF6D's middle part) is open by that car's own
+    /// `PAX_Entry<n>_Open` / `PAX_Exit<n>_Open`, counted among its own doors. Without those
+    /// it follows the section's own door leaves as [`Self::doors_open`] numbers them: entry
+    /// `n` by `door_<n>` (or `door<n>`), exit `n` by the leaf past the section's front entry
+    /// leaves.
+    pub fn doors_open_cabin(v: &VehicleInstance, cabin: &Cabin) -> (Vec<bool>, Vec<bool>) {
+        let (mut entry, mut exit) = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
+        let (own_entry, own_exit) = Self::section_doors(v, cabin);
+        for (open, own) in entry.iter_mut().zip(own_entry) {
+            if let Some(o) = own {
+                *open = o;
+            }
+        }
+        for (open, own) in exit.iter_mut().zip(own_exit) {
+            if let Some(o) = own {
+                *open = o;
+            }
+        }
+        (entry, exit)
+    }
+
+    /// The doors of an AI vehicle that has stood at a stop for `since` seconds: as its
+    /// scripts say where the leading vehicle reports its doors ([`Self::doors_open_cabin`]).
+    /// Where it does not, a section running its own scripts that says has its doors as it
+    /// says, and the rest open once it has stood 2.5 s, as a bus whose script does not say.
+    pub(super) fn ai_doors_open(
+        v: &VehicleInstance,
+        cabin: &Cabin,
+        since: f64,
+    ) -> (Vec<bool>, Vec<bool>) {
+        if Self::reports_doors(v, cabin.entries.len(), cabin.exits.len()) {
+            return Self::doors_open_cabin(v, cabin);
+        }
+        let (entry, exit) = Self::section_doors(v, cabin);
+        let fill = |own: Vec<Option<bool>>| -> Vec<bool> {
+            own.into_iter().map(|o| o.unwrap_or(since > 2.5)).collect()
+        };
+        (fill(entry), fill(exit))
+    }
+
+    /// The doors of the sections that run their own scripts, as those scripts say (each
+    /// entry and exit of `cabin`): None for a door of the leading vehicle, or of a section
+    /// that says nothing of it.
+    fn section_doors(v: &VehicleInstance, cabin: &Cabin) -> (Vec<Option<bool>>, Vec<Option<bool>>) {
+        let own = |door: &Door, kind: &str| -> Option<bool> {
+            let (part, n) = door.part;
+            let car = v.trailers.get(part.checked_sub(1)?)?;
+            let run = car.run.as_deref()?;
+            // (every program has the `PAX_*_Open` variables: they count where the car's
+            // scripts declare or write them, as the leading vehicle's do)
+            let p = &car.ty.program;
+            let says =
+                |name: &str| p.has_script_var(name) || p.var(name).is_some_and(|id| p.stores(id));
+            let open = format!("PAX_{kind}{n}_Open");
+            if says(&open) {
+                return run.own(&open).map(|x| x > 0.5);
+            }
+            let leaf = if kind == "Exit" {
+                let entries = cabin.entries.iter().filter(|d| d.part.0 == part).count();
+                exit_door_base(entries) + n
+            } else {
+                n
+            };
+            // (`door_<n>`, else `door<n>`, as the door animations are found)
+            run.own(&format!("door_{leaf}"))
+                .or_else(|| run.own(&format!("door{leaf}")))
+                .map(|x| x > 0.5)
+        };
+        (
+            cabin.entries.iter().map(|d| own(d, "Entry")).collect(),
+            cabin.exits.iter().map(|d| own(d, "Exit")).collect(),
+        )
     }
 
     /// The stop the player's duty is due at next: (stop object, its timetable name, where it
@@ -368,26 +476,16 @@ impl PeopleSim {
                     None => 0.0,
                 };
                 let open = stop.is_some();
-                let (mut entry_open, mut exit_open) = (
-                    vec![false; cabin.entries.len()],
-                    vec![false; cabin.exits.len()],
-                );
-                if open {
-                    if Self::reports_doors(&c.vehicle, cabin.entries.len(), cabin.exits.len()) {
-                        let (e, x) =
-                            Self::doors_open(&c.vehicle, cabin.entries.len(), cabin.exits.len());
-                        entry_open = e;
-                        exit_open = x;
-                    } else if since > 2.5 {
-                        // the script does not say: the doors are open while the bus boards
-                        entry_open
-                            .iter_mut()
-                            .chain(exit_open.iter_mut())
-                            .for_each(|o| *o = true);
-                    }
-                }
-                let walk_open = (!c.is_bus())
-                    .then(|| Self::doors_open(&c.vehicle, cabin.entries.len(), cabin.exits.len()));
+                // (where the scripts do not say, the doors are open while the bus boards)
+                let (entry_open, exit_open) = if open {
+                    Self::ai_doors_open(&c.vehicle, &cabin, since)
+                } else {
+                    (
+                        vec![false; cabin.entries.len()],
+                        vec![false; cabin.exits.len()],
+                    )
+                };
+                let walk_open = (!c.is_bus()).then(|| Self::doors_open_cabin(&c.vehicle, &cabin));
                 self.seats
                     .entry(BusId::Ai(c.id))
                     .or_insert_with(|| vec![false; cabin.seats.len()]);
@@ -489,7 +587,7 @@ impl PeopleSim {
                 .bounding_box
                 .unwrap_or([2.5, 11.0, 3.0, 0.0, 0.0, 1.5]);
         let trailers = part_frames(v, &cabin);
-        let walk_open = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
+        let walk_open = Self::doors_open_cabin(v, &cabin);
         Some(BusNow {
             terminus: None,
             takes: Takes::Nobody,
@@ -612,7 +710,7 @@ impl PeopleSim {
             let trailers = part_frames(v, &cabin);
             // (their doors as their game has them: a walker gets in only where one is open;
             // the passengers here never board it - that bus's own game boards them)
-            let walk_open = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
+            let walk_open = Self::doors_open_cabin(v, &cabin);
             out.push(BusNow {
                 terminus: None,
                 takes: Takes::Nobody,

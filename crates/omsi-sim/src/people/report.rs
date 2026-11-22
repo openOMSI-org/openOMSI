@@ -126,7 +126,10 @@ impl PeopleSim {
                 .cloned()
                 .unwrap_or_default(),
         };
-        Self::write_door_requests(b, &doors);
+        match self.cabin_made(b) {
+            Some(cabin) => Self::write_door_requests_cabin(b, &doors, &cabin),
+            None => Self::write_door_requests(b, &doors),
+        }
     }
 
     /// Who wants a timetable bus to stop, as Omsi.exe asks before it lets one pull in

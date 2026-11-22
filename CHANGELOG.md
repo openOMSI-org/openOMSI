@@ -29,6 +29,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   a car with a pantograph (the NF6D's) no longer makes it a metro car.
 - **Mirrors on every car of a train**: a coupled car's `reflexionN` mirrors show its own mirror
   cameras, numbered on from car to car, instead of the first car's.
+- **Passengers use every car of a train**: a car coupled turned round, back to back with the car in
+  front of it, is joined into the passenger cabin turned round, so people get in and out by its own
+  doors and ride in it; and the doors of a car that runs its own scripts (the NF6D's sections)
+  open for the passengers and for the player on foot by that car's own `PAX_Entry<n>_Open`.
 - **Drive a tram from either cab**: in a train with a cab at each end (the NF6D) walk
   to the other cab and take its wheel (G), or switch driving ends from the outside view with the
   interior-camera keys. That cab's own scripts then take the keys, the switches and the indicator,

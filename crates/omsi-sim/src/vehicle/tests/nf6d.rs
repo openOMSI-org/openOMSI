@@ -122,6 +122,106 @@ fn a_destination_picked_by_hand_reaches_both_cabs() {
     );
 }
 
+/// The doors opened from the head cab open in the middle part and the rear section too, for
+/// the people and the player on foot: each part's own `PAX_Entry<n>_Open`, not the head
+/// car's by the train's count.
+#[test]
+#[ignore = "needs an OMSI 2 install with the NF6D add-on (OMSI_ROOT)"]
+fn the_doors_of_every_section_open_for_the_people() {
+    let mut v = switched_on(false);
+    let cabin = crate::people::cabin::Cabin::load_train(&crate::people::cabin::train_parts(&v))
+        .expect("the tram's cabin");
+    assert!(
+        cabin.parts.len() >= 4,
+        "the sections joined: {}",
+        cabin.parts.len()
+    );
+    let sections: Vec<usize> = cabin.entries.iter().map(|d| d.part.0).collect();
+    assert!(
+        sections.iter().any(|&p| p > 0),
+        "doors behind the head car: {sections:?}"
+    );
+    let (shut, _) = crate::people::PeopleSim::doors_open_cabin(&v, &cabin);
+    assert!(shut.iter().all(|o| !o), "all shut at first: {shut:?}");
+    // the release, then the right-hand doors open (the cab's own keys)
+    v.trigger("bus_dooraft");
+    frames(&mut v, 5);
+    v.trigger("bus_doorfront0");
+    frames(&mut v, 300);
+    let (open, _) = crate::people::PeopleSim::doors_open_cabin(&v, &cabin);
+    let open_in = |part: usize| {
+        cabin
+            .entries
+            .iter()
+            .zip(&open)
+            .any(|(d, o)| d.part.0 == part && *o)
+    };
+    assert!(open_in(0), "a head car door: {open:?} {sections:?}");
+    let behind: Vec<usize> = sections.iter().copied().filter(|&p| p > 0).collect();
+    assert!(
+        behind.iter().any(|&p| open_in(p)),
+        "a door behind the head car: {open:?} {sections:?}"
+    );
+}
+
+/// Every door of the tram the passengers use - entries and exits, all sections - opens for
+/// them on its own side: the right-hand doors with the right preselected, the left-hand
+/// ones with the left (`kw_s_2`).
+#[test]
+#[ignore = "needs an OMSI 2 install with the NF6D add-on (OMSI_ROOT)"]
+fn every_door_opens_for_the_people_on_its_side() {
+    for rear in [false, true] {
+        doors_open_on_their_side(rear);
+    }
+}
+
+/// [`every_door_opens_for_the_people_on_its_side`] driven from the head cab or the rear one
+/// (`rear`: its own right hand is the tram's left).
+fn doors_open_on_their_side(rear: bool) {
+    let open_with = |left: bool| {
+        let mut v = switched_on(rear);
+        if left {
+            v.trigger("kw_s_2");
+            frames(&mut v, 5);
+        }
+        v.trigger("bus_dooraft");
+        frames(&mut v, 5);
+        v.trigger("bus_doorfront0");
+        frames(&mut v, 300);
+        let cabin = crate::people::cabin::Cabin::load_train(&crate::people::cabin::train_parts(&v))
+            .unwrap();
+        let (e, x) = crate::people::PeopleSim::doors_open_cabin(&v, &cabin);
+        (cabin, e, x)
+    };
+    let (cabin, right_e, right_x) = open_with(false);
+    let (_, left_e, left_x) = open_with(true);
+    let mut shut = Vec::new();
+    for (kind, doors, r, l) in [
+        ("entry", &cabin.entries, &right_e, &left_e),
+        ("exit", &cabin.exits, &right_x, &left_x),
+    ] {
+        for (i, d) in doors.iter().enumerate() {
+            let (right, left) = (r[i], l[i]);
+            eprintln!(
+                "rear cab {rear}: {kind} {i}: section {} door {} side {:+} -> driver's right {right} left {left}",
+                d.part.0, d.part.1, d.side
+            );
+            // (the driver's right hand is the tram's from the head cab, its left from the rear)
+            let own_side = if (d.side > 0.0) != rear { right } else { left };
+            if !own_side {
+                shut.push(format!(
+                    "{kind} {i} (section {}, door {}, side {:+})",
+                    d.part.0, d.part.1, d.side
+                ));
+            }
+        }
+    }
+    assert!(
+        shut.is_empty(),
+        "doors that do not open on their own side: {shut:?}"
+    );
+}
+
 /// Driven from the rear cab, a destination picked from the list shows on the head cab's
 /// matrix as well (it reads the rear cab's destination cable then).
 #[test]

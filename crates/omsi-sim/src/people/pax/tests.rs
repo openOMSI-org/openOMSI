@@ -39,7 +39,8 @@ fn arriving_ai_uses_the_timetable_stop_not_a_neighbour() {
     )
     .unwrap();
     let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
-    let cabin = Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin"));
+    let cabin =
+        Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).expect("cabin"));
     std::fs::remove_dir_all(&dir).unwrap();
     let mut humans = PeopleSim::new(Path::new("/nonexistent"), 200);
     humans.stops.insert(42, test_stop("Scheduled", ""));
