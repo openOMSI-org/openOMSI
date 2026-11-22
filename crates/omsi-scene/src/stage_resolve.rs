@@ -55,7 +55,7 @@ impl World {
     }
 
     /// The ground as the tile files have it at world x, y (None outside `src`).
-    pub(super) fn base_ground(
+    pub(crate) fn base_ground(
         src: &HashMap<(i32, i32), Arc<StagedTile>>,
         x: f64,
         y: f64,
@@ -73,7 +73,7 @@ impl World {
 
     /// Where a staged object stands before the ground is edited: crossings are warped and
     /// the ground deformed from there.
-    pub(super) fn provisional_pose(
+    pub(crate) fn provisional_pose(
         st: &StagedTile,
         o: &StagedObject,
         src: &HashMap<(i32, i32), Arc<StagedTile>>,
@@ -102,7 +102,7 @@ impl World {
     /// The `[maplight]`s of the objects of tile `key` and its eight neighbours, as a light map
     /// bakes them (Omsi.exe 0x7903e0 goes through the tile's near objects, those of the nine
     /// tiles, 0x77fe5c).
-    pub(super) fn light_map_lamps(
+    pub(crate) fn light_map_lamps(
         &self,
         key: (i32, i32),
         layout: &TileLayout,
@@ -140,7 +140,7 @@ impl World {
 
     /// A tile's final ground and final object poses (computed once per staging; `src` are
     /// the staged tiles it depends on).
-    pub(super) fn resolve(
+    pub(crate) fn resolve(
         &self,
         key: (i32, i32),
         src: &HashMap<(i32, i32), Arc<StagedTile>>,
