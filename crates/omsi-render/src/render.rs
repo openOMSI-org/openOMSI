@@ -299,7 +299,7 @@ impl Renderer {
             Some(c) => RenderOptions {
                 msaa: c.msaa_for(options.msaa),
                 ssao: options.ssao && c.ssao,
-                shadow_size: options.shadow_size.clamp(512, c.shadow_size),
+                shadow_size: options.shadow_size.clamp(256, c.shadow_size),
                 puddle_reflections: options.puddle_reflections && c.puddle_reflections,
                 ..options
             },

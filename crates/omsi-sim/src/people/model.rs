@@ -263,7 +263,7 @@ pub struct PeopleSim {
     pub wall_cells: HashMap<(i32, i32, i32), WallCell>,
     pub wall_key: (usize, usize, usize, f64),
     /// Passenger cabins by vehicle files (the front vehicle and its coupled parts).
-    pub cabins: HashMap<Vec<PathBuf>, Option<Arc<Cabin>>>,
+    pub cabins: HashMap<Vec<(PathBuf, bool)>, Option<Arc<Cabin>>>,
     pub player_cabin: Option<Arc<Cabin>>,
     pub player_next_stop: Option<RequestStop>,
     /// Which places of each bus are taken.
@@ -320,6 +320,8 @@ pub struct PeopleSim {
     pub ai_stop_requests: Vec<u64>,
     /// Tickets sold at the cash desk this session and what they were worth.
     pub tickets_sold: u32,
+    /// How many of the sales above were fares paid without a ticket (#2742).
+    pub fares_no_ticket: u32,
     pub ticket_cash: f32,
     /// The tickets sold since the last `take_sales`: name and value.
     pub sales: Vec<(String, f32)>,
@@ -448,6 +450,10 @@ pub struct PeopleSim {
     /// Optional visual-only response to an approaching full bus.
     pub visual_full_bus_reaction: bool,
     pub bad_driving: bool,
+    /// The fare is paid without a ticket (#2742): the passenger pays, gets the change and
+    /// goes to their place instead of waiting at the desk for a ticket - and no ticket
+    /// sound or ticket hand-over is made. Set by the app from the settings.
+    pub no_ticket: bool,
     /// How passengers board (`boarding` in the settings): `auto` - pay and take the
     /// ticket by themselves after a moment; `pay` - wait at the desk for the driver to
     /// sell it (and show a pass after `PAY_PATIENCE`); `walk` - no cash desk at all.

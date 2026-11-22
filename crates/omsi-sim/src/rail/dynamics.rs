@@ -55,7 +55,16 @@ pub struct Conditions {
 
 impl Default for Conditions {
     fn default() -> Self {
-        Conditions { grade: 0.0, radius: f32::INFINITY, wetness: 0.0, temperature: 15.0, in_tunnel: false, air_density: 1.2, headwind: 0.0, sanding: false }
+        Conditions {
+            grade: 0.0,
+            radius: f32::INFINITY,
+            wetness: 0.0,
+            temperature: 15.0,
+            in_tunnel: false,
+            air_density: 1.2,
+            headwind: 0.0,
+            sanding: false,
+        }
     }
 }
 
@@ -99,13 +108,21 @@ pub fn adhesion(v: f32, wetness: f32, temperature: f32, sanding: bool) -> f32 {
     let dry = 0.161 + 7.5 / (kmh + 44.0);
     // wet rails 0.7 of it, leaves or snow 0.4, ice 0.2
     let w = wetness.clamp(0.0, 2.0);
-    let mut factor = if w <= 1.0 { 1.0 - 0.3 * w } else { 0.7 - 0.3 * (w - 1.0) };
+    let mut factor = if w <= 1.0 {
+        1.0 - 0.3 * w
+    } else {
+        0.7 - 0.3 * (w - 1.0)
+    };
     if temperature <= 0.0 && w > 0.05 {
         factor = factor.min(0.2 + 0.5 * (1.0 - ((0.5 - temperature) / 3.0).clamp(0.0, 1.0)));
     }
     // sand brings a wet rail back to near dry
     let mu = dry * factor;
-    if sanding { mu.max(dry * 0.85).min(dry) } else { mu }
+    if sanding {
+        mu.max(dry * 0.85).min(dry)
+    } else {
+        mu
+    }
 }
 
 /// Curve resistance, as a fraction of the weight (Röckl).
@@ -114,8 +131,23 @@ pub fn curve_resistance(radius: f32) -> f32 {
         return 0.0;
     }
     let r = radius.max(30.0);
-    let per_kn = if r >= 300.0 { 650.0 / (r - 55.0) } else { 500.0 / (r - 30.0).max(10.0) };
+    let per_kn = if r >= 300.0 {
+        650.0 / (r - 55.0)
+    } else {
+        500.0 / (r - 30.0).max(10.0)
+    };
     per_kn * 1e-3
+}
+
+/// Curve resistance of a street tram, as a fraction of the weight: its short bogies (under 2 m
+/// between the axles) and small wheels drag far less through a curve than Röckl's main-line
+/// cars - about 10 N/kN in a 25 m curve, 1 N/kN at 300 m. Röckl's figures hold a tram on a
+/// fifth of its pull standing in a tight curve.
+pub fn tram_curve_resistance(radius: f32) -> f32 {
+    if !radius.is_finite() || radius > 2000.0 {
+        return 0.0;
+    }
+    300.0 / (radius.max(15.0) + 5.0) * 1e-3
 }
 
 /// Resistance to motion at speed `v` (m/s, any sign), N, positive, not counting the grade.
@@ -126,12 +158,22 @@ pub fn resistance(c: &Consist, cond: &Conditions, v: f32) -> f32 {
     // journals, the wheels have settled on the rails
     let start = 1.0 + 0.8 / (1.0 + (v.abs() / 0.6).powi(2));
     let run = weight * (a + b * v.abs()) * start;
-    let curve = weight * curve_resistance(cond.radius) * if c.class == RailClass::Tram { 1.2 } else { 1.0 };
+    let curve = weight
+        * if c.class == RailClass::Tram {
+            tram_curve_resistance(cond.radius)
+        } else {
+            curve_resistance(cond.radius)
+        };
     // the air: the front, plus the skin friction along the length (a car of 20 m has about
     // 0.4 m² of "front" in friction), twice in a tunnel
     let rel = v.abs() + cond.headwind * v.signum();
     let skin = 0.4 * c.cars.saturating_sub(1) as f32;
-    let air = 0.5 * cond.air_density * (c.cd_a + skin) * rel * rel.abs() * if cond.in_tunnel { 2.0 } else { 1.0 };
+    let air = 0.5
+        * cond.air_density
+        * (c.cd_a + skin)
+        * rel
+        * rel.abs()
+        * if cond.in_tunnel { 2.0 } else { 1.0 };
     run + curve + air
 }
 
@@ -189,27 +231,53 @@ pub fn step(c: &Consist, cond: &Conditions, f: &Forces, v0: f32, dt: f32) -> Out
             }
         }
     }
-    Outcome { speed: v, accel: (v - v0) / dt.max(1e-4), spinning, sliding, resistance: resist_now, coupler_force: 0.0 }
+    Outcome {
+        speed: v,
+        accel: (v - v0) / dt.max(1e-4),
+        spinning,
+        sliding,
+        resistance: resist_now,
+        coupler_force: 0.0,
+    }
 }
 
 /// The drive and brake a class gives a pedal-driven vehicle (one whose scripts give none):
 /// full throttle is the starting effort up to the speed where the rated power runs out
 /// (F = P / v), the brake pedal a share of the service deceleration, the last tenth of it
 /// the emergency one.
-pub fn pedal_forces(class: RailClass, mass: f32, throttle: f32, brake: f32, v: f32, reverse: bool) -> Forces {
+pub fn pedal_forces(
+    class: RailClass,
+    mass: f32,
+    throttle: f32,
+    brake: f32,
+    v: f32,
+    reverse: bool,
+) -> Forces {
     let p = class.performance();
     let m_eff = mass * (1.0 + ROTATING);
     let power = p.kw_per_tonne * 1000.0 * mass / 1000.0;
     let effort = (p.start_accel * m_eff).min(power / v.abs().max(0.5));
     let drive = throttle.clamp(0.0, 1.0) * effort * if reverse { -1.0 } else { 1.0 };
     let b = brake.clamp(0.0, 1.0);
-    let decel = if b < 0.9 { p.service_brake * (b / 0.9) } else { p.service_brake + (p.emergency_brake - p.service_brake) * (b - 0.9) / 0.1 };
+    let decel = if b < 0.9 {
+        p.service_brake * (b / 0.9)
+    } else {
+        p.service_brake + (p.emergency_brake - p.service_brake) * (b - 0.9) / 0.1
+    };
     // a tram's emergency stop is made by its magnetic track brake besides the wheels' own
     // service brake, which the rails could not hold alone
     if class == RailClass::Tram && b >= 0.9 {
-        Forces { drive: 0.0, brake: p.service_brake * m_eff, track_brake: (decel - p.service_brake) * m_eff }
+        Forces {
+            drive: 0.0,
+            brake: p.service_brake * m_eff,
+            track_brake: (decel - p.service_brake) * m_eff,
+        }
     } else {
-        Forces { drive, brake: decel * m_eff, track_brake: 0.0 }
+        Forces {
+            drive,
+            brake: decel * m_eff,
+            track_brake: 0.0,
+        }
     }
 }
 
@@ -218,15 +286,35 @@ mod tests {
     use super::*;
 
     fn tram() -> Consist {
-        Consist { class: RailClass::Tram, mass: 36_000.0, driven_share: 1.0, cars: 2, cd_a: 6.0, length: 28.0 }
+        Consist {
+            class: RailClass::Tram,
+            mass: 36_000.0,
+            driven_share: 1.0,
+            cars: 2,
+            cd_a: 6.0,
+            length: 28.0,
+        }
     }
 
     fn train() -> Consist {
-        Consist { class: RailClass::Train, mass: 400_000.0, driven_share: 0.25, cars: 8, cd_a: 8.0, length: 160.0 }
+        Consist {
+            class: RailClass::Train,
+            mass: 400_000.0,
+            driven_share: 0.25,
+            cars: 8,
+            cd_a: 8.0,
+            length: 160.0,
+        }
     }
 
     /// Seconds and metres to run `secs` with `forces` from `v0`.
-    fn run(c: &Consist, cond: &Conditions, mut forces: impl FnMut(f32) -> Forces, v0: f32, secs: f32) -> (f32, f32, Outcome) {
+    fn run(
+        c: &Consist,
+        cond: &Conditions,
+        mut forces: impl FnMut(f32) -> Forces,
+        v0: f32,
+        secs: f32,
+    ) -> (f32, f32, Outcome) {
         let (mut v, mut s, mut last) = (v0, 0.0, Outcome::default());
         let dt = 0.02;
         for _ in 0..(secs / dt) as usize {
@@ -270,7 +358,14 @@ mod tests {
         // 8 cars at 144 km/h: Davis-like 8-12 kN for a 400 t train
         assert!(high > 8_000.0 && high < 25_000.0, "{high}");
         // a tunnel doubles the air's part
-        let tunnel = resistance(&c, &Conditions { in_tunnel: true, ..cond }, 40.0);
+        let tunnel = resistance(
+            &c,
+            &Conditions {
+                in_tunnel: true,
+                ..cond
+            },
+            40.0,
+        );
         assert!(tunnel > high);
         // standing costs more than rolling slowly
         assert!(resistance(&c, &cond, 0.0) > resistance(&c, &cond, 1.5) * 1.3);
@@ -282,14 +377,32 @@ mod tests {
         let cond = Conditions::default();
         let p = RailClass::Tram.performance();
         // full throttle for 10 s: ~1.1 m/s² from rest (start effort minus resistance)
-        let (v, _, _) = run(&c, &cond, |v| pedal_forces(RailClass::Tram, c.mass, 1.0, 0.0, v, false), 0.0, 10.0);
+        let (v, _, _) = run(
+            &c,
+            &cond,
+            |v| pedal_forces(RailClass::Tram, c.mass, 1.0, 0.0, v, false),
+            0.0,
+            10.0,
+        );
         assert!(v > 9.0 && v < 12.5, "{v}");
         // service brake from 50 km/h stops in 5.5 s... 1.3 m/s²: 13.9^2/(2*1.3) = 74 m
-        let (v, s, _) = run(&c, &cond, |v| pedal_forces(RailClass::Tram, c.mass, 0.0, 0.9, v, false), 13.9, 20.0);
+        let (v, s, _) = run(
+            &c,
+            &cond,
+            |v| pedal_forces(RailClass::Tram, c.mass, 0.0, 0.9, v, false),
+            13.9,
+            20.0,
+        );
         assert_eq!(v, 0.0);
         assert!(s > 55.0 && s < 80.0, "stops in {s} m");
         // emergency is harder
-        let (_, s_em, _) = run(&c, &cond, |v| pedal_forces(RailClass::Tram, c.mass, 0.0, 1.0, v, false), 13.9, 20.0);
+        let (_, s_em, _) = run(
+            &c,
+            &cond,
+            |v| pedal_forces(RailClass::Tram, c.mass, 0.0, 1.0, v, false),
+            13.9,
+            20.0,
+        );
         assert!(s_em < s * 0.6, "{s_em} against {s}");
         assert!(p.emergency_brake > p.service_brake);
     }
@@ -298,7 +411,13 @@ mod tests {
     fn a_train_needs_a_long_way_to_stop() {
         let c = train();
         let cond = Conditions::default();
-        let (v, s, _) = run(&c, &cond, |v| pedal_forces(RailClass::Train, c.mass, 0.0, 0.9, v, false), 36.0, 90.0);
+        let (v, s, _) = run(
+            &c,
+            &cond,
+            |v| pedal_forces(RailClass::Train, c.mass, 0.0, 0.9, v, false),
+            36.0,
+            90.0,
+        );
         assert_eq!(v, 0.0);
         // 130 km/h at 0.9 m/s²: 36²/(1.8) = 720 m
         assert!(s > 600.0 && s < 850.0, "{s}");
@@ -308,25 +427,73 @@ mod tests {
     fn wet_rails_make_the_wheels_spin_and_slide() {
         let c = tram();
         let dry = Conditions::default();
-        let leaves = Conditions { wetness: 2.0, temperature: 4.0, ..dry };
-        let big = Forces { drive: 90_000.0, ..Forces::default() };
+        let leaves = Conditions {
+            wetness: 2.0,
+            temperature: 4.0,
+            ..dry
+        };
+        let big = Forces {
+            drive: 90_000.0,
+            ..Forces::default()
+        };
         assert!(!step(&c, &dry, &big, 3.0, 0.02).spinning);
         let out = step(&c, &leaves, &big, 3.0, 0.02);
         assert!(out.spinning, "the driven wheels spin on a leafy rail");
-        let hard_brake = Forces { brake: 220_000.0, ..Forces::default() };
+        let hard_brake = Forces {
+            brake: 220_000.0,
+            ..Forces::default()
+        };
         assert!(step(&c, &leaves, &hard_brake, 10.0, 0.02).sliding);
-        assert!(!step(&c, &dry, &Forces { brake: 70_000.0, ..Forces::default() }, 10.0, 0.02).sliding);
+        assert!(
+            !step(
+                &c,
+                &dry,
+                &Forces {
+                    brake: 70_000.0,
+                    ..Forces::default()
+                },
+                10.0,
+                0.02
+            )
+            .sliding
+        );
         // slipping gives less than gripping would
-        let grip = run(&c, &dry, |_| Forces { drive: 90_000.0, ..Forces::default() }, 0.0, 6.0).0;
-        let slip = run(&c, &leaves, |_| Forces { drive: 90_000.0, ..Forces::default() }, 0.0, 6.0).0;
+        let grip = run(
+            &c,
+            &dry,
+            |_| Forces {
+                drive: 90_000.0,
+                ..Forces::default()
+            },
+            0.0,
+            6.0,
+        )
+        .0;
+        let slip = run(
+            &c,
+            &leaves,
+            |_| Forces {
+                drive: 90_000.0,
+                ..Forces::default()
+            },
+            0.0,
+            6.0,
+        )
+        .0;
         assert!(slip < grip * 0.8, "{slip} against {grip}");
     }
 
     #[test]
     fn a_grade_holds_back_a_climbing_train_and_runs_a_free_one_away() {
         let c = train();
-        let up = Conditions { grade: 0.03, ..Conditions::default() };
-        let down = Conditions { grade: -0.03, ..Conditions::default() };
+        let up = Conditions {
+            grade: 0.03,
+            ..Conditions::default()
+        };
+        let down = Conditions {
+            grade: -0.03,
+            ..Conditions::default()
+        };
         // coasting up a 30 per mille grade at 20 m/s decelerates ~0.3 m/s²
         let o = step(&c, &up, &Forces::default(), 20.0, 0.1);
         assert!(o.accel < -0.25 && o.accel > -0.45, "{}", o.accel);
@@ -334,8 +501,24 @@ mod tests {
         let (v, _, _) = run(&c, &down, |_| Forces::default(), 5.0, 240.0);
         assert!(v > 28.0, "{v}");
         // a standing train on a grade stays put with its brake on, rolls without
-        assert_eq!(step(&c, &down, &Forces { brake: 150_000.0, ..Forces::default() }, 0.0, 0.1).speed, 0.0);
-        let steep = Conditions { grade: -0.05, ..down };
+        assert_eq!(
+            step(
+                &c,
+                &down,
+                &Forces {
+                    brake: 150_000.0,
+                    ..Forces::default()
+                },
+                0.0,
+                0.1
+            )
+            .speed,
+            0.0
+        );
+        let steep = Conditions {
+            grade: -0.05,
+            ..down
+        };
         let (v, _, _) = run(&c, &steep, |_| Forces::default(), 0.0, 3.0);
         assert!(v > 1.0, "a free train on a 5 % downgrade rolls away: {v}");
     }
@@ -350,7 +533,16 @@ mod tests {
         }
         assert_eq!(v, 0.0);
         // and is not turned round by its own resistance
-        let o = step(&c, &cond, &Forces { brake: 50_000.0, ..Forces::default() }, 0.05, 0.1);
+        let o = step(
+            &c,
+            &cond,
+            &Forces {
+                brake: 50_000.0,
+                ..Forces::default()
+            },
+            0.05,
+            0.1,
+        );
         assert!(o.speed >= 0.0);
     }
 
@@ -358,15 +550,61 @@ mod tests {
     fn a_tight_bend_slows_a_coasting_tram() {
         let c = tram();
         let straight = step(&c, &Conditions::default(), &Forces::default(), 8.0, 1.0);
-        let bend = step(&c, &Conditions { radius: 25.0, ..Conditions::default() }, &Forces::default(), 8.0, 1.0);
-        assert!(bend.accel < straight.accel * 1.8 && bend.accel < straight.accel - 0.3, "{} against {}", bend.accel, straight.accel);
+        let bend = step(
+            &c,
+            &Conditions {
+                radius: 25.0,
+                ..Conditions::default()
+            },
+            &Forces::default(),
+            8.0,
+            1.0,
+        );
+        let extra = straight.accel - bend.accel;
+        assert!(
+            extra > 0.06 && extra < 0.15,
+            "{} against {}",
+            bend.accel,
+            straight.accel
+        );
+    }
+
+    /// A tram starting in its tightest curve on a fifth of its pull (the NF6D's first
+    /// throttle step) gets going: the curve does not hold it as if it were braked.
+    #[test]
+    fn a_tram_gets_going_in_a_tight_curve_on_little_pull() {
+        let c = tram();
+        let bend = Conditions {
+            radius: 25.0,
+            ..Conditions::default()
+        };
+        let pull = 0.2 * 0.15 * c.mass * G;
+        let (v, _, _) = run(
+            &c,
+            &bend,
+            |_| Forces {
+                drive: pull,
+                ..Forces::default()
+            },
+            0.0,
+            10.0,
+        );
+        assert!(v > 0.5, "{v} m/s after 10 s");
+        assert!(tram_curve_resistance(25.0) < curve_resistance(25.0) * 0.5);
+        assert!(tram_curve_resistance(300.0) < tram_curve_resistance(50.0));
     }
 
     #[test]
     fn reversing_drives_backwards_and_the_rest_follows() {
         let c = tram();
         let cond = Conditions::default();
-        let (v, _, _) = run(&c, &cond, |v| pedal_forces(RailClass::Tram, c.mass, 1.0, 0.0, v, true), 0.0, 5.0);
+        let (v, _, _) = run(
+            &c,
+            &cond,
+            |v| pedal_forces(RailClass::Tram, c.mass, 1.0, 0.0, v, true),
+            0.0,
+            5.0,
+        );
         assert!(v < -3.0, "{v}");
     }
 }

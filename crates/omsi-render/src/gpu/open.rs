@@ -198,150 +198,18 @@ impl Renderer {
         });
         let shadow_size = options
             .shadow_size
-            .clamp(512, if intel_vulkan_safe { 2048 } else { 8192 });
-        let mut limits = wgpu::Limits::default().using_resolution(adapter.limits());
-        if intel_vulkan_safe {
-            // Do not request every large limit the Intel driver advertises. In particular,
-            // asking for its maximum storage-buffer and buffer sizes makes 31.0.101.2141
-            // crash in vkCreateDevice instead of returning a VkResult. The WebGPU defaults
-            // are ample for the renderer and stay on the driver's well-tested path.
-            limits = wgpu::Limits::default().using_resolution(adapter.limits());
-        } else {
-            limits.max_storage_buffer_binding_size =
-                adapter.limits().max_storage_buffer_binding_size;
-            limits.max_buffer_size = adapter.limits().max_buffer_size;
-            limits.max_sampled_textures_per_shader_stage =
-                limits.max_sampled_textures_per_shader_stage.max(
-                    adapter
-                        .limits()
-                        .max_sampled_textures_per_shader_stage
-                        .min(crate::pipelines::scene::PANE_MASK_TEXTURES),
-                );
-        }
-        // an older or smaller graphics chip (an OpenGL one, a GT 530) does not reach the
-        // WebGPU defaults: asked for them anyway, the device was never opened
-        if !limits.check_limits(&adapter.limits()) {
-            log::warn!(
-                "{}: below the standard limits; using what it has",
-                info.name
-            );
-            limits = adapter.limits();
-        }
-        // OMSI_GPU_LIMITS=default|downlevel: the WebGPU defaults (or the downlevel ones) and
-        // nothing more, whatever this machine could do - to find what a stricter driver refuses
-        match omsi_cfg::flags::OMSI_GPU_LIMITS.var() {
-            Some("default") => limits = wgpu::Limits::default(),
-            Some("downlevel") => limits = wgpu::Limits::downlevel_defaults(),
-            _ => {}
-        }
-        // the shadow atlas is two maps wide: no wider than the card draws
+            .clamp(256, if intel_vulkan_safe { 2048 } else { 8192 });
+        let (limits, format, wanted, targets, required_features, ray_query) = device_features(
+            &adapter,
+            &info,
+            surface,
+            format,
+            &options,
+            intel_vulkan_safe,
+        );
         let shadow_size = shadow_size
             .min(limits.max_texture_dimension_2d / 2)
             .max(256);
-        let format = format
-            .or_else(|| {
-                surface.map(|s| {
-                    let formats = s.get_capabilities(&adapter).formats;
-                    // (an Android driver lists the plain RGBA8 first: the picture, written in
-                    // linear light for an sRGB target, came out dark and flat)
-                    if cfg!(target_os = "android") {
-                        if let Some(f) = formats.iter().find(|f| f.is_srgb()) {
-                            return *f;
-                        }
-                    }
-                    formats[0]
-                })
-            })
-            .unwrap_or(wgpu::TextureFormat::Rgba8UnormSrgb);
-        // Every target the scene is drawn into with multisampling (the swap chain or mirror
-        // format, the HDR target of the enhanced path and its screen mask, the depth buffer)
-        // must take the sample count, and the colour targets must resolve. A device judges
-        // that by the WebGPU table, which promises only 1x and 4x, unless it was asked for
-        // the adapter's own table: the launcher's "2x MSAA" (which Apple GPUs do support)
-        // was a fatal validation error before the first frame because the adapter's table
-        // said yes and the device's said no. So the adapter's table is asked for when the
-        // wanted count needs it (2x, 8x), and the count is checked against the table the
-        // device will use.
-        let wanted = match options.msaa {
-            1 | 2 | 4 | 8 => options.msaa,
-            _ => MSAA,
-        };
-        let targets = [
-            format,
-            wgpu::TextureFormat::Rgba16Float,
-            DEPTH_FORMAT,
-            MASK_FORMAT,
-        ];
-        let takes = |flags: wgpu::TextureFormatFeatureFlags, f: wgpu::TextureFormat, n: u32| {
-            flags.sample_count_supported(n)
-                && (n == 1
-                    || f.is_depth_stencil_format()
-                    || flags.contains(wgpu::TextureFormatFeatureFlags::MULTISAMPLE_RESOLVE))
-        };
-        let adapter_table_needed = !targets.iter().all(|&f| {
-            takes(
-                f.guaranteed_format_features(wgpu::Features::empty()).flags,
-                f,
-                wanted,
-            )
-        });
-        let mut required_features = if adapter_table_needed && info.backend != wgpu::Backend::Noop {
-            adapter.features() & wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
-        } else {
-            wgpu::Features::empty()
-        };
-        if omsi_cfg::flags::OMSI_GPU_TIMERS.is_set() {
-            required_features |= adapter.features() & wgpu::Features::TIMESTAMP_QUERY;
-        }
-        // (FSR 3 on Vulkan picks its 16 bit shaders by what the card has, not what the device enabled)
-        if info.backend == wgpu::Backend::Vulkan
-            && options
-                .temporal
-                .is_some_and(|t| t.upscaler == crate::temporal::TemporalUpscaler::Fsr3)
-        {
-            required_features |= adapter.features() & wgpu::Features::SHADER_F16;
-        }
-        // DXT textures stay compressed on the GPU where it takes them (Apple silicon does);
-        // OMSI_NO_BC=1 uploads everything as RGBA (the old way, for comparisons), and so does
-        // the settings' `gpu_texture_compression` off
-        if !omsi_cfg::flags::OMSI_NO_BC.is_set() && options.gpu_texture_compression {
-            required_features |= adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC;
-        } else if !options.gpu_texture_compression {
-            log::info!(
-                "GPU texture compression off in the settings: DXT/BC textures are decoded to RGBA"
-            );
-        }
-        if intel_vulkan_safe {
-            // Keep vkCreateDevice entirely free of optional extensions. Compressed source
-            // textures are decoded to RGBA by upload_texture on this device.
-            required_features = wgpu::Features::empty();
-        }
-        // the driver's compiled pipelines kept for the next start (Vulkan, OpenGL)
-        if !intel_vulkan_safe {
-            required_features |= pipeline_cache::wanted(&adapter);
-            // (the vehicles' blank display textures cleared on the GPU, `add_blank_texture`)
-            required_features |= adapter.features() & wgpu::Features::CLEAR_TEXTURE;
-        }
-        // Enhanced+: hardware ray queries where the device has them (Apple silicon from the
-        // M3/A17 on, RTX and RDNA 2 cards and newer through Vulkan and Direct3D 12 - with DXC,
-        // which the Windows build ships beside the game); OMSI_NO_RT=1 leaves them out. Should
-        // the device refuse its work all the same, it falls back to Enhanced (`rt_error`).
-        let ray_query = options.ray_tracing
-            && !intel_vulkan_safe
-            && info.backend != wgpu::Backend::Noop
-            && adapter
-                .features()
-                .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
-            && !omsi_cfg::flags::OMSI_NO_RT.is_set();
-        if ray_query {
-            required_features |= wgpu::Features::EXPERIMENTAL_RAY_QUERY;
-            limits = limits.using_acceleration_structure_values(adapter.limits());
-        } else if options.ray_tracing {
-            log::warn!(
-                "{}: no hardware ray queries; Enhanced+ is drawn as Enhanced",
-                info.name
-            );
-        }
         device_selection::select_array_path(&adapter, &limits, &info);
         log::info!(
             "opening graphics device: {} ({:?}, vendor {:#06x}, device {:#06x}), features {:?}, max buffer {} MB, max storage binding {} MB",
@@ -417,7 +285,7 @@ impl Renderer {
                 f.guaranteed_format_features(device.features()).flags
             }
         };
-        let supported = |n: u32| targets.iter().all(|&f| takes(flags_of(f), f, n));
+        let supported = |n: u32| targets.iter().all(|&f| supports_msaa(flags_of(f), f, n));
         let wanted = if ray_query && wanted > 4 && !omsi_cfg::flags::OMSI_FULL_GPU.is_set() {
             log::info!(
                 "Enhanced+: {wanted}x MSAA drawn at 4x (8x doubles the ray traced passes' cost and their targets' memory)"
@@ -473,32 +341,7 @@ impl Renderer {
             omsi_texture::set_gpu_options(omsi_texture::GpuOptions { bc, compress });
             omsi_texture::gpu::set_halve_plain(halve);
         }
-        log::info!(
-            "renderer: {} ({:?}), {:?}, {}x MSAA{}, anisotropy {}, shadow map {}, SSAO {}, render scale {}, textures {}",
-            info.name,
-            info.backend,
-            format,
-            options.msaa,
-            if adapter_table {
-                " (adapter format table)"
-            } else {
-                ""
-            },
-            options.anisotropy,
-            options.shadow_size,
-            options.ssao,
-            if options.render_scale > 0.0 {
-                format!("{:.2}", options.render_scale.clamp(0.5, 1.0))
-            } else {
-                "auto".to_string()
-            },
-            match (bc, compress) {
-                (false, _) if halve => "RGBA at half size (no BC on this device)",
-                (false, _) => "RGBA (no BC on this device)",
-                (true, false) => "DXT as blocks, others RGBA",
-                (true, true) => "DXT as blocks, others compressed where close",
-            }
-        );
+        log_device_options(&info, format, &options, adapter_table, bc, compress, halve);
         // Every pipeline is built under an error scope of every kind and the renderer built
         // again with less where one fails: without multisampling (a driver whose table
         // promises more than it takes), then without the pipelines a picture can do without
@@ -524,6 +367,212 @@ impl Renderer {
             name,
         })
     }
+}
+
+fn log_device_options(
+    info: &wgpu::AdapterInfo,
+    format: wgpu::TextureFormat,
+    options: &RenderOptions,
+    adapter_table: bool,
+    bc: bool,
+    compress: bool,
+    halve: bool,
+) {
+    log::info!(
+        "renderer: {} ({:?}), {:?}, {}x MSAA{}, anisotropy {}, shadow map {}, SSAO {}, render scale {}, textures {}",
+        info.name,
+        info.backend,
+        format,
+        options.msaa,
+        if adapter_table {
+            " (adapter format table)"
+        } else {
+            ""
+        },
+        options.anisotropy,
+        options.shadow_size,
+        options.ssao,
+        if options.render_scale > 0.0 {
+            format!("{:.2}", options.render_scale.clamp(0.5, 1.0))
+        } else {
+            "auto".to_string()
+        },
+        match (bc, compress) {
+            (false, _) if halve => "RGBA at half size (no BC on this device)",
+            (false, _) => "RGBA (no BC on this device)",
+            (true, false) => "DXT as blocks, others RGBA",
+            (true, true) => "DXT as blocks, others compressed where close",
+        }
+    );
+}
+
+fn supports_msaa(
+    flags: wgpu::TextureFormatFeatureFlags,
+    format: wgpu::TextureFormat,
+    samples: u32,
+) -> bool {
+    flags.sample_count_supported(samples)
+        && (samples == 1
+            || format.is_depth_stencil_format()
+            || flags.contains(wgpu::TextureFormatFeatureFlags::MULTISAMPLE_RESOLVE))
+}
+
+fn device_features(
+    adapter: &wgpu::Adapter,
+    info: &wgpu::AdapterInfo,
+    surface: Option<&wgpu::Surface<'_>>,
+    format: Option<wgpu::TextureFormat>,
+    options: &RenderOptions,
+    intel_vulkan_safe: bool,
+) -> (
+    wgpu::Limits,
+    wgpu::TextureFormat,
+    u32,
+    [wgpu::TextureFormat; 4],
+    wgpu::Features,
+    bool,
+) {
+    let mut limits = wgpu::Limits::default().using_resolution(adapter.limits());
+    if intel_vulkan_safe {
+        // Do not request every large limit the Intel driver advertises. In particular,
+        // asking for its maximum storage-buffer and buffer sizes makes 31.0.101.2141
+        // crash in vkCreateDevice instead of returning a VkResult. The WebGPU defaults
+        // are ample for the renderer and stay on the driver's well-tested path.
+        limits = wgpu::Limits::default().using_resolution(adapter.limits());
+    } else {
+        limits.max_storage_buffer_binding_size = adapter.limits().max_storage_buffer_binding_size;
+        limits.max_buffer_size = adapter.limits().max_buffer_size;
+        limits.max_sampled_textures_per_shader_stage =
+            limits.max_sampled_textures_per_shader_stage.max(
+                adapter
+                    .limits()
+                    .max_sampled_textures_per_shader_stage
+                    .min(crate::pipelines::scene::PANE_MASK_TEXTURES),
+            );
+    }
+    // an older or smaller graphics chip (an OpenGL one, a GT 530) does not reach the
+    // WebGPU defaults: asked for them anyway, the device was never opened
+    if !limits.check_limits(&adapter.limits()) {
+        log::warn!(
+            "{}: below the standard limits; using what it has",
+            info.name
+        );
+        limits = adapter.limits();
+    }
+    // OMSI_GPU_LIMITS=default|downlevel: the WebGPU defaults (or the downlevel ones) and
+    // nothing more, whatever this machine could do - to find what a stricter driver refuses
+    match omsi_cfg::flags::OMSI_GPU_LIMITS.var() {
+        Some("default") => limits = wgpu::Limits::default(),
+        Some("downlevel") => limits = wgpu::Limits::downlevel_defaults(),
+        _ => {}
+    }
+    // the shadow atlas is two maps wide: no wider than the card draws
+    let format = format
+        .or_else(|| {
+            surface.map(|s| {
+                let formats = s.get_capabilities(adapter).formats;
+                // (an Android driver lists the plain RGBA8 first: the picture, written in
+                // linear light for an sRGB target, came out dark and flat)
+                if cfg!(target_os = "android") {
+                    if let Some(f) = formats.iter().find(|f| f.is_srgb()) {
+                        return *f;
+                    }
+                }
+                formats[0]
+            })
+        })
+        .unwrap_or(wgpu::TextureFormat::Rgba8UnormSrgb);
+    // Every target the scene is drawn into with multisampling (the swap chain or mirror
+    // format, the HDR target of the enhanced path and its screen mask, the depth buffer)
+    // must take the sample count, and the colour targets must resolve. A device judges
+    // that by the WebGPU table, which promises only 1x and 4x, unless it was asked for
+    // the adapter's own table: the launcher's "2x MSAA" (which Apple GPUs do support)
+    // was a fatal validation error before the first frame because the adapter's table
+    // said yes and the device's said no. So the adapter's table is asked for when the
+    // wanted count needs it (2x, 8x), and the count is checked against the table the
+    // device will use.
+    let wanted = match options.msaa {
+        1 | 2 | 4 | 8 => options.msaa,
+        _ => MSAA,
+    };
+    let targets = [
+        format,
+        wgpu::TextureFormat::Rgba16Float,
+        DEPTH_FORMAT,
+        MASK_FORMAT,
+    ];
+    let adapter_table_needed = !targets.iter().all(|&f| {
+        supports_msaa(
+            f.guaranteed_format_features(wgpu::Features::empty()).flags,
+            f,
+            wanted,
+        )
+    });
+    let mut required_features = if adapter_table_needed && info.backend != wgpu::Backend::Noop {
+        adapter.features() & wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+    } else {
+        wgpu::Features::empty()
+    };
+    if omsi_cfg::flags::OMSI_GPU_TIMERS.is_set() {
+        required_features |= adapter.features() & wgpu::Features::TIMESTAMP_QUERY;
+    }
+    // (FSR 3 on Vulkan picks its 16 bit shaders by what the card has, not what the device enabled)
+    if info.backend == wgpu::Backend::Vulkan
+        && options
+            .temporal
+            .is_some_and(|t| t.upscaler == crate::temporal::TemporalUpscaler::Fsr3)
+    {
+        required_features |= adapter.features() & wgpu::Features::SHADER_F16;
+    }
+    // DXT textures stay compressed on the GPU where it takes them (Apple silicon does);
+    // OMSI_NO_BC=1 uploads everything as RGBA (the old way, for comparisons), and so does
+    // the settings' `gpu_texture_compression` off
+    if !omsi_cfg::flags::OMSI_NO_BC.is_set() && options.gpu_texture_compression {
+        required_features |= adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC;
+    } else if !options.gpu_texture_compression {
+        log::info!(
+            "GPU texture compression off in the settings: DXT/BC textures are decoded to RGBA"
+        );
+    }
+    if intel_vulkan_safe {
+        // Keep vkCreateDevice entirely free of optional extensions. Compressed source
+        // textures are decoded to RGBA by upload_texture on this device.
+        required_features = wgpu::Features::empty();
+    }
+    // the driver's compiled pipelines kept for the next start (Vulkan, OpenGL)
+    if !intel_vulkan_safe {
+        required_features |= pipeline_cache::wanted(adapter);
+        // (the vehicles' blank display textures cleared on the GPU, `add_blank_texture`)
+        required_features |= adapter.features() & wgpu::Features::CLEAR_TEXTURE;
+    }
+    // Enhanced+: hardware ray queries where the device has them (Apple silicon from the
+    // M3/A17 on, RTX and RDNA 2 cards and newer through Vulkan and Direct3D 12 - with DXC,
+    // which the Windows build ships beside the game); OMSI_NO_RT=1 leaves them out. Should
+    // the device refuse its work all the same, it falls back to Enhanced (`rt_error`).
+    let ray_query = options.ray_tracing
+        && !intel_vulkan_safe
+        && info.backend != wgpu::Backend::Noop
+        && adapter
+            .features()
+            .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
+        && !omsi_cfg::flags::OMSI_NO_RT.is_set();
+    if ray_query {
+        required_features |= wgpu::Features::EXPERIMENTAL_RAY_QUERY;
+        limits = limits.using_acceleration_structure_values(adapter.limits());
+    } else if options.ray_tracing {
+        log::warn!(
+            "{}: no hardware ray queries; Enhanced+ is drawn as Enhanced",
+            info.name
+        );
+    }
+    (
+        limits,
+        format,
+        wanted,
+        targets,
+        required_features,
+        ray_query,
+    )
 }
 
 /// Only a chip with no BC at all (a phone's), not one whose BC a setting turned off.
@@ -816,10 +865,10 @@ impl Renderer {
         options: RenderOptions,
     ) -> Renderer {
         use pipelines::{
-            coronas, defaults, enhanced, errors, mip, overlays, passes, post, scene, shadows, sky,
-            ssao, upscale,
+            coronas, defaults, enhanced, errors, mip, overlays, passes, post, scene, sky, ssao,
+            upscale,
         };
-        let (msaa, shadow_size) = (options.msaa, options.shadow_size);
+        let msaa = options.msaa;
         RT_GBUF.store(options.ray_tracing, std::sync::atomic::Ordering::Relaxed);
         let errors = errors::install(&device, format, &options);
         let leave_out_enhanced = passes::leave_out_enhanced(&options, &adapter_name);
@@ -830,24 +879,7 @@ impl Renderer {
         }
         let scene = scene::SceneBase::new(&device, leave_out_enhanced, options.detailed_trees);
         let hdr_format = wgpu::TextureFormat::Rgba16Float;
-        let shadows = shadows::build(
-            &device,
-            &scene,
-            shadow_size,
-            !leave_out_enhanced && !options.no_enhanced,
-            options.light_shadows >= 2,
-        );
-        if shadows.size < shadow_size {
-            update_ceiling(|ceiling| {
-                if let Some(c) = ceiling.as_mut() {
-                    c.shadow_size = c.shadow_size.min(shadows.size);
-                }
-            });
-        }
-        let options = RenderOptions {
-            shadow_size: shadows.size,
-            ..options
-        };
+        let (shadows, options) = build_shadow_maps(&device, &scene, options, leave_out_enhanced);
         let defaults = defaults::build(&device, &queue, options.anisotropy);
         let (coronas, corona_texture) = coronas::Coronas::new(&device, &queue, &scene);
         let precip = crate::passes::PrecipMap::new(&device);
@@ -1018,44 +1050,8 @@ impl Renderer {
                 bounce_prev: None,
                 bounce_reproj: (Mat4::ZERO.to_cols_array_2d(), 0.0),
             },
-            shadows: ShadowRes {
-                shadow_far_cache: std::cell::Cell::new((
-                    Mat4::IDENTITY,
-                    0,
-                    DVec3::ZERO,
-                    Vec3::ZERO,
-                )),
-                shadow_near_cache: std::cell::Cell::new((
-                    Mat4::IDENTITY,
-                    0,
-                    DVec3::ZERO,
-                    Vec3::ZERO,
-                )),
-                shadow_close_cache: std::cell::Cell::new((Mat4::IDENTITY, DVec3::ZERO, Vec3::ZERO)),
-                xr_shadow_cache: std::cell::Cell::new(None),
-                shadow_clear_pipeline: shadows.clear_pipeline,
-                lamp_tiles: Default::default(),
-                cabin_motion: Default::default(),
-                precip,
-                shadow_view: shadows.view,
-                shadow_view_far: shadows.view_far,
-                lamp_atlas: shadows.lamp_atlas,
-                lamp_matrices: std::cell::RefCell::new(vec![Mat4::ZERO; LAMP_SHADOWS]),
-                shadow_sampler: shadows.sampler,
-                shadow_layout: scene.shadow_layout,
-                shadow_pipelines: shadows.pipelines,
-            },
-            history: ViewHistory {
-                triple_culling: Default::default(),
-                xr_culling: Default::default(),
-                flicker: std::cell::RefCell::new(HashMap::new()),
-                main_bundles: Default::default(),
-                mirror_bundles: Default::default(),
-                bundle_stats: Default::default(),
-                cull_drawn: std::cell::RefCell::new(Vec::new()),
-                object_sizes: Default::default(),
-                object_sizes_scratch: Default::default(),
-            },
+            shadows: shadow_resources(shadows, precip, scene.shadow_layout),
+            history: new_view_history(),
             errors: GpuErrors {
                 gpu_error: errors.gpu_error,
                 rt_error: errors.rt_error,
@@ -1161,5 +1157,71 @@ impl Renderer {
             rt,
             mesh_pages: false,
         }
+    }
+}
+
+fn build_shadow_maps(
+    device: &wgpu::Device,
+    scene: &pipelines::scene::SceneBase,
+    options: RenderOptions,
+    leave_out_enhanced: bool,
+) -> (pipelines::shadows::Shadows, RenderOptions) {
+    let shadow_size = options.shadow_size;
+    let shadows = pipelines::shadows::build(
+        device,
+        scene,
+        shadow_size,
+        !leave_out_enhanced && !options.no_enhanced,
+        options.light_shadows >= 2,
+    );
+    if shadows.size < shadow_size {
+        update_ceiling(|ceiling| {
+            if let Some(c) = ceiling.as_mut() {
+                c.shadow_size = c.shadow_size.min(shadows.size);
+            }
+        });
+    }
+    let options = RenderOptions {
+        shadow_size: shadows.size,
+        ..options
+    };
+    (shadows, options)
+}
+
+fn shadow_resources(
+    shadows: pipelines::shadows::Shadows,
+    precip: crate::passes::PrecipMap,
+    shadow_layout: wgpu::BindGroupLayout,
+) -> ShadowRes {
+    ShadowRes {
+        shadow_far_cache: std::cell::Cell::new((Mat4::IDENTITY, 0, DVec3::ZERO, Vec3::ZERO)),
+        shadow_near_cache: std::cell::Cell::new((Mat4::IDENTITY, 0, DVec3::ZERO, Vec3::ZERO)),
+        shadow_close_cache: std::cell::Cell::new((Mat4::IDENTITY, DVec3::ZERO, Vec3::ZERO)),
+        xr_shadow_cache: std::cell::Cell::new(None),
+        shadow_clear_pipeline: shadows.clear_pipeline,
+        lamp_tiles: Default::default(),
+        cabin_motion: Default::default(),
+        precip,
+        shadow_view: shadows.view,
+        shadow_view_far: shadows.view_far,
+        lamp_atlas: shadows.lamp_atlas,
+        lamp_matrices: std::cell::RefCell::new(vec![Mat4::ZERO; LAMP_SHADOWS]),
+        shadow_sampler: shadows.sampler,
+        shadow_layout,
+        shadow_pipelines: shadows.pipelines,
+    }
+}
+
+fn new_view_history() -> ViewHistory {
+    ViewHistory {
+        triple_culling: Default::default(),
+        xr_culling: Default::default(),
+        flicker: std::cell::RefCell::new(HashMap::new()),
+        main_bundles: Default::default(),
+        mirror_bundles: Default::default(),
+        bundle_stats: Default::default(),
+        cull_drawn: std::cell::RefCell::new(Vec::new()),
+        object_sizes: Default::default(),
+        object_sizes_scratch: Default::default(),
     }
 }

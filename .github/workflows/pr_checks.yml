@@ -74,6 +74,16 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash scripts/arch-guard.sh
 
+      # The guard's growth limit itself, when the guard changes: scripts/arch-guard-test.sh.
+      - name: Crate layers guard tests
+        if: ${{ !cancelled() }}
+        run: |
+          if git diff --quiet "$BASE" HEAD -- scripts/arch-guard.sh scripts/arch-guard-test.sh; then
+            echo "The arch guard is not changed."
+            exit 0
+          fi
+          bash scripts/arch-guard-test.sh
+
       - name: Drive page layouts
         if: ${{ !cancelled() }}
         run: |

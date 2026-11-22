@@ -213,9 +213,11 @@ flags! {
     OMSI_DEBUG_AI_WIDE: Bool, Debug, Use, "off", "Log every tenth of a second an AI car standing over 1.5 m beside its way.";
     OMSI_DEBUG_ANIM: Text, Debug, Once, "-", "Log the animations of the meshes whose file name contains this text.";
     OMSI_DEBUG_BOARDS: Bool, Debug, Use, "off", "Log boarding at bus stops.";
+    OMSI_DEBUG_CABLES: Bool, Debug, Use, "off", "Log every control cable value a train car reads when it changes.";
     OMSI_DEBUG_CAMERA: Num, Debug, Once, "1", "Camera arm log: 1 the types and what stops the arm, 2 also every frame.";
     OMSI_DEBUG_CAR: Num, Debug, Use, "-", "Log the state of the AI car with this id every step.";
     OMSI_DEBUG_CAREER: Bool, Debug, Use, "off", "Log the jolts the career scoring counts.";
+    OMSI_DEBUG_CAR_VARS: Text, Debug, Use, "-", "Log each change, per car of a train, of the script variables and strings whose name contains one of these comma-separated texts.";
     OMSI_DEBUG_COLLISION: Bool, Debug, Use, "off", "Log the player's collision state.";
     OMSI_DEBUG_CONES: Bool, Debug, Use, "off", "Log the light coronas and beams prepared per frame.";
     OMSI_DEBUG_CULL: Num, Debug, Frame, "off", "Log what near and in the picture is left out of the draw list, and why.";

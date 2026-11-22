@@ -240,10 +240,7 @@ fn reload_cabin(
     let Some(h) = humans else {
         return Ok("Cabin drawn anew (no passengers in this game)".into());
     };
-    let key: Vec<PathBuf> = part_defs(&p.vehicle)
-        .iter()
-        .map(|d| d.path.clone())
-        .collect();
+    let key = omsi_sim::people::PeopleSim::cabin_key_of(&p.vehicle);
     let old = h.cabins.remove(&key).flatten();
     let new = h.cabin_for(&p.vehicle);
     let aboard = h.people_in(omsi_sim::people::BusId::Player);
