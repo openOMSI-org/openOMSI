@@ -1165,7 +1165,6 @@ impl Settings {
         text.push_str(&format!("puddles={}\n", self.puddles));
         text.push_str(&format!("gpu_texture_compression={}\n", self.gpu_texture_compression as u8));
         text.push_str(&format!("passenger_animation={}\n", self.passenger_animation));
-        text.push_str(&format!("pax_no_ticket={}\n", self.pax_no_ticket as u8));
         text.push_str(&format!("passenger_connections={}\npassenger_transfer_percent={}\n", self.passenger_connections as u8, self.passenger_transfer_percent));
         text.push_str(&format!("passenger_hailing={}\n", self.passenger_hailing as u8));
         text.push_str(&format!("passenger_full_bus_reaction={}\n", self.passenger_full_bus_reaction as u8));
