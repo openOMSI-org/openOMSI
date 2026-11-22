@@ -91,34 +91,34 @@ mod admission;
 pub use admission::source_ip;
 mod paths;
 pub use paths::{human_path, vehicle_path};
-mod join_target;
 mod hardware_id;
+mod join_target;
 pub use hardware_id::*;
-pub use join_target::{describe_join, parse_join, JoinTarget};
+pub use join_target::{JoinTarget, describe_join, parse_join};
 pub mod addrs;
 pub mod bridge;
+mod traffic_net;
+pub mod traffic_table;
 pub mod wire;
 pub mod world;
-pub mod traffic_table;
-mod traffic_net;
 pub use traffic_net::TrafficNetStats;
-pub mod vars;
-pub mod var_schema;
-pub mod scripttex;
-pub mod freetex;
 pub mod ai_context;
+pub mod freetex;
+pub mod scripttex;
 pub mod sounds;
+pub mod var_schema;
+pub mod vars;
 pub mod voice_net;
 pub use voice_net::{VoiceIn, VoicePolicy};
+mod discovery;
+mod host_ports;
+pub mod hostkey;
+pub mod official;
+pub mod remote_text;
+pub mod tunnel;
 pub mod ws;
 pub mod ws_api;
 mod ws_http;
-pub mod tunnel;
-pub mod official;
-pub mod hostkey;
-mod host_ports;
-mod discovery;
-pub mod remote_text;
 pub use remote_text::is_fingerprint;
 
 use std::cell::Cell;
@@ -154,7 +154,9 @@ pub use wire::{
 /// 16: `REALM`: the hardware identifier is made for each host owner, not the same everywhere.
 /// 17: the timetable buses' fleet number, plate and depot file in `TRAF` (`meta numbers`): a
 /// game of 16 drew the map's buses without numbers and with another depot's signs.
-pub const PROTOCOL: u32 = 17;
+/// 18: the AI script context pages only the static trip; `schedule_active` rides in the
+/// header, so a timetable bus's context no longer restarts while it runs (#3957).
+pub const PROTOCOL: u32 = 18;
 /// (omsi-plugin's `MULTIPLAYER_PORTS` keeps `omsi.send` off this one and the `PORT_RANGE` after it.)
 pub const DEFAULT_PORT: u16 = 27015;
 /// Ports a host tries after the default one when that is taken (a second session on the
@@ -217,12 +219,12 @@ const SOUND_ACK_RATE: (f32, f32) = (2048.0, 8192.0);
 use voice_net::VOICE_RATE;
 const MESSAGE_RATE: (f32, f32) = (10.0, 20.0);
 const CHAT_RATE: (f32, f32) = (1.0, 3.0);
-mod receive_budget;
-mod receive_world;
 mod join_queue;
 mod parked;
-pub use parked::{is_parked, FIRST_PARKED_ID};
+mod receive_budget;
+mod receive_world;
 pub use join_queue::LOADING_ALIVE;
+pub use parked::{FIRST_PARKED_ID, is_parked};
 // ---------------------------------------------------------------------------------------
 // session codes
 
@@ -397,7 +399,10 @@ impl SessionCode {
             let mut v = 0usize;
             for k in 0..5 {
                 let bit = i * 5 + k;
-                let b = bytes.get(bit / 8).map(|x| (x >> (7 - bit % 8)) & 1).unwrap_or(0);
+                let b = bytes
+                    .get(bit / 8)
+                    .map(|x| (x >> (7 - bit % 8)) & 1)
+                    .unwrap_or(0);
                 v = (v << 1) | b as usize;
             }
             chars.push(ALPHABET[v] as char);
@@ -420,13 +425,20 @@ impl SessionCode {
         }
         lengths
             .into_iter()
-            .find(|&l| l < s.len() && l.div_ceil(4) * 4 == s.len() && s.as_bytes()[l..].iter().all(|c| *c == ALPHABET[0]))
+            .find(|&l| {
+                l < s.len()
+                    && l.div_ceil(4) * 4 == s.len()
+                    && s.as_bytes()[l..].iter().all(|c| *c == ALPHABET[0])
+            })
             .map(|l| &s[..l])
     }
 
     /// The lengths a code is written with (its last group filled to four).
     fn written_lengths() -> Vec<usize> {
-        Self::valid_lengths().into_iter().map(|l| l.div_ceil(4) * 4).collect()
+        Self::valid_lengths()
+            .into_iter()
+            .map(|l| l.div_ceil(4) * 4)
+            .collect()
     }
 
     /// The code lengths (characters after `OMSI-`) that exist: one address, or two to
@@ -470,11 +482,16 @@ impl SessionCode {
                 Some(v) => v,
                 None if matches!(c, b'0' | b'O' | b'1' | b'I') => {
                     return Err(format!(
-                    "the character '{}' never appears in a session code - check the character that looks like it",
-                    c as char
-                ))
+                        "the character '{}' never appears in a session code - check the character that looks like it",
+                        c as char
+                    ));
                 }
-                None => return Err(format!("the character '{}' is not part of a session code", c as char)),
+                None => {
+                    return Err(format!(
+                        "the character '{}' is not part of a session code",
+                        c as char
+                    ));
+                }
             };
             for k in (0..5).rev() {
                 bits.push(((v >> k) & 1) as u8);
@@ -584,11 +601,7 @@ pub fn random_session_id() -> u64 {
     );
     h.write_u32(std::process::id());
     let v = h.finish() & 0xFFFF_FFFF_FFFF;
-    if v == 0 {
-        1
-    } else {
-        v
-    }
+    if v == 0 { 1 } else { v }
 }
 
 /// The addresses a session code carries: those of this machine another player can reach
@@ -877,16 +890,29 @@ impl Pose {
         // the vehicle's fingerprint and height go last (an older game reads the fields it
         // knows and passes these by); their room is kept first, so long texts or pictures
         // never make an INFO too long to be taken in, nor cut what the bus is
-        let content = if is_fingerprint(&self.content) { self.content.as_str() } else { "" };
-        let tail = format!("|{content}|{:.2}", finite_or(self.height, 0.0).clamp(0.0, 10.0));
+        let content = if is_fingerprint(&self.content) {
+            self.content.as_str()
+        } else {
+            ""
+        };
+        let tail = format!(
+            "|{content}|{:.2}",
+            finite_or(self.height, 0.0).clamp(0.0, 10.0)
+        );
         // the display texts get what room is left in one datagram (long vehicle and figure
         // paths and a destination in another alphabet made an INFO too long to be taken in:
         // the others never learnt which bus the player drove)
         let room = MAX_DATAGRAM.saturating_sub(head.len() + figure.len() + 2 + tail.len());
-        let info = format!("{head}{}|{figure}", encode_texts(&self.texts, MAX_TEXTS, MAX_TEXT_LEN, room));
+        let info = format!(
+            "{head}{}|{figure}",
+            encode_texts(&self.texts, MAX_TEXTS, MAX_TEXT_LEN, room)
+        );
         // the `[matl_freetex]` pictures in what room is left
         let room = MAX_DATAGRAM.saturating_sub(info.len() + 1 + tail.len());
-        format!("{info}|{}{tail}", encode_texts(&self.freetex, MAX_FREETEX, MAX_FREETEX_LEN, room))
+        format!(
+            "{info}|{}{tail}",
+            encode_texts(&self.freetex, MAX_FREETEX, MAX_FREETEX_LEN, room)
+        )
     }
 
     /// The info fields of an `INFO` message (checked and cleaned), or None.
@@ -912,12 +938,33 @@ impl Pose {
             width: num(8, 0.0, 8.0)?,
             box_offset: num(9, -40.0, 40.0)?,
             table: u32::from_str_radix(parts[10].trim(), 16).ok()?,
-            tour: parts.get(11).map(|t| clean_text(t, MAX_FIELD)).unwrap_or_default(),
-            texts: parts.get(12).map(|t| decode_texts(t, MAX_TEXTS, MAX_TEXT_LEN)).unwrap_or_default(),
-            figure: parts.get(13).and_then(|f| human_path(f)).unwrap_or_default(),
-            freetex: parts.get(14).map(|t| remote_text::only_relative(decode_texts(t, MAX_FREETEX, MAX_FREETEX_LEN))).unwrap_or_default(),
-            content: parts.get(15).map(|c| c.trim()).filter(|c| is_fingerprint(c)).map(str::to_string).unwrap_or_default(),
-            height: parts.get(16).and_then(|h| h.trim().parse::<f32>().ok()).filter(|h| h.is_finite() && (0.0..=10.0).contains(h)).unwrap_or(0.0),
+            tour: parts
+                .get(11)
+                .map(|t| clean_text(t, MAX_FIELD))
+                .unwrap_or_default(),
+            texts: parts
+                .get(12)
+                .map(|t| decode_texts(t, MAX_TEXTS, MAX_TEXT_LEN))
+                .unwrap_or_default(),
+            figure: parts
+                .get(13)
+                .and_then(|f| human_path(f))
+                .unwrap_or_default(),
+            freetex: parts
+                .get(14)
+                .map(|t| remote_text::only_relative(decode_texts(t, MAX_FREETEX, MAX_FREETEX_LEN)))
+                .unwrap_or_default(),
+            content: parts
+                .get(15)
+                .map(|c| c.trim())
+                .filter(|c| is_fingerprint(c))
+                .map(str::to_string)
+                .unwrap_or_default(),
+            height: parts
+                .get(16)
+                .and_then(|h| h.trim().parse::<f32>().ok())
+                .filter(|h| h.is_finite() && (0.0..=10.0).contains(h))
+                .unwrap_or(0.0),
             ..Default::default()
         })
     }
@@ -990,11 +1037,7 @@ impl Pose {
 }
 
 fn finite_or(v: f32, or: f32) -> f32 {
-    if v.is_finite() {
-        v
-    } else {
-        or
-    }
+    if v.is_finite() { v } else { or }
 }
 
 /// Text from the network or for it: no field separators or control characters, no
@@ -1014,7 +1057,11 @@ fn encode_texts(texts: &[String], max: usize, max_len: usize, room: usize) -> St
         .iter()
         .take(max)
         .map(|t| {
-            let t: String = t.chars().filter(|c| !c.is_control()).take(max_len).collect();
+            let t: String = t
+                .chars()
+                .filter(|c| !c.is_control())
+                .take(max_len)
+                .collect();
             t.bytes().map(|b| format!("{b:02x}")).collect::<String>()
         })
         .scan(0usize, |used, h| {
@@ -1034,8 +1081,14 @@ fn decode_texts(field: &str, max: usize, max_len: usize) -> Vec<String> {
         .split(',')
         .take(max)
         .map(|h| {
-            let bytes: Vec<u8> = (0..h.len() / 2).filter_map(|i| u8::from_str_radix(h.get(2 * i..2 * i + 2)?, 16).ok()).collect();
-            String::from_utf8_lossy(&bytes).chars().filter(|c| !c.is_control()).take(max_len).collect()
+            let bytes: Vec<u8> = (0..h.len() / 2)
+                .filter_map(|i| u8::from_str_radix(h.get(2 * i..2 * i + 2)?, 16).ok())
+                .collect();
+            String::from_utf8_lossy(&bytes)
+                .chars()
+                .filter(|c| !c.is_control())
+                .take(max_len)
+                .collect()
         })
         .collect()
 }
@@ -1466,7 +1519,8 @@ impl LanSession {
             starting: false,
             lost_at: None,
             timed_out: false,
-            join_timeout: omsi_cfg::flags::OMSI_LAN_JOIN_TIMEOUT.live_var()
+            join_timeout: omsi_cfg::flags::OMSI_LAN_JOIN_TIMEOUT
+                .live_var()
                 .ok()
                 .and_then(|v| v.parse::<f32>().ok())
                 .filter(|v| *v > 0.0)
@@ -1629,16 +1683,27 @@ impl LanSession {
         match parse_join(target)? {
             JoinTarget::Discover => match Self::discover(DEFAULT_PORT, name, world, wait) {
                 Ok(Some(s)) => Ok(s),
-                Ok(None) => Err(format!("no host answered on the local network within {:.0} s (is a session hosted? a firewall may block UDP ports {DEFAULT_PORT}-{})", wait.as_secs_f32(), DEFAULT_PORT + PORT_RANGE - 1)),
+                Ok(None) => Err(format!(
+                    "no host answered on the local network within {:.0} s (is a session hosted? a firewall may block UDP ports {DEFAULT_PORT}-{})",
+                    wait.as_secs_f32(),
+                    DEFAULT_PORT + PORT_RANGE - 1
+                )),
                 Err(e) => Err(format!("searching the network failed: {e}")),
             },
-            JoinTarget::Direct { addrs, session, protocol } => {
+            JoinTarget::Direct {
+                addrs,
+                session,
+                protocol,
+            } => {
                 if let Some(p) = protocol {
                     if p as u32 != PROTOCOL {
-                        return Err(format!("the session code was made by a game with LAN protocol {p}, this game speaks protocol {PROTOCOL} - both players need the same version"));
+                        return Err(format!(
+                            "the session code was made by a game with LAN protocol {p}, this game speaks protocol {PROTOCOL} - both players need the same version"
+                        ));
                     }
                 }
-                Self::join_addr(addrs, session, name, world).map_err(|e| format!("cannot open a network socket: {e}"))
+                Self::join_addr(addrs, session, name, world)
+                    .map_err(|e| format!("cannot open a network socket: {e}"))
             }
         }
     }
@@ -1666,7 +1731,10 @@ impl LanSession {
                 let parts: Vec<&str> = text.split('|').collect();
                 if parts[0] == "HERE" {
                     if field(&parts, 1).parse::<u32>().ok() != Some(PROTOCOL) {
-                        log::warn!("LAN: host at {from} speaks protocol {} (we speak {PROTOCOL}); skipping it", clean_text(field(&parts, 1), 8));
+                        log::warn!(
+                            "LAN: host at {from} speaks protocol {} (we speak {PROTOCOL}); skipping it",
+                            clean_text(field(&parts, 1), 8)
+                        );
                         continue;
                     }
                     log::info!(
@@ -1713,7 +1781,9 @@ impl LanSession {
 
     /// Everybody else as we know them.
     pub fn peers(&self) -> impl Iterator<Item = &Peer> {
-        self.peers.values().filter(|p| !self.parked.hidden.contains(&p.pose.id))
+        self.peers
+            .values()
+            .filter(|p| !self.parked.hidden.contains(&p.pose.id))
     }
 
     pub fn peer_count(&self) -> usize {
@@ -1753,7 +1823,9 @@ impl LanSession {
     /// Host: cap remote players independently of the protocol's hard ceiling.
     /// Dedicated servers use server.cfg's max_players; reconnects of existing peers remain allowed.
     pub fn set_peer_limit(&mut self, players: usize) {
-        if self.role == Role::Host { self.max_peers = players.clamp(1, MAX_PEERS); }
+        if self.role == Role::Host {
+            self.max_peers = players.clamp(1, MAX_PEERS);
+        }
     }
 
     /// Our world after the game took over the host's (a client): only what still differs
@@ -1854,7 +1926,10 @@ impl LanSession {
     }
 
     fn on_command(&mut self, parts: &[&str], from: SocketAddr) {
-        let (Some(sender), Some(to)) = (field(parts, 1).parse::<u32>().ok(), field(parts, 2).parse::<u32>().ok()) else {
+        let (Some(sender), Some(to)) = (
+            field(parts, 1).parse::<u32>().ok(),
+            field(parts, 2).parse::<u32>().ok(),
+        ) else {
             return;
         };
         let text = clean_text(field(parts, 3), MAX_CHAT);
@@ -1864,7 +1939,10 @@ impl LanSession {
         match self.role {
             Role::Host => {
                 // only from the player it says, at their address
-                if self.checked_peer(sender, from, MESSAGE_RATE, PeerTraffic::Message).is_none() {
+                if self
+                    .checked_peer(sender, from, MESSAGE_RATE, PeerTraffic::Message)
+                    .is_none()
+                {
                     return;
                 }
                 if to == self.my_id {
@@ -1887,13 +1965,19 @@ impl LanSession {
         if self.role != Role::Host {
             return;
         }
-        let Some(p) = self.peers.remove(&id) else { return };
+        let Some(p) = self.peers.remove(&id) else {
+            return;
+        };
         let reason = clean_text(reason, 200);
         if let Some(a) = p.addr {
             self.send(format!("KICK|{reason}").as_bytes(), a);
         }
         if ban {
-            self.banned.push(admission::Ban { nonce: p.nonce, ip: p.addr.and_then(admission::source_ip), why: reason.clone() });
+            self.banned.push(admission::Ban {
+                nonce: p.nonce,
+                ip: p.addr.and_then(admission::source_ip),
+                why: reason.clone(),
+            });
         }
         self.broadcast(format!("BYE|{id}").as_bytes(), None);
         self.notice(format!("{} was sent away by the host", p.label()), None);
@@ -1902,15 +1986,29 @@ impl LanSession {
     /// Host: the hardware bans the door holds (identifier, reason), replacing the list; a
     /// player already here whose identifier is on it is sent away at once.
     pub fn set_hardware_bans(&mut self, bans: Vec<(String, String)>) {
-        let bans: Vec<(String, String)> = bans.into_iter().filter(|b| is_hardware_id(&b.0)).collect();
+        let bans: Vec<(String, String)> =
+            bans.into_iter().filter(|b| is_hardware_id(&b.0)).collect();
         let here: Vec<(u32, String)> = self
             .peers
             .iter()
-            .filter_map(|(id, p)| p.hwid.as_ref().and_then(|h| bans.iter().find(|b| &b.0 == h)).map(|b| (*id, b.1.clone())))
+            .filter_map(|(id, p)| {
+                p.hwid
+                    .as_ref()
+                    .and_then(|h| bans.iter().find(|b| &b.0 == h))
+                    .map(|b| (*id, b.1.clone()))
+            })
             .collect();
         self.hw_bans = bans;
         for (id, why) in here {
-            self.kick(id, &if why.is_empty() { "you are banned from this session".to_string() } else { format!("you are banned from this session (reason: {why})") }, false);
+            self.kick(
+                id,
+                &if why.is_empty() {
+                    "you are banned from this session".to_string()
+                } else {
+                    format!("you are banned from this session (reason: {why})")
+                },
+                false,
+            );
         }
     }
 
@@ -1942,7 +2040,11 @@ impl LanSession {
             return Err("only the host speaks to one player".into());
         }
         let name = clean_text(name, MAX_NAME);
-        let addr = self.peers.get(&to).and_then(|p| p.addr).ok_or_else(|| format!("no player {to}"))?;
+        let addr = self
+            .peers
+            .get(&to)
+            .and_then(|p| p.addr)
+            .ok_or_else(|| format!("no player {to}"))?;
         self.send(format!("SAY|{}|{name}|{text}", self.my_id).as_bytes(), addr);
         log::info!("LAN chat to {to} <{name}> {text}");
         Ok(())
@@ -2001,7 +2103,9 @@ impl LanSession {
 
     /// The moment of this frame on our clock (ms), for stamping what is sent of it.
     pub fn stamp_ms(&self) -> u32 {
-        self.frame_ms.map(|m| m.max(0.0) as u32).unwrap_or_else(|| self.world_ms())
+        self.frame_ms
+            .map(|m| m.max(0.0) as u32)
+            .unwrap_or_else(|| self.world_ms())
     }
 
     /// The address of player `id` (host).
@@ -2032,7 +2136,8 @@ impl LanSession {
         if let Some(to) = self.peer_addr(id).filter(|_| self.role == Role::Host) {
             let text = desc.encode();
             self.send(text.as_bytes(), to);
-            self.world_sent.set(self.world_sent.get() + text.len() as u64);
+            self.world_sent
+                .set(self.world_sent.get() + text.len() as u64);
         }
     }
 
@@ -2065,7 +2170,8 @@ impl LanSession {
         {
             let text = desc.encode();
             self.send(text.as_bytes(), h);
-            self.world_sent.set(self.world_sent.get() + text.len() as u64);
+            self.world_sent
+                .set(self.world_sent.get() + text.len() as u64);
         }
     }
 
@@ -2095,7 +2201,10 @@ impl LanSession {
         if let (Role::Client, Some(h), true) = (self.role, self.host, self.connected) {
             for chunk in people.chunks(64) {
                 let ids: Vec<String> = chunk.iter().map(|i| i.to_string()).collect();
-                self.send(format!("CLAIM|{}|{}", self.my_id, ids.join(",")).as_bytes(), h);
+                self.send(
+                    format!("CLAIM|{}|{}", self.my_id, ids.join(",")).as_bytes(),
+                    h,
+                );
             }
         }
     }
@@ -2199,14 +2308,20 @@ impl LanSession {
     fn on_realm(&mut self, parts: &[&str]) {
         let realm = field(parts, 1).trim();
         if is_hardware_id(realm) {
-            self.hardware_id = self.hardware_base.as_deref().map(|m| host_hardware_id(m, realm));
+            self.hardware_id = self
+                .hardware_base
+                .as_deref()
+                .map(|m| host_hardware_id(m, realm));
         }
         self.realm_answered = true;
         self.hello_acc = self.hello_acc.max(1.0);
     }
 
     fn on_challenge(&mut self, parts: &[&str]) {
-        if let (Some(_), Ok(c)) = (self.rebind_secret, u64::from_str_radix(field(parts, 1).trim(), 16)) {
+        if let (Some(_), Ok(c)) = (
+            self.rebind_secret,
+            u64::from_str_radix(field(parts, 1).trim(), 16),
+        ) {
             self.answer = Some(c);
             if self.connected {
                 self.confirm = true;
@@ -2303,7 +2418,7 @@ impl LanSession {
         if self.role == Role::Client
             && !self.connected
             && (self.rejected.is_none()
-                    && self.hello_acc >= (if self.waiting_for_slot { 2.0 } else { 1.0 })
+                && self.hello_acc >= (if self.waiting_for_slot { 2.0 } else { 1.0 })
                 || self.timed_out && self.hello_acc >= 5.0)
         {
             self.hello_acc = 0.0;
@@ -2369,7 +2484,8 @@ impl LanSession {
                 p.drop_counts[10]
             );
             gone.push(id);
-            self.gone_lately.push((p.nonce, p.pose.name.clone(), id, now));
+            self.gone_lately
+                .push((p.nonce, p.pose.name.clone(), id, now));
             if self.role == Role::Host {
                 self.broadcast(format!("BYE|{id}").as_bytes(), None);
                 self.notice(format!("{} lost the connection", p.label()), None);
@@ -2401,7 +2517,11 @@ impl LanSession {
             return;
         }
         let why = match (self.welcome.is_some(), self.lost_at) {
-            (false, _) if self.trying >= self.join_timeout.as_secs_f32() + (if self.waiting_for_slot { 300.0 } else { 0.0 }) => {
+            (false, _)
+                if self.trying
+                    >= self.join_timeout.as_secs_f32()
+                        + (if self.waiting_for_slot { 300.0 } else { 0.0 }) =>
+            {
                 self.no_answer(self.join_timeout)
             }
             (true, Some(at)) if at.elapsed() >= RECONNECT_TIMEOUT => format!(
@@ -2447,7 +2567,8 @@ impl LanSession {
             self.host = None;
         }
         log::info!("LAN: reconnecting");
-        self.events.push(LanEvent::Notice("reconnecting ...".into()));
+        self.events
+            .push(LanEvent::Notice("reconnecting ...".into()));
         true
     }
 
@@ -2467,10 +2588,19 @@ impl LanSession {
         } else if usize::from(last - first) + 1 == ports.len() {
             format!("ports {first}-{last}")
         } else {
-            format!("ports {}", ports.iter().map(u16::to_string).collect::<Vec<_>>().join(", "))
+            format!(
+                "ports {}",
+                ports
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         };
         let one_machine = self.candidates.first().is_some_and(|first| {
-            self.candidates.iter().all(|candidate| candidate.ip() == first.ip())
+            self.candidates
+                .iter()
+                .all(|candidate| candidate.ip() == first.ip())
         });
         if self.refused >= 2 && one_machine {
             return format!(
@@ -2535,7 +2665,8 @@ impl LanSession {
         // Sent when it changes, but no more often than INFO_MIN_GAP: a roller blind turning
         // through its numbers or a pilot screen changes the `[matl_freetex]` pictures many
         // times a second, and the host took ten messages a second and dropped the rest.
-        if (info != self.last_info && self.info_acc >= INFO_MIN_GAP) || self.info_acc >= INFO_EVERY {
+        if (info != self.last_info && self.info_acc >= INFO_MIN_GAP) || self.info_acc >= INFO_EVERY
+        {
             self.info_acc = 0.0;
             match self.role {
                 Role::Host => self.broadcast(info.as_bytes(), None),
@@ -2549,7 +2680,10 @@ impl LanSession {
         }
         if self.role == Role::Host && self.clock_acc >= CLOCK_EVERY {
             self.clock_acc = 0.0;
-            self.broadcast(format!("CLOCK|{}|{}", self.world.fields(), self.clock_speed).as_bytes(), None);
+            self.broadcast(
+                format!("CLOCK|{}|{}", self.world.fields(), self.clock_speed).as_bytes(),
+                None,
+            );
         }
         if let (Role::Client, Some(at), None, Some(h)) =
             (self.role, self.place, self.near.as_ref(), self.host)
@@ -2572,7 +2706,9 @@ impl LanSession {
         let started = Instant::now();
         let mut packets = 0usize;
         loop {
-            if self.receive_budget_yield(packets, started) { break; }
+            if self.receive_budget_yield(packets, started) {
+                break;
+            }
             let (n, from) = match self.socket.recv_from(&mut self.buf) {
                 Ok(x) => x,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
@@ -2612,17 +2748,30 @@ impl LanSession {
                     self.host_seen = Instant::now();
                 }
             }
-            if n == 0 || n > MAX_DATAGRAM { continue; }
+            if n == 0 || n > MAX_DATAGRAM {
+                continue;
+            }
             let mut data = self.buf[..n].to_vec();
             if data[0] == 0xEA {
                 let expected = match self.role {
                     Role::Client => self.rebind_secret,
-                    Role::Host => self.peers.values().find(|p| p.addr == Some(from)).map(|p| p.secret),
+                    Role::Host => self
+                        .peers
+                        .values()
+                        .find(|p| p.addr == Some(from))
+                        .map(|p| p.secret),
                 };
-                if expected.is_none() || data.get(1..17) != expected.as_ref().map(|s| s.as_slice()) { continue; }
+                if expected.is_none() || data.get(1..17) != expected.as_ref().map(|s| s.as_slice())
+                {
+                    continue;
+                }
                 data.drain(..17);
-                if !session_sync::session_bound(&data) { continue; }
-            } else if session_sync::session_bound(&data) { continue; }
+                if !session_sync::session_bound(&data) {
+                    continue;
+                }
+            } else if session_sync::session_bound(&data) {
+                continue;
+            }
             if data[0] == 0xEB {
                 self.on_string_ack(&data, from);
                 continue;
@@ -2633,7 +2782,9 @@ impl LanSession {
                 }
                 continue;
             }
-            if self.on_table_or_voice(&data, from) { continue; }
+            if self.on_table_or_voice(&data, from) {
+                continue;
+            }
             if data[0] == world::WORLD_MAGIC {
                 self.on_world_datagram(&data, from, n);
                 continue;
@@ -2683,9 +2834,21 @@ impl LanSession {
                 ("HELLO", Role::Host) => self.on_hello(&parts, from),
                 // Ignore unexpected addresses: they must not impersonate a host or
                 // end an in-progress join by injecting a fabricated welcome.
-                ("WELCOME", Role::Client) if self.accepts_host_source(from) => self.on_welcome(&parts, from),
-                ("CHALLENGE", Role::Client) if self.host == Some(from) || (self.host.is_none() && self.candidates.contains(&from)) => self.on_challenge(&parts),
-                ("REALM", Role::Client) if self.host == Some(from) || (self.host.is_none() && self.candidates.contains(&from)) => self.on_realm(&parts),
+                ("WELCOME", Role::Client) if self.accepts_host_source(from) => {
+                    self.on_welcome(&parts, from)
+                }
+                ("CHALLENGE", Role::Client)
+                    if self.host == Some(from)
+                        || (self.host.is_none() && self.candidates.contains(&from)) =>
+                {
+                    self.on_challenge(&parts)
+                }
+                ("REALM", Role::Client)
+                    if self.host == Some(from)
+                        || (self.host.is_none() && self.candidates.contains(&from)) =>
+                {
+                    self.on_realm(&parts)
+                }
                 // Temporary server-side capacity limits are not permanent rejections.
                 ("WAIT", Role::Client)
                     if !self.connected
@@ -2700,10 +2863,15 @@ impl LanSession {
                     // trying those, but a refusal from the one machine whose ports we
                     // are scanning is final, just like an explicit-port refusal.
                     if self.host.is_none()
-                        && self.candidates.iter().any(|candidate| candidate.ip() != from.ip())
+                        && self
+                            .candidates
+                            .iter()
+                            .any(|candidate| candidate.ip() != from.ip())
                     {
                         if self.other_reject.is_none() {
-                            log::info!("LAN: {from} turned us away ({reason}); still trying the host's other addresses");
+                            log::info!(
+                                "LAN: {from} turned us away ({reason}); still trying the host's other addresses"
+                            );
                         }
                         self.other_reject = Some(format!("{from}: {reason}"));
                         continue;
@@ -2741,7 +2909,11 @@ impl LanSession {
                 ("CLOCK", Role::Client) => {
                     let world = WorldInfo::from_fields(&parts, 1);
                     // (after the world's fields: how fast the host's clock runs)
-                    let speed = field(&parts, 6).parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0 && *v <= 1000.0).unwrap_or(1.0);
+                    let speed = field(&parts, 6)
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|v| v.is_finite() && *v > 0.0 && *v <= 1000.0)
+                        .unwrap_or(1.0);
                     self.clock_speed = speed;
                     if !world.date.is_empty() {
                         self.host_clock = Some(HostClock {
@@ -2756,7 +2928,9 @@ impl LanSession {
                 ("KICK", Role::Client) => {
                     let reason = clean_text(field(&parts, 1), 200);
                     log::warn!("LAN: the host sent us away: {reason}");
-                    self.events.push(LanEvent::Notice(format!("the host sent you away: {reason}")));
+                    self.events.push(LanEvent::Notice(format!(
+                        "the host sent you away: {reason}"
+                    )));
                     self.rejected = Some(format!("the host sent you away: {reason}"));
                     self.turned_away = Some(reason);
                     self.connected = false;
@@ -2765,7 +2939,10 @@ impl LanSession {
                     let Some(id) = field(&parts, 1).parse::<u32>().ok() else {
                         continue;
                     };
-                    if self.checked_peer(id, from, MESSAGE_RATE, PeerTraffic::Message).is_none() {
+                    if self
+                        .checked_peer(id, from, MESSAGE_RATE, PeerTraffic::Message)
+                        .is_none()
+                    {
                         continue;
                     }
                     if parts[0] == "WANT" {
@@ -2793,7 +2970,10 @@ impl LanSession {
                     else {
                         continue;
                     };
-                    if self.checked_peer(id, from, MESSAGE_RATE, PeerTraffic::Message).is_none() {
+                    if self
+                        .checked_peer(id, from, MESSAGE_RATE, PeerTraffic::Message)
+                        .is_none()
+                    {
                         continue;
                     }
                     if let Some(d @ world::Desc::Person { .. }) = world::Desc::decode(&parts) {
@@ -2889,7 +3069,10 @@ impl LanSession {
             if category_count.is_power_of_two() {
                 log::warn!(
                     "LAN: player {id} exceeded {traffic:?} rate ({:.0}/s, burst {:.0}); {} {traffic:?} datagram(s) dropped, {} total",
-                    rate.0, rate.1, category_count, peer.dropped
+                    rate.0,
+                    rate.1,
+                    category_count,
+                    peer.dropped
                 );
             }
             return None;
@@ -2959,7 +3142,8 @@ impl LanSession {
         let relay;
         {
             let peer = match self.role {
-                Role::Host => match self.checked_peer(id, from, MESSAGE_RATE, PeerTraffic::Message) {
+                Role::Host => match self.checked_peer(id, from, MESSAGE_RATE, PeerTraffic::Message)
+                {
                     Some(p) => p,
                     None => return,
                 },
@@ -3044,7 +3228,10 @@ impl LanSession {
             if chat_drops.is_power_of_two() {
                 log::warn!(
                     "LAN: player {id} exceeded Chat rate ({:.0}/s, burst {:.0}); {} Chat datagram(s) dropped, {} total",
-                    CHAT_RATE.0, CHAT_RATE.1, chat_drops, peer.dropped
+                    CHAT_RATE.0,
+                    CHAT_RATE.1,
+                    chat_drops,
+                    peer.dropped
                 );
             }
             return;
@@ -3082,7 +3269,8 @@ impl LanSession {
             self.schema_receiver.retain_peers(&keep);
             self.car_receiver.retain_peers(&keep);
             gone.push(id);
-            self.gone_lately.push((p.nonce, p.pose.name.clone(), id, Instant::now()));
+            self.gone_lately
+                .push((p.nonce, p.pose.name.clone(), id, Instant::now()));
             if self.role == Role::Host {
                 self.broadcast(text.as_bytes(), None);
                 self.notice(format!("{} left", p.label()), None);
@@ -3115,14 +3303,21 @@ impl LanSession {
                 clean_text(asked, 16),
                 session_hex(self.session)
             );
-            self.reject(from, "wrong session code: this host now runs another session - ask for the current code");
+            self.reject(
+                from,
+                "wrong session code: this host now runs another session - ask for the current code",
+            );
             return;
         }
         let bus = vehicle_path(field(parts, 4)).unwrap_or_default();
         let world = WorldInfo::from_fields(parts, 5);
         let nonce = u64::from_str_radix(field(parts, 10), 16).ok();
-        let hwid = Some(field(parts, 13)).filter(|h| is_hardware_id(h)).map(str::to_string);
-        if nonce.is_some_and(|n| self.retired_nonces.contains(&n)) { return; }
+        let hwid = Some(field(parts, 13))
+            .filter(|h| is_hardware_id(h))
+            .map(str::to_string);
+        if nonce.is_some_and(|n| self.retired_nonces.contains(&n)) {
+            return;
+        }
         // a returning client keeps its id; so does one that tried several of our addresses
         // at once, and the address its latest hello came from is the one it has chosen
         let same = |p: &Peer| p.addr == Some(from) || (nonce.is_some() && p.nonce == nonce);
@@ -3136,13 +3331,23 @@ impl LanSession {
             Some((id, _)) => {
                 let id = *id;
                 let by_secret = match (nonce, self.peers.get(&id)) {
-                    (Some(n), Some(p)) => self.rebind.proven(n, from, &p.secret, field(parts, 11), field(parts, 12)),
+                    (Some(n), Some(p)) => {
+                        self.rebind
+                            .proven(n, from, &p.secret, field(parts, 11), field(parts, 12))
+                    }
                     _ => false,
                 };
-                let proven = by_secret || self.peers.get(&id).is_some_and(|p| p.addr == Some(from) || !p.settled);
+                let proven = by_secret
+                    || self
+                        .peers
+                        .get(&id)
+                        .is_some_and(|p| p.addr == Some(from) || !p.settled);
                 if !proven {
                     if let Some(n) = nonce {
-                        self.send(format!("CHALLENGE|{:016x}", self.rebind.challenge(n, from)).as_bytes(), from);
+                        self.send(
+                            format!("CHALLENGE|{:016x}", self.rebind.challenge(n, from)).as_bytes(),
+                            from,
+                        );
                     }
                     return;
                 }
@@ -3158,7 +3363,10 @@ impl LanSession {
                 (id, None)
             }
             None if self.peers.len() >= self.max_peers => {
-                log::warn!("LAN: '{name}' at {from} wants to join, but {} players are here already; turned away", self.max_peers);
+                log::warn!(
+                    "LAN: '{name}' at {from} wants to join, but {} players are here already; turned away",
+                    self.max_peers
+                );
                 self.reject(
                     from,
                     &format!("the session is full ({} players)", self.max_peers),
@@ -3171,27 +3379,59 @@ impl LanSession {
                 return;
             }
             None if field(parts, 13).is_empty() && self.ban_realm.is_some() => {
-                self.send(format!("REALM|{}", self.ban_realm.as_deref().unwrap_or_default()).as_bytes(), from);
+                self.send(
+                    format!("REALM|{}", self.ban_realm.as_deref().unwrap_or_default()).as_bytes(),
+                    from,
+                );
                 return;
             }
             None if self.hw_required && hwid.is_none() => {
                 self.reject(from, "this session needs the game's identifier for bans: turn it on in the launcher's settings, or update the game");
                 return;
             }
-            None if hwid.as_deref().is_some_and(|h| self.hw_bans.iter().any(|b| b.0 == h)) => {
-                let why = self.hw_bans.iter().find(|b| Some(b.0.as_str()) == hwid.as_deref()).map(|b| b.1.clone()).unwrap_or_default();
-                log::info!("LAN: '{name}' at {from} is banned on this machine's hardware list; turned away");
-                self.reject(from, &if why.is_empty() { "you are banned from this session".to_string() } else { format!("you are banned from this session (reason: {why})") });
+            None if hwid
+                .as_deref()
+                .is_some_and(|h| self.hw_bans.iter().any(|b| b.0 == h)) =>
+            {
+                let why = self
+                    .hw_bans
+                    .iter()
+                    .find(|b| Some(b.0.as_str()) == hwid.as_deref())
+                    .map(|b| b.1.clone())
+                    .unwrap_or_default();
+                log::info!(
+                    "LAN: '{name}' at {from} is banned on this machine's hardware list; turned away"
+                );
+                self.reject(
+                    from,
+                    &if why.is_empty() {
+                        "you are banned from this session".to_string()
+                    } else {
+                        format!("you are banned from this session (reason: {why})")
+                    },
+                );
                 return;
             }
-            None if (nonce.is_none() && !self.banned.is_empty()) || admission::banned(&self.banned, nonce, from).is_some() => {
-                let why = admission::banned(&self.banned, nonce, from).unwrap_or_default().to_string();
-                self.reject(from, &if why.is_empty() { "the host has sent you away from this session".to_string() } else { format!("the host has sent you away from this session (reason: {why})") });
+            None if (nonce.is_none() && !self.banned.is_empty())
+                || admission::banned(&self.banned, nonce, from).is_some() =>
+            {
+                let why = admission::banned(&self.banned, nonce, from)
+                    .unwrap_or_default()
+                    .to_string();
+                self.reject(
+                    from,
+                    &if why.is_empty() {
+                        "the host has sent you away from this session".to_string()
+                    } else {
+                        format!("the host has sent you away from this session (reason: {why})")
+                    },
+                );
                 return;
             }
             None => {
                 // back after a lost connection (or a restart of the game): the number it had
-                self.gone_lately.retain(|g| g.3.elapsed() < Duration::from_secs(300));
+                self.gone_lately
+                    .retain(|g| g.3.elapsed() < Duration::from_secs(300));
                 let back = self
                     .gone_lately
                     .iter()
@@ -3203,7 +3443,11 @@ impl LanSession {
                         _ => false,
                     })
                     .map(|k| self.gone_lately.remove(k));
-                let id = match back.as_ref().map(|g| g.2).filter(|i| !self.peers.contains_key(i)) {
+                let id = match back
+                    .as_ref()
+                    .map(|g| g.2)
+                    .filter(|i| !self.peers.contains_key(i))
+                {
                     Some(i) => i,
                     None => self.fresh_id(),
                 };
@@ -3259,7 +3503,9 @@ impl LanSession {
             }
         };
         if self.peers.get(&id).is_some_and(|p| p.nonce != nonce) {
-            if let Some(old) = self.peers.get(&id).and_then(|p| p.nonce) { self.retired_nonces.insert(old); }
+            if let Some(old) = self.peers.get(&id).and_then(|p| p.nonce) {
+                self.retired_nonces.insert(old);
+            }
             self.reset_peer_sync(id);
             self.broadcast(format!("BYE|{id}").as_bytes(), Some(id));
             let mut peer = Peer::new(Some(from), Pose::placeholder(id, &name, &bus));
@@ -3311,7 +3557,10 @@ impl LanSession {
         }
         if let Some(secret) = admission::parse_secret(field(parts, 11)) {
             if u64::from_str_radix(field(parts, 12), 16).ok() != Some(self.nonce)
-                || self.retired_secrets.contains(&secret) { return; }
+                || self.retired_secrets.contains(&secret)
+            {
+                return;
+            }
             if self.rebind_secret.is_some_and(|old| old != secret) {
                 self.retired_secrets.push(self.rebind_secret.unwrap());
                 self.peers.clear();
@@ -3358,7 +3607,16 @@ impl LanSession {
         }
         self.host_seen = Instant::now();
         if first {
-            log::info!("LAN: connected to '{host_name}' (session {}), we are player {id}; the host's world: {} {} {:02}:{:02} weather '{}' season '{}'", session_hex(session), world.map, world.date, (world.time / 3600.0) as i32, ((world.time % 3600.0) / 60.0) as i32, world.weather, world.season);
+            log::info!(
+                "LAN: connected to '{host_name}' (session {}), we are player {id}; the host's world: {} {} {:02}:{:02} weather '{}' season '{}'",
+                session_hex(session),
+                world.map,
+                world.date,
+                (world.time / 3600.0) as i32,
+                ((world.time % 3600.0) / 60.0) as i32,
+                world.weather,
+                world.season
+            );
             self.events.push(LanEvent::Notice(format!(
                 "connected to {host_name}'s session ({players} player(s))"
             )));

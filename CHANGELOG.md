@@ -21,6 +21,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **Backing through points keeps the train together**: backing, the vehicle follows the track its
   train lies on, and the train's rear end takes the way the points are set (or the rear cab's
   indicator says) and throws them.
+- **Plugins can lay cards of their own over the navigator's map**: a plugin that fills the navigator's frame (`frame = true`) can put small cards of its own on the map - the next stop, the speed, whatever it shows - with the `map` element's new `overlay` key, at any corner or edge of the map and held inside it (what crosses the map's edge is left out, the card's corners stay rounded); their buttons take clicks as in the rest of the panel (`omsi.ui.version` 8). An example is `docs/examples/plugins/navigator_map.lua`.
 - **mX Graphics (Experimental)** on a Mac: Settings → Graphics → Display → *mX Graphics (Experimental)* draws the game on Metal with [mX](https://github.com/openOMSI-org/mX), openOMSI's own graphics library, instead of wgpu, from the next start. The picture is meant to be the same. It is an early step: the game's shaders do not use mX's bindless textures yet, and in the tests so far it spent less processor time on a frame than wgpu and the same time on the graphics chip. Ray tracing and frame generation stay off with it; where mX cannot open the graphics chip, the game draws with wgpu as before. Off by default. mX's Direct3D 12 and Vulkan have not drawn the game on a real graphics card yet, so Windows and Linux do not offer the switch; `OMSI_MX=on` tries them for one run (without DLSS, FSR 3 and VR), and `OMSI_MX=off` turns mX off for a run on a Mac.
 - **Plugins see the AI vehicles' size**: `omsi.traffic.list()`, `get`, `nearest` and `ahead`
   give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,
@@ -628,6 +629,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   sound's name (a cut-off download, a web page), the warning now gives its path, its size and its
   first bytes. Before, the log only had the line `probe reach EOF at n bytes` with no file name,
   which read like the cause of a crash (#3956); that line is still logged just before ours.
+- **LAN: timetable buses no longer stay invisible on a client**: a scheduled bus or
+  trolleybus with a long line (several pages of timetable) could stay "waiting for a context"
+  on a client for good, because its pages started over each time its schedule state changed.
+  Only the trip itself is paged now, every page of a new trip goes out quickly, and the client
+  keeps the last complete trip until the new one is whole. Both players need this version
+  (LAN protocol 18) (#3957).
 - **Graphics in the processor (Intel UHD, AMD APUs) no longer run out of memory on big maps**:
   their texture allowance came from what the driver may hand out in all, up to 30 % of it,
   which on a 16 GB machine was 2.2 GB of textures beside a big map and the game itself, and the
