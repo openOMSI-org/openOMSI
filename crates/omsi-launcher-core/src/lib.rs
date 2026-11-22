@@ -11,9 +11,11 @@ pub mod ai_lists;
 pub mod crash;
 pub mod depot;
 mod file_dialog;
+mod game_setting_options;
 mod graphics_profile_transfer;
 #[cfg(test)]
 mod graphics_profile_transfer_tests;
+pub use game_setting_options::game_setting_options;
 mod graphics_profiles;
 mod hof_sync;
 pub mod i18n;
@@ -3052,12 +3054,12 @@ pub fn graphics_presets() -> [(&'static str, Value); 6] {
     let msaa = [1, 4, 2, 4, 4, 4];
     let scale = ["0.75", "auto", "auto", "auto", "auto", "auto"];
     let anisotropy = [2, 8, 8, 8, 16, 16];
-    let shadow = [1024, 2048, 2048, 2048, 4096, 4096];
+    let shadow = [512, 2048, 2048, 2048, 4096, 4096];
     let mirror = [128, 256, 256, 512, 512, 512];
     let refresh = ["eco", "full", "full", "full", "full", "full"];
-    let view = ["600", "auto", "auto", "auto", "2000", "2000"];
+    let view = ["300", "auto", "auto", "auto", "2000", "2000"];
     let obj_size = [0.03, 0.013, 0.013, 0.01, 0.005, 0.005];
-    let obj_dist = ["500", "auto", "auto", "auto", "1500", "1500"];
+    let obj_dist = ["300", "auto", "auto", "auto", "1500", "1500"];
     let rain = ["low", "high", "high", "high", "high", "high"];
     let light_shadows = ["off", "off", "street", "street", "all", "all"];
     let street_light = ["off", "off", "off", "auto", "on", "on"];
@@ -3386,6 +3388,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     }
     // Human posing; the original OMSI behavior remains the default.
     v["passenger_animation"] = json!("original");
+    // A fare paid without a ticket (#2742); off, as OMSI has always sold tickets
+    v["pax_no_ticket"] = json!(false);
     v["photo_mode"] = json!("simple");
     // the people as drawn: the content's own, or the Rocketbox avatars (this computer only)
     v["character_models"] = json!("original");
@@ -3404,6 +3408,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // stop, as in OMSI; #1773)
     v["ai_wait_timed_stops_only"] = json!(false);
     v["pax_bad_driving"] = json!(true);
+    v["pax_late_tolerance_min"] = json!(5.0);
     v["pax_free_drive"] = json!("auto");
     v["pax_board_when_stopped"] = json!(false);
     passenger_defaults(&mut v);
@@ -3901,6 +3906,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 v[&k] = json!(match val.to_ascii_lowercase().as_str() {
                     "vulkan" => "vulkan",
                     "dx12" => "dx12",
+                    "dx11" => "dx11",
                     "gl" => "gl",
                     "angle" => "angle",
                     _ => "auto",
@@ -4254,6 +4260,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "mirror_particles"
             | "ai_wait_timed_stops_only"
             | "pax_bad_driving"
+            | "pax_bad_driving"
+            | "pax_no_ticket"
             | "pax_board_when_stopped"
             | "passenger_connections"
             | "passenger_hailing"
@@ -4261,6 +4269,15 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "pax_short_rides_stand"
             | "auto_announce"
             | "ambient" => v[&k] = json!(b(val)),
+            "pax_late_tolerance_min" => {
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .unwrap_or(5.0)
+                        .clamp(0.0, 120.0)
+                )
+            }
             "head_tracking_source" => v[&k] = json!(head_tracking_source(val)),
             "tobii_edges" => v[&k] = json!(b(val)),
             "head_tracking_smoothing" | "head_tracking_dead_zone" => {
@@ -4629,6 +4646,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         {
             "vulkan" => "vulkan",
             "dx12" => "dx12",
+            "dx11" => "dx11",
             "gl" => "gl",
             "angle" => "angle",
             _ => "auto",
@@ -5021,6 +5039,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     ));
     text.push_str(&format!("pax_bad_driving={}\n", b("pax_bad_driving", true)));
     text.push_str(&format!(
+        "pax_late_tolerance_min={}\n",
+        f("pax_late_tolerance_min", 5.0).clamp(0.0, 120.0)
+    ));
+    text.push_str(&format!(
         "pax_free_drive={}\n",
         match v
             .get("pax_free_drive")
@@ -5057,6 +5079,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("pax_short_rides_stand", false)
     ));
     text.push_str(&format!("auto_announce={}\n", b("auto_announce", false)));
+    text.push_str(&format!("pax_no_ticket={}\n", b("pax_no_ticket", false)));
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
         f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0),
