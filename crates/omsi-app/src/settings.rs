@@ -1546,8 +1546,8 @@ pub mod bus_seats;
 mod passenger_connections_tests;
 
 #[cfg(test)]
-#[path = "settings/pax_late_tolerance_tests.rs"]
-mod pax_late_tolerance_tests;
-#[cfg(test)]
 #[path = "settings/axis_dead_zones_tests.rs"]
 mod axis_dead_zones_tests;
+#[cfg(test)]
+#[path = "settings/pax_late_tolerance_tests.rs"]
+mod pax_late_tolerance_tests;

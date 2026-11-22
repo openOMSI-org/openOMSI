@@ -2,9 +2,8 @@
 
 use super::Func;
 
-/// A dead zone for each axis the settings can give one to (#1344): an old pedal whose
-/// potentiometer trembles at rest wants its own, while the wheel is smooth, and the other way
-/// round. An axis with none set here follows the setting for all of them (`ctrl_deadzone`).
+/// An old pedal whose potentiometer trembles at rest wants its own dead zone, while the wheel
+/// is smooth, and the other way round (#1344).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Zones {
     pub steer: Option<f32>,
@@ -14,13 +13,8 @@ pub struct Zones {
 }
 
 impl Zones {
-    /// The widest a dead zone may be, as the general setting has it.
     pub const MAX: f32 = 0.3;
 
-    /// Read from the settings' `throttle=0.12;brake=0.08` (`steering`, `gas` and
-    /// `throttlebrake` are the other names it knows; a decimal comma is read as such, the
-    /// entries being told apart by the semicolon only). What cannot be read, and what is not an
-    /// axis it knows, is left out.
     pub fn parse(s: &str) -> Zones {
         let mut z = Zones::default();
         for part in s.split(';') {
@@ -45,7 +39,6 @@ impl Zones {
         z
     }
 
-    /// The settings' form of them, the axes it has something for only.
     pub fn write(&self) -> String {
         let mut out: Vec<String> = Vec::new();
         for (name, v) in [
@@ -61,8 +54,6 @@ impl Zones {
         out.join(";")
     }
 
-    /// The dead zone of what the axis `f` does: its own, or `all` - the setting for the axes
-    /// without one.
     pub fn of(&self, f: Func, all: f32) -> f32 {
         let own = match f {
             Func::Steering => self.steer,
@@ -76,7 +67,6 @@ impl Zones {
     }
 }
 
-/// A zone as the settings write it: two places, no trailing zeros (`0.12`, `0`, `0.075`).
 fn trim_zone(v: f32) -> String {
     let s = format!("{v:.3}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
@@ -87,8 +77,6 @@ fn trim_zone(v: f32) -> String {
     }
 }
 
-/// An axis' value with its dead zone taken off, as the axis loop applies it: round the
-/// wheel's centre, or at a pedal's rest (#1344).
 pub fn axis_zone(v: f32, f: Func, dz: f32) -> f32 {
     let dz = dz.clamp(0.0, Zones::MAX);
     match f {
