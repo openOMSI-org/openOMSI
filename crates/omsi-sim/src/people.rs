@@ -131,6 +131,9 @@ mod destination_tests;
 mod no_ticket_tests;
 #[cfg(test)]
 #[rustfmt::skip]
+mod late_tolerance_tests;
+#[cfg(test)]
+#[rustfmt::skip]
 mod free_drive_tests;
 #[cfg(test)]
 #[rustfmt::skip]

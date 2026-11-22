@@ -133,7 +133,7 @@ impl PeopleSim {
                 }
             }
         }
-        if self.delay > 300.0 {
+        if self.late_tolerance > 0.0 && self.delay > self.late_tolerance {
             complaint_seen = true;
             if code == 0 && (self.rand_f() as f32) < whinge {
                 code = 2;

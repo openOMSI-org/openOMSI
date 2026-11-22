@@ -1,0 +1,15 @@
+[package]
+name = "omsi-mapdraw-mx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The maps' own picture: the palettes and the map's layers (omsi_map::layers) drawn as triangles - ground, water, woods, paving with its rim, tracks, trees and houses - and the navigator's roads, route and street names from the traffic network"
+
+[dependencies]
+omsi-cfg = { path = "../omsi-cfg" }
+omsi-map = { path = "../omsi-map" }
+omsi-sim = { path = "../omsi-sim" }
+omsi-ui = { package = "omsi-ui-mx", path = "../omsi-ui-mx" }
+glam.workspace = true
+hashbrown.workspace = true
+log.workspace = true

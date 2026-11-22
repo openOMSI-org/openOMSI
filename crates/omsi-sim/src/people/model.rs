@@ -241,6 +241,9 @@ pub fn arrive(from: DVec2, to: DVec2, pace: f64) -> DVec2 {
 /// Seconds after one passenger's greeting or complaint before anybody says another.
 pub const CHAT_PAUSE: f64 = 12.0;
 
+/// How late the player's bus may be before its boarding passengers say so (s): five
+/// minutes, as Omsi.exe had it. The player may allow more (#2718).
+pub const LATE_TOLERANCE: f64 = 300.0;
 /// How still a bus has to stand before the stop's passengers walk to it, when
 /// [`PeopleSim::board_when_stopped`] is on (m/s; #2757).
 pub const BOARD_STOPPED_SPEED: f64 = 0.2;
@@ -355,9 +358,12 @@ pub struct PeopleSim {
     pub density: f32,
     /// The clock's time of day in seconds (set by the app): day tickets sell by it.
     pub time_of_day: f64,
-    /// How late the player's bus is on its duty (s; set by the app): over five minutes,
+    /// How late the player's bus is on its duty (s; set by the app): over `late_tolerance`,
     /// boarding passengers may say so.
     pub delay: f64,
+    /// How late the bus may be before they say so (s): [`LATE_TOLERANCE`] unless the
+    /// settings say otherwise (#2718). Zero turns the complaint off.
+    pub late_tolerance: f64,
     /// The game's folder (the ticket pack's voices are found from it).
     pub root: std::path::PathBuf,
     /// What passengers said since the app last collected it (see `take_voice_lines`).
