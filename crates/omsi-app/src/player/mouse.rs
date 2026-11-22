@@ -515,8 +515,9 @@ impl Player {
                 // a plain click on a control the scripts only know as a drag: dragged to its
                 // other end (a click opened the NL/NG driver's door by the mouse's jitter
                 // and a second click never shut it again)
-                if allow_auto_drag && auto_drag_click(&ev, self.press_info.0, self.press_info.1) {
-                    if self.vehicle.has_trigger(&format!("{ev}_drag")) {
+                if auto_drag_click(&ev, self.press_info.0, self.press_info.1) {
+                    let has_drag = self.vehicle.has_trigger(&format!("{ev}_drag"));
+                    if has_drag && allow_auto_drag {
                         let anim = def
                             .animations
                             .first()
@@ -549,7 +550,7 @@ impl Player {
                                 t: 0.0,
                             });
                         }
-                    } else {
+                    } else if !has_drag {
                         // (a variable of the scripts is theirs to move; only one that the model
                         // alone names is flipped here, #3887)
                         let is_model_only = |v: &str| {
