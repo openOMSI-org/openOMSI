@@ -2932,3 +2932,5 @@
 "Default for every bus": "Mặc định cho mọi xe buýt"
 "Use for {bus}": "Dùng cho {bus}"
 "Profile {name} in use": "Đang dùng hồ sơ {name}"
+"Driving end {number} of {count}: {name}": "Buồng lái {number}/{count}: {name}"
+"At the wheel in the other cab": "Đang lái ở buồng lái bên kia"

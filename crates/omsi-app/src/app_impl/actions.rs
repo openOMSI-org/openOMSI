@@ -320,6 +320,9 @@ impl App {
                     && (self.cam.look != (0.0, 0.0) || self.cam.view_zoom.contains_key(&self.view));
                 if let Some(p) = self.player.as_mut() {
                     p.cam_choice = (0, 0);
+                    if let Some(k) = p.vehicle.active_cab {
+                        crate::on_foot::seat_in_cab(p, Some(k));
+                    }
                 }
                 self.cam.orbit = ORBIT_DEFAULT;
                 if eyed {
@@ -373,6 +376,14 @@ impl App {
                 let Some(p) = self.player.as_mut() else {
                     return true;
                 };
+                if self.view == "outside" {
+                    let back = name == "view_interiorcam_minus";
+                    if let Some(msg) = crate::on_foot::change_driving_end(p, back) {
+                        self.service_msg = Some((msg, 2.5));
+                        self.sync_view_look();
+                    }
+                    return true;
+                }
                 // (the interior cameras only cycle in the interior: from outside the keys
                 // would change an invisible camera)
                 if !matches!(self.view.as_str(), "driver" | "pax") {

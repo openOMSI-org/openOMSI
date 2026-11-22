@@ -124,6 +124,7 @@ impl App {
             )),
             situation_vars: Vec::new(),
             situation_strvars: Vec::new(),
+            situation_cars: Vec::new(),
             situation_odometer_km: None,
             situation_others: Vec::new(),
             line: None,

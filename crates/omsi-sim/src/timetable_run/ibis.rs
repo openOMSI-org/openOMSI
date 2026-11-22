@@ -64,14 +64,8 @@ pub fn player_ibis(
     // blind's own keys, not by its variables: the NL202 declares the roller blind's
     // variables without having one, and the AI trigger then gave its matrix a blank line
     // number that pushed the destination aside.
-    if has_roller_blind(v)
-        && v.var("elec_busbar_main_sw")
-            .map(|x| x > 0.5)
-            .unwrap_or(false)
-    {
-        set_line_to(v, line);
-        v.set_var("AI_target_index", target.terminus_index as f32);
-        v.trigger("ai_scheduled_settarget");
+    if has_roller_blind(v) && switched_on(v) {
+        turn_every_blind(v, line, target.terminus_index as usize);
     }
     log::info!(
         "IBIS: typing line '{}' to '{}' (line {} route {:?} destination {:?}, stop {})",
@@ -150,18 +144,42 @@ pub fn turn_roller_blind(
     pick: &mut Option<BlindPick>,
     starting: bool,
 ) {
-    if pick.is_none() || starting || !v.var("elec_busbar_main_sw").is_some_and(|x| x > 0.5) {
+    if pick.is_none() || starting || !switched_on(v) {
         return;
     }
     let Some(p) = pick.take() else { return };
-    set_line_to(v, &p.line);
-    v.set_var("AI_target_index", p.row as f32);
-    v.trigger("ai_scheduled_settarget");
+    turn_every_blind(v, &p.line, p.row);
     log::info!(
         "roller blind turned to destination {} on route '{}'",
         p.row,
         p.line
     );
+}
+
+/// Turn the roller blind of every car of the train to row `row` on `line`, each by its own
+/// script.
+fn turn_every_blind(v: &mut crate::VehicleInstance, line: &str, row: usize) {
+    set_line_to(v, line);
+    v.set_var("AI_target_index", row as f32);
+    let cab = v.active_cab.take();
+    v.trigger("ai_scheduled_settarget");
+    v.active_cab = cab;
+    let text = format!("{:>3}", line.trim());
+    for part in 0..v.trailers.len() {
+        if v.part_has_trigger(part, &BLIND_KEYS) {
+            v.set_part_var(part, "AI_target_index", row as f32);
+            v.set_part_str(part, "SetLineTo", &text);
+            v.trigger_part(part, "ai_scheduled_settarget");
+        }
+    }
+}
+
+/// Whether a bus with a roller blind is switched on, as far as its scripts say. A vehicle whose
+/// scripts keep no `elec_busbar_main_sw` has nothing to wait for.
+fn switched_on(v: &crate::VehicleInstance) -> bool {
+    !v.script_stores("elec_busbar_main_sw")
+        || v.var("elec_busbar_main_sw").is_some_and(|x| x > 0.5)
+        || v.var("elec_busbar_main").is_some_and(|x| x > 0.0)
 }
 
 /// The row of the depot file a hand-cranked roller blind shows, as its script gives
@@ -284,17 +302,18 @@ pub fn ibis_target(
 
 /// A hand-cranked roller blind (SD79 or SD83 type), known by its own keys.
 pub fn has_roller_blind(v: &crate::VehicleInstance) -> bool {
-    [
-        "rollband_sync",
-        "rlbnd_ziel_start",
-        //Likino 677 & ikarus i200 rollbands:
-        "bus_rollband_setL1",
-        "bus_rollband_setL2",
-        "bus_rollband_setL3",
-    ]
-    .iter()
-    .any(|t| v.ty.program.trigger(t).is_some())
+    BLIND_KEYS.iter().any(|t| v.ty.program.trigger(t).is_some())
 }
+
+/// The triggers a hand-cranked roller blind is known by.
+const BLIND_KEYS: [&str; 5] = [
+    "rollband_sync",
+    "rlbnd_ziel_start",
+    //Likino 677 & ikarus i200 rollbands:
+    "bus_rollband_setL1",
+    "bus_rollband_setL2",
+    "bus_rollband_setL3",
+];
 
 /// `SetLineTo` for the AI trigger. A roller blind turns one roller per character -
 /// hundreds, tens, units, with the letter suffixes only on the later rollers - so its
@@ -673,12 +692,12 @@ fn set_destination_at_display(
         );
         return;
     }
-    v.set_var("IBIS_LinieKurs", line_num);
-    v.set_var("IBIS_Linie_Complex", line_code as f32);
-    v.set_var("IBIS_Linie_Suffix", line_suffix);
-    v.set_var("IBIS_TerminusIndex", ti as f32);
+    v.set_var_with_cables("IBIS_LinieKurs", line_num);
+    v.set_var_with_cables("IBIS_Linie_Complex", line_code as f32);
+    v.set_var_with_cables("IBIS_Linie_Suffix", line_suffix);
+    v.set_var_with_cables("IBIS_TerminusIndex", ti as f32);
     v.set_var("IBIS_TerminusCode", code as f32);
-    v.set_var(
+    v.set_var_with_cables(
         "IBIS_RouteIndex",
         route_index.map(|r| r as f32).unwrap_or(-1.0),
     );

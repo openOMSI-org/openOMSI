@@ -552,7 +552,7 @@ fn a_destination_picked_from_the_list_is_that_one_of_its_name() {
 /// switch is on and the start-up is done.
 #[test]
 fn a_destination_picked_from_the_list_turns_the_roller_blind() {
-    let osc = "{trigger:rollband_sync}\n{end}\n{trigger:ai_scheduled_settarget}\n(L.L.AI_target_index) (S.L.rlbnd_ziel_target)\n(L.$.SetLineTo) (S.$.rlbnd_line)\n{end}\n";
+    let osc = "{trigger:rollband_sync}\n{end}\n{trigger:main}\n1 (S.L.elec_busbar_main_sw)\n{end}\n{trigger:ai_scheduled_settarget}\n(L.L.AI_target_index) (S.L.rlbnd_ziel_target)\n(L.$.SetLineTo) (S.$.rlbnd_line)\n{end}\n";
     let vars = "IBIS_LinieKurs\nIBIS_TerminusIndex\nIBIS_TerminusCode\nAI_target_index\nrlbnd_ziel_target\nelec_busbar_main_sw\n";
     let t = |code: i32, id: &str| omsi_vehicle::hof::Terminus {
         code,
@@ -596,6 +596,87 @@ fn a_destination_picked_from_the_list_turns_the_roller_blind() {
         set_player_destination_at(&mut ibis, &hof, "145", 1, &[]),
         None
     );
+}
+
+/// A blind on a vehicle whose scripts keep no `elec_busbar_main_sw` turns to the pick at
+/// once and stays there (it jumped to it, went back to empty and waited for good).
+#[test]
+fn a_roller_blind_without_a_main_switch_variable_stays_on_the_pick() {
+    let osc = "{trigger:rollband_sync}\n{end}\n{trigger:ai_scheduled_settarget}\n(L.L.AI_target_index) (S.L.rlbnd_ziel_target)\n{end}\n";
+    let vars = "IBIS_LinieKurs\nIBIS_TerminusIndex\nIBIS_TerminusCode\nAI_target_index\nrlbnd_ziel_target\nelec_busbar_main_sw\n";
+    let t = |code: i32, id: &str| omsi_vehicle::hof::Terminus {
+        code,
+        texture_id: id.into(),
+        strings: vec![id.to_uppercase()],
+        ..Default::default()
+    };
+    let hof = omsi_vehicle::Hof {
+        termini: vec![
+            t(0, "Empty"),
+            t(205, "U Ruhleben"),
+            t(154, "U Rathaus Spandau"),
+        ],
+        ..Default::default()
+    };
+    let mut v = script_test_vehicle(osc, vars, "SetLineTo\nrlbnd_line\nIBIS_terminus_name\n");
+    let mut pick = set_player_destination_at(&mut v, &hof, "145", 2, &[]);
+    turn_roller_blind(&mut v, &mut pick, false);
+    assert_eq!(pick, None);
+    assert_eq!(v.var("rlbnd_ziel_target"), Some(2.0));
+}
+
+/// A pick turns the blind of every car of a train, each by its own script, whichever cab the
+/// driver sits in.
+#[test]
+fn a_destination_picked_turns_the_blind_of_every_car() {
+    let osc = "{frame}\n(L.L.train_me_reverse) s0\n{end}\n{trigger:rollband_sync}\n{end}\n{trigger:ai_scheduled_settarget}\n(L.L.AI_target_index) (S.L.rlbnd_ziel_target)\n(L.$.SetLineTo) (S.$.rlbnd_line)\n{end}\n";
+    let vars = "IBIS_LinieKurs\nIBIS_TerminusIndex\nIBIS_TerminusCode\nAI_target_index\nrlbnd_ziel_target\ntrain_me_reverse\n";
+    let t = |code: i32, id: &str| omsi_vehicle::hof::Terminus {
+        code,
+        texture_id: id.into(),
+        strings: vec![id.to_uppercase()],
+        ..Default::default()
+    };
+    let hof = omsi_vehicle::Hof {
+        termini: vec![
+            t(0, "Empty"),
+            t(205, "U Ruhleben"),
+            t(154, "U Rathaus Spandau"),
+        ],
+        ..Default::default()
+    };
+    for cab in [None, Some(0)] {
+        let mut v = script_test_vehicle(osc, vars, "SetLineTo\nrlbnd_line\nIBIS_terminus_name\n");
+        let rear = v.ty.clone();
+        v.attach_trailer_ex(rear, true);
+        for _ in 0..3 {
+            v.update(0.02);
+        }
+        assert!(v.trailers[0].run.is_some());
+        v.active_cab = cab;
+        let mut pick = set_player_destination_at(&mut v, &hof, "145", 2, &[]);
+        turn_roller_blind(&mut v, &mut pick, false);
+        v.update(0.02);
+        assert_eq!(pick, None);
+        assert_eq!(
+            v.var("rlbnd_ziel_target"),
+            Some(2.0),
+            "the head car's blind"
+        );
+        assert_eq!(
+            v.trailers[0].run_var("rlbnd_ziel_target"),
+            Some(2.0),
+            "the rear car's blind"
+        );
+        assert_eq!(
+            v.trailers[0]
+                .run
+                .as_deref()
+                .and_then(|r| r.get_str("rlbnd_line"))
+                .map(str::trim),
+            Some("145")
+        );
+    }
 }
 
 #[test]

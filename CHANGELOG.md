@@ -29,6 +29,15 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   a car with a pantograph (the NF6D's) no longer makes it a metro car.
 - **Mirrors on every car of a train**: a coupled car's `reflexionN` mirrors show its own mirror
   cameras, numbered on from car to car, instead of the first car's.
+- **Drive a tram from either cab**: in a train with a cab at each end (the NF6D) walk
+  to the other cab and take its wheel (G), or switch driving ends from the outside view with the
+  interior-camera keys. That cab's own scripts then take the keys, the switches and the indicator,
+  and its cameras, driver figure, sounds, roller blinds and destination displays are its own. Every
+  car with scripts of its own pulls and brakes, and the cars talk over their control cables as in
+  OMSI 2. Camera changes glide inside a coupled part too.
+- **Backing through points keeps the train together**: backing, the vehicle follows the track its
+  train lies on, and the train's rear end takes the way the points are set (or the rear cab's
+  indicator says) and throws them.
 - **Plugins can lay cards of their own over the navigator's map**: a plugin that fills the navigator's frame (`frame = true`) can put small cards of its own on the map - the next stop, the speed, whatever it shows - with the `map` element's new `overlay` key, at any corner or edge of the map and held inside it (what crosses the map's edge is left out, the card's corners stay rounded); their buttons take clicks as in the rest of the panel (`omsi.ui.version` 8). An example is `docs/examples/plugins/navigator_map.lua`.
 - **mX Graphics (Experimental)** on a Mac: Settings → Graphics → Display → *mX Graphics (Experimental)* draws the game on Metal with [mX](https://github.com/openOMSI-org/mX), openOMSI's own graphics library, instead of wgpu, from the next start. The picture is meant to be the same. It is an early step: the game's shaders do not use mX's bindless textures yet, and in the tests so far it spent less processor time on a frame than wgpu and the same time on the graphics chip. Ray tracing and frame generation stay off with it; where mX cannot open the graphics chip, the game draws with wgpu as before. Off by default. mX's Direct3D 12 and Vulkan have not drawn the game on a real graphics card yet, so Windows and Linux do not offer the switch; `OMSI_MX=on` tries them for one run (without DLSS, FSR 3 and VR), and `OMSI_MX=off` turns mX off for a run on a Mac.
 - **Plugins see the AI vehicles' size**: `omsi.traffic.list()`, `get`, `nearest` and `ahead`

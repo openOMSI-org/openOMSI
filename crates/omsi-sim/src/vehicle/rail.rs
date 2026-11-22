@@ -109,26 +109,39 @@ impl VehicleInstance {
                 .filter_map(|t| t.run.as_deref_mut())
                 .map(|r| r.take_own_brakeforce())
                 .sum::<f32>();
+        let radius_of = |def: &omsi_vehicle::Vehicle, or: f32| {
+            let driven = def
+                .axles
+                .iter()
+                .filter(|a| a.driven)
+                .map(|a| a.wheel_diameter / 2.0)
+                .collect::<Vec<_>>();
+            if driven.is_empty() {
+                or
+            } else {
+                (driven.iter().sum::<f32>() / driven.len() as f32).max(0.15)
+            }
+        };
+        let radius = radius_of(&self.ty.def, 0.45);
+        // Omsi.exe runs every car on its own `M_Wheel` and `Brakeforce`: a car with its own
+        // scripts pulls and brakes too, turned round the other way.
+        let mut part_drive = 0.0f32;
+        for t in &self.trailers {
+            let Some(run) = t.run.as_deref() else {
+                continue;
+            };
+            if let Some(m) = run.own_stored("M_Wheel").filter(|m| m.is_finite()) {
+                let m = if t.reversed { -m } else { m };
+                part_drive += m / radius_of(&t.ty.def, radius);
+            }
+        }
         let brake = own + towed;
-        if m_wheel.abs() < 1.0 && brake < 1.0 {
+        let drive = m_wheel / radius + part_drive;
+        if drive.abs() < 1.0 && brake < 1.0 {
             return None;
         }
-        let driven = self
-            .ty
-            .def
-            .axles
-            .iter()
-            .filter(|a| a.driven)
-            .map(|a| a.wheel_diameter / 2.0)
-            .collect::<Vec<_>>();
-        let radius = if driven.is_empty() {
-            0.45
-        } else {
-            driven.iter().sum::<f32>() / driven.len() as f32
-        }
-        .max(0.15);
         Some(Forces {
-            drive: m_wheel / radius,
+            drive,
             brake,
             track_brake: 0.0,
         })

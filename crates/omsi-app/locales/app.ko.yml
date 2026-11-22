@@ -2983,3 +2983,5 @@
 "Default for every bus": "모든 버스의 기본값"
 "Use for {bus}": "{bus}에 사용"
 "Profile {name} in use": "프로필 {name} 사용 중"
+"Driving end {number} of {count}: {name}": "운전실 {number}/{count}: {name}"
+"At the wheel in the other cab": "반대편 운전실에서 운전 중"

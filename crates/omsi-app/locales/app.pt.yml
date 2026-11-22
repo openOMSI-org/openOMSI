@@ -4385,3 +4385,5 @@
 "Default for every bus": "Padrão para todos os ônibus"
 "Use for {bus}": "Usar para {bus}"
 "Profile {name} in use": "Perfil {name} em uso"
+"Driving end {number} of {count}: {name}": "Cabine {number} de {count}: {name}"
+"At the wheel in the other cab": "No comando da outra cabine"

@@ -3830,3 +3830,5 @@
 "Default for every bus": "Standard för alla bussar"
 "Use for {bus}": "Använd för {bus}"
 "Profile {name} in use": "Profilen {name} används"
+"Driving end {number} of {count}: {name}": "Förarhytt {number} av {count}: {name}"
+"At the wheel in the other cab": "Vid reglaget i den andra hytten"

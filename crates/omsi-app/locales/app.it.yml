@@ -3242,3 +3242,5 @@
 "Default for every bus": "Predefinito per ogni autobus"
 "Use for {bus}": "Usa per {bus}"
 "Profile {name} in use": "Profilo {name} in uso"
+"Driving end {number} of {count}: {name}": "Cabina {number} di {count}: {name}"
+"At the wheel in the other cab": "Alla guida nell'altra cabina"
