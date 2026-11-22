@@ -1,3 +1,0 @@
-test(sim): drive stuck pedestrian regression through tick_inner update (#3790)
-
-Signed-off-by: szambonurek-88 <szymonzolsztyna@gmail.com>
