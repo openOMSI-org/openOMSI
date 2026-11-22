@@ -439,9 +439,9 @@ pub struct Settings {
     /// `dx12`, `gl` or `angle` (OpenGL ES on ANGLE over DirectX 11, Windows; see
     /// `startup::backend_order`).
     pub graphics_api: String,
-    /// mX Graphics (Experimental, read on a Mac only): the game drawn by mX, openOMSI's own
-    /// graphics library, through wgpu; where mX cannot open a device, wgpu's own backends take
-    /// over (`startup::game_graphics_instance`; `OMSI_MX` overrides it on every system).
+    /// mX Graphics (Experimental, off by default): the whole game on mX, openOMSI's own
+    /// graphics library (the `*-mx` crates), with wgpu not started; off, the game is wgpu's
+    /// alone (`startup::mx_graphics`, read once at the start).
     pub mx_graphics: bool,
     /// Default motor polarity for wheels without a saved per-device direction.
     pub ff_invert: bool,

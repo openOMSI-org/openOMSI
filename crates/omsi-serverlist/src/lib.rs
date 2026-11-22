@@ -36,7 +36,10 @@ mod tests {
     fn only_an_https_service_is_taken() {
         assert_eq!(service_url(""), DEFAULT_SERVICE);
         assert_eq!(service_url("http://insecure.example"), DEFAULT_SERVICE);
-        assert_eq!(service_url("https://list.example.org/"), "https://list.example.org");
+        assert_eq!(
+            service_url("https://list.example.org/"),
+            "https://list.example.org"
+        );
         assert_eq!(service_url("https://a b"), DEFAULT_SERVICE);
     }
 }
