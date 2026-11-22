@@ -25,6 +25,18 @@ fn it_holds_the_speed_on_the_flat_uphill_and_downhill() {
 }
 
 #[test]
+fn cresting_a_hill_releases_the_throttle() {
+    let mut cruise = Cruise::new(50.0);
+    for _ in 0..600 {
+        cruise.pedals(40.0, 1.0 / 60.0);
+    }
+    assert_eq!(cruise.pedals(51.0, 1.0 / 60.0), (0.0, 0.0));
+    let (throttle, brake) = cruise.pedals(55.0, 1.0 / 60.0);
+    assert_eq!(throttle, 0.0);
+    assert!(brake > 0.0);
+}
+
+#[test]
 fn a_light_analog_brake_goes_through_and_a_firm_one_switches_it_off() {
     let mut c = Cruise::new(50.0);
     // well below the speed, so the controller alone would give throttle
