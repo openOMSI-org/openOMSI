@@ -187,7 +187,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[1].kind,
         Kind::Map {
             height: 180.0,
-            cards: false
+            cards: false,
+            overlay: Vec::new()
         }
     );
     // (no height: the navigator's own map's; its cards over it)
@@ -195,7 +196,8 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
         p.children[2].kind,
         Kind::Map {
             height: 0.0,
-            cards: true
+            cards: true,
+            overlay: Vec::new()
         }
     );
     assert!(
@@ -203,6 +205,117 @@ fn a_panel_that_fills_the_navigators_frame_with_its_map() {
             .unwrap_err()
             .contains("frame")
     );
+}
+
+/// Version 8: cards of the plugin's own over a map (`overlay`), read as a panel's keys are.
+#[test]
+fn a_map_takes_cards_over_it() {
+    let p = panel(r##"{ anchor = "navigator", frame = true, children = { { type = "map", overlay = {
+        { place = "top_right", width = 120, children = { { type = "text", text = "x" } } },
+        { place = "bottom", x = 0, y = 20, padding = 4, gap = 2, background = "#14161ACC", radius = 6, children = {
+            { type = "button", id = "next", text = "Next" },
+        } },
+    } } } }"##).unwrap();
+    let Kind::Map { overlay, cards, .. } = &p.children[0].kind else {
+        panic!("{:?}", p.children[0])
+    };
+    assert!(*cards);
+    let text = Element {
+        id: None,
+        color: None,
+        grow: false,
+        clickable: false,
+        kind: Kind::Text {
+            text: "x".into(),
+            size: 14.0,
+            weight: Weight::Regular,
+            align: Align::Left,
+            wrap: true,
+        },
+    };
+    // (left out: 8 from the map's edges, the padding, gap and corners of a small card, the game's card colour)
+    assert_eq!(
+        overlay[0],
+        MapCard {
+            place: Anchor::TopRight,
+            x: 8.0,
+            y: 8.0,
+            width: Some(120.0),
+            padding: 10.0,
+            gap: 6.0,
+            background: None,
+            radius: 10.0,
+            children: vec![text]
+        }
+    );
+    let c = &overlay[1];
+    assert_eq!(
+        (c.place, c.x, c.y, c.width, c.padding, c.gap, c.radius),
+        (Anchor::Bottom, 0.0, 20.0, None, 4.0, 2.0, 6.0)
+    );
+    assert_eq!(c.background, Rgba::parse("#14161ACC"));
+    // what is in a card is found by its id, as what is in a row
+    let mut ui = UiState::default();
+    ui.set(1, "p", p).unwrap();
+    ui.update(
+        1,
+        "p",
+        "next",
+        &Value::map([("text", "Markt".into())]),
+        None,
+    )
+    .unwrap();
+    let Kind::Map { overlay, .. } = &ui.get(1, "p").unwrap().panel.children[0].kind else {
+        panic!()
+    };
+    assert!(matches!(&overlay[1].children[0].kind, Kind::Button { text, .. } if text == "Markt"));
+    assert_eq!(ui.value(1, "p", "next"), Some(Value::Nil));
+}
+
+#[test]
+fn a_map_card_in_the_navigator_anchor_is_refused() {
+    for (src, want) in [
+        (
+            r#"{ children = { { type = "map", overlay = { { place = "navigator" } } } } }"#,
+            "children[1].overlay[1].place: \"navigator\" is no place",
+        ),
+        (
+            r#"{ children = { { type = "map", overlay = { { place = "middle" } } } } }"#,
+            "children[1].overlay[1].place: \"middle\" is no place",
+        ),
+        (
+            r#"{ children = { { type = "map", overlay = true } } }"#,
+            "children[1].overlay: a list is expected",
+        ),
+        (
+            r#"{ children = { { type = "map", overlay = { "card" } } } }"#,
+            "children[1].overlay[1]: a card is a table",
+        ),
+        (
+            r#"{ children = { { type = "map", overlay = { { width = "wide" } } } } }"#,
+            "children[1].overlay[1].width: a number is expected",
+        ),
+        (
+            r#"{ children = { { type = "map", overlay = { { children = { { type = "button" } } } } } } }"#,
+            "children[1].overlay[1].children[1]: a button needs an id",
+        ),
+    ] {
+        let e = panel(src).unwrap_err();
+        assert!(e.contains(want), "{src}: {e}");
+    }
+}
+
+#[test]
+fn overlay_cards_count_toward_the_200_elements() {
+    // the map, and each card with what is in it
+    let cards = |n: usize| {
+        format!(
+            "{{ children = {{ {{ type = 'map', overlay = (function() local c = {{}} for i = 1, {n} do c[i] = {{ children = {{ {{ type = 'space' }} }} }} end return c end)() }} }} }}"
+        )
+    };
+    assert!(panel(&cards(99)).is_ok());
+    let e = panel(&cards(100)).unwrap_err();
+    assert!(e.contains("at most 200 elements"), "{e}");
 }
 
 #[test]
@@ -518,4 +631,26 @@ fn controls_change_and_tell_their_plugin() {
     assert!(ui.update(1, "p", "nothing", &Value::map([]), None).is_err());
     ui.drag(1, "p", 5.0, -2.0);
     assert_eq!(ui.get(1, "p").unwrap().moved, (5.0, -2.0));
+}
+
+#[test]
+fn an_unknown_overlay_key_is_left_alone() {
+    // (a plugin written for a later game still shows here)
+    let p = panel(
+        r##"{ children = { { type = "map", overlay = {
+        { place = "top", glow = 3, children = { { type = "text", text = "x" } } },
+    } } } }"##,
+    )
+    .unwrap();
+    let Kind::Map { overlay, .. } = &p.children[0].kind else {
+        panic!("a map");
+    };
+    assert_eq!(overlay.len(), 1);
+    assert_eq!(overlay[0].place, Anchor::Top);
+    assert_eq!(overlay[0].children.len(), 1);
+    // (a key of the wrong kind is still refused, with its path)
+    let e =
+        panel(r#"{ children = { { type = "map", overlay = { { glow = 3, width = "wide" } } } } }"#)
+            .unwrap_err();
+    assert!(e.contains("children[1].overlay[1].width"), "{e}");
 }

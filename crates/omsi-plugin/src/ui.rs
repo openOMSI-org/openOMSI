@@ -32,7 +32,8 @@ pub use read::{ToastSpec, panel_from_source, parse_panel, parse_toast};
 /// 6: a navigator panel that fills the navigator's whole frame (`frame`), and the navigator's
 /// map as an element of it (`map`).
 /// 7: the interface themes (`ui.themes`, `ui.theme`, `ui.set_theme`).
-pub const VERSION: i64 = 7;
+/// 8: cards of the plugin's own over the navigator's map (`overlay`).
+pub const VERSION: i64 = 8;
 /// Most panels of one plugin.
 pub const MAX_PANELS: usize = 16;
 /// Most elements of one panel, those in rows included.
@@ -277,6 +278,24 @@ pub struct Stop {
     pub tag: String,
 }
 
+/// A card of the plugin's own over a `map` element (`overlay`): a small panel at its `place`
+/// in the map's room, kept `x` and `y` from the map's edges, cut off at them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MapCard {
+    /// One of the panel anchors, the navigator's aside.
+    pub place: Anchor,
+    pub x: f32,
+    pub y: f32,
+    /// None: as wide as what is in it. Never wider than the map less `x` on both sides.
+    pub width: Option<f32>,
+    pub padding: f32,
+    pub gap: f32,
+    /// None: the game's own card colour.
+    pub background: Option<Rgba>,
+    pub radius: f32,
+    pub children: Vec<Element>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
     Text {
@@ -382,10 +401,12 @@ pub enum Kind {
     },
     /// The navigator's map, in a panel that fills its frame: `height` (0: as high as the
     /// navigator's own map, 0.8 times its width), `cards` the navigator's cards over it (the
-    /// next turn, the clock, the speed, the next stop). Elsewhere empty room.
+    /// next turn, the clock, the speed, the next stop), `overlay` the plugin's own cards over
+    /// it. Elsewhere empty room (with the plugin's cards in it).
     Map {
         height: f32,
         cards: bool,
+        overlay: Vec<MapCard>,
     },
 }
 
@@ -933,10 +954,16 @@ fn find_element<'a>(list: &'a mut [Element], id: &str) -> Option<&'a mut Element
         if e.id.as_deref() == Some(id) {
             return Some(e);
         }
-        if let Kind::Row { children, .. } | Kind::Box { children, .. } = &mut e.kind {
-            if let Some(f) = find_element(children, id) {
-                return Some(f);
-            }
+        let found = match &mut e.kind {
+            Kind::Row { children, .. } | Kind::Box { children, .. } => find_element(children, id),
+            // (what is in the plugin's cards over a map, as what is in a row)
+            Kind::Map { overlay, .. } => overlay
+                .iter_mut()
+                .find_map(|c| find_element(&mut c.children, id)),
+            _ => None,
+        };
+        if found.is_some() {
+            return found;
         }
     }
     None
@@ -947,10 +974,13 @@ fn find_in<'a>(list: &'a [Element], id: &str) -> Option<&'a Element> {
         if e.id.as_deref() == Some(id) {
             return Some(e);
         }
-        if let Kind::Row { children, .. } | Kind::Box { children, .. } = &e.kind {
-            if let Some(f) = find_in(children, id) {
-                return Some(f);
-            }
+        let found = match &e.kind {
+            Kind::Row { children, .. } | Kind::Box { children, .. } => find_in(children, id),
+            Kind::Map { overlay, .. } => overlay.iter().find_map(|c| find_in(&c.children, id)),
+            _ => None,
+        };
+        if found.is_some() {
+            return found;
         }
     }
     None
