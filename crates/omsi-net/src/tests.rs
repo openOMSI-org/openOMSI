@@ -1489,6 +1489,7 @@ fn a_player_without_a_bus_sends_a_heartbeat() {
     );
 }
 
+mod car_vars;
 mod connections;
 
 mod lifecycle;

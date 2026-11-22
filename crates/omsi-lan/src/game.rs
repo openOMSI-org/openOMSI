@@ -24,6 +24,7 @@ pub use crate::clock::host_time_now;
 use crate::clock::{host_clock_now, clock_gap};
 use crate::script_texture::{script_texture_table, script_texture_subscription_table};
 mod sound_sync;
+mod car_sync;
 mod buses;
 use crate::animation_sync;
 use crate::config::LanConfig;
@@ -165,6 +166,11 @@ pub struct RemoteVehicle {
     remote_schema: Option<omsi_net::var_schema::Schema>,
     synced: hashbrown::HashMap<u32, f32>,
     synced_strings: hashbrown::HashMap<u32, String>,
+    /// Their coupled cars' own variables (`car_sync`): the tables of our copy's cars, and
+    /// what came, by (car, variable id in its program).
+    cars: car_sync::CarTables,
+    car_synced: car_sync::Synced<f32>,
+    car_synced_strings: car_sync::Synced<String>,
     animations: animation_sync::Animations,
     /// Owner's timestamp currently used for the interpolated pose and animations.
     draw_time: Option<f64>,
@@ -329,6 +335,11 @@ pub struct LanGame {
     /// Our vehicle's variable table (by its program), for `omsi_net::vars`.
     my_vars: Option<(usize, Arc<VarTable>)>,
     my_var_schema: Option<String>,
+    /// Our train's cars' own variables (`car_sync`): their tables, and the values sent,
+    /// kept from frame to frame.
+    my_cars: car_sync::CarTables,
+    car_floats: Vec<f32>,
+    car_strings: Vec<String>,
     vars_log: f32,
     my_texture_table: Option<(usize, u32)>,
 }
@@ -1813,6 +1824,9 @@ fn new_remote(
         remote_schema: None,
         synced: Default::default(),
         synced_strings: Default::default(),
+        cars: Default::default(),
+        car_synced: Default::default(),
+        car_synced_strings: Default::default(),
         animations,
         draw_time: None,
         texture_subscription: None,
@@ -2024,7 +2038,9 @@ fn drive_remote(rv: &mut RemoteVehicle, pose: &Pose, dt: f32, exact: bool) {
         .filter(|(id, _)| !rv.synced_strings.contains_key(id))
         .chain(rv.synced_strings.iter().map(|(id, value)| (*id, value.as_str())))
         .collect();
+    car_sync::apply(&mut rv.vehicle, &rv.car_synced, &rv.car_synced_strings);
     rv.vehicle.update_ai_with_strings(dt, &frame, &inputs, &pinned, &strings);
+    car_sync::apply(&mut rv.vehicle, &rv.car_synced, &rv.car_synced_strings);
     rv.last = pose.clone();
 }
 
@@ -2241,6 +2257,10 @@ pub fn tick_send(
     publish_script_textures(lan, game, player.as_deref_mut(), &mine.bus);
     buses::tick(lan, args, &mine, player.as_deref());
     sync_vars(lan, game, player.as_deref(), dt);
+    if let Some(p) = player.as_deref().filter(|_| !omsi_cfg::flags::OMSI_NO_VAR_SYNC.is_set()) {
+        car_sync::send(lan, game, p, dt);
+    }
+    car_sync::receive(lan, game);
     Sent { updates, gone }
 }
 
