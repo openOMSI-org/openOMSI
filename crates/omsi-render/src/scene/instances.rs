@@ -383,6 +383,14 @@ impl Renderer {
             }
         }
     }
+    /// Material slots with a later, geometrically duplicated surface.
+    pub fn duplicate_surface_slots(&self, scene: &Scene, mesh: MeshId) -> Vec<usize> {
+        scene
+            .meshes
+            .get(mesh)
+            .map(|mesh| mesh.duplicate_surface_slots.clone())
+            .unwrap_or_default()
+    }
 
     /// How much snow lies on the roof of an instance's vehicle (see [`Instance::roof_snow`]).
     pub fn set_roof_snow(&self, scene: &mut Scene, instance: usize, snow: Option<f32>) {

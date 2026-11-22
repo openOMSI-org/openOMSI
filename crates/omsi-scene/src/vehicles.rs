@@ -803,18 +803,9 @@ impl World {
             }
         }
         for (mi, &instance) in instances.iter().enumerate() {
-            let Some(mesh) = vt.meshes.get(mi) else { continue };
-            let Some(def) = vt.model.meshes.get(mesh.def_index) else { continue };
-            if !std::path::Path::new(&def.file)
-                .file_name()
-                .is_some_and(|name| name.eq_ignore_ascii_case("pmon.o3d"))
-            {
-                continue;
-            }
-            for slot in 0..5 {
-                if let Some(max_level) = pmon_slot_depth_limit(slot) {
-                    renderer.limit_slot_depth_level(scene, instance, slot, max_level);
-                }
+            let Some((mesh, _)) = set.meshes.get(mi) else { continue };
+            for slot in renderer.duplicate_surface_slots(scene, *mesh) {
+                renderer.limit_slot_depth_level(scene, instance, slot, 1);
             }
         }
         let far = self.far_instances(renderer, scene, vt, set, &instances, key.is_some() && lod, &mut gpu);
@@ -1263,24 +1254,6 @@ impl World {
             dyn_slots.push(DynSlot { mesh: instances.len(), slot, text: text_slot, script: script_slot, script_trans, lit: script_slot.is_some_and(|i| vt.model.html_page_lit(i)), tex, alpha, transmap, night, lightmap, envmap, address, extra, color, emissive });
         }
         base
-    }
-}
-
-fn pmon_slot_depth_limit(slot: usize) -> Option<u8> {
-    (slot < 4).then_some(1)
-}
-
-#[cfg(test)]
-mod pmon_depth_tests {
-    use super::pmon_slot_depth_limit;
-
-    #[test]
-    fn limits_only_the_first_four_pmon_slots_to_one_step() {
-        for slot in 0..4 {
-            assert_eq!(pmon_slot_depth_limit(slot), Some(1));
-        }
-        assert_eq!(pmon_slot_depth_limit(4), None);
-        assert_eq!(pmon_slot_depth_limit(8), None);
     }
 }
 

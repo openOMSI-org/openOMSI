@@ -29,7 +29,9 @@ pub struct GpuMesh {
     pub source: Option<String>,
     /// Its flat surfaces by material slot, for the draw order's depth step of a surface
     /// lying on another of its object (`scene::overlay`).
+    /// Earlier slots with a later coplanar duplicate, calculated once at mesh upload.
     pub(crate) flats: Vec<crate::scene::overlay::Flat>,
+    pub(crate) duplicate_surface_slots: Vec<usize>,
     pub(crate) depth_normals: Vec<Vec3>,
 }
 
@@ -301,6 +303,8 @@ impl MeshPage {
         if !ib.is_empty() && self.real {
             queue.write_buffer(&self.index, at.1, ib);
         }
+        let flats = crate::scene::overlay::mesh_flats(data);
+        let duplicate_surface_slots = crate::scene::overlay::duplicate_support_slots(data, &flats);
         let (center, radius) = mesh_bounds(data);
         GpuMesh {
             vertex_buf: self.vertex.clone(),
@@ -318,7 +322,8 @@ impl MeshPage {
             bounds_radius: radius,
             one_sided: data.one_sided,
             source: None,
-            flats: crate::scene::overlay::mesh_flats(data),
+            flats,
+            duplicate_surface_slots,
             depth_normals: crate::scene::depth_plane::normals(data),
         }
     }
@@ -341,6 +346,7 @@ impl GpuMesh {
             bounds_center: Vec3::ZERO,
             bounds_radius: 0.0,
             one_sided: false,
+            duplicate_surface_slots: Vec::new(),
             source: None,
             flats: Vec::new(),
             depth_normals: Vec::new(),

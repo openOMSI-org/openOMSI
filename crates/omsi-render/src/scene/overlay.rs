@@ -232,6 +232,23 @@ fn projected_overlap(a: &Flat, b: &Flat, minimum: f32) -> bool {
         a_hi.min(b_hi) - a_lo.max(b_lo) > minimum
     })
 }
+fn projected_contains(outer: &Flat, inner: &Flat, tolerance: f32) -> bool {
+    let across = outer.normal.cross(outer.axis);
+    [outer.axis, across].into_iter().all(|axis| {
+        let interval = |flat: &Flat| {
+            let mut center = (flat.lo + flat.hi) * 0.5;
+            center -= flat.normal * (flat.normal.dot(center) - flat.offset);
+            let flat_across = flat.normal.cross(flat.axis);
+            let radius = flat.half[0] * axis.dot(flat.axis).abs()
+                + flat.half[1] * axis.dot(flat_across).abs();
+            let middle = center.dot(axis);
+            (middle - radius, middle + radius)
+        };
+        let (outer_lo, outer_hi) = interval(outer);
+        let (inner_lo, inner_hi) = interval(inner);
+        outer_lo <= inner_lo + tolerance && outer_hi >= inner_hi - tolerance
+    })
+}
 
 /// `f` against `g` when the two face the same way and their boxes overlap within `margin`: how
 /// far `f`'s middle lies off `g`'s plane, and how far `f`'s tilt lifts its corners off it.
@@ -258,6 +275,67 @@ fn facing(f: &Flat, g: &Flat, margin: f32) -> Option<(f32, f32)> {
 /// it lifting no edge further than `PLANE_GAP`, and their boxes overlapping.
 fn lies_on(f: &Flat, g: &Flat) -> bool {
     facing(f, g, BOX_GAP).is_some_and(|(gap, tilt)| gap < CENTRE_GAP + tilt && tilt < PLANE_GAP)
+}
+fn slot_is_single_flat(data: &MeshData, flat: &Flat) -> bool {
+    let mut found = false;
+    for &(first, count, slot) in &data.ranges {
+        if slot != flat.slot {
+            continue;
+        }
+        let end = first.saturating_add(count).min(data.indices.len() as u32) as usize;
+        let mut i = first as usize;
+        while i + 2 < end {
+            let Some(a) = data.positions.get(data.indices[i] as usize).copied() else {
+                return false;
+            };
+            let Some(b) = data.positions.get(data.indices[i + 1] as usize).copied() else {
+                return false;
+            };
+            let Some(c) = data.positions.get(data.indices[i + 2] as usize).copied() else {
+                return false;
+            };
+            i += 3;
+            let points = [a, b, c];
+            let Some(normal) = (b - a).cross(c - a).try_normalize() else {
+                continue;
+            };
+            if normal.dot(flat.normal).abs() <= 0.9995
+                || points
+                    .iter()
+                    .any(|p| (flat.normal.dot(*p) - flat.offset).abs() >= PLANE_GAP)
+            {
+                return false;
+            }
+            found = true;
+        }
+    }
+    found
+}
+
+/// The first material slot of each fully duplicated flat support surface.
+/// Mixed-geometry slots are left alone because the GPU applies depth per slot.
+pub(crate) fn duplicate_support_slots(data: &MeshData, flats: &[Flat]) -> Vec<usize> {
+    let overlaps = |a: &Flat, b: &Flat| {
+        boxes_overlap(a, b, BOX_GAP) && lies_on(a, b) && projected_overlap(a, b, CENTRE_GAP)
+    };
+    let mut slots = std::collections::BTreeSet::new();
+    for flat in flats {
+        if !slot_is_single_flat(data, flat) {
+            continue;
+        }
+        let has_earlier = flats
+            .iter()
+            .any(|other| other.slot < flat.slot && overlaps(other, flat));
+        let has_later = flats.iter().any(|other| {
+            other.slot > flat.slot
+                && overlaps(flat, other)
+                && projected_contains(other, flat, CENTRE_GAP)
+        });
+        if !has_earlier && has_later {
+            slots.insert(flat.slot as usize);
+        }
+    }
+    slots.into_iter().collect()
 }
 
 /// Whether `f` lies just off `g`'s plane, further than `CENTRE_GAP` but nearer than
@@ -1259,5 +1337,34 @@ mod tests {
                 .all(|caps| caps.len() == 1)
         );
         assert!((run.flat_caps[child_start][0].value - 0.000063).abs() < 1e-7);
+    }
+    #[test]
+    fn favourite_page_limits_only_earlier_duplicate_panel_geometry() {
+        let mesh = joined_mesh([
+            quad(0.0, 0.2, 3, false),
+            quad(0.0, 0.2, 10, true),
+            quad(0.0, 0.2, 7, true),
+            quad(0.001, 0.1, 8, false),
+        ]);
+        let flats = mesh_flats(&mesh);
+        assert_eq!(duplicate_support_slots(&mesh, &flats), vec![3]);
+    }
+
+    #[test]
+    fn separated_same_mesh_layers_do_not_get_a_geometry_depth_limit() {
+        let mesh = joined_mesh([quad(0.0, 0.2, 2, false), quad(0.0003, 0.2, 5, true)]);
+        let flats = mesh_flats(&mesh);
+        assert!(duplicate_support_slots(&mesh, &flats).is_empty());
+    }
+    #[test]
+    fn mixed_material_slot_is_not_limited_for_only_one_duplicate_plane() {
+        let mesh = joined_mesh([
+            quad(0.0, 0.2, 3, false),
+            quad(0.0, 0.2, 7, true),
+            quad(0.004, 0.1, 3, false),
+            quad(0.004, 0.1, 8, true),
+        ]);
+        let flats = mesh_flats(&mesh);
+        assert!(duplicate_support_slots(&mesh, &flats).is_empty());
     }
 }
