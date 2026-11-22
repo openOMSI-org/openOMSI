@@ -197,6 +197,9 @@ pub(crate) struct Precip {
     pub bind_group: mx::BindGroup,
     label: &'static str,
     vs: &'static str,
+    /// The enhanced picture's vertex shader (with its own fragment shaders: the flakes'
+    /// and the drops' shapes, the splashes, the far veil).
+    vs_enhanced: &'static str,
     /// Its quads are strips of four vertices (the rain's), not lists of six.
     strip: bool,
 }
@@ -211,36 +214,49 @@ const PREMULTIPLIED_SNOW: mx::BlendState = mx::BlendState {
 };
 
 impl Precip {
-    pub(crate) fn snow(device: &mx::Device, roof: &mx::TextureView) -> Precip {
+    pub(crate) fn snow(
+        device: &mx::Device,
+        roof: &mx::TextureView,
+        flakes: &crate::precip::FlakeAtlas,
+    ) -> Precip {
         Precip::new(
             device,
             roof,
+            flakes,
             "snow",
-            "vs_snow",
+            ["vs_snow", "vs_snow_enhanced"],
             snow_shader_source(),
             std::mem::size_of::<SnowUniform>(),
             false,
         )
     }
 
-    pub(crate) fn rain(device: &mx::Device, roof: &mx::TextureView) -> Precip {
+    pub(crate) fn rain(
+        device: &mx::Device,
+        roof: &mx::TextureView,
+        flakes: &crate::precip::FlakeAtlas,
+    ) -> Precip {
         Precip::new(
             device,
             roof,
+            flakes,
             "rain",
-            "vs_rain",
+            ["vs_rain", "vs_rain_enhanced"],
             rain_shader_source(),
             std::mem::size_of::<RainUniform>(),
             true,
         )
     }
 
-    /// (`roof`: the precipitation's roof map, `passes::precip_map`)
+    /// (`roof`: the precipitation's roof map, `passes::precip_map`; `flakes`: the enhanced
+    /// snowfall's crystals, `precip::FlakeAtlas`, in the rain's group as well)
+    #[allow(clippy::too_many_arguments)]
     fn new(
         device: &mx::Device,
         roof: &mx::TextureView,
+        flakes: &crate::precip::FlakeAtlas,
         label: &'static str,
-        vs: &'static str,
+        vs: [&'static str; 2],
         source: String,
         size: usize,
         strip: bool,
@@ -264,6 +280,14 @@ impl Precip {
                     binding: 1,
                     resource: mx::BindingResource::TextureView(roof),
                 },
+                mx::BindGroupEntry {
+                    binding: 2,
+                    resource: mx::BindingResource::TextureView(&flakes.view),
+                },
+                mx::BindGroupEntry {
+                    binding: 3,
+                    resource: mx::BindingResource::Sampler(&flakes.sampler),
+                },
             ],
         });
         Precip {
@@ -271,7 +295,8 @@ impl Precip {
             buf,
             bind_group,
             label,
-            vs,
+            vs: vs[0],
+            vs_enhanced: vs[1],
             strip,
         }
     }
@@ -293,8 +318,14 @@ impl Precip {
             false,
             surfaces,
         );
+        // (the enhanced picture's fragment shaders take the enhanced vertex shader's output)
+        let vs = if fs.ends_with("_enhanced") {
+            self.vs_enhanced
+        } else {
+            self.vs
+        };
         no_vertex_pipeline(self.label, &self.shader, fs, &targets)
-            .vs(self.vs)
+            .vs(vs)
             .strip(self.strip)
             .depth(depth_test(mx::CompareFunction::GreaterEqual))
             .samples(msaa)
