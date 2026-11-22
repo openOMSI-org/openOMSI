@@ -27,7 +27,12 @@ pub(crate) fn load(disabled: bool) -> Plugins {
     let permissions = std::sync::Arc::new(omsi_plugin::api::process::ProcessPermissions::new(
         crate::lan::data_dir().map(|p| p.join("plugin-process-permissions.json")),
     ));
-    Plugins::load_with_process_permissions(&dirs, &HostConfig::detect(), omsi_plugin::api::process::ProcessGrants::from_env(), permissions)
+    Plugins::load_with_process_permissions(
+        &dirs,
+        &HostConfig::detect(),
+        omsi_plugin::api::process::ProcessGrants::from_env(),
+        permissions,
+    )
 }
 
 /// The game's side of a plugin frame: the whole game (the plugins taken out of it for the
@@ -53,14 +58,40 @@ pub(crate) struct Io<'a> {
 }
 
 impl<'a> Io<'a> {
-    pub(crate) fn new(app: &'a mut crate::App, dt: f32, keys: Vec<(String, bool)>, events: Vec<GameEvent>, events_ex: Vec<(&'static str, Vec<omsi_plugin::api::Value>)>) -> Io<'a> {
-        Io { app: Some(app), dt, message: None, info: Default::default(), commands: Vec::new(), keys, events, events_ex, ticket_asks: Vec::new() }
+    pub(crate) fn new(
+        app: &'a mut crate::App,
+        dt: f32,
+        keys: Vec<(String, bool)>,
+        events: Vec<GameEvent>,
+        events_ex: Vec<(&'static str, Vec<omsi_plugin::api::Value>)>,
+    ) -> Io<'a> {
+        Io {
+            app: Some(app),
+            dt,
+            message: None,
+            info: Default::default(),
+            commands: Vec::new(),
+            keys,
+            events,
+            events_ex,
+            ticket_asks: Vec::new(),
+        }
     }
 
     /// An io without a game, with `info` as `omsi.info()` (the tests).
     #[cfg(test)]
     fn snapshot(info: Vec<(&'static str, InfoValue)>) -> Io<'static> {
-        Io { app: None, dt: 0.0, message: None, info: std::cell::RefCell::new(Some(info)), commands: Vec::new(), keys: Vec::new(), events: Vec::new(), events_ex: Vec::new(), ticket_asks: Vec::new() }
+        Io {
+            app: None,
+            dt: 0.0,
+            message: None,
+            info: std::cell::RefCell::new(Some(info)),
+            commands: Vec::new(),
+            keys: Vec::new(),
+            events: Vec::new(),
+            events_ex: Vec::new(),
+            ticket_asks: Vec::new(),
+        }
     }
 
     fn app(&self) -> Option<&crate::App> {
@@ -84,7 +115,11 @@ impl<'a> Io<'a> {
     }
 
     fn veh_mut(&mut self) -> Option<&mut omsi_sim::VehicleInstance> {
-        self.app.as_deref_mut()?.player.as_mut().map(|p| &mut p.vehicle)
+        self.app
+            .as_deref_mut()?
+            .player
+            .as_mut()
+            .map(|p| &mut p.vehicle)
     }
 
     fn player_mut(&mut self) -> Option<&mut crate::player::Player> {
@@ -96,9 +131,20 @@ impl<'a> Io<'a> {
     fn other(&mut self, id: u64) -> Option<&mut omsi_sim::VehicleInstance> {
         let app = self.app.as_deref_mut()?;
         if id >> 48 == 1 {
-            return app.net.remotes.remotes.get_mut(&((id & 0xFFFF_FFFF) as u32)).map(|r| r.vehicle_mut());
+            return app
+                .net
+                .remotes
+                .remotes
+                .get_mut(&((id & 0xFFFF_FFFF) as u32))
+                .map(|r| r.vehicle_mut());
         }
-        app.session.traffic.as_mut()?.cars.iter_mut().find(|c| c.id == id).map(|c| &mut c.vehicle)
+        app.session
+            .traffic
+            .as_mut()?
+            .cars
+            .iter_mut()
+            .find(|c| c.id == id)
+            .map(|c| &mut c.vehicle)
     }
 }
 
@@ -114,7 +160,11 @@ pub(crate) fn queue_event(events: &mut Vec<GameEvent>, name: &'static str, args:
 }
 
 /// Keep an event whose values are tables for the plugins' next frame.
-pub(crate) fn queue_event_ex(events: &mut Vec<(&'static str, Vec<omsi_plugin::api::Value>)>, name: &'static str, args: Vec<omsi_plugin::api::Value>) {
+pub(crate) fn queue_event_ex(
+    events: &mut Vec<(&'static str, Vec<omsi_plugin::api::Value>)>,
+    name: &'static str,
+    args: Vec<omsi_plugin::api::Value>,
+) {
     if events.len() >= MAX_EVENTS {
         events.remove(0);
     }
@@ -140,7 +190,11 @@ impl crate::App {
         if now == self.integrations.vehicle_scripts_of {
             return;
         }
-        let files = self.player.as_ref().map(|p| p.vehicle.ty.def.script_files.clone()).unwrap_or_default();
+        let files = self
+            .player
+            .as_ref()
+            .map(|p| p.vehicle.ty.def.script_files.clone())
+            .unwrap_or_default();
         if files.is_empty() && self.integrations.vehicle_scripts_of.is_none() {
             // (nothing running, nothing to start: just remember the vehicle)
             self.integrations.vehicle_scripts_of = now;
@@ -172,12 +226,20 @@ impl crate::App {
                 plugins.emit(&mut io, "pause", Vec::new());
                 seen.menu = menu;
             } else {
-                queue_event_ex(&mut self.integrations.plugin_events_ex, "resume", Vec::new());
+                queue_event_ex(
+                    &mut self.integrations.plugin_events_ex,
+                    "resume",
+                    Vec::new(),
+                );
             }
         }
         if menu != seen.menu && !self.paused {
             seen.menu = menu;
-            queue_event_ex(&mut self.integrations.plugin_events_ex, if menu { "menu_open" } else { "menu_close" }, Vec::new());
+            queue_event_ex(
+                &mut self.integrations.plugin_events_ex,
+                if menu { "menu_open" } else { "menu_close" },
+                Vec::new(),
+            );
         }
         let ev = &mut self.integrations.plugin_events_ex;
         // people in and out of the player's bus: who is in it now, against the last frame
@@ -187,7 +249,21 @@ impl crate::App {
                 .session
                 .humans
                 .as_ref()
-                .map(|h| h.people.iter().filter(|p| p.inside(BusId::Player)).map(|p| (p.id, match &p.state { State::Pax(x) => x.stop, _ => None })).collect())
+                .map(|h| {
+                    h.people
+                        .iter()
+                        .filter(|p| p.inside(BusId::Player))
+                        .map(|p| {
+                            (
+                                p.id,
+                                match &p.state {
+                                    State::Pax(x) => x.stop,
+                                    _ => None,
+                                },
+                            )
+                        })
+                        .collect()
+                })
                 .unwrap_or_default();
             if let Some(before) = seen.riders.as_ref() {
                 let mut boarded: hashbrown::HashMap<Option<i64>, i64> = hashbrown::HashMap::new();
@@ -200,8 +276,16 @@ impl crate::App {
                     queue_event_ex(ev, "passenger_board", vec![Value::Int(n), Value::opt(stop)]);
                 }
                 // (somebody gone from the people altogether was taken away, not let out)
-                let people: hashbrown::HashSet<u32> = self.session.humans.as_ref().map(|h| h.people.iter().map(|p| p.id).collect()).unwrap_or_default();
-                let out = before.keys().filter(|id| !now.contains_key(*id) && people.contains(*id)).count();
+                let people: hashbrown::HashSet<u32> = self
+                    .session
+                    .humans
+                    .as_ref()
+                    .map(|h| h.people.iter().map(|p| p.id).collect())
+                    .unwrap_or_default();
+                let out = before
+                    .keys()
+                    .filter(|id| !now.contains_key(*id) && people.contains(*id))
+                    .count();
                 if out > 0 {
                     queue_event_ex(ev, "passenger_alight", vec![Value::Int(out as i64)]);
                 }
@@ -211,16 +295,34 @@ impl crate::App {
             seen.riders = None;
         }
         if plugins.hears("lan_join") || plugins.hears("lan_leave") {
-            let now: hashbrown::HashMap<u32, String> = self.net.lan.as_ref().map(|l| l.peers().filter(|p| p.has_info && !omsi_net::is_parked(p.pose.id)).map(|p| (p.pose.id, p.pose.name.clone())).collect()).unwrap_or_default();
+            let now: hashbrown::HashMap<u32, String> = self
+                .net
+                .lan
+                .as_ref()
+                .map(|l| {
+                    l.peers()
+                        .filter(|p| p.has_info && !omsi_net::is_parked(p.pose.id))
+                        .map(|p| (p.pose.id, p.pose.name.clone()))
+                        .collect()
+                })
+                .unwrap_or_default();
             if let Some(before) = seen.players.as_ref() {
                 for (id, name) in &now {
                     if !before.contains_key(id) {
-                        queue_event_ex(ev, "lan_join", vec![Value::Int(*id as i64), Value::Str(name.clone())]);
+                        queue_event_ex(
+                            ev,
+                            "lan_join",
+                            vec![Value::Int(*id as i64), Value::Str(name.clone())],
+                        );
                     }
                 }
                 for (id, name) in before {
                     if !now.contains_key(id) {
-                        queue_event_ex(ev, "lan_leave", vec![Value::Int(*id as i64), Value::Str(name.clone())]);
+                        queue_event_ex(
+                            ev,
+                            "lan_leave",
+                            vec![Value::Int(*id as i64), Value::Str(name.clone())],
+                        );
                     }
                 }
             }
@@ -231,7 +333,15 @@ impl crate::App {
         if plugins.hears("controller_button") {
             if let Some(c) = self.input.controllers.as_ref() {
                 for (dev, n, down) in &c.raw_buttons {
-                    queue_event_ex(ev, "controller_button", vec![Value::Str(dev.clone()), Value::Int(*n as i64), Value::Bool(*down)]);
+                    queue_event_ex(
+                        ev,
+                        "controller_button",
+                        vec![
+                            Value::Str(dev.clone()),
+                            Value::Int(*n as i64),
+                            Value::Bool(*down),
+                        ],
+                    );
                 }
             }
         }
@@ -246,11 +356,17 @@ impl crate::App {
     /// A message of a plugin on another player's game (`lan.send`): to the plugin of the
     /// same name here. True when the text was one.
     pub(crate) fn plugin_lan_message(&mut self, from: u32, text: &str) -> bool {
-        let Some(rest) = text.strip_prefix(crate::plugin_io::world::LAN_PREFIX) else { return false };
+        let Some(rest) = text.strip_prefix(crate::plugin_io::world::LAN_PREFIX) else {
+            return false;
+        };
         let (name, msg) = rest.split_once(' ').unwrap_or((rest, ""));
         if let Some(p) = self.integrations.plugins.as_ref().filter(|p| p.has(name)) {
             use omsi_plugin::api::Value;
-            p.post(name, "lan_message", vec![Value::Int(from as i64), Value::Str(msg.to_string())]);
+            p.post(
+                name,
+                "lan_message",
+                vec![Value::Int(from as i64), Value::Str(msg.to_string())],
+            );
         }
         true
     }
@@ -258,13 +374,24 @@ impl crate::App {
 
 /// The player's bus hit AI cars this frame (before the hits are handed to the traffic):
 /// an `ai_collision` event each, for the plugins.
-pub(crate) fn plugin_impacts(veh: &omsi_sim::VehicleInstance, integ: &mut crate::app::Integrations) {
-    if veh.dynamic_impacts.is_empty() || !integ.plugins.as_ref().is_some_and(|x| x.hears("ai_collision")) {
+pub(crate) fn plugin_impacts(
+    veh: &omsi_sim::VehicleInstance,
+    integ: &mut crate::app::Integrations,
+) {
+    if veh.dynamic_impacts.is_empty()
+        || !integ
+            .plugins
+            .as_ref()
+            .is_some_and(|x| x.hears("ai_collision"))
+    {
         return;
     }
     use omsi_plugin::api::Value;
     for i in veh.dynamic_impacts.iter().filter(|i| i.obstacle_id <= -2) {
-        let args = vec![Value::Int(-i.obstacle_id - 2), Value::from(i.energy / 1000.0)];
+        let args = vec![
+            Value::Int(-i.obstacle_id - 2),
+            Value::from(i.energy / 1000.0),
+        ];
         queue_event_ex(&mut integ.plugin_events_ex, "ai_collision", args);
     }
 }
@@ -277,13 +404,36 @@ pub(crate) fn num_f32(x: f32) -> InfoValue {
 
 /// The game menu lines a plugin may run with `omsi.command` (those that do something at
 /// once, not the ones that open a list).
-pub(crate) const PLUGIN_COMMANDS: [&str; 14] = ["refuel", "wash", "repair", "shot", "save", "load", "weather", "later", "earlier", "info", "timetable", "reset", "couple", "uncouple"];
+pub(crate) const PLUGIN_COMMANDS: [&str; 14] = [
+    "refuel",
+    "wash",
+    "repair",
+    "shot",
+    "save",
+    "load",
+    "weather",
+    "later",
+    "earlier",
+    "info",
+    "timetable",
+    "reset",
+    "couple",
+    "uncouple",
+];
 
 /// What the game is doing, for `omsi.info()`.
 pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
     use InfoValue::{Bool, Num, Text};
     let mut v: Vec<(&'static str, InfoValue)> = Vec::new();
-    v.push(("map", Text(app.world.as_ref().map(|w| w.global.name.clone()).unwrap_or_default())));
+    v.push((
+        "map",
+        Text(
+            app.world
+                .as_ref()
+                .map(|w| w.global.name.clone())
+                .unwrap_or_default(),
+        ),
+    ));
     v.push(("clock", Num(app.clock.time)));
     v.push(("day", Num(app.clock.day_of_year as f64)));
     v.push(("year", Num(app.clock.year as f64)));
@@ -306,7 +456,10 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
         v.push(("traffic", Num(t.cars.len() as f64)));
     }
     if let Some(w) = app.world.as_ref() {
-        v.push(("map_path", Text(w.global.path.to_string_lossy().into_owned())));
+        v.push((
+            "map_path",
+            Text(w.global.path.to_string_lossy().into_owned()),
+        ));
     }
     v.push(("version", Text(crate::startup::VERSION.to_string())));
     if let Some(p) = app.player.as_ref() {
@@ -320,16 +473,29 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
         v.push(("tile_pos_x", Num(lx)));
         v.push(("tile_pos_y", Num(ly)));
         v.push(("heading", Num(veh.heading.rem_euclid(360.0))));
-        v.push(("vehicle_manufacturer", Text(veh.ty.def.manufacturer.trim().to_string())));
-        v.push(("vehicle_model", Text(veh.ty.def.type_name.trim().to_string())));
+        v.push((
+            "vehicle_manufacturer",
+            Text(veh.ty.def.manufacturer.trim().to_string()),
+        ));
+        v.push((
+            "vehicle_model",
+            Text(veh.ty.def.type_name.trim().to_string()),
+        ));
         // the terminus the bus shows (the hof entry its scripts chose; none for an
         // `[addterminus_allexit]` one), which is not always the timetable's
         let shown = match (veh.var("target_index_int"), veh.host.hof.as_ref()) {
-            (Some(i), Some(hof)) if i.is_finite() && i >= 0.0 => hof.termini.get(i.round() as usize).filter(|t| !t.all_exit).map(|t| t.texture_id.trim().to_string()),
+            (Some(i), Some(hof)) if i.is_finite() && i >= 0.0 => hof
+                .termini
+                .get(i.round() as usize)
+                .filter(|t| !t.all_exit)
+                .map(|t| t.texture_id.trim().to_string()),
             _ => None,
         };
         v.push(("destination", Text(shown.unwrap_or_default())));
-        v.push(("passengers", Num(app.session.humans.as_ref().map(|h| h.riding()).unwrap_or(0) as f64)));
+        v.push((
+            "passengers",
+            Num(app.session.humans.as_ref().map(|h| h.riding()).unwrap_or(0) as f64),
+        ));
     }
     if let Some(d) = app.session.duty.as_ref() {
         v.push(("line", Text(d.line.trim().to_string())));
@@ -345,9 +511,20 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
             v.push(("trip_done", Bool(d.trip_done())));
             let bus = app.player.as_ref().map(|p| p.vehicle.position);
             let next_calling = omsi_sim::timetable_run::next_calling_stop(&trip.stops, d.next_stop);
-            stop_info(&mut v, &trip.stops, next_calling, d.at_stop() && next_calling == d.next_stop, bus);
+            stop_info(
+                &mut v,
+                &trip.stops,
+                next_calling,
+                d.at_stop() && next_calling == d.next_stop,
+                bus,
+            );
             if let Some(stop) = trip.stops.get(next_calling) {
-                if let Some(distance) = app.menus.navigator.as_ref().and_then(|n| n.next_stop_distance_for(stop.object_id)) {
+                if let Some(distance) = app
+                    .menus
+                    .navigator
+                    .as_ref()
+                    .and_then(|n| n.next_stop_distance_for(stop.object_id))
+                {
                     v.push(("next_stop_distance_nav", Num(distance)));
                 }
             }
@@ -358,7 +535,13 @@ pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
 
 /// `omsi.info()`'s keys of the next stop and the one before it: `stops` the trip's, `next`
 /// the index of the next one, `bus` where the player's bus is.
-fn stop_info(v: &mut Vec<(&'static str, InfoValue)>, stops: &[crate::schedule::PlannedStop], next: usize, at_stop: bool, bus: Option<glam::DVec3>) {
+fn stop_info(
+    v: &mut Vec<(&'static str, InfoValue)>,
+    stops: &[crate::schedule::PlannedStop],
+    next: usize,
+    at_stop: bool,
+    bus: Option<glam::DVec3>,
+) {
     use InfoValue::{Bool, Num, Text};
     // straight-line metres from the bus, where the stop's place is known
     let distance = |s: &crate::schedule::PlannedStop| {
@@ -391,7 +574,9 @@ fn stop_info(v: &mut Vec<(&'static str, InfoValue)>, stops: &[crate::schedule::P
 impl Io<'_> {
     /// The `omsi.info()` key of an `.opl` list's `openomsi_<key>` name (any case).
     fn game_key(name: &str) -> Option<&str> {
-        name.get(..9).filter(|p| p.eq_ignore_ascii_case("openomsi_")).map(|_| &name[9..])
+        name.get(..9)
+            .filter(|p| p.eq_ignore_ascii_case("openomsi_"))
+            .map(|_| &name[9..])
     }
 
     /// The value of `omsi.info()` an `.opl` list names as `openomsi_<key>` (any case).
@@ -400,7 +585,12 @@ impl Io<'_> {
         if self.info.borrow().is_none() {
             let _ = self.info();
         }
-        self.info.borrow().as_ref()?.iter().find(|(k, _)| k.eq_ignore_ascii_case(key)).map(|(_, v)| v.clone())
+        self.info
+            .borrow()
+            .as_ref()?
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(key))
+            .map(|(_, v)| v.clone())
     }
 
     fn game_number(&self, name: &str) -> Option<f32> {
@@ -434,7 +624,9 @@ impl PluginIo for Io<'_> {
     }
 
     fn hof_data(&self) -> Option<omsi_plugin::api::Value> {
-        Some(crate::plugin_io::hof::snapshot(self.veh()?.host.hof.as_deref()?))
+        Some(crate::plugin_io::hof::snapshot(
+            self.veh()?.host.hof.as_deref()?,
+        ))
     }
     fn hof_terminus(&self, identifier: &str) -> Option<omsi_plugin::api::Value> {
         crate::plugin_io::hof::find_terminus(self.veh()?.host.hof.as_deref()?, identifier)
@@ -442,19 +634,33 @@ impl PluginIo for Io<'_> {
     fn hof_busstop(&self, identifier: &str) -> Option<omsi_plugin::api::Value> {
         crate::plugin_io::hof::find_busstop(self.veh()?.host.hof.as_deref()?, identifier)
     }
-    fn data_query(&mut self, query: omsi_plugin::data::DataQuery, args: &[omsi_plugin::data::QueryValue], object: Option<i64>) -> Result<Vec<omsi_plugin::data::QueryValue>, String> {
+    fn data_query(
+        &mut self,
+        query: omsi_plugin::data::DataQuery,
+        args: &[omsi_plugin::data::QueryValue],
+        object: Option<i64>,
+    ) -> Result<Vec<omsi_plugin::data::QueryValue>, String> {
         if let Some(id) = object {
-            let object = self.app_mut().ok_or("no game")?.session.scenery.find_mut(id).ok_or("scripted scenery object not loaded")?;
+            let object = self
+                .app_mut()
+                .ok_or("no game")?
+                .session
+                .scenery
+                .find_mut(id)
+                .ok_or("scripted scenery object not loaded")?;
             let number = object.inst.str_var("number").to_owned();
             return crate::plugin_io::data::read(&mut object.inst.host, &number, query, args);
         }
         crate::plugin_io::data::query(self.veh_mut().ok_or("no player vehicle")?, query, args)
     }
     fn object_owned_by(&self, id: i64, plugin: &str) -> bool {
-        self.app().is_some_and(|a| crate::plugin_io::object::owned_by(a, id, plugin))
+        self.app()
+            .is_some_and(|a| crate::plugin_io::object::owned_by(a, id, plugin))
     }
     fn object_list(&self, plugin: &str) -> Vec<i64> {
-        self.app().map(|a| crate::plugin_io::object::list(a, plugin)).unwrap_or_default()
+        self.app()
+            .map(|a| crate::plugin_io::object::list(a, plugin))
+            .unwrap_or_default()
     }
     fn object_info(&self, id: i64) -> Option<omsi_plugin::ObjectInfo> {
         crate::plugin_io::object::info(self.app()?, id)
@@ -463,30 +669,42 @@ impl PluginIo for Io<'_> {
         crate::plugin_io::object::var(self.app_mut()?, id, name)
     }
     fn object_set_var(&mut self, id: i64, name: &str, v: f32) -> bool {
-        self.app_mut().is_some_and(|a| crate::plugin_io::object::set_var(a, id, name, v))
+        self.app_mut()
+            .is_some_and(|a| crate::plugin_io::object::set_var(a, id, name, v))
     }
     fn object_str(&mut self, id: i64, name: &str) -> Option<String> {
         crate::plugin_io::object::str_var(self.app_mut()?, id, name)
     }
     fn object_set_str(&mut self, id: i64, name: &str, v: &str) -> bool {
-        self.app_mut().is_some_and(|a| crate::plugin_io::object::set_str(a, id, name, v))
+        self.app_mut()
+            .is_some_and(|a| crate::plugin_io::object::set_str(a, id, name, v))
     }
     fn object_trigger(&mut self, id: i64, name: &str) -> bool {
-        self.app_mut().is_some_and(|a| crate::plugin_io::object::trigger(a, id, name))
+        self.app_mut()
+            .is_some_and(|a| crate::plugin_io::object::trigger(a, id, name))
     }
     fn object_meshes(&self, id: i64) -> Vec<String> {
         // (reads only: the instance is borrowed through the list)
         let s = &self.app().map(|a| &a.session.scenery);
         match s.and_then(|s| s.find(id).map(|i| s.get(i))) {
-            Some(o) => (0..o.inst.mesh_count()).filter_map(|i| o.inst.mesh_file(i).map(str::to_string)).collect(),
+            Some(o) => (0..o.inst.mesh_count())
+                .filter_map(|i| o.inst.mesh_file(i).map(str::to_string))
+                .collect(),
             None => Vec::new(),
         }
     }
-    fn object_set_mesh(&mut self, id: i64, mesh: &str, t: Option<omsi_plugin::MeshTransform>) -> bool {
-        self.app_mut().is_some_and(|a| crate::plugin_io::object::set_mesh(a, id, mesh, t))
+    fn object_set_mesh(
+        &mut self,
+        id: i64,
+        mesh: &str,
+        t: Option<omsi_plugin::MeshTransform>,
+    ) -> bool {
+        self.app_mut()
+            .is_some_and(|a| crate::plugin_io::object::set_mesh(a, id, mesh, t))
     }
     fn object_set_visible(&mut self, id: i64, mesh: &str, v: Option<bool>) -> bool {
-        self.app_mut().is_some_and(|a| crate::plugin_io::object::set_visible(a, id, mesh, v))
+        self.app_mut()
+            .is_some_and(|a| crate::plugin_io::object::set_visible(a, id, mesh, v))
     }
 
     fn system(&mut self, name: &str) -> Option<f32> {
@@ -541,11 +759,17 @@ impl PluginIo for Io<'_> {
     }
 
     fn script_texture_size(&self, index: usize) -> Option<(u32, u32)> {
-        self.veh()?.host.script_textures.get(index).map(|st| (st.width, st.height))
+        self.veh()?
+            .host
+            .script_textures
+            .get(index)
+            .map(|st| (st.width, st.height))
     }
 
     fn set_script_texture(&mut self, index: usize, width: u32, height: u32, rgba: &[u8]) -> bool {
-        self.veh_mut().and_then(|v| v.host.script_textures.get_mut(index)).is_some_and(|st| st.replace(width, height, rgba))
+        self.veh_mut()
+            .and_then(|v| v.host.script_textures.get_mut(index))
+            .is_some_and(|st| st.replace(width, height, rgba))
     }
 
     /// A key down fires the trigger, a key up `<trigger>_off` (OMSI's keyboard event
@@ -565,15 +789,25 @@ impl PluginIo for Io<'_> {
     }
 
     fn vehicle_name(&self) -> Option<String> {
-        self.veh().map(|v| format!("{} {}", v.ty.def.manufacturer, v.ty.def.type_name).trim().to_string())
+        self.veh().map(|v| {
+            format!("{} {}", v.ty.def.manufacturer, v.ty.def.type_name)
+                .trim()
+                .to_string()
+        })
     }
 
     fn vehicle_manufacturer_model(&self) -> Option<(String, String)> {
-        self.veh().map(|v| (v.ty.def.manufacturer.trim().to_string(), v.ty.def.type_name.trim().to_string()))
+        self.veh().map(|v| {
+            (
+                v.ty.def.manufacturer.trim().to_string(),
+                v.ty.def.type_name.trim().to_string(),
+            )
+        })
     }
 
     fn position(&self) -> Option<[f64; 4]> {
-        self.veh().map(|v| [v.position.x, v.position.y, v.position.z, v.heading])
+        self.veh()
+            .map(|v| [v.position.x, v.position.y, v.position.z, v.heading])
     }
 
     fn mesh_point(&self, mesh: &str, point: [f32; 3], section: usize) -> Option<[f64; 3]> {
@@ -588,7 +822,13 @@ impl PluginIo for Io<'_> {
         body_frame_of(self.other(id)?, section)
     }
 
-    fn other_mesh_point(&mut self, id: u64, mesh: &str, point: [f32; 3], section: usize) -> Option<[f64; 3]> {
+    fn other_mesh_point(
+        &mut self,
+        id: u64,
+        mesh: &str,
+        point: [f32; 3],
+        section: usize,
+    ) -> Option<[f64; 3]> {
         mesh_point_of(self.other(id)?, mesh, point, section)
     }
 
@@ -611,7 +851,12 @@ impl PluginIo for Io<'_> {
         if self.info.borrow().is_none() {
             let _ = self.info();
         }
-        self.info.borrow().as_ref()?.iter().find(|(k, _)| *k == key).map(|(_, v)| v.clone())
+        self.info
+            .borrow()
+            .as_ref()?
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, v)| v.clone())
     }
 
     fn command(&mut self, what: &str) -> bool {
@@ -625,7 +870,10 @@ impl PluginIo for Io<'_> {
 
     fn var_names(&self) -> (Vec<String>, Vec<String>) {
         match self.veh() {
-            Some(v) => (v.ty.program.var_names.clone(), v.ty.program.str_var_names.clone()),
+            Some(v) => (
+                v.ty.program.var_names.clone(),
+                v.ty.program.str_var_names.clone(),
+            ),
             None => (Vec::new(), Vec::new()),
         }
     }
@@ -646,10 +894,38 @@ impl PluginIo for Io<'_> {
         let (Some(app), Some(me)) = (self.app(), self.veh().map(|v| v.position)) else {
             return Vec::new();
         };
-        let near = |v: &omsi_sim::VehicleInstance| (v.position.x - me.x).powi(2) + (v.position.y - me.y).powi(2) <= radius * radius;
-        let other = |id: u64, kind: &'static str, v: &omsi_sim::VehicleInstance| omsi_plugin::Other { id, kind, name: format!("{} {}", v.ty.def.manufacturer, v.ty.def.type_name).trim().to_string(), pos: [v.position.x, v.position.y, v.position.z, v.heading] };
-        let mut out: Vec<omsi_plugin::Other> = app.session.traffic.as_ref().map(|t| t.cars.iter().filter(|c| near(&c.vehicle)).map(|c| other(c.id, "ai", &c.vehicle)).collect()).unwrap_or_default();
-        out.extend(app.net.remotes.remotes.iter().filter(|(_, r)| near(r.vehicle())).map(|(id, r)| other((1u64 << 48) | *id as u64, "player", r.vehicle())));
+        let near = |v: &omsi_sim::VehicleInstance| {
+            (v.position.x - me.x).powi(2) + (v.position.y - me.y).powi(2) <= radius * radius
+        };
+        let other =
+            |id: u64, kind: &'static str, v: &omsi_sim::VehicleInstance| omsi_plugin::Other {
+                id,
+                kind,
+                name: format!("{} {}", v.ty.def.manufacturer, v.ty.def.type_name)
+                    .trim()
+                    .to_string(),
+                pos: [v.position.x, v.position.y, v.position.z, v.heading],
+            };
+        let mut out: Vec<omsi_plugin::Other> = app
+            .session
+            .traffic
+            .as_ref()
+            .map(|t| {
+                t.cars
+                    .iter()
+                    .filter(|c| near(&c.vehicle))
+                    .map(|c| other(c.id, "ai", &c.vehicle))
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.extend(
+            app.net
+                .remotes
+                .remotes
+                .iter()
+                .filter(|(_, r)| near(r.vehicle()))
+                .map(|(id, r)| other((1u64 << 48) | *id as u64, "player", r.vehicle())),
+        );
         out
     }
 
@@ -666,17 +942,27 @@ impl PluginIo for Io<'_> {
         pbus::velocity(self.app()?)
     }
     fn bus_acceleration(&self) -> Option<[f64; 3]> {
-        self.veh().map(|v| [v.physics.a_trans.x as f64, v.physics.a_trans.y as f64, v.physics.a_trans.z as f64])
+        self.veh().map(|v| {
+            [
+                v.physics.a_trans.x as f64,
+                v.physics.a_trans.y as f64,
+                v.physics.a_trans.z as f64,
+            ]
+        })
     }
     fn bus_orientation(&self) -> Option<[f64; 3]> {
-        self.veh().map(|v| [v.heading.rem_euclid(360.0), v.pitch as f64, v.bank as f64])
+        self.veh()
+            .map(|v| [v.heading.rem_euclid(360.0), v.pitch as f64, v.bank as f64])
     }
     fn bus_mass(&self) -> Option<f64> {
         self.veh().map(|v| v.physics.mass_kg as f64)
     }
     fn bus_km(&self) -> Option<(f64, f64)> {
         let app = self.app()?;
-        Some((pbus::veh(app)?.odometer_km(), app.session.career.metres / 1000.0))
+        Some((
+            pbus::veh(app)?.odometer_km(),
+            app.session.career.metres / 1000.0,
+        ))
     }
     fn bus_doors(&self) -> Vec<f32> {
         self.app().map(pbus::doors).unwrap_or_default()
@@ -685,7 +971,8 @@ impl PluginIo for Io<'_> {
         pbus::doors_open(self.app()?)
     }
     fn bus_door_count(&self) -> usize {
-        self.veh().map_or(0, |v| crate::player::door_keys(&v.ty).len())
+        self.veh()
+            .map_or(0, |v| crate::player::door_keys(&v.ty).len())
     }
     fn bus_door_key(&mut self, n: usize) -> bool {
         self.app_mut().is_some_and(|a| pbus::door_key(a, n))
@@ -694,7 +981,9 @@ impl PluginIo for Io<'_> {
         self.veh().map(crate::lan::indicator)
     }
     fn bus_set_indicator(&mut self, want: u8) -> bool {
-        let Some(p) = self.player_mut() else { return false };
+        let Some(p) = self.player_mut() else {
+            return false;
+        };
         if crate::lan::indicator(&p.vehicle) != want {
             p.toggle_indicator(want);
         }
@@ -707,7 +996,8 @@ impl PluginIo for Io<'_> {
         self.veh().map(|v| v.interior_light())
     }
     fn bus_set_interior_light(&mut self, on: bool) -> bool {
-        self.player_mut().is_some_and(|p| !p.set_saloon_lights(on).is_empty())
+        self.player_mut()
+            .is_some_and(|p| !p.set_saloon_lights(on).is_empty())
     }
     fn bus_engine(&self) -> Option<(bool, Option<f32>, bool)> {
         pbus::engine(self.app()?)
@@ -738,13 +1028,24 @@ impl PluginIo for Io<'_> {
     fn bus_track(&self) -> Option<op::TrackPos> {
         let app = self.app()?;
         let r = app.player.as_ref()?.rail.as_ref()?;
-        let lane = app.session.traffic.as_ref().and_then(|t| t.net.lanes.get(r.lane));
+        let lane = app
+            .session
+            .traffic
+            .as_ref()
+            .and_then(|t| t.net.lanes.get(r.lane));
         let lane_length = lane.map_or(0.0, |l| l.length());
         let travelled = r.travelled();
-        Some(op::TrackPos { lane: r.lane, s: r.s, lane_length, forward: r.along, travelled })
+        Some(op::TrackPos {
+            lane: r.lane,
+            s: r.s,
+            lane_length,
+            forward: r.along,
+            travelled,
+        })
     }
     fn bus_steer(&self) -> Option<(f32, f32)> {
-        self.veh().map(|v| (v.physics.steer_deg, v.physics.max_steer_deg))
+        self.veh()
+            .map(|v| (v.physics.steer_deg, v.physics.max_steer_deg))
     }
     fn bus_action(&mut self, name: &str, down: bool) -> bool {
         self.player_mut().is_some_and(|p| p.action(name, down))
@@ -756,10 +1057,13 @@ impl PluginIo for Io<'_> {
         self.app().map(pbus::destinations).unwrap_or_default()
     }
     fn bus_set_destination(&mut self, index: usize) -> bool {
-        self.app_mut().is_some_and(|a| pbus::set_destination(a, index))
+        self.app_mut()
+            .is_some_and(|a| pbus::set_destination(a, index))
     }
     fn bus_set_line(&mut self, line: &str) -> bool {
-        let Some(app) = self.app_mut() else { return false };
+        let Some(app) = self.app_mut() else {
+            return false;
+        };
         if app.player.is_none() || line.trim().is_empty() {
             return false;
         }
@@ -769,7 +1073,13 @@ impl PluginIo for Io<'_> {
     fn bus_ident(&self) -> Option<(String, String)> {
         let app = self.app()?;
         let v = pbus::veh(app)?;
-        let file = v.ty.def.path.strip_prefix(&app.args.root).unwrap_or(&v.ty.def.path).to_string_lossy().replace('\\', "/");
+        let file =
+            v.ty.def
+                .path
+                .strip_prefix(&app.args.root)
+                .unwrap_or(&v.ty.def.path)
+                .to_string_lossy()
+                .replace('\\', "/");
         Some((v.number(), file))
     }
     fn bus_passengers(&self) -> Option<(usize, usize, usize)> {
@@ -779,13 +1089,19 @@ impl PluginIo for Io<'_> {
         self.app().map(pbus::tickets).unwrap_or_default()
     }
     fn bus_sales(&self) -> Option<(u32, f64)> {
-        self.app()?.session.humans.as_ref().map(|h| (h.tickets_sold, h.ticket_cash as f64))
+        self.app()?
+            .session
+            .humans
+            .as_ref()
+            .map(|h| (h.tickets_sold, h.ticket_cash as f64))
     }
     fn bus_wheels(&self) -> Vec<op::Wheel> {
         self.app().map(pbus::wheels).unwrap_or_default()
     }
     fn bus_triggers(&self) -> Vec<String> {
-        self.veh().map(|v| v.ty.program.trigger_names()).unwrap_or_default()
+        self.veh()
+            .map(|v| v.ty.program.trigger_names())
+            .unwrap_or_default()
     }
     fn bus_sound(&mut self, event: &str) -> bool {
         self.app_mut().is_some_and(|a| pbus::sound(a, event))
@@ -804,11 +1120,20 @@ impl PluginIo for Io<'_> {
         Some((t.target, t.unsched_factor))
     }
     fn traffic_set_density(&mut self, cars: Option<usize>, share: Option<f32>) -> bool {
-        let Some(app) = self.app_mut() else { return false };
-        if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+        let Some(app) = self.app_mut() else {
+            return false;
+        };
+        if app
+            .net
+            .lan
+            .as_ref()
+            .is_some_and(|l| l.role == omsi_net::Role::Client)
+        {
             return false;
         }
-        let Some(t) = app.session.traffic.as_mut() else { return false };
+        let Some(t) = app.session.traffic.as_mut() else {
+            return false;
+        };
         if let Some(n) = cars {
             t.target = n;
             app.args.traffic = n;
@@ -844,14 +1169,21 @@ impl PluginIo for Io<'_> {
         self.app().map(|a| a.settings.pax_density)
     }
     fn people_set_density(&mut self, v: f32) -> bool {
-        let Some(app) = self.app_mut() else { return false };
+        let Some(app) = self.app_mut() else {
+            return false;
+        };
         app.settings.pax_density = v;
         true
     }
     fn ticket_asks(&self) -> Vec<op::TicketAsk> {
         self.ticket_asks.clone()
     }
-    fn people_set_ticket(&mut self, id: u32, change: &op::TicketChange, by: &str) -> Result<(), String> {
+    fn people_set_ticket(
+        &mut self,
+        id: u32,
+        change: &op::TicketChange,
+        by: &str,
+    ) -> Result<(), String> {
         let app = self.app_mut().ok_or("no game")?;
         pbus::set_ticket(app, id, change, by)
     }
@@ -869,29 +1201,53 @@ impl PluginIo for Io<'_> {
     fn duty_skip_to(&mut self, index: usize) -> bool {
         self.app_mut().is_some_and(|a| pduty::skip_to(a, index))
     }
-    fn duty_start(&mut self, line: &str, tour: &str, trip: usize, stop: usize) -> Result<(), String> {
+    fn duty_start(
+        &mut self,
+        line: &str,
+        tour: &str,
+        trip: usize,
+        stop: usize,
+    ) -> Result<(), String> {
         pduty::start(self.app_mut().ok_or("no game")?, line, tour, trip, stop)
     }
     fn duty_end(&mut self) -> bool {
         self.app_mut().is_some_and(pduty::finish)
     }
     fn duty_set_auto_ibis(&mut self, owner: u64, on: bool) -> bool {
-        self.app_mut().is_some_and(|a| pduty::set_auto_ibis(a, owner, on))
+        self.app_mut()
+            .is_some_and(|a| pduty::set_auto_ibis(a, owner, on))
     }
     fn duty_type_ibis(&mut self) -> bool {
         self.app_mut().is_some_and(pduty::type_ibis)
     }
     fn duty_set_closed_stops(&mut self, stops: &[String], via: &str) -> bool {
-        self.app_mut().is_some_and(|a| pduty::set_closed_stops(a, stops, via))
+        self.app_mut()
+            .is_some_and(|a| pduty::set_closed_stops(a, stops, via))
     }
     fn timetable_lines(&self) -> Vec<op::Line> {
         self.app().map(pduty::lines).unwrap_or_default()
     }
-    fn timetable_stops(&self, line: &str, tour: &str, trip: Option<usize>) -> Vec<(usize, usize, String, f64)> {
-        self.app().map(|a| pduty::tour_stops(a, line, tour, trip)).unwrap_or_default()
+    fn timetable_stops(
+        &self,
+        line: &str,
+        tour: &str,
+        trip: Option<usize>,
+    ) -> Vec<(usize, usize, String, f64)> {
+        self.app()
+            .map(|a| pduty::tour_stops(a, line, tour, trip))
+            .unwrap_or_default()
     }
     fn timetable_stop_names(&self) -> Vec<(i64, String)> {
-        self.app().and_then(|a| a.session.schedule.as_ref()).map(|s| s.data.bus_stops.iter().map(|b| (b.object_id, b.name.trim().to_string())).collect()).unwrap_or_default()
+        self.app()
+            .and_then(|a| a.session.schedule.as_ref())
+            .map(|s| {
+                s.data
+                    .bus_stops
+                    .iter()
+                    .map(|b| (b.object_id, b.name.trim().to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
     fn map_info(&self) -> Option<op::MapInfo> {
         pduty::map_info(self.app()?)
@@ -914,22 +1270,30 @@ impl PluginIo for Io<'_> {
         pduty::object(self.app()?, id)
     }
     fn map_objects_near(&self, x: f64, y: f64, r: f64) -> Vec<(i64, [f64; 4])> {
-        self.app().map(|a| pduty::objects_near(a, x, y, r)).unwrap_or_default()
+        self.app()
+            .map(|a| pduty::objects_near(a, x, y, r))
+            .unwrap_or_default()
     }
     fn map_ground(&self, x: f64, y: f64) -> (Option<f64>, Option<f64>) {
-        self.app().and_then(|a| a.world.as_ref()).map(|w| (w.ground_height(x, y), w.ground_terrain(x, y))).unwrap_or_default()
+        self.app()
+            .and_then(|a| a.world.as_ref())
+            .map(|w| (w.ground_height(x, y), w.ground_terrain(x, y)))
+            .unwrap_or_default()
     }
     fn map_entrypoints(&self) -> Vec<op::Entry> {
         self.app().map(pduty::entrypoints).unwrap_or_default()
     }
     fn map_teleport(&mut self, at: [f64; 3], heading: f64) -> bool {
-        self.app_mut().is_some_and(|a| pduty::teleport(a, at, heading))
+        self.app_mut()
+            .is_some_and(|a| pduty::teleport(a, at, heading))
     }
     fn map_teleport_entry(&mut self, index: usize) -> bool {
-        self.app_mut().is_some_and(|a| pduty::teleport_entry(a, index))
+        self.app_mut()
+            .is_some_and(|a| pduty::teleport_entry(a, index))
     }
     fn map_place_on_road(&mut self, x: f64, y: f64) -> bool {
-        self.app_mut().is_some_and(|a| pduty::place_on_road(a, x, y))
+        self.app_mut()
+            .is_some_and(|a| pduty::place_on_road(a, x, y))
     }
     fn map_lane(&self, x: f64, y: f64) -> Option<op::Lane> {
         pduty::lane(self.app()?, x, y)
@@ -949,7 +1313,9 @@ impl PluginIo for Io<'_> {
         self.app().map(|a| a.time_speed())
     }
     fn set_time_speed(&mut self, x: f64) -> bool {
-        let Some(app) = self.app_mut() else { return false };
+        let Some(app) = self.app_mut() else {
+            return false;
+        };
         if app.net.lan.is_some() || app.real_time_locked() {
             return false;
         }
@@ -960,7 +1326,9 @@ impl PluginIo for Io<'_> {
         self.app().is_some_and(|a| a.paused)
     }
     fn set_paused(&mut self, on: bool) -> bool {
-        let Some(app) = self.app_mut() else { return false };
+        let Some(app) = self.app_mut() else {
+            return false;
+        };
         if app.net.lan.is_some() {
             return false;
         }
@@ -972,7 +1340,10 @@ impl PluginIo for Io<'_> {
     fn season(&self) -> Option<(Option<String>, bool)> {
         self.app()?;
         let app = self.app()?;
-        Some((omsi_texture::season_folder(), app.world.as_ref().is_some_and(|w| w.settings.snow())))
+        Some((
+            omsi_texture::season_folder(),
+            app.world.as_ref().is_some_and(|w| w.settings.snow()),
+        ))
     }
     fn weather(&self) -> Option<op::Weather> {
         pworld::weather(self.app()?)
@@ -995,16 +1366,21 @@ impl PluginIo for Io<'_> {
         self.app_mut().is_some_and(|a| pworld::set_view(a, name))
     }
     fn set_free_camera(&mut self, at: [f64; 3], yaw: f32, pitch: f32) -> bool {
-        self.app_mut().is_some_and(|a| pworld::set_free_camera(a, at, yaw, pitch))
+        self.app_mut()
+            .is_some_and(|a| pworld::set_free_camera(a, at, yaw, pitch))
     }
     fn set_zoom(&mut self, k: f32) -> bool {
-        let Some(app) = self.app_mut() else { return false };
+        let Some(app) = self.app_mut() else {
+            return false;
+        };
         let view = app.view.clone();
         app.cam.view_zoom.insert(view, k);
         true
     }
     fn set_look(&mut self, yaw: f32, pitch: f32) -> bool {
-        let Some(app) = self.app_mut() else { return false };
+        let Some(app) = self.app_mut() else {
+            return false;
+        };
         app.cam.look = (yaw, pitch);
         true
     }
@@ -1016,13 +1392,21 @@ impl PluginIo for Io<'_> {
     }
     fn mouse(&self) -> Option<op::Mouse> {
         let i = &self.app()?.input;
-        Some(op::Mouse { x: i.cursor.0, y: i.cursor.1, left: i.buttons_held.0, right: i.buttons_held.1, middle: i.mmb_held })
+        Some(op::Mouse {
+            x: i.cursor.0,
+            y: i.cursor.1,
+            left: i.buttons_held.0,
+            right: i.buttons_held.1,
+            middle: i.mmb_held,
+        })
     }
     fn controllers(&self) -> Vec<op::Controller> {
         self.app().map(pworld::controllers).unwrap_or_default()
     }
     fn bindings(&self, vehicle: bool) -> Vec<(String, String)> {
-        self.app().map(|a| pworld::bindings(a, vehicle)).unwrap_or_default()
+        self.app()
+            .map(|a| pworld::bindings(a, vehicle))
+            .unwrap_or_default()
     }
 
     // --- sound ---
@@ -1030,7 +1414,9 @@ impl PluginIo for Io<'_> {
         pworld::sound_play(self.app.as_deref_mut()?, file, s)
     }
     fn sound_set(&mut self, id: u64, s: &op::Sound) -> bool {
-        self.app.as_deref_mut().is_some_and(|a| pworld::sound_set(a, id, s))
+        self.app
+            .as_deref_mut()
+            .is_some_and(|a| pworld::sound_set(a, id, s))
     }
     fn sound_stop(&mut self, id: u64) {
         if let Some(a) = self.app().and_then(|a| a.sound.audio.as_ref()) {
@@ -1038,7 +1424,9 @@ impl PluginIo for Io<'_> {
         }
     }
     fn sound_playing(&self, id: u64) -> bool {
-        self.app().and_then(|a| a.sound.audio.as_ref()).is_some_and(|a| a.is_playing(id))
+        self.app()
+            .and_then(|a| a.sound.audio.as_ref())
+            .is_some_and(|a| a.is_playing(id))
     }
     fn volume(&self) -> Option<f32> {
         self.app().map(|a| a.settings.volume)
@@ -1054,10 +1442,15 @@ impl PluginIo for Io<'_> {
     fn screenshot(&mut self) -> Option<String> {
         let app = self.app.as_deref_mut()?;
         app.take_screenshot();
-        app.perf.shot.as_ref().map(|s| s.0.to_string_lossy().into_owned())
+        app.perf
+            .shot
+            .as_ref()
+            .map(|s| s.0.to_string_lossy().into_owned())
     }
     fn notify(&mut self, text: &str, kind: u8, seconds: f32) -> bool {
-        self.app.as_deref_mut().is_some_and(|a| pworld::notify(a, text, kind, seconds))
+        self.app
+            .as_deref_mut()
+            .is_some_and(|a| pworld::notify(a, text, kind, seconds))
     }
     fn game_action(&mut self, name: &str) -> bool {
         self.app_mut().is_some_and(|a| a.game_action(name))
@@ -1085,7 +1478,12 @@ impl PluginIo for Io<'_> {
 }
 
 /// Where a point of one of a vehicle's meshes is now (see `PluginIo::mesh_point`).
-fn mesh_point_of(v: &omsi_sim::VehicleInstance, mesh: &str, point: [f32; 3], section: usize) -> Option<[f64; 3]> {
+fn mesh_point_of(
+    v: &omsi_sim::VehicleInstance,
+    mesh: &str,
+    point: [f32; 3],
+    section: usize,
+) -> Option<[f64; 3]> {
     let (position, xf) = if section == 0 {
         (v.position, v.mesh_local_transform(mesh_index(&v.ty, mesh)?))
     } else {
@@ -1106,11 +1504,31 @@ fn mesh_index(ty: &omsi_sim::VehicleType, mesh: &str) -> Option<usize> {
     fn name(f: &str) -> &str {
         f.rsplit(['/', '\\']).next().unwrap_or(f)
     }
-    let norm = |b: u8| if b == b'/' { b'\\' } else { b.to_ascii_lowercase() };
-    let ends_with = |file: &str| file.len() >= mesh.len() && file.bytes().rev().zip(mesh.bytes().rev()).all(|(a, b)| norm(a) == norm(b));
-    let file_of = |i: usize| ty.model.meshes.get(ty.meshes[i].def_index).map_or("", |m| m.file.as_str());
+    let norm = |b: u8| {
+        if b == b'/' {
+            b'\\'
+        } else {
+            b.to_ascii_lowercase()
+        }
+    };
+    let ends_with = |file: &str| {
+        file.len() >= mesh.len()
+            && file
+                .bytes()
+                .rev()
+                .zip(mesh.bytes().rev())
+                .all(|(a, b)| norm(a) == norm(b))
+    };
+    let file_of = |i: usize| {
+        ty.model
+            .meshes
+            .get(ty.meshes[i].def_index)
+            .map_or("", |m| m.file.as_str())
+    };
     let n = ty.meshes.len();
-    (0..n).find(|&i| name(file_of(i)).eq_ignore_ascii_case(mesh)).or_else(|| (0..n).find(|&i| ends_with(file_of(i))))
+    (0..n)
+        .find(|&i| name(file_of(i)).eq_ignore_ascii_case(mesh))
+        .or_else(|| (0..n).find(|&i| ends_with(file_of(i))))
 }
 
 /// A vehicle's body (or a coupled section's) now: origin and axes (see `PluginIo::body_frame`).
@@ -1122,7 +1540,10 @@ fn body_frame_of(v: &omsi_sim::VehicleInstance, section: usize) -> Option<[f64; 
         (t.position, t.body_rotation())
     };
     let (x, y, z) = (r.x_axis, r.y_axis, r.z_axis);
-    Some([p.x, p.y, p.z, x.x as f64, x.y as f64, x.z as f64, y.x as f64, y.y as f64, y.z as f64, z.x as f64, z.y as f64, z.z as f64])
+    Some([
+        p.x, p.y, p.z, x.x as f64, x.y as f64, x.z as f64, y.x as f64, y.y as f64, y.z as f64,
+        z.x as f64, z.y as f64, z.z as f64,
+    ])
 }
 
 #[cfg(test)]
@@ -1155,7 +1576,14 @@ mod tests {
     fn game_info_names_require_prefix_and_ignore_ascii_case() {
         let io = snapshot(vec![("heading", InfoValue::Num(93.0))]);
         assert_eq!(io.game_number("OPENOMSI_Heading"), Some(93.0));
-        for name in ["heading", "openomsi", "openomsi_", "openomsi_unknown", "openomsí_heading", "💡💡💡heading"] {
+        for name in [
+            "heading",
+            "openomsi",
+            "openomsi_",
+            "openomsi_unknown",
+            "openomsí_heading",
+            "💡💡💡heading",
+        ] {
             assert_eq!(io.game_value(name), None, "{name}");
         }
     }
@@ -1172,7 +1600,10 @@ mod tests {
         assert_eq!(io.game_number("openomsi_speed"), Some(42.5));
         assert_eq!(io.game_number("openomsi_paused"), Some(1.0));
         assert_eq!(io.game_number("openomsi_on_foot"), Some(0.0));
-        assert_eq!(io.game_string("openomsi_destination").as_deref(), Some("Žďár nad Sázavou"));
+        assert_eq!(
+            io.game_string("openomsi_destination").as_deref(),
+            Some("Žďár nad Sázavou")
+        );
         assert_eq!(io.game_string("openomsi_map_path"), Some(String::new()));
         assert_eq!(io.game_number("openomsi_destination"), None);
         assert_eq!(io.game_string("openomsi_speed"), None);
@@ -1189,7 +1620,13 @@ mod tests {
 
     #[test]
     fn legacy_vehicle_callbacks_still_require_a_player_vehicle() {
-        let mut io = snapshot(vec![("clock", InfoValue::Num(32400.0)), ("map_path", InfoValue::Text("maps/example/global.cfg".into()))]);
+        let mut io = snapshot(vec![
+            ("clock", InfoValue::Num(32400.0)),
+            (
+                "map_path",
+                InfoValue::Text("maps/example/global.cfg".into()),
+            ),
+        ]);
         assert_eq!(io.var("openomsi_clock"), None);
         assert_eq!(io.string("openomsi_map_path"), None);
     }
@@ -1220,8 +1657,15 @@ mod tests {
 
         let mut info = Vec::new();
         stop_info(&mut info, &stops, next, false, None);
-        let get = |key: &str| info.iter().find(|(name, _)| *name == key).map(|(_, value)| value.clone());
-        assert_eq!(get("next_stop"), Some(InfoValue::Text("Next calling stop".into())));
+        let get = |key: &str| {
+            info.iter()
+                .find(|(name, _)| *name == key)
+                .map(|(_, value)| value.clone())
+        };
+        assert_eq!(
+            get("next_stop"),
+            Some(InfoValue::Text("Next calling stop".into()))
+        );
         assert_eq!(get("next_stop_number"), Some(InfoValue::Num(4.0)));
         assert_eq!(get("next_stop_id"), Some(InfoValue::Num(13.0)));
         assert_eq!(get("at_stop"), Some(InfoValue::Bool(false)));
@@ -1235,11 +1679,17 @@ mod tests {
 
         let mut depot_info = Vec::new();
         stop_info(&mut depot_info, &depot_stops, depot_next, false, None);
-        let depot_get = |key: &str| depot_info.iter()
-            .find(|(name, _)| *name == key)
-            .map(|(_, value)| value.clone());
+        let depot_get = |key: &str| {
+            depot_info
+                .iter()
+                .find(|(name, _)| *name == key)
+                .map(|(_, value)| value.clone())
+        };
 
-        assert_eq!(depot_get("next_stop"), Some(InfoValue::Text("Depot start".into())));
+        assert_eq!(
+            depot_get("next_stop"),
+            Some(InfoValue::Text("Depot start".into()))
+        );
         assert_eq!(depot_get("next_stop_number"), Some(InfoValue::Num(1.0)));
         assert_eq!(depot_get("at_stop"), Some(InfoValue::Bool(false)));
     }
@@ -1258,9 +1708,19 @@ mod tests {
             stops,
             closed: None,
         };
-        let stops = vec![stop(11, "A", 0.0, true), stop(12, "B", 100.0, false), stop(13, "C", -1.0, true)];
+        let stops = vec![
+            stop(11, "A", 0.0, true),
+            stop(12, "B", 100.0, false),
+            stop(13, "C", -1.0, true),
+        ];
         let mut v = Vec::new();
-        stop_info(&mut v, &stops, 2, true, Some(glam::DVec3::new(30.0, 40.0, 0.0)));
+        stop_info(
+            &mut v,
+            &stops,
+            2,
+            true,
+            Some(glam::DVec3::new(30.0, 40.0, 0.0)),
+        );
         let get = |k: &str| v.iter().find(|(key, _)| *key == k).map(|(_, x)| x.clone());
         assert_eq!(get("next_stop"), Some(InfoValue::Text("C".into())));
         assert_eq!(get("next_stop_id"), Some(InfoValue::Num(13.0)));
@@ -1272,6 +1732,9 @@ mod tests {
         // at the first stop there is none before it
         let mut v = Vec::new();
         stop_info(&mut v, &stops, 0, false, None);
-        assert!(v.iter().all(|(k, _)| !k.starts_with("previous_stop") && *k != "next_stop_distance"));
+        assert!(
+            v.iter()
+                .all(|(k, _)| !k.starts_with("previous_stop") && *k != "next_stop_distance")
+        );
     }
 }
