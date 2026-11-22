@@ -127,6 +127,7 @@ impl App {
                     &t.ty,
                     scheme.filter(|i| k < own && *i < t.ty.paint_schemes.len()),
                     &render,
+                    p.vehicle.mirror_base(k),
                 )
             })
             .collect();

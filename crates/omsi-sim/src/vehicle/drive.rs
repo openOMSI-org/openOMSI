@@ -27,7 +27,135 @@ pub(super) fn driven_wheels_speed(wheels: impl Iterator<Item = (f32, f32, bool)>
     (n > 0).then(|| sum / n as f32)
 }
 
+/// How far either side of the track's middle a rail vehicle meets scenery under its body
+/// (m): just over the gauge.
+const RAIL_STRIP: f64 = 0.7;
+
+/// How high over the rails a rail car's body clears a platform beside the track (m): the
+/// highest platform of its kind, a tram's kerb of up to 30 cm, a railway's 96 cm, a metro's
+/// level platform.
+fn platform_clear(class: Option<crate::rail::RailClass>) -> f64 {
+    match class {
+        Some(crate::rail::RailClass::Metro) => 1.15,
+        Some(crate::rail::RailClass::Train) => 1.0,
+        _ => 0.35,
+    }
+}
+
 impl VehicleInstance {
+    /// The boxes a vehicle meets scenery with: its body's collision box (`bb`, its
+    /// `[boundingbox]`, None without one) standing at `pos` facing `heading`. On the rails,
+    /// each car's own box where that car stands on the track (the trailing cars as they
+    /// stood, moved by `moved`), at its whole width from the top of a platform up, and below
+    /// that only the strip over the track, on the track's middle whatever way the box is set
+    /// off to the side: the car's body overhangs a platform, as the real one does, and a pole
+    /// or a wall beside the body is hit, in a bend too. A coupled car with a box counts though
+    /// the leading car has none. They are made as they are asked for, not kept in a list: this
+    /// runs every physics step for every vehicle with collisions.
+    pub(super) fn scenery_boxes(
+        &self,
+        bb: Option<[f32; 6]>,
+        (pos, heading): (DVec3, f64),
+        moved: DVec3,
+    ) -> impl Iterator<Item = crate::collision::Obb> + '_ {
+        let rail = self.rail_env.is_some();
+        let clear = if rail {
+            platform_clear(crate::rail::RailClass::of(&self.ty.def))
+        } else {
+            0.0
+        };
+        let trailers = self
+            .trailers
+            .iter()
+            .filter(move |_| rail)
+            .filter_map(move |t| {
+                Some((t.ty.def.bounding_box?, t.position + moved, t.body_heading()))
+            });
+        bb.map(|bb| (bb, pos, heading))
+            .into_iter()
+            .chain(trailers)
+            .flat_map(move |(bb, at, heading)| {
+                let b = crate::collision::Obb::from_box(bb, at, heading);
+                if !rail {
+                    return [Some(b), None];
+                }
+                // (the strip lies on the track: the box's length, not its offset to the side)
+                let strip = [
+                    bb[0].min(2.0 * RAIL_STRIP as f32),
+                    bb[1],
+                    bb[2],
+                    0.0,
+                    bb[4],
+                    bb[5],
+                ];
+                let upper = (b.z1 > at.z + clear).then(|| crate::collision::Obb {
+                    z0: b.z0.max(at.z + clear),
+                    ..b
+                });
+                [
+                    Some(crate::collision::Obb::from_box(strip, at, heading)),
+                    upper,
+                ]
+            })
+            .flatten()
+    }
+
+    /// The first obstacle the body runs into this step, from `prev` (its position and
+    /// heading before it), with the contact and whether it was already inside it. Other
+    /// vehicles meet the leading car's whole box (`bb`, None without one); scenery meets
+    /// [`Self::scenery_boxes`]. Each obstacle is tried as it is found, the scenery near each
+    /// box first, then the other vehicles.
+    fn first_hit(
+        &self,
+        bb: Option<[f32; 6]>,
+        prev: (DVec3, f64),
+        dt: f32,
+    ) -> Option<(crate::collision::Obb, crate::collision::Contact, bool)> {
+        let (now, before) = (
+            self.body_heading(),
+            body_heading(&self.ty.def, prev.1, false),
+        );
+        let moved = self.position - prev.0;
+        // (each box this step with the same box before it)
+        let scenery = self.collision.as_deref().into_iter().flat_map(move |cw| {
+            self.scenery_boxes(bb, (self.position, now), moved)
+                .zip(self.scenery_boxes(bb, (prev.0, before), DVec3::ZERO))
+                .flat_map(move |(b, b_prev)| {
+                    cw.obstacles_near(&b)
+                        .into_iter()
+                        .map(move |o| (o, b, b_prev))
+                })
+        });
+        let vehicles = bb.into_iter().flat_map(move |bb| {
+            let body = crate::collision::Obb::from_box(bb, self.position, now);
+            let prev_body = crate::collision::Obb::from_box(bb, prev.0, before);
+            self.dynamic_boxes
+                .iter()
+                .map(move |&o| (o, body, prev_body))
+        });
+        // an obstacle we were already inside before this step (spawned on it, pushed into
+        // it) never blocks: only entering an obstacle does
+        scenery
+            .chain(vehicles)
+            .find_map(|(obstacle, obb, prev_obb)| {
+                let was_overlapping = if obstacle.mass > 0.0 {
+                    let mut previous = obstacle;
+                    previous.center -= obstacle.velocity * dt as f64;
+                    previous.overlaps(&prev_obb)
+                } else {
+                    obstacle.overlaps(&prev_obb)
+                };
+                if !obstacle.overlaps(&obb)
+                    || (was_overlapping && obstacle.mass <= 0.0)
+                    || (obstacle.id >= 0 && self.knocked.contains(&obstacle.id))
+                {
+                    return None;
+                }
+                obb.contact(&obstacle)
+                    .map(|contact| (obstacle, contact, was_overlapping))
+            })
+    }
+
     pub fn set_controls(&mut self, c: Controls) {
         self.physics.controls = c;
     }
@@ -137,119 +265,88 @@ impl VehicleInstance {
         self.position.y += h.cos() * ds as f64;
         self.heading = (self.heading + dheading as f64).rem_euclid(360.0);
         // collisions: back out of obstacles and stop
-        if let Some(bb) = self.ty.def.bounding_box {
-            let obb = crate::collision::Obb::from_box(bb, self.position, self.body_heading());
-            // an obstacle we were already inside before this step (spawned on it, pushed into
-            // it) never blocks: only entering an obstacle does
-            let prev_obb = crate::collision::Obb::from_box(
-                bb,
-                prev.0,
-                body_heading(&self.ty.def, prev.1, false),
-            );
-            let mut obstacles = self
-                .collision
-                .as_ref()
-                .map(|cw| cw.obstacles_near(&obb))
-                .unwrap_or_default();
-            obstacles.extend(self.dynamic_boxes.iter().copied());
-            let hit = obstacles.iter().copied().find_map(|obstacle| {
-                let was_overlapping = if obstacle.mass > 0.0 {
-                    let mut previous = obstacle;
-                    previous.center -= obstacle.velocity * dt as f64;
-                    previous.overlaps(&prev_obb)
-                } else {
-                    obstacle.overlaps(&prev_obb)
-                };
-                if !obstacle.overlaps(&obb)
-                    || (was_overlapping && obstacle.mass <= 0.0)
-                    || (obstacle.id >= 0 && self.knocked.contains(&obstacle.id))
-                {
-                    return None;
-                }
-                obb.contact(&obstacle)
-                    .map(|contact| (obstacle, contact, was_overlapping))
-            });
-            if let Some((hit, contact, was_overlapping)) = hit {
-                let body_h = body_heading(&self.ty.def, prev.1, false).to_radians();
-                let own_velocity =
-                    glam::DVec2::new(body_h.sin(), body_h.cos()) * self.physics.speed as f64;
-                let relative_velocity = own_velocity - hit.velocity;
-                let closing_speed = -relative_velocity.dot(contact.normal);
-                let speed = if hit.mass > 0.0 {
-                    closing_speed.max(0.0) as f32
-                } else {
-                    relative_velocity.length() as f32
-                };
-                // out of a moving car that comes on only as far as the bus itself ran into
-                // it this step (as the rigid model has it): a car creeping into the standing
-                // bus does not shove it along; out of one standing or drawing away all the way
-                let approaching = hit.mass > 0.0 && hit.velocity.dot(contact.normal) > 0.0;
-                let out = if approaching {
-                    contact
-                        .depth
-                        .min((-own_velocity.dot(contact.normal)).max(0.0) * dt as f64 + 0.001)
-                } else {
-                    contact.depth + 0.001
-                };
-                if hit.mass <= 0.0 || closing_speed >= -(crate::rigid::CRASH_SPEED as f64) {
-                    if was_overlapping {
-                        self.position += contact.normal.extend(0.0) * out;
-                        if speed > crate::rigid::CRASH_SPEED {
-                            self.physics.speed = 0.0;
-                        }
-                    } else if speed <= crate::rigid::CRASH_SPEED {
-                        self.position += contact.normal.extend(0.0) * out;
-                    } else {
-                        // what the blow takes: the bus's motion into a wall, and between two
-                        // vehicles what the pair loses, 0.5 v² (1 - e²) over their inverse
-                        // mass, as the rigid model counts it: a 1 t car running into the
-                        // standing bus at 10 m/s is some 44 kJ, not the 500 kJ of the bus
-                        // itself at that speed
-                        let e = if hit.mass > 0.0 {
-                            let back = if speed > 1.0 {
-                                crate::rigid::RESTITUTION
-                            } else {
-                                0.0
-                            };
-                            0.5 * speed * speed * (1.0 - back * back)
-                                / (1.0 / self.physics.mass_kg + 1.0 / hit.mass)
-                        } else {
-                            0.5 * self.physics.mass_kg * speed * speed
-                        };
-                        let point = glam::DVec3::new(
-                            contact.point.x,
-                            contact.point.y,
-                            crate::collision::impact_height(contact.z0, contact.z1),
-                        );
-                        let rel = point.truncate() - self.position.truncate();
-                        let (sh, ch) = (body_h.sin(), body_h.cos());
-                        let coll_pos = [
-                            (rel.x * ch - rel.y * sh) as f32,
-                            (rel.x * sh + rel.y * ch) as f32,
-                            (point.z - self.position.z) as f32,
-                        ];
-                        self.host.coll_pos = coll_pos;
-                        // kJ, like the rigid model reports it
-                        self.host.coll_energy += e / 1000.0;
-                        self.last_crash += e;
-                        self.crashes += 1;
-                        self.last_impact = e;
-                        self.collided = true;
-                        self.break_glass_for_impact(Vec3::from_array(coll_pos), speed, e);
-                        if hit.mass > 0.0 && hit.id <= -2 && e >= 1000.0 {
-                            self.dynamic_impacts.push(DynamicImpact {
-                                obstacle_id: hit.id,
-                                point,
-                                push: (-contact.normal).extend(0.0),
-                                speed,
-                                energy: e,
-                                mass: self.physics.mass_kg,
-                            });
-                        }
-                        self.position = prev.0;
-                        self.heading = prev.1;
+        // (a coupled car with a box meets scenery though the leading car has none)
+        let hit = self.first_hit(self.ty.def.bounding_box, prev, dt);
+        if let Some((hit, contact, was_overlapping)) = hit {
+            let body_h = body_heading(&self.ty.def, prev.1, false).to_radians();
+            let own_velocity =
+                glam::DVec2::new(body_h.sin(), body_h.cos()) * self.physics.speed as f64;
+            let relative_velocity = own_velocity - hit.velocity;
+            let closing_speed = -relative_velocity.dot(contact.normal);
+            let speed = if hit.mass > 0.0 {
+                closing_speed.max(0.0) as f32
+            } else {
+                relative_velocity.length() as f32
+            };
+            // out of a moving car that comes on only as far as the bus itself ran into
+            // it this step (as the rigid model has it): a car creeping into the standing
+            // bus does not shove it along; out of one standing or drawing away all the way
+            let approaching = hit.mass > 0.0 && hit.velocity.dot(contact.normal) > 0.0;
+            let out = if approaching {
+                contact
+                    .depth
+                    .min((-own_velocity.dot(contact.normal)).max(0.0) * dt as f64 + 0.001)
+            } else {
+                contact.depth + 0.001
+            };
+            if hit.mass <= 0.0 || closing_speed >= -(crate::rigid::CRASH_SPEED as f64) {
+                if was_overlapping {
+                    self.position += contact.normal.extend(0.0) * out;
+                    if speed > crate::rigid::CRASH_SPEED {
                         self.physics.speed = 0.0;
                     }
+                } else if speed <= crate::rigid::CRASH_SPEED {
+                    self.position += contact.normal.extend(0.0) * out;
+                } else {
+                    // what the blow takes: the bus's motion into a wall, and between two
+                    // vehicles what the pair loses, 0.5 v² (1 - e²) over their inverse
+                    // mass, as the rigid model counts it: a 1 t car running into the
+                    // standing bus at 10 m/s is some 44 kJ, not the 500 kJ of the bus
+                    // itself at that speed
+                    let e = if hit.mass > 0.0 {
+                        let back = if speed > 1.0 {
+                            crate::rigid::RESTITUTION
+                        } else {
+                            0.0
+                        };
+                        0.5 * speed * speed * (1.0 - back * back)
+                            / (1.0 / self.physics.mass_kg + 1.0 / hit.mass)
+                    } else {
+                        0.5 * self.physics.mass_kg * speed * speed
+                    };
+                    let point = glam::DVec3::new(
+                        contact.point.x,
+                        contact.point.y,
+                        crate::collision::impact_height(contact.z0, contact.z1),
+                    );
+                    let rel = point.truncate() - self.position.truncate();
+                    let (sh, ch) = (body_h.sin(), body_h.cos());
+                    let coll_pos = [
+                        (rel.x * ch - rel.y * sh) as f32,
+                        (rel.x * sh + rel.y * ch) as f32,
+                        (point.z - self.position.z) as f32,
+                    ];
+                    self.host.coll_pos = coll_pos;
+                    // kJ, like the rigid model reports it
+                    self.host.coll_energy += e / 1000.0;
+                    self.last_crash += e;
+                    self.crashes += 1;
+                    self.last_impact = e;
+                    self.collided = true;
+                    self.break_glass_for_impact(Vec3::from_array(coll_pos), speed, e);
+                    if hit.mass > 0.0 && hit.id <= -2 && e >= 1000.0 {
+                        self.dynamic_impacts.push(DynamicImpact {
+                            obstacle_id: hit.id,
+                            point,
+                            push: (-contact.normal).extend(0.0),
+                            speed,
+                            energy: e,
+                            mass: self.physics.mass_kg,
+                        });
+                    }
+                    self.position = prev.0;
+                    self.heading = prev.1;
+                    self.physics.speed = 0.0;
                 }
             }
         }

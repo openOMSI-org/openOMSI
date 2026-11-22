@@ -13,6 +13,22 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   stands across it. The walls of a cut in the ground show the ground's texture instead of streaks.
 - **No sun inside tunnels**: a spline with a profile as tall as a storey (2 m or more) casts its
   shadow wherever it lies, also when it is buried in the ground.
+- **Rail vehicles no longer crash into platforms they clear**: on the rails each car of a tram or a
+  train meets scenery with its own box, where that car stands on the track, in bends too. Above the
+  top of a platform (0.35 m over the rails for a tram, 1.0 m for a train, 1.15 m for a metro) the box
+  is the car's whole width, so a pole or a wall beside the body stops it. Below that only the strip
+  over the track's middle counts (0.7 m either side), as the real body overhangs a platform's edge:
+  a buffer stop still stops it, the platform no longer does. Other vehicles meet the leading car's
+  whole body, side impacts included.
+- **An AI tram's rear section follows the bend from the moment it appears**: the track behind a tram
+  put on its rails is laid out from the lanes before it, so a KT4D's rear section no longer stands
+  across the track until the tram has driven its own length.
+- **Trams roll through tight curves**: a street tram's curve resistance is its own (about 10 N/kN
+  in a 25 m curve) instead of a main-line car's, and the curve is taken over 12 m of track, so the
+  kink where a switch's lanes meet no longer reads as the sharpest curve there is. A contact shoe on
+  a car with a pantograph (the NF6D's) no longer makes it a metro car.
+- **Mirrors on every car of a train**: a coupled car's `reflexionN` mirrors show its own mirror
+  cameras, numbered on from car to car, instead of the first car's.
 - **Plugins can lay cards of their own over the navigator's map**: a plugin that fills the navigator's frame (`frame = true`) can put small cards of its own on the map - the next stop, the speed, whatever it shows - with the `map` element's new `overlay` key, at any corner or edge of the map and held inside it (what crosses the map's edge is left out, the card's corners stay rounded); their buttons take clicks as in the rest of the panel (`omsi.ui.version` 8). An example is `docs/examples/plugins/navigator_map.lua`.
 - **mX Graphics (Experimental)** on a Mac: Settings → Graphics → Display → *mX Graphics (Experimental)* draws the game on Metal with [mX](https://github.com/openOMSI-org/mX), openOMSI's own graphics library, instead of wgpu, from the next start. The picture is meant to be the same. It is an early step: the game's shaders do not use mX's bindless textures yet, and in the tests so far it spent less processor time on a frame than wgpu and the same time on the graphics chip. Ray tracing and frame generation stay off with it; where mX cannot open the graphics chip, the game draws with wgpu as before. Off by default. mX's Direct3D 12 and Vulkan have not drawn the game on a real graphics card yet, so Windows and Linux do not offer the switch; `OMSI_MX=on` tries them for one run (without DLSS, FSR 3 and VR), and `OMSI_MX=off` turns mX off for a run on a Mac.
 - **Plugins see the AI vehicles' size**: `omsi.traffic.list()`, `get`, `nearest` and `ahead`
