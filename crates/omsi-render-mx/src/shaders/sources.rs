@@ -52,6 +52,11 @@ fn without_tree_fade(src: &str) -> String {
 }
 
 fn stub_fn(src: &str, head: &str, value: &str) -> String {
+    stub_body(src, head, &format!("return {value};"))
+}
+
+/// `head`'s function with `body` for all it does.
+fn stub_body(src: &str, head: &str, body: &str) -> String {
     let start = src
         .find(head)
         .unwrap_or_else(|| panic!("scene shader: {head} not found"));
@@ -60,11 +65,7 @@ fn stub_fn(src: &str, head: &str, value: &str) -> String {
             .find("\n}")
             .unwrap_or_else(|| panic!("scene shader: {head} has no end"))
         + 2;
-    format!(
-        "{}{head}\n    return {value};\n}}{}",
-        &src[..start],
-        &src[close..]
-    )
+    format!("{}{head}\n    {body}\n}}{}", &src[..start], &src[close..])
 }
 
 /// The sun's shadow tent with each gather of four depth comparisons taken as four single
@@ -465,7 +466,14 @@ pub(crate) fn lean_scene(src: String) -> String {
         );
     debug_assert_eq!(out.matches("sun_shadow_soft(in.world").count(), 1);
     debug_assert!(!out.contains("* lamp_shadow_at("));
-    out
+    // and no drops on the panes, only their film and blur: FXC unrolls the drops' cell
+    // loops into each of the shader's glass paths, and Direct3D 11 on WARP spent over two
+    // minutes on the scene pipelines (the ANGLE startup check timed out)
+    stub_body(
+        &out,
+        "fn glass_drops(a: ptr<function, DropAcc>, b: PaneBase, p: PaneProj, w: f32, wet: f32, heavy: f32, bank: f32, size: f32, world: vec3<f32>, t: f32) {",
+        "",
+    )
 }
 
 /// The sky dome (both paths) and the enhanced reflection probe.
@@ -497,8 +505,9 @@ pub(crate) fn rain_shader_source() -> String {
 }
 
 pub(crate) fn lean_rain(src: String) -> String {
+    // (no line end in the pattern: a Windows checkout turns the file's into CRLF)
     const LAMPS: &str =
-        "        l = max(precip_light(in.pos, to_eye, true) - round, vec3<f32>(0.0)) * 1.5 + l;\n";
+        "l = max(precip_light(in.pos, to_eye, true) - round, vec3<f32>(0.0)) * 1.5 + l;";
     debug_assert_eq!(src.matches(LAMPS).count(), 1);
     src.replace(LAMPS, "")
 }
