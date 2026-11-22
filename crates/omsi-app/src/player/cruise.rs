@@ -29,7 +29,7 @@ impl Cruise {
         let err = self.kmh - kmh;
         self.integral = (self.integral + err * dt).clamp(-10.0, 30.0);
         let u = 0.08 * err + 0.03 * self.integral;
-        if u >= 0.0 {
+        if err >= 0.0 && u >= 0.0 {
             (u.min(1.0), 0.0)
         } else if err < -1.5 {
             (0.0, (-(err + 1.5) * 0.05).clamp(0.0, 0.4))
