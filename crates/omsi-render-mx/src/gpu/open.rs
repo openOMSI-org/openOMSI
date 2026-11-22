@@ -4,6 +4,14 @@ use super::upscaler_device;
 use crate::*;
 
 /// The chosen MSAA is being tried again after a remembered fallback (see `build_with_fallbacks`).
+/// How many times this thread published the adapter's state, its texture options and
+/// its memory and name (tests: other tests open
+/// renderers on their own threads at the same time, so the global value alone races).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static ADAPTER_PUBLISHED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
 static MSAA_RETRY: super::auxiliary::AdapterBool = super::auxiliary::AdapterBool::new(5);
 
 impl Renderer {
@@ -296,6 +304,8 @@ impl Renderer {
             };
         log::info!("graphics device opened; compiling renderer pipelines");
         if auxiliary_context().is_none() {
+            #[cfg(test)]
+            ADAPTER_PUBLISHED.with(|n| n.set(n.get() + 1));
             ADAPTER_TEXTURE_MB.store(guess_mb, std::sync::atomic::Ordering::Relaxed);
             ADAPTER_VRAM_MB.store(discrete_vram, std::sync::atomic::Ordering::Relaxed);
             *ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()) = Some(info.clone());
@@ -344,6 +354,8 @@ impl Renderer {
         let halve = halves_plain(adapter.supports_bc(), &options);
         if auxiliary_context().is_none() {
             omsi_texture::set_gpu_options(omsi_texture::GpuOptions { bc, compress });
+            #[cfg(test)]
+            ADAPTER_PUBLISHED.with(|n| n.set(n.get() + 1));
             omsi_texture::gpu::set_halve_plain(halve);
         }
         log::info!(
