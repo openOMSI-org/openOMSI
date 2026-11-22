@@ -206,7 +206,11 @@ fn brt_ticket_buyers_preserve_selling_door_when_fallback_triggers_and_noticketsa
 
     // Timeout triggers fallback, but ticket buyer still avoids {noticketsale} door 1
     h.pax_mut(0).unwrap().door_since = Some(h.time - DOOR_GIVE_UP * 0.6);
-    assert_eq!(choose(&mut h, &bus), 2, "ticket buyer stays at selling door after fallback");
+    assert_eq!(
+        choose(&mut h, &bus),
+        2,
+        "ticket buyer stays at selling door after fallback"
+    );
 
     // Multi-tick regression: continues targeting selling door over multiple ticks
     for _ in 0..5 {
@@ -241,7 +245,11 @@ fn brt_ticket_buyers_fall_back_to_open_door_when_rear_boarding_is_disabled() {
     bus.entry_open[2] = false;
 
     // With rear door boarding off, passenger falls back to open {noticketsale} door
-    assert_eq!(choose(&mut h, &bus), 1, "falls back to open door when rear boarding is disabled");
+    assert_eq!(
+        choose(&mut h, &bus),
+        1,
+        "falls back to open door when rear boarding is disabled"
+    );
 }
 
 #[test]
