@@ -11,9 +11,11 @@ pub mod ai_lists;
 pub mod crash;
 pub mod depot;
 mod file_dialog;
+mod game_setting_options;
 mod graphics_profile_transfer;
 #[cfg(test)]
 mod graphics_profile_transfer_tests;
+pub use game_setting_options::game_setting_options;
 mod graphics_profiles;
 mod hof_sync;
 pub mod i18n;
@@ -3052,12 +3054,12 @@ pub fn graphics_presets() -> [(&'static str, Value); 6] {
     let msaa = [1, 4, 2, 4, 4, 4];
     let scale = ["0.75", "auto", "auto", "auto", "auto", "auto"];
     let anisotropy = [2, 8, 8, 8, 16, 16];
-    let shadow = [1024, 2048, 2048, 2048, 4096, 4096];
+    let shadow = [512, 2048, 2048, 2048, 4096, 4096];
     let mirror = [128, 256, 256, 512, 512, 512];
     let refresh = ["eco", "full", "full", "full", "full", "full"];
-    let view = ["600", "auto", "auto", "auto", "2000", "2000"];
+    let view = ["300", "auto", "auto", "auto", "2000", "2000"];
     let obj_size = [0.03, 0.013, 0.013, 0.01, 0.005, 0.005];
-    let obj_dist = ["500", "auto", "auto", "auto", "1500", "1500"];
+    let obj_dist = ["300", "auto", "auto", "auto", "1500", "1500"];
     let rain = ["low", "high", "high", "high", "high", "high"];
     let light_shadows = ["off", "off", "street", "street", "all", "all"];
     let street_light = ["off", "off", "off", "auto", "on", "on"];
