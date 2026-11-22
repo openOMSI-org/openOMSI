@@ -883,8 +883,9 @@ impl Renderer {
         let defaults = defaults::build(&device, &queue, options.anisotropy);
         let (coronas, corona_texture) = coronas::Coronas::new(&device, &queue, &scene);
         let precip = crate::passes::PrecipMap::new(&device);
-        let snow = coronas::Precip::snow(&device, &scene.camera_layout, &precip.view);
-        let rain = coronas::Precip::rain(&device, &scene.camera_layout, &precip.view);
+        let flakes = crate::precip::FlakeAtlas::new(&device, &queue);
+        let snow = coronas::Precip::snow(&device, &scene.camera_layout, &precip.view, &flakes);
+        let rain = coronas::Precip::rain(&device, &scene.camera_layout, &precip.view, &flakes);
         drop(corona_texture);
         let sky = sky::SkyBase::new(&device, &queue, &scene.camera_layout, !leave_out_enhanced);
         let sky_pipelines = sky.pipeline_base();
@@ -949,6 +950,7 @@ impl Renderer {
                 scale_targets: HashMap::new(),
                 triple_targets: None,
                 glass_picture: None,
+                glass_mips: None,
                 target_use: HashMap::new(),
                 evicted_at: std::time::Instant::now(),
                 hdr_targets: HashMap::new(),
@@ -986,6 +988,7 @@ impl Renderer {
                 cloud_detail_view: sky.cloud_detail_view,
                 cloud_sampler: sky.cloud_sampler,
                 cloud_shape_cpu: sky.cloud_shape_cpu,
+                cloud_view_buf: sky.cloud_view_buf,
                 cloud_sun: None,
                 sky_mesh,
             },
@@ -1002,6 +1005,17 @@ impl Renderer {
                 fog_lamps_pipeline: fog_lamps.pipeline,
                 fog_lamps_layout: fog_lamps.layout,
                 fog_lamps_buf: fog_lamps.buf,
+                vol_fog: (!leave_out_enhanced)
+                    .then(|| {
+                        crate::vol_fog::VolFog::new(
+                            &device,
+                            &queue,
+                            &scene.camera_layout,
+                            hdr_format,
+                            gl,
+                        )
+                    })
+                    .flatten(),
                 corona_bind_group: coronas.bind_group,
                 snow_buf: snow.buf,
                 snow_bind_group: snow.bind_group,

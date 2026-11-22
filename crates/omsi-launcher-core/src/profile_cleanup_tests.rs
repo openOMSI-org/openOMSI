@@ -92,6 +92,12 @@ fn the_presets_rise_in_steps() {
             &json!("on")
         )
     );
+    // the volumetric fog is on in every preset (the Vanilla modes draw none), as it is by default
+    assert!(
+        p.iter()
+            .all(|(_, preset)| preset["volumetric_fog"] == json!(true)),
+        "{p:?}"
+    );
     for (name, preset) in &p {
         assert!(preset.get("video_memory").is_none(), "{name}");
         assert!(preset.get("cloud_quality").is_none(), "{name}");
@@ -138,9 +144,15 @@ fn low_then_back_to_vanilla_plus_keeps_the_shadows() {
         (
             &defaults["light_glow"],
             &defaults["cloud_shadows"],
-            &defaults["light_shadows"]
+            &defaults["light_shadows"],
+            &defaults["volumetric_fog"]
         ),
-        (&json!(false), &json!(false), &json!("off"))
+        (&json!(false), &json!(false), &json!("off"), &json!(true))
+    );
+    let off = settings_from_text(Some("volumetric_fog=0\n"));
+    assert_eq!(
+        settings_from_text(Some(&settings_to_text(&off, None)))["volumetric_fog"],
+        json!(false)
     );
     for (name, p) in &graphics_presets()[..3] {
         assert_eq!(

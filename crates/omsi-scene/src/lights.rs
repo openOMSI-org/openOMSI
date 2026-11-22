@@ -87,11 +87,15 @@ pub fn apply_weather(
     } else {
         0.0
     };
-    l.sun_intensity *= 1.0 - 0.75 * rain;
-    l.ambient *= 1.0 - 0.28 * rain;
-    l.secondary *= 1.0 - 0.32 * rain;
-    l.sky_color *= 1.0 - 0.22 * rain;
-    l.fog_color *= 1.0 - 0.15 * rain;
+    // (a downpour much more so than a shower: at the heaviest the day is a dusk, a fifth or so
+    // of an overcast day's light - taken a third off, a cloudburst at noon looked like any
+    // grey day)
+    let heavy = rain.powf(1.3);
+    l.sun_intensity *= 1.0 - 0.85 * rain;
+    l.ambient *= 1.0 - 0.55 * heavy;
+    l.secondary *= 1.0 - 0.6 * heavy;
+    l.sky_color *= 1.0 - 0.45 * heavy;
+    l.fog_color *= 1.0 - 0.4 * heavy;
     if rain > 0.0 {
         l.fog_density = l.fog_density.max(2.3 / (2500.0 - 1800.0 * rain));
     }
@@ -100,6 +104,9 @@ pub fn apply_weather(
     l.rain = rain;
     l.snowfall = if precip_kind == 2 { rain } else { 0.0 };
     l.night = l.night.max(gloom_darkness(overcast, rain));
+    // (by day in a downpour some of the houses' windows light up: the setting `rain_lights`,
+    // the shader picks which, `rain_lit_windows`)
+    l.rain_lights = ((rain - 0.35) / 0.45).clamp(0.0, 1.0);
     // (night maps on with the street lamps, or where the weather makes it that dark: a
     // clear dusk showed the lit windows and signs at a fraction, a rainy one at nearly
     // full, #276)

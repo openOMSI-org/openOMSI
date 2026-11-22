@@ -234,6 +234,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_ROAD_SNOW_LOG` | bool | off | use | scene, scene-mx | With the roads' snow: log its cover, the snow fallen, the weather and what it costs a frame (mean, worst, rut texels drawn) every ten seconds. |
 | `OMSI_SCENE_DIGEST` | bool | off | use | app, app-mx | Log a hash of the renderer's scene (its instances in order, their places, materials and parameters) before each offscreen picture: two runs whose renderers saw the same calls log the same digests. |
 | `OMSI_SEED` | num | random | use | app, app-mx | Seed of the scripts' random numbers (repeat a session). |
+| `OMSI_SHADER_HOT` | text | - | use | render, render-mx | Read the renderer's WGSL from this copy of a renderer crate's `src` folder (1: the source tree the game was built from), not the copy compiled in: trying shaders without a rebuild. |
 | `OMSI_SKIP_OBJECT` | text | - | use | scene, scene-mx | Leave out the objects whose file name contains this text. |
 | `OMSI_SKIP_PIPE` | text | - | frame | render, render-mx | Pipeline kinds to leave out of the main pass (comma-separated numbers). |
 | `OMSI_SPOT_SELECT` | num | - | use | scene, scene-mx | Turn on spotlight n (headlight pictures). |

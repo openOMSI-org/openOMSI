@@ -1205,6 +1205,8 @@ pub(crate) struct LightRes {
     /// OpenGL and without storage buffers), its bind group layout and parameters.
     pub(crate) fog_lamps_pipeline: Option<[mx::RenderPipeline; 2]>,
     pub(crate) fog_lamps_buf: mx::Buffer,
+    /// Enhanced: the volumetric fog (`vol_fog`; none where its pipelines cannot be made).
+    pub(crate) vol_fog: Option<crate::vol_fog::VolFog>,
     /// The tile light maps (`.map.LM.bmp`) of the 5x5 tiles around the camera, north up, and
     /// where that square lies (world x, y of its south-west corner, its side in metres).
     pub(crate) lm_atlas: mx::Texture,
