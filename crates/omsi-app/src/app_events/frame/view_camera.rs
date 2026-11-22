@@ -8,13 +8,30 @@ impl App {
     /// foot).
     pub(super) fn frame_view_camera(&mut self, dt: f32) {
         if self.view != "free" && self.view != "foot" {
-            let Some(p) = self.player.as_mut() else { return };
+            let Some(p) = self.player.as_mut() else {
+                return;
+            };
             // (the key made only when the view changed: `swap_view_look` does nothing else)
-            if !crate::input_script::look_key_is(&self.cam.look_view, &self.view, Some(p.cam_choice)) {
+            if !crate::input_script::look_key_is(
+                &self.cam.look_view,
+                &self.view,
+                Some(p.cam_choice),
+            ) {
                 let key = crate::input_script::look_key_of(&self.view, Some(p.cam_choice));
                 let left = self.cam.look_view.clone();
-                crate::input_script::swap_view_look(&mut self.cam.look, &mut self.cam.view_looks, &mut self.cam.look_view, &key);
-                crate::app_impl::swap_cam_zoom(&mut self.cam.view_zoom, &mut self.cam.cam_zooms, &left, &key, &self.view);
+                crate::input_script::swap_view_look(
+                    &mut self.cam.look,
+                    &mut self.cam.view_looks,
+                    &mut self.cam.look_view,
+                    &key,
+                );
+                crate::app_impl::swap_cam_zoom(
+                    &mut self.cam.view_zoom,
+                    &mut self.cam.cam_zooms,
+                    &left,
+                    &key,
+                    &self.view,
+                );
             }
             if let Some(cam) = self.camera.as_ref() {
                 let cam = *cam;
@@ -31,8 +48,12 @@ impl App {
                     }
                     // (the view editor's turn and field of view kept for it, `views.cfg`)
                     let def = &p.vehicle.ty.def;
-                    let std = def.cameras_driver.get(def.camera_std % def.cameras_driver.len().max(1));
-                    (self.cam.view_yaw, self.cam.view_fov) = std.map_or((0.0, None), |c| crate::game_panels::view_editor::stored(&bus, c));
+                    let std = def
+                        .cameras_driver
+                        .get(def.camera_std % def.cameras_driver.len().max(1));
+                    (self.cam.view_yaw, self.cam.view_fov) = std.map_or((0.0, None), |c| {
+                        crate::game_panels::view_editor::stored(&bus, c)
+                    });
                     self.session.seat_bus = bus;
                 }
                 p.seat = glam::Vec3::from_array(self.settings.seat);
@@ -42,14 +63,35 @@ impl App {
                 // (a port that cannot be had is tried again now and then, the
                 // setting stays on: turning it off here undid the switch in the
                 // menu at once)
-                if self.settings.head_tracking && self.input.headtrack.is_none() && self.input.headtrack_failed.is_none_or(|t| t.elapsed().as_secs_f32() > 5.0) {
-                    let hwnd = self.window.as_ref().and_then(|window| crate::controllers::window_handle(window));
-                    let tobii = crate::tobii::Options { edges: self.settings.tobii_edges, ..Default::default() };
-                    self.input.headtrack = crate::headtrack::HeadTracker::start_with(self.settings.head_tracking_port, &self.settings.head_tracking_source, tobii, hwnd);
-                    self.input.headtrack_failed = self.input.headtrack.is_none().then(std::time::Instant::now);
+                if self.settings.head_tracking
+                    && self.input.headtrack.is_none()
+                    && self
+                        .input
+                        .headtrack_failed
+                        .is_none_or(|t| t.elapsed().as_secs_f32() > 5.0)
+                {
+                    let hwnd = self
+                        .window
+                        .as_ref()
+                        .and_then(|window| crate::controllers::window_handle(window));
+                    let tobii = crate::tobii::Options {
+                        edges: self.settings.tobii_edges,
+                        ..Default::default()
+                    };
+                    self.input.headtrack = crate::headtrack::HeadTracker::start_with(
+                        self.settings.head_tracking_port,
+                        &self.settings.head_tracking_source,
+                        tobii,
+                        hwnd,
+                    );
+                    self.input.headtrack_failed =
+                        self.input.headtrack.is_none().then(std::time::Instant::now);
                 }
                 if let Some(h) = self.input.headtrack.as_ref() {
-                    h.set_tobii(crate::tobii::Options { edges: self.settings.tobii_edges, ..Default::default() });
+                    h.set_tobii(crate::tobii::Options {
+                        edges: self.settings.tobii_edges,
+                        ..Default::default()
+                    });
                 }
                 if !self.settings.head_tracking {
                     self.input.headtrack_scale_last = None;
@@ -60,22 +102,43 @@ impl App {
                 // tracker's poses, a Tobii tracker's trembling filtered out, see
                 // `crate::head_filter`; with head tracking switched off or the tracker lost the
                 // view glides home - then the sensitivities and inversions)
-                let sample = self.input.headtrack.as_ref().and_then(|h| h.sample()).filter(|_| self.settings.head_tracking);
+                let sample = self
+                    .input
+                    .headtrack
+                    .as_ref()
+                    .and_then(|h| h.sample())
+                    .filter(|_| self.settings.head_tracking);
                 let calm = if self.settings.head_tracking_source == "opentrack" {
                     crate::head_filter::Params::OPENTRACK
                 } else {
-                    crate::head_filter::Params::tobii(self.settings.head_tracking_smoothing, self.settings.head_tracking_dead_zone)
+                    crate::head_filter::Params::tobii(
+                        self.settings.head_tracking_smoothing,
+                        self.settings.head_tracking_dead_zone,
+                    )
                 };
-                let tracked = self.input.head_filter.step(sample.as_ref(), std::time::Instant::now(), calm).filter(|_| matches!(self.view.as_str(), "driver" | "pax"));
+                let tracked = self
+                    .input
+                    .head_filter
+                    .step(sample.as_ref(), std::time::Instant::now(), calm)
+                    .filter(|_| matches!(self.view.as_str(), "driver" | "pax"));
                 #[cfg(windows)]
                 let vr_on = self.xr.vr.is_some();
                 #[cfg(not(windows))]
                 let vr_on = false;
                 // Camera smoothing uses frame time, not the head physics' clamped step.
                 // Physical head tracking controls the view without an added automatic turn.
-                p.steer_look = if vr_on || tracked.is_some() { 0.0 } else {
-                    crate::player::steering_view_yaw(p.steer_look, p.vehicle.physics.controls.steering, dt,
-                                                     self.settings.steer_look && crate::player::steering_follows(&self.view, p.cam_choice), self.settings.steer_look_angle, self.settings.steer_look_response)
+                p.steer_look = if vr_on || tracked.is_some() {
+                    0.0
+                } else {
+                    crate::player::steering_view_yaw(
+                        p.steer_look,
+                        p.vehicle.physics.controls.steering,
+                        dt,
+                        self.settings.steer_look
+                            && crate::player::steering_follows(&self.view, p.cam_choice),
+                        self.settings.steer_look_angle,
+                        self.settings.steer_look_response,
+                    )
                 };
                 let mut tracked_rot = None;
                 if let Some(t) = tracked {
@@ -90,7 +153,10 @@ impl App {
                 // zoom was applied on top of itself and ran off to its narrowest
                 // or widest at once)
                 let prev_cam = cam;
-                let base = omsi_render::Camera { fov_deg: 60.0, ..cam };
+                let base = omsi_render::Camera {
+                    fov_deg: 60.0,
+                    ..cam
+                };
                 // Where the view is drawn: the way the mouse (or the stick, or the
                 // arrow keys) turned the head is eased in, so the picture glides to
                 // the angle asked for instead of jumping to it (off by default); the
@@ -108,8 +174,14 @@ impl App {
                     vr_on,
                 );
                 // the view editor's turn and field of view: the standard driver's camera's
-                let own_view = self.view == "driver" && self.player.as_ref().is_some_and(|p| p.cam_choice.0 == 0) && !vr_on;
-                let head_look = if own_view { (head_look.0 + self.cam.view_yaw, head_look.1) } else { head_look };
+                let own_view = self.view == "driver"
+                    && self.player.as_ref().is_some_and(|p| p.cam_choice.0 == 0)
+                    && !vr_on;
+                let head_look = if own_view {
+                    (head_look.0 + self.cam.view_yaw, head_look.1)
+                } else {
+                    head_look
+                };
                 let view_fov = self.cam.view_fov.filter(|_| own_view);
                 // what turns the bus's own camera into the picture: the head's turn,
                 // the field of view setting and the zoom (for the camera left in a
@@ -124,12 +196,18 @@ impl App {
                 // ahead instead of saving a partial angle, and
                 // leaving the view drops it the same way.
                 self.f1_return(dt);
-                let Some(p) = self.player.as_mut() else { return };
-                let zoom = crate::app_impl::with_zoom_hold(self.cam.view_zoom.get(&self.view).copied(), self.cam.zoom_hold.factor);
+                let Some(p) = self.player.as_mut() else {
+                    return;
+                };
+                let zoom = crate::app_impl::with_zoom_hold(
+                    self.cam.view_zoom.get(&self.view).copied(),
+                    self.cam.zoom_hold.factor,
+                );
                 // The sway's own turn of the view: the driver's view only, for it is
                 // his head (and nothing at all while the sway is off or driven by a
                 // head tracker - `head_idle` is still then).
-                let idle_rot = (self.view == "driver" && !p.head_idle.is_still()).then(|| [p.head_idle.yaw, p.head_idle.pitch, p.head_idle.roll]);
+                let idle_rot = (self.view == "driver" && !p.head_idle.is_still())
+                    .then(|| [p.head_idle.yaw, p.head_idle.pitch, p.head_idle.roll]);
                 let finish = move |c: &mut omsi_render::Camera| {
                     if let Some(r) = tracked_rot {
                         c.yaw += r[0].clamp(-170.0, 170.0);
@@ -145,6 +223,10 @@ impl App {
                     // this bus before it
                     c.fov_deg = crate::app_impl::drawn_fov(c.fov_deg, view_fov, fov_setting, zoom);
                 };
+                if self.view == "driver" {
+                    let part = p.trailer_driver_seat().map(|s| s.0);
+                    p.vehicle.follow_driver_camera(part);
+                }
                 let mut cam = p.camera_look(&self.view, &base, head_look, self.cam.orbit);
                 finish(&mut cam);
                 // Smooth cockpit camera switch (arrow keys): the camera left comes closer to the one
@@ -152,7 +234,9 @@ impl App {
                 // motion and the head go on top afterwards, so nothing of the last frame's picture is
                 // needed.
                 let mut cam = self.blend_cab_camera(cam, prev_cam, head_look, zoom, &finish, dt);
-                let Some(p) = self.player.as_mut() else { return };
+                let Some(p) = self.player.as_mut() else {
+                    return;
+                };
                 if self.view == "outside" && self.settings.camera_collision {
                     if let Some(w) = self.world.as_ref() {
                         cam = p.camera_clipped(cam, w, self.cam.orbit, dt);
@@ -165,13 +249,23 @@ impl App {
         } else if let Some(cam) = self.camera.as_mut() {
             // the free camera and the view on foot follow the setting too (they
             // stayed at 60 degrees whatever it said)
-            let base = if self.settings.fov >= 20.0 { self.settings.fov.min(120.0) } else { 60.0 };
-            cam.fov_deg = (base * self.cam.view_zoom.get(&self.view).copied().unwrap_or(1.0) * self.cam.zoom_hold.factor).clamp(8.0, 120.0);
+            let base = if self.settings.fov >= 20.0 {
+                self.settings.fov.min(120.0)
+            } else {
+                60.0
+            };
+            cam.fov_deg = (base
+                * self.cam.view_zoom.get(&self.view).copied().unwrap_or(1.0)
+                * self.cam.zoom_hold.factor)
+                .clamp(8.0, 120.0);
         }
     }
 
     /// Head tracking's pose with the six sensitivity sliders and the inversions applied.
-    fn head_track_adjust(&mut self, mut t: crate::headtrack::HeadPose) -> crate::headtrack::HeadPose {
+    fn head_track_adjust(
+        &mut self,
+        mut t: crate::headtrack::HeadPose,
+    ) -> crate::headtrack::HeadPose {
         // TrackIR/NPClient reports an absolute pose. Apply the six
         // user-facing sensitivity controls, but when a sensitivity
         // slider changes while the head is stationary, compensate the
@@ -179,32 +273,53 @@ impl App {
         // Inversion is deliberately NOT compensated: it only changes
         // direction, and switching it back restores the original pose.
         let mut scales = [0.0_f32; 6];
-        scales[0] = (self.settings.head_tracking_x_sens / 100.0).clamp(0.0, 1.0).powi(2);
-        scales[1] = (self.settings.head_tracking_y_sens / 100.0).clamp(0.0, 1.0).powi(2);
-        scales[2] = (self.settings.head_tracking_z_sens / 100.0).clamp(0.0, 1.0).powi(2);
-        scales[3] = (self.settings.head_tracking_yaw_sens / 100.0).clamp(0.0, 1.0).powi(2);
-        scales[4] = (self.settings.head_tracking_pitch_sens / 100.0).clamp(0.0, 1.0).powi(2);
-        scales[5] = (self.settings.head_tracking_roll_sens / 100.0).clamp(0.0, 1.0).powi(2);
+        scales[0] = (self.settings.head_tracking_x_sens / 100.0)
+            .clamp(0.0, 1.0)
+            .powi(2);
+        scales[1] = (self.settings.head_tracking_y_sens / 100.0)
+            .clamp(0.0, 1.0)
+            .powi(2);
+        scales[2] = (self.settings.head_tracking_z_sens / 100.0)
+            .clamp(0.0, 1.0)
+            .powi(2);
+        scales[3] = (self.settings.head_tracking_yaw_sens / 100.0)
+            .clamp(0.0, 1.0)
+            .powi(2);
+        scales[4] = (self.settings.head_tracking_pitch_sens / 100.0)
+            .clamp(0.0, 1.0)
+            .powi(2);
+        scales[5] = (self.settings.head_tracking_roll_sens / 100.0)
+            .clamp(0.0, 1.0)
+            .powi(2);
 
         let legacy = ["yaw", "pitch", "roll"];
         let invert = [
             self.settings.head_tracking_invert_x,
             self.settings.head_tracking_invert_y,
             self.settings.head_tracking_invert_z,
-            self.settings.head_tracking_invert_yaw || self.settings.head_tracking_invert.contains(legacy[0]),
-            self.settings.head_tracking_invert_pitch || self.settings.head_tracking_invert.contains(legacy[1]),
-            self.settings.head_tracking_invert_roll || self.settings.head_tracking_invert.contains(legacy[2]),
+            self.settings.head_tracking_invert_yaw
+                || self.settings.head_tracking_invert.contains(legacy[0]),
+            self.settings.head_tracking_invert_pitch
+                || self.settings.head_tracking_invert.contains(legacy[1]),
+            self.settings.head_tracking_invert_roll
+                || self.settings.head_tracking_invert.contains(legacy[2]),
         ];
         for k in 0..6 {
-            if invert[k] { scales[k] = -scales[k]; }
+            if invert[k] {
+                scales[k] = -scales[k];
+            }
         }
 
         let raw = [t.pos[0], t.pos[1], t.pos[2], t.rot[0], t.rot[1], t.rot[2]];
-        let invert_changed = self.input.headtrack_invert_last.is_some_and(|previous| previous != invert);
+        let invert_changed = self
+            .input
+            .headtrack_invert_last
+            .is_some_and(|previous| previous != invert);
         if invert_changed {
             self.input.headtrack_scale_bias = [0.0; 6];
         } else if let Some(previous) = self.input.headtrack_scale_last {
-            let sensitivity_changed = (0..6).any(|k| (previous[k].abs() - scales[k].abs()).abs() > f32::EPSILON);
+            let sensitivity_changed =
+                (0..6).any(|k| (previous[k].abs() - scales[k].abs()).abs() > f32::EPSILON);
             if sensitivity_changed {
                 for k in 0..6 {
                     let old_output = raw[k] * previous[k] + self.input.headtrack_scale_bias[k];
@@ -232,13 +347,18 @@ impl App {
 
     /// The eased return of the look and the zoom (F1), for the camera it started from.
     fn f1_return(&mut self, dt: f32) {
-        let Some(cam_choice) = self.player.as_ref().map(|p| p.cam_choice) else { return };
+        let Some(cam_choice) = self.player.as_ref().map(|p| p.cam_choice) else {
+            return;
+        };
         let cur = crate::input_script::look_key_of(&self.view, Some(cam_choice));
         let mine = matches!(&self.cam.f1_reset, Some((.., k)) if *k == cur);
         if self.view == "driver" && mine {
             if let Some((look_from, zoom_from, t, _)) = self.cam.f1_reset.clone() {
-                let (look, zoom, done) =
-                    crate::input_script::reset_blend(look_from, zoom_from, t + crate::cam_approach::step(dt));
+                let (look, zoom, done) = crate::input_script::reset_blend(
+                    look_from,
+                    zoom_from,
+                    t + crate::cam_approach::step(dt),
+                );
                 if done {
                     self.cam.look = (0.0, 0.0);
                     self.cam.view_zoom.remove(&self.view);
@@ -246,7 +366,8 @@ impl App {
                 } else {
                     self.cam.look = look;
                     self.cam.view_zoom.insert(self.view.clone(), zoom);
-                    self.cam.f1_reset = Some((look_from, zoom_from, t + crate::cam_approach::step(dt), cur));
+                    self.cam.f1_reset =
+                        Some((look_from, zoom_from, t + crate::cam_approach::step(dt), cur));
                 }
             }
         } else if let Some((.., key)) = self.cam.f1_reset.take() {
@@ -270,15 +391,29 @@ impl App {
         dt: f32,
     ) -> Camera {
         let mut cam = cam;
-        let Some(p) = self.player.as_ref() else { return cam };
+        let Some(p) = self.player.as_ref() else {
+            return cam;
+        };
         let inside_view = self.view == "driver";
-        let entering = std::mem::take(&mut self.cam.cam_blend.entering);
+        // (a glide stays within one part of the train: the parts' frames differ)
+        let part = p.trailer_driver_seat().map(|(part, _)| part);
+        if self.cam.cam_blend.part != part {
+            self.cam.cam_blend.part = part;
+            self.cam.cam_blend.from = None;
+            self.cam.cam_blend.shown = None;
+        }
+        let entering = std::mem::take(&mut self.cam.cam_blend.entering) && part.is_none();
         let left = self
-            .cam.cam_blend
+            .cam
+            .cam_blend
             .key
             .as_ref()
-            .is_some_and(|k| k.0 == self.view && k.1 .0 != p.cam_choice.0);
-        let target = if inside_view { p.driver_local(head_look) } else { None };
+            .is_some_and(|k| k.0 == self.view && k.1.0 != p.cam_choice.0);
+        let target = if inside_view {
+            p.driver_local(head_look)
+        } else {
+            None
+        };
         let mut started = false;
         if let Some(to) = target.as_ref() {
             if (entering || left) && self.settings.driverview_smooth {
@@ -314,7 +449,11 @@ impl App {
         match (target.as_ref(), from_now.as_ref()) {
             (Some(to), Some(from)) => {
                 // (the frame that starts the glide does not count)
-                let now = if started { from.clone() } else { crate::cam_approach::approach(from, to, dt) };
+                let now = if started {
+                    from.clone()
+                } else {
+                    crate::cam_approach::approach(from, to, dt)
+                };
                 let mut here = p.driver_world(&now);
                 finish(&mut here);
                 if crate::cam_approach::settled(&now, to) {
@@ -344,7 +483,11 @@ impl App {
         }
         let drawn = match self.cam.cam_blend.zoom_from {
             Some(z) => {
-                let z = if started { z } else { zoom_glide(z, zoom_now, dt) };
+                let z = if started {
+                    z
+                } else {
+                    zoom_glide(z, zoom_now, dt)
+                };
                 self.cam.cam_blend.zoom_from = ((z - zoom_now).abs() > 1e-3).then_some(z);
                 cam.fov_deg = (cam.fov_deg * z / zoom_now.max(0.01)).clamp(8.0, 120.0);
                 z
