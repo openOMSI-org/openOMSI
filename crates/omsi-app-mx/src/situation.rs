@@ -412,6 +412,7 @@ pub(crate) fn build_situation(
             } else {
                 0
             },
+            cars: v.car_states(),
         }
     };
     let mut vehicles = Vec::new();
