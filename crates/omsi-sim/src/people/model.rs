@@ -32,7 +32,11 @@ impl Eye {
     pub fn widened(mut self, extent: Option<(f64, f64)>) -> Eye {
         if let Some((tan_x, tan_y)) = extent {
             let half_diag = tan_x.hypot(tan_y).atan();
-            self.cos_half = self.cos_half.min((half_diag + 10f64.to_radians()).min(89f64.to_radians()).cos());
+            self.cos_half = self.cos_half.min(
+                (half_diag + 10f64.to_radians())
+                    .min(89f64.to_radians())
+                    .cos(),
+            );
         }
         self
     }
@@ -67,8 +71,7 @@ pub enum BusId {
     Ai(u64),
 }
 
-impl BusId {
-}
+impl BusId {}
 
 #[derive(Debug, Clone)]
 pub enum State {
@@ -216,8 +219,13 @@ pub const OFF_PATH: f64 = 0.1;
 /// The corridor a walker at `pos` keeps to: none while they are still well off it. Eased
 /// into it at up to 0.6 m/s (twice a step) on top of walking there, the people getting off
 /// a bus slid sideways from its door to the pavement at twice their pace (#1033, #1079).
-pub fn path_corridor(pos: DVec2, corridor: Option<(DVec2, DVec2, f64)>) -> Option<(DVec2, DVec2, f64)> {
-    corridor.filter(|&(a, b, dev)| (crowd::clamp_to_corridor(pos, a, b, dev) - pos).length() <= OFF_PATH)
+pub fn path_corridor(
+    pos: DVec2,
+    corridor: Option<(DVec2, DVec2, f64)>,
+) -> Option<(DVec2, DVec2, f64)> {
+    corridor.filter(|&(a, b, dev)| {
+        (crowd::clamp_to_corridor(pos, a, b, dev) - pos).length() <= OFF_PATH
+    })
 }
 
 pub fn arrive(from: DVec2, to: DVec2, pace: f64) -> DVec2 {
@@ -232,6 +240,13 @@ pub fn arrive(from: DVec2, to: DVec2, pace: f64) -> DVec2 {
 
 /// Seconds after one passenger's greeting or complaint before anybody says another.
 pub const CHAT_PAUSE: f64 = 12.0;
+
+/// How late the player's bus may be before its boarding passengers say so (s): five
+/// minutes, as Omsi.exe had it. The player may allow more (#2718).
+pub const LATE_TOLERANCE: f64 = 300.0;
+/// How still a bus has to stand before the stop's passengers walk to it, when
+/// [`PeopleSim::board_when_stopped`] is on (m/s; #2757).
+pub const BOARD_STOPPED_SPEED: f64 = 0.2;
 
 /// A cell of `PeopleSim::wall_cells`: when it was made, and its walls with their heights.
 pub type WallCell = (f64, Vec<(Block, f64, f64)>);
@@ -248,7 +263,7 @@ pub struct PeopleSim {
     pub wall_cells: HashMap<(i32, i32, i32), WallCell>,
     pub wall_key: (usize, usize, usize, f64),
     /// Passenger cabins by vehicle files (the front vehicle and its coupled parts).
-    pub cabins: HashMap<Vec<PathBuf>, Option<Arc<Cabin>>>,
+    pub cabins: HashMap<Vec<(PathBuf, bool)>, Option<Arc<Cabin>>>,
     pub player_cabin: Option<Arc<Cabin>>,
     pub player_next_stop: Option<RequestStop>,
     /// Which places of each bus are taken.
@@ -305,6 +320,8 @@ pub struct PeopleSim {
     pub ai_stop_requests: Vec<u64>,
     /// Tickets sold at the cash desk this session and what they were worth.
     pub tickets_sold: u32,
+    /// How many of the sales above were fares paid without a ticket (#2742).
+    pub fares_no_ticket: u32,
     pub ticket_cash: f32,
     /// The tickets sold since the last `take_sales`: name and value.
     pub sales: Vec<(String, f32)>,
@@ -341,9 +358,12 @@ pub struct PeopleSim {
     pub density: f32,
     /// The clock's time of day in seconds (set by the app): day tickets sell by it.
     pub time_of_day: f64,
-    /// How late the player's bus is on its duty (s; set by the app): over five minutes,
+    /// How late the player's bus is on its duty (s; set by the app): over `late_tolerance`,
     /// boarding passengers may say so.
     pub delay: f64,
+    /// How late the bus may be before they say so (s): [`LATE_TOLERANCE`] unless the
+    /// settings say otherwise (#2718). Zero turns the complaint off.
+    pub late_tolerance: f64,
     /// The game's folder (the ticket pack's voices are found from it).
     pub root: std::path::PathBuf,
     /// What passengers said since the app last collected it (see `take_voice_lines`).
@@ -401,6 +421,10 @@ pub struct PeopleSim {
     /// The player's duty (`set_duty`): its trip, the stop of it the duty is due at, and
     /// whether the trip has reached its last stop. A fallback for unrecognized signs.
     pub duty: Option<(Arc<DutyTrip>, usize, bool)>,
+    /// Whether the stops of the map fill in free drive (`pax_free_drive`, #2712): `auto`
+    /// fills them while the player has no duty, as OMSI's passengers turned up whatever was
+    /// being driven.
+    pub free_drive_fill: crate::people::free_drive::FreeDriveFill,
     /// Buses whose validator somebody used since the app last looked (`take_stamped`), with
     /// the index of that `[stamper]` in the bus's cabin.
     pub stamped: Vec<(BusId, Option<usize>)>,
@@ -426,6 +450,10 @@ pub struct PeopleSim {
     /// Optional visual-only response to an approaching full bus.
     pub visual_full_bus_reaction: bool,
     pub bad_driving: bool,
+    /// The fare is paid without a ticket (#2742): the passenger pays, gets the change and
+    /// goes to their place instead of waiting at the desk for a ticket - and no ticket
+    /// sound or ticket hand-over is made. Set by the app from the settings.
+    pub no_ticket: bool,
     /// How passengers board (`boarding` in the settings): `auto` - pay and take the
     /// ticket by themselves after a moment; `pay` - wait at the desk for the driver to
     /// sell it (and show a pass after `PAY_PATIENCE`); `walk` - no cash desk at all.
@@ -434,6 +462,9 @@ pub struct PeopleSim {
     /// (`standing_chance` in the settings).
     pub stand_chance: f32,
     pub short_rides_stand: bool,
+    /// Nobody walks to a bus that is still rolling in, nor to its shut doors: they wait at
+    /// the stop until it stands still with a door open (#2757). Off as OMSI had it.
+    pub board_when_stopped: bool,
     /// The driver pressed the ticket key (`ticket_give`): sell the requested ticket.
     pub give_ticket: bool,
     /// The key that sells a ticket, as the HUD names it.
@@ -506,15 +537,15 @@ pub fn map_human_types(root: &Path, list: &[String]) -> Vec<Arc<HumanType>> {
             format!("Humans/{rel}")
         };
         let path = omsi_cfg::resolve_path(root, &rel);
-        let ty = loaded.entry(path.to_string_lossy().to_lowercase()).or_insert_with(|| {
-            match HumanType::load(&path) {
+        let ty = loaded
+            .entry(path.to_string_lossy().to_lowercase())
+            .or_insert_with(|| match HumanType::load(&path) {
                 Ok(t) => Some(Arc::new(t)),
                 Err(e) => {
                     log::warn!("map human {}: {e:#}", path.display());
                     None
                 }
-            }
-        });
+            });
         if let Some(t) = ty {
             picked.push(t.clone());
         }

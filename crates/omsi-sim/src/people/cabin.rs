@@ -24,6 +24,10 @@ pub struct Door {
     pub wait: Vec3,
     /// The sections it belongs to that people walk between (see `Cabin::groups`).
     pub group: usize,
+    /// The section of the cabin it is in (0 the front one, see `Cabin::parts`) and its number
+    /// among that section's own `[entry]`s or `[exit]`s: a car that runs its own scripts
+    /// (the NF6D's middle part) opens it by its own `PAX_Entry<n>_Open`, counted from 0.
+    pub part: (usize, usize),
 }
 
 impl Door {
@@ -41,7 +45,11 @@ impl Door {
         let a = self.inside.truncate();
         let b = glam::Vec2::new(self.outside.x - self.side * (DOOR_OUT - 0.1), self.inside.y);
         let ab = b - a;
-        let t = if ab.length_squared() > 1e-6 { ((p.truncate() - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0) } else { 0.0 };
+        let t = if ab.length_squared() > 1e-6 {
+            ((p.truncate() - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         (a + ab * t - p.truncate()).length() < BODY
     }
 }
@@ -130,11 +138,21 @@ pub fn seat_numbers(seats: &[Seat], sitting: impl Iterator<Item = usize>) -> Vec
 /// (A place in a section of its own without an entry or without an exit is off too: nobody
 /// could get there, or out of it again, #718.)
 pub fn places_off(v: &VehicleInstance, cabin: &Cabin) -> Vec<bool> {
-    let unreached = |g: usize| cabin.groups > 1 && (!cabin.entries.iter().any(|e| e.group == g) || !cabin.exits.iter().any(|e| e.group == g));
+    let unreached = |g: usize| {
+        cabin.groups > 1
+            && (!cabin.entries.iter().any(|e| e.group == g)
+                || !cabin.exits.iter().any(|e| e.group == g))
+    };
     cabin
         .seats
         .iter()
-        .map(|s| s.switch_var.as_deref().and_then(|n| v.var(n)).is_some_and(|x| x == 0.0) || unreached(s.group))
+        .map(|s| {
+            s.switch_var
+                .as_deref()
+                .and_then(|n| v.var(n))
+                .is_some_and(|x| x == 0.0)
+                || unreached(s.group)
+        })
         .collect()
 }
 
@@ -149,7 +167,11 @@ pub fn places_taken_in(bn: &BusNow, occupied: &HashSet<(BusId, usize)>) -> Vec<(
         .seats
         .iter()
         .enumerate()
-        .filter_map(|(k, s)| s.taken_var.as_ref().map(|n| (n.clone(), occupied.contains(&(bn.id, k)))))
+        .filter_map(|(k, s)| {
+            s.taken_var
+                .as_ref()
+                .map(|n| (n.clone(), occupied.contains(&(bn.id, k))))
+        })
         .collect()
 }
 
@@ -159,14 +181,22 @@ pub fn places_taken_in(bn: &BusNow, occupied: &HashSet<(BusId, usize)>) -> Vec<(
 pub fn doorways_taken(bn: &BusNow, at: &[(Option<BusId>, DVec3)]) -> (Vec<bool>, Vec<bool>) {
     doorways_taken_partitioned(
         bn,
-        at.iter().filter_map(|(bus, pos)| (*bus == Some(bn.id)).then_some(pos)),
-        at.iter().filter_map(|(bus, pos)| bus.is_none().then_some(pos)),
+        at.iter()
+            .filter_map(|(bus, pos)| (*bus == Some(bn.id)).then_some(pos)),
+        at.iter()
+            .filter_map(|(bus, pos)| bus.is_none().then_some(pos)),
     )
 }
 
 pub fn door_reach(bn: &BusNow) -> f64 {
     // (beyond the bus's own length round its origin nobody outside can be in a doorway)
-    bn.half.length() + bn.centre.length() + bn.trailers.iter().map(|t| t.offset.length() as f64).fold(0.0, f64::max) + 2.0
+    bn.half.length()
+        + bn.centre.length()
+        + bn.trailers
+            .iter()
+            .map(|t| t.offset.length() as f64)
+            .fold(0.0, f64::max)
+        + 2.0
 }
 
 pub fn doorways_taken_partitioned<'a>(
@@ -203,26 +233,64 @@ pub struct CabinPart {
     pub offset: Vec3,
     /// The unfolded y of the joint in front of it (the front section: none, +inf).
     pub joint_y: f32,
+    /// Its model faces the other way from the front section's (a car coupled turned round):
+    /// its own points are turned about its origin into the cabin.
+    pub turned: bool,
 }
 
 /// One vehicle of a coupled train as a cabin is put together from it: its definition, its
-/// origin in the front vehicle's unfolded frame, and the unfolded y of its front joint.
-pub type TrainPart<'a> = (&'a omsi_vehicle::Vehicle, Vec3, f32);
+/// origin in the front vehicle's unfolded frame, the unfolded y of its front joint, and
+/// whether its model faces the other way from the front vehicle's.
+pub type TrainPart<'a> = (&'a omsi_vehicle::Vehicle, Vec3, f32, bool);
 
-/// The sections of `v` passengers can walk through, front first: the vehicle and every
-/// coupled part straight behind it (a part coupled the wrong way round and all behind it
-/// are left out).
+/// A door as `Cabin::load_train` gathers it: merged path point or -1, sells tickets,
+/// `{withbutton}`, half width of the section, group, part (see `Door::part`).
+type EntryPoint = (i32, bool, bool, f32, usize, (usize, usize));
+
+/// A section cabin's links to the vehicle in front and to the one behind (`[linkToNextVeh]`,
+/// `[linkToPrevVeh]`): the other way round in a car coupled turned round.
+fn front_and_rear(cab: &PassengerCabin, turned: bool) -> (Option<i32>, Option<i32>) {
+    match turned {
+        true => (cab.link_to_prev_veh, cab.link_to_next_veh),
+        false => (cab.link_to_next_veh, cab.link_to_prev_veh),
+    }
+}
+
+/// A point of a section's own model frame in the cabin's axes (turned round about its
+/// origin where the section is).
+pub fn turn_point(p: Vec3, turned: bool) -> Vec3 {
+    if turned {
+        Vec3::new(-p.x, -p.y, p.z)
+    } else {
+        p
+    }
+}
+
+/// A place of a section's cabin turned round with it (see [`turn_point`]): it faces the
+/// other way too.
+fn turn_place(p: &omsi_vehicle::cabin::PassPos, turned: bool) -> omsi_vehicle::cabin::PassPos {
+    let mut p = p.clone();
+    if turned {
+        p.pos = turn_point(Vec3::from(p.pos), true).into();
+        p.rot += 180.0;
+    }
+    p
+}
+
+/// The sections of `v` passengers can walk through, front first: the vehicle and every coupled
+/// part behind it. A part coupled the wrong way round (hung on by its back) is turned round into
+/// the cabin.
 pub fn train_parts(v: &VehicleInstance) -> Vec<TrainPart<'_>> {
-    let mut out: Vec<TrainPart<'_>> = vec![(&v.ty.def, Vec3::ZERO, f32::INFINITY)];
-    let mut offset = Vec3::ZERO;
+    let lead_turn = crate::vehicle::body_reversed(&v.ty.def, false);
+    let mut out: Vec<TrainPart<'_>> = vec![(&v.ty.def, Vec3::ZERO, f32::INFINITY, false)];
+    let (mut origin, mut prev_turned) = (Vec3::ZERO, false);
     for t in &v.trailers {
-        if t.reversed {
-            break;
-        }
+        let turned = crate::vehicle::body_reversed(&t.ty.def, t.reversed) != lead_turn;
         let (back, front) = t.couplings();
-        let joint_y = offset.y + back.y;
-        offset += back - front;
-        out.push((&t.ty.def, offset, joint_y));
+        let joint = origin + turn_point(back, prev_turned);
+        origin = joint - turn_point(front, turned);
+        out.push((&t.ty.def, origin, joint.y, turned));
+        prev_turned = turned;
     }
     out
 }
@@ -231,7 +299,7 @@ impl Cabin {
     /// The cabin of a train of vehicles (see [`train_parts`]): the front one's, with the
     /// sections behind joined on as far as they have a cabin and a path network.
     pub fn load_train(parts: &[TrainPart<'_>]) -> Option<Cabin> {
-        let (lead, _, _) = parts.first()?;
+        let (lead, _, _, _) = parts.first()?;
         let load_cabin = |def: &omsi_vehicle::Vehicle| -> Option<PassengerCabin> {
             let rel = def.passenger_cabin.as_ref()?;
             PassengerCabin::load(&omsi_cfg::resolve_path(def.dir(), rel))
@@ -253,8 +321,8 @@ impl Cabin {
         let mut step_packs: Vec<Arc<[String]>> = Vec::new();
         // (merged path point or -1, sells tickets, {withbutton}, half width of the section,
         // group)
-        let mut entry_points: Vec<(i32, bool, bool, f32, usize)> = Vec::new();
-        let mut exit_points: Vec<(i32, f32, usize)> = Vec::new();
+        let mut entry_points: Vec<EntryPoint> = Vec::new();
+        let mut exit_points: Vec<(i32, f32, usize, (usize, usize))> = Vec::new();
         let mut places: Vec<(omsi_vehicle::cabin::PassPos, Vec3, usize, usize)> = Vec::new();
         let mut group = 0usize;
         let mut point_group: Vec<usize> = Vec::new();
@@ -266,19 +334,24 @@ impl Cabin {
         // its cabin gives it (`[linkToPrevVeh]`)
         let mut rear_link: Option<usize> = None;
         let mut rear_declared: Option<usize> = None;
-        for (k, (def, offset, joint_y)) in parts.iter().enumerate() {
+        for (k, (def, offset, joint_y, turned)) in parts.iter().enumerate() {
+            let turned = *turned;
+            let place = |p: Vec3| turn_point(p, turned) + *offset;
             let cab = if k == 0 {
                 Some(data.clone())
             } else {
                 load_cabin(def)
             };
             let Some(cab) = cab else { break };
-            let (own, own_links, own_steps, own_packs, own_rooms): (Vec<Vec3>, Vec<(i32, i32, bool)>, Vec<i32>, Vec<Vec<String>>, Vec<f32>) = match load_paths(def) {
+            let (own, own_links, own_steps, own_packs, own_rooms): (
+                Vec<Vec3>,
+                Vec<(i32, i32, bool)>,
+                Vec<i32>,
+                Vec<Vec<String>>,
+                Vec<f32>,
+            ) = match load_paths(def) {
                 Some(p) => (
-                    p.points
-                        .iter()
-                        .map(|q| Vec3::from(q.pos) + *offset)
-                        .collect(),
+                    p.points.iter().map(|q| place(Vec3::from(q.pos))).collect(),
                     p.links,
                     p.link_step_sound,
                     p.step_sound_packs,
@@ -307,8 +380,12 @@ impl Cabin {
                 // no bellows: walked through only where both cabins give those points, as
                 // Omsi.exe joins coupled cabins (0x7d172c) - joined at the aisle's ends, the
                 // passengers of a bus walked through its back wall into the trailer behind
-                let hitch = def.coupling_front_character.is_some_and(|c| c[3] == 0.0);
-                let front = cab.link_to_next_veh.and_then(valid).or_else(|| if hitch { None } else { end(true) });
+                // (two cars back to back: walked between only where both cabins give a link)
+                let hitch = turned || def.coupling_front_character.is_some_and(|c| c[3] == 0.0);
+                let front = front_and_rear(&cab, turned)
+                    .0
+                    .and_then(valid)
+                    .or_else(|| if hitch { None } else { end(true) });
                 match (if hitch { rear_declared } else { rear_link }, front) {
                     (Some(a), Some(b)) => {
                         links.push((a as i32, b as i32, false));
@@ -335,41 +412,76 @@ impl Cabin {
                 (n >= 0 && (n as usize) < own_packs.len()).then(|| pack_base + n as usize)
             }));
             step_packs.extend(own_packs.into_iter().map(Arc::from));
-            link_room.extend((0..own_links.len()).map(|i| own_rooms.get(i).copied().unwrap_or(2.0)));
-            rear_declared = cab.link_to_prev_veh.and_then(valid);
+            link_room
+                .extend((0..own_links.len()).map(|i| own_rooms.get(i).copied().unwrap_or(2.0)));
+            rear_declared = front_and_rear(&cab, turned).1.and_then(valid);
             rear_link = rear_declared.or_else(|| end(false));
             let half = def
                 .bounding_box
                 .map(|b| b[0] * 0.5)
                 .unwrap_or_else(|| own.iter().map(|p| p.x.abs()).fold(1.2, f32::max));
             let shift = |i: i32| valid(i).map(|m| m as i32).unwrap_or(-1);
-            entry_points.extend(
-                cab.entries
+            entry_points.extend(cab.entries.iter().enumerate().map(|(n, e)| {
+                (
+                    shift(e.path_point),
+                    !e.no_ticket_sale,
+                    e.with_button,
+                    half,
+                    group,
+                    (cabin_parts.len(), n),
+                )
+            }));
+            exit_points.extend(
+                cab.exits
                     .iter()
-                    .map(|e| (shift(e.path_point), !e.no_ticket_sale, e.with_button, half, group)),
+                    .enumerate()
+                    .map(|(n, e)| (shift(*e), half, group, (cabin_parts.len(), n))),
             );
-            exit_points.extend(cab.exits.iter().map(|e| (shift(*e), half, group)));
-            places.extend(cab.pass_positions.iter().map(|p| (p.clone(), *offset, seat_base + p.file_index, group)));
-            stampers.extend(cab.stampers.iter().map(|st| (valid(st.path_point), Vec3::from(st.pos) + *offset)));
+            places.extend(cab.pass_positions.iter().map(|p| {
+                (
+                    turn_place(p, turned),
+                    *offset,
+                    seat_base + p.file_index,
+                    group,
+                )
+            }));
+            stampers.extend(
+                cab.stampers
+                    .iter()
+                    .map(|st| (valid(st.path_point), place(Vec3::from(st.pos)))),
+            );
             seat_base += cab.pass_positions.len() + cab.driver_positions.len();
             cabin_parts.push(CabinPart {
                 offset: *offset,
                 joint_y: *joint_y,
+                turned,
             });
         }
         let graph = PathGraph::new(points.clone(), &links);
         // (the side of the road the stops are on: where a door's own point does not tell)
-        let kerb = if LEFT_HAND.load(std::sync::atomic::Ordering::Relaxed) { -1.0f32 } else { 1.0 };
-        let door = |pp: i32, sells: bool, button: bool, half_width: f32, group: usize| -> Door {
+        let kerb = if LEFT_HAND.load(std::sync::atomic::Ordering::Relaxed) {
+            -1.0f32
+        } else {
+            1.0
+        };
+        // (path point, sells tickets, button, half width, group, part)
+        let door = |(pp, sells, button, half_width, group, part): EntryPoint| -> Door {
             let point = (pp >= 0 && (pp as usize) < points.len()).then_some(pp as usize);
-            let inside = point
-                .map(|i| points[i])
-                .unwrap_or(Vec3::new(kerb * (half_width - 0.1), 4.0, 0.4));
+            let inside =
+                point
+                    .map(|i| points[i])
+                    .unwrap_or(Vec3::new(kerb * (half_width - 0.1), 4.0, 0.4));
             // A door's side is the side of its entry point; one in the middle of the aisle
             // (or none) is taken to open to the kerb - on the left where the traffic keeps
             // left. (Always the right: a UK bus whose entry point lies on the aisle had the
             // people come to its door from the road side, round the bus.)
-            let side = if inside.x.abs() < 0.6 { kerb } else if inside.x >= 0.0 { 1.0 } else { -1.0 };
+            let side = if inside.x.abs() < 0.6 {
+                kerb
+            } else if inside.x >= 0.0 {
+                1.0
+            } else {
+                -1.0
+            };
             let outside = Vec3::new(side * (half_width + DOOR_OUT), inside.y, 0.0);
             // the aisle point next to the door: its neighbour nearest the middle
             let wait_point = point
@@ -385,8 +497,16 @@ impl Cabin {
             let wait = wait_point.map(|w| points[w]).unwrap_or_else(|| {
                 points
                     .iter()
-                    .filter(|p| (p.x - inside.x).abs() > 0.3 && (p.truncate() - inside.truncate()).length() < 1.2 && (p.z - inside.z).abs() < 0.6)
-                    .min_by(|a, b| (a.truncate() - inside.truncate()).length().total_cmp(&(b.truncate() - inside.truncate()).length()))
+                    .filter(|p| {
+                        (p.x - inside.x).abs() > 0.3
+                            && (p.truncate() - inside.truncate()).length() < 1.2
+                            && (p.z - inside.z).abs() < 0.6
+                    })
+                    .min_by(|a, b| {
+                        (a.truncate() - inside.truncate())
+                            .length()
+                            .total_cmp(&(b.truncate() - inside.truncate()).length())
+                    })
                     .copied()
                     .unwrap_or(Vec3::new(inside.x - side * 0.7, inside.y, inside.z))
             });
@@ -400,15 +520,13 @@ impl Cabin {
                 button,
                 wait,
                 group,
+                part,
             }
         };
-        let mut entries: Vec<Door> = entry_points
-            .iter()
-            .map(|(pp, sells, button, half, g)| door(*pp, *sells, *button, *half, *g))
-            .collect();
+        let mut entries: Vec<Door> = entry_points.iter().map(|e| door(*e)).collect();
         let exits: Vec<Door> = exit_points
             .iter()
-            .map(|(pp, half, g)| door(*pp, false, false, *half, *g))
+            .map(|&(pp, half, g, part)| door((pp, false, false, half, g, part)))
             .collect();
         // two leaves of one door: the queue of the front leaf runs forwards, the other's back,
         // so that the two lines do not stand in each other
@@ -491,9 +609,15 @@ impl Cabin {
             .collect();
         let routes = build_routes(graph.points.len(), &links);
         let point_of = |i: i32| usize::try_from(i).ok().filter(|i| *i < graph.points.len());
-        let sale = data.ticket_sales.last().map(|st| (point_of(st.path_point), Vec3::from(st.pos)));
+        let sale = data
+            .ticket_sales
+            .last()
+            .map(|st| (point_of(st.path_point), Vec3::from(st.pos)));
         let money_point = data.money_points.last().map(|m| Vec3::from(m.pos));
-        let money_var = data.money_points.last().map(|m| (Vec3::from(m.pos), m.var, m.parent.clone()));
+        let money_var = data
+            .money_points
+            .last()
+            .map(|m| (Vec3::from(m.pos), m.var, m.parent.clone()));
         let change_point = data.change_points.last().map(|m| Vec3::from(m.pos));
         Some(Cabin {
             data,
@@ -522,17 +646,6 @@ impl Cabin {
     pub fn all_points(&self) -> Vec<Option<usize>> {
         (0..self.graph.points.len()).map(Some).collect()
     }
-
-
-
-
-
-
-
-
-
-
-
 }
 
 /// A bus as the passengers see it this frame.
@@ -595,7 +708,10 @@ impl CabinAir {
     pub fn of(v: &VehicleInstance) -> CabinAir {
         CabinAir {
             temp: v.var("Cabinair_Temp").filter(|t| t.is_finite()),
-            rel_hum: v.var("Cabinair_relHum").filter(|h| h.is_finite()).unwrap_or(0.0),
+            rel_hum: v
+                .var("Cabinair_relHum")
+                .filter(|h| h.is_finite())
+                .unwrap_or(0.0),
             outside: v.host.temperature,
             brightness: v.var("Envir_Brightness").unwrap_or(1.0),
         }
@@ -627,14 +743,19 @@ pub fn part_frames(v: &VehicleInstance, cabin: &Cabin) -> Vec<PartFrame> {
                 t.ty.def
                     .bounding_box
                     .unwrap_or([2.5, 7.0, 3.0, 0.0, 0.0, 1.5]);
+            let turn = if cp.turned { -1.0 } else { 1.0 };
             PartFrame {
                 pos: t.position,
-                rot: t.body_rotation(),
+                rot: if cp.turned {
+                    t.body_rotation() * Mat4::from_rotation_z(std::f32::consts::PI)
+                } else {
+                    t.body_rotation()
+                },
                 heading: t.heading,
                 offset: cp.offset,
                 joint_y: cp.joint_y,
                 half: DVec2::new(bb[0] as f64 * 0.5, bb[1] as f64 * 0.5),
-                centre: DVec2::new(bb[3] as f64, bb[4] as f64),
+                centre: DVec2::new(bb[3] as f64, bb[4] as f64) * turn,
             }
         })
         .collect()
@@ -688,7 +809,12 @@ pub struct DrawnBus {
 
 impl DrawnBus {
     pub fn of(v: &VehicleInstance, cabin: &Cabin) -> DrawnBus {
-        DrawnBus { pos: v.position, rot: v.body_rotation(), heading: v.heading, trailers: part_frames(v, cabin) }
+        DrawnBus {
+            pos: v.position,
+            rot: v.body_rotation(),
+            heading: v.heading,
+            trailers: part_frames(v, cabin),
+        }
     }
 
     pub fn world(&self, local: Vec3) -> DVec3 {
@@ -727,7 +853,10 @@ impl BusNow {
     /// A world point in the cabin's frame (the inverse of `world`): the front section's,
     /// or a rear section's for a point behind its joint.
     pub fn to_local(&self, w: DVec3) -> Vec3 {
-        let mut l = self.rot.inverse().transform_point3((w - self.pos).as_vec3());
+        let mut l = self
+            .rot
+            .inverse()
+            .transform_point3((w - self.pos).as_vec3());
         for t in &self.trailers {
             if l.y > t.joint_y {
                 break;
@@ -742,7 +871,14 @@ impl BusNow {
         train_tilt(&self.rot, self.heading, &self.trailers, local)
     }
 
-    pub fn follow(&self, drawn: &DrawnBus, local: Vec3, position: DVec3, heading: f64, tilt: Mat4) -> (DVec3, f64, Mat4) {
+    pub fn follow(
+        &self,
+        drawn: &DrawnBus,
+        local: Vec3,
+        position: DVec3,
+        heading: f64,
+        tilt: Mat4,
+    ) -> (DVec3, f64, Mat4) {
         (
             position + (drawn.world(local) - self.world(local)),
             heading + crowd::angle_diff(self.heading_at(local), drawn.heading_at(local)),
