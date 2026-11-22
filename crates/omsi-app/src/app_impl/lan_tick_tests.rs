@@ -30,7 +30,8 @@ fn hosted_session_enforces_session_buses_on_host_own_bus() {
         "allowed host bus is kept"
     );
 
-    // In-game placement of disallowed bus is rejected
+    // A fresh rejection must come from placement, not from the previous tick.
+    app.service_msg = None;
     app.place_vehicle("Vehicles/Forbidden/Forbidden.bus", None, None);
     assert!(app.menus.pending_placement.is_none());
     assert!(
@@ -45,35 +46,7 @@ fn hosted_session_enforces_session_buses_on_host_own_bus() {
     let mut vehicle = crate::schedule::tests::script_test_vehicle("", "", "");
     std::sync::Arc::make_mut(&mut vehicle.ty).def.path =
         std::path::PathBuf::from("Vehicles/Forbidden/Forbidden.bus");
-    let ty = vehicle.ty.clone();
-    let render = scene::VehicleRender {
-        window_wipers: None,
-        instances: vec![],
-        far: vec![],
-        own_materials: vec![],
-        set: None,
-        variants: vec![],
-        text_textures: vec![],
-        script_textures: vec![],
-        shared_script: false,
-        displays_far: false,
-        display_tick: 0,
-        skinned: vec![],
-        damaged: vec![],
-        glass_cracks: vec![],
-        hidden: false,
-        interior_lamps: Default::default(),
-        interior_blocks: Default::default(),
-        own_set: None,
-    };
-    app.player = Some(crate::spawn::new_player(
-        vehicle,
-        render,
-        vec![],
-        vec![],
-        false,
-        &ty,
-    ));
+    app.player = Some(crate::spawn::test_player(vehicle, vec![]));
     app.tick_lan(0.016);
     assert!(app.player.is_none(), "disallowed driven vehicle is removed");
     assert_eq!(app.view, "foot", "host is placed on foot");
