@@ -334,18 +334,18 @@ fn graphics_modes() {
 /// the glow are Enhanced's options, kept and read back.
 #[test]
 fn enhanced_options_and_ray_tracing() {
-    let on = Settings::from_text("graphics=enhanced\nray_tracing=1\nlight_shadows=all\ncloud_shadows=0\nlight_glow=0\n");
+    let on = Settings::from_text("graphics=enhanced\nray_tracing=1\nlight_shadows=all\ncloud_shadows=0\nlight_glow=0\nvolumetric_fog=0\n");
     assert!(on.ray_tracing() && on.enhanced && on.graphics == "enhanced" && on.mode() == "enhanced_plus");
     let o = on.render_options();
-    assert_eq!((o.ray_tracing, o.light_shadows, o.cloud_shadows, o.light_glow), (true, 2, false, false));
+    assert_eq!((o.ray_tracing, o.light_shadows, o.cloud_shadows, o.light_glow, o.volumetric_fog), (true, 2, false, false, false));
     let text = on.to_text();
-    assert!(text.contains("graphics=enhanced\n") && text.contains("ray_tracing=1\n") && text.contains("light_shadows=all\n"), "{text}");
+    assert!(text.contains("graphics=enhanced\n") && text.contains("ray_tracing=1\n") && text.contains("light_shadows=all\n") && text.contains("volumetric_fog=0\n"), "{text}");
     assert_eq!(Settings::from_text(&text), on);
     // without Enhanced it traces nothing; expensive light shadows are off by default
     let plain = Settings::from_text("graphics=vanilla_plus\nray_tracing=1\n");
     assert!(!plain.ray_tracing() && !plain.render_options().ray_tracing && plain.mode() == "vanilla_plus");
     let d = Settings::default().render_options();
-    assert_eq!((d.light_shadows, d.cloud_shadows, d.light_glow, d.ray_tracing), (0, false, false, false));
+    assert_eq!((d.light_shadows, d.cloud_shadows, d.light_glow, d.volumetric_fog, d.ray_tracing), (0, false, false, true, false));
     assert_eq!(["off", "street", "all", "every", "x", "0"].map(|v| Settings::from_text(&format!("light_shadows={v}\n")).light_shadows), ["off", "street", "all", "all", "street", "off"]);
     // a file of the days of Enhanced+ is written back as Enhanced with ray tracing
     let old = Settings::from_text("graphics=enhanced_plus\n");

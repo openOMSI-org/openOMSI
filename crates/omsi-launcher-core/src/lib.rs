@@ -3073,7 +3073,7 @@ pub fn graphics_presets() -> [(&'static str, Value); 6] {
             "view_distance": view[i], "min_obj_size": obj_size[i], "max_obj_dist": obj_dist[i],
             "mirror_size": mirror[i], "mirror_refresh": refresh[i], "mirror_quality": mirror_quality[i], "render_scale": scale[i],
             "detail_textures": !low, "ssao": !low, "shadows": !low, "reflections": 1.0, "road_glare": 1.0, "traffic_headlights": 1.0,
-            "light_shadows": light_shadows[i], "cloud_shadows": i >= 3, "light_glow": i >= 3,
+            "light_shadows": light_shadows[i], "cloud_shadows": i >= 3, "light_glow": i >= 3, "volumetric_fog": true,
             "street_light": street_light[i], "puddles": puddles[i],
         });
         let mut preset = preset;
@@ -3297,6 +3297,7 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["light_shadows"] = json!("off");
     v["cloud_shadows"] = json!(false);
     v["light_glow"] = json!(false);
+    v["volumetric_fog"] = json!(true);
     v["pause_quick_actions"] = json!("default");
     // (the interface theme's id: "openomsi" is openOMSI's own look)
     v["ui_theme_pack"] = json!("openomsi");
@@ -3684,7 +3685,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "street_light" => v[&k] = json!(street_light(val)),
             "ray_tracing" | "rt" => v["ray_tracing"] = json!(b(val)),
             "light_shadows" => v[&k] = json!(light_shadows(val)),
-            "cloud_shadows" | "light_glow" => v[&k] = json!(b(val)),
+            "cloud_shadows" | "light_glow" | "volumetric_fog" => v[&k] = json!(b(val)),
             "rain_quality" => v[&k] = json!(rain_quality(val)),
             "vehicle_smoke" => v[&k] = json!(vehicle_smoke(val)),
             "puddles" => v[&k] = json!(puddles(val)),
@@ -4247,6 +4248,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "mx_graphics" => v[&k] = json!(b(val)),
             "mirror_hud" => v[&k] = json!(val.trim().parse::<u8>().map(|x| x.min(7)).unwrap_or(0)),
             "windy_trees"
+            | "rain_lights"
             | "detailed_trees"
             | "road_snow"
             | "mirror_hud_every_frame"
@@ -4880,7 +4882,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         )
     ));
     text.push_str(&format!(
-        "ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\n",
+        "ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\nvolumetric_fog={}\n",
         b("ray_tracing", false)
             | (graphics_mode(
                 v.get("graphics")
@@ -4893,7 +4895,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
                 .unwrap_or("off")
         ),
         b("cloud_shadows", false),
-        b("light_glow", false)
+        b("light_glow", false),
+        b("volumetric_fog", true)
     ));
     text.push_str(&format!(
         "rain_quality={}\n",
@@ -4987,6 +4990,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         f("perf_size", 1.0).clamp(0.6, 2.0)
     ));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
+    text.push_str(&format!("rain_lights={}\n", b("rain_lights", true)));
     text.push_str(&format!("detailed_trees={}\n", b("detailed_trees", true)));
     text.push_str(&format!("road_snow={}\n", b("road_snow", false)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));

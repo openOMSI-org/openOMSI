@@ -528,10 +528,11 @@ pub(super) fn sync_live(app: &mut App) {
     let live = app.settings.render_options();
     if let Some(r) = app.renderer.as_mut() {
         r.options.street_light = live.street_light;
-        // (so do the lights' shadows, the clouds' and the glow: read every frame)
+        // (so do the lights' shadows, the clouds', the glow and the fog: read every frame)
         r.options.light_shadows = live.light_shadows;
         r.options.cloud_shadows = live.cloud_shadows;
         r.options.light_glow = live.light_glow;
+        r.options.volumetric_fog = live.volumetric_fog;
     }
     let s = &app.settings;
     if let Some(w) = app.world.as_ref() {

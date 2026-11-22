@@ -158,6 +158,7 @@ struct SettingsPage: View {
                 SettingSelect(label: "Light has shadows", key: "light_shadows", options: [("off", "Off"), ("street", "Street lamps and vehicles"), ("all", "Every light")])
                 SettingToggle(label: "Cloud shadows and light shafts", key: "cloud_shadows", fallback: true)
                 SettingToggle(label: "Glow of lights", key: "light_glow", fallback: true)
+                SettingToggle(label: "Volumetric fog", key: "volumetric_fog", fallback: true)
             }
             SettingSelect(label: "Vehicle smoke", key: "vehicle_smoke", options: [("all", "All vehicles"), ("player", "Player only"), ("off", "Off")], help: "Controls the vehicles' smoke particles, not scenery effects or glowing particles.")
             if (store.setting("reflections")?.double ?? 1) > 0.005 {

@@ -594,6 +594,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "ray_tracing" => s.ray_tracing_on,
         "cloud_shadows" => s.cloud_shadows,
         "light_glow" => s.light_glow,
+        "volumetric_fog" => s.volumetric_fog,
         "windy_trees" => s.windy_trees,
         "detailed_trees" => s.detailed_trees,
         "road_snow" => s.road_snow,
@@ -1005,6 +1006,10 @@ fn toggle_set_graphics_and_controls(
         "light_glow" => {
             app.settings.light_glow = on;
             Some(("light_glow", bit))
+        }
+        "volumetric_fog" => {
+            app.settings.volumetric_fog = on;
+            Some(("volumetric_fog", bit))
         }
         "windy_trees" => {
             app.settings.windy_trees = on;

@@ -153,6 +153,7 @@ fn restore_runtime_graphics(
     target.light_shadows = source.light_shadows.clone();
     target.cloud_shadows = source.cloud_shadows.clone();
     target.light_glow = source.light_glow.clone();
+    target.volumetric_fog = source.volumetric_fog;
     target.vsync = source.vsync.clone();
     target.max_fps = source.max_fps.clone();
     target.max_obj_dist = source.max_obj_dist.clone();

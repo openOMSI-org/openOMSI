@@ -476,6 +476,7 @@ pub(crate) fn weather_lighting(
         }
     }
     lighting.wetness = wetness;
+    lighting.air_temp = w.temp.0;
     // [wind] direction (deg) and speed (m/s): the snowfall drifts with it
     lighting.wind = glam::Vec3::new(w.wind.0.to_radians().sin() * w.wind.1, w.wind.0.to_radians().cos() * w.wind.1, 0.0);
     omsi_sim::particles::set_wind(lighting.wind);

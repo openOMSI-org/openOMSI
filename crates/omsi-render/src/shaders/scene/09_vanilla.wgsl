@@ -32,17 +32,8 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
     // (the pane's water, read once for the uses below)
     let film_water = window_wetness(in);
     if (material.emissive.w > 1.5) {
-        // a pane's film of water: drops, not the sliding texture
-        let v = normalize(camera.cam_pos.xyz - in.world);
-        let in_cab = inside_vehicle(camera.cam_pos.xyz) * near_player_vehicle(in.world) > 0.5;
-        let g = rain_glass(in.world, in.uv - in.params.zw, in.normal, film_water, camera.post.y, in_cab, in.wipe_uv);
-        if (g.cover <= 0.001 && g.mist <= 0.001) { return vec4<f32>(0.0); }
-        let through = rain_through(g, v);
-        let seen = select(rain_behind(in.world, through, rain_env_vanilla(normalize(through)), 1.0, g.mist), vec3<f32>(0.0), dot(through, through) < 1e-4);
-        let d = rain_light(g, v, through, rain_env_vanilla(reflect(-v, g.n)), seen, rain_env_vanilla(vec3<f32>(0.0, 0.0, 0.5)) * 0.9, camera.sun_color.rgb * camera.sun_dir.w);
-        // (fading out with the distance: see enhanced.wgsl)
-        let near = 1.0 - smoothstep(5.0, 15.0, distance(in.world, camera.cam_pos.xyz));
-        return vec4<f32>(min(d.rgb, vec3<f32>(1.5)), d.a * near);
+        // a pane's film of water: drops, not the sliding texture (`glass_film_classic`)
+        return glass_film_classic(in, film_water);
     }
     var duv = tex_address(in.uv);
     if (material.extra.x > 0.5) {
@@ -51,7 +42,10 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
     }
     var tex = diffuse_border(textureSampleBias(t_diffuse, s_diffuse, duv, camera.lod.x), duv);
     if (is_snow_pane()) {
-        tex = snow_on_pane(in, film_water);
+        // (as the enhanced picture lays it, `glass_snow_with`: no cabin air here, so no
+        // defroster, and the height on the glass by the bus's level frame)
+        let fz = clamp((in.world.z - camera.inside_a.z - camera.inside_c.z) / max(camera.inside_b.w, 0.1), -1.0, 1.0);
+        tex = glass_snow_with(in, film_water, 0.0, fz);
     }
     // The texture coordinates without the [texcoordtransX/Y] offset: in Omsi.exe's
     // fixed-function pipeline the texture transform is the diffuse stage's alone, the
@@ -240,7 +234,7 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         // terrain: the tile light map in tile space (north at the top row)
         // a [matl_item] night map is switched by its variable (warning lamps, displays):
         // it glows whenever that is on, by day as well; the others fade in with the night
-        let night = select(camera.sun_color.w, 1.0, material.extra.w > 1.5);
+        let night = select(rain_lit_windows(in.world), 1.0, material.extra.w > 1.5);
         lit = lit + night_sample.rgb * night * select(clamp(in.params2.y, 0.0, 1.0), 1.0, material.extra.w > 1.5);
     }
     if (material.params2.y > 0.0) {
@@ -399,6 +393,16 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
     if (mode > 1.5 && min(material.emissive.r, min(material.emissive.g, material.emissive.b)) > 0.99 && material.emissive.w < 1.5) {
         a = encoded_blend_alpha(rgb, a, light);
     }
+    if (material.emissive.w > 0.5 && material.emissive.w < 1.5) {
+        // a pane in the rain without a film of its own (`pane_rain`): the traffic's windows
+        let g = pane_rain(in.world, in.local, in.normal);
+        if (g.cover > 0.001 || g.veil > 0.001 || g.mist > 0.001) {
+            let vn = normalize(camera.cam_pos.xyz - in.world);
+            let o = pane_rain_compose(g, rgb, a, vn, rain_env_vanilla(reflect(-vn, g.n)), rain_env_vanilla(vec3<f32>(0.0, 0.0, 0.5)) * 0.9);
+            rgb = o.rgb;
+            a = o.a;
+        }
+    }
     return vec4<f32>(rgb, a);
 }
 
@@ -429,4 +433,74 @@ fn encoded_blend_alpha(rgb: vec3<f32>, a: f32, light: vec3<f32>) -> f32 {
         return a;
     }
     return clamp((over - d) / span, 0.0, a);
+}
+
+// The rain film on a pane in the classic pictures: the drops, the runners and the blur of the
+// wet glass as the enhanced picture draws them (`glass_water`, enhanced/07_glass.wgsl
+// `glass_film`), lit by the classic picture's own sky (`rain_env_vanilla`). Without the
+// cabin's air there is no condensation behind them.
+fn glass_film_classic(in: FsIn, water: f32) -> vec4<f32> {
+    let v = camera.cam_pos.xyz - in.world;
+    let dist = length(v);
+    let vn = v / max(dist, 1e-4);
+    let in_cab = inside_vehicle(camera.cam_pos.xyz) * near_player_vehicle(in.world) > 0.5;
+    let g = glass_water(in.world, in.local, in.normal, water, camera.post.y, in_cab);
+    if (g.cover <= 0.001 && g.mist <= 0.001 && g.veil <= 0.001) {
+        return vec4<f32>(0.0);
+    }
+    let has_picture = camera.flags.z < -0.5;
+    let dims = vec2<f32>(textureDimensions(t_env));
+    let uv0 = in.clip.xy / dims;
+    let mist_col = rain_env_vanilla(vec3<f32>(0.0, 0.0, 0.5)) * 0.9;
+    // the view through the wet glass between the drops, softened by the film of water
+    let veil_lod = log2(max(dims.y * mix(0.005, 0.014, clamp(g.veil / 0.6, 0.0, 1.0)), 1.0));
+    var behind = mist_col;
+    if (has_picture) {
+        behind = finite_or(glass_blur(uv0, veil_lod), mist_col);
+    }
+    // a drop: a small lens, the street small and upside down in it, darker at its rim
+    var drop_col = behind;
+    var a_drop = 0.0;
+    if (g.cover > 0.001) {
+        // (bent by the dome, the way out of the drop is looked up where it meets the street a
+        // few metres on - not a fixed share of the screen aside, which from the driver's seat
+        // landed on the dark dashboard and the pillars and drew every drop as a black speck:
+        // the classic pictures keep no depth to tell those from the street)
+        let tilt = g.n - g.out * dot(g.n, g.out);
+        let thr = normalize(-vn - tilt * 0.9);
+        var seen = behind;
+        let cp = camera.view_proj * vec4<f32>(in.world + thr * 6.0, 1.0);
+        if (has_picture && cp.w > 0.05) {
+            let ndc = cp.xy / cp.w;
+            let uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+            let inside = smoothstep(0.0, 0.06, min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y)));
+            let far = finite_or(glass_blur(clamp(uv, vec2<f32>(0.001), vec2<f32>(0.999)), 0.8 + 1.5 * g.mist), behind);
+            seen = mix(behind, far, inside);
+        }
+        let rim = smoothstep(0.55, 1.0, g.rim);
+        let facing = dot(g.out, vn) > 0.0;
+        let cosv = clamp(abs(dot(g.n, vn)), 0.0, 1.0);
+        let f = select(0.02, 0.02 + 0.98 * pow(1.0 - cosv, 5.0), facing);
+        var c = seen * (1.0 - 0.45 * rim) * (1.0 - f) + rain_env_vanilla(reflect(-vn, g.n)) * f;
+        if (facing) {
+            let r = reflect(-vn, g.n);
+            c = c + camera.sun_color.rgb * camera.sun_dir.w * pow(max(dot(r, camera.sun_dir.xyz), 0.0), 900.0) * f * 60.0;
+        }
+        let detail = smoothstep(0.5, 1.6, g.size_px);
+        drop_col = mix(behind * 0.93, c, detail);
+        a_drop = g.cover * mix(0.5, 0.95, detail) * (1.0 - smoothstep(5.0, 15.0, dist));
+    }
+    let a_mist = g.mist * 0.5;
+    var a_veil = 0.0;
+    if (g.veil > 0.001 && has_picture) {
+        a_veil = g.veil * (1.0 - smoothstep(25.0, 60.0, dist));
+    }
+    let a_under = a_veil + a_mist * (1.0 - a_veil);
+    let under = (behind * a_veil + mix(mist_col, behind, 0.9) * a_mist * (1.0 - a_veil)) / max(a_under, 1e-4);
+    let a = a_drop + a_under * (1.0 - a_drop);
+    if (a <= 1e-4) {
+        return vec4<f32>(0.0);
+    }
+    let col = (drop_col * a_drop + under * a_under * (1.0 - a_drop)) / a;
+    return vec4<f32>(min(col, vec3<f32>(1.5)), a);
 }

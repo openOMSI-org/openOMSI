@@ -496,6 +496,7 @@ flags! {
     OMSI_SCREEN_AT: Text, Setup, Once, "-", "x,y: the screen (a point on the desktop, pixels) the game window opens on; the launcher sets it to where it stands.";
     OMSI_SEED: Num, Test, Use, "random", "Seed of the scripts' random numbers (repeat a session).";
     OMSI_SERIAL_PIPELINES: Bool, Switch, Use, "off", "Compile the renderer's pipelines one after the other on one thread, as before (A/B).";
+    OMSI_SHADER_HOT: Text, Test, Use, "-", "Read the renderer's WGSL from this copy of a renderer crate's `src` folder (1: the source tree the game was built from), not the copy compiled in: trying shaders without a rebuild.";
     OMSI_SHADOW_FAR_EVERY_FRAME: Bool, Switch, Frame, "off", "Redraw the far shadow map every frame.";
     OMSI_SHADOW_NEAR_EVERY_FRAME: Bool, Switch, Frame, "off", "Redraw the near shadow map every frame.";
     OMSI_SIM_THREAD: Text, Switch, Use, "the setting", "Window: the AI traffic's, the people's and the scenery scripts' steps on a thread of their own while the picture is drawn (one frame later): 0 / false / off / no: on the main thread, anything else: on their thread, over the `sim_thread` setting (off by default); the offscreen run ignores it.";

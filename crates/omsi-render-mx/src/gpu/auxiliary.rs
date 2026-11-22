@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
 pub(crate) struct AuxiliaryState {
-    flags: [bool; 8],
+    flags: [bool; 9],
     arrays: u8,
     ceiling: Option<crate::Ceiling>,
 }
