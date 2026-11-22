@@ -160,6 +160,8 @@ pub struct Choice {
     pub lan_addr: String,
     /// Discovered gateway to try if an Auto UDP join gets no answer.
     pub lan_ws_fallback: Option<String>,
+    #[serde(default)]
+    pub session_buses: String,
     /// 2: `entry` may be -1 (automatic); older files had a fixed entry point there.
     pub version: u32,
 }
@@ -194,6 +196,7 @@ impl Default for Choice {
             lan_mode: "off".into(),
             lan_addr: String::new(),
             lan_ws_fallback: None,
+            session_buses: String::new(),
             version: 2,
         }
     }
@@ -719,6 +722,7 @@ impl State {
             // The native launcher has no server-fleet consent dialog yet. Never
             // silently authorize a download from this entry point.
             allow_server_fleet: false,
+            session_buses: Some(c.session_buses.clone()).filter(|b| c.lan_mode == "host" && !b.trim().is_empty()).map(|b| b.trim().to_string()),
             lan_name: None,
             season: Some(c.season.clone()).filter(|s| s != "auto").map(|s| super::season::launcher_choice(&s, &c.phase).map(|x| x.word()).unwrap_or(s)),
             tutorial: None,
