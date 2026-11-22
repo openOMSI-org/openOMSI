@@ -7,12 +7,7 @@ use super::*;
 const STEP_AWAY_S: f32 = 3.0;
 /// ...and is gone this long after getting off, looked at or not (Omsi.exe: at once).
 const GONE_AFTER_S: f32 = 10.0;
-/// Seconds a pedestrian may spend wanting to walk and not moving a step before it is
-/// deleted (#3790: the issue asks for one or two minutes). The pavement's own paths can
-/// leave somebody trampling in one place - a zebra whose kerb is too close, a lamp post on
-/// the line - and a bus standing over the crossing does the same, with no crowd to blame.
-/// The slip-past below gets people through a crowd; it never gets them out of a place no
-/// step leaves, and OMSI's people walked in place there for good.
+/// How long a pedestrian may walk in place before deletion (#3790).
 pub(crate) const STUCK_GONE_S: f32 = 120.0;
 
 /// Continue from a stop in the middle or at either end of a pavement lane.
@@ -286,9 +281,7 @@ impl PeopleSim {
             return Want::stand(None, Activity::Stand);
         }
         if strolling {
-            // a pedestrian that has wanted to walk for two minutes and has not moved a step
-            // is deleted where it stands: nothing in the crowd keeps it there any more
-            // (#3790 - the slip-past moved people through each other, never off a kerb)
+            // Deletes pedestrians walking in place for two minutes (#3790).
             if self.people[i].stuck_total > STUCK_GONE_S {
                 if debug_pax() {
                     log::info!(
@@ -706,8 +699,6 @@ impl PeopleSim {
         };
         let actual_speed = (w.pos - prev_pos).length() as f32 / dt.max(0.001);
         // somebody pressed against somebody else for seconds slips past them
-        // (the second count is the one the map's own geometry runs up: it is not cleared by
-        // the slip-past, only by a step; see `STUCK_GONE_S`)
         if want.vel.length() > 0.2 && actual_speed < 0.08 {
             p.stuck += dt;
             p.stuck_total += dt;

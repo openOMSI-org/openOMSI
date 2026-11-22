@@ -146,9 +146,7 @@ pub struct Person {
     /// Seconds without getting nearer the goal while wanting to move; seconds left
     /// passing through others.
     pub stuck: f32,
-    /// Seconds spent wanting to walk and not moving at all, kept across the slip-pasts
-    /// above: a pedestrian the crowd cannot be blamed for (the pavement's own paths, a
-    /// bus standing over the crossing) is deleted here once it adds up (#3790).
+    /// Seconds spent wanting to walk and not moving, across slip-pasts (#3790).
     pub stuck_total: f32,
     pub ghost: f32,
     /// Seconds a standing vehicle has stood in the way (see the crowd step).

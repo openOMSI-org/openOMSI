@@ -65,7 +65,7 @@ impl World for Bare {
 fn pavement() -> Network {
     let mut net = Network::default();
     net.lanes.push(crate::traffic::LaneBuilder::polyline(
-        vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, 20.0, 0.0)],
+        vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, 2000.0, 0.0)],
         LaneKind::Sidewalk,
         2.5,
     ));
@@ -79,24 +79,12 @@ struct Stuck {
     world: Bare,
     traffic: crate::ai_traffic::TrafficSim,
     dt: f32,
+    wall_y: Option<f64>,
 }
 
 impl Stuck {
     fn new() -> Stuck {
-        let mut world = Bare::default();
-        let mut collision = crate::collision::CollisionWorld::default();
-        collision.add(crate::collision::Obb {
-            center: DVec2::new(0.0, 2.5),
-            half: DVec2::new(50.0, 0.25),
-            heading: 0.0,
-            z0: -1.0,
-            z1: 3.0,
-            velocity: DVec2::ZERO,
-            mass: 0.0,
-            pole: None,
-            id: 1,
-        });
-        world.collision = Arc::new(collision);
+        let world = Bare::default();
         let net = pavement();
         let mut sim = PeopleSim::new(Path::new("/nonexistent"), 40);
         sim.players_only = true;
@@ -116,7 +104,7 @@ impl Stuck {
         let leg = Leg {
             lane: 0,
             a: 0.0,
-            b: 20.0,
+            b: 2000.0,
         };
         sim.spawn(
             &world,
@@ -143,26 +131,55 @@ impl Stuck {
             (1.0, 0),
             0,
         );
-        Stuck {
+        let mut s = Stuck {
             sim,
             world,
             traffic,
             dt: 1.0 / 30.0,
-        }
+            wall_y: None,
+        };
+        s.set_wall(2.5);
+        s
+    }
+
+    fn set_wall(&mut self, y: f64) {
+        self.wall_y = Some(y);
+        let mut collision = crate::collision::CollisionWorld::default();
+        collision.add(crate::collision::Obb {
+            center: DVec2::new(0.0, y),
+            half: DVec2::new(50.0, 0.25),
+            heading: 0.0,
+            z0: -1.0,
+            z1: 3.0,
+            velocity: DVec2::ZERO,
+            mass: 0.0,
+            pole: None,
+            id: 1,
+        });
+        self.world.collision = Arc::new(collision);
+        self.sim.wall_cells.clear();
+        self.sim.wall_key.0 = usize::MAX;
+    }
+
+    fn clear_wall(&mut self) {
+        self.wall_y = None;
+        self.world.collision = Arc::new(crate::collision::CollisionWorld::default());
+        self.sim.wall_cells.clear();
+        self.sim.wall_key.0 = 0;
     }
 
     /// One frame driven through normal people update (`tick_inner`).
     fn frame(&mut self, moved: f64) {
         if moved == 0.0 {
-            self.sim
-                .tick_inner(self.dt, &self.world, None, Some(&self.traffic));
-        } else {
-            let saved = self.world.collision.clone();
-            self.world.collision = Arc::new(crate::collision::CollisionWorld::default());
-            self.sim
-                .tick_inner(self.dt, &self.world, None, Some(&self.traffic));
-            self.world.collision = saved;
+            if self.wall_y.is_none() {
+                let y = self.sim.people.first().map(|p| p.position.y).unwrap_or(2.0);
+                self.set_wall(y + 0.50);
+            }
+        } else if self.wall_y.is_some() {
+            self.clear_wall();
         }
+        self.sim
+            .tick_inner(self.dt, &self.world, None, Some(&self.traffic));
     }
 }
 
@@ -195,17 +212,29 @@ fn two_minutes_of_trampling_in_one_place_gets_a_pedestrian_deleted() {
 #[test]
 fn a_step_frees_a_pedestrian_the_crowd_only_held_up() {
     let mut s = Stuck::new();
-    // a jam that moves in bursts - half a second of walking, a second standing, over and
-    // over: ten minutes in the crowd and never two minutes in one place
-    for n in 0..(600.0 / s.dt) as usize {
-        s.frame(if n % 45 < 15 { 1.0 } else { 0.0 });
+    // A jam that moves in bursts - encountering an obstruction throughout the run,
+    // accumulating stuck time, then taking a step that resets the counter, over and over:
+    // ten minutes in the crowd and never two minutes in one place.
+    for _ in 0..400 {
+        // Obstructed: counter rises
+        for _ in 0..30 {
+            s.frame(0.0);
+        }
+        assert_eq!(s.sim.people.len(), 1);
+        let stuck = s.sim.people[0].stuck_total;
+        assert!(stuck >= 0.9, "counter should rise while blocked: {stuck}");
+
+        // Freed: taking a step resets the counter
+        for _ in 0..15 {
+            s.frame(1.0);
+        }
+        assert_eq!(s.sim.people.len(), 1);
+        assert_eq!(
+            s.sim.people[0].stuck_total, 0.0,
+            "counter should reset after moving"
+        );
     }
     assert_eq!(s.sim.people.len(), 1);
-    let held = s.sim.people[0].stuck_total;
-    assert!(
-        held < 2.0,
-        "the crowd let them through, but {held:.1} s stand at the end"
-    );
 }
 
 #[test]
