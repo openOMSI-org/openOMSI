@@ -445,7 +445,7 @@ mod hold_tests {
     #[test]
     fn deferred_trip_and_route_transition_waits_for_startup_and_typist() {
         use omsi_sim::timetable_run::{PlannedStop, PlannedTrip, PlayerDuty, StopDir};
-        use omsi_vehicle::Hof;
+        use omsi_vehicle::hof::{Hof, InfoTrip, Terminus};
 
         let stop = |name: &str| PlannedStop {
             object_id: 1,
@@ -480,6 +480,38 @@ mod hold_tests {
         v.set_var("IBIS_RouteIndex", 0.0);
         v.set_var("IBIS_busstop", 0.0);
         v.host.hof = Some(std::sync::Arc::new(Hof {
+            termini: vec![
+                Terminus {
+                    code: 1,
+                    texture_id: "Terminus A".into(),
+                    terminus_stop: None,
+                    all_exit: false,
+                    strings: vec!["Terminus A".into()],
+                },
+                Terminus {
+                    code: 2,
+                    texture_id: "Terminus B".into(),
+                    terminus_stop: None,
+                    all_exit: false,
+                    strings: vec!["Terminus B".into()],
+                },
+            ],
+            info_trips: vec![
+                InfoTrip {
+                    code: "10001".into(),
+                    name: "Terminus A".into(),
+                    route: "1".into(),
+                    line: "100".into(),
+                    extra: vec![],
+                },
+                InfoTrip {
+                    code: "10002".into(),
+                    name: "Terminus B".into(),
+                    route: "2".into(),
+                    line: "100".into(),
+                    extra: vec![],
+                },
+            ],
             info_busstop_lists: vec![
                 vec!["Stop 1".into(), "Stop 2".into()],
                 vec!["Stop 2".into(), "Stop 3".into()],
@@ -523,11 +555,24 @@ mod hold_tests {
             Some(1.0),
             "retains old stop while transition is busy"
         );
+        assert_eq!(
+            player.vehicle.var("IBIS_RouteIndex"),
+            Some(0.0),
+            "retains old route while transition is busy"
+        );
 
-        // When typing completes, update_duty_ibis applies the new trip's stop
-        player.ibis_duty = None;
+        // Drive queued trip typing to completion through the production typing path
+        if let Some((line, terminus, stops, stop)) = player.ibis_duty.take() {
+            player.type_destination(&line, &terminus, &stops, (stop.0, &stop.1));
+        }
+        player.tick_ibis(1.0);
         assert!(!player.ibis_busy());
-        player.vehicle.set_var("IBIS_RouteIndex", 1.0);
+        assert_eq!(
+            player.vehicle.var("IBIS_RouteIndex"),
+            Some(1.0),
+            "new route established by typing"
+        );
+
         player.update_duty_ibis(&mut duty);
         assert_eq!(
             player.ibis_shown,
