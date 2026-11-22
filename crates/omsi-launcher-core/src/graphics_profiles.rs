@@ -32,6 +32,7 @@ pub const GRAPHICS_PROFILE_KEYS: [&str; 48] = [
     "vehicle_smoke",
     "puddles",
     "windy_trees",
+    "rain_lights",
     "detailed_trees",
     "road_snow",
     "ray_tracing",

@@ -145,19 +145,18 @@ fn snow_noise(p: vec2<f32>) -> f32 {
 
 // By day in a downpour some of the houses' windows are lit, as people switch the light on when
 // it gets that dark (`camera.wind.w` - 1: the share, `Lighting::rain_lights`, 0 with the
-// setting off): the night maps of a few rooms here and there, chosen by a cell of the world
-// some four metres wide and three high (the world's own figures, `world_origin`, so the same
-// rooms stay lit as the render origin moves), each fading in at its own point of the rain.
-// What a night map shows at `world`: the night's own strength or, where such a room is lit,
-// the full light.
-fn rain_lit_windows(world: vec3<f32>) -> f32 {
+// setting off): the night maps of a few rooms here and there, chosen by a cell of the
+// object's own frame some four metres wide and three high (`local`: the same rooms of a
+// house stay lit, and a bus driving by does not flicker as it crosses cells of the world),
+// each fading in at its own point of the rain. What a night map shows: the night's own
+// strength or, where such a room is lit, the full light.
+fn rain_lit_windows(local: vec3<f32>) -> f32 {
     let night = clamp(camera.sun_color.w, 0.0, 1.0);
     let share = clamp(camera.wind.w - 1.0, 0.0, 1.0);
     if (share <= 0.0) {
         return night;
     }
-    let w = world + camera.world_origin.xyz;
-    let cell = floor(vec3<f32>(w.xy / 4.0, w.z / 3.0));
+    let cell = floor(vec3<f32>(local.xy / 4.0, local.z / 3.0));
     let h = rain_hash(cell.xy + vec2<f32>(cell.z * 17.3, cell.z * 5.1));
     // (some a third of the rooms at the heaviest rain)
     let lit = smoothstep(h.x, h.x + 0.08, share * 0.38);

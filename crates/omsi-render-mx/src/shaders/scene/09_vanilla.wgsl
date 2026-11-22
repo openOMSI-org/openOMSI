@@ -234,7 +234,7 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         // terrain: the tile light map in tile space (north at the top row)
         // a [matl_item] night map is switched by its variable (warning lamps, displays):
         // it glows whenever that is on, by day as well; the others fade in with the night
-        let night = select(rain_lit_windows(in.world), 1.0, material.extra.w > 1.5);
+        let night = select(rain_lit_windows(in.local), 1.0, material.extra.w > 1.5);
         lit = lit + night_sample.rgb * night * select(clamp(in.params2.y, 0.0, 1.0), 1.0, material.extra.w > 1.5);
     }
     if (material.params2.y > 0.0) {

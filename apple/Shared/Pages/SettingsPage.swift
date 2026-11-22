@@ -164,6 +164,7 @@ struct SettingsPage: View {
             if (store.setting("reflections")?.double ?? 1) > 0.005 {
                 SettingSelect(label: enhanced ? "Real-Time Reflections" : "Puddles", key: "puddles", options: [("high", "High"), ("low", "Low"), ("off", "Off")])
             }
+            SettingToggle(label: "Lights on in a downpour", key: "rain_lights", fallback: true, help: "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on")
             SettingToggle(label: "Windy trees", key: "windy_trees", fallback: true)
             SettingToggle(label: "Detailed trees", key: "detailed_trees", fallback: true, help: "Close up, the trees' leaf pictures no longer show as streaks seen from the side, and their crowns get shade; costs a little graphics time")
             if !classic {

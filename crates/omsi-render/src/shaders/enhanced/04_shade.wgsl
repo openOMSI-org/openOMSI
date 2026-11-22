@@ -840,7 +840,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // met a square that is an object)
     if (material.extra.w > 0.5) {
         let switched = material.extra.w > 1.5;
-        let night = select(rain_lit_windows(in.world), 1.0, switched);
+        let night = select(rain_lit_windows(in.local), 1.0, switched);
         // (a switched one is the display's own state: not dimmed with the instance's night
         // lighting, which is 0 by day and left the Procity's pressure screen black)
         let nm = night_sample.rgb * night * select(clamp(in.params2.y, 0.0, 1.0), 1.0, switched);

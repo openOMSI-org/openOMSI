@@ -147,6 +147,7 @@ fn restore_runtime_graphics(
     target.vehicle_smoke = source.vehicle_smoke.clone();
     target.puddles = source.puddles.clone();
     target.windy_trees = source.windy_trees.clone();
+    target.rain_lights = source.rain_lights;
     target.detailed_trees = source.detailed_trees;
     target.road_snow = source.road_snow.clone();
     target.ray_tracing_on = source.ray_tracing_on.clone();

@@ -395,6 +395,7 @@ mod tests {
                     "vehicle_smoke",
                     "puddles",
                     "windy_trees",
+                    "rain_lights",
                     "detailed_trees",
                     "road_snow",
                 ])

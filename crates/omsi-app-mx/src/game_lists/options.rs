@@ -596,6 +596,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "light_glow" => s.light_glow,
         "volumetric_fog" => s.volumetric_fog,
         "windy_trees" => s.windy_trees,
+        "rain_lights" => s.rain_lights,
         "detailed_trees" => s.detailed_trees,
         "road_snow" => s.road_snow,
         "mirror_hud_every_frame" => s.mirror_hud_every_frame,
@@ -1014,6 +1015,10 @@ fn toggle_set_graphics_and_controls(
         "windy_trees" => {
             app.settings.windy_trees = on;
             Some(("windy_trees", bit))
+        }
+        "rain_lights" => {
+            app.settings.rain_lights = on;
+            Some(("rain_lights", bit))
         }
         "detailed_trees" => {
             app.settings.detailed_trees = on;
