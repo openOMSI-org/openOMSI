@@ -179,12 +179,6 @@ impl Layout<'_> {
         }
     }
 
-    /// A card of the plugin's own over the map `map` (`overlay`), laid out as a panel is - its
-    /// background, then what is in it stacked - at its place in the map less its offsets, as
-    /// wide as what is in it unless it says. The panel is drawn over the navigator's map, so
-    /// the card lies on it; cut off at the map's edges, it never covers the panel round it
-    /// (one taller than the map starts at the top and loses its bottom, as a panel taller than
-    /// the navigator's room does).
     fn map_card(&mut self, c: &MapCard, map: Rect) {
         let room = map.pad(c.x, c.y);
         let natural = c
@@ -226,9 +220,7 @@ impl Layout<'_> {
         self.clip(from, map);
     }
 
-    /// Cut what was laid out from `from` on (its items, its hits) to `r`: a shape to its part
-    /// in `r`, and a text, an icon, a picture or a line only wholly in it is kept. A hit keeps
-    /// its place in the list (the shapes it lights refer to it by it), with no room outside.
+    // Keep hit indices stable because hover shapes refer to them.
     fn clip(&mut self, (items, hits): (usize, usize), r: Rect) {
         let cut = |b: Rect| {
             let (x, y) = (b.x.clamp(r.x, r.right()), b.y.clamp(r.y, r.bottom()));
