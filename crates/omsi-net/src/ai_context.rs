@@ -1,10 +1,15 @@
 //! The host's AI script context: complete timetable pages and current system values.
 //! Pages repeat in rotation; loss and reordering never expose a partial timetable.
+//!
+//! Only the static trip (line, terminus, stops) is paged and hashed. Values that move while
+//! the bus runs (`active`, the stop index, the delay, the system values) ride in every
+//! page's header, so they never make the client start a long timetable over (#3957). While
+//! a new version of the trip is still coming in, the client keeps the last complete one.
 use std::collections::HashMap;
 
 pub const MAGIC: u8 = 0xB7;
 const CHUNK: usize = 1000;
-const HEADER: usize = 120;
+const HEADER: usize = 124;
 const MAX_BYTES: usize = 256 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -27,11 +32,10 @@ fn string(out: &mut Vec<u8>, s: &str) -> Option<()> {
 
 impl Context {
     fn layout(&self) -> Option<Vec<u8>> {
-        if !self.active.is_finite() || self.stops.len() > 4096 {
+        if self.stops.len() > 4096 {
             return None;
         }
         let mut out = Vec::new();
-        out.extend_from_slice(&self.active.to_le_bytes());
         out.extend_from_slice(&self.terminus.to_le_bytes());
         string(&mut out, &self.line)?;
         out.extend_from_slice(&(self.stops.len() as u16).to_le_bytes());
@@ -50,8 +54,16 @@ impl Context {
         Some(out)
     }
 
+    /// The hash of the paged trip and how many pages it takes; a sender sends all of them
+    /// quickly whenever the hash changes.
+    pub fn pages(&self) -> Option<(u64, usize)> {
+        let layout = self.layout()?;
+        Some((hash(&layout), layout.len().div_ceil(CHUNK)))
+    }
+
     pub fn packet(&self, protocol: u8, id: u32, seq: u32, page: usize) -> Option<Vec<u8>> {
         if id > crate::world::MAX_ID
+            || !self.active.is_finite()
             || !self.delay.is_finite()
             || self.system.iter().any(|x| !x.is_finite())
         {
@@ -66,6 +78,7 @@ impl Context {
         out.extend_from_slice(&hash(&layout).to_le_bytes());
         out.extend_from_slice(&(layout.len() as u32).to_le_bytes());
         out.extend_from_slice(&(part as u16).to_le_bytes());
+        out.extend_from_slice(&self.active.to_le_bytes());
         out.extend_from_slice(&self.index.to_le_bytes());
         out.extend_from_slice(&self.delay.to_le_bytes());
         for v in self.system {
@@ -119,6 +132,8 @@ struct Assembly {
     parts: Vec<bool>,
     dynamic: Context,
     layout: Option<Context>,
+    /// The last complete trip of an older version, shown until this one is whole.
+    previous: Option<Context>,
 }
 
 fn newer(seq: u32, old: u32) -> bool {
@@ -146,6 +161,7 @@ impl Receiver {
         let version = u64::from_le_bytes(r.take()?);
         let len = r.u32()? as usize;
         let part = r.u16()? as usize;
+        let active = r.f32()?;
         let index = i32::from_le_bytes(r.take()?);
         let delay = r.f32()?;
         let mut system = [0.0; 22];
@@ -177,6 +193,11 @@ impl Receiver {
             {
                 return None;
             }
+            // Only once the new version is accepted, or a rejected one loses the old trip.
+            let previous = self
+                .entries
+                .get_mut(&id)
+                .and_then(|a| a.layout.take().or_else(|| a.previous.take()));
             self.entries.insert(
                 id,
                 Assembly {
@@ -185,12 +206,14 @@ impl Receiver {
                     bytes: vec![0; len],
                     parts: vec![false; len.div_ceil(CHUNK)],
                     dynamic: Context {
+                        active,
                         index,
                         delay,
                         system,
                         ..Default::default()
                     },
                     layout: None,
+                    previous,
                 },
             );
         }
@@ -200,6 +223,7 @@ impl Receiver {
         }
         if newer(seq, a.seq) {
             a.seq = seq;
+            a.dynamic.active = active;
             a.dynamic.index = index;
             a.dynamic.delay = delay;
             a.dynamic.system = system;
@@ -208,14 +232,13 @@ impl Receiver {
             a.bytes[part * CHUNK..part * CHUNK + r.0.len()].copy_from_slice(r.0);
             a.parts[part] = true;
             if !a.parts.iter().all(|p| *p) {
-                return None;
+                return a.previous.as_ref().map(|c| (id, a.dynamic.with(c)));
             }
             if hash(&a.bytes) != a.hash {
                 a.parts.fill(false);
-                return None;
+                return a.previous.as_ref().map(|c| (id, a.dynamic.with(c)));
             }
             let mut r = Read(&a.bytes);
-            let active = r.f32()?;
             let terminus = i32::from_le_bytes(r.take()?);
             let line = r.string()?;
             let count = r.u16()?;
@@ -232,19 +255,27 @@ impl Receiver {
             if !r.0.is_empty() {
                 return None;
             }
+            a.previous = None;
             a.layout = Some(Context {
-                active,
                 terminus,
                 line,
                 stops,
                 ..Default::default()
             });
         }
-        let mut context = a.layout.as_ref()?.clone();
-        context.index = a.dynamic.index;
-        context.delay = a.dynamic.delay;
-        context.system = a.dynamic.system;
-        Some((id, context))
+        Some((id, a.dynamic.with(a.layout.as_ref()?)))
+    }
+}
+
+impl Context {
+    fn with(&self, layout: &Context) -> Context {
+        Context {
+            active: self.active,
+            index: self.index,
+            delay: self.delay,
+            system: self.system,
+            ..layout.clone()
+        }
     }
 }
 
@@ -277,9 +308,10 @@ mod tests {
         let count = c.layout().unwrap().len().div_ceil(CHUNK);
         let mut rx = Receiver::default();
         for p in (1..count).rev() {
-            assert!(rx
-                .receive(&c.packet(9, 7, p as u32, p).unwrap(), 9)
-                .is_none());
+            assert!(
+                rx.receive(&c.packet(9, 7, p as u32, p).unwrap(), 9)
+                    .is_none()
+            );
         }
         c.index = 9;
         c.delay = 5.0;
@@ -305,6 +337,72 @@ mod tests {
         assert!(rx.receive(&old.packet(9, 7, 5, 0).unwrap(), 9).is_none());
         rx.retain(&[]);
         assert!(rx.entries.is_empty());
+    }
+    #[test]
+    fn moving_values_never_restart_a_long_trip() {
+        // #3957: schedule_active and the stop index change while the pages trickle in.
+        let mut c = context();
+        let (_, count) = c.pages().unwrap();
+        assert!(count > 3);
+        let mut rx = Receiver::default();
+        let mut got = None;
+        for p in 0..count {
+            c.active = if p % 2 == 0 { 1.0 } else { 0.0 };
+            c.index = p as i32;
+            got = rx.receive(&c.packet(9, 7, p as u32, p).unwrap(), 9);
+        }
+        assert_eq!(got.unwrap().1, c);
+    }
+    #[test]
+    fn a_changed_trip_keeps_the_last_whole_one_until_it_is_complete() {
+        let old = context();
+        let mut rx = Receiver::default();
+        let (_, count) = old.pages().unwrap();
+        for p in 0..count {
+            rx.receive(&old.packet(9, 7, p as u32, p).unwrap(), 9);
+        }
+        let mut new = context();
+        new.stops[3].2 += 30.0;
+        new.index = 6;
+        let (_, got) = rx.receive(&new.packet(9, 7, 50, 1).unwrap(), 9).unwrap();
+        assert_eq!(got.stops, old.stops);
+        assert_eq!(got.index, 6);
+        let mut last = None;
+        for p in 0..count {
+            last = rx.receive(&new.packet(9, 7, 60 + p as u32, p).unwrap(), 9);
+        }
+        assert_eq!(last.unwrap().1, new);
+    }
+    #[test]
+    fn a_rejected_replacement_keeps_the_last_whole_trip() {
+        let old = context();
+        let mut rx = Receiver::default();
+        let (_, count) = old.pages().unwrap();
+        for p in 0..count {
+            rx.receive(&old.packet(9, 7, p as u32, p).unwrap(), 9);
+        }
+        let used = rx.entries[&7].bytes.len();
+        rx.entries.insert(
+            8,
+            Assembly {
+                hash: 0,
+                seq: 0,
+                bytes: vec![0; 16 * 1024 * 1024 - used],
+                parts: Vec::new(),
+                dynamic: Context::default(),
+                layout: None,
+                previous: None,
+            },
+        );
+        let mut bigger = context();
+        bigger.stops.push((100, "one more stop".into(), 0.0, 0.0));
+        assert!(
+            rx.receive(&bigger.packet(9, 7, 50, 0).unwrap(), 9)
+                .is_none()
+        );
+        assert_eq!(rx.entries[&7].layout.as_ref().unwrap().stops, old.stops);
+        let got = rx.receive(&old.packet(9, 7, 51, 0).unwrap(), 9).unwrap().1;
+        assert_eq!(got.stops, old.stops);
     }
     #[test]
     fn invalid_protocol_lengths_and_nonfinite_values_are_rejected() {

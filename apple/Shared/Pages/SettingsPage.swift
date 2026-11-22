@@ -572,11 +572,11 @@ enum Choices {
             }
         }
     }
-    static let shadowSize = [("1024", "1024"), ("2048", "2048"), ("4096", "4096")]
+    static let shadowSize = [("256", "256"), ("512", "512"), ("1024", "1024"), ("2048", "2048"), ("4096", "4096")]
     static let cloudQuality = [("high", "High"), ("low", "Low")]
     static let rainQuality = [("high", "High"), ("medium", "Medium"), ("low", "Low")]
-    static let viewDistance = [("auto", "Default (1200 m)"), ("600", "600 m - fastest"), ("900", "900 m"), ("1200", "1200 m"), ("1500", "1500 m"), ("2000", "2000 m"), ("2500", "2500 m")]
-    static let objectDistance = [("auto", "Automatic"), ("500", "500 m"), ("750", "750 m"), ("900", "900 m"), ("1500", "1500 m"), ("3000", "3000 m")]
+    static let viewDistance = [("auto", "Default (1200 m)"), ("300", "300 m"), ("600", "600 m"), ("900", "900 m"), ("1200", "1200 m"), ("1500", "1500 m"), ("2000", "2000 m"), ("2500", "2500 m")]
+    static let objectDistance = [("auto", "Automatic"), ("300", "300 m"), ("500", "500 m"), ("750", "750 m"), ("900", "900 m"), ("1500", "1500 m"), ("3000", "3000 m")]
     static let smallObjects = [("0.005", "All"), ("0.013", "Normal"), ("0.02", "Fewer (faster)"), ("0.03", "Few (fastest)")]
     static let mirrorSize = [("0", "Off"), ("128", "Low (128)"), ("256", "Normal (256)"), ("512", "High (512)"), ("1024", "Very high (1024)")]
     static let mirrorRefresh = [("off", "None (frozen picture)"), ("eco", "Economical"), ("full", "Full"), ("every", "Every frame (smoothest)")]

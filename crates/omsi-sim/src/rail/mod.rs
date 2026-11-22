@@ -8,12 +8,13 @@
 //! its file declares, or an explicit `[rail_class]`), [`TrackClass`] for a piece of track,
 //! and [`dynamics`] moves a consist along its track by the forces on it.
 
+pub mod body;
 pub mod brake;
 pub mod chain;
-pub mod body;
 pub mod class;
 pub mod dynamics;
 pub mod track;
+pub mod trail;
 
 /// Whether the rail physics beyond the original's are on: the pantograph against the wire, the
 /// body on its springs and the power curve of AI trams.
@@ -23,7 +24,8 @@ pub fn realistic() -> bool {
     crate::rigid::realistic_default()
 }
 
-pub use body::{Body, BodyOut, BodyParams};
+pub use body::{Body, BodyOut, BodyParams, ROLL_SHOWN};
 pub use class::{RailClass, TrackClass, TrackFacts};
-pub use dynamics::{step, Conditions, Consist, Forces, Outcome};
-pub use track::{classify, RailMapConfig, TrackInfo, TrackRule};
+pub use dynamics::{Conditions, Consist, Forces, Outcome, step};
+pub use track::{RailMapConfig, TrackInfo, TrackRule, classify};
+pub use trail::Trail;

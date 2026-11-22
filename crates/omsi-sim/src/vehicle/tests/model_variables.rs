@@ -401,6 +401,7 @@ fn a_livery_changed_puts_back_what_the_old_one_set() {
         &car,
         &mut v,
         [1.0, 0.0, 0.0],
+        &mut Vec::new(),
     )));
     assert_eq!((v.var("v_drzwi"), v.var("v_font")), (Some(1.0), Some(7.0)));
     assert_eq!(v.trailers[0].run_var("v_font"), Some(7.0));
@@ -523,6 +524,7 @@ fn a_coupled_car_lets_go_of_the_value_it_took_from_the_painted_bus() {
         &car,
         &mut v,
         [1.0, 0.0, 0.0],
+        &mut Vec::new(),
     )));
     assert_eq!(v.trailers[0].run_var("v_drzwi"), Some(1.0));
     for scheme in [Some(1), None] {
