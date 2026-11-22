@@ -1,6 +1,6 @@
 //! "Place a vehicle..." names, grouped as `families` in `launcher/ui/js/pages/bus-picker.js`.
 
-/// One model: its name and its versions (label, bus file).
+/// `versions`: (label, bus file).
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Family {
     pub(crate) name: String,
@@ -18,8 +18,7 @@ fn has_alnum(w: &str) -> bool {
     w.chars().any(char::is_alphanumeric)
 }
 
-/// `vehicles`: (name as the launcher gives it - manufacturer and type -, type, bus file) of
-/// one maker's vehicles.
+/// `vehicles`: (manufacturer and type, type, bus file).
 pub(crate) fn families(vehicles: &[(String, String, String)]) -> Vec<Family> {
     let mut by: Vec<(String, Vec<&(String, String, String)>)> = Vec::new();
     for v in vehicles {
@@ -98,15 +97,14 @@ pub(crate) fn families(vehicles: &[(String, String, String)]) -> Vec<Family> {
     out
 }
 
-/// One maker's page: a model of several versions as a heading over them, a model of one as
-/// its bus's row. `found` (label, action) is the search: a version is matched with its model's
-/// name before its own label, and a heading stays while one of its versions does.
+/// A version is searched with its model's name before its own label ("citaro k"), and a
+/// heading stays while one of its versions does.
 pub(crate) fn rows(
     families: Vec<Family>,
     found: impl Fn(&str, &str) -> bool,
 ) -> Vec<(String, String)> {
     let mut rows = Vec::new();
-    // (each row's family, and the model's name its search starts with: none on a heading)
+    // (None: a heading)
     let mut model: Vec<(usize, Option<String>)> = Vec::new();
     for (i, f) in families.into_iter().enumerate() {
         if f.versions.len() > 1 {
@@ -144,8 +142,7 @@ pub(crate) fn rows(
         .collect()
 }
 
-/// What the picture's second line says of a bus: the first line of its description (its
-/// `[description]`), else its folder - not its file's path.
+/// The folder, not the file's path, when the bus has no description.
 pub(crate) fn about(description: &str, bus: &str) -> String {
     let line = description
         .lines()
@@ -166,8 +163,8 @@ pub(crate) fn about(description: &str, bus: &str) -> String {
         .replace('_', " ")
 }
 
-/// Bus rows (`bus <file>`) of one page with the same label get the file's stem, or its folder
-/// when the stems are the same too: only the picture tells them apart otherwise.
+/// Rows of one label get the file's stem, or the folder when the stems match too: only the
+/// picture would tell them apart.
 pub(crate) fn tell_apart(rows: &mut [(String, String)]) {
     let part = |b: &str, n: usize| b.rsplit('/').nth(n).unwrap_or_default().to_string();
     let keys: Vec<Option<(String, String, String)>> = rows
