@@ -55,7 +55,11 @@ impl App {
             log::warn!("writing the session summary: {e}");
         }
         if let (Some(id), Some(p)) = (self.args.depot.as_deref(), self.player.as_ref()) {
-            let outing = crate::depot_bus::outing_since(&self.session.career, &self.args, &self.session.depot_base);
+            let outing = crate::depot_bus::outing_since(
+                &self.session.career,
+                &self.args,
+                &self.session.depot_base,
+            );
             crate::depot_bus::record(&p.vehicle, id, &outing);
         }
         self.session.career.seconds = 0.0;
@@ -64,8 +68,14 @@ impl App {
     /// The quicksave, where there is one: the newer of the content folder's and the fallback
     /// folder's (see `save_or_fallback`).
     pub(crate) fn quicksave_file(&self) -> Option<PathBuf> {
-        let file = crate::startup::content_dir().unwrap_or_else(|| self.args.root.clone()).join("Situations").join("quicksave.osn");
-        newer_quicksave(file, crate::startup::save_fallback_dir().map(|f| f.join("Situations").join("quicksave.osn")))
+        let file = crate::startup::content_dir()
+            .unwrap_or_else(|| self.args.root.clone())
+            .join("Situations")
+            .join("quicksave.osn");
+        newer_quicksave(
+            file,
+            crate::startup::save_fallback_dir().map(|f| f.join("Situations").join("quicksave.osn")),
+        )
     }
 
     /// "Load a situation..." (#3975): the list of saves; with the plugin command on,
@@ -84,9 +94,15 @@ impl App {
     /// Start the game again on the situation `file` (a fresh process, as OMSI loads a
     /// situation into a fresh world); true when it started. The caller ends this session.
     pub(crate) fn load_situation_file(&mut self, file: &Path) -> bool {
-        let Ok(exe) = std::env::current_exe() else { return false };
+        let Ok(exe) = std::env::current_exe() else {
+            return false;
+        };
         let mut cmd = std::process::Command::new(exe);
-        cmd.arg("--root").arg(&self.args.root).arg("--no-menu").arg("--situation").arg(&file);
+        cmd.arg("--root")
+            .arg(&self.args.root)
+            .arg("--no-menu")
+            .arg("--situation")
+            .arg(&file);
         self.pass_session_args(&mut cmd);
         // (the duty typed by itself goes on being typed: `--autostart` with a situation)
         if self.player.as_ref().is_some_and(|p| p.duty_typed) {
@@ -114,24 +130,56 @@ impl App {
         if self.menus.tutorial.is_some() || self.net.lan.is_some() || self.player.is_none() {
             return;
         }
-        let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else { return };
-        let Some(dir) = std::path::Path::new(&self.args.map.replace('\\', "/")).parent().map(|d| d.to_path_buf()) else { return };
-        let Some(base) = crate::startup::content_dir() else { return };
+        let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else {
+            return;
+        };
+        let Some(dir) = std::path::Path::new(&self.args.map.replace('\\', "/"))
+            .parent()
+            .map(|d| d.to_path_buf())
+        else {
+            return;
+        };
+        let Some(base) = crate::startup::content_dir() else {
+            return;
+        };
         let dir = base.join(dir);
         let out = dir.join("laststn.osn");
-        let sit = build_situation(&self.args, w, &self.clock, self.args.weather.as_deref(), self.player.as_ref(), &self.session.placed, cam, self.session.duty.as_ref(), "Last situation");
-        let textures: Vec<(Vec<u8>, u32, u32)> = self.player.as_ref().map(|p| p.vehicle.host.script_textures.iter().map(|st| (st.rgba.clone(), st.width, st.height)).collect()).unwrap_or_default();
-        let spawned = std::thread::Builder::new().name("autosave".into()).spawn(move || {
-            let _one = SAVING.lock();
-            let _ = std::fs::create_dir_all(&dir);
-            match sit.save(&out) {
-                Ok(()) => {
-                    crate::situation::write_script_textures(&out, &textures);
-                    log::info!("saved the last situation {}", out.display());
+        let sit = build_situation(
+            &self.args,
+            w,
+            &self.clock,
+            self.args.weather.as_deref(),
+            self.player.as_ref(),
+            &self.session.placed,
+            cam,
+            self.session.duty.as_ref(),
+            "Last situation",
+        );
+        let textures: Vec<(Vec<u8>, u32, u32)> = self
+            .player
+            .as_ref()
+            .map(|p| {
+                p.vehicle
+                    .host
+                    .script_textures
+                    .iter()
+                    .map(|st| (st.rgba.clone(), st.width, st.height))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let spawned = std::thread::Builder::new()
+            .name("autosave".into())
+            .spawn(move || {
+                let _one = SAVING.lock();
+                let _ = std::fs::create_dir_all(&dir);
+                match sit.save(&out) {
+                    Ok(()) => {
+                        crate::situation::write_script_textures(&out, &textures);
+                        log::info!("saved the last situation {}", out.display());
+                    }
+                    Err(e) => log::warn!("saving {}: {e}", out.display()),
                 }
-                Err(e) => log::warn!("saving {}: {e}", out.display()),
-            }
-        });
+            });
         if let Err(e) = spawned {
             log::warn!("autosave: no thread to write it on: {e}");
         }
@@ -143,18 +191,34 @@ impl App {
         if self.menus.tutorial.is_some() || self.net.lan.is_some() || self.player.is_none() {
             return None;
         }
-        let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else { return None };
-        let dir = std::path::Path::new(&self.args.map.replace('\\', "/")).parent().map(|d| d.to_path_buf())?;
+        let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else {
+            return None;
+        };
+        let dir = std::path::Path::new(&self.args.map.replace('\\', "/"))
+            .parent()
+            .map(|d| d.to_path_buf())?;
         let base = crate::startup::content_dir()?;
         let dir = base.join(dir);
         let _ = std::fs::create_dir_all(&dir);
         let out = dir.join("laststn.osn");
-        let sit = build_situation(&self.args, w, &self.clock, self.args.weather.as_deref(), self.player.as_ref(), &self.session.placed, cam, self.session.duty.as_ref(), "Last situation");
+        let sit = build_situation(
+            &self.args,
+            w,
+            &self.clock,
+            self.args.weather.as_deref(),
+            self.player.as_ref(),
+            &self.session.placed,
+            cam,
+            self.session.duty.as_ref(),
+            "Last situation",
+        );
         match sit.save(&out) {
             Ok(()) => {
                 match self.player.as_ref() {
                     Some(p) => crate::situation::save_script_textures(&out, &p.vehicle),
-                    None => crate::situation::write_script_textures(&out, &[] as &[(&[u8], u32, u32)]),
+                    None => {
+                        crate::situation::write_script_textures(&out, &[] as &[(&[u8], u32, u32)])
+                    }
                 }
                 log::info!("saved the last situation {}", out.display());
                 Some(out)
@@ -188,7 +252,12 @@ impl App {
     /// other graphics interface when the lost one was Vulkan. Twice at most in a row. False
     /// when it cannot (a LAN session, the tutorial, nothing to save): the session ends.
     pub(crate) fn restart_after_device_loss(&mut self) -> bool {
-        if cfg!(windows) && self.renderer.as_ref().is_some_and(|r| r.adapter_name.contains("(Vulkan)")) {
+        if cfg!(windows)
+            && self
+                .renderer
+                .as_ref()
+                .is_some_and(|r| r.adapter_name.contains("(Vulkan)"))
+        {
             crate::startup::mark_vulkan_lost();
         }
         let n = omsi_cfg::flags::OMSI_SAFE_GPU.parse::<u32>().unwrap_or(0);
@@ -196,10 +265,18 @@ impl App {
             return false;
         }
         self.settle_depot_switch(true);
-        let Some(file) = self.save_last_situation() else { return false };
-        let Ok(exe) = std::env::current_exe() else { return false };
+        let Some(file) = self.save_last_situation() else {
+            return false;
+        };
+        let Ok(exe) = std::env::current_exe() else {
+            return false;
+        };
         let mut cmd = std::process::Command::new(exe);
-        cmd.arg("--root").arg(&self.args.root).arg("--no-menu").arg("--situation").arg(&file);
+        cmd.arg("--root")
+            .arg(&self.args.root)
+            .arg("--no-menu")
+            .arg("--situation")
+            .arg(&file);
         self.pass_session_args(&mut cmd);
         // (the duty typed by itself goes on being typed: `--autostart` with a situation)
         if self.player.as_ref().is_some_and(|p| p.duty_typed) {
@@ -211,7 +288,11 @@ impl App {
         cmd.env("OMSI_SAFE_GPU", (n + 1).to_string());
         // (on Windows the other interface: DirectX 12 after Vulkan, Vulkan after DirectX 12 -
         // an AMD Radeon's DX12 driver lost the device where its Vulkan one did not, #274)
-        let name = self.renderer.as_ref().map(|r| r.adapter_name.clone()).unwrap_or_default();
+        let name = self
+            .renderer
+            .as_ref()
+            .map(|r| r.adapter_name.clone())
+            .unwrap_or_default();
         if cfg!(windows) {
             if name.contains("(Vulkan)") {
                 cmd.env("OMSI_BACKEND", "dx12");
@@ -221,7 +302,10 @@ impl App {
         }
         match cmd.spawn() {
             Ok(_) => {
-                log::warn!("starting again with safer graphics on {} (the graphics device was lost)", file.display());
+                log::warn!(
+                    "starting again with safer graphics on {} (the graphics device was lost)",
+                    file.display()
+                );
                 true
             }
             Err(e) => {
@@ -233,20 +317,47 @@ impl App {
 
     /// Quick save: `Situations/quicksave.osn` next to the game, as OMSI's `quicksave`.
     pub(crate) fn quick_save(&mut self) {
-        let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else { return };
+        let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else {
+            return;
+        };
         // into openOMSI's content folder, never the original installation (the menu and
         // --situation find it there as they find a mod's files)
-        let dir = crate::startup::content_dir().unwrap_or_else(|| self.args.root.clone()).join("Situations");
+        let dir = crate::startup::content_dir()
+            .unwrap_or_else(|| self.args.root.clone())
+            .join("Situations");
         let out = dir.join("quicksave.osn");
-        let sit = build_situation(&self.args, w, &self.clock, self.args.weather.as_deref(), self.player.as_ref(), &self.session.placed, cam, self.session.duty.as_ref(), "Quicksave");
-        match save_or_fallback(&sit, &out, Path::new("Situations").join("quicksave.osn").as_path()) {
+        let sit = build_situation(
+            &self.args,
+            w,
+            &self.clock,
+            self.args.weather.as_deref(),
+            self.player.as_ref(),
+            &self.session.placed,
+            cam,
+            self.session.duty.as_ref(),
+            "Quicksave",
+        );
+        match save_or_fallback(
+            &sit,
+            &out,
+            Path::new("Situations").join("quicksave.osn").as_path(),
+        ) {
             Ok(out) => {
                 match self.player.as_ref() {
                     Some(p) => crate::situation::save_script_textures(&out, &p.vehicle),
-                    None => crate::situation::write_script_textures(&out, &[] as &[(&[u8], u32, u32)]),
+                    None => {
+                        crate::situation::write_script_textures(&out, &[] as &[(&[u8], u32, u32)])
+                    }
                 }
-                log::info!("saved situation {} ({} vehicles)", out.display(), sit.vehicles.len());
-                self.service_msg = Some(("Situation saved (quicksave): the launcher continues from it".into(), 4.0));
+                log::info!(
+                    "saved situation {} ({} vehicles)",
+                    out.display(),
+                    sit.vehicles.len()
+                );
+                self.service_msg = Some((
+                    "Situation saved (quicksave): the launcher continues from it".into(),
+                    4.0,
+                ));
             }
             Err(e) => {
                 log::warn!("saving {}: {e}", out.display());
@@ -259,7 +370,12 @@ impl App {
     pub(crate) fn save_slots(&self) -> Vec<omsi_launcher_lib::SavedSituation> {
         omsi_launcher_lib::saved_situations(&self.args.map)
             .into_iter()
-            .filter(|s| s.file.parent().and_then(|d| d.file_name()).is_some_and(|d| d.eq_ignore_ascii_case(SAVES)))
+            .filter(|s| {
+                s.file
+                    .parent()
+                    .and_then(|d| d.file_name())
+                    .is_some_and(|d| d.eq_ignore_ascii_case(SAVES))
+            })
             .collect()
     }
 
@@ -270,22 +386,38 @@ impl App {
     /// `typed`: a name the player gave it in the menu (#3975), which it keeps when it is
     /// saved over later, as a name given in the launcher does.
     pub(crate) fn save_slot_to(&mut self, over: Option<std::path::PathBuf>, typed: Option<String>) {
-        let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else { return };
+        let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else {
+            return;
+        };
         let Some(dir) = crate::startup::content_dir().and_then(|base| {
-            std::path::Path::new(&self.args.map.replace('\\', "/")).parent().map(|d| base.join(d).join(SAVES))
+            std::path::Path::new(&self.args.map.replace('\\', "/"))
+                .parent()
+                .map(|d| base.join(d).join(SAVES))
         }) else {
             return;
         };
         let _ = std::fs::create_dir_all(&dir);
         // (the slots of the fallback folder count too: a number is never given twice)
-        let rel_dir = std::path::Path::new(&self.args.map.replace('\\', "/")).parent().map(|d| d.join(SAVES)).unwrap_or_default();
+        let rel_dir = std::path::Path::new(&self.args.map.replace('\\', "/"))
+            .parent()
+            .map(|d| d.join(SAVES))
+            .unwrap_or_default();
         let fallback = crate::startup::save_fallback_dir().map(|f| f.join(&rel_dir));
         // (only one of this map's own slots is ever written over)
         let over = over.and_then(|f| self.save_slots().into_iter().find(|s| s.file == f));
-        let Some((n, out, named)) = slot_target(&dir, fallback.as_deref(), over, typed) else { return };
+        let Some((n, out, named)) = slot_target(&dir, fallback.as_deref(), over, typed) else {
+            return;
+        };
         let bus = self.player.as_ref().map(|p| {
             let d = &p.vehicle.ty.def;
-            if d.type_name.trim().is_empty() { d.path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default() } else { d.type_name.trim().to_string() }
+            if d.type_name.trim().is_empty() {
+                d.path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default()
+            } else {
+                d.type_name.trim().to_string()
+            }
         });
         let t = self.clock.time;
         let what = match (bus, self.session.duty.as_ref()) {
@@ -293,21 +425,54 @@ impl App {
             (Some(b), None) => b,
             (None, _) => "on foot".to_string(),
         };
-        let head = if out.file_stem().is_some_and(|s| s.to_string_lossy() == n) { n.clone() } else { format!("Slot {n}") };
-        let name = named.clone().unwrap_or_else(|| format!("{head}: {what}, {:02}:{:02}", (t / 3600.0) as i32 % 24, ((t % 3600.0) / 60.0) as i32));
-        let mut sit = build_situation(&self.args, w, &self.clock, self.args.weather.as_deref(), self.player.as_ref(), &self.session.placed, cam, self.session.duty.as_ref(), &name);
+        let head = if out.file_stem().is_some_and(|s| s.to_string_lossy() == n) {
+            n.clone()
+        } else {
+            format!("Slot {n}")
+        };
+        let name = named.clone().unwrap_or_else(|| {
+            format!(
+                "{head}: {what}, {:02}:{:02}",
+                (t / 3600.0) as i32 % 24,
+                ((t % 3600.0) / 60.0) as i32
+            )
+        });
+        let mut sit = build_situation(
+            &self.args,
+            w,
+            &self.clock,
+            self.args.weather.as_deref(),
+            self.player.as_ref(),
+            &self.session.placed,
+            cam,
+            self.session.duty.as_ref(),
+            &name,
+        );
         sit.name_chosen = named.is_some();
-        let rel = rel_dir.join(out.file_name().map(|f| f.to_os_string()).unwrap_or_else(|| format!("Slot {n}.osn").into()));
+        let rel = rel_dir.join(
+            out.file_name()
+                .map(|f| f.to_os_string())
+                .unwrap_or_else(|| format!("Slot {n}.osn").into()),
+        );
         match save_or_fallback(&sit, &out, rel.as_path()) {
             Ok(out) => {
                 match self.player.as_ref() {
                     Some(p) => crate::situation::save_script_textures(&out, &p.vehicle),
-                    None => crate::situation::write_script_textures(&out, &[] as &[(&[u8], u32, u32)]),
+                    None => {
+                        crate::situation::write_script_textures(&out, &[] as &[(&[u8], u32, u32)])
+                    }
                 }
-                log::info!("saved situation {} ({} vehicles)", out.display(), sit.vehicles.len());
+                log::info!(
+                    "saved situation {} ({} vehicles)",
+                    out.display(),
+                    sit.vehicles.len()
+                );
                 self.service_msg = Some(match &named {
                     Some(name) => (omsi_ui::tr("Saved as \"{}\"").replace("{}", name), 4.0),
-                    None => (format!("Saved as slot {n}: the launcher continues from it"), 4.0),
+                    None => (
+                        format!("Saved as slot {n}: the launcher continues from it"),
+                        4.0,
+                    ),
                 });
             }
             Err(e) => {
@@ -339,15 +504,42 @@ pub(crate) fn newer_quicksave(main: PathBuf, fallback: Option<PathBuf>) -> Optio
 /// `over` is saved over in place and keeps its number ("Slot 3" stays the third) and a name
 /// chosen for it, unless one is `typed`; else the first number free in `dir` and `fallback`
 /// (a number is never given twice).
-pub(crate) fn slot_target(dir: &Path, fallback: Option<&Path>, over: Option<omsi_launcher_lib::SavedSituation>, typed: Option<String>) -> Option<(String, PathBuf, Option<String>)> {
-    let typed = typed.map(|t| t.trim().chars().filter(|c| !c.is_control()).take(NAME_MAX).collect::<String>()).filter(|t| !t.is_empty());
+pub(crate) fn slot_target(
+    dir: &Path,
+    fallback: Option<&Path>,
+    over: Option<omsi_launcher_lib::SavedSituation>,
+    typed: Option<String>,
+) -> Option<(String, PathBuf, Option<String>)> {
+    let typed = typed
+        .map(|t| {
+            t.trim()
+                .chars()
+                .filter(|c| !c.is_control())
+                .take(NAME_MAX)
+                .collect::<String>()
+        })
+        .filter(|t| !t.is_empty());
     let named = typed.or_else(|| over.as_ref().filter(|s| s.chosen).map(|s| s.name.clone()));
-    let number_of = |f: &Path| f.file_stem().and_then(|s| s.to_string_lossy().strip_prefix("Slot ").and_then(|n| n.trim().parse::<usize>().ok()));
-    let taken = |n: usize| dir.join(format!("Slot {n}.osn")).exists() || fallback.is_some_and(|f| f.join(format!("Slot {n}.osn")).exists());
+    let number_of = |f: &Path| {
+        f.file_stem().and_then(|s| {
+            s.to_string_lossy()
+                .strip_prefix("Slot ")
+                .and_then(|n| n.trim().parse::<usize>().ok())
+        })
+    };
+    let taken = |n: usize| {
+        dir.join(format!("Slot {n}.osn")).exists()
+            || fallback.is_some_and(|f| f.join(format!("Slot {n}.osn")).exists())
+    };
     let (n, out) = match over.map(|s| s.file) {
         Some(f) => match number_of(&f) {
             Some(n) => (n.to_string(), f),
-            None => (f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(), f),
+            None => (
+                f.file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+                f,
+            ),
         },
         None => {
             let n = (1..10_000).find(|n| !taken(*n))?;
@@ -359,14 +551,31 @@ pub(crate) fn slot_target(dir: &Path, fallback: Option<&Path>, over: Option<omsi
 
 /// Save `sit` to `out`; where that folder takes no file, to `rel` under the fallback folder
 /// (`startup::save_fallback_dir`) instead (#1673). The file written.
-fn save_or_fallback(sit: &omsi_content::situation::Situation, out: &Path, rel: &Path) -> std::io::Result<PathBuf> {
-    let first = out.parent().map(std::fs::create_dir_all).unwrap_or(Ok(())).and_then(|_| sit.save(out));
+fn save_or_fallback(
+    sit: &omsi_content::situation::Situation,
+    out: &Path,
+    rel: &Path,
+) -> std::io::Result<PathBuf> {
+    let first = out
+        .parent()
+        .map(std::fs::create_dir_all)
+        .unwrap_or(Ok(()))
+        .and_then(|_| sit.save(out));
     let e = match first {
         Ok(()) => return Ok(out.to_path_buf()),
         Err(e) => e,
     };
-    let Some(alt) = crate::startup::save_fallback_dir().map(|f| f.join(rel)).filter(|a| a != out) else { return Err(e) };
-    log::warn!("saving {}: {e}; saved into {} instead", out.display(), alt.display());
+    let Some(alt) = crate::startup::save_fallback_dir()
+        .map(|f| f.join(rel))
+        .filter(|a| a != out)
+    else {
+        return Err(e);
+    };
+    log::warn!(
+        "saving {}: {e}; saved into {} instead",
+        out.display(),
+        alt.display()
+    );
     if let Some(d) = alt.parent() {
         std::fs::create_dir_all(d)?;
     }

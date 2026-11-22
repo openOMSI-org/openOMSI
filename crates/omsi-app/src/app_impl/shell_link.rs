@@ -3,12 +3,18 @@
 
 use super::*;
 use crate::game_lists::ListKind;
-use crate::shell::pause::{ListView, PauseView};
 use crate::shell::Action;
+use crate::shell::pause::{ListView, PauseView};
 
-fn pause_kind(kind: Option<&ListKind>, original: crate::ui::MenuKind, remote_admin: bool) -> crate::ui::MenuKind {
+fn pause_kind(
+    kind: Option<&ListKind>,
+    original: crate::ui::MenuKind,
+    remote_admin: bool,
+) -> crate::ui::MenuKind {
     match kind {
-        kind if crate::game_lists::bus_preview::is_vehicle_list(kind) => crate::ui::MenuKind::Vehicles,
+        kind if crate::game_lists::bus_preview::is_vehicle_list(kind) => {
+            crate::ui::MenuKind::Vehicles
+        }
         Some(ListKind::AdminClassic) => crate::ui::MenuKind::Sections,
         Some(ListKind::Admin) if !remote_admin => crate::ui::MenuKind::Sections,
         _ => original,
@@ -19,16 +25,25 @@ impl App {
     /// The screens of the launcher's toolkit take the mouse: the pause menu is open (not in
     /// a headset, whose menu is a card in the scene), or the photo mode is on.
     pub(crate) fn shell_takes_mouse(&self) -> bool {
-        self.has_process_permission_prompt() || (!self.vr_active() && self.menus.game_menu.is_some()) || self.photo.is_some()
+        self.has_process_permission_prompt()
+            || (!self.vr_active() && self.menus.game_menu.is_some())
+            || self.photo.is_some()
     }
 
     /// The pause menu drawn with the launcher's toolkit, over the picture (nothing when it is
     /// closed or a headset shows its own).
     pub(crate) fn frame_shell(&mut self, dt: f32) {
-        if self.frame_process_permission(dt) { return; }
+        if self.frame_process_permission(dt) {
+            return;
+        }
         if self.shell.pause_category == crate::shell::pause::navigation::Category::Online {
-            if matches!(self.menus.list_kind, Some(ListKind::PlayerList | ListKind::BanList)) {
-                if matches!(self.menus.list_kind, Some(ListKind::BanList)) { self.shell.pause_online.tab = 2; }
+            if matches!(
+                self.menus.list_kind,
+                Some(ListKind::PlayerList | ListKind::BanList)
+            ) {
+                if matches!(self.menus.list_kind, Some(ListKind::BanList)) {
+                    self.shell.pause_online.tab = 2;
+                }
                 self.close_list();
             }
         }
@@ -52,28 +67,64 @@ impl App {
             return;
         }
         let (w, h) = (s.config.width as f32, s.config.height as f32);
-        let dpi = self.window.as_ref().map(|w| w.scale_factor() as f32).unwrap_or(1.0);
-        let scale = dpi * ui::size_factor(h, dpi, self.settings.ui_scale, self.settings.ui_scale_window);
+        let dpi = self
+            .window
+            .as_ref()
+            .map(|w| w.scale_factor() as f32)
+            .unwrap_or(1.0);
+        let scale = dpi
+            * ui::size_factor(
+                h,
+                dpi,
+                self.settings.ui_scale,
+                self.settings.ui_scale_window,
+            );
         self.fix_pause_focus();
-        if self.menus.chooser.is_some() && crate::game_lists::bus_preview::is_vehicle_list(self.menus.list_kind.as_ref())
-            && self.renderer.as_ref().is_some_and(|r| r.device.adapter_info().backend != wgpu::Backend::Gl) {
+        if self.menus.chooser.is_some()
+            && crate::game_lists::bus_preview::is_vehicle_list(self.menus.list_kind.as_ref())
+            && self
+                .renderer
+                .as_ref()
+                .is_some_and(|r| r.device.adapter_info().backend != wgpu::Backend::Gl)
+        {
             let kind = self.menus.list_kind.as_ref().unwrap();
             let index = self.menus.chooser.unwrap();
-            let row = self.menus.admin_list.as_ref().and_then(|rows| rows.get(index));
+            let row = self
+                .menus
+                .admin_list
+                .as_ref()
+                .and_then(|rows| rows.get(index));
             if self.shell.bus_preview.selection_changed(kind, index, row) {
                 let (look, title, meta) = crate::game_lists::bus_preview::selection(self);
                 self.shell.bus_preview.select(look, title, meta);
             }
-            self.shell.bus_preview.update(crate::launcher::showroom_options(&self.settings), self.renderer.as_ref().and_then(|r| r.adapter()));
-            if let Some(renderer) = self.renderer.as_ref() { self.shell.upload_bus_preview(renderer); }
-        } else if self.shell.bus_preview.active { self.shell.clear_bus_preview(); }
+            self.shell.bus_preview.update(
+                crate::launcher::showroom_options(&self.settings),
+                self.renderer.as_ref().and_then(|r| r.adapter()),
+            );
+            if let Some(renderer) = self.renderer.as_ref() {
+                self.shell.upload_bus_preview(renderer);
+            }
+        } else if self.shell.bus_preview.active {
+            self.shell.clear_bus_preview();
+        }
         let rail = self.game_menu_items();
         let tabs = match self.menus.list_kind.as_ref() {
             Some(k) if self.menus.chooser.is_some() => crate::game_lists::page_titles(self, k),
             _ => None,
         };
-        let chooser_list = self.menus.admin_list.as_ref().unwrap_or(&self.menus.vehicle_list);
-        let (kind, head, preview) = crate::game_lists::menu_extras(self.menus.list_kind.as_ref(), self.menus.admin_list.as_deref(), self.menus.chooser, crate::duty_book::timetable(self), self.clock.time);
+        let chooser_list = self
+            .menus
+            .admin_list
+            .as_ref()
+            .unwrap_or(&self.menus.vehicle_list);
+        let (kind, head, preview) = crate::game_lists::menu_extras(
+            self.menus.list_kind.as_ref(),
+            self.menus.admin_list.as_deref(),
+            self.menus.chooser,
+            crate::duty_book::timetable(self),
+            self.clock.time,
+        );
         let remote_admin = crate::admin_panel::remote(self);
         let kind = pause_kind(self.menus.list_kind.as_ref(), kind, remote_admin);
         let badge = match self.menus.list_kind.as_ref() {
@@ -86,12 +137,28 @@ impl App {
             head,
             badge,
             tabs: tabs.clone(),
-            items: chooser_list.iter().map(|(name, action)| (action.as_str(), name.as_str())).collect(),
+            items: chooser_list
+                .iter()
+                .map(|(name, action)| (action.as_str(), name.as_str()))
+                .collect(),
             sel,
             preview: preview.as_ref(),
-            pane_first: self.menus.pane_scroll.filter(|p| Some(p.0) == self.menus.chooser).map(|p| p.1),
-            dropdown: self.menus.dropdown.as_ref().map(|d| ui::DropdownView { row: d.row, items: d.items.iter().map(|x| x.0.as_str()).collect(), sel: d.sel, top: d.top, current: d.current }),
-            key: format!("{:?}", self.menus.list_kind).chars().filter(|c| c.is_alphanumeric()).collect(),
+            pane_first: self
+                .menus
+                .pane_scroll
+                .filter(|p| Some(p.0) == self.menus.chooser)
+                .map(|p| p.1),
+            dropdown: self.menus.dropdown.as_ref().map(|d| ui::DropdownView {
+                row: d.row,
+                items: d.items.iter().map(|x| x.0.as_str()).collect(),
+                sel: d.sel,
+                top: d.top,
+                current: d.current,
+            }),
+            key: format!("{:?}", self.menus.list_kind)
+                .chars()
+                .filter(|c| c.is_alphanumeric())
+                .collect(),
         });
         let view = PauseView {
             paused: self.paused,
@@ -117,11 +184,19 @@ impl App {
     }
 
     fn apply_online_action(&mut self, tab: u8, action: &str) {
-        if self.menus.game_menu.is_none() || self.net.lan.is_none() || self.shell.pause_category != crate::shell::pause::navigation::Category::Online { return; }
+        if self.menus.game_menu.is_none()
+            || self.net.lan.is_none()
+            || self.shell.pause_category != crate::shell::pause::navigation::Category::Online
+        {
+            return;
+        }
         if tab == 0 {
             if let Some((target, stage)) = self.shell.pause_online.management.clone() {
                 if action == format!("pick {}", target.tag()) && stage.is_none() {
-                    if crate::player_list::items(self, &ListKind::PlayerList).iter().any(|row| row.1 == action) {
+                    if crate::player_list::items(self, &ListKind::PlayerList)
+                        .iter()
+                        .any(|row| row.1 == action)
+                    {
                         crate::player_list::run(self, &ListKind::PlayerList, action);
                     }
                     return;
@@ -147,25 +222,59 @@ impl App {
         }
         if tab == 1 {
             let allowed = if crate::admin_panel::remote(self) {
-                self.net.admin_panel.main_lines(std::time::Instant::now(), &|text| text.to_string()).iter().any(|row| row.1.strip_prefix("send ") == Some(action))
-            } else { crate::admin::items(self).iter().any(|row| row.1 == action) };
+                self.net
+                    .admin_panel
+                    .main_lines(std::time::Instant::now(), &|text| text.to_string())
+                    .iter()
+                    .any(|row| row.1.strip_prefix("send ") == Some(action))
+            } else {
+                crate::admin::items(self).iter().any(|row| row.1 == action)
+            };
             if crate::player_list::rights(self) == Some(omsi_admin::Role::Admin) && allowed {
                 crate::admin::run(self, action);
-                if crate::admin_panel::remote(self) { self.net.admin_panel.soon(); }
+                if crate::admin_panel::remote(self) {
+                    self.net.admin_panel.soon();
+                }
             }
         } else if tab == 0 || tab == 2 {
-            let kind = if tab == 2 { ListKind::BanList } else { ListKind::PlayerList };
-            if !crate::player_list::items(self, &kind).iter().any(|row| row.1 == action && row.1 != "noop") { return; }
+            let kind = if tab == 2 {
+                ListKind::BanList
+            } else {
+                ListKind::PlayerList
+            };
+            if !crate::player_list::items(self, &kind)
+                .iter()
+                .any(|row| row.1 == action && row.1 != "noop")
+            {
+                return;
+            }
             if let Some(next) = crate::player_list::run(self, &kind, action) {
-                if !matches!(next, ListKind::PlayerList | ListKind::BanList) { self.open_list(next); }
+                if !matches!(next, ListKind::PlayerList | ListKind::BanList) {
+                    self.open_list(next);
+                }
             }
         }
     }
 
     /// What the pause menu's sidebar shows of the session: the bus and the driver.
     fn pause_summary(&self) -> crate::shell::pause::Summary {
-        let bus = self.player.as_ref().map(|p| format!("{} {}", p.vehicle.ty.def.manufacturer.trim(), p.vehicle.ty.def.type_name.trim()).trim().to_string()).unwrap_or_default();
-        crate::shell::pause::Summary { bus, driver: self.args.lan_name.trim().to_string() }
+        let bus = self
+            .player
+            .as_ref()
+            .map(|p| {
+                format!(
+                    "{} {}",
+                    p.vehicle.ty.def.manufacturer.trim(),
+                    p.vehicle.ty.def.type_name.trim()
+                )
+                .trim()
+                .to_string()
+            })
+            .unwrap_or_default();
+        crate::shell::pause::Summary {
+            bus,
+            driver: self.args.lan_name.trim().to_string(),
+        }
     }
 
     /// What the clicks on the screens asked for, done (at the start of a frame, with the
@@ -184,10 +293,22 @@ impl App {
             // (the mouse has taken over from the keyboard)
             self.menus.menu_kbd = false;
             match a {
-                Action::ProcessPermission(id, decision) => { self.answer_process_permission(id, decision); }
+                Action::ProcessPermission(id, decision) => {
+                    self.answer_process_permission(id, decision);
+                }
                 Action::BusSelect(k) => {
-                    if self.menus.game_menu.is_some() && self.menus.chooser.is_some() && crate::game_lists::bus_preview::is_vehicle_list(self.menus.list_kind.as_ref())
-                        && self.menus.admin_list.as_ref().and_then(|rows| rows.get(k)).is_some_and(|row| crate::game_lists::bus_preview::selectable(&row.1)) {
+                    if self.menus.game_menu.is_some()
+                        && self.menus.chooser.is_some()
+                        && crate::game_lists::bus_preview::is_vehicle_list(
+                            self.menus.list_kind.as_ref(),
+                        )
+                        && self
+                            .menus
+                            .admin_list
+                            .as_ref()
+                            .and_then(|rows| rows.get(k))
+                            .is_some_and(|row| crate::game_lists::bus_preview::selectable(&row.1))
+                    {
                         self.menus.chooser = Some(k);
                     }
                 }
@@ -198,7 +319,9 @@ impl App {
                     if self.menus.chooser.is_some() {
                         self.menus.chooser = Some(k);
                         // (a click on a tour shows its stops: the trip starts with the button)
-                        if matches!(self.menus.list_kind, Some(ListKind::Tours(..))) && crate::game_lists::tour_at(self, k).is_some() {
+                        if matches!(self.menus.list_kind, Some(ListKind::Tours(..)))
+                            && crate::game_lists::tour_at(self, k).is_some()
+                        {
                             if let Some(ListKind::Tours(line, _)) = self.menus.list_kind.clone() {
                                 self.menus.list_kind = Some(ListKind::Tours(line, None));
                             }
@@ -211,7 +334,10 @@ impl App {
                 }
                 Action::PauseCategory(category) => {
                     if self.menus.game_menu.is_some() {
-                        if category == self.shell.pause_category && !self.shell.pause_hidden && self.menus.list_kind.is_none() {
+                        if category == self.shell.pause_category
+                            && !self.shell.pause_hidden
+                            && self.menus.list_kind.is_none()
+                        {
                             self.shell.pause_hidden = true;
                             self.shell.quick_edit = false;
                         } else {
@@ -254,23 +380,45 @@ mod pause_navigation_tests {
     #[test]
     fn local_admin_pages_use_sections_without_changing_remote_admin_pages() {
         use crate::ui::MenuKind;
-        assert_eq!(pause_kind(Some(&ListKind::Admin), MenuKind::List, false), MenuKind::Sections);
-        assert_eq!(pause_kind(Some(&ListKind::Admin), MenuKind::List, true), MenuKind::List);
-        assert_eq!(pause_kind(Some(&ListKind::AdminClassic), MenuKind::List, true), MenuKind::Sections);
+        assert_eq!(
+            pause_kind(Some(&ListKind::Admin), MenuKind::List, false),
+            MenuKind::Sections
+        );
+        assert_eq!(
+            pause_kind(Some(&ListKind::Admin), MenuKind::List, true),
+            MenuKind::List
+        );
+        assert_eq!(
+            pause_kind(Some(&ListKind::AdminClassic), MenuKind::List, true),
+            MenuKind::Sections
+        );
     }
     #[test]
     fn in_game_bus_preview_uses_a_dedicated_vehicle_page() {
-        use super::{pause_kind, ListKind};
-        for kind in [ListKind::Liveries, ListKind::PlaceMaker, ListKind::PlaceType("maker".into()), ListKind::PlaceLivery("bus".into()), ListKind::PlaceHof("bus".into(), "paint".into())] {
-            assert_ne!(pause_kind(Some(&kind), crate::ui::MenuKind::List, false), crate::ui::MenuKind::List);
+        use super::{ListKind, pause_kind};
+        for kind in [
+            ListKind::Liveries,
+            ListKind::PlaceMaker,
+            ListKind::PlaceType("maker".into()),
+            ListKind::PlaceLivery("bus".into()),
+            ListKind::PlaceHof("bus".into(), "paint".into()),
+        ] {
+            assert_ne!(
+                pause_kind(Some(&kind), crate::ui::MenuKind::List, false),
+                crate::ui::MenuKind::List
+            );
         }
-        assert_eq!(pause_kind(Some(&ListKind::Hofs), crate::ui::MenuKind::List, false), crate::ui::MenuKind::List);
+        assert_eq!(
+            pause_kind(Some(&ListKind::Hofs), crate::ui::MenuKind::List, false),
+            crate::ui::MenuKind::List
+        );
     }
 
     #[test]
     fn in_game_bus_preview_is_released_when_closing_the_menu_or_list() {
         use clap::Parser;
-        let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+        let mut app =
+            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
         app.shell.bus_preview.active = true;
         app.close_list();
         assert!(!app.shell.bus_preview.active);
@@ -278,7 +426,6 @@ mod pause_navigation_tests {
         app.close_game_menu();
         assert!(!app.shell.bus_preview.active);
     }
-
 }
 
 #[cfg(test)]
@@ -286,8 +433,10 @@ mod online_action_tests {
     #[test]
     fn online_room_switch_opens_the_existing_form_without_leaving_the_session() {
         use clap::Parser;
-        let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
-        app.net.lan = Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
+        let mut app =
+            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+        app.net.lan =
+            Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
         app.menus.game_menu = Some(0);
         app.shell.pause_category = crate::shell::pause::navigation::Category::Online;
         assert!(app.game_menu_action("multiplayer"));
@@ -299,8 +448,10 @@ mod online_action_tests {
     #[test]
     fn online_world_action_changes_the_session_without_opening_a_list() {
         use clap::Parser;
-        let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
-        app.net.lan = Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
+        let mut app =
+            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+        app.net.lan =
+            Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
         app.menus.game_menu = Some(0);
         app.shell.pause_category = crate::shell::pause::navigation::Category::Online;
         app.apply_online_action(1, "speed 4");
@@ -316,24 +467,34 @@ mod online_action_tests {
     #[test]
     fn online_quick_player_list_uses_the_shared_page() {
         use clap::Parser;
-        let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
-        app.net.lan = Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
+        let mut app =
+            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+        app.net.lan =
+            Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
         app.menus.game_menu = Some(0);
         app.shell.pause_category = crate::shell::pause::navigation::Category::Home;
         app.shell.pause_hidden = false;
         assert!(app.game_menu_action("players"));
-        assert_eq!(app.shell.pause_category, crate::shell::pause::navigation::Category::Online);
+        assert_eq!(
+            app.shell.pause_category,
+            crate::shell::pause::navigation::Category::Online
+        );
         assert_eq!(app.shell.pause_online.tab, 0);
         assert!(!app.shell.pause_hidden);
         assert!(app.menus.list_kind.is_none() && app.menus.chooser.is_none());
-        assert_eq!(crate::shell::pause::online_ui::from_app(&app).players.len(), 1);
+        assert_eq!(
+            crate::shell::pause::online_ui::from_app(&app).players.len(),
+            1
+        );
     }
 
     #[test]
     fn online_player_modal_rejects_stale_targets_and_unlisted_actions() {
         use clap::Parser;
-        let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
-        app.net.lan = Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
+        let mut app =
+            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+        app.net.lan =
+            Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
         app.menus.game_menu = Some(0);
         app.shell.pause_category = crate::shell::pause::navigation::Category::Online;
         app.shell.pause_online.management = Some((omsi_admin::Target { id: 2, conn: 999 }, None));
@@ -342,21 +503,30 @@ mod online_action_tests {
         assert_eq!(app.settings.voice_all_off, before);
         app.apply_online_action(0, "run speed 8");
         assert_eq!(app.net.lan.as_ref().unwrap().clock_speed, 1.0);
-        assert!(crate::shell::pause::online_ui::from_app(&app).management.is_none());
+        assert!(
+            crate::shell::pause::online_ui::from_app(&app)
+                .management
+                .is_none()
+        );
         assert!(app.menus.list_kind.is_none());
     }
 
     #[test]
     fn online_quick_multiplayer_opens_the_online_page_and_keeps_the_session() {
         use clap::Parser;
-        let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
-        app.net.lan = Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
+        let mut app =
+            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+        app.net.lan =
+            Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
         app.menus.game_menu = Some(0);
         app.shell.pause_category = crate::shell::pause::navigation::Category::Home;
         app.shell.pause_hidden = false;
         app.shell.pause_online.tab = 2;
         assert!(app.game_menu_action("multiplayer"));
-        assert_eq!(app.shell.pause_category, crate::shell::pause::navigation::Category::Online);
+        assert_eq!(
+            app.shell.pause_category,
+            crate::shell::pause::navigation::Category::Online
+        );
         assert_eq!(app.shell.pause_online.tab, 0);
         assert!(!app.shell.pause_hidden);
         assert!(app.menus.game_panels.multiplayer.is_none());
@@ -368,7 +538,8 @@ mod online_action_tests {
     #[test]
     fn online_multiplayer_without_a_session_still_opens_the_connection_form() {
         use clap::Parser;
-        let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+        let mut app =
+            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
         app.menus.game_menu = Some(0);
         assert!(app.game_menu_action("multiplayer"));
         assert!(app.menus.game_panels.multiplayer.is_some());
