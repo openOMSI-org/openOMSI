@@ -2673,6 +2673,7 @@
 "Cloud shadows and light shafts": "Mga anino ng ulap at sinag ng liwanag"
 "Graphics set to {preset} for this computer (Options › Graphics changes it)": "Itinakda ang graphics sa {preset} para sa computer na ito (Mga opsyon › Graphics para baguhin)"
 "Glow of lights": "Kislap ng mga ilaw"
+"Volumetric fog": "Volumetric na hamog"
 "Street lamps and vehicles": "Mga ilaw-kalye at sasakyan"
 "Every light": "Bawat ilaw"
 "Extra": "Extra"
@@ -2681,6 +2682,7 @@
 "Enhanced: which lights cast shadows - the street lamps and the vehicles' headlamps, or every light: spots along their own axis and the lamps that shine every way in cube maps. Cached maps, a few passes a frame": "Enhanced: aling mga ilaw ang nagbibigay ng anino – ang mga ilaw-kalye at headlight ng sasakyan, o bawat ilaw: mga spotlight sa sarili nilang axis at mga lampara na nagliliwanag sa lahat ng direksyon, sa cube map. Naka-cache ang mga mapa, ilang pass lang kada frame"
 "Enhanced: the clouds' shadow moving over the land and the sun's shafts through the gaps of a broken sky": "Enhanced: ang anino ng ulap na gumagalaw sa lupa at ang sinag ng araw sa mga puwang ng nagkapira-pirasong langit"
 "Enhanced: the glare round bright lights and the lamps' halo in the night air": "Enhanced: ang kislap sa paligid ng matitingkad na ilaw at ang halo ng mga lampara sa hangin ng gabi"
+"Enhanced: fog you can see the light in - the sun's shafts, drifting banks of mist, the clouds' shadows in the air": "Enhanced: hamog na kita ang liwanag - ang mga sinag ng araw, ang naaanod na kumpol ng ulap, ang anino ng mga ulap sa hangin"
 "Sets the graphics mode and most of the options at once, from Low (Vanilla) to Ultra (Enhanced with everything on)": "Itinatakda ang graphics mode at karamihan ng mga opsyon nang sabay, mula “Mababa” (Vanilla) hanggang “Ultra” (Enhanced na bukas ang lahat)"
 "AI Lists": "Mga listahan ng AI"
 "Choose which AI cars and buses a map's traffic is made of, and which buses run on which line. You choose from the vehicles you have installed; nothing new is added, and the map's own lists stay as they are.": "Piliin kung anong mga AI na kotse at bus ang bumubuo sa trapiko ng isang mapa, at aling mga bus ang tumatakbo sa aling linya. Pumipili ka mula sa mga naka-install na sasakyan; walang bagong idinaragdag, at nananatili ang sariling mga listahan ng mapa."
@@ -2942,9 +2944,10 @@
 "straight on": "diretso"
 "to the left": "pakaliwa"
 "to the right": "pakanan"
+"Lights on in a downpour": "Ilaw sa malakas na ulan"
+"By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Sa araw kapag malakas ang ulan, may mga bintana ng bahay na may ilaw, dahil sapat na ang dilim para magbukas ng ilaw"
 
 "Buses of this session": "Mga bus ng sesyong ito"
 "every bus": "bawat bus"
 "The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Mga bus na maaaring imaneho ng mga manlalaro, pinaghihiwalay ng ;. Blangko: bawat bus."
 "only these buses can be driven here ({list})": "dito ay maaari lamang imaneho ang mga bus na ito ({list})"
-

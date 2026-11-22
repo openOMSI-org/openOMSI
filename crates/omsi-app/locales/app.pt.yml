@@ -4125,6 +4125,7 @@
 "Cloud shadows and light shafts": "Sombras de nuvens e feixes de luz"
 "Graphics set to {preset} for this computer (Options › Graphics changes it)": "Gráficos ajustados para {preset} neste computador (Opções › Gráficos altera)"
 "Glow of lights": "Brilho das luzes"
+"Volumetric fog": "Névoa volumétrica"
 "Street lamps and vehicles": "Postes de rua e veículos"
 "Every light": "Todas as luzes"
 "Extra": "Extra"
@@ -4133,6 +4134,7 @@
 "Enhanced: which lights cast shadows - the street lamps and the vehicles' headlamps, or every light: spots along their own axis and the lamps that shine every way in cube maps. Cached maps, a few passes a frame": "Enhanced: quais luzes projetam sombras: os postes de rua e os faróis dos veículos, ou todas as luzes: refletores ao longo do próprio eixo e lâmpadas que iluminam em todas as direções, em mapas cúbicos. Mapas em cache, poucas passagens por quadro"
 "Enhanced: the clouds' shadow moving over the land and the sun's shafts through the gaps of a broken sky": "Enhanced: a sombra das nuvens que se move sobre o terreno e os feixes de sol pelas aberturas de um céu fragmentado"
 "Enhanced: the glare round bright lights and the lamps' halo in the night air": "Enhanced: o brilho ao redor de luzes fortes e o halo das lâmpadas no ar da noite"
+"Enhanced: fog you can see the light in - the sun's shafts, drifting banks of mist, the clouds' shadows in the air": "Enhanced: névoa em que se vê a luz - os raios do sol, bancos de neblina à deriva, as sombras das nuvens no ar"
 "Sets the graphics mode and most of the options at once, from Low (Vanilla) to Ultra (Enhanced with everything on)": "Define o modo gráfico e a maioria das opções de uma vez, de “Baixo” (Vanilla) a “Ultra” (Enhanced com tudo ligado)"
 "AI Lists": "Listas de IA"
 "Choose which AI cars and buses a map's traffic is made of, and which buses run on which line. You choose from the vehicles you have installed; nothing new is added, and the map's own lists stay as they are.": "Escolha de que carros e ônibus de IA o trânsito de um mapa é feito e quais ônibus rodam em cada linha. Você escolhe entre os veículos instalados; nada de novo é adicionado e as listas do próprio mapa continuam como estão."
@@ -4396,9 +4398,10 @@
 "straight on": "em frente"
 "to the left": "para a esquerda"
 "to the right": "para a direita"
+"Lights on in a downpour": "Luzes acesas no temporal"
+"By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "De dia, com chuva forte, algumas janelas das casas acendem, porque fica escuro o bastante para acender a luz"
 
 "Buses of this session": "Autocarros desta sessão"
 "every bus": "todos os autocarros"
 "The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Autocarros permitidos aos jogadores, separados por ; : pastas ou ficheiros de autocarro. Vazio: todos os autocarros."
 "only these buses can be driven here ({list})": "apenas estes autocarros podem ser conduzidos aqui ({list})"
-

@@ -2967,6 +2967,7 @@
 "Cloud shadows and light shafts": "Felhőárnyékok és fénysugarak"
 "Graphics set to {preset} for this computer (Options › Graphics changes it)": "A grafika erre a számítógépre {preset} szintre állítva (Beállítások › Grafika módosítja)"
 "Glow of lights": "Fények ragyogása"
+"Volumetric fog": "Volumetrikus köd"
 "Street lamps and vehicles": "Utcai lámpák és járművek"
 "Every light": "Minden fény"
 "Extra": "Extra"
@@ -2975,6 +2976,7 @@
 "Enhanced: which lights cast shadows - the street lamps and the vehicles' headlamps, or every light: spots along their own axis and the lamps that shine every way in cube maps. Cached maps, a few passes a frame": "Enhanced: mely fények vetnek árnyékot – az utcai lámpák és a járművek fényszórói, vagy minden fény: a saját tengelyük mentén világító reflektorok és a minden irányba világító lámpák kockatérképekkel. Gyorsítótárazott térképek, képkockánként néhány menet"
 "Enhanced: the clouds' shadow moving over the land and the sun's shafts through the gaps of a broken sky": "Enhanced: a tájon végighúzódó felhőárnyék és a nap sugarai a szakadozott ég résein át"
 "Enhanced: the glare round bright lights and the lamps' halo in the night air": "Enhanced: a fényes lámpák körüli ragyogás és a lámpák glóriája az éjszakai levegőben"
+"Enhanced: fog you can see the light in - the sun's shafts, drifting banks of mist, the clouds' shadows in the air": "Enhanced: köd, amelyben látszik a fény - a nap sugarai, sodródó ködpadok, a felhők árnyéka a levegőben"
 "Sets the graphics mode and most of the options at once, from Low (Vanilla) to Ultra (Enhanced with everything on)": "Egyszerre állítja be a grafikai módot és a legtöbb beállítást, „Alacsony” (Vanilla) szinttől „Ultra” (Enhanced mindennel bekapcsolva) szintig"
 "AI Lists": "MI-listák"
 "Choose which AI cars and buses a map's traffic is made of, and which buses run on which line. You choose from the vehicles you have installed; nothing new is added, and the map's own lists stay as they are.": "Válassza ki, milyen MI-autókból és buszokból áll egy térkép forgalma, és melyik busz melyik vonalon jár. A telepített járművek közül választhat; semmi új nem kerül hozzá, a térkép saját listái változatlanok maradnak."
@@ -3236,9 +3238,10 @@
 "straight on": "egyenesen"
 "to the left": "balra"
 "to the right": "jobbra"
+"Lights on in a downpour": "Világítás felhőszakadáskor"
+"By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Nappal, erős esőben néhány ház ablakában ég a villany, mert elég sötét lesz ahhoz, hogy felkapcsolják"
 
 "Buses of this session": "Ezen munkamenet buszai"
 "every bus": "minden busz"
 "The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "A játékosok által vezethető buszok, ; jellel elválasztva. Üres: minden busz."
 "only these buses can be driven here ({list})": "itt csak ezek a buszok vezethetők ({list})"
-

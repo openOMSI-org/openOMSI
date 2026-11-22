@@ -147,12 +147,14 @@ fn restore_runtime_graphics(
     target.vehicle_smoke = source.vehicle_smoke.clone();
     target.puddles = source.puddles.clone();
     target.windy_trees = source.windy_trees.clone();
+    target.rain_lights = source.rain_lights;
     target.detailed_trees = source.detailed_trees;
     target.road_snow = source.road_snow.clone();
     target.ray_tracing_on = source.ray_tracing_on.clone();
     target.light_shadows = source.light_shadows.clone();
     target.cloud_shadows = source.cloud_shadows.clone();
     target.light_glow = source.light_glow.clone();
+    target.volumetric_fog = source.volumetric_fog;
     target.vsync = source.vsync.clone();
     target.max_fps = source.max_fps.clone();
     target.max_obj_dist = source.max_obj_dist.clone();

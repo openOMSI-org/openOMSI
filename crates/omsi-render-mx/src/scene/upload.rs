@@ -471,7 +471,7 @@ impl Renderer {
                 },
                 mx::BindGroupEntry {
                     binding: 17,
-                    resource: mx::BindingResource::TextureView(&probe.cube_view),
+                    resource: mx::BindingResource::TextureView(probe.clouds.display_view()),
                 },
             ]);
         }

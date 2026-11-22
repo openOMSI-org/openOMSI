@@ -17,7 +17,8 @@ struct SnowTrack {
     place: vec4<f32>,
     // x: how far the snow covers the roads (0..1; below 0 the weather's "snow on road"
     // decides, as before), y: the snow fallen so far (thousandths of a full cover, modulo
-    // 65536), z: how deep the lanes' ruts show (0..1), w: unused
+    // 65536), z: how deep the lanes' ruts show (0..1), w: how far it thaws to slush (0..1;
+    // Enhanced alone, 0 on the other paths)
     state: vec4<f32>,
 };
 
@@ -137,5 +138,17 @@ fn road_snow(world: vec3<f32>) -> vec3<f32> {
         track = edge * (0.75 + 0.25 * vnoise_f(m2, 14.0, vec2<f32>(1.7, 9.3)));
     }
     cover = cover * (1.0 - track * 0.6);
-    return vec3<f32>(cover, max(slush, track * 0.5 * base), track);
+    var wet = max(slush, track * 0.5 * base);
+    // Thawing (rain on it, or a wet road, while no fresh snow falls): what is left goes grey
+    // and soaked, and it breaks up - the thin patches first, in the grain of a smooth noise
+    // a few strides across - into slush over the wet asphalt.
+    let thaw = clamp(snow_track.state.w, 0.0, 1.0);
+    if (thaw > 0.0 && cover > 0.0) {
+        let n = vnoise_f(m, 1.1, vec2<f32>(6.1, 2.3)) * 0.6 + vnoise_f(m2, 4.3, vec2<f32>(9.7, 4.1)) * 0.4;
+        let bare = smoothstep(n - 0.06, n + 0.06, thaw * 0.6 - 0.08 + 0.3 * (1.0 - base));
+        let left = cover * (1.0 - bare);
+        wet = max(wet, (cover - left) * 0.7 + left * thaw * 0.8);
+        cover = left * (1.0 - 0.55 * thaw);
+    }
+    return vec3<f32>(cover, wet, track);
 }

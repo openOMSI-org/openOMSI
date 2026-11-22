@@ -2966,6 +2966,7 @@
 "Cloud shadows and light shafts": "बादलों की परछाईं और प्रकाश किरणें"
 "Graphics set to {preset} for this computer (Options › Graphics changes it)": "इस कंप्यूटर के लिए ग्राफ़िक्स {preset} पर सेट किए गए (विकल्प › ग्राफ़िक्स से बदलें)"
 "Glow of lights": "रोशनियों की चमक"
+"Volumetric fog": "वॉल्यूमेट्रिक कोहरा"
 "Street lamps and vehicles": "सड़क की बत्तियाँ और वाहन"
 "Every light": "हर रोशनी"
 "Extra": "एक्स्ट्रा"
@@ -2974,6 +2975,7 @@
 "Enhanced: which lights cast shadows - the street lamps and the vehicles' headlamps, or every light: spots along their own axis and the lamps that shine every way in cube maps. Cached maps, a few passes a frame": "Enhanced: कौन-सी रोशनियाँ परछाईं डालती हैं — सड़क की बत्तियाँ और वाहनों की हेडलाइटें, या हर रोशनी: अपनी धुरी की दिशा में स्पॉट और चारों ओर रोशनी देने वाले लैंप, क्यूब मैप में। मैप कैश किए जाते हैं, प्रति फ़्रेम कुछ ही पास"
 "Enhanced: the clouds' shadow moving over the land and the sun's shafts through the gaps of a broken sky": "Enhanced: ज़मीन पर सरकती बादलों की परछाईं और बिखरे आसमान की दरारों से आती सूरज की किरणें"
 "Enhanced: the glare round bright lights and the lamps' halo in the night air": "Enhanced: तेज़ रोशनियों के आसपास की चमक और रात की हवा में लैंप का प्रभामंडल"
+"Enhanced: fog you can see the light in - the sun's shafts, drifting banks of mist, the clouds' shadows in the air": "Enhanced: ऐसा कोहरा जिसमें रोशनी दिखती है - सूरज की किरणें, बहती धुंध की परतें, हवा में बादलों की छाया"
 "Sets the graphics mode and most of the options at once, from Low (Vanilla) to Ultra (Enhanced with everything on)": "ग्राफ़िक्स मोड और ज़्यादातर विकल्प एक साथ सेट करता है, «लो» (Vanilla) से «अल्ट्रा» (सब कुछ चालू Enhanced) तक"
 "AI Lists": "AI सूचियाँ"
 "Choose which AI cars and buses a map's traffic is made of, and which buses run on which line. You choose from the vehicles you have installed; nothing new is added, and the map's own lists stay as they are.": "चुनें कि किसी मैप का ट्रैफ़िक किन AI कारों और बसों से बना है, और कौन-सी बसें किस लाइन पर चलती हैं। आप इंस्टॉल किए गए वाहनों में से चुनते हैं; कुछ नया नहीं जुड़ता और मैप की अपनी सूचियाँ जैसी हैं वैसी रहती हैं।"
@@ -3235,9 +3237,10 @@
 "straight on": "सीधे"
 "to the left": "बाईं ओर"
 "to the right": "दाईं ओर"
+"Lights on in a downpour": "मूसलाधार बारिश में रोशनी"
+"By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "दिन में तेज़ बारिश के दौरान कुछ घरों की खिड़कियों में रोशनी जलती है, क्योंकि इतना अंधेरा हो जाता है कि बत्ती जलानी पड़े"
 
 "Buses of this session": "इस सत्र की बसें"
 "every bus": "प्रत्येक बस"
 "The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "खिलाड़ियों द्वारा चलाई जाने वाली बसें, ; से अलग की गई। खाली: प्रत्येक बस।"
 "only these buses can be driven here ({list})": "यहाँ केवल ये बसें चलाई जा सकती हैं ({list})"
-

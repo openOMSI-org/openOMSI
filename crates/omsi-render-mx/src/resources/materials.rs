@@ -627,7 +627,7 @@ impl Renderer {
         let texture = scene.materials.get(base)?.texture;
         // The shader reads the inverse pane height only as a magnitude (`abs(wipe_bounds.zw)`),
         // so its sign is free: negative marks the variant that shows settled snow, which
-        // the shader draws itself from the mask (`snow_on_pane`) instead of water drops.
+        // the shader draws itself from the mask (`glass_snow_with`) instead of water drops.
         let mut bounds = bounds;
         bounds[3] = if snow {
             -bounds[3].abs()

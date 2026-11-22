@@ -39,11 +39,17 @@ fn cs_tex_avg(@builtin(local_invocation_id) lid: vec3<u32>, @builtin(local_invoc
     }
     workgroupBarrier();
     if (li == 0u) {
+        // (the colour weighed by the coverage: a cut-out texture's thrown-away texels are
+        // white or black, and its leaves' mean came out pale or dark with them; a solid
+        // texture's alpha - a reflection mask - hardly moves it)
         var s = vec4<f32>(0.0);
+        var cw = 0.0;
         for (var i = 0u; i < 64u; i++) {
-            s += avg_sum[i];
+            let k = avg_sum[i].a + 0.02;
+            s += vec4<f32>(avg_sum[i].rgb * k, avg_sum[i].a);
+            cw += k;
         }
-        avg_out.c = s / 64.0;
+        avg_out.c = vec4<f32>(s.rgb / cw, s.a / 64.0);
         avg_out.tile = tile;
     }
 }

@@ -19,6 +19,9 @@ struct Lighting<'a> {
     enh_buf: &'a mx::Buffer,
     lin_sampler: &'a mx::Sampler,
     sky_lut_view: &'a mx::TextureView,
+    /// The clouds' base volume and curl map (the passes that march them).
+    cloud_base: &'a mx::TextureView,
+    cloud_curl: &'a mx::TextureView,
 }
 
 pub(crate) fn build(
@@ -70,6 +73,8 @@ pub(crate) fn build(
         enh_buf: &enh_buf,
         lin_sampler: &lin_sampler,
         sky_lut_view: &sky_lut_view,
+        cloud_base: &sky.cloud_base_view,
+        cloud_curl: &sky.cloud_curl_view,
     };
     let probe = with_probe.then(|| probe(device, queue, hdr_format, &lighting, sky));
     Enhanced {
@@ -115,6 +120,14 @@ fn probe_bind_group(
             mx::BindGroupEntry {
                 binding: 16,
                 resource: mx::BindingResource::TextureView(src),
+            },
+            mx::BindGroupEntry {
+                binding: 20,
+                resource: mx::BindingResource::TextureView(lighting.cloud_base),
+            },
+            mx::BindGroupEntry {
+                binding: 21,
+                resource: mx::BindingResource::TextureView(lighting.cloud_curl),
             },
         ],
     })
@@ -209,10 +222,7 @@ fn probe(
             sample_count: 1,
             dimension: mx::TextureDimension::D2,
             format: hdr_format,
-            // (copied into: the cube for a new eye is filled beside it, see `SkySched`)
-            usage: mx::TextureUsages::RENDER_ATTACHMENT
-                | mx::TextureUsages::TEXTURE_BINDING
-                | mx::TextureUsages::COPY_DST,
+            usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         })
         .expect("mX: a texture");
@@ -303,6 +313,13 @@ fn probe(
     )
     .vs("vs_probe")
     .create(device);
+    let clouds = crate::cloud_pass::CloudPass::new(
+        device,
+        queue,
+        &sky.shader,
+        lighting.lin_sampler,
+        &|round| probe_bind_group(device, "cloud trace", lighting, round, &dummy_view),
+    );
     Probe {
         view,
         faces,
@@ -310,15 +327,13 @@ fn probe(
         sky_pipeline: probe_pipeline("fs_probe_sky"),
         filter_pipeline: probe_pipeline("fs_probe_filter"),
         scale: 1.0,
-        cube_view,
-        cube_tex,
         cube_faces,
         cube_bind_groups,
         cube_pipeline,
         cube_next: 0,
         cube_filled: false,
         cube_round: 0,
-        cube_eye: None,
         sched: SkySched::default(),
+        clouds,
     }
 }

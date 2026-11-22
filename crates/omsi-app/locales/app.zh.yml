@@ -3356,6 +3356,7 @@
 "Cloud shadows and light shafts": "云影与光束"
 "Graphics set to {preset} for this computer (Options › Graphics changes it)": "已为这台电脑将图形设为 {preset}（选项 › 图形 可更改）"
 "Glow of lights": "灯光辉光"
+"Volumetric fog": "体积雾"
 "Street lamps and vehicles": "路灯和车辆"
 "Every light": "所有光源"
 "Extra": "超高"
@@ -3364,6 +3365,7 @@
 "Enhanced: which lights cast shadows - the street lamps and the vehicles' headlamps, or every light: spots along their own axis and the lamps that shine every way in cube maps. Cached maps, a few passes a frame": "Enhanced：哪些光源投射阴影——路灯和车辆前灯，或所有光源：沿自身轴线的聚光灯，以及向四周发光的灯（使用立方体贴图）。贴图会被缓存，每帧只需少量渲染通道"
 "Enhanced: the clouds' shadow moving over the land and the sun's shafts through the gaps of a broken sky": "Enhanced：在大地上移动的云影，以及穿过破碎天空缝隙的阳光束"
 "Enhanced: the glare round bright lights and the lamps' halo in the night air": "Enhanced：明亮灯光周围的辉光，以及夜间空气中灯的光晕"
+"Enhanced: fog you can see the light in - the sun's shafts, drifting banks of mist, the clouds' shadows in the air": "Enhanced：能看见光的雾 - 阳光的光束、飘动的雾带、空气中的云影"
 "Sets the graphics mode and most of the options at once, from Low (Vanilla) to Ultra (Enhanced with everything on)": "一次性设置图形模式和大部分选项，从“低”（Vanilla）到“极致”（全部开启的 Enhanced）"
 "AI Lists": "AI 列表"
 "Choose which AI cars and buses a map's traffic is made of, and which buses run on which line. You choose from the vehicles you have installed; nothing new is added, and the map's own lists stay as they are.": "选择地图的交通由哪些 AI 汽车和公交车组成，以及哪些公交车行驶在哪条线路上。只能从已安装的车辆中选择，不会添加任何新内容，地图自带的列表保持原样。"
@@ -3627,9 +3629,10 @@
 "straight on": "直行"
 "to the left": "向左"
 "to the right": "向右"
+"Lights on in a downpour": "暴雨时窗户亮灯"
+"By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "白天下暴雨时，天色暗到需要开灯，部分房屋的窗户会亮起灯光"
 
 "Buses of this session": "本次会话的公交车"
 "every bus": "所有车辆"
 "The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "玩家可驾驶的车辆，用分号 ; 分隔：文件夹名如 MAN_SD200 或车辆文件。驾驶其他车辆的玩家将被请离。留空：所有车辆。"
 "only these buses can be driven here ({list})": "此处只能驾驶这些公交车 ({list})"
-

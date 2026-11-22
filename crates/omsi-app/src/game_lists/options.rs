@@ -5,7 +5,11 @@ use super::*;
 /// The value of the slider setting `verb` (`arg`: the seat's axis).
 pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
     if let Some(field) = verb.strip_prefix("vr_nav_") {
-        return if app.vr_active() && app.player.is_some() { app.vr_nav_profile().value(field) } else { None };
+        return if app.vr_active() && app.player.is_some() {
+            app.vr_nav_profile().value(field)
+        } else {
+            None
+        };
     }
     let s = &app.settings;
     Some(match verb {
@@ -43,7 +47,9 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "voice_mic_gain" => s.voice_mic_gain,
         "vol_scenery" => s.vol_scenery,
         "vol_ambient" => s.vol_ambient,
-        "radio_speaker" | "radio_hiss" | "radio_dropouts" => *crate::radio::fx_setting(&mut s.radio_fx.clone(), verb).1,
+        "radio_speaker" | "radio_hiss" | "radio_dropouts" => {
+            *crate::radio::fx_setting(&mut s.radio_fx.clone(), verb).1
+        }
         "wheel_range" => s.wheel_range,
         "wheel_lock" => s.wheel_lock,
         "cab_wheel_rotation" => s.cab_wheel_rotation as f32,
@@ -77,7 +83,11 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "visibility" => app.session.weather.as_ref()?.fog.0,
         "rain_amt" => {
             let w = app.session.weather.as_ref()?;
-            if w.precip.first().copied().unwrap_or(0.0) < 0.5 { 0.0 } else { (w.precip.get(1).copied().unwrap_or(0.0) / 255.0).clamp(0.0, 1.0) }
+            if w.precip.first().copied().unwrap_or(0.0) < 0.5 {
+                0.0
+            } else {
+                (w.precip.get(1).copied().unwrap_or(0.0) / 255.0).clamp(0.0, 1.0)
+            }
         }
         "wet" => app.session.wetness,
         "cloud_cover" => crate::weather_setup::cover_of(app.session.weather.as_ref()?),
@@ -91,7 +101,12 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
 }
 
 /// Set the slider setting `verb` to `v`; the key and value to keep for the next game.
-pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option<(&'static str, String)> {
+pub(super) fn option_set(
+    app: &mut App,
+    verb: &str,
+    arg: &str,
+    v: f32,
+) -> Option<(&'static str, String)> {
     if let Some(field) = verb.strip_prefix("vr_nav_") {
         app.vr_nav_set(field, v);
         return None; // Stored per bus, never in the desktop settings file.
@@ -123,7 +138,10 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         }
         "night_brightness" => {
             app.settings.night_brightness = v.clamp(0.0, 3.0);
-            Some(("night_brightness", app.settings.night_brightness.to_string()))
+            Some((
+                "night_brightness",
+                app.settings.night_brightness.to_string(),
+            ))
         }
         "fsr_sharpness" => {
             app.settings.fsr_sharpness = v.clamp(0.0, 1.0);
@@ -155,13 +173,20 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         }
         "head_tracking_smoothing" | "head_tracking_dead_zone" => {
             let s = &mut app.settings;
-            let (key, to) = if verb == "head_tracking_smoothing" { ("head_tracking_smoothing", &mut s.head_tracking_smoothing) } else { ("head_tracking_dead_zone", &mut s.head_tracking_dead_zone) };
+            let (key, to) = if verb == "head_tracking_smoothing" {
+                ("head_tracking_smoothing", &mut s.head_tracking_smoothing)
+            } else {
+                ("head_tracking_dead_zone", &mut s.head_tracking_dead_zone)
+            };
             *to = omsi_launcher_lib::head_tracking_value(key, Some(v as f64)) as f32;
             Some((key, to.to_string()))
         }
         "pad_steer_smooth" => {
             app.settings.pad_steer_smooth = v.clamp(0.0, 300.0).round();
-            Some(("pad_steer_smooth", app.settings.pad_steer_smooth.to_string()))
+            Some((
+                "pad_steer_smooth",
+                app.settings.pad_steer_smooth.to_string(),
+            ))
         }
         "pad_steer_speed" => {
             app.settings.pad_steer_speed = (v.clamp(0.8, 5.0) * 10.0).round() / 10.0;
@@ -173,11 +198,17 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         }
         "look_smoothing_ms" => {
             app.settings.look_smoothing_ms = v.round();
-            Some(("look_smoothing_ms", app.settings.look_smoothing_ms.to_string()))
+            Some((
+                "look_smoothing_ms",
+                app.settings.look_smoothing_ms.to_string(),
+            ))
         }
         "zoom_hold_amount" => {
             app.settings.zoom_hold_amount = ((v * 100.0).round() / 100.0).clamp(0.15, 1.0);
-            Some(("zoom_hold_amount", app.settings.zoom_hold_amount.to_string()))
+            Some((
+                "zoom_hold_amount",
+                app.settings.zoom_hold_amount.to_string(),
+            ))
         }
         "mouse_sens" => {
             app.settings.mouse_sens = (v * 100.0).round() / 100.0;
@@ -226,7 +257,11 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
             app.settings.vol_ambient = (v * 100.0).round() / 100.0;
             Some(("vol_ambient", app.settings.vol_ambient.to_string()))
         }
-        "radio_speaker" | "radio_hiss" | "radio_dropouts" => Some(crate::radio::set_fx_setting(&mut app.settings.radio_fx, verb, v)),
+        "radio_speaker" | "radio_hiss" | "radio_dropouts" => Some(crate::radio::set_fx_setting(
+            &mut app.settings.radio_fx,
+            verb,
+            v,
+        )),
         "wheel_range" => {
             app.settings.wheel_range = v.round();
             Some(("wheel_range", app.settings.wheel_range.to_string()))
@@ -277,11 +312,17 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         "fov" => Some(set_camera_fov(&mut app.settings, v)),
         "steer_look_angle" => {
             app.settings.steer_look_angle = v.round();
-            Some(("steer_look_angle", app.settings.steer_look_angle.to_string()))
+            Some((
+                "steer_look_angle",
+                app.settings.steer_look_angle.to_string(),
+            ))
         }
         "steer_look_response" => {
             app.settings.steer_look_response = (v * 100.0).round() / 100.0;
-            Some(("steer_look_response", app.settings.steer_look_response.to_string()))
+            Some((
+                "steer_look_response",
+                app.settings.steer_look_response.to_string(),
+            ))
         }
         "head_idle" => {
             app.settings.head_idle = (v * 100.0).round() / 100.0;
@@ -294,27 +335,45 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         // the seat: kept for this bus (`bus_seats`), not for every bus (#1355)
         "head_tracking_yaw_sens" => {
             app.settings.head_tracking_yaw_sens = v.round().clamp(0.0, 100.0);
-            Some(("head_tracking_yaw_sens", app.settings.head_tracking_yaw_sens.to_string()))
+            Some((
+                "head_tracking_yaw_sens",
+                app.settings.head_tracking_yaw_sens.to_string(),
+            ))
         }
         "head_tracking_pitch_sens" => {
             app.settings.head_tracking_pitch_sens = v.round().clamp(0.0, 100.0);
-            Some(("head_tracking_pitch_sens", app.settings.head_tracking_pitch_sens.to_string()))
+            Some((
+                "head_tracking_pitch_sens",
+                app.settings.head_tracking_pitch_sens.to_string(),
+            ))
         }
         "head_tracking_roll_sens" => {
             app.settings.head_tracking_roll_sens = v.round().clamp(0.0, 100.0);
-            Some(("head_tracking_roll_sens", app.settings.head_tracking_roll_sens.to_string()))
+            Some((
+                "head_tracking_roll_sens",
+                app.settings.head_tracking_roll_sens.to_string(),
+            ))
         }
         "head_tracking_x_sens" => {
             app.settings.head_tracking_x_sens = v.round().clamp(0.0, 100.0);
-            Some(("head_tracking_x_sens", app.settings.head_tracking_x_sens.to_string()))
+            Some((
+                "head_tracking_x_sens",
+                app.settings.head_tracking_x_sens.to_string(),
+            ))
         }
         "head_tracking_y_sens" => {
             app.settings.head_tracking_y_sens = v.round().clamp(0.0, 100.0);
-            Some(("head_tracking_y_sens", app.settings.head_tracking_y_sens.to_string()))
+            Some((
+                "head_tracking_y_sens",
+                app.settings.head_tracking_y_sens.to_string(),
+            ))
         }
         "head_tracking_z_sens" => {
             app.settings.head_tracking_z_sens = v.round().clamp(0.0, 100.0);
-            Some(("head_tracking_z_sens", app.settings.head_tracking_z_sens.to_string()))
+            Some((
+                "head_tracking_z_sens",
+                app.settings.head_tracking_z_sens.to_string(),
+            ))
         }
         "seat" => {
             let k: usize = arg.trim().parse().unwrap_or(0).min(2);
@@ -329,13 +388,25 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         }
         // the clock set directly: the hour or the minute (the seconds stay)
         "hour" | "minute" => {
-            if app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client) {
+            if app
+                .net
+                .lan
+                .as_ref()
+                .is_some_and(|l| l.role == omsi_net::Role::Client)
+            {
                 app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
                 return None;
             }
             let t = app.clock.time;
-            let (h, m) = (((t / 3600.0) as i64).rem_euclid(24), ((t / 60.0) as i64) % 60);
-            let (h, m) = if verb == "hour" { (v.round() as i64, m) } else { (h, v.round() as i64) };
+            let (h, m) = (
+                ((t / 3600.0) as i64).rem_euclid(24),
+                ((t / 60.0) as i64) % 60,
+            );
+            let (h, m) = if verb == "hour" {
+                (v.round() as i64, m)
+            } else {
+                (h, v.round() as i64)
+            };
             let target = (h * 3600 + m * 60) as f64 + t % 60.0;
             app.shift_clock(target - t);
             None
@@ -355,14 +426,19 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
             None
         }
         "wet" => {
-            let mut c=custom_state(app); c.road_wetness=v; app.set_custom_weather(c); None
+            let mut c = custom_state(app);
+            c.road_wetness = v;
+            app.set_custom_weather(c);
+            None
         }
         "cloud_cover" => {
             // (and the kind the cover stands nearest: the picture the sky is drawn with)
             let v = v.clamp(0.0, 1.0);
             app.edit_weather(|w| {
                 w.cloud_cover = Some(v);
-                w.clouds.0 = CLOUD_KINDS[crate::weather_setup::cloud_kind_nearest(v)].id.to_string();
+                w.clouds.0 = CLOUD_KINDS[crate::weather_setup::cloud_kind_nearest(v)]
+                    .id
+                    .to_string();
                 if v <= 0.0 {
                     w.clouds.1 = 0.0;
                 }
@@ -370,10 +446,16 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
             None
         }
         "brightness" => {
-            let mut c=custom_state(app); c.brightness=v; app.set_custom_weather(c); None
+            let mut c = custom_state(app);
+            c.brightness = v;
+            app.set_custom_weather(c);
+            None
         }
         "humidity" => {
-            let mut c=custom_state(app); c.humidity=v; app.set_custom_weather(c); None
+            let mut c = custom_state(app);
+            c.humidity = v;
+            app.set_custom_weather(c);
+            None
         }
         "temp" => {
             app.edit_weather(|w| w.temp.0 = v);
@@ -401,7 +483,10 @@ fn set_graphics_brightness(app: &mut App, verb: &str, v: f32) -> Option<(&'stati
         }
         "traffic_headlights" => {
             app.settings.traffic_headlights = v.clamp(0.0, 2.0);
-            Some(("traffic_headlights", app.settings.traffic_headlights.to_string()))
+            Some((
+                "traffic_headlights",
+                app.settings.traffic_headlights.to_string(),
+            ))
         }
         _ => None,
     }
@@ -412,9 +497,13 @@ fn set_graphics_brightness(app: &mut App, verb: &str, v: f32) -> Option<(&'stati
 fn set_cab_wheel_rotation(app: &mut App, v: f32) -> (&'static str, String) {
     app.settings.cab_wheel_rotation = crate::settings::cab_wheel_rotation(v);
     if let Some(p) = app.player.as_mut() {
-        p.vehicle.set_cab_wheel_rotation(app.settings.cab_wheel_rotation);
+        p.vehicle
+            .set_cab_wheel_rotation(app.settings.cab_wheel_rotation);
     }
-    ("cab_wheel_rotation", app.settings.cab_wheel_rotation.to_string())
+    (
+        "cab_wheel_rotation",
+        app.settings.cab_wheel_rotation.to_string(),
+    )
 }
 
 /// Whether the switch `id` is on (None: `id` is no switch).
@@ -425,13 +514,35 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "passenger_hailing" => s.passenger_hailing,
         "passenger_full_bus_reaction" => s.passenger_full_bus_reaction,
         "pax_short_rides_stand" => s.pax_short_rides_stand,
-        "navigator" => if app.vr_active() { app.vr_nav_profile().enabled } else { app.menus.navigator.as_ref().is_some_and(|n| n.enabled) },
+        "navigator" => {
+            if app.vr_active() {
+                app.vr_nav_profile().enabled
+            } else {
+                app.menus.navigator.as_ref().is_some_and(|n| n.enabled)
+            }
+        }
         "nav_ai" => app.menus.navigator.as_ref().map_or(s.nav_ai, |n| n.show_ai),
-        "nav_ai_cars" => app.menus.navigator.as_ref().map_or(s.nav_ai_cars, |n| n.show_cars),
-        "nav_surface" => app.menus.navigator.as_ref().map_or(s.nav_surface, |n| n.show_surface),
+        "nav_ai_cars" => app
+            .menus
+            .navigator
+            .as_ref()
+            .map_or(s.nav_ai_cars, |n| n.show_cars),
+        "nav_surface" => app
+            .menus
+            .navigator
+            .as_ref()
+            .map_or(s.nav_surface, |n| n.show_surface),
         "nav_3d" => app.menus.navigator.as_ref().map_or(s.nav_3d, |n| n.show_3d),
-        "nav_classic_2d" => app.menus.navigator.as_ref().map_or(s.nav_classic_2d, |n| n.classic_2d),
-        "nav_widget" => app.menus.navigator.as_ref().map_or(s.nav_widget, |n| n.widget),
+        "nav_classic_2d" => app
+            .menus
+            .navigator
+            .as_ref()
+            .map_or(s.nav_classic_2d, |n| n.classic_2d),
+        "nav_widget" => app
+            .menus
+            .navigator
+            .as_ref()
+            .map_or(s.nav_widget, |n| n.widget),
         "milezero" => s.milezero,
         "shadows" => s.shadows,
         "head" => s.head_movement,
@@ -452,8 +563,8 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "full_tank" => s.full_tank,
         "time_sync" => s.time_sync,
         "metar_sync" => s.metar_sync,
-        "snow_cover" => app.session.weather.as_ref().is_some_and(|w|w.snow),
-        "snow_road" => app.session.weather.as_ref().is_some_and(|w|w.snow_on_road),
+        "snow_cover" => app.session.weather.as_ref().is_some_and(|w| w.snow),
+        "snow_road" => app.session.weather.as_ref().is_some_and(|w| w.snow_on_road),
         "camcoll" => s.camera_collision,
         "steer_look" => s.steer_look,
         "hands_in_cab" => s.hands_in_cab,
@@ -483,7 +594,9 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "ray_tracing" => s.ray_tracing_on,
         "cloud_shadows" => s.cloud_shadows,
         "light_glow" => s.light_glow,
+        "volumetric_fog" => s.volumetric_fog,
         "windy_trees" => s.windy_trees,
+        "rain_lights" => s.rain_lights,
         "detailed_trees" => s.detailed_trees,
         "road_snow" => s.road_snow,
         "mirror_hud_every_frame" => s.mirror_hud_every_frame,
@@ -539,9 +652,15 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
         "passenger_connections" => {
             app.settings.passenger_connections = on;
             if let Some(h) = app.session.humans.as_mut() {
-                h.transfer_percent = if on && app.args.passenger_connections_allowed(app.net.lan.is_some()) {
+                h.transfer_percent = if on
+                    && app
+                        .args
+                        .passenger_connections_allowed(app.net.lan.is_some())
+                {
                     app.settings.passenger_transfer_percent
-                } else { 0.0 };
+                } else {
+                    0.0
+                };
             }
             Some(("passenger_connections", bit))
         }
@@ -551,24 +670,26 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
                 h.visual_hailing = on && app.settings.passenger_animation == "enhanced";
             }
             Some(("passenger_hailing", bit))
-        },
+        }
         "passenger_full_bus_reaction" => {
             app.settings.passenger_full_bus_reaction = on;
             if let Some(h) = app.session.humans.as_mut() {
                 h.visual_full_bus_reaction = on && app.settings.passenger_animation == "enhanced";
             }
             Some(("passenger_full_bus_reaction", bit))
-        },
+        }
         "pax_short_rides_stand" => {
             app.settings.pax_short_rides_stand = on;
             if let Some(h) = app.session.humans.as_mut() {
                 h.short_rides_stand = on;
             }
             Some(("pax_short_rides_stand", bit))
-        },
+        }
         "navigator" => {
             if app.vr_active() {
-                if app.vr_nav_profile().enabled != on { app.vr_nav_adjust("enabled", 1.0); }
+                if app.vr_nav_profile().enabled != on {
+                    app.vr_nav_adjust("enabled", 1.0);
+                }
                 return None;
             }
             if let Some(n) = app.menus.navigator.as_mut() {
@@ -638,7 +759,10 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
         // (at once: stuck under a bridge a map made too low, the bus drives on)
         "coll_objects" => {
             app.settings.collision_objects = on;
-            let cw = app.world.as_ref().map(|w| w.data.peek().lists.collision.clone());
+            let cw = app
+                .world
+                .as_ref()
+                .map(|w| w.data.peek().lists.collision.clone());
             if let Some(p) = app.player.as_mut() {
                 p.vehicle.collision = cw.filter(|_| on);
             }
@@ -691,16 +815,34 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             app.settings.get_up = on;
             Some(("get_up", bit))
         }
-        "trip_summary" => { app.settings.trip_summary = on; Some(("trip_summary", bit)) }
+        "trip_summary" => {
+            app.settings.trip_summary = on;
+            Some(("trip_summary", bit))
+        }
         // (taken at the next start: never in the middle of a session)
-        "sim_thread" => { app.settings.sim_thread = on; Some(("sim_thread", bit)) }
-        "full_tank" => { app.settings.full_tank = on; Some(("full_tank", bit)) }
+        "sim_thread" => {
+            app.settings.sim_thread = on;
+            Some(("sim_thread", bit))
+        }
+        "full_tank" => {
+            app.settings.full_tank = on;
+            Some(("full_tank", bit))
+        }
         // the real-time sync: the clock takes the device's date and time at once (a host's
         // clock runs at real time while it is on, at its time speed again after)
         "time_sync" => {
             app.settings.time_sync = on;
-            if let Some(l) = app.net.lan.as_mut().filter(|l| l.role == omsi_net::Role::Host) {
-                l.clock_speed = if on { 1.0 } else { app.settings.time_speed.clamp(1.0, 30.0) };
+            if let Some(l) = app
+                .net
+                .lan
+                .as_mut()
+                .filter(|l| l.role == omsi_net::Role::Host)
+            {
+                l.clock_speed = if on {
+                    1.0
+                } else {
+                    app.settings.time_speed.clamp(1.0, 30.0)
+                };
             }
             app.sync_real_time();
             Some(("time_sync", bit))
@@ -718,8 +860,14 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
             }
             Some(("metar_sync", bit))
         }
-        "snow_cover" => { app.edit_weather(|w|w.snow=on); None }
-        "snow_road" => { app.edit_weather(|w|w.snow_on_road=on); None }
+        "snow_cover" => {
+            app.edit_weather(|w| w.snow = on);
+            None
+        }
+        "snow_road" => {
+            app.edit_weather(|w| w.snow_on_road = on);
+            None
+        }
         "fps" => {
             app.settings.show_fps = on;
             Some(("show_fps", bit))
@@ -825,7 +973,12 @@ pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static 
 
 /// `toggle_set`'s second half: the picture, the screens and VR, sound, the controls and the
 /// interface (`bit` is the switch's value as kept).
-fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: String) -> Option<(&'static str, String)> {
+fn toggle_set_graphics_and_controls(
+    app: &mut App,
+    id: &str,
+    on: bool,
+    bit: String,
+) -> Option<(&'static str, String)> {
     match id {
         "ssao" => {
             app.settings.ssao = on;
@@ -841,7 +994,10 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
         }
         "ray_tracing" => {
             app.settings.ray_tracing_on = on;
-            app.service_msg = Some((omsi_ui::tr("Takes effect when the game starts the next time").into_owned(), 5.0));
+            app.service_msg = Some((
+                omsi_ui::tr("Takes effect when the game starts the next time").into_owned(),
+                5.0,
+            ));
             Some(("ray_tracing", bit))
         }
         "cloud_shadows" => {
@@ -852,25 +1008,58 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
             app.settings.light_glow = on;
             Some(("light_glow", bit))
         }
+        "volumetric_fog" => {
+            app.settings.volumetric_fog = on;
+            Some(("volumetric_fog", bit))
+        }
         "windy_trees" => {
             app.settings.windy_trees = on;
             Some(("windy_trees", bit))
         }
-        "detailed_trees" => { app.settings.detailed_trees = on; Some(("detailed_trees", bit)) }
+        "rain_lights" => {
+            app.settings.rain_lights = on;
+            Some(("rain_lights", bit))
+        }
+        "detailed_trees" => {
+            app.settings.detailed_trees = on;
+            Some(("detailed_trees", bit))
+        }
         // (the next picture tells the road snow, see `picture_lighting`)
-        "road_snow" => { app.settings.road_snow = on; Some(("road_snow", bit)) }
-        "mirror_hud_every_frame" => { app.settings.mirror_hud_every_frame = on; Some(("mirror_hud_every_frame", bit)) }
-        "mirror_shadows" => { app.settings.mirror_shadows = on; Some(("mirror_shadows", bit)) }
-        "mirror_particles" => { app.settings.mirror_particles = on; Some(("mirror_particles", bit)) }
-        "ambient" => { app.settings.ambient = on; Some(("ambient", bit)) }
+        "road_snow" => {
+            app.settings.road_snow = on;
+            Some(("road_snow", bit))
+        }
+        "mirror_hud_every_frame" => {
+            app.settings.mirror_hud_every_frame = on;
+            Some(("mirror_hud_every_frame", bit))
+        }
+        "mirror_shadows" => {
+            app.settings.mirror_shadows = on;
+            Some(("mirror_shadows", bit))
+        }
+        "mirror_particles" => {
+            app.settings.mirror_particles = on;
+            Some(("mirror_particles", bit))
+        }
+        "ambient" => {
+            app.settings.ambient = on;
+            Some(("ambient", bit))
+        }
         "fullscreen" => {
             app.settings.fullscreen = on;
             if app.gfx.spanned {
-                log::info!("triple screen: the window spans three monitors, fullscreen is left alone");
+                log::info!(
+                    "triple screen: the window spans three monitors, fullscreen is left alone"
+                );
             } else if let Some(w) = app.window.as_ref() {
                 w.set_fullscreen(on.then_some(winit::window::Fullscreen::Borderless(None)));
             }
-            let cap = crate::settings::fullscreen_scene_cap(on, app.gfx.spanned, crate::settings::Settings::resolution().filter(|_| app.args.size == crate::cli::DEFAULT_SIZE));
+            let cap = crate::settings::fullscreen_scene_cap(
+                on,
+                app.gfx.spanned,
+                crate::settings::Settings::resolution()
+                    .filter(|_| app.args.size == crate::cli::DEFAULT_SIZE),
+            );
             if let Some(r) = app.renderer.as_mut() {
                 r.options.max_scene = cap;
             }
@@ -1039,8 +1228,25 @@ fn toggle_set_graphics_and_controls(app: &mut App, id: &str, on: bool, bit: Stri
 /// Change the setting `verb` (a switch or a slider) as `mv` says; false when it is neither.
 pub(crate) fn option_do(app: &mut App, verb: &str, arg: &str, mv: Move) -> bool {
     // (the weather is the METAR report's while the sync is on)
-    if app.metar_locked() && matches!(verb, "visibility" | "rain_amt" | "wet" | "brightness" | "humidity" | "temp" | "wind_speed" | "wind_dir" | "snow_cover" | "snow_road") {
-        app.service_msg = Some(("The weather cannot be changed while the METAR sync is on".into(), 3.0));
+    if app.metar_locked()
+        && matches!(
+            verb,
+            "visibility"
+                | "rain_amt"
+                | "wet"
+                | "brightness"
+                | "humidity"
+                | "temp"
+                | "wind_speed"
+                | "wind_dir"
+                | "snow_cover"
+                | "snow_road"
+        )
+    {
+        app.service_msg = Some((
+            "The weather cannot be changed while the METAR sync is on".into(),
+            3.0,
+        ));
         return true;
     }
     if let Some(cur) = toggle_now(app, verb) {
@@ -1051,7 +1257,9 @@ pub(crate) fn option_do(app: &mut App, verb: &str, arg: &str, mv: Move) -> bool 
             Move::To(f) => f >= 0.5,
         };
         if on != cur {
-            if is_graphics_setting(verb) { begin_graphics_change(app); }
+            if is_graphics_setting(verb) {
+                begin_graphics_change(app);
+            }
             if let Some((k, v)) = toggle_set(app, verb, on) {
                 remember_setting(k, &v);
             }
@@ -1065,7 +1273,9 @@ pub(crate) fn option_do(app: &mut App, verb: &str, arg: &str, mv: Move) -> bool 
             let to = step_move(&steps, now, mv);
             // (a slider dragged sends the same value many times over)
             if (to - now).abs() > 1e-6 {
-                if is_graphics_setting(verb) { begin_graphics_change(app); }
+                if is_graphics_setting(verb) {
+                    begin_graphics_change(app);
+                }
                 if let Some((k, v)) = option_set(app, verb, arg, to) {
                     remember_setting(k, &v);
                 }
@@ -1079,12 +1289,23 @@ pub(crate) fn option_do(app: &mut App, verb: &str, arg: &str, mv: Move) -> bool 
 }
 
 fn set_connection_percent(app: &mut App, value: f32) -> Option<(&'static str, String)> {
-    if !value.is_finite() { return None; }
+    if !value.is_finite() {
+        return None;
+    }
     app.settings.passenger_transfer_percent = value.round().clamp(0.0, 100.0);
     if let Some(humans) = app.session.humans.as_mut() {
-        humans.transfer_percent = if app.args.passenger_connections_allowed(app.net.lan.is_some()) && app.settings.passenger_connections {
+        humans.transfer_percent = if app
+            .args
+            .passenger_connections_allowed(app.net.lan.is_some())
+            && app.settings.passenger_connections
+        {
             app.settings.passenger_transfer_percent
-        } else { 0.0 };
+        } else {
+            0.0
+        };
     }
-    Some(("passenger_transfer_percent", app.settings.passenger_transfer_percent.to_string()))
+    Some((
+        "passenger_transfer_percent",
+        app.settings.passenger_transfer_percent.to_string(),
+    ))
 }
