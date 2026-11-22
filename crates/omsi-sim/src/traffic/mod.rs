@@ -11,11 +11,13 @@ use hashbrown::HashMap;
 
 mod ai_state;
 mod extend;
-#[cfg(test)]
-mod extend_tests;
 mod lane;
 mod lights;
 mod network;
+mod rail_points;
+pub use rail_points::{next_branch, settable_branches};
+#[cfg(test)]
+mod extend_tests;
 mod walk_path;
 pub mod way;
 

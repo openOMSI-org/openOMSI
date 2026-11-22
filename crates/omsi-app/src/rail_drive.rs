@@ -738,6 +738,138 @@ impl RailDrive {
     }
 }
 
+/// How far ahead (m) `change_switch` looks for points.
+const SWITCH_REACH: f32 = 50.0;
+
+/// What setting points did, from `World::switch_set_to` after the set.
+#[derive(Debug, PartialEq)]
+enum Thrown {
+    Moved,
+    Stuck,
+    /// No switch object, or its path has no `[switchdir]`: nothing there to set.
+    NoSwitch,
+}
+
+impl From<Option<bool>> for Thrown {
+    fn from(set_to: Option<bool>) -> Self {
+        match set_to {
+            Some(true) => Thrown::Moved,
+            Some(false) => Thrown::Stuck,
+            None => Thrown::NoSwitch,
+        }
+    }
+}
+
+/// The first points ahead of the train's leading end within `SWITCH_REACH`, and how far
+/// from that end they are (the front end, or the rear end; see `leads_from_rear` and
+/// `Network::points_ahead`). `ends`: how far the train reaches ahead of the vehicle's origin
+/// and behind it (`VehicleInstance::train_ends`), so points under the train are not the ones ahead of it.
+/// `world`: the switches the track beyond the origin is found by, as it lies.
+fn switch_ahead(
+    r: &RailDrive,
+    net: &Network,
+    world: Option<(&World, &mut omsi_sim::scenery::SceneryState)>,
+    from_rear: bool,
+    (front, rear): (f64, f64),
+) -> Option<(f32, Vec<(usize, f64)>)> {
+    let (lane, s, along) = if from_rear {
+        // (the trail it has come along, else the track behind it as it lies)
+        r.state_at(net, r.u - rear).unwrap_or_else(|| {
+            let mut probe = RailDrive::at(r.spot());
+            probe.step(net, world, -rear as f32, 0);
+            probe.spot()
+        })
+    } else {
+        let mut probe = RailDrive::at(r.spot());
+        probe.step(net, world, front as f32, 0);
+        probe.spot()
+    };
+    net.points_ahead(lane, s, along != from_rear, SWITCH_REACH)
+}
+
+/// Whether the train's rear end leads: moving, the end it moves towards (`speed` is along the
+/// train's front, so backing from the rear cab runs front first); standing, the end of the
+/// cab it is driven from (`turned`: a cab in a car turned round, at the rear end).
+fn leads_from_rear(turned: bool, speed: f32) -> bool {
+    const MOVING: f32 = 0.1;
+    if speed.abs() > MOVING {
+        speed < 0.0
+    } else {
+        turned
+    }
+}
+
+/// `change_switch` (J): the points ahead of the train's leading end are set to their next
+/// branch, as a tram driver sets them from the cab (Berlin's and Essen's by a button, the
+/// map's own points otherwise only by a click on them). What it did, for the screen.
+pub(crate) fn change_switch(
+    p: &Player,
+    net: &Network,
+    world: &World,
+    scenery: &mut omsi_sim::scenery::SceneryState,
+) -> String {
+    let Some(r) = p.rail.as_ref() else {
+        return omsi_ui::tr("Not on rails").into_owned();
+    };
+    let turned = p
+        .vehicle
+        .active_cab
+        .and_then(|k| p.vehicle.trailers.get(k))
+        .is_some_and(|t| t.reversed);
+    let from_rear = leads_from_rear(turned, p.vehicle.physics.speed);
+    let ends = p.vehicle.train_ends(r.trail.reach_back);
+    let Some((dist, branches)) =
+        switch_ahead(r, net, Some((world, &mut *scenery)), from_rear, ends)
+    else {
+        return omsi_ui::i18n::tr_fill(
+            "No points within {reach} m ahead",
+            &[("{reach}", &SWITCH_REACH)],
+        );
+    };
+    let states: Vec<Option<bool>> = branches
+        .iter()
+        .map(|(i, _)| {
+            let key = net.lanes[*i].key?;
+            world.switch_set_to(scenery, key.id, key.path)
+        })
+        .collect();
+    let (branches, set) = omsi_sim::traffic::settable_branches(&branches, &states);
+    let metres = dist.round() as i64;
+    let cannot = || {
+        omsi_ui::i18n::tr_fill(
+            "The points {dist} m ahead cannot be set",
+            &[("{dist}", &metres)],
+        )
+    };
+    if branches.len() < 2 {
+        return cannot();
+    }
+    let (next, way) = omsi_sim::traffic::next_branch(&branches, set);
+    let Some(key) = net.lanes[branches[next].0].key else {
+        return cannot();
+    };
+    world.set_switches(scenery, &[(key.id, key.path)]);
+    match Thrown::from(world.switch_set_to(scenery, key.id, key.path)) {
+        Thrown::Moved => {}
+        Thrown::Stuck => {
+            return omsi_ui::i18n::tr_fill(
+                "The points {dist} m ahead do not move",
+                &[("{dist}", &metres)],
+            );
+        }
+        Thrown::NoSwitch => return cannot(),
+    }
+    log::info!(
+        "change_switch: the points {dist:.0} m ahead ({} end) set {way} (lane {})",
+        if from_rear { "rear" } else { "front" },
+        branches[next].0
+    );
+    omsi_ui::i18n::tr_fill(
+        "Points {dist} m ahead: {way}",
+        &[("{dist}", &metres), ("{way}", &omsi_ui::tr(way))],
+    )
+}
+
 /// The indicator the driver has set (1 left, 2 right, else 0), from the script's switch or
 /// its lamps.
 fn blinker_of(v: &omsi_sim::VehicleInstance) -> u8 {
@@ -820,6 +952,9 @@ pub(crate) fn frame(
 mod backing_tests;
 
 #[cfg(test)]
+mod points_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -831,6 +966,16 @@ mod tests {
             head: [0.0, 0.0],
             half_width: 0.5,
         }
+    }
+
+    /// A keyed lane whose switch object is not in the scenery (or has no `[switchdir]`) is
+    /// points that cannot be set, not points that moved.
+    #[test]
+    fn points_without_a_switch_cannot_be_set() {
+        let scenery = omsi_sim::scenery::SceneryState::default();
+        assert_eq!(Thrown::from(scenery.switch_set_to(7, 0)), Thrown::NoSwitch);
+        assert_eq!(Thrown::from(Some(false)), Thrown::Stuck);
+        assert_eq!(Thrown::from(Some(true)), Thrown::Moved);
     }
 
     #[test]
@@ -854,6 +999,25 @@ mod tests {
         assert!(wire_roughness(1.0, 15.0) > dry);
         assert!(wire_roughness(1.0, -5.0) > wire_roughness(1.0, 15.0));
         assert_eq!(wire_roughness(0.0, -5.0), dry, "dry frost is not ice");
+    }
+
+    #[test]
+    fn the_leading_end_is_the_one_the_train_moves_towards() {
+        assert!(
+            !leads_from_rear(false, 5.0),
+            "driving on from the front cab"
+        );
+        assert!(leads_from_rear(false, -2.0), "backing from the front cab");
+        assert!(leads_from_rear(true, -5.0), "driving on from the rear cab");
+        assert!(
+            !leads_from_rear(true, 2.0),
+            "backing from the rear cab: the front end leads"
+        );
+        assert!(leads_from_rear(true, 0.0), "standing: the rear cab's end");
+        assert!(
+            !leads_from_rear(false, 0.05),
+            "standing: the front cab's end"
+        );
     }
 
     #[test]
