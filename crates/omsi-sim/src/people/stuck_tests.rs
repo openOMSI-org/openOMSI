@@ -125,7 +125,7 @@ impl Stuck {
             State::Strolling(PedWalk::new(vec![leg], true, 0.0)),
         )
         .expect("a person to walk");
-        let random = crate::ai_traffic::RandomTypes {
+        let random = crate::ai_traffic::setup::RandomTypes {
             types: Vec::new(),
             groups: Vec::new(),
             group_curves: false,
@@ -245,7 +245,7 @@ fn onboard_passenger_stuck_counter_uses_bus_local_coordinates() {
         &want,
         s.dt,
         &s.world,
-        Some(&s.net),
+        Some(&s.traffic.net),
         &[],
         &HashMap::new(),
     );
