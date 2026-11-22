@@ -601,6 +601,15 @@ impl Default for Settings {
 #[rustfmt::skip]
 pub(crate) static SERVER_AI_LIMITS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
+fn bounded_float(value: &str, min: f32, max: f32, fallback: f32) -> f32 {
+    value
+        .parse::<f32>()
+        .ok()
+        .filter(|v| v.is_finite())
+        .map(|v| v.clamp(min, max))
+        .unwrap_or(fallback)
+}
+
 #[rustfmt::skip]
 impl Settings {
     /// HUD coordinates occupy the centre panel by default; world picking always
@@ -802,47 +811,12 @@ impl Settings {
                         .map(|x| if x < 20.0 { 0.0 } else { x.min(120.0) })
                         .unwrap_or(s.triple.fov_deg)
                 }
-                "triple_width_mm" => {
-                    s.triple.width_mm = v
-                        .parse::<f32>()
-                        .ok()
-                        .filter(|x| x.is_finite())
-                        .map(|x| x.clamp(200.0, 2000.0))
-                        .unwrap_or(s.triple.width_mm)
-                }
-                "triple_distance_mm" => {
-                    s.triple.distance_mm = v
-                        .parse::<f32>()
-                        .ok()
-                        .filter(|x| x.is_finite())
-                        .map(|x| x.clamp(200.0, 3000.0))
-                        .unwrap_or(s.triple.distance_mm)
-                }
-                "triple_bezel_mm" => {
-                    s.triple.bezel_mm = v
-                        .parse::<f32>()
-                        .ok()
-                        .filter(|x| x.is_finite())
-                        .map(|x| x.clamp(0.0, 100.0))
-                        .unwrap_or(s.triple.bezel_mm)
-                }
-                "triple_left_angle_deg" => {
-                    s.triple.left_angle_deg = v
-                        .parse::<f32>()
-                        .ok()
-                        .filter(|x| x.is_finite())
-                        .map(|x| x.clamp(0.0, 90.0))
-                        .unwrap_or(s.triple.left_angle_deg)
-                }
-                "triple_right_angle_deg" => {
-                    s.triple.right_angle_deg = v
-                        .parse::<f32>()
-                        .ok()
-                        .filter(|x| x.is_finite())
-                        .map(|x| x.clamp(0.0, 90.0))
-                        .unwrap_or(s.triple.right_angle_deg)
-                }
-                "triple_eye_height_mm" => s.triple.eye_height_mm = v.parse::<f32>().ok().filter(|x| x.is_finite()).map(|x| x.clamp(-500.0, 500.0)).unwrap_or(s.triple.eye_height_mm),
+                "triple_width_mm" => s.triple.width_mm = bounded_float(v, 200.0, 2000.0, s.triple.width_mm),
+                "triple_distance_mm" => s.triple.distance_mm = bounded_float(v, 200.0, 3000.0, s.triple.distance_mm),
+                "triple_bezel_mm" => s.triple.bezel_mm = bounded_float(v, 0.0, 100.0, s.triple.bezel_mm),
+                "triple_left_angle_deg" => s.triple.left_angle_deg = bounded_float(v, 0.0, 90.0, s.triple.left_angle_deg),
+                "triple_right_angle_deg" => s.triple.right_angle_deg = bounded_float(v, 0.0, 90.0, s.triple.right_angle_deg),
+                "triple_eye_height_mm" => s.triple.eye_height_mm = bounded_float(v, -500.0, 500.0, s.triple.eye_height_mm),
                 "fullscreen" => s.fullscreen = b(v),
                 "vsync" => s.vsync = b(v),
                 "volume" => s.volume = v.parse().unwrap_or(s.volume),
