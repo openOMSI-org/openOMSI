@@ -12,13 +12,16 @@
 //! As the scaler (`super::metalfx`), the framework is opened by name, and the work goes into
 //! command buffers of wgpu's own Metal queue.
 
-use super::metalfx::{class, texture, Texture};
 use super::GenerationInputs;
-use anyhow::{anyhow, bail, Result};
-use objc2::rc::{autoreleasepool, Retained};
-use objc2::runtime::{AnyObject, ProtocolObject};
+use super::metalfx::{Texture, class, texture};
+use anyhow::{Result, anyhow, bail};
 use objc2::msg_send;
-use objc2_metal::{MTLCommandBuffer, MTLCommandQueue, MTLDevice, MTLPixelFormat, MTLTexture, MTLTextureType, MTLTextureUsage};
+use objc2::rc::{Retained, autoreleasepool};
+use objc2::runtime::{AnyObject, ProtocolObject};
+use objc2_metal::{
+    MTLCommandBuffer, MTLCommandQueue, MTLDevice, MTLPixelFormat, MTLTexture, MTLTextureType,
+    MTLTextureUsage,
+};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -31,7 +34,11 @@ const LONGEST_WAIT: f32 = 0.05;
 
 /// How long the drawn frame waits behind the generated one, for frames this far apart (s).
 pub(crate) fn half_interval(frame_seconds: f32) -> f32 {
-    if frame_seconds.is_finite() { (frame_seconds * HALF).clamp(0.0, LONGEST_WAIT) } else { 0.0 }
+    if frame_seconds.is_finite() {
+        (frame_seconds * HALF).clamp(0.0, LONGEST_WAIT)
+    } else {
+        0.0
+    }
 }
 
 /// What the interpolator was made for: a change of any of it makes a new one.
@@ -67,18 +74,28 @@ pub struct FrameGeneration(Arc<Mutex<Shared>>);
 
 impl FrameGeneration {
     pub(crate) fn load(device: &wgpu::Device) -> Result<FrameGeneration> {
-        if wgpu_mx::custom::is_mx(device) {
-            bail!("MetalFX frame generation does not run with mX Graphics yet");
-        }
-        let hal = unsafe { device.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("the game is not running on Metal"))?;
+        let hal = unsafe { device.as_hal::<wgpu_hal::api::Metal>() }
+            .ok_or_else(|| anyhow!("the game is not running on Metal"))?;
         let raw = hal.raw_device().clone();
         drop(hal);
-        let class = class(c"MTLFXFrameInterpolatorDescriptor").ok_or_else(|| anyhow!("this macOS has no MetalFX frame interpolation (it comes with macOS 26 and newer)"))?;
+        let class = class(c"MTLFXFrameInterpolatorDescriptor").ok_or_else(|| {
+            anyhow!(
+                "this macOS has no MetalFX frame interpolation (it comes with macOS 26 and newer)"
+            )
+        })?;
         let supported: bool = unsafe { msg_send![class, supportsDevice: &*raw] };
         if !supported {
             bail!("this Mac's graphics chip cannot run MetalFX's frame interpolator");
         }
-        Ok(FrameGeneration(Arc::new(Mutex::new(Shared { device: raw, prepared: None, interpolator: None, last: None, gap: true, generated: 0, stopped: false }))))
+        Ok(FrameGeneration(Arc::new(Mutex::new(Shared {
+            device: raw,
+            prepared: None,
+            interpolator: None,
+            last: None,
+            gap: true,
+            generated: 0,
+            stopped: false,
+        }))))
     }
 
     fn shared(&self) -> std::sync::MutexGuard<'_, Shared> {
@@ -118,7 +135,9 @@ impl FrameGeneration {
     fn stop(&self, why: &anyhow::Error) {
         let mut shared = self.shared();
         if !shared.stopped {
-            log::error!("frame generation stopped working ({why:#}); the window is drawn without it from now on");
+            log::error!(
+                "frame generation stopped working ({why:#}); the window is drawn without it from now on"
+            );
         }
         shared.stopped = true;
         shared.prepared = None;
@@ -127,7 +146,13 @@ impl FrameGeneration {
     /// The picture between the last frame and this one into `output`: `finished` is this
     /// frame as the window shows it, with the interface. False: there is nothing to go from
     /// (the first frame, a cut), and no picture was made.
-    pub(crate) fn generate(&self, queue: &wgpu::Queue, inputs: &GenerationInputs, finished: &wgpu::Texture, output: &wgpu::Texture) -> Result<bool> {
+    pub(crate) fn generate(
+        &self,
+        queue: &wgpu::Queue,
+        inputs: &GenerationInputs,
+        finished: &wgpu::Texture,
+        output: &wgpu::Texture,
+    ) -> Result<bool> {
         let mut shared = self.shared();
         let Some(last) = inputs.last_picture.as_ref().filter(|_| !inputs.cut) else {
             shared.gap = true;
@@ -140,18 +165,45 @@ impl FrameGeneration {
             let motion = texture(&inputs.motion, "motion vectors")?;
             let finished = texture(finished, "finished picture")?;
             let output = texture(output, "result")?;
-            let scaler = inputs.scaler.as_ref().map_or(0, |s| Retained::as_ptr(s) as usize);
-            let made = Made { render: inputs.render_size, output: inputs.output_size, formats: [picture.pixelFormat(), depth.pixelFormat(), motion.pixelFormat(), finished.pixelFormat(), output.pixelFormat()], scaler };
-            if shared.interpolator.as_ref().is_some_and(|(_, m)| *m != made) {
+            let scaler = inputs
+                .scaler
+                .as_ref()
+                .map_or(0, |s| Retained::as_ptr(s) as usize);
+            let made = Made {
+                render: inputs.render_size,
+                output: inputs.output_size,
+                formats: [
+                    picture.pixelFormat(),
+                    depth.pixelFormat(),
+                    motion.pixelFormat(),
+                    finished.pixelFormat(),
+                    output.pixelFormat(),
+                ],
+                scaler,
+            };
+            if shared
+                .interpolator
+                .as_ref()
+                .is_some_and(|(_, m)| *m != made)
+            {
                 shared.interpolator = None;
             }
             if shared.interpolator.is_none() {
-                let raw = interpolator(&shared.device, &made, inputs.scaler.as_deref(), [&picture, &depth, &motion, &finished, &output])?;
+                let raw = interpolator(
+                    &shared.device,
+                    &made,
+                    inputs.scaler.as_deref(),
+                    [&picture, &depth, &motion, &finished, &output],
+                )?;
                 shared.interpolator = Some((raw, made));
                 shared.gap = true;
             }
-            let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("no Metal queue under wgpu's"))?;
-            let buffer = queue_hal.as_raw().commandBuffer().ok_or_else(|| anyhow!("Metal gave no command buffer for MetalFX"))?;
+            let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Metal>() }
+                .ok_or_else(|| anyhow!("no Metal queue under wgpu's"))?;
+            let buffer = queue_hal
+                .as_raw()
+                .commandBuffer()
+                .ok_or_else(|| anyhow!("Metal gave no command buffer for MetalFX"))?;
             drop(queue_hal);
             let none: Option<&ProtocolObject<dyn MTLTexture>> = None;
             let reset = shared.gap;
@@ -204,8 +256,14 @@ impl Drop for Shared {
 }
 
 /// Apple's interpolator for these sizes and formats, its textures' usages checked.
-fn interpolator(device: &ProtocolObject<dyn MTLDevice>, made: &Made, scaler: Option<&AnyObject>, textures: [&Texture; 5]) -> Result<Retained<AnyObject>> {
-    let class = class(c"MTLFXFrameInterpolatorDescriptor").ok_or_else(|| anyhow!("MetalFX's frame interpolation is gone"))?;
+fn interpolator(
+    device: &ProtocolObject<dyn MTLDevice>,
+    made: &Made,
+    scaler: Option<&AnyObject>,
+    textures: [&Texture; 5],
+) -> Result<Retained<AnyObject>> {
+    let class = class(c"MTLFXFrameInterpolatorDescriptor")
+        .ok_or_else(|| anyhow!("MetalFX's frame interpolation is gone"))?;
     let desc: Retained<AnyObject> = unsafe { msg_send![class, new] };
     let raw: Option<Retained<AnyObject>> = unsafe {
         let _: () = msg_send![&*desc, setColorTextureFormat: made.formats[0]];
@@ -223,7 +281,16 @@ fn interpolator(device: &ProtocolObject<dyn MTLDevice>, made: &Made, scaler: Opt
         }
         msg_send![&*desc, newFrameInterpolatorWithDevice: device]
     };
-    let raw = raw.ok_or_else(|| anyhow!("MetalFX made no frame interpolator for {}x{} to {}x{} ({:?})", made.render.0, made.render.1, made.output.0, made.output.1, made.formats))?;
+    let raw = raw.ok_or_else(|| {
+        anyhow!(
+            "MetalFX made no frame interpolator for {}x{} to {}x{} ({:?})",
+            made.render.0,
+            made.render.1,
+            made.output.0,
+            made.output.1,
+            made.formats
+        )
+    })?;
     let needs: [(&str, MTLTextureUsage); 5] = unsafe {
         [
             ("picture", msg_send![&*raw, colorTextureUsage]),
@@ -235,10 +302,25 @@ fn interpolator(device: &ProtocolObject<dyn MTLDevice>, made: &Made, scaler: Opt
     };
     for ((what, need), have) in needs.into_iter().zip(textures) {
         if have.usage().0 & need.0 != need.0 {
-            bail!("MetalFX's frame interpolator cannot use the {what} texture (usage {:#x}, it needs {:#x})", have.usage().0, need.0);
+            bail!(
+                "MetalFX's frame interpolator cannot use the {what} texture (usage {:#x}, it needs {:#x})",
+                have.usage().0,
+                need.0
+            );
         }
     }
-    log::info!("frame generation: Apple MetalFX for {}x{}, the scene drawn at {}x{}{}", made.output.0, made.output.1, made.render.0, made.render.1, if scaler.is_some() { "" } else { ", without the scaler's help" });
+    log::info!(
+        "frame generation: Apple MetalFX for {}x{}, the scene drawn at {}x{}{}",
+        made.output.0,
+        made.output.1,
+        made.render.0,
+        made.render.1,
+        if scaler.is_some() {
+            ""
+        } else {
+            ", without the scaler's help"
+        }
+    );
     Ok(raw)
 }
 
@@ -268,10 +350,15 @@ struct Pacer {
 
 impl Pacer {
     fn new(device: &ProtocolObject<dyn MTLDevice>) -> Result<Pacer> {
-        let queue = device.newCommandQueue().ok_or_else(|| anyhow!("Metal gave no queue for frame generation's presents"))?;
+        let queue = device
+            .newCommandQueue()
+            .ok_or_else(|| anyhow!("Metal gave no queue for frame generation's presents"))?;
         let event: Option<Retained<AnyObject>> = unsafe { msg_send![device, newSharedEvent] };
-        let event = event.ok_or_else(|| anyhow!("Metal gave no event for frame generation's pacing"))?;
-        let (send, receive) = std::sync::mpsc::channel::<Sent<(Retained<ProtocolObject<dyn MTLCommandBuffer>>, u64)>>();
+        let event =
+            event.ok_or_else(|| anyhow!("Metal gave no event for frame generation's pacing"))?;
+        let (send, receive) = std::sync::mpsc::channel::<
+            Sent<(Retained<ProtocolObject<dyn MTLCommandBuffer>>, u64)>,
+        >();
         let signal = Sent(event.clone());
         std::thread::Builder::new()
             .name("frame generation pacing".into())
@@ -283,7 +370,11 @@ impl Pacer {
                     let now = Instant::now();
                     if let Some(last) = last {
                         let seconds = (now - last).as_secs_f32().min(0.25);
-                        interval = if interval > 0.0 { interval * 0.8 + seconds * 0.2 } else { seconds };
+                        interval = if interval > 0.0 {
+                            interval * 0.8 + seconds * 0.2
+                        } else {
+                            seconds
+                        };
                     }
                     last = Some(now);
                     std::thread::sleep(std::time::Duration::from_secs_f32(half_interval(interval)));
@@ -293,7 +384,12 @@ impl Pacer {
                 }
             })
             .map_err(|e| anyhow!("no thread for frame generation's pacing: {e}"))?;
-        Ok(Pacer { queue, event, value: 0, send })
+        Ok(Pacer {
+            queue,
+            event,
+            value: 0,
+            send,
+        })
     }
 }
 
@@ -333,26 +429,46 @@ fn fs(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
 /// UNORM resource (the sRGB-encoded numbers, as the scaler's), drawn and read through its sRGB
 /// view. Cleared here: wgpu fills a texture it has not drawn into with zeros before its first
 /// read, which would wipe what MetalFX wrote into it meanwhile.
-pub(crate) fn window_picture(device: &wgpu::Device, queue: &wgpu::Queue, label: &str, format: wgpu::TextureFormat, (width, height): (u32, u32)) -> (wgpu::Texture, wgpu::TextureView) {
+pub(crate) fn window_picture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: &str,
+    format: wgpu::TextureFormat,
+    (width, height): (u32, u32),
+) -> (wgpu::Texture, wgpu::TextureView) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
-        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: format.remove_srgb_suffix(),
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::COPY_DST,
         view_formats: &[format],
     });
-    let view = texture.create_view(&wgpu::TextureViewDescriptor { format: Some(format), ..Default::default() });
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor {
+        format: Some(format),
+        ..Default::default()
+    });
+    let mut encoder =
+        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) });
     drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some(label),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: &view,
             depth_slice: None,
             resolve_target: None,
-            ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                store: wgpu::StoreOp::Store,
+            },
         })],
         depth_stencil_attachment: None,
         timestamp_writes: None,
@@ -363,47 +479,118 @@ pub(crate) fn window_picture(device: &wgpu::Device, queue: &wgpu::Queue, label: 
     (texture, view)
 }
 
-fn picture(device: &wgpu::Device, queue: &wgpu::Queue, layout: &wgpu::BindGroupLayout, label: &str, format: wgpu::TextureFormat, size: (u32, u32)) -> (wgpu::Texture, wgpu::TextureView, wgpu::BindGroup) {
+fn picture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+    label: &str,
+    format: wgpu::TextureFormat,
+    size: (u32, u32),
+) -> (wgpu::Texture, wgpu::TextureView, wgpu::BindGroup) {
     let (texture, view) = window_picture(device, queue, label, format, size);
-    let group = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some(label), layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) }] });
+    let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(label),
+        layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::TextureView(&view),
+        }],
+    });
     (texture, view, group)
 }
 
 impl GenerationWindow {
     /// For a window of this format and size, on the renderer's device.
-    pub(crate) fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat, size: (u32, u32)) -> Result<GenerationWindow> {
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        size: (u32, u32),
+    ) -> Result<GenerationWindow> {
         let handle = FrameGeneration::load(device)?;
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("frame generation picture"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
                 count: None,
             }],
         });
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("frame generation copy"), source: wgpu::ShaderSource::Wgsl(COPY.into()) });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("frame generation copy"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("frame generation copy"),
+            source: wgpu::ShaderSource::Wgsl(COPY.into()),
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("frame generation copy"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
         let copy = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("frame generation copy"),
             layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState { module: &module, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
-            fragment: Some(wgpu::FragmentState { module: &module, entry_point: Some("fs"), targets: &[Some(format.into())], compilation_options: Default::default() }),
+            vertex: wgpu::VertexState {
+                module: &module,
+                entry_point: Some("vs"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &module,
+                entry_point: Some("fs"),
+                targets: &[Some(format.into())],
+                compilation_options: Default::default(),
+            }),
             primitive: Default::default(),
             depth_stencil: None,
             multisample: Default::default(),
             multiview_mask: None,
             cache: None,
         });
-        let (drawn, drawn_view, drawn_group) = picture(device, queue, &layout, "frame generation: the drawn frame", format, size);
-        let (made, _, made_group) = picture(device, queue, &layout, "frame generation: the generated frame", format, size);
-        let show = match omsi_cfg::flags::OMSI_FG_SHOW.var().map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+        let (drawn, drawn_view, drawn_group) = picture(
+            device,
+            queue,
+            &layout,
+            "frame generation: the drawn frame",
+            format,
+            size,
+        );
+        let (made, _, made_group) = picture(
+            device,
+            queue,
+            &layout,
+            "frame generation: the generated frame",
+            format,
+            size,
+        );
+        let show = match omsi_cfg::flags::OMSI_FG_SHOW
+            .var()
+            .map(|v| v.trim().to_ascii_lowercase())
+            .as_deref()
+        {
             Some("generated") => Show::Generated,
             Some("drawn") => Show::Drawn,
             _ => Show::Both,
         };
         let pacer = Pacer::new(&handle.shared().device)?;
-        Ok(GenerationWindow { handle, format, size, drawn, drawn_view, drawn_group, made, made_group, layout, copy, pacer: Mutex::new(pacer), show })
+        Ok(GenerationWindow {
+            handle,
+            format,
+            size,
+            drawn,
+            drawn_view,
+            drawn_group,
+            made,
+            made_group,
+            layout,
+            copy,
+            pacer: Mutex::new(pacer),
+            show,
+        })
     }
 
     pub(crate) fn handle(&self) -> FrameGeneration {
@@ -421,8 +608,22 @@ impl GenerationWindow {
         }
         self.handle.wait();
         self.size = size;
-        (self.drawn, self.drawn_view, self.drawn_group) = picture(device, queue, &self.layout, "frame generation: the drawn frame", self.format, size);
-        let (made, _, made_group) = picture(device, queue, &self.layout, "frame generation: the generated frame", self.format, size);
+        (self.drawn, self.drawn_view, self.drawn_group) = picture(
+            device,
+            queue,
+            &self.layout,
+            "frame generation: the drawn frame",
+            self.format,
+            size,
+        );
+        let (made, _, made_group) = picture(
+            device,
+            queue,
+            &self.layout,
+            "frame generation: the generated frame",
+            self.format,
+            size,
+        );
         (self.made, self.made_group) = (made, made_group);
     }
 
@@ -436,8 +637,16 @@ impl GenerationWindow {
         self.drawn.clone()
     }
 
-    fn copy(&self, device: &wgpu::Device, queue: &wgpu::Queue, picture: &wgpu::BindGroup, into: &wgpu::TextureView) {
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("frame generation copy") });
+    fn copy(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        picture: &wgpu::BindGroup,
+        into: &wgpu::TextureView,
+    ) {
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("frame generation copy"),
+        });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("frame generation copy"),
@@ -445,7 +654,10 @@ impl GenerationWindow {
                     view: into,
                     depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -463,14 +675,26 @@ impl GenerationWindow {
     /// this one in `frame` (the window's picture the game acquired), then this frame in the
     /// window's next picture, half a frame time later. Without an upscaled frame to go from
     /// (a menu, the loading screen, a cut), this frame alone.
-    pub(crate) fn present(&self, surface: &wgpu::Surface<'_>, device: &wgpu::Device, queue: &wgpu::Queue, frame: wgpu::SurfaceTexture) {
+    pub(crate) fn present(
+        &self,
+        surface: &wgpu::Surface<'_>,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        frame: wgpu::SurfaceTexture,
+    ) {
         let into = frame.texture.create_view(&Default::default());
         let prepared = self.handle.take().filter(|p| p.output_size == self.size);
-        let generated = match prepared.as_ref().filter(|_| self.show != Show::Drawn && self.handle.working()) {
-            Some(inputs) => self.handle.generate(queue, inputs, &self.drawn, &self.made).unwrap_or_else(|e| {
-                self.handle.stop(&e);
-                false
-            }),
+        let generated = match prepared
+            .as_ref()
+            .filter(|_| self.show != Show::Drawn && self.handle.working())
+        {
+            Some(inputs) => self
+                .handle
+                .generate(queue, inputs, &self.drawn, &self.made)
+                .unwrap_or_else(|e| {
+                    self.handle.stop(&e);
+                    false
+                }),
             None => {
                 self.handle.shared().gap = true;
                 false
@@ -494,28 +718,53 @@ impl GenerationWindow {
     /// The drawn frame into the window's next picture, shown a little under half a frame time
     /// after the generated one ([`Pacer`]). wgpu's own present cannot wait for that, so this
     /// picture is taken from the window's layer and presented by hand, as wgpu does it.
-    fn present_drawn(&self, surface: &wgpu::Surface<'_>, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<()> {
+    fn present_drawn(
+        &self,
+        surface: &wgpu::Surface<'_>,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<()> {
         autoreleasepool(|_| {
-            let surface_hal = unsafe { surface.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("no Metal layer under the window"))?;
+            let surface_hal = unsafe { surface.as_hal::<wgpu_hal::api::Metal>() }
+                .ok_or_else(|| anyhow!("no Metal layer under the window"))?;
             let drawable: Option<Retained<AnyObject>> = {
                 let layer = surface_hal.render_layer().lock();
                 unsafe { msg_send![&**layer, nextDrawable] }
             };
             drop(surface_hal);
             // (none: the window went away under the frame; the next frame shows it)
-            let Some(drawable) = drawable else { return Ok(()) };
+            let Some(drawable) = drawable else {
+                return Ok(());
+            };
             let raw: Texture = unsafe { msg_send![&*drawable, texture] };
             let (width, height) = (raw.width() as u32, raw.height() as u32);
             if (width, height) != self.size {
                 return Ok(());
             }
-            let hal = unsafe { wgpu_hal::metal::Device::texture_from_raw(raw, self.format, MTLTextureType::Type2D, 1, 1, wgpu_hal::CopyExtent { width, height, depth: 1 }) };
+            let hal = unsafe {
+                wgpu_hal::metal::Device::texture_from_raw(
+                    raw,
+                    self.format,
+                    MTLTextureType::Type2D,
+                    1,
+                    1,
+                    wgpu_hal::CopyExtent {
+                        width,
+                        height,
+                        depth: 1,
+                    },
+                )
+            };
             let texture = unsafe {
                 device.create_texture_from_hal::<wgpu_hal::api::Metal>(
                     hal,
                     &wgpu::TextureDescriptor {
                         label: Some("frame generation: the window's second picture"),
-                        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                        size: wgpu::Extent3d {
+                            width,
+                            height,
+                            depth_or_array_layers: 1,
+                        },
                         mip_level_count: 1,
                         sample_count: 1,
                         dimension: wgpu::TextureDimension::D2,
@@ -525,17 +774,32 @@ impl GenerationWindow {
                     },
                 )
             };
-            self.copy(device, queue, &self.drawn_group, &texture.create_view(&Default::default()));
+            self.copy(
+                device,
+                queue,
+                &self.drawn_group,
+                &texture.create_view(&Default::default()),
+            );
             // (behind the generated frame and both copies on wgpu's queue: its end is the pacing's mark)
-            let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Metal>() }.ok_or_else(|| anyhow!("no Metal queue under wgpu's"))?;
-            let mark = queue_hal.as_raw().commandBuffer().ok_or_else(|| anyhow!("Metal gave no command buffer for the pacing"))?;
+            let queue_hal = unsafe { queue.as_hal::<wgpu_hal::api::Metal>() }
+                .ok_or_else(|| anyhow!("no Metal queue under wgpu's"))?;
+            let mark = queue_hal
+                .as_raw()
+                .commandBuffer()
+                .ok_or_else(|| anyhow!("Metal gave no command buffer for the pacing"))?;
             drop(queue_hal);
             mark.commit();
             let mut pacer = self.pacer.lock().unwrap_or_else(|e| e.into_inner());
             pacer.value += 1;
             let value = pacer.value;
-            pacer.send.send(Sent((mark, value))).map_err(|_| anyhow!("frame generation's pacing thread is gone"))?;
-            let buffer = pacer.queue.commandBuffer().ok_or_else(|| anyhow!("Metal gave no command buffer for the present"))?;
+            pacer
+                .send
+                .send(Sent((mark, value)))
+                .map_err(|_| anyhow!("frame generation's pacing thread is gone"))?;
+            let buffer = pacer
+                .queue
+                .commandBuffer()
+                .ok_or_else(|| anyhow!("Metal gave no command buffer for the present"))?;
             unsafe {
                 let _: () = msg_send![&*buffer, encodeWaitForEvent: &*pacer.event, value: value];
                 let _: () = msg_send![&*buffer, presentDrawable: &*drawable];

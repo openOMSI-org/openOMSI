@@ -2,8 +2,8 @@
 //! held to the limits and checked here, so that a plugin learns at once what is wrong.
 
 use super::{
-    Align, Anchor, ChartStyle, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS, MAX_TEXT, Panel,
-    Rgba, RowAlign, Stop, StopState, Weight, check_id,
+    Align, Anchor, ChartStyle, Element, Kind, MAX_DEPTH, MAX_ELEMENTS, MAX_POINTS, MAX_TEXT,
+    MapCard, Panel, Rgba, RowAlign, Stop, StopState, Weight, check_id,
 };
 use crate::api::Value;
 use std::path::{Path, PathBuf};
@@ -446,6 +446,44 @@ impl Reader<'_> {
             .collect()
     }
 
+    /// The plugin's cards over a map: `{ { place = "top_right", width = 120, children = { ... } },
+    /// ... }`, each with a panel's keys. A card counts as an element, as a box does, and what is
+    /// in it with the panel's.
+    fn overlay(&self, key: &str, depth: usize, count: &mut usize) -> Result<Vec<MapCard>, String> {
+        let mut out = Vec::new();
+        for (i, t) in self.list(key)?.iter().enumerate() {
+            let r = Reader {
+                t,
+                path: format!("{}[{}]", self.at(key), i + 1),
+                folder: self.folder,
+            };
+            if !t.is_table() {
+                return Err(format!("{}: a card is a table", r.path));
+            }
+            *count += 1;
+            if *count > MAX_ELEMENTS {
+                return Err(format!("a panel has at most {MAX_ELEMENTS} elements"));
+            }
+            // (the navigator's place is the panel's, not a place on the map)
+            let place = match r.string("place")? {
+                None => Anchor::TopLeft,
+                Some(a) => Anchor::parse(&a).filter(|p| *p != Anchor::Navigator).ok_or_else(|| format!("{}: \"{a}\" is no place (top_left, top, top_right, left, center, right, bottom_left, bottom, bottom_right)", r.at("place")))?,
+            };
+            out.push(MapCard {
+                place,
+                x: r.number("x", 8.0, 0.0, 4000.0)?,
+                y: r.number("y", 8.0, 0.0, 4000.0)?,
+                width: r.opt_number("width")?.map(|w| w.clamp(40.0, 4000.0)),
+                padding: r.number("padding", 10.0, 0.0, 64.0)?,
+                gap: r.number("gap", 6.0, 0.0, 64.0)?,
+                background: r.color("background")?,
+                radius: r.number("radius", 10.0, 0.0, 64.0)?,
+                children: r.children("children", depth + 1, count)?,
+            });
+        }
+        Ok(out)
+    }
+
     /// An image of the plugin's folder: the file when it is there.
     fn image(&self, key: &str) -> Result<Option<PathBuf>, String> {
         let Some(src) = self.string(key)? else {
@@ -572,6 +610,7 @@ impl Reader<'_> {
             "map" => Kind::Map {
                 height: self.number("height", 0.0, 0.0, 4000.0)?,
                 cards: self.boolean("cards", true)?,
+                overlay: self.overlay("overlay", depth, count)?,
             },
             "space" => Kind::Space {
                 size: self.number("size", 8.0, 0.0, 1000.0)?,

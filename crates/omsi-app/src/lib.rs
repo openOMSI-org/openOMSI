@@ -16,43 +16,58 @@ mod admin_panel;
 mod auto_announce;
 mod player_list;
 mod voice_chat;
-use omsi_scene::check;
 use omsi_platform::discord;
+use omsi_scene::check;
 #[cfg(steam)]
 mod steam;
-pub(crate) use omsi_scene::head_idle;
 use omsi_input::{head_filter, headtrack, tobii};
+pub(crate) use omsi_scene::head_idle;
 #[cfg(windows)]
 use omsi_xr::openxr;
 #[cfg(target_os = "android")]
+#[rustfmt::skip]
 mod android;
 #[cfg(target_os = "android")]
+#[rustfmt::skip]
 mod android_launcher;
 #[cfg(target_os = "ios")]
+#[rustfmt::skip]
 mod ios;
 #[cfg(target_os = "ios")]
 mod apple;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod apple_bridge;
+#[rustfmt::skip]
 mod platform;
+#[rustfmt::skip]
 mod touch;
+#[rustfmt::skip]
 mod units;
+#[rustfmt::skip]
 mod placing;
+#[rustfmt::skip]
 use omsi_mt as mt;
+#[rustfmt::skip]
 use omsi_platform::updater;
+#[rustfmt::skip]
 mod update_watch;
 use omsi_platform::presence;
 use omsi_soundscape::ambience;
 mod soundscape;
-use omsi_scene::wheel_surface;
-use omsi_scene::camera_arm;
-use omsi_vehicle::cam_approach;
 use omsi_career::career;
 use omsi_input::describe;
+use omsi_scene::camera_arm;
 pub(crate) use omsi_scene::editor;
+use omsi_scene::wheel_surface;
+#[rustfmt::skip]
+use omsi_vehicle::cam_approach;
+#[rustfmt::skip]
 mod duty_book;
+#[rustfmt::skip]
 mod first_graphics;
+#[rustfmt::skip]
 mod game_lists;
+#[rustfmt::skip]
 mod game_panels;
 mod game_controller_menu;
 mod rail_drive;
@@ -77,14 +92,19 @@ use omsi_scene::money;
 mod milezero;
 mod radio;
 
-use omsi_scene::puddles;
 use omsi_platform::quit;
-use omsi_weather::condensation;
+use omsi_scene::puddles;
+#[rustfmt::skip]
 use omsi_scene::{rain, window_wipers};
+#[rustfmt::skip]
+use omsi_weather::condensation;
+#[rustfmt::skip]
 mod scene;
+#[rustfmt::skip]
 mod season_phase;
 mod schedule;
 /// The cab's paper timetable (`omsi_scene::schedule_paper`) in the game's language.
+#[rustfmt::skip]
 mod schedule_paper {
     pub(crate) fn update_vehicle(
         vehicle: &mut omsi_sim::VehicleInstance,
@@ -94,61 +114,95 @@ mod schedule_paper {
         omsi_scene::schedule_paper::update_vehicle(vehicle, duty, fonts, || crate::settings::Settings::load().language)
     }
 }
+#[rustfmt::skip]
 mod real_time;
+#[rustfmt::skip]
 mod settings;
+#[rustfmt::skip]
 mod shell;
+#[rustfmt::skip]
 mod photo;
+#[rustfmt::skip]
 mod depot_bus;
+#[rustfmt::skip]
 mod devtools;
+#[rustfmt::skip]
 mod telemetry;
+#[rustfmt::skip]
 mod themes;
 mod remote;
 use omsi_scene::threads;
 use omsi_scene::tiles;
 mod traffic;
+#[rustfmt::skip]
 mod view_sync;
+#[rustfmt::skip]
 mod watchdog;
+#[rustfmt::skip]
 mod ui;
 
 // the game itself, split by what each part does
 mod app;
+#[rustfmt::skip]
 mod applog;
+#[rustfmt::skip]
 mod logmask;
+#[rustfmt::skip]
 mod app_events;
+#[rustfmt::skip]
 mod bus_service;
 mod camera_util;
 // the game controllers, their mappings and force feedback (`omsi-input`), at their old paths
 use omsi_input::{controllers, gamepad_profile, hpattern};
 mod cli;
 use omsi_input::diagnostics;
+#[rustfmt::skip]
 mod perf_overlay;
+#[rustfmt::skip]
 mod perf_report;
+#[rustfmt::skip]
 pub(crate) use omsi_cfg::profile_keys;
+#[rustfmt::skip]
 mod frame_stages;
+#[rustfmt::skip]
 mod support_bundle;
+#[rustfmt::skip]
 mod duty_start;
+#[rustfmt::skip]
 mod input_script;
 mod app_impl;
 use omsi_guard::launcher_link;
 use omsi_lan::mods as lan_mods;
 mod memory;
+#[rustfmt::skip]
 mod offscreen;
+#[rustfmt::skip]
 pub(crate) use omsi_sim::ground_gap;
+#[rustfmt::skip]
 mod on_foot;
+#[rustfmt::skip]
 mod trolley_hands;
 mod trolley_mouse;
 pub(crate) mod trolley_net;
+#[rustfmt::skip]
 mod optimiser;
+#[rustfmt::skip]
 use omsi_scene::route_arrows;
+#[rustfmt::skip]
 mod server;
+#[rustfmt::skip]
 mod player;
 mod plugin_io;
 // the plugins' panels (`omsi-plugin-ui`) at their old path, and the app's side of their input
 use omsi_plugin_ui as plugin_ui;
 mod plugin_panels;
+#[rustfmt::skip]
 mod process_permissions;
+#[rustfmt::skip]
 mod plugins;
+#[rustfmt::skip]
 mod services;
+#[rustfmt::skip]
 mod sim_thread;
 mod situation;
 mod spawn;
@@ -165,9 +219,11 @@ mod world_load;
 rust_i18n::i18n!("locales");
 // (the tables are read when this crate compiles: this makes cargo compile it again when they
 // change - the macro alone left the old texts in the program)
+#[rustfmt::skip]
 use omsi_launcher_lib::i18n::TABLES as _LOCALES;
 
 /// Show the interface in `code` (the settings' ENG / DEU / FRA / RUS).
+#[rustfmt::skip]
 pub(crate) fn ui_language(code: &str) {
     omsi_ui::i18n::set_lookup(|lang, text| _rust_i18n_try_translate(lang, text).map(|t| t.into_owned()));
     static TEMPLATES: std::sync::Once = std::sync::Once::new();
@@ -177,12 +233,14 @@ pub(crate) fn ui_language(code: &str) {
     omsi_sim::vehicle_api::set_locale(iso);
 }
 
+#[rustfmt::skip]
 const MISSING_ORIGINAL: &str = "The original OMSI 2 was not found.\n\n\
     openOMSI needs a complete installation of the original game (any version). \
     Choose its folder in the launcher (Setup), or start once with \
     --root \"/path/to/OMSI 2\", the folder with Omsi.exe, maps and Vehicles in it.\n\n\
     Missing in {folder}: {missing}";
 
+#[rustfmt::skip]
 fn locale_keys(yml: &str) -> impl Iterator<Item = String> + '_ {
     yml.lines().filter_map(|l| l.strip_prefix('"')?.strip_suffix("\":")).filter(|k| k.contains('{')).filter_map(|k| {
         let mut out = String::new();
@@ -203,42 +261,47 @@ fn locale_keys(yml: &str) -> impl Iterator<Item = String> + '_ {
     })
 }
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
+use app::*;
+use camera_util::*;
 use clap::Parser;
+use cli::*;
+use diagnostics::*;
+use duty_start::*;
 use glam::{DVec3, Vec3};
+use input_script::*;
+use launcher_link::*;
+use memory::*;
+use offscreen::*;
 use omsi_render::{Camera, Renderer, Scene, SurfaceState};
+use player::*;
 use scene::World;
+use services::*;
+use situation::*;
+use spawn::*;
+use startup::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
+use traffic_link::*;
+use weather_setup::*;
 use winit::application::ApplicationHandler;
 use winit::event::{DeviceEvent, ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
-use app::*;
-use camera_util::*;
-use cli::*;
-use diagnostics::*;
-use duty_start::*;
-use input_script::*;
-use launcher_link::*;
-use memory::*;
-use offscreen::*;
-use player::*;
-use services::*;
-use situation::*;
-use spawn::*;
-use startup::*;
-use traffic_link::*;
-use weather_setup::*;
 use world_load::*;
 
 /// The game (and its launcher) from the command line: what `main` does.
+#[rustfmt::skip]
 pub fn run() -> Result<()> {
+    omsi_cfg::migrate_legacy_data_dir();
+    // mX Graphics on: the game is mX's from here on, wgpu is not touched
+    if startup::mx_graphics() {
+        return openomsi_game_mx::run();
+    }
     view_sync::install_sim_decoder();
     startup::install_scene_settings();
-    omsi_cfg::migrate_legacy_data_dir();
     omsi_launcher_lib::adopt_own_inputs();
     #[cfg(target_os = "macos")]
     restart_with_allocator_settings();
@@ -324,6 +387,7 @@ pub fn run() -> Result<()> {
 
 /// The game's event loop. With OMSI_HIDDEN_WINDOW the process stays out of the Dock and the
 /// menu bar on macOS, as its window stays out of sight.
+#[rustfmt::skip]
 fn game_event_loop() -> Result<EventLoop<()>> {
     #[cfg(target_os = "macos")]
     if omsi_cfg::flags::OMSI_HIDDEN_WINDOW.is_set() {
@@ -333,10 +397,10 @@ fn game_event_loop() -> Result<EventLoop<()>> {
     Ok(EventLoop::new()?)
 }
 
-
 /// Everything before a window: the language, the session's random seed, the original
 /// installation and the content roots (mods, archives). None when the program has
 /// nothing more to do (a fatal error was shown).
+#[rustfmt::skip]
 pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option<server::ServerCfg>)>> {
     optimiser::recover_cut_short();
     ui_language(&settings::Settings::load().language);
@@ -453,6 +517,7 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
 
 /// The game for `args`, ready for its window; None when there is no window to open (a
 /// picture or a model was written instead).
+#[rustfmt::skip]
 pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) -> Result<Option<App>> {
     if let (Some(map), Some(to)) = (args.pack_map.clone(), args.pack_to.clone()) {
         omsi_lan::map_pack::run(&map, &to)?;
@@ -612,6 +677,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<server::ServerCfg>) ->
 
 /// The game's App for `args` and `settings`, every part of it as it starts (the window comes
 /// later).
+#[rustfmt::skip]
 fn assemble_app(args: Args, settings: settings::Settings) -> App {
     let view = args.view.clone();
     let args_root_for_keys = args.root.clone();
@@ -631,7 +697,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     } else {
         crate::steam::Steam::start()
     };
-    let instance = game_graphics_instance(settings.mx_graphics);
+    let instance = graphics_instance();
     let vr_nav_profiles = crate::vr_navigator::Profiles::load(crate::vr_navigator::profiles_path().as_deref());
     let ui = ui::Ui::new();
     let rain = rain::Rain::new();
@@ -977,6 +1043,7 @@ mod tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 pub(crate) fn with_test_language<T>(code: &str, f: impl FnOnce() -> T) -> T {
     use std::sync::{Mutex, OnceLock};
     static LANGUAGE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -988,6 +1055,7 @@ pub(crate) fn with_test_language<T>(code: &str, f: impl FnOnce() -> T) -> T {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod locale_tests {
     use omsi_ui::i18n::{templated, templates, Piece};
 

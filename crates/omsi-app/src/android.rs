@@ -14,8 +14,8 @@
 
 use super::*;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use winit::platform::android::activity::AndroidApp;
 use winit::platform::android::EventLoopBuilderExtAndroid;
+use winit::platform::android::activity::AndroidApp;
 
 /// Whether the first drive of this run was already started (see `Shell::switch`).
 static SAFER_TRIED: AtomicBool = AtomicBool::new(false);
@@ -23,8 +23,50 @@ static SAFER_TRIED: AtomicBool = AtomicBool::new(false);
 /// Where the app keeps what a person puts on the phone for it.
 pub const SHARED: &str = "/storage/emulated/0/openOMSI";
 
+/// mX Graphics, read once for the process: `android_main` and the launcher page's bridge
+/// (`android_launcher`) go to the same game, whichever of them asks first.
+static MX: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+/// Whether this process runs the game on mX (see [`MX`]); asked by the launcher page's
+/// bridge, which can be called before `android_main` has read the settings.
+pub(crate) fn mx_selected() -> bool {
+    *MX.get_or_init(|| files_dir().is_some_and(|home| crate::startup::mx_graphics_in(&home)))
+}
+
+/// The app's internal data folder (`Context.getFilesDir`, what `AndroidApp::internal_data_path`
+/// gives `android_main`), asked through JNI.
+fn files_dir() -> Option<PathBuf> {
+    use jni::objects::{JObject, JString};
+    let ctx = ndk_context::android_context();
+    // SAFETY: the VM and the activity ndk_context was given live as long as the program
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.ok()?;
+    let mut env = vm.attach_current_thread().ok()?;
+    let activity = std::mem::ManuallyDrop::new(unsafe { JObject::from_raw(ctx.context().cast()) });
+    let dir = env
+        .call_method(&*activity, "getFilesDir", "()Ljava/io/File;", &[])
+        .and_then(|v| v.l());
+    let path = dir.and_then(|d| {
+        env.call_method(&d, "getAbsolutePath", "()Ljava/lang/String;", &[])
+            .and_then(|v| v.l())
+    });
+    let Ok(path) = path else {
+        let _ = env.exception_clear();
+        return None;
+    };
+    let path: String = env.get_string(&JString::from(path)).ok()?.into();
+    Some(PathBuf::from(path))
+}
+
 #[unsafe(no_mangle)]
+#[rustfmt::skip]
 fn android_main(app: AndroidApp) {
+    // mX Graphics on: the game is mX's, wgpu is not touched
+    if *MX.get_or_init(|| {
+        app.internal_data_path()
+            .is_some_and(|home| crate::startup::mx_graphics_in(&home))
+    }) {
+        return openomsi_game_mx::android::android_main(app);
+    }
     crate::view_sync::install_sim_decoder();
     crate::startup::install_scene_settings();
     // an error is also written where a person finds it without a computer:
@@ -181,6 +223,7 @@ fn started_ok() {
 /// `game-prev.log`: when that run closed in the middle of a drive (a crash in the graphics
 /// driver takes the process without a word), the launcher shows its end
 /// ([`previous_run_crash`]).
+#[rustfmt::skip]
 fn init_log() {
     let dir = omsi_launcher_lib::data_dir();
     let (now, prev) = (dir.join("game.log"), dir.join("game-prev.log"));
@@ -200,6 +243,7 @@ struct TeeLogger {
     file: std::sync::Mutex<Option<std::fs::File>>,
 }
 
+#[rustfmt::skip]
 impl log::Log for TeeLogger {
     fn enabled(&self, m: &log::Metadata) -> bool {
         m.level() <= log::Level::Info
@@ -229,6 +273,7 @@ impl log::Log for TeeLogger {
 }
 
 /// A system property (`ro.product.model` ...), for the log's first lines.
+#[rustfmt::skip]
 fn prop(name: &str) -> String {
     unsafe extern "C" {
         fn __system_property_get(name: *const std::ffi::c_char, value: *mut std::ffi::c_char) -> i32;
@@ -244,6 +289,7 @@ fn prop(name: &str) -> String {
 /// When the app's previous run closed while a drive was going (a game started from the
 /// launcher, and neither "game ends" nor "session ended" after it): what it said last and
 /// the end of its log, for the launcher's crash dialog.
+#[rustfmt::skip]
 pub(crate) fn previous_run_crash() -> Option<(String, String)> {
     let p = omsi_launcher_lib::data_dir().join("game-prev.log");
     let text = std::fs::read_to_string(&p).ok()?;
@@ -274,6 +320,7 @@ pub(crate) fn previous_run_crash() -> Option<(String, String)> {
 /// every folder of the content folder gets one except `Screenshots` (those are pictures to
 /// find), and so does the OMSI installation when it lies somewhere else. Nothing of the
 /// content is moved or changed.
+#[rustfmt::skip]
 fn hide_from_gallery(content: &Path) {
     let mut dirs: Vec<PathBuf> = std::fs::read_dir(content)
         .into_iter()
@@ -335,6 +382,7 @@ struct Shell {
     prepared: bool,
 }
 
+#[rustfmt::skip]
 impl Shell {
     /// The installation and the content roots, as a bare start finds them.
     fn prepare_once(&mut self) {
@@ -430,6 +478,7 @@ impl Shell {
     }
 }
 
+#[rustfmt::skip]
 impl ApplicationHandler for Shell {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         log::info!("app in front");
@@ -501,8 +550,10 @@ static TILT_ON: AtomicBool = AtomicBool::new(false);
 /// The latest turn (-1 .. 1) as f32 bits, and whether the sensor gave one yet.
 static TILT: AtomicU32 = AtomicU32::new(0);
 static TILT_SEEN: AtomicBool = AtomicBool::new(false);
+#[rustfmt::skip]
 static TILT_THREAD: std::sync::Once = std::sync::Once::new();
 
+#[rustfmt::skip]
 pub(crate) fn tilt() -> Option<f32> {
     (TILT_ON.load(Ordering::Relaxed) && TILT_SEEN.load(Ordering::Relaxed)).then(|| f32::from_bits(TILT.load(Ordering::Relaxed)))
 }
@@ -519,6 +570,7 @@ pub(crate) fn soft_keyboard(show: bool) {
     }
 }
 
+#[rustfmt::skip]
 pub(crate) fn set_tilt(on: bool) {
     TILT_ON.store(on, Ordering::Relaxed);
     if on {
@@ -529,6 +581,7 @@ pub(crate) fn set_tilt(on: bool) {
 }
 
 #[repr(C)]
+#[rustfmt::skip]
 struct SensorEvent {
     version: i32,
     sensor: i32,
@@ -541,6 +594,7 @@ struct SensorEvent {
 }
 
 #[link(name = "android")]
+#[rustfmt::skip]
 unsafe extern "C" {
     fn ASensorManager_getInstanceForPackage(package: *const std::ffi::c_char) -> *mut std::ffi::c_void;
     fn ASensorManager_getDefaultSensor(manager: *mut std::ffi::c_void, kind: i32) -> *const std::ffi::c_void;
@@ -555,6 +609,7 @@ unsafe extern "C" {
 
 /// Reads the accelerometer while tilt steering is on (a looper of its own, so the
 /// activity's does not see the sensor's events).
+#[rustfmt::skip]
 fn tilt_thread() {
     const ACCELEROMETER: i32 = 1;
     // SAFETY: the NDK's sensor API used as documented, all on this one thread; the queue and
@@ -622,6 +677,7 @@ fn tilt_thread() {
 
 /// Call a `void name(int)` method of the activity (OmsiActivity.java).
 /// The NativeActivity (`OmsiActivity`) instance, set in `android_main`.
+#[rustfmt::skip]
 static ACTIVITY: std::sync::atomic::AtomicPtr<std::ffi::c_void> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
 /// The activity as a JNI object (the context ndk_context gives when it was not set).
@@ -634,6 +690,7 @@ fn activity_ptr() -> *mut std::ffi::c_void {
     }
 }
 
+#[rustfmt::skip]
 fn call_activity_int(name: &str, arg: i32) -> Option<()> {
     let ctx = ndk_context::android_context();
     // SAFETY: the VM ndk_context was given and the activity android-activity holds live as
@@ -651,10 +708,12 @@ fn call_activity_int(name: &str, arg: i32) -> Option<()> {
 }
 
 /// Ask for the microphone (voice chat) if it is not allowed yet.
+#[rustfmt::skip]
 pub(crate) fn request_microphone() {
     let _ = with_activity(|env, activity| env.call_method(activity, "requestMicrophone", "()V", &[]).map(|_| ()));
 }
 
+#[rustfmt::skip]
 pub(crate) fn vibrate(ms: u32) {
     static OFF: AtomicBool = AtomicBool::new(false);
     if OFF.load(Ordering::Relaxed) {
@@ -667,6 +726,7 @@ pub(crate) fn vibrate(ms: u32) {
 
 /// Run `f` with the Java environment and the activity (None when Java is out of reach or
 /// the call threw).
+#[rustfmt::skip]
 fn with_activity<R>(f: impl FnOnce(&mut jni::JNIEnv, &jni::objects::JObject) -> jni::errors::Result<R>) -> Option<R> {
     let ctx = ndk_context::android_context();
     // SAFETY: as in `call_activity_int`
@@ -685,6 +745,7 @@ fn with_activity<R>(f: impl FnOnce(&mut jni::JNIEnv, &jni::objects::JObject) -> 
 
 /// Hand the downloaded APK to the system's package installer (`OmsiActivity.installApk`):
 /// the system asks the player, `install_status` tells what they answered.
+#[rustfmt::skip]
 pub(crate) fn install_apk(path: &std::path::Path) -> anyhow::Result<()> {
     let p = path.to_string_lossy().to_string();
     with_activity(|env, activity| {
@@ -698,6 +759,7 @@ pub(crate) fn install_apk(path: &std::path::Path) -> anyhow::Result<()> {
 /// The package installer's answer so far: 0 nothing yet, 1 asking the player, 2 installed,
 /// 3 cancelled, 4 failed (with the system's message), 5 waiting for "Install unknown apps",
 /// 6 that permission refused.
+#[rustfmt::skip]
 pub(crate) fn install_status() -> Option<(i32, String)> {
     with_activity(|env, activity| {
         let code = env.call_method(activity, "getInstallStatus", "()I", &[])?.i()?;
