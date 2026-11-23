@@ -6,6 +6,13 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ## Unreleased
 
+### Fixes
+
+- **mX graphics have the tram changes too**: the rear cab, backing a tram from it and the J
+  points key, the tunnel mouths and the sun kept out of tunnels, the rail vehicles' collisions,
+  the curves and the body sway came only to the standard graphics. With mX graphics switched on
+  the NF6D's B car could not be driven and tunnel mouths stood closed.
+
 ## 0.3.57 - 2026-11-23
 
 ### New and improved
