@@ -8,7 +8,12 @@
 //! the screen-space AO where they are there. What a hit looks like - for the reflections -
 //! comes from a record per geometry: its material's colour and textures, which the hit reads
 //! from small copies of them at its triangle's texture coordinates (rt_tex.rs), or their mean
-//! colours until those are made.
+//! colours until those are made, and its corners' normals, by which it is lit.
+//!
+//! After the main pass the reflections are traced (rt_reflect.wgsl): a ray per pixel along a
+//! direction of the surface's GGX lobe, new every frame, and denoised over the frames and the
+//! pixels round it (rt_denoise.wgsl) before the composite adds them, weighted by the main
+//! pass's Fresnel and lobe integral, in place of the probe's reflection.
 //!
 //! OMSI_NO_RT=1 opens no ray queries (Enhanced+ draws as Enhanced), OMSI_NO_RT_FRAME=1 keeps
 //! them but traces nothing, OMSI_NO_RT_GRADE=1 leaves out Enhanced+'s grade, and
@@ -18,13 +23,12 @@
 
 use super::*;
 
+mod reflect;
+
 /// How far from the camera meshes are traced (m): beyond it the shadow map holds.
 pub(super) const RT_RANGE: f32 = 420.0;
 /// How far the ambient occlusion looks (m).
 const AO_RADIUS: f32 = 2.2;
-/// The sun disc as traced (tangent of its radius): larger than the real 0.27 deg, for the
-/// soft edge a shadow takes on away from its caster (the shadow map's is softer still).
-const SUN_CONE: f32 = 0.012;
 /// Bottom-level structures built (or rebuilt) per frame at most: a map tile streamed in
 /// brings hundreds of meshes; they come into the shadows over a few frames instead of a hitch.
 const BLAS_BUDGET: usize = 320;
@@ -206,10 +210,33 @@ pub(super) struct RayTracer {
     /// The reflections: their layout, the rays, their history and the composite.
     reflect: mx::ComputePipeline,
     composite: mx::RenderPipeline,
-    /// The reflections' rays (one per `refl_div()` x `refl_div()` pixels).
-    refl: Option<((u32, u32), mx::TextureView)>,
-    /// A 1 x 1 storage texture for the composite's unused output binding.
-    spare: mx::TextureView,
+    /// The reflections' rays (one per `refl_div()` x `refl_div()` pixels) and their denoiser's
+    /// textures.
+    refl: Option<((u32, u32), ReflTargets)>,
+    /// 1 x 1 storage textures for the outputs a pass leaves unused (one per binding).
+    spare: [mx::TextureView; 3],
+    /// The reflections' denoiser (rt_denoise.wgsl): its passes, the a-trous steps (a uniform
+    /// per pass, `step_stride` apart) and its bind groups.
+    temporal_refl: mx::ComputePipeline,
+    atrous: mx::ComputePipeline,
+    steps: mx::Buffer,
+    step_stride: u64,
+    denoise_groups: Option<(RtBindKey, [mx::BindGroup; 8])>,
+}
+
+/// The reflections' textures at the rays' size (all rgba16float).
+struct ReflTargets {
+    /// This frame's rays: rgb what each brings back, a how far it went.
+    raw: mx::TextureView,
+    /// The surface each left: its distance, roughness, normal (rt_reflect.wgsl `t_meta_out`).
+    meta: mx::TextureView,
+    /// The history (rgb, frames in it) and its moments (the luminance's two, the view depth it
+    /// was taken at, the variance), this frame's and last frame's by turns.
+    hist: [mx::TextureView; 2],
+    moments: [mx::TextureView; 2],
+    /// The a-trous passes' two textures by turns; the last pass leaves the result in `a`.
+    a: mx::TextureView,
+    b: mx::TextureView,
 }
 
 /// One reflection ray per this many pixels each way (OMSI_RT_REFL_HALF=1: per 2 x 2).
@@ -223,23 +250,37 @@ fn refl_div() -> u32 {
 
 /// The traced lighting's shader: the shared ray tracing and its own.
 pub(super) fn lighting_source() -> String {
-    [include_str!("rt_common.wgsl"), include_str!("rt.wgsl")].join("\n")
+    [
+        crate::shaders::hot_wgsl(include_str!("rt_common.wgsl"), "rt_common.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("rt.wgsl"), "rt.wgsl"),
+    ]
+    .join("\n")
 }
 
 /// The size of the shaders' `RtParams` (for the shader test).
 #[cfg(test)]
 pub(super) const PARAMS_SIZE: usize = std::mem::size_of::<Params>();
 
+/// The reflections' denoiser's shader: the shared ray tracing's parameters and its own.
+pub(super) fn denoise_source() -> String {
+    [
+        crate::shaders::hot_wgsl(include_str!("rt_common.wgsl"), "rt_common.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("rt_denoise.wgsl"), "rt_denoise.wgsl"),
+    ]
+    .join("\n")
+}
+
 /// The reflections' shader: the shared ray tracing, the enhanced uniform's layout, its own.
 pub(super) fn reflect_source() -> String {
-    let common = include_str!("enhanced_common.wgsl");
+    let common =
+        crate::shaders::hot_wgsl(include_str!("enhanced_common.wgsl"), "enhanced_common.wgsl");
     let enh = &common[..common
         .find("@group(0) @binding(11)")
         .expect("Enhanced struct")];
     [
-        include_str!("rt_common.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("rt_common.wgsl"), "rt_common.wgsl"),
         enh,
-        include_str!("rt_reflect.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("rt_reflect.wgsl"), "rt_reflect.wgsl"),
     ]
     .join("\n")
 }
@@ -269,7 +310,7 @@ impl RayTracer {
         let avg_module = device
             .create_shader_module(&mx::ShaderModuleDescriptor {
                 label: Some("texture means"),
-                source: &*(include_str!("rt_avg.wgsl")),
+                source: crate::shaders::hot_wgsl(include_str!("rt_avg.wgsl"), "rt_avg.wgsl"),
             })
             .expect("mX: a shader");
         let avg_pipeline = device
@@ -333,6 +374,53 @@ impl RayTracer {
                 }),
             })
             .expect("mX: a render pipeline");
+        let denoise_module = device
+            .create_shader_module(&mx::ShaderModuleDescriptor {
+                label: Some("rt reflections denoiser"),
+                source: &*(denoise_source()),
+            })
+            .expect("mX: a shader");
+        let denoise_pass = |entry: &str| {
+            device
+                .create_compute_pipeline(&mx::ComputePipelineDescriptor {
+                    label: Some(entry),
+                    module: &denoise_module,
+                    entry_point: Some(entry),
+                    constants: &div,
+                })
+                .expect("mX: a compute pipeline")
+        };
+        let temporal_refl = denoise_pass("cs_temporal");
+        let atrous = denoise_pass("cs_atrous");
+        // (written with the parameters every frame, `prepare_ray_tracing`)
+        let step_stride = (device.limits().min_uniform_buffer_offset_alignment as u64).max(256);
+        let steps = device
+            .create_buffer(&mx::BufferDescriptor {
+                label: Some("rt reflections denoiser steps"),
+                size: 3 * step_stride,
+                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+            })
+            .expect("mX: a buffer");
+        let spare = || {
+            device
+                .create_texture(&mx::TextureDescriptor {
+                    label: Some("rt spare"),
+                    size: mx::Extent3d {
+                        width: 1,
+                        height: 1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: mx::TextureDimension::D2,
+                    format: mx::TextureFormat::Rgba16Float,
+                    usage: mx::TextureUsages::STORAGE_BINDING,
+                    view_formats: &[],
+                })
+                .expect("mX: a texture")
+                .create_view(&Default::default())
+                .expect("mX: a texture view")
+        };
         let tlas_cap = 8192;
         RayTracer {
             blas: hashbrown::HashMap::new(),
@@ -370,24 +458,12 @@ impl RayTracer {
             reflect,
             composite,
             refl: None,
-            spare: device
-                .create_texture(&mx::TextureDescriptor {
-                    label: Some("rt spare"),
-                    size: mx::Extent3d {
-                        width: 1,
-                        height: 1,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: mx::TextureDimension::D2,
-                    format: mx::TextureFormat::Rgba16Float,
-                    usage: mx::TextureUsages::STORAGE_BINDING,
-                    view_formats: &[],
-                })
-                .expect("mX: a texture")
-                .create_view(&Default::default())
-                .expect("mX: a texture view"),
+            spare: [spare(), spare(), spare()],
+            temporal_refl,
+            atrous,
+            steps,
+            step_stride,
+            denoise_groups: None,
         }
     }
 
@@ -856,12 +932,18 @@ impl Renderer {
                 _ => ([0.0; 4], [0.0; 4], [0.0; 4], [0.0; 4]),
             };
         let debug = omsi_cfg::flags::OMSI_DEBUG_RT.parse::<f32>().unwrap_or(0.0);
+        // The sun's disc as the shadow rays see it (tangent of its radius): its own 0.27
+        // degrees, so that a shadow is as sharp at its caster's foot and as soft away from it
+        // as the real one; a veil of high cloud spreads the sun into an aureole a few degrees
+        // wide, and the shadows widen with it (as the shadow map's, `sun_shadow_soft`).
+        let veil_spread = 1.0 - (-lighting.veil.clamp(0.0, 3.0) / sun.z.max(0.03)).exp();
+        let cone = SUN_RADIUS.tan() * (1.0 + 3.0 * veil_spread);
         let p = Params {
             inv_view_proj: view_proj.inverse().to_cols_array_2d(),
             view_proj: view_proj.to_cols_array_2d(),
             prev_view_proj: prev_vp.to_cols_array_2d(),
             eye: cam.extend((frame % 4096) as f32).to_array(),
-            sun: sun.extend(if sun_on { SUN_CONE } else { 0.0 }).to_array(),
+            sun: sun.extend(if sun_on { cone } else { 0.0 }).to_array(),
             size: [
                 w as f32,
                 h as f32,
@@ -879,6 +961,10 @@ impl Renderer {
         };
         self.queue
             .write_buffer(&rt.params, 0, bytemuck::bytes_of(&p))
+            .expect("mX: a queue write");
+        // (the reflections' a-trous passes' steps, `reflect::refl_steps`)
+        self.queue
+            .write_buffer(&rt.steps, 0, &reflect::refl_steps(rt.step_stride))
             .expect("mX: a queue write");
         rt.prev = Some((view_proj, ro, vehicle));
         true
@@ -1093,178 +1179,6 @@ impl Renderer {
             pass.set_bind_group(0, bg);
             pass.dispatch_workgroups(gx, gy, 1);
         }
-    }
-}
-
-impl Renderer {
-    /// The ray-traced reflections of the window's picture, added to `HdrTargets::view` after
-    /// the main pass (and before the rain on the glass, which looks through it).
-    pub(super) fn encode_rt_reflections(
-        &mut self,
-        encoder: &mut mx::CommandEncoder,
-        w: u32,
-        h: u32,
-        queries: Option<&mx::QuerySet>,
-        timed: &mut Vec<&'static str>,
-    ) {
-        let (Some(rt), Some(hdr), Some(ao), Some(probe)) = (
-            self.rt.as_mut(),
-            self.targets.hdr_targets.get(&(w, h)),
-            self.targets.ao.as_ref(),
-            self.tone.probe.as_ref(),
-        ) else {
-            return;
-        };
-        let Some(gbuf) = hdr.gbuf.as_ref() else {
-            return;
-        };
-        let half = (w.div_ceil(refl_div()), h.div_ceil(refl_div()));
-        if rt.refl.as_ref().is_none_or(|r| r.0 != half) {
-            let mk = |label: &str| {
-                self.device
-                    .create_texture(&mx::TextureDescriptor {
-                        label: Some(label),
-                        size: mx::Extent3d {
-                            width: half.0,
-                            height: half.1,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: mx::TextureDimension::D2,
-                        format: mx::TextureFormat::Rgba16Float,
-                        usage: mx::TextureUsages::STORAGE_BINDING
-                            | mx::TextureUsages::TEXTURE_BINDING,
-                        view_formats: &[],
-                    })
-                    .expect("mX: a texture")
-                    .create_view(&Default::default())
-                    .expect("mX: a texture view")
-            };
-            rt.refl = Some((half, mk("rt reflection rays")));
-        }
-        let (_, raw) = rt.refl.as_ref().unwrap();
-        let dummy = &self.black_texture.view;
-        let group = |out: &mx::TextureView, scene: &mx::TextureView, h12: &mx::TextureView| {
-            self.device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("ray-traced reflections"),
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: rt.params.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 1,
-                        resource: mx::BindingResource::AccelerationStructure(&rt.tlas),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 2,
-                        resource: mx::BindingResource::TextureView(&ao.depth_view),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 3,
-                        resource: rt.records_buf.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 4,
-                        resource: rt.tex_avg.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 5,
-                        resource: mx::BindingResource::TextureView(&gbuf[0].1),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 6,
-                        resource: mx::BindingResource::TextureView(&gbuf[1].1),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 7,
-                        resource: mx::BindingResource::TextureView(out),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 8,
-                        resource: mx::BindingResource::Sampler(&self.tone.lin_sampler),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 9,
-                        resource: mx::BindingResource::TextureView(scene),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 10,
-                        resource: mx::BindingResource::TextureView(&probe.view),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 11,
-                        resource: self.tone.enh_buf.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 12,
-                        resource: mx::BindingResource::TextureView(h12),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 13,
-                        resource: rt.tex.uvs.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 14,
-                        resource: mx::BindingResource::TextureView(&rt.tex.atlas_view),
-                    },
-                ],
-            })
-        };
-        // (no pass's output is among its inputs)
-        let key: RtBindKey = (
-            rt.bind_gen,
-            vec![
-                ao.depth_view.clone(),
-                gbuf[0].1.clone(),
-                gbuf[1].1.clone(),
-                raw.clone(),
-                hdr.view.clone(),
-                probe.view.clone(),
-                dummy.clone(),
-            ],
-        );
-        if rt.refl_groups.as_ref().is_none_or(|g| g.0 != key) {
-            rt.refl_groups = Some((
-                key,
-                [group(raw, &hdr.view, dummy), group(&rt.spare, dummy, raw)],
-            ));
-        }
-        let [trace_bg, composite_bg] = &rt.refl_groups.as_ref().expect("made above").1;
-        {
-            let mut pass = encoder.begin_compute_pass(&mx::ComputePassDescriptor {
-                label: Some("rt reflections"),
-                timestamp_writes: pass_timer(queries, timed, "rt reflections").map(|t| {
-                    mx::PassTimestampWrites {
-                        query_set: t.query_set,
-                        beginning_of_pass_write_index: t.beginning_of_pass_write_index,
-                        end_of_pass_write_index: t.end_of_pass_write_index,
-                    }
-                }),
-            });
-            let (gx, gy) = (half.0.div_ceil(8), half.1.div_ceil(8));
-            pass.set_pipeline(&rt.reflect);
-            pass.set_bind_group(0, trace_bg);
-            pass.dispatch_workgroups(gx, gy, 1);
-        }
-        let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
-            label: Some("rt reflections composite"),
-            color_attachments: &[Some(mx::RenderPassColorAttachment {
-                view: &hdr.view,
-                resolve_target: None,
-                ops: mx::Operations {
-                    load: mx::LoadOp::Load,
-                    store: mx::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: pass_timer(queries, timed, "rt composite"),
-            occlusion_query_set: None,
-        });
-        pass.set_pipeline(&rt.composite);
-        pass.set_bind_group(0, composite_bg);
-        pass.draw(0..3, 0..1);
     }
 }
 

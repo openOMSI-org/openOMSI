@@ -145,7 +145,9 @@ fn sun_shafts(c: vec3<f32>, d: vec3<f32>, len: f32, jitter: f32) -> vec3<f32> {
     // (the clouds' shadow field: the shafts through a broken sky, followed to kilometres)
     let sky_gaps = enh.cloud_f1.w > 0.5 && s.z >= 0.06;
     let shadows = camera.shadow.x > 0.5;
-    if ((!shadows && !sky_gaps) || s.z <= 0.0 || max(e_sun.r, e_sun.g) < 1e-4) {
+    // (with the volumetric fog on, its march has the shadows in the air already:
+    // volumetric_fog.wgsl, enh.vol_fog.x)
+    if (enh.vol_fog.x > 0.5 || (!shadows && !sky_gaps) || s.z <= 0.0 || max(e_sun.r, e_sun.g) < 1e-4) {
         return vec3<f32>(0.0);
     }
     let end = min(len, SHAFT_NEAR);

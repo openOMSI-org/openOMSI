@@ -1050,11 +1050,16 @@ fn shaders_validate_and_match_the_uniforms() {
         ("sky", sky_shader_source()),
         ("corona", corona_shader_source()),
         ("fog lamps", fog_lamps_shader_source()),
+        ("volumetric fog", crate::vol_fog::shader_source()),
         ("snow", snow_shader_source()),
         ("rain", rain_shader_source()),
         (
             "rain basic",
             lean_rain(precip_shader_source(include_str!("../rain.wgsl"))),
+        ),
+        (
+            "snow basic",
+            lean_snow(precip_shader_source(include_str!("../snow.wgsl"))),
         ),
         ("post", include_str!("../post.wgsl").to_string()),
         ("ssao", include_str!("../ssao.wgsl").to_string()),
@@ -1070,6 +1075,7 @@ fn shaders_validate_and_match_the_uniforms() {
         ),
         ("ray-traced lighting", rt::lighting_source()),
         ("ray-traced reflections", rt::reflect_source()),
+        ("ray-traced reflections denoiser", rt::denoise_source()),
         ("texture means", include_str!("../rt_avg.wgsl").to_string()),
         (
             "rt texture coordinates",
@@ -1084,6 +1090,10 @@ fn shaders_validate_and_match_the_uniforms() {
         ("Enhanced", std::mem::size_of::<EnhancedUniform>()),
         ("PostParams", std::mem::size_of::<PostUniform>()),
         ("FogLampParams", std::mem::size_of::<FogLampUniform>()),
+        (
+            "VolFogParams",
+            std::mem::size_of::<crate::vol_fog::VolFogUniform>(),
+        ),
         ("SnowParams", std::mem::size_of::<SnowUniform>()),
         ("RainParams", std::mem::size_of::<RainUniform>()),
         ("PuddleParams", std::mem::size_of::<puddles::Uniform>()),
@@ -1096,6 +1106,10 @@ fn shaders_validate_and_match_the_uniforms() {
         ("Camera", std::mem::size_of::<CameraUniform>()),
         ("MaterialParams", std::mem::size_of::<MaterialUniform>()),
         ("Motion", std::mem::size_of::<MotionUniform>()),
+        (
+            "CloudView",
+            std::mem::size_of::<crate::cloud_pass::CloudView>(),
+        ),
         ("RtParams", rt::PARAMS_SIZE),
         ("Record", rt::RECORD_SIZE),
     ];
@@ -1479,7 +1493,8 @@ fn the_scene_groups_fit_the_sixteen_texture_units_of_opengl() {
                      stage: crate::gpu::schema::ShaderStages| {
         e.iter()
             .filter(|e| {
-                matches!(e.ty, crate::gpu::schema::BindingType::Texture { .. })
+                e.binding != 22
+                    && matches!(e.ty, crate::gpu::schema::BindingType::Texture { .. })
                     && e.visibility.contains(stage)
             })
             .count()

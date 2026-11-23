@@ -381,7 +381,12 @@ mod tests {
                 .chain(["clouds"])
                 .chain(
                     enhanced
-                        .then_some(["light_shadows", "cloud_shadows", "light_glow"])
+                        .then_some([
+                            "light_shadows",
+                            "cloud_shadows",
+                            "light_glow",
+                            "volumetric_fog",
+                        ])
                         .into_iter()
                         .flatten(),
                 )
@@ -390,6 +395,7 @@ mod tests {
                     "vehicle_smoke",
                     "puddles",
                     "windy_trees",
+                    "rain_lights",
                     "detailed_trees",
                     "road_snow",
                 ])
