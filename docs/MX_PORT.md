@@ -116,24 +116,35 @@ default settings (4x MSAA, SSAO), release, M4, `OMSI_BENCH=300` and `OMSI_GPU_TI
 main pass alone 19 to 22 ms. Neither multisampling (1x: the same) nor the number of draws
 (240) was the cause; the enhanced fragment shader was. Cut to the texture alone it took 1.3 ms.
 
-- **Lean pipelines** (`override LEAN`, `LEAN_GLASS`, `DRY` in the scene shader,
+- **Lean pipelines** (`override LEAN`, `LEAN_GLASS`, `WET`, `SNOW` in the scene shader,
   `frame_plan.rs` `main_key`): the shader's branches are uniform per draw, but the code of the
-  rare ones (glass and its films, water, bump and PBR maps, LED panels, glow, debug views; on a
-  dry frame the wet road, its puddles and the snow) took registers from every pixel. Plain
-  materials are drawn with pipelines specialized without them, blended ones with the glass
-  branch kept; the weather's branches come in a wet and a dry set. 21.9 -> 10.3 ms of main
-  pass on a sunny day. A lean pipeline the driver fails on is drawn with the full one.
+  rare ones (glass and its films, water, bump and PBR maps, LED panels, glow, debug views, and
+  the weather's: the wet road with its puddles, the snow) took registers from every pixel.
+  Plain materials are drawn with pipelines specialized without them, blended ones with the
+  glass branch kept, in four sets by the frame's weather (dry, rain, snow, both). They are made
+  on two threads of their own after the renderer is up and used as they come; until then, and
+  where the driver fails on one, the full pipeline draws. (Apple's compiler service crashed on
+  the variants with the wet road and the snow together, and once hung on one: hence the
+  weathers apart and the background threads.)
 - **The ground pass with MSAA and AO**: the painted terrain's layers were lit each in full
   and blended (4 ms here) unless MSAA was 1x and SSAO off, because the ground picture took the
   camera group's AO slot. It is read through the heap now (`FrameHeap::ground`, immediates
   after the material's places) and drawn with a depth of the terrain's own, so a
-  multisampled pass finds the ground at the edges too. 10.3 -> 6.5 ms.
+  multisampled pass finds the ground at the edges too.
 
-| Grundorf cab, GPU wait a frame (median) | before | after |
-|---|---|---|
-| day, Sommerlich | 28.2 ms (main 21.9) | 10.5-12.9 ms (main 5.4-6.5) |
-| rain, Schmuddelwetter | 25.6 ms (main 19.4) | 12.3 ms (main 7.2) |
-| night 22:30 | 26.1 ms (main 19.8) | 12.9 ms (main 6.0) |
+Release builds of origin/main (e7e5571) and of this work, run in turns, two runs each:
+
+| Grundorf cab, 1920x1080 Enhanced | GPU wait before | after | main pass before | after | frame (fps) before | after |
+|---|---|---|---|---|---|---|
+| day, Sommerlich 12:00 | 29.5 ms | 12.6 ms | 22.7 ms | 6.3 ms | 31.2 ms (32) | 14.3 ms (70) |
+| rain, Schmuddelwetter | 26.6 ms | 15.3 ms | 19.8 ms | 8.3 ms | 27.9 ms (36) | 16.9 ms (59) |
+| night 22:30 | 28.1 ms | 13.1 ms | 20.8 ms | 5.9 ms | 30.8 ms (32) | 15.7 ms (64) |
+
+Metal 2 (`MX_METAL_BOUND=1`): 12.9 ms, main pass 6.3 ms. The renderer's GPU tests: 285 of 289
+pass on Metal, the other four as before (the two coplanar prints, `spv_dump`,
+`xr_diagnostics`). An offscreen run's `~/.openomsi/gpu-fallback.cfg` (a pipeline the driver
+refused at start) quietly turns every later run to 1x MSAA and basic pipelines: check that a
+benchmark's log has no "drawing with 1x MSAA".
 
 `OMSI_NO_LEAN=1` draws with the full pipelines, for comparison.
 
