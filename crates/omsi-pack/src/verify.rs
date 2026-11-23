@@ -1,14 +1,14 @@
 //! The full scan of a pack's files, and the record that lets an unchanged pack skip it.
 #[cfg(windows)]
 use std::collections::HashMap;
+#[cfg(not(windows))]
+use std::time::UNIX_EPOCH;
 use std::{
     collections::{BTreeSet, HashSet},
     fs::File,
     io::{self, Read},
     path::PathBuf,
 };
-#[cfg(not(windows))]
-use std::{fs, time::UNIX_EPOCH};
 
 use rayon::prelude::*;
 use ring::aead::{AES_256_GCM, Aad, LessSafeKey, NONCE_LEN, Nonce, UnboundKey};
@@ -77,6 +77,9 @@ impl VerifiedPack {
         let mut out = Vec::new();
         #[cfg(windows)]
         let mut folders = HashMap::new();
+        // folders already found free of links while fingerprinting this asset
+        #[cfg(not(windows))]
+        let mut dirs = HashSet::new();
         let plain = [format!(
             "assets/{}/plain.bin",
             sha256_hex(asset.id.as_bytes())
@@ -98,7 +101,8 @@ impl VerifiedPack {
             }
             #[cfg(not(windows))]
             {
-                let meta = fs::metadata(self.root.join(file))
+                // a link anywhere in the path fails here, as it does in a full scan
+                let meta = ensure_regular_file(&self.root.join(file), &mut dirs)
                     .map_err(|_| PackError::Invalid("chunk is missing, truncated, or changed"))?;
                 let modified = meta
                     .modified()

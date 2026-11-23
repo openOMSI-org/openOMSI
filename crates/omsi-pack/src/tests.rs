@@ -601,6 +601,42 @@ fn a_linked_folder_or_file_in_a_pack_is_rejected_on_every_scan() {
     fs::remove_dir_all(root).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn a_folder_swapped_for_a_link_after_the_first_open_is_rejected_when_opened_again() {
+    let root = licence_scratch("verify-once-linked-folder");
+    let signer = SigningKey::generate(&SystemRandom::new()).unwrap();
+    let mut metadata = licence_metadata(&[0; 32]);
+    metadata.key_id = None;
+    let pack = root.join("plain.oopp");
+    let manifest = create_pack(
+        &pack,
+        metadata,
+        &licence_input(),
+        &signer,
+        None,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    let trusted = licence_trust(&signer);
+    let keys = MemoryKeys::default();
+    let first = VerifiedPack::open_unlocked(&pack, &trusted, &keys).unwrap();
+    let folder = pack.join(format!(
+        "assets/{}",
+        sha256_hex(manifest.assets[0].id.as_bytes())
+    ));
+    let moved = root.join("moved");
+    // the files keep their inode, size and times; only the path to them changes
+    fs::rename(&folder, &moved).unwrap();
+    std::os::unix::fs::symlink(&moved, &folder).unwrap();
+    assert!(
+        VerifiedPack::open_unlocked(&pack, &trusted, &keys).is_err(),
+        "a linked asset folder reused the cached verification"
+    );
+    assert!(first.read("maps/Fixture/global.cfg").is_err());
+    fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn a_largest_pack_manifest_fits() {
     // 4096 assets with the longest id and path; together 1 GiB in 64 KiB chunks, plus one
