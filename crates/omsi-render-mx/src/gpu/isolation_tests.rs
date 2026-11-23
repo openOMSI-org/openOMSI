@@ -91,7 +91,9 @@ fn auxiliary_adapter_state_is_restored_after_failure() {
 #[test]
 fn auxiliary_adapter_state_device_open_does_not_publish_metadata() {
     publish_main_options();
-    let gpu_options = omsi_texture::gpu_options();
+    // (counted on this thread: other tests publish their own options meanwhile)
+    let published = || super::open::ADAPTER_PUBLISHED.with(|n| n.get());
+    let gpu_options = published();
     let texture = ADAPTER_TEXTURE_MB.load(Relaxed);
     let vram = ADAPTER_VRAM_MB.load(Relaxed);
     let info = ADAPTER_INFO
@@ -113,7 +115,7 @@ fn auxiliary_adapter_state_device_open_does_not_publish_metadata() {
         fallback_store(name, Some((1, true)));
         assert_eq!(fallback_path().and_then(|p| std::fs::read(p).ok()), before);
         assert!(ceiling().is_some());
-        assert_eq!(omsi_texture::gpu_options(), gpu_options);
+        assert_eq!(published(), gpu_options);
         assert!(fallback_load("auxiliary must not load fallbacks").is_none());
         assert_eq!(ADAPTER_TEXTURE_MB.load(Relaxed), texture);
         assert_eq!(ADAPTER_VRAM_MB.load(Relaxed), vram);
@@ -136,7 +138,7 @@ fn auxiliary_adapter_state_device_open_does_not_publish_metadata() {
             renderer.adapter().unwrap().info().backend,
             mx::Backend::Noop
         );
-        assert_eq!(omsi_texture::gpu_options(), gpu_options);
+        assert_eq!(published(), gpu_options);
         assert_eq!(ADAPTER_TEXTURE_MB.load(Relaxed), texture);
     });
     assert_eq!(ADAPTER_TEXTURE_MB.load(Relaxed), texture);

@@ -42,7 +42,10 @@ impl LampSight {
             device,
             mx::ShaderModuleDescriptor {
                 label: Some("lamp sight"),
-                source: &*(include_str!("../lamp_sight.wgsl")),
+                source: &*(crate::shaders::hot_wgsl(
+                    include_str!("../lamp_sight.wgsl"),
+                    "lamp_sight.wgsl",
+                )),
             },
         );
         let targets = [target(mx::TextureFormat::Rgba8Unorm, None)];

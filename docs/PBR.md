@@ -37,6 +37,53 @@ The separate maps are packed into one occlusion/roughness/metalness picture for 
 PBR maps are kept at up to 4096 px a side and uncompressed (a normal map does not survive DXT1
 compression), so use them where they are seen up close.
 
+## The lighting model
+
+Enhanced draws every surface, with or without these maps, with the usual metal/roughness
+model of current engines:
+
+- specular: GGX microfacets, height-correlated Smith visibility, Schlick's Fresnel with F0 =
+  4 % for a dielectric and the diffuse colour for a metal, and the light a rough surface's
+  microfacets pass on to each other given back (multiple scattering, so a rough metal is not
+  darker than its colour);
+- diffuse: Lambert, with only the share the specular reflection leaves it - a surface never
+  sends out more light than falls on it;
+- the sky and the street round a surface reach it through the split sum (a pre-blurred sky
+  probe and an analytic DFG term), darkened in creases by the ambient occlusion (specular
+  occlusion) and, under a normal map, by the horizon of the real surface;
+- roughness is widened where the normal turns within a pixel (specular antialiasing), so
+  fine relief and curved, polished bodies do not sparkle or crawl;
+- textures are read as sRGB (linear light in the shader); the PBR maps are read as data.
+
+With **Enhanced+** (ray tracing on), the reflections are traced: every surface that reflects
+noticeably sends a ray per pixel along its GGX lobe, a mirror-smooth one along the mirror
+direction, and the rays are gathered over frames and neighbouring pixels. A rough surface
+gets a blurred reflection of the real street, a pane, a chrome rail or a wet road a sharp
+one, and each only as strongly as its Fresnel term says.
+
+## OMSI materials without maps
+
+Without maps, the material is derived from what OMSI's own files say:
+
+| OMSI material | Roughness | F0 / metal |
+|---|---|---|
+| Terrain | 0.92 | 3 % |
+| Plain object with an o3d specular power *p* | ((2 / (p + 2))^½)^½, 0.4 .. 0.9 | 4 % |
+| Plain object without one | 0.8 | 4 % |
+| Leaves, fences (alpha-tested) | 0.7, no reflection | 4 % |
+| Paint with `[matl_envmap]` | from the share the envmap mask lays over it: a polished coat (0.06) at the stock bodies' share, satin down to 0.8 where little is mirrored | a clear coat whose average reflectance matches the share; metal only where a mask of its own says so |
+| Glass (blended pane) | 0.04 | from the pane's alpha and envmap factor (4 .. 90 %) |
+| Map water | 0.06 + ripples | 2 % |
+
+Weather changes the surface:
+
+- **Rain**: water stands on what faces up. Porous surfaces (rough ones: soil, plaster,
+  stone) darken as they soak (Lekner and Dorf); upward faces turn glossy, walls much less
+  (Lagarde). Roads with `[moisture]` go dark and smooth, with puddles in their low spots.
+- **Snow** covers upward faces, matt (roughness 0.95).
+- **Clouds**: under a thin deck or a veil of high cloud part of the sun's light comes from
+  the whole sky instead of as a beam: shadows fade and the light goes flat.
+
 ## How they are drawn
 
 - The normal map bends the surface normal (a tangent frame is derived per pixel, so no

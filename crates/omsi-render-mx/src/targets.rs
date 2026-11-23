@@ -46,11 +46,9 @@ pub(crate) struct Probe {
     pub(crate) filter_pipeline: mx::RenderPipeline,
     /// The sky table scale it was drawn with (when, see `SkySched`).
     pub(crate) scale: f32,
-    /// The enhanced sky itself at `SKY_CUBE_SIZE` a face (clouds and all), drawn a face a
-    /// frame; the dome reads it (camera binding 17). The volumetric clouds cost 6-18 ms a
-    /// frame drawn for every pixel of a 1440p sky; a face a frame is well under one.
-    pub(crate) cube_view: mx::TextureView,
-    pub(crate) cube_tex: mx::Texture,
+    /// The enhanced sky itself at `SKY_CUBE_SIZE` a face (a cheaper march of the clouds),
+    /// drawn a slice a frame: the probe's sharpest level, which the reflections and the sky
+    /// of the mirrors read. The window's own sky has its clouds traced per pixel (`clouds`).
     pub(crate) cube_faces: Vec<mx::TextureView>,
     pub(crate) cube_bind_groups: Vec<mx::BindGroup>,
     pub(crate) cube_pipeline: mx::RenderPipeline,
@@ -58,16 +56,11 @@ pub(crate) struct Probe {
     pub(crate) cube_filled: bool,
     /// Redraws so far (picks the round of the next).
     pub(crate) cube_round: u32,
-    /// Where every face of the cube is drawn from (world). A face drawn from wherever the
-    /// camera stood at the time left six faces from six places: flying up towards the
-    /// clouds, the faces disagreed at their seams and the blended history dragged each one
-    /// behind the camera, so the clouds shook and lagged. The cube keeps one eye; the dome
-    /// takes the parallax out, and the eye moves on (the whole cube redrawn) once the
-    /// camera has gone far enough for the correction to show.
-    pub(crate) cube_eye: Option<DVec3>,
-    /// Which slices of the cube are drawn when, the cube for the next eye and the probe's
-    /// turn.
+    /// Which slices of the cube are drawn when, and the probe's turn.
     pub(crate) sched: SkySched,
+    /// The window's volumetric clouds (cloud_pass.rs): the dome reads them (camera binding
+    /// 17).
+    pub(crate) clouds: crate::cloud_pass::CloudPass,
 }
 
 /// The textures of the ambient-occlusion pass for one target size.
@@ -193,16 +186,20 @@ impl Renderer {
                         height,
                         depth_or_array_layers: 1,
                     },
-                    mip_level_count: 1,
+                    mip_level_count: crate::glass_mips::glass_mip_levels(width, height, format),
                     sample_count: 1,
                     dimension: mx::TextureDimension::D2,
                     format,
                     usage: mx::TextureUsages::COPY_DST
                         | mx::TextureUsages::COPY_SRC
-                        | mx::TextureUsages::TEXTURE_BINDING,
+                        | mx::TextureUsages::TEXTURE_BINDING
+                        | mx::TextureUsages::RENDER_ATTACHMENT,
                     view_formats: &[],
                 })
                 .expect("mX: a texture");
+            // (the enhanced picture's copy keeps smaller levels for the wet panes' blur)
+            self.targets.glass_mips = (tex.mip_level_count() > 1)
+                .then(|| crate::glass_mips::GlassMips::new(&self.device, &tex));
             self.targets.glass_picture = Some(
                 tex.create_view(&Default::default())
                     .expect("mX: a texture view"),
@@ -746,6 +743,8 @@ pub(crate) struct Targets {
     pub(crate) triple_targets: Option<((u32, u32), Vec<(mx::TextureView, mx::BindGroup)>)>,
     /// Full-resolution current scene before rain films, in its original colour format.
     pub(crate) glass_picture: Option<mx::TextureView>,
+    /// What makes the smaller levels of `glass_picture` (enhanced: the wet panes' blur).
+    pub(crate) glass_mips: Option<crate::glass_mips::GlassMips>,
     /// When each size of the size-keyed targets (scale, MSAA, HDR) was last asked for.
     pub(crate) target_use: HashMap<(u32, u32), std::time::Instant>,
     pub(crate) evicted_at: std::time::Instant,

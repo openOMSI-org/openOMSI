@@ -8,6 +8,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Alt menu redone**: the quick menu's thirty tiles are flat, squarer and have pictograms of their own in the style of OMSI 2's menu (a bus with a plus, a cross or arrows for placing, removing and swapping it, a pump, a clock, a chequered flag...) in place of the generic symbols.
 - **Tunnel mouths are open**: a `[terrainhole]` standing upright, as in the Kartoffelphantom tram
   tunnels, is an opening: the ground is cut behind it up to where the hill is over it, and no wall
   stands across it. The walls of a cut in the ground show the ground's texture instead of streaks.
@@ -147,6 +148,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).
   Graphics has *Light has shadows* (`light_shadows`: Off, Street lamps and vehicles, Every light),
   *Cloud shadows and light shafts* (`cloud_shadows`), *Glow of lights* (`light_glow`),
+  *Volumetric fog* (`volumetric_fog`, on by default),
   *Real-Time Reflections* (the puddles' setting, now with the wet roads' and the water's) and
   *Reflective objects reflect* (the reflection maps), next to the street light and the mirrors. The
   presets are Low, Medium, High, Extra, Max and Ultra, and each sets the mode too: Low is Vanilla,
