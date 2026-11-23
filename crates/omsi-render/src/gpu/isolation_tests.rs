@@ -70,6 +70,30 @@ fn auxiliary_adapter_state_is_restored_after_failure() {
 
 #[test]
 fn auxiliary_adapter_state_device_open_does_not_publish_metadata() {
+    const CHILD: &str = "AUXILIARY_METADATA_TEST_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "gpu::isolation_tests::auxiliary_adapter_state_device_open_does_not_publish_metadata",
+            ])
+            .env(CHILD, "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        return;
+    }
+    auxiliary_adapter_state_device_open_does_not_publish_metadata_body();
+}
+
+fn auxiliary_adapter_state_device_open_does_not_publish_metadata_body() {
+    let gpu_options = omsi_texture::gpu_options();
+    let texture = ADAPTER_TEXTURE_MB.load(Relaxed);
+    let vram = ADAPTER_VRAM_MB.load(Relaxed);
+    let info = ADAPTER_INFO
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
     // (counted on this thread: other tests publish their own options meanwhile)
     let published = || super::open::ADAPTER_PUBLISHED.with(|n| n.get());
     let published_before = published();
@@ -95,6 +119,12 @@ fn auxiliary_adapter_state_device_open_does_not_publish_metadata() {
         assert!(ceiling().is_some());
         assert_eq!(published(), published_before);
         assert!(fallback_load("auxiliary must not load fallbacks").is_none());
+        assert_eq!(ADAPTER_TEXTURE_MB.load(Relaxed), texture);
+        assert_eq!(ADAPTER_VRAM_MB.load(Relaxed), vram);
+        assert_eq!(
+            *ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()),
+            info
+        );
         let jobs: Vec<crate::pipelines::parallel::Job<bool>> = (0..16)
             .map(|_| -> crate::pipelines::parallel::Job<bool> {
                 Box::new(|| auxiliary_context().is_some())
@@ -110,8 +140,15 @@ fn auxiliary_adapter_state_device_open_does_not_publish_metadata() {
             renderer.adapter().unwrap().get_info().backend,
             wgpu::Backend::Noop
         );
-        assert_eq!(published(), published_before);
+        assert_eq!(omsi_texture::gpu_options(), gpu_options);
+        assert_eq!(ADAPTER_TEXTURE_MB.load(Relaxed), texture);
     });
+    assert_eq!(ADAPTER_TEXTURE_MB.load(Relaxed), texture);
+    assert_eq!(ADAPTER_VRAM_MB.load(Relaxed), vram);
+    assert_eq!(
+        *ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()),
+        info
+    );
     assert_eq!(published(), published_before);
 }
 
