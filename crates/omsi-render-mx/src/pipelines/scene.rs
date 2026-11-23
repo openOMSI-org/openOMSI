@@ -105,7 +105,7 @@ impl SceneBase {
         terrain_paint: bool,
         samples: u32,
         surfaces: bool,
-        lean: bool,
+        lean: Lean,
     ) -> mx::RenderPipeline {
         let use_alpha_to_coverage = alpha_to_coverage && samples > 1;
         let constants: Vec<(&str, f64)> = [
@@ -115,7 +115,8 @@ impl SceneBase {
                 if use_alpha_to_coverage { 1.0 } else { 0.0 },
             ),
             ("TERRAIN_PAINT", if terrain_paint { 1.0 } else { 0.0 }),
-            ("LEAN", if lean { 1.0 } else { 0.0 }),
+            ("LEAN", if lean != Lean::No { 1.0 } else { 0.0 }),
+            ("LEAN_GLASS", if lean == Lean::Glass { 1.0 } else { 0.0 }),
         ]
         .into_iter()
         .chain(self.trees.iter().copied())
@@ -256,7 +257,7 @@ impl SceneBase {
         samples: u32,
         index: usize,
         surfaces: bool,
-        lean: bool,
+        lean: Lean,
     ) -> mx::RenderPipeline {
         let kind = (index / 4) as u8;
         let (cull, surface) = (index & 2 != 0, index & 1 != 0);

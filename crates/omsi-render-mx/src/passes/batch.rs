@@ -1182,7 +1182,7 @@ mod tests {
 
     #[test]
     fn state_changes_count_what_the_encoder_sets() {
-        use crate::frame_plan::{Batch, state_changes, state_changes_by_material};
+        use crate::frame_plan::{Batch, Lean, state_changes, state_changes_by_material};
         let b = |pipe: u8, material: u32| Batch {
             pipe,
             mesh: 0,
@@ -1190,7 +1190,7 @@ mod tests {
             count: 3,
             material,
             instances: 0..1,
-            lean: false,
+            lean: Lean::No,
         };
         // opaque culled (pipe 2) and not culled (pipe 0) of two looks, then a blended one
         let batches = [b(0, 1), b(0, 2), b(2, 1), b(2, 2), b(8, 1)];

@@ -175,7 +175,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // depth, its letters a `\S:n` transparency map: the EMT Citaro's Krueger matrix
     // (Mallorca) was taken for glass, which gives no light of its own, and its letters stayed
     // grey at night while its light map lit them in Vanilla+ (#2927).
-    let glass = !LEAN && !terrain && mode > 1.5 && (material.bump.z > 0.5 || material.emissive.w > 0.5) &&
+    let glass = (!LEAN || LEAN_GLASS) && !terrain && mode > 1.5 && (material.bump.z > 0.5 || material.emissive.w > 0.5) &&
         (has_env || material.params.z > 0.5 || material.emissive.w > 0.5) && material.flags.x < 0.5;
     // An envmap on opaque vehicle paint is legacy material data, not a request to make
     // the whole body behave like glass. Keep the diffuse/sun response, but use the

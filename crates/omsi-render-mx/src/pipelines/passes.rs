@@ -67,6 +67,14 @@ fn take(made: &mut impl Iterator<Item = Made>, lean: bool) -> PassPipelines {
         pipelines: (0..SceneBase::PIPELINES).map(|_| one(made)).collect(),
         rain_pipelines: (0..SceneBase::PIPELINES).map(|_| one(made)).collect(),
         lean_pipelines: lean.then(|| (0..SceneBase::PIPELINES).map(|_| one(made)).collect()),
+        lean_glass_pipelines: lean.then(|| {
+            (0..SceneBase::PIPELINES)
+                .map(|i| {
+                    lean_glass_kind((i / 4) as u8)
+                        .then(|| one(made))
+                })
+                .collect()
+        }),
         corona_pipeline: one(made),
         smoke_pipeline: one(made),
         snow_pipeline: made.next().flatten(),
@@ -89,18 +97,25 @@ impl PassKit<'_> {
                 jobs.push(Box::new(move || {
                     Some(
                         self.scene
-                            .pipeline_at_for(device, f, fs.scene, samples, i, surfaces, false),
+                            .pipeline_at_for(device, f, fs.scene, samples, i, surfaces, Lean::No),
                     )
                 }));
             }
         }
         // (the lean ones of the enhanced pass, multisampled as the main pass: see `main_key`)
         if lean_pass(fs.scene) {
-            for i in 0..SceneBase::PIPELINES {
+            for (i, lean) in (0..SceneBase::PIPELINES)
+                .map(|i| (i, Lean::Plain))
+                .chain(
+                    (0..SceneBase::PIPELINES)
+                        .filter(|i| lean_glass_kind((i / 4) as u8))
+                        .map(|i| (i, Lean::Glass)),
+                )
+            {
                 jobs.push(Box::new(move || {
                     Some(
                         self.scene
-                            .pipeline_at_for(device, f, fs.scene, self.msaa, i, surfaces, true),
+                            .pipeline_at_for(device, f, fs.scene, self.msaa, i, surfaces, lean),
                     )
                 }));
             }

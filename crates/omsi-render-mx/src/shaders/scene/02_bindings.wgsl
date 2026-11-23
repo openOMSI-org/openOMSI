@@ -14,6 +14,8 @@ override DETAILED_TREES: bool = false;
 // are uniform per draw, but their code alone took registers from every pixel - the lean
 // variant shaded the city half again as fast (21 against 11 ms of a 1080p cab view on an M4).
 override LEAN: bool = false;
+// With LEAN: the glass's branch kept (a lean blended draw: a window on a dry day).
+override LEAN_GLASS: bool = false;
 @group(0) @binding(5) var t_shadow: texture_depth_2d;
 @group(0) @binding(6) var s_shadow: sampler_comparison;
 @group(0) @binding(7) var t_shadow_far: texture_depth_2d;

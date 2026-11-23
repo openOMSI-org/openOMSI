@@ -1371,7 +1371,7 @@ fn vehicle_capture_splits_shared_batches_without_drawing_ai_entries() {
         count: 24,
         material: 4,
         instances: 0..6,
-        lean: false,
+        lean: Lean::No,
     };
     let own = [11, 12, 13, 14].into_iter().collect();
     let selected = selected_entry_batches(&[batch], &[11, 12, 32, 13, 45, 14], &own);

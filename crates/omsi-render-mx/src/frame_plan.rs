@@ -56,8 +56,9 @@ pub(crate) struct Batch {
     pub(crate) material: u32,
     pub(crate) instances: std::ops::Range<u32>,
     /// The material takes none of the enhanced shading's rarer branches (`material_lean`):
-    /// on a dry frame the main pass draws it with the `LEAN` pipelines.
-    pub(crate) lean: bool,
+    /// on a dry frame the main pass draws it with the `LEAN` pipelines (`Lean::Glass`: those
+    /// that keep the glass's branch).
+    pub(crate) lean: Lean,
 }
 
 /// Turn draw items into batches, appending their entries to `list`. `sort`: the order does
@@ -87,7 +88,7 @@ pub(crate) fn batch_items(
             lean: scene
                 .materials
                 .get(last.1 as usize)
-                .is_some_and(|m| material_lean(&m.uniform)),
+                .map_or(Lean::No, |m| material_lean(&m.uniform)),
         });
     };
     if sort {
@@ -406,39 +407,77 @@ pub(crate) fn pipe_code(kind: u8, cull: bool, surface: bool) -> u8 {
     kind * 4 + (cull as u8) * 2 + surface as u8
 }
 
-/// The pipeline of a main-pass batch (`DrawItem::pipe`), the lean one with `LEAN_PIPE` set
-/// (see `main_key`).
-pub(crate) fn main_pipeline(pp: &PassPipelines, pipe: u8) -> &mx::RenderPipeline {
-    match &pp.lean_pipelines {
-        Some(lean) if pipe & LEAN_PIPE != 0 => &lean[(pipe & !LEAN_PIPE) as usize],
-        _ => &pp.pipelines[(pipe & !LEAN_PIPE) as usize],
+/// The pipeline of a main-pass batch (`DrawItem::pipe`), a lean one with `LEAN_PIPE` or
+/// `LEAN_GLASS_PIPE` set (see `main_key`).
+pub(crate) fn main_pipeline(pp: &PassPipelines, key: u8) -> &mx::RenderPipeline {
+    let pipe = (key & !(LEAN_PIPE | LEAN_GLASS_PIPE)) as usize;
+    let lean = if key & LEAN_GLASS_PIPE != 0 {
+        pp.lean_glass_pipelines.as_ref().and_then(|l| l[pipe].as_ref())
+    } else if key & LEAN_PIPE != 0 {
+        pp.lean_pipelines.as_ref().map(|l| &l[pipe])
+    } else {
+        None
+    };
+    lean.unwrap_or(&pp.pipelines[pipe])
+}
+
+/// The bits of a main-pass pipeline key that pick the lean pipelines (`override LEAN`) and
+/// the lean ones that keep the glass (`LEAN_GLASS`).
+pub(crate) const LEAN_PIPE: u8 = 0x80;
+pub(crate) const LEAN_GLASS_PIPE: u8 = 0x40;
+
+/// Which lean pipelines a material may be drawn with (`material_lean`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Lean {
+    No,
+    /// the `LEAN` and `LEAN_GLASS` pipelines: may be glass (blended)
+    Glass,
+    /// the `LEAN` pipelines: opaque, alpha-tested or terrain - never glass
+    Plain,
+}
+
+/// The main pass's pipeline key of a batch: its `pipe`, with a lean bit when the frame is
+/// dry (`lean_frame`), the pass has those pipelines and the material needs no more.
+pub(crate) fn main_key(pp: &PassPipelines, lean_frame: bool) -> impl Fn(&Batch) -> u8 + '_ {
+    let plain = lean_frame && pp.lean_pipelines.is_some();
+    let glass = lean_frame && pp.lean_glass_pipelines.is_some();
+    move |b: &Batch| {
+        b.pipe
+            | match b.lean {
+                Lean::Plain if plain => LEAN_PIPE,
+                Lean::Glass | Lean::Plain if glass && lean_glass_kind(b.pipe / 4) => {
+                    LEAN_GLASS_PIPE
+                }
+                _ => 0,
+            }
     }
 }
 
-/// The bit of a main-pass pipeline key that picks the lean pipelines (`override LEAN`).
-pub(crate) const LEAN_PIPE: u8 = 0x80;
-
-/// The main pass's pipeline key of a batch: its `pipe`, with `LEAN_PIPE` when the frame
-/// is dry (`lean_frame`), the pass has lean pipelines and the material needs no more.
-pub(crate) fn main_key(pp: &PassPipelines, lean_frame: bool) -> impl Fn(&Batch) -> u8 + '_ {
-    let lean = lean_frame && pp.lean_pipelines.is_some();
-    move |b: &Batch| b.pipe | if lean && b.lean { LEAN_PIPE } else { 0 }
+/// The pipeline kinds that have `LEAN_GLASS` pipelines: the blended ones.
+pub(crate) fn lean_glass_kind(kind: u8) -> bool {
+    matches!(kind, PIPE_BLEND | PIPE_BLEND_NO_WRITE)
 }
 
-/// Does a material take none of the branches the `LEAN` scene pipelines leave out (see
-/// `override LEAN` in the scene shader)? Opaque, alpha-tested or terrain, not the map's
-/// water, no bump or PBR maps, no LED panel, no pane's film, no glow, not a season's snow
-/// pane. (Glass is blended and never terrain: it is never lean.)
-pub(crate) fn material_lean(m: &MaterialUniform) -> bool {
+/// Which of the branches the `LEAN` scene pipelines leave out (see `override LEAN` in the
+/// scene shader) a material may take: none, when it is not the map's water, has no bump or
+/// PBR maps, is no LED panel, no pane's film, no glow and not a season's snow pane; and
+/// glass only when it is blended and no terrain.
+pub(crate) fn material_lean(m: &MaterialUniform) -> Lean {
     let terrain = m.extra[0] > 0.5;
-    (m.params[0] < 1.5 || terrain)
-        && m.ambient[3] <= 1.5
+    let plain_branches = m.ambient[3] <= 1.5
         && m.bump[1] <= 0.5
         && m.pbr.iter().all(|&v| v <= 0.5)
         && m.emissive[3] >= -1.5
         && m.emissive[3] <= 1.5
         && m.glow[0] <= 0.0
-        && !(m.wipe_bounds[2] != 0.0 && m.wipe_bounds[3] < 0.0)
+        && !(m.wipe_bounds[2] != 0.0 && m.wipe_bounds[3] < 0.0);
+    if !plain_branches {
+        Lean::No
+    } else if m.params[0] < 1.5 || terrain {
+        Lean::Plain
+    } else {
+        Lean::Glass
+    }
 }
 
 /// Rasterizer state of a scene pipeline. The content meshes keep Direct3D's winding: the
