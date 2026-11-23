@@ -183,7 +183,14 @@ pub(crate) fn encode_batches_filtered<'a, E: mx::RenderEncoder>(
     include: impl Fn(&Batch) -> bool,
     pipeline: impl Fn(u8) -> &'a mx::RenderPipeline,
 ) {
-    encode_batches_keyed(pass, scene, batches, include, |b| b.pipe, pipeline);
+    encode_batches_keyed(
+        pass,
+        scene,
+        batches,
+        include,
+        |b| b.pipe as u16,
+        |k| pipeline(k as u8),
+    );
 }
 
 /// The main pass's batches: each with its pipeline, the lean one where it may (`main_key`).
@@ -210,10 +217,10 @@ pub(crate) fn encode_batches_keyed<'a, E: mx::RenderEncoder>(
     scene: &'a Scene,
     batches: &[Batch],
     include: impl Fn(&Batch) -> bool,
-    key: impl Fn(&Batch) -> u8,
-    pipeline: impl Fn(u8) -> &'a mx::RenderPipeline,
+    key: impl Fn(&Batch) -> u16,
+    pipeline: impl Fn(u16) -> &'a mx::RenderPipeline,
 ) {
-    let (mut pipe, mut mesh, mut material) = (u8::MAX, u32::MAX, u32::MAX);
+    let (mut pipe, mut mesh, mut material) = (u16::MAX, u32::MAX, u32::MAX);
     pass.set_immediates(FrameHeap::OFFSET, bytemuck::bytes_of(&scene.frame_heap));
     // (the materials' values: the scene's table, its rows at each draw's offset)
     pass.set_bind_group(1, &scene.material_table.group);
@@ -408,16 +415,16 @@ pub(crate) fn pipe_code(kind: u8, cull: bool, surface: bool) -> u8 {
     kind * 4 + (cull as u8) * 2 + surface as u8
 }
 
-/// The pipeline of a main-pass batch (`DrawItem::pipe`), a lean one with `LEAN_PIPE` or
-/// `LEAN_GLASS_PIPE` set, of a dry frame with `DRY_PIPE` too (see `main_key`).
-pub(crate) fn main_pipeline(pp: &PassPipelines, key: u8) -> &mx::RenderPipeline {
-    let pipe = (key & !(LEAN_PIPE | LEAN_GLASS_PIPE | DRY_PIPE)) as usize;
-    let dry = (key & DRY_PIPE != 0) as usize;
+/// The pipeline of a main-pass batch (`DrawItem::pipe`) by its key (`main_key`): a lean
+/// one with `LEAN_PIPE` or `LEAN_GLASS_PIPE` set, of the frame's weather.
+pub(crate) fn main_pipeline(pp: &PassPipelines, key: u16) -> &mx::RenderPipeline {
+    let pipe = (key & 0xff) as usize;
+    let weather = ((key & WEATHER_PIPE) >> WEATHER_SHIFT) as usize;
     let lean = pp.lean.as_ref().and_then(|l| {
         if key & LEAN_GLASS_PIPE != 0 {
-            l.glass[dry][pipe].get()
+            l.glass[weather][pipe].get()
         } else if key & LEAN_PIPE != 0 {
-            l.plain[dry][pipe].get()
+            l.plain[weather][pipe].get()
         } else {
             None
         }
@@ -425,34 +432,41 @@ pub(crate) fn main_pipeline(pp: &PassPipelines, key: u8) -> &mx::RenderPipeline 
     lean.unwrap_or(&pp.pipelines[pipe])
 }
 
-/// The bits of a main-pass pipeline key that pick the lean pipelines (`override LEAN`), the
-/// lean ones that keep the glass (`LEAN_GLASS`), and those of a dry frame (`DRY`).
-pub(crate) const LEAN_PIPE: u8 = 0x80;
-pub(crate) const LEAN_GLASS_PIPE: u8 = 0x40;
-pub(crate) const DRY_PIPE: u8 = 0x20;
+/// The bits of a main-pass pipeline key above the batch's `pipe` that pick the lean pipelines
+/// (`override LEAN`), the lean ones that keep the glass (`LEAN_GLASS`), and the frame's
+/// weather (`FrameLean::weather`).
+pub(crate) const LEAN_PIPE: u16 = 0x100;
+pub(crate) const LEAN_GLASS_PIPE: u16 = 0x200;
+const WEATHER_SHIFT: u16 = 10;
+const WEATHER_PIPE: u16 = 3 << WEATHER_SHIFT;
 
-/// The main pass's lean pipelines (`override LEAN`), of a wet frame and a dry one (`DRY`):
-/// for plain materials, and for blended ones that may be glass (`lean_glass_kind`). A lean
+/// The weathers the lean pipelines come in (`override WET`, `SNOW`): dry, wet (rain), snow,
+/// both. Apart, because Apple's shader compiler gave up on the lean variants with the wet
+/// road and the snow at once: those of a rainy day alone compile.
+pub(crate) const WEATHERS: usize = 4;
+
+/// The main pass's lean pipelines (`override LEAN`), one set a weather (`WEATHERS`): for
+/// plain materials, and for blended ones that may be glass (`lean_glass_kind`). A lean
 /// pipeline is a faster way to the same picture, made in the background
 /// (`PassKit::lean_in_background`): until it is there, or where the driver fails on it, the
 /// full one draws in its place.
 pub(crate) struct LeanPipelines {
-    pub(crate) plain: [Vec<std::sync::OnceLock<mx::RenderPipeline>>; 2],
-    pub(crate) glass: [Vec<std::sync::OnceLock<mx::RenderPipeline>>; 2],
+    pub(crate) plain: [Vec<std::sync::OnceLock<mx::RenderPipeline>>; WEATHERS],
+    pub(crate) glass: [Vec<std::sync::OnceLock<mx::RenderPipeline>>; WEATHERS],
     /// how many are there (the main pass's bundles are recorded again when it changes)
     pub(crate) ready: std::sync::atomic::AtomicU32,
 }
 
 impl Default for LeanPipelines {
     fn default() -> Self {
-        let set = || {
+        let set = |_| {
             (0..crate::pipelines::scene::SceneBase::PIPELINES)
                 .map(|_| Default::default())
                 .collect()
         };
         LeanPipelines {
-            plain: [set(), set()],
-            glass: [set(), set()],
+            plain: std::array::from_fn(set),
+            glass: std::array::from_fn(set),
             ready: Default::default(),
         }
     }
@@ -462,12 +476,12 @@ impl LeanPipelines {
     pub(crate) fn slot(
         &self,
         lean: Lean,
-        dry: bool,
+        weather: usize,
         pipe: usize,
     ) -> &std::sync::OnceLock<mx::RenderPipeline> {
         match lean {
-            Lean::Glass => &self.glass[dry as usize][pipe],
-            _ => &self.plain[dry as usize][pipe],
+            Lean::Glass => &self.glass[weather][pipe],
+            _ => &self.plain[weather][pipe],
         }
     }
 
@@ -488,25 +502,36 @@ pub(crate) enum Lean {
 
 /// The main pass's pipeline key of a batch: its `pipe`, with a lean bit when the frame may
 /// (`FrameCtx::lean`), the pass has those pipelines and the material needs no more, and the
-/// dry bit with it on a dry frame.
-pub(crate) fn main_key(pp: &PassPipelines, frame: FrameLean) -> impl Fn(&Batch) -> u8 + '_ {
+/// frame's weather with it.
+pub(crate) fn main_key(pp: &PassPipelines, frame: FrameLean) -> impl Fn(&Batch) -> u16 + '_ {
     let lean = frame.lean && pp.lean.is_some();
-    let dry = if frame.dry { DRY_PIPE } else { 0 };
+    let weather = (frame.weather() as u16) << WEATHER_SHIFT;
     move |b: &Batch| {
-        b.pipe
+        b.pipe as u16
             | match b.lean {
-                Lean::Plain if lean => LEAN_PIPE | dry,
-                Lean::Glass if lean && lean_glass_kind(b.pipe / 4) => LEAN_GLASS_PIPE | dry,
+                Lean::Plain if lean => LEAN_PIPE | weather,
+                Lean::Glass if lean && lean_glass_kind(b.pipe / 4) => LEAN_GLASS_PIPE | weather,
                 _ => 0,
             }
     }
 }
 
-/// What a frame allows the lean pipelines (`main_key`): at all (no debug view), and the dry ones.
+/// What a frame allows the lean pipelines (`main_key`): at all (no debug view), and with the
+/// branches of which weather.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub(crate) struct FrameLean {
     pub(crate) lean: bool,
-    pub(crate) dry: bool,
+    /// a wet road or wet surfaces
+    pub(crate) wet: bool,
+    /// snow falling or lying, on the roads or the vehicles
+    pub(crate) snow: bool,
+}
+
+impl FrameLean {
+    /// The lean pipelines' set (`LeanPipelines`) of this weather.
+    pub(crate) fn weather(&self) -> usize {
+        self.wet as usize | (self.snow as usize) << 1
+    }
 }
 
 /// The pipeline kinds that have `LEAN_GLASS` pipelines: the blended ones.

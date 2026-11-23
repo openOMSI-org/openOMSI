@@ -90,14 +90,14 @@ impl PassKit<'_> {
             return None;
         }
         let lean = Arc::new(LeanPipelines::default());
-        // (plain dry first: a dry day's picture is the commonest; then the glass, then wet)
-        let mut todo: Vec<(usize, Lean, bool)> = Vec::new();
-        for dry in [true, false] {
-            todo.extend((0..SceneBase::PIPELINES).map(|i| (i, Lean::Plain, dry)));
+        // (a dry day's first, the commonest; then rain, snow, and both)
+        let mut todo: Vec<(usize, Lean, usize)> = Vec::new();
+        for weather in 0..WEATHERS {
+            todo.extend((0..SceneBase::PIPELINES).map(|i| (i, Lean::Plain, weather)));
             todo.extend(
                 (0..SceneBase::PIPELINES)
                     .filter(|i| lean_glass_kind((i / 4) as u8))
-                    .map(|i| (i, Lean::Glass, dry)),
+                    .map(|i| (i, Lean::Glass, weather)),
             );
         }
         let todo = Arc::new(std::sync::Mutex::new(todo.into_iter()));
@@ -114,16 +114,20 @@ impl PassKit<'_> {
                     crate::with_auxiliary_context(context, || {
                         loop {
                             let next = todo.lock().unwrap_or_else(|e| e.into_inner()).next();
-                            let Some((i, kind, dry)) = next else { break };
+                            let Some((i, kind, weather)) = next else {
+                                break;
+                            };
                             // (none while the renderer is gone: nothing left to draw with them)
                             if Arc::strong_count(&lean) == 1 {
                                 break;
                             }
                             let made = optional_pipeline(&device, "a lean scene pipeline", || {
-                                scene.pipeline_at_for(&device, f, &fs, msaa, i, surfaces, kind, dry)
+                                scene.pipeline_at_for(
+                                    &device, f, &fs, msaa, i, surfaces, kind, weather,
+                                )
                             });
                             if let Some(p) = made {
-                                let _ = lean.slot(kind, dry, i).set(p);
+                                let _ = lean.slot(kind, weather, i).set(p);
                                 lean.ready
                                     .fetch_add(1, std::sync::atomic::Ordering::Release);
                             }
@@ -153,7 +157,7 @@ impl PassKit<'_> {
                         i,
                         surfaces,
                         Lean::No,
-                        false,
+                        0,
                     ))
                 }));
             }

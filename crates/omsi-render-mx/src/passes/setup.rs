@@ -368,7 +368,8 @@ impl Renderer {
         }
         let lean = FrameLean {
             lean: !env.no_lean && crate::lighting::debug_view() == 0.0,
-            dry: lighting.wetness <= 0.0 && lighting.snow <= 0.0 && lighting.road_snow.is_none(),
+            wet: lighting.wetness > 0.0,
+            snow: lighting.snow > 0.0 || lighting.road_snow.is_some(),
         };
         FrameCtx {
             env,

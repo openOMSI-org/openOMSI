@@ -370,7 +370,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     let wet_road = camera.shadow.w * material.params2.z * outside * dry_snow;
     let wet_any = camera.shadow.w * outside * select(0.35, 0.0, glass) * dry_snow;
     var puddle = 0.0;
-    if (!DRY && wet_road > 0.0) {
+    if (WET && wet_road > 0.0) {
         albedo = albedo * mix(1.0, 0.5, wet_road);
         ambient_albedo = ambient_albedo * mix(1.0, 0.5, wet_road);
         rough = mix(rough, 0.12, wet_road);
@@ -407,7 +407,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             f0 = mix(f0, vec3<f32>(enh.debug.y), puddle);
             n = normalize(mix(n, geo_n, puddle) + vec3<f32>(ripple.xy, 0.0));
         }
-    } else if (!DRY && wet_any > 0.0) {
+    } else if (WET && wet_any > 0.0) {
         // (a body's paint wears a film of water as smooth as glass: the street and the sky
         // mirror in a wet bus as sharply as in its windows)
         // (Lagarde's wet surfaces: the water stands on what faces up and runs off a wall,
@@ -438,25 +438,25 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // a carriageway under snow that builds up: its own cover, ruts and tracks (road_snow.wgsl)
     let carriageway = !terrain && material.params2.z > 0.0 && road_snow_dynamic();
     var rs = vec3<f32>(0.0);
-    if (!DRY && carriageway && snow_ok > 0.0) {
+    if (SNOW && carriageway && snow_ok > 0.0) {
         rs = road_snow(in.world);
     }
     // a vehicle's part: the snow its own roof has gathered, where that is kept (another
     // player's bus keeps the weather's)
     let vehicle = vehicle_snow_kept(in.params2.w);
     var on_vehicle = 0.0;
-    if (!DRY && vehicle && snow_ok > 0.0) {
+    if (SNOW && vehicle && snow_ok > 0.0) {
         on_vehicle = vehicle_snow(in.params2.w, in.local);
     }
     let snow = select(select(enh.weather.y, rs.x, carriageway), on_vehicle, vehicle) * snow_ok;
-    if (!DRY && rs.y > 0.0) {
+    if (SNOW && rs.y > 0.0) {
         // the slush in the ruts and the tracks: wet and grey, darker than the snow, glossy
         let slush = rs.y * snow_ok;
         albedo = mix(albedo, albedo * 0.55 + vec3<f32>(0.08), slush);
         ambient_albedo = mix(ambient_albedo, ambient_albedo * 0.55 + vec3<f32>(0.08), slush);
         rough = mix(rough, 0.35, slush);
     }
-    if (!DRY && snow > 0.0) {
+    if (SNOW && snow > 0.0) {
         let up = clamp(n.z, 0.0, 1.0);
         let ground = select(0.0, 1.0, terrain || material.params2.z > 0.0);
         // (a road kept clear - "snow on road" off - stays asphalt: whitened, it turned the

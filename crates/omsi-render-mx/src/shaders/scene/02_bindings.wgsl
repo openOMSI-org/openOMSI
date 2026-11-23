@@ -16,8 +16,10 @@ override DETAILED_TREES: bool = false;
 override LEAN: bool = false;
 // With LEAN: the glass's branch kept (a lean blended draw: a window).
 override LEAN_GLASS: bool = false;
-// With LEAN: a dry frame's - no wet road or puddles, no snow (`FrameCtx::dry_frame`).
-override DRY: bool = false;
+// The weather's branches (`FrameLean::weather`): the wet road and its puddles, and the snow.
+// Lean pipelines leave out what the frame's weather does not need.
+override WET: bool = true;
+override SNOW: bool = true;
 @group(0) @binding(5) var t_shadow: texture_depth_2d;
 @group(0) @binding(6) var s_shadow: sampler_comparison;
 @group(0) @binding(7) var t_shadow_far: texture_depth_2d;
