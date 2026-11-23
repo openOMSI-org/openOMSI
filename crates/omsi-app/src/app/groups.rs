@@ -452,6 +452,8 @@ pub(crate) struct MenuState {
     pub(crate) online_weather: std::cell::OnceCell<Vec<(String, String)>>,
     /// (manufacturer, type) of each vehicle of `vehicle_list`, by its path.
     pub(crate) vehicle_meta: std::collections::HashMap<String, (String, String)>,
+    /// (description, standard paint's name) of each vehicle of `vehicle_list`, by its path.
+    pub(crate) vehicle_about: std::collections::HashMap<String, (String, String)>,
     pub(crate) hud: Option<hud::Hud>,
     /// The route navigator (ETS2-style map in a corner).
     pub(crate) navigator: Option<navigator::Navigator>,

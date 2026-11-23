@@ -6,26 +6,49 @@ use super::*;
 fn quality_presets_set_the_mode_and_keep_the_rest() {
     for start in ["vanilla", "vanilla_plus", "enhanced", "enhanced_plus"] {
         for (_, preset) in graphics_presets() {
-            let mut v = settings_from_text(Some(&format!("graphics={start}\ngraphics_api=gl\nlanguage=PTB\nai_unsched_factor=25\n")));
+            let mut v = settings_from_text(Some(&format!(
+                "graphics={start}\ngraphics_api=gl\nlanguage=PTB\nai_unsched_factor=25\n"
+            )));
             apply_graphics_profile(&preset, &mut v);
             let saved = settings_from_text(Some(&settings_to_text(&v, None)));
             assert_eq!(saved["graphics_api"], "gl");
             assert_eq!(saved["language"], "PTB");
             assert_eq!(saved["ai_unsched_factor"], 25);
             for (key, x) in preset.as_object().unwrap() {
-                assert_eq!(saved[key.as_str()].to_string().trim_matches('"'), x.to_string().trim_matches('"'), "{start}: {key}");
+                assert_eq!(
+                    saved[key.as_str()].to_string().trim_matches('"'),
+                    x.to_string().trim_matches('"'),
+                    "{start}: {key}"
+                );
             }
         }
     }
-    let modes: Vec<&str> = graphics_presets().iter().map(|(_, p)| effective_mode(p)).collect();
-    assert_eq!(modes, ["vanilla", "vanilla_plus", "enhanced", "enhanced", "enhanced", "enhanced_plus"]);
+    let modes: Vec<&str> = graphics_presets()
+        .iter()
+        .map(|(_, p)| effective_mode(p))
+        .collect();
+    assert_eq!(
+        modes,
+        [
+            "vanilla",
+            "vanilla_plus",
+            "enhanced",
+            "enhanced",
+            "enhanced",
+            "enhanced_plus"
+        ]
+    );
     let names: Vec<&str> = graphics_presets().iter().map(|(n, _)| *n).collect();
     assert_eq!(names, ["Low", "Medium", "High", "Extra", "Max", "Ultra"]);
     // Medium is what the game starts with
     let defaults = settings_from_text(None);
     let medium = &graphics_presets()[1].1;
     for (k, x) in medium.as_object().unwrap() {
-        assert_eq!(defaults[k.as_str()].to_string().trim_matches('"'), x.to_string().trim_matches('"'), "{k}");
+        assert_eq!(
+            defaults[k.as_str()].to_string().trim_matches('"'),
+            x.to_string().trim_matches('"'),
+            "{k}"
+        );
     }
 }
 
@@ -37,13 +60,44 @@ fn the_presets_rise_in_steps() {
     let p = graphics_presets();
     for w in p.windows(2) {
         let (a, b) = (&w[0].1, &w[1].1);
-        assert!(rank(b["light_shadows"].as_str().unwrap(), &["off", "street", "all"]) >= rank(a["light_shadows"].as_str().unwrap(), &["off", "street", "all"]));
+        assert!(
+            rank(
+                b["light_shadows"].as_str().unwrap(),
+                &["off", "street", "all"]
+            ) >= rank(
+                a["light_shadows"].as_str().unwrap(),
+                &["off", "street", "all"]
+            )
+        );
         assert!(b["shadow_size"].as_i64() >= a["shadow_size"].as_i64());
         assert!(b["anisotropy"].as_i64() >= a["anisotropy"].as_i64());
         assert!(b["ray_tracing"].as_bool() >= a["ray_tracing"].as_bool());
     }
     let ultra = &p[5].1;
-    assert_eq!((&ultra["ray_tracing"], &ultra["light_shadows"], &ultra["cloud_shadows"], &ultra["light_glow"], &ultra["puddles"], &ultra["street_light"]), (&json!(true), &json!("all"), &json!(true), &json!(true), &json!("high"), &json!("on")));
+    assert_eq!(
+        (
+            &ultra["ray_tracing"],
+            &ultra["light_shadows"],
+            &ultra["cloud_shadows"],
+            &ultra["light_glow"],
+            &ultra["puddles"],
+            &ultra["street_light"]
+        ),
+        (
+            &json!(true),
+            &json!("all"),
+            &json!(true),
+            &json!(true),
+            &json!("high"),
+            &json!("on")
+        )
+    );
+    // the volumetric fog is on in every preset (the Vanilla modes draw none), as it is by default
+    assert!(
+        p.iter()
+            .all(|(_, preset)| preset["volumetric_fog"] == json!(true)),
+        "{p:?}"
+    );
     for (name, preset) in &p {
         assert!(preset.get("video_memory").is_none(), "{name}");
         assert!(preset.get("cloud_quality").is_none(), "{name}");
@@ -65,16 +119,47 @@ fn low_then_back_to_vanilla_plus_keeps_the_shadows() {
     apply_graphics_profile(low, &mut v);
     assert_eq!(effective_mode(&v), "vanilla");
     let saved = settings_from_text(Some(&settings_to_text(&v, None)));
-    assert_eq!((&saved["shadows"], &saved["ssao"], &saved["detail_textures"], &saved["video_memory"]), (&json!(true), &json!(true), &json!(true), &json!(3000)));
+    assert_eq!(saved["shadow_size"], 512);
+    assert_eq!(saved["view_distance"], "300");
+    assert_eq!(saved["max_obj_dist"], "300");
+    assert_eq!(
+        (
+            &saved["shadows"],
+            &saved["ssao"],
+            &saved["detail_textures"],
+            &saved["video_memory"]
+        ),
+        (&json!(true), &json!(true), &json!(true), &json!(3000))
+    );
     let mut back = saved.clone();
     apply_graphics_profile(&graphics_presets()[1].1, &mut back);
     assert_eq!(effective_mode(&back), "vanilla_plus");
-    assert_eq!((&back["shadows"], &back["ssao"]), (&json!(true), &json!(true)));
+    assert_eq!(
+        (&back["shadows"], &back["ssao"]),
+        (&json!(true), &json!(true))
+    );
     // the options that cost most are off in the defaults and in every preset below Extra
     let defaults = settings_from_text(None);
-    assert_eq!((&defaults["light_glow"], &defaults["cloud_shadows"], &defaults["light_shadows"]), (&json!(false), &json!(false), &json!("off")));
+    assert_eq!(
+        (
+            &defaults["light_glow"],
+            &defaults["cloud_shadows"],
+            &defaults["light_shadows"],
+            &defaults["volumetric_fog"]
+        ),
+        (&json!(false), &json!(false), &json!("off"), &json!(true))
+    );
+    let off = settings_from_text(Some("volumetric_fog=0\n"));
+    assert_eq!(
+        settings_from_text(Some(&settings_to_text(&off, None)))["volumetric_fog"],
+        json!(false)
+    );
     for (name, p) in &graphics_presets()[..3] {
-        assert_eq!((&p["light_glow"], &p["cloud_shadows"]), (&json!(false), &json!(false)), "{name}");
+        assert_eq!(
+            (&p["light_glow"], &p["cloud_shadows"]),
+            (&json!(false), &json!(false)),
+            "{name}"
+        );
     }
 }
 
@@ -83,10 +168,16 @@ fn low_then_back_to_vanilla_plus_keeps_the_shadows() {
 #[test]
 fn enhanced_plus_is_enhanced_with_ray_tracing() {
     let v = settings_from_text(Some("graphics=enhanced_plus\n"));
-    assert_eq!((&v["graphics"], &v["ray_tracing"], &v["enhanced"]), (&json!("enhanced"), &json!(true), &json!(true)));
+    assert_eq!(
+        (&v["graphics"], &v["ray_tracing"], &v["enhanced"]),
+        (&json!("enhanced"), &json!(true), &json!(true))
+    );
     assert_eq!(effective_mode(&v), "enhanced_plus");
     let text = settings_to_text(&v, None);
-    assert!(text.contains("graphics=enhanced\n") && text.contains("ray_tracing=1\n"), "{text}");
+    assert!(
+        text.contains("graphics=enhanced\n") && text.contains("ray_tracing=1\n"),
+        "{text}"
+    );
     let v = settings_from_text(Some("graphics=enhanced\nray_tracing=0\n"));
     assert_eq!(effective_mode(&v), "enhanced");
     // ray tracing without Enhanced draws nothing traced
@@ -98,16 +189,48 @@ fn enhanced_plus_is_enhanced_with_ray_tracing() {
 fn a_phone_starts_from_the_games_phone_defaults() {
     let phone = settings_from_text_on(None, true);
     let saved = settings_from_text_on(Some(&settings_to_text(&phone, None)), false);
-    for (k, x) in [("msaa", json!(2)), ("anisotropy", json!(4)), ("ssao", json!(false)), ("shadow_size", json!(1024)), ("mirror_size", json!(128)), ("max_fps", json!(60)), ("max_obj_dist", json!("900")), ("pax_density", json!(0.7)), ("navigator_corner", json!("top-center"))] {
+    for (k, x) in [
+        ("msaa", json!(2)),
+        ("anisotropy", json!(4)),
+        ("ssao", json!(false)),
+        ("shadow_size", json!(1024)),
+        ("mirror_size", json!(128)),
+        ("max_fps", json!(60)),
+        ("max_obj_dist", json!("900")),
+        ("pax_density", json!(0.7)),
+        ("navigator_corner", json!("top-center")),
+    ] {
         assert_eq!(phone[k], x, "{k}");
         assert_eq!(saved[k], x, "{k}");
     }
     let desktop = settings_from_text_on(None, false);
-    assert_eq!((&desktop["msaa"], &desktop["max_obj_dist"], &desktop["navigator_corner"]), (&json!(4), &json!("auto"), &json!("bottom-left")));
+    assert_eq!(
+        (
+            &desktop["msaa"],
+            &desktop["max_obj_dist"],
+            &desktop["navigator_corner"]
+        ),
+        (&json!(4), &json!("auto"), &json!("bottom-left"))
+    );
     let file = settings_from_text_on(Some("msaa=8\nmax_obj_dist=1500\n"), true);
-    assert_eq!((&file["msaa"], &file["max_obj_dist"], &file["anisotropy"]), (&json!(8), &json!("1500"), &json!(4)));
+    assert_eq!(
+        (&file["msaa"], &file["max_obj_dist"], &file["anisotropy"]),
+        (&json!(8), &json!("1500"), &json!(4))
+    );
     for (k, d) in desktop.as_object().unwrap() {
-        if !["msaa", "anisotropy", "ssao", "shadow_size", "mirror_size", "max_fps", "max_obj_dist", "pax_density", "navigator_corner"].contains(&k.as_str()) {
+        if ![
+            "msaa",
+            "anisotropy",
+            "ssao",
+            "shadow_size",
+            "mirror_size",
+            "max_fps",
+            "max_obj_dist",
+            "pax_density",
+            "navigator_corner",
+        ]
+        .contains(&k.as_str())
+        {
             assert_eq!(&phone[k.as_str()], d, "{k}");
         }
     }
@@ -115,11 +238,21 @@ fn a_phone_starts_from_the_games_phone_defaults() {
 
 #[test]
 fn a_graphics_profile_holds_the_whole_graphics_tab() {
-    for k in ["shadow_blobs", "night_brightness", "gpu_texture_compression"] {
+    for k in [
+        "shadow_blobs",
+        "night_brightness",
+        "gpu_texture_compression",
+    ] {
         assert!(GRAPHICS_PROFILE_KEYS.contains(&k), "{k}");
     }
     let mut mine = settings_from_text(None);
-    for (k, x) in [("shadow_blobs", json!(false)), ("night_brightness", json!(1.5)), ("gpu_texture_compression", json!(false)), ("graphics", json!("enhanced")), ("language", json!("PTB"))] {
+    for (k, x) in [
+        ("shadow_blobs", json!(false)),
+        ("night_brightness", json!(1.5)),
+        ("gpu_texture_compression", json!(false)),
+        ("graphics", json!("enhanced")),
+        ("language", json!("PTB")),
+    ] {
         mine[k] = x;
     }
     let mut profile = serde_json::Map::new();
@@ -129,7 +262,20 @@ fn a_graphics_profile_holds_the_whole_graphics_tab() {
     let mut other = settings_from_text(None);
     apply_graphics_profile(&Value::Object(profile), &mut other);
     let saved = settings_from_text(Some(&settings_to_text(&other, None)));
-    assert_eq!((&saved["shadow_blobs"], &saved["night_brightness"], &saved["gpu_texture_compression"], &saved["graphics"]), (&json!(false), &json!(1.5), &json!(false), &json!("enhanced")));
+    assert_eq!(
+        (
+            &saved["shadow_blobs"],
+            &saved["night_brightness"],
+            &saved["gpu_texture_compression"],
+            &saved["graphics"]
+        ),
+        (
+            &json!(false),
+            &json!(1.5),
+            &json!(false),
+            &json!("enhanced")
+        )
+    );
     assert_eq!(saved["language"], "ENG");
 }
 
@@ -140,7 +286,10 @@ fn puddles_are_saved_and_kept_in_graphics_profiles() {
     assert_eq!(settings_from_text(None)["puddles"], "high");
     for q in ["off", "low", "high"] {
         let v = settings_from_text(Some(&format!("puddles={q}\n")));
-        assert_eq!(settings_from_text(Some(&settings_to_text(&v, None)))["puddles"], q);
+        assert_eq!(
+            settings_from_text(Some(&settings_to_text(&v, None)))["puddles"],
+            q
+        );
     }
     assert_eq!(settings_from_text(Some("puddles=ultra"))["puddles"], "high");
     assert!(GRAPHICS_PROFILE_KEYS.contains(&"puddles"));
@@ -152,9 +301,15 @@ fn cloud_quality_is_saved_and_kept_in_graphics_profiles() {
     assert_eq!(settings_from_text(None)["cloud_quality"], "high");
     for q in ["high", "low"] {
         let v = settings_from_text(Some(&format!("graphics=enhanced\ncloud_quality={q}\n")));
-        assert_eq!(settings_from_text(Some(&settings_to_text(&v, None)))["cloud_quality"], q);
+        assert_eq!(
+            settings_from_text(Some(&settings_to_text(&v, None)))["cloud_quality"],
+            q
+        );
     }
-    assert_eq!(settings_from_text(Some("cloud_quality=auto"))["cloud_quality"], "high");
+    assert_eq!(
+        settings_from_text(Some("cloud_quality=auto"))["cloud_quality"],
+        "high"
+    );
     assert!(GRAPHICS_PROFILE_KEYS.contains(&"cloud_quality"));
 }
 
@@ -203,14 +358,27 @@ fn a_delete_request_needs_a_plain_profile_name() {
 
 #[test]
 fn the_reflections_are_a_strength_and_older_files_read_as_on_or_off() {
-    for (text, x) in [("reflections=1\n", 1.0), ("reflections=0\n", 0.0), ("reflections=true\n", 1.0), ("reflections=0.35\n", 0.35), ("reflections=7\n", 1.0)] {
+    for (text, x) in [
+        ("reflections=1\n", 1.0),
+        ("reflections=0\n", 0.0),
+        ("reflections=true\n", 1.0),
+        ("reflections=0.35\n", 0.35),
+        ("reflections=7\n", 1.0),
+    ] {
         let v = settings_from_text(Some(text));
         assert_eq!(v["reflections"], x, "{text}");
-        assert_eq!(settings_from_text(Some(&settings_to_text(&v, None)))["reflections"], x, "{text}");
+        assert_eq!(
+            settings_from_text(Some(&settings_to_text(&v, None)))["reflections"],
+            x,
+            "{text}"
+        );
     }
     let mut v = settings_from_text(None);
     v["reflections"] = json!(false);
-    assert_eq!(settings_from_text(Some(&settings_to_text(&v, None)))["reflections"], 0.0);
+    assert_eq!(
+        settings_from_text(Some(&settings_to_text(&v, None)))["reflections"],
+        0.0
+    );
 }
 
 /// Expensive transitional lighting and accumulated snow should be opt-in in a new install,
@@ -222,9 +390,14 @@ fn expensive_effects_default_off_and_manual_choices_survive() {
     assert_eq!(defaults["road_snow"], false);
     assert_eq!(graphics_presets()[1].1["light_shadows"], "off");
     for (name, preset) in graphics_presets() {
-        assert!(preset.get("road_snow").is_none(), "{name}: changing presets must not re-enable snow");
+        assert!(
+            preset.get("road_snow").is_none(),
+            "{name}: changing presets must not re-enable snow"
+        );
     }
-    let enabled = settings_from_text(Some("graphics=enhanced\nlight_shadows=street\nroad_snow=1\n"));
+    let enabled = settings_from_text(Some(
+        "graphics=enhanced\nlight_shadows=street\nroad_snow=1\n",
+    ));
     let saved = settings_to_text(&enabled, None);
     let restored = settings_from_text(Some(&saved));
     assert_eq!(restored["light_shadows"], "street");
@@ -248,7 +421,10 @@ fn road_and_traffic_brightness_survive_launcher_roundtrip_and_profiles() {
 }
 
 fn graphics_profile_dir(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("openomsi-gfx-profiles-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "openomsi-gfx-profiles-{tag}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -263,10 +439,15 @@ fn graphics_profiles_are_a_file_each() {
     for name in ["High", "high", "a/b", "a_b"] {
         assert_eq!(save_graphics_profile_in(&dir, name, &mine).unwrap(), name);
     }
-    let files = std::fs::read_dir(graphics_profiles_dir(&dir)).unwrap().count();
+    let files = std::fs::read_dir(graphics_profiles_dir(&dir))
+        .unwrap()
+        .count();
     assert_eq!(files, 4);
     let all = graphics_profiles_in(&dir);
-    assert_eq!(all.keys().map(String::as_str).collect::<Vec<_>>(), ["High", "a/b", "a_b", "high"]);
+    assert_eq!(
+        all.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["High", "a/b", "a_b", "high"]
+    );
     assert_eq!(all["High"], json!({ "graphics": "enhanced", "msaa": 4 }));
     save_graphics_profile_in(&dir, "High", &json!({ "msaa": 8 })).unwrap();
     assert_eq!(graphics_profiles_in(&dir)["High"], json!({ "msaa": 8 }));
@@ -286,9 +467,15 @@ fn a_damaged_graphics_profile_file_costs_only_that_profile() {
     save_graphics_profile_in(&dir, "Low", &json!({ "msaa": 1 })).unwrap();
     save_graphics_profile_in(&dir, "Ultra", &json!({ "msaa": 8 })).unwrap();
     std::fs::write(graphics_profile_file(&dir, "Low"), "{ not json").unwrap();
-    assert_eq!(graphics_profiles_in(&dir).keys().collect::<Vec<_>>(), ["Ultra"]);
+    assert_eq!(
+        graphics_profiles_in(&dir).keys().collect::<Vec<_>>(),
+        ["Ultra"]
+    );
     save_graphics_profile_in(&dir, "Medium", &json!({ "msaa": 4 })).unwrap();
-    assert_eq!(graphics_profiles_in(&dir).keys().collect::<Vec<_>>(), ["Medium", "Ultra"]);
+    assert_eq!(
+        graphics_profiles_in(&dir).keys().collect::<Vec<_>>(),
+        ["Medium", "Ultra"]
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -299,14 +486,21 @@ fn the_single_graphics_profiles_file_is_split_into_files() {
     let dir = graphics_profile_dir("migrate");
     std::fs::write(
         old_graphics_profiles_path(&dir),
-        serde_json::to_string(&json!({ "Cinema": { "msaa": 8, "shadows": true }, "Fast": { "msaa": 1 } })).unwrap(),
+        serde_json::to_string(
+            &json!({ "Cinema": { "msaa": 8, "shadows": true }, "Fast": { "msaa": 1 } }),
+        )
+        .unwrap(),
     )
     .unwrap();
     let all = graphics_profiles_in(&dir);
     assert_eq!(all["Cinema"], json!({ "msaa": 8, "shadows": true }));
     assert_eq!(all["Fast"], json!({ "msaa": 1 }));
     assert!(!old_graphics_profiles_path(&dir).exists());
-    assert!(old_graphics_profiles_path(&dir).with_extension("json.migrated").exists());
+    assert!(
+        old_graphics_profiles_path(&dir)
+            .with_extension("json.migrated")
+            .exists()
+    );
     save_graphics_profile_in(&dir, "Cinema", &json!({ "msaa": 2 })).unwrap();
     assert_eq!(graphics_profiles_in(&dir)["Cinema"], json!({ "msaa": 2 }));
     let bad = graphics_profile_dir("migrate-bad");
@@ -327,7 +521,12 @@ fn a_graphics_profile_copied_under_another_file_name_is_one_profile() {
     assert_eq!(graphics_profiles_in(&dir)["Shared"], json!({ "msaa": 4 }));
     assert!(own.exists() && !copy.exists());
     save_graphics_profile_in(&dir, "Shared", &json!({ "msaa": 8 })).unwrap();
-    assert_eq!(std::fs::read_dir(graphics_profiles_dir(&dir)).unwrap().count(), 1);
+    assert_eq!(
+        std::fs::read_dir(graphics_profiles_dir(&dir))
+            .unwrap()
+            .count(),
+        1
+    );
     std::fs::copy(&own, &copy).unwrap();
     assert_eq!(graphics_profiles_in(&dir)["Shared"], json!({ "msaa": 8 }));
     assert!(copy.exists());

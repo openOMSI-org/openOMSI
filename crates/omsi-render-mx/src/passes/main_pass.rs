@@ -680,7 +680,17 @@ impl Renderer {
             .as_ref()
             .filter(|_| particles && lighting.snowfall > 0.01 && !f.env.no_snowfall)
         {
-            let (counts, mean) = snowfall_flakes(lighting.snowfall);
+            let (mut counts, mean) = snowfall_flakes(lighting.snowfall);
+            // (the enhanced snowfall's flakes are drawn as their shapes, and as many as the
+            // `rain_quality` setting asks for; beyond them its veil)
+            let veil = if f.enhanced {
+                let k = [0.5, 0.75, 1.0][scene.rainfall.quality.min(2) as usize];
+                counts = counts.map(|n| (n as f32 * k) as u32);
+                veil_panels(scene.rainfall.quality)
+            } else {
+                0
+            };
+            let flakes = counts.iter().sum::<u32>();
             let u = SnowUniform {
                 wind: lighting
                     .wind
@@ -689,6 +699,7 @@ impl Renderer {
                 fall: [lighting.snowfall, mean, counts[0] as f32, counts[1] as f32],
                 roof: self.shadows.precip.uniform().0,
                 roof_on: [self.shadows.precip.uniform().1, 0.0, 0.0, 0.0],
+                ext: [flakes as f32, veil as f32, 0.7, f.height as f32],
             };
             self.queue
                 .write_buffer(&self.lights.snow_buf, 0, bytemuck::bytes_of(&u))
@@ -696,7 +707,7 @@ impl Renderer {
             pass.set_pipeline(snow);
             pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
             pass.set_bind_group(1, &self.lights.snow_bind_group);
-            pass.draw(0..6, 0..counts.iter().sum::<u32>());
+            pass.draw(0..6, 0..flakes + veil);
         }
         // the rainfall, as the snowfall (rain.wgsl)
         let rf = scene.rainfall;
@@ -706,6 +717,11 @@ impl Renderer {
             .filter(|_| particles && rf.rate > 0.001 && lighting.snowfall <= 0.01 && !f.env.no_rain)
         {
             let counts = rainfall_drops(rf.rate, rf.quality);
+            let veil = if f.enhanced {
+                veil_panels(rf.quality)
+            } else {
+                0
+            };
             let u = RainUniform {
                 wind: rf
                     .wind
@@ -728,6 +744,13 @@ impl Renderer {
                 ],
                 roof: self.shadows.precip.uniform().0,
                 roof_on: [self.shadows.precip.uniform().1, 0.0, 0.0, 0.0],
+                // (the enhanced rain's far veil after the drops and the splashes)
+                ext: [
+                    counts.iter().sum::<u32>() as f32,
+                    veil as f32,
+                    0.7,
+                    rf.quality.min(2) as f32,
+                ],
             };
             self.queue
                 .write_buffer(&self.lights.rain_buf, 0, bytemuck::bytes_of(&u))
@@ -735,7 +758,7 @@ impl Renderer {
             pass.set_pipeline(rain);
             pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
             pass.set_bind_group(1, &self.lights.rain_bind_group);
-            pass.draw(0..4, 0..counts.iter().sum::<u32>());
+            pass.draw(0..4, 0..counts.iter().sum::<u32>() + veil);
         }
         // light coronas, additive: the world's, then the vehicle the camera is in -
         // drawn over them as Omsi.exe draws it last (see `cab_items`) - then its own

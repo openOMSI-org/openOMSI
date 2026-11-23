@@ -166,7 +166,14 @@ impl VehicleInstance {
         });
         match slot {
             Ok(i) => self.state.vars[i as usize] = v,
-            Err(true) => self.add_var(name, v),
+            Err(true) => {
+                self.add_var(name, v);
+                // a variable only the model names (#3887): its animations move from now on
+                let id = (self.state.vars.len() - 1) as omsi_script::VarId;
+                for a in &mut self.animators {
+                    a.bind_missing(name, id);
+                }
+            }
             Err(false) => return false,
         }
         true
@@ -237,7 +244,10 @@ impl VehicleInstance {
             .run_trigger(&p, name, &mut self.state, &mut self.host);
         if let Some(value) = changer_value(name) {
             let given = &mut self.host.change_coins[coins_before..];
-            let dm_euro_lever = match (name.to_ascii_lowercase().strip_prefix("cashdesk_change_"), given.first().map(|c| c.0)) {
+            let dm_euro_lever = match (
+                name.to_ascii_lowercase().strip_prefix("cashdesk_change_"),
+                given.first().map(|c| c.0),
+            ) {
                 (Some("0050"), Some(2)) => true,
                 (Some("0100"), Some(3)) => true,
                 (Some("0200"), Some(4)) => true,
@@ -252,6 +262,10 @@ impl VehicleInstance {
             }
         }
         fired
+    }
+
+    pub fn has_trigger(&self, name: &str) -> bool {
+        self.ty.program.trigger(name).is_some()
     }
 
     /// Whether the own scripts of coupled part `part` have one of the triggers `names`.
@@ -472,7 +486,6 @@ mod tests {
         assert_eq!(v.host.change_coins.pop(), Some((0, 0.5)));
     }
 }
-
 #[cfg(test)]
 mod turn_tests {
     #[test]

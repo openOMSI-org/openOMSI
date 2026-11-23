@@ -1027,41 +1027,45 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
         }
         ListKind::PlaceType(key) => {
             let all = place_vehicles(app, &tr("Unknown manufacturer"));
-            let mut types: Vec<(String, String)> = all
+            let mine: Vec<(String, String, String)> = all
                 .iter()
                 .filter(|v| v.0 == *key)
-                .map(|v| (v.2.clone(), v.3.clone()))
-                .collect();
-            types.sort_by(|a, b| bus_cmp(&a.0, &b.0).then_with(|| a.1.cmp(&b.1)));
-            // (a type name used twice: with its pack's folder, then with its file)
-            let same = |t: &[(String, String)], n: &str| {
-                t.iter()
-                    .filter(|x| x.0.to_lowercase() == n.to_lowercase())
-                    .count()
-            };
-            let counts: Vec<usize> = types.iter().map(|t| same(&types, &t.0)).collect();
-            for (t, n) in types.iter().zip(counts) {
-                let mut label = t.0.clone();
-                if n > 1 {
-                    let parts: Vec<&str> = t.1.split('/').collect();
-                    let folder = parts.get(1).copied().unwrap_or_default();
-                    let file = parts
-                        .last()
-                        .copied()
-                        .unwrap_or_default()
-                        .rsplit_once('.')
-                        .map(|x| x.0)
+                .map(|v| {
+                    let name = app
+                        .menus
+                        .vehicle_list
+                        .iter()
+                        .find(|x| x.1 == v.3)
+                        .map(|x| x.0.clone())
+                        .unwrap_or_else(|| v.2.clone());
+                    let ty = app
+                        .menus
+                        .vehicle_meta
+                        .get(&v.3)
+                        .map(|m| m.1.clone())
                         .unwrap_or_default();
-                    label = format!("{label}  |  {}  |  {}", bus_label(folder), bus_label(file));
-                }
-                out.push((label, format!("bus {}", t.1)));
-            }
+                    (name, ty, v.3.clone())
+                })
+                .collect();
+            let query = search_query(app);
+            out.extend(place_names::rows(
+                place_names::families(&mine),
+                |label, action| search_matches(label, action, query),
+            ));
         }
         ListKind::PlaceLivery(bus) => {
             out.push((tr("Random livery"), "livery ".into()));
             // the model's own textures, without a paint scheme: since "Random livery" draws
             // among the schemes (0.2.46), the bus's main livery could not be had (#2598)
-            out.push((tr("Original paint"), format!("livery {ORIGINAL_PAINT}")));
+            // (named as the bus's [friendlyname] names its standard paint, as the launcher does)
+            let standard = app
+                .menus
+                .vehicle_about
+                .get(bus)
+                .map(|a| a.1.clone())
+                .filter(|p| !p.is_empty() && p.as_str() != "<nouse>")
+                .unwrap_or_else(|| tr("Original paint"));
+            out.push((standard, format!("livery {ORIGINAL_PAINT}")));
             let mut names = bus_def(app, bus).map(|d| liveries(&d)).unwrap_or_default();
             // (alphabetical)
             names.sort_by_key(|n| n.to_lowercase());
@@ -1172,17 +1176,20 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
     }
     if searchable(kind) {
         let query = search_query(app);
-        out.retain(|(label, action)| {
-            search_matches(
-                label,
-                if matches!(kind, ListKind::Streets) {
-                    ""
-                } else {
-                    action
-                },
-                query,
-            )
-        });
+        // (a model's versions are searched together with its name, `place_names::rows`)
+        if !matches!(kind, ListKind::PlaceType(_)) {
+            out.retain(|(label, action)| {
+                search_matches(
+                    label,
+                    if matches!(kind, ListKind::Streets) {
+                        ""
+                    } else {
+                        action
+                    },
+                    query,
+                )
+            });
+        }
         let label = if app.menus.menu_edit_search {
             format!(
                 "{}: {query}_  ({})",
@@ -1942,6 +1949,7 @@ mod graphics;
 mod liveries;
 mod menu_pages;
 mod options;
+pub(crate) mod place_names;
 mod rows;
 mod streets;
 pub(crate) use dropdowns::*;
