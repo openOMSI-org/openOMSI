@@ -285,6 +285,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_LIGHT_GRID_SQUARES` | bool | off | frame | render, render-mx | A light goes into every cell of the light grid's square round its range, the corners its range misses too (A/B). |
 | `OMSI_MAIN_SPLIT` | bool | off | frame | render, render-mx | Split the main pass's bundles in two (encoded apart, the second part loads what the first stored). |
 | `OMSI_MIRROR_ENHANCED` | bool | off | frame | app, app-mx, render, render-mx | Draw the mirrors with the enhanced shading again. |
+| `OMSI_MX` | text | settings | once | app | mX Graphics for this run: on (1, true) starts the game on mX on any system - its DirectX 12, Vulkan and OpenGL have not drawn the game on a player's card yet; off (0, false) keeps a Mac on wgpu whatever the setting says. |
 | `OMSI_NOZCHECK_BIAS` | bool | off | use | scene, scene-mx | The old reading of [matl_noZcheck] (A/B). |
 | `OMSI_NO_ANIMPARENT` | bool | off | use | sim | Every mesh animated on its own, without [animparent] (A/B). |
 | `OMSI_NO_AO` | bool | off | frame | render, render-mx | No ambient occlusion pass. |

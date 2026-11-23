@@ -229,6 +229,7 @@ mod tests {
     /// in the bus's tilted frame (#3958),
     /// and the rain and the snow on the panes shared with the classic pictures, the cabin's
     /// reflection probe gone, the traffic's wet windows and the windows lit in a downpour.
+    /// And #4153: the drops on the panes read as drops again, prefiltered under a pixel.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
@@ -237,10 +238,10 @@ mod tests {
             super::SCENE.replace("\r\n", "\n"),
             super::ENHANCED.replace("\r\n", "\n"),
         );
-        assert_eq!((scene.len(), fnv1a(&scene)), (150809, 14772275079590108979));
+        assert_eq!((scene.len(), fnv1a(&scene)), (152041, 16478430361663833047));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),
-            (120282, 14685988075852730076)
+            (120309, 14136318524526509786)
         );
     }
 }

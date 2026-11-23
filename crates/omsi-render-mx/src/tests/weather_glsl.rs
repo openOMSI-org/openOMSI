@@ -66,6 +66,7 @@ fn the_rain_and_snow_shaders_translate_to_glsl_with_a_float_roof_map() {
         rain_shader_source(),
         snow_shader_source(),
         lean_rain(rain_shader_source()),
+        lean_snow(snow_shader_source()),
     ]
     .map(depth)
     {
