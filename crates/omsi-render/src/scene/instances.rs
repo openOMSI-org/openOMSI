@@ -122,17 +122,29 @@ impl Renderer {
         let draw_order = scene.next_instance_order;
         scene.next_instance_order += 1;
         let key = crate::frame_plan::origin_key(origin);
-        let (slot_levels, slot_depth_caps) = scene.object_run.levels_with_caps(
-            key,
-            draw_order,
-            mesh,
-            transform,
-            &scene.meshes[mesh].flats,
-            slots,
-        );
+        let alpha: Vec<_> = materials
+            .iter()
+            .map(|&id| {
+                scene
+                    .materials
+                    .get(id)
+                    .map_or(crate::AlphaMode::Opaque, |m| m.alpha)
+            })
+            .collect();
+        let (slot_levels, slot_depth_caps, slot_depth_floors) =
+            scene.object_run.levels_for_materials(
+                key,
+                draw_order,
+                mesh,
+                transform,
+                &scene.meshes[mesh].flats,
+                slots,
+                &alpha,
+            );
         scene.instances.push(Instance {
             draw_order,
             slot_levels,
+            slot_depth_floors,
             slot_depth_caps,
             mesh,
             transform,
@@ -192,7 +204,7 @@ impl Renderer {
         let draw_order = scene.next_instance_order;
         scene.next_instance_order += 1;
         let key = crate::frame_plan::origin_key(origin);
-        let (slot_levels, slot_depth_caps) = scene.object_run.levels_with_caps(
+        let (slot_levels, slot_depth_caps, slot_depth_floors) = scene.object_run.levels_with_caps(
             key,
             draw_order,
             mesh,
@@ -203,6 +215,7 @@ impl Renderer {
         scene.instances.push(Instance {
             draw_order,
             slot_levels,
+            slot_depth_floors,
             slot_depth_caps,
             mesh,
             transform,
@@ -375,9 +388,11 @@ impl Renderer {
     ) {
         if let Some(i) = scene.instances.get_mut(instance) {
             if let Some(current) = i.slot_levels.get_mut(slot) {
-                let max_level = max_level.min(crate::scene::overlay::MAX_LEVEL);
-                if *current > max_level {
-                    *current = max_level;
+                let floor = i.slot_depth_floors.get(slot).copied().unwrap_or(0);
+                let limited =
+                    crate::scene::overlay::limited_depth_level(*current, floor, max_level);
+                if *current != limited {
+                    *current = limited;
                     Self::mark_changed(scene, instance);
                 }
             }

@@ -54,6 +54,7 @@ struct DepthCap {
 pub(crate) struct DepthCaps {
     pub(crate) positive: f32,
     pub(crate) negative: f32,
+    pub(crate) shared: bool,
 }
 
 impl Default for DepthCaps {
@@ -61,6 +62,7 @@ impl Default for DepthCaps {
         Self {
             positive: f32::INFINITY,
             negative: f32::INFINITY,
+            shared: false,
         }
     }
 }
@@ -199,7 +201,17 @@ pub(crate) struct ObjectRun {
     by_normal: HashMap<(i32, i32, i32), Vec<usize>>,
     model: Option<u64>,
     added: usize,
-    models: HashMap<u64, Vec<(usize, Vec<u8>, Vec<Arc<[DepthCap]>>)>>,
+    models: HashMap<u64, Vec<CachedDepth>>,
+}
+
+#[derive(Clone)]
+struct CachedDepth {
+    mesh: usize,
+    levels: Vec<u8>,
+    floors: Vec<u8>,
+    caps: Vec<Arc<[DepthCap]>>,
+    limits: Vec<DepthCaps>,
+    alpha: Vec<crate::AlphaMode>,
 }
 
 /// Cells of 1/30, so neighbouring cells cover the normals accepted by `facing`.
@@ -414,7 +426,20 @@ impl ObjectRun {
         transform: Mat4,
         flats: &[Flat],
         slots: usize,
-    ) -> (Vec<u8>, Vec<DepthCaps>) {
+    ) -> (Vec<u8>, Vec<DepthCaps>, Vec<u8>) {
+        self.levels_for_materials(origin, draw_order, mesh, transform, flats, slots, &[])
+    }
+
+    pub(crate) fn levels_for_materials(
+        &mut self,
+        origin: [u64; 3],
+        draw_order: u64,
+        mesh: usize,
+        transform: Mat4,
+        flats: &[Flat],
+        slots: usize,
+        alpha: &[crate::AlphaMode],
+    ) -> (Vec<u8>, Vec<DepthCaps>, Vec<u8>) {
         if !self.fresh && (origin != self.origin || draw_order != self.next) {
             self.open = false;
             self.model = None;
@@ -427,16 +452,35 @@ impl ObjectRun {
         self.origin = origin;
         self.next = draw_order + 1;
         if !self.open {
-            return (vec![0; slots], vec![DepthCaps::default(); slots]);
+            return (
+                vec![0; slots],
+                vec![DepthCaps::default(); slots],
+                vec![0; slots],
+            );
         }
         let known = self
             .model
             .and_then(|model| self.models.get(&model))
             .and_then(|list| list.get(self.added))
-            .filter(|(id, levels, _)| *id == mesh && levels.len() == slots)
-            .map(|(_, levels, caps)| (levels.clone(), caps.clone()));
+            .filter(|entry| {
+                entry.mesh == mesh && entry.levels.len() == slots && entry.alpha == alpha
+            })
+            .cloned();
+        if let Some(list) = self.model.and_then(|model| self.models.get(&model))
+            && known.is_none()
+            && self.added < list.len()
+        {
+            self.model = None;
+        }
         self.added += 1;
-        if let Some((levels, caps)) = known {
+        if let Some(CachedDepth {
+            levels,
+            floors,
+            caps,
+            limits,
+            ..
+        }) = known
+        {
             for flat in flats.iter().filter(|flat| (flat.slot as usize) < slots) {
                 let slot = flat.slot as usize;
                 self.by_normal
@@ -447,11 +491,7 @@ impl ObjectRun {
                 self.flat_caps.push(Arc::clone(&caps[slot]));
                 self.flat_meshes.push(mesh);
             }
-            let values = caps
-                .iter()
-                .map(|constraints| depth_cap_limits(constraints))
-                .collect();
-            return (levels, values);
+            return (levels, limits, floors);
         }
         let normal_m = transform.inverse().transpose();
         let placed: Vec<Flat> = flats
@@ -497,8 +537,11 @@ impl ObjectRun {
             })
             .collect();
         let mut levels = vec![0u8; slots];
+        let mut floors = vec![0u8; slots];
         let mut depth_caps = vec![DepthCaps::default(); slots];
         let mut slot_caps: Vec<Arc<[DepthCap]>> = vec![Arc::from([]); slots];
+        let first_flat = self.flats.len();
+        let mut background_caps = HashMap::<usize, Vec<DepthCap>>::new();
         for slot in 0..slots {
             let mine: Vec<&Flat> = placed.iter().filter(|f| f.slot as usize == slot).collect();
             let mut level = 0u8;
@@ -552,6 +595,7 @@ impl ObjectRun {
                 level
             };
             let floor = under.iter().map(|&i| self.flats[i].1).max().unwrap_or(0);
+            floors[slot] = floor;
             let level = level.max(floor);
             let mut cap_constraints: Vec<DepthCap> = Vec::new();
             for (near, _, gap, positive_side, _) in
@@ -597,7 +641,41 @@ impl ObjectRun {
                     }
                 }
             }
-            depth_caps[slot] = depth_cap_limits(&cap_constraints);
+            let mut limits = depth_cap_limits(&cap_constraints);
+            if level >= 2 && !cap_constraints.is_empty() {
+                for &i in under.iter().filter(|&&i| i >= first_flat) {
+                    let (base, base_level) = self.flats[i];
+                    let base = &mut depth_caps[base.slot as usize];
+                    base.shared |= base_level == 1 && *base == limits;
+                }
+            }
+            // 只降低同階的共面挖空背景，避免跨行文字把上限傳給其他文字材質。
+            if floor == MAX_LEVEL
+                && alpha.get(slot) == Some(&crate::AlphaMode::Blend)
+                && !cap_constraints.is_empty()
+            {
+                for &i in under.iter().filter(|&&i| i >= first_flat) {
+                    let (base, base_level) = self.flats[i];
+                    if base_level == level
+                        && alpha.get(base.slot as usize) == Some(&crate::AlphaMode::Test)
+                        && mine.iter().any(|&&flat| {
+                            Flat {
+                                slot: base.slot,
+                                ..flat
+                            } == base
+                        })
+                    {
+                        limits.shared = true;
+                        for &cap in &cap_constraints {
+                            push_depth_cap(
+                                background_caps.entry(base.slot as usize).or_default(),
+                                cap,
+                            );
+                        }
+                    }
+                }
+            }
+            depth_caps[slot] = limits;
             let cap_constraints: Arc<[DepthCap]> = cap_constraints.into();
             slot_caps[slot] = Arc::clone(&cap_constraints);
             levels[slot] = level;
@@ -611,13 +689,36 @@ impl ObjectRun {
                 self.flat_meshes.push(mesh);
             }
         }
+        if !background_caps.is_empty() {
+            for (slot, mut caps) in background_caps {
+                for &cap in slot_caps[slot].iter() {
+                    push_depth_cap(&mut caps, cap);
+                }
+                depth_caps[slot] = depth_cap_limits(&caps);
+                depth_caps[slot].shared = true;
+                slot_caps[slot] = caps.into();
+            }
+            for (flat, caps) in self.flats[first_flat..]
+                .iter()
+                .zip(&mut self.flat_caps[first_flat..])
+            {
+                *caps = Arc::clone(&slot_caps[flat.0.slot as usize]);
+            }
+        }
         if let Some(m) = self.model {
             let list = self.models.entry(m).or_default();
             if list.len() + 1 == self.added {
-                list.push((mesh, levels.clone(), slot_caps));
+                list.push(CachedDepth {
+                    mesh,
+                    levels: levels.clone(),
+                    floors: floors.clone(),
+                    caps: slot_caps,
+                    limits: depth_caps.clone(),
+                    alpha: alpha.to_vec(),
+                });
             }
         }
-        (levels, depth_caps)
+        (levels, depth_caps, floors)
     }
 }
 
@@ -631,6 +732,10 @@ fn depth_cap_limits(caps: &[DepthCap]) -> DepthCaps {
         *limit = limit.min(cap.value);
         limits
     })
+}
+
+pub(crate) fn limited_depth_level(current: u8, floor: u8, max_level: u8) -> u8 {
+    current.min(max_level.max(floor).min(MAX_LEVEL))
 }
 
 #[cfg(test)]
@@ -1193,7 +1298,7 @@ mod tests {
         ]);
         let mut run = ObjectRun::default();
         run.begin(None);
-        let (levels, caps) =
+        let (levels, caps, _) =
             run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 5);
         assert_eq!(levels, [0, 1, 1, 2, 2]);
         assert!((caps[4].positive - 0.00018).abs() < 1e-7);
@@ -1213,7 +1318,7 @@ mod tests {
                 ]);
                 let mut run = ObjectRun::default();
                 run.begin(None);
-                let (levels, caps) =
+                let (levels, caps, _) =
                     run.levels_with_caps([0; 3], 0, 0, transform, &mesh_flats(&mesh), 5);
                 assert_eq!(levels, [0, 0, 1, 2, 2]);
                 let (near, far) = if positive_side {
@@ -1241,7 +1346,7 @@ mod tests {
         ]);
         let mut run = ObjectRun::default();
         run.begin(None);
-        let (levels, caps) =
+        let (levels, caps, _) =
             run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 4);
         assert_eq!(levels, [0, 0, 1, 2]);
         assert!(caps[3].positive.is_infinite());
@@ -1265,11 +1370,11 @@ mod tests {
 
         assert_eq!(add(&mut run, 0, 0.0, 1.2).0, [0]);
         assert_eq!(add(&mut run, 1, 0.00007, 0.2).0, [0]);
-        let (support_levels, support_caps) = add(&mut run, 2, 0.0, 1.0);
+        let (support_levels, support_caps, _) = add(&mut run, 2, 0.0, 1.0);
         assert_eq!(support_levels, [1]);
         assert!((support_caps[0].positive - 0.000063).abs() < 1e-7);
 
-        let (child_levels, child_caps) = add(&mut run, 3, 0.00004, 0.1);
+        let (child_levels, child_caps, _) = add(&mut run, 3, 0.00004, 0.1);
         assert_eq!(child_levels, [2]);
         assert!((child_caps[0].positive - 0.000063).abs() < 1e-7);
     }
@@ -1288,7 +1393,7 @@ mod tests {
         ]);
         let mut run = ObjectRun::default();
         run.begin(None);
-        let (levels, caps) =
+        let (levels, caps, _) =
             run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&mesh), 4);
         assert_eq!(levels, [0, 0, 1, 2]);
         assert!(
@@ -1348,6 +1453,29 @@ mod tests {
         ]);
         let flats = mesh_flats(&mesh);
         assert_eq!(duplicate_support_slots(&mesh, &flats), vec![3]);
+    }
+
+    #[test]
+    fn duplicate_support_keeps_the_floor_of_its_existing_mesh_stack() {
+        let base = quad(0.0, 1.0, 0, false);
+        let first_layer = quad(0.0, 0.8, 0, true);
+        let second_layer = quad(0.0, 0.6, 0, false);
+        let support = joined_mesh([quad(0.0, 0.2, 3, false), quad(0.0, 0.2, 10, true)]);
+        assert_eq!(
+            duplicate_support_slots(&support, &mesh_flats(&support)),
+            vec![3]
+        );
+        let mut run = ObjectRun::default();
+        run.begin(None);
+        run.levels_with_caps([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&base), 1);
+        run.levels_with_caps([0; 3], 1, 1, Mat4::IDENTITY, &mesh_flats(&first_layer), 1);
+        run.levels_with_caps([0; 3], 2, 2, Mat4::IDENTITY, &mesh_flats(&second_layer), 1);
+        let (levels, _, floors) =
+            run.levels_with_caps([0; 3], 3, 3, Mat4::IDENTITY, &mesh_flats(&support), 11);
+
+        assert_eq!(levels[3], 3);
+        assert_eq!(floors[3], 2);
+        assert_eq!(limited_depth_level(levels[3], floors[3], 1), 2);
     }
 
     #[test]

@@ -630,5 +630,10 @@ pub(crate) fn draw_order_level(i: &Instance, slot: usize) -> f32 {
         let micrometres = (caps.negative * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;
         encoded |= (1 << 23) | (micrometres << 12);
     }
-    encoded as f32
+    // 負號標記共用上限，保留 24 位元整數的精度。
+    if caps.shared {
+        -(encoded as f32)
+    } else {
+        encoded as f32
+    }
 }

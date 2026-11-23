@@ -743,6 +743,143 @@ fn a_label_a_fraction_of_a_millimetre_in_front_of_a_stacked_screen_stays_seen() 
     }
 }
 
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_coplanar_display_frame_and_text_stay_visible_under_a_front_label() {
+    let mut renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let base = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.3; 4], true);
+    let frame = renderer.add_material(
+        &mut scene,
+        None,
+        AlphaMode::Test,
+        [1.0, 0.0, 0.0, 1.0],
+        true,
+    );
+    let label = renderer.add_material(
+        &mut scene,
+        None,
+        AlphaMode::Opaque,
+        [0.0, 0.0, 1.0, 1.0],
+        true,
+    );
+    let mut rgba = Vec::new();
+    for y in 0..32 {
+        for x in 0..32 {
+            let alpha = if (12..20).contains(&x) && (8..24).contains(&y) {
+                255
+            } else {
+                0
+            };
+            rgba.extend([0, 255, 0, alpha]);
+        }
+    }
+    let glyph = renderer.add_texture(
+        &mut scene,
+        &omsi_texture::Image {
+            width: 32,
+            height: 32,
+            rgba,
+            has_alpha: true,
+        },
+        false,
+    );
+    let text = renderer.add_material(&mut scene, Some(glyph), AlphaMode::Blend, [1.0; 4], true);
+    let row = grid(0.0, 0.0, 0.0, 0.45, 1, 0.0, false);
+    let tilt = |mut row: MeshData| {
+        for point in &mut row.positions {
+            point.z += 0.006 * point.y;
+        }
+        row
+    };
+    let adjacent = grid(1.0, 0.0, 0.0, 0.35, 1, 0.0, false);
+    let independent = grid(-0.9, 0.0, 0.0, 0.3, 1, 0.0, false);
+    let with_uvs = |mut grid: MeshData| {
+        use glam::Vec2;
+        grid.uvs = [Vec2::ZERO, Vec2::X, Vec2::Y, Vec2::ONE].to_vec();
+        grid
+    };
+    let mut display = slotted(vec![
+        row.clone(),
+        adjacent.clone(),
+        row.clone(),
+        with_uvs(row),
+        with_uvs(adjacent),
+        with_uvs(independent.clone()),
+        with_uvs(tilt(grid(-2.1, 0.0, 0.0, 0.55, 1, 0.0, false))),
+        with_uvs(independent),
+        with_uvs(grid(-0.9, 0.0, 0.0, 0.3, 1, 0.0, false)),
+    ]);
+    for (range, slot) in display.ranges.iter_mut().zip([0, 0, 1, 2, 2, 2, 2, 3, 4]) {
+        range.2 = slot;
+    }
+    let display = renderer.add_mesh(&mut scene, &display);
+    let support = renderer.add_mesh(
+        &mut scene,
+        &slotted(vec![
+            grid(0.0, 0.0, 0.0, 1.5, 1, 0.0, false),
+            grid(0.0, 0.0, 0.0, 1.5, 1, 0.0, false),
+            grid(0.0, 0.0, 0.0, 1.5, 1, 0.0, false),
+        ]),
+    );
+    let front = renderer.add_mesh(&mut scene, &grid(1.0, 0.0, 0.0002, 0.25, 1, 0.0, false));
+    renderer.begin_object(&mut scene);
+    for (mesh, materials) in [
+        (front, vec![label]),
+        (support, vec![base; 3]),
+        (display, vec![base, frame, text, text, text]),
+    ] {
+        renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, materials);
+    }
+    let display = scene.instances.last().unwrap();
+    let caps = display.slot_depth_caps.clone();
+    let levels = display.slot_levels.clone();
+    assert!(caps[1].shared && caps[2].shared);
+    assert!(
+        caps[2].positive.is_finite(),
+        "the multi-row print needs the front label's cap"
+    );
+    for slot in [3, 4] {
+        assert!(
+            !caps[slot].shared && caps[slot].positive.is_infinite(),
+            "unrelated text slot {slot} inherited a cap: {:?}",
+            caps[slot]
+        );
+    }
+    let camera = Camera {
+        position: DVec3::new(0.0, -12.0, 9.0),
+        yaw: 0.0,
+        pitch: -(0.75f32).atan().to_degrees(),
+        roll: 0.0,
+        fov_deg: 14.0,
+        near: 0.1,
+        far: 3000.0,
+    };
+    let lighting = Lighting {
+        shadows: false,
+        fog_density: 0.0,
+        ..Default::default()
+    };
+    let image = renderer
+        .render_to_image(&mut scene, 256, 256, &camera, &lighting)
+        .unwrap();
+    let vp = camera.view_proj(1.0, camera.position);
+    for (point, colour, name) in [
+        (Vec3::new(-0.26, 0.0, 0.0), 0, "frame"),
+        (Vec3::new(1.0, 0.0, 0.0002), 2, "front label"),
+        (Vec3::ZERO, 1, "text"),
+    ] {
+        let ndc = vp.project_point3(point - camera.position.as_vec3());
+        let x = ((ndc.x * 0.5 + 0.5) * 256.0) as usize;
+        let y = ((0.5 - ndc.y * 0.5) * 256.0) as usize;
+        let pixel = &image[(y * 256 + x) * 4..][..3];
+        assert!(
+            pixel[colour] > 150 && pixel[(colour + 1) % 3] < 60 && pixel[(colour + 2) % 3] < 60,
+            "{name} at x={x}: {pixel:?}, levels={levels:?}, caps={caps:?}"
+        );
+    }
+}
+
 /// Shading normals may be authored independently of a display's flat geometry.
 /// They must not bend the depth offset and lift an earlier layer through its print.
 #[test]
