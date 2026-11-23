@@ -687,7 +687,9 @@ fn texture_id_of(path: std::path::PathBuf) -> u16 {
     if let Some(id) = t.ids.get(&path) {
         return *id;
     }
-    let Some(id) = next_corona_id(t.listed.len()) else { return 0; };
+    let Some(id) = next_corona_id(t.listed.len()) else {
+        return 0;
+    };
     t.ids.insert(path.clone(), id);
     t.listed.push((id, CoronaSource::File(path)));
     id
@@ -712,7 +714,11 @@ fn memo_scoped_id(t: &mut CoronaTextures, path: std::path::PathBuf, id: u16) -> 
     id
 }
 
-fn register_scoped_corona_bytes(t: &mut CoronaTextures, path: std::path::PathBuf, source: Vec<u8>) -> u16 {
+fn register_scoped_corona_bytes(
+    t: &mut CoronaTextures,
+    path: std::path::PathBuf,
+    source: Vec<u8>,
+) -> u16 {
     if let Some(id) = t.scoped_ids.get(&path) {
         return *id;
     }
@@ -785,13 +791,19 @@ pub(super) fn corona_texture_id_with_texture_dirs(
     if publisher_texture_dirs.is_empty() {
         return corona_texture_id(model_dir, name);
     }
-    let root = CORONA_TEXTURES.lock().unwrap_or_else(|e| e.into_inner()).as_ref()
-        .and_then(|t| t.root.clone()).unwrap_or_default();
+    let root = CORONA_TEXTURES
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .and_then(|t| t.root.clone())
+        .unwrap_or_default();
     let mut search = crate::texture_dirs(&root, model_dir);
     crate::world::insert_publisher_texture_dirs(&mut search, publisher_texture_dirs, &root);
     let search: Vec<&std::path::Path> = search.iter().map(|dir| dir.as_path()).collect();
     // The lower-level memo includes the full search path vector, so map scopes do not share hits.
-    let Some(path) = omsi_texture::find_texture(name, &search) else { return 0; };
+    let Some(path) = omsi_texture::find_texture(name, &search) else {
+        return 0;
+    };
     let in_publisher_mount = publisher_texture_dirs
         .iter()
         .filter_map(|dir| dir.parent())
@@ -879,10 +891,9 @@ pub fn upload_corona_textures(renderer: &mut omsi_render::Renderer) {
     for (id, source) in pending {
         let (path, decoded) = match source {
             CoronaSource::File(path) => (path.clone(), omsi_texture::decode_file(&path)),
-            CoronaSource::Memory { path, bytes } => (
-                path.clone(),
-                omsi_texture::decode_bytes(&bytes, &path),
-            ),
+            CoronaSource::Memory { path, bytes } => {
+                (path.clone(), omsi_texture::decode_bytes(&bytes, &path))
+            }
         };
         match decoded {
             Ok(img) => renderer.set_corona_texture(id, &img),
@@ -1029,14 +1040,27 @@ mod scoped_corona_cache_tests {
     fn scoped_images_deduplicate_by_bytes_and_survive_their_virtual_path() {
         let mut cache = CoronaTextures::default();
         let bytes = b"authenticated image bytes".to_vec();
-        let first = register_scoped_corona_bytes(&mut cache, "/map/.publisher-world/1/1/Texture/a.png".into(), bytes.clone());
-        let second = register_scoped_corona_bytes(&mut cache, "/map/.publisher-world/2/2/Texture/b.png".into(), bytes.clone());
+        let first = register_scoped_corona_bytes(
+            &mut cache,
+            "/map/.publisher-world/1/1/Texture/a.png".into(),
+            bytes.clone(),
+        );
+        let second = register_scoped_corona_bytes(
+            &mut cache,
+            "/map/.publisher-world/2/2/Texture/b.png".into(),
+            bytes.clone(),
+        );
         assert_ne!(first, 0);
         assert_eq!(second, first);
         assert_eq!(cache.listed.len(), 1);
         cache.scoped_ids.clear(); // the mount lease may end; renderer replay still has bytes
-        assert!(matches!(&cache.listed[0].1, CoronaSource::Memory { bytes: saved, .. } if saved.as_ref() == bytes.as_slice()));
-        assert_eq!(register_scoped_corona_bytes(&mut cache, "/map/reopened/Texture/c.png".into(), bytes), first);
+        assert!(
+            matches!(&cache.listed[0].1, CoronaSource::Memory { bytes: saved, .. } if saved.as_ref() == bytes.as_slice())
+        );
+        assert_eq!(
+            register_scoped_corona_bytes(&mut cache, "/map/reopened/Texture/c.png".into(), bytes),
+            first
+        );
         assert_eq!(cache.listed.len(), 1);
     }
 
@@ -1045,7 +1069,10 @@ mod scoped_corona_cache_tests {
         let mut cache = CoronaTextures::default();
         let oversized = vec![0; MAX_SCOPED_CORONA_BYTES + 1];
         let rejected = std::path::PathBuf::from("/map/Texture/large.png");
-        assert_eq!(register_scoped_corona_bytes(&mut cache, rejected.clone(), oversized), 0);
+        assert_eq!(
+            register_scoped_corona_bytes(&mut cache, rejected.clone(), oversized),
+            0
+        );
         assert_eq!(cache.scoped_ids.get(&rejected), Some(&0));
         assert!(cache.listed.is_empty());
         assert_eq!(next_corona_id(u16::MAX as usize - 1), Some(u16::MAX));
@@ -1056,10 +1083,19 @@ mod scoped_corona_cache_tests {
     fn scoped_corona_total_byte_budget_memoizes_rejection() {
         let mut cache = CoronaTextures::default();
         let half = MAX_SCOPED_CORONA_BYTES / 2;
-        assert_ne!(register_scoped_corona_bytes(&mut cache, "/map/Texture/a.png".into(), vec![1; half]), 0);
-        assert_ne!(register_scoped_corona_bytes(&mut cache, "/map/Texture/b.png".into(), vec![2; half]), 0);
+        assert_ne!(
+            register_scoped_corona_bytes(&mut cache, "/map/Texture/a.png".into(), vec![1; half]),
+            0
+        );
+        assert_ne!(
+            register_scoped_corona_bytes(&mut cache, "/map/Texture/b.png".into(), vec![2; half]),
+            0
+        );
         let rejected = std::path::PathBuf::from("/map/Texture/c.png");
-        assert_eq!(register_scoped_corona_bytes(&mut cache, rejected.clone(), vec![3]), 0);
+        assert_eq!(
+            register_scoped_corona_bytes(&mut cache, rejected.clone(), vec![3]),
+            0
+        );
         assert_eq!(cache.scoped_ids.get(&rejected), Some(&0));
         assert_eq!(cache.listed.len(), 2);
     }
@@ -1068,10 +1104,15 @@ mod scoped_corona_cache_tests {
     fn scoped_path_memo_evicts_reopened_aliases_without_changing_content_ids() {
         let mut cache = CoronaTextures::default();
         let bytes = b"same authenticated image";
-        let first = register_scoped_corona_bytes(&mut cache, "/map/Texture/0.png".into(), bytes.to_vec());
+        let first =
+            register_scoped_corona_bytes(&mut cache, "/map/Texture/0.png".into(), bytes.to_vec());
         for index in 1..=MAX_SCOPED_CORONA_PATHS {
             assert_eq!(
-                register_scoped_corona_bytes(&mut cache, format!("/map-{index}/Texture/reopened.png").into(), bytes.to_vec()),
+                register_scoped_corona_bytes(
+                    &mut cache,
+                    format!("/map-{index}/Texture/reopened.png").into(),
+                    bytes.to_vec()
+                ),
                 first
             );
         }

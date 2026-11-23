@@ -14,7 +14,10 @@ fn path(
     direction: i32,
 ) -> String {
     let extra = if keyword == "path_2" { "0\n0\n" } else { "" };
-    format!("[{keyword}]\n{}\n{}\n{}\n{heading}\n{radius}\n{length}\n{}\n{}\n0\n3\n{direction}\n0\n{extra}", start.x, start.y, start.z, gradients[0], gradients[1])
+    format!(
+        "[{keyword}]\n{}\n{}\n{}\n{heading}\n{radius}\n{length}\n{}\n{}\n0\n3\n{direction}\n0\n{extra}",
+        start.x, start.y, start.z, gradients[0], gradients[1]
+    )
 }
 
 fn lanes(text: &str, pos: DVec3, heading: f64) -> Vec<Lane> {
@@ -48,8 +51,21 @@ impl PublisherMapFixture {
         let mut trust = omsi_pack::TrustedPublishers::default();
         trust.insert("fixture", signer.key_id(), signer.public_key());
         trust.save_file(&root.join("Publishers.json")).unwrap();
-        let mut fixture = Self { root, signer, trusted: trust, encrypted_packs: Vec::new() };
-        fixture.add_map("Fixture", "scene-types", "plain map alias", 10.0, 0.0, 4, None);
+        let mut fixture = Self {
+            root,
+            signer,
+            trusted: trust,
+            encrypted_packs: Vec::new(),
+        };
+        fixture.add_map(
+            "Fixture",
+            "scene-types",
+            "plain map alias",
+            10.0,
+            0.0,
+            4,
+            None,
+        );
         omsi_cfg::add_content_root(fixture.root.clone());
         fixture
     }
@@ -87,9 +103,13 @@ impl PublisherMapFixture {
         let global_texture_cfg = format!("[surface]\n{}\n", texture_surface + 1);
         let global_texel = [180, 32, 76, 255];
         let mut global_png = std::io::Cursor::new(Vec::new());
-        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(2, 2, image::Rgba(global_texel)))
-            .write_to(&mut global_png, image::ImageFormat::Png)
-            .unwrap();
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            2,
+            2,
+            image::Rgba(global_texel),
+        ))
+        .write_to(&mut global_png, image::ImageFormat::Png)
+        .unwrap();
         let assets = [
             omsi_pack::AssetInput {
                 id: "object".into(),
@@ -164,8 +184,15 @@ impl PublisherMapFixture {
                 .unwrap()
                 .as_secs()
                 + 3600;
-            let entitlement = omsi_pack::issue_entitlement(&manifest, key, expires, &self.signer).unwrap();
-            omsi_pack::unlock(&pack, &entitlement, &self.trusted, &omsi_pack::SystemKeyStore).unwrap();
+            let entitlement =
+                omsi_pack::issue_entitlement(&manifest, key, expires, &self.signer).unwrap();
+            omsi_pack::unlock(
+                &pack,
+                &entitlement,
+                &self.trusted,
+                &omsi_pack::SystemKeyStore,
+            )
+            .unwrap();
             // The native entitlement is unique to this disposable fixture pack.
             self.encrypted_packs.push(pack);
         }
@@ -213,36 +240,78 @@ fn world_loaders_resolve_publisher_aliases_from_the_map_scope() {
     let world = World::open(&fixture.root, &map_dir.join("global.cfg"), 20261001).unwrap();
 
     assert_eq!(
-        world.object_type("Sceneryobjects/Fixture/renamed.sco").unwrap().sco.friendly_name,
+        world
+            .object_type("Sceneryobjects/Fixture/renamed.sco")
+            .unwrap()
+            .sco
+            .friendly_name,
         "plain map alias"
     );
     let spline = world.spline_type("Splines/Fixture/renamed.sli").unwrap();
     assert_eq!(spline.def.length, 10.0);
     assert_eq!(spline.surface, vec![4, 5]);
-    let object = world.object_type("Sceneryobjects/Fixture/renamed.sco").unwrap();
-    assert!(omsi_cfg::publisher::validate_asset_alias("Sceneryobjects/Fixture/script/renamed.osc", "Sceneryobjects/Fixture/script/main.osc").is_err());
-    let program = object.program.as_ref().expect("signed object script was not compiled");
+    let object = world
+        .object_type("Sceneryobjects/Fixture/renamed.sco")
+        .unwrap();
+    assert!(
+        omsi_cfg::publisher::validate_asset_alias(
+            "Sceneryobjects/Fixture/script/renamed.osc",
+            "Sceneryobjects/Fixture/script/main.osc"
+        )
+        .is_err()
+    );
+    let program = object
+        .program
+        .as_ref()
+        .expect("signed object script was not compiled");
     assert!(program.errors.is_empty(), "{:?}", program.errors);
-    assert!(program.var_names.iter().any(|name| name == "owned_pack_value"));
-    for script in object.sco.scripts.scripts.iter().chain(&object.sco.scripts.varlists) {
+    assert!(
+        program
+            .var_names
+            .iter()
+            .any(|name| name == "owned_pack_value")
+    );
+    for script in object
+        .sco
+        .scripts
+        .scripts
+        .iter()
+        .chain(&object.sco.scripts.varlists)
+    {
         assert!(omsi_cfg::vfs::is_file(script));
         assert!(!script.exists(), "signed script materialized as plaintext");
     }
     let dirs = world.object_texture_dirs(&object);
     let dirs: Vec<&Path> = dirs.iter().map(PathBuf::as_path).collect();
     let texture = omsi_texture::find_texture("global.png", &dirs).unwrap();
-    assert_eq!(texture, world._publisher_mounts.resolve_map_alias(&map_dir, "Texture/global.png").unwrap());
+    assert_eq!(
+        texture,
+        world
+            ._publisher_mounts
+            .resolve_map_alias(&map_dir, "Texture/global.png")
+            .unwrap()
+    );
     let decoded = omsi_texture::decode_file(&texture).unwrap();
     assert_eq!((decoded.width, decoded.height), (2, 2));
     assert_eq!(&decoded.rgba[..4], &[180, 32, 76, 255]);
-    assert!(!texture.exists(), "global publisher texture must remain virtual");
-    assert!(!world.navigation_map().lanes.is_empty(), "navigation must load map-scoped signed splines");
+    assert!(
+        !texture.exists(),
+        "global publisher texture must remain virtual"
+    );
+    assert!(
+        !world.navigation_map().lanes.is_empty(),
+        "navigation must load map-scoped signed splines"
+    );
 
     let fallback = fixture.root.join("Sceneryobjects/Ordinary/fallback.sco");
     std::fs::create_dir_all(fallback.parent().unwrap()).unwrap();
     std::fs::write(&fallback, "[friendlyname]\nordinary physical fallback\n").unwrap();
     assert_eq!(
-        world.object_type("Sceneryobjects/Ordinary/fallback.sco").unwrap().sco.friendly_name,
+        world
+            .object_type("Sceneryobjects/Ordinary/fallback.sco")
+            .unwrap()
+            .sco
+            .friendly_name,
         "ordinary physical fallback"
     );
 }
@@ -255,23 +324,66 @@ fn publisher_worlds_keep_their_lease_when_the_same_map_is_reopened() {
     let mut fixture = PublisherMapFixture::new();
     let map = fixture.map_dir().join("global.cfg");
     let first = World::open(&fixture.root, &map, 20261001).unwrap();
-    fixture.add_map("Fixture", "second-session", "second map session", 30.0, 6.0, 8, None);
+    fixture.add_map(
+        "Fixture",
+        "second-session",
+        "second map session",
+        30.0,
+        6.0,
+        8,
+        None,
+    );
     let second = World::open(&fixture.root, &map, 20261001).unwrap();
 
     // Load after both leases exist so a cache cannot hide resolution through the wrong lease.
     let alias = "Sceneryobjects/Fixture/renamed.sco";
-    assert_eq!(first.object_type(alias).unwrap().sco.friendly_name, "plain map alias");
-    assert_eq!(second.object_type(alias).unwrap().sco.friendly_name, "second map session");
-    assert_eq!(first.spline_type("Splines/Fixture/renamed.sli").unwrap().def.length, 10.0);
-    assert_eq!(second.spline_type("Splines/Fixture/renamed.sli").unwrap().def.length, 30.0);
+    assert_eq!(
+        first.object_type(alias).unwrap().sco.friendly_name,
+        "plain map alias"
+    );
+    assert_eq!(
+        second.object_type(alias).unwrap().sco.friendly_name,
+        "second map session"
+    );
+    assert_eq!(
+        first
+            .spline_type("Splines/Fixture/renamed.sli")
+            .unwrap()
+            .def
+            .length,
+        10.0
+    );
+    assert_eq!(
+        second
+            .spline_type("Splines/Fixture/renamed.sli")
+            .unwrap()
+            .def
+            .length,
+        30.0
+    );
 
-    let first_path = first._publisher_mounts.resolve_map_alias(&fixture.map_dir(), alias).unwrap();
-    let second_path = second._publisher_mounts.resolve_map_alias(&fixture.map_dir(), alias).unwrap();
+    let first_path = first
+        ._publisher_mounts
+        .resolve_map_alias(&fixture.map_dir(), alias)
+        .unwrap();
+    let second_path = second
+        ._publisher_mounts
+        .resolve_map_alias(&fixture.map_dir(), alias)
+        .unwrap();
     assert_ne!(first_path, second_path);
     let unscoped = omsi_cfg::resolve_path(&fixture.map_dir(), alias);
-    assert!(!omsi_cfg::vfs::is_file(&unscoped), "an unleased lookup must not select a conflicting authority");
+    assert!(
+        !omsi_cfg::vfs::is_file(&unscoped),
+        "an unleased lookup must not select a conflicting authority"
+    );
     drop(second);
-    assert_eq!(first._publisher_mounts.resolve_map_alias(&fixture.map_dir(), alias).unwrap(), first_path);
+    assert_eq!(
+        first
+            ._publisher_mounts
+            .resolve_map_alias(&fixture.map_dir(), alias)
+            .unwrap(),
+        first_path
+    );
 }
 
 #[cfg(any(target_os = "macos", windows))]
@@ -282,42 +394,83 @@ fn encrypted_and_plain_publisher_aliases_are_isolated_by_world_map_scope() {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut fixture = PublisherMapFixture::new();
     let key = omsi_pack::random_content_key().unwrap();
-    fixture.add_map("Encrypted", "encrypted-scene", "encrypted map alias", 22.0, 4.0, 5, Some(key));
+    fixture.add_map(
+        "Encrypted",
+        "encrypted-scene",
+        "encrypted map alias",
+        22.0,
+        4.0,
+        5,
+        Some(key),
+    );
 
     let plain_dir = fixture.map_dir();
     let encrypted_dir = fixture.map_dir_named("Encrypted");
     let plain = World::open(&fixture.root, &plain_dir.join("global.cfg"), 20261001).unwrap();
-    let encrypted = World::open(&fixture.root, &encrypted_dir.join("global.cfg"), 20261001).unwrap();
+    let encrypted =
+        World::open(&fixture.root, &encrypted_dir.join("global.cfg"), 20261001).unwrap();
 
     assert_eq!(
-        plain.object_type("Sceneryobjects/Fixture/renamed.sco").unwrap().sco.friendly_name,
+        plain
+            .object_type("Sceneryobjects/Fixture/renamed.sco")
+            .unwrap()
+            .sco
+            .friendly_name,
         "plain map alias"
     );
     assert_eq!(
-        encrypted.object_type("Sceneryobjects/Fixture/renamed.sco").unwrap().sco.friendly_name,
+        encrypted
+            .object_type("Sceneryobjects/Fixture/renamed.sco")
+            .unwrap()
+            .sco
+            .friendly_name,
         "encrypted map alias"
     );
     let plain_spline = plain.spline_type("Splines/Fixture/renamed.sli").unwrap();
-    let encrypted_spline = encrypted.spline_type("Splines/Fixture/renamed.sli").unwrap();
+    let encrypted_spline = encrypted
+        .spline_type("Splines/Fixture/renamed.sli")
+        .unwrap();
     assert_eq!(plain_spline.def.length, 10.0);
     assert_eq!(encrypted_spline.def.length, 22.0);
     assert_eq!(plain_spline.surface, vec![4, 5]);
     assert_eq!(encrypted_spline.surface, vec![5, 6]);
-    let encrypted_object = encrypted.object_type("Sceneryobjects/Fixture/renamed.sco").unwrap();
+    let encrypted_object = encrypted
+        .object_type("Sceneryobjects/Fixture/renamed.sco")
+        .unwrap();
     let program = encrypted_object.program.as_ref().unwrap();
     assert!(program.errors.is_empty(), "{:?}", program.errors);
-    assert!(program.var_names.iter().any(|name| name == "owned_pack_value"));
-    assert!(encrypted_object.sco.scripts.scripts.iter().all(|p| omsi_cfg::vfs::is_sealed(p) && !p.exists()));
+    assert!(
+        program
+            .var_names
+            .iter()
+            .any(|name| name == "owned_pack_value")
+    );
+    assert!(
+        encrypted_object
+            .sco
+            .scripts
+            .scripts
+            .iter()
+            .all(|p| omsi_cfg::vfs::is_sealed(p) && !p.exists())
+    );
     let dirs = encrypted.object_texture_dirs(&encrypted_object);
     let dirs: Vec<&Path> = dirs.iter().map(PathBuf::as_path).collect();
     assert_eq!(
         omsi_texture::find_texture("global.png", &dirs),
-        encrypted._publisher_mounts.resolve_map_alias(&encrypted_dir, "Texture/global.png")
+        encrypted
+            ._publisher_mounts
+            .resolve_map_alias(&encrypted_dir, "Texture/global.png")
     );
-    let texture = encrypted._publisher_mounts.resolve_map_alias(&encrypted_dir, "Texture/global.png").unwrap();
+    let texture = encrypted
+        ._publisher_mounts
+        .resolve_map_alias(&encrypted_dir, "Texture/global.png")
+        .unwrap();
     let decoded = omsi_texture::decode_file(&texture).unwrap();
     assert_eq!(&decoded.rgba[..4], &[180, 32, 76, 255]);
-    assert!(!texture.exists(), "encrypted global texture must remain virtual");
+    assert!(
+        !texture.exists(),
+        "encrypted global texture must remain virtual"
+    );
     let plain_navigation = plain.navigation_map();
     let encrypted_navigation = encrypted.navigation_map();
     assert!(!plain_navigation.lanes.is_empty());
@@ -481,7 +634,11 @@ fn descending_object_path_joins_do_not_lift_the_rear_axle() {
 /// alone in a new test process; true in the parent once that run has passed.
 fn ran_in_fresh_process(test: &str) -> bool {
     if std::env::var_os("PUBLISHER_CACHE_TEST_CHILD").is_some() {
-        assert_eq!(omsi_cfg::vfs::protected_reads(), 0, "the new test process already read protected content");
+        assert_eq!(
+            omsi_cfg::vfs::protected_reads(),
+            0,
+            "the new test process already read protected content"
+        );
         return false;
     }
     let output = std::process::Command::new(std::env::current_exe().unwrap())
@@ -500,7 +657,14 @@ fn ran_in_fresh_process(test: &str) -> bool {
 
 /// An ordinary disk cache of a new synthetic map, holding a sentinel origin.
 fn sentinel_mapgen_cache(prefix: &str) -> (PathBuf, PathBuf, PathBuf, glam::DVec2) {
-    let name = format!("{prefix}_{}_{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+    let name = format!(
+        "{prefix}_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
     let root = std::env::temp_dir().join(&name);
     let map = root.join(&name);
     std::fs::create_dir_all(&map).unwrap();
@@ -510,18 +674,25 @@ fn sentinel_mapgen_cache(prefix: &str) -> (PathBuf, PathBuf, PathBuf, glam::DVec
     let mut sentinel = omsi_map::layers::Layers::default();
     sentinel.origin = glam::DVec2::new(123456.0, 654321.0);
     std::fs::write(&path, sentinel.to_bytes(crate::mapgen::key_of(&map, &[]))).unwrap();
-    assert!(omsi_map::layers::Layers::open(&path, crate::mapgen::key_of(&map, &[])).is_some(), "invalid cache fixture");
+    assert!(
+        omsi_map::layers::Layers::open(&path, crate::mapgen::key_of(&map, &[])).is_some(),
+        "invalid cache fixture"
+    );
     (root, map, path, sentinel.origin)
 }
 
 #[test]
 fn ordinary_sealed_session_stores_keep_the_mapgen_cache() {
-    if ran_in_fresh_process("object_path_tests::ordinary_sealed_session_stores_keep_the_mapgen_cache") {
+    if ran_in_fresh_process(
+        "object_path_tests::ordinary_sealed_session_stores_keep_the_mapgen_cache",
+    ) {
         return;
     }
     let (root, map, path, origin) = sentinel_mapgen_cache("SessionStoreCache");
     // A multiplayer session store is sealed at rest, but it is not publisher-protected content.
-    let key = std::sync::Arc::new(omsi_cfg::vfs::SealKey::new(&omsi_cfg::vfs::random_key().unwrap()));
+    let key = std::sync::Arc::new(omsi_cfg::vfs::SealKey::new(
+        &omsi_cfg::vfs::random_key().unwrap(),
+    ));
     let mount = root.join("session-store");
     omsi_cfg::vfs::mount_sealed(&mount, key, vec![]);
     let layers = crate::mapgen::cached(&root, &map, &[], &[], &[]);
@@ -529,19 +700,37 @@ fn ordinary_sealed_session_stores_keep_the_mapgen_cache() {
     omsi_cfg::vfs::unmount_sealed(&mount);
     std::fs::remove_file(&path).unwrap();
     std::fs::remove_dir_all(root).unwrap();
-    assert!(!seen, "a multiplayer session store counted as publisher-protected content");
-    assert_eq!(layers.origin, origin, "an ordinary session lost its map layer cache");
+    assert!(
+        !seen,
+        "a multiplayer session store counted as publisher-protected content"
+    );
+    assert_eq!(
+        layers.origin, origin,
+        "an ordinary session lost its map layer cache"
+    );
 }
 
 #[cfg(any(target_os = "macos", windows))]
 #[test]
 fn an_ordinary_map_keeps_its_mapgen_cache_after_a_protected_pack_is_mounted() {
-    if ran_in_fresh_process("object_path_tests::an_ordinary_map_keeps_its_mapgen_cache_after_a_protected_pack_is_mounted") {
+    if ran_in_fresh_process(
+        "object_path_tests::an_ordinary_map_keeps_its_mapgen_cache_after_a_protected_pack_is_mounted",
+    ) {
         return;
     }
-    let _guard = PUBLISHER_WORLD_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = PUBLISHER_WORLD_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut fixture = PublisherMapFixture::new();
-    fixture.add_map("Protected", "released-protection", "released protected fixture", 10.0, 0.0, 4, Some(omsi_pack::random_content_key().unwrap()));
+    fixture.add_map(
+        "Protected",
+        "released-protection",
+        "released protected fixture",
+        10.0,
+        0.0,
+        4,
+        Some(omsi_pack::random_content_key().unwrap()),
+    );
     std::fs::remove_dir_all(fixture.root.join("Packs/scene-types.oopp")).unwrap();
     for mount in omsi_cfg::publisher::mount_packs(&fixture.root).unwrap() {
         omsi_cfg::vfs::unmount_sealed(&mount);
@@ -551,23 +740,47 @@ fn an_ordinary_map_keeps_its_mapgen_cache_after_a_protected_pack_is_mounted() {
     let layers = crate::mapgen::cached(&root, &map, &[], &[], &[]);
     std::fs::remove_file(&path).unwrap();
     std::fs::remove_dir_all(root).unwrap();
-    assert_eq!(layers.origin, origin, "an ordinary map lost its disk cache because a protected pack was installed");
+    assert_eq!(
+        layers.origin, origin,
+        "an ordinary map lost its disk cache because a protected pack was installed"
+    );
 }
 
 #[cfg(any(target_os = "macos", windows))]
 #[test]
 fn a_map_without_dependencies_does_not_read_an_installed_packs_assets() {
-    if ran_in_fresh_process("object_path_tests::a_map_without_dependencies_does_not_read_an_installed_packs_assets") {
+    if ran_in_fresh_process(
+        "object_path_tests::a_map_without_dependencies_does_not_read_an_installed_packs_assets",
+    ) {
         return;
     }
-    let _guard = PUBLISHER_WORLD_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = PUBLISHER_WORLD_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut fixture = PublisherMapFixture::new();
-    let name = format!("PublisherCacheFixture_{}_{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
-    fixture.add_map(&name, "sealed-cache-fixture", "sealed mapgen fixture", 22.0, 4.0, 5, Some(omsi_pack::random_content_key().unwrap()));
+    let name = format!(
+        "PublisherCacheFixture_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    fixture.add_map(
+        &name,
+        "sealed-cache-fixture",
+        "sealed mapgen fixture",
+        22.0,
+        4.0,
+        5,
+        Some(omsi_pack::random_content_key().unwrap()),
+    );
     let map = fixture.map_dir_named(&name);
     std::fs::remove_file(map.join("dependencies.json")).unwrap();
     let tile = map.join("tiles/sector/tile_0_0.map");
-    let text = std::fs::read_to_string(&tile).unwrap().replace("renamed.sli", "original.sli");
+    let text = std::fs::read_to_string(&tile)
+        .unwrap()
+        .replace("renamed.sli", "original.sli");
     std::fs::write(&tile, text).unwrap();
     std::fs::remove_dir_all(fixture.root.join("Packs/scene-types.oopp")).unwrap();
     let mounts = omsi_cfg::publisher::mount_packs(&fixture.root).unwrap();
@@ -579,12 +792,20 @@ fn a_map_without_dependencies_does_not_read_an_installed_packs_assets() {
     let spline = world.spline_type("Splines/Fixture/original.sli");
     let _layers = world.map_layers();
     let read_protected = omsi_cfg::vfs::protected_reads() != reads;
-    if cache.exists() { std::fs::remove_file(&cache).unwrap(); }
+    if cache.exists() {
+        std::fs::remove_file(&cache).unwrap();
+    }
     drop(world);
     for mount in mounts {
         omsi_cfg::vfs::unmount_sealed(&mount);
         omsi_cfg::remove_content_root(&mount);
     }
-    assert!(spline.is_none(), "a map without dependencies.json read a spline from an installed pack");
-    assert!(!read_protected, "a map without dependencies.json read protected pack content");
+    assert!(
+        spline.is_none(),
+        "a map without dependencies.json read a spline from an installed pack"
+    );
+    assert!(
+        !read_protected,
+        "a map without dependencies.json read protected pack content"
+    );
 }

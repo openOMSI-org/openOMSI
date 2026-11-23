@@ -538,7 +538,13 @@ fn model_lights_into(
                 texture: l
                     .texture
                     .as_deref()
-                    .map(|b| crate::lights::corona_texture_id_with_texture_dirs(model_dir, b, publisher_texture_dirs))
+                    .map(|b| {
+                        crate::lights::corona_texture_id_with_texture_dirs(
+                            model_dir,
+                            b,
+                            publisher_texture_dirs,
+                        )
+                    })
                     .filter(|t| *t != 0)
                     .unwrap_or_else(crate::lights::glow_texture_id),
                 ..Default::default()
@@ -612,7 +618,13 @@ fn model_lights_into(
                 texture: l
                     .bitmap
                     .as_deref()
-                    .map(|b| crate::lights::corona_texture_id_with_texture_dirs(model_dir, b, publisher_texture_dirs))
+                    .map(|b| {
+                        crate::lights::corona_texture_id_with_texture_dirs(
+                            model_dir,
+                            b,
+                            publisher_texture_dirs,
+                        )
+                    })
                     .filter(|t| *t != 0)
                     .unwrap_or_else(crate::lights::glow_texture_id),
                 ..Default::default()
@@ -958,6 +970,9 @@ pub(super) fn insert_publisher_texture_dirs(
         return;
     }
     let global = omsi_cfg::resolve_path(root, "Texture");
-    let at = dirs.iter().position(|dir| *dir == global).unwrap_or(dirs.len());
+    let at = dirs
+        .iter()
+        .position(|dir| *dir == global)
+        .unwrap_or(dirs.len());
     dirs.splice(at..at, publisher_texture_dirs.iter().cloned());
 }
