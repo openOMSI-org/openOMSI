@@ -326,22 +326,24 @@ pub(super) fn locate(path: &Path) -> Option<(Arc<SealedMount>, String)> {
     if mounts.is_empty() {
         return None;
     }
-    for m in mounts.iter() {
-        if let Ok(rest) = path.strip_prefix(&m.path) {
-            let mut parts: Vec<String> = Vec::new();
-            for c in rest.components() {
-                match c {
-                    Component::Normal(s) => parts.push(s.to_string_lossy().to_lowercase()),
-                    Component::ParentDir => {
-                        parts.pop();
-                    }
-                    _ => {}
-                }
+    // The deepest mount answers: a publisher pack is mounted inside its map's folder, and in
+    // LAN that folder lies in the session store.
+    let m = mounts
+        .iter()
+        .filter(|m| path.starts_with(&m.path))
+        .max_by_key(|m| m.path.components().count())?;
+    let rest = path.strip_prefix(&m.path).ok()?;
+    let mut parts: Vec<String> = Vec::new();
+    for c in rest.components() {
+        match c {
+            Component::Normal(s) => parts.push(s.to_string_lossy().to_lowercase()),
+            Component::ParentDir => {
+                parts.pop();
             }
-            return Some((m.clone(), parts.join("/")));
+            _ => {}
         }
     }
-    None
+    Some((m.clone(), parts.join("/")))
 }
 
 #[cfg(test)]
@@ -495,5 +497,35 @@ mod tests {
             before,
             "a multiplayer session store counted as publisher-protected content"
         );
+    }
+
+    #[test]
+    fn a_store_mounted_inside_another_answers_for_its_own_files() {
+        let dir =
+            std::env::temp_dir().join(format!("omsi-cfg-sealed-nested-{}", std::process::id()));
+        let key = Arc::new(SealKey::new(&random_key().unwrap()));
+        let outer_files = store(&dir.join("outer-blobs"), &key);
+        let inner_files = store(&dir.join("inner-blobs"), &key);
+        // a LAN session store, and a publisher pack mounted inside the map folder it holds
+        let outer = dir.join("session");
+        let inner = outer.join("maps/Test Map/.publisher-world/1/1-0");
+        mount_sealed(&outer, key.clone(), outer_files);
+        mount_sealed(&inner, key.clone(), inner_files);
+        let inner_cfg = inner.join("maps/Test Map/global.cfg");
+        let outer_cfg = outer.join("maps/Test Map/global.cfg");
+        let inner_read = super::super::read(&inner_cfg);
+        let inner_is_file = super::super::is_file(&inner_cfg);
+        let outer_is_file = super::super::is_file(&outer_cfg);
+        let inner_sealed = is_sealed(&inner_cfg);
+        unmount_sealed(&inner);
+        unmount_sealed(&outer);
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(
+            inner_read.unwrap(),
+            [b"[name]\r\n".as_slice(), MARKER, b"\r\n"].concat()
+        );
+        assert!(inner_is_file, "the inner store's file is not found");
+        assert!(outer_is_file, "the outer store lost its own file");
+        assert!(inner_sealed);
     }
 }
