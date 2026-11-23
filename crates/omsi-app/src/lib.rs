@@ -705,7 +705,8 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
     let mut spray = puddles::Spray::new();
     spray.graphics = args.session_settings.graphics();
     let radio = radio::Radio::load(&args_root_for_keys);
-    let (started, last) = (Instant::now(), Instant::now());
+    let started = Instant::now();
+    let last = Instant::now();
     let input_script = parse_input_script();
     let game_keys = omsi_content::KeyboardCfg::load(&crate::startup::keyboard_cfg(&args_root_for_keys)).unwrap_or_default().with_game_defaults().with_vr_defaults().game;
     let own_keys = crate::startup::own_keys(&args_root_for_keys);
