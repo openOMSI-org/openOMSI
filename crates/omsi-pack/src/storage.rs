@@ -243,6 +243,13 @@ fn windows_key_path(scope: &str) -> Result<PathBuf> {
 
 #[cfg(windows)]
 fn write_windows_key(scope: &str, value: &[u8]) -> Result<()> {
+    write_key_file(&windows_key_path(scope)?, value)
+}
+
+/// Replace the key file at `path` with `value` through a temporary file beside it. The
+/// temporary file gets a random name: one a crash left behind never blocks a later store.
+#[cfg(windows)]
+fn write_key_file(path: &Path, value: &[u8]) -> Result<()> {
     use std::{io::Write as _, os::windows::ffi::OsStrExt};
     use windows::{
         Win32::Storage::FileSystem::{
@@ -250,12 +257,10 @@ fn write_windows_key(scope: &str, value: &[u8]) -> Result<()> {
         },
         core::PCWSTR,
     };
-    let path = windows_key_path(scope)?;
-    let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
-    let mut f = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&tmp)?;
+    let dir = path
+        .parent()
+        .ok_or(PackError::Invalid("stored key path has no folder"))?;
+    let (tmp, mut f) = crate::create_private_temp(dir, ".key")?;
     if let Err(e) = f.write_all(value).and_then(|_| f.sync_all()) {
         let _ = fs::remove_file(&tmp);
         return Err(e.into());
@@ -337,5 +342,23 @@ mod windows_tests {
             "a junction in a pack path must stay refused"
         );
         assert!(matches!(absent, Err(PackError::KeyNotFound)));
+    }
+
+    #[test]
+    fn a_temporary_file_left_by_a_crash_does_not_block_storing_a_key() {
+        let dir = std::env::temp_dir().join(format!("omsi-pack-key-temp-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("key.dpapi");
+        // the name the old code gave this process's temporary file
+        let left = path.with_extension(format!("{}.tmp", std::process::id()));
+        fs::write(&left, b"left over").unwrap();
+        let first = write_key_file(&path, b"first");
+        let second = write_key_file(&path, b"second");
+        let stored = fs::read(&path);
+        let _ = fs::remove_dir_all(&dir);
+        first.unwrap();
+        second.unwrap();
+        assert_eq!(stored.unwrap(), b"second");
     }
 }
