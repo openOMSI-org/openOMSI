@@ -200,6 +200,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_LAN_SAY` | text | - | use | lan | "30=Hallo;45=Bye": LAN chat lines said at these seconds of the session. |
 | `OMSI_MOBILE` | bool | off | use | app, app-mx | The phone layout on a computer (screen cut-outs). |
 | `OMSI_MUTE` | bool | off | use | audio | Mix everything as usual but play nothing. |
+| `OMSI_MX_SOFTWARE` | bool | off | once | app-mx | Let mX Graphics draw on a software renderer (WARP, llvmpipe) on a computer; without it a computer where only one opens starts again on wgpu. |
 | `OMSI_NAV_2D` | bool | off | use | app, app-mx | Navigator pictures with flat houses (the nav_3d setting off). |
 | `OMSI_NAV_CONTOURS` | bool | off | use | app, app-mx | Offscreen: the city map in its terrain view (contour lines and their heights, when the map's package has them). |
 | `OMSI_NAV_LINES` | text | - | use | app, app-mx | Offscreen: open the city map's lines panel on the line with this number (a route, then a departure time, after semicolons: 5;1 or 5;1;14:07, which opens its timetable). |
@@ -285,6 +286,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_LIGHT_GRID_SQUARES` | bool | off | frame | render, render-mx | A light goes into every cell of the light grid's square round its range, the corners its range misses too (A/B). |
 | `OMSI_MAIN_SPLIT` | bool | off | frame | render, render-mx | Split the main pass's bundles in two (encoded apart, the second part loads what the first stored). |
 | `OMSI_MIRROR_ENHANCED` | bool | off | frame | app, app-mx, render, render-mx | Draw the mirrors with the enhanced shading again. |
+| `OMSI_MX` | text | settings | once | app, app-mx | mX Graphics for this run, over the mx_graphics setting: on (1, true) starts the game on mX, off (0, false) on wgpu. |
 | `OMSI_NOZCHECK_BIAS` | bool | off | use | scene, scene-mx | The old reading of [matl_noZcheck] (A/B). |
 | `OMSI_NO_ANIMPARENT` | bool | off | use | sim | Every mesh animated on its own, without [animparent] (A/B). |
 | `OMSI_NO_AO` | bool | off | frame | render, render-mx | No ambient occlusion pass. |

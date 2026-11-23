@@ -463,6 +463,13 @@ fn attach(view: &mx::TextureView, clear: mx::Color) -> Option<mx::RenderPassColo
     })
 }
 
+impl CloudPass {
+    /// Lets the history go: the next traced frame starts afresh.
+    pub(crate) fn forget(&mut self) {
+        self.prev = None;
+    }
+}
+
 impl Renderer {
     /// The window's clouds at its picture's size; true when the camera group must be made
     /// again to read new targets.
@@ -489,6 +496,19 @@ impl Renderer {
         let Some(probe) = self.tone.probe.as_mut() else {
             return;
         };
+        // (a clear sky, or the clouds turned off: no trace - its quarter-resolution march
+        // ran every frame whatever the sky held - and no history to come back to)
+        if f.lighting.cloud_density <= 0.001 {
+            probe.clouds.forget();
+            self.queue
+                .write_buffer(
+                    &self.sky.cloud_view_buf,
+                    0,
+                    bytemuck::bytes_of(&CloudView::default()),
+                )
+                .expect("mX: a queue write");
+            return;
+        }
         let Some(sky_bg) = scene.sky_bind_group.as_ref() else {
             self.queue
                 .write_buffer(

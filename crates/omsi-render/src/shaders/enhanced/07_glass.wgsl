@@ -39,7 +39,7 @@ fn glass_film(in: FsIn, water: f32) -> vec4<f32> {
     // the view through the wet glass between the drops: softened by the film of water
     // (a running film scatters the light by a fraction of a degree: some 0.7 % of the
     // picture's height in a downpour, a third of that in a drizzle)
-    let veil_lod = log2(max(dims.y * mix(0.005, 0.014, clamp(g.veil / 0.6, 0.0, 1.0)), 1.0));
+    let veil_lod = log2(max(dims.y * mix(0.002, 0.006, clamp(g.veil / 0.3, 0.0, 1.0)), 1.0));
     var behind = mist_col;
     if (has_picture) {
         behind = finite_or(glass_blur(uv0, veil_lod), mist_col);
@@ -87,7 +87,7 @@ fn glass_film(in: FsIn, water: f32) -> vec4<f32> {
         // view behind it, a little dimmer for its rim - a faint grain, not a dark speck.
         let detail = smoothstep(0.5, 1.6, g.size_px);
         drop_col = mix(behind * 0.93, c, detail);
-        a_drop = g.cover * mix(0.5, 0.95, detail);
+        a_drop = g.cover * mix(select(0.15, 0.5, has_picture), 0.95, detail);
     }
     // Drops a few pixels across are a pane's sparkle close up; seen from the street they
     // fade out over the first fifteen metres. The haze stays further.
@@ -110,7 +110,7 @@ fn glass_film(in: FsIn, water: f32) -> vec4<f32> {
     // (drawn with the pane before this film): a misted pane shows the drops behind it as
     // soft shadows, not sharp lenses.
     if (in_cab) {
-        a = a * (1.0 - 0.8 * glass_condensation(in.world, g.out));
+        a = a * (1.0 - 0.5 * glass_condensation(in.world, g.out));
     }
     return vec4<f32>(col, a);
 }

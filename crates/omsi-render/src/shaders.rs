@@ -190,14 +190,14 @@ mod tests {
             !shader.contains("spec = spec * camera.lod.y;"),
             "multiplying by the ground flag corrupts road glare"
         );
-        assert!(
-            setup.contains(
-                "lod: [self.fsr_mip_bias(f), 0.0, lighting.road_glare.clamp(0.0, 2.0), lighting.air_temp.clamp(-40.0, 45.0)]"
-            ),
-            "camera uniform must initialize the ground-pass flag to zero and glare in z"
-        );
         // (compared without whitespace: rustfmt may break the call over lines)
         let squeeze = |s: &str| s.split_whitespace().collect::<String>();
+        assert!(
+            squeeze(setup).contains(&squeeze(
+                "lod: [self.fsr_mip_bias(f), 0.0, lighting.road_glare.clamp(0.0, 2.0), lighting.air_temp.clamp(-40.0, 45.0)"
+            )),
+            "camera uniform must initialize the ground-pass flag to zero and glare in z"
+        );
         let render = squeeze(include_str!("render.rs"));
         assert!(
             render.contains(&squeeze(
@@ -225,9 +225,11 @@ mod tests {
     /// and the traced sample read once for FXC, the road glare in its own uniform lane,
     /// and the detail grain's octaves left out where faded, and the instance's parameters
     /// handed to the fragments flat (#1488), no lamp glint on a face seen from behind, no sun glint on a face seen from behind (#3359), and an unswitched night map's gain capped (#3362),
-    /// and the panes' condensation laid in the bus's tilted frame (#3958),
+    /// depth caps limited to separated target-plane sides; the panes' condensation laid
+    /// in the bus's tilted frame (#3958),
     /// and the rain and the snow on the panes shared with the classic pictures, the cabin's
     /// reflection probe gone, the traffic's wet windows and the windows lit in a downpour.
+    /// And #4153: the drops on the panes read as drops again, prefiltered under a pixel.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
@@ -236,10 +238,10 @@ mod tests {
             super::SCENE.replace("\r\n", "\n"),
             super::ENHANCED.replace("\r\n", "\n"),
         );
-        assert_eq!((scene.len(), fnv1a(&scene)), (150040, 4592271315124872392));
+        assert_eq!((scene.len(), fnv1a(&scene)), (152041, 16478430361663833047));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),
-            (120282, 6580462276163353075)
+            (120309, 14136318524526509786)
         );
     }
 }
