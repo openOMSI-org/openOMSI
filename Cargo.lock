@@ -3206,7 +3206,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 [[package]]
 name = "mx"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=25e1abf2780a5b4c5631d055d681e5b68de0e2da#25e1abf2780a5b4c5631d055d681e5b68de0e2da"
+source = "git+https://github.com/openOMSI-org/mX?rev=650b244ca3224411a87ed8e84640bd873c6f5589#650b244ca3224411a87ed8e84640bd873c6f5589"
 dependencies = [
  "mx-dx11",
  "mx-dx12",
@@ -3224,7 +3224,7 @@ dependencies = [
 [[package]]
 name = "mx-dx11"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=25e1abf2780a5b4c5631d055d681e5b68de0e2da#25e1abf2780a5b4c5631d055d681e5b68de0e2da"
+source = "git+https://github.com/openOMSI-org/mX?rev=650b244ca3224411a87ed8e84640bd873c6f5589#650b244ca3224411a87ed8e84640bd873c6f5589"
 dependencies = [
  "log",
  "mx-shader",
@@ -3239,7 +3239,7 @@ dependencies = [
 [[package]]
 name = "mx-dx12"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=25e1abf2780a5b4c5631d055d681e5b68de0e2da#25e1abf2780a5b4c5631d055d681e5b68de0e2da"
+source = "git+https://github.com/openOMSI-org/mX?rev=650b244ca3224411a87ed8e84640bd873c6f5589#650b244ca3224411a87ed8e84640bd873c6f5589"
 dependencies = [
  "log",
  "mx-shader",
@@ -3254,7 +3254,7 @@ dependencies = [
 [[package]]
 name = "mx-gl"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=25e1abf2780a5b4c5631d055d681e5b68de0e2da#25e1abf2780a5b4c5631d055d681e5b68de0e2da"
+source = "git+https://github.com/openOMSI-org/mX?rev=650b244ca3224411a87ed8e84640bd873c6f5589#650b244ca3224411a87ed8e84640bd873c6f5589"
 dependencies = [
  "glow",
  "khronos-egl",
@@ -3270,7 +3270,7 @@ dependencies = [
 [[package]]
 name = "mx-metal"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=25e1abf2780a5b4c5631d055d681e5b68de0e2da#25e1abf2780a5b4c5631d055d681e5b68de0e2da"
+source = "git+https://github.com/openOMSI-org/mX?rev=650b244ca3224411a87ed8e84640bd873c6f5589#650b244ca3224411a87ed8e84640bd873c6f5589"
 dependencies = [
  "log",
  "mx-shader",
@@ -3290,7 +3290,7 @@ dependencies = [
 [[package]]
 name = "mx-noop"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=25e1abf2780a5b4c5631d055d681e5b68de0e2da#25e1abf2780a5b4c5631d055d681e5b68de0e2da"
+source = "git+https://github.com/openOMSI-org/mX?rev=650b244ca3224411a87ed8e84640bd873c6f5589#650b244ca3224411a87ed8e84640bd873c6f5589"
 dependencies = [
  "mx-shader",
  "mx-types",
@@ -3302,8 +3302,9 @@ dependencies = [
 [[package]]
 name = "mx-shader"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=25e1abf2780a5b4c5631d055d681e5b68de0e2da#25e1abf2780a5b4c5631d055d681e5b68de0e2da"
+source = "git+https://github.com/openOMSI-org/mX?rev=650b244ca3224411a87ed8e84640bd873c6f5589#650b244ca3224411a87ed8e84640bd873c6f5589"
 dependencies = [
+ "log",
  "naga 30.0.2",
  "naga-types",
  "thiserror 2.0.21",
@@ -3312,7 +3313,7 @@ dependencies = [
 [[package]]
 name = "mx-types"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=25e1abf2780a5b4c5631d055d681e5b68de0e2da#25e1abf2780a5b4c5631d055d681e5b68de0e2da"
+source = "git+https://github.com/openOMSI-org/mX?rev=650b244ca3224411a87ed8e84640bd873c6f5589#650b244ca3224411a87ed8e84640bd873c6f5589"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
@@ -3321,7 +3322,7 @@ dependencies = [
 [[package]]
 name = "mx-upscale"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=25e1abf2780a5b4c5631d055d681e5b68de0e2da#25e1abf2780a5b4c5631d055d681e5b68de0e2da"
+source = "git+https://github.com/openOMSI-org/mX?rev=650b244ca3224411a87ed8e84640bd873c6f5589#650b244ca3224411a87ed8e84640bd873c6f5589"
 dependencies = [
  "anyhow",
  "ash",
@@ -3338,7 +3339,7 @@ dependencies = [
 [[package]]
 name = "mx-vulkan"
 version = "0.1.0"
-source = "git+https://github.com/openOMSI-org/mX?rev=25e1abf2780a5b4c5631d055d681e5b68de0e2da#25e1abf2780a5b4c5631d055d681e5b68de0e2da"
+source = "git+https://github.com/openOMSI-org/mX?rev=650b244ca3224411a87ed8e84640bd873c6f5589#650b244ca3224411a87ed8e84640bd873c6f5589"
 dependencies = [
  "ash",
  "gpu-allocator",
@@ -3382,7 +3383,7 @@ dependencies = [
 [[package]]
 name = "naga"
 version = "30.0.2"
-source = "git+https://github.com/openOMSI-org/mX?rev=25e1abf2780a5b4c5631d055d681e5b68de0e2da#25e1abf2780a5b4c5631d055d681e5b68de0e2da"
+source = "git+https://github.com/openOMSI-org/mX?rev=650b244ca3224411a87ed8e84640bd873c6f5589#650b244ca3224411a87ed8e84640bd873c6f5589"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
