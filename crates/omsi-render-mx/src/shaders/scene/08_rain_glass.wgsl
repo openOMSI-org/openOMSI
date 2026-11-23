@@ -200,6 +200,9 @@ struct DropAcc {
     rim: f32,
     size_px: f32,
     track: f32,
+    // the cover of the drops too small for the pixel to see one by one, as their average
+    // (taken into the mist, so that they read as an even haze, not as random specks)
+    avg: f32,
 };
 
 fn drop_take(a: ptr<function, DropAcc>, d: vec4<f32>, r: f32, px: f32) {
@@ -217,6 +220,17 @@ fn drop_take(a: ptr<function, DropAcc>, d: vec4<f32>, r: f32, px: f32) {
 // own while it is gone again, taken by a runner or merged into a neighbour, and the next
 // lands somewhere else in the cell - all fading, nothing popping.
 fn glass_bead(a: ptr<function, DropAcc>, p: PaneProj, layer: f32, cell: f32, occ: f32, r0: f32, size: f32, t: f32, px: f32) {
+    // (a layer whose drops are smaller than the pixel, or cells no wider than it - a mirror's
+    // small picture, the glass seen from afar - is taken at its average cover: sampled one
+    // random cell a pixel, it drew white noise)
+    let fine = max(1.0 - smoothstep(0.7, 1.5, r0 * size / px), 1.0 - smoothstep(1.0, 2.5, cell / px));
+    if (fine > 0.0) {
+        let rr = 1.6 * r0 * size / cell;
+        (*a).avg = (*a).avg + fine * occ * min(3.14159 * rr * rr, 1.0);
+        if (fine > 0.99) {
+            return;
+        }
+    }
     let turn = 0.61 + layer * 1.37;
     let g2 = rain_turn(p.q, turn) / cell + vec2<f32>(layer * 17.3, layer * 5.1);
     let c = floor(g2);
@@ -227,7 +241,7 @@ fn glass_bead(a: ptr<function, DropAcc>, p: PaneProj, layer: f32, cell: f32, occ
     let arrival = c + floor(cycle) * vec2<f32>(17.0, 43.0);
     let h = rain_hash(arrival);
     // (a share of cells rising with the wetness: a drop fades in over a small rise of it)
-    let shown = clamp((occ - h.x) * 20.0, 0.0, 1.0) * smoothstep(0.0, 0.03, ph) * (1.0 - smoothstep(0.9, 1.0, ph));
+    let shown = clamp((occ - h.x) * 20.0, 0.0, 1.0) * smoothstep(0.0, 0.03, ph) * (1.0 - smoothstep(0.9, 1.0, ph)) * (1.0 - fine);
     if (shown <= 0.0) {
         return;
     }
@@ -276,15 +290,17 @@ fn glass_meander(s: f32, seed: vec2<f32>, amp: f32) -> f32 {
 // within a second, and a few beads it left. One chance a cell of 3 cm x 0.5 m; a pixel
 // looks at its own cell and the one above, whose drop may have slid into it.
 fn glass_runners(a: ptr<function, DropAcc>, qr: vec2<f32>, mr: mat2x2<f32>, seed: f32, wet: f32, heavy: f32, blow: f32, size: f32, t: f32, px: f32) {
-    let lane_w = 0.02;
-    let seg_h = 0.8;
+    // (lanes of 4.5 cm and cells 1.2 m tall, few of them running at once: denser, their
+    // tracks cut the glass into wide clear stripes)
+    let lane_w = 0.045;
+    let seg_h = 1.2;
     let lane = floor(qr.x / lane_w);
     let seg0 = floor(qr.y / seg_h);
     for (var k = 0; k < 2; k = k + 1) {
         let seg = seg0 - f32(k);
         let key = vec2<f32>(lane * 1.7 + seed * 101.0, seg * 2.3 + seed * 37.0);
         let h1 = rain_hash(key + vec2<f32>(3.0, 11.0));
-        if (h1.x >= wet * (0.5 + 0.3 * heavy + 0.2 * blow)) {
+        if (h1.x >= wet * (0.15 + 0.15 * heavy + 0.1 * blow)) {
             continue;
         }
         let h2 = rain_hash(key + vec2<f32>(8.1, 5.1));
@@ -295,7 +311,7 @@ fn glass_runners(a: ptr<function, DropAcc>, qr: vec2<f32>, mr: mat2x2<f32>, seed
         let v = (0.08 + 0.16 * h1.y * h1.y) * (1.0 + 0.8 * blow) * (1.0 + 0.4 * heavy);
         let run_len = 0.12 + 0.4 * h2.x;
         let run_t = run_len / v;
-        let refill = mix(8.0, 4.0, wet);
+        let refill = mix(3.0, 1.5, wet);
         let period = sit + run_t + refill;
         let cycle = t / period + h2.x;
         let tau = fract(cycle) * period;
@@ -387,25 +403,27 @@ fn glass_drops(a: ptr<function, DropAcc>, b: PaneBase, p: PaneProj, w: f32, wet:
         }
     }
     // --- the drops that sit: four sizes, a great many small ones and fewer large ones (radius
-    // 0.5 to 1, 0.8 to 1.6, 1.2 to 2.4 and 1.7 to 3.4 mm), all fewer in the runners' fresh
+    // 1 to 2, 1.6 to 3.2, 2.4 to 4.8 and 3.4 to 6.8 mm: smaller ones, true to a drizzle's,
+    // were under a pixel from the driver's seat and drew the windscreen as an even grain),
+    // all fewer in the runners' fresh
     // tracks and under the bank
     let room = (1.0 - (*a).track) * (1.0 - bank) * w;
     for (var layer = 0; layer < 4; layer = layer + 1) {
         let fl = f32(layer);
-        var cell = 0.0034;
-        var r0 = 0.0005;
+        var cell = 0.0068;
+        var r0 = 0.001;
         var occ = 0.85 * smoothstep(0.02, 0.25, wet);
         if (layer == 1) {
-            cell = 0.0054;
-            r0 = 0.0008;
+            cell = 0.0108;
+            r0 = 0.0016;
             occ = 0.75 * smoothstep(0.05, 0.4, wet);
         } else if (layer == 2) {
-            cell = 0.008;
-            r0 = 0.0012;
+            cell = 0.016;
+            r0 = 0.0024;
             occ = 0.6 * smoothstep(0.15, 0.6, wet);
         } else if (layer == 3) {
-            cell = 0.0115;
-            r0 = 0.0017;
+            cell = 0.023;
+            r0 = 0.0034;
             occ = 0.4 * smoothstep(0.35, 0.9, wet);
         }
         glass_bead(a, p, fl, cell, occ * room, r0, size, t, b.px_area);
@@ -472,6 +490,7 @@ fn glass_water(world: vec3<f32>, local: vec3<f32>, n: vec3<f32>, water: f32, t: 
     acc.rim = 0.0;
     acc.size_px = 0.0;
     acc.track = 0.0;
+    acc.avg = 0.0;
     // the bank a blade pushed: its ridge bends the view
     if (bank > 0.0) {
         acc.cover = bank;
@@ -498,17 +517,18 @@ fn glass_water(world: vec3<f32>, local: vec3<f32>, n: vec3<f32>, water: f32, t: 
     }
     // (seen from further than a millimetre a pixel: their average)
     let mist = mix(wet * 0.3 * 0.12, grain, smoothstep(0.0015, 0.0006, b.px));
-    g.mist = clamp(mist * (1.0 - acc.track), 0.0, 1.0);
+    g.mist = clamp((mist + 0.6 * acc.avg) * (1.0 - acc.track), 0.0, 1.0);
     // The connected water between the drops scatters some of the view into a soft haze
     // (the veil, drawn from the picture's blurred levels), the same on every pane as wet.
     // A runner's fresh track is a clear sheet of water, sharper than the rest.
-    let film = smoothstep(0.03, 0.4, wet) * (1.0 - 0.7 * acc.track);
+    let film = smoothstep(0.03, 0.4, wet) * (1.0 - 0.3 * acc.track);
     // (by the air's temperature, `camera.lod.w`: on cold glass the water spreads into a film
     // and a fine mist of droplets that scatter the view - near freezing the sleet's slush on
     // top - while in a warm summer rain it beads up and runs off, the glass between the drops
     // nearly clear)
     let cold = 1.0 - smoothstep(2.0, 24.0, camera.lod.w);
-    g.veil = film * mix(0.35, 0.6, heavy) * mix(0.55, 1.3, cold);
+    // (light: a strong veil hid the drops behind a uniform fog)
+    g.veil = film * mix(0.12, 0.25, heavy) * mix(0.7, 1.2, cold);
     g.cover = acc.cover;
     g.rim = acc.rim;
     g.size_px = acc.size_px;

@@ -209,13 +209,24 @@ pub(crate) fn find_root() -> Option<PathBuf> {
 /// own graphics library (the `*-mx` crates, `openomsi_game_mx`), and wgpu is never started;
 /// off, the game runs on wgpu alone and nothing of mX is started. Read once at the start.
 pub fn mx_graphics() -> bool {
-    settings::Settings::load().mx_graphics
+    mx_allowed() && settings::Settings::load().mx_graphics
+}
+
+/// Whether this system may run the game on mX at all: on a Mac (Metal, the one backend mX
+/// has run a map on), elsewhere only with `OMSI_MX=1` for testing. mX's DirectX 12, Vulkan
+/// and OpenGL paths have not drawn the game on a player's card yet: there the setting left
+/// players with a grey screen or the software renderer's few frames a second (#4153).
+fn mx_allowed() -> bool {
+    cfg!(target_os = "macos") || std::env::var("OMSI_MX").is_ok_and(|v| v == "1")
 }
 
 /// [`mx_graphics`], from the settings under `home` (the phones' entry points ask before they
 /// set HOME, which the mX game sets again in its own).
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) fn mx_graphics_in(home: &std::path::Path) -> bool {
+    if !mx_allowed() {
+        return false;
+    }
     let text =
         std::fs::read_to_string(home.join(".openomsi").join("settings.cfg")).unwrap_or_default();
     settings::Settings::from_text(&text).mx_graphics

@@ -215,11 +215,15 @@ fn cloud_density(p: vec3<f32>, h: f32, lod: f32, sky: CloudSky, fine: bool) -> f
     var e = DETAIL_MEAN * sky.erode;
     if (fine) {
         // the detail, twisted by the curl map (more under a cloud, where the wind tears it)
-        let curl = textureSampleLevel(t_cloud_curl, s_cloud, bxy / CURL_PERIOD, 0.0).rg * 2.0 - vec2<f32>(1.0);
+        let curl = textureSampleLevel(t_cloud_curl, s_cloud, bxy / CURL_PERIOD, max(lod + 0.5, 0.0)).rg * 2.0 - vec2<f32>(1.0);
         let q = vec3<f32>(p.xy + cloud_drift() * DETAIL_DRIFT, bz) / DETAIL_PERIOD + vec3<f32>(curl * CURL_STRENGTH * (1.0 - h), 0.0);
-        let dn = textureSampleLevel(t_cloud_detail, s_cloud, q, max(lod - 3.0, 0.0)).r;
-        // (wispy at the base, billowy higher up)
-        e = mix(dn, 1.0 - dn, clamp(h * 4.0, 0.0, 1.0)) * sky.erode;
+        // (the detail texel is half the base's: one level coarser; read too sharp, a
+        // repeating 625 m volume drew moire arcs over the sky)
+        let dl = max(lod + 1.0, 0.0);
+        let dn = textureSampleLevel(t_cloud_detail, s_cloud, q, dl).r;
+        // (wispy at the base, billowy higher up; its mean where it can no longer be resolved)
+        let ed = mix(dn, 1.0 - dn, clamp(h * 4.0, 0.0, 1.0));
+        e = mix(ed, DETAIL_MEAN, smoothstep(1.5, 3.0, dl)) * sky.erode;
     }
     return clamp((m - e) / (1.0 - e), 0.0, 1.0);
 }
@@ -253,7 +257,10 @@ fn cloud_march(d: vec3<f32>, below: vec3<f32>, steps: i32, jitter: f32, pix: f32
     let t0 = span.x;
     let t1 = span.y;
     out.dist = t0;
-    let ds = (t1 - t0) / f32(steps);
+    // (more steps for the long, low rays: a fixed count across up to 15 km slices the layer
+    // into horizontal planes, drawn as rings round the zenith and bands at the horizon)
+    let n = i32(clamp(f32(steps) * (1.0 + 2.0 * (1.0 - abs(d.z))), f32(steps), f32(steps) * 3.0));
+    let ds = (t1 - t0) / f32(n);
     // the key light: the sun, and the moon once the sun has gone from the clouds too
     let night = camera.sun_dir.z < -0.12;
     let ld = select(normalize(camera.sun_dir.xyz), normalize(enh.moon.xyz), night);
@@ -277,10 +284,12 @@ fn cloud_march(d: vec3<f32>, below: vec3<f32>, steps: i32, jitter: f32, pix: f32
     var hit = 0.0;
     var hit_w = 0.0;
     var t = t0 + ds * jitter;
-    for (var i = 0; i < steps; i = i + 1) {
+    for (var i = 0; i < n; i = i + 1) {
         let p = vec3<f32>(cloud_ground(d, t), cloud_height(d, t));
         let h = (p.z - cloud_bottom()) / (cloud_top() - cloud_bottom());
-        let lod = log2(max(t * pix / texel, 1.0));
+        // (the step's length counts as the footprint too: a long step through a sharp volume
+        // reads it as contour lines)
+        let lod = log2(max(max(t * pix, 0.5 * ds) / texel, 1.0));
         let sigma = cloud_sigma(p, h, lod, sky, fine);
         if (sigma > 1e-6) {
             // the key light reaching p through the cloud towards it, in steps growing 1.9
@@ -289,7 +298,7 @@ fn cloud_march(d: vec3<f32>, below: vec3<f32>, steps: i32, jitter: f32, pix: f32
             var ls = 40.0;
             var lt = 0.0;
             for (var k = 0; k < 6; k = k + 1) {
-                let q = p + ld * (lt + 0.5 * ls);
+                let q = p + ld * (lt + fract(jitter + 0.61803399 * f32(k + 1)) * ls);
                 let hq = (q.z - cloud_bottom()) / (cloud_top() - cloud_bottom());
                 if (hq >= 1.0 || hq <= 0.0) {
                     break;
@@ -440,13 +449,13 @@ fn high_clouds(d: vec3<f32>, bg: vec3<f32>, pix: f32) -> vec4<f32> {
             // (a finer field of its own lets the strands part and gather like hair, not run
             // side by side as one bent comb)
             let comb = hc_fbm(r / vec2<f32>(3500.0, 1400.0) + vec2<f32>(8.1, 2.6), fp / 1400.0, 2) - 0.5;
-            let f = vec2<f32>(r.x / 2600.0, (r.y + 1500.0 * warp + 500.0 * comb) / 180.0);
-            let fib = hc_fbm(f, 2.0 * fp / 180.0, 4);
+            let f = vec2<f32>(r.x / 2600.0, (r.y + 1500.0 * warp + 500.0 * comb) / 450.0);
+            let fib = hc_fbm(f, 2.0 * fp / 450.0, 4);
             // (what the footprint has blurred out: the grain evens out into the wisp's sheen
             // well before a strand narrows to a pixel)
-            let lost = smoothstep(0.05, 0.45, fp / 180.0);
-            let he = 2.0 * fp / 180.0;
-            let hair = mix(1.0, 0.45 + 1.1 * smoothstep(0.25 - he, 0.85 + he, fib), 0.7 * (1.0 - lost));
+            let lost = smoothstep(0.05, 0.45, fp / 450.0);
+            let he = 2.0 * fp / 450.0;
+            let hair = mix(1.0, 0.45 + 1.1 * smoothstep(0.25 - he, 0.85 + he, fib), 0.4 * (1.0 - lost));
             let dens = patchy * wisp * hair;
             hi_cover = clamp(dens, 0.0, 1.0) * mix(0.3, 0.6, clamp(veil, 0.0, 1.0)) * smoothstep(0.02, 0.15, d.z);
             // (lit by the sun at its own height, through thin ice: forward scattering
@@ -925,7 +934,7 @@ fn fs_probe_filter(in: FsIn) -> ProbeOut {
 
 // The steps of the sky cube's clouds: the cube is the reflections' sky and the mirrors',
 // redrawn a slice a frame and averaged over its rounds.
-const CUBE_CLOUD_STEPS: i32 = 28;
+const CUBE_CLOUD_STEPS: i32 = 40;
 
 // One face of the sky cube: the sky radiance (the table, the clouds, the air) divided by the
 // table scale, and the cloud cover in alpha (the sun's disc is hidden by it).
@@ -938,7 +947,7 @@ fn fs_sky_cube(in: FsIn) -> @location(0) vec4<f32> {
     // a new start point for the steps each redraw (p.y counts the redraws): interleaved
     // gradient noise over the face, shifted by the golden ratio
     let ign = fract(52.9829189 * fract(dot(in.clip.xy, vec2<f32>(0.06711056, 0.00583715))));
-    let jitter = fract(ign + probe.p.y * 0.61803399);
+    let jitter = fract(ign + (probe.p.y + 8.0 * f32(probe.p.x)) * 0.61803399);
     let bg = sky_table(d);
     let hi = high_clouds(d, bg, pix);
     let c = cloud_march(d, bg, CUBE_CLOUD_STEPS, jitter, pix, false);
