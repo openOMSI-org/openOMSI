@@ -225,7 +225,8 @@ mod tests {
     /// and the traced sample read once for FXC, the road glare in its own uniform lane,
     /// and the detail grain's octaves left out where faded, and the instance's parameters
     /// handed to the fragments flat (#1488), no lamp glint on a face seen from behind, no sun glint on a face seen from behind (#3359), and an unswitched night map's gain capped (#3362),
-    /// and the panes' condensation laid in the bus's tilted frame (#3958),
+    /// depth caps limited to separated target-plane sides; the panes' condensation laid
+    /// in the bus's tilted frame (#3958),
     /// and the rain and the snow on the panes shared with the classic pictures, the cabin's
     /// reflection probe gone, the traffic's wet windows and the windows lit in a downpour.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
@@ -236,7 +237,7 @@ mod tests {
             super::SCENE.replace("\r\n", "\n"),
             super::ENHANCED.replace("\r\n", "\n"),
         );
-        assert_eq!((scene.len(), fnv1a(&scene)), (150026, 2254454624361339472));
+        assert_eq!((scene.len(), fnv1a(&scene)), (150809, 14772275079590108979));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),
             (120282, 14685988075852730076)
