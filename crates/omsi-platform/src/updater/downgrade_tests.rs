@@ -12,10 +12,18 @@ fn stable_can_downgrade_only_a_listed_broken_build_to_a_verified_release() {
     });
     let broken = ["0.3.56".to_string(), "0.3.56-pr12".to_string()];
     let selected = |release: &serde_json::Value, current: &str, broken: &[String], allowed| {
-        stable_release(release, current, broken, allowed).unwrap().map(|r| r.version)
+        stable_release(release, current, broken, allowed)
+            .unwrap()
+            .map(|r| r.version)
     };
-    assert_eq!(selected(&stable, "0.3.56", &broken, true), Some("0.3.52".into()));
-    assert_eq!(selected(&stable, "0.3.51", &broken, true), Some("0.3.52".into()));
+    assert_eq!(
+        selected(&stable, "0.3.56", &broken, true),
+        Some("0.3.52".into())
+    );
+    assert_eq!(
+        selected(&stable, "0.3.51", &broken, true),
+        Some("0.3.52".into())
+    );
     assert_eq!(selected(&stable, "0.3.56", &[], true), None);
     assert_eq!(selected(&stable, "0.3.56", &broken, false), None);
     assert_eq!(selected(&stable, "0.3.56-pr12", &broken, true), None);
