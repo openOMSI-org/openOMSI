@@ -50,7 +50,7 @@ function Sidebar() {
     remember('sidebar', icons ? 'full' : 'icons');
   };
   return html`<nav class=${'sidebar' + (icons ? ' icons' : '')}>
-    <div class="brand"><img src="logo.svg" alt="" /><div><b>openOMSI</b><small>${t('Launcher')} ${s.boot?.version || ''}</small></div></div>
+    <div class="brand"><img src="logo.svg" alt="" /><div><b>openBus</b><small>${t('Launcher')} ${s.boot?.version || ''}</small></div></div>
     ${GROUPS.map(([title, pages]) => html`<div class="nav-group" role="group" aria-label=${t(title)}>
       <div class="nav-title">${t(title)}</div>
       ${pages.map(([id, label, icon]) => {

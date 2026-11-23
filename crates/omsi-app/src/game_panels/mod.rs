@@ -117,10 +117,10 @@ pub(super) fn theme_color(c: omsi_ui::Color) -> Rgba {
     Rgba(c.0.map(|v| (v * 255.0 + 0.5) as u8))
 }
 
-/// The game's card: the colour of the panels (openOMSI's own near black in its dark look), a
+/// The game's card: the colour of the panels (openBus's own near black in its dark look), a
 /// little see-through over the picture (`alpha`).
 pub(super) fn card(anchor: omsi_plugin::ui::Anchor, x: f32, y: f32, width: f32, alpha: u8, pal: Palette, children: Vec<Element>) -> Panel {
-    let [r, g, b, _] = if pal == Palette::OPENOMSI { [14, 16, 20, 255] } else { theme_color(pal.panel).0 };
+    let [r, g, b, _] = if pal == Palette::OPENBUS { [14, 16, 20, 255] } else { theme_color(pal.panel).0 };
     let background = Rgba([r, g, b, alpha]);
     Panel { anchor, x, y, width, padding: 14.0, gap: 8.0, background: Some(background), radius: 12.0, accent: None, visible: true, clickable: false, draggable: false, grab: false, frame: false, children }
 }

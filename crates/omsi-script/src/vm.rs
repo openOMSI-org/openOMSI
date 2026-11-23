@@ -1022,7 +1022,7 @@ mod tests {
 
     /// Aachen ibox / ticket-printer buttons (#744): the press trigger sets a flag, `_drag`
     /// and `_off` clear it, and the frame script is what acts. The frame must run while the
-    /// flag is still set - openOMSI does that from `Player::click` via `update_scripts_only`.
+    /// flag is still set - openBus does that from `Player::click` via `update_scripts_only`.
     #[test]
     fn momentary_mouse_flag_needs_frame_before_drag_clear() {
         let dir = std::env::temp_dir().join(format!(

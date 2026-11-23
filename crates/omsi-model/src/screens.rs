@@ -5,7 +5,7 @@ use super::*;
 
 pub const NAVIGATOR_TEXTURE_MAX: i32 = 4096;
 
-/// An openOMSI extension: Omsi.exe leaves such a slot an empty script texture.
+/// An openBus extension: Omsi.exe leaves such a slot an empty script texture.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NavigatorTextureDef {
     pub script_index: usize,

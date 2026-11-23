@@ -791,8 +791,8 @@ _version: 2
   en: "OMSI 2 folder"
 "Browse":
   en: "Browse"
-"The openomsi program":
-  en: "The openomsi program"
+"The openbus program":
+  en: "The openbus program"
 "Save":
   en: "Save"
 "Saved. Reading the content again...":
@@ -1505,8 +1505,8 @@ _version: 2
   en: "Sun"
 "TTData":
   en: "TTData"
-"TTData copied by the openOMSI launcher's timetable editor; its reset deletes this folder\\n":
-  en: "TTData copied by the openOMSI launcher's timetable editor; its reset deletes this folder\\n"
+"TTData copied by the openBus launcher's timetable editor; its reset deletes this folder\\n":
+  en: "TTData copied by the openBus launcher's timetable editor; its reset deletes this folder\\n"
 "Take your hands off the wheel and your feet off the pedals (the wheel in the middle), then press Next.":
   en: "Take your hands off the wheel and your feet off the pedals (the wheel in the middle), then press Next."
 "Tap a .zip to install it":
@@ -1667,8 +1667,8 @@ _version: 2
   en: "Not served"
 "on time":
   en: "on time"
-"openOMSI":
-  en: "openOMSI"
+"openBus":
+  en: "openBus"
 "placehof ":
   en: "placehof "
 "put their bus back on its wheels":
@@ -2955,8 +2955,8 @@ _version: 2
   en: "On foot: W A S D walk, Shift runs, C kneels, F4 free camera / F1 back, G sits down (by the driver's place: back at the wheel), Ctrl+Shift+G steps out of the bus"
 "Switching the vehicle off ...":
   en: "Switching the vehicle off ..."
-"No radio stations (see ~/.openomsi/radio.cfg)":
-  en: "No radio stations (see ~/.openomsi/radio.cfg)"
+"No radio stations (see ~/.openbus/radio.cfg)":
+  en: "No radio stations (see ~/.openbus/radio.cfg)"
 "The bus radio is off (switch it on in the cockpit)":
   en: "The bus radio is off (switch it on in the cockpit)"
 "No clouds":
@@ -3053,12 +3053,12 @@ _version: 2
   en: "KY_{action} added. Press its key now."
 "This bus takes parts from vehicle pack(s) that are not installed: {} (install them for its displays and devices)":
   en: "This bus takes parts from vehicle pack(s) that are not installed: {} (install them for its displays and devices)"
-"openOMSI {} could not be downloaded: {e}":
-  en: "openOMSI {} could not be downloaded: {e}"
-"openOMSI was not updated to {}: the installation was cancelled.":
-  en: "openOMSI was not updated to {}: the installation was cancelled."
-"openOMSI was not updated to {}: installing apps was not allowed for openOMSI (Settings → Apps → openOMSI → Install unknown apps).":
-  en: "openOMSI was not updated to {}: installing apps was not allowed for openOMSI (Settings → Apps → openOMSI → Install unknown apps)."
+"openBus {} could not be downloaded: {e}":
+  en: "openBus {} could not be downloaded: {e}"
+"openBus was not updated to {}: the installation was cancelled.":
+  en: "openBus was not updated to {}: the installation was cancelled."
+"openBus was not updated to {}: installing apps was not allowed for openBus (Settings → Apps → openBus → Install unknown apps).":
+  en: "openBus was not updated to {}: installing apps was not allowed for openBus (Settings → Apps → openBus → Install unknown apps)."
 "METAR of {} (fetched at the start)":
   en: "METAR of {} (fetched at the start)"
 "the host plays on {theirs}, which is not installed here - install that map to meet the others":
@@ -3731,14 +3731,14 @@ _version: 2
   en: "System"
 "Automatic ({size} here)":
   en: "Automatic ({size} here)"
-"This is openOMSI {version}":
-  en: "This is openOMSI {version}"
+"This is openBus {version}":
+  en: "This is openBus {version}"
 "OMSI 2 was found.":
   en: "OMSI 2 was found."
 "This is not a complete OMSI 2 installation.":
   en: "This is not a complete OMSI 2 installation."
-"openOMSI plays the content of an OMSI 2 installation: the original game must be installed (Steam or another copy).":
-  en: "openOMSI plays the content of an OMSI 2 installation: the original game must be installed (Steam or another copy)."
+"openBus plays the content of an OMSI 2 installation: the original game must be installed (Steam or another copy).":
+  en: "openBus plays the content of an OMSI 2 installation: the original game must be installed (Steam or another copy)."
 "OMSI 2 was not found. Choose its folder below.":
   en: "OMSI 2 was not found. Choose its folder below."
 "The folder with Omsi.exe, maps and Vehicles. Left empty, the usual places are searched (Steam libraries, Wine bottles).":
@@ -3747,8 +3747,8 @@ _version: 2
   en: "Browse…"
 "Game program":
   en: "Game program"
-"The openomsi program the duties start. Left empty, the one beside the launcher.":
-  en: "The openomsi program the duties start. Left empty, the one beside the launcher."
+"The openbus program the duties start. Left empty, the one beside the launcher.":
+  en: "The openbus program the duties start. Left empty, the one beside the launcher."
 "Choose the game program":
   en: "Choose the game program"
 "Where things are":
@@ -3775,8 +3775,8 @@ _version: 2
   en: "Reading the map…"
 "{roads} roads | {stops} stops | {entries} entry points":
   en: "{roads} roads | {stops} stops | {entries} entry points"
-"Copy the whole OMSI 2 folder (with Omsi.exe, maps and Vehicles) from a computer into openOMSI/OMSI 2 in the phone's internal storage; it is found there by itself.":
-  en: "Copy the whole OMSI 2 folder (with Omsi.exe, maps and Vehicles) from a computer into openOMSI/OMSI 2 in the phone's internal storage; it is found there by itself."
+"Copy the whole OMSI 2 folder (with Omsi.exe, maps and Vehicles) from a computer into openBus/OMSI 2 in the phone's internal storage; it is found there by itself.":
+  en: "Copy the whole OMSI 2 folder (with Omsi.exe, maps and Vehicles) from a computer into openBus/OMSI 2 in the phone's internal storage; it is found there by itself."
 "Time and date":
   en: "Time and date"
 "{n} tours":
@@ -4123,16 +4123,16 @@ _version: 2
   en: "{n} trips"
 "via {stop}":
   en: "via {stop}"
-"openOMSI {version} is available":
-  en: "openOMSI {version} is available"
-"Sessions and servers are run by players, not by openOMSI. The host receives your driver name, network address, chat and voice, and may keep logs.":
-  en: "Sessions and servers are run by players, not by openOMSI. The host receives your driver name, network address, chat and voice, and may keep logs."
+"openBus {version} is available":
+  en: "openBus {version} is available"
+"Sessions and servers are run by players, not by openBus. The host receives your driver name, network address, chat and voice, and may keep logs.":
+  en: "Sessions and servers are run by players, not by openBus. The host receives your driver name, network address, chat and voice, and may keep logs."
 "As the host, your game receives your players' driver names, network addresses, chat and voice. You are responsible for what you keep of it, such as logs and bans.":
   en: "As the host, your game receives your players' driver names, network addresses, chat and voice. You are responsible for what you keep of it, such as logs and bans."
 "Community server":
   en: "Community server"
-"Run by openOMSI":
-  en: "Run by openOMSI"
+"Run by openBus":
+  en: "Run by openBus"
 "Send servers an identifier for bans":
   en: "Send servers an identifier for bans"
 "Made from this computer's ID, different for each server owner, so servers cannot match you with each other. Some servers turn away players without it.":
@@ -4153,46 +4153,46 @@ _version: 2
   en: "Did not start on this computer"
 "Known to be broken":
   en: "Known to be broken"
-"Downloading openOMSI {version}":
-  en: "Downloading openOMSI {version}"
-"Installing openOMSI {version}":
-  en: "Installing openOMSI {version}"
+"Downloading openBus {version}":
+  en: "Downloading openBus {version}"
+"Installing openBus {version}":
+  en: "Installing openBus {version}"
 "{done} of {total} from GitHub":
   en: "{done} of {total} from GitHub"
 "Looking for updates…":
   en: "Looking for updates…"
-"openOMSI {version} is the latest version.":
-  en: "openOMSI {version} is the latest version."
-"Updated to openOMSI {version}":
-  en: "Updated to openOMSI {version}"
-"openOMSI {version} is installed: start it again yourself ({e}).":
-  en: "openOMSI {version} is installed: start it again yourself ({e})."
-"You have {current}. The launcher downloads the new version ({size}) from GitHub and Android installs it; openOMSI then starts again. Your mods and settings stay as they are.":
-  en: "You have {current}. The launcher downloads the new version ({size}) from GitHub and Android installs it; openOMSI then starts again. Your mods and settings stay as they are."
+"openBus {version} is the latest version.":
+  en: "openBus {version} is the latest version."
+"Updated to openBus {version}":
+  en: "Updated to openBus {version}"
+"openBus {version} is installed: start it again yourself ({e}).":
+  en: "openBus {version} is installed: start it again yourself ({e})."
+"You have {current}. The launcher downloads the new version ({size}) from GitHub and Android installs it; openBus then starts again. Your mods and settings stay as they are.":
+  en: "You have {current}. The launcher downloads the new version ({size}) from GitHub and Android installs it; openBus then starts again. Your mods and settings stay as they are."
 "You have {current}. The launcher downloads the new version ({size}) from GitHub, puts it in place of this one and starts again. Your mods and settings stay as they are.":
   en: "You have {current}. The launcher downloads the new version ({size}) from GitHub, puts it in place of this one and starts again. Your mods and settings stay as they are."
-"openOMSI {version} was not installed":
-  en: "openOMSI {version} was not installed"
-"openOMSI {version} is installed: start it again yourself.":
-  en: "openOMSI {version} is installed: start it again yourself."
+"openBus {version} was not installed":
+  en: "openBus {version} was not installed"
+"openBus {version} is installed: start it again yourself.":
+  en: "openBus {version} is installed: start it again yourself."
 "The list of versions could not be read.":
   en: "The list of versions could not be read."
 "Versions cannot be installed here.":
   en: "Versions cannot be installed here."
 "No release to choose from":
   en: "No release to choose from"
-"openOMSI {version} is downloaded from GitHub and takes the place of this version; the launcher then starts again. Your mods, settings and saves stay as they are.":
-  en: "openOMSI {version} is downloaded from GitHub and takes the place of this version; the launcher then starts again. Your mods, settings and saves stay as they are."
-"Update checks are turned off so that this version stays. To come back, choose the latest version in this list, or download it from GitHub if openOMSI {version} does not have this list yet.":
-  en: "Update checks are turned off so that this version stays. To come back, choose the latest version in this list, or download it from GitHub if openOMSI {version} does not have this list yet."
-"Install openOMSI {version}":
-  en: "Install openOMSI {version}"
+"openBus {version} is downloaded from GitHub and takes the place of this version; the launcher then starts again. Your mods, settings and saves stay as they are.":
+  en: "openBus {version} is downloaded from GitHub and takes the place of this version; the launcher then starts again. Your mods, settings and saves stay as they are."
+"Update checks are turned off so that this version stays. To come back, choose the latest version in this list, or download it from GitHub if openBus {version} does not have this list yet.":
+  en: "Update checks are turned off so that this version stays. To come back, choose the latest version in this list, or download it from GitHub if openBus {version} does not have this list yet."
+"Install openBus {version}":
+  en: "Install openBus {version}"
 "Install":
   en: "Install"
-"openOMSI {version} is installed":
-  en: "openOMSI {version} is installed"
-"Close the game first: openOMSI cannot be replaced while it runs.":
-  en: "Close the game first: openOMSI cannot be replaced while it runs."
+"openBus {version} is installed":
+  en: "openBus {version} is installed"
+"Close the game first: openBus cannot be replaced while it runs.":
+  en: "Close the game first: openBus cannot be replaced while it runs."
 "Another version is being installed.":
   en: "Another version is being installed."
 "Open the list of versions again.":
@@ -4499,8 +4499,8 @@ _version: 2
   en: "Speeds, distances and temperatures in the game's own texts"
 "Theme pack":
   en: "Theme pack"
-"The look of the menus, the panels and the loading screen: openOMSI's own, or one a mod or plugin brings":
-  en: "The look of the menus, the panels and the loading screen: openOMSI's own, or one a mod or plugin brings"
+"The look of the menus, the panels and the loading screen: openBus's own, or one a mod or plugin brings":
+  en: "The look of the menus, the panels and the loading screen: openBus's own, or one a mod or plugin brings"
 "Metric (km/h, km, °C)":
   en: "Metric (km/h, km, °C)"
 "British (mph, miles, yards, °C)":
@@ -4703,8 +4703,8 @@ _version: 2
   en: "Devices connected:"
 "No device connected yet":
   en: "No device connected yet"
-"A device that does not connect: allow openOMSI in this computer's firewall, and check that both are on the same network.":
-  en: "A device that does not connect: allow openOMSI in this computer's firewall, and check that both are on the same network."
+"A device that does not connect: allow openBus in this computer's firewall, and check that both are on the same network.":
+  en: "A device that does not connect: allow openBus in this computer's firewall, and check that both are on the same network."
 "Forget paired devices":
   en: "Forget paired devices"
 "Switch off":
@@ -4779,8 +4779,8 @@ _version: 2
   en: "Your friends paste it into Multiplayer → Connect by Code."
 "stopping - saving the run...":
   en: "stopping - saving the run..."
-"Android asks whether to update openOMSI: press Update there. The app then starts again by itself.":
-  en: "Android asks whether to update openOMSI: press Update there. The app then starts again by itself."
+"Android asks whether to update openBus: press Update there. The app then starts again by itself.":
+  en: "Android asks whether to update openBus: press Update there. The app then starts again by itself."
 "CHAT  (in the game: the chat key, see Controls)":
   en: "CHAT  (in the game: the chat key, see Controls)"
 "no key bindings":
@@ -4915,8 +4915,8 @@ _version: 2
   en: "Camera +"
 "Camera −":
   en: "Camera −"
-"Check that both are on the same network, and allow openOMSI in the computer's firewall (Windows asks the first time).":
-  en: "Check that both are on the same network, and allow openOMSI in the computer's firewall (Windows asks the first time)."
+"Check that both are on the same network, and allow openBus in the computer's firewall (Windows asks the first time).":
+  en: "Check that both are on the same network, and allow openBus in the computer's firewall (Windows asks the first time)."
 "Choose":
   en: "Choose"
 "Clear line":
@@ -5205,20 +5205,20 @@ _version: 2
   en: "Beta"
 "Beta: every new version as soon as it is built, before it is tested. Back on Stable, the beta you have stays until a newer stable version comes out.":
   en: "Beta: every new version as soon as it is built, before it is tested. Back on Stable, the beta you have stays until a newer stable version comes out."
-"Welcome to openOMSI":
-  en: "Welcome to openOMSI"
+"Welcome to openBus":
+  en: "Welcome to openBus"
 "Drive the buses of OMSI 2 wherever you are: its maps, its buses and its lines, at your fingertips.":
   en: "Drive the buses of OMSI 2 wherever you are: its maps, its buses and its lines, at your fingertips."
-"openOMSI plays the content of your own copy of OMSI 2 (Steam or another copy): the game itself is not included.":
-  en: "openOMSI plays the content of your own copy of OMSI 2 (Steam or another copy): the game itself is not included."
+"openBus plays the content of your own copy of OMSI 2 (Steam or another copy): the game itself is not included.":
+  en: "openBus plays the content of your own copy of OMSI 2 (Steam or another copy): the game itself is not included."
 "Get started":
   en: "Get started"
 "I already have it: choose the folder":
   en: "I already have it: choose the folder"
 "Copy OMSI 2 onto this device":
   en: "Copy OMSI 2 onto this device"
-"openOMSI needs the whole OMSI 2 folder of your computer: the one with Omsi.exe, maps and Vehicles in it.":
-  en: "openOMSI needs the whole OMSI 2 folder of your computer: the one with Omsi.exe, maps and Vehicles in it."
+"openBus needs the whole OMSI 2 folder of your computer: the one with Omsi.exe, maps and Vehicles in it.":
+  en: "openBus needs the whole OMSI 2 folder of your computer: the one with Omsi.exe, maps and Vehicles in it."
 "On Steam: right-click OMSI 2, then Manage, then Browse local files.":
   en: "On Steam: right-click OMSI 2, then Manage, then Browse local files."
 "Free space":
@@ -5231,8 +5231,8 @@ _version: 2
   en: "Connect the iPhone or iPad to the Mac with a cable."
 "In the Finder, select it in the sidebar, then Files.":
   en: "In the Finder, select it in the sidebar, then Files."
-"Drag the OMSI 2 folder onto openOMSI.":
-  en: "Drag the OMSI 2 folder onto openOMSI."
+"Drag the OMSI 2 folder onto openBus.":
+  en: "Drag the OMSI 2 folder onto openBus."
 "From a Windows PC":
   en: "From a Windows PC"
 "Install Apple Devices from the Microsoft Store (or iTunes).":
@@ -5247,10 +5247,10 @@ _version: 2
   en: "Choose the folder on the drive."
 "Choose the folder":
   en: "Choose the folder"
-"Or copy it into openOMSI in the Files app: the drive is then no longer needed.":
-  en: "Or copy it into openOMSI in the Files app: the drive is then no longer needed."
-"Open openOMSI in Files":
-  en: "Open openOMSI in Files"
+"Or copy it into openBus in the Files app: the drive is then no longer needed.":
+  en: "Or copy it into openBus in the Files app: the drive is then no longer needed."
+"Open openBus in Files":
+  en: "Open openBus in Files"
 "OMSI 2 is there but not complete yet: is the copy still running?":
   en: "OMSI 2 is there but not complete yet: is the copy still running?"
 "Looking for OMSI 2: it is found by itself once the copy is done.":
@@ -5975,10 +5975,10 @@ _version: 2
   en: "Insert: new panel - Delete: remove it - C: show another mirror"
 "Interior lights":
   en: "Interior lights"
-"Its log is in the openOMSI data folder (launcher.log).":
-  en: "Its log is in the openOMSI data folder (launcher.log)."
-"Its log is in the openOMSI data folder (launcher.log); Microsoft Edge WebView2 {} is installed.":
-  en: "Its log is in the openOMSI data folder (launcher.log); Microsoft Edge WebView2 {} is installed."
+"Its log is in the openBus data folder (launcher.log).":
+  en: "Its log is in the openBus data folder (launcher.log)."
+"Its log is in the openBus data folder (launcher.log); Microsoft Edge WebView2 {} is installed.":
+  en: "Its log is in the openBus data folder (launcher.log); Microsoft Edge WebView2 {} is installed."
 "Key binding was not saved: {e}":
   en: "Key binding was not saved: {e}"
 "Kneeling: C (or Space) stands up again":
@@ -6747,8 +6747,8 @@ _version: 2
   en: "Apple MetalFX (experimental)"
 "mX Graphics (Experimental)":
   en: "mX Graphics (Experimental)"
-"Draws the game with mX, openOMSI's own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before.":
-  en: "Draws the game with mX, openOMSI's own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before."
+"Draws the game with mX, openBus's own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before.":
+  en: "Draws the game with mX, openBus's own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before."
 "Standard (Catmull-Rom)":
   en: "Standard (Catmull-Rom)"
 "Standard Catmull-Rom or experimental FSR 1; changes show at once":
@@ -6833,16 +6833,16 @@ _version: 2
   en: "Tilt steering is switched in the game (the steering wheel button). A game controller (Xbox, PlayStation, MFi) works as soon as it is connected."
 "Key bindings":
   en: "Key bindings"
-"The keys of the game are OMSI's Inputs/keyboard.cfg: the openOMSI launcher of Windows and Linux sets them on its Controls page, which reads and writes the same file.":
-  en: "The keys of the game are OMSI's Inputs/keyboard.cfg: the openOMSI launcher of Windows and Linux sets them on its Controls page, which reads and writes the same file."
+"The keys of the game are OMSI's Inputs/keyboard.cfg: the openBus launcher of Windows and Linux sets them on its Controls page, which reads and writes the same file.":
+  en: "The keys of the game are OMSI's Inputs/keyboard.cfg: the openBus launcher of Windows and Linux sets them on its Controls page, which reads and writes the same file."
 "Anything put into this folder is installed by itself once it has finished copying.":
   en: "Anything put into this folder is installed by itself once it has finished copying."
 "No mods yet. Choose a folder or an archive.":
   en: "No mods yet. Choose a folder or an archive."
 "The original OMSI 2 was not found.":
   en: "The original OMSI 2 was not found."
-"Copy a complete OMSI 2 (the folder with Omsi.exe, maps and Vehicles) into openOMSI in the Files app (On My iPhone / iPad), or from a Mac's Finder over a cable, and choose it here. A copy on iCloud Drive or a USB drive can be chosen as well.":
-  en: "Copy a complete OMSI 2 (the folder with Omsi.exe, maps and Vehicles) into openOMSI in the Files app (On My iPhone / iPad), or from a Mac's Finder over a cable, and choose it here. A copy on iCloud Drive or a USB drive can be chosen as well."
+"Copy a complete OMSI 2 (the folder with Omsi.exe, maps and Vehicles) into openBus in the Files app (On My iPhone / iPad), or from a Mac's Finder over a cable, and choose it here. A copy on iCloud Drive or a USB drive can be chosen as well.":
+  en: "Copy a complete OMSI 2 (the folder with Omsi.exe, maps and Vehicles) into openBus in the Files app (On My iPhone / iPad), or from a Mac's Finder over a cable, and choose it here. A copy on iCloud Drive or a USB drive can be chosen as well."
 "The OMSI 2 folder is the one with maps and Vehicles in it (any complete installation).":
   en: "The OMSI 2 folder is the one with maps and Vehicles in it (any complete installation)."
 "Version":
@@ -6859,10 +6859,10 @@ _version: 2
   en: "From {stop} - {time}"
 "OMSI 2 not found":
   en: "OMSI 2 not found"
-"openOMSI finds and joins the multiplayer sessions of other players on your network, and lets your phone or tablet reach the remote cockpit once you switch it on.":
-  en: "openOMSI finds and joins the multiplayer sessions of other players on your network, and lets your phone or tablet reach the remote cockpit once you switch it on."
-"openOMSI uses the microphone for voice chat in multiplayer, only while you hold a talk key (or with the open microphone) and only if you switch voice chat on. Nothing is recorded.":
-  en: "openOMSI uses the microphone for voice chat in multiplayer, only while you hold a talk key (or with the open microphone) and only if you switch voice chat on. Nothing is recorded."
+"openBus finds and joins the multiplayer sessions of other players on your network, and lets your phone or tablet reach the remote cockpit once you switch it on.":
+  en: "openBus finds and joins the multiplayer sessions of other players on your network, and lets your phone or tablet reach the remote cockpit once you switch it on."
+"openBus uses the microphone for voice chat in multiplayer, only while you hold a talk key (or with the open microphone) and only if you switch voice chat on. Nothing is recorded.":
+  en: "openBus uses the microphone for voice chat in multiplayer, only while you hold a talk key (or with the open microphone) and only if you switch voice chat on. Nothing is recorded."
 "Tilt steering turns the bus's steering wheel with the device.":
   en: "Tilt steering turns the bus's steering wheel with the device."
 "Player {}":
@@ -6915,10 +6915,10 @@ _version: 2
   en: "{button}: choose an action"
 "Position {:.0}, {:.0}, {:.1}   tile {tx}_{ty}   heading {:.0} deg":
   en: "Position {:.0}, {:.0}, {:.1}   tile {tx}_{ty}   heading {:.0} deg"
-"The original OMSI 2 was not found.\n\nopenOMSI needs a complete installation of the original game (any version). Choose its folder in the launcher (Setup), or start once with --root \"/path/to/OMSI 2\", the folder with Omsi.exe, maps and Vehicles in it.\n\nMissing in {folder}: {missing}":
-  en: "The original OMSI 2 was not found.\n\nopenOMSI needs a complete installation of the original game (any version). Choose its folder in the launcher (Setup), or start once with --root \"/path/to/OMSI 2\", the folder with Omsi.exe, maps and Vehicles in it.\n\nMissing in {folder}: {missing}"
-"openOMSI cannot start":
-  en: "openOMSI cannot start"
+"The original OMSI 2 was not found.\n\nopenBus needs a complete installation of the original game (any version). Choose its folder in the launcher (Setup), or start once with --root \"/path/to/OMSI 2\", the folder with Omsi.exe, maps and Vehicles in it.\n\nMissing in {folder}: {missing}":
+  en: "The original OMSI 2 was not found.\n\nopenBus needs a complete installation of the original game (any version). Choose its folder in the launcher (Setup), or start once with --root \"/path/to/OMSI 2\", the folder with Omsi.exe, maps and Vehicles in it.\n\nMissing in {folder}: {missing}"
+"openBus cannot start":
+  en: "openBus cannot start"
 "Panel under the cursor: mirror {} of {} ({side}), {:.0} x {:.0} px":
   en: "Panel under the cursor: mirror {} of {} ({side}), {:.0} x {:.0} px"
 "right":
@@ -6993,14 +6993,14 @@ _version: 2
   en: "Move the mouse to put the pole on the wire, click to let it go"
 "{n} newer below":
   en: "{n} newer below"
-"openOMSI {} is out: it is downloaded in the background and installed when this session ends":
-  en: "openOMSI {} is out: it is downloaded in the background and installed when this session ends"
-"openOMSI {} is downloaded: the launcher offers it when this session ends":
-  en: "openOMSI {} is downloaded: the launcher offers it when this session ends"
-"openOMSI {} is downloaded: it is installed when this session ends":
-  en: "openOMSI {} is downloaded: it is installed when this session ends"
-"this map has no openomsi_weather.cfg":
-  en: "this map has no openomsi_weather.cfg"
+"openBus {} is out: it is downloaded in the background and installed when this session ends":
+  en: "openBus {} is out: it is downloaded in the background and installed when this session ends"
+"openBus {} is downloaded: the launcher offers it when this session ends":
+  en: "openBus {} is downloaded: the launcher offers it when this session ends"
+"openBus {} is downloaded: it is installed when this session ends":
+  en: "openBus {} is downloaded: it is installed when this session ends"
+"this map has no openbus_weather.cfg":
+  en: "this map has no openbus_weather.cfg"
 "response has no valid temperature":
   en: "response has no valid temperature"
 "response has no valid humidity":
@@ -7467,10 +7467,10 @@ _version: 2
   en: "no home folder"
 "connection lost: closed by the host":
   en: "connection lost: closed by the host"
-"the host says: not this session (or the host's openOMSI is older and sends its mods unencrypted: both need the same version)":
-  en: "the host says: not this session (or the host's openOMSI is older and sends its mods unencrypted: both need the same version)"
-"the host's openOMSI is older: both need the same version":
-  en: "the host's openOMSI is older: both need the same version"
+"the host says: not this session (or the host's openBus is older and sends its mods unencrypted: both need the same version)":
+  en: "the host says: not this session (or the host's openBus is older and sends its mods unencrypted: both need the same version)"
+"the host's openBus is older: both need the same version":
+  en: "the host's openBus is older: both need the same version"
 "the host could not prove it runs this session: its mods are not taken":
   en: "the host could not prove it runs this session: its mods are not taken"
 "its files make no valid list":
@@ -7715,10 +7715,10 @@ _version: 2
   en: "Not done ({e})"
 "The folder {root} does not exist: choose the folder of the original OMSI 2 (with Omsi.exe, maps and Vehicles in it) under Setup.":
   en: "The folder {root} does not exist: choose the folder of the original OMSI 2 (with Omsi.exe, maps and Vehicles in it) under Setup."
-"The folder {root} is openOMSI's own folder, not OMSI 2's: choose the folder of the original game (with Omsi.exe in it) under Setup.":
-  en: "The folder {root} is openOMSI's own folder, not OMSI 2's: choose the folder of the original game (with Omsi.exe in it) under Setup."
-"The folder {root} is not a complete OMSI 2 - it lacks {}. openOMSI plays on the original's stock content: choose the folder of a complete installation under Setup.":
-  en: "The folder {root} is not a complete OMSI 2 - it lacks {}. openOMSI plays on the original's stock content: choose the folder of a complete installation under Setup."
+"The folder {root} is openBus's own folder, not OMSI 2's: choose the folder of the original game (with Omsi.exe in it) under Setup.":
+  en: "The folder {root} is openBus's own folder, not OMSI 2's: choose the folder of the original game (with Omsi.exe in it) under Setup."
+"The folder {root} is not a complete OMSI 2 - it lacks {}. openBus plays on the original's stock content: choose the folder of a complete installation under Setup.":
+  en: "The folder {root} is not a complete OMSI 2 - it lacks {}. openBus plays on the original's stock content: choose the folder of a complete installation under Setup."
 "No depot bus {id}":
   en: "No depot bus {id}"
 "No depot service {kind}":
@@ -7743,48 +7743,48 @@ _version: 2
   en: "its copy would go into the OMSI 2 folder"
 "{folder} cannot be read":
   en: "{folder} cannot be read"
-"openOMSI is installed by the store here":
-  en: "openOMSI is installed by the store here"
+"openBus is installed by the store here":
+  en: "openBus is installed by the store here"
 "No version is installed yet.":
   en: "No version is installed yet."
 "that player has left":
   en: "that player has left"
 "that player is no longer here: number taken by another connection ({now}); refresh the list":
   en: "that player is no longer here: number taken by another connection ({now}); refresh the list"
-"openOMSI {from} could not start on this computer.\n\nIt has updated itself to {to} and starts again now.":
-  en: "openOMSI {from} could not start on this computer.\n\nIt has updated itself to {to} and starts again now."
-"openOMSI {from} could not start on this computer.\n\nIt went back to {to}, which ran here, and starts again now. {from} will not be installed again, only a newer version.":
-  en: "openOMSI {from} could not start on this computer.\n\nIt went back to {to}, which ran here, and starts again now. {from} will not be installed again, only a newer version."
-"The project lists openOMSI {from} as broken.\n\nIt was replaced by {to} and starts again now.":
-  en: "The project lists openOMSI {from} as broken.\n\nIt was replaced by {to} and starts again now."
-"The project lists openOMSI {from} as broken: {why}.\n\nIt was replaced by {to} and starts again now.":
-  en: "The project lists openOMSI {from} as broken: {why}.\n\nIt was replaced by {to} and starts again now."
-"openOMSI {version} could not start on this computer, and there is no newer or earlier version for it yet.\n\nIt tries once more in safe mode (simple graphics, no plugins).":
-  en: "openOMSI {version} could not start on this computer, and there is no newer or earlier version for it yet.\n\nIt tries once more in safe mode (simple graphics, no plugins)."
-"openOMSI {version} does not start on this computer, and it could not heal itself.\n\nDownload the latest version: {url}\n\nThe start's log: {log}\nTo report it, attach a support package: openomsi --export-diagnostics support.json":
-  en: "openOMSI {version} does not start on this computer, and it could not heal itself.\n\nDownload the latest version: {url}\n\nThe start's log: {log}\nTo report it, attach a support package: openomsi --export-diagnostics support.json"
+"openBus {from} could not start on this computer.\n\nIt has updated itself to {to} and starts again now.":
+  en: "openBus {from} could not start on this computer.\n\nIt has updated itself to {to} and starts again now."
+"openBus {from} could not start on this computer.\n\nIt went back to {to}, which ran here, and starts again now. {from} will not be installed again, only a newer version.":
+  en: "openBus {from} could not start on this computer.\n\nIt went back to {to}, which ran here, and starts again now. {from} will not be installed again, only a newer version."
+"The project lists openBus {from} as broken.\n\nIt was replaced by {to} and starts again now.":
+  en: "The project lists openBus {from} as broken.\n\nIt was replaced by {to} and starts again now."
+"The project lists openBus {from} as broken: {why}.\n\nIt was replaced by {to} and starts again now.":
+  en: "The project lists openBus {from} as broken: {why}.\n\nIt was replaced by {to} and starts again now."
+"openBus {version} could not start on this computer, and there is no newer or earlier version for it yet.\n\nIt tries once more in safe mode (simple graphics, no plugins).":
+  en: "openBus {version} could not start on this computer, and there is no newer or earlier version for it yet.\n\nIt tries once more in safe mode (simple graphics, no plugins)."
+"openBus {version} does not start on this computer, and it could not heal itself.\n\nDownload the latest version: {url}\n\nThe start's log: {log}\nTo report it, attach a support package: openbus --export-diagnostics support.json":
+  en: "openBus {version} does not start on this computer, and it could not heal itself.\n\nDownload the latest version: {url}\n\nThe start's log: {log}\nTo report it, attach a support package: openbus --export-diagnostics support.json"
 "Open the download page":
   en: "Open the download page"
 "OK":
   en: "OK"
 "Open the download page now?":
   en: "Open the download page now?"
-"The openOMSI launcher ({launcher}) was not found. It belongs in the same folder as the game ({folder}).\n\nPlease download openOMSI again and keep all of its files together.":
-  en: "The openOMSI launcher ({launcher}) was not found. It belongs in the same folder as the game ({folder}).\n\nPlease download openOMSI again and keep all of its files together."
-"The openOMSI launcher ({launcher}) could not be started: {why}.":
-  en: "The openOMSI launcher ({launcher}) could not be started: {why}."
-"The openOMSI launcher ({launcher}) stopped right after it started ({why}).":
-  en: "The openOMSI launcher ({launcher}) stopped right after it started ({why})."
+"The openBus launcher ({launcher}) was not found. It belongs in the same folder as the game ({folder}).\n\nPlease download openBus again and keep all of its files together.":
+  en: "The openBus launcher ({launcher}) was not found. It belongs in the same folder as the game ({folder}).\n\nPlease download openBus again and keep all of its files together."
+"The openBus launcher ({launcher}) could not be started: {why}.":
+  en: "The openBus launcher ({launcher}) could not be started: {why}."
+"The openBus launcher ({launcher}) stopped right after it started ({why}).":
+  en: "The openBus launcher ({launcher}) stopped right after it started ({why})."
 "Microsoft Edge WebView2 {version} is registered on this Windows, but its files are missing (removed by a clean-up tool?). Repair it: Settings > Apps > Installed apps > Microsoft Edge WebView2 Runtime > Modify > Repair, or install Microsoft's \"Evergreen Standalone Installer\" from https://developer.microsoft.com/microsoft-edge/webview2/":
   en: "Microsoft Edge WebView2 {version} is registered on this Windows, but its files are missing (removed by a clean-up tool?). Repair it: Settings > Apps > Installed apps > Microsoft Edge WebView2 Runtime > Modify > Repair, or install Microsoft's \"Evergreen Standalone Installer\" from https://developer.microsoft.com/microsoft-edge/webview2/"
 "Its log says: {error}":
   en: "Its log says: {error}"
 "Microsoft Edge WebView2 {version} is installed, so it is not missing.":
   en: "Microsoft Edge WebView2 {version} is installed, so it is not missing."
-"The openOMSI launcher shows its window with Microsoft Edge WebView2, which this Windows does not have yet.\n\nInstall it now with Microsoft's installer?":
-  en: "The openOMSI launcher shows its window with Microsoft Edge WebView2, which this Windows does not have yet.\n\nInstall it now with Microsoft's installer?"
-"Its log is in the openOMSI data folder (launcher.log); Microsoft Edge WebView2 {version} is installed.":
-  en: "Its log is in the openOMSI data folder (launcher.log); Microsoft Edge WebView2 {version} is installed."
+"The openBus launcher shows its window with Microsoft Edge WebView2, which this Windows does not have yet.\n\nInstall it now with Microsoft's installer?":
+  en: "The openBus launcher shows its window with Microsoft Edge WebView2, which this Windows does not have yet.\n\nInstall it now with Microsoft's installer?"
+"Its log is in the openBus data folder (launcher.log); Microsoft Edge WebView2 {version} is installed.":
+  en: "Its log is in the openBus data folder (launcher.log); Microsoft Edge WebView2 {version} is installed."
 "The launcher's window needs Microsoft Edge WebView2 (part of Windows 10 and 11; for older systems: https://developer.microsoft.com/microsoft-edge/webview2/).":
   en: "The launcher's window needs Microsoft Edge WebView2 (part of Windows 10 and 11; for older systems: https://developer.microsoft.com/microsoft-edge/webview2/)."
 "SteamOS does not include it. In Desktop Mode, in Konsole: sudo steamos-readonly disable, then sudo pacman -S webkit2gtk-4.1, then sudo steamos-readonly enable (a SteamOS update can remove it again). See docs/USER_GUIDE.md.":
@@ -7855,8 +7855,8 @@ _version: 2
   en: "the official server is not online right now"
 "no address given":
   en: "no address given"
-"the answer is not an openOMSI server's":
-  en: "the answer is not an openOMSI server's"
+"the answer is not an openBus server's":
+  en: "the answer is not an openBus server's"
 "the host did not answer within {} seconds":
   en: "the host did not answer within {} seconds"
 "the server list could not be reached ({e})":
@@ -7877,12 +7877,12 @@ _version: 2
   en: "map cfg must be UTF-8"
 "Could not check for updates: {e}.":
   en: "Could not check for updates: {e}."
-"openOMSI was not updated to {}: {e}":
-  en: "openOMSI was not updated to {}: {e}"
-"openOMSI {} could not be downloaded: {e}.":
-  en: "openOMSI {} could not be downloaded: {e}."
-"openOMSI was not updated to {}: the system's installer refused the package.":
-  en: "openOMSI was not updated to {}: the system's installer refused the package."
+"openBus was not updated to {}: {e}":
+  en: "openBus was not updated to {}: {e}"
+"openBus {} could not be downloaded: {e}.":
+  en: "openBus {} could not be downloaded: {e}."
+"openBus was not updated to {}: the system's installer refused the package.":
+  en: "openBus was not updated to {}: the system's installer refused the package."
 "GitHub refused for now (too many requests from this address); it is tried again later":
   en: "GitHub refused for now (too many requests from this address); it is tried again later"
 "the server answered with an error ({code})":
@@ -7901,12 +7901,12 @@ _version: 2
   en: "the download stopped at {} of {} bytes"
 "the downloaded file is damaged (SHA-256 {got}, GitHub lists {want})":
   en: "the downloaded file is damaged (SHA-256 {got}, GitHub lists {want})"
-"the folder {} cannot be written. Put openOMSI in a folder of yours (or start it once as administrator) and update again":
-  en: "the folder {} cannot be written. Put openOMSI in a folder of yours (or start it once as administrator) and update again"
-"the folder {} cannot be written. Put openOMSI in a folder of yours and update again":
-  en: "the folder {} cannot be written. Put openOMSI in a folder of yours and update again"
-"macOS runs openOMSI from a temporary read-only copy. Move openOMSI.app into your Applications folder (or any folder), start it from there and update again":
-  en: "macOS runs openOMSI from a temporary read-only copy. Move openOMSI.app into your Applications folder (or any folder), start it from there and update again"
+"the folder {} cannot be written. Put openBus in a folder of yours (or start it once as administrator) and update again":
+  en: "the folder {} cannot be written. Put openBus in a folder of yours (or start it once as administrator) and update again"
+"the folder {} cannot be written. Put openBus in a folder of yours and update again":
+  en: "the folder {} cannot be written. Put openBus in a folder of yours and update again"
+"macOS runs openBus from a temporary read-only copy. Move openBus.app into your Applications folder (or any folder), start it from there and update again":
+  en: "macOS runs openBus from a temporary read-only copy. Move openBus.app into your Applications folder (or any folder), start it from there and update again"
 "Pole {} is on the wire":
   en: "Pole {} is on the wire"
 "Pole {} is down on its hook":
@@ -7981,8 +7981,8 @@ _version: 2
   en: "the active OpenXR runtime does not support D3D12"
 "OpenXR PCVR requires the DX12 graphics backend":
   en: "OpenXR PCVR requires the DX12 graphics backend"
-"the OpenXR headset and openOMSI are using different graphics adapters":
-  en: "the OpenXR headset and openOMSI are using different graphics adapters"
+"the OpenXR headset and openBus are using different graphics adapters":
+  en: "the OpenXR headset and openBus are using different graphics adapters"
 "OpenXR runtime did not return two stereo views":
   en: "OpenXR runtime did not return two stereo views"
 "OpenXR eye resolutions differ; this renderer needs matching eye sizes":
@@ -8423,8 +8423,8 @@ _version: 2
   en: "A look at the left or right edge of the screen turns the view further that way"
 "Add-ons":
   en: "Add-ons"
-"Projects made for openOMSI by others. Their own websites say what they do and how to get them.":
-  en: "Projects made for openOMSI by others. Their own websites say what they do and how to get them."
+"Projects made for openBus by others. Their own websites say what they do and how to get them.":
+  en: "Projects made for openBus by others. Their own websites say what they do and how to get them."
 "No add-on yet":
   en: "No add-on yet"
 "by {author}":
@@ -8433,8 +8433,8 @@ _version: 2
   en: "Open website"
 "Open the website?":
   en: "Open the website?"
-"Opens {site} in your browser. The website is not part of openOMSI.":
-  en: "Opens {site} in your browser. The website is not part of openOMSI."
+"Opens {site} in your browser. The website is not part of openBus.":
+  en: "Opens {site} in your browser. The website is not part of openBus."
 "Flashlight on":
   en: "Flashlight on"
 "Flashlight off":
@@ -8709,8 +8709,8 @@ _version: 2
   en: "Leaving closes your hosted room for all other players."
 "NVIDIA DLSS runtime (optional)":
   en: "NVIDIA DLSS runtime (optional)"
-"Not included with openOMSI. Installs NVIDIA's own DLLs only after your approval. Windows, NVIDIA RTX and a game restart required.":
-  en: "Not included with openOMSI. Installs NVIDIA's own DLLs only after your approval. Windows, NVIDIA RTX and a game restart required."
+"Not included with openBus. Installs NVIDIA's own DLLs only after your approval. Windows, NVIDIA RTX and a game restart required.":
+  en: "Not included with openBus. Installs NVIDIA's own DLLs only after your approval. Windows, NVIDIA RTX and a game restart required."
 "Checking NVIDIA DLSS files…":
   en: "Checking NVIDIA DLSS files…"
 "NVIDIA DLSS runtime is installed.":
@@ -8747,8 +8747,8 @@ _version: 2
   en: "Discord: multiplayer and the number of players"
 "Discord: buttons to the website and the community":
   en: "Discord: buttons to the website and the community"
-"Get openOMSI":
-  en: "Get openOMSI"
+"Get openBus":
+  en: "Get openBus"
 "Join the Discord":
   en: "Join the Discord"
 "Somebody else has just taken this bus":

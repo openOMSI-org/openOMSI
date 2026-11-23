@@ -1,21 +1,21 @@
-//! The official server by name: a player types `openomsi` (the launcher lists it as
-//! "openOMSI | Official Server") and is joined to wherever that server is reached now.
+//! The official server by name: a player types `openbus` (the launcher lists it as
+//! "openBus | Official Server") and is joined to wherever that server is reached now.
 //!
 //! The server is reached through a Cloudflare quick tunnel, whose address changes whenever
 //! it starts again. It posts that address to a fixed topic of the public relay (`bridge`'s
 //! ntfy.sh) every few minutes, signed with the official server's Ed25519 key; a game asking
-//! for `openomsi` takes the newest post whose signature checks out with the public key
+//! for `openbus` takes the newest post whose signature checks out with the public key
 //! below and which is recent. Anybody can post to the topic, nobody else can sign: a forged
 //! address is never taken.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// What a player types for the official server.
-pub const ALIAS: &str = "openomsi";
+pub const ALIAS: &str = "openbus";
 /// Its name in the launcher's list.
-pub const NAME: &str = "openOMSI | Official Server";
+pub const NAME: &str = "openBus | Official Server";
 /// The relay topic its address is posted under.
-const TOPIC: &str = "openomsi-official-server-7f3a9c";
+const TOPIC: &str = "openbus-official-server-7f3a9c";
 const RELAY: &str = "https://ntfy.sh";
 /// The official server's public key (Ed25519).
 const PUBLIC_KEY: [u8; 32] = [
@@ -73,7 +73,7 @@ pub fn resolve() -> Result<String, String> {
     if PUBLIC_KEY == [0; 32] {
         return Err("this build does not know the official server".into());
     }
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("openOMSI").build();
+    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("openBus").build();
     let body = agent
         .get(&format!("{RELAY}/{TOPIC}/json?poll=1&since=1h"))
         .call()
@@ -105,7 +105,7 @@ pub fn announce(url: &str, pkcs8: &[u8]) -> Result<(), String> {
     let pair = ring::signature::Ed25519KeyPair::from_pkcs8_maybe_unchecked(pkcs8).map_err(|e| format!("the official key: {e}"))?;
     let text = signed_text(url, now());
     let sig = pair.sign(text.as_bytes());
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("openOMSI").build();
+    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("openBus").build();
     agent
         .post(&format!("{RELAY}/{TOPIC}"))
         .set("Cache", "yes")
@@ -147,6 +147,6 @@ mod tests {
         assert!(verify(&format!("{text} #{}", hex(other.sign(text.as_bytes()).as_ref())), &key, t).is_none());
         let good = post("https://a.trycloudflare.com", t);
         assert!(verify(&good.replace("https://a.", "https://b."), &key, t).is_none());
-        assert!(is_alias(" OpenOMSI "));
+        assert!(is_alias(" OpenBus "));
     }
 }

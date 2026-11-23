@@ -105,7 +105,7 @@ pub fn open_public_gateway(session: &LanSession, info: omsi_net::ws::ServerInfo,
         let mut posted: Option<(String, Instant)> = None;
         let mut checked = Instant::now();
         // the official server (`OMSI_OFFICIAL_KEY`: its signing key's file) says where it is
-        // reached every five minutes, for the players who type `openomsi`
+        // reached every five minutes, for the players who type `openbus`
         let official = omsi_cfg::flags::OMSI_OFFICIAL_KEY.os().and_then(|p| std::fs::read(p).map_err(|e| log::warn!("official key {}: {e}", std::path::Path::new(&p).display())).ok());
         let mut announced: Option<(String, Instant)> = None;
         loop {
@@ -536,7 +536,7 @@ mod tests {
 
 /// The WebSocket gateway of a host joined straight over UDP (by code or address), when its TCP
 /// port is out of reach: a dedicated server's web port on the same address (`web_port`, 27025 by
-/// default, or the UDP port + 10 as the defaults have them), if an openOMSI status answers there
+/// default, or the UDP port + 10 as the defaults have them), if an openBus status answers there
 /// within 3 s. `ws://<address>/ws`, as a tunnel's.
 pub(crate) fn host_web_gateway(host: std::net::SocketAddr) -> Option<String> {
     let mut ports = vec![host.port().saturating_add(10), 27025];

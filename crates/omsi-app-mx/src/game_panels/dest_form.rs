@@ -252,7 +252,7 @@ mod tests {
                 "沒有可連接的物件：請倒車至拖車掛鉤處（2.5 米以內，成一直線）"
             );
 
-            let panel = format!("{:?}", DestForm::default().panel(Palette::OPENOMSI));
+            let panel = format!("{:?}", DestForm::default().panel(Palette::OPENBUS));
             for text in [
                 "目的地顯示",
                 "路線編號",
@@ -276,7 +276,7 @@ mod tests {
     #[test]
     fn form_preserves_ibis_line_while_passing_lettered_route_to_display_trigger() {
         let mut app = crate::assemble_app(
-            <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]),
+            <crate::cli::Args as clap::Parser>::parse_from(["openbus"]),
             Default::default(),
         );
         let mut v = crate::schedule::tests::script_test_vehicle(

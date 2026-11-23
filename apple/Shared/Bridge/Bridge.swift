@@ -13,8 +13,8 @@ enum Bridge {
     static func call(_ cmd: String, _ arg: [String: Any] = [:]) throws -> Data {
         let json = (try? JSONSerialization.data(withJSONObject: arg)) ?? Data("{}".utf8)
         let text = String(decoding: json, as: UTF8.self)
-        guard let reply = openomsi_bridge(cmd, text) else { throw Failure(message: "no reply to \(cmd)") }
-        defer { openomsi_bridge_free(reply) }
+        guard let reply = openbus_bridge(cmd, text) else { throw Failure(message: "no reply to \(cmd)") }
+        defer { openbus_bridge_free(reply) }
         let data = Data(bytes: reply, count: strlen(reply))
         guard let obj = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) as? [String: Any] else {
             throw Failure(message: "a reply to \(cmd) that is no JSON object")

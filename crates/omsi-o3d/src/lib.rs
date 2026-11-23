@@ -3,7 +3,7 @@
 //! * `.o3d` - OMSI's own binary format (unit `mc_o3dfiles`), see `docs/FORMATS.md`.
 //! * `.x`   - DirectX text meshes, still used by a handful of stock objects and the helper meshes.
 //! * `.glb` / `.gltf`, `.fbx`, `.obj` - the formats of today's modelling tools and asset
-//!   libraries (see [`import`]): openOMSI reads them wherever OMSI reads a mesh, with their
+//!   libraries (see [`import`]): openBus reads them wherever OMSI reads a mesh, with their
 //!   textures (embedded ones too), skins and blend shapes.
 //!
 //! All of them produce the same [`Mesh`]. Coordinates are OMSI's: X right, Y forward, Z up, metres.
@@ -348,7 +348,7 @@ pub fn parse_mesh(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
     }
 }
 
-/// The mesh file formats openOMSI reads, by extension.
+/// The mesh file formats openBus reads, by extension.
 pub const MESH_EXTENSIONS: [&str; 6] = ["o3d", "x", "glb", "gltf", "fbx", "obj"];
 
 impl Mesh {

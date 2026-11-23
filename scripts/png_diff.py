@@ -6,7 +6,7 @@ Prints the share of pixels that differ and the largest and mean channel differen
 over every channel of every pixel), and writes the difference amplified 8 times into diff.png.
 Exits 1 when more than the allowed share of pixels (default 0) differs.
 Only the standard library: a small PNG reader for the 8-bit, non-interlaced RGB/RGBA files
-openomsi writes.
+openbus writes.
 """
 import struct
 import sys

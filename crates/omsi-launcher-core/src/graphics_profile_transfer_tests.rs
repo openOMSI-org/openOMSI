@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 fn folder(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "openomsi-profile-transfer-{tag}-{}",
+        "openbus-profile-transfer-{tag}-{}",
         std::process::id()
     ));
     std::fs::create_dir_all(&dir).unwrap();

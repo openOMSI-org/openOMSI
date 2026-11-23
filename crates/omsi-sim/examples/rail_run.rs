@@ -2,7 +2,7 @@
 //! (or its scripts) - 30 s of full throttle, then the service brake to a stop.
 //!
 //! usage: rail_run <vehicle.ovh|.bus> [--grade 0.02] [--wet 0..2]
-//! (the OMSI 2 installation is taken from $OMSI_ROOT or ~/.openomsi-root)
+//! (the OMSI 2 installation is taken from $OMSI_ROOT or ~/.openbus-root)
 use std::path::{Path, PathBuf};
 
 fn original_root() -> Option<PathBuf> {
@@ -10,7 +10,7 @@ fn original_root() -> Option<PathBuf> {
         return Some(PathBuf::from(r));
     }
     let home = std::env::var("HOME").ok()?;
-    Some(PathBuf::from(std::fs::read_to_string(Path::new(&home).join(".openomsi-root")).ok()?.trim()))
+    Some(PathBuf::from(std::fs::read_to_string(Path::new(&home).join(".openbus-root")).ok()?.trim()))
 }
 
 fn main() {

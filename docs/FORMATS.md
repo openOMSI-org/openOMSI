@@ -1,6 +1,6 @@
 # OMSI 2 content formats
 
-The file formats of OMSI 2 content (maps, objects, vehicles, scripts, timetables …) as openOMSI
+The file formats of OMSI 2 content (maps, objects, vehicles, scripts, timetables …) as openBus
 reads them.
 
 ## Text encoding
@@ -10,7 +10,7 @@ reads them.
 * Every other text file is read by OMSI in the system's ANSI code page (Delphi `AnsiString`):
   the stock content is Windows-1252, but a mod is written in its author's code page -
   Windows-1251 for the Russian ones (LiAZ, PAZ, the Scania Citywide's cockpit), 1250 for the
-  Polish and Czech ones - and some newer files are UTF-8. openOMSI has no system code page
+  Polish and Czech ones - and some newer files are UTF-8. openBus has no system code page
   to borrow and decides per file (`omsi-cfg::codepage::detect`): valid UTF-8; 1251 when at
   least half of the letters `0xC0..` stand in runs of three or more (Russian words; German
   has at most two in a row, "Größe"); 1250 when letters that are signs in 1252 (ł ą ś Ł Ś Ż)
@@ -55,7 +55,7 @@ File names in content files are resolved as Windows resolves them: `\` and `/` b
 names compare without regard to case (umlauts included), a folder name loses one trailing dot
 and the last name all trailing dots and spaces (Ahlheim's `anz-oben.jpg.`).
 
-Content roots (openOMSI's content folder, mounted archives, the OMSI 2 installation) are
+Content roots (openBus's content folder, mounted archives, the OMSI 2 installation) are
 searched as if they had been copied over each other, highest priority last - with one
 exception: a vehicle pack (`Vehicles/<folder>`) present in two roots in two *versions* does
 not mix. The copy under a higher-priority root patches the one a vehicle was loaded from
@@ -314,7 +314,7 @@ far end at the spline's end, 3 and 4 the near end at its start, otherwise each p
 third value moves it past the end. A `.sli` without `[terrainholeprofile]` gets one per
 string of joined `[profile]`s (0x5ab908): its left end and right end 3 cm in and 3 mm
 down, a bottom 10 cm under its lowest point reaching 0.5 m past both ends. An outline
-that crosses itself cuts nothing. openOMSI does not cut this outline out of the drawn ground
+that crosses itself cuts nothing. openBus does not cut this outline out of the drawn ground
 where the aligned spline lies in a trough: it fills the trough with solid ground instead, and
 cuts the outline as Omsi.exe does where the saved ground stands above the spline (a cutting)
 or where that fill cannot be built. Each `[terrainhole] <mesh.o3d>` in a `.sco` or model.cfg names an
@@ -461,7 +461,7 @@ blue; numbers or variable names (TRauch, read at 0x5f5e58; the final alpha stays
 fades out over its life). Every frame (0x5a238c) a particle's velocity is multiplied by the
 brake factor raised to 20 x dt - 0x5a145c keeps 20 ln(max(brake, 0.1)) per emitter, so the
 factor is per twentieth of a second at any frame rate - its level speed is drawn towards the
-weather's wind (0x753428) by what that takes off (not yet in openOMSI, where it slows to a
+weather's wind (0x753428) by what that takes off (not yet in openBus, where it slows to a
 standstill), and 9.81 x gravity x dt is taken off its vertical speed (a negative gravity
 lifts it). Size and alpha go linearly with its age (0x5a183c).
 Nothing stops it at the ground: it falls on through the road until its life is over (the
@@ -476,7 +476,7 @@ particle's colour lit by the weather's light and the one lamp of 0x858efc on the
 for `--PS_emissive--`) and the alpha rauch.tga's times the vertex's (a `[particle_emitter]`
 whose `--PS_bitmap--` is not marked as alpha: `ONE`/`INVSRCCOLOR`, texture times vertex
 colour). So the road cuts every
-puff that sinks into it off in a straight line; openOMSI fades a puff out over the lowest
+puff that sinks into it off in a straight line; openBus fades a puff out over the lowest
 6-25 cm above the ground it was set off over instead (the plane its vehicle's wheels stand on,
 an object's own z = 0), and leaves out one wholly under it (`omsi_render::SmokeParticle`).
 
@@ -563,7 +563,7 @@ rim the reflection running on away from the camera.
   .bus: rear-view mirror cameras (yaw clockwise from forward: 201 = back, turned towards
   the bus flank). Camera N draws into the texture named `reflexionN.bmp` on the model's
   mirror mesh; the mesh UVs are already mirrored, so the camera image is used as is.
-  `[add_camera_reflexion_static]` (openOMSI, see MODDING.md) is a camera that looks along
+  `[add_camera_reflexion_static]` (openBus, see MODDING.md) is a camera that looks along
   its own yaw and pitch; a rear section's cameras are numbered on after the front's.
 * `[isshadow]` mesh (`D_schatten.o3d` with `Shadow.tga`, alpha blend, no z check/write):
   the vehicle's shadow blob lying at model z = 0; OMSI draws it on the ground under the
@@ -612,7 +612,7 @@ rim the reflection running on away from the camera.
   A tile with `[variable_terrainlightmap]` (296 of Spandau's 329) has its light map baked
   from the `[maplight]`s of the objects of the nine tiles when they are loaded (Omsi.exe
   writes it over the file, unless options.cfg has `[no_generateTerrLightMaps]`), so the file
-  is only what the last OMSI run left: openOMSI bakes it the same way. A texel, on the ground
+  is only what the last OMSI run left: openBus bakes it the same way. A texel, on the ground
   at its south-west corner, takes each lamp's colour × min(1, (radius / distance)²), the
   distance from the lamp's own height over its object, added up, held at 1 and truncated;
   a lamp more than 15.96 radii away along x or y adds nothing.
@@ -667,7 +667,7 @@ set_camera_outside_center schwerpunkt rollwiderstand rot_pnt_long inv_min_turnra
 newachse (achse_long achse_maxwidth achse_minwidth achse_raddurchmesser achse_feder achse_maxforce
 achse_daempfer achse_antrieb achse_inertia_inv) number registration_automatic registration_list
 registration_free kmcounter_init + model/script/sound/paths/passengercabin.
-openOMSI's own blocks (read the same way, `key value` lines to the next block): `[trolley_pole]`,
+openBus's own blocks (read the same way, `key value` lines to the next block): `[trolley_pole]`,
 `[trolley_rheostat]`, `[trolley_async]`, `[trolley_battery]`, `[trolley_aux]`, `[trolley_vars]`,
 `[trolley_none]`: the poles on the roof and the traction drive of a trolleybus, or none of the
 game's own for a vehicle that moves its poles itself (OMSI 2 has none: its trolleybus
@@ -745,7 +745,7 @@ onlytypes end types_prefered number_tour.
   its own `[sound]` (on a pusher the engine is there) and plays it on the shared scripts'
   triggers and variables.
 * The player's bus's outside entries heard in its cab (`[viewpoint]` without 2) come in at
-  `Snd_OutsideVol` of their volume as in Omsi.exe, and openOMSI also takes their treble away
+  `Snd_OutsideVol` of their volume as in Omsi.exe, and openBus also takes their treble away
   through what is shut: a low-pass at some 500 Hz with everything closed, rising evenly in
   octaves to the whole range at `Snd_OutsideVol` 0.95 and none from there (Omsi.exe has no
   filter; the traffic heard from the cab keeps it as Omsi.exe does, `0.2 + Snd_OutsideVol`
@@ -766,7 +766,7 @@ onlytypes end types_prefered number_tour.
 * Input: keyboard.cfg `[game]/[vehicles]` + `[entry] name scancode modifier` (the modifier
   is a mask, as Omsi.exe reads it (0x6478d0): 1 the action is told the key's state every
   frame - the throttle, brake and steering keys, " *" in OMSI's key list - 2 Shift, 4 Ctrl;
-  Omsi.exe has no Alt, openOMSI's own Alt is 8, which OMSI leaves alone);
+  Omsi.exe has no Alt, openBus's own Alt is 8, which OMSI leaves alone);
   gamectrler.cfg ctrl axis buttons FFScale.
 * Startup order (logfile.txt) documents the manager creation sequence, mirrored in `omsi-sim`.
 
@@ -777,8 +777,8 @@ OMSI plays no music itself. The radios of the buses only set variables that plug
 most mods, 1 while it plays (no sound.cfg uses it); the Sound Extension plugin's
 `SndExt_Radio` - the station button pressed (1..n, 0 = off; the W906 Sprinter and the
 Procity show their own station names for it) with `SndVol_Radio` - the volume knob (0..1,
-the Sprinter's goes to 2) and `SndExt_RadioPlaylist` for its USB/CD modes. openOMSI
-plays internet stations for them (`~/.openomsi/radio.cfg`). Streams in HE-AAC with a
+the Sprinter's goes to 2) and `SndExt_RadioPlaylist` for its USB/CD modes. openBus
+plays internet stations for them (`~/.openbus/radio.cfg`). Streams in HE-AAC with a
 program config element (some `.aacp` stations) are not decoded; MP3, AAC-LC and Ogg are.
 
 A radio whose display is a text of its script gets the station and the song that play,
@@ -830,10 +830,10 @@ Regional = https://example.org/regional.mp3 | 97.9
 * `options.cfg`: `[texture]` has two values (0 and 1 in the stock file), taken to be the
   resolution reduction and the compression switch of the options dialog (not verified);
   `[texmemlimit]` (401.0 in the stock file) is the texture memory in MB above which OMSI
-  lowers the resolution of distant textures. openOMSI's own keys are
+  lowers the resolution of distant textures. openBus's own keys are
   `texture_compression=` (on by default) and `video_memory=` (MB for everything the game
   holds on the card, not the textures alone; nine tenths of a discrete card's memory when
-  unset). `[texmemlimit]` and openOMSI's old `texture_memory=` were texture budgets: they
+  unset). `[texmemlimit]` and openBus's old `texture_memory=` were texture budgets: they
   are not imported and the launcher drops `texture_memory=` when it writes the file. `OMSI_NO_BC=1` uploads everything as
   RGBA, `OMSI_NO_TEXCOMPRESS=1` keeps DXT files as blocks and the rest RGBA.
 
@@ -851,10 +851,10 @@ Regional = https://example.org/regional.mp3 | 97.9
   sodium and gas street lamps, the Sv signals, the ICE and RE160 coaches) declare theirs
   after the far `[LOD] 0` mesh, and no stock model repeats a light in two levels.
 * `[spotlight]` (vehicle): pos, dir, rgb, range, inner, outer; the active one is chosen by the
-  `Spot_Select` variable (negative = none). `[spotlight_2]` (openOMSI, see MODDING.md): the same twelve
+  `Spot_Select` variable (negative = none). `[spotlight_2]` (openBus, see MODDING.md): the same twelve
   numbers, a switching variable and a no-mirror flag; any number lit at once. `[spotlight_cookie]`
-  (openOMSI, below): a lamp whose beam is a picture. `[interiorlight] variable range r g b x y z`.
-* `[spotlight_cookie]` (openOMSI; Omsi.exe skips it): a lamp whose light is a picture of its
+  (openBus, below): a lamp whose beam is a picture. `[interiorlight] variable range r g b x y z`.
+* `[spotlight_cookie]` (openBus; Omsi.exe skips it): a lamp whose light is a picture of its
   beam - the beam as it would show on a wall square to the lamp, its brightness and colour every
   way within the field the picture covers. One value a line: x, y, z (the lamp, vehicle frame:
   x right, y ahead, z up), the direction's x, y, z, red, green, blue (0..255, the picture's
@@ -893,11 +893,11 @@ puts it on a material, `[matl_transmap] \S:n` uses its alpha as transparency map
 the line after the page's path makes it a **surface** - shaded by the world's light as every
 other material is, on every slot that shows the page, a scenery object's or a vehicle's -
 where a page is a display, drawn unlit at its own brightness, by default.
-An openOMSI extension; Omsi.exe draws such a slot unlit either way.
+An openBus extension; Omsi.exe draws such a slot unlit either way.
 `[navigatortexture] w h [variable] [mapScale] [fixedNorth] [noNavUI] [navCenter] [showHistory]`
 declares a screen the game's navigator draws its small map
 on, while the optional variable is not 0 (see `NAVIGATORTEXTURE.md`); `[useNavigatorTexture] n`
-puts the n-th on a material. Also an openOMSI extension. The
+puts the n-th on a material. Also an openBus extension. The
 scripts draw with `(M.V.ST…)` callbacks, arguments pushed in order (index first):
 `STNewTex(i)`, `STLock(i)`, `STUnlock(i)` (upload), `STFilter(i)`, `STSetColor(i, a, r, g, b)`,
 `STDrawPixel(i, x, y)`, `STDrawRect(i, x1, y1, x2, y2)`, `STTextOut(i, x, y, font, mode,
@@ -910,7 +910,7 @@ matrix's `..\..\Anzeigen\Krueger\x.bmp` is `Vehicles\Anzeigen\Krueger\x.bmp`), `
 `GetFontIndex("name")` registers an .oft font and answers **-1** for a font that does not exist
 (the chura matrix falls back from missing custom fonts with `1 + 31416 * l1 1 + max 31415 % 1 -`,
 which only works for -1); fonts are looked up by `[newfont]` name in every content root's
-`Fonts`. openOMSI draws a missing weight with another one of the same family and size
+`Fonts`. openBus draws a missing weight with another one of the same family and size
 ("churafont++ Numeric 26x11 Bold" → "churafont++ Numeric 26x11"; the Citaro pack asks for
 weights it never shipped and lost its line number). `TextLength(font, "text")` = drawn width
 (glyph advance x1−x0 plus the font gap). A work texture keeps its picture in the colour
@@ -922,14 +922,14 @@ its alpha pixel (0x5d67bc), whatever size the colour bitmap has: often a small s
 colour (stock `EFADfont.bmp`, 128×128 under a 128×200 alpha). For a row past the colour
 bitmap's height Omsi.exe's `TBitmap.ScanLine` raises a range error (0x4763b0) and the text
 stops being drawn there; a column past its width reads into the neighbouring scanline's
-bytes. openOMSI repeats the colour bitmap in both cases instead.
+bytes. openBus repeats the colour bitmap in both cases instead.
 `NrSpecRandom(seed)` = stable pseudo random in [0, 1).
 
 Depot (.hof) callbacks: `GetRouteIndex(code)` (code = line×100 + route → `[infosystem_trip]`
 index), `GetRouteTerminusIndex(route)`, `GetTerminusCode(idx)`, `GetTerminusIndex(code)`,
 `GetTerminusString(idx, n)`, `GetBusstopCount(route)`, `GetRouteBusstopIdent(route, k)`,
 `GetBusstopIndex("ident")`, `GetBusstopString(idx, n)`, `GetDepotStringGlobal(n)`.
-openOMSI adds `GetRadioName` and `GetRadioSong` (no arguments, a string each): the bus
+openBus adds `GetRadioName` and `GetRadioSong` (no arguments, a string each): the bus
 radio's station and title, empty while it is off.
 `[addterminus]`/`[addterminus_allexit]` records are code, ident, then `stringcount_terminus`
 strings (no separate station line in any shipped file). AI buses get their destination the
@@ -939,7 +939,7 @@ original way: string `SetLineTo` + `AI_target_index` (terminus index) and the
 the group names no depot file at all (`AI_target_index` stays as it was). Depot callbacks with
 index -1 (what the lookups answer for an unknown code) return "" / -1, never entry 0. A depot
 file belongs to a map: when the bus folder has none of the name the map's `ailists.cfg` wants
-(a mod bus brings only its own map's), openOMSI takes it from another vehicle folder
+(a mod bus brings only its own map's), openBus takes it from another vehicle folder
 (`omsi_vehicle::hof::depot_anywhere`); a bus of a plain `[aigroup_2]` pool, whose group names
 no depot, takes the map's depot of its folder where it has one, else the folder's first
 (`schedule::pool_depot`, Omsi.exe's selected-hof index 0). The FloFix
@@ -952,7 +952,7 @@ OMSI offers the `.bus`/`.ovh` files that have a `[friendlyname]` (all stock buse
 rear section, most `_KI` AI variants and the AI cars have none). A rear section has
 `[coupling_front]` (and `[scriptshare]`: no scripts of its own, the front's variables drive
 it) and is named by the front's `[couple_back] file reversed`, resolved from the front's
-folder in whichever content root has it. openOMSI also keeps a coupled part with a copied
+folder in whichever content root has it. openBus also keeps a coupled part with a copied
 `[friendlyname]` out of the list, spawns the front section when a rear one is asked for, and
 refuses a rear section nothing couples. With `[scriptshare]` the rear section's `\S:n`
 materials are the front's script textures (the O530G's rear display declares no
@@ -972,9 +972,9 @@ The passenger cabins of the sections are joined by `[linkToNextVeh]` / `[linkToP
 path points: the rear section's seats and exits are numbered after the front's, which is
 how the stock door scripts count them, and a person walking from one section to the other
 crosses the joint on those links. Omsi.exe joins two coupled cabins only where both give
-these points. openOMSI also crosses a bus joint whose cabins give none, between the ends of
+these points. openBus also crosses a bus joint whose cabins give none, between the ends of
 the two aisles, but not a trailer on a lorry's hitch (`[coupling_front_character]` type 0):
-without the points that is a cabin of its own in openOMSI, and passengers whose place is in
+without the points that is a cabin of its own in openBus, and passengers whose place is in
 it get in and out by its own `[entry]` and `[exit]` doors (a place there is not offered when
 the trailer has no entry or no exit).
 
@@ -1001,7 +1001,7 @@ texture of man02 and the women's hair carry `[matl_alpha] 1` (alpha test).
 The `[passengercabin]` file gives `[passpos] x y z seat-height rot` seats - x, y, z is the
 **hip** ("Attachpunkt Arsch") when the seat height above the floor is greater than zero and
 the **foot** when it is zero, which marks a standing place - plus `[entry]`/`[exit]`
-path points, `[ticket_sale]`, `[stamper]`. In openOMSI a `[passpos]` may go on with one or
+path points, `[ticket_sale]`, `[stamper]`. In openBus a `[passpos]` may go on with one or
 two script variable names on the lines straight after its five values (see MODDING.md). `[entry]` may carry `{noticketsale}`: passengers
 who use that door walk straight to a seat instead of past the cash desk. It and `{withbutton}`
 are lines of their own that mark the entry read last, wherever they stand between the blocks
@@ -1046,7 +1046,7 @@ material for anything else - a variable at 2 with one item is dark. A variable n
 declares is registered by the model loader at 0 (the stock MANs' spare buttons are switched
 by `*Noch nicht belegt*`, "not assigned yet", and stay dark). The `[matl_change]` block
 itself changes the plain material; each `[matl_item]` starts as a copy of the plain
-material as it is at that point (openOMSI draws the first item). The item's `[matl_nightmap]` glows at full strength while the
+material as it is at that point (openBus draws the first item). The item's `[matl_nightmap]` glows at full strength while the
 variable is on, by day as well - warning lamps (`lights_blinkgeber`, `cockpit_light_*`,
 `haltewunschlampe`) and dashboard screens drawn only in the night map (the Procity's pressure
 screen, switched by `elec_busbar_main`) depend on it. A vehicle's plain `[matl_nightmap]` glows
@@ -1061,7 +1061,7 @@ the variant and add `texture × emissive` self-illumination (lower-deck lighting
 `[matl_lightmap]` is a light *mask* multiplied with the diffuse texture (the SD202 maps
 `D86_02_L1.bmp` are grey masks of the lit atlas regions), scaled by its variable.
 
-`[matl_glow] <texture> <value>` is **an openOMSI extension** (Omsi.exe's model unit has no
+`[matl_glow] <texture> <value>` is **an openBus extension** (Omsi.exe's model unit has no
 such keyword and skips it as it skips any unknown line; no stock content uses it): it makes the
 slot **its own light**. The named texture is a **greyscale mask** of how much shines where
 (white full, black none) and the light is the material's **own colour** - a destination
@@ -1078,7 +1078,7 @@ there. A glow that is switched (a tail lamp) is a `[matl_item]` of a `[matl_chan
 keyword; an item without a light map or glow of its own keeps its base material's. The last
 `[matl_glow]` of a slot counts.
 
-`[led_glow_effect] <value>` is **an openOMSI extension** too (Omsi.exe skips it): `value`, 0 to
+`[led_glow_effect] <value>` is **an openBus extension** too (Omsi.exe skips it): `value`, 0 to
 1, is how much of the `Led glow` setting the slot's lit dots burn with. Without it the enhanced
 picture guesses which slots are LED panels - a `\S:n` script mask (or a page's dot mask) under a
 light map that is white all over - and gives them the whole of the setting; with it the

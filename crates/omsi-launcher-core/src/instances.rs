@@ -1,7 +1,7 @@
 //! The games the launcher started. Any number may run at once: each gets its own log
 //! (`game.log`, `game-2.log`, ...), an id (passed to the game in `OMSI_INSTANCE`) and a
-//! registry file `~/.openomsi/instances/<id>.json`, so that every launcher window (and
-//! `--cli instances`) sees them. The game itself writes `~/.openomsi/lan/<id>.json`
+//! registry file `~/.openbus/instances/<id>.json`, so that every launcher window (and
+//! `--cli instances`) sees them. The game itself writes `~/.openbus/lan/<id>.json`
 //! while a LAN session runs; its code and players are shown with the instance.
 //!
 //! A process id is reused once its process has ended, so an entry also keeps when its

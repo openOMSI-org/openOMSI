@@ -251,7 +251,7 @@ impl Traffic {
 mod horn_tests {
     #[test]
     fn an_ai_bus_honks_with_the_horn_of_its_own_sound_set() {
-        let dir = std::env::temp_dir().join(format!("openomsi_horn_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus_horn_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let cfg = dir.join("sound_AI.cfg");
         std::fs::write(&cfg, "[sound]\nengine.wav\n1\n\n[sound]\nSD_hupe_lang.wav\n1\n\n[volcurve]\ncockpit_hupe_volume\n").unwrap();

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="org.openomsi.game"
+    package="org.openbus.game"
     android:versionCode="@VERSION_CODE@"
     android:versionName="@VERSION_NAME@"
     android:installLocation="auto">
@@ -30,7 +30,7 @@
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <application
-        android:label="openOMSI"
+        android:label="openBus"
         android:icon="@mipmap/ic_launcher"
         android:hasCode="true"
         android:largeHeap="true"
@@ -42,7 +42,7 @@
 
         <activity
             android:name=".OmsiActivity"
-            android:label="openOMSI"
+            android:label="openBus"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
@@ -50,7 +50,7 @@
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density"
             android:windowSoftInputMode="adjustNothing|stateHidden"
             android:theme="@style/OmsiTheme">
-            <meta-data android:name="android.app.lib_name" android:value="openomsi_game" />
+            <meta-data android:name="android.app.lib_name" android:value="openbus_game" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

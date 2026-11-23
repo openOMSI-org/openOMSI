@@ -165,13 +165,13 @@ flags! {
     OMSI_AI_MODEL_LOCK: Bool, Switch, Use, "off", "AI cars steer no further than their model's own steering lock (no 60 degree allowance for tight turns).";
     OMSI_AI_WAY_ONLY: Bool, Switch, Use, "off", "AI vehicles stand on their way with the plain ground sampler, as before (A/B).";
     OMSI_AMBIENCE_DENSITY: Text, Debug, Once, "1", "The ambience's one-shots (birds, the far life, thunder, the objects' calls) this many times as often (a number), or only some of them (slot=factor,…: bird.geese=40) - what fits the place, season and hour stays the same (for demos and checks).";
-    OMSI_AMBIENCE_DIR: Text, Setup, Use, "-", "The folder of the ambience's recordings (its pack.json), instead of `ambience` beside the program or in ~/.openomsi.";
+    OMSI_AMBIENCE_DIR: Text, Setup, Use, "-", "The folder of the ambience's recordings (its pack.json), instead of `ambience` beside the program or in ~/.openbus.";
     OMSI_API_BLESS: Bool, Test, Use, "off", "cargo test -p omsi-plugin api_manifest: write docs/plugin-api.json and the reference tables of docs/PLUGINS.md again from the plugin API registry.";
     OMSI_APPLE_EXIT_AFTER: Num, Test, Use, "-", "iPhone/iPad: the session ends by itself after this many seconds (checks the way back to the Swift launcher without a person).";
     OMSI_AUDIO_TRACE: Text, Debug, Once, "-", "Write what the game asks of the mixer (every sound started, changed, stopped, the listener each frame) into this file, rounded and deterministic for offscreen recordings (see scripts/audio-trace.sh).";
     OMSI_AUDIT_LINE: Num, Test, Test, "-", "bus_audit example: the line (number and letter code) the IBIS typist enters instead of the bus's own.";
     OMSI_AUTOPILOT: Num, Test, Use, "-", "Offscreen: the player's bus follows the lanes at this speed in km/h (finds where it falls through or leaves the road).";
-    OMSI_AVATARS_DIR: Text, Setup, Use, "-", "The folder of the passenger avatars (its pack.json), instead of `avatars` beside the program or in ~/.openomsi.";
+    OMSI_AVATARS_DIR: Text, Setup, Use, "-", "The folder of the passenger avatars (its pack.json), instead of `avatars` beside the program or in ~/.openbus.";
     OMSI_BACKEND: Text, Setup, Use, "settings", "vulkan, dx12, metal, gl or angle (dx11, d3d11; Windows): the graphics API tried first (overrides the settings). Set at runtime by the launcher and on Android.";
     OMSI_BACKGROUND: Bool, Test, Use, "off", "A test window that does not take the keyboard focus (OMSI_INPUT drives the handlers directly); with OMSI_INPUT it ignores the real mouse too.";
     OMSI_BASIC_PIPELINES: Bool, Switch, Once, "off", "Use the reduced (basic) render pipelines, as after a driver failed to build the full ones.";
@@ -359,7 +359,7 @@ flags! {
     OMSI_LAN_JOIN_TIMEOUT: Num, Tuning, Use, "default", "LAN: seconds to wait when joining a game.";
     OMSI_LAN_SAY: Text, Test, Use, "-", "\"30=Hallo;45=Bye\": LAN chat lines said at these seconds of the session.";
     OMSI_LAN_TRACE: Text, Debug, Use, "-", "LAN CSV file: where the host's people are drawn.";
-    OMSI_LAUNCHER: Text, Setup, Use, "-", "Program a plain start opens as the launcher instead of the desktop launcher (openomsi-launcher-app) beside the game.";
+    OMSI_LAUNCHER: Text, Setup, Use, "-", "Program a plain start opens as the launcher instead of the desktop launcher (openbus-launcher-app) beside the game.";
     OMSI_LIGHT_GRID_SQUARES: Bool, Switch, Frame, "off", "A light goes into every cell of the light grid's square round its range, the corners its range misses too (A/B).";
     OMSI_LIST_ALIGNED: Bool, Debug, Use, "off", "Log the splines aligned to the terrain.";
     OMSI_MAIN_SPLIT: Bool, Switch, Frame, "off", "Split the main pass's bundles in two (encoded apart, the second part loads what the first stored).";
@@ -418,7 +418,7 @@ flags! {
     OMSI_NO_NAV_CULL: Bool, Switch, Use, "off", "The navigator draws all of its ground and houses every frame, not only what its camera sees (A/B).";
     OMSI_NO_OWN_VEHICLE_LAMP_BLOCK: Bool, Switch, Frame, "off", "Other vehicles' lamps light the player's vehicle inside and the street beyond it through its body again (A/B).";
     OMSI_NO_PBR: Bool, Switch, Use, "off", "No PBR materials.";
-    OMSI_NO_PIPELINE_CACHE: Bool, Switch, Use, "off", "Compile every pipeline at each start (no ~/.openomsi/cache/pipelines-*.bin).";
+    OMSI_NO_PIPELINE_CACHE: Bool, Switch, Use, "off", "Compile every pipeline at each start (no ~/.openbus/cache/pipelines-*.bin).";
     OMSI_NO_PLUGINS: Bool, Switch, Use, "off", "No plugins loaded.";
     OMSI_NO_POLL_THREAD: Bool, Switch, Use, "off", "No device poll thread.";
     OMSI_NO_POST_SPLIT: Bool, Switch, Frame, "off", "Finish the passes after the main pass in the main pass's own command buffer (A/B).";
@@ -440,7 +440,7 @@ flags! {
     OMSI_NO_SPRAY: Bool, Switch, Use, "off", "No tyre spray.";
     OMSI_NO_SURF: Bool, Switch, Once, "off", "Every road as smooth as before (no surface texture) (A/B).";
     OMSI_NO_TEXCOMPRESS: Bool, Switch, Use, "off", "No runtime texture compression.";
-    OMSI_NO_TEXTURE_CACHE: Bool, Switch, Once, "off", "Compress every texture at each start (no ~/.openomsi/cache/textures).";
+    OMSI_NO_TEXTURE_CACHE: Bool, Switch, Once, "off", "Compress every texture at each start (no ~/.openbus/cache/textures).";
     OMSI_NO_TUNNEL: Bool, Switch, Use, "off", "LAN: no tunnel.";
     OMSI_NO_UPDATE: Bool, Switch, Use, "off", "No update check.";
     OMSI_NO_VAR_SYNC: Bool, Switch, Use, "off", "LAN: no variable sync.";
@@ -656,7 +656,7 @@ mod tests {
              - **Read** - `once` per process; `use`: each time the code passing it runs (start-up, loading, per step);\n  \
              `frame`: every frame in `Renderer::render_inner`; `test`: tests and examples only.\n\n\
              Values are read once per process and cached (`omsi_cfg::env`): changing the environment of a running game has no\n\
-             effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set before the game starts.\n\n",
+             effect. On Android, `openBus/env.txt` holds `NAME=value` lines that are set before the game starts.\n\n",
         );
         let kinds = [
             (Kind::Debug, "Debug output"),

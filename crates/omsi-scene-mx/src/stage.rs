@@ -900,7 +900,7 @@ impl World {
                     // Omsi.exe cuts the ground out under such a spline (the flag, or the
                     // `_2` number, goes to the segment, 0x79b95e -> +0x205, and Generate
                     // makes the outline from it; the terrain takes it with the `[terrainhole]`
-                    // meshes, "Terrain hole cutting: Spline"). openOMSI fills a trough with
+                    // meshes, "Terrain hole cutting: Spline"). openBus fills a trough with
                     // fitted ground instead and keeps the cut where the hill stands over
                     // the spline or the fit fails. The mode is the trough's end extension.
                     if omsi_cfg::flags::OMSI_LIST_ALIGNED.is_set() {

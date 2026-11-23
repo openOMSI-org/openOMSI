@@ -1,4 +1,4 @@
-"""Mechanical part of openOMSI's port to mX: drop what mX has no concept of.
+"""Mechanical part of openBus's port to mX: drop what mX has no concept of.
 
 - descriptor fields: multiview_mask, depth_slice, compilation_options, cache: None,
   mapped_at_creation: false, pipeline `layout: Some(..)/None`, bind group `layout: &..`

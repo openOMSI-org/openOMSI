@@ -1,5 +1,5 @@
 //! A support package for a GitHub issue (Setup → Export diagnostics, or
-//! `openomsi --export-diagnostics <zip>`): a ZIP the player saves on this computer, looks
+//! `openbus --export-diagnostics <zip>`): a ZIP the player saves on this computer, looks
 //! into and attaches by hand. Nothing is sent anywhere.
 //!
 //! It is built from an allowlist, never from configuration dumps: the program, the system,

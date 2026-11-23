@@ -496,7 +496,7 @@ mod tests {
     fn content() -> PathBuf {
         static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let d = std::env::temp_dir().join(format!("openomsi_mods_{}_{n}_{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let d = std::env::temp_dir().join(format!("openbus_mods_{}_{n}_{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         std::fs::create_dir_all(d.join("Vehicles/Big Bus")).unwrap();
         std::fs::write(d.join("Vehicles/Big Bus/big.bus"), b"[name]").unwrap();
         std::fs::create_dir_all(d.join("maps/Hill Town")).unwrap();

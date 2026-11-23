@@ -7,19 +7,19 @@
 //! their number in it: no path a client names is ever opened. A joining game asks for the
 //! list before its world is loaded, fetches what it does not have in the same version
 //! (compared by SHA-256), checks every file against the list's size and hash, and mounts
-//! them for this session at `~/.openomsi/lan-mods/<pid>`, which becomes the first content
+//! them for this session at `~/.openbus/lan-mods/<pid>`, which becomes the first content
 //! root. The mount goes when the session ends (and a folder an older version left there
 //! goes at the next start).
 //!
 //! Not to be copied: the connection is encrypted (`channel`: a key agreement of its own,
 //! bound to the session, then authenticated frames - an older game is told to update), and
 //! nothing the host sends is ever written to the disk in plain form. The files are kept
-//! sealed in the store (`store`, `~/.openomsi/lan-store`, so the next join need not fetch
+//! sealed in the store (`store`, `~/.openbus/lan-store`, so the next join need not fetch
 //! them again), named by a keyed hash, and the session's mount is a sealed store of
 //! `omsi_cfg::vfs`: the engine reads them decrypted into memory under their own names,
 //! while a copy of the game's folders gives nothing but noise. Nothing the engine derives
 //! from them is cached on the disk either (`omsi_cfg::vfs::is_sealed`). What this does not
-//! do, honestly: stop a determined player. openOMSI is open source and the decryption runs
+//! do, honestly: stop a determined player. openBus is open source and the decryption runs
 //! on the player's machine, with the store's key beside it (see `store`) - a changed build,
 //! or a dump of the game's memory, has the files in plain form. And the host's own copy is
 //! the host's mod folder, as it always was. It keeps the mods from being copied out of the
@@ -158,8 +158,8 @@ fn sha256_of(data: &[u8]) -> String {
 // the host
 
 /// Is content root `r` the OMSI 2 installation itself (its files are taken to be there on
-/// every machine)? A content root inside it is not: openOMSI unpacked
-/// into the OMSI 2 folder keeps what it installs in `<OMSI 2>/openOMSI`, and those mods
+/// every machine)? A content root inside it is not: openBus unpacked
+/// into the OMSI 2 folder keeps what it installs in `<OMSI 2>/openBus`, and those mods
 /// were never passed on.
 fn is_original(r: &Path, original: &Path) -> bool {
     r == original
@@ -638,10 +638,10 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
 // -------------------------------------------------------------------------------------
 // the joining player
 
-/// The session folder of this game (`~/.openomsi/lan-mods/<pid>`).
+/// The session folder of this game (`~/.openbus/lan-mods/<pid>`).
 fn sandbox_base() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".openomsi").join("lan-mods"))
+    Some(PathBuf::from(home).join(".openbus").join("lan-mods"))
 }
 
 /// The host's mods of this session, mounted as a content root (process-wide like the
@@ -867,13 +867,13 @@ fn open_waiting(host: SocketAddr, session: u64, wait: Duration) -> Result<Connec
         let said = t.strip_prefix("ERR").unwrap_or(t).trim();
         // (what a host of the unencrypted protocol says to every greeting of this one)
         if said == "not this session" {
-            return Err("the host says: not this session (or the host's openOMSI is older and sends its mods unencrypted: both need the same version)".into());
+            return Err("the host says: not this session (or the host's openBus is older and sends its mods unencrypted: both need the same version)".into());
         }
         return Err(format!("the host says: {said}"));
     };
     let proof: Vec<&str> = host_key.split_whitespace().collect();
     let [host_key, public, sig] = proof[..] else {
-        return Err("the host's openOMSI is older: both need the same version".into());
+        return Err("the host's openBus is older: both need the same version".into());
     };
     if !channel::proven(session, &keys.public_hex(), host_key, public, sig) {
         return Err("the host could not prove it runs this session: its mods are not taken".into());
@@ -885,7 +885,7 @@ fn open_waiting(host: SocketAddr, session: u64, wait: Duration) -> Result<Connec
     Ok((raw, SecureWriter::new(out, send), SecureReader::new(input, receive)))
 }
 
-/// The downloads kept between sessions, sealed (`~/.openomsi/lan-store`, see `store`): a
+/// The downloads kept between sessions, sealed (`~/.openbus/lan-store`, see `store`): a
 /// map fetched once is not fetched again at the next join.
 fn store_dir() -> Option<PathBuf> {
     sandbox_base().map(|b| b.with_file_name("lan-store"))
@@ -1240,7 +1240,7 @@ mod tests {
     fn serve_files(files: &[(&str, Vec<u8>)]) -> (SocketAddr, PathBuf, u64) {
         let key = Arc::new(omsi_net::hostkey::HostKey::generate().unwrap());
         let session = key.session();
-        let dir = std::env::temp_dir().join(format!("openomsi-lan-serve-{}-{session:x}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus-lan-serve-{}-{session:x}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut entries = Vec::new();
         let mut sources = Vec::new();
@@ -1327,7 +1327,7 @@ mod tests {
             let mut s = TcpStream::connect(addr).unwrap();
             s.write_all(format!("{magic} {} {}\n", omsi_net::session_hex(session), "00".repeat(32)).as_bytes()).unwrap();
             let reply = read_reply(&mut BufReader::new(s)).unwrap_err();
-            assert!(reply.contains("update openOMSI"), "{reply}");
+            assert!(reply.contains("update openBus"), "{reply}");
         }
         std::fs::remove_dir_all(&dir).ok();
         // a host of the old protocol answers this one's greeting as it answered any other
@@ -1348,7 +1348,7 @@ mod tests {
     /// does everything else of the map.
     #[test]
     fn the_hosts_vehicle_files_never_cover_ours() {
-        let root = std::env::temp_dir().join(format!("openomsi-own-vehicles-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("openbus-own-vehicles-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("Vehicles").join("MyBus").join("Texture")).unwrap();
         std::fs::write(root.join("Vehicles").join("MyBus").join("Texture").join("repaints.cti"), b"[item]\nMine\nx\ny.dds\n").unwrap();

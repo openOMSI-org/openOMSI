@@ -10,7 +10,7 @@ impl Fixture {
         // other's files and deleted them under each other.
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let path = std::env::temp_dir().join(format!(
-            "openomsi-crossing-field-{}-{}-{}",
+            "openbus-crossing-field-{}-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             std::time::SystemTime::now()

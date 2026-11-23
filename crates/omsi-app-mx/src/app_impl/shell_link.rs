@@ -411,7 +411,7 @@ mod pause_navigation_tests {
     fn in_game_bus_preview_is_released_when_closing_the_menu_or_list() {
         use clap::Parser;
         let mut app =
-            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+            crate::assemble_app(crate::Args::parse_from(["openbus"]), Default::default());
         app.shell.bus_preview.active = true;
         app.close_list();
         assert!(!app.shell.bus_preview.active);
@@ -427,7 +427,7 @@ mod online_action_tests {
     fn online_room_switch_opens_the_existing_form_without_leaving_the_session() {
         use clap::Parser;
         let mut app =
-            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+            crate::assemble_app(crate::Args::parse_from(["openbus"]), Default::default());
         app.net.lan =
             Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
         app.menus.game_menu = Some(0);
@@ -442,7 +442,7 @@ mod online_action_tests {
     fn online_world_action_changes_the_session_without_opening_a_list() {
         use clap::Parser;
         let mut app =
-            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+            crate::assemble_app(crate::Args::parse_from(["openbus"]), Default::default());
         app.net.lan =
             Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
         app.menus.game_menu = Some(0);
@@ -461,7 +461,7 @@ mod online_action_tests {
     fn online_quick_player_list_uses_the_shared_page() {
         use clap::Parser;
         let mut app =
-            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+            crate::assemble_app(crate::Args::parse_from(["openbus"]), Default::default());
         app.net.lan =
             Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
         app.menus.game_menu = Some(0);
@@ -485,7 +485,7 @@ mod online_action_tests {
     fn online_player_modal_rejects_stale_targets_and_unlisted_actions() {
         use clap::Parser;
         let mut app =
-            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+            crate::assemble_app(crate::Args::parse_from(["openbus"]), Default::default());
         app.net.lan =
             Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
         app.menus.game_menu = Some(0);
@@ -508,7 +508,7 @@ mod online_action_tests {
     fn online_quick_multiplayer_opens_the_online_page_and_keeps_the_session() {
         use clap::Parser;
         let mut app =
-            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+            crate::assemble_app(crate::Args::parse_from(["openbus"]), Default::default());
         app.net.lan =
             Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
         app.menus.game_menu = Some(0);
@@ -532,7 +532,7 @@ mod online_action_tests {
     fn online_multiplayer_without_a_session_still_opens_the_connection_form() {
         use clap::Parser;
         let mut app =
-            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+            crate::assemble_app(crate::Args::parse_from(["openbus"]), Default::default());
         app.menus.game_menu = Some(0);
         assert!(app.game_menu_action("multiplayer"));
         assert!(app.menus.game_panels.multiplayer.is_some());

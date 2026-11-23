@@ -15,7 +15,7 @@ function Row({ r, on, blocked, onPick }) {
   const off = r.current || !!r.broken || blocked;
   return html`<button type="button" class=${'list-item version' + (on ? ' on' : '')} disabled=${off} aria-pressed=${on} onClick=${() => onPick(r.version)}>
     <span class="grow">
-      <span class="title">openOMSI ${r.version}</span>
+      <span class="title">openBus ${r.version}</span>
       <span class="sub">${[day(r.date), r.size ? bytes(r.size) : ''].filter(Boolean).join(', ')}</span>
     </span>
     <span class="tags">
@@ -33,13 +33,13 @@ function Progress({ job }) {
   if (job.state === 'downloading') {
     const pct = job.total > 0 ? Math.min(100, (job.done / job.total) * 100) : 0;
     return html`<div class="version-progress">
-      <b>${t('Downloading openOMSI {version}', v)}</b>
+      <b>${t('Downloading openBus {version}', v)}</b>
       <div class="progress"><div style=${`width:${pct.toFixed(1)}%`}></div></div>
       <span class="muted small">${job.total > 0 ? `${bytes(job.done)} / ${bytes(job.total)}` : html`<${Spinner} />`}</span>
     </div>`;
   }
   return html`<div class="version-progress">
-    <b>${t('Installing openOMSI {version}', v)}</b>
+    <b>${t('Installing openBus {version}', v)}</b>
     <div class="progress"><div style="width:100%"></div></div>
     <span class="muted small">${t('The new version is put in place; the launcher starts again in a moment.')}</span>
   </div>`;
@@ -101,7 +101,7 @@ export function VersionsDialog({ onClose }) {
   if (working) {
     body = html`<${Progress} job=${job} />`;
   } else if (job?.state === 'failed' || job?.state === 'stuck') {
-    const title = job.state === 'failed' ? 'openOMSI {version} was not installed' : 'openOMSI {version} is installed: start it again yourself.';
+    const title = job.state === 'failed' ? 'openBus {version} was not installed' : 'openBus {version} is installed: start it again yourself.';
     body = html`<${Notice} kind="danger"><b>${t(title, { version: job.version })}</b><div class="dim small selectable">${job.error}</div></${Notice}>`;
     footer = html`<${Button} label="Close" onClick=${onClose} />${job.state === 'failed' && html`<${Button} icon="refresh" label="Try again" onClick=${load} />`}`;
   } else if (!data && !error) {
@@ -118,13 +118,13 @@ export function VersionsDialog({ onClose }) {
         ? html`<div class="list">${data.list.map((r) => html`<${Row} key=${r.version} r=${r} on=${pick === r.version} blocked=${blocked} onPick=${setPick} />`)}</div>`
         : html`<${Empty} icon="history" title="No release to choose from" />`}
       ${chosen && html`<${Notice}>
-        ${t('openOMSI {version} is downloaded from GitHub and takes the place of this version; the launcher then starts again. Your mods, settings and saves stay as they are.', { version: chosen.version })}
-        ${!chosen.latest && html`<div class="version-keep">${t('Update checks are turned off so that this version stays. To come back, choose the latest version in this list, or download it from GitHub if openOMSI {version} does not have this list yet.', { version: chosen.version })}</div>`}
+        ${t('openBus {version} is downloaded from GitHub and takes the place of this version; the launcher then starts again. Your mods, settings and saves stay as they are.', { version: chosen.version })}
+        ${!chosen.latest && html`<div class="version-keep">${t('Update checks are turned off so that this version stays. To come back, choose the latest version in this list, or download it from GitHub if openBus {version} does not have this list yet.', { version: chosen.version })}</div>`}
       </${Notice}>`}
       ${error && html`<${Notice} kind="danger"><div class="selectable">${error}</div></${Notice}>`}
     </div>`;
     footer = html`<${Button} label="Cancel" onClick=${onClose} />
-      <${Button} kind="primary" icon="download" disabled=${!chosen || blocked} onClick=${install}>${chosen ? t('Install openOMSI {version}', { version: chosen.version }) : t('Install')}</${Button}>`;
+      <${Button} kind="primary" icon="download" disabled=${!chosen || blocked} onClick=${install}>${chosen ? t('Install openBus {version}', { version: chosen.version }) : t('Install')}</${Button}>`;
   }
   return html`<${Dialog} title="Choose a version" onClose=${working ? null : onClose} footer=${footer}>${body}</${Dialog}>`;
 }

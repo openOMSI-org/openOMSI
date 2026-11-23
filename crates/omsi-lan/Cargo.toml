@@ -3,7 +3,7 @@ name = "omsi-lan"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI's multiplayer on top of omsi-net: the host's mods for joining players, the voice chat link, the public gateway and the server's status page, the sync tables and the spawn geometry"
+description = "openBus's multiplayer on top of omsi-net: the host's mods for joining players, the voice chat link, the public gateway and the server's status page, the sync tables and the spawn geometry"
 
 [dependencies]
 omsi-model = { path = "../omsi-model" }

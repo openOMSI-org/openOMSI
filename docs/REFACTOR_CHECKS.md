@@ -5,14 +5,14 @@ game does. These checks show it did not, beside `cargo test`.
 
 ## Golden pictures
 
-`scripts/golden.sh` renders a fixed set of offscreen scenes with one `openomsi` binary, and
+`scripts/golden.sh` renders a fixed set of offscreen scenes with one `openbus` binary, and
 compares two such sets pixel by pixel. Build the binary of the commit before the change and
 the one after it, render both, compare:
 
 ```sh
 export OMSI_ROOT="/path/to/OMSI 2"          # the original install (default: "OMSI 2 Original" beside the checkout)
-scripts/golden.sh render /path/to/before/openomsi /tmp/golden/before
-scripts/golden.sh render /path/to/after/openomsi  /tmp/golden/after
+scripts/golden.sh render /path/to/before/openbus /tmp/golden/before
+scripts/golden.sh render /path/to/after/openbus  /tmp/golden/after
 scripts/golden.sh compare /tmp/golden/before /tmp/golden/after
 ```
 
@@ -68,12 +68,12 @@ of `grundorf_drive_traffic`; they carry no wall-clock figures.
 ## Audio traces
 
 The golden pictures say nothing about what is heard. `scripts/audio-trace.sh` runs offscreen
-drives with one `openomsi` binary, each writing an audio trace (`OMSI_AUDIO_TRACE=<file>`)
+drives with one `openbus` binary, each writing an audio trace (`OMSI_AUDIO_TRACE=<file>`)
 and the sound mixed from it (`OMSI_RECORD`), and compares two such sets:
 
 ```sh
-scripts/audio-trace.sh render  /path/to/before/openomsi /tmp/audio/before
-scripts/audio-trace.sh render  /path/to/after/openomsi  /tmp/audio/after
+scripts/audio-trace.sh render  /path/to/before/openbus /tmp/audio/before
+scripts/audio-trace.sh render  /path/to/after/openbus  /tmp/audio/after
 scripts/audio-trace.sh compare /tmp/audio/before /tmp/audio/after
 ```
 
@@ -98,7 +98,7 @@ is the same from run to run; `compare` exits 1 when it is not, with the first st
 differs and the files started more or less often. The mixes are compared too, but only
 reported: the order the voices are summed in moves their samples by one unit (of 32767).
 
-The ambience's recordings are read from `$OMSI_AMBIENCE_DIR`, else `~/.openomsi/ambience`;
+The ambience's recordings are read from `$OMSI_AMBIENCE_DIR`, else `~/.openbus/ambience`;
 without them the ambience is silent in both runs alike.
 
 What an offscreen run does not play - the scenery's sound objects, the bus radio, the

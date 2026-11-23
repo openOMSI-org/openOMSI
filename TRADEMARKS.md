@@ -1,42 +1,33 @@
-# openOMSI trademarks and project identity
+# openBus origin, names and logos
 
-## Creator and marks
+## Origin
 
-The **openOMSI** name and the original project logos are marks of **usonskyyyy**,
-who created the project's original codebase. Later contributions remain credited
-to their respective authors.
+openBus is an independent fork of [openOMSI](https://github.com/openOMSI-org/openOMSI),
+whose original codebase was created by **usonskyyyy**. Contributions to openOMSI remain
+credited to their respective authors, and their copyright and license notices are kept in
+this repository (see [LICENSE](LICENSE)).
 
-This notice does not claim that these marks are registered trademarks.
+openBus is **not** the official openOMSI project and is not affiliated with, sponsored by or
+endorsed by usonskyyyy or the openOMSI organization.
 
-## Official organization
+## The openBus name and logos
 
-The official organization is **openOMSI.org**, available on GitHub as
-[`openOMSI-org`](https://github.com/openOMSI-org). It was previously named
-`openOMSI-Project`.
+The **openBus** name and the logos in `assets/logos` and `assets/icons/app` are the project's
+own. The logos currently in the repository are placeholders. The openOMSI name and original
+logos are marks of their creator and are not used by this project.
 
-The official source repository is
-[`openOMSI-org/openOMSI`](https://github.com/openOMSI-org/openOMSI).
-An organization or repository with a similar name is not made official merely
-by using that name.
+These notices do not claim that any of these marks are registered trademarks.
 
-## Use of the name and logos
+## License
 
-The source-code license does not grant permission to use the openOMSI name or
-logos to imply official status, sponsorship or endorsement by usonskyyyy or the
-official organization.
-
-You may refer truthfully to openOMSI in documentation, compatibility descriptions,
-reviews and attribution. Identify unofficial forks, modified distributions and
-services clearly as independent projects; do not present them as official
-openOMSI releases or services. For permission to use the marks as your own
-branding, contact the project through the official organization.
-
-These terms concern use as branding. They do not reduce the permissions granted
-for source code or artwork under their applicable copyright licenses, including
-the rights to copy, modify and distribute the software.
+openBus is distributed under the GNU Affero General Public License, version 3 only
+(SPDX-License-Identifier: AGPL-3.0-only), except for files that carry their own license
+notices. These terms concern use as branding; they do not reduce the permissions the license
+grants for source code or artwork, including the rights to copy, modify and distribute the
+software.
 
 ## Third-party marks
 
-OMSI, OMSI 2 and other third-party names and logos belong to their respective
-owners. openOMSI is an independent project and is not affiliated with or endorsed
-by the owners of OMSI or OMSI 2.
+OMSI, OMSI 2 and other third-party names and logos belong to their respective owners.
+openBus is an independent project and is not affiliated with or endorsed by the owners of
+OMSI or OMSI 2.

@@ -2,7 +2,7 @@
 -- and two buttons. Copy it into the `plugins` folder next to the game (see docs/PLUGINS.md,
 -- "On-screen panels"). F10 gives the panel the mouse, Esc (or F10 again) gives it back.
 
--- an older openOMSI has no panels: the same news as a line of text
+-- an older openBus has no panels: the same news as a line of text
 if not (omsi.ui and omsi.ui.version >= 1) then
   omsi.every(5, function()
     local i = omsi.info()

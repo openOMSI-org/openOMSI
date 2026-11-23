@@ -24,7 +24,7 @@ test('bare addresses use WS in Auto, explicit ports use UDP', () => {
 });
 
 test('web links, official alias and tunnels require WS', () => {
-  for (const address of ['https://play.example.org', 'http://play.example.org:27025', 'https://play.example.org:27015', 'ws://play.example.org/ws', 'wss://play.example.org/ws', 'openomsi', 'OpenOMSI', 'abc.trycloudflare.com', 'abc.trycloudflare.com/ws', 'abc.trycloudflare.com:443/ws', 'ABC.TryCloudflare.com/ws', 'me@abc.trycloudflare.com/ws']) {
+  for (const address of ['https://play.example.org', 'http://play.example.org:27025', 'https://play.example.org:27015', 'ws://play.example.org/ws', 'wss://play.example.org/ws', 'openbus', 'OpenBus', 'abc.trycloudflare.com', 'abc.trycloudflare.com/ws', 'abc.trycloudflare.com:443/ws', 'ABC.TryCloudflare.com/ws', 'me@abc.trycloudflare.com/ws']) {
     assert.equal(serverJoinAddress(address, 'auto', info), address);
     assert.equal(serverJoinAddress(address, 'websocket', info), address);
     assert.throws(() => serverJoinAddress(address, 'udp', info), /UDP needs the game's address/);
@@ -49,7 +49,7 @@ test('only Auto UDP joins carry the discovered gateway as a fallback', () => {
   for (const protocol of ['udp', 'websocket']) {
     assert.equal(serverJoinSettings('play.example.org:27015', protocol, info).lan_ws_fallback, null);
   }
-  for (const address of ['play.example.org', 'https://play.example.org:27015', 'openomsi']) {
+  for (const address of ['play.example.org', 'https://play.example.org:27015', 'openbus']) {
     assert.equal(serverJoinSettings(address, 'auto', info).lan_ws_fallback, null);
   }
 });

@@ -348,7 +348,7 @@ impl<'a> CfgReader<'a> {
 
     /// `n` integers, then any further whole-number lines that follow at once (a blank line,
     /// a keyword or anything else ends the list): OMSI's fixed-length lists read as always,
-    /// and a file may give more (openOMSI: `[illumination_interior]` with more than four
+    /// and a file may give more (openBus: `[illumination_interior]` with more than four
     /// lamps).
     pub fn i32_list(&mut self, n: usize) -> Vec<i32> {
         let mut v: Vec<i32> = (0..n).map(|_| self.i32()).collect();
@@ -921,9 +921,9 @@ pub fn resolve_path(base: &Path, rel: &str) -> PathBuf {
     cur
 }
 
-/// What an installation of the original OMSI 2 must have for openOMSI to run on it: the
+/// What an installation of the original OMSI 2 must have for openBus to run on it: the
 /// game and the stock content every player gets (both stock maps, the buses, people, fonts,
-/// weather, inputs). A folder without them (openOMSI's own content folder, a mod pack, a
+/// weather, inputs). A folder without them (openBus's own content folder, a mod pack, a
 /// half-copied installation) is not a base to play on - everybody plays on the same original
 /// content.
 pub const ORIGINAL_ESSENTIALS: &[&str] = &[
@@ -953,14 +953,14 @@ pub fn original_keyboard_cfg(root: &Path) -> PathBuf {
 }
 
 /// The essentials (see [`ORIGINAL_ESSENTIALS`]) that `root` lacks; empty for a complete
-/// original installation. openOMSI's content folder never counts as one.
+/// original installation. openBus's content folder never counts as one.
 pub fn missing_original_essentials(root: &Path) -> Vec<String> {
-    // (a folder with Omsi.exe in it is the game's, even marked: openOMSI unpacked into the OMSI
+    // (a folder with Omsi.exe in it is the game's, even marked: openBus unpacked into the OMSI
     // folder made it its content folder once - see `content_folder_of` - and every start after
     // that said the game was not there)
     let marked = root.join(CONTENT_MARKER).exists() || root.join(LEGACY_CONTENT_MARKER).exists();
     if marked && resolve_existing(root, &["Omsi.exe"]).is_none() {
-        return vec![format!("{} (this is the openOMSI content folder, not the original game)", root.display())];
+        return vec![format!("{} (this is the openBus content folder, not the original game)", root.display())];
     }
     ORIGINAL_ESSENTIALS
         .iter()
@@ -973,22 +973,22 @@ pub fn missing_original_essentials(root: &Path) -> Vec<String> {
         .collect()
 }
 
-/// The top-level content folders openOMSI recognises. Most use OMSI 2's original spelling;
-/// `HOFs` is an openOMSI extension for depot files shared by every vehicle. A content
+/// The top-level content folders openBus recognises. Most use OMSI 2's original spelling;
+/// `HOFs` is an openBus extension for depot files shared by every vehicle. A content
 /// folder is laid out with these names, so the mod installer and mounted archives can merge
 /// them into the same virtual installation.
 pub const CONTENT_FOLDERS: &[&str] = &[
     "Vehicles", "HOFs", "maps", "Sceneryobjects", "Splines", "Texture", "Fonts", "Plugins", "TicketPacks", "Drivers", "Weather", "Announcements", "Humans", "Money", "Scripts", "Trains", "Situations", "Inputs", "Sounds",
 ];
 
-/// Marker file of an openOMSI content folder (so it is never mistaken for the OMSI 2
+/// Marker file of an openBus content folder (so it is never mistaken for the OMSI 2
 /// installation itself).
-pub const CONTENT_MARKER: &str = ".openomsi-content";
-/// The marker of a content folder made before the project was called openOMSI.
+pub const CONTENT_MARKER: &str = ".openbus-content";
+/// The marker of a content folder made before the project was called openBus.
 pub const LEGACY_CONTENT_MARKER: &str = ".omsi-rewrite-content";
 
 /// Move the data of a version from before the rename (`~/.omsi-rewrite`,
-/// `~/.omsi-rewrite-root`) to its new place (`~/.openomsi`, `~/.openomsi-root`), once.
+/// `~/.omsi-rewrite-root`) to its new place (`~/.openbus`, `~/.openbus-root`), once.
 /// (First thing at the start of every program: an unusable `HOME` is dropped here, see
 /// [`drop_unusable_home`].)
 pub fn migrate_legacy_data_dir() {
@@ -996,7 +996,7 @@ pub fn migrate_legacy_data_dir() {
     let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(std::path::PathBuf::from) else {
         return;
     };
-    for (old, new) in [(".omsi-rewrite", ".openomsi"), (".omsi-rewrite-root", ".openomsi-root")] {
+    for (old, new) in [(".omsi-rewrite", ".openbus"), (".omsi-rewrite-root", ".openbus-root")] {
         let (old, new) = (home.join(old), home.join(new));
         if old.exists() && !new.exists() {
             let _ = std::fs::rename(&old, &new);
@@ -1005,7 +1005,7 @@ pub fn migrate_legacy_data_dir() {
 }
 
 /// On Windows a `HOME` variable some other program set for itself (a Unix-style path, a
-/// network drive that is not connected) is no folder to keep openOMSI's data in: the
+/// network drive that is not connected) is no folder to keep openBus's data in: the
 /// launcher's settings went nowhere, and the OMSI folder chosen under Setup was forgotten
 /// as soon as it was saved - the lists stayed empty. Such a `HOME` is dropped for this
 /// program (and the game it starts), which then uses `USERPROFILE` as without one.
@@ -1015,25 +1015,25 @@ pub fn drop_unusable_home() {
     }
     let Some(h) = std::env::var_os("HOME") else { return };
     let p = std::path::PathBuf::from(&h);
-    let usable = p.is_absolute() && p.is_dir() && std::fs::create_dir_all(p.join(".openomsi")).is_ok();
+    let usable = p.is_absolute() && p.is_dir() && std::fs::create_dir_all(p.join(".openbus")).is_ok();
     if !usable && std::env::var_os("USERPROFILE").is_some() {
         unsafe { std::env::remove_var("HOME") };
     }
 }
 
-/// openOMSI's content folder for a program in `dir`: that folder - unless it is the original
-/// OMSI 2 folder itself (openOMSI unpacked into it), which openOMSI never writes to: then the
-/// `openOMSI` folder inside it.
+/// openBus's content folder for a program in `dir`: that folder - unless it is the original
+/// OMSI 2 folder itself (openBus unpacked into it), which openBus never writes to: then the
+/// `openBus` folder inside it.
 pub fn content_folder_of(dir: &Path) -> PathBuf {
     if resolve_existing(dir, &["Omsi.exe"]).is_some() && resolve_existing(dir, &["maps"]).is_some() {
-        dir.join("openOMSI")
+        dir.join("openBus")
     } else {
         dir.to_path_buf()
     }
 }
 
 /// A folder of programs - macOS's `/Applications` or `~/Applications`, where an
-/// openOMSI.app is usually copied to - is no place for the content folder: the game laid
+/// openBus.app is usually copied to - is no place for the content folder: the game laid
 /// OMSI's folders (Vehicles, maps, Mods ...) out among the user's applications (#1043). The
 /// content folder then lives in the user's data folder instead - unless content was already
 /// installed there by an older version, which then stays where the player put it.
@@ -1061,7 +1061,7 @@ fn holds_content(dir: &Path) -> bool {
 
 /// Check if a directory is writable by attempting to create and remove a probe file.
 pub fn is_writable(dir: &Path) -> bool {
-    let probe = dir.join(".openomsi-write-test");
+    let probe = dir.join(".openbus-write-test");
     let ok = std::fs::write(&probe, b"x").is_ok();
     let _ = std::fs::remove_file(&probe);
     ok
@@ -1069,7 +1069,7 @@ pub fn is_writable(dir: &Path) -> bool {
 
 /// The game's own content folder, where it writes what it makes (drivers, saves, journeys):
 /// `OMSI_CONTENT`, else the content folder beside the program (beside an .app bundle) when it
-/// may be written, else `~/.openomsi/content`.
+/// may be written, else `~/.openbus/content`.
 pub fn content_dir() -> Option<PathBuf> {
     if let Some(d) = crate::flags::OMSI_CONTENT.os() {
         return Some(PathBuf::from(d));
@@ -1079,7 +1079,7 @@ pub fn content_dir() -> Option<PathBuf> {
         Some(cand)
     } else {
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-        let fallback = PathBuf::from(home).join(".openomsi").join("content");
+        let fallback = PathBuf::from(home).join(".openbus").join("content");
         let _ = ensure_content_layout(&fallback);
         Some(fallback)
     }
@@ -1099,7 +1099,7 @@ pub fn own_input(name: &str) -> Option<PathBuf> {
         return content_dir().map(|c| c.join("Inputs").join(name));
     }
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".openomsi").join("Inputs").join(name))
+    Some(PathBuf::from(home).join(".openbus").join("Inputs").join(name))
 }
 
 pub fn input_in_use(name: &str) -> Option<PathBuf> {
@@ -1110,7 +1110,7 @@ pub fn adopt_own_inputs(previous_program: Option<&Path>) {
     if crate::flags::OMSI_CONTENT.os().is_some() {
         return;
     }
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".openomsi").join("content"));
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".openbus").join("content"));
     let here = std::env::current_exe().ok().and_then(|e| content_folder_of_program(&e));
     for name in OWN_INPUTS {
         let Some(own) = own_input(name).filter(|p| !p.exists()) else { continue };
@@ -1128,7 +1128,7 @@ fn sibling_installs(here: &Path) -> Vec<PathBuf> {
     entries
         .flatten()
         .map(|e| e.path())
-        .filter(|d| ["openomsi", "openomsi.exe", "openOMSI.app"].iter().any(|p| d.join(p).exists()))
+        .filter(|d| ["openbus", "openbus.exe", "openBus.app"].iter().any(|p| d.join(p).exists()))
         .map(|d| content_folder_of(&d))
         .collect()
 }
@@ -1172,7 +1172,7 @@ pub fn ensure_content_layout(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir.join("Mods"))?;
     let marker = dir.join(CONTENT_MARKER);
     if !marker.exists() {
-        std::fs::write(&marker, "This folder holds openOMSI's own content and installed mods, laid out like the original game.\nDrop a mod folder or zip into Mods/ and the launcher sorts it into place.\n")?;
+        std::fs::write(&marker, "This folder holds openBus's own content and installed mods, laid out like the original game.\nDrop a mod folder or zip into Mods/ and the launcher sorts it into place.\n")?;
     }
     let readme = dir.join("Mods").join("README.txt");
     if !readme.exists() {

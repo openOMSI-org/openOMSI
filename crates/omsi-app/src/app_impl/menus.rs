@@ -699,7 +699,7 @@ mod tests {
             "wss://localhost/ws",
             "ws://localhost/ws",
         ] {
-            let args = Args::parse_from(["openomsi", "--lan-join", target]);
+            let args = Args::parse_from(["openbus", "--lan-join", target]);
             let menu = game_menu_for(&args);
             assert!(menu.contains(&("duty", "Line and tour...")), "{target}");
             assert!(menu.contains(&("endduty", "End the tour")), "{target}");
@@ -716,7 +716,7 @@ mod tests {
     #[test]
     fn solo_and_udp_menus_keep_their_existing_actions() {
         for extra in [vec![], vec!["--lan-join", "127.0.0.1:27015"]] {
-            let args = Args::parse_from(std::iter::once("openomsi").chain(extra));
+            let args = Args::parse_from(std::iter::once("openbus").chain(extra));
             let menu = game_menu_for(&args);
             assert_eq!(menu, &GAME_MENU);
             assert!(menu.contains(&("duty", "Line and tour...")));

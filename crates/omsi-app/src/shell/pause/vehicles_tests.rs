@@ -101,7 +101,7 @@ fn in_game_bus_preview_keeps_search_and_manufacturer_navigation() {
 }
 
 #[test]
-#[ignore = "Requires OMSI_ROOT, OPENOMSI_PREVIEW_BUS and OPENOMSI_PAUSE_PREVIEW"]
+#[ignore = "Requires OMSI_ROOT, OPENBUS_PREVIEW_BUS and OPENBUS_PAUSE_PREVIEW"]
 fn in_game_bus_preview_render_real_vehicle() {
     use crate::launcher::showroom::Look;
     use std::time::{Duration, Instant};
@@ -114,12 +114,12 @@ fn in_game_bus_preview_render_real_vehicle() {
     if owns_root {
         omsi_cfg::add_content_root(root.clone());
     }
-    let bus = std::env::var("OPENOMSI_PREVIEW_BUS").expect("OPENOMSI_PREVIEW_BUS");
-    let map = std::env::var("OPENOMSI_PREVIEW_MAP").unwrap_or_default();
+    let bus = std::env::var("OPENBUS_PREVIEW_BUS").expect("OPENBUS_PREVIEW_BUS");
+    let map = std::env::var("OPENBUS_PREVIEW_MAP").unwrap_or_default();
     let def = omsi_vehicle::Vehicle::load(&omsi_cfg::resolve_path(&root, &bus)).unwrap();
     let title = format!("{} {}", def.manufacturer, def.type_name);
     let out = std::path::PathBuf::from(
-        std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("preview directory"),
+        std::env::var_os("OPENBUS_PAUSE_PREVIEW").expect("preview directory"),
     );
     std::fs::create_dir_all(&out).unwrap();
     let settings = crate::settings::Settings::load();

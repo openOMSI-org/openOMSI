@@ -389,12 +389,12 @@ fn stop_info(v: &mut Vec<(&'static str, InfoValue)>, stops: &[crate::schedule::P
 }
 
 impl Io<'_> {
-    /// The `omsi.info()` key of an `.opl` list's `openomsi_<key>` name (any case).
+    /// The `omsi.info()` key of an `.opl` list's `openbus_<key>` name (any case).
     fn game_key(name: &str) -> Option<&str> {
-        name.get(..9).filter(|p| p.eq_ignore_ascii_case("openomsi_")).map(|_| &name[9..])
+        name.get(..9).filter(|p| p.eq_ignore_ascii_case("openbus_")).map(|_| &name[9..])
     }
 
-    /// The value of `omsi.info()` an `.opl` list names as `openomsi_<key>` (any case).
+    /// The value of `omsi.info()` an `.opl` list names as `openbus_<key>` (any case).
     fn game_value(&self, name: &str) -> Option<InfoValue> {
         let key = Self::game_key(name)?;
         if self.info.borrow().is_none() {
@@ -1124,9 +1124,9 @@ mod tests {
     #[test]
     fn disabled_session_accepts_cli_flag_and_returns_no_plugins() {
         use clap::Parser;
-        let normal = crate::cli::Args::try_parse_from(["openomsi"]).unwrap();
+        let normal = crate::cli::Args::try_parse_from(["openbus"]).unwrap();
         assert!(!normal.no_plugins);
-        let disabled = crate::cli::Args::try_parse_from(["openomsi", "--no-plugins"]).unwrap();
+        let disabled = crate::cli::Args::try_parse_from(["openbus", "--no-plugins"]).unwrap();
         assert!(disabled.no_plugins);
         assert!(load(disabled.no_plugins).is_empty());
     }
@@ -1146,8 +1146,8 @@ mod tests {
     #[test]
     fn game_info_names_require_prefix_and_ignore_ascii_case() {
         let io = snapshot(vec![("heading", InfoValue::Num(93.0))]);
-        assert_eq!(io.game_number("OPENOMSI_Heading"), Some(93.0));
-        for name in ["heading", "openomsi", "openomsi_", "openomsi_unknown", "openomsí_heading", "💡💡💡heading"] {
+        assert_eq!(io.game_number("OPENBUS_Heading"), Some(93.0));
+        for name in ["heading", "openbus", "openbus_", "openbus_unknown", "openomsí_heading", "💡💡💡heading"] {
             assert_eq!(io.game_value(name), None, "{name}");
         }
     }
@@ -1161,29 +1161,29 @@ mod tests {
             ("destination", InfoValue::Text("Žďár nad Sázavou".into())),
             ("map_path", InfoValue::Text(String::new())),
         ]);
-        assert_eq!(io.game_number("openomsi_speed"), Some(42.5));
-        assert_eq!(io.game_number("openomsi_paused"), Some(1.0));
-        assert_eq!(io.game_number("openomsi_on_foot"), Some(0.0));
-        assert_eq!(io.game_string("openomsi_destination").as_deref(), Some("Žďár nad Sázavou"));
-        assert_eq!(io.game_string("openomsi_map_path"), Some(String::new()));
-        assert_eq!(io.game_number("openomsi_destination"), None);
-        assert_eq!(io.game_string("openomsi_speed"), None);
-        assert_eq!(io.game_string("openomsi_paused"), None);
+        assert_eq!(io.game_number("openbus_speed"), Some(42.5));
+        assert_eq!(io.game_number("openbus_paused"), Some(1.0));
+        assert_eq!(io.game_number("openbus_on_foot"), Some(0.0));
+        assert_eq!(io.game_string("openbus_destination").as_deref(), Some("Žďár nad Sázavou"));
+        assert_eq!(io.game_string("openbus_map_path"), Some(String::new()));
+        assert_eq!(io.game_number("openbus_destination"), None);
+        assert_eq!(io.game_string("openbus_speed"), None);
+        assert_eq!(io.game_string("openbus_paused"), None);
     }
 
     #[test]
     fn game_info_numbers_reject_non_finite_values_and_float_overflow() {
         for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, f64::MAX] {
             let io = snapshot(vec![("speed", InfoValue::Num(value))]);
-            assert_eq!(io.game_number("openomsi_speed"), None);
+            assert_eq!(io.game_number("openbus_speed"), None);
         }
     }
 
     #[test]
     fn legacy_vehicle_callbacks_still_require_a_player_vehicle() {
         let mut io = snapshot(vec![("clock", InfoValue::Num(32400.0)), ("map_path", InfoValue::Text("maps/example/global.cfg".into()))]);
-        assert_eq!(io.var("openomsi_clock"), None);
-        assert_eq!(io.string("openomsi_map_path"), None);
+        assert_eq!(io.var("openbus_clock"), None);
+        assert_eq!(io.string("openbus_map_path"), None);
     }
 
     #[test]

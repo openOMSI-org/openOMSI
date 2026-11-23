@@ -1,10 +1,10 @@
-//! openOMSI's own additions to the model vocabulary that need more than a line of the
+//! openBus's own additions to the model vocabulary that need more than a line of the
 //! keyword handler: `[spotlight_cookie]`, and the tidying of `[illumination_interior]`.
 
 use super::Model;
 use omsi_cfg::CfgReader;
 
-/// `[spotlight_cookie]` (openOMSI): a lamp whose beam is a picture - how strong and in what
+/// `[spotlight_cookie]` (openBus): a lamp whose beam is a picture - how strong and in what
 /// colour it shines every way within the field the picture covers (see docs/FORMATS.md).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SpotlightCookie {

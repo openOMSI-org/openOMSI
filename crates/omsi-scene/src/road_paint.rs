@@ -573,7 +573,7 @@ mod tests {
     #[test]
     fn a_crossing_on_a_flat_face_becomes_triangles() {
         // a square of road 2 m wide whose picture has one light bar over a quarter of it
-        let dir = std::env::temp_dir().join(format!("openomsi-lane-paint-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus-lane-paint-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let mut png = image::RgbaImage::new(64, 64);
         for (i, px) in png.pixels_mut().enumerate() {

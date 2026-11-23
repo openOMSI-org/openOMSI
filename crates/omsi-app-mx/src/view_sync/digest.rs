@@ -165,7 +165,7 @@ pub(crate) fn log_scene_digest(scene: &Scene, view: Option<&SimView>, what: &str
         static TAKEN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let n = TAKEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
-            "openomsi-scene-digest-{}-{what}-{n}.txt",
+            "openbus-scene-digest-{}-{what}-{n}.txt",
             std::process::id()
         ));
         match std::fs::write(&path, instance_lines(scene, view)) {

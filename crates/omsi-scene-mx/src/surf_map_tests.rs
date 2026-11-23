@@ -11,7 +11,7 @@ fn bmp(red: u8) -> Vec<u8> {
 
 #[test]
 fn surf_map_beside_a_texture_in_a_mounted_archive() {
-    let dir = std::env::temp_dir().join(format!("openomsi-surf-zip-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("openbus-surf-zip-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let zip_path = dir.join("roads.zip");
     let mut z = zip::ZipWriter::new(std::fs::File::create(&zip_path).unwrap());

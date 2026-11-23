@@ -5,7 +5,7 @@
 //!
 //! Nothing here comes from outside the map: a map's author need not ship anything (a package,
 //! `crate::package`, still adds what it has). The layers are kept on disk after the first read
-//! (`~/.openomsi/cache/mapgen`), keyed by the tiles' sizes and dates, so a map is read once.
+//! (`~/.openbus/cache/mapgen`), keyed by the tiles' sizes and dates, so a map is read once.
 //!
 //! Positions are world metres relative to `origin` (an `f32` cannot hold a big map's metres to
 //! the centimetre). Areas are triangles, ready to draw; buildings are outlines (anticlockwise)
@@ -360,12 +360,12 @@ impl Reader<'_> {
     }
 }
 
-/// Where the layers of a map are kept: `~/.openomsi/cache/mapgen/<name>.bin`.
+/// Where the layers of a map are kept: `~/.openbus/cache/mapgen/<name>.bin`.
 pub fn cache_path(map_name: &str) -> Option<std::path::PathBuf> {
     let base = if cfg!(target_os = "ios") {
-        std::path::PathBuf::from(std::env::var_os("OPENOMSI_CONTAINER")?).join("Library").join("Caches")
+        std::path::PathBuf::from(std::env::var_os("OPENBUS_CONTAINER")?).join("Library").join("Caches")
     } else {
-        std::path::PathBuf::from(std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?).join(".openomsi").join("cache")
+        std::path::PathBuf::from(std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?).join(".openbus").join("cache")
     };
     let safe: String = map_name.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
     base.is_absolute().then(|| base.join("mapgen").join(format!("{safe}.bin")))

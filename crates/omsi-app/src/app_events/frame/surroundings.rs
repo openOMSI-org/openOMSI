@@ -212,7 +212,7 @@ pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind
                 }
                 let inside = cx.view.cam.heard_inside;
                 let __tm = Instant::now();
-                // openOMSI's ambience; with its recordings the street's rain is its own
+                // openBus's ambience; with its recordings the street's rain is its own
                 let ours = if let Some(s) = cx.sound.soundscape.as_mut() {
                     s.enabled = cx.common.settings.ambient;
                     s.volume = cx.common.settings.vol_ambient;

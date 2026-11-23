@@ -301,7 +301,7 @@ mod tests {
 
     #[test]
     fn the_stack_keeps_the_game_frames_without_hashes() {
-        let text = "   0: std::backtrace::Backtrace::force_capture\n             at /rustc/abc/library/std/src/backtrace.rs:312:13\n   1: omsi_app::run::{{closure}}::h0123456789abcdef\n   2: core::panicking::panic_fmt\n   3: omsi_sim::bus::Bus::step::h0123456789abcdef\n             at /home/isaac/openOMSI/crates/omsi-sim/src/bus.rs:10:5\n   4: <unknown>\n   5: omsi_app::frame\n   6: main\n";
+        let text = "   0: std::backtrace::Backtrace::force_capture\n             at /rustc/abc/library/std/src/backtrace.rs:312:13\n   1: omsi_app::run::{{closure}}::h0123456789abcdef\n   2: core::panicking::panic_fmt\n   3: omsi_sim::bus::Bus::step::h0123456789abcdef\n             at /home/isaac/openBus/crates/omsi-sim/src/bus.rs:10:5\n   4: <unknown>\n   5: omsi_app::frame\n   6: main\n";
         assert_eq!(stack(text), ["omsi_sim::bus::Bus::step", "omsi_app::frame"]);
     }
 

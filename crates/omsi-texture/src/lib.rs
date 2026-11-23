@@ -2,7 +2,7 @@
 //!
 //! OMSI looks a texture up by *file name* in a search order: the object's `texture` folder,
 //! then the global `Texture` folder, trying a same-stem DDS first, the exact name, then other supported
-//! extensions (OMSI's `.dds`, `.bmp`, `.tga`, `.jpg`, `.png`, and what openOMSI reads besides:
+//! extensions (OMSI's `.dds`, `.bmp`, `.tga`, `.jpg`, `.png`, and what openBus reads besides:
 //! `.jpeg`, `.webp`, `.tif`, `.gif`, `.ktx2`, `.ktx`, `.qoi`, `.hdr`, `.exr`, `.pnm`) - except
 //! for a name that asks for a DDS, which is that DDS or missing - plus seasonal (`Texture\Spring` …) and `_LOW` variants. A `<texture>.cfg` sidecar carries
 //! per-texture flags.
@@ -458,7 +458,7 @@ fn names_another_machine(name: &str) -> bool {
 }
 
 /// Folders of pictures the game makes itself and hands to the scripts by their full path
-/// (the paper timetable in `~/.openomsi/cache/schedules`, see `trust_generated_dir`).
+/// (the paper timetable in `~/.openbus/cache/schedules`, see `trust_generated_dir`).
 static GENERATED_DIRS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
 /// Let full paths into `dir` be opened: it holds pictures the game itself writes (the paper

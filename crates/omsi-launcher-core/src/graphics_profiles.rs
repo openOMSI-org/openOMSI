@@ -54,7 +54,7 @@ pub const GRAPHICS_PROFILE_KEYS: [&str; 49] = [
     "gpu_texture_compression",
 ];
 
-/// The folder of the saved graphics profiles, a file each (`~/.openomsi/graphics_profiles/`).
+/// The folder of the saved graphics profiles, a file each (`~/.openbus/graphics_profiles/`).
 pub(crate) fn graphics_profiles_dir(base: &Path) -> PathBuf {
     base.join("graphics_profiles")
 }
@@ -119,7 +119,7 @@ pub(crate) fn migrate_graphics_profiles(base: &Path) {
     }
 }
 
-/// The saved graphics profiles by name (`~/.openomsi/graphics_profiles/`, a file each). A
+/// The saved graphics profiles by name (`~/.openbus/graphics_profiles/`, a file each). A
 /// file that cannot be read is left out; the others are not lost with it.
 pub fn graphics_profiles() -> std::collections::BTreeMap<String, Value> {
     graphics_profiles_in(&data_dir())

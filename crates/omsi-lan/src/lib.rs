@@ -1,4 +1,4 @@
-//! openOMSI's multiplayer on top of the transport (`omsi-net`): what of a session needs no
+//! openBus's multiplayer on top of the transport (`omsi-net`): what of a session needs no
 //! game world - the host's mods for the players who join (`mods`), the WebSocket gateway, tunnel and status page
 //! (`gateway`), what of a vehicle goes over the network beyond its pose (`sync`), where a
 //! joining bus may stand (`spawn`), a client's tracks of the host's world (`mirror`), a
@@ -32,10 +32,10 @@ pub mod sync;
 
 use std::path::PathBuf;
 
-/// `~/.openomsi`: the session's status file, the LAN mods' store.
+/// `~/.openbus`: the session's status file, the LAN mods' store.
 pub fn data_dir() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".openomsi"))
+    Some(PathBuf::from(home).join(".openbus"))
 }
 
 pub use omsi_net::LEFT_SERVER;

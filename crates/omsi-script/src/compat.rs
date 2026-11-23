@@ -78,7 +78,7 @@ fn letter_in_front(line: &str) -> Option<char> {
 /// `line×100 + route` via `GetRouteIndex`. PIN compare still uses the float vs `ibox_PIN`.
 ///
 /// Stock `ibox_tastatur` also enforces a hard **4-digit** float cap (`ibox_eingabe > 9999`
-/// then `÷10`) — comment `'4 Ziffern Begrenzung`. That is not an openOMSI invention.
+/// then `÷10`) — comment `'4 Ziffern Begrenzung`. That is not an openBus invention.
 /// Hof trip `3301` (Vaals Flats) is **not** typed as one five-digit string `03301`: the
 /// header pads line to three digits (`033`) and shows route (`01`). Enter **Linie** `33`
 /// or `033`, then **Route** `01` → `GetRouteIndex(33×100+1)`.

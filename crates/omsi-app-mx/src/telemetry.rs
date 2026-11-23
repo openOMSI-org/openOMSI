@@ -1,6 +1,6 @@
 //! Live telemetry for outside tools (bus information systems such as OBIS): the player's
 //! bus position and its timetable progress, written about twice a second as JSON to
-//! `<home>/.openomsi/telemetry.json` (written atomically on a thread of its own).
+//! `<home>/.openbus/telemetry.json` (written atomically on a thread of its own).
 //!
 //! Opt-in: the game writes the file only while it exists - a tool that wants it (or the
 //! player) creates it once, empty; deleting it switches the writing off again. Nothing else

@@ -1,5 +1,5 @@
 # User-initiated installation of NVIDIA Streamline 2.14.1 for an existing Windows game.
-# No NVIDIA binary is stored in the openOMSI release or source tree.
+# No NVIDIA binary is stored in the openBus release or source tree.
 param(
     [Parameter(Mandatory = $true)][string] $GameDirectory,
     [Parameter(Mandatory = $true)][string] $PackagingScript
@@ -14,20 +14,20 @@ $Files = @(
     'NVIDIA-Streamline-NOTICE.txt'
 )
 $ResolvedGame = (Resolve-Path -LiteralPath $GameDirectory).Path
-if (-not (Test-Path -LiteralPath (Join-Path $ResolvedGame 'openomsi.exe') -PathType Leaf)) {
-    throw 'The selected installation directory does not contain openomsi.exe'
+if (-not (Test-Path -LiteralPath (Join-Path $ResolvedGame 'openbus.exe') -PathType Leaf)) {
+    throw 'The selected installation directory does not contain openbus.exe'
 }
 if (-not (Test-Path -LiteralPath $PackagingScript -PathType Leaf)) {
     throw 'The bundled NVIDIA verification script is missing'
 }
-# (the launcher's own bus preview runs as `openomsi --launcher-service` and loads no NVIDIA file;
+# (the launcher's own bus preview runs as `openbus --launcher-service` and loads no NVIDIA file;
 # a game in another folder does not use these files)
-$GameExe = Join-Path $ResolvedGame 'openomsi.exe'
-$RunningGame = @(Get-CimInstance Win32_Process -Filter "Name = 'openomsi.exe'" | Where-Object {
+$GameExe = Join-Path $ResolvedGame 'openbus.exe'
+$RunningGame = @(Get-CimInstance Win32_Process -Filter "Name = 'openbus.exe'" | Where-Object {
     $_.CommandLine -notmatch '--launcher-service' -and (-not $_.ExecutablePath -or $_.ExecutablePath -ieq $GameExe)
 })
 if ($RunningGame.Count -gt 0) {
-    throw 'Close openOMSI before installing NVIDIA DLSS files'
+    throw 'Close openBus before installing NVIDIA DLSS files'
 }
 $GameItem = Get-Item -LiteralPath $ResolvedGame -Force
 if ($GameItem.LinkType -or ($GameItem.Target -and $GameItem.Target.Count -gt 0)) {
@@ -36,8 +36,8 @@ if ($GameItem.LinkType -or ($GameItem.Target -and $GameItem.Target.Count -gt 0))
 
 # Two independent temporary directories: the downloaded SDK in system temp, and a
 # transaction directory on the same volume as the game for atomic replacements.
-$DownloadDir = Join-Path ([IO.Path]::GetTempPath()) ('openomsi-nvidia-' + [guid]::NewGuid().ToString('N'))
-$TxnDir = Join-Path $ResolvedGame ('.openomsi-nvidia-install-' + [guid]::NewGuid().ToString('N'))
+$DownloadDir = Join-Path ([IO.Path]::GetTempPath()) ('openbus-nvidia-' + [guid]::NewGuid().ToString('N'))
+$TxnDir = Join-Path $ResolvedGame ('.openbus-nvidia-install-' + [guid]::NewGuid().ToString('N'))
 $MovedBackups = [System.Collections.Generic.List[string]]::new()
 $Installed = [System.Collections.Generic.List[string]]::new()
 $Finished = $false
@@ -46,7 +46,7 @@ try {
     $Stage = Join-Path $DownloadDir 'stage'
     $Archive = Join-Path $DownloadDir 'streamline-sdk-v2.14.1.zip'
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri $ReleaseUrl -OutFile $Archive -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 300 -Headers @{ 'User-Agent' = 'openOMSI-Launcher' }
+    Invoke-WebRequest -Uri $ReleaseUrl -OutFile $Archive -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 300 -Headers @{ 'User-Agent' = 'openBus-Launcher' }
 
     # This pinned source-controlled script verifies the full SDK archive SHA256,
     # extracts ONLY the four allowlisted production DLLs, checks every NVIDIA

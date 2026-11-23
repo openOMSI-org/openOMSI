@@ -1,10 +1,10 @@
 # Navigator Textures
 
-A bus can have a GPS screen of its own in the cockpit: the mod models the screen, and openOMSI
+A bus can have a GPS screen of its own in the cockpit: the mod models the screen, and openBus
 draws the navigator's small map on it - the route, the next turn, the next stop, the speed and
 its limit, as the navigator in the corner of the window shows them.
 
-An openOMSI extension: Omsi.exe has no navigator and leaves such a slot an empty script texture.
+An openBus extension: Omsi.exe has no navigator and leaves such a slot an empty script texture.
 
 ### Example model config
 

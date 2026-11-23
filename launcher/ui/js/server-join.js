@@ -1,7 +1,7 @@
 // Keep these rules in step with server_join_address in omsi-launcher-model.
 function isWebAddress(address) {
   return /^(https?|wss?):\/\//.test(address)
-    || address.toLowerCase() === 'openomsi'
+    || address.toLowerCase() === 'openbus'
     || isTunnel(address);
 }
 

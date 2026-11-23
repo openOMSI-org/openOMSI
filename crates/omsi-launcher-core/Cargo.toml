@@ -10,7 +10,7 @@ name = "omsi_launcher_lib"
 path = "src/lib.rs"
 
 [[bin]]
-name = "openomsi-launcher"
+name = "openbus-launcher"
 path = "src/main.rs"
 
 [build-dependencies]

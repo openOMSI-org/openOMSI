@@ -1322,7 +1322,7 @@ mod tests {
         assert_eq!(file_trigger_name(file), r"..\..\Announcements\Spandau\Falkenseer Ch%Stadtrandstr.wav");
         assert_eq!(file_trigger_name(r"C:\a?b*c\d<e>f|g.wav"), r"C:\a%b%c\d%e%f%g.wav");
         // found where the announcement lies
-        let root = std::env::temp_dir().join(format!("openomsi-file-trigger-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("openbus-file-trigger-{}", std::process::id()));
         let sound = root.join("Vehicles").join("MAN_NL_NG").join("Sound");
         let spandau = root.join("Vehicles").join("Announcements").join("Spandau");
         std::fs::create_dir_all(&sound).unwrap();

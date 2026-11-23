@@ -1,8 +1,8 @@
 //! The launcher's look: flat and dark (neutral greys, no tint), one amber accent used
 //! sparingly - after the calm menus of Euro Truck Simulator 2.
 //!
-//! The game's screens read their colours from the palette in force ([`th`]): openOMSI's own,
-//! dark ([`Palette::OPENOMSI`]) or light ([`Palette::LIGHT`]) as the player chose
+//! The game's screens read their colours from the palette in force ([`th`]): openBus's own,
+//! dark ([`Palette::OPENBUS`]) or light ([`Palette::LIGHT`]) as the player chose
 //! ([`palette`]), and over it the colours of an interface theme the player chose
 //! (`Themes/<id>/theme.json`, docs/THEMES.md: [`Palette::with_colors`]), put in force with
 //! [`set`]. A theme may also make the panels frosted glass over the game's picture ([`Glass`]).
@@ -70,7 +70,7 @@ pub struct Palette {
 }
 
 impl Palette {
-    pub const OPENOMSI: Palette = Palette {
+    pub const OPENBUS: Palette = Palette {
         accent: Color::rgba(232, 160, 48, 1.0),
         accent_2: Color::rgba(96, 160, 232, 1.0),
         danger: Color::rgba(222, 78, 68, 1.0),
@@ -101,7 +101,7 @@ impl Palette {
         glass: None,
     };
 
-    /// openOMSI's light look (the setting `ui_theme` "light").
+    /// openBus's light look (the setting `ui_theme` "light").
     pub const LIGHT: Palette = Palette {
         accent: Color::rgba(185, 120, 14, 1.0),
         accent_2: Color::rgba(52, 116, 184, 1.0),
@@ -166,7 +166,7 @@ impl Palette {
         })
     }
 
-    /// A palette with the colours `given` (by name) on `base` (openOMSI's dark or light look,
+    /// A palette with the colours `given` (by name) on `base` (openBus's dark or light look,
     /// [`palette`]); a colour the theme leaves out follows the one it goes with there (the
     /// panels' greys the surfaces', the texts the inks', the darker red the red), so that a
     /// theme of a few colours is whole. Names it does not know are returned.
@@ -214,12 +214,12 @@ impl Palette {
     }
 }
 
-/// openOMSI's own look, light or dark.
+/// openBus's own look, light or dark.
 pub fn palette(light: bool) -> Palette {
-    if light { Palette::LIGHT } else { Palette::OPENOMSI }
+    if light { Palette::LIGHT } else { Palette::OPENBUS }
 }
 
-static PALETTE: RwLock<Palette> = RwLock::new(Palette::OPENOMSI);
+static PALETTE: RwLock<Palette> = RwLock::new(Palette::OPENBUS);
 
 thread_local! {
     /// A palette for this thread alone (`with_palette`: the tests of a theme).
@@ -231,11 +231,11 @@ pub fn th() -> Palette {
     LOCAL.with(|l| l.get()).unwrap_or_else(|| *PALETTE.read().unwrap_or_else(|e| e.into_inner()))
 }
 
-/// A corner of `r` as openOMSI draws it, moved by as much as the palette's `radius` differs from
-/// openOMSI's: a theme's rounder (or squarer) corners for every surface, the openOMSI look's own
+/// A corner of `r` as openBus draws it, moved by as much as the palette's `radius` differs from
+/// openBus's: a theme's rounder (or squarer) corners for every surface, the openBus look's own
 /// unchanged.
 pub fn corner(r: f32) -> f32 {
-    (r + th().radius - Palette::OPENOMSI.radius).max(0.0)
+    (r + th().radius - Palette::OPENBUS.radius).max(0.0)
 }
 
 /// Puts `p` in force for every screen drawn after.
@@ -311,32 +311,32 @@ mod tests {
     }
 
     /// A theme of a few colours is whole: what it leaves out follows what it gives, the rest
-    /// stays openOMSI's.
+    /// stays openBus's.
     #[test]
     fn a_colour_left_out_follows_the_one_it_goes_with() {
         let navy = Color::rgba(10, 20, 46, 1.0);
         let orange = Color::rgba(245, 134, 32, 1.0);
-        let (p, unknown) = Palette::with_colors(Palette::OPENOMSI, [("background", navy), ("accent", orange), ("ink", Color::WHITE), ("sparkle", navy)]);
+        let (p, unknown) = Palette::with_colors(Palette::OPENBUS, [("background", navy), ("accent", orange), ("ink", Color::WHITE), ("sparkle", navy)]);
         assert_eq!(unknown, ["sparkle"]);
         assert_eq!((p.bg, p.rail, p.sidebar), (navy, navy, navy));
         assert_eq!((p.accent, p.warn), (orange, orange));
         assert_ne!(p.accent_hover, orange, "a lighter orange under the mouse");
         assert_eq!(p.text, Color::WHITE);
-        assert_eq!(p.surface, Palette::OPENOMSI.surface);
+        assert_eq!(p.surface, Palette::OPENBUS.surface);
         // (given itself, a colour stays as given)
-        let (p, _) = Palette::with_colors(Palette::OPENOMSI, [("background", navy), ("sidebar", orange)]);
+        let (p, _) = Palette::with_colors(Palette::OPENBUS, [("background", navy), ("sidebar", orange)]);
         assert_eq!((p.rail, p.sidebar), (navy, orange));
     }
 
-    /// The light look is a palette of its own, with openOMSI's corners and no glass; a theme's
+    /// The light look is a palette of its own, with openBus's corners and no glass; a theme's
     /// colours go over the look chosen, what it leaves out stays that look's.
     #[test]
     fn a_theme_goes_over_the_light_or_the_dark_look() {
-        assert_eq!(palette(false), Palette::OPENOMSI);
+        assert_eq!(palette(false), Palette::OPENBUS);
         assert_eq!(palette(true), Palette::LIGHT);
-        assert_ne!(Palette::LIGHT.bg, Palette::OPENOMSI.bg);
-        assert_ne!(Palette::LIGHT.text, Palette::OPENOMSI.text);
-        assert_eq!((Palette::LIGHT.radius, Palette::LIGHT.glass), (Palette::OPENOMSI.radius, None));
+        assert_ne!(Palette::LIGHT.bg, Palette::OPENBUS.bg);
+        assert_ne!(Palette::LIGHT.text, Palette::OPENBUS.text);
+        assert_eq!((Palette::LIGHT.radius, Palette::LIGHT.glass), (Palette::OPENBUS.radius, None));
         let orange = Color::rgba(245, 134, 32, 1.0);
         let (p, _) = Palette::with_colors(palette(true), [("accent", orange)]);
         assert_eq!((p.accent, p.warn), (orange, orange));
@@ -346,12 +346,12 @@ mod tests {
     /// A palette set for one thread is that thread's: the others keep the one in force.
     #[test]
     fn a_palette_for_a_thread_stays_on_it() {
-        let red = Palette { accent: Color::rgba(255, 0, 0, 1.0), ..Palette::OPENOMSI };
+        let red = Palette { accent: Color::rgba(255, 0, 0, 1.0), ..Palette::OPENBUS };
         with_palette(red, || {
             assert_eq!(th().accent, red.accent);
             let other = std::thread::spawn(|| th().accent).join().unwrap();
-            assert_eq!(other, Palette::OPENOMSI.accent);
+            assert_eq!(other, Palette::OPENBUS.accent);
         });
-        assert_eq!(th().accent, Palette::OPENOMSI.accent);
+        assert_eq!(th().accent, Palette::OPENBUS.accent);
     }
 }

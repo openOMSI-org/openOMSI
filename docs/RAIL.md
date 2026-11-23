@@ -1,9 +1,9 @@
 # Trams, metros and trains
 
 OMSI 2 has one kind of rail (`[path]` type 2) and one flag for everything that runs on it. The
-editor cannot be changed, so openOMSI reads what a map maker says in three places and works the
+editor cannot be changed, so openBus reads what a map maker says in three places and works the
 rest out. Nothing here changes how a stock map or a mod loads: a map without an
-`openomsi-rail.cfg` is read as before, with its tracks classed by their names and their
+`openbus-rail.cfg` is read as before, with its tracks classed by their names and their
 surroundings.
 
 ## Vehicle classes
@@ -12,7 +12,7 @@ surroundings.
 its file says so as OMSI 2 does (`[type] 2`, `[boogies]`, `[contact_shoe]` or `[rail_body_osc]`);
 which class it is comes from, in this order:
 
-1. `[rail_class]` in the `.ovh` / `.bus` (an openOMSI keyword, followed by `tram`, `metro` or
+1. `[rail_class]` in the `.ovh` / `.bus` (an openBus keyword, followed by `tram`, `metro` or
    `train`);
 2. a `[contact_shoe]`: a third rail, so a metro;
 3. a car over 45 t, or a vehicle over 60 t with four driven axles: a train (length says nothing:
@@ -29,7 +29,7 @@ whether a third rail runs beside it, whether it is in a tunnel, and a speed limi
 
 A map maker tells the game what a track is by, in this order:
 
-1. **A rule** in `<map>/openomsi-rail.cfg`:
+1. **A rule** in `<map>/openbus-rail.cfg`:
 
    ```
    # a rule applies to every rail lane it matches; later rules win over earlier ones
@@ -158,7 +158,7 @@ vehicle's own file and the map:
 
 `cargo run -p omsi-sim --example handling -- <file.bus>... --kmh 50 [--realistic]` compares the two.
 
-## Traction, brakes and couplings of a vehicle (openOMSI blocks)
+## Traction, brakes and couplings of a vehicle (openBus blocks)
 
 A rail vehicle that is driven by the pedals (its scripts give no drive) can describe how it
 pulls, brakes and couples in three blocks of its `.bus` / `.ovh`. OMSI 2 skips them; what a file

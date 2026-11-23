@@ -1722,7 +1722,7 @@
       "name": "game.has",
       "group": "game",
       "since": "0.2.22",
-      "doc": "Whether this game has an API function (`\"weather.set\"`): for a plugin that should also run in an older openOMSI.",
+      "doc": "Whether this game has an API function (`\"weather.set\"`): for a plugin that should also run in an older openBus.",
       "params": [
         {
           "name": "name",
@@ -3971,7 +3971,7 @@
       "name": "ui.set_theme",
       "group": "ui",
       "since": "0.3.42",
-      "doc": "Switches the game's interface to theme `id` (`\"\"` or `\"openomsi\"`: openOMSI's own look), as if the player chose it in Options › Interface: it is kept for the next start. Ask the player first; they can switch back there.",
+      "doc": "Switches the game's interface to theme `id` (`\"\"` or `\"openbus\"`: openBus's own look), as if the player chose it in Options › Interface: it is kept for the next start. Ask the player first; they can switch back there.",
       "params": [
         {
           "name": "id",
@@ -4008,7 +4008,7 @@
       "name": "ui.theme",
       "group": "ui",
       "since": "0.3.42",
-      "doc": "The id of the interface theme in use (`\"\"`: openOMSI's own look).",
+      "doc": "The id of the interface theme in use (`\"\"`: openBus's own look).",
       "params": [],
       "returns": "string",
       "multi": false,
@@ -4018,7 +4018,7 @@
       "name": "ui.themes",
       "group": "ui",
       "since": "0.3.42",
-      "doc": "The game's interface themes: each `{ id, name }`, openOMSI's own look first (its id `\"\"`). A theme is a folder with a `theme.json` (`Themes/<id>/`, or a plugin's own folder: see docs/THEMES.md).",
+      "doc": "The game's interface themes: each `{ id, name }`, openBus's own look first (its id `\"\"`). A theme is a folder with a `theme.json` (`Themes/<id>/`, or a plugin's own folder: see docs/THEMES.md).",
       "params": [],
       "returns": "list of tables",
       "multi": false,

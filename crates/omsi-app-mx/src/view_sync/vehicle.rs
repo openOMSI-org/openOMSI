@@ -599,7 +599,7 @@ mod freetex_path_tests {
 
     #[test]
     fn vehicle_freetex_retries_paths_below_texture_component() {
-        let root = std::env::temp_dir().join("openomsi-freetex-path-test");
+        let root = std::env::temp_dir().join("openbus-freetex-path-test");
         let vehicle_texture = root.join("Vehicles/TestBus/Texture");
         let wanted = vehicle_texture.join("mb_pmon/alerta_FalhaCambio.bmp");
         std::fs::create_dir_all(wanted.parent().unwrap()).unwrap();

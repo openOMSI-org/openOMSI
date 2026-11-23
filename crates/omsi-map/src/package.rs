@@ -1,4 +1,4 @@
-//! A map's pre-built surface (`Maps/<Map>/openomsi-realmap/`: `manifest.cfg` and `surface.oms`),
+//! A map's pre-built surface (`Maps/<Map>/openbus-realmap/`: `manifest.cfg` and `surface.oms`),
 //! read as plain data: water, green, built-up land, rivers, rail and borders in world metres.
 //!
 //! The map author ships it (docs/MAP_PACKAGE.md). Everything in it is made beforehand,
@@ -22,7 +22,7 @@ pub use lines::{LineInfo, RouteInfo, GROUP_BRT, GROUP_EXPRESS, GROUP_FEEDER, MOD
 pub use places::{Label, Marker, Region, Street};
 pub use relief::{LINE_CONTOUR, LINE_CONTOUR_INDEX};
 
-pub const FOLDER: &str = "openomsi-realmap";
+pub const FOLDER: &str = "openbus-realmap";
 const MAGIC: &[u8; 4] = b"OMSF";
 const VERSION: u32 = 1;
 
@@ -643,9 +643,9 @@ mod tests {
 
     #[test]
     fn the_synthetic_example_of_the_docs_reads() {
-        // docs/examples/openomsi-realmap: made up for the tests, in the tile grid of the tutorial map
+        // docs/examples/openbus-realmap: made up for the tests, in the tile grid of the tutorial map
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/examples");
-        let p = Package::open(&dir).expect("docs/examples/openomsi-realmap is a package");
+        let p = Package::open(&dir).expect("docs/examples/openbus-realmap is a package");
         assert_eq!(p.name, "Synthetic example");
         assert_eq!(p.chunks(), 1);
         assert_eq!(p.north(), 12.0, "the manifest of the example says where north lies");

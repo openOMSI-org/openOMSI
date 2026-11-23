@@ -4,16 +4,16 @@
 # purpose, and the outcome read from the files - which version is installed afterwards, what is
 # kept, the journal, the bad versions, the messages the player would have seen.
 #
-#   scripts/guard-e2e.sh <old openomsi> <new openomsi> [scenario ...]
+#   scripts/guard-e2e.sh <old openbus> <new openbus> [scenario ...]
 #   scripts/guard-e2e.sh list
 #
 # <old> and <new> are release builds of the same commit with different versions
-# (OPENOMSI_VERSION=0.9.1 / 0.9.2 cargo build --release -p omsi-app), each with
+# (OPENBUS_VERSION=0.9.1 / 0.9.2 cargo build --release -p omsi-app), each with
 # libsteam_api.dylib beside it on macOS. Nothing is shown on the screen (hidden launcher
 # windows, the guard's messages written to a file), nothing touches the real installation or
-# ~/.openomsi (a fresh HOME per scenario), and no update is fetched from GitHub. Needs bash,
+# ~/.openbus (a fresh HOME per scenario), and no update is fetched from GitHub. Needs bash,
 # python3 and zip. Exits 0 when every scenario passed. GUARD_E2E_BUNDLE=1 (macOS) lays every
-# installation and release out as an openOMSI.app bundle, as players have it.
+# installation and release out as an openBus.app bundle, as players have it.
 set -uo pipefail
 
 SCENARIOS=(update_crashes update_hangs fixed_release_heals update_cannot_start listed_broken nothing_helps good_start_cleans_up)
@@ -41,25 +41,25 @@ case "$(uname -s)-$(uname -m)" in
   *) echo "unsupported platform"; exit 2 ;;
 esac
 
-WORK="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/openomsi-guard-e2e.XXXXXX")" && pwd -P)"
+WORK="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/openbus-guard-e2e.XXXXXX")" && pwd -P)"
 echo "work folder: $WORK (old $OLD_V, new $NEW_V)"
 PASS=0
 FAIL=0
 
 BUNDLE="${GUARD_E2E_BUNDLE:-}"
 # the program of an installation, and the top-level items a release holds
-prog() { if [ -n "$BUNDLE" ]; then echo "$1/openOMSI.app/Contents/MacOS/openomsi"; else echo "$1/openomsi"; fi; }
-if [ -n "$BUNDLE" ]; then ITEMS='openOMSI.app\n'; else ITEMS='openomsi\nlibsteam_api.dylib\n'; fi
+prog() { if [ -n "$BUNDLE" ]; then echo "$1/openBus.app/Contents/MacOS/openbus"; else echo "$1/openbus"; fi; }
+if [ -n "$BUNDLE" ]; then ITEMS='openBus.app\n'; else ITEMS='openbus\nlibsteam_api.dylib\n'; fi
 
-# copy a build's program files into a folder (an openOMSI.app in it with GUARD_E2E_BUNDLE)
+# copy a build's program files into a folder (an openBus.app in it with GUARD_E2E_BUNDLE)
 put_build() { # <bin> <dir>
   local to="$2"
   if [ -n "$BUNDLE" ]; then
-    to="$2/openOMSI.app/Contents/MacOS"; mkdir -p "$to"
-    printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleExecutable</key><string>openomsi</string><key>CFBundleIdentifier</key><string>io.github.openomsi.e2e</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>\n' > "$2/openOMSI.app/Contents/Info.plist"
+    to="$2/openBus.app/Contents/MacOS"; mkdir -p "$to"
+    printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleExecutable</key><string>openbus</string><key>CFBundleIdentifier</key><string>io.github.openbus.e2e</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>\n' > "$2/openBus.app/Contents/Info.plist"
   fi
   mkdir -p "$to"
-  cp "$1" "$to/openomsi"
+  cp "$1" "$to/openbus"
   local lib; lib="$(dirname "$1")/libsteam_api.dylib"
   [ -f "$lib" ] && cp "$lib" "$to/"
   return 0
@@ -77,7 +77,7 @@ make_release() { # <version> <bin or 'garbage'> <out dir> [name=content ...]
   fi
   local kv
   for kv in "$@"; do printf '%s\n' "${kv#*=}" > "$stage/${kv%%=*}"; done
-  local zip="$out/openOMSI-$v-$SUFFIX"
+  local zip="$out/openBus-$v-$SUFFIX"
   (cd "$stage" && zip -qry "$zip" .)
   python3 -I - "$v" "$zip" "$out/release-$v.json" <<'PY'
 import hashlib, json, os, sys
@@ -94,20 +94,20 @@ PY
 updated_install() { # <dir> <new bin> [name=content ...]
   local dir="$1" bin="$2"; shift 2
   put_build "$OLD_BIN" "$dir"
-  printf "$ITEMS" > "$dir/.openomsi-files"
-  for f in openomsi libsteam_api.dylib openOMSI.app .openomsi-files; do [ -e "$dir/$f" ] && mv "$dir/$f" "$dir/$f.old-update"; done
+  printf "$ITEMS" > "$dir/.openbus-files"
+  for f in openbus libsteam_api.dylib openBus.app .openbus-files; do [ -e "$dir/$f" ] && mv "$dir/$f" "$dir/$f.old-update"; done
   put_build "$bin" "$dir"
   local list="$ITEMS" kv
   for kv in "$@"; do printf '%s\n' "${kv#*=}" > "$dir/${kv%%=*}"; list="$list${kv%%=*}\n"; done
-  printf "$list" > "$dir/.openomsi-files"
-  printf '%s' "$OLD_V" > "$dir/.openomsi-previous"
+  printf "$list" > "$dir/.openbus-files"
+  printf '%s' "$OLD_V" > "$dir/.openbus-previous"
 }
 
 # start the launcher of <dir> as a player would (hidden), and wait until no program of that
 # installation runs any more (the guard may start it again in between)
 run_launcher() { # <dir> <home> [VAR=value ...]
   local dir="$1" home="$2"; shift 2
-  mkdir -p "$home/.openomsi"
+  mkdir -p "$home/.openbus"
   env -i PATH="$PATH" HOME="$home" TMPDIR="${TMPDIR:-/tmp}" \
     OMSI_ROOT="${OMSI_ROOT:-/nonexistent}" OMSI_BACKGROUND=1 OMSI_HIDDEN_WINDOW=1 \
     OMSI_GUARD_TEST_BREAK=1 OMSI_GUARD_DIALOG_FILE="$home/messages.txt" OMSI_HEALTH_URL="file://$WORK/health-empty.json" \
@@ -139,14 +139,14 @@ REL_NEW_GARBAGE="$(make_release "$NEW_V" garbage "$REL/garbage")"
 for s in "${SCENARIOS[@]}"; do
   echo "== $s"
   FAILED=0
-  D="$WORK/$s/install"; H="$WORK/$s/home"; mkdir -p "$D" "$H/.openomsi"
-  G="$H/.openomsi/guard"
+  D="$WORK/$s/install"; H="$WORK/$s/home"; mkdir -p "$D" "$H/.openbus"
+  G="$H/.openbus/guard"
   case "$s" in
     update_crashes)
       # the launcher of the old version updates itself (update_auto) to a new one that crashes
       # at every start: the guard puts the old one back and never installs the new one again
       put_build "$OLD_BIN" "$D"
-      printf 'update_check=true\nupdate_auto=true\n' > "$H/.openomsi/settings.cfg"
+      printf 'update_check=true\nupdate_auto=true\n' > "$H/.openbus/settings.cfg"
       run_launcher "$D" "$H" OMSI_UPDATE_URL="file://$REL_NEW_CRASH"
       check "the old version $OLD_V is installed again" test "$(installed_version "$D")" = "$OLD_V"
       check "$NEW_V is marked broken here" grep -qx "$NEW_V" "$G/bad-versions"
@@ -157,7 +157,7 @@ for s in "${SCENARIOS[@]}"; do
     update_hangs)
       # as above, but the new version hangs before its first frames
       put_build "$OLD_BIN" "$D"
-      printf 'update_check=true\nupdate_auto=true\n' > "$H/.openomsi/settings.cfg"
+      printf 'update_check=true\nupdate_auto=true\n' > "$H/.openbus/settings.cfg"
       run_launcher "$D" "$H" OMSI_UPDATE_URL="file://$REL_NEW_HANG" OMSI_GUARD_DEADLINE=10
       check "the old version $OLD_V is installed again" test "$(installed_version "$D")" = "$OLD_V"
       check "the hang is in the journal" grep -q '"end": "hang"' "$G/starts.json"
@@ -169,7 +169,7 @@ for s in "${SCENARIOS[@]}"; do
       # started by the guard (no earlier version kept)
       put_build "$OLD_BIN" "$D"
       printf 'panic\n' > "$D/guard-test-break"
-      printf "${ITEMS}guard-test-break\n" > "$D/.openomsi-files"
+      printf "${ITEMS}guard-test-break\n" > "$D/.openbus-files"
       run_launcher "$D" "$H" OMSI_UPDATE_URL="file://$REL_NEW_GOOD"
       check "the fixed release $NEW_V is installed" test "$(installed_version "$D")" = "$NEW_V"
       check "the player was told it updated" grep -q "updated itself to $NEW_V" "$H/messages.txt"
@@ -180,7 +180,7 @@ for s in "${SCENARIOS[@]}"; do
       # the launcher updates itself to a release whose program cannot even run: its self-test
       # refuses it before anything is replaced
       put_build "$OLD_BIN" "$D"
-      printf 'update_check=true\nupdate_auto=true\n' > "$H/.openomsi/settings.cfg"
+      printf 'update_check=true\nupdate_auto=true\n' > "$H/.openbus/settings.cfg"
       run_launcher "$D" "$H" OMSI_UPDATE_URL="file://$REL_NEW_GARBAGE"
       check "$OLD_V is still installed" test "$(installed_version "$D")" = "$OLD_V"
       check "nothing was set aside" bash -c "! ls '$D' | grep -q old-update"
@@ -195,7 +195,7 @@ for s in "${SCENARIOS[@]}"; do
       check "the way back was kept" bash -c "ls -a '$D' | grep -q old-update"
       run_launcher "$D" "$H" OMSI_HEALTH_URL="file://$WORK/health-bad.json" OMSI_UPDATE_URL="file://$REL_NEW_GOOD"
       check "the next start went back to $OLD_V" test "$(installed_version "$D")" = "$OLD_V"
-      check "the player was told why" grep -q "lists openOMSI $NEW_V as broken" "$H/messages.txt"
+      check "the player was told why" grep -q "lists openBus $NEW_V as broken" "$H/messages.txt"
       check "$NEW_V is marked broken here" grep -qx "$NEW_V" "$G/bad-versions"
       ;;
     nothing_helps)
@@ -219,10 +219,10 @@ for s in "${SCENARIOS[@]}"; do
       updated_install "$D" "$NEW_BIN"
       run_launcher "$D" "$H" OMSI_UPDATE_URL="file://$REL_NEW_GOOD"
       check "$NEW_V is installed" test "$(installed_version "$D")" = "$NEW_V"
-      check "the kept earlier version is gone" bash -c "! ls -a '$D' | grep -q 'old-update\|openomsi-previous'"
+      check "the kept earlier version is gone" bash -c "! ls -a '$D' | grep -q 'old-update\|openbus-previous'"
       check "the start is healthy in the journal" grep -q '"healthy": true' "$G/starts.json"
       check "no message was shown" test ! -s "$H/messages.txt"
-      check "no watcher is left" bash -c "! pgrep -f 'openomsi --guard-watch' > /dev/null"
+      check "no watcher is left" bash -c "! pgrep -f 'openbus --guard-watch' > /dev/null"
       ;;
     *) echo "    unknown scenario"; FAILED=1 ;;
   esac

@@ -1,5 +1,5 @@
 //! The launcher is another program: the desktop launcher (`launcher/`, a Tauri window over
-//! omsi-launcher-core, `openomsi-launcher-app`) beside the game, or any program
+//! omsi-launcher-core, `openbus-launcher-app`) beside the game, or any program
 //! `OMSI_LAUNCHER` names. A plain start opens it; the game has no launcher window of its own.
 
 use anyhow::{anyhow, Result};
@@ -7,7 +7,7 @@ use omsi_launcher_lib::i18n::{fill, tr, trf};
 use std::path::{Path, PathBuf};
 
 /// The desktop launcher's program name.
-const APP_LAUNCHER: &str = if cfg!(windows) { "openomsi-launcher-app.exe" } else { "openomsi-launcher-app" };
+const APP_LAUNCHER: &str = if cfg!(windows) { "openbus-launcher-app.exe" } else { "openbus-launcher-app" };
 
 /// The desktop launcher: beside this program (in the same bundle on macOS; a development
 /// build's folder when it was built into the same target folder, see docs/BUILDING.md).
@@ -27,7 +27,7 @@ pub fn open_app_launcher(fatal_message: fn(&str)) -> Result<()> {
     let exe = std::env::current_exe().unwrap_or_default();
     let dir = exe.parent().map(Path::to_path_buf).unwrap_or_default();
     let Some(bin) = find_app_launcher() else {
-        let text = "The openOMSI launcher ({launcher}) was not found. It belongs in the same folder as the game ({folder}).\n\nPlease download openOMSI again and keep all of its files together.";
+        let text = "The openBus launcher ({launcher}) was not found. It belongs in the same folder as the game ({folder}).\n\nPlease download openBus again and keep all of its files together.";
         let vars: &[(&str, &dyn std::fmt::Display)] = &[("launcher", &APP_LAUNCHER), ("folder", &dir.display())];
         fatal_message(&trf(text, vars));
         anyhow::bail!("{}", fill(text.to_string(), vars));
@@ -58,20 +58,20 @@ fn said(bin: &Path, (text, why): Failure) -> String {
 fn start_app_launcher(bin: &Path, exe: &Path, fresh: bool) -> Option<Failure> {
     log::info!("starting the desktop launcher {}{}", bin.display(), if fresh { " (a fresh web view profile)" } else { "" });
     let mut cmd = std::process::Command::new(bin);
-    cmd.env("OPENOMSI_BIN", exe);
+    cmd.env("OPENBUS_BIN", exe);
     if fresh {
-        cmd.env("OPENOMSI_WEBVIEW_FRESH", "1");
+        cmd.env("OPENBUS_WEBVIEW_FRESH", "1");
     }
     let mut child = match cmd.spawn() {
         Ok(c) => c,
-        Err(e) => return Some(("The openOMSI launcher ({launcher}) could not be started: {why}.", e.to_string())),
+        Err(e) => return Some(("The openBus launcher ({launcher}) could not be started: {why}.", e.to_string())),
     };
     // (a program that cannot even load - Linux without WebKitGTK's library - or whose window
     // cannot open ends at once with an error)
     let t0 = std::time::Instant::now();
     while t0.elapsed() < std::time::Duration::from_secs(2) {
         match child.try_wait() {
-            Ok(Some(status)) if !status.success() => return Some(("The openOMSI launcher ({launcher}) stopped right after it started ({why}).", status.to_string())),
+            Ok(Some(status)) if !status.success() => return Some(("The openBus launcher ({launcher}) stopped right after it started ({why}).", status.to_string())),
             Ok(Some(_)) | Err(_) => break,
             Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
         }
@@ -125,7 +125,7 @@ fn offer_webview2() -> bool {
     use windows::core::PCWSTR;
     use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, IDYES, MB_ICONQUESTION, MB_YESNO};
     let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
-    let (t, c) = (wide(&tr("The openOMSI launcher shows its window with Microsoft Edge WebView2, which this Windows does not have yet.\n\nInstall it now with Microsoft's installer?")), wide("openOMSI"));
+    let (t, c) = (wide(&tr("The openBus launcher shows its window with Microsoft Edge WebView2, which this Windows does not have yet.\n\nInstall it now with Microsoft's installer?")), wide("openBus"));
     // SAFETY: both strings are NUL-terminated and live for the call
     if unsafe { MessageBoxW(None, PCWSTR(t.as_ptr()), PCWSTR(c.as_ptr()), MB_YESNO | MB_ICONQUESTION) } != IDYES {
         return false;
@@ -144,7 +144,7 @@ fn offer_webview2() -> bool {
 fn webview_hint() -> String {
     if cfg!(windows) {
         match omsi_platform::webview2::runtime() {
-            Some(rt) if rt.present => trf("Its log is in the openOMSI data folder (launcher.log); Microsoft Edge WebView2 {version} is installed.", &[("version", &rt.version)]),
+            Some(rt) if rt.present => trf("Its log is in the openBus data folder (launcher.log); Microsoft Edge WebView2 {version} is installed.", &[("version", &rt.version)]),
             _ => tr("The launcher's window needs Microsoft Edge WebView2 (part of Windows 10 and 11; for older systems: https://developer.microsoft.com/microsoft-edge/webview2/)."),
         }
     } else if cfg!(target_os = "linux") {
@@ -157,7 +157,7 @@ fn webview_hint() -> String {
             base
         }
     } else {
-        tr("Its log is in the openOMSI data folder (launcher.log).")
+        tr("Its log is in the openBus data folder (launcher.log).")
     }
 }
 
@@ -170,7 +170,7 @@ pub fn open_launcher() -> Result<bool> {
     log::info!("starting the launcher {}", bin.display());
     let exe = std::env::current_exe().unwrap_or_default();
     std::process::Command::new(&bin)
-        .env("OPENOMSI_BIN", &exe)
+        .env("OPENBUS_BIN", &exe)
         .spawn()
         .map_err(|e| anyhow!("starting {}: {e}", bin.display()))?;
     Ok(true)

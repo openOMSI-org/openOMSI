@@ -66,7 +66,7 @@ pub fn data_dir() -> PathBuf {
     // (made once: asked for dozens of times a second - the launcher's frames, its polls - and
     // made each time, two system calls for a folder that was there)
     static MADE: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
-    let d = home().join(".openomsi");
+    let d = home().join(".openbus");
     let mut made = MADE.lock().unwrap_or_else(|e| e.into_inner());
     if made.as_ref() != Some(&d) && std::fs::create_dir_all(&d).is_ok() {
         *made = Some(d.clone());
@@ -94,9 +94,9 @@ fn find_game(configured: &str) -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             cands.push(dir.join(if cfg!(windows) {
-                "openomsi.exe"
+                "openbus.exe"
             } else {
-                "openomsi"
+                "openbus"
             }));
         }
     }
@@ -107,28 +107,28 @@ fn find_game(configured: &str) -> Option<PathBuf> {
             .file_stem()
             .map(|s| s.to_string_lossy().to_ascii_lowercase())
             .unwrap_or_default();
-        if stem == "openomsi" {
+        if stem == "openbus" {
             cands.push(c);
         }
     }
-    if let Some(p) = std::env::var_os("OPENOMSI_BIN") {
+    if let Some(p) = std::env::var_os("OPENBUS_BIN") {
         cands.push(PathBuf::from(p));
     }
     if let Ok(exe) = std::env::current_exe() {
         for a in exe.ancestors().skip(1).take(7) {
-            cands.push(a.join("openomsi"));
-            cands.push(a.join("openomsi.exe"));
-            cands.push(a.join("target").join("release").join("openomsi"));
-            cands.push(a.join("target").join("release").join("openomsi.exe"));
-            cands.push(a.join("Resources").join("openomsi"));
+            cands.push(a.join("openbus"));
+            cands.push(a.join("openbus.exe"));
+            cands.push(a.join("target").join("release").join("openbus"));
+            cands.push(a.join("target").join("release").join("openbus.exe"));
+            cands.push(a.join("Resources").join("openbus"));
         }
     }
     if let Ok(cwd) = std::env::current_dir() {
         for a in cwd.ancestors().take(4) {
-            cands.push(a.join("target").join("release").join("openomsi"));
+            cands.push(a.join("target").join("release").join("openbus"));
         }
     }
-    cands.push(data_dir().join("openomsi"));
+    cands.push(data_dir().join("openbus"));
     cands.into_iter().find(|p| p.is_file())
 }
 
@@ -146,7 +146,7 @@ fn find_root(configured: &str) -> Option<PathBuf> {
     if let Some(p) = omsi_cfg::flags::OMSI_ROOT.live_os() {
         first.push(PathBuf::from(p));
     }
-    if let Ok(t) = std::fs::read_to_string(home().join(".openomsi-root")) {
+    if let Ok(t) = std::fs::read_to_string(home().join(".openbus-root")) {
         first.push(PathBuf::from(t.trim()));
     }
     // searching the disk costs a moment: once per process is enough (until the settings
@@ -161,7 +161,7 @@ fn find_root(configured: &str) -> Option<PathBuf> {
     if let Some(p) = &r {
         // the game finds it the same way next time
         let _ = std::fs::write(
-            home().join(".openomsi-root"),
+            home().join(".openbus-root"),
             p.to_string_lossy().as_bytes(),
         );
     }
@@ -230,7 +230,7 @@ pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
     {
         v["anisotropy"] = json!(af.clamp(1, 16));
     }
-    // (`texmemlimit`, OMSI's texture budget, is not taken: openOMSI's video memory bounds
+    // (`texmemlimit`, OMSI's texture budget, is not taken: openBus's video memory bounds
     // everything on the card, and the stock 401 would leave it 401 MB)
     if let Some(x) = num("performance_refltexsize") {
         v["mirror_size"] = json!(1i64 << (x as i64).clamp(6, 11));
@@ -1484,7 +1484,7 @@ fn shared_depot_names() -> Vec<String> {
     names
 }
 
-/// One line into ~/.openomsi/launcher.log.
+/// One line into ~/.openbus/launcher.log.
 fn log_line(line: &str) {
     use std::io::Write;
     let p = data_dir().join("launcher.log");
@@ -2850,7 +2850,7 @@ pub fn delete_profile(name: &str) -> Result<()> {
 mod profile_cleanup_tests;
 
 // ---------------------------------------------------------------------------------------
-// key bindings: the newer of ~/.openomsi/Inputs/keyboard.cfg and the content folder's once
+// key bindings: the newer of ~/.openbus/Inputs/keyboard.cfg and the content folder's once
 // the page has saved one (the game reads that first), else the original installation's,
 // which is never written
 
@@ -2919,7 +2919,7 @@ pub fn save_keybindings(v: &Value) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------------------
-// settings (the game's ~/.openomsi/settings.cfg)
+// settings (the game's ~/.openbus/settings.cfg)
 
 pub fn get_settings() -> Result<Value> {
     let text = std::fs::read_to_string(data_dir().join("settings.cfg")).ok();
@@ -3301,8 +3301,8 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["light_glow"] = json!(false);
     v["volumetric_fog"] = json!(true);
     v["pause_quick_actions"] = json!("default");
-    // (the interface theme's id: "openomsi" is openOMSI's own look)
-    v["ui_theme_pack"] = json!("openomsi");
+    // (the interface theme's id: "openbus" is openBus's own look)
+    v["ui_theme_pack"] = json!("openbus");
     v["ui_theme"] = json!("dark");
     v["road_glare"] = json!(1.0);
     v["traffic_headlights"] = json!(1.0);
@@ -3441,7 +3441,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     ] {
         v[k] = d;
     }
-    // openOMSI's own: what passengers say, OMSI's route arrows, getting up from the seat
+    // openBus's own: what passengers say, OMSI's route arrows, getting up from the seat
     for (k, d) in [
         ("pax_voices", json!("all")),
         ("nav_ai", json!(true)),
@@ -4480,7 +4480,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let dynamic_arrows = b("nav_dynamic_arrows", legacy_arrows);
     let map_arrows = b("nav_map_arrows", legacy_arrows);
     let text = format!(
-        "# openOMSI settings (written by the launcher)\nversion=4\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\nvideo_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
+        "# openBus settings (written by the launcher)\nversion=4\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\nvideo_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
         n("msaa", 4),
         n("anisotropy", 8),
         b("ssao", true),
@@ -4846,7 +4846,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         v.get("ui_theme_pack")
             .and_then(|x| x.as_str())
             .filter(|x| !x.trim().is_empty())
-            .unwrap_or("openomsi")
+            .unwrap_or("openbus")
             .replace(['\r', '\n'], "")
     ));
     text.push_str(&format!("mouse_pedals={}\n", b("mouse_pedals", true)));
@@ -5568,7 +5568,7 @@ pub fn check_join(text: &str) -> Value {
 // ---------------------------------------------------------------------------------------
 // small services for the window
 
-/// A line into ~/.openomsi/launcher.log.
+/// A line into ~/.openbus/launcher.log.
 pub fn log_to_file(line: &str) {
     use std::io::Write;
     let p = data_dir().join("launcher.log");

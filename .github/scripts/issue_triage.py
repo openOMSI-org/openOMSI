@@ -137,9 +137,9 @@ def milestone_number(n: int) -> int | None:
 
 
 def first_line(body: str) -> str:
-    """`openOMSI 0.1.1324 on android` from a crash report: its version and system."""
+    """`openBus 0.1.1324 on android` from a crash report: its version and system."""
     line = (body or "").strip().splitlines()[0] if (body or "").strip() else ""
-    return line if line.startswith("openOMSI ") else ""
+    return line if line.startswith("openBus ") else ""
 
 
 def main() -> None:

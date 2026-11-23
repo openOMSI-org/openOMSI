@@ -1,6 +1,6 @@
 //! [`PluginIo`]: the game's side of the plugins. The first eight methods are what an OMSI
 //! `.opl` plugin needs and every game implements them; the two script texture methods
-//! after them serve an `.opl`'s openOMSI-only `[scripttexturelist]`; the rest feed the Lua and WASM
+//! after them serve an `.opl`'s openBus-only `[scripttexturelist]`; the rest feed the Lua and WASM
 //! plugins' API (`crate::api`) and default to "the game has none of it" - a test's fake
 //! game implements what it tests, the real game (omsi-app's `plugins.rs`) all of it.
 //!

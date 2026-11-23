@@ -7,16 +7,16 @@ SetCompressor /SOLID lzma
 !include "StrFunc.nsh"
 ${UnStrLoc}
 
-!define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\openOMSI"
+!define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\openBus"
 
-Name "openOMSI"
+Name "openBus"
 OutFile "${OUT}"
-InstallDir "$LOCALAPPDATA\Programs\openOMSI"
+InstallDir "$LOCALAPPDATA\Programs\openBus"
 InstallDirRegKey HKCU "${UNINSTALL_KEY}" "InstallLocation"
-BrandingText "openOMSI ${VERSION}"
+BrandingText "openBus ${VERSION}"
 
-!define MUI_ICON "assets\icons\app\openomsi.ico"
-!define MUI_UNICON "assets\icons\app\openomsi.ico"
+!define MUI_ICON "assets\icons\app\openbus.ico"
+!define MUI_UNICON "assets\icons\app\openbus.ico"
 !define MUI_BGCOLOR 121212
 !define MUI_TEXTCOLOR EDEDED
 !define MUI_HEADERIMAGE
@@ -26,7 +26,7 @@ BrandingText "openOMSI ${VERSION}"
 !define MUI_WELCOMEFINISHPAGE_BITMAP "assets\icons\app\installer-sidebar.bmp"
 !define MUI_UNWELCOMEFINISHPAGE_BITMAP "assets\icons\app\installer-sidebar.bmp"
 !define MUI_ABORTWARNING
-!define MUI_FINISHPAGE_RUN "$INSTDIR\openomsi.exe"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\openbus.exe"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -68,12 +68,12 @@ Section
   SetOutPath "$INSTDIR"
   File "${DIST}\*.*"
   WriteUninstaller "$INSTDIR\uninstall.exe"
-  CreateShortcut "$SMPROGRAMS\openOMSI.lnk" "$INSTDIR\openomsi.exe"
-  CreateShortcut "$DESKTOP\openOMSI.lnk" "$INSTDIR\openomsi.exe"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "openOMSI"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\openomsi.exe"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "openOMSI"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "URLInfoAbout" "https://github.com/openOMSI-org/openOMSI"
+  CreateShortcut "$SMPROGRAMS\openBus.lnk" "$INSTDIR\openbus.exe"
+  CreateShortcut "$DESKTOP\openBus.lnk" "$INSTDIR\openbus.exe"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "openBus"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\openbus.exe"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "openBus"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "URLInfoAbout" "https://github.com/rafaelkaiz/openBus"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
   WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoModify" 1
@@ -88,7 +88,7 @@ FunctionEnd
 Section "Uninstall"
   !include "${UNINSTALL_LIST}"
   ClearErrors
-  FileOpen $0 "$INSTDIR\.openomsi-files" r
+  FileOpen $0 "$INSTDIR\.openbus-files" r
   IfErrors manifest_done
   manifest_next:
     ClearErrors
@@ -122,12 +122,12 @@ Section "Uninstall"
   Delete "$INSTDIR\NVIDIA-Streamline-NOTICE.txt"
   Delete "$INSTDIR\*.old-update"
   Delete "$INSTDIR\*.bad-update"
-  Delete "$INSTDIR\.openomsi-files"
-  Delete "$INSTDIR\.openomsi-previous"
-  RMDir /r "$INSTDIR\.openomsi-update"
+  Delete "$INSTDIR\.openbus-files"
+  Delete "$INSTDIR\.openbus-previous"
+  RMDir /r "$INSTDIR\.openbus-update"
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"
-  Delete "$SMPROGRAMS\openOMSI.lnk"
-  Delete "$DESKTOP\openOMSI.lnk"
+  Delete "$SMPROGRAMS\openBus.lnk"
+  Delete "$DESKTOP\openBus.lnk"
   DeleteRegKey HKCU "${UNINSTALL_KEY}"
 SectionEnd

@@ -3,7 +3,7 @@ name = "omsi-app-mx"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The openOMSI application: loads a map and renders it"
+description = "The openBus application: loads a map and renders it"
 
 # The game is a library with a small `main` around it: the Android build takes the same
 # library as a shared object (`cargo rustc --lib --crate-type cdylib`, see
@@ -11,7 +11,7 @@ description = "The openOMSI application: loads a map and renders it"
 # Mac apps link it as a static library (`--crate-type staticlib`, see scripts/build-apple.sh)
 # into the Swift app, whose launcher talks to it through `apple_bridge`.
 [lib]
-name = "openomsi_game_mx"
+name = "openbus_game_mx"
 path = "src/lib.rs"
 
 

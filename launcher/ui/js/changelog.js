@@ -23,7 +23,7 @@ function Inline({ text }) {
  * where the version is already shown above them. */
 export function Notes({ text, version }) {
   let list = blocks(text);
-  if (version && list[0]?.kind === 'paragraph' && list[0].text.replace(/\*/g, '').trim() === `openOMSI ${version}`) list = list.slice(1);
+  if (version && list[0]?.kind === 'paragraph' && list[0].text.replace(/\*/g, '').trim() === `openBus ${version}`) list = list.slice(1);
   if (!list.length) return null;
   return html`<div class="notes selectable">${list.map((b) =>
     b.kind === 'heading' ? html`<div class=${'notes-h' + Math.min(b.level, 3)}><${Inline} text=${b.text} /></div>`
@@ -71,7 +71,7 @@ export function ChangelogDialog() {
     const isNew = (v) => seen && compareVersions(v, seen) > 0 && compareVersions(v, current) <= 0;
     body = html`<div class="changelog">${data.list.map((r) => html`<details key=${r.version} open=${fresh.includes(r.version)}>
       <summary>
-        <span class="grow"><b>openOMSI ${r.version}</b> <span class="muted small">${day(r.date)}</span></span>
+        <span class="grow"><b>openBus ${r.version}</b> <span class="muted small">${day(r.date)}</span></span>
         <span class="tags">
           ${isNew(r.version) && html`<${Tag} kind="ok">${t('New')}</${Tag}>`}
           ${r.beta && html`<${Tag}>${t('Beta')}</${Tag}>`}

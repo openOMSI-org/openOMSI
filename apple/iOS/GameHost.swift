@@ -84,54 +84,54 @@ final class GameHost {
 
 // --- the functions the game calls (C names, see apple.rs) ------------------------------------
 
-@_cdecl("openomsi_swift_attach_window")
-func openomsiSwiftAttachWindow(_ view: UnsafeMutableRawPointer) {
+@_cdecl("openbus_swift_attach_window")
+func openbusSwiftAttachWindow(_ view: UnsafeMutableRawPointer) {
     let v = Unmanaged<UIView>.fromOpaque(view).takeUnretainedValue()
     MainActor.assumeIsolated { GameHost.shared.attach(v) }
 }
 
-@_cdecl("openomsi_swift_detach_window")
-func openomsiSwiftDetachWindow(_ view: UnsafeMutableRawPointer) {
+@_cdecl("openbus_swift_detach_window")
+func openbusSwiftDetachWindow(_ view: UnsafeMutableRawPointer) {
     let v = Unmanaged<UIView>.fromOpaque(view).takeUnretainedValue()
     MainActor.assumeIsolated { GameHost.shared.detach(v) }
 }
 
-@_cdecl("openomsi_swift_game_started")
-func openomsiSwiftGameStarted() {
+@_cdecl("openbus_swift_game_started")
+func openbusSwiftGameStarted() {
     MainActor.assumeIsolated { GameHost.shared.store.starting = false }
 }
 
-@_cdecl("openomsi_swift_show_launcher")
-func openomsiSwiftShowLauncher() {
+@_cdecl("openbus_swift_show_launcher")
+func openbusSwiftShowLauncher() {
     MainActor.assumeIsolated { GameHost.shared.showLauncher() }
 }
 
-@_cdecl("openomsi_swift_tilt")
-func openomsiSwiftTilt(_ on: Int32) {
+@_cdecl("openbus_swift_tilt")
+func openbusSwiftTilt(_ on: Int32) {
     DispatchQueue.main.async { GameHost.shared.tilt(on != 0) }
 }
 
-@_cdecl("openomsi_swift_tilt_value")
-func openomsiSwiftTiltValue(_ out: UnsafeMutablePointer<Float>) -> Int32 {
+@_cdecl("openbus_swift_tilt_value")
+func openbusSwiftTiltValue(_ out: UnsafeMutablePointer<Float>) -> Int32 {
     // (asked from the game's frame, on the main thread)
     MainActor.assumeIsolated { GameHost.shared.tiltValue(out) ? 1 : 0 }
 }
 
-@_cdecl("openomsi_swift_haptic")
-func openomsiSwiftHaptic(_ ms: UInt32) {
+@_cdecl("openbus_swift_haptic")
+func openbusSwiftHaptic(_ ms: UInt32) {
     DispatchQueue.main.async {
         UIImpactFeedbackGenerator(style: ms > 30 ? .medium : .light).impactOccurred()
     }
 }
 
-@_cdecl("openomsi_swift_open_url")
-func openomsiSwiftOpenUrl(_ url: UnsafePointer<CChar>) {
+@_cdecl("openbus_swift_open_url")
+func openbusSwiftOpenUrl(_ url: UnsafePointer<CChar>) {
     let s = String(cString: url)
     DispatchQueue.main.async { Platform.openURL(s) }
 }
 
-@_cdecl("openomsi_swift_safe_insets")
-func openomsiSwiftSafeInsets(_ out: UnsafeMutablePointer<Float>) {
+@_cdecl("openbus_swift_safe_insets")
+func openbusSwiftSafeInsets(_ out: UnsafeMutablePointer<Float>) {
     MainActor.assumeIsolated {
         guard let w = GameHost.shared.gameWindow else { return }
         let s = Float(w.screen.scale)
@@ -145,13 +145,13 @@ func openomsiSwiftSafeInsets(_ out: UnsafeMutablePointer<Float>) {
     }
 }
 
-@_cdecl("openomsi_swift_is_phone")
-func openomsiSwiftIsPhone() -> Int32 {
+@_cdecl("openbus_swift_is_phone")
+func openbusSwiftIsPhone() -> Int32 {
     MainActor.assumeIsolated { UIDevice.current.userInterfaceIdiom == .phone ? 1 : 0 }
 }
 
-@_cdecl("openomsi_swift_set_clipboard")
-func openomsiSwiftSetClipboard(_ text: UnsafePointer<CChar>) -> Int32 {
+@_cdecl("openbus_swift_set_clipboard")
+func openbusSwiftSetClipboard(_ text: UnsafePointer<CChar>) -> Int32 {
     UIPasteboard.general.string = String(cString: text)
     return 1
 }
@@ -161,7 +161,7 @@ func openomsiSwiftSetClipboard(_ text: UnsafePointer<CChar>) -> Int32 {
 enum Platform {
     static let isPhone = true
 
-    /// The Files app at the folder (the app's own folders show as "openOMSI" there).
+    /// The Files app at the folder (the app's own folders show as "openBus" there).
     static func reveal(_ path: String) {
         var c = URLComponents(url: URL(fileURLWithPath: path), resolvingAgainstBaseURL: false)
         c?.scheme = "shareddocuments"

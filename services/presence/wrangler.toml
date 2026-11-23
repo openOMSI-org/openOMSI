@@ -1,5 +1,5 @@
-# The "playing now" counter of openOMSI (see README.md beside this file).
-name = "openomsi"
+# The "playing now" counter of openBus (see README.md beside this file).
+name = "openbus"
 main = "worker.js"
 compatibility_date = "2026-09-01"
 

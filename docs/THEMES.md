@@ -6,12 +6,12 @@ and notifications; the panels as frosted glass over the game's picture; the logo
 the pause menu; and the loading screen, whose logo can itself be the loading bar. The HUD, the
 navigator and the cockpit keep their own look (the navigator follows its light or dark map).
 
-The player chooses a theme in **Options › Interface › Theme pack**; openOMSI's own look is
+The player chooses a theme in **Options › Interface › Theme pack**; openBus's own look is
 the first entry. The choice is kept in the settings file (`ui_theme_pack`) and is in force from the
-loading screen of the next start on - a theme that cannot be read leaves openOMSI's own look, with
+loading screen of the next start on - a theme that cannot be read leaves openBus's own look, with
 a line in `game.log` saying why.
 
-A theme goes over openOMSI's light or dark look, whichever the player chose in **Options ›
+A theme goes over openBus's light or dark look, whichever the player chose in **Options ›
 Interface › Interface theme** (`ui_theme`): its colours, corners and glass on top, and what it
 leaves out from that look. A theme that gives all its surfaces and inks looks the same in both; one
 of a few colours (an accent alone) is a light or a dark look with its accent.
@@ -53,14 +53,14 @@ used. A content folder another player's game sent in a LAN session brings no the
 }
 ```
 
-Everything is optional; what a theme leaves out stays openOMSI's (light or dark, as chosen).
+Everything is optional; what a theme leaves out stays openBus's (light or dark, as chosen).
 
 | Key | |
 | --- | --- |
 | `name` | The theme's name in the options (40 characters at most; without it, the id). |
-| `title` | The name at the top of the pause menu, beside `logo`, over openOMSI's version. |
+| `title` | The name at the top of the pause menu, beside `logo`, over openBus's version. |
 | `colors` | Colours by name, as `"#rrggbb"`, `"#rrggbbaa"` or `[r, g, b]` / `[r, g, b, a]` (0 to 255; the opacity 0 to 1). |
-| `radius` | The corners of the panels (0 to 24 points; openOMSI's are 8). |
+| `radius` | The corners of the panels (0 to 24 points; openBus's are 8). |
 | `glass` | `true`, or the glass's `opacity` (how much of a panel's colour lies over the blurred picture, 0 to 1), `blur` (its radius in points, 0 to 64), `edge` and `highlight` (the light edge round a panel and the sheen at its top, 0 to 1). |
 | `loading` | The loading screen: `background`, `text` (the map's name and the tips), `logo` and `progress`. |
 | `logo` | The logo at the top of the pause menu: an icon (drawn 32 points square, with `title` beside it), or a wordmark - a logo at least 1.6 times as wide as high, drawn across the top of the rail in place of the icon and the name. |
@@ -78,7 +78,7 @@ TGA, BMP, JPEG, DDS; 4096 pixels at most). Nothing outside the folder is read.
 
 **The loading bar.** `loading.progress` says how the loading screen shows how far it is:
 
-- `"bar"` (the default): openOMSI's striped bar along the bottom, in the theme's accent;
+- `"bar"` (the default): openBus's striped bar along the bottom, in the theme's accent;
 - `"stroke"`: the logo is the bar - its path with `id="progress"` (one `<path ... />` without a
   dash of its own: a ring, a line) is drawn along as far as the loading is, over a faint track of
   the whole path;
@@ -113,7 +113,7 @@ on the glass, so that it reads as a control and not as a pane.
 
 ## For plugins
 
-`omsi.ui.themes()` lists the themes, `omsi.ui.theme()` says the one in use (`""`: openOMSI's
+`omsi.ui.themes()` lists the themes, `omsi.ui.theme()` says the one in use (`""`: openBus's
 own) and `omsi.ui.set_theme(id)` switches to one, as if the player chose it (see
 [PLUGINS.md](PLUGINS.md#an-interface-theme)). A plugin should do that once at most, and only
-over openOMSI's own look: the player can always switch back in the options.
+over openBus's own look: the player can always switch back in the options.

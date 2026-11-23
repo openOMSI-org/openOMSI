@@ -244,7 +244,7 @@ mod tests {
     fn failed_start_does_not_allocate_a_handle() {
         let mut p = Processes::default();
         assert!(
-            p.start("/nonexistent/openomsi-test-program", &[], None, &[])
+            p.start("/nonexistent/openbus-test-program", &[], None, &[])
                 .is_err()
         );
         assert!(p.children.is_empty());

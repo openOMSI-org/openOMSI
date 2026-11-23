@@ -1,6 +1,6 @@
 # History and roadmap
 
-The round-by-round record of how openOMSI was built, moved here verbatim from
+The round-by-round record of how openBus was built, moved here verbatim from
 [ARCHITECTURE.md](ARCHITECTURE.md), which now describes only the architecture. It is kept as it
 was written; the release notes are in [CHANGELOG.md](../CHANGELOG.md).
 
@@ -105,13 +105,13 @@ was written; the release notes are in [CHANGELOG.md](../CHANGELOG.md).
    physics step (they trembled a seat-width behind the bus); SSAO with an ordered 4x4
    pattern and a 6x6 depth-aware blur, 5x5 PCF shadows; weather changes the light
    (overcast, rain, fog over the whole sky, snow textures and cover on any map);
-   `~/.openomsi/settings.cfg` (MSAA, anisotropy, SSAO, shadows, navigator, enhanced,
+   `~/.openbus/settings.cfg` (MSAA, anisotropy, SSAO, shadows, navigator, enhanced,
    fullscreen); the ETS2-style navigator (`omsi-app::navigator`, N); AI cars spawn out of
    sight; pedestrians walk both ways along the pavements (`Network::prev`); a procedural
    gait/stance/sitting pose; Shift+U also sets the IBIS to the duty (without the AI
    trigger, which switched the NL202's electrics off); stop announcements verified through
    the IBIS-2 'next stop' key; `--export-glb` writes the bus as glTF; session summaries in
-   `~/.openomsi/sessions/*.json`; the Enhanced graphics path (first an HDR filter with light shafts,
+   `~/.openbus/sessions/*.json`; the Enhanced graphics path (first an HDR filter with light shafts,
    ACES, grading and vignette; since f9770c1 its own physically based renderer without them);
    and the Tauri launcher in `launcher/` (profile with hours/XP/level, bus with 3D
    preview and liveries, depot, line, tour, roadbook with the IBIS codes, time, date,
@@ -413,7 +413,7 @@ windows. Each was traced to a general cause, most of them read off OMSI:
   ribbons, discs and shapes) and the wgpu pipeline for them (layers with their own camera,
   viewport and rounded clip). `examples/headless` checks it without the game.
 * **Launcher** (`omsi-app::launcher` + `crates/omsi-launcher-core`) - the Tauri launcher
-  replaced by the game's own window: `openomsi` without arguments opens it. The showroom is a
+  replaced by the game's own window: `openbus` without arguments opens it. The showroom is a
   scene of the game renderer (the bus placed by `World::add_vehicle` after a worker read it
   and put its textures on the GPU ahead; the game's sky and lighting of the chosen time and
   weather; `player::sync_vehicle_transforms` shared with the player's bus); the interface
@@ -634,7 +634,7 @@ players; entry spawn on the road surface; `[illumination_interior]` inherited by
 ; NaN guards for Vulkan/D3D (fast-math hid them on Metal); LAN remote buses get
 display texts, window rain and a driver; walking inside the bus (cabin corridor), drag-only
 controls toggle by click, door groups close together; a running gait; **dedicated server**
-(`openomsi --server server.cfg`, wgpu no-op device) with WebSocket transport, `/status`,
+(`openbus --server server.cfg`, wgpu no-op device) with WebSocket transport, `/status`,
 `/icon.png`, Cloudflare quick tunnels (also for Connect by Code); launcher Multiplayer page
 (Connect by Code / Servers) and a server-locked Drive page with Leave Server. **(done)**
 
@@ -741,7 +741,7 @@ known; **money** - notes as well as coins, exact fare exact; **keys** - a releas
 what the press started, F12 yields to a bus binding, the blinker keys follow the lever;
 **clouds** drift on over midnight; **launcher** - decomposed accents composed (macOS file
 names), the METAR airport nearest the map, the Timetable page on the chosen map, saving for
-maps in archives, "Reset timetable". **(done)** Found to be content, not openOMSI: Novi
+maps in archives, "Reset timetable". **(done)** Found to be content, not openBus: Novi
 Sad's `.ttr` tracks jump between tiles (id 9277167 on tiles 441 and 167 in a row), a missing
 `IK218N` script, missing fonts. Still open: the frame rate at 2560×1080 with 4× MSAA in
 Enhanced on Novi Sad (~25-30 fps offscreen, GPU main pass ~12 ms), the "camera too far
@@ -776,8 +776,8 @@ long names `_normal`, `_roughness`, `_metallic`, `_ao`), `_orm`/`_arm`/`_mra` be
 diffuse texture (single letters are OMSI's night maps; a normal map must also look like one), normal mapping by a derivative tangent frame in enhanced.wgsl. Not reproduced: stray
 light sources (Grundorf, Novi Sad at night), the EN92 Ctrl+Shift cab light.
 
-Round 25 (Sept 27 2026): **Android** - the game is now a library (`openomsi_game`, `lib.rs`;
-`main.rs` calls `run`), built for Android as `libopenomsi_game.so` for a NativeActivity
+Round 25 (Sept 27 2026): **Android** - the game is now a library (`openbus_game`, `lib.rs`;
+`main.rs` calls `run`), built for Android as `libopenbus_game.so` for a NativeActivity
 (`scripts/build-android.sh`, docs/ANDROID.md). One process and one window there: `android.rs`
 runs the launcher and the game in turn (`omsi_launcher_lib::launch` keeps the command line
 instead of starting a process, `platform::exit` ends a session back to the launcher),
@@ -830,7 +830,7 @@ position, message) is `PluginIo`'s new default methods. Tests: `crates/omsi-plug
   the player, are compared with the raw steering-axis motion (`ffb_calibration.rs`).
   Ambiguous motion is rejected; losing focus, leaving the page or cancelling releases the
   effects. The confirmed polarity is stored per device in `gamectrler.cfg` as
-  `[openOMSI.FFInvert]` (0 normal, 1 inverted), and can be changed on that device's page.
+  `[openBus.FFInvert]` (0 normal, 1 inverted), and can be changed on that device's page.
   Devices without this setting still use the existing global `ff_invert` value.
 * **Multiplayer** (`omsi-net::bridge`, `lan.rs`): UPnP forwardings are asked for an hour and
   renewed every 20 minutes (they were asked once for 7200 s); the ntfy.sh rendezvous is polled
@@ -841,7 +841,7 @@ position, message) is `PluginIo`'s new default methods. Tests: `crates/omsi-plug
   launcher's HOF follows the chrono scenarios of the chosen date, as the game's AI already did.
 * **Installations** (`omsi-cfg::install_search::root_guesses`, `content_folder_of`): a given
   path is trimmed of quotes, a file means its folder, the folders above and an OMSI folder
-  inside are tried; a program unpacked into the OMSI 2 folder uses `<OMSI>/openOMSI` as its
+  inside are tried; a program unpacked into the OMSI 2 folder uses `<OMSI>/openBus` as its
   content folder, and a folder with `Omsi.exe` counts as the game even if an older build
   marked it as a content folder.
 * **Phones**: launcher scale at least the system's (`ui_scale`), settings stacked in one column
@@ -916,13 +916,13 @@ Reverse engineered from Omsi.exe and put in place of our own guesses:
   drag across ran off the screen at about 0.4 of the lock to the left.
 * **Updates** (`updater.rs`, `launcher/update.rs`): the GitHub API's latest release, the
   platform's asset by `release.yml`'s names, SHA-256 from the asset's `digest`. A computer
-  unpacks into `.openomsi-update` beside the program and swaps each top-level item (old one
-  renamed `*.old-update`, all undone on a failure; `.openomsi-files` lists what an update
+  unpacks into `.openbus-update` beside the program and swaps each top-level item (old one
+  renamed `*.old-update`, all undone on a failure; `.openbus-files` lists what an update
   installed, so files a release drops go too; nothing else in the folder is touched), then
   starts the program file again and ends; the next start deletes `*.old-update`. Android: a
   PackageInstaller session (`OmsiActivity.installApk`), the status PendingIntent comes back
   to the activity (cancel → error in the launcher, success → the system starts the new app);
-  "Install unknown apps" is asked for first. `openOMSI/env.txt` gives a phone `OMSI_*`
+  "Install unknown apps" is asked for first. `openBus/env.txt` gives a phone `OMSI_*`
   switches. The JNI calls now go to the real NativeActivity (`AndroidApp::activity_as_ptr`):
   ndk_context's context is the Application - the buttons' vibration never reached Java.
   Checked: desktop end to end on macOS (update, not now, auto, damaged file, read-only

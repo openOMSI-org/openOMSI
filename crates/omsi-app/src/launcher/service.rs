@@ -1,4 +1,4 @@
-//! `openomsi --launcher-service`: what the desktop launcher (`launcher/`, a webview) asks of
+//! `openbus --launcher-service`: what the desktop launcher (`launcher/`, a webview) asks of
 //! the game program, with no window of its own - the bus preview drawn by the game's
 //! renderer exactly as the launcher window draws it (`showroom`), and the city map with a
 //! trip's route read the way the navigator reads it (`mapview::export`).
@@ -51,7 +51,7 @@ fn write(out: &Out, id: &Value, mut head: Value, body: &[u8]) {
     let _ = o.flush();
 }
 
-/// `openomsi --launcher-service`: requests on stdin, answers on stdout.
+/// `openbus --launcher-service`: requests on stdin, answers on stdout.
 pub fn run() -> anyhow::Result<()> {
     super::install();
     let out: Out = Arc::new(Mutex::new(answers()));

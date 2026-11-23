@@ -1,7 +1,7 @@
 # How routes work
 
 How timetables, chrono scenarios, `car_use`, hof files and IBIS behave in OMSI 2, and how
-openOMSI follows that behaviour.
+openBus follows that behaviour.
 
 ## Chrono scenarios
 
@@ -92,7 +92,7 @@ ignored with "has no valid [line] entry for the current chrono scenario".
   marked for one ran on the other and showed as "not on this date" in the launcher).
 * A tour whose `[ai_group]` names a plain `[aigroup_2]` pool (no `[aigroup_depot]` block)
   gets a depot file as well: Omsi.exe leaves such a bus's selected-hof index at 0 (its
-  folder's first `.hof`), openOMSI takes the map's own depot of that folder where it has
+  folder's first `.hof`), openBus takes the map's own depot of that folder where it has
   one. Without it the bus had no `SetLineTo`/`AI_target_index` and never ran
   `ai_scheduled_settarget`, and every mod whose display switches its destination picture on
   in that trigger (the HK roller blinds, the LED matrices) drove with a blank display.

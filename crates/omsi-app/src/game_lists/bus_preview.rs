@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn in_game_bus_preview_repaint_resolves_the_loaded_vehicle_without_repeating_the_root() {
-        let root = std::env::temp_dir().join("openomsi preview root");
+        let root = std::env::temp_dir().join("openbus preview root");
         let relative = "Vehicles/Preview Pack/#Bus.bus";
         let loaded_file = root.join(relative);
         let bus = repaint_bus_path(&root, &loaded_file);

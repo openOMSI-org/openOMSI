@@ -1,5 +1,5 @@
 #!/bin/sh
-# The openOMSI dedicated server, asked for what it needs: the first time the OMSI 2 folder
+# The openBus dedicated server, asked for what it needs: the first time the OMSI 2 folder
 # and the main settings of server.cfg, every time the map (a numbered list of the maps
 # installed); and, if wanted, a start-<map>.sh beside it that starts that map again without
 # a question. The server's output goes to this window and to server.log.
@@ -11,7 +11,7 @@
 # (start.sh stays as it was: start.sh /path/to/OMSI2 [server.cfg])
 set -u
 here="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-exe="$here/openomsi"
+exe="$here/openbus"
 conf="$here/run-server.conf"
 cfg="$here/server.cfg"
 log="$here/server.log"
@@ -38,7 +38,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-[ -x "$exe" ] || die "openomsi is not beside this script ($exe)" "o openomsi não está ao lado deste script ($exe)"
+[ -x "$exe" ] || die "openbus is not beside this script ($exe)" "o openbus não está ao lado deste script ($exe)"
 
 # run-server.conf: root=<OMSI 2 folder>, last=<last map picked>
 conf_get() { [ -f "$conf" ] && sed -n "s/^$1=//p" "$conf" | tail -n 1; }
@@ -243,7 +243,7 @@ if [ "$ask_shortcut" = 1 ]; then
     case "$v" in
       [yYsS]*)
         quoted="$(printf '%s' "$map" | sed "s/'/'\\\\''/g")"
-        printf '#!/bin/sh\n# openOMSI server on %s, with run-server.sh (made by it)\nexec "$(dirname -- "$0")/run-server.sh" --map '"'"'%s'"'"' "$@"\n' "$name" "$quoted" > "$shortcut"
+        printf '#!/bin/sh\n# openBus server on %s, with run-server.sh (made by it)\nexec "$(dirname -- "$0")/run-server.sh" --map '"'"'%s'"'"' "$@"\n' "$name" "$quoted" > "$shortcut"
         chmod +x "$shortcut"
         say "Made $shortcut." "Criado $shortcut."
         ;;

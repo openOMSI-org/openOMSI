@@ -80,16 +80,16 @@ fn client_ai_has_schedule_and_all_system_values_before_init_and_frame() {
 fn a_file_is_named_relative_to_the_deepest_root_holding_it() {
     // the content folder first, the OMSI 2 folder inside it after (a server's layout)
     let roots = [
-        PathBuf::from("/srv/openOMSI"),
-        PathBuf::from("/srv/openOMSI/OMSI 2"),
+        PathBuf::from("/srv/openBus"),
+        PathBuf::from("/srv/openBus/OMSI 2"),
     ];
-    let golf = Path::new("/srv/openOMSI/OMSI 2/Vehicles/VW_Golf_2/ai_vw_golf_2.bus");
+    let golf = Path::new("/srv/openBus/OMSI 2/Vehicles/VW_Golf_2/ai_vw_golf_2.bus");
     assert_eq!(
         relative_to_roots(golf, &roots).as_deref(),
         Some("Vehicles/VW_Golf_2/ai_vw_golf_2.bus")
     );
     // a mod in the content folder itself stays relative to that
-    let m = Path::new("/srv/openOMSI/Vehicles/Mod/mod.bus");
+    let m = Path::new("/srv/openBus/Vehicles/Mod/mod.bus");
     assert_eq!(
         relative_to_roots(m, &roots).as_deref(),
         Some("Vehicles/Mod/mod.bus")

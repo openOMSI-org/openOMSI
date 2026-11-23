@@ -1021,7 +1021,7 @@ pub struct PanelsFrame {
     pub dt: f32,
     /// `ui::backdrop` of the opacity setting.
     pub backdrop: f32,
-    /// The palette in force (`omsi_ui::theme::th`): openOMSI's dark or light look, a
+    /// The palette in force (`omsi_ui::theme::th`): openBus's dark or light look, a
     /// theme's over it.
     pub palette: Palette,
     /// The navigator's panel (physical x0, y0, x1, y1), which the notifications stay clear of.
@@ -1171,7 +1171,7 @@ impl PluginPanels {
                 revision: u64::MAX,
                 scale: 0.0,
                 backdrop: 0.0,
-                pal: Palette::OPENOMSI,
+                pal: Palette::OPENBUS,
                 laid: Laid::default(),
                 tex: None,
                 drawn: None,
@@ -1285,7 +1285,7 @@ impl PluginPanels {
                 revision: 0,
                 scale: 0.0,
                 backdrop: 0.0,
-                pal: Palette::OPENOMSI,
+                pal: Palette::OPENBUS,
                 laid: Laid::default(),
                 tex: None,
                 drawn: None,

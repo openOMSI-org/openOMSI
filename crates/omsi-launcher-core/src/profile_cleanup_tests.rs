@@ -422,7 +422,7 @@ fn road_and_traffic_brightness_survive_launcher_roundtrip_and_profiles() {
 
 fn graphics_profile_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "openomsi-gfx-profiles-{tag}-{}",
+        "openbus-gfx-profiles-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);

@@ -7,9 +7,9 @@ enum AppLanguage {
     /// The interface tables' codes (the game's language list) → Apple's language identifiers.
     static let apple: [String: String] = ["pt": "pt-BR", "pt-pt": "pt-PT", "zh": "zh-Hans", "zh-tw": "zh-Hant", "tl": "fil"]
 
-    /// `home` is the folder the game keeps `.openomsi` in (the app's data folder on an iPhone).
+    /// `home` is the folder the game keeps `.openbus` in (the app's data folder on an iPhone).
     static func apply(home: URL) {
-        let file = home.appendingPathComponent(".openomsi/settings.cfg")
+        let file = home.appendingPathComponent(".openbus/settings.cfg")
         guard let text = try? String(contentsOf: file, encoding: .utf8) else { return }
         let code = text.split(whereSeparator: \.isNewline)
             .first { $0.hasPrefix("language=") }

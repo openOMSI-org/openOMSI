@@ -3,7 +3,7 @@ name = "omsi-navigator"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI's navigator: the small route map and the full-screen city map - following the route and finding the way back, the traffic's congestion, the timetable's vehicles and the other players, the map package's places - drawn with omsi-ui into a texture of the renderer"
+description = "openBus's navigator: the small route map and the full-screen city map - following the route and finding the way back, the traffic's congestion, the timetable's vehicles and the other players, the map package's places - drawn with omsi-ui into a texture of the renderer"
 
 [dependencies]
 omsi-cfg = { path = "../omsi-cfg" }

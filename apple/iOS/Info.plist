@@ -38,7 +38,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>openOMSI</string>
+	<string>openBus</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -46,7 +46,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>openOMSI</string>
+	<string>openBus</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -82,7 +82,7 @@
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
 	</dict>
-	<!-- the app's Documents in the Files app ("openOMSI"): the copy of OMSI 2, the mods,
+	<!-- the app's Documents in the Files app ("openBus"): the copy of OMSI 2, the mods,
 	     the screenshots -->
 	<key>UIFileSharingEnabled</key>
 	<true/>
@@ -135,13 +135,13 @@
 	</array>
 	<!-- LAN sessions: the other players on the same network -->
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>openOMSI finds and joins the multiplayer sessions of other players on your network, and lets your phone or tablet reach the remote cockpit once you switch it on.</string>
+	<string>openBus finds and joins the multiplayer sessions of other players on your network, and lets your phone or tablet reach the remote cockpit once you switch it on.</string>
 	<key>NSBonjourServices</key>
 	<array>
-		<string>_openomsi._udp</string>
+		<string>_openbus._udp</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>openOMSI uses the microphone for voice chat in multiplayer, only while you hold a talk key (or with the open microphone) and only if you switch voice chat on. Nothing is recorded.</string>
+	<string>openBus uses the microphone for voice chat in multiplayer, only while you hold a talk key (or with the open microphone) and only if you switch voice chat on. Nothing is recorded.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Tilt steering turns the bus's steering wheel with the device.</string>
 </dict>

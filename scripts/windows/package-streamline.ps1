@@ -1,6 +1,6 @@
 # Verify and extract the official NVIDIA Streamline 2.14.1 PRODUCTION DLLs
 # into a staging folder for an optional user-initiated installation.
-# The openOMSI public release does not bundle these proprietary binaries.
+# The openBus public release does not bundle these proprietary binaries.
 #
 # Binary source: https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.1
 # Do not take files from third-party modifications or development/debug builds.
@@ -90,16 +90,16 @@ This optional user-installed component set contains NVIDIA's unmodified, signed 
   sl.interposer.dll, sl.common.dll, sl.dlss.dll, nvngx_dlss.dll
 
 These components are installed as unmodified NVIDIA-distributed runtime
-libraries. The source code of openOMSI remains licensed under GNU AGPLv3.
-All original openOMSI integration source code remains GNU AGPLv3.
+libraries. The source code of openBus remains licensed under GNU AGPLv3.
+All original openBus integration source code remains GNU AGPLv3.
 These separate, unmodified NVIDIA vendor DLLs are NOT relicensed under
-the openOMSI AGPLv3 or its retained historical MIT license.
+the openBus AGPLv3 or its retained historical MIT license.
 Each NVIDIA file retains its original applicable vendor license:
   - NVIDIA-Streamline-LICENSE.txt: MIT-covered Streamline components
   - nvngx_dlss.license.txt: proprietary NVIDIA DLSS/NGX runtime
 All NVIDIA license terms and intellectual property rights remain in force.
 This software contains source code provided by NVIDIA Corporation.
-No NVIDIA endorsement of openOMSI is implied. No openOMSI source
+No NVIDIA endorsement of openBus is implied. No openBus source
 code is removed from AGPLv3 and no linking exception is granted here.
 See docs/NVIDIA_DLL_LICENSE_SCOPE.md in the project source repository.
 Only DLSS Super Resolution / DLAA is included, not DLSS Frame Generation.

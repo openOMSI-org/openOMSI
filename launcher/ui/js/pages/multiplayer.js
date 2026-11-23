@@ -103,7 +103,7 @@ function Servers() {
   return html`<div class="stack servers-page">
     <${PageHead} title="Servers" text="Manage server addresses and lists. Select a server, then choose your bus on Drive." actions=${html`
       <button type="button" class="btn" aria-haspopup="dialog" onClick=${() => { setError(''); setAdding(true); }}><${Icon} name="globe" />${t('Use a server address')}</button>`} />
-    <p class="muted small" style="margin:0">${t("Sessions and servers are run by players, not by openOMSI. The host receives your driver name, network address, chat and voice, and may keep logs.")}</p>
+    <p class="muted small" style="margin:0">${t("Sessions and servers are run by players, not by openBus. The host receives your driver name, network address, chat and voice, and may keep logs.")}</p>
     <${Tabs} value=${tab} options=${[['saved', 'Saved servers'], ['public', 'Public servers']]} onChange=${setTab} />
     <div hidden=${tab !== 'public'}><${PublicServers} onJoin=${joinPublic} onAdd=${(e) => { if (list && !list.some((y) => y.address === e.address)) { save([...list, { name: e.covered ? '' : e.name, address: e.address }]); ask(e.address); } }} /></div>
     ${adding && html`<${Dialog} modal title="Use a server address" onClose=${close} class="connection-dialog" footer=${html`
@@ -129,12 +129,12 @@ function Servers() {
             const i = st.ok;
             const autoLabel = i ? `${t('Auto')} (${serverJoinProtocol(x.address, 'auto', i) === 'udp' ? 'UDP' : 'WS'})` : t('Auto');
             // the name the player gave it first (one added without a name keeps its address there)
-            const official = x.address === 'openomsi';
+            const official = x.address === 'openbus';
             const own = !official && x.name && x.name !== x.address ? x.name : '';
             return html`<${Card} body=${false}><div class="card-body row" style="align-items:flex-start;gap:14px">
               ${i?.icon ? html`<img src=${i.icon} width="48" height="48" style="border-radius:8px" />` : html`<div class="avatar" style="width:48px;height:48px;border-radius:8px"><${Icon} name="globe" /></div>`}
               <div class="grow stack" style="gap:4px;min-width:0">
-                <div class="row"><b style="font-size:15px">${own || i?.name || x.name || x.address}</b><${Tag}>${t(official ? 'Run by openOMSI' : 'Community server')}</${Tag}>${i?.password && html`<${Tag}>${t('Password')}</${Tag}>`}</div>
+                <div class="row"><b style="font-size:15px">${own || i?.name || x.name || x.address}</b><${Tag}>${t(official ? 'Run by openBus' : 'Community server')}</${Tag}>${i?.password && html`<${Tag}>${t('Password')}</${Tag}>`}</div>
                 ${st.loading && html`<div class="row muted small"><${Spinner} /> ${t('Asking the server...')}</div>`}
                 ${st.err && html`<div class="small" style="color:var(--danger)">${t("Can't reach the server: {err}", { err: st.err })}</div>`}
                 ${st.err && !official && html`<div class="muted small selectable">${x.address}</div>`}
@@ -143,7 +143,7 @@ function Servers() {
               </div>
               <div style="width:130px"><${Select} raw value=${x.protocol || 'auto'} options=${[['auto', autoLabel], ['udp', t('UDP')], ['websocket', t('WebSocket')]]} onChange=${(protocol) => save(list.map((y) => y === x ? { ...y, protocol } : y))} /></div>
               <${Button} small kind="ghost" icon="refresh" title="Refresh" onClick=${() => ask(x.address)} />
-              ${x.address !== 'openomsi' && html`<${Button} small kind="ghost" icon="trash" title="Remove from the list" onClick=${() => save(list.filter((y) => y !== x))} />`}
+              ${x.address !== 'openbus' && html`<${Button} small kind="ghost" icon="trash" title="Remove from the list" onClick=${() => save(list.filter((y) => y !== x))} />`}
               <${Button} kind="primary" icon="play" label="Select server" disabled=${!i} onClick=${() => join(x)} />
             </div></${Card}>`;
           })}

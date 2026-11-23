@@ -9,8 +9,8 @@ use std::sync::{
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub const DEFAULT_APP_ID: &str = "1568733650634145792";
-const WEBSITE: &str = "https://openomsi.org/";
-const COMMUNITY: &str = "https://discord.gg/openomsi";
+const WEBSITE: &str = "https://github.com/rafaelkaiz/openBus";
+const COMMUNITY: &str = "https://github.com/rafaelkaiz/openBus/discussions";
 const MAX_FRAME: usize = 64 * 1024;
 #[cfg(not(test))]
 const POLL: Duration = Duration::from_millis(100);
@@ -110,7 +110,7 @@ impl ServerLimit {
 
 fn party_id(session: u64) -> String {
     use sha2::Digest;
-    let digest = sha2::Sha256::digest(format!("openomsi-discord-party:{session}"));
+    let digest = sha2::Sha256::digest(format!("openbus-discord-party:{session}"));
     digest[..12].iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -153,7 +153,7 @@ impl Presence {
         if multiplayer && party.is_none() {
             state.push(tr("Multiplayer"));
         }
-        let mut large_text = String::from("openOMSI");
+        let mut large_text = String::from("openBus");
         if show.map {
             large_text.push_str(&format!(" | {map}"));
         }
@@ -181,7 +181,7 @@ impl Presence {
         (enabled && !launching && !game_running).then(|| Self {
             details: tr("In launcher"),
             state: tr("Preparing a drive"),
-            large_text: "openOMSI".into(),
+            large_text: "openBus".into(),
             buttons: buttons(show_buttons),
             ..Default::default()
         })
@@ -192,7 +192,7 @@ fn buttons(shown: bool) -> Vec<(String, &'static str)> {
     if !shown {
         return Vec::new();
     }
-    vec![(tr("Get openOMSI"), WEBSITE), (tr("Join the Discord"), COMMUNITY)]
+    vec![(tr("Get openBus"), WEBSITE), (tr("Join the Discord"), COMMUNITY)]
 }
 
 fn delay_text(delay: f32) -> String {
@@ -781,7 +781,7 @@ mod tests {
         let p = Presence::for_game(&online, show).unwrap();
         assert_eq!(p.details, "Map | Line 5");
         assert_eq!(p.state, "Bus | Tour 2");
-        assert_eq!(p.large_text, "openOMSI | Map | Full bus name");
+        assert_eq!(p.large_text, "openBus | Map | Full bus name");
         assert_eq!(p.small, Some(("online", "Multiplayer".into())));
         assert_eq!(p.party, Some((party_id(7), 3, 16)));
         assert_eq!(p.buttons.len(), 2);
@@ -804,7 +804,7 @@ mod tests {
         let hidden = Presence::for_game(&game, none).unwrap();
         assert_eq!(hidden.details, "");
         assert_eq!(hidden.state, "Driving");
-        assert_eq!(hidden.large_text, "openOMSI");
+        assert_eq!(hidden.large_text, "openBus");
         assert_eq!(hidden.small, Some(("bus", "Driving".into())));
         assert_eq!(hidden.party, None);
         assert!(hidden.buttons.is_empty());
@@ -1012,7 +1012,7 @@ mod tests {
         let wanted = Arc::new(Mutex::new(Some(Presence {
             details: "Map".into(),
             state: "On foot".into(),
-            large_text: "openOMSI".into(),
+            large_text: "openBus".into(),
             ..Default::default()
         })));
         let stop = Arc::new(AtomicBool::new(false));
@@ -1047,7 +1047,7 @@ mod tests {
         let p = Presence {
             details: "🚌".repeat(130),
             state: "line".into(),
-            large_text: "openOMSI".into(),
+            large_text: "openBus".into(),
             small: Some(("bus", "Driving".into())),
             party: Some(("abc".into(), 2, 8)),
             buttons: vec![("x".repeat(40), WEBSITE)],

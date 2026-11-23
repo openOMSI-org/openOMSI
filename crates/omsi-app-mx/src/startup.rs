@@ -114,7 +114,7 @@ pub(crate) fn shift_held_now(keys: &hashbrown::HashSet<KeyCode>) -> bool {
 
 /// Does this folder look like an OMSI 2 installation?
 pub(crate) fn is_omsi_root(p: &Path) -> bool {
-    // a complete installation of the original game (openOMSI's own content folder has the
+    // a complete installation of the original game (openBus's own content folder has the
     // same layout, but it is a mod overlay, not the game)
     omsi_cfg::missing_original_essentials(p).is_empty()
 }
@@ -166,10 +166,10 @@ pub(crate) fn fatal_dialog(title: &str, text: &str) {
     }
 }
 
-/// openOMSI's own content folder: the folder of the game binary, laid out like an OMSI 2
+/// openBus's own content folder: the folder of the game binary, laid out like an OMSI 2
 /// installation (Vehicles, maps, Sceneryobjects ...). Mods live here; it is searched before
 /// the original installation.
-/// The `Inputs/keyboard.cfg` the game follows: the newer of `~/.openomsi/Inputs`' and the
+/// The `Inputs/keyboard.cfg` the game follows: the newer of `~/.openbus/Inputs`' and the
 /// content folder's once the launcher has saved key bindings, else the original installation's
 /// (never written) - or, where that has none, its `keyboard_reset.cfg`, the standard keys OMSI
 /// falls back to as well.
@@ -213,19 +213,19 @@ fn own_bindings_in(file: &Path, modifier: i32) -> std::collections::HashSet<i32>
 
 pub(crate) use omsi_cfg::content_dir;
 
-/// Where a save goes when the content folder takes none (`~/.openomsi/content`): a game
+/// Where a save goes when the content folder takes none (`~/.openbus/content`): a game
 /// unpacked into Program Files, or a folder Windows' controlled folder access guards, said
 /// "Could not save: access is denied (os error 5)" (#1673). The launcher lists the saves
 /// there as well.
 pub(crate) fn save_fallback_dir() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".openomsi").join("content"))
+    Some(PathBuf::from(home).join(".openbus").join("content"))
 }
 
 /// Where the last working installation was remembered.
 pub(crate) fn root_memo() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".openomsi-root"))
+    Some(PathBuf::from(home).join(".openbus-root"))
 }
 
 /// Find the OMSI 2 installation without being told where it is.
@@ -241,7 +241,7 @@ pub(crate) fn find_root() -> Option<PathBuf> {
     }
     // the folder the launcher was told about (Setup)
     if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        if let Ok(t) = std::fs::read_to_string(PathBuf::from(home).join(".openomsi/launcher.json"))
+        if let Ok(t) = std::fs::read_to_string(PathBuf::from(home).join(".openbus/launcher.json"))
         {
             if let Some(r) = serde_json::from_str::<serde_json::Value>(&t)
                 .ok()
@@ -509,7 +509,7 @@ fn vulkan_passed_over(
 
 fn vulkan_lost_path() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".openomsi").join("vulkan-lost"))
+    Some(PathBuf::from(home).join(".openbus").join("vulkan-lost"))
 }
 
 /// A renderer in software on the processor (wgpu calls it a CPU adapter: WARP, llvmpipe,
@@ -869,7 +869,7 @@ pub(crate) fn present_clear(
 /// everywhere).
 pub(crate) fn fatal_message(text: &str) {
     log::error!("{text}");
-    eprintln!("openOMSI: {text}");
+    eprintln!("openBus: {text}");
     #[cfg(target_os = "linux")]
     linux_message(text);
     #[cfg(windows)]
@@ -881,7 +881,7 @@ pub(crate) fn fatal_message(text: &str) {
                 .chain(std::iter::once(0))
                 .collect::<Vec<u16>>()
         };
-        let (t, c) = (wide(text), wide("openOMSI"));
+        let (t, c) = (wide(text), wide("openBus"));
         unsafe {
             MessageBoxW(
                 None,
@@ -909,14 +909,14 @@ fn linux_message(text: &str) {
             "zenity",
             vec![
                 "--error",
-                "--title=openOMSI",
+                "--title=openBus",
                 "--width=520",
                 "--no-markup",
                 "--text",
                 text,
             ],
         ),
-        ("kdialog", vec!["--title", "openOMSI", "--error", text]),
+        ("kdialog", vec!["--title", "openBus", "--error", text]),
         ("xmessage", vec!["-center", text]),
     ];
     for (program, args) in tries {
@@ -1004,7 +1004,7 @@ pub(crate) fn fit_rect(
 
 /// The application icon for the window (Windows and Linux; macOS takes the bundle's).
 pub(crate) fn window_icon() -> Option<winit::window::Icon> {
-    static PNG: &[u8] = include_bytes!("../../../assets/icons/app/openomsi-256.png");
+    static PNG: &[u8] = include_bytes!("../../../assets/icons/app/openbus-256.png");
     let img = image::load_from_memory(PNG).ok()?.into_rgba8();
     let (w, h) = img.dimensions();
     winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()
@@ -1151,7 +1151,7 @@ pub(crate) fn restart_with_allocator_settings() {
 
 /// A Windows GUI program has no console; when it was started from one (cmd, PowerShell)
 /// the log and --help still belong there, unless its output was sent to a file or a pipe
-/// (`openomsi.exe ... > game.log 2>&1`): attached, the log went to the console instead and
+/// (`openbus.exe ... > game.log 2>&1`): attached, the log went to the console instead and
 /// the file stayed empty.
 #[cfg(windows)]
 pub(crate) fn attach_parent_console() {

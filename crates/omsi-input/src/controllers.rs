@@ -37,7 +37,7 @@ pub enum Func {
     Brake,
     Clutch,
     ThrottleBrake,
-    /// The driver's head turned left and right, up and down (#454; openOMSI's own: OMSI's
+    /// The driver's head turned left and right, up and down (#454; openBus's own: OMSI's
     /// file has the five above, numbered 0 to 4).
     LookX,
     LookY,
@@ -88,12 +88,12 @@ pub struct DeviceCfg {
     pub buttons: Vec<(String, String)>,
     /// `[FFScale]`: steering forces (centering and drag), then vibration strength.
     pub ff_scale: Option<(f32, f32)>,
-    /// `[openOMSI.FFTuning]`: how this wheel's steering force is weighted (None: the
+    /// `[openBus.FFTuning]`: how this wheel's steering force is weighted (None: the
     /// defaults, and nothing written).
     pub ff_tune: Option<FfTune>,
     /// Motor polarity for this device; None uses the existing global setting.
     pub ff_invert: Option<bool>,
-    /// `[openOMSI.Latching]`: the buttons (from 0) that are latching switches - a turn signal
+    /// `[openBus.Latching]`: the buttons (from 0) that are latching switches - a turn signal
     /// lever, a lit hazard button - and switch back when they come out.
     pub latching: Vec<usize>,
     pub more: Vec<(usize, String)>,
@@ -121,7 +121,7 @@ impl DeviceCfg {
     }
 }
 
-/// The `gamectrler.cfg` in use: the newer of `~/.openomsi/Inputs`' (written by the launcher)
+/// The `gamectrler.cfg` in use: the newer of `~/.openbus/Inputs`' (written by the launcher)
 /// and the content folder's, before OMSI 2's own.
 pub fn cfg_path(root: &Path) -> std::path::PathBuf {
     omsi_cfg::input_in_use("gamectrler.cfg")
@@ -139,7 +139,7 @@ pub fn read_cfg_checked(root: &Path) -> Result<Vec<DeviceCfg>, String> {
     let text = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut devices = parse_cfg(&omsi_cfg::codepage::decode(&text));
     // An inherited OMSI file can contain 0/0 FFScale on a wheel. Keep its axis and
-    // button bindings, but use openOMSI's 100/100 default until our own file is saved.
+    // button bindings, but use openBus's 100/100 default until our own file is saved.
     let original = root.join("Inputs").join("gamectrler.cfg");
     let from_original = path == original
         || std::fs::canonicalize(&path).ok().zip(std::fs::canonicalize(&original).ok()).is_some_and(|(a, b)| a == b);
@@ -190,14 +190,14 @@ pub fn parse_cfg(text: &str) -> Vec<DeviceCfg> {
                 }
                 i += 3;
             }
-            "[openOMSI.Latching]" => {
+            "[openBus.Latching]" => {
                 if let Some(d) = out.last_mut() {
                     // (button numbers as the launcher shows them, from 1)
                     d.latching = lines.get(i + 1).unwrap_or(&"").split_whitespace().filter_map(|v| v.parse::<usize>().ok()?.checked_sub(1)).collect();
                 }
                 i += 2;
             }
-            "[openOMSI.MoreActions]" => {
+            "[openBus.MoreActions]" => {
                 let n: usize = lines.get(i + 1).and_then(|v| v.parse().ok()).unwrap_or(0).min(4096);
                 if let Some(d) = out.last_mut() {
                     for k in 0..n {
@@ -210,7 +210,7 @@ pub fn parse_cfg(text: &str) -> Vec<DeviceCfg> {
                 }
                 i += 2 + n * 2;
             }
-            "[openOMSI.FFTuning]" => {
+            "[openBus.FFTuning]" => {
                 // centring, damping, parking, min_force, smoothing: as many as are there
                 // before the next blank line or section, the rest (and a NaN) at their defaults
                 let given: Vec<f32> = lines[i + 1..].iter().take(5).take_while(|v| !v.is_empty() && !v.starts_with('['))
@@ -220,7 +220,7 @@ pub fn parse_cfg(text: &str) -> Vec<DeviceCfg> {
                 }
                 i += 1 + given.len();
             }
-            "[openOMSI.FFInvert]" => {
+            "[openBus.FFInvert]" => {
                 if let Some(d) = out.last_mut() {
                     d.ff_invert = lines.get(i + 1).and_then(|v| match *v { "0" => Some(false), "1" => Some(true), _ => None });
                 }
@@ -253,17 +253,17 @@ pub fn cfg_text(devices: &[DeviceCfg]) -> String {
         // (only where it says something the defaults do not, as the file will read it back)
         let tune_lines = |tune: FfTune| tune.clamped().values().iter().map(|v| format!("{v:.3}\r\n")).collect::<String>();
         if let Some(lines) = d.ff_tune.map(tune_lines).filter(|l| *l != tune_lines(FfTune::default())) {
-            t.push_str(&format!("[openOMSI.FFTuning]\r\n{lines}\r\n"));
+            t.push_str(&format!("[openBus.FFTuning]\r\n{lines}\r\n"));
         }
         if let Some(invert) = d.ff_invert {
-            t.push_str(&format!("[openOMSI.FFInvert]\r\n{}\r\n\r\n", invert as u8));
+            t.push_str(&format!("[openBus.FFInvert]\r\n{}\r\n\r\n", invert as u8));
         }
         if !d.latching.is_empty() {
             let numbers: Vec<String> = d.latching.iter().map(|b| (b + 1).to_string()).collect();
-            t.push_str(&format!("[openOMSI.Latching]\r\n{}\r\n\r\n", numbers.join(" ")));
+            t.push_str(&format!("[openBus.Latching]\r\n{}\r\n\r\n", numbers.join(" ")));
         }
         if !d.more.is_empty() {
-            t.push_str(&format!("[openOMSI.MoreActions]\r\n{}\r\n", d.more.len()));
+            t.push_str(&format!("[openBus.MoreActions]\r\n{}\r\n", d.more.len()));
             for (b, action) in &d.more {
                 t.push_str(&format!("{}\r\n{action}\r\n", b + 1));
             }
@@ -1217,7 +1217,7 @@ pub fn window_handle(window: &winit::window::Window) -> Option<isize> {
 }
 
 
-/// Save to `~/.openomsi/Inputs`. The original OMSI installation is read-only.
+/// Save to `~/.openbus/Inputs`. The original OMSI installation is read-only.
 pub fn save_cfg(devices: &[DeviceCfg]) -> Result<std::path::PathBuf, String> {
     let path = omsi_cfg::own_input("gamectrler.cfg").ok_or("No home folder was found to keep the controllers in")?;
     save_cfg_to(&path, devices)?;
@@ -2209,18 +2209,18 @@ mod tests {
         assert_eq!(super::latch_release("Blinker_Right_Set"), "blinker_off");
         assert_eq!(super::latch_release("parking_brake_set"), "parking_brake_release");
         assert_eq!(super::latch_release("blinker_warn_toggle"), "blinker_warn_toggle");
-        let text = "[ctrl]\r\nAER0 Truck Simulator Gear\r\n0\r\n\r\n[buttons]\r\n2\r\nblinker_warn_toggle\r\n0\r\n\r\n0\r\n\r\n[openOMSI.Latching]\r\n1\r\n";
+        let text = "[ctrl]\r\nAER0 Truck Simulator Gear\r\n0\r\n\r\n[buttons]\r\n2\r\nblinker_warn_toggle\r\n0\r\n\r\n0\r\n\r\n[openBus.Latching]\r\n1\r\n";
         let devices = super::parse_cfg(text);
         assert_eq!(devices[0].latching, vec![0]);
         let again = super::parse_cfg(&super::cfg_text(&devices));
         assert_eq!(again[0].latching, vec![0]);
         assert_eq!(again[0].buttons, devices[0].buttons);
-        assert!(super::cfg_text(&devices).contains("[openOMSI.Latching]\r\n1\r\n"));
+        assert!(super::cfg_text(&devices).contains("[openBus.Latching]\r\n1\r\n"));
     }
 
     #[test]
     fn look_axes_are_kept_in_the_file_and_rest_at_the_centre() {
-        // (openOMSI's own numbers after OMSI's five, written back as read)
+        // (openBus's own numbers after OMSI's five, written back as read)
         for f in [super::Func::LookX, super::Func::LookY] {
             assert_eq!(super::Func::from_code(super::Func::code(Some(f))), Some(f));
         }

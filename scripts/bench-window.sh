@@ -3,7 +3,7 @@
 # OMSI_HIDDEN_WINDOW (never shown, frames drawn into a texture of its size) and OMSI_PROFILE,
 # its exit summary as JSON for scripts/compare-performance.py.
 #
-#   scripts/bench-window.sh <openomsi binary> <out prefix> [plain|enhanced] [seconds] [extra args ...]
+#   scripts/bench-window.sh <openbus binary> <out prefix> [plain|enhanced] [seconds] [extra args ...]
 #
 # The scene: Berlin-Spandau at 08:00, the MAN EN92 started (--autostart), traffic 30, the
 # passengers and the timetable, the driver's view at 1280x720; at 44 s the parking brake
@@ -37,9 +37,9 @@ extra=()
 [ "$mode" = enhanced ] && extra+=(--enhanced)
 home="$(mktemp -d "${TMPDIR:-/tmp}/bench-home.XXXXXX")"
 trap 'rm -rf "$home"' EXIT
-mkdir -p "$home/.openomsi"
+mkdir -p "$home/.openbus"
 # (the swaying trees move with the wall clock)
-printf 'windy_trees=0\nvolume=0\nvol_ai=0\nvol_ambient=0\nambient=0\n' >"$home/.openomsi/settings.cfg"
+printf 'windy_trees=0\nvolume=0\nvol_ai=0\nvol_ambient=0\nambient=0\n' >"$home/.openbus/settings.cfg"
 drive="t=44 key .; t=45 keydown W"
 [ "${BENCH_STILL:-0}" = 1 ] && drive="t=99999 key ."
 env HOME="$home" OMSI_SEED=1 OMSI_HIDDEN_WINDOW=1 OMSI_NO_UPDATE=1 OMSI_MAX_FPS="${BENCH_FPS:-1000}" \

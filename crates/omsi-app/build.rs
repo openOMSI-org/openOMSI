@@ -1,15 +1,15 @@
-//! On Windows, puts the application icon and the version (`OPENOMSI_VERSION`, as the CI
+//! On Windows, puts the application icon and the version (`OPENBUS_VERSION`, as the CI
 //! passes it) into the executable; Steam's library beside the binary. The version and the
 //! commit the game shows are stamped by omsi-platform's `build.rs`.
 
 fn main() {
-    println!("cargo:rerun-if-env-changed=OPENOMSI_VERSION");
+    println!("cargo:rerun-if-env-changed=OPENBUS_VERSION");
     windows_icon();
     steam();
     // (the executable exports the two switchable-graphics hints of main.rs, see there)
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
         for sym in ["NvOptimusEnablement", "AmdPowerXpressRequestHighPerformance"] {
-            println!("cargo:rustc-link-arg-bin=openomsi=/EXPORT:{sym},DATA");
+            println!("cargo:rustc-link-arg-bin=openbus=/EXPORT:{sym},DATA");
         }
     }
 }
@@ -31,7 +31,7 @@ fn steam() {
     };
     println!("cargo:rustc-cfg=steam");
     if os == "linux" {
-        println!("cargo:rustc-link-arg-bin=openomsi=-Wl,-rpath,$ORIGIN");
+        println!("cargo:rustc-link-arg-bin=openbus=-Wl,-rpath,$ORIGIN");
     }
     let src = std::path::Path::new("../../assets/steam_redist").join(lib);
     println!("cargo:rerun-if-changed={}", src.display());
@@ -45,12 +45,12 @@ fn windows_icon() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
-    println!("cargo:rerun-if-changed=../../assets/icons/app/openomsi.ico");
+    println!("cargo:rerun-if-changed=../../assets/icons/app/openbus.ico");
     let mut res = winresource::WindowsResource::new();
-    res.set_icon("../../assets/icons/app/openomsi.ico")
-        .set("ProductName", "openOMSI")
-        .set("FileDescription", "openOMSI")
-        .set("ProductVersion", &std::env::var("OPENOMSI_VERSION").unwrap_or_default());
+    res.set_icon("../../assets/icons/app/openbus.ico")
+        .set("ProductName", "openBus")
+        .set("FileDescription", "openBus")
+        .set("ProductVersion", &std::env::var("OPENBUS_VERSION").unwrap_or_default());
     if let Err(e) = res.compile() {
         println!("cargo:warning=no icon in the executable: {e}");
     }

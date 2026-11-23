@@ -157,9 +157,9 @@ mod tests {
 
     #[test]
     fn the_example_has_three_lines() {
-        // docs/examples/openomsi-realmap: two bus lines (one feeder, one BRT) and a tram line
+        // docs/examples/openbus-realmap: two bus lines (one feeder, one BRT) and a tram line
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/examples");
-        let p = Package::open(&dir).expect("docs/examples/openomsi-realmap is a package");
+        let p = Package::open(&dir).expect("docs/examples/openbus-realmap is a package");
         let l = p.lines();
         assert_eq!(l.iter().map(|x| (x.number.as_str(), x.group, x.modal)).collect::<Vec<_>>(), [("E1", GROUP_FEEDER, MODAL_BUS), ("E2", GROUP_BRT, MODAL_BUS), ("T1", GROUP_FEEDER, MODAL_TRAM)]);
         assert_eq!(l[0].routes.len(), 2, "out and back");

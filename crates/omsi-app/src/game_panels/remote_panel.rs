@@ -54,7 +54,7 @@ impl RemotePanel {
                     RowAlign::Start,
                 ));
                 c.push(note(&tr("Use it only on a network you trust, such as your home Wi-Fi: what it sends is not encrypted."), pal));
-                c.push(note(&tr("A device that does not connect: allow openOMSI in this computer's firewall, and check that both are on the same network."), pal));
+                c.push(note(&tr("A device that does not connect: allow openBus in this computer's firewall, and check that both are on the same network."), pal));
                 c.push(grow_row(vec![button("forget", &tr("Forget paired devices"), Some("delete"))]));
                 c.push(grow_row(vec![button("off", &tr("Switch off"), Some("power_settings_new")), button("close", &tr("Close"), Some("close"))]));
             }

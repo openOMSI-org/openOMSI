@@ -27,7 +27,7 @@ final class PreviewModel {
                 if buffer.count < w * h * 4 { buffer = [UInt8](repeating: 0, count: w * h * 4) }
                 var ow: UInt32 = 0, oh: UInt32 = 0
                 let got = buffer.withUnsafeMutableBufferPointer { b in
-                    openomsi_preview_frame(UInt32(w), UInt32(h), b.baseAddress, b.count, &ow, &oh)
+                    openbus_preview_frame(UInt32(w), UInt32(h), b.baseAddress, b.count, &ow, &oh)
                 }
                 if got == 1, let img = Self.image(buffer, Int(ow), Int(oh)) {
                     await MainActor.run { me.image = img }
@@ -101,7 +101,7 @@ struct BusPreview: View {
                     .onChanged { v in
                         let d = CGSize(width: v.translation.width - lastDrag.width, height: v.translation.height - lastDrag.height)
                         lastDrag = v.translation
-                        openomsi_preview_orbit(Float(d.width), Float(d.height))
+                        openbus_preview_orbit(Float(d.width), Float(d.height))
                     }
                     .onEnded { _ in lastDrag = .zero }
             )
@@ -110,7 +110,7 @@ struct BusPreview: View {
                     .onChanged { v in
                         let k = lastZoom / v.magnification
                         lastZoom = v.magnification
-                        openomsi_preview_zoom(Float(k))
+                        openbus_preview_zoom(Float(k))
                     }
                     .onEnded { _ in lastZoom = 1 }
             )
@@ -132,7 +132,7 @@ struct BusPreview: View {
             HStack(spacing: 4) {
                 ForEach(Array(Self.views.enumerated()), id: \.offset) { i, v in
                     let on = v.id == (p.view ?? "outside")
-                    Button { openomsi_preview_view(UInt32(i)); Haptics.tap() } label: {
+                    Button { openbus_preview_view(UInt32(i)); Haptics.tap() } label: {
                         Image(systemName: v.icon).font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(on ? Theme.accentText : Theme.text)
                             .frame(width: 36, height: 30)

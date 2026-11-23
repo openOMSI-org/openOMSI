@@ -97,7 +97,7 @@ pub fn builtin_vars(root: &Path) -> Vec<String> {
         v.push(format!("PAX_Exit{a}_Open"));
         v.push(format!("PAX_Exit{a}_Req"));
     }
-    // somebody standing in the doorway (openOMSI's, #720: what a door's light barrier
+    // somebody standing in the doorway (openBus's, #720: what a door's light barrier
     // sees), after those
     for a in 0..PAX_DOORS {
         v.push(format!("PAX_Entry{a}_Busy"));

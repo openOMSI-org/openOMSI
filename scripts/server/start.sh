@@ -1,5 +1,5 @@
 #!/bin/sh
-# Start the openOMSI dedicated server: start.sh /path/to/OMSI2 [server.cfg]
+# Start the openBus dedicated server: start.sh /path/to/OMSI2 [server.cfg]
 # (the OMSI 2 folder: a complete original installation, as the players have it; mods
 # go into this folder's Vehicles, maps, Sceneryobjects … as in the game's content folder)
 set -eu
@@ -41,4 +41,4 @@ max_bytes=$(( $(log_number log_max_mb 20) * 1048576 ))
 rotate_log
 # (Ctrl+C is the server's: it stops cleanly and its last lines still reach the log)
 trap ':' INT
-"$here/openomsi" --root "$root" --server "$cfg" 2>&1 | log_lines
+"$here/openbus" --root "$root" --server "$cfg" 2>&1 | log_lines

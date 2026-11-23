@@ -1,4 +1,4 @@
-# Real OMSI 2 trolleybus content: how it is made, and how openOMSI runs it
+# Real OMSI 2 trolleybus content: how it is made, and how openBus runs it
 
 What this records was read off three real add-ons, with their files only read, never run:
 
@@ -10,7 +10,7 @@ What this records was read off three real add-ons, with their files only read, n
 
 None of them carries a plugin, a DLL or a script that touches the overhead wire. (There is no
 `.dll` in any of the three archives.) That is the central finding: **in these add-ons the
-trolleybus is a bus with a decoration**, and everything that makes it electric in openOMSI
+trolleybus is a bus with a decoration**, and everything that makes it electric in openBus
 has to come from the host, read off what the files do say.
 
 ## The buses
@@ -71,7 +71,7 @@ Bronitsyn draws its wire with **splines**, not with an object per span:
 
 ## What a host must provide to make this content work
 
-This is the interface the real content leaves to its host (openOMSI provides all of it):
+This is the interface the real content leaves to its host (openBus provides all of it):
 
 1. **Read the wire off the map**: any spline whose profile is two thin, high strips is a pair
    of wires (centre = the middle of the strips, spacing = their distance, height = their height);
@@ -96,7 +96,7 @@ This is the interface the real content leaves to its host (openOMSI provides all
 4. Everything else a real trolleybus does - the pole's spring, its coming off, arcs, dead
    sections, switches by current or indicator - is the host's own, layered over this.
 
-## What openOMSI does
+## What openBus does
 
 * `omsi_scene::trolley_derive` reads a map's wire splines as above (for any map, only when a
   trolleybus is the player's vehicle; `trolley.txt` beside the map, in an overlay root or named

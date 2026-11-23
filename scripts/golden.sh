@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Golden pictures: render a fixed set of offscreen scenes with one openomsi binary, and compare
+# Golden pictures: render a fixed set of offscreen scenes with one openbus binary, and compare
 # two such sets pixel by pixel. A refactor that must not change behaviour renders the same
 # pictures as the binary built from the commit before it. See docs/REFACTOR_CHECKS.md.
 #
-#   scripts/golden.sh render  <openomsi binary> <out dir> [scene ...]
+#   scripts/golden.sh render  <openbus binary> <out dir> [scene ...]
 #   scripts/golden.sh compare <dir a> <dir b>
 #   scripts/golden.sh list
 #
@@ -77,8 +77,8 @@ render() {
     args="${args%%|*}"
     if [ $# -gt 0 ] && [[ "$want" != *" $name "* ]]; then continue; fi
     home="$(mktemp -d "${TMPDIR:-/tmp}/golden-home.XXXXXX")"
-    mkdir -p "$home/.openomsi"
-    printf '%s\n' "${SETTINGS[@]}" >"$home/.openomsi/settings.cfg"
+    mkdir -p "$home/.openbus"
+    printf '%s\n' "${SETTINGS[@]}" >"$home/.openbus/settings.cfg"
     printf '%-24s' "$name"
     if eval "env HOME=\"\$home\" OMSI_SEED=\"\$SEED\" $env \"\$bin\" --root \"\$root\" --offscreen \"\$out/$name.png\" --size \"\$SIZE\" $args" >"$out/$name.log" 2>&1; then
       echo "ok"

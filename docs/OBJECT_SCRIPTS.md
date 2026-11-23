@@ -1,7 +1,7 @@
 # Scripts of map objects
 
 A scenery object (`.sco`) can name Lua or compiled (`.oop`) scripts that animate it and run its
-logic. This is an openOMSI extension; OMSI 2 skips the keywords, so an object that uses them
+logic. This is an openBus extension; OMSI 2 skips the keywords, so an object that uses them
 still loads there (and simply does not move). The existing `[script]` (`.osc`) and `[newanim]`
 animations keep working next to them.
 

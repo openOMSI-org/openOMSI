@@ -1,17 +1,17 @@
 #!/bin/sh
 set -eu
 cd "$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-app="${1:-dist/macos/openOMSI.app}"
-out="${2:-out/openOMSI.dmg}"
+app="${1:-dist/macos/openBus.app}"
+out="${2:-out/openBus.dmg}"
 tmp=$(mktemp -d)
 trap 'hdiutil detach -force "${device:-$tmp/mnt}" >/dev/null 2>&1 || true; rm -rf "$tmp"' EXIT
 mkdir "$tmp/stage" "$tmp/mnt"
-ditto "$app" "$tmp/stage/openOMSI.app"
+ditto "$app" "$tmp/stage/openBus.app"
 ln -s /Applications "$tmp/stage/Applications"
 mkdir "$tmp/stage/.background"
 tiffutil -cathidpicheck assets/icons/app/dmg-background.png assets/icons/app/dmg-background@2x.png -out "$tmp/stage/.background/background.tiff" >/dev/null
 for try in 1 2 3; do
-  hdiutil create -volname openOMSI -srcfolder "$tmp/stage" -fs HFS+ -format UDRW -ov "$tmp/rw.dmg" && break
+  hdiutil create -volname openBus -srcfolder "$tmp/stage" -fs HFS+ -format UDRW -ov "$tmp/rw.dmg" && break
   [ "$try" = 3 ] && exit 1
   sleep 5
 done
@@ -35,7 +35,7 @@ on run argv
     set icon size of o to 128
     set text size of o to 13
     set background picture of o to file ".background:background.tiff" of d
-    set position of item "openOMSI.app" of d to {140, 180}
+    set position of item "openBus.app" of d to {140, 180}
     set position of item "Applications" of d to {400, 180}
     update d without registering applications
     delay 2
@@ -44,7 +44,7 @@ on run argv
   end timeout
 end run
 APPLESCRIPT
-cp assets/icons/app/openomsi.icns "$tmp/mnt/.VolumeIcon.icns"
+cp assets/icons/app/openbus.icns "$tmp/mnt/.VolumeIcon.icns"
 xattr -wx com.apple.FinderInfo "0000000000000000040000000000000000000000000000000000000000000000" "$tmp/mnt"
 sync
 # Finder may keep the image busy briefly, even after its mount point disappears.

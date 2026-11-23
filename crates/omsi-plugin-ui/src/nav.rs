@@ -749,7 +749,7 @@ mod tests {
             revision: 0,
             scale: 1.0,
             backdrop: 1.0,
-            pal: Palette::OPENOMSI,
+            pal: Palette::OPENBUS,
             laid,
             tex: None,
             drawn: None,

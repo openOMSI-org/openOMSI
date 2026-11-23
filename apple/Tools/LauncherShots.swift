@@ -2,7 +2,7 @@
 // checking a change and for the CI): `launcher-shots <out dir> <W>x<H> <seconds> [page[:step]] ...`
 // with the pages of `Page` (drive, settings, mods ...; `drive:bus` / `drive:map` with a picker
 // open). Built by scripts/build-apple.sh shots; reads the launcher's data of $HOME as the app
-// does, Inter from $OPENOMSI_FONTS.
+// does, Inter from $OPENBUS_FONTS.
 import AppKit
 import SwiftUI
 

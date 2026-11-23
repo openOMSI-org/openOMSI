@@ -419,7 +419,7 @@ impl LuaBinding {
     fn bind(&self, p: &LuaPlugin) -> mlua::Result<()> {
         let lua = &self.lua;
         let omsi = lua.create_table()?;
-        omsi.set("version", option_env!("OPENOMSI_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))?;
+        omsi.set("version", option_env!("OPENBUS_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))?;
         omsi.set("name", p.name.clone())?;
         for f in api::registry() {
             let mut t = omsi.clone();

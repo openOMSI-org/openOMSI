@@ -399,7 +399,7 @@ fn seven_zip_names_stay_inside_the_staging_folder() {
     let dest = tmp("7zslip").join("staging");
     assert_eq!(staged_target(&dest, "Vehicles/Foo/foo.bus"), Some(dest.join("Vehicles/Foo/foo.bus")));
     assert_eq!(staged_target(&dest, "Vehicles\\Foo\\foo.bus"), Some(dest.join("Vehicles/Foo/foo.bus")));
-    for bad in ["a/C:Plugins/evil.dll", "a/C:openomsi.exe", "C:\\Plugins\\evil.dll", "\\\\host\\share\\x", "../x", "/etc/x", "Plugins/NUL"] {
+    for bad in ["a/C:Plugins/evil.dll", "a/C:openbus.exe", "C:\\Plugins\\evil.dll", "\\\\host\\share\\x", "../x", "/etc/x", "Plugins/NUL"] {
         assert_eq!(staged_target(&dest, bad), None, "{bad:?}");
     }
 }

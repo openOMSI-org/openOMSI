@@ -91,7 +91,7 @@ fn tuning<'a>(t: &'a mut FfTune, verb: &str) -> Option<&'a mut f32> {
 }
 
 /// The tuning as the device keeps it: none when every value is its default, so a wheel
-/// nobody tuned is saved without `[openOMSI.FFTuning]` and keeps today's feel.
+/// nobody tuned is saved without `[openBus.FFTuning]` and keeps today's feel.
 fn tuned(t: FfTune) -> Option<FfTune> {
     (t != FfTune::default()).then_some(t)
 }

@@ -5,7 +5,7 @@ fn a_fetched_bus_reads_only_its_own_files() {
     let Some(root) = std::env::var_os("OMSI_ROOT").map(PathBuf::from) else { return };
     let _turn = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     omsi_cfg::add_content_root(root.clone());
-    let store = std::env::temp_dir().join(format!("openomsi-mounted-store-{}", std::process::id()));
+    let store = std::env::temp_dir().join(format!("openbus-mounted-store-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&store);
     open_for_test(&store);
     let bus = "Vehicles/MAN_SD200/MAN_SD77.bus";

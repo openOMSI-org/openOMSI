@@ -5,7 +5,7 @@
 //! `docs/plugin-api.json` is generated from these entries, so a function cannot be
 //! documented differently from what it does - and the Rust function that does it. Lua binds
 //! every entry as `omsi.<name>` (a dot is a nested table: `omsi.ui.set`); a WASM plugin calls
-//! `openomsi.call("<name>", args)`.
+//! `openbus.call("<name>", args)`.
 //!
 //! The events (`omsi.on`), timers, watches and messages between plugins live in the
 //! language-neutral [`runtime`], which calls the plugin's functions back through its
@@ -28,7 +28,7 @@ use crate::PluginIo;
 
 /// The version of the function interface a plugin binds to (`api_abi` of an `.oop`).
 pub const ABI: i64 = 1;
-/// The openOMSI version the functions and events marked `since` it came with.
+/// The openBus version the functions and events marked `since` it came with.
 pub const VERSION: &str = "0.2.22";
 
 /// One parameter of a function, for the documentation and the argument checks.

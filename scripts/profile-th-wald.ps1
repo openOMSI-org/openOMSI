@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)][string]$Root,
-    [string]$Exe = 'target/release/openomsi.exe',
+    [string]$Exe = 'target/release/openbus.exe',
     [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$Name = 'th-wald',
     [string]$Bus = 'Vehicles/MB_C2_EN_BVG/MB_C2_E6_Gn_BVG_main.bus',
     [ValidateSet('outside', 'driver')][string]$View = 'outside',

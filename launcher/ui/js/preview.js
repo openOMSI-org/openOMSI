@@ -1,4 +1,4 @@
-// The bus preview: drawn by the game's own renderer (the launcher's helper, `openomsi
+// The bus preview: drawn by the game's own renderer (the launcher's helper, `openbus
 // --launcher-service`), with the game's own showroom - the bus with its
 // textures and every part, under the chosen time and weather.
 //

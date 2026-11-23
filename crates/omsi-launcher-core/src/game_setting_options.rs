@@ -244,7 +244,7 @@ pub fn game_setting_options(key: &str) -> Vec<(&'static str, &'static str)> {
             ("25", "At most 25"),
         ],
         "language" => crate::LANGUAGES.iter().map(|l| (l.0, l.1)).collect(),
-        // (openOMSI's own look as "openomsi": the setting reads it as "")
+        // (openBus's own look as "openbus": the setting reads it as "")
         "ui_theme" => vec![("dark", "Dark"), ("light", "Light theme")],
         "vr_scale" => vec![
             ("0.5", "50%"),

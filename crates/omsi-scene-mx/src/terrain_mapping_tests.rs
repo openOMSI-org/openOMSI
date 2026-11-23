@@ -10,7 +10,7 @@ impl Fixture {
         // by side otherwise share a folder (see crossing_deformation_tests.rs).
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let path = std::env::temp_dir().join(format!(
-            "openomsi-terrain-mapping-{}-{}-{}",
+            "openbus-terrain-mapping-{}-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             std::time::SystemTime::now()

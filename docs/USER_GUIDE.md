@@ -1,10 +1,10 @@
 # User guide
 
-How to run openOMSI, drive, use the launcher, install mods and play over LAN. For building
+How to run openBus, drive, use the launcher, install mods and play over LAN. For building
 from source see [BUILDING.md](BUILDING.md).
 For OpenXR headset setup and controls on Windows, see [VR.md](VR.md).
 
-> openOMSI runs on the content of an **original OMSI 2 installation**. Without one the game does not start.
+> openBus runs on the content of an **original OMSI 2 installation**. Without one the game does not start.
 
 ## Checking an installation
 
@@ -12,17 +12,17 @@ For OpenXR headset setup and controls on Windows, see [VR.md](VR.md).
 cargo run --release -p omsi-check -- "/path/to/OMSI 2"
 ```
 
-This loads every content file in the install with openOMSI's loaders and reports what failed.
+This loads every content file in the install with openBus's loaders and reports what failed.
 
 ## Running
 
 ```bash
-openomsi --root "/path/to/OMSI 2"
+openbus --root "/path/to/OMSI 2"
 ```
 
 `--root` is only needed once: the path is remembered, so afterwards the program can be
 started with no arguments at all. Without it the installation is looked for in `$OMSI_ROOT`,
-next to the program (an `OMSI 2 Original` or `OMSI 2` folder beside openOMSI) and in the
+next to the program (an `OMSI 2 Original` or `OMSI 2` folder beside openBus) and in the
 usual Steam locations.
 
 Started without arguments the program opens the launcher (see below). `--menu` shows the
@@ -67,7 +67,7 @@ about, smile when they pay, now and then raise their brows, frown in thought or 
 at night, and their lips move with what they say. This is drawn on your computer only: the
 passengers themselves (where they go, sit and pay, their tickets) are not changed, and in
 multiplayer the others see their own people. The avatars are downloaded once, the first time
-the setting is on (about 310 MB, into `~/.openomsi/avatars`); until they are there the people
+the setting is on (about 310 MB, into `~/.openbus/avatars`); until they are there the people
 stay the content's own. `OMSI_CHARACTER_MODELS=improved` or `=original` overrides the setting
 for one session, `OMSI_AVATARS_DIR` names another folder of avatars.
 
@@ -87,25 +87,25 @@ whole start-up by itself (main switch, ignition, starter, gearbox to neutral); `
 is the same thing for an offscreen run.
 
 **Updates.** When the launcher starts it asks
-[github.com/openOMSI-org/openOMSI](https://github.com/openOMSI-org/openOMSI) for the latest release
+[github.com/rafaelkaiz/openBus](https://github.com/rafaelkaiz/openBus) for the latest release
 and, when there is a newer one, offers it in a dialog: **Update now** downloads it (checked
 against the SHA-256 GitHub lists), puts the new program in place of the old one and starts the
 launcher again; mods, content and settings stay. On Android the system's installer asks
-whether to update the app; Update replaces openOMSI and starts it again, Cancel leaves it as
+whether to update the app; Update replaces openBus and starts it again, Cancel leaves it as
 it was. No update is installed while a game runs. Settings → General → *Updates*: *Look for
 updates when the launcher starts* (on by default), *Update channel* (Stable, the tested
 releases, by default; Beta, every beta as soon as it is published, for testers), *Install
 updates without asking* (off by default), and the version line with **Check now**. A folder
-openOMSI cannot write to (Program Files, an app opened straight from Downloads on macOS) is
+openBus cannot write to (Program Files, an app opened straight from Downloads on macOS) is
 reported with what to do. A download that breaks goes on where it stopped (up to four times),
 a request that fails is tried again after 3 and 10 s, and when the GitHub API does not answer
 (or says its hourly limit is reached) the latest version is taken from github.com itself.
 A new release can always be downloaded by hand from the
-[latest release](https://github.com/openOMSI-org/openOMSI/releases/latest) page as well.
+[latest release](https://github.com/rafaelkaiz/openBus/releases/latest) page as well.
 
 While it is open the launcher looks again every 30 minutes, and shortly after a game it
 started ends. During a session the game looks a minute in and every hour after: a newer
-version is downloaded in the background and a card over the navigator says so ("openOMSI
+version is downloaded in the background and a card over the navigator says so ("openBus
 X is out"); when the session ends the launcher installs the file already downloaded (by
 itself with "Install updates without asking", else it offers it), and never while a game
 runs. "Tell me about a new version during a session" switches the cards off (the download
@@ -113,24 +113,24 @@ goes on). `OMSI_NO_UPDATE=1` switches the checks off; `OMSI_UPDATE_URL` points t
 release description (GitHub's format; `file://` works, for testing - the game then looks after
 3 s).
 
-**When a version does not start.** openOMSI heals a start that breaks on its own, before
+**When a version does not start.** openBus heals a start that breaks on its own, before
 anything that could break has run: when it is started (a double click, the launcher) it first
 starts a small watcher without a window. If the launcher crashes, ends on an error or has not
 drawn its first frames after two minutes (it is then ended), the watcher steps in - when that
 version never started on this computer, or failed twice in a row:
 
 1. a newer release, when there is one, is downloaded and installed (its program must start
-   before it replaces anything) and openOMSI starts again;
+   before it replaces anything) and openBus starts again;
 2. else the version the last update replaced - kept beside it until the new version has
-   started well once - is put back, and openOMSI starts again;
-3. else openOMSI starts once more in **safe mode** (the basic render pipelines, no plugins);
+   started well once - is put back, and openBus starts again;
+3. else openBus starts once more in **safe mode** (the basic render pipelines, no plugins);
 4. else a message says what to do (download the latest release, where the log is).
 
 Each step is told in a message box. A version that failed is never installed again on this
 computer, only a newer one. The project can also list a released version as broken
 (`release/health.json`); such a version goes back to the one before, or on to a fixed one, at
 the next start even when it starts well. A crash in the middle of a drive is not a broken
-start: nothing is changed then. The guard keeps its own record in `~/.openomsi/guard/`
+start: nothing is changed then. The guard keeps its own record in `~/.openbus/guard/`
 (`guard.log`, `starts.json`, `bad-versions`). `OMSI_NO_GUARD=1` switches it off. On Android
 the next start after one that never reached the launcher looks for an update at once (the
 system's installer asks); going back is the system's business there.
@@ -282,8 +282,8 @@ The game's standalone command-line equivalent is `--no-plugins` (direct CLI runs
 still require this flag); `OMSI_NO_PLUGINS=1` forces plugins off even when the
 launcher preference allows them.
 
-The launcher is a program of its own beside the game, `openomsi-launcher-app` (a Tauri window,
-`launcher/`, see its README): `openomsi` started without arguments opens it, and where it is
+The launcher is a program of its own beside the game, `openbus-launcher-app` (a Tauri window,
+`launcher/`, see its README): `openbus` started without arguments opens it, and where it is
 missing - or its window cannot open, for want of WebView2 on an old Windows (the game offers
 Microsoft's installer) or of WebKitGTK 4.1 on Linux - the game says so and where it belongs
 (on Linux in a dialog of the desktop as well as in the terminal).
@@ -297,7 +297,7 @@ include it and its system is read-only: in Desktop Mode open Konsole and run
 update can remove the package again, then run the same commands once more).
 On Android the same page shows in a web view over the game's window; iPhone, iPad and the Mac
 app have a launcher of their own (SwiftUI). The chosen bus is shown as a picture **drawn by
-the game's renderer** (the game program runs beside the launcher as its helper, `openomsi
+the game's renderer** (the game program runs beside the launcher as its helper, `openbus
 --launcher-service`) - its model, paint, materials, reflections and shadows exactly as in the
 game, under the light of the chosen time and weather; drag on it to turn the bus, scroll to
 zoom.
@@ -342,8 +342,8 @@ The menu on the left groups the pages: **Play** (Drive, Multiplayer, Running gam
   session; the keys are in Controls. Switching it on makes the system ask for the
   microphone. See [VOICE.md](VOICE.md).
 * **Controls** - `Inputs/keyboard.cfg`: click a key, press the new one; clashes are red. The
-  keys and the game controllers are kept in `~/.openomsi/Inputs` (on Windows
-  `C:\Users\<you>\.openomsi\Inputs`), so an update or a new program folder keeps them; keys
+  keys and the game controllers are kept in `~/.openbus/Inputs` (on Windows
+  `C:\Users\<you>\.openbus\Inputs`), so an update or a new program folder keeps them; keys
   saved beside the program are brought over there. The keys are the game's with *Driving
   keys: Custom controls* (Settings → Driving); with a ready-made layout (W A S D, arrows)
   those keys drive and win over the list - the page says so, and changing a key switches to
@@ -386,8 +386,8 @@ The menu on the left groups the pages: **Play** (Drive, Multiplayer, Running gam
   little delay). At their defaults (100 %, 100 %, 100 %, 0 %, 0 ms) the wheel feels as it
   always did, and **Reset tuning** puts them back. The same rows are in the game: Controls →
   *Game controllers* → the device → *Force feedback*, where a change applies at once.
-  Changes are saved by themselves, for that device, in `~/.openomsi/Inputs/gamectrler.cfg` -
-  the tuning in a section of its own, `[openOMSI.FFTuning]`, which OMSI 2 ignores, so the file
+  Changes are saved by themselves, for that device, in `~/.openbus/Inputs/gamectrler.cfg` -
+  the tuning in a section of its own, `[openBus.FFTuning]`, which OMSI 2 ignores, so the file
   still works there (a wheel left at the defaults is saved without it). A running game takes
   the launcher's changes the next time you drive, or at once with **Reload saved
   controllers** in its controller menu. *Force feedback and vibration* in Settings → Driving
@@ -395,21 +395,21 @@ The menu on the left groups the pages: **Play** (Drive, Multiplayer, Running gam
 * **Setup** - where the original installation and the game program are, and where the
   content folder (mods) and the settings and logs are. The OMSI 2 folder may be given as a
   path with quotes, as `Omsi.exe` itself or as a folder inside it; unpacked into the OMSI 2
-  folder itself, openOMSI keeps its own content in an `openOMSI` folder there and never
+  folder itself, openBus keeps its own content in an `openBus` folder there and never
   writes to the game's.
 * **Tutorials** - OMSI 2's four lessons, each started in its own situation (`--tutorial 1..4`).
 * **Profile** - the driver whose personnel file the game writes: hours, experience and level,
   from OMSI's own `.odr` personnel files plus the session summaries the game writes to
-  `~/.openomsi/sessions`, and the recent runs.
+  `~/.openbus/sessions`, and the recent runs.
 
 ```bash
 scripts/build-macos.sh   # or build-windows.cmd / build-linux.sh: the game opens the launcher
 ```
 
-Without a person at it: `OPENOMSI_LAUNCHER_SELFTEST=1 openomsi-launcher-app` checks the page in
+Without a person at it: `OPENBUS_LAUNCHER_SELFTEST=1 openbus-launcher-app` checks the page in
 a hidden window and prints a report (see `launcher/README.md`). The data side is
 `crates/omsi-launcher-core`:
-`openomsi-launcher --cli lines '{"map":"maps/Grundorf/global.cfg"}'` runs any of its commands
+`openbus-launcher --cli lines '{"map":"maps/Grundorf/global.cfg"}'` runs any of its commands
 from a terminal - `config`, `maps`, `vehicles`, `weather`, `lines`, `ibis`, `profiles`,
 `profile`, `mods`, `modinfo`, `install`, `instances`, `stop`, `log`, `join`, `settings`,
 `save_settings`, `keybindings`, `save_keybindings`, `preview`, `args`, `launch`. `lines`
@@ -418,7 +418,7 @@ lines, as in the game, whose default date is 1989-05-30.
 
 ## Settings, enhanced graphics, the navigator
 
-`~/.openomsi/settings.cfg` (written by the launcher's settings page, or by hand) holds
+`~/.openbus/settings.cfg` (written by the launcher's settings page, or by hand) holds
 `msaa` (1/2/4/8; a count the GPU cannot do falls back to the next lower one, and Real-Time Ray Tracing draws 8 at 4), `anisotropy`
 (1..16), `ssao`, `shadows`, `shadow_size`, `shadow_blobs` (the models' `[isshadow]` shadow
 meshes, OMSI's flat blob under a vehicle, laid on the road its wheels stand on; off, only the
@@ -433,7 +433,7 @@ at its first and last stop, railway stations and the stops the timetable gives a
 own, and drives on from the others once boarding is done; off by default: it waits at every
 stop it serves, as in OMSI),
 `graphics` (the graphics mode: `vanilla` - as OMSI 2 draws it, without sun shadows, ambient
-occlusion, detail grain, snow cover or rain drops of openOMSI's own -, `vanilla_plus` - the
+occlusion, detail grain, snow cover or rain drops of openBus's own -, `vanilla_plus` - the
 same renderer with those extras, the default -, `enhanced` or `enhanced_plus`, see below),
 `boarding`, `detail_textures`, `exact_fare`, `pax_bad_driving`, `fullscreen`, `vsync`, `volume`
 and `drive_keys`, plus `render_scale` (`auto` or a fraction: the picture is drawn smaller
@@ -458,7 +458,7 @@ calm of the full chain). The bus's own screens in Enhanced (the IBIS, ticket and
 html terminals, the dashboard's LCDs) dim at night as a real dashboard's do, and are never
 lifted over their own colour by the eye's adaptation to the dark cab; the gauges' backlight
 and the destination LED matrices (`led_glow`) are left as they are. A mod can also declare a
-material its own light outright - `[matl_glow] <texture> <value>` (openOMSI's own keyword, see
+material its own light outright - `[matl_glow] <texture> <value>` (openBus's own keyword, see
 docs/FORMATS.md): the texture is a greyscale mask of where it shines (the light is the
 material's own colour) and `value` is on this slider's scale, so `6` is as bright as its default
 and `20` brighter than its top; the slider does not change it. `mouse_sens` (mouse steering,
@@ -481,9 +481,9 @@ own cameras), `head_idle` (0..1, 0 by default: how far the view sways on its own
 rest breathes and shifts its weight, and 0 of it is exactly as OMSI; most of it is seen while
 the bus waits at a stop) and `head_idle_pace` (0.5..2: how fast that sway moves, 1 being the
 pace it is designed at), `collision_objects` (walls, poles and bridges stop the bus; off is OMSI's `no_collision`
-option and is taken from OMSI's options when openOMSI starts the first time), `graphics_api`
+option and is taken from OMSI's options when openBus starts the first time), `graphics_api`
 (`auto`, `vulkan`, `dx12` on Windows, `gl`, `angle` on Windows: which graphics interface the
-game asks first - with `auto` on Windows DirectX 12, then Vulkan, then OpenGL, then ANGLE, except with a discrete AMD Radeon, where `auto` asks Vulkan first, as it is faster there; after a device lost on Vulkan, `auto` keeps to DirectX 12 on that machine until the next version of the game, or until `~/.openomsi/vulkan-lost` is deleted;
+game asks first - with `auto` on Windows DirectX 12, then Vulkan, then OpenGL, then ANGLE, except with a discrete AMD Radeon, where `auto` asks Vulkan first, as it is faster there; after a device lost on Vulkan, `auto` keeps to DirectX 12 on that machine until the next version of the game, or until `~/.openbus/vulkan-lost` is deleted;
 on Linux and Android Vulkan, then OpenGL; a Mac, iPhone and iPad always use Metal; see
 *Graphics API* below), `ctrl_off` (game controllers switched off on the Controls page, by
 name, separated by `|`) and `language` (the language of the interface - `ENG`, `DEU`, `FRA`,
@@ -494,13 +494,13 @@ With `collision_vehicles` enabled, impacts against AI traffic are delivered to t
 vehicle's collision scripts and deform a localized part of its body mesh where the model
 has editable body geometry.
 
-**NVIDIA DLSS and AMD FSR 3** (Settings → Graphics → Upscaling, `upscaler=dlss` or `fsr3`, with `upscale_quality=native`, `quality`, `balanced`, `performance` or `ultra_performance`; Windows, DirectX 12 or Vulkan; DLSS only with an NVIDIA RTX card, FSR 3 with any): the picture is drawn smaller and brought up to the window with the help of the last frames, in place of the anti-aliasing and the render scale, from the next start (not with a headset or a triple screen). They are offered only when the vendor's DLLs are beside `openomsi.exe`. The Windows x64 package includes AMD's FidelityFX DLLs. NVIDIA's are not included: on an RTX card the launcher offers to download them from NVIDIA once you accept NVIDIA's licences. See [the licensing review](UPSCALER_THIRD_PARTY_LICENSING.md) and [NVIDIA DLL license scope](NVIDIA_DLL_LICENSE_SCOPE.md). Where an upscaler cannot start, `game.log` says why and the picture is drawn as without it.
+**NVIDIA DLSS and AMD FSR 3** (Settings → Graphics → Upscaling, `upscaler=dlss` or `fsr3`, with `upscale_quality=native`, `quality`, `balanced`, `performance` or `ultra_performance`; Windows, DirectX 12 or Vulkan; DLSS only with an NVIDIA RTX card, FSR 3 with any): the picture is drawn smaller and brought up to the window with the help of the last frames, in place of the anti-aliasing and the render scale, from the next start (not with a headset or a triple screen). They are offered only when the vendor's DLLs are beside `openbus.exe`. The Windows x64 package includes AMD's FidelityFX DLLs. NVIDIA's are not included: on an RTX card the launcher offers to download them from NVIDIA once you accept NVIDIA's licences. See [the licensing review](UPSCALER_THIRD_PARTY_LICENSING.md) and [NVIDIA DLL license scope](NVIDIA_DLL_LICENSE_SCOPE.md). Where an upscaler cannot start, `game.log` says why and the picture is drawn as without it.
 
 **Apple MetalFX** (Settings → Graphics → Upscaling, `upscaler=metalfx`, with the same `upscale_quality` as above; a Mac with Apple silicon on macOS 13 or newer): Apple's own temporal upscaler, in place of the anti-aliasing and the render scale, from the next start (not with a triple screen). It is part of macOS: nothing to install, and nothing of it ships with the game. MetalFX scales up as far as the Mac's graphics chip lets it, twice a side on most: Ultra performance is then drawn at that size, and `game.log` says so. Glass and the rain on the windows are told to it as a mask on macOS 14.4 and newer; older versions run without the mask. Where it cannot start (an Intel Mac, macOS 11 or 12), the choice is not offered or `game.log` says why, and the picture is drawn as without it.
 
 **Frame generation** (Settings → Graphics → Frame generation, `frame_generation=metalfx`; a Mac with Apple silicon on macOS 26 or newer, with Apple MetalFX upscaling on): between every two frames the game draws, the window shows one that Apple's MetalFX frame interpolator makes from them, so 45 drawn frames a second are shown as 90. Motion looks smoother; the controls answer a little later, as each drawn frame waits half a frame time behind its generated one, and they answer no faster than the drawn frames come. Following Apple's advice of at least 30 drawn frames a second, it is judged as SSAO and the shadows are: once it has been making frames for 15 seconds (the first seconds after loading are slow anyway), when two frame rate readings in a row (5 seconds each) find fewer than 30 frames a second drawn with it, the game turns it off for this drive and says so ("The graphics card cannot keep up: frame generation off for this drive"). Generated frames cost the graphics chip time of their own, about 5 ms per million pixels of the window on an M2 (25 ms at 2940x1846), so at the Mac's full resolution it can show fewer frames than without it. Switched off and on in the menu, it is tried again. With V-sync on, the game draws half the display's refresh rate and the generated frames fill the other half. It is switched in the game's menu without a restart. The HUD, the menus and the pause screen are not interpolated: they stay as the last drawn frame has them; menus and the loading screen get no generated frames at all. With the frame rate shown, the corner reads e.g. `90 fps (45 + FG)`: the frames on screen and the drawn ones. Screenshots show drawn frames only. Where it cannot start, `game.log` says why (`frame generation is off: ...`) and the game runs on without it.
 
-**mX Graphics (Experimental)** (Settings → Graphics → Display, `mx_graphics`; off by default): from the next start the whole game runs on [mX](https://github.com/openOMSI-org/mX), openOMSI's own graphics library, and wgpu is not started at all; off, the game runs on wgpu alone, as before. With it on, the graphics API setting also offers DirectX 11 on Windows, Macs without Metal 3 run on mX's Metal 2 path, and the upscalers and frame generation (MetalFX, DLSS, FSR 3, XeSS) are mX's. The picture is meant to be the same as with wgpu. mX has not run the game on Windows, Linux or Android graphics cards yet; if the game does not start with it, turn the setting off in the launcher.
+**mX Graphics (Experimental)** (Settings → Graphics → Display, `mx_graphics`; off by default): from the next start the whole game runs on [mX](https://github.com/openOMSI-org/mX), openBus's own graphics library, and wgpu is not started at all; off, the game runs on wgpu alone, as before. With it on, the graphics API setting also offers DirectX 11 on Windows, Macs without Metal 3 run on mX's Metal 2 path, and the upscalers and frame generation (MetalFX, DLSS, FSR 3, XeSS) are mX's. The picture is meant to be the same as with wgpu. mX has not run the game on Windows, Linux or Android graphics cards yet; if the game does not start with it, turn the setting off in the launcher.
 
 **Graphics API** (Settings → Graphics → Display, `graphics_api`; not on a Mac): the interface named is asked first and
 the others follow, so a machine without it still starts. *ANGLE (DirectX 11)* (Windows) runs
@@ -508,7 +508,7 @@ OpenGL ES through Google's ANGLE on the card's DirectX 11 driver: for graphics c
 DirectX 12, Vulkan and OpenGL drivers are missing or broken (Intel HD Graphics 2000-4000, AMD
 Radeon HD 5000/6000). It is tried last, after the other three failed, and only when
 `libEGL.dll` and `libGLESv2.dll` (Google's ANGLE, BSD licence, with its Direct3D 11 renderer)
-are next to `openomsi.exe`; without them it is skipped (the log says so). The Windows x64
+are next to `openbus.exe`; without them it is skipped (the log says so). The Windows x64
 package ships them, built from ANGLE's own source by
 [angle-openomsi](https://github.com/openOMSI-org/angle-openomsi) (there is no ARM64 build);
 with them the log names the adapter `ANGLE (…Direct3D11…)` on the `Gl` backend.
@@ -540,7 +540,7 @@ lights to matter.
 
 `detail_textures` lays procedural (fractal) grain over the ground and the roads up close,
 in Vanilla+ and the enhanced modes alike. `graphics=enhanced` (Enhanced in the launcher, or
-`--enhanced`) switches to openOMSI's own physically based renderer: high-range lighting with energy-conserving diffuse and GGX
+`--enhanced`) switches to openBus's own physically based renderer: high-range lighting with energy-conserving diffuse and GGX
 reflections (roughness from `[matl_envmap]`), a computed atmosphere that also lights the
 scene, contact-hardening sun shadows, aerial perspective and height fog, automatic
 exposure, a glow only real highlights produce and a photographic tone curve with FXAA
@@ -721,7 +721,7 @@ Under **Seat position**, **Head pitch** adjusts the driver's neutral view angle 
 screens, and is included when taking offscreen screenshots. Manual looking and head tracking
 remain relative to this setting; **Reset the seat position** resets it along with the seat
 offsets. The seat set in the game menu is kept for each bus on its own (`seats.cfg` in the
-`.openomsi` folder): fitted to one bus, the others keep the views their `.bus` files give
+`.openbus` folder): fitted to one bus, the others keep the views their `.bus` files give
 (or the seat of the launcher's settings, for a bus never fitted), and resetting it puts
 that bus's views back as its file has them.
 
@@ -733,8 +733,8 @@ The choice is saved as `right_stick_look=0` (off) or `right_stick_look=1` (on) i
 
 ## Mods and the content folder
 
-The content folder lies beside the game (beside `openOMSI.app` on macOS). When that place
-cannot be written to (for example under Program Files), it is `~/.openomsi/content`
+The content folder lies beside the game (beside `openBus.app` on macOS). When that place
+cannot be written to (for example under Program Files), it is `~/.openbus/content`
 instead. It is laid out like an OMSI 2 installation - `Vehicles`, `maps`, `Sceneryobjects`,
 `Splines`, `Texture`, `Fonts`, `Plugins`, `TicketPacks`, `Drivers`, `Weather`, … - and is
 searched *before* the original folder: whatever a mod puts there is found exactly as if it
@@ -748,7 +748,7 @@ vehicle folder and `HOFs/` contain the same file name, the vehicle's own copy ta
 priority (the launcher's depot list shows the shared ones after the bus's own).
 
 A map names the depot files its buses need in `maps/<map>/ailists.cfg`. When a mod map is
-installed in the openOMSI content folder and some of those files are missing from `HOFs/`, the
+installed in the openBus content folder and some of those files are missing from `HOFs/`, the
 launcher's **Mods** page asks whether to share them with every bus. **Share with every bus**
 copies them there from the map's folder or from any bus that brought them, so every bus, the
 stock ones included, can use the map's depot without copying `.hof` files by hand. **Not for
@@ -768,7 +768,7 @@ drop one onto the window. The launcher sorts it into place: OMSI-style folders a
 inside are merged, and a lone bus, map, object or spline folder is recognised by its
 `.bus` / `global.cfg` / `.sco` / `.sli` files and put under the right folder. Anything put
 into the `Mods/` folder (shown on the page) is installed by itself once it has finished
-copying. `openomsi-launcher --cli install '{"path":"/path/to/mod.7z"}'` and `--cli mods`
+copying. `openbus-launcher --cli install '{"path":"/path/to/mod.7z"}'` and `--cli mods`
 do the same from a shell. An installation is a background job: the disk is checked for
 room before anything is unpacked, everything is unpacked into a staging folder and moved
 into place in one step, and a cancelled or failed install leaves nothing behind. A repaint
@@ -802,10 +802,10 @@ beside the date) offers these weathers:
   game time, one that suits the month (snow only from November to March, no frost in
   summer, no heat in winter) and is close to the one before, and every change comes in
   over a few minutes.
-* **Tomorrow.io**: live weather for the nearest area the map's `openomsi_weather.cfg`
-  configures. Each player needs a private API key in `~/.openomsi/tomorrow-api-key.txt`;
+* **Tomorrow.io**: live weather for the nearest area the map's `openbus_weather.cfg`
+  configures. Each player needs a private API key in `~/.openbus/tomorrow-api-key.txt`;
   see [setup and map-author instructions](WEATHER_REGIONS.md), including the
-  [community config editor](https://openomsi.mxnticek.eu/weather/).
+  [community config editor](https://openbus.mxnticek.eu/weather/).
 * the installed weather presets (`Weather/*.owt`), with their names and descriptions.
 
 `--weather natural`, `cycle`, `tomorrow` or a file such as `Weather/Bodennebel.owt` does
@@ -847,7 +847,7 @@ air.
 ## Radio
 
 OMSI plays no music itself: a bus's radio only sets variables that radio plugins turn into
-sound. openOMSI plays internet radio for them, with no plugin needed.
+sound. openBus plays internet radio for them, with no plugin needed.
 
 **Which buses.** Every bus whose radio sets `Snd_Radio` (the cassette player of the stock
 SD200/SD202/NL and of many mods: it plays the first station) or `SndExt_Radio` (the radios
@@ -855,7 +855,7 @@ made for the Sound Extension plugin: station button *n* plays the *n*-th station
 knob `SndVol_Radio` sets how loud). Switch the radio on in the cockpit as in OMSI; the
 screen says which station plays and the song when the stream names it.
 
-**Your stations.** `~/.openomsi/radio.cfg` (on Windows `C:\Users\<you>\.openomsi\radio.cfg`)
+**Your stations.** `~/.openbus/radio.cfg` (on Windows `C:\Users\<you>\.openbus\radio.cfg`)
 is written with a few stations the first time the game starts. One station a line, the
 first line on the first button:
 
@@ -905,7 +905,7 @@ and then for a moment (a bridge, a tall building). With all three at 0 the strea
 untouched. They are `radio_speaker`, `radio_hiss` and `radio_dropouts` (0..1) in
 `settings.cfg`.
 
-**When nothing plays.** `~/.openomsi/game.log` says what happened:
+**When nothing plays.** `~/.openbus/game.log` says what happened:
 `radio: 23 stations` (the list), `radio: station 1 Radiozurnal (https://…)` (a button
 pressed), then `Radio 1 plays Radiozurnal (buffering …)` and the song, or `no signal`
 with the reason in a `radio <url>: …` line - mostly an address that is not a stream or a
@@ -928,7 +928,7 @@ For measuring: `OMSI_PROFILE=1` logs the time each stage of the frame takes, and
 percentiles and the number of frames over 16.7, 33.3, 50 and 100 ms, counted from 15 s
 after the map has loaded. `OMSI_PROFILE_JSON=<file>` also writes the summary to a file.
 
-The game's log is `~/.openomsi/game.log` (the launcher's `launcher.log` beside it), and
+The game's log is `~/.openbus/game.log` (the launcher's `launcher.log` beside it), and
 the first line of both is the build they were made from.
 
 ## Object editor
@@ -965,7 +965,7 @@ the mouse works the panel where it is over it and the cab everywhere else. Four 
 
 * **Variables**: the search lists the bus's script variables (`$` before the text: its string
   variables) with their values; a click puts one on the watch list at the top, which is kept
-  per bus in `~/.openomsi/devtools/<bus file>.watch`. A watched variable chosen can be **Set**
+  per bus in `~/.openbus/devtools/<bus file>.watch`. A watched variable chosen can be **Set**
   to a value once, or **Held** at it - written into the bus before its scripts run and after
   them, every frame, until *Let go* or until the panel closes.
 * **Overlays** over the picture: the paths and their points (with the entries and exits), the
@@ -1008,7 +1008,7 @@ panel has a yellow frame, and:
 * **Esc** (or Ctrl+Shift+M again) ends the editor and keeps the layout.
 
 A new panel has the shape of the mirror's glass in the model. The layout is kept per bus in
-`~/.openomsi/mirror_hud.cfg`. The setting `mirror_hud` (0 off, 1 the right mirror, 2 the left,
+`~/.openbus/mirror_hud.cfg`. The setting `mirror_hud` (0 off, 1 the right mirror, 2 the left,
 3 both) gives a bus with no layout of its own its first panels. The panels need the mirrors
 themselves to be drawn (`mirror_size` not 0); they are redrawn at the rate `mirror_refresh`
 sets, also when the glass is not in the view. With **Mirror panels every frame** (Settings →
@@ -1140,16 +1140,16 @@ current stop, the terminus and the delay) before their scripts start.
 (its map, bus, objects, splines, AI vehicles and people from the content folder or archives,
 also a content folder inside the OMSI 2 folder) is listed with a SHA-256 per file and served
 over TCP on the session's port; a joining game fetches what it lacks before it loads the map
-and keeps the downloads for the next time (`~/.openomsi/lan-store`). Listing a big add-on map
+and keeps the downloads for the next time (`~/.openbus/lan-store`). Listing a big add-on map
 takes the host a while after it starts; a joining game waits for it. Maps installed straight into the OMSI 2 folder are not passed on: both
 players need them.
 
 The host's mods are for playing the session, not for keeping: they travel encrypted
 (ChaCha20-Poly1305, with a key agreed per connection and bound to the session), and the
-joining game never writes them to the disk in plain form. `~/.openomsi/lan-store` holds each
+joining game never writes them to the disk in plain form. `~/.openbus/lan-store` holds each
 file sealed and named by a keyed hash, and the game reads them decrypted into memory only;
 copying them out of the game's folders gives noise, and so does listening on the network.
-That is all it does: openOMSI is open source and the decryption runs on the player's own
+That is all it does: openBus is open source and the decryption runs on the player's own
 computer, so a changed build or a dump of the game's memory still gets the files, and the
 store's key lies on the same computer (sealed by Windows for the user's account, elsewhere a
 file only the user can read: obfuscation, not a lock). The host's own copy is the host's mod

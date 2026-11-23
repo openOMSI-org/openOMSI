@@ -21,7 +21,7 @@ pub fn hardware_id() -> Option<String> {
 
 pub fn host_hardware_id(machine: &str, realm: &str) -> String {
     use sha2::{Digest, Sha256};
-    let h = Sha256::new().chain_update(b"openOMSI hardware id v2\0").chain_update(machine.as_bytes()).chain_update(b"\0").chain_update(realm.as_bytes()).finalize();
+    let h = Sha256::new().chain_update(b"openBus hardware id v2\0").chain_update(machine.as_bytes()).chain_update(b"\0").chain_update(realm.as_bytes()).finalize();
     h[..16].iter().map(|b| format!("{b:02x}")).collect()
 }
 

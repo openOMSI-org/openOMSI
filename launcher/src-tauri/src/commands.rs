@@ -57,7 +57,7 @@ impl omsi_launcher_api::Platform for Window {
         crate::service::ask(req, wait)
     }
     fn selftest(&self) -> Option<String> {
-        crate::selftest().then(|| std::env::var("OPENOMSI_LAUNCHER_SELFTEST").unwrap_or_default())
+        crate::selftest().then(|| std::env::var("OPENBUS_LAUNCHER_SELFTEST").unwrap_or_default())
     }
     fn quit(&self) {
         self.0.exit(0);
@@ -197,7 +197,7 @@ fn fit_zoom(window: tauri::WebviewWindow, size: f64) -> Answer {
 #[tauri::command]
 fn update_relaunch(app: AppHandle) -> Answer {
     let place = omsi_platform::updater::install_place().map_err(err)?;
-    let game = place.exe.with_file_name(if cfg!(windows) { "openomsi.exe" } else { "openomsi" });
+    let game = place.exe.with_file_name(if cfg!(windows) { "openbus.exe" } else { "openbus" });
     let program = if game.is_file() { game } else { place.exe.clone() };
     omsi_launcher_lib::log_to_file(&format!("update: starting {} after the update", program.display()));
     std::process::Command::new(&program).current_dir(&place.dir).spawn().map_err(err)?;

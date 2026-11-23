@@ -1,6 +1,6 @@
 # Ambience sound credits
 
-The openOMSI ambience pack is cut from the field recordings below. Every file was trimmed, level-normalised and re-encoded (32 kHz MP3, impulse responses 32 kHz FLAC); nothing else was changed. The licence of each recording applies to the takes cut from it (listed in pack.json under `source`).
+The openBus ambience pack is cut from the field recordings below. Every file was trimmed, level-normalised and re-encoded (32 kHz MP3, impulse responses 32 kHz FLAC); nothing else was changed. The licence of each recording applies to the takes cut from it (listed in pack.json under `source`).
 
 ## CC0 1.0 (public domain dedication)
 

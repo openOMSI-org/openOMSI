@@ -644,7 +644,7 @@ mod tests {
     fn app() -> crate::App {
         use clap::Parser;
         let mut app =
-            crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+            crate::assemble_app(crate::Args::parse_from(["openbus"]), Default::default());
         app.settings.zoom_hold_amount = 0.5;
         app
     }

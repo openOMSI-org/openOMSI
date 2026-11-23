@@ -179,7 +179,7 @@ mod tests {
             assert_eq!(omsi_ui::tr("<1 min"), "<1 分鐘");
             assert_eq!(omsi_ui::tr("Nothing to couple: back up to a trailer's coupling (within 2.5 m, in line)"), "沒有可連接的物件：請倒車至拖車掛鉤處（2.5 米以內，成一直線）");
 
-            let panel = format!("{:?}", DestForm::default().panel(Palette::OPENOMSI));
+            let panel = format!("{:?}", DestForm::default().panel(Palette::OPENBUS));
             for text in ["目的地顯示", "路線編號", "目的地(兩行)", "第一行", "第二行(可留空)", "從車廠檔案選擇", "清除顯示", "選擇", "關閉", "車庫檔中的目的地依名稱尋找;其他文字依輸入內容顯示。"] {
                 assert!(panel.contains(text), "destination form is missing translated text: {text}");
             }
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn form_preserves_ibis_line_while_passing_lettered_route_to_display_trigger() {
         let mut app = crate::assemble_app(
-            <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]),
+            <crate::cli::Args as clap::Parser>::parse_from(["openbus"]),
             Default::default(),
         );
         let mut v = crate::schedule::tests::script_test_vehicle(

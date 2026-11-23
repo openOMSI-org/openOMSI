@@ -3,7 +3,7 @@ name = "omsi-xr"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI in a PC VR headset: the OpenXR session (Windows) and the cockpit navigator's placement"
+description = "openBus in a PC VR headset: the OpenXR session (Windows) and the cockpit navigator's placement"
 
 [dependencies]
 omsi-render = { path = "../omsi-render" }

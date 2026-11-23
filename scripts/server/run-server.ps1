@@ -1,4 +1,4 @@
-﻿# The openOMSI dedicated server, asked for what it needs (run-server.cmd starts this with a
+﻿# The openBus dedicated server, asked for what it needs (run-server.cmd starts this with a
 # double click): the first time the OMSI 2 folder and the main settings of server.cfg, every
 # time the map (a numbered list of the maps installed); and, if wanted, a start-<map>.cmd
 # beside it that starts that map again without a question. The server's output goes to this
@@ -19,13 +19,13 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
 
 $here = $PSScriptRoot
-$exe = Join-Path $here 'openomsi.exe'
-if (-not (Test-Path -LiteralPath $exe)) { $exe = Join-Path $here 'openomsi' }
+$exe = Join-Path $here 'openbus.exe'
+if (-not (Test-Path -LiteralPath $exe)) { $exe = Join-Path $here 'openbus' }
 $conf = Join-Path $here 'run-server.conf'
 $cfg = Join-Path $here 'server.cfg'
 $log = Join-Path $here 'server.log'
 $utf8 = New-Object System.Text.UTF8Encoding $false
-# (openomsi writes UTF-8: map folders with accents read right)
+# (openbus writes UTF-8: map folders with accents read right)
 $oldOut = [Console]::OutputEncoding
 [Console]::OutputEncoding = $utf8
 
@@ -39,7 +39,7 @@ function Quit([int]$code, [string]$en, [string]$ptText) {
 }
 
 if (-not (Test-Path -LiteralPath $exe)) {
-    Quit 1 "openomsi.exe is not beside this script ($here)" "o openomsi.exe não está ao lado deste script ($here)"
+    Quit 1 "openbus.exe is not beside this script ($here)" "o openbus.exe não está ao lado deste script ($here)"
 }
 
 # run-server.conf: root=<OMSI 2 folder>, last=<last map>, preset.<name>=<map>
@@ -47,10 +47,10 @@ if (-not (Test-Path -LiteralPath $exe)) {
 function Read-Lines([string]$path) {
     if (Test-Path -LiteralPath $path) { [IO.File]::ReadAllLines($path, $utf8) }
 }
-# openomsi.exe that Windows did not start (an antivirus, Smart App Control, a download still
+# openbus.exe that Windows did not start (an antivirus, Smart App Control, a download still
 # blocked): the reason and the way out - no other folder or map would do
 function Not-Started([string]$why) {
-    Quit 1 "openomsi.exe could not be started: $why`nWindows or an antivirus may block a program just downloaded: right-click the .zip, Properties, tick Unblock and extract it again; or allow openomsi.exe in Windows Security (Protection history) or your antivirus." "O openomsi.exe não pôde ser iniciado: $why`nO Windows ou um antivírus podem bloquear um programa recém-baixado: clique com o botão direito no .zip, Propriedades, marque Desbloquear e extraia de novo; ou permita o openomsi.exe na Segurança do Windows (Histórico de proteção) ou no seu antivírus."
+    Quit 1 "openbus.exe could not be started: $why`nWindows or an antivirus may block a program just downloaded: right-click the .zip, Properties, tick Unblock and extract it again; or allow openbus.exe in Windows Security (Protection history) or your antivirus." "O openbus.exe não pôde ser iniciado: $why`nO Windows ou um antivírus podem bloquear um programa recém-baixado: clique com o botão direito no .zip, Propriedades, marque Desbloquear e extraia de novo; ou permita o openbus.exe na Segurança do Windows (Histórico de proteção) ou no seu antivírus."
 }
 
 # one argument as Windows programs read their command line (spaces, quotes, a backslash
@@ -62,10 +62,10 @@ function Quote-Arg([string]$a) {
     return '"' + $a + '"'
 }
 
-# openomsi.exe is a windowed program: run with &, PowerShell neither waits for it nor keeps
+# openbus.exe is a windowed program: run with &, PowerShell neither waits for it nor keeps
 # its exit code (the map list came after the prompt, $LASTEXITCODE unset). Started here, its
 # output comes through pipes, and it is waited for.
-function Start-Openomsi([string[]]$argv) {
+function Start-Openbus([string[]]$argv) {
     $si = New-Object System.Diagnostics.ProcessStartInfo
     $si.FileName = $exe
     $si.Arguments = (@($argv | ForEach-Object { Quote-Arg $_ }) -join ' ')
@@ -80,7 +80,7 @@ function Start-Openomsi([string[]]$argv) {
 
 # every line of the program's output (stdout and stderr, as they come) to $each, until it ends;
 # its exit code. (Short waits: Ctrl+C is not held up.)
-function Pump-Openomsi($p, [scriptblock]$each) {
+function Pump-Openbus($p, [scriptblock]$each) {
     $o = $p.StandardOutput.ReadLineAsync()
     $e = $p.StandardError.ReadLineAsync()
     while ($o -or $e) {
@@ -160,10 +160,10 @@ function Rotate-Log([string]$path, [int]$keep) {
 # the installed maps of a folder (server.cfg written with its defaults when missing); $null
 # with the reason shown when the folder is not a complete OMSI 2
 function List-Maps([string]$root) {
-    $p = Start-Openomsi @('--root', $root, '--server', $cfg, '--list-maps')
+    $p = Start-Openbus @('--root', $root, '--server', $cfg, '--list-maps')
     $maps = New-Object System.Collections.Generic.List[string]
     $said = New-Object System.Collections.Generic.List[string]
-    $code = Pump-Openomsi $p { param($line, $err) if (-not $line.Trim()) { return } if ($err) { $said.Add($line) } else { $maps.Add($line) } }
+    $code = Pump-Openbus $p { param($line, $err) if (-not $line.Trim()) { return } if ($err) { $said.Add($line) } else { $maps.Add($line) } }
     if ($code -eq 0) { return ,[string[]]$maps.ToArray() }
     foreach ($t in @($said) + @($maps)) {
         if ($t -notmatch ' INFO ') { Write-Host $t -ForegroundColor Yellow }
@@ -193,7 +193,7 @@ function Join-WindowJob {
         Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
-public static class OpenOmsiWindowJob {
+public static class OpenBusWindowJob {
     [StructLayout(LayoutKind.Sequential)]
     struct Basic { public long PerProcessUserTimeLimit; public long PerJobUserTimeLimit; public uint LimitFlags; public UIntPtr MinimumWorkingSetSize; public UIntPtr MaximumWorkingSetSize; public uint ActiveProcessLimit; public UIntPtr Affinity; public uint PriorityClass; public uint SchedulingClass; }
     [StructLayout(LayoutKind.Sequential)]
@@ -216,7 +216,7 @@ public static class OpenOmsiWindowJob {
     }
 }
 '@
-        if (-not [OpenOmsiWindowJob]::Join()) { Say 'Note: closing this window may leave the server running (Task Manager ends it).' 'Aviso: fechar esta janela pode deixar o servidor rodando (o Gerenciador de Tarefas o encerra).' }
+        if (-not [OpenBusWindowJob]::Join()) { Say 'Note: closing this window may leave the server running (Task Manager ends it).' 'Aviso: fechar esta janela pode deixar o servidor rodando (o Gerenciador de Tarefas o encerra).' }
     } catch {
         Say 'Note: closing this window may leave the server running (Task Manager ends it).' 'Aviso: fechar esta janela pode deixar o servidor rodando (o Gerenciador de Tarefas o encerra).'
     }
@@ -345,7 +345,7 @@ if ($askShortcut) {
         $v = Ask "Create start-$slug.cmd, which starts this map again without asking? [y/N]" "Criar start-$slug.cmd, que inicia este mapa de novo sem perguntar? [s/N]"
         if ($v -match '^[yYsS]') {
             Conf-Set "preset.$slug" $Map
-            $text = "@echo off`r`nrem openOMSI server on one map, with run-server.cmd (made by it)`r`ncall `"%~dp0run-server.cmd`" -Preset `"$slug`" %*`r`n"
+            $text = "@echo off`r`nrem openBus server on one map, with run-server.cmd (made by it)`r`ncall `"%~dp0run-server.cmd`" -Preset `"$slug`" %*`r`n"
             [IO.File]::WriteAllText($shortcut, $text, (New-Object System.Text.ASCIIEncoding))
             Say "Made $shortcut." "Criado $shortcut."
         }
@@ -363,9 +363,9 @@ $script:writer = New-Object System.IO.StreamWriter($log, $true, $utf8)
 $script:writer.AutoFlush = $true
 $script:written = [int64]0
 $code = 0
-$p = Start-Openomsi @('--root', $root, '--server', $cfg, '--server-map', $Map)
+$p = Start-Openbus @('--root', $root, '--server', $cfg, '--server-map', $Map)
 try {
-    $code = Pump-Openomsi $p {
+    $code = Pump-Openbus $p {
         param($line, $err)
         Write-Host $line
         $script:writer.WriteLine($line)

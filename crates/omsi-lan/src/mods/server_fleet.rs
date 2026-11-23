@@ -326,7 +326,7 @@ mod tests {
 
     #[test]
     fn refuses_untrusted_files_outside_content_roots() {
-        let base = std::env::temp_dir().join(format!("openomsi-fleet-sources-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("openbus-fleet-sources-{}", std::process::id()));
         let root = base.join("game");
         let inside = root.join("Vehicles").join("Bus");
         std::fs::create_dir_all(&inside).unwrap();

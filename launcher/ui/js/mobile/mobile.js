@@ -65,7 +65,7 @@ function More() {
       ${item('setup', 'Setup', 'folder')}
       ${item('addons', 'Add-ons', 'globe')}
     </div>
-    <p class="m-foot">openOMSI ${s.boot?.version || ''}</p>
+    <p class="m-foot">openBus ${s.boot?.version || ''}</p>
   </div>`;
 }
 

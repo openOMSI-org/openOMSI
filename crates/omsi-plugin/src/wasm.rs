@@ -1,8 +1,8 @@
 //! WebAssembly plugins (`kind = "wasm"` in a `.oop`): a module built for wasm32-unknown-unknown,
-//! usually from Rust with the openOMSI plugin SDK, run by an interpreter (wasmi) on every platform
+//! usually from Rust with the openBus plugin SDK, run by an interpreter (wasmi) on every platform
 //! the game runs on - the same file on Windows, macOS, Linux and Android.
 //!
-//! The module reaches the game through one import, `openomsi.call(name, args)`, which calls a
+//! The module reaches the game through one import, `openbus.call(name, args)`, which calls a
 //! function of the plugin API by the name Lua plugins know it under (`"var"`, `"ui.set"`), its
 //! arguments and result passed as JSON. The game calls the module back through `oop_callback(id,
 //! args)` for the callbacks it registered (`{"$cb": id}` in an argument). See the plugin spec:
@@ -89,11 +89,11 @@ impl WasmPlugin {
         let memory = instance.get_memory(&store, "memory").ok_or_else(|| format!("{name}: the module exports no memory"))?;
         let abi = instance
             .get_typed_func::<(), i32>(&store, "oop_abi")
-            .map_err(|_| format!("{name}: no oop_abi export - not an openOMSI plugin (build it with the openOMSI plugin SDK)"))?
+            .map_err(|_| format!("{name}: no oop_abi export - not an openBus plugin (build it with the openBus plugin SDK)"))?
             .call(&mut store, ())
             .map_err(|e| format!("{name}: oop_abi: {e}"))?;
         if abi != ABI {
-            return Err(format!("{name}: made for plugin ABI {abi}, this openOMSI runs ABI {ABI} - update {}", if abi > ABI { "openOMSI" } else { "the plugin" }));
+            return Err(format!("{name}: made for plugin ABI {abi}, this openBus runs ABI {ABI} - update {}", if abi > ABI { "openBus" } else { "the plugin" }));
         }
         let typed = |f: &str| format!("{name}: {f} is missing or has the wrong type");
         Ok(WasmPlugin {
@@ -227,7 +227,7 @@ fn with_dispatch<R>(caller: &mut Caller<'_, HostState>, f: impl FnOnce(&mut dyn 
 }
 
 fn link(linker: &mut Linker<HostState>) -> Result<(), wasmi::Error> {
-    linker.func_wrap("openomsi", "call", |mut caller: Caller<'_, HostState>, name_ptr: i32, name_len: i32, args_ptr: i32, args_len: i32| -> Result<i64, wasmi::Error> {
+    linker.func_wrap("openbus", "call", |mut caller: Caller<'_, HostState>, name_ptr: i32, name_len: i32, args_ptr: i32, args_len: i32| -> Result<i64, wasmi::Error> {
         let name = read_text(&caller, name_ptr, name_len)?;
         let args = read_text(&caller, args_ptr, args_len)?;
         let result = with_dispatch(&mut caller, |d| d.call(&name, &args))?;
@@ -239,11 +239,11 @@ fn link(linker: &mut Linker<HostState>) -> Result<(), wasmi::Error> {
             }
         }
     })?;
-    linker.func_wrap("openomsi", "last_error", |mut caller: Caller<'_, HostState>| -> Result<i64, wasmi::Error> {
+    linker.func_wrap("openbus", "last_error", |mut caller: Caller<'_, HostState>| -> Result<i64, wasmi::Error> {
         let text = std::mem::take(&mut caller.data_mut().last_error);
         hand_over(&mut caller, text.as_bytes())
     })?;
-    linker.func_wrap("openomsi", "log", |mut caller: Caller<'_, HostState>, level: i32, ptr: i32, len: i32| -> Result<(), wasmi::Error> {
+    linker.func_wrap("openbus", "log", |mut caller: Caller<'_, HostState>, level: i32, ptr: i32, len: i32| -> Result<(), wasmi::Error> {
         let text = read_text(&caller, ptr, len)?;
         with_dispatch(&mut caller, |d| d.log(level, &text))
     })?;

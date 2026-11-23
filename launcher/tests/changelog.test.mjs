@@ -5,15 +5,15 @@ import test from 'node:test';
 import { blocks, inline, compareVersions, freshVersions } from '../ui/js/markdown.js';
 
 test('release notes as the release script writes them', () => {
-  const notes = '**openOMSI 0.3.42**\n\n> **Beta, for testing.** Report what breaks\n> in an issue.\n\n### New\n\n- **Remote cockpit**: the game serves a page\n  on your home network.\n  - a nested point\n- `OMSI_NO_SPLINE_HOLES` and [the page](https://github.com/openOMSI-org/openOMSI)\n\n---\n<!-- hidden -->\nLast line\r\ngoes on.';
+  const notes = '**openBus 0.3.42**\n\n> **Beta, for testing.** Report what breaks\n> in an issue.\n\n### New\n\n- **Remote cockpit**: the game serves a page\n  on your home network.\n  - a nested point\n- `OMSI_NO_SPLINE_HOLES` and [the page](https://github.com/rafaelkaiz/openBus)\n\n---\n<!-- hidden -->\nLast line\r\ngoes on.';
   assert.deepEqual(blocks(notes), [
-    { kind: 'paragraph', text: '**openOMSI 0.3.42**' },
+    { kind: 'paragraph', text: '**openBus 0.3.42**' },
     { kind: 'quote', text: '**Beta, for testing.** Report what breaks in an issue.' },
     { kind: 'heading', level: 3, text: 'New' },
     { kind: 'list', items: [
       { depth: 0, text: '**Remote cockpit**: the game serves a page on your home network.' },
       { depth: 1, text: 'a nested point' },
-      { depth: 0, text: '`OMSI_NO_SPLINE_HOLES` and [the page](https://github.com/openOMSI-org/openOMSI)' },
+      { depth: 0, text: '`OMSI_NO_SPLINE_HOLES` and [the page](https://github.com/rafaelkaiz/openBus)' },
     ] },
     { kind: 'paragraph', text: 'Last line goes on.' },
   ]);
@@ -66,8 +66,8 @@ test('inline marks, and links only to https', () => {
     assert.equal(parts[0].text, 'go', bad);
   }
   assert.deepEqual(inline('<img src=x onerror=alert(1)>'), [{ kind: 'text', text: '<img src=x onerror=alert(1)>' }]);
-  assert.deepEqual(inline('<img width="1600" alt="What\'s new in openOMSI 0.3.52" src="https://github.com/user-attachments/assets/560783ae-7534-49b4-bf5e-980b0271618e" />'), [
-    { kind: 'image', url: 'https://github.com/user-attachments/assets/560783ae-7534-49b4-bf5e-980b0271618e', alt: "What's new in openOMSI 0.3.52", width: 1600, height: undefined },
+  assert.deepEqual(inline('<img width="1600" alt="What\'s new in openBus 0.3.52" src="https://github.com/user-attachments/assets/560783ae-7534-49b4-bf5e-980b0271618e" />'), [
+    { kind: 'image', url: 'https://github.com/user-attachments/assets/560783ae-7534-49b4-bf5e-980b0271618e', alt: "What's new in openBus 0.3.52", width: 1600, height: undefined },
   ]);
   assert.deepEqual(inline('![Preview](https://github.com/user-attachments/assets/preview.png)'), [
     { kind: 'image', alt: 'Preview', url: 'https://github.com/user-attachments/assets/preview.png', width: undefined, height: undefined },

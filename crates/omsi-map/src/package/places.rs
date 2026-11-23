@@ -347,9 +347,9 @@ mod tests {
 
     #[test]
     fn the_example_names_its_places() {
-        // docs/examples/openomsi-realmap, in the tile grid of the tutorial map: a street through (494, 730)
+        // docs/examples/openbus-realmap, in the tile grid of the tutorial map: a street through (494, 730)
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/examples");
-        let p = Package::open(&dir).expect("docs/examples/openomsi-realmap is a package");
+        let p = Package::open(&dir).expect("docs/examples/openbus-realmap is a package");
         assert_eq!(p.markers().len(), 2);
         assert!(p.picture("icons/stop.png").is_some_and(|b| b.len() > 4 && &b[1..4] == b"PNG"));
         assert!(p.picture("../manifest.cfg").is_none(), "a path cannot climb out of the folder");

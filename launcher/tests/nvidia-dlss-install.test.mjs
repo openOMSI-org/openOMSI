@@ -50,7 +50,7 @@ test('installer downloads only official Streamline and verifies SDK hash and sig
 test('installer is Windows only and checks RTX and the game folder', () => {
   assert.match(backend, /#\[cfg\(windows\)\]/);
   assert.match(backend, /omsi_cfg::upscaler_files::rtx_present\(\)/);
-  assert.match(backend, /openomsi\.exe/);
+  assert.match(backend, /openbus\.exe/);
   assert.match(installer, /-notmatch '--launcher-service'/);
-  assert.match(installer, /Close openOMSI before installing/);
+  assert.match(installer, /Close openBus before installing/);
 });

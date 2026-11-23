@@ -194,7 +194,7 @@ mod cabin_temperature_tests {
 
     #[test]
     fn cabin_start_follows_switch_on_every_trip_and_preserves_saved_state() {
-        let mut args = Args::parse_from(["openomsi", "--comfortable-cabin-on-start"]);
+        let mut args = Args::parse_from(["openbus", "--comfortable-cabin-on-start"]);
         assert!(use_comfortable_cabin(&args));
         // The same enabled switch applies to the first and later trips of a tour.
         args.line = Some("5".into());

@@ -72,7 +72,7 @@ mod tests;
 /// `PAX_Exit<n>_Req`): Omsi.exe's eight, and eight more for buses with more doors than
 /// that (#719). A cabin's entries and exits past the eighth that the scripts give no
 /// variables of their own open with the eighth, as in Omsi.exe, and ask through the eighth's
-/// `_Req` (openOMSI's choice: Omsi.exe's request arrays have eight slots and lose them).
+/// `_Req` (openBus's choice: Omsi.exe's request arrays have eight slots and lose them).
 pub const PAX_DOORS: usize = 16;
 
 /// Motion state handed to `VehicleInstance::update_ai`.

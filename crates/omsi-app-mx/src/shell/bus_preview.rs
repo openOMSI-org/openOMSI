@@ -639,10 +639,10 @@ mod tests {
         if owns_root {
             omsi_cfg::add_content_root(root.clone());
         }
-        let bus = std::env::var("OPENOMSI_PREVIEW_BUS").expect("bus");
-        let map = std::env::var("OPENOMSI_PREVIEW_MAP").expect("map");
+        let bus = std::env::var("OPENBUS_PREVIEW_BUS").expect("bus");
+        let map = std::env::var("OPENBUS_PREVIEW_MAP").expect("map");
         let out =
-            std::path::PathBuf::from(std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("output"));
+            std::path::PathBuf::from(std::env::var_os("OPENBUS_PAUSE_PREVIEW").expect("output"));
         let ty = omsi_sim::VehicleType::load(&root, &omsi_cfg::resolve_path(&root, &bus)).unwrap();
         let paint = ty
             .paint_schemes

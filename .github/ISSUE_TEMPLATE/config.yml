@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Questions and help
-    url: https://discord.gg/openomsi
-    about: How do I...? Setting up, mods, or a chat with other players - ask on our Discord server.
+    url: https://github.com/rafaelkaiz/openBus/discussions
+    about: How do I...? Setting up, mods, or a chat with other players - ask in GitHub Discussions.
   - name: Security problem
-    url: https://github.com/openOMSI-org/openOMSI/security/advisories/new
+    url: https://github.com/rafaelkaiz/openBus/security/advisories/new
     about: A vulnerability in the game, the server or the updater - report it privately, not as an issue (see SECURITY.md).
   - name: User guide
-    url: https://github.com/openOMSI-org/openOMSI/blob/main/docs/USER_GUIDE.md
+    url: https://github.com/rafaelkaiz/openBus/blob/main/docs/USER_GUIDE.md
     about: Settings, controls, multiplayer and common problems explained.

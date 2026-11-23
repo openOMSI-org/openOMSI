@@ -82,18 +82,18 @@ pub fn candidates() -> Vec<PathBuf> {
     let mut tried: Vec<PathBuf> = Vec::new();
     let mut bases: Vec<PathBuf> = Vec::new();
     // a phone: the shared storage, where a copy of the game is put by cable or file manager
-    // (openOMSI's own folder first, where the app asks for it)
+    // (openBus's own folder first, where the app asks for it)
     if cfg!(target_os = "android") {
         for s in ["/storage/emulated/0", "/sdcard"] {
             let s = PathBuf::from(s);
-            bases.push(s.join("openOMSI"));
+            bases.push(s.join("openBus"));
             bases.push(s.join("Download"));
             bases.push(s.join("Games"));
             bases.push(s);
         }
     }
     // an iPhone or an iPad: the app's own Documents (the content folder, which the Files app
-    // shows as "openOMSI"), where a copy of the game is put by the Files app or the Finder
+    // shows as "openBus"), where a copy of the game is put by the Files app or the Finder
     if cfg!(target_os = "ios") {
         if let Some(c) = crate::flags::OMSI_CONTENT.live_os() {
             bases.push(PathBuf::from(c));
@@ -182,7 +182,7 @@ fn shallow_scan() -> Option<PathBuf> {
 
 /// The folders a path the player gave may mean: what was typed or pasted (Windows' "Copy as
 /// path" puts quotes round it), the folder of a file named instead of its folder (`Omsi.exe`,
-/// or openOMSI's own program when openOMSI was unpacked into the OMSI folder), the folders
+/// or openBus's own program when openBus was unpacked into the OMSI folder), the folders
 /// above a subfolder chosen by mistake (`maps`, `Vehicles\MAN_SD200`), and an OMSI folder
 /// inside the one chosen.
 pub fn root_guesses(given: &Path) -> Vec<PathBuf> {
@@ -222,9 +222,9 @@ mod tests {
 
     #[test]
     fn a_file_or_a_quoted_path_means_its_folder() {
-        let dir = std::env::temp_dir().join("openomsi-root-guess");
+        let dir = std::env::temp_dir().join("openbus-root-guess");
         let _ = std::fs::create_dir_all(dir.join("maps"));
-        let exe = dir.join("openomsi.exe");
+        let exe = dir.join("openbus.exe");
         std::fs::write(&exe, b"").unwrap();
         assert_eq!(root_guesses(&exe)[0], dir);
         let quoted = PathBuf::from(format!("\"{}\" ", dir.display()));
@@ -235,15 +235,15 @@ mod tests {
     }
 
     #[test]
-    fn openomsi_unpacked_into_the_omsi_folder_keeps_its_content_apart() {
-        let dir = std::env::temp_dir().join("openomsi-in-omsi");
+    fn openbus_unpacked_into_the_omsi_folder_keeps_its_content_apart() {
+        let dir = std::env::temp_dir().join("openbus-in-omsi");
         let _ = std::fs::create_dir_all(dir.join("maps"));
         std::fs::write(dir.join("Omsi.exe"), b"").unwrap();
-        // a marker an older openOMSI left there does not make it "not the game"
+        // a marker an older openBus left there does not make it "not the game"
         std::fs::write(dir.join(crate::CONTENT_MARKER), b"").unwrap();
-        assert_eq!(crate::content_folder_of(&dir), dir.join("openOMSI"));
+        assert_eq!(crate::content_folder_of(&dir), dir.join("openBus"));
         assert!(!crate::missing_original_essentials(&dir).iter().any(|m| m.contains("content folder")));
-        let other = std::env::temp_dir().join("openomsi-plain");
+        let other = std::env::temp_dir().join("openbus-plain");
         let _ = std::fs::create_dir_all(&other);
         assert_eq!(crate::content_folder_of(&other), other);
         let _ = std::fs::remove_dir_all(&dir);

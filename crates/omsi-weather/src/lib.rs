@@ -1,4 +1,4 @@
-//! openOMSI's weather as state and physics: the physical weather model (`weather_model`),
+//! openBus's weather as state and physics: the physical weather model (`weather_model`),
 //! the weather changing by itself (`weather_cycle`), a season chosen with its phase
 //! (`season_phase`), the roads' wetness and the clouds' drift (`conditions`), the cabin air
 //! and the condensation on the glass (`condensation`) and the drops running down it

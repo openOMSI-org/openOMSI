@@ -15,8 +15,8 @@ import { RadioStations } from './radio-stations.js';
 import { AiListsPage } from './ai-lists.js';
 import { OptimiseBlock } from './optimise.js';
 
-const REPO_URL = 'https://github.com/openOmsi-project/openOMSI';
-const PRIVACY_URL = 'https://openomsi.org/privacy/';
+const REPO_URL = 'https://github.com/openBus-project/openBus';
+const PRIVACY_URL = 'https://rafaelkaiz.github.io/openBus/privacy/';
 
 /** A number, also of the text a select keeps ("0.65"); NaN for anything else. */
 function num(x) {
@@ -236,7 +236,7 @@ const CUSTOM = {
 
 
 // The game executable is AGPLv3. NVIDIA's runtime is never part of the
-// openOMSI release: the player may separately obtain official vendor files.
+// openBus release: the player may separately obtain official vendor files.
 const NVIDIA_STREAMLINE_URL = 'https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.1';
 const NVIDIA_STREAMLINE_LICENSE = 'https://github.com/NVIDIA-RTX/Streamline/blob/v2.14.1/license.txt';
 const NVIDIA_NGX_LICENSE = 'https://github.com/NVIDIA-RTX/Streamline/blob/v2.14.1/external/ngx-sdk/license.txt';
@@ -275,7 +275,7 @@ function NvidiaDlssInstall() {
     <div class="setting-row full">
       <div class="stack" style="gap:10px">
         <${Name} label="NVIDIA DLSS runtime (optional)"
-          help="Not included with openOMSI. Installs NVIDIA's own DLLs only after your approval. Windows, NVIDIA RTX and a game restart required." />
+          help="Not included with openBus. Installs NVIDIA's own DLLs only after your approval. Windows, NVIDIA RTX and a game restart required." />
         <p class="muted small" style="margin:0">${t(status == null ? 'Checking NVIDIA DLSS files…'
           : installed ? 'NVIDIA DLSS runtime is installed.'
           : 'DLSS files are not installed. The game works without them.')}</p>
@@ -494,9 +494,9 @@ function VersionRow() {
   const [open, setOpen] = useState(false);
   return html`<${UpdateRow} /><div class="setting-row full">
     <div class="row wrap">
-      <span class="muted small grow">${t('This is openOMSI {version}', { version: S.boot?.version || '' })}</span>
+      <span class="muted small grow">${t('This is openBus {version}', { version: S.boot?.version || '' })}</span>
       ${S.boot?.versions && html`<${Button} small icon="history" label="Choose a version…" onClick=${() => setOpen(true)} />`}
-      <${Button} small kind="ghost" icon="external" onClick=${() => call('open_url', { url: REPO_URL }).catch((e) => toast(t(e.message), 'error'))}>github.com/openOmsi-project/openOMSI</${Button}>
+      <${Button} small kind="ghost" icon="external" onClick=${() => call('open_url', { url: REPO_URL }).catch((e) => toast(t(e.message), 'error'))}>github.com/openBus-project/openBus</${Button}>
       <${Button} small kind="ghost" label="Privacy" onClick=${() => call('open_url', { url: PRIVACY_URL }).catch((e) => toast(t(e.message), 'error'))} />
     </div>
     ${open && html`<${VersionsDialog} onClose=${() => setOpen(false)} />`}

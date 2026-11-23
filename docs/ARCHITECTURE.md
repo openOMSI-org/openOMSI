@@ -1,6 +1,6 @@
 # Architecture
 
-openOMSI mirrors the unit structure of the original Delphi program so that every subsystem
+openBus mirrors the unit structure of the original Delphi program so that every subsystem
 has an obvious counterpart, but replaces its architecture where the original was limited:
 64-bit, data loading and tessellation on a worker pool, a modern renderer, no global mutable
 state (the aim; see "Known debt" below for where the code stands).

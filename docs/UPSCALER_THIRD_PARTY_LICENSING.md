@@ -1,15 +1,15 @@
 # Third-party temporal upscaler licensing — decision record
 
 **Status: AMD 2.4.0's four FSR DLLs are expressly MIT-listed and bundled.
-NVIDIA runtime DLLs are NOT bundled with openOMSI releases; the Windows
+NVIDIA runtime DLLs are NOT bundled with openBus releases; the Windows
 launcher offers an optional, player-initiated direct download from NVIDIA
 only after the player acknowledges NVIDIA's terms. This does NOT independently
 settle AGPLv3/NGX compatibility.** This is not legal advice, nor a claim of consent
-from NVIDIA or every openOMSI rights holder.
+from NVIDIA or every openBus rights holder.
 
 ## Scope
 
-- All original openOMSI source code (including the DLSS/FSR integration) stays
+- All original openBus source code (including the DLSS/FSR integration) stays
   AGPLv3-licensed. Its license is not changed or excepted by bundling vendor
   binaries.
 - NVIDIA: Streamline 2.14.1; `sl.interposer.dll`, `sl.common.dll`,
@@ -28,7 +28,7 @@ it lists **all four exact signedbin DLLs** above, then states those listed
 files `are subject to the following license`: the MIT grant.
 
 This **explicit exception** means these four signed DLLs can be redistributed
-together with the AGPLv3 openOMSI distribution under their MIT terms, with
+together with the AGPLv3 openBus distribution under their MIT terms, with
 copyright/permission notice preserved. This conclusion is limited to those
 four filenames at the pinned commit — it does not cover every binary, SDK
 tool, library or future version.
@@ -58,12 +58,12 @@ automatically prohibit every open-source game; they do mean that the
 interaction with AGPLv3 needs an affirmative, case-specific determination.
 
 The proprietary NGX DLL is *not* generally covered by the Streamline MIT
-license. Neither openOMSI's AGPLv3 nor its retained historical MIT notice
+license. Neither openBus's AGPLv3 nor its retained historical MIT notice
 changes the licensing of any vendor binary. NVIDIA's binaries keep their
 original NVIDIA terms; AMD's four specifically MIT-listed binaries keep
-their original AMD MIT terms. No openOMSI source code is being removed from
-AGPLv3 by this distribution notice. Because openOMSI's optional DLSS integration dynamically loads this
-DLL, merely placing it beside `openomsi.exe` or calling it a separate file
+their original AMD MIT terms. No openBus source code is being removed from
+AGPLv3 by this distribution notice. Because openBus's optional DLSS integration dynamically loads this
+DLL, merely placing it beside `openbus.exe` or calling it a separate file
 does not prove a GPL/AGPL-compatible aggregate. The GNU GPL FAQ treats
 linking with GPL-incompatible libraries as needing an appropriate exception
 unless a defined exception applies. A custom linking exception for AGPL code
@@ -77,7 +77,7 @@ files. This opt-in installer does not itself grant an AGPL linking exception,
 establish compatibility, sublicense NVIDIA's DLLs, or shift liability to
 NVIDIA. Acceptance is not transfer of ownership. NVIDIA's open-source Streamline core and proprietary
 NGX runtime remain subject to different legal grants. The maintainers
-should obtain confirmation from NVIDIA and appropriate openOMSI rights
+should obtain confirmation from NVIDIA and appropriate openBus rights
 holders before public release; see `NVIDIA_DLL_LICENSE_SCOPE.md`.
 
 Official references:

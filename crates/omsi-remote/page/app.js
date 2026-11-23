@@ -11,12 +11,12 @@ const store = {
 
 const App = {
   ws: null,
-  token: store.get("openomsi.token"),
+  token: store.get("openbus.token"),
   vehicle: null,
   layout: null,
   scope: null,
   state: {},
-  page: Math.max(0, Number(store.get("openomsi.page")) || 0),
+  page: Math.max(0, Number(store.get("openbus.page")) || 0),
   nodes: [],
   pressed: new Map(),
   retry: 0,
@@ -138,13 +138,13 @@ const App = {
         this.token = m.token;
         this.qrPin = null;
         this.pairing = false;
-        store.set("openomsi.token", m.token);
+        store.set("openbus.token", m.token);
         $("pair").hidden = true;
         break;
       case "denied":
         if (m.reason === "token") {
           this.token = null;
-          store.set("openomsi.token", null);
+          store.set("openbus.token", null);
           if (this.qrPin) this.pairWith(this.qrPin);
           else this.showPair();
         } else if (m.reason === "full") {
@@ -265,7 +265,7 @@ const App = {
 
   showPage(i) {
     this.page = i;
-    store.set("openomsi.page", String(i));
+    store.set("openbus.page", String(i));
     this.render();
   },
 

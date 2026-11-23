@@ -123,7 +123,7 @@ pub fn relative_file(path: &Path, root: &Path) -> String {
 }
 
 /// `path` relative to the root of `roots` it lies in, the deepest one: an OMSI 2 folder
-/// inside the content folder (`openOMSI/OMSI 2`, as a server is often laid out) names its
+/// inside the content folder (`openBus/OMSI 2`, as a server is often laid out) names its
 /// files `Vehicles/...` as the other games find them, not `OMSI 2/Vehicles/...`, which no
 /// other game has (a Linux server's AI cars were left out on every client, #1097).
 pub fn relative_to_roots(path: &Path, roots: &[PathBuf]) -> Option<String> {
@@ -166,11 +166,11 @@ mod tests {
     #[test]
     fn a_file_is_named_relative_to_the_deepest_root_holding_it() {
         // the content folder first, the OMSI 2 folder inside it after (a server's layout)
-        let roots = [PathBuf::from("/srv/openOMSI"), PathBuf::from("/srv/openOMSI/OMSI 2")];
-        let golf = Path::new("/srv/openOMSI/OMSI 2/Vehicles/VW_Golf_2/ai_vw_golf_2.bus");
+        let roots = [PathBuf::from("/srv/openBus"), PathBuf::from("/srv/openBus/OMSI 2")];
+        let golf = Path::new("/srv/openBus/OMSI 2/Vehicles/VW_Golf_2/ai_vw_golf_2.bus");
         assert_eq!(relative_to_roots(golf, &roots).as_deref(), Some("Vehicles/VW_Golf_2/ai_vw_golf_2.bus"));
         // a mod in the content folder itself stays relative to that
-        let m = Path::new("/srv/openOMSI/Vehicles/Mod/mod.bus");
+        let m = Path::new("/srv/openBus/Vehicles/Mod/mod.bus");
         assert_eq!(relative_to_roots(m, &roots).as_deref(), Some("Vehicles/Mod/mod.bus"));
         assert_eq!(relative_to_roots(Path::new("/elsewhere/x.bus"), &roots), None);
     }

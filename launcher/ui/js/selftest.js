@@ -1,4 +1,4 @@
-// The page checks itself in a hidden window (OPENOMSI_LAUNCHER_SELFTEST=1): the commands
+// The page checks itself in a hidden window (OPENBUS_LAUNCHER_SELFTEST=1): the commands
 // answer, the content is read, a map picture comes through `omsi://`, the font is Inter, and
 // every page draws without an error. The report goes back to the program, which prints it.
 
@@ -43,7 +43,7 @@ export async function selftest() {
     const r = await fetch(url).catch((e) => ({ ok: false, status: e.message }));
     check('omsi:// picture', r.ok, `${url} ${r.status}`);
   }
-  // (OPENOMSI_LAUNCHER_SELFTEST=full: the game program draws the bus and reads the route map)
+  // (OPENBUS_LAUNCHER_SELFTEST=full: the game program draws the bus and reads the route map)
   if (S.boot?.selftest === 'full' && S.vehicles?.length) {
     const c = S.choice;
     const bus = S.vehicles.find((v) => /SD77|SD202|NL202/i.test(v.file)) || S.vehicles[0];

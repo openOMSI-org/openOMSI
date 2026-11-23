@@ -1,4 +1,4 @@
-# Builds openOMSI for Windows and Linux (x64, ARM64), macOS (Apple silicon, Intel) and Android
+# Builds openBus for Windows and Linux (x64, ARM64), macOS (Apple silicon, Intel) and Android
 # (plus the dedicated server for Linux and Windows) when a maintainer runs it from main
 # (Actions -> Release -> Run workflow) and publishes them as the beta (pre-release)
 # v<MAJOR.MINOR.PATCH>; promote.yml makes a tested beta the stable release. A push to main
@@ -52,7 +52,7 @@ jobs:
         run: echo "version=$(sh scripts/version.sh)${PR:+-pr$PR}" >> "$GITHUB_OUTPUT"
       - env:
           VERSION: ${{ steps.v.outputs.version }}
-        run: echo "### openOMSI $VERSION" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "### openBus $VERSION" >> "$GITHUB_STEP_SUMMARY"
 
   windows:
     needs: version
@@ -65,7 +65,7 @@ jobs:
         # ARM64 (Snapdragon laptops): built on the x64 runner with its ARM64 tools
         arch: ${{ fromJSON(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:all-platforms') && '["x64"]' || '["x64", "arm64"]') }}
     env:
-      OPENOMSI_VERSION: ${{ needs.version.outputs.version }}
+      OPENBUS_VERSION: ${{ needs.version.outputs.version }}
       TARGET: ${{ matrix.arch == 'arm64' && 'aarch64-pc-windows-msvc' || 'x86_64-pc-windows-msvc' }}
     steps:
       - uses: actions/checkout@v7
@@ -123,7 +123,7 @@ jobs:
           }
           Copy-Item (Join-Path $dir.FullName "libEGL.dll"), (Join-Path $dir.FullName "libGLESv2.dll"), (Join-Path $dir.FullName "LICENSE-ANGLE.txt") dist/windows/
           Get-ChildItem dist/windows
-      # NVIDIA DLSS is NOT bundled in any openOMSI release. A player may
+      # NVIDIA DLSS is NOT bundled in any openBus release. A player may
       # download the official SDK explicitly through the Windows launcher.
       # The AMD FidelityFX binaries below retain their own MIT terms.
       # The four specific signed FidelityFX SDK 2.4.0 DLLs below are explicitly
@@ -188,7 +188,7 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $name = "openOMSI-$env:OPENOMSI_VERSION-windows-${{ matrix.arch }}"
+          $name = "openBus-$env:OPENBUS_VERSION-windows-${{ matrix.arch }}"
           New-Item -ItemType Directory -Force out | Out-Null
           Copy-Item README.md, LICENSE dist/windows/
           Compress-Archive -Path dist/windows/* -DestinationPath "out/$name.zip"
@@ -196,12 +196,12 @@ jobs:
           # started with --server, start.cmd, and run-server.cmd that asks for the folder,
           # the settings and the map
           New-Item -ItemType Directory -Force dist/server | Out-Null
-          Copy-Item dist/windows/openomsi.exe, dist/windows/vcruntime140.dll, dist/windows/vcruntime140_1.dll, dist/windows/msvcp140.dll, scripts/server/start.cmd, scripts/server/run-server.cmd, scripts/server/run-server.ps1, LICENSE dist/server/
+          Copy-Item dist/windows/openbus.exe, dist/windows/vcruntime140.dll, dist/windows/vcruntime140_1.dll, dist/windows/msvcp140.dll, scripts/server/start.cmd, scripts/server/run-server.cmd, scripts/server/run-server.ps1, LICENSE dist/server/
           # (Steam's library: the x64 program does not start without it beside it)
           if (Test-Path dist/windows/steam_api64.dll) { Copy-Item dist/windows/steam_api64.dll dist/server/ }
           Copy-Item docs/SERVER.md dist/server/README.md
-          New-Item -ItemType File -Force dist/server/.openomsi-content | Out-Null
-          Compress-Archive -Path dist/server/* -DestinationPath "out/openOMSI-$env:OPENOMSI_VERSION-server-windows-${{ matrix.arch }}.zip"
+          New-Item -ItemType File -Force dist/server/.openbus-content | Out-Null
+          Compress-Archive -Path dist/server/* -DestinationPath "out/openBus-$env:OPENBUS_VERSION-server-windows-${{ matrix.arch }}.zip"
       - name: Installer
         shell: bash
         run: |
@@ -210,25 +210,25 @@ jobs:
             command -v makensis >/dev/null && break
             choco install nsis -y --no-progress || sleep 30
           done
-          sh scripts/windows/make-installer.sh dist/windows "out/openOMSI-$OPENOMSI_VERSION-windows-${{ matrix.arch }}-setup.exe"
+          sh scripts/windows/make-installer.sh dist/windows "out/openBus-$OPENBUS_VERSION-windows-${{ matrix.arch }}-setup.exe"
       - name: Installer install and uninstall
         if: matrix.arch == 'x64'
         shell: pwsh
         run: |
-          $dir = "$env:RUNNER_TEMP\openOMSI"
-          $lnk = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\openOMSI.lnk"
-          $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\openOMSI"
-          Start-Process -Wait "out/openOMSI-$env:OPENOMSI_VERSION-windows-x64-setup.exe" -ArgumentList "/S", "/D=$dir"
-          foreach ($p in "$dir\openomsi.exe", "$dir\openomsi-launcher-app.exe", "$dir\uninstall.exe", $lnk, $key) {
+          $dir = "$env:RUNNER_TEMP\openBus"
+          $lnk = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\openBus.lnk"
+          $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\openBus"
+          Start-Process -Wait "out/openBus-$env:OPENBUS_VERSION-windows-x64-setup.exe" -ArgumentList "/S", "/D=$dir"
+          foreach ($p in "$dir\openbus.exe", "$dir\openbus-launcher-app.exe", "$dir\uninstall.exe", $lnk, $key) {
             if (-not (Test-Path $p)) { throw "the installer did not make $p" }
           }
           New-Item -ItemType Directory -Force "$dir\Mods\mine" | Out-Null
           Set-Content "$dir\Mods\mine\keep.txt" "a player's mod"
           Set-Content "$dir\later.dll" "a file an update brought"
-          Set-Content "$dir\openomsi.exe.old-update" "the version before"
-          Set-Content "$dir\.openomsi-files" "later.dll`nopenomsi.exe`n..`nMods`n"
+          Set-Content "$dir\openbus.exe.old-update" "the version before"
+          Set-Content "$dir\.openbus-files" "later.dll`nopenbus.exe`n..`nMods`n"
           Start-Process -Wait "$dir\uninstall.exe" -ArgumentList "/S", "_?=$dir"
-          foreach ($p in "$dir\openomsi.exe", "$dir\openomsi-launcher-app.exe", "$dir\later.dll", "$dir\openomsi.exe.old-update", "$dir\.openomsi-files", $lnk, $key) {
+          foreach ($p in "$dir\openbus.exe", "$dir\openbus-launcher-app.exe", "$dir\later.dll", "$dir\openbus.exe.old-update", "$dir\.openbus-files", $lnk, $key) {
             if (Test-Path $p) { throw "the uninstaller left $p" }
           }
           if (-not (Test-Path "$dir\Mods\mine\keep.txt")) { throw "the uninstaller deleted the player's mods" }
@@ -267,17 +267,17 @@ jobs:
         # Intel Macs: built on the Apple silicon runner for x86_64
         arch: ${{ fromJSON(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:all-platforms') && '["arm64"]' || '["arm64", "x64"]') }}
     env:
-      OPENOMSI_VERSION: ${{ needs.version.outputs.version }}
-      OPENOMSI_TARGET: ${{ matrix.arch == 'x64' && 'x86_64-apple-darwin' || 'aarch64-apple-darwin' }}
+      OPENBUS_VERSION: ${{ needs.version.outputs.version }}
+      OPENBUS_TARGET: ${{ matrix.arch == 'x64' && 'x86_64-apple-darwin' || 'aarch64-apple-darwin' }}
       MACOSX_DEPLOYMENT_TARGET: '11.0'
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ env.OPENOMSI_TARGET }}
+          targets: ${{ env.OPENBUS_TARGET }}
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ env.OPENOMSI_TARGET }}
+          key: ${{ env.OPENBUS_TARGET }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             . -> target
@@ -295,8 +295,8 @@ jobs:
         run: |
           mkdir -p out
           cp README.md LICENSE dist/macos/
-          (cd dist/macos && ditto -c -k --sequesterRsrc . "../../out/openOMSI-$OPENOMSI_VERSION-macos-${{ matrix.arch }}.zip")
-          sh scripts/macos/make-dmg.sh dist/macos/openOMSI.app "out/openOMSI-$OPENOMSI_VERSION-macos-${{ matrix.arch }}.dmg"
+          (cd dist/macos && ditto -c -k --sequesterRsrc . "../../out/openBus-$OPENBUS_VERSION-macos-${{ matrix.arch }}.zip")
+          sh scripts/macos/make-dmg.sh dist/macos/openBus.app "out/openBus-$OPENBUS_VERSION-macos-${{ matrix.arch }}.dmg"
       - uses: actions/upload-artifact@v7
         with:
           # (a release keeps its files; a pull request's test builds are fetched within days)
@@ -316,7 +316,7 @@ jobs:
     timeout-minutes: 90
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04' }}
     env:
-      OPENOMSI_VERSION: ${{ needs.version.outputs.version }}
+      OPENBUS_VERSION: ${{ needs.version.outputs.version }}
     steps:
       # The x64 job builds the whole workspace's tests and then the release on one runner,
       # more than its free disk holds: full, the runner stopped answering mid-build ("lost
@@ -371,8 +371,8 @@ jobs:
           mkdir -p out
           cp README.md LICENSE dist/linux/
           cp LICENSE dist/server/
-          (cd dist/linux && zip -qr "../../out/openOMSI-$OPENOMSI_VERSION-linux-${{ matrix.arch }}.zip" .)
-          (cd dist/server && zip -qr "../../out/openOMSI-$OPENOMSI_VERSION-server-linux-${{ matrix.arch }}.zip" .)
+          (cd dist/linux && zip -qr "../../out/openBus-$OPENBUS_VERSION-linux-${{ matrix.arch }}.zip" .)
+          (cd dist/server && zip -qr "../../out/openBus-$OPENBUS_VERSION-server-linux-${{ matrix.arch }}.zip" .)
       - uses: actions/upload-artifact@v7
         with:
           # (a release keeps its files; a pull request's test builds are fetched within days)
@@ -386,12 +386,12 @@ jobs:
     timeout-minutes: 90
     runs-on: ubuntu-latest
     env:
-      OPENOMSI_VERSION: ${{ needs.version.outputs.version }}
-      # the signing key (base64 of a keystore, alias openomsi, password android); without
+      OPENBUS_VERSION: ${{ needs.version.outputs.version }}
+      # the signing key (base64 of a keystore, alias openbus, password android); without
       # it every build is signed with a new key and does not install over the last one
       ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
       # a pull request's APK is an app of its own beside the release (scripts/build-android.sh)
-      OPENOMSI_PR: ${{ github.event.pull_request.number }}
+      OPENBUS_PR: ${{ github.event.pull_request.number }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -430,10 +430,10 @@ jobs:
       - name: Package
         run: |
           mkdir -p out
-          cp "dist/android/openOMSI-$OPENOMSI_VERSION.apk" "out/openOMSI-$OPENOMSI_VERSION-android-arm64.apk"
-          # (and under a name of its own: releases/latest/download/openOMSI-android.apk is
+          cp "dist/android/openBus-$OPENBUS_VERSION.apk" "out/openBus-$OPENBUS_VERSION-android-arm64.apk"
+          # (and under a name of its own: releases/latest/download/openBus-android.apk is
           # always the newest stable APK - for a phone whose installed build cannot update itself)
-          cp "dist/android/openOMSI-$OPENOMSI_VERSION.apk" "out/openOMSI-android.apk"
+          cp "dist/android/openBus-$OPENBUS_VERSION.apk" "out/openBus-android.apk"
       - uses: actions/upload-artifact@v7
         with:
           # (a release keeps its files; a pull request's test builds are fetched within days)
@@ -486,5 +486,5 @@ jobs:
           gh release create "v$VERSION" $files SHA256SUMS \
             --verify-tag \
             --prerelease \
-            --title "openOMSI $VERSION" \
+            --title "openBus $VERSION" \
             --notes-file ../notes.md

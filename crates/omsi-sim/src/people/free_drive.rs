@@ -1,5 +1,5 @@
 //! #2712: whether the stops of the map fill in free drive, where nobody is working the
-//! timetable. OMSI's passengers turned up at stops whatever the player was driving; openOMSI
+//! timetable. OMSI's passengers turned up at stops whatever the player was driving; openBus
 //! filled a stop only where the timetable had a trip due there, so a driver out for a spin
 //! found the whole map empty.
 

@@ -1,7 +1,7 @@
-# openOMSI dedicated server - a starting point for a test (copy it to config/server.cfg).
+# openBus dedicated server - a starting point for a test (copy it to config/server.cfg).
 # Every key is explained in the server.cfg the server writes on its first start.
 
-name = openOMSI server (Docker)
+name = openBus server (Docker)
 motd = Test server: players' buses by their content
 
 # a small stock map for a quick start (Berlin-Spandau takes much longer to load)

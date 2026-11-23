@@ -1,7 +1,7 @@
 //! Transport modes: which kind of public transport a vehicle is and a map is made for.
 //!
-//! OMSI 2 knows buses, and a single rail flag. openOMSI lets a vehicle or a map say what it
-//! is with one bare keyword per mode (an openOMSI extension; OMSI 2 skips what it does not
+//! OMSI 2 knows buses, and a single rail flag. openBus lets a vehicle or a map say what it
+//! is with one bare keyword per mode (an openBus extension; OMSI 2 skips what it does not
 //! know, so a file that uses them still loads there):
 //!
 //! ```text

@@ -2,8 +2,8 @@
 set -eu
 cd "$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 dist="${1:-dist/windows}"
-out="${2:-out/openOMSI-setup.exe}"
-version="${OPENOMSI_VERSION:-$(sh scripts/version.sh 2>/dev/null || echo 0.0.0)}"
+out="${2:-out/openBus-setup.exe}"
+version="${OPENBUS_VERSION:-$(sh scripts/version.sh 2>/dev/null || echo 0.0.0)}"
 mkdir -p "$(dirname "$out")"
 list="${out%.exe}-uninstall.nsh"
 for f in "$dist"/*; do

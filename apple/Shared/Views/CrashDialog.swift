@@ -8,19 +8,19 @@ struct CrashReport: Decodable, Equatable {
     var silent: Bool { what.contains("closed without a word") }
 
     func report(version: String, os: String) -> String {
-        "openOMSI \(version) (\(os))\n\(what)\n\n\(tail)"
+        "openBus \(version) (\(os))\n\(what)\n\n\(tail)"
     }
 
     func issueURL(version: String, os: String) -> String {
         let gap = "\n...\n"
         let (machine, end) = tail.range(of: gap).map { (String(tail[..<$0.lowerBound]), String(tail[$0.upperBound...])) } ?? ("", tail)
         let about = machine.isEmpty ? "" : "The computer:\n```\n\(machine)\n```\n\n"
-        let body = { (lines: [String]) in "openOMSI \(version) on \(os)\n\n```\n\(what)\n```\n\n\(about)The end of the log:\n```\n\(lines.joined(separator: "\n"))\n```\n" }
+        let body = { (lines: [String]) in "openBus \(version) on \(os)\n\n```\n\(what)\n```\n\n\(about)The end of the log:\n```\n\(lines.joined(separator: "\n"))\n```\n" }
         let lines = end.components(separatedBy: "\n")
         var shown = 0
         while shown < lines.count, encode(body(Array(lines.suffix(shown + 1)))).count <= 6500 { shown += 1 }
         let title = "Crash: \(String(what.prefix(80)))"
-        return "https://github.com/openOMSI-org/openOMSI/issues/new?title=\(encode(title))&body=\(encode(body(Array(lines.suffix(shown)))))"
+        return "https://github.com/rafaelkaiz/openBus/issues/new?title=\(encode(title))&body=\(encode(body(Array(lines.suffix(shown)))))"
     }
 
     private func encode(_ s: String) -> String {

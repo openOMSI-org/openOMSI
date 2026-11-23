@@ -76,12 +76,12 @@ pub(crate) struct Shell {
     picture: Option<(u32, u32, Vec<u8>)>,
     /// The picture's texture once it is on the card.
     pub(crate) picture_tex: Option<usize>,
-    /// The openOMSI logo (the launcher's sidebar has it) on the card, and in the graphics of
+    /// The openBus logo (the launcher's sidebar has it) on the card, and in the graphics of
     /// the `shot` pictures.
     pub(crate) logo_tex: Option<usize>,
     shot_logo: Option<usize>,
-    /// The interface theme whose logo `logo_tex` is (none: openOMSI's), and the name it shows
-    /// beside it (none: "openOMSI").
+    /// The interface theme whose logo `logo_tex` is (none: openBus's), and the name it shows
+    /// beside it (none: "openBus").
     logo_of: Option<String>,
     pub(crate) logo_title: Option<String>,
     /// A theme's logo that is a wordmark (wider than `WIDE` times its height): its width over

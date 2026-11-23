@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Frame time and memory of openOMSI builds on the same scenes: wgpu against mX, and against
+"""Frame time and memory of openBus builds on the same scenes: wgpu against mX, and against
 earlier releases.
 
 usage:
   bench_wgpu_vs_mx.py <OMSI 2 root> --build LABEL=PATH[:mx|:wgpu] [--build ...]
                       [--frames N] [--runs N] [--size WxH] [--out results.csv]
-  bench_wgpu_vs_mx.py <openomsi binary> <OMSI 2 root>     (the binary as wgpu and as mX)
+  bench_wgpu_vs_mx.py <openbus binary> <OMSI 2 root>     (the binary as wgpu and as mX)
 
 A build is a game binary; `:mx` and `:wgpu` set the mX Graphics setting for it (a binary
 from before the setting ignores it). Each run is an offscreen render with OMSI_BENCH=N: the
@@ -58,7 +58,7 @@ if a.scenes:
 GRAPHICS = ["vanilla_plus", "enhanced"]
 BENCH = re.compile(r"bench: \d+ frames of \S+: drawing ([\d.]+) ms, GPU wait ([\d.]+) ms \(medians\), frame mean ([\d.]+) ms, worst ([\d.]+) ms")
 
-own = os.path.expanduser("~/.openomsi/settings.cfg")
+own = os.path.expanduser("~/.openbus/settings.cfg")
 base = open(own).read() if os.path.exists(own) else ""
 work = tempfile.mkdtemp(prefix="omsi-bench-")
 system = platform.system()
@@ -66,7 +66,7 @@ system = platform.system()
 
 def home(label: str, mx: bool) -> str:
     h = os.path.join(work, re.sub(r"\W", "_", label))
-    d = os.path.join(h, ".openomsi")
+    d = os.path.join(h, ".openbus")
     os.makedirs(d, exist_ok=True)
     keep = [l for l in base.splitlines() if not re.match(r"\s*(mx_graphics|upscaler|render_scale|frame_generation)\s*=", l)]
     keep += [f"mx_graphics={int(mx)}", "upscaler=off", "render_scale=1", "frame_generation=off"]

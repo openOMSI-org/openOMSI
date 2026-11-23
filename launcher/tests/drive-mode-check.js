@@ -54,7 +54,7 @@ export async function run(root, Component = DriveMode) {
       assert(root.querySelector('#multiplayer-code'), 'Join must show the code form even when hosting');
       assert(!root.querySelector('[role="dialog"]').textContent.includes('Use a server address'), 'Friend dialog must not show addresses');
       const dialog = root.querySelector('[role="dialog"]');
-      const privacy = 'Sessions and servers are run by players, not by openOMSI.';
+      const privacy = 'Sessions and servers are run by players, not by openBus.';
       assert(dialog.innerText.includes(privacy), 'The player-operated server and data notice must be visible before confirming');
       assert(![...dialog.querySelectorAll('details')].some((details) => details.textContent.includes(privacy)), 'The server and data notice must not be hidden in collapsed help');
       assert(JSON.stringify(S.choice) === choice, 'Opening Join must retain all duty settings');

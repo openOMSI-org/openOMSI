@@ -12,7 +12,7 @@ pub(crate) struct SoundState {
     pub(crate) audio: Option<omsi_audio::AudioEngine>,
     /// Sounds of the world around the camera (rain, footsteps).
     pub(crate) ambience: Option<ambience::Ambience>,
-    /// openOMSI's ambience from recordings (settings `ambient`, `vol_ambient`).
+    /// openBus's ambience from recordings (settings `ambient`, `vol_ambient`).
     pub(crate) soundscape: Option<crate::soundscape::Soundscape>,
     /// Voice chat in a session (`voice_chat`), alive while the settings have it on.
     pub(crate) voice: Option<crate::voice_chat::VoiceChat>,
@@ -95,7 +95,7 @@ pub(crate) struct Integrations {
     pub(crate) plugin_command: bool,
     /// The Lua plugins' panels and notifications on the screen (`omsi.ui`).
     pub(crate) plugin_panels: crate::plugin_ui::PluginPanels,
-    /// Discord's "Playing openOMSI" status, and when it was last brought up to date.
+    /// Discord's "Playing openBus" status, and when it was last brought up to date.
     #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
     pub(crate) discord: Option<crate::discord::Discord>,
     #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]

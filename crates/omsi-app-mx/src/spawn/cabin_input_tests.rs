@@ -85,7 +85,7 @@ fn desktop_click_keeps_endpoint_fallback_and_precise_cancel_stops_it() {
 #[test]
 fn desktop_escape_finishes_pending_drag_and_keeps_endpoint_fallback() {
     use clap::Parser;
-    let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+    let mut app = crate::assemble_app(crate::Args::parse_from(["openbus"]), Default::default());
     app.player = Some(player());
     app.input.dragging = true;
     app.input.drag_delta = (0.0, 0.5);
@@ -113,7 +113,7 @@ fn automatically_moving_control() -> Player {
 #[test]
 fn desktop_escape_preserves_an_auto_drag_until_it_finishes() {
     use clap::Parser;
-    let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default());
+    let mut app = crate::assemble_app(crate::Args::parse_from(["openbus"]), Default::default());
     app.player = Some(automatically_moving_control());
     app.open_game_menu();
     assert!(app.player.as_ref().unwrap().auto_drag.is_some());

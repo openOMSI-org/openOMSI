@@ -180,7 +180,7 @@ mod save_slot_tests {
     #[test]
     fn a_quicksave_belongs_to_the_map_it_names() {
         assert!(same_map("maps\\Grundorf\\global.cfg", "maps/Grundorf/global.cfg"));
-        assert!(same_map("C:\\Users\\x\\openOMSI\\content\\maps\\Grundorf\\global.cfg", "maps/grundorf/global.cfg"));
+        assert!(same_map("C:\\Users\\x\\openBus\\content\\maps\\Grundorf\\global.cfg", "maps/grundorf/global.cfg"));
         assert!(!same_map("maps\\Berlin-Spandau\\global.cfg", "maps/Grundorf/global.cfg"));
         let dir = std::env::temp_dir().join(format!("omsi_quicksave_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -219,14 +219,14 @@ mod save_slot_tests {
         std::fs::write(dir.join("Slot 2.osn"), b"[time]\r\n8\r\n").unwrap();
         std::fs::write(dir.join("Slot 3.osn"), b"[name]\rold\r[time]\r8\r").unwrap();
         write_name(&dir.join("Slot 3.osn"), "Morning").unwrap();
-        assert_eq!(omsi_cfg::decode_text(&std::fs::read(dir.join("Slot 3.osn")).unwrap()), "[name]\r\nMorning\r\n[openomsi_name_chosen]\r\n[time]\r\n8\r\n");
+        assert_eq!(omsi_cfg::decode_text(&std::fs::read(dir.join("Slot 3.osn")).unwrap()), "[name]\r\nMorning\r\n[openbus_name_chosen]\r\n[time]\r\n8\r\n");
         std::fs::remove_file(dir.join("Slot 3.osn")).unwrap();
         let before = std::fs::metadata(dir.join("Slot 1.osn")).unwrap().modified().unwrap();
         write_name(&dir.join("Slot 1.osn"), "Slot 1: Depot run, 09:00").unwrap();
         assert_eq!(std::fs::metadata(dir.join("Slot 1.osn")).unwrap().modified().unwrap(), before);
         write_name(&dir.join("Slot 2.osn"), "Перед депо").unwrap();
-        assert_eq!(std::fs::read(dir.join("Slot 1.osn")).unwrap(), utf16(&format!("[name]\r\nSlot 1: Depot run, 09:00\r\n[openomsi_name_chosen]{body}")));
-        assert_eq!(omsi_cfg::decode_text(&std::fs::read(dir.join("Slot 2.osn")).unwrap()), "[name]\r\nПеред депо\r\n[openomsi_name_chosen]\r\n\r\n[time]\r\n8\r\n");
+        assert_eq!(std::fs::read(dir.join("Slot 1.osn")).unwrap(), utf16(&format!("[name]\r\nSlot 1: Depot run, 09:00\r\n[openbus_name_chosen]{body}")));
+        assert_eq!(omsi_cfg::decode_text(&std::fs::read(dir.join("Slot 2.osn")).unwrap()), "[name]\r\nПеред депо\r\n[openbus_name_chosen]\r\n\r\n[time]\r\n8\r\n");
         std::fs::write(dir.join("Slot 4.osn"), utf16("[name]\r\nSlot 4: SD202, 10:00\r\n")).unwrap();
         let mut slots: Vec<(String, bool)> = save_slots(&dir).into_iter().map(|s| (s.name, s.chosen)).collect();
         slots.sort();

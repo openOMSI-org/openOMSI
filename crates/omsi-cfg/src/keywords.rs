@@ -4,7 +4,7 @@
 //! string equality, so case and surrounding white space count): a `[matl_nozWrite]` or
 //! `[NoDistanceCheck]` in a mod is not a keyword there. The list is every bracketed literal
 //! the program compares lines with (version 2.2.032); a keyword that is not in it is one
-//! openOMSI reads on its own account and is compared without regard to case.
+//! openBus reads on its own account and is compared without regard to case.
 
 /// Keywords whose spelling has capitals, sorted by their lower-case form.
 pub(crate) const MIXED_CASE: &[&str] = &[

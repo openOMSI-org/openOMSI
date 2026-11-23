@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>openOMSI uses the microphone for voice chat in multiplayer, only while you hold a talk key (or with the open microphone) and only if you switch voice chat on. Nothing is recorded.</string>
+	<string>openBus uses the microphone for voice chat in multiplayer, only while you hold a talk key (or with the open microphone) and only if you switch voice chat on. Nothing is recorded.</string>
 </dict>
 </plist>

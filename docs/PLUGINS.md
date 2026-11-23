@@ -1,6 +1,6 @@
 # Plugins
 
-openOMSI runs three kinds of plugins from the `plugins` folder of the game (and of every
+openBus runs three kinds of plugins from the `plugins` folder of the game (and of every
 content root):
 
 * **Lua plugins** (`.lua`) - a text file, no compiler, works the same on Windows, macOS,
@@ -9,7 +9,7 @@ content root):
   and the people, the weather and the clock, the camera, input, sound, panels of their own
   on the screen, storage, settings and the LAN session - about 270 functions and 60 events.
 * **Compiled plugins** (`.oop`) - a plugin built with the
-  [openOMSI Development Tools](https://github.com/openOMSI-org/openOMSI-Development-Tools):
+  [openBus Development Tools](https://github.com/openOMSI-org/openOMSI-Development-Tools):
   Lua, or Rust (and other languages) compiled to WebAssembly. One file for every platform,
   run in a sandbox with only the permissions it declares (see
   [below](#compiled-plugins-oop)).
@@ -121,7 +121,7 @@ for all of them:
   where it may happen.
 * **Units**: metres, map coordinates x east, y north, z up; headings in degrees clockwise
   from north; speeds km/h; times seconds (of the day since midnight for clock times).
-* **New functions come with new openOMSI versions.** `omsi.game.has("weather.set")` tells
+* **New functions come with new openBus versions.** `omsi.game.has("weather.set")` tells
   whether this game has one; the reference says since which version each exists.
 
 The parts of the API, with a taste of each (the [reference](#reference) has every
@@ -179,7 +179,7 @@ without building the table):
 
 `map`, `clock` (seconds since midnight), `day`, `year`, `view`, `paused`, `on_foot`,
 `multiplayer`, `traffic` (AI vehicles), `speed` (km/h), `delay` (s, late positive),
-`map_path` (the map's global.cfg), `version` (of openOMSI); with a bus also `tile_x`,
+`map_path` (the map's global.cfg), `version` (of openBus); with a bus also `tile_x`,
 `tile_y` (its tile, as global.cfg's `[map]` list numbers them), `tile_pos_x`, `tile_pos_y`
 (metres in that tile, x east, y north), `heading` (degrees, clockwise from north),
 `vehicle_manufacturer`, `vehicle_model`, `destination` (the terminus the bus shows),
@@ -341,7 +341,7 @@ F10 gives the panels the mouse; a click on the button sounds the horn. The whole
 `omsi.ui.version` is `8` (`7` before cards over the map, `6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
 element, `4` before `grab`, `3` before boxes, stop lists and the other
 elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
-test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
+test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openBus.
 The panels are the plugin's own: one plugin cannot change or remove another's, and when the
 plugin stops, or is loaded again after a change of its file, its panels go (its
 notifications run their time). They show over the picture and the navigator and under the
@@ -442,7 +442,7 @@ card taller than the map - is left out: its background stops at the edge with it
 rounded, and a text, an icon or a picture that does not wholly fit is not drawn. Its buttons
 and other clickable parts take clicks as in the panel; a press on the map beside them is still
 the navigator's. A `map` element outside a panel in the whole frame is empty room, and its cards
-are laid out in that room the same way. An older openOMSI leaves `overlay` out and shows the map
+are laid out in that room the same way. An older openBus leaves `overlay` out and shows the map
 without them; [`navigator_map.lua`](examples/plugins/navigator_map.lua) is a whole example.
 
 ```lua
@@ -483,7 +483,7 @@ Another element with an `id` and `clickable = true` (a whole row, say) is clicke
 button is. Texts are shown as they are: they are not translated into the game's language.
 
 Keys the game does not know are left alone and an element of an unknown `type` is left out,
-so a plugin written for a later openOMSI still shows its panels here. A key of the wrong
+so a plugin written for a later openBus still shows its panels here. A key of the wrong
 kind makes `set` return `false` and the reason. Limits, each plugin: 16 panels, 200
 elements in a panel (those in rows, boxes and cards over a map counted, and each card), 500 characters in a text, 64 in an id,
 rows and boxes 8 deep, 512 values in a chart or cells in a table.
@@ -626,7 +626,7 @@ only to ports from 1024 up. It holds at most 256 MB of memory.
 
 ### Tips
 
-* Watch `game.log` (in `~/.openomsi/`) while you write a plugin: every `omsi.log` line and
+* Watch `game.log` (in `~/.openbus/`) while you write a plugin: every `omsi.log` line and
   every error is there.
 * `OMSI_WATCH_VARS=Velocity,throttle` logs changes of bus variables - useful to find the
   names a bus uses; the bus's `.osc` scripts list them all, `omsi.vars()` too.
@@ -645,7 +645,7 @@ declared to call the function (a plain `.lua` file has all except native process
 
 ### Native helper programs
 
-The interactive game asks for permission when a plugin first tries to start a native helper. The host-owned window initially shows the plugin name, the application's filename and the number of arguments, together with the safety warning and decision descriptions. **Details** reveals the full executable path, plugin entry path, individual arguments and working directory; **Hide details** collapses them again. Each new request starts collapsed, and opening details never approves execution. **Allow once** covers only that launch. **Always allow** stores a hash-bound approval in `~/.openomsi/plugin-process-permissions.json` (on Windows, `%USERPROFILE%\.openomsi\plugin-process-permissions.json`). It applies only to that entry, folder snapshot and helper; changed content asks again. **Deny** blocks all native helpers for that canonical plugin entry for the current game session, even if helper names, content or arguments change. Escape also denies; Enter never automatically approves. The game and other plugins keep running while a request waits. Unload/reload cancels it. Packages must still declare `process`. Dialog text and buttons are translated into every supported interface language; plugin names, file paths and arguments are displayed literally and are never sent to translation.
+The interactive game asks for permission when a plugin first tries to start a native helper. The host-owned window initially shows the plugin name, the application's filename and the number of arguments, together with the safety warning and decision descriptions. **Details** reveals the full executable path, plugin entry path, individual arguments and working directory; **Hide details** collapses them again. Each new request starts collapsed, and opening details never approves execution. **Allow once** covers only that launch. **Always allow** stores a hash-bound approval in `~/.openbus/plugin-process-permissions.json` (on Windows, `%USERPROFILE%\.openbus\plugin-process-permissions.json`). It applies only to that entry, folder snapshot and helper; changed content asks again. **Deny** blocks all native helpers for that canonical plugin entry for the current game session, even if helper names, content or arguments change. Escape also denies; Enter never automatically approves. The game and other plugins keep running while a request waits. Unload/reload cancels it. Packages must still declare `process`. Dialog text and buttons are translated into every supported interface language; plugin names, file paths and arguments are displayed literally and are never sent to translation.
 
 Embedded hosts remain default-deny unless they explicitly install `ProcessPermissions` through `Plugins::load_with_process_permissions`. The optional `OMSI_PLUGIN_PROCESS_ALLOW` variable names an absolute JSON manifest for preapproved content; ordinary players do not need environment variables or terminal commands. The manifest schema is unchanged, but older full-folder snapshots may need regeneration under the executable-content policy below. All approvals bind the canonical entry path and SHA256, canonical plugin folder, relevant executable-content files (including required modules), and the helper path and SHA256. Remove a saved approval from the user settings file with the game closed to revoke it.
 
@@ -948,10 +948,10 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | `omsi.ui.screen()` | width, height, scale | The screen in the panels' pixels, and how many of the screen's own pixels one of them is. | 0.2.21 |
 | `omsi.ui.set(id, panel)` | true, or false and the reason | Creates the panel `id` or replaces it; a table that is not right gives `false` and where (`"children[2].size: a number is expected"`). The same table again changes nothing. *Permission: `ui`.* | 0.2.21 |
 | `omsi.ui.set_menu_item(id, label, [icon])` | true, or false and the reason | Puts a line in the game's pause menu, or changes the plugin's line `id`: its label (40 characters at most, shown as it is) and a Material Symbols icon of the game's (`"departure_board"`; the plugins' own icon without one). Choosing it closes the menu and sends `menu_item` with `id` - to open the plugin's panel, say. A plugin has 3 lines at most; they go when it stops. *Permission: `ui`.* | 0.3.36 |
-| `omsi.ui.set_theme(id)` | true, or false and the reason | Switches the game's interface to theme `id` (`""` or `"openomsi"`: openOMSI's own look), as if the player chose it in Options › Interface: it is kept for the next start. Ask the player first; they can switch back there. *Permission: `ui`.* | 0.3.42 |
+| `omsi.ui.set_theme(id)` | true, or false and the reason | Switches the game's interface to theme `id` (`""` or `"openbus"`: openBus's own look), as if the player chose it in Options › Interface: it is kept for the next start. Ask the player first; they can switch back there. *Permission: `ui`.* | 0.3.42 |
 | `omsi.ui.show(panel, [on])` | boolean | Shows a panel (or hides it with `false`; it is kept); `false` when there is none. *Permission: `ui`.* | 0.2.22 |
-| `omsi.ui.theme()` | string | The id of the interface theme in use (`""`: openOMSI's own look). | 0.3.42 |
-| `omsi.ui.themes()` | list of tables | The game's interface themes: each `{ id, name }`, openOMSI's own look first (its id `""`). A theme is a folder with a `theme.json` (`Themes/<id>/`, or a plugin's own folder: see docs/THEMES.md). | 0.3.42 |
+| `omsi.ui.theme()` | string | The id of the interface theme in use (`""`: openBus's own look). | 0.3.42 |
+| `omsi.ui.themes()` | list of tables | The game's interface themes: each `{ id, name }`, openBus's own look first (its id `""`). A theme is a folder with a `theme.json` (`Themes/<id>/`, or a plugin's own folder: see docs/THEMES.md). | 0.3.42 |
 | `omsi.ui.toast(text, [opts])` | true, or false and the reason | A notification card at the top right, newest at the top; it goes after `opts.seconds` (1 to 60, default 5). `opts`: `title`, `icon`, `color`. A plugin shows 8 at most: a ninth makes its oldest go. *Permission: `ui`.* | 0.2.21 |
 | `omsi.ui.toggle(panel)` | boolean | Shows a hidden panel or hides a shown one; whether it shows now. *Permission: `ui`.* | 0.2.22 |
 | `omsi.ui.typing()` | boolean | Whether the player types into a text field of a plugin now (the keys then go to the field, not to the bus). | 0.2.22 |
@@ -1054,7 +1054,7 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | `omsi.game.action(name)` | boolean | A game action of keyboard.cfg's `[game]` (`sim_pause`, `view_set_map`, `view_toggle_informationdisplay`, `view_set_schedule`, ...), as its key does; `true` when the game knows it. *Permission: `world_write`.* | 0.2.22 |
 | `omsi.game.api()` | integer | The version of the plugin interface (`api_abi` of an `.oop`; raised only when something is taken away or changes). | 0.2.22 |
 | `omsi.game.fps()` | number or nil | Frames a second now. | 0.2.22 |
-| `omsi.game.has(name)` | boolean | Whether this game has an API function (`"weather.set"`): for a plugin that should also run in an older openOMSI. | 0.2.22 |
+| `omsi.game.has(name)` | boolean | Whether this game has an API function (`"weather.set"`): for a plugin that should also run in an older openBus. | 0.2.22 |
 | `omsi.game.menu_open()` | boolean | Whether the game menu is open. | 0.2.22 |
 | `omsi.game.notify(text, [kind], [seconds])` | boolean | A notification of the game's own (the cards the server's messages use): `kind` `"info"`, `"warning"` or `"alert"`. *Permission: `ui`.* | 0.2.22 |
 | `omsi.game.platform()` | string | The system the game runs on: `"windows"`, `"macos"`, `"linux"`, `"android"`. | 0.2.22 |
@@ -1174,8 +1174,8 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 
 ## Compiled plugins (`.oop`)
 
-An `.oop` (openOMSI Plugin) is to a plugin what a DLL is to a program, but sandboxed: build
-output, not sources. `oopc build` of the [openOMSI Development
+An `.oop` (openBus Plugin) is to a plugin what a DLL is to a program, but sandboxed: build
+output, not sources. `oopc build` of the [openBus Development
 Tools](https://github.com/openOMSI-org/openOMSI-Development-Tools) makes one from a plugin
 project, and the game loads `plugins/<name>.oop` like the other plugins. Two kinds:
 
@@ -1185,7 +1185,7 @@ project, and the game loads `plugins/<name>.oop` like the other plugins. Two kin
   bytecode could break out of the sandbox.
 * **WebAssembly** (`wasm32-unknown-unknown`), usually Rust with the plugin SDK of the
   Development Tools: the module calls every function of the API by its name here
-  (`openomsi.call("ui.set", ...)`, the SDK wraps them all) and gets the same events, timers
+  (`openbus.call("ui.set", ...)`, the SDK wraps them all) and gets the same events, timers
   and watches. It runs in an interpreter (wasmi) on every platform the game runs on; one call
   into it that runs too long stops the plugin, not the game, and it may use 256 MB of memory.
   A callback that the module's own call raises (its `emit` reaching its own handler) runs
@@ -1213,8 +1213,8 @@ output, never the author's sources, which are not in the file.
 ## The telemetry file (for programs beside the game)
 
 A program that only wants to follow the player's bus - a fleet map, an in-vehicle
-terminal, a stream overlay - can read `~/.openomsi/telemetry.json` (on Windows
-`%USERPROFILE%\.openomsi\telemetry.json`) instead of being a plugin. The game writes it
+terminal, a stream overlay - can read `~/.openbus/telemetry.json` (on Windows
+`%USERPROFILE%\.openbus\telemetry.json`) instead of being a plugin. The game writes it
 **only while the file exists**: the program (or you) creates it once, empty, and the game
 fills it from then on; deleting it stops the writing. It stays on this computer.
 
@@ -1232,7 +1232,7 @@ buses on the road (`id`, `line`, `tour`, `trip`, `terminus`, `depart`, `next_sto
 ## OMSI plugins (`plugins/*.opl` + DLL)
 
 What OMSI does with plugins, and how
-openOMSI does the same (`crates/omsi-plugin`, driven from `crates/omsi-app/src/plugins.rs`).
+openBus does the same (`crates/omsi-plugin`, driven from `crates/omsi-app/src/plugins.rs`).
 
 ### The original
 
@@ -1258,23 +1258,23 @@ openOMSI does the same (`crates/omsi-plugin`, driven from `crates/omsi-app/src/p
   All `stdcall`; `index` is the position in the plugin's own list. Names the vehicle does
   not have are skipped.
 
-### openOMSI
+### openBus
 
 * `omsi_plugin::Plugins::load` reads the `plugins` folder of every content root (the
   first root's copy of an `.opl` wins) and loads each library:
   * **in-process** when the running program can load it (same system and architecture -
-    a plugin built for openOMSI, or a 32-bit DLL in a 32-bit Windows build);
+    a plugin built for openBus, or a 32-bit DLL in a 32-bit Windows build);
   * otherwise in **`omsi-plugin-host32.exe`**, `omsi-plugin-host` built for 32-bit Windows,
     which loads the DLL and answers over stdin/stdout (one round trip per frame). On
     Windows it runs directly; on macOS and Linux through Wine (`wine` on the `PATH`, or
     `OMSI_WINE`). The host is found next to the game (`OMSI_PLUGIN_HOST32` overrides).
 * The system variables are the scripts' (`omsi_script::SysVar`); a plugin's writes to
   them are not applied (the clock, weather and input stay the game's).
-* **`openomsi_<key>`** in a `[varlist]` or `[stringvarlist]` reads the value `<key>` of
+* **`openbus_<key>`** in a `[varlist]` or `[stringvarlist]` reads the value `<key>` of
   `omsi.info()` (see above): numbers and booleans as variables, texts as string variables,
   while the player drives a bus. A plugin that reads the bus's place, its type or the map
   out of Omsi.exe's memory at fixed addresses - which cannot work here - lists
-  `openomsi_tile_x`, `openomsi_tile_pos_x`, `openomsi_heading`, `openomsi_map_path`... instead.
+  `openbus_tile_x`, `openbus_tile_pos_x`, `openbus_heading`, `openbus_map_path`... instead.
   OMSI has no variables of these names and skips them, so one `.opl` serves both games.
   Names are matched case-insensitively. Vehicle script variables take precedence over
   this fallback. Game values are read-only: writing them does not change the game.
@@ -1288,10 +1288,10 @@ openOMSI does the same (`crates/omsi-plugin`, driven from `crates/omsi-app/src/p
 * `PluginStart` gets a nil owner: there is no Delphi application object. Plugins that
   open their own windows do so without a parent.
 
-### Script textures (openOMSI only)
+### Script textures (openBus only)
 
 OMSI 2 gives plugins no way into the vehicle's `[scripttexture]`s; tools such as OmsiHook
-reach them in Omsi.exe's memory, which does not exist here. openOMSI adds one optional
+reach them in Omsi.exe's memory, which does not exist here. openBus adds one optional
 procedure and one `.opl` tag for it. OMSI skips both, so one DLL and `.opl` serve both
 games.
 
@@ -1352,7 +1352,7 @@ the host, which keeps the buffers on its side. The textures go over the pipe onl
 library that exports `AccessScriptTexture`; an older `omsi-plugin-host32.exe` without this
 procedure still serves every other plugin.
 
-### Passengers' tickets (openOMSI only)
+### Passengers' tickets (openBus only)
 
 ```pascal
 procedure AccessTicketRequest(person: Cardinal; age: Single;

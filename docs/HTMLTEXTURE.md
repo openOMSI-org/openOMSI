@@ -2,7 +2,7 @@
 
 **Note:** This API is still under development, so breaking changes may occur at any time.
 
-Previously, you had to use `scriptTexture` in Omsi 2; to make things easier for both modders and developers, openOmsi
+Previously, you had to use `scriptTexture` in Omsi 2; to make things easier for both modders and developers, openBus
 now offers `htmlTexture`.
 These can be used, for example, as IBIS or other information in vehicles, giving you a few more design options.
 
@@ -87,7 +87,7 @@ the eye's own adaptation - so a sign face dims with the night it stands in, and 
 showing it stops being the bus's own screen with it (its bright pixels glow as a surface's
 do - an LED page, above, keeps the screen and its dots' glow). The word is the page's own: it reaches every slot that shows the page, wherever that
 slot is - a scenery object's and a vehicle's alike. Without the word nothing changes at all,
-and the word is openOMSI's own: Omsi.exe knows neither `[htmltexture]` nor `lit` and draws
+and the word is openBus's own: Omsi.exe knows neither `[htmltexture]` nor `lit` and draws
 the slot unlit.
 
 ### Html file

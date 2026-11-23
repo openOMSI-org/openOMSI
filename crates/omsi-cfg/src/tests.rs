@@ -73,7 +73,7 @@ fn writable_check() {
 #[test]
 fn applications_folder_is_no_content_folder() {
     assert!(is_programs_folder(Path::new("/Users/x/Applications")));
-    assert!(!is_programs_folder(Path::new("/Users/x/Games/openOMSI")));
+    assert!(!is_programs_folder(Path::new("/Users/x/Games/openBus")));
     // content an older version installed there stays in use
     let dir = std::env::temp_dir().join(format!("omsi-apps-{}", std::process::id())).join("Applications");
     std::fs::create_dir_all(dir.join("Mods")).unwrap();
@@ -91,7 +91,7 @@ fn applications_folder_is_no_content_folder() {
 fn own_inputs_outlive_the_program_folder() {
     let t = std::env::temp_dir().join(format!("omsi-own-inputs-{}", std::process::id()));
     let own = t.join("home").join("Inputs").join("keyboard.cfg");
-    let (first, second) = (t.join("openOMSI-0.2.38").join("keyboard.cfg"), t.join("openOMSI-0.2.39").join("keyboard.cfg"));
+    let (first, second) = (t.join("openBus-0.2.38").join("keyboard.cfg"), t.join("openBus-0.2.39").join("keyboard.cfg"));
     std::fs::create_dir_all(first.parent().unwrap()).unwrap();
     std::fs::create_dir_all(second.parent().unwrap()).unwrap();
     let at = |p: &Path, secs: u64| std::fs::File::options().write(true).open(p).unwrap().set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs)).unwrap();
@@ -113,13 +113,13 @@ fn own_inputs_outlive_the_program_folder() {
     assert_eq!(newest([Some(own.clone()), Some(first.clone())]), Some(first.clone()));
     assert_eq!(std::fs::read_dir(own.parent().unwrap()).unwrap().count(), 1);
     std::fs::remove_dir_all(&t).unwrap();
-    std::fs::create_dir_all(t.join("openOMSI-0.2.38")).unwrap();
-    std::fs::write(t.join("openOMSI-0.2.38").join("openomsi.exe"), b"x").unwrap();
+    std::fs::create_dir_all(t.join("openBus-0.2.38")).unwrap();
+    std::fs::write(t.join("openBus-0.2.38").join("openbus.exe"), b"x").unwrap();
     std::fs::create_dir_all(t.join("photos")).unwrap();
-    assert_eq!(sibling_installs(&t.join("openOMSI-0.2.40")), vec![t.join("openOMSI-0.2.38")]);
+    assert_eq!(sibling_installs(&t.join("openBus-0.2.40")), vec![t.join("openBus-0.2.38")]);
     std::fs::remove_dir_all(&t).unwrap();
-    assert_eq!(content_folder_of_program(Path::new("/x/Games/openOMSI.app/Contents/MacOS/openomsi")), Some(PathBuf::from("/x/Games")));
-    assert_eq!(content_folder_of_program(Path::new("/x/openOMSI-0.2.38/openomsi.exe")), Some(PathBuf::from("/x/openOMSI-0.2.38")));
+    assert_eq!(content_folder_of_program(Path::new("/x/Games/openBus.app/Contents/MacOS/openbus")), Some(PathBuf::from("/x/Games")));
+    assert_eq!(content_folder_of_program(Path::new("/x/openBus-0.2.38/openbus.exe")), Some(PathBuf::from("/x/openBus-0.2.38")));
 }
 
 #[test]

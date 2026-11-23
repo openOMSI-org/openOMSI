@@ -3,7 +3,7 @@
 -- stop (top right) and the speed (bottom right). Copy it into the `plugins` folder next to the
 -- game (see docs/PLUGINS.md, "In the navigator") and open the navigator (Shift+N).
 
--- an older openOMSI has no cards over the map: it leaves `overlay` out, and the map keeps the
+-- an older openBus has no cards over the map: it leaves `overlay` out, and the map keeps the
 -- navigator's own cards (`cards` is false only where the plugin's are there in their place)
 if not (omsi.ui and omsi.ui.version >= 6) then return end
 

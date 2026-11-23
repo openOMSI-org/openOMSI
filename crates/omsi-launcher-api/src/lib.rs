@@ -29,7 +29,7 @@ pub trait Platform: Send + Sync {
     /// The game's renderer, for the bus preview and the city map: the launcher service's
     /// request and its answer (see `omsi-app`'s `launcher::service`).
     fn renderer(&self, req: Value, wait: Duration) -> Result<(Value, Vec<u8>), String>;
-    /// The self-check's mode (`OPENOMSI_LAUNCHER_SELFTEST`), if one runs.
+    /// The self-check's mode (`OPENBUS_LAUNCHER_SELFTEST`), if one runs.
     fn selftest(&self) -> Option<String> {
         None
     }
@@ -1354,14 +1354,14 @@ mod setup_tests {
 
     #[test]
     fn a_folder_that_is_no_complete_omsi_2_is_not_saved() {
-        let home = std::env::temp_dir().join(format!("openomsi-setup-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("openbus-setup-{}", std::process::id()));
         let not_omsi = home.join("Downloads");
         std::fs::create_dir_all(&not_omsi).unwrap();
         let was = (std::env::var_os("HOME"), std::env::var_os("USERPROFILE"));
         unsafe { std::env::set_var("HOME", &home) };
         unsafe { std::env::set_var("USERPROFILE", &home) };
         let r = config_save(not_omsi.to_string_lossy().to_string(), String::new()).unwrap();
-        let written = home.join(".openomsi").join("launcher.json").exists();
+        let written = home.join(".openbus").join("launcher.json").exists();
         for (k, v) in [("HOME", was.0), ("USERPROFILE", was.1)] {
             match v {
                 Some(v) => unsafe { std::env::set_var(k, v) },
@@ -1398,7 +1398,7 @@ mod game_end_tests {
 
     #[test]
     fn a_crash_and_a_server_kick_are_told_and_a_stop_or_a_clean_end_is_not() {
-        let dir = std::env::temp_dir().join(format!("openomsi-game-end-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus-game-end-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let game = |pid: u32, log: &str| {
             let p = dir.join(format!("game-{pid}.log"));
@@ -1419,7 +1419,7 @@ mod game_end_tests {
         let kicked = game(
             12,
             &format!(
-                "[t INFO x] starting the game: omsi\n[t WARN openomsi_game::lan] {}Expelled: dangerous driving\n[t INFO x] game ends\n",
+                "[t INFO x] starting the game: omsi\n[t WARN openbus_game::lan] {}Expelled: dangerous driving\n[t INFO x] game ends\n",
                 omsi_net::LEFT_SERVER
             ),
         );
@@ -1475,7 +1475,7 @@ mod custom_weather_tests {
 // --- the model test (Troubleshooting) -------------------------------------------------
 
 /// The game program loads `path` - a vehicle, a scenery object, a spline, a human, a map, a
-/// mod's folder or zip - as it would for a drive (`openomsi --check`) and answers its
+/// mod's folder or zip - as it would for a drive (`openbus --check`) and answers its
 /// loaders' warnings and errors and whatever it names that is not there as JSON. `deep`: a
 /// map's objects and splines are loaded whole (models, meshes, textures), not only read.
 fn content_check(path: String, deep: bool) -> Answer {
@@ -1549,7 +1549,7 @@ mod support_package_tests {
         }
         fn support_package(&self, suggested: &Path) -> Option<Result<std::path::PathBuf, String>> {
             Some(Ok(
-                Path::new("/storage/emulated/0/openOMSI").join(suggested.file_name().unwrap())
+                Path::new("/storage/emulated/0/openBus").join(suggested.file_name().unwrap())
             ))
         }
     }
@@ -1560,7 +1560,7 @@ mod support_package_tests {
         let path = Path::new(actual.as_str().unwrap());
         assert_eq!(
             path.parent(),
-            Some(Path::new("/storage/emulated/0/openOMSI"))
+            Some(Path::new("/storage/emulated/0/openBus"))
         );
         let filename = path.file_name().unwrap().to_str().unwrap();
         assert!(filename.starts_with("support-"), "{filename}");

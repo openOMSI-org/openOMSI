@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn a_player_who_played_before_is_no_first_start() {
-        let dir = std::env::temp_dir().join(format!("openomsi-first-start-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus-first-start-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("cache")).unwrap();
         assert!(first_start(&dir));
         std::fs::create_dir_all(dir.join("sessions")).unwrap();
@@ -119,12 +119,12 @@ mod tests {
 
     #[test]
     fn the_first_picture_is_drawn_with_the_preset() {
-        let mut app = crate::assemble_app(crate::cli::Args::parse_from(["openomsi"]), crate::settings::Settings::from_text("graphics=vanilla_plus\nmirror_size=256\n"));
+        let mut app = crate::assemble_app(crate::cli::Args::parse_from(["openbus"]), crate::settings::Settings::from_text("graphics=vanilla_plus\nmirror_size=256\n"));
         take(&mut app, crate::settings::Settings::from_text("graphics=vanilla\nmirror_size=128\nrain_quality=low\n"));
         assert!(app.args.session_settings.classic);
         assert_eq!(app.args.session_settings.mirror_size, 128);
         assert_eq!(app.session.spray.graphics, crate::scene::host::GraphicsKind::Classic);
-        let mut app = crate::assemble_app(crate::cli::Args::parse_from(["openomsi"]), crate::settings::Settings::from_text("graphics=vanilla_plus\n"));
+        let mut app = crate::assemble_app(crate::cli::Args::parse_from(["openbus"]), crate::settings::Settings::from_text("graphics=vanilla_plus\n"));
         take(&mut app, crate::settings::Settings::from_text("graphics=enhanced\n"));
         assert!(app.args.session_settings.enhanced);
         assert!(app.session.sky.look.enhanced);

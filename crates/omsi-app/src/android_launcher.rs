@@ -97,7 +97,7 @@ fn take(env: &mut JNIEnv, s: &JString) -> String {
 /// "1" and the JSON answer, or "0" and the error.
 #[unsafe(no_mangle)]
 #[rustfmt::skip]
-pub extern "system" fn Java_org_openomsi_game_LauncherBridge_call<'a>(
+pub extern "system" fn Java_org_openbus_game_LauncherBridge_call<'a>(
     mut env: JNIEnv<'a>,
     class: JClass<'a>,
     cmd: JString<'a>,
@@ -106,7 +106,7 @@ pub extern "system" fn Java_org_openomsi_game_LauncherBridge_call<'a>(
     // mX Graphics: the mX game's copy of this bridge answers, so that its session and its
     // bus preview are the ones the page talks to
     if super::android::mx_selected() {
-        return openomsi_game_mx::android_launcher::Java_org_openomsi_game_LauncherBridge_call(
+        return openbus_game_mx::android_launcher::Java_org_openbus_game_LauncherBridge_call(
             env, class, cmd, args,
         );
     }
@@ -132,7 +132,7 @@ pub extern "system" fn Java_org_openomsi_game_LauncherBridge_call<'a>(
 /// the bytes after a 1, or a 0 and the error's text.
 #[unsafe(no_mangle)]
 #[rustfmt::skip]
-pub extern "system" fn Java_org_openomsi_game_LauncherBridge_bytes<'a>(
+pub extern "system" fn Java_org_openbus_game_LauncherBridge_bytes<'a>(
     mut env: JNIEnv<'a>,
     class: JClass<'a>,
     cmd: JString<'a>,
@@ -141,7 +141,7 @@ pub extern "system" fn Java_org_openomsi_game_LauncherBridge_bytes<'a>(
     // mX Graphics: the mX game's copy of this bridge answers, so that its session and its
     // bus preview are the ones the page talks to
     if super::android::mx_selected() {
-        return openomsi_game_mx::android_launcher::Java_org_openomsi_game_LauncherBridge_bytes(
+        return openbus_game_mx::android_launcher::Java_org_openbus_game_LauncherBridge_bytes(
             env, class, cmd, args,
         );
     }

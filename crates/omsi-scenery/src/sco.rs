@@ -104,7 +104,7 @@ pub struct ScriptSet {
     pub stringvarlists: Vec<PathBuf>,
     pub scripts: Vec<PathBuf>,
     pub constfiles: Vec<PathBuf>,
-    /// `[lua_script]` (openOMSI): Lua or compiled (`.oop`) scripts that drive every placed
+    /// `[lua_script]` (openBus): Lua or compiled (`.oop`) scripts that drive every placed
     /// object of the type (see `omsi_plugin` and `docs/OBJECT_SCRIPTS.md`).
     pub lua: Vec<PathBuf>,
     /// `[lua_range]`: how close the camera must be for them to run (m); 0: the game's.

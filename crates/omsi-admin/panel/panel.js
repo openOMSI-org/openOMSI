@@ -1,4 +1,4 @@
-// openOMSI server administration panel. Talks to /api/admin/* of the server that served it
+// openBus server administration panel. Talks to /api/admin/* of the server that served it
 // (see docs/SERVER.md). Every text from the server is shown with textContent, never as HTML.
 // The token lives in this tab's sessionStorage only; the password is never kept.
 "use strict";
@@ -27,7 +27,7 @@ const T = {
     lockedRT: "real time", lockedMETAR: "METAR",
     "hwban-hint": "A machine ban keeps out the player's computer, whatever name or address they come back with. It does not stop someone who changes the game or the system's machine id.",
     "hwban-for": "Ban the machine for", forever: "for good", "hwban-session": "Ban the machine: this session", "hwban-all": "Ban the machine: all my sessions",
-    bans: "Banned machines", "bans-hint": "Lifting a ban is for an admin. A ban in \"all my sessions\" is in your account's list (~/.openomsi/bans-owner.json) and holds in every session you host.",
+    bans: "Banned machines", "bans-hint": "Lifting a ban is for an admin. A ban in \"all my sessions\" is in your account's list (~/.openbus/bans-owner.json) and holds in every session you host.",
     noBans: "Nobody is banned.", lift: "Lift the ban", scopeSession: "this session", scopeAll: "all sessions", ends: "ends", noName: "unknown name",
     confirmHwban: "Ban the machine of {name} (number {id}, connection {conn}) in {scope}, {span}?", confirmLift: "Lift the ban of {name}?",
   },
@@ -54,7 +54,7 @@ const T = {
     lockedRT: "hora real", lockedMETAR: "METAR",
     "hwban-hint": "O banimento da máquina barra o computador do jogador, com qualquer nome ou endereço. Não barra quem altera o jogo ou o identificador da máquina do sistema.",
     "hwban-for": "Banir a máquina por", forever: "para sempre", "hwban-session": "Banir a máquina: esta sessão", "hwban-all": "Banir a máquina: todas as minhas sessões",
-    bans: "Máquinas banidas", "bans-hint": "Só o admin tira um banimento. Um banimento em \"todas as minhas sessões\" fica na lista da sua conta (~/.openomsi/bans-owner.json) e vale em toda sessão que você hospeda.",
+    bans: "Máquinas banidas", "bans-hint": "Só o admin tira um banimento. Um banimento em \"todas as minhas sessões\" fica na lista da sua conta (~/.openbus/bans-owner.json) e vale em toda sessão que você hospeda.",
     noBans: "Ninguém banido.", lift: "Tirar o banimento", scopeSession: "esta sessão", scopeAll: "todas as sessões", ends: "termina", noName: "nome desconhecido",
     confirmHwban: "Banir a máquina de {name} (número {id}, conexão {conn}) em {scope}, {span}?", confirmLift: "Tirar o banimento de {name}?",
   },

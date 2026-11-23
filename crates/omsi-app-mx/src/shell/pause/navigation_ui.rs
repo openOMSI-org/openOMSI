@@ -97,14 +97,14 @@ pub(super) fn rail(sh: &mut Shell, v: &PauseView) {
     } else {
         ui.p().rect(r, th().sidebar);
     }
-    // the game's name and version: openOMSI's icon and name; a theme's wordmark across the top,
-    // or its icon and name, over openOMSI's version
+    // the game's name and version: openBus's icon and name; a theme's wordmark across the top,
+    // or its icon and name, over openBus's version
     if let (Some(tex), Some(aspect)) = (sh.logo_tex, sh.logo_wide) {
         // (as wide as the rail's buttons, at most 52 high: the version under it before Resume)
         let h = 52.0f32.min((RAIL_W - 32.0) / aspect);
         ui.image(Rect::new(16.0, 10.0, h * aspect, h), tex, 0.0);
         ui.text_in(
-            &format!("openOMSI {}", crate::startup::VERSION),
+            &format!("openBus {}", crate::startup::VERSION),
             Rect::new(18.0, 10.0 + h, RAIL_W - 36.0, 13.0),
             9.5,
             Weight::Regular,
@@ -126,7 +126,7 @@ pub(super) fn rail(sh: &mut Shell, v: &PauseView) {
                 Align::Left,
             );
             ui.text_in(
-                &format!("openOMSI {}", crate::startup::VERSION),
+                &format!("openBus {}", crate::startup::VERSION),
                 Rect::new(60.0, 38.0, RAIL_W - 72.0, 18.0),
                 11.0,
                 Weight::Regular,
@@ -136,7 +136,7 @@ pub(super) fn rail(sh: &mut Shell, v: &PauseView) {
         }
         None => {
             ui.text(
-                "openOMSI",
+                "openBus",
                 Vec2::new(60.0, 32.0),
                 18.0,
                 Weight::Bold,

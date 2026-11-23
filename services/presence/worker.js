@@ -1,4 +1,4 @@
-// The "playing now" counter of openOMSI: a running game says every three minutes that it is
+// The "playing now" counter of openBus: a running game says every three minutes that it is
 // being played (crates/omsi-app/src/presence.rs; every ten minutes, every three in games
 // before 0.1.1552), the website and the README badge read how many are. One Durable Object
 // keeps the sessions in memory (a random id each, its system and the game's version, the time of its
@@ -106,15 +106,15 @@ export default {
     } catch (e) {
       // (the counter unreachable: ask the games to wait as for a 429; the reason stays in the
       // worker's log, it is nothing for whoever asked)
-      console.error("openOMSI presence:", e);
-      return new Response("openOMSI presence: unavailable\n", { status: 503, headers: { "Content-Type": "text/plain", "Retry-After": "1800", ...CORS } });
+      console.error("openBus presence:", e);
+      return new Response("openBus presence: unavailable\n", { status: 503, headers: { "Content-Type": "text/plain", "Retry-After": "1800", ...CORS } });
     }
   },
 };
 
 async function handle(request, env, ctx) {
   const url = new URL(request.url);
-  const counter = env.PRESENCE.get(env.PRESENCE.idFromName("openomsi"));
+  const counter = env.PRESENCE.get(env.PRESENCE.idFromName("openbus"));
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS });
   }
@@ -148,5 +148,5 @@ async function handle(request, env, ctx) {
     ctx.waitUntil(cache.put(key, out.clone()));
     return out;
   }
-  return new Response("openOMSI presence: GET /players, GET /badge\n", { status: url.pathname === "/" ? 200 : 404, headers: { "Content-Type": "text/plain", ...CORS } });
+  return new Response("openBus presence: GET /players, GET /badge\n", { status: url.pathname === "/" ? 200 : 404, headers: { "Content-Type": "text/plain", ...CORS } });
 }

@@ -331,7 +331,7 @@ mod tests {
     #[test]
     fn a_host_cannot_join_its_own_room() {
         use clap::Parser;
-        let mut app = crate::assemble_app(Args::parse_from(["openomsi"]), Default::default());
+        let mut app = crate::assemble_app(Args::parse_from(["openbus"]), Default::default());
         let host = omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap();
         let id = host.session;
         let address = host.local_addr();
@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn leaving_host_stops_its_mods_server() {
-        let mut app = crate::assemble_app(Args::parse_from(["openomsi"]), Default::default());
+        let mut app = crate::assemble_app(Args::parse_from(["openbus"]), Default::default());
         let mut host = omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap();
         let address = format!("127.0.0.1:{}", host.local_addr().unwrap().port());
         app.net.mods_server = lan::share_mods(&mut app.args.lan_config(), &mut host);
@@ -379,7 +379,7 @@ mod tests {
 
     #[test]
     fn rejected_candidate_keeps_the_current_room_and_role() {
-        let mut app = crate::assemble_app(Args::parse_from(["openomsi"]), Default::default());
+        let mut app = crate::assemble_app(Args::parse_from(["openbus"]), Default::default());
         let current = omsi_net::LanSession::host(0, "current", Default::default(), false).unwrap();
         let current_id = current.session;
         app.net.lan = Some(current);

@@ -1149,7 +1149,7 @@ pub fn object_rotation_ypr(rot_deg: [f64; 3]) -> Mat4 {
 /// right side; going over to the right-handed world turns every sense of rotation round.
 /// `object_rotation` already turns the heading, and pitch and bank have to turn as well: taken
 /// as they stand, TH_Wald's rocks tipped the other way and stood as boxes with a grass lid
-/// beside the road instead of a rock face. (Pitch and bank that openOMSI works out itself -
+/// beside the road instead of a rock face. (Pitch and bank that openBus works out itself -
 /// a parked car on a slope, an object tilted with its spline - are world angles already.)
 pub fn map_rotation(rot_deg: [f64; 3]) -> [f64; 3] {
     [rot_deg[0], -rot_deg[1], -rot_deg[2]]

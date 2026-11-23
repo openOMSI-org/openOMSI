@@ -1,4 +1,4 @@
-//! What a mesh file holds as openOMSI reads it: `cargo run -p omsi-o3d --example mesh_info
+//! What a mesh file holds as openBus reads it: `cargo run -p omsi-o3d --example mesh_info
 //! <file.o3d|.x|.glb|.gltf|.fbx|.obj>`.
 
 fn main() {

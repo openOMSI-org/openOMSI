@@ -647,7 +647,7 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
             .iter()
             .map(|l| (l.0, l.1))
             .collect(),
-        // (openOMSI's own look as "openomsi": the setting reads it as "")
+        // (openBus's own look as "openbus": the setting reads it as "")
         "ui_theme_pack" => crate::themes::choices()
             .iter()
             .map(|(id, name)| {
@@ -710,7 +710,7 @@ mod tests {
     #[test]
     fn selecting_custom_controls_releases_the_arrow_driving_preset() {
         use winit::keyboard::KeyCode;
-        let args = crate::cli::Args::parse_from(["openomsi", "--drive-keys", "arrows"]);
+        let args = crate::cli::Args::parse_from(["openbus", "--drive-keys", "arrows"]);
         let settings = crate::settings::Settings {
             drive_keys: "arrows".into(),
             ..Default::default()
@@ -752,7 +752,7 @@ mod tests {
     #[test]
     fn reloading_other_settings_keeps_the_command_line_driving_layout() {
         use winit::keyboard::KeyCode;
-        let args = crate::cli::Args::parse_from(["openomsi", "--drive-keys", "arrows"]);
+        let args = crate::cli::Args::parse_from(["openbus", "--drive-keys", "arrows"]);
         let mut app = crate::assemble_app(args, crate::settings::Settings::default());
         app.input.keys.insert(KeyCode::ArrowRight);
 
@@ -763,7 +763,7 @@ mod tests {
 
     #[test]
     fn live_interface_theme_updates_the_navigator_map() {
-        let args = crate::cli::Args::parse_from(["openomsi"]);
+        let args = crate::cli::Args::parse_from(["openbus"]);
         let mut app = crate::assemble_app(args, crate::settings::Settings::default());
         app.menus.navigator = Some(omsi_navigator::Navigator::new(true, 0.85, "bottom-left"));
 

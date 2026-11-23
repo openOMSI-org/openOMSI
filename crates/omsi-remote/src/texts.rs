@@ -17,7 +17,7 @@ pub static TEXTS: &[&str] = &[
     "Camera +",
     "Camera −",
     "Cancel",
-    "Check that both are on the same network, and allow openOMSI in the computer's firewall (Windows asks the first time).",
+    "Check that both are on the same network, and allow openBus in the computer's firewall (Windows asks the first time).",
     "Choose",
     "Clear line",
     "Cockpit",

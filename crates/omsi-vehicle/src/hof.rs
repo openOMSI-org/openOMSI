@@ -517,7 +517,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("openomsi-shared-hof-{stamp}"));
+        let root = std::env::temp_dir().join(format!("openbus-shared-hof-{stamp}"));
         let bus = root.join("Vehicles/TestBus");
         let shared = root.join("HOFs");
         std::fs::create_dir_all(&bus).unwrap();
@@ -548,7 +548,7 @@ mod tests {
     #[test]
     fn a_depot_kept_in_its_map_folder_is_found() {
         let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let root = std::env::temp_dir().join(format!("openomsi-map-hof-{stamp}"));
+        let root = std::env::temp_dir().join(format!("openbus-map-hof-{stamp}"));
         let map = root.join("maps/Moulon");
         std::fs::create_dir_all(&map).unwrap();
         std::fs::write(map.join(format!("company-{stamp}.hof")), format!("[name]\nCompany {stamp}\n")).unwrap();
@@ -562,7 +562,7 @@ mod tests {
 
     #[test]
     fn depot_name_prefers_file_stem_over_shared_internal_name() {
-        let dir = std::env::temp_dir().join(format!("openomsi-hof-stem-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus-hof-stem-{}", std::process::id()));
         std::fs::remove_dir_all(&dir).ok();
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("HOF1.hof"), "[name]\nShared\n").unwrap();

@@ -221,7 +221,7 @@ pub(crate) fn render_mirrors(
     // (aimed from the eye of the view being drawn, as Omsi.exe aims them - from the
     // driver's without one)
     let eye = view.as_ref().map(|v| v.0.position).unwrap_or_else(|| driver_eye(p));
-    // the leading vehicle's cameras, then its rear sections' (openOMSI: numbered on from the
+    // the leading vehicle's cameras, then its rear sections' (openBus: numbered on from the
     // last of the one in front, so a screen in the cab can show a camera on a rear door),
     // each aimed and placed in its own body
     let v = &p.vehicle;

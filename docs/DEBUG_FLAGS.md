@@ -12,7 +12,7 @@ Generated from `crates/omsi-cfg/src/flags.rs` - edit the list there and run
   `frame`: every frame in `Renderer::render_inner`; `test`: tests and examples only.
 
 Values are read once per process and cached (`omsi_cfg::env`): changing the environment of a running game has no
-effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set before the game starts.
+effect. On Android, `openBus/env.txt` holds `NAME=value` lines that are set before the game starts.
 
 ## Debug output
 
@@ -325,7 +325,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_NO_NAV_CULL` | bool | off | use | navigator, navigator-mx | The navigator draws all of its ground and houses every frame, not only what its camera sees (A/B). |
 | `OMSI_NO_OWN_VEHICLE_LAMP_BLOCK` | bool | off | frame | render, render-mx | Other vehicles' lamps light the player's vehicle inside and the street beyond it through its body again (A/B). |
 | `OMSI_NO_PBR` | bool | off | use | scene, scene-mx | No PBR materials. |
-| `OMSI_NO_PIPELINE_CACHE` | bool | off | use | render | Compile every pipeline at each start (no ~/.openomsi/cache/pipelines-*.bin). |
+| `OMSI_NO_PIPELINE_CACHE` | bool | off | use | render | Compile every pipeline at each start (no ~/.openbus/cache/pipelines-*.bin). |
 | `OMSI_NO_PLUGINS` | bool | off | use | app, app-mx, guard | No plugins loaded. |
 | `OMSI_NO_POLL_THREAD` | bool | off | use | render, render-mx | No device poll thread. |
 | `OMSI_NO_POST_SPLIT` | bool | off | frame | render, render-mx | Finish the passes after the main pass in the main pass's own command buffer (A/B). |
@@ -347,7 +347,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_NO_SPRAY` | bool | off | use | app, app-mx | No tyre spray. |
 | `OMSI_NO_SURF` | bool | off | once | scene, scene-mx | Every road as smooth as before (no surface texture) (A/B). |
 | `OMSI_NO_TEXCOMPRESS` | bool | off | use | render, render-mx | No runtime texture compression. |
-| `OMSI_NO_TEXTURE_CACHE` | bool | off | once | texture | Compress every texture at each start (no ~/.openomsi/cache/textures). |
+| `OMSI_NO_TEXTURE_CACHE` | bool | off | once | texture | Compress every texture at each start (no ~/.openbus/cache/textures). |
 | `OMSI_NO_TUNNEL` | bool | off | use | lan | LAN: no tunnel. |
 | `OMSI_NO_UPDATE` | bool | off | use | app, app-mx, launcher-api | No update check. |
 | `OMSI_NO_VAR_SYNC` | bool | off | use | lan | LAN: no variable sync. |
@@ -407,8 +407,8 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 
 | Name | Type | Default | Read | Crates | Description |
 |---|---|---|---|---|---|
-| `OMSI_AMBIENCE_DIR` | text | - | use | soundscape | The folder of the ambience's recordings (its pack.json), instead of `ambience` beside the program or in ~/.openomsi. |
-| `OMSI_AVATARS_DIR` | text | - | use | platform | The folder of the passenger avatars (its pack.json), instead of `avatars` beside the program or in ~/.openomsi. |
+| `OMSI_AMBIENCE_DIR` | text | - | use | soundscape | The folder of the ambience's recordings (its pack.json), instead of `ambience` beside the program or in ~/.openbus. |
+| `OMSI_AVATARS_DIR` | text | - | use | platform | The folder of the passenger avatars (its pack.json), instead of `avatars` beside the program or in ~/.openbus. |
 | `OMSI_BACKEND` | text | settings | use | app, app-mx | vulkan, dx12, metal, gl or angle (dx11, d3d11; Windows): the graphics API tried first (overrides the settings). Set at runtime by the launcher and on Android. |
 | `OMSI_CLOUDFLARED` | text | - | use | net | Path of the cloudflared binary for the LAN tunnel (searched after the game's folder, before the PATH). |
 | `OMSI_CONTENT` | text | beside the game | use | app, app-mx, cfg, launcher-core, sim | The content folder (mods, archives, screenshots). Set at runtime on Android and iOS. |
@@ -417,7 +417,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_HEALTH_URL` | text | built-in | use | platform | Another list of broken releases (URL or file:///...json) for the start guard instead of release/health.json on GitHub. |
 | `OMSI_INSTANCE` | text | - | use | app, app-mx, lan, launcher-core | The id of a game instance started by the launcher (set for the child process). |
 | `OMSI_LAN_IP` | text | - | use | net | a.b.c.d[,e.f.g.h]: LAN addresses to offer first (when the detection gets them wrong). |
-| `OMSI_LAUNCHER` | text | - | use | app, app-mx, guard | Program a plain start opens as the launcher instead of the desktop launcher (openomsi-launcher-app) beside the game. |
+| `OMSI_LAUNCHER` | text | - | use | app, app-mx, guard | Program a plain start opens as the launcher instead of the desktop launcher (openbus-launcher-app) beside the game. |
 | `OMSI_OFFICIAL_KEY` | text | - | use | lan | File of the official server's signing key. |
 | `OMSI_PLUGIN_HOST32` | text | beside the game | use | plugin | Path of omsi-plugin-host32.exe. |
 | `OMSI_PLUGIN_PROCESS_ALLOW` | text | none | use | plugin | Optional native process preapproval: absolute path to a JSON manifest binding plugin content and in-folder helpers to SHA256 hashes. The interactive game otherwise asks the player. Changes revoke consent; packages must declare process. Approved programs run with the game account permissions. |

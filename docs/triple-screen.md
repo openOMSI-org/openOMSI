@@ -53,7 +53,7 @@ supported by this rig.
 
 ## Saved settings
 
-The launcher and game share `~/.openomsi/settings.cfg`:
+The launcher and game share `~/.openbus/settings.cfg`:
 
 ```ini
 triple_screen=1

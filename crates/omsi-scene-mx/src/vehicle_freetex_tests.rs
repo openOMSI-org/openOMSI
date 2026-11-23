@@ -7,7 +7,7 @@ impl Fixture {
     fn world() -> (Self, World) {
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let path = std::env::temp_dir().join(format!(
-            "openomsi-display-cache-{}-{}",
+            "openbus-display-cache-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));

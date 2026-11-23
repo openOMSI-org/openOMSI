@@ -22,7 +22,7 @@ pub struct SituationVehicle {
     pub timetable: Vec<String>,
     pub riders: usize,
     /// The coupled cars that run scripts of their own (a tram's rear cab), each with its
-    /// own variables (`[openOMSI_car]`; Omsi.exe keeps one set for the whole train).
+    /// own variables (`[openBus_car]`; Omsi.exe keeps one set for the whole train).
     pub cars: Vec<SituationCar>,
 }
 
@@ -54,7 +54,7 @@ pub struct Situation {
     pub vehicles: Vec<SituationVehicle>,
 }
 
-pub const NAME_CHOSEN: &str = "[openomsi_name_chosen]";
+pub const NAME_CHOSEN: &str = "[openbus_name_chosen]";
 
 impl Situation {
     /// Write the situation the way OMSI does (UTF-16 LE with a BOM, CR LF).
@@ -104,7 +104,7 @@ impl Situation {
                 t.push_str("\r\n[ismyVehicle]\r\n");
             }
             if v.riders > 0 {
-                t.push_str(&format!("\r\n[openOMSI_riders]\r\n{}\r\n", v.riders));
+                t.push_str(&format!("\r\n[openBus_riders]\r\n{}\r\n", v.riders));
             }
             t.push_str(&format!("\r\n[vars]\r\n{}\r\n", v.vars.len()));
             for (n, x) in &v.vars {
@@ -115,7 +115,7 @@ impl Situation {
                 t.push_str(&format!("{n}\r\n{x}\r\n"));
             }
             for c in &v.cars {
-                t.push_str(&format!("\r\n[openOMSI_car]\r\n{}\r\n{}\r\n", c.car, c.vars.len()));
+                t.push_str(&format!("\r\n[openBus_car]\r\n{}\r\n{}\r\n", c.car, c.vars.len()));
                 for (n, x) in &c.vars {
                     t.push_str(&format!("{n}\r\n{x:.6}\r\n"));
                 }
@@ -146,7 +146,7 @@ impl Situation {
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
                 "name" => s.name = r.str().to_string(),
-                "openomsi_name_chosen" => s.name_chosen = true,
+                "openbus_name_chosen" => s.name_chosen = true,
                 "description" => s.description = r.until("[end]").join("\n"),
                 "map" => s.map = r.str().to_string(),
                 "actuweather" => s.weather = Some(r.str().to_string()),
@@ -182,7 +182,7 @@ impl Situation {
                         veh.is_my_vehicle = true;
                     }
                 }
-                "openomsi_riders" => {
+                "openbus_riders" => {
                     let n = r.usize();
                     if let Some(veh) = s.vehicles.last_mut() {
                         veh.riders = n;
@@ -212,7 +212,7 @@ impl Situation {
                         veh.string_vars = vars;
                     }
                 }
-                "openomsi_car" => {
+                "openbus_car" => {
                     let car = r.usize();
                     let vars = (0..r.count()).map(|_| (r.str().to_string(), r.f64())).collect();
                     let string_vars =

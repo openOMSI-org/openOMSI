@@ -145,14 +145,14 @@ fn pause_navigation_category_icons_exist_in_the_shared_icon_set() {
 }
 
 #[test]
-#[ignore = "Requires a graphics adapter and OPENOMSI_PAUSE_PREVIEW output directory"]
+#[ignore = "Requires a graphics adapter and OPENBUS_PAUSE_PREVIEW output directory"]
 fn pause_navigation_write_preview() {
     omsi_ui::i18n::set_lookup(|lang, text| {
         crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned())
     });
     omsi_ui::i18n::set_language("en");
     let out = std::path::PathBuf::from(
-        std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set OPENOMSI_PAUSE_PREVIEW"),
+        std::env::var_os("OPENBUS_PAUSE_PREVIEW").expect("set OPENBUS_PAUSE_PREVIEW"),
     );
     std::fs::create_dir_all(&out).unwrap();
     let instance = mx::Instance::default();
@@ -463,7 +463,7 @@ fn pause_navigation_uses_runtime_theme_palette() {
             .unwrap()
             .verts
             .iter()
-            .any(|v| v.color == Palette::OPENOMSI.sidebar.0)
+            .any(|v| v.color == Palette::OPENBUS.sidebar.0)
     );
     assert!(
         light
@@ -480,7 +480,7 @@ fn pause_navigation_uses_runtime_theme_palette() {
 fn quick_actions_editor_uses_runtime_theme_palette() {
     let rail = menu();
     for (light_theme, surface) in [
-        (false, Palette::OPENOMSI.surface),
+        (false, Palette::OPENBUS.surface),
         (true, Palette::LIGHT.surface),
     ] {
         let mut sh = Shell::new();

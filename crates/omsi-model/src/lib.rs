@@ -108,10 +108,10 @@ pub struct MaterialDef {
     /// (the `Led glow` setting's 16 levels: the shader's strength is `value * 0.25`, so 6 is
     /// as bright as that setting's default and 20 brighter than its top). The mask takes the
     /// light map's slot: a slot with a `[matl_lightmap]` keeps that and has no glow. An
-    /// openOMSI extension: Omsi.exe does not know the keyword, and the classic picture draws
+    /// openBus extension: Omsi.exe does not know the keyword, and the classic picture draws
     /// the material as if it were not there.
     pub glow: Option<(String, f32)>,
-    /// `[led_glow_effect] <value>` (openOMSI): how much of an LED panel's glow the slot
+    /// `[led_glow_effect] <value>` (openBus): how much of an LED panel's glow the slot
     /// gets, 0..1 - 0 none (a flipdot or an LCD the automatic guess took for LED dots),
     /// 1 the full `Led glow` setting. The modeller's word replaces the guess the enhanced
     /// picture otherwise makes from the slot's `\S:n` mask and white light map.
@@ -238,7 +238,7 @@ pub struct MeshDef {
     pub animations: Vec<Animation>,
     /// `[visible] var value`: the mesh's last plain condition (what the original reads).
     pub visible: Option<(String, f32)>,
-    /// Every visibility condition of the mesh (openOMSI, #729): the mesh is shown when all
+    /// Every visibility condition of the mesh (openBus, #729): the mesh is shown when all
     /// conditions of any one group hold. Several `[visible]` and `[visible_range] var min
     /// max` blocks of a mesh make one group (all must hold; with plain `[visible]` blocks
     /// alone the last one counts, as in the original), a variable written with `!`
@@ -276,7 +276,7 @@ pub struct HtmlTextureDef {
     /// is by default, drawn unlit at its own brightness, which is what a bus's own panel is.
     /// The slots that take their picture from this page are drawn lit with it, wherever
     /// they are - a scenery object's and a vehicle's alike (`Model::html_page_lit`). An
-    /// openOMSI extension: Omsi.exe knows neither part, and draws such a slot unlit.
+    /// openBus extension: Omsi.exe knows neither part, and draws such a slot unlit.
     pub lit: bool,
 }
 
@@ -307,7 +307,7 @@ pub struct Spotlight {
     pub values: [f32; 12],
 }
 
-/// `[spotlight_2]` (openOMSI): a `[spotlight]`'s twelve numbers, then the variable that
+/// `[spotlight_2]` (openBus): a `[spotlight]`'s twelve numbers, then the variable that
 /// switches it (0 off, 1 full, a constant too) and a flag: 0 (or none) puts a twin lamp on
 /// the other side of the vehicle, mirrored across its axis, 1 keeps the one lamp.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -856,7 +856,7 @@ impl Model {
                 }
             }
             "visible" | "visible_range" => {
-                // (`var !`: the condition negated, an openOMSI extension like the range)
+                // (`var !`: the condition negated, an openBus extension like the range)
                 let line = r.str().trim().to_string();
                 let not = line.ends_with('!');
                 let v = line.trim_end_matches('!').trim().to_string();
@@ -880,7 +880,7 @@ impl Model {
                     m.illumination = v;
                 }
             }
-            // (OMSI's four lamps, and openOMSI takes as many more as the lines that follow
+            // (OMSI's four lamps, and openBus takes as many more as the lines that follow
             // give)
             "illumination_interior" => {
                 let v: Vec<i32> = r.i32_list(4);

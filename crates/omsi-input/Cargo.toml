@@ -3,7 +3,7 @@ name = "omsi-input"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI's input devices: game controllers and their mappings, force feedback, head tracking, key names"
+description = "openBus's input devices: game controllers and their mappings, force feedback, head tracking, key names"
 
 [features]
 # `describe::ControlNames::from_table` for the tests of crates that use the names

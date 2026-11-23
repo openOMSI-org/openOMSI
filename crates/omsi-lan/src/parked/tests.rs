@@ -21,7 +21,7 @@ fn on_foot(p: &Pose, x: f64) -> Pose {
 }
 
 fn temp(name: &str) -> PathBuf {
-    let file = std::env::temp_dir().join(format!("openomsi-parked-{name}-{}.json", std::process::id()));
+    let file = std::env::temp_dir().join(format!("openbus-parked-{name}-{}.json", std::process::id()));
     let _ = std::fs::remove_file(&file);
     file
 }
@@ -218,7 +218,7 @@ fn a_bus_asked_for_and_not_taken_is_free_again_and_the_player_keeps_its_own() {
 
 #[test]
 fn a_list_that_could_not_be_written_is_written_later() {
-    let dir = std::env::temp_dir().join(format!("openomsi-parked-nodir-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("openbus-parked-nodir-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let mut p = Parked::open_with(&dir.join("parked.json"), "m", 4, &[], |_| true);
     p.left(2, &bus(&fp("a1"), 1.0));

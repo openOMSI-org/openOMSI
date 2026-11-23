@@ -211,7 +211,7 @@ pub(super) fn material_extra(
     }
 }
 
-/// `[led_glow_effect] <0..1>` of a slot (an openOMSI extension, see
+/// `[led_glow_effect] <0..1>` of a slot (an openBus extension, see
 /// `MaterialExtra::led_glow`): the last of its commands counts, as with the others.
 pub(super) fn led_glow_effect(ov: &[&MaterialDef]) -> Option<f32> {
     ov.iter().rev().find_map(|o| o.led_glow)
@@ -227,7 +227,7 @@ pub(super) fn apply_led_glow_effect(extra: &mut MaterialExtra, ov: &[&MaterialDe
     }
 }
 
-/// `[matl_glow] <texture> <value>` (an openOMSI extension, see `MaterialExtra::glow`): the
+/// `[matl_glow] <texture> <value>` (an openBus extension, see `MaterialExtra::glow`): the
 /// mask a slot's commands bind in the light map's slot. A `[matl_lightmap]` of the slot keeps
 /// that slot, and the glow is left out; the last `[matl_glow]` of the slot counts, as the
 /// other `[matl_*]` commands do.

@@ -47,12 +47,12 @@ jobs:
           fi
           files=$(gh release view "v$VERSION" --json assets --jq '.assets[].name')
           for f in windows-x64.zip windows-arm64.zip macos-arm64.zip macos-x64.zip linux-x64.zip linux-arm64.zip android-arm64.apk server-linux-x64.zip server-linux-arm64.zip server-windows-x64.zip server-windows-arm64.zip; do
-            if ! printf '%s\n' "$files" | grep -qx "openOMSI-$VERSION-$f"; then
-              echo "::error::v$VERSION has no openOMSI-$VERSION-$f: only a beta of every platform can be promoted"
+            if ! printf '%s\n' "$files" | grep -qx "openBus-$VERSION-$f"; then
+              echo "::error::v$VERSION has no openBus-$VERSION-$f: only a beta of every platform can be promoted"
               exit 1
             fi
           done
-          for f in openOMSI-android.apk SHA256SUMS; do
+          for f in openBus-android.apk SHA256SUMS; do
             if ! printf '%s\n' "$files" | grep -qx "$f"; then
               echo "::error::v$VERSION has no $f"
               exit 1
@@ -70,4 +70,4 @@ jobs:
           fi
           sh scripts/release-notes.sh "$VERSION" "$stable" > notes.md
           gh release edit "v$VERSION" --prerelease=false --latest --notes-file notes.md
-          echo "### openOMSI $VERSION is the stable release (after $stable)" >> "$GITHUB_STEP_SUMMARY"
+          echo "### openBus $VERSION is the stable release (after $stable)" >> "$GITHUB_STEP_SUMMARY"

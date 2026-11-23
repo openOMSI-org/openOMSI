@@ -1,4 +1,4 @@
-//! The joining player's store of the host's mods (`~/.openomsi/lan-store`), kept between
+//! The joining player's store of the host's mods (`~/.openbus/lan-store`), kept between
 //! sessions so a map fetched once is not fetched again: every file only sealed (see
 //! `omsi_cfg::vfs::seal`), its blob named by a keyed hash of its SHA-256 - neither its name
 //! nor its hash can be read off the disk.
@@ -6,7 +6,7 @@
 //! The store's key has to outlive the game, so it is on the disk as well: on Windows sealed
 //! for the user's account by the system (DPAPI), elsewhere in a file only the user may read
 //! (`store.key`, mode 0600). That is obfuscation, not protection from the user: whoever runs
-//! as the player can read the key, and openOMSI's source says what to do with it. (The
+//! as the player can read the key, and openBus's source says what to do with it. (The
 //! macOS keychain would ask the player to allow every new build of the game.) A key that is
 //! lost or unreadable gives a new one, and the blobs of the old one go.
 
@@ -99,7 +99,7 @@ impl Store {
             }
         };
         // one key for the blobs, one for their names, both from the store's key
-        let prk = Salt::new(HKDF_SHA256, b"openOMSI LAN store").extract(&master);
+        let prk = Salt::new(HKDF_SHA256, b"openBus LAN store").extract(&master);
         let sub = |what: &[u8]| -> Result<[u8; 32], String> {
             let mut k = [0u8; 32];
             prk.expand(&[what], Len32).and_then(|o| o.fill(&mut k)).map_err(|_| "no store key".to_string())?;
@@ -340,7 +340,7 @@ fn dpapi(data: &[u8], protect: bool) -> Option<Vec<u8>> {
     // and then freed with LocalFree as the documentation asks
     unsafe {
         let r = if protect {
-            CryptProtectData(&input, windows::core::w!("openOMSI LAN store"), None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out)
+            CryptProtectData(&input, windows::core::w!("openBus LAN store"), None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out)
         } else {
             CryptUnprotectData(&input, None, None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out)
         };
@@ -360,7 +360,7 @@ mod tests {
     /// way): a player could otherwise fill the disk with pieces of files never finished.
     #[test]
     fn loose_pieces_go_oldest_first_to_make_room_but_not_recent_ones() {
-        let dir = std::env::temp_dir().join(format!("openomsi-lan-pieces-room-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus-lan-pieces-room-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let store = Store::open(&dir).unwrap();
@@ -391,7 +391,7 @@ mod tests {
 
     #[test]
     fn reused_blob_updates_eviction_age_without_changing_content() {
-        let dir = std::env::temp_dir().join(format!("openomsi-lan-reuse-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus-lan-reuse-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let old_data = b"bus file used again";
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn the_store_keeps_nothing_plain() {
-        let dir = std::env::temp_dir().join(format!("openomsi-lan-store-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus-lan-store-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         // an older version's plain file goes
         let legacy = dir.join("ab".repeat(32));

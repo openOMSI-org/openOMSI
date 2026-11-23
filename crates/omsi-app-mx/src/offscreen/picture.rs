@@ -37,7 +37,7 @@ impl Offscreen<'_> {
                 &[],
                 camera,
                 duty.as_ref(),
-                "openOMSI save",
+                "openBus save",
             );
             match sit.save(out) {
                 Ok(()) => log::info!(

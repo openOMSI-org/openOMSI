@@ -243,7 +243,7 @@ mod tests {
     use clap::Parser;
 
     fn app() -> App {
-        crate::assemble_app(Args::parse_from(["openomsi"]), Default::default())
+        crate::assemble_app(Args::parse_from(["openbus"]), Default::default())
     }
 
     #[test]
@@ -261,7 +261,7 @@ mod tests {
         let mut app = app();
         let host = omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap();
         let root = std::env::temp_dir().join(format!(
-            "openomsi-room-seeds-{}-{}",
+            "openbus-room-seeds-{}-{}",
             std::process::id(),
             host.session
         ));

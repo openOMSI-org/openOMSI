@@ -317,7 +317,7 @@
   g.outerWidth = g.innerWidth; g.outerHeight = g.innerHeight;
   g.devicePixelRatio = 1; g.scrollX = 0; g.scrollY = 0; g.pageXOffset = 0; g.pageYOffset = 0;
   g.screen = { width: g.innerWidth, height: g.innerHeight, availWidth: g.innerWidth, availHeight: g.innerHeight, colorDepth: 24 };
-  g.navigator = { userAgent: 'openOMSI', language: 'en', languages: ['en'], platform: 'openOMSI', onLine: true };
+  g.navigator = { userAgent: 'openBus', language: 'en', languages: ['en'], platform: 'openBus', onLine: true };
   g.location = { href: 'omsi://page', origin: 'omsi://page', protocol: 'omsi:', host: '', hostname: '', pathname: '/', search: '', hash: '', reload() {}, assign() {}, replace() {} };
   g.history = { length: 1, pushState() {}, replaceState() {}, back() {}, forward() {} };
   g.matchMedia = (q) => ({ matches: false, media: String(q), addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });

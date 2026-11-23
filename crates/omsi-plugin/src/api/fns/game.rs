@@ -28,10 +28,10 @@ fn panel_id(c: &mut Ctx<'_>, id: &str) -> Result<u64, ApiError> {
 pub static FNS: &[ApiFn] = &[
     def!("game.version", "game", [], "string", "The game's version (`\"0.2.22\"`).", NEW, None, false, |c, a| {
         let io = c.io();
-        io.info().into_iter().find(|(k, _)| *k == "version").and_then(|(_, v)| Value::from(v).to_text()).unwrap_or_else(|| option_env!("OPENOMSI_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")).to_string())
+        io.info().into_iter().find(|(k, _)| *k == "version").and_then(|(_, v)| Value::from(v).to_text()).unwrap_or_else(|| option_env!("OPENBUS_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")).to_string())
     }),
     def!("game.api", "game", [], "integer", "The version of the plugin interface (`api_abi` of an `.oop`; raised only when something is taken away or changes).", NEW, None, false, |c, a| crate::api::ABI),
-    def!("game.has", "game", [p("name", "string")], "boolean", "Whether this game has an API function (`\"weather.set\"`): for a plugin that should also run in an older openOMSI.", NEW, None, false, |c, a| {
+    def!("game.has", "game", [p("name", "string")], "boolean", "Whether this game has an API function (`\"weather.set\"`): for a plugin that should also run in an older openBus.", NEW, None, false, |c, a| {
         let n = a.str(0)?;
         Ok::<_, ApiError>(crate::api::find(n.strip_prefix("omsi.").unwrap_or(&n)).is_some())
     }),
@@ -145,13 +145,13 @@ pub static FNS: &[ApiFn] = &[
         let r = s.ui().set_menu_item(owner, &id, &label, icon);
         Ok::<_, ApiError>(super::core::ok_or_reason(r))
     }),
-    def!("ui.themes", "ui", [], "list of tables", "The game's interface themes: each `{ id, name }`, openOMSI's own look first (its id `\"\"`). A theme is a folder with a `theme.json` (`Themes/<id>/`, or a plugin's own folder: see docs/THEMES.md).", V42, None, false, |c, a| {
+    def!("ui.themes", "ui", [], "list of tables", "The game's interface themes: each `{ id, name }`, openBus's own look first (its id `\"\"`). A theme is a folder with a `theme.json` (`Themes/<id>/`, or a plugin's own folder: see docs/THEMES.md).", V42, None, false, |c, a| {
         let s = c.state();
         let list: Vec<Value> = s.ui().themes().iter().map(|t| Value::map([("id", Value::from(t.id.clone())), ("name", Value::from(t.name.clone()))])).collect();
         Value::List(list)
     }),
-    def!("ui.theme", "ui", [], "string", "The id of the interface theme in use (`\"\"`: openOMSI's own look).", V42, None, false, |c, a| c.state().ui().theme().to_string()),
-    def!("ui.set_theme", "ui", [p("id", "string")], "true, or false and the reason", "Switches the game's interface to theme `id` (`\"\"` or `\"openomsi\"`: openOMSI's own look), as if the player chose it in Options › Interface: it is kept for the next start. Ask the player first; they can switch back there.", V42, Ui, true, |c, a| {
+    def!("ui.theme", "ui", [], "string", "The id of the interface theme in use (`\"\"`: openBus's own look).", V42, None, false, |c, a| c.state().ui().theme().to_string()),
+    def!("ui.set_theme", "ui", [p("id", "string")], "true, or false and the reason", "Switches the game's interface to theme `id` (`\"\"` or `\"openbus\"`: openBus's own look), as if the player chose it in Options › Interface: it is kept for the next start. Ask the player first; they can switch back there.", V42, Ui, true, |c, a| {
         let id = a.str(0)?;
         let s = c.state();
         let r = s.ui().ask_theme(&id);

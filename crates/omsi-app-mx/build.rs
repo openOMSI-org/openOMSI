@@ -1,5 +1,5 @@
 //! `cfg(steam)` for the mX game's Steam code (`src/steam.rs`), on the targets
-//! `assets/steam_redist` has the library for. The executable `openomsi` belongs to omsi-app:
+//! `assets/steam_redist` has the library for. The executable `openbus` belongs to omsi-app:
 //! its `build.rs` gives it the icon, the exported switchable-graphics hints, the rpath and
 //! Steam's library beside it, for both games.
 

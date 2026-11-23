@@ -158,9 +158,9 @@ impl Vr {
         extensions.khr_d3d12_enable = true;
         let instance = entry.create_instance(
             &xr::ApplicationInfo {
-                application_name: "openOMSI",
+                application_name: "openBus",
                 application_version: 1,
-                engine_name: "openOMSI",
+                engine_name: "openBus",
                 engine_version: 1,
                 api_version: xr::Version::new(1, 0, 0),
             },
@@ -182,7 +182,7 @@ impl Vr {
         if luid.LowPart != requirements.adapter_luid.LowPart
             || luid.HighPart != requirements.adapter_luid.HighPart
         {
-            bail!("the OpenXR headset and openOMSI are using different graphics adapters");
+            bail!("the OpenXR headset and openBus are using different graphics adapters");
         }
         let binding = xr::d3d::SessionCreateInfoD3D12 {
             device: device.raw_device().as_raw().cast(),

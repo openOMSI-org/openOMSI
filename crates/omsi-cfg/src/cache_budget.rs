@@ -138,7 +138,7 @@ mod tests {
     use super::*;
 
     fn temp(name: &str) -> PathBuf {
-        let p = std::env::temp_dir().join(format!("openomsi-budget-{name}-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("openbus-budget-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&p);
         fs::create_dir_all(&p).unwrap();
         p

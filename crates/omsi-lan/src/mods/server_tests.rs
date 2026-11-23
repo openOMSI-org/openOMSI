@@ -11,7 +11,7 @@ fn hosting_with_accept(
     let address = listener.local_addr().unwrap();
     let key = Arc::new(omsi_net::hostkey::HostKey::generate().unwrap());
     let source = ModSource {
-        root: std::env::temp_dir().join("openomsi-no-test-content"),
+        root: std::env::temp_dir().join("openbus-no-test-content"),
         map: String::new(),
         bus: None,
         weather: None,
@@ -122,7 +122,7 @@ fn selected_bus_request_is_rejected_without_an_authorized_fleet() {
     let key = Arc::new(omsi_net::hostkey::HostKey::generate().unwrap());
     let session = key.session();
     let source = ModSource {
-        root: std::env::temp_dir().join("openomsi-no-test-content"),
+        root: std::env::temp_dir().join("openbus-no-test-content"),
         map: String::new(),
         bus: None,
         weather: None,

@@ -1438,7 +1438,7 @@ mod guard_tests {
     #[test]
     fn old_preview_failures_do_not_block_a_new_version() {
         let dir = std::env::temp_dir().join(format!(
-            "openomsi-preview-old-failures-{}",
+            "openbus-preview-old-failures-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1458,7 +1458,7 @@ mod guard_tests {
     #[test]
     fn unfinished_preview_is_still_blocked_in_the_same_version() {
         let dir = std::env::temp_dir().join(format!(
-            "openomsi-preview-current-failure-{}",
+            "openbus-preview-current-failure-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);

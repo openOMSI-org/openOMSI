@@ -74,7 +74,7 @@ fn wasm_uses_the_same_read_only_hof_api() {
     use omsi_plugin::{HostConfig, Plugins};
     use oop_format::{Header, Kind, OopBuilder};
     let guest = r#"(module
-      (import "openomsi" "call" (func $call (param i32 i32 i32 i32) (result i64)))
+      (import "openbus" "call" (func $call (param i32 i32 i32 i32) (result i64)))
       (memory (export "memory") 1)
       (global $next (mut i32) (i32.const 4096))
       (data (i32.const 0) "hof.get")

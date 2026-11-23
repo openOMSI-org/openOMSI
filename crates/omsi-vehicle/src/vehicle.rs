@@ -21,7 +21,7 @@ pub struct Camera {
     pub pitch: f32,
     /// `[add_camera_reflexion_2]` extra parameter.
     pub extra: Option<f32>,
-    /// `[add_camera_reflexion_static]` (openOMSI): a camera for a screen (CCTV), not a mirror
+    /// `[add_camera_reflexion_static]` (openBus): a camera for a screen (CCTV), not a mirror
     /// - it looks where its yaw and pitch point, whoever looks at its picture.
     pub fixed: bool,
 }
@@ -55,7 +55,7 @@ impl Default for Axle {
     }
 }
 
-/// How an axle's strut works (an openOMSI extension; OMSI 2 knows one kind, the coil spring with
+/// How an axle's strut works (an openBus extension; OMSI 2 knows one kind, the coil spring with
 /// a damper, which is what an axle without a `[suspension]` block gets).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SuspensionKind {
@@ -238,16 +238,16 @@ pub struct Vehicle {
     pub inv_min_turn_radius: f32,
     pub ai_delta_height: f32,
     pub axles: Vec<Axle>,
-    /// `[suspension]` blocks (openOMSI): the kind of strut per axle.
+    /// `[suspension]` blocks (openBus): the kind of strut per axle.
     pub suspensions: Vec<Suspension>,
-    /// `[rail_traction]`, `[rail_brake]` and `[rail_coupler]` (openOMSI): the traction curve, the
+    /// `[rail_traction]`, `[rail_brake]` and `[rail_coupler]` (openBus): the traction curve, the
     /// brake system and the couplers of a rail vehicle (see `rail_spec`).
     pub rail_traction: Option<crate::rail_spec::RailTraction>,
     pub rail_brake: Option<crate::rail_spec::RailBrake>,
     pub rail_coupler: Option<crate::rail_spec::RailCoupler>,
     /// `[rail_power]`: where the vehicle gets its current (`Auto`: from its shape).
     pub rail_power: crate::rail_spec::PowerKind,
-    /// `[vehicle_script]` (openOMSI): Lua (`.lua`) or compiled (`.oop`) scripts that belong to the
+    /// `[vehicle_script]` (openBus): Lua (`.lua`) or compiled (`.oop`) scripts that belong to the
     /// vehicle and run while it is the player's, with the plugin API (see `omsi_plugin`).
     pub script_files: Vec<PathBuf>,
     pub attachments: Vec<Attachment>,
@@ -261,15 +261,15 @@ pub struct Vehicle {
     pub control_cable_back: Vec<ControlCable>,
     pub rowdy_factor: Option<(f32, f32)>,
     pub boogies: Option<f32>,
-    /// `[rail_class]` (an openOMSI extension): `tram`, `metro` or `train`, when the file's
+    /// `[rail_class]` (an openBus extension): `tram`, `metro` or `train`, when the file's
     /// shape does not tell.
     pub rail_class: Option<String>,
     /// The modes the file declares with `[bus_transport]`, `[tram_transport]`,
-    /// `[railway_transport]`, `[metro_transport]` and `[trolleybus_transport]` (openOMSI
+    /// `[railway_transport]`, `[metro_transport]` and `[trolleybus_transport]` (openBus
     /// keywords); empty when it declares none (`omsi_sim::transport::modes_of` then works
     /// the mode out from the file's shape).
     pub transport: omsi_cfg::transport::ModeSet,
-    /// `[pantograph_var]` / `[pantograph_trigger]` (openOMSI keywords): the script variable that
+    /// `[pantograph_var]` / `[pantograph_trigger]` (openBus keywords): the script variable that
     /// says the pantograph is raised (1) or down (0), and the mouse-event trigger that toggles it.
     /// Without them a rail vehicle's pantograph is found by its mesh (see the game's
     /// `detect_pantograph`).
@@ -280,7 +280,7 @@ pub struct Vehicle {
     pub sinus: Option<[f32; 4]>,
     pub rail_body_osc: Option<[f32; 7]>,
     pub contact_shoes: Vec<[f32; 6]>,
-    /// openOMSI's trolleybus gear: `[trolley_pole]`, `[trolley_rheostat]`, `[trolley_async]`
+    /// openBus's trolleybus gear: `[trolley_pole]`, `[trolley_rheostat]`, `[trolley_async]`
     /// and the like (see `omsi_trolley::TrolleyDef`).
     pub trolley: omsi_trolley::TrolleyDef,
     pub ai_brake_performance: Option<[f32; 5]>,

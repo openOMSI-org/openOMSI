@@ -39,7 +39,7 @@ fn trace() -> Option<&'static Mutex<Trace>> {
             match std::fs::File::create(path) {
                 Ok(f) => {
                     let mut out = std::io::BufWriter::new(f);
-                    let _ = writeln!(out, "# openomsi audio trace 1");
+                    let _ = writeln!(out, "# openbus audio trace 1");
                     Some(Mutex::new(Trace { out, files: HashMap::new(), last: HashMap::new(), frame: 0 }))
                 }
                 Err(e) => {

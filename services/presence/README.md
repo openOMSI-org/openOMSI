@@ -1,6 +1,6 @@
 # Presence: "playing now"
 
-A Cloudflare Worker that counts the openOMSI games being played right now. A running game
+A Cloudflare Worker that counts the openBus games being played right now. A running game
 posts `/ping` every ten minutes and `/bye` when it ends (`crates/omsi-app/src/presence.rs`,
 setting `presence`, on by default; after a 429 it waits half an hour); a session counts for
 25 minutes after its last ping.
@@ -20,7 +20,7 @@ more.
 ## Deploy
 
 Cloudflare's Workers Builds deploys it from this repository on every push to `main`
-(Worker `openomsi`, root directory `services/presence`, deploy command `npx wrangler deploy`).
+(Worker `openbus`, root directory `services/presence`, deploy command `npx wrangler deploy`).
 By hand: `npx wrangler login` once, then `npx wrangler deploy` in this folder.
 
 It runs on Cloudflare's free plan (a Worker and one Durable Object, which keeps the sessions in memory and nothing in its storage): 100 000

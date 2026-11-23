@@ -2,7 +2,7 @@
 //! endian doubles - x, y, z in cm, yaw, pitch, roll in degrees - to UDP port 4242). opentrack
 //! takes TrackIR, Tobii, webcams (neuralnet tracker) and phones, on every platform.
 //!
-//! On Windows openOMSI also reads NaturalPoint's native NPClient interface directly when
+//! On Windows openBus also reads NaturalPoint's native NPClient interface directly when
 //! available, and keeps opentrack's `FT_SharedMem` output as a fallback. A recent UDP pose wins
 //! over native TrackIR, which in turn wins over `FT_SharedMem`.
 //!
@@ -370,7 +370,7 @@ mod npclient {
     ///
     /// This is deliberately kept private to the Windows head-tracking thread:
     /// the vendor DLL owns process-global state and is not something the rest of
-    /// openOMSI should have to know about.
+    /// openBus should have to know about.
     pub struct Reader {
         native: Option<Native>,
         hwnd: Option<isize>,
@@ -555,7 +555,7 @@ mod npclient {
         }
 
         /// Poll a fresh TrackIR frame. NPClient position values are in millimetres;
-        /// openOMSI's HeadPose uses centimetres, so translation is divided by ten.
+        /// openBus's HeadPose uses centimetres, so translation is divided by ten.
         pub fn poll(&mut self) -> Option<HeadPose> {
             self.try_start()?;
             let native = self.native.as_mut()?;
@@ -571,7 +571,7 @@ mod npclient {
             }
 
             // NPClient uses the NaturalPoint/TrackIR coordinate convention. Keep the
-            // native pose in openOMSI's common head-tracking convention here. User-facing
+            // native pose in openBus's common head-tracking convention here. User-facing
             // sensitivity and inversion are applied later, in the camera path, so native
             // TrackIR and OpenTrack behave identically.
             // Keep the native TrackIR translation signs here.  seat_offset()

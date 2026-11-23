@@ -1,4 +1,4 @@
-//! The privacy-filtered support package (`openomsi --export-diagnostics`, Setup → Export
+//! The privacy-filtered support package (`openbus --export-diagnostics`, Setup → Export
 //! diagnostics): what may go in, the logs' projection, and the ZIP. The game fills in what
 //! it ran with (`omsi-app`'s `support_bundle::snapshot`); nothing is sent anywhere.
 
@@ -112,13 +112,13 @@ fn tail(path: &Path) -> std::io::Result<String> {
     Ok(if size > LOG_BYTES { text.split_once('\n').map(|(_, t)| t).unwrap_or("").into() } else { text.into_owned() })
 }
 
-/// Where a game started from the launcher keeps its snapshot (`~/.openomsi/support/<id>.json`).
+/// Where a game started from the launcher keeps its snapshot (`~/.openbus/support/<id>.json`).
 pub fn session_dir() -> PathBuf {
     omsi_launcher_lib::data_dir().join("support")
 }
 
 fn summary(value: &Value) -> String {
-    format!("openOMSI support package (schema 1)\n\n{}\n\nLogs are privacy projections, not raw log copies. Null means unavailable.\nRoots and archives are aliases; no absolute paths or archive filenames are exported.\nhistory/ holds a record of each game of the last 30 days: the day it was played, frame times, how it ended and its error, filtered the same way.\nSettings are allowlisted; no environment, command line, chat, player identity, LAN codes, addresses, configuration files or serial numbers are attached.\n", serde_json::to_string_pretty(value).unwrap_or_default())
+    format!("openBus support package (schema 1)\n\n{}\n\nLogs are privacy projections, not raw log copies. Null means unavailable.\nRoots and archives are aliases; no absolute paths or archive filenames are exported.\nhistory/ holds a record of each game of the last 30 days: the day it was played, frame times, how it ended and its error, filtered the same way.\nSettings are allowlisted; no environment, command line, chat, player identity, LAN codes, addresses, configuration files or serial numbers are attached.\n", serde_json::to_string_pretty(value).unwrap_or_default())
 }
 
 fn archive(out: &Path, value: &Value, logs: &[(String, String)], history: &[(String, Value)]) -> anyhow::Result<()> {

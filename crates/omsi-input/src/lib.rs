@@ -1,4 +1,4 @@
-//! openOMSI's input devices: game controllers (gilrs, DirectInput on Windows, evdev on Linux,
+//! openBus's input devices: game controllers (gilrs, DirectInput on Windows, evdev on Linux,
 //! the HID and GameController frameworks on macOS), their mappings (`gamectrler.cfg`),
 //! force feedback, head tracking (TrackIR / FreeTrack), the keyboard's scan codes and the
 //! names of the cockpit's controls. Nothing here knows the game's `App` or the renderer:

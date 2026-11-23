@@ -16,7 +16,7 @@ use omsi_sim::VehicleInstance;
 use std::path::{Path, PathBuf};
 
 /// Jolts: smoothed acceleration across over 3 m/s² or along over 5 m/s² weighing 0.1, at
-/// most one a second; openOMSI only registers them with passengers aboard (#3898).
+/// most one a second; openBus only registers them with passengers aboard (#3898).
 const HARSH_ACROSS: f32 = 3.0;
 const HARSH_ALONG: f32 = 5.0;
 const JOLT_WEIGHT: f64 = 0.1;
@@ -166,7 +166,7 @@ impl Career {
     pub fn load(root: &Path, rel: &str) -> Career {
         // an absolute path is used as it is; a relative one is written into the content
         // folder (the original installation is only read: its copy is where a driver that
-        // has not played openOMSI yet starts from)
+        // has not played openBus yet starts from)
         let given = Path::new(rel);
         let (path, read) = if given.is_absolute() {
             (given.to_path_buf(), given.to_path_buf())
@@ -613,7 +613,7 @@ fn ticket_percent(points: i32, requests: i32) -> f64 {
 }
 
 impl Career {
-    /// Write this session into `~/.openomsi/sessions/<time>-<process>.json`, where the
+    /// Write this session into `~/.openbus/sessions/<time>-<process>.json`, where the
     /// launcher adds it up into the driver's hours, experience and level (the process id
     /// keeps two games that end in the same second apart).
     pub fn write_session(
@@ -627,7 +627,7 @@ impl Career {
             .or_else(|| std::env::var_os("USERPROFILE"))
             .map(PathBuf::from)
             .unwrap_or_default();
-        let dir = home.join(".openomsi").join("sessions");
+        let dir = home.join(".openbus").join("sessions");
         std::fs::create_dir_all(&dir)?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

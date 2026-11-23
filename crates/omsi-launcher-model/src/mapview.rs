@@ -283,7 +283,7 @@ pub fn export_with(
 /// to the far corners, and a river or a shore runs on beyond the last road.
 const PACKAGE_MARGIN: f64 = 2500.0;
 
-/// The map's package (`Maps/<Map>/openomsi-realmap`, docs/MAP_PACKAGE.md) as the page draws it
+/// The map's package (`Maps/<Map>/openbus-realmap`, docs/MAP_PACKAGE.md) as the page draws it
 /// under the roads: the filling triangles by class and the rivers, rail and borders, in metres
 /// from `origin` like the roads, and the manifest's dark colours as CSS. `null` for a map
 /// without a package, so the picture is what it always was.

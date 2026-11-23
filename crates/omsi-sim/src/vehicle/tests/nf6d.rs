@@ -178,7 +178,7 @@ fn the_nf6ds_cars_stay_level_as_its_file_says() {
     );
 }
 
-/// A destination picked from openOMSI's list (as `game_lists` does it) reaches both cabs'
+/// A destination picked from openBus's list (as `game_lists` does it) reaches both cabs'
 /// matrices: the head cab's own (its rear cab used to zero the cable it reads in its
 /// {init}) and the rear cab's, line number included.
 #[test]

@@ -1,4 +1,4 @@
-package org.openomsi.game;
+package org.openbus.game;
 
 import android.Manifest;
 import android.app.NativeActivity;
@@ -24,7 +24,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 
 /**
- * openOMSI's activity: the game itself is native code (libopenomsi_game.so, run by
+ * openBus's activity: the game itself is native code (libopenbus_game.so, run by
  * NativeActivity). This adds only what NativeActivity lacks: the whole screen without the
  * system bars, the screen kept on while playing, access to the shared storage (where the
  * copy of OMSI 2 and the mods are), the vibration of the on-screen buttons, and installing
@@ -39,8 +39,8 @@ public class OmsiActivity extends NativeActivity {
      * "Install unknown apps", 6 that refused. */
     private static volatile int installStatus = 0;
     private static volatile String installMessage = "";
-    private static final String ACTION_INSTALLED = "org.openomsi.game.INSTALL_STATUS";
-    private static final String EXTRA_INSTALL_TOKEN = "org.openomsi.game.INSTALL_TOKEN";
+    private static final String ACTION_INSTALLED = "org.openbus.game.INSTALL_STATUS";
+    private static final String EXTRA_INSTALL_TOKEN = "org.openbus.game.INSTALL_TOKEN";
     private static final String INSTALL_PREFS = "install";
     /** An APK waiting for the "Install unknown apps" permission. */
     private String pendingApk = null;
@@ -194,7 +194,7 @@ public class OmsiActivity extends NativeActivity {
 
     private void startInstall(String path) {
         if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
-            // the player allows openOMSI to install apps first, then comes back here
+            // the player allows openBus to install apps first, then comes back here
             pendingApk = path;
             askedInstallPermission = true;
             installStatus = 5;
@@ -215,7 +215,7 @@ public class OmsiActivity extends NativeActivity {
             session = pi.openSession(id);
             File f = new File(path);
             InputStream in = new FileInputStream(f);
-            OutputStream out = session.openWrite("openomsi.apk", 0, f.length());
+            OutputStream out = session.openWrite("openbus.apk", 0, f.length());
             byte[] buf = new byte[1 << 16];
             int n;
             while ((n = in.read(buf)) > 0) {
@@ -300,7 +300,7 @@ public class OmsiActivity extends NativeActivity {
             case PackageInstaller.STATUS_FAILURE_CONFLICT:
             case PackageInstaller.STATUS_FAILURE_INCOMPATIBLE:
                 // signed with another key than the installed app (a build of one's own)
-                installMessage = "this openOMSI was installed from a build with another signature than the GitHub releases. Uninstall it once and install the APK from github.com/openOMSI-org/openOMSI - updates work from then on.";
+                installMessage = "this openBus was installed from a build with another signature than the GitHub releases. Uninstall it once and install the APK from github.com/rafaelkaiz/openBus - updates work from then on.";
                 installStatus = 4;
                 break;
             default: {

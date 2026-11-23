@@ -1,4 +1,4 @@
-//! Updates from the project's GitHub releases (github.com/openOMSI-org/openOMSI).
+//! Updates from the project's GitHub releases (github.com/rafaelkaiz/openBus).
 //!
 //! A release a maintainer starts from main publishes `v<MAJOR.MINOR.PATCH>` with one archive
 //! per platform (see .github/workflows/release.yml). The launcher asks the GitHub API for the
@@ -6,12 +6,12 @@
 //! build it offers it - or, with `update_auto`, installs it at once:
 //!
 //! * **Windows, macOS, Linux**: the archive is downloaded (and checked against the SHA-256
-//!   GitHub lists for it), unpacked into `.openomsi-update` beside the program, and every
+//!   GitHub lists for it), unpacked into `.openbus-update` beside the program, and every
 //!   program file it holds takes the place of the old one: the old one is renamed to
 //!   `*.old-update` first (Windows lets a running .exe be renamed, not overwritten) and put
 //!   back if anything fails. On macOS the running `.app` bundle is the one replaced,
 //!   whatever the user named it. Files an earlier update installed that the new archive no
-//!   longer has go as well (`.openomsi-files` lists them); nothing else in the folder - the
+//!   longer has go as well (`.openbus-files` lists them); nothing else in the folder - the
 //!   mods, the content - is touched. Then the new launcher is started and this one ends; the
 //!   next start deletes the `*.old-update` files.
 //! * **Android**: the APK is downloaded and handed to the system's package installer
@@ -46,18 +46,18 @@ mod unpack;
 pub use unpack::unpack;
 
 /// The project on GitHub.
-pub const REPO: &str = "openOMSI-org/openOMSI";
-pub const REPO_URL: &str = "https://github.com/openOMSI-org/openOMSI";
-const LATEST_API: &str = "https://api.github.com/repos/openOMSI-org/openOMSI/releases/latest";
-const RELEASES_API: &str = "https://api.github.com/repos/openOMSI-org/openOMSI/releases?per_page=100";
+pub const REPO: &str = "rafaelkaiz/openBus";
+pub const REPO_URL: &str = "https://github.com/rafaelkaiz/openBus";
+const LATEST_API: &str = "https://api.github.com/repos/rafaelkaiz/openBus/releases/latest";
+const RELEASES_API: &str = "https://api.github.com/repos/rafaelkaiz/openBus/releases?per_page=100";
 const RELEASE_PAGES: u32 = 5;
-const NEWEST_API: &str = "https://api.github.com/repos/openOMSI-org/openOMSI/releases?per_page=10";
+const NEWEST_API: &str = "https://api.github.com/repos/rafaelkaiz/openBus/releases?per_page=10";
 pub const FIRST_SELF_TESTED: &str = "0.2.32";
 
 /// A build the App Store delivers (every iPhone and iPad build, and a Mac build made with
-/// `OPENOMSI_STORE=1`): the store installs its updates, and a store app may not fetch and run
+/// `OPENBUS_STORE=1`): the store installs its updates, and a store app may not fetch and run
 /// a program of its own, so no release is ever looked for or offered.
-pub const STORE_BUILD: bool = cfg!(target_os = "ios") || option_env!("OPENOMSI_STORE").is_some();
+pub const STORE_BUILD: bool = cfg!(target_os = "ios") || option_env!("OPENBUS_STORE").is_some();
 
 /// A release newer than this build, with the file for this platform.
 #[derive(Clone, Debug, PartialEq)]
@@ -179,7 +179,7 @@ impl Updater {
             let result = download_and_install(&r, &status);
             if let Err(e) = result {
                 log::warn!("update to {}: {e:#}", r.version);
-                *lock(&status) = Status::Failed(format!("openOMSI was not updated to {}: {e}", r.version));
+                *lock(&status) = Status::Failed(format!("openBus was not updated to {}: {e}", r.version));
             }
         });
     }
@@ -201,7 +201,7 @@ impl Updater {
                 }
                 Err(e) => {
                     log::warn!("update {}: background download: {e:#}", r.version);
-                    *lock(&status) = Status::Failed(format!("openOMSI {} could not be downloaded: {e}.", r.version));
+                    *lock(&status) = Status::Failed(format!("openBus {} could not be downloaded: {e}.", r.version));
                 }
             }
         });
@@ -213,9 +213,9 @@ impl Updater {
         #[cfg(target_os = "android")]
         if let Status::WaitingForInstaller(r) = self.status() {
             match crate::android::hooks().and_then(|h| (h.install_status)()) {
-                Some((3, _)) => self.set(Status::Failed(format!("openOMSI was not updated to {}: the installation was cancelled.", r.version))),
-                Some((4, msg)) => self.set(Status::Failed(format!("openOMSI was not updated to {}: {}", r.version, if msg.is_empty() { "the system's installer refused the package." } else { msg.as_str() }))),
-                Some((6, _)) => self.set(Status::Failed(format!("openOMSI was not updated to {}: installing apps was not allowed for openOMSI (Settings → Apps → openOMSI → Install unknown apps).", r.version))),
+                Some((3, _)) => self.set(Status::Failed(format!("openBus was not updated to {}: the installation was cancelled.", r.version))),
+                Some((4, msg)) => self.set(Status::Failed(format!("openBus was not updated to {}: {}", r.version, if msg.is_empty() { "the system's installer refused the package." } else { msg.as_str() }))),
+                Some((6, _)) => self.set(Status::Failed(format!("openBus was not updated to {}: installing apps was not allowed for openBus (Settings → Apps → openBus → Install unknown apps).", r.version))),
                 // (2, success: the system ends this process and starts the new app)
                 _ => {}
             }
@@ -283,7 +283,7 @@ pub fn asset_name(version: &str) -> Option<String> {
     } else {
         return None;
     };
-    Some(format!("openOMSI-{version}-{suffix}"))
+    Some(format!("openBus-{version}-{suffix}"))
 }
 
 // --- the release ----------------------------------------------------------------------------
@@ -295,7 +295,7 @@ pub fn agent() -> ureq::Agent {
     let b = ureq::AgentBuilder::new()
         .timeout_connect(std::time::Duration::from_secs(20))
         .timeout_read(std::time::Duration::from_secs(30))
-        .user_agent(&format!("openOMSI/{} (updater)", current_version()));
+        .user_agent(&format!("openBus/{} (updater)", current_version()));
     // (through the proxy the system is set to use, #1000)
     match crate::proxy::system_proxy().and_then(|p| ureq::Proxy::new(&p).map_err(|e| log::warn!("network: the proxy {} cannot be used: {e}", crate::proxy::redact(&p))).ok()) {
         Some(proxy) => b.proxy(proxy).build(),
@@ -609,7 +609,7 @@ fn download(r: &Release, to: &Path, status: &Mutex<Status>) -> anyhow::Result<()
     }
     let part = to.with_extension("part");
     if std::fs::metadata(&part).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age < std::time::Duration::from_secs(15)) {
-        anyhow::bail!("another download of openOMSI {} is under way; try again in a moment", r.version);
+        anyhow::bail!("another download of openBus {} is under way; try again in a moment", r.version);
     }
     let _ = std::fs::remove_file(checked_note(to));
     let mut hasher = sha2::Sha256::new();
@@ -704,9 +704,9 @@ fn download_and_install(r: &Release, status: &Mutex<Status>) -> anyhow::Result<(
         let place = install_place()?;
         if !writable(&place.dir) {
             if cfg!(windows) {
-                anyhow::bail!("the folder {} cannot be written. Put openOMSI in a folder of yours (or start it once as administrator) and update again", short_path(&place.dir));
+                anyhow::bail!("the folder {} cannot be written. Put openBus in a folder of yours (or start it once as administrator) and update again", short_path(&place.dir));
             }
-            anyhow::bail!("the folder {} cannot be written. Put openOMSI in a folder of yours and update again", short_path(&place.dir));
+            anyhow::bail!("the folder {} cannot be written. Put openBus in a folder of yours and update again", short_path(&place.dir));
         }
     }
     let file = download_dir().join(&r.asset_name);
@@ -740,7 +740,7 @@ fn download_and_install(r: &Release, status: &Mutex<Status>) -> anyhow::Result<(
     #[cfg(target_os = "ios")]
     {
         let _ = file;
-        anyhow::bail!("openOMSI {} comes from the App Store", r.version)
+        anyhow::bail!("openBus {} comes from the App Store", r.version)
     }
 }
 
@@ -757,7 +757,7 @@ pub struct Place {
 /// The installation this process runs from (refused for a development build).
 pub fn install_place() -> anyhow::Result<Place> {
     // (taken once: on Linux `current_exe` follows the running file, so after the swap it
-    // named `openomsi.old-update` - the old program, started again as "the new launcher" -
+    // named `openbus.old-update` - the old program, started again as "the new launcher" -
     // and after a second swap a deleted file that could not be started at all, #811)
     static EXE: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
     let exe = EXE
@@ -769,7 +769,7 @@ pub fn install_place() -> anyhow::Result<Place> {
     }
     // (macOS runs an app opened straight from Downloads from a read-only copy elsewhere)
     if exe.to_string_lossy().contains("/AppTranslocation/") {
-        anyhow::bail!("macOS runs openOMSI from a temporary read-only copy. Move openOMSI.app into your Applications folder (or any folder), start it from there and update again");
+        anyhow::bail!("macOS runs openBus from a temporary read-only copy. Move openBus.app into your Applications folder (or any folder), start it from there and update again");
     }
     let bundle = exe.ancestors().find(|p| p.extension().map(|e| e.eq_ignore_ascii_case("app")).unwrap_or(false)).map(Path::to_path_buf);
     let dir = bundle.as_deref().unwrap_or(&exe).parent().ok_or_else(|| anyhow::anyhow!("no folder around {}", exe.display()))?.to_path_buf();
@@ -777,7 +777,7 @@ pub fn install_place() -> anyhow::Result<Place> {
 }
 
 /// The program's own path from what the system says the running file is: on Linux that
-/// follows a rename (`openomsi.old-update`) and an unlinked file (`... (deleted)`), but the
+/// follows a rename (`openbus.old-update`) and an unlinked file (`... (deleted)`), but the
 /// program to start is the one at the original name.
 fn program_path(exe: &Path) -> PathBuf {
     let mut s = exe.to_string_lossy().to_string();
@@ -785,7 +785,7 @@ fn program_path(exe: &Path) -> PathBuf {
         s = t.to_string();
     }
     while let Some(t) = s.strip_suffix(OLD) {
-        // (`openomsi.exe.2.old-update`: put aside beside an older one, see `aside_of`)
+        // (`openbus.exe.2.old-update`: put aside beside an older one, see `aside_of`)
         s = match t.rsplit_once('.') {
             Some((head, n)) if !head.is_empty() && !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => head.to_string(),
             _ => t.to_string(),
@@ -811,7 +811,7 @@ fn short_path(p: &Path) -> String {
 
 /// Whether files can be put into `dir` (the check before anything is downloaded).
 fn writable(dir: &Path) -> bool {
-    let probe = dir.join(".openomsi-write-test");
+    let probe = dir.join(".openbus-write-test");
     let ok = std::fs::write(&probe, b"").is_ok();
     let _ = std::fs::remove_file(&probe);
     ok
@@ -833,8 +833,8 @@ fn in_cargo_target_dir(exe: &Path) -> bool {
     exe.ancestors().skip(2).take(2).any(|d| std::fs::read_to_string(d.join("CACHEDIR.TAG")).is_ok_and(|t| t.contains("cargo")))
 }
 
-const STAGING: &str = ".openomsi-update";
-pub(crate) const MANIFEST: &str = ".openomsi-files";
+const STAGING: &str = ".openbus-update";
+pub(crate) const MANIFEST: &str = ".openbus-files";
 const OLD: &str = ".old-update";
 
 fn old_of(p: &Path) -> PathBuf {
@@ -878,7 +878,7 @@ pub(crate) fn target_of(name: &str, place: &Place) -> PathBuf {
 
 /// Put the program files of the release archive `zip` into the installation at `place`,
 /// once its program has passed its self-test. The files it replaces stay beside it as
-/// `*.old-update`, with the version they belong to (`.openomsi-previous`), until the new
+/// `*.old-update`, with the version they belong to (`.openbus-previous`), until the new
 /// version has started well once (`cleanup_after_update`): until then the start guard can
 /// go back to them (`recovery::rollback`).
 pub fn install_archive(zip: &Path, place: &Place) -> anyhow::Result<()> {
@@ -899,10 +899,10 @@ pub(crate) fn install_archive_with(zip: &Path, place: &Place, self_test: bool) -
     // a program must be among them: a wrong archive must not replace anything
     let has_program = items.iter().any(|n| {
         let l = n.to_ascii_lowercase();
-        l == "openomsi" || l == "openomsi.exe" || l.ends_with(".app")
+        l == "openbus" || l == "openbus.exe" || l.ends_with(".app")
     });
     if !has_program {
-        anyhow::bail!("the update archive holds no openOMSI program");
+        anyhow::bail!("the update archive holds no openBus program");
     }
     // the new program must start before it replaces the old one: a build that cannot even
     // be loaded here (a library missing, a broken file) stops now, with nothing replaced
@@ -1072,11 +1072,11 @@ pub fn open_url(url: &str) {
         // (the Swift app's UIApplication.open, linked into the same program, see omsi-app's
         // `apple.rs`)
         unsafe extern "C" {
-            fn openomsi_swift_open_url(url: *const std::ffi::c_char);
+            fn openbus_swift_open_url(url: *const std::ffi::c_char);
         }
         if let Ok(u) = std::ffi::CString::new(url) {
             // SAFETY: a nul-terminated string the call only reads
-            unsafe { openomsi_swift_open_url(u.as_ptr()) }
+            unsafe { openbus_swift_open_url(u.as_ptr()) }
         }
     }
     #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android"), not(target_os = "ios")))]
@@ -1102,9 +1102,9 @@ mod tests {
     fn the_platform_file_of_a_github_release() {
         let name = asset_name("0.1.9").unwrap();
         let v = serde_json::json!({
-            "tag_name": "v0.1.9", "html_url": "https://github.com/openOMSI-org/openOMSI/releases/tag/v0.1.9", "body": "notes",
+            "tag_name": "v0.1.9", "html_url": "https://github.com/rafaelkaiz/openBus/releases/tag/v0.1.9", "body": "notes",
             "assets": [
-                {"name": "openOMSI-0.1.9-server-linux-x64.zip", "browser_download_url": "https://x/server", "size": 5},
+                {"name": "openBus-0.1.9-server-linux-x64.zip", "browser_download_url": "https://x/server", "size": 5},
                 {"name": name, "browser_download_url": "https://x/mine", "size": 42, "digest": "sha256:ABCDEF"}
             ]
         });
@@ -1232,7 +1232,7 @@ mod tests {
         assert!(newest_of(&serde_json::json!({"message": "rate limited"}), "0.3.5", &[]).is_err());
         assert_eq!(newest_of(&list, "0.3.4", &["0.3.7".into()]).unwrap().map(|r| r.version), Some("0.3.6".into()));
         let mut one_platform = release("v0.3.8", true, false);
-        one_platform["assets"] = serde_json::json!([{"name": "openOMSI-0.3.8-some-other-platform.zip", "browser_download_url": "https://x/o.zip", "size": 7}]);
+        one_platform["assets"] = serde_json::json!([{"name": "openBus-0.3.8-some-other-platform.zip", "browser_download_url": "https://x/o.zip", "size": 7}]);
         let with_one_platform = serde_json::json!([one_platform, release("v0.3.7", true, false), release("v0.3.5", false, false)]);
         assert_eq!(newest_of(&with_one_platform, "0.3.5", &[]).unwrap().map(|r| r.version), Some("0.3.7".into()));
 
@@ -1322,7 +1322,7 @@ mod tests {
             version: "9.9.9".into(),
             page: String::new(),
             notes: String::new(),
-            asset_name: format!("openOMSI-test-{}.zip", std::process::id()),
+            asset_name: format!("openBus-test-{}.zip", std::process::id()),
             asset_url: format!("http://127.0.0.1:{port}/file.zip"),
             size: data.len() as u64,
             sha256: Some(sha),
@@ -1341,23 +1341,23 @@ mod tests {
 
     #[test]
     fn the_program_path_survives_the_swap() {
-        assert_eq!(program_path(Path::new("/home/me/openOMSI/openomsi")), PathBuf::from("/home/me/openOMSI/openomsi"));
-        assert_eq!(program_path(Path::new("/home/me/openOMSI/openomsi.old-update")), PathBuf::from("/home/me/openOMSI/openomsi"));
-        assert_eq!(program_path(Path::new("/home/me/openOMSI/openomsi.old-update (deleted)")), PathBuf::from("/home/me/openOMSI/openomsi"));
-        assert_eq!(program_path(Path::new("C:\\Games\\openOMSI\\openomsi.exe.old-update")), PathBuf::from("C:\\Games\\openOMSI\\openomsi.exe"));
-        assert_eq!(program_path(Path::new("C:\\Games\\openOMSI\\openomsi.exe.2.old-update")), PathBuf::from("C:\\Games\\openOMSI\\openomsi.exe"));
+        assert_eq!(program_path(Path::new("/home/me/openBus/openbus")), PathBuf::from("/home/me/openBus/openbus"));
+        assert_eq!(program_path(Path::new("/home/me/openBus/openbus.old-update")), PathBuf::from("/home/me/openBus/openbus"));
+        assert_eq!(program_path(Path::new("/home/me/openBus/openbus.old-update (deleted)")), PathBuf::from("/home/me/openBus/openbus"));
+        assert_eq!(program_path(Path::new("C:\\Games\\openBus\\openbus.exe.old-update")), PathBuf::from("C:\\Games\\openBus\\openbus.exe"));
+        assert_eq!(program_path(Path::new("C:\\Games\\openBus\\openbus.exe.2.old-update")), PathBuf::from("C:\\Games\\openBus\\openbus.exe"));
     }
 
     #[test]
     fn development_builds_are_recognised() {
-        assert!(is_dev_build(Path::new("/src/openOMSI/target/release/openomsi")));
-        assert!(is_dev_build(Path::new("C:\\src\\target\\x86_64-pc-windows-msvc\\release\\openomsi.exe")));
-        assert!(!is_dev_build(Path::new("/Applications/openOMSI.app/Contents/MacOS/openomsi")));
-        assert!(!is_dev_build(Path::new("/home/me/Games/openOMSI/openomsi")));
-        let dir = std::env::temp_dir().join(format!("openomsi-dev-build-{}", std::process::id()));
+        assert!(is_dev_build(Path::new("/src/openBus/target/release/openbus")));
+        assert!(is_dev_build(Path::new("C:\\src\\target\\x86_64-pc-windows-msvc\\release\\openbus.exe")));
+        assert!(!is_dev_build(Path::new("/Applications/openBus.app/Contents/MacOS/openbus")));
+        assert!(!is_dev_build(Path::new("/home/me/Games/openBus/openbus")));
+        let dir = std::env::temp_dir().join(format!("openbus-dev-build-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("builds/release")).unwrap();
         std::fs::write(dir.join("builds/CACHEDIR.TAG"), "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n").unwrap();
-        assert!(is_dev_build(&dir.join("builds/release/openomsi")));
+        assert!(is_dev_build(&dir.join("builds/release/openbus")));
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1369,35 +1369,35 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join("install");
         std::fs::create_dir_all(dir.join("Vehicles/MyMod")).unwrap();
-        std::fs::write(dir.join("openomsi"), "old game").unwrap();
-        std::fs::write(dir.join("openomsi-launcher"), "old cli").unwrap();
+        std::fs::write(dir.join("openbus"), "old game").unwrap();
+        std::fs::write(dir.join("openbus-launcher"), "old cli").unwrap();
         std::fs::write(dir.join("retired.dll"), "old").unwrap();
         std::fs::write(dir.join("Vehicles/MyMod/bus.bus"), "mod").unwrap();
-        std::fs::write(dir.join(MANIFEST), "openomsi\nopenomsi-launcher\nretired.dll\n").unwrap();
+        std::fs::write(dir.join(MANIFEST), "openbus\nopenbus-launcher\nretired.dll\n").unwrap();
         // the new release
         let zip_path = root.join("new.zip");
         {
             let mut z = zip::ZipWriter::new(std::fs::File::create(&zip_path).unwrap());
             let o = zip::write::SimpleFileOptions::default().unix_permissions(0o755);
-            for (n, body) in [("openomsi", "new game"), ("openomsi-launcher", "new cli"), ("README.md", "readme")] {
+            for (n, body) in [("openbus", "new game"), ("openbus-launcher", "new cli"), ("README.md", "readme")] {
                 z.start_file(n, o).unwrap();
                 z.write_all(body.as_bytes()).unwrap();
             }
             z.finish().unwrap();
         }
-        let place = Place { dir: dir.clone(), bundle: None, exe: dir.join("openomsi") };
+        let place = Place { dir: dir.clone(), bundle: None, exe: dir.join("openbus") };
         install_archive_with(&zip_path, &place, false).unwrap();
-        assert_eq!(std::fs::read_to_string(dir.join("openomsi")).unwrap(), "new game");
-        assert_eq!(std::fs::read_to_string(dir.join("openomsi-launcher")).unwrap(), "new cli");
+        assert_eq!(std::fs::read_to_string(dir.join("openbus")).unwrap(), "new game");
+        assert_eq!(std::fs::read_to_string(dir.join("openbus-launcher")).unwrap(), "new cli");
         assert_eq!(std::fs::read_to_string(dir.join("README.md")).unwrap(), "readme");
         assert!(!dir.join("retired.dll").exists());
         assert_eq!(std::fs::read_to_string(dir.join("Vehicles/MyMod/bus.bus")).unwrap(), "mod");
-        assert_eq!(std::fs::read_to_string(dir.join("openomsi.old-update")).unwrap(), "old game");
+        assert_eq!(std::fs::read_to_string(dir.join("openbus.old-update")).unwrap(), "old game");
         assert!(!dir.join(STAGING).exists());
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(std::fs::metadata(dir.join("openomsi")).unwrap().permissions().mode() & 0o777, 0o755);
+            assert_eq!(std::fs::metadata(dir.join("openbus")).unwrap().permissions().mode() & 0o777, 0o755);
         }
         // an archive without a program replaces nothing
         let bad = root.join("bad.zip");
@@ -1408,7 +1408,7 @@ mod tests {
             z.finish().unwrap();
         }
         assert!(install_archive_with(&bad, &place, false).is_err());
-        assert_eq!(std::fs::read_to_string(dir.join("openomsi")).unwrap(), "new game");
+        assert_eq!(std::fs::read_to_string(dir.join("openbus")).unwrap(), "new game");
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -1417,23 +1417,23 @@ mod tests {
         let root = std::env::temp_dir().join(format!("omsi_update_app_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join("Applications");
-        let bundle = dir.join("openOMSI.app");
+        let bundle = dir.join("openBus.app");
         std::fs::create_dir_all(bundle.join("Contents/MacOS")).unwrap();
-        std::fs::write(bundle.join("Contents/MacOS/openomsi"), "old game").unwrap();
+        std::fs::write(bundle.join("Contents/MacOS/openbus"), "old game").unwrap();
         std::fs::write(dir.join("Other.txt"), "theirs").unwrap();
         let zip_path = root.join("new.zip");
         {
             let mut z = zip::ZipWriter::new(std::fs::File::create(&zip_path).unwrap());
             let o = zip::write::SimpleFileOptions::default().unix_permissions(0o755);
-            for (n, body) in [("openOMSI.app/Contents/MacOS/openomsi", "new game"), ("README.md", "readme"), ("LICENSE", "license")] {
+            for (n, body) in [("openBus.app/Contents/MacOS/openbus", "new game"), ("README.md", "readme"), ("LICENSE", "license")] {
                 z.start_file(n, o).unwrap();
                 z.write_all(body.as_bytes()).unwrap();
             }
             z.finish().unwrap();
         }
-        let place = Place { dir: dir.clone(), bundle: Some(bundle.clone()), exe: bundle.join("Contents/MacOS/openomsi") };
+        let place = Place { dir: dir.clone(), bundle: Some(bundle.clone()), exe: bundle.join("Contents/MacOS/openbus") };
         install_archive_with(&zip_path, &place, false).unwrap();
-        assert_eq!(std::fs::read_to_string(bundle.join("Contents/MacOS/openomsi")).unwrap(), "new game");
+        assert_eq!(std::fs::read_to_string(bundle.join("Contents/MacOS/openbus")).unwrap(), "new game");
         assert!(!dir.join("README.md").exists());
         assert!(!dir.join("LICENSE").exists());
         assert_eq!(std::fs::read_to_string(dir.join("Other.txt")).unwrap(), "theirs");

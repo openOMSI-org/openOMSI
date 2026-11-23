@@ -323,7 +323,7 @@ fn store(bus: &str, driver: &omsi_vehicle::Camera, mirrors: &[omsi_vehicle::Came
     let path = views_path().ok_or_else(|| std::io::Error::other("no folder for the game's data"))?;
     let text = std::fs::read_to_string(&path).unwrap_or_default();
     let key = bus.trim().replace('\\', "/").to_ascii_lowercase();
-    let mut out = String::from("# openOMSI: the driver's view and the mirrors of each vehicle as set in the view editor,\n# in the .bus file's own camera entries\n");
+    let mut out = String::from("# openBus: the driver's view and the mirrors of each vehicle as set in the view editor,\n# in the .bus file's own camera entries\n");
     for (k, body) in blocks(&text).into_iter().filter(|(k, _)| *k != key) {
         out.push_str(&format!("[vehicle]\n{k}\n{body}"));
     }

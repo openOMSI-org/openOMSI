@@ -38,19 +38,19 @@ export function SetupPage() {
     if (p) to(p);
   };
   return html`
-    <${PageHead} title="Setup" text="openOMSI plays the content of an OMSI 2 installation: the original game must be installed (Steam or another copy)." />
+    <${PageHead} title="Setup" text="openBus plays the content of an OMSI 2 installation: the original game must be installed (Steam or another copy)." />
     <div class="stack" style="max-width:860px">
       ${!b.root && html`<${Notice} kind="warn">${b.root_error || t('OMSI 2 was not found. Choose its folder below.')}</${Notice}>`}
       <${Card} title="Folders">
         <div class="stack">
           ${onPhone
-            ? html`<${Field} label="OMSI 2 folder" help="Copy the whole OMSI 2 folder (with Omsi.exe, maps and Vehicles) from a computer into openOMSI/OMSI 2 in the phone's internal storage; it is found there by itself.">
-                <${Input} value=${root} placeholder=${b.root || '/storage/emulated/0/openOMSI/OMSI 2'} onInput=${setRoot} />
+            ? html`<${Field} label="OMSI 2 folder" help="Copy the whole OMSI 2 folder (with Omsi.exe, maps and Vehicles) from a computer into openBus/OMSI 2 in the phone's internal storage; it is found there by itself.">
+                <${Input} value=${root} placeholder=${b.root || '/storage/emulated/0/openBus/OMSI 2'} onInput=${setRoot} />
               </${Field}>`
             : html`<${Field} label="OMSI 2 folder" help="The folder with Omsi.exe, maps and Vehicles. Left empty, the usual places are searched (Steam libraries, Wine bottles).">
                 <div class="row"><div class="grow"><${Input} value=${root} placeholder=${b.root || 'Automatic'} onInput=${setRoot} /></div><${Button} icon="folder" label="Browse…" onClick=${() => browse('pick_folder', 'Choose the OMSI 2 folder', setRoot)} /></div>
               </${Field}>
-              <${Field} label="Game program" help="The openomsi program the duties start. Left empty, the one beside the launcher.">
+              <${Field} label="Game program" help="The openbus program the duties start. Left empty, the one beside the launcher.">
                 <div class="row"><div class="grow"><${Input} value=${game} placeholder=${b.game || 'Automatic'} onInput=${setGame} /></div><${Button} icon="file" label="Browse…" onClick=${() => browse('pick_file', 'Choose the game program', setGame)} /></div>
               </${Field}>`}
           <div><${Button} kind="primary" icon="check" label="Save" disabled=${busy} onClick=${save} /></div>

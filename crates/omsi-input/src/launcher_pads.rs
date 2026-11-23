@@ -267,7 +267,7 @@ mod tests {
 
     #[test]
     fn a_device_goes_to_the_page_and_back_unchanged() {
-        let text = "[ctrl]\r\nLogitech G25 Racing Wheel USB\r\n1\r\n\r\n[axis]\r\n0\r\n0\r\n1\r\n9\r\n2\r\n1\r\n-1\r\n0\r\n-1\r\n0\r\n3\r\n17\r\n-1\r\n0\r\n-1\r\n0\r\n\r\n[buttons]\r\n3\r\nhorn\r\n0\r\n\r\n0\r\nblinker_left_set\r\n0\r\n\r\n[FFScale]\r\n0.800\r\n1.200\r\n\r\n[openOMSI.FFInvert]\r\n1\r\n\r\n[openOMSI.Latching]\r\n3\r\n";
+        let text = "[ctrl]\r\nLogitech G25 Racing Wheel USB\r\n1\r\n\r\n[axis]\r\n0\r\n0\r\n1\r\n9\r\n2\r\n1\r\n-1\r\n0\r\n-1\r\n0\r\n3\r\n17\r\n-1\r\n0\r\n-1\r\n0\r\n\r\n[buttons]\r\n3\r\nhorn\r\n0\r\n\r\n0\r\nblinker_left_set\r\n0\r\n\r\n[FFScale]\r\n0.800\r\n1.200\r\n\r\n[openBus.FFInvert]\r\n1\r\n\r\n[openBus.Latching]\r\n3\r\n";
         let devices = controllers::parse_cfg(text);
         let back: Vec<DeviceCfg> = devices.iter().map(|d| device_from(&device_json(d)).unwrap()).collect();
         assert_eq!(back, devices);
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn a_wheels_force_feedback_tuning_goes_to_the_page_and_back() {
-        let text = "\r\n[ctrl]\r\nWheel\r\n1\r\n\r\n[FFScale]\r\n1.000\r\n1.000\r\n\r\n[openOMSI.FFTuning]\r\n0.800\r\n2.500\r\n0.000\r\n0.050\r\n0.020\r\n\r\n";
+        let text = "\r\n[ctrl]\r\nWheel\r\n1\r\n\r\n[FFScale]\r\n1.000\r\n1.000\r\n\r\n[openBus.FFTuning]\r\n0.800\r\n2.500\r\n0.000\r\n0.050\r\n0.020\r\n\r\n";
         let devices = controllers::parse_cfg(text);
         let json = device_json(&devices[0]);
         assert_eq!(json["ff_tune"], json!({ "centring": 0.8, "damping": 2.5, "parking": 0.0, "min_force": 0.05, "smoothing": 0.02 }));

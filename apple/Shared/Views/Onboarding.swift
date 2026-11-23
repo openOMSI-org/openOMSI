@@ -82,14 +82,14 @@ struct Onboarding: View {
                 .frame(width: 120, height: 120)
                 .clipShape(RoundedRectangle(cornerRadius: 27, style: .continuous))
                 .shadow(color: .black.opacity(0.4), radius: 16, y: 8)
-                .accessibilityLabel("openOMSI")
+                .accessibilityLabel("openBus")
                 .padding(.top, 24)
             VStack(spacing: 10) {
-                Text("Welcome to openOMSI").font(.inter(28, .bold)).multilineTextAlignment(.center)
+                Text("Welcome to openBus").font(.inter(28, .bold)).multilineTextAlignment(.center)
                 Text("Drive the buses of OMSI 2 wherever you are: its maps, its buses and its lines, at your fingertips.")
                     .font(.inter(15)).foregroundStyle(Theme.text2).multilineTextAlignment(.center)
             }
-            Notice(text: String(localized: "openOMSI plays the content of your own copy of OMSI 2 (Steam or another copy): the game itself is not included."), kind: .info)
+            Notice(text: String(localized: "openBus plays the content of your own copy of OMSI 2 (Steam or another copy): the game itself is not included."), kind: .info)
             Spacer(minLength: 12)
             VStack(spacing: 10) {
                 Button { next(1) } label: { Label("Get started", systemImage: "arrow.right") }
@@ -104,7 +104,7 @@ struct Onboarding: View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Copy OMSI 2 onto this device").font(.inter(24, .bold))
-                Text("openOMSI needs the whole OMSI 2 folder of your computer: the one with Omsi.exe, maps and Vehicles in it.")
+                Text("openBus needs the whole OMSI 2 folder of your computer: the one with Omsi.exe, maps and Vehicles in it.")
                     .font(.inter(14.5)).foregroundStyle(Theme.text2).fixedSize(horizontal: false, vertical: true)
             }
             Notice(text: String(localized: "On Steam: right-click OMSI 2, then Manage, then Browse local files."), kind: .info, icon: "lightbulb.fill")
@@ -125,12 +125,12 @@ struct Onboarding: View {
                 way("mac", icon: "laptopcomputer", title: "From a Mac", steps: [
                     "Connect the iPhone or iPad to the Mac with a cable.",
                     "In the Finder, select it in the sidebar, then Files.",
-                    "Drag the OMSI 2 folder onto openOMSI.",
+                    "Drag the OMSI 2 folder onto openBus.",
                 ])
                 way("pc", icon: "pc", title: "From a Windows PC", steps: [
                     "Install Apple Devices from the Microsoft Store (or iTunes).",
                     "Connect the iPhone or iPad with a cable, then open Files (File Sharing in iTunes).",
-                    "Drag the OMSI 2 folder onto openOMSI.",
+                    "Drag the OMSI 2 folder onto openBus.",
                 ])
                 way("usb", icon: "externaldrive.fill", title: "From a USB drive", steps: [
                     "Copy the OMSI 2 folder onto a USB drive and plug it into the iPhone or iPad.",
@@ -139,13 +139,13 @@ struct Onboarding: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Button { choose() } label: { Label("Choose the folder", systemImage: "folder.badge.plus") }
                             .buttonStyle(.secondary)
-                        Text("Or copy it into openOMSI in the Files app: the drive is then no longer needed.")
+                        Text("Or copy it into openBus in the Files app: the drive is then no longer needed.")
                             .font(.inter(13)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
             if let c = store.snapshot.content_dir {
-                Button { Platform.reveal(c) } label: { Label("Open openOMSI in Files", systemImage: "folder.fill") }
+                Button { Platform.reveal(c) } label: { Label("Open openBus in Files", systemImage: "folder.fill") }
                     .buttonStyle(.launcher(.plain, wide: true))
             }
             if !missing.isEmpty {

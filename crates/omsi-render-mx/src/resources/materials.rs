@@ -417,7 +417,7 @@ pub struct MaterialExtra {
     /// crown leaves the trunk (nothing below it moves), of the crown's top, and how much the
     /// tree gives to the wind (1 a broadleaf). `None`: not foliage.
     pub sway: Option<[f32; 3]>,
-    /// `[matl_glow] <texture> <value>` (an openOMSI extension): the material is its own
+    /// `[matl_glow] <texture> <value>` (an openBus extension): the material is its own
     /// light. The named picture - a greyscale mask of how much shines where - is bound in
     /// the light map's slot (the shaders sample it as `t_light`) and the light is the
     /// material's own colour; this is its strength in the shader's terms (the .cfg value
@@ -426,7 +426,7 @@ pub struct MaterialExtra {
     /// halo comes from its brightness as any light's does. `params2.x` is left off, so the
     /// classic picture draws the material as if the keyword were not there.
     pub glow: f32,
-    /// `[led_glow_effect]` (an openOMSI extension): the share (0..1) of the `Led glow`
+    /// `[led_glow_effect]` (an openBus extension): the share (0..1) of the `Led glow`
     /// setting an LED panel's dots burn with; `None` the whole of it. With the keyword
     /// the modeller has said whether the slot is an LED panel at all (`led` follows it),
     /// so this is only read where `led` is set.

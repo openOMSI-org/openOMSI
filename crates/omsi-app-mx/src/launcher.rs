@@ -2,7 +2,7 @@
 //! the desktop launcher (`launcher/`, a Tauri window beside this program, see `launcher_link`),
 //! the launcher page in a web view on Android (`android_launcher`) and the Swift launcher on
 //! Apple's systems (`apple_bridge`). What they ask of the game is here: the helper service the
-//! desktop launcher runs (`openomsi --launcher-service`: the bus preview drawn with the game's
+//! desktop launcher runs (`openbus --launcher-service`: the bus preview drawn with the game's
 //! own scene in `showroom`, the city map, the controllers), and the program's side of the
 //! launcher's model (`AppHost`): the interface's language, machine translation and the city map
 //! read the way the navigator reads it.

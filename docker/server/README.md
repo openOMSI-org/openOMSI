@@ -1,6 +1,6 @@
-# openOMSI dedicated server (Linux, Docker)
+# openBus dedicated server (Linux, Docker)
 
-The server is `openomsi` itself started with `--server`: no window, no sound, no graphics
+The server is `openbus` itself started with `--server`: no window, no sound, no graphics
 card. This container builds it for Linux and runs it with your OMSI 2 installation mounted
 **read only**. It serves both for a local test (Docker Desktop on Windows) and for a Linux
 server.
@@ -41,7 +41,7 @@ On a server on the internet, open all three in the firewall.
 
 In the launcher: **Multiplayer → Join**, address `<server address>:27015` (locally
 `127.0.0.1:27015`). Or from the command line:
-`openomsi.exe --lan-join 127.0.0.1:27015 --bus Vehicles/... --map maps/Grundorf/global.cfg`.
+`openbus.exe --lan-join 127.0.0.1:27015 --bus Vehicles/... --map maps/Grundorf/global.cfg`.
 
 Every player needs a game with the players' buses by content to send and receive them.
 
@@ -55,7 +55,7 @@ people, ground textures), pack it into the `content` folder beside this file and
 in `server.cfg`:
 
 ```sh
-openomsi.exe --root "<OMSI 2 folder>" --pack-map "<map name>" --pack-to content
+openbus.exe --root "<OMSI 2 folder>" --pack-map "<map name>" --pack-to content
 ```
 
 On the same disk as OMSI the files go in as hard links, taking no space again.
@@ -66,10 +66,10 @@ the map themselves; whoever joins without it is told which map is missing. The p
 buses are still passed on by the server.
 
 Files the map names that do not exist on your machine are listed in
-`content\openomsi-map-pack-<map>.txt`: neither the server nor the players will have them.
+`content\openbus-map-pack-<map>.txt`: neither the server nor the players will have them.
 
 For a server on another machine, make a `.zip` and unpack it into that machine's content
-folder: `openomsi.exe --root "<OMSI 2 folder>" --pack-map "<map name>" --pack-to map.zip`.
+folder: `openbus.exe --root "<OMSI 2 folder>" --pack-map "<map name>" --pack-to map.zip`.
 
 ## Players' buses
 
@@ -81,7 +81,7 @@ folder: `openomsi.exe --root "<OMSI 2 folder>" --pack-map "<map name>" --pack-to
   Meanwhile, a **grey box of the bus's size** with "loading the bus: 40%".
 - Nothing is written into anybody's `Vehicles` folders; every player's `.cti` and paints
   stay their own.
-- The server keeps the buses in the `openomsi-data` volume (`/root/.openomsi/lan-store`),
+- The server keeps the buses in the `openbus-data` volume (`/root/.openbus/lan-store`),
   every version. Buses nobody has used for `uploads_keep_days` days (30) go; when the disk
   runs short, the least used go first. No bus is refused for its size.
 

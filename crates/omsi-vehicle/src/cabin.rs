@@ -17,11 +17,11 @@ pub struct PassPos {
     /// the seat number scripts ask `GetHumanCountOnSeat` about (0x7d39a4) - with the
     /// driver's place first, as most cabins have it, the first `[passpos]` is seat 1.
     pub file_index: usize,
-    /// openOMSI's (#721): a script variable that switches the `[passpos]` on and off - while
+    /// openBus's (#721): a script variable that switches the `[passpos]` on and off - while
     /// it is 0 no passenger takes the place - named on the line straight after its five
     /// values. None (or a name the scripts do not have): always on.
     pub switch_var: Option<String>,
-    /// openOMSI's: a script variable the engine sets to 1 while somebody is on the place and
+    /// openBus's: a script variable the engine sets to 1 while somebody is on the place and
     /// to 0 while nobody is, named on the line after that.
     pub taken_var: Option<String>,
 }
@@ -119,7 +119,7 @@ impl PassengerCabin {
                         None => [0, 1, 2, 3],
                     };
                     let file_index = c.pass_positions.len() + c.driver_positions.len();
-                    // (openOMSI's two variables of a `[passpos]`, #721: lines that follow at
+                    // (openBus's two variables of a `[passpos]`, #721: lines that follow at
                     // once - a blank line, the next block or a `{...}` flag ends them, so every
                     // OMSI 2 file reads as before, and Omsi.exe passes over the lines)
                     let mut more = || {

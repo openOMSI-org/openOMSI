@@ -96,7 +96,7 @@ wgpu = { version = "29", default-features = false, features = ["std", "parking_l
 # match wgpu's (Dependabot's `wgpu` group updates the three together)
 wgpu-hal = "29"
 naga = "29"
-# mX, openOMSI's own graphics library: the game with mX Graphics on (the *-mx crates)
+# mX, openBus's own graphics library: the game with mX Graphics on (the *-mx crates)
 mx = { git = "https://github.com/openOMSI-org/mX", rev = "fd964cd650bdbe5eb6942664c276d3f4324f4ea0" }
 # (the vendors' upscalers and frame generators on mX: DLSS, FSR 3, XeSS, MetalFX)
 mx-upscale = { git = "https://github.com/openOMSI-org/mX", rev = "fd964cd650bdbe5eb6942664c276d3f4324f4ea0" }

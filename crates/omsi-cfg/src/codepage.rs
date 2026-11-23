@@ -5,7 +5,7 @@
 //! Russian installation reads Windows-1251, a Polish or Czech one Windows-1250, a German
 //! one Windows-1252. A mod is written for the code page of its author, so the LiAZ 5292 or
 //! the Scania Citywide's Russian cockpit texts only read as Cyrillic on a Russian Windows;
-//! read as 1252, the LiAZ called itself "ËèÀÇ 5292.20". openOMSI looks at every file on
+//! read as 1252, the LiAZ called itself "ËèÀÇ 5292.20". openBus looks at every file on
 //! its own ([`detect`]), except on a Windows whose ANSI code page is a double-byte one
 //! (Chinese, Japanese, Korean): there it reads what is not UTF-8 in that code page, as
 //! OMSI does, since a hanzi folder name in an `ailists.cfg` reads as nothing else.
@@ -395,7 +395,7 @@ mod tests {
     #[test]
     fn a_turkish_file_name_read_as_1252_is_found() {
         assert!(name_variants("ÝÞIKLAR_ðüneþ.bmp").contains(&"İŞIKLAR_ğüneş.bmp".to_string()));
-        let dir = std::env::temp_dir().join(format!("openomsi_cp1254_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus_cp1254_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("İŞIKLAR_ğüneş.bmp"), b"x").unwrap();
         let found = crate::resolve_path(&dir, "ÝÞIKLAR_ðüneþ.bmp");

@@ -43,7 +43,7 @@ pub enum Msg {
     Crashed(String),
 }
 
-/// A server in the Multiplayer page's list (`~/.openomsi/servers.json`), as the player
+/// A server in the Multiplayer page's list (`~/.openbus/servers.json`), as the player
 /// added it: its address (`https://….trycloudflare.com`, `http://host:port`) and a name of
 /// their own (empty: the server's).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -116,7 +116,7 @@ fn servers_path() -> std::path::PathBuf {
     core::data_dir().join("servers.json")
 }
 
-/// The duty as it is remembered between launches (`~/.openomsi/launcher-duty.json`).
+/// The duty as it is remembered between launches (`~/.openbus/launcher-duty.json`).
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(default)]
 pub struct Choice {
@@ -280,7 +280,7 @@ pub struct State {
     /// (see `crash_of`), for the dialog that asks to report it.
     pub crash: Option<(String, String)>,
     /// Windows: the desktop launcher could not open for want of WebView2 and opened this one
-    /// instead (`OPENOMSI_NO_WEBVIEW`): the dialog that offers to install it, with how the
+    /// instead (`OPENBUS_NO_WEBVIEW`): the dialog that offers to install it, with how the
     /// install goes ("", "busy", "done" or the error).
     pub webview: Option<std::sync::Arc<std::sync::Mutex<String>>>,
     /// A game started from here was sent away by its server (kicked, banned) or turned away
@@ -360,7 +360,7 @@ impl State {
             launch_hold: None,
             launched_pid: None,
             crash: None,
-            webview: (cfg!(windows) && std::env::var_os("OPENOMSI_NO_WEBVIEW").is_some()).then(|| std::sync::Arc::new(std::sync::Mutex::new(String::new()))),
+            webview: (cfg!(windows) && std::env::var_os("OPENBUS_NO_WEBVIEW").is_some()).then(|| std::sync::Arc::new(std::sync::Mutex::new(String::new()))),
             disconnected: None,
             jobs: Vec::new(),
             mods: None,
@@ -1326,12 +1326,12 @@ pub fn root_problem(root: &str) -> String {
         "The original OMSI 2 was not found automatically: choose its folder (the one with Omsi.exe, maps and Vehicles in it) under Setup and press Save.".to_string()
     } else if !p.exists() {
         format!("The folder {root} does not exist: choose the folder of the original OMSI 2 (with Omsi.exe, maps and Vehicles in it) under Setup.")
-    } else if missing.iter().any(|m| m.contains("content folder")) || p.join("openomsi.exe").exists() || p.join("openomsi").is_file() {
-        format!("The folder {root} is openOMSI's own folder, not OMSI 2's: choose the folder of the original game (with Omsi.exe in it) under Setup.")
+    } else if missing.iter().any(|m| m.contains("content folder")) || p.join("openbus.exe").exists() || p.join("openbus").is_file() {
+        format!("The folder {root} is openBus's own folder, not OMSI 2's: choose the folder of the original game (with Omsi.exe in it) under Setup.")
     } else if missing.is_empty() {
         String::new()
     } else {
-        format!("The folder {root} is not a complete OMSI 2 - it lacks {}. openOMSI plays on the original's stock content: choose the folder of a complete installation under Setup.", missing.iter().take(3).cloned().collect::<Vec<_>>().join(", "))
+        format!("The folder {root} is not a complete OMSI 2 - it lacks {}. openBus plays on the original's stock content: choose the folder of a complete installation under Setup.", missing.iter().take(3).cloned().collect::<Vec<_>>().join(", "))
     }
 }
 
@@ -1352,7 +1352,7 @@ mod choice_tests {
             }
             assert_eq!(server_join_address(address, JoinProto::WebSocket, Some(&info)).unwrap().0, info.reached_at);
         }
-        for address in ["https://play.example.org", "http://play.example.org:27025", "https://play.example.org:27015", "ws://play.example.org/ws", "wss://play.example.org/ws", "openomsi", "OpenOMSI", "abc.trycloudflare.com", "abc.trycloudflare.com/ws", "abc.trycloudflare.com:443/ws", "ABC.TryCloudflare.com/ws", "me@abc.trycloudflare.com/ws"] {
+        for address in ["https://play.example.org", "http://play.example.org:27025", "https://play.example.org:27015", "ws://play.example.org/ws", "wss://play.example.org/ws", "openbus", "OpenBus", "abc.trycloudflare.com", "abc.trycloudflare.com/ws", "abc.trycloudflare.com:443/ws", "ABC.TryCloudflare.com/ws", "me@abc.trycloudflare.com/ws"] {
             for protocol in [JoinProto::Auto, JoinProto::WebSocket] {
                 assert_eq!(server_join_address(address, protocol, Some(&info)).unwrap(), (address.into(), JoinProto::WebSocket));
             }

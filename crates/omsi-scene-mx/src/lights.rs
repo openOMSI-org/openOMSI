@@ -268,7 +268,7 @@ pub fn vehicle_lights(
             push_enhanced_spot(lights, at, d, level, &vals, share);
         }
     }
-    // [spotlight_2] (openOMSI): every spot its variable switches on, the leading vehicle's
+    // [spotlight_2] (openBus): every spot its variable switches on, the leading vehicle's
     // and its sections', where it is declared - a pair mirrored across the vehicle's axis
     // unless its flag keeps the one lamp - and as bright as a [spotlight] of its colour,
     // shared between the pair, times the variable (0..1)
@@ -286,7 +286,7 @@ pub fn vehicle_lights(
             }
         }
     }
-    // [spotlight_cookie] (openOMSI): lamps whose beam is a picture, the leading vehicle's
+    // [spotlight_cookie] (openBus): lamps whose beam is a picture, the leading vehicle's
     // and its sections'
     let parts = std::iter::once((&ty.model, v.position, body)).chain(
         v.trailers
@@ -947,7 +947,7 @@ mod bitmap_tests {
     /// picture of that name at all the standard glow stays.
     #[test]
     fn a_light_bitmap_shipped_as_dds_is_found() {
-        let dir = std::env::temp_dir().join("openomsi-light-bitmap-dds-test");
+        let dir = std::env::temp_dir().join("openbus-light-bitmap-dds-test");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("Signals/texture")).unwrap();
         std::fs::write(dir.join("Signals/texture/Glimmer_lamp.dds"), b"DDS ").unwrap();

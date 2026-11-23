@@ -1,17 +1,16 @@
 # openMapper
 
-openMapper is a simple map editor for openOMSI. Draw roads with a couple of clicks, place
+openMapper is a simple map editor for openBus. Draw roads with a couple of clicks, place
 buildings and trees from a visual catalogue, shape and paint the ground, and drive your map in
-openOMSI with a single button. It is built for anyone to pick up, not just for experienced map
+openBus with a single button. It is built for anyone to pick up, not just for experienced map
 makers.
 
 > **Early release: expect bugs.** openMapper is new. Things may be missing, broken or change
-> between versions. Report problems on [GitHub](https://github.com/openOMSI-org/openMapper/issues)
-> or on [Discord](https://discord.gg/openomsi). Keep a copy of a map you care about: saving keeps
+> between versions. Report problems on [GitHub](https://github.com/openOMSI-org/openMapper/issues). Keep a copy of a map you care about: saving keeps
 > the last ten versions, but a copy is cheaper than a regret.
 
 openMapper needs an installed OMSI 2 (Steam or retail): maps are built from its content. The
-original folder is never written to. Maps and imported assets go into openOMSI's content folder,
+original folder is never written to. Maps and imported assets go into openBus's content folder,
 which the game reads before the installation.
 
 ## What it can do
@@ -28,7 +27,7 @@ which the game reads before the installation.
 * **Your own models:** import glTF, FBX, OBJ and more, edit meshes, make materials and PBR maps,
   and export.
 * **Check and drive:** a map check, the game's own checks, safe saving with earlier versions, and a
-  test drive in openOMSI on one key (`F5`).
+  test drive in openBus on one key (`F5`).
 
 ## Download
 

@@ -119,7 +119,7 @@ struct JoinByCode: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Join friends").font(.inter(17, .semibold))
                         Text("Confirm the session first, then choose your bus on the Drive page. The game has not connected yet.").font(.inter(13)).foregroundStyle(Theme.muted)
-                        Text("Sessions and servers are run by players, not by openOMSI. The host receives your driver name, network address, chat and voice, and may keep logs.").font(.inter(13)).foregroundStyle(Theme.muted)
+                        Text("Sessions and servers are run by players, not by openBus. The host receives your driver name, network address, chat and voice, and may keep logs.").font(.inter(13)).foregroundStyle(Theme.muted)
                     }
                     Field("Session code", help: String(localized: "Paste the complete code from your friend. Leading and trailing spaces are removed.")) {
                         HStack(spacing: 8) {

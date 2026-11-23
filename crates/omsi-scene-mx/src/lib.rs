@@ -1,4 +1,4 @@
-//! openOMSI's scene: builds a renderable scene from a map and its vehicles - terrain,
+//! openBus's scene: builds a renderable scene from a map and its vehicles - terrain,
 //! splines, scenery objects, the vehicles' types and materials, their lights, the rain and
 //! the wipers on their glass, the puddles - and keeps the world it was built from (`World`).
 //! The game's own per-frame view sync (omsi-app's `view_sync`) and everything that needs the

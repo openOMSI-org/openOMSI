@@ -108,7 +108,7 @@ mod tests {
     fn quick_actions_editor_keys_do_not_execute_or_close_the_game_menu() {
         // A headless fixture avoids initializing Steam's process-global native client.
         let args = <crate::cli::Args as clap::Parser>::parse_from([
-            "openomsi",
+            "openbus",
             "--server",
             "test-server.cfg",
         ]);
@@ -129,7 +129,7 @@ mod tests {
     fn leaving_the_editor_moves_the_focus_off_an_action_that_is_not_shown() {
         use crate::shell::pause::navigation::Category;
         let args = <crate::cli::Args as clap::Parser>::parse_from([
-            "openomsi",
+            "openbus",
             "--server",
             "test-server.cfg",
         ]);

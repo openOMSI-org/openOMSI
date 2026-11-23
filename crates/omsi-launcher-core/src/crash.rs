@@ -173,14 +173,14 @@ pub const CRASH_TAIL_GAP: &str = "...";
 mod disconnect_tests {
     #[test]
     fn the_servers_word_is_read_back_from_the_log_of_this_run() {
-        let dir = std::env::temp_dir().join(format!("openomsi-disc-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus-disc-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("game.log");
         let left = omsi_net::LEFT_SERVER;
-        std::fs::write(&p, format!("[x INFO a] starting the game: one\n[x WARN openomsi_game::lan] {left}old\n[x INFO a] starting the game: two\n[x WARN openomsi_game::lan] {left}Expulsé : conduite dangereuse\n[x INFO a] game ends\n")).unwrap();
+        std::fs::write(&p, format!("[x INFO a] starting the game: one\n[x WARN openbus_game::lan] {left}old\n[x INFO a] starting the game: two\n[x WARN openbus_game::lan] {left}Expulsé : conduite dangereuse\n[x INFO a] game ends\n")).unwrap();
         assert_eq!(super::disconnect_of(&p).as_deref(), Some("Expulsé : conduite dangereuse"));
         // a run that ended in any other way: nothing
-        std::fs::write(&p, format!("[x INFO a] starting the game: one\n[x WARN openomsi_game::lan] {left}old\n[x INFO a] starting the game: two\n[x INFO a] game ends\n")).unwrap();
+        std::fs::write(&p, format!("[x INFO a] starting the game: one\n[x WARN openbus_game::lan] {left}old\n[x INFO a] starting the game: two\n[x INFO a] game ends\n")).unwrap();
         assert!(super::disconnect_of(&p).is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -236,18 +236,18 @@ mod redact_tests {
 
     #[test]
     fn a_report_names_neither_the_account_nor_the_driver() {
-        let log = "[t INFO a] command line: C:\\Users\\Isaac Santana\\openomsi.exe --root D:\\OMSI 2 --driver Drivers/Isaac S.odr\n\
+        let log = "[t INFO a] command line: C:\\Users\\Isaac Santana\\openbus.exe --root D:\\OMSI 2 --driver Drivers/Isaac S.odr\n\
             [t INFO a] working folder: C:/Users/Isaac Santana/AppData\n\
-            [t WARN a] /home/rafa/.openomsi/x.cfg and /Users/ana/Library\n\
+            [t WARN a] /home/rafa/.openbus/x.cfg and /Users/ana/Library\n\
             [t ERROR a] panicked at C:\\Users\\other\n\
             [t INFO a] DRIVERS\\Joao.ODR read; vehicle Vehicles/MAN/MAN.bus";
         let r = redact_with(log, Some("C:\\Users\\Isaac Santana"));
         for gone in ["Isaac", "rafa", "ana/", "other", "Joao"] {
             assert!(!r.contains(gone), "{gone}: {r}");
         }
-        assert!(r.contains("command line: ~\\openomsi.exe --root D:\\OMSI 2 --driver Drivers/<driver>.odr"), "{r}");
+        assert!(r.contains("command line: ~\\openbus.exe --root D:\\OMSI 2 --driver Drivers/<driver>.odr"), "{r}");
         assert!(r.contains("working folder: ~/AppData"), "{r}");
-        assert!(r.contains("/home/<user>/.openomsi/x.cfg and /Users/<user>/Library"), "{r}");
+        assert!(r.contains("/home/<user>/.openbus/x.cfg and /Users/<user>/Library"), "{r}");
         assert!(r.contains("panicked at C:\\Users\\<user>\n"), "{r}");
         assert!(r.contains("DRIVERS\\<driver>.ODR read; vehicle Vehicles/MAN/MAN.bus"), "{r}");
         // what names nobody stays as it is
@@ -272,16 +272,16 @@ mod redact_tests {
 mod crash_tests {
     #[test]
     fn a_panic_is_found_and_a_clean_end_is_not() {
-        let dir = std::env::temp_dir().join("openomsi-crash-test");
+        let dir = std::env::temp_dir().join("openbus-crash-test");
         let _ = std::fs::create_dir_all(&dir);
         let p = dir.join("game.log");
-        std::fs::write(&p, "[t INFO x] loading\n[t ERROR openomsi_game] the game stopped on an error (build x): panicked at a.rs:1:1:\n    index out of bounds\n\n   0: std::backtrace\n").unwrap();
+        std::fs::write(&p, "[t INFO x] loading\n[t ERROR openbus_game] the game stopped on an error (build x): panicked at a.rs:1:1:\n    index out of bounds\n\n   0: std::backtrace\n").unwrap();
         let (what, tail) = super::crash_of(&p).unwrap();
         assert!(what.contains("index out of bounds"), "{what}");
         assert!(tail.contains("loading"));
-        std::fs::write(&p, "[t INFO x] loading\n[t INFO openomsi_game::app_events] game ends\n").unwrap();
+        std::fs::write(&p, "[t INFO x] loading\n[t INFO openbus_game::app_events] game ends\n").unwrap();
         assert!(super::crash_of(&p).is_none());
-        std::fs::write(&p, "[t ERROR omsi_render] the graphics device was lost (Unknown): Unexpected error variant\n[t INFO openomsi_game::app_events] game ends\n").unwrap();
+        std::fs::write(&p, "[t ERROR omsi_render] the graphics device was lost (Unknown): Unexpected error variant\n[t INFO openbus_game::app_events] game ends\n").unwrap();
         assert!(super::crash_of(&p).unwrap().0.contains("device was lost"));
         // an error before the game started, or one it got over, is not the crash
         std::fs::write(&p, "[t ERROR omsi_render] a part of the picture could not be recorded (left out)\n[t INFO x] starting the game: omsi\n[t INFO omsi_render] renderer: compiling the sky and clouds shaders\n").unwrap();
@@ -293,15 +293,15 @@ mod crash_tests {
     /// error alone, not the records after it (#1187).
     #[test]
     fn the_report_has_the_computer_and_a_clean_title() {
-        let dir = std::env::temp_dir().join(format!("openomsi-crash-machine-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus-crash-machine-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let p = dir.join("game.log");
-        let mut log = String::from("[t INFO openomsi_game::applog] system: windows x86_64 (10.0), 8 threads, 8192 MB memory\n[t INFO openomsi_game::applog] command line: openomsi --map maps/X/global.cfg\n[t INFO omsi_render] graphics adapter: GTX 750 (DiscreteGpu, Dx12, 2048 MB of its own), texture memory taken for it: 716 MB\n");
+        let mut log = String::from("[t INFO openbus_game::applog] system: windows x86_64 (10.0), 8 threads, 8192 MB memory\n[t INFO openbus_game::applog] command line: openbus --map maps/X/global.cfg\n[t INFO omsi_render] graphics adapter: GTX 750 (DiscreteGpu, Dx12, 2048 MB of its own), texture memory taken for it: 716 MB\n");
         // (more than the end that goes with the report)
         for k in 0..400 {
-            log.push_str(&format!("[t INFO openomsi_game::scene] tile loading: placed tile {k},0\n"));
+            log.push_str(&format!("[t INFO openbus_game::scene] tile loading: placed tile {k},0\n"));
         }
-        log.push_str("[t ERROR openomsi_game::app_events] ending the session: the graphics device was lost (Unknown: Out of memory)\n[t INFO openomsi_game::app_events] game ends\n[t WARN openomsi_game::scene] tile loading: first-area batch prepared in 352.71 s\n");
+        log.push_str("[t ERROR openbus_game::app_events] ending the session: the graphics device was lost (Unknown: Out of memory)\n[t INFO openbus_game::app_events] game ends\n[t WARN openbus_game::scene] tile loading: first-area batch prepared in 352.71 s\n");
         std::fs::write(&p, log).unwrap();
         let (what, tail) = super::crash_of(&p).unwrap();
         assert_eq!(what, "ending the session: the graphics device was lost (Unknown: Out of memory)");

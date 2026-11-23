@@ -14,8 +14,8 @@ fn main() {
     let date = git(&["log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M"]).unwrap_or_default();
     let dirty = git(&["status", "--porcelain"]).map(|s| !s.trim().is_empty()).unwrap_or(false);
     println!("cargo:rustc-env=OMSI_BUILD={hash}{} {date}", if dirty { "+" } else { "" });
-    println!("cargo:rustc-env=OPENOMSI_VERSION={}", version(&git));
-    println!("cargo:rerun-if-env-changed=OPENOMSI_VERSION");
+    println!("cargo:rustc-env=OPENBUS_VERSION={}", version(&git));
+    println!("cargo:rerun-if-env-changed=OPENBUS_VERSION");
     println!("cargo:rerun-if-changed=../../VERSION");
     println!("cargo:rerun-if-changed=../../.git/HEAD");
     println!("cargo:rerun-if-changed=../../.git/index");
@@ -23,9 +23,9 @@ fn main() {
 
 /// `MAJOR.MINOR` from the VERSION file, then the release tagged on this commit, or one more
 /// than the last release of that `MAJOR.MINOR` (as scripts/version.sh; the CI passes its
-/// result in `OPENOMSI_VERSION`).
+/// result in `OPENBUS_VERSION`).
 fn version(git: &dyn Fn(&[&str]) -> Option<String>) -> String {
-    if let Ok(v) = std::env::var("OPENOMSI_VERSION") {
+    if let Ok(v) = std::env::var("OPENBUS_VERSION") {
         if !v.trim().is_empty() {
             return v.trim().to_string();
         }

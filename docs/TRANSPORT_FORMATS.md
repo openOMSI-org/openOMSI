@@ -31,7 +31,7 @@ A worked example is in `docs/examples/transport-metro/`.
 
 | File | Used by the game for |
 | --- | --- |
-| `network.cfg` | the class (tram, metro, railway), street or mainline, third rail, tunnel and speed limit of the rail lanes it matches, after `openomsi-rail.cfg` (which still works) |
+| `network.cfg` | the class (tram, metro, railway), street or mainline, third rail, tunnel and speed limit of the rail lanes it matches, after `openbus-rail.cfg` (which still works) |
 | `stations.cfg`, `routes.cfg` | the lines, tours and trips of the timetable, routed over the map's network (see below); the stops, the departure boards, the IBIS |
 | `catenary.cfg`, `thirdrail.cfg` | the current of the player's rail vehicle: a pantograph needs a live section of wire under it, a shoe a live section of rail beside it, and a sagging line weakens the motors (a vehicle says `[rail_power]` `catenary`, `third_rail` or `diesel`; else a contact shoe means third rail and a pantograph overhead wire). A map without the file takes the current for granted. AI vehicles are not powered by the line yet |
 | `switches.cfg` | the speed limit of the diverging branch (`diverging_speed` with `object`, `tile`, `diverging_path`), and how the points are operated (see [Switches](#switchescfg-in-the-game)) |
@@ -188,7 +188,7 @@ gauge 1435
 ```
 
 A rule needs `file`, `tile` or `id`; later rules win field by field. This replaces guessing the
-mode of a track from its name (`openomsi-rail.cfg` is still read).
+mode of a track from its name (`openbus-rail.cfg` is still read).
 
 ## switches.cfg
 

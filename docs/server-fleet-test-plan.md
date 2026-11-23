@@ -1,6 +1,6 @@
 # Server-owned fleet: reproducible regression plan (#370)
 
-Branch: `test/server-fleet-auto-sync` in `isaacsa2/openOMSI`.
+Branch: `test/server-fleet-auto-sync` in `isaacsa2/openBus`.
 
 The unit tests simulate real launcher selection and a **local authenticated TCP mods server**. They do not claim to render a bus, contact a live VPS or prove performance.
 

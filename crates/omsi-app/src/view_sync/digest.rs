@@ -103,7 +103,7 @@ pub(crate) fn log_scene_digest(scene: &Scene, view: Option<&SimView>, what: &str
         log::info!("scene digest {what}: counts {c:016x} places {p:016x} materials {m:016x} params {a:016x} sim {s:016x} ({} instances)", scene.instances.len());
         static TAKEN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let n = TAKEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("openomsi-scene-digest-{}-{what}-{n}.txt", std::process::id()));
+        let path = std::env::temp_dir().join(format!("openbus-scene-digest-{}-{what}-{n}.txt", std::process::id()));
         match std::fs::write(&path, instance_lines(scene, view)) {
             Ok(()) => log::info!("scene digest {what}: each instance's hashes in {}", path.display()),
             Err(e) => log::warn!("scene digest {what}: {}: {e}", path.display()),

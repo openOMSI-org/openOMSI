@@ -47,7 +47,7 @@ impl Pack {
     }
 
     /// Where the pack is looked for: `OMSI_AMBIENCE_DIR`, then `ambience` beside the program
-    /// (and in the macOS bundle's resources), then in the user's openOMSI folder.
+    /// (and in the macOS bundle's resources), then in the user's openBus folder.
     pub fn find() -> Option<Pack> {
         Pack::dirs().iter().find_map(|d| Pack::load(d))
     }
@@ -65,14 +65,14 @@ impl Pack {
         dirs
     }
 
-    /// Where a downloaded pack goes: the user's openOMSI folder.
+    /// Where a downloaded pack goes: the user's openBus folder.
     pub fn user_dir() -> Option<PathBuf> {
-        std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".openomsi").join("ambience"))
+        std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".openbus").join("ambience"))
     }
 
     /// Fetch the recordings in the background when there are none yet (a computer, the
     /// ambience on): the release asset `ambience-1` of the project, checked and unpacked into
-    /// the user's openOMSI folder. They play from the next drive on.
+    /// the user's openBus folder. They play from the next drive on.
     pub fn fetch_if_missing() {
         static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if cfg!(target_os = "android") || STARTED.swap(true, std::sync::atomic::Ordering::Relaxed) || Pack::find_dir().is_some() {
@@ -80,7 +80,7 @@ impl Pack {
         }
         let Some(dir) = Pack::user_dir() else { return };
         let part = dir.with_extension("zip.part");
-        // (another openOMSI process - the launcher, the game - is fetching it now)
+        // (another openBus process - the launcher, the game - is fetching it now)
         if std::fs::metadata(&part).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age.as_secs() < 120) {
             return;
         }
@@ -122,7 +122,7 @@ impl Pack {
 
 /// The recordings' archive (a pre-release of the project's own, see `tools/ambience`), its
 /// SHA-256 and size.
-const PACK_URL: &str = "https://github.com/openOMSI-org/openOMSI/releases/download/ambience-1/openOMSI-ambience-1.zip";
+const PACK_URL: &str = "https://github.com/rafaelkaiz/openBus/releases/download/ambience-1/openBus-ambience-1.zip";
 const PACK_SHA256: &str = "f0f90ed4108dcd28c492cc2d0ff4fd01c776cb12886556187280eb3d714cacc3";
 const PACK_BYTES: u64 = 297_379_915;
 

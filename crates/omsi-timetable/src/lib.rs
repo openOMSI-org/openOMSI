@@ -266,7 +266,7 @@ impl Line {
     /// tour with its trips (a `Dep.: h:m:s` note above each, as the game's editor puts it).
     pub fn to_text(&self) -> String {
         let mut o = String::new();
-        o.push_str("-----------------------\r\nTime Table Line File\r\n-----------------------\r\n\r\nCreated with openOMSI\r\n\r\n");
+        o.push_str("-----------------------\r\nTime Table Line File\r\n-----------------------\r\n\r\nCreated with openBus\r\n\r\n");
         if self.user_allowed {
             o.push_str("[userallowed]\r\n\r\n");
         }
@@ -317,7 +317,7 @@ impl Trip {
     /// stops by their distances where no stop has a time of its own).
     pub fn to_text(&self) -> String {
         let mut o = String::new();
-        o.push_str("-----------------------\r\nTime Table Trip File\r\n-----------------------\r\n\r\nCreated with openOMSI\r\n\r\n");
+        o.push_str("-----------------------\r\nTime Table Trip File\r\n-----------------------\r\n\r\nCreated with openBus\r\n\r\n");
         o.push_str(&format!("[trip]\r\n{}\r\n{}\r\n{}\r\n\r\n", self.display_name, self.terminus, self.line));
         o.push_str(".........................\r\n        Stations\r\n.........................\r\n\r\n");
         for id in &self.stations {
@@ -618,7 +618,7 @@ mod line_tests {
     }
 
     fn folder(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("openomsi-ttl-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("openbus-ttl-{name}-{}", std::process::id()));
         std::fs::remove_dir_all(&d).ok();
         std::fs::create_dir_all(&d).unwrap();
         d

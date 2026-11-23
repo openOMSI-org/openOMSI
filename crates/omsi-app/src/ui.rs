@@ -49,7 +49,7 @@ pub enum NoticeKind {
     Info,
     Warn,
     Alert,
-    /// A new openOMSI version (`update_watch`).
+    /// A new openBus version (`update_watch`).
     Update,
     /// Something the driver has to do (release the parking brake, start the engine, give
     /// the change): in the accent.
@@ -1178,7 +1178,7 @@ impl Loading {
     }
 }
 
-/// How long the last loads of each map took (`~/.openomsi/cache/load-times.json`: the map's
+/// How long the last loads of each map took (`~/.openbus/cache/load-times.json`: the map's
 /// file → the last three loads in seconds), so that the loading bar can go along the time the
 /// next one will likely take.
 pub struct LoadTimes;
@@ -1186,7 +1186,7 @@ pub struct LoadTimes;
 impl LoadTimes {
     fn path() -> Option<std::path::PathBuf> {
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-        Some(std::path::PathBuf::from(home).join(".openomsi").join("cache").join("load-times.json"))
+        Some(std::path::PathBuf::from(home).join(".openbus").join("cache").join("load-times.json"))
     }
 
     fn read() -> serde_json::Map<String, serde_json::Value> {

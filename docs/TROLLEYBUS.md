@@ -2,7 +2,7 @@
 
 OMSI 2 itself has no overhead wire. Its trolleybus add-ons carry a plugin DLL that reads the
 bus's place out of Omsi.exe's memory and moves fake poles over wires that are only meshes on a
-map; none of that can run in openOMSI. openOMSI therefore has its own trolleybus simulation,
+map; none of that can run in openBus. openBus therefore has its own trolleybus simulation,
 built into the game and described by two small text formats, so that a map can carry a real
 overhead wire and a vehicle real poles and a real drive:
 
@@ -544,7 +544,7 @@ On foot you get out with Ctrl+Shift+G (the `get_up` setting); the outside camera
 
 ```
 OMSI_TROLLEY_FILE=trolley.txt OMSI_TROLLEY_UP=1 OMSI_DEBUG_TROLLEY=1 OMSI_AUTOPILOT=40 \
-  openomsi --map maps/<map>/global.cfg --bus Vehicles/<bus>.bus --offscreen out.png \
+  openbus --map maps/<map>/global.cfg --bus Vehicles/<bus>.bus --offscreen out.png \
   --drive 30 --spawn x,y,heading --view outside --snapshots 14.5
 ```
 

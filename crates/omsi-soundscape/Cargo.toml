@@ -3,7 +3,7 @@ name = "omsi-soundscape"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI's sounds of the world on top of omsi-audio: the soundscape's recordings, places and rules, the ambience's one-shots and the bus radio"
+description = "openBus's sounds of the world on top of omsi-audio: the soundscape's recordings, places and rules, the ambience's one-shots and the bus radio"
 
 [dependencies]
 omsi-audio = { path = "../omsi-audio" }

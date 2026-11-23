@@ -1,4 +1,4 @@
-// The public server list of openOMSI (see README.md beside this file). A server with
+// The public server list of openBus (see README.md beside this file). A server with
 // `public_server = 1` registers here and says it is alive every minute; the launcher and the
 // game read the list. One Durable Object keeps the listings in memory (a listing lives three
 // minutes past its last heartbeat, so a restarted object is right again within a minute) and
@@ -81,7 +81,7 @@ export class List extends DurableObject {
     try {
       const ctl = new AbortController();
       const timer = setTimeout(() => ctl.abort(), 5000);
-      const r = await fetch(l.address + "/status", { redirect: "manual", signal: ctl.signal, headers: { "User-Agent": "openOMSI-serverlist/1" } });
+      const r = await fetch(l.address + "/status", { redirect: "manual", signal: ctl.signal, headers: { "User-Agent": "openBus-serverlist/1" } });
       clearTimeout(timer);
       if (r.status !== 200) throw new Error("the status page answered " + r.status);
       const text = (await r.text()).slice(0, 65536);
@@ -136,7 +136,7 @@ export default {
     try {
       return await handle(request, env, ctx);
     } catch (e) {
-      console.error("openOMSI serverlist:", e);
+      console.error("openBus serverlist:", e);
       return json({ error: "unavailable" }, 503, { "Retry-After": "120" });
     }
   },
@@ -157,7 +157,7 @@ async function bodyOf(request) {
 
 async function handle(request, env, ctx) {
   const url = new URL(request.url);
-  const list = env.LIST.get(env.LIST.idFromName("openomsi"));
+  const list = env.LIST.get(env.LIST.idFromName("openbus"));
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   const ip = request.headers.get("CF-Connecting-IP") || "";
   if (request.method === "POST" && ["/v1/register", "/v1/heartbeat", "/v1/unlist"].includes(url.pathname)) {
@@ -183,5 +183,5 @@ async function handle(request, env, ctx) {
     const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     return new Response(bin, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff", ...CORS } });
   }
-  return new Response("openOMSI server list: GET /v1/servers\n", { status: url.pathname === "/" ? 200 : 404, headers: { "Content-Type": "text/plain", ...CORS } });
+  return new Response("openBus server list: GET /v1/servers\n", { status: url.pathname === "/" ? 200 : 404, headers: { "Content-Type": "text/plain", ...CORS } });
 }

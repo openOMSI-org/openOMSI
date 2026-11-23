@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Audio traces: run a fixed set of offscreen drives with one openomsi binary, each writing
+# Audio traces: run a fixed set of offscreen drives with one openbus binary, each writing
 # what the game asks of the mixer (OMSI_AUDIO_TRACE) and the sound mixed from it
 # (OMSI_RECORD), and compare two such sets. A refactor that must not change what is heard
 # writes the same traces as the binary built from the commit before it - the golden
 # pictures (scripts/golden.sh) cover only what is seen. See docs/REFACTOR_CHECKS.md.
 #
-#   scripts/audio-trace.sh render  <openomsi binary> <out dir> [scene ...]
-#   scripts/audio-trace.sh window  <openomsi binary> <out dir> [scene ...]
+#   scripts/audio-trace.sh render  <openbus binary> <out dir> [scene ...]
+#   scripts/audio-trace.sh window  <openbus binary> <out dir> [scene ...]
 #   scripts/audio-trace.sh compare <dir a> <dir b>
 #   scripts/audio-trace.sh list
 #
 # AUDIO_TRACE_SEED (1) changes OMSI_SEED. Needs the original OMSI 2 install ($OMSI_ROOT,
 # else "OMSI 2 Original" beside the checkout); the ambience's recordings are taken from
-# $OMSI_AMBIENCE_DIR, else ~/.openomsi/ambience (without them the ambience is silent in
+# $OMSI_AMBIENCE_DIR, else ~/.openbus/ambience (without them the ambience is silent in
 # both runs alike). Every scene runs with a fresh, empty $HOME and OMSI_SEED fixed.
 #
 # A run writes <scene>.trace (one line per request to the mixer: voices started with their
@@ -61,7 +61,7 @@ render() {
   [ -x "$bin" ] || { echo "not an executable: $bin" >&2; exit 2; }
   local root="${OMSI_ROOT:-$(dirname "$repo")/OMSI 2 Original}"
   [ -d "$root/maps" ] || { echo "no OMSI 2 install at $root (set OMSI_ROOT)" >&2; exit 2; }
-  local amb="${OMSI_AMBIENCE_DIR:-$HOME/.openomsi/ambience}"
+  local amb="${OMSI_AMBIENCE_DIR:-$HOME/.openbus/ambience}"
   mkdir -p "$out"
   case "$(realpath "$out")/" in
     "$(realpath "$repo")"/*) echo "refusing to write recordings of licensed content inside the repository: $out" >&2; exit 2 ;;
@@ -74,8 +74,8 @@ render() {
     args="${args%%|*}"
     if [ $# -gt 0 ] && [[ "$want" != *" $name "* ]]; then continue; fi
     home="$(mktemp -d "${TMPDIR:-/tmp}/audio-trace-home.XXXXXX")"
-    mkdir -p "$home/.openomsi"
-    printf 'windy_trees=0\n' >"$home/.openomsi/settings.cfg"
+    mkdir -p "$home/.openbus"
+    printf 'windy_trees=0\n' >"$home/.openbus/settings.cfg"
     rm -f "$out/$name.trace" "$out/$name.wav"
     printf '%-24s' "$name"
     # (a picture every 10 s is the least OMSI_RECORD takes; the pictures are not compared)
@@ -96,7 +96,7 @@ window() {
   [ -x "$bin" ] || { echo "not an executable: $bin" >&2; exit 2; }
   local root="${OMSI_ROOT:-$(dirname "$repo")/OMSI 2 Original}"
   [ -d "$root/maps" ] || { echo "no OMSI 2 install at $root (set OMSI_ROOT)" >&2; exit 2; }
-  local amb="${OMSI_AMBIENCE_DIR:-$HOME/.openomsi/ambience}"
+  local amb="${OMSI_AMBIENCE_DIR:-$HOME/.openbus/ambience}"
   mkdir -p "$out"
   case "$(realpath "$out")/" in
     "$(realpath "$repo")"/*) echo "refusing to write traces of licensed content inside the repository: $out" >&2; exit 2 ;;
@@ -109,9 +109,9 @@ window() {
     args="${args%|*}"
     if [ $# -gt 0 ] && [[ "$want" != *" $name "* ]]; then continue; fi
     home="$(mktemp -d "${TMPDIR:-/tmp}/audio-trace-home.XXXXXX")"
-    mkdir -p "$home/.openomsi"
-    printf 'windy_trees=0\n' >"$home/.openomsi/settings.cfg"
-    printf 'volume = 0.7\nsilent = http://127.0.0.1:9/station.mp3\n' >"$home/.openomsi/radio.cfg"
+    mkdir -p "$home/.openbus"
+    printf 'windy_trees=0\n' >"$home/.openbus/settings.cfg"
+    printf 'volume = 0.7\nsilent = http://127.0.0.1:9/station.mp3\n' >"$home/.openbus/radio.cfg"
     rm -f "$out/$name.wtrace"
     printf '%-24s' "$name"
     if eval "env HOME=\"\$home\" OMSI_SEED=\"\$SEED\" OMSI_NO_UPDATE=1 OMSI_HIDDEN_WINDOW=1 OMSI_MUTE=1 OMSI_AMBIENCE_DIR=\"\$amb\" OMSI_AUDIO_TRACE=\"\$out/$name.wtrace\" \"\$bin\" --root \"\$root\" --no-menu --size 640x360 --exit-after $secs $args" >"$out/$name.log" 2>&1; then

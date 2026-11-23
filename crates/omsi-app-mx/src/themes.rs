@@ -14,8 +14,8 @@ use omsi_ui::Color;
 use omsi_ui::icons::{Mark, Stage};
 use omsi_ui::theme::{self, Glass, Palette};
 
-/// openOMSI's own look as the settings file writes it (the setting reads it as "").
-pub(crate) const OWN: &str = "openomsi";
+/// openBus's own look as the settings file writes it (the setting reads it as "").
+pub(crate) const OWN: &str = "openbus";
 /// The longest theme file, SVG logo or picture that is read (bytes).
 const MAX_FILE: u64 = 4 << 20;
 /// The widest and highest picture logo (pixels).
@@ -28,7 +28,7 @@ const TRACK: f32 = 0.18;
 /// How the loading screen shows how far the loading is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub(crate) enum Progress {
-    /// openOMSI's striped bar along the bottom, in the theme's accent.
+    /// openBus's striped bar along the bottom, in the theme's accent.
     #[default]
     Bar,
     /// The logo's path `progress` drawn along as far as the loading is (an SVG logo).
@@ -155,7 +155,7 @@ pub(crate) struct Loading {
     pub background: Option<Color>,
     /// The map's name and the tips.
     pub text: Option<Color>,
-    /// In the middle, in place of openOMSI's wordmark.
+    /// In the middle, in place of openBus's wordmark.
     pub logo: Option<Logo>,
     pub progress: Progress,
 }
@@ -164,20 +164,20 @@ pub(crate) struct Loading {
 pub(crate) struct Theme {
     pub id: String,
     pub name: String,
-    /// The colours it gives (by name), over openOMSI's light or dark look (`palette`).
+    /// The colours it gives (by name), over openBus's light or dark look (`palette`).
     pub colors: Vec<(String, Color)>,
-    /// The corners of its panels (none: openOMSI's).
+    /// The corners of its panels (none: openBus's).
     pub radius: Option<f32>,
     pub glass: Option<Glass>,
     pub loading: Loading,
-    /// The logo at the top of the pause menu, and the name beside it (openOMSI's version
+    /// The logo at the top of the pause menu, and the name beside it (openBus's version
     /// stays under it).
     pub logo: Option<Logo>,
     pub title: Option<String>,
 }
 
 impl Theme {
-    /// Its palette over openOMSI's light or dark look, as the player chose (`ui_theme`): its
+    /// Its palette over openBus's light or dark look, as the player chose (`ui_theme`): its
     /// colours, what it leaves out from that look, its corners and its glass.
     pub fn palette(&self, light: bool) -> Palette {
         let (mut p, _) = Palette::with_colors(
@@ -216,7 +216,7 @@ pub(crate) fn parse(id: &str, dir: &Path, text: &str) -> Result<Theme, String> {
         None => id.to_string(),
     };
     let mut colors: Vec<(String, Color)> = Vec::new();
-    let mut known = Palette::OPENOMSI;
+    let mut known = Palette::OPENBUS;
     if let Some(c) = o.get("colors") {
         for (k, val) in c
             .as_object()
@@ -421,7 +421,7 @@ fn valid_id(id: &str) -> bool {
         && id
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
-        && !id.eq_ignore_ascii_case("openomsi")
+        && !id.eq_ignore_ascii_case("openbus")
 }
 
 /// Every theme there is, (id, folder): the content roots' `Themes` folders first, then the
@@ -484,10 +484,10 @@ fn load_from(themes: &[(String, PathBuf)], id: &str) -> Result<Theme, String> {
     parse(id, dir, &text)
 }
 
-/// The value of the setting `ui_theme_pack` as read: one line, "" for openOMSI's own look.
+/// The value of the setting `ui_theme_pack` as read: one line, "" for openBus's own look.
 pub(crate) fn setting(v: &str) -> String {
     let v = v.trim();
-    if v.eq_ignore_ascii_case("openomsi") || v.eq_ignore_ascii_case("default") || !valid_id(v) {
+    if v.eq_ignore_ascii_case("openbus") || v.eq_ignore_ascii_case("default") || !valid_id(v) {
         return String::new();
     }
     v.to_string()
@@ -505,9 +505,9 @@ static STATE: Mutex<State> = Mutex::new(State {
     theme: None,
 });
 
-/// Puts the theme `id` (the setting `ui_theme_pack`) in force over openOMSI's light or dark
+/// Puts the theme `id` (the setting `ui_theme_pack`) in force over openBus's light or dark
 /// look (`ui_theme`), when they are not already: the theme read anew when it is another, the
-/// palette for the screens. A theme that cannot be read leaves openOMSI's look, with a line in
+/// palette for the screens. A theme that cannot be read leaves openBus's look, with a line in
 /// the log why. Cheap to call every frame.
 pub(crate) fn sync(id: &str, light: bool) {
     let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -529,7 +529,7 @@ pub(crate) fn sync(id: &str, light: bool) {
                     );
                     s.theme = Some(Arc::new(t));
                 }
-                Err(e) => log::warn!("interface theme \"{id}\": {e} - openOMSI's own look"),
+                Err(e) => log::warn!("interface theme \"{id}\": {e} - openBus's own look"),
             }
         }
     }
@@ -541,13 +541,13 @@ pub(crate) fn sync(id: &str, light: bool) {
     theme::set(palette);
 }
 
-/// The palette of the theme in force over openOMSI's light or dark look: what `sync` puts in
+/// The palette of the theme in force over openBus's light or dark look: what `sync` puts in
 /// force, for what is built from the settings rather than drawn (the game's own panels).
 pub(crate) fn palette(light: bool) -> Palette {
     current().map_or(theme::palette(light), |t| t.palette(light))
 }
 
-/// The theme in force (none: openOMSI's own look).
+/// The theme in force (none: openBus's own look).
 pub(crate) fn current() -> Option<Arc<Theme>> {
     STATE
         .lock()
@@ -556,11 +556,11 @@ pub(crate) fn current() -> Option<Arc<Theme>> {
         .clone()
 }
 
-/// The themes the player can choose, (id, name): openOMSI's own look first. Looked for once.
+/// The themes the player can choose, (id, name): openBus's own look first. Looked for once.
 pub(crate) fn choices() -> &'static [(String, String)] {
     static LIST: OnceLock<Vec<(String, String)>> = OnceLock::new();
     LIST.get_or_init(|| {
-        let mut out = vec![(String::new(), "openOMSI".to_string())];
+        let mut out = vec![(String::new(), "openBus".to_string())];
         for (id, dir) in found() {
             // (its name, without reading its pictures)
             let name = std::fs::read_to_string(dir.join("theme.json"))
@@ -584,7 +584,7 @@ mod tests {
     use super::*;
 
     fn folder(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("openomsi-themes-{}-{name}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("openbus-themes-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -686,7 +686,7 @@ mod tests {
             (t.name.as_str(), t.loading.progress, t.palette(false).glass),
             ("x", Progress::Fill, Some(Glass::DEFAULT))
         );
-        assert_eq!(t.palette(false).accent, Palette::OPENOMSI.accent);
+        assert_eq!(t.palette(false).accent, Palette::OPENBUS.accent);
     }
 
     /// Themes are found in the content roots' `Themes` folders and in the plugins' folders;
@@ -721,9 +721,9 @@ mod tests {
             ("omsihub", Color::rgba(0xf5, 0x86, 0x20, 1.0))
         );
         assert!(load_from(&found, "plain").is_err());
-        // the setting: one id, openOMSI's own look by any of its names
+        // the setting: one id, openBus's own look by any of its names
         assert_eq!(setting(" omsihub "), "omsihub");
-        for own in ["", "openOMSI", "default", "a b", "../x"] {
+        for own in ["", "openBus", "default", "a b", "../x"] {
             assert_eq!(setting(own), "", "{own}");
         }
     }
@@ -731,7 +731,7 @@ mod tests {
     /// The options' row for the theme is in the player's language.
     #[test]
     fn the_theme_row_is_translated() {
-        let desc = "The look of the menus, the panels and the loading screen: openOMSI's own, or one a mod or plugin brings";
+        let desc = "The look of the menus, the panels and the loading screen: openBus's own, or one a mod or plugin brings";
         crate::with_test_language("nl", || {
             assert_eq!(omsi_ui::tr("Theme pack"), "Themapakket");
             assert!(omsi_ui::tr(desc).starts_with("Hoe de menu's"));

@@ -1,5 +1,5 @@
 //! User-visible cache budgets. These apply to the *cache* and the joining player's
-//! *sealed LAN store*, not the full ~/.openomsi folder (settings, saves and mods live there).
+//! *sealed LAN store*, not the full ~/.openbus folder (settings, saves and mods live there).
 //! Cleanup is suspended while any game holds a cache lease, including CLI runs.
 
 use serde::Serialize;
@@ -44,11 +44,11 @@ pub fn cleanup(scope: &str, clear: bool) -> Result<Status, String> {
         return Err(crate::i18n::tr("Unknown cache scope."));
     }
     if running() {
-        return Err(crate::i18n::tr("Close all running openOMSI games before cleaning the cache."));
+        return Err(crate::i18n::tr("Close all running openBus games before cleaning the cache."));
     }
     let base = crate::data_dir();
     let _maintenance = omsi_cfg::cache_activity::maintenance(&base)
-        .ok_or_else(|| crate::i18n::tr("Close all running openOMSI games before cleaning the cache."))?;
+        .ok_or_else(|| crate::i18n::tr("Close all running openBus games before cleaning the cache."))?;
     let mut reclaimed_local = 0;
     let mut reclaimed_lan = 0;
     if matches!(scope, "local" | "both") {

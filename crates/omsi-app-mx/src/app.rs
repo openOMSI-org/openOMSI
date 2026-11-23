@@ -177,7 +177,7 @@ impl App {
             .unwrap_or((1600, 900));
         let (fit, at) = crate::startup::fit_window(event_loop, lw as f64, lh as f64);
         let mut attrs = Window::default_attributes()
-            .with_title("openOMSI")
+            .with_title("openBus")
             .with_inner_size(fit)
             .with_window_icon(crate::startup::window_icon());
         if let Some(at) = at {
@@ -1268,7 +1268,7 @@ pub(crate) fn start_centers(args: &Args, cam: &Camera, world: Option<&World>) ->
 }
 
 /// What the map needs and this installation lacks, said on the screen and written to
-/// `~/.openomsi/missing_content.txt` by add-on folder: a map short of an add-on showed
+/// `~/.openbus/missing_content.txt` by add-on folder: a map short of an add-on showed
 /// holes, bare roads and white objects, and nobody could tell that from a fault of the game.
 pub(crate) fn report_missing_content(w: &World, msg: &mut Option<(String, f32)>) {
     let (files, textures) = w.missing_content();
@@ -1285,7 +1285,7 @@ pub(crate) fn report_missing_content(w: &World, msg: &mut Option<(String, f32)>)
             .push(format!("{what}: {f}"));
     }
     let mut text = format!(
-        "openOMSI: content this map uses that is not installed\nmap: {}\n\n",
+        "openBus: content this map uses that is not installed\nmap: {}\n\n",
         w.map_dir.display()
     );
     for (a, list) in &by_addon {

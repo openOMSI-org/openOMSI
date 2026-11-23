@@ -1,8 +1,8 @@
-// openOMSI website: a small hash router that shows the overview, the download page and the
+// openBus website: a small hash router that shows the overview, the download page and the
 // Markdown files of docs/ (copied next to this page by .github/workflows/pages.yml).
-const REPO = "openOMSI-org/openOMSI";
+const REPO = "rafaelkaiz/openBus";
 // the "playing now" counter (services/presence/): the games running right now
-const PRESENCE = "https://openomsi.savvabestbrother.workers.dev";
+const PRESENCE = "https://presence.openbus.example";
 const MAPPER_REPO = "openOMSI-org/openMapper";
 // The "New" markers of openMapper (menu badge, announcement on the overview) end by themselves
 const MAPPER_NEW_UNTIL = Date.parse("2026-11-23T00:00:00Z");
@@ -136,7 +136,7 @@ async function home() {
   if (chip) chip.textContent = rel.tag_name ? `Latest: ${rel.tag_name.replace(/^v/, "")}` : "No release yet";
 }
 
-// How many play openOMSI right now: the counter's count of these ten minutes (the README's
+// How many play openBus right now: the counter's count of these ten minutes (the README's
 // badge shows the same one), asked again as soon as the next ten minutes have begun while the
 // page shows it (the counter runs on Cloudflare's free plan: every request counts against its
 // daily limit, and the answer is cached until then anyway).
@@ -166,7 +166,7 @@ async function download(beta = false) {
   const grid = document.getElementById("dl-grid");
   const ver = document.getElementById("dl-version");
   if (beta) {
-    document.title = "Beta downloads · openOMSI";
+    document.title = "Beta downloads · openBus";
     view.querySelector("h1").textContent = "Beta downloads";
     document.getElementById("dl-channel").innerHTML = `Betas are for testing new changes. For everyday use, choose the <a href="#/download">stable release</a>.`;
     document.getElementById("dl-warning-title").textContent = "Beta: for testing";
@@ -189,8 +189,8 @@ async function download(beta = false) {
   // dedicated server's zip as well, and the Windows button downloaded the server.
   const card = p => {
     const find = name => (rel.assets || []).find(a => a.name === name);
-    const zip = find(`openOMSI-${v}-${p.key}.${p.ext || "zip"}`);
-    const setup = p.setup && find(`openOMSI-${v}-${p.key}${p.setup}`);
+    const zip = find(`openBus-${v}-${p.key}.${p.ext || "zip"}`);
+    const setup = p.setup && find(`openBus-${v}-${p.key}${p.setup}`);
     const a = setup || zip;
     const size = a ? ` · ${(a.size / 1048576).toFixed(0)} MB` : "";
     const mine = p.os && p.os === visitorOs();
@@ -210,17 +210,17 @@ async function download(beta = false) {
 const MAPPER_RAW = `https://raw.githubusercontent.com/${MAPPER_REPO}/main`;
 // openMapper's own docs are read from its repository, so they are always the current ones
 const DOC_SETS = {
-  openomsi: { list: DOCS, repo: REPO, route: "docs", url: n => `docs/${n}.md`, blob: "" },
+  openbus: { list: DOCS, repo: REPO, route: "docs", url: n => `docs/${n}.md`, blob: "" },
   mapper: { list: MAPPER_DOCS, repo: MAPPER_REPO, route: "mapper/docs", url: n => `${MAPPER_RAW}/docs/${n}.md`, blob: "" },
 };
 
-async function doc(name, anchor, set = "openomsi") {
+async function doc(name, anchor, set = "openbus") {
   const cfg = DOC_SETS[set];
   const meta = cfg.list.find(d => d.file === name);
   view.innerHTML = `<div class="content"><div class="doc"><div class="loading">Loading…</div></div></div>`;
   let md;
   try {
-    if (!meta && set !== "openomsi") throw new Error(404);
+    if (!meta && set !== "openbus") throw new Error(404);
     const r = await fetch(cfg.url(name));
     if (!r.ok) throw new Error(r.status);
     md = await r.text();
@@ -231,7 +231,7 @@ async function doc(name, anchor, set = "openomsi") {
   const box = view.querySelector(".doc");
   box.innerHTML = `<div class="doc-toolbar"><a href="https://github.com/${cfg.repo}/blob/main/docs/${name}.md">
     <span class="material-icons" style="font-size:18px">edit</span> Edit on GitHub</a></div>` + marked.parse(md);
-  document.title = `${meta ? meta.title : name} · ${set === "mapper" ? "openMapper" : "openOMSI"}`;
+  document.title = `${meta ? meta.title : name} · ${set === "mapper" ? "openMapper" : "openBus"}`;
   // heading anchors
   box.querySelectorAll("h1, h2, h3, h4").forEach(h => {
     h.id = slug(h.textContent);
@@ -334,7 +334,7 @@ async function releases(beta = false) {
     <p class="lead">${beta ? 'Versions for testing, including older betas. <a href="#/beta">Download the latest beta</a>.' : 'Stable versions, newest first. <a href="#/download">Download the latest stable release</a>.'}</p>
     <nav class="release-channels" aria-label="Release channel"><a class="btn ${beta ? "btn-outlined" : "btn-contained"}" href="#/releases"${beta ? "" : ' aria-current="page"'}>Stable</a> <a class="btn ${beta ? "btn-contained" : "btn-outlined"}" href="#/releases/beta"${beta ? ' aria-current="page"' : ""}>Betas</a></nav>
     <div id="rel-list"><div class="loading">Loading…</div></div></div>`;
-  document.title = `${beta ? "Beta" : "Stable"} releases · openOMSI`;
+  document.title = `${beta ? "Beta" : "Stable"} releases · openBus`;
   const box = document.getElementById("rel-list");
   let all, stable;
   try { [all, stable] = await Promise.all([gameReleases(), latestRelease()]); }
@@ -378,7 +378,7 @@ async function issues(number) {
       <input id="iq" type="search" placeholder="Filter by title or label" value="${esc(issueQuery)}">
     </div>
     <div id="issue-list"><div class="loading">Loading…</div></div></div>`;
-  document.title = "Issues · openOMSI";
+  document.title = "Issues · openBus";
   view.querySelectorAll(".tabs button").forEach(b => {
     b.classList.toggle("on", b.dataset.s === issueState);
     b.onclick = () => { issueState = b.dataset.s; issues(); };
@@ -409,7 +409,7 @@ async function issue(n) {
   let i, comments;
   try { [i, comments] = await Promise.all([gh(`issues/${n}`), gh(`issues/${n}/comments?per_page=100`)]); }
   catch (e) { box.innerHTML = `<p>${esc(e.message)}</p>`; return; }
-  document.title = `#${i.number} ${i.title} · openOMSI`;
+  document.title = `#${i.number} ${i.title} · openBus`;
   const post = (who, when, body) => `<div class="card elevation-1 comment"><div class="comment-head"><img src="${esc(who?.avatar_url)}&s=48" alt=""><b>${esc(who?.login)}</b><span class="muted">${ago(when)}</span></div><div class="doc">${md(body) || "<p class='muted'>No description.</p>"}</div></div>`;
   box.innerHTML = `<h1 class="issue-head">${esc(i.title)} <span class="muted">#${i.number}</span></h1>
     <p><span class="label" style="--lc:${i.state === "open" ? "#2da44e" : "#8250df"}">${i.state === "open" ? "Open" : "Closed"}</span> ${labelChips(i.labels)}</p>
@@ -424,7 +424,7 @@ function route() {
   document.getElementById("mapper-badge")?.toggleAttribute("hidden", !mapperIsNew());
   document.querySelectorAll(".drawer a[data-route]").forEach(a => a.classList.toggle("active", a.dataset.route === path || (["/issues", "/releases"].includes(a.dataset.route) && path.startsWith(a.dataset.route + "/"))));
   toggleDrawer(false);
-  document.title = "openOMSI";
+  document.title = "openBus";
   if (path.startsWith("/docs/")) return doc(path.slice(6), anchor);
   if (path === "/mapper") { location.replace("#/docs/OPENMAPPER"); return; }
   if (path.startsWith("/mapper/docs/")) return doc(path.slice(13), anchor, "mapper");
@@ -462,20 +462,3 @@ window.addEventListener("hashchange", route);
 })();
 route();
 
-// Donate: the button opens its menu upwards; a click elsewhere, Escape or a choice closes it
-(() => {
-  const button = document.getElementById("donate-button");
-  const menu = document.getElementById("donate-menu");
-  if (!button || !menu) return;
-  const open = on => {
-    menu.hidden = !on;
-    button.setAttribute("aria-expanded", on ? "true" : "false");
-    if (on) menu.querySelector("a").focus();
-  };
-  button.addEventListener("click", e => { e.stopPropagation(); open(menu.hidden); });
-  menu.addEventListener("click", e => { if (e.target.closest("a")) open(false); });
-  document.addEventListener("click", e => { if (!menu.hidden && !e.target.closest("#donate")) open(false); });
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && !menu.hidden) { open(false); button.focus(); }
-  });
-})();

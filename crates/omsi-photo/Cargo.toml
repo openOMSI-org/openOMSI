@@ -3,7 +3,7 @@ name = "omsi-photo"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI's photo mode darkroom: the lens (focal length, aperture, depth of field and motion samples) and the developing of the accumulated samples (grade, film looks, grain, crop)"
+description = "openBus's photo mode darkroom: the lens (focal length, aperture, depth of field and motion samples) and the developing of the accumulated samples (grade, film looks, grain, crop)"
 
 [dependencies]
 omsi-render = { path = "../omsi-render" }

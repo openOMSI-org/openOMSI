@@ -1,7 +1,7 @@
 # Suspension types
 
 OMSI 2 has one strut: a coil spring with a damper, read from each axle's `achse_feder`,
-`achse_daempfer` and `achse_maxforce`. openOMSI keeps that exactly for every axle without a
+`achse_daempfer` and `achse_maxforce`. openBus keeps that exactly for every axle without a
 `[suspension]` block, and lets a vehicle give any axle another kind. OMSI 2 skips the block, and
 the axle there is the coil strut.
 

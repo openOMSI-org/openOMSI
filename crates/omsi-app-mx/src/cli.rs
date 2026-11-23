@@ -6,7 +6,7 @@ use super::*;
 pub(crate) const DEFAULT_SIZE: &str = "1600x900";
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "openomsi", version = crate::startup::VERSION, about = "openOMSI")]
+#[command(name = "openbus", version = crate::startup::VERSION, about = "openBus")]
 pub(crate) struct Args {
     /// Write a support package (a ZIP for a GitHub issue: the system, the graphics device and
     /// settings, no paths, names or log text) to this file and end, without starting the game.
@@ -130,7 +130,7 @@ pub(crate) struct Args {
     /// variable and, unless the plate is free, gives the plate that list pairs with it.
     #[arg(long)]
     pub(crate) number: Option<String>,
-    /// Bus of the player's depot (`~/.openomsi/depot.json`): its wear is restored, and saved at the end.
+    /// Bus of the player's depot (`~/.openbus/depot.json`): its wear is restored, and saved at the end.
     #[arg(long)]
     pub(crate) depot: Option<String>,
     /// Time of day at start, HH:MM (default 09:00).
@@ -392,7 +392,7 @@ mod passenger_connection_authority_tests {
     use super::*;
     #[test]
     fn connections_stay_off_for_every_network_entry_path() {
-        let solo = Args::parse_from(["openomsi"]);
+        let solo = Args::parse_from(["openbus"]);
         assert!(solo.passenger_connections_allowed(false));
         assert!(!solo.passenger_connections_allowed(true));
         for flags in [
@@ -401,7 +401,7 @@ mod passenger_connection_authority_tests {
             vec!["--lan-join", "wss://localhost/ws"],
             vec!["--server", "server.cfg"],
         ] {
-            let args = Args::parse_from(std::iter::once("openomsi").chain(flags));
+            let args = Args::parse_from(std::iter::once("openbus").chain(flags));
             assert!(!args.passenger_connections_allowed(false));
             assert!(!args.passenger_connections_allowed(true));
         }

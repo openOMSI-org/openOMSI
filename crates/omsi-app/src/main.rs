@@ -1,4 +1,4 @@
-//! `openomsi` - the game and its launcher (the game itself is the `openomsi_game` library).
+//! `openbus` - the game and its launcher (the game itself is the `openbus_game` library).
 
 // a game, not a console program: no console window opens beside it on Windows (a start
 // from a terminal still prints there, see attach_parent_console)
@@ -42,7 +42,7 @@ fn main() -> anyhow::Result<()> {
         }
         omsi_guard::test_break();
     }
-    let r = openomsi_game::run();
+    let r = openbus_game::run();
     omsi_guard::exited(r.is_ok());
     r
 }

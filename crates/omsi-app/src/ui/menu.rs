@@ -5,11 +5,11 @@ use super::*;
 // ---------------------------------------------------------------------------------------
 // the game menu and its lists: flat near-black greys and one amber accent, as the launcher
 
-/// openOMSI's colour `c`, or the palette's in force (Light, a theme pack: `themes`) in its
+/// openBus's colour `c`, or the palette's in force (Light, a theme pack: `themes`) in its
 /// place - for the inks as for the fills, so a text and what it is drawn on share one look.
 fn own(c: [u8; 4], themed: impl Fn(omsi_ui::theme::Palette) -> omsi_ui::Color) -> [u8; 4] {
     let p = omsi_ui::theme::th();
-    if p == omsi_ui::theme::Palette::OPENOMSI {
+    if p == omsi_ui::theme::Palette::OPENBUS {
         c
     } else {
         omsi_ui::theme::rgba8(themed(p))
@@ -57,7 +57,7 @@ pub(super) fn chip_fill() -> [u8; 4] {
     own([31, 31, 31, 255], |p| p.field)
 }
 /// A switch's track when off, a slider's empty track, their knob (the launcher's; a theme's
-/// tracks are its text a little over its panel, as openOMSI's greys are on its own).
+/// tracks are its text a little over its panel, as openBus's greys are on its own).
 pub(super) fn track_off() -> [u8; 4] {
     own([62, 62, 62, 255], |p| p.panel.mix(p.text, 0.19))
 }
@@ -274,7 +274,7 @@ impl Ui {
         let left = x + (PAD + TEXT_IN) * s;
         // (the game's name in the accent; the list names above are in capitals)
         // (as the launcher's section headings: small bold capitals, dim; the title bold)
-        let eyebrow = if sub.is_empty() { "OPENOMSI".to_string() } else { sub.to_uppercase() };
+        let eyebrow = if sub.is_empty() { "OPENBUS".to_string() } else { sub.to_uppercase() };
         let room = w - (PAD + TEXT_IN) * 2.0 * s;
         let eyebrow = clip_bold(&self.text, &eyebrow, 11.0 * s, room);
         let e = self.text.label(r, scene, &eyebrow, (11.0 * s) as u32 | BOLD, self::dim());
@@ -801,7 +801,7 @@ impl Ui {
         self.text.rounded(r, scene, [rail_w - 1.0, 0.0, rail_w, f.height], 0.0, self::edge());
         // the game's name and version, as at the top of the launcher's rail
         let bx = 24.0 * s + cut;
-        let name_w = self.put(r, scene, "openOMSI", (20.0 * s) as u32 | BOLD, self::white(), bx, 34.0 * s);
+        let name_w = self.put(r, scene, "openBus", (20.0 * s) as u32 | BOLD, self::white(), bx, 34.0 * s);
         self.put(r, scene, crate::startup::VERSION, (12.0 * s) as u32, self::muted(), bx, 54.0 * s);
         // what state the game is in, a small amber tag beside the name
         let tag = if f.paused { "PAUSED" } else { "MENU" };
@@ -1226,10 +1226,10 @@ mod tests {
         (l(a) - l(b)).abs()
     }
 
-    /// openOMSI's own look is drawn with the colours it always had.
+    /// openBus's own look is drawn with the colours it always had.
     #[test]
     fn the_own_look_keeps_its_colours() {
-        with_palette(Palette::OPENOMSI, || {
+        with_palette(Palette::OPENBUS, || {
             assert_eq!(self::white(), [236, 236, 236, 0]);
             assert_eq!(self::selected(), [44, 44, 44, 255]);
             assert_eq!(self::rail(), [18, 18, 18, 255]);

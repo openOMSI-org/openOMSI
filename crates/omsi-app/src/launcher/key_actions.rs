@@ -282,7 +282,7 @@ mod key_actions_tests {
     #[test]
     fn script_action_cache_round_trips_and_is_scoped_to_the_install_root() {
         let dir = std::env::temp_dir().join(format!(
-            "openomsi_action_cache_{}_{}",
+            "openbus_action_cache_{}_{}",
             std::process::id(),
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
         ));

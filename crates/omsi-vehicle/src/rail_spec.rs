@@ -1,4 +1,4 @@
-//! The rail blocks of a vehicle file (openOMSI keywords; OMSI 2 skips them): the traction
+//! The rail blocks of a vehicle file (openBus keywords; OMSI 2 skips them): the traction
 //! curve, the brake system and the couplers of a tram, metro train or railway vehicle.
 //!
 //! ```text

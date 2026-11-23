@@ -12,12 +12,12 @@ const MapView = {
     const z = Math.max(0.25, Math.min(3, this.zoom * f));
     this.scale *= z / this.zoom;
     this.zoom = z;
-    store.set("openomsi.mapZoom", String(Math.round(z * 1000) / 1000));
+    store.set("openbus.mapZoom", String(Math.round(z * 1000) / 1000));
     this.wake();
   },
 
   attach(view) {
-    if (!this.zoom) this.zoom = Math.max(0.25, Math.min(3, Number(store.get("openomsi.mapZoom")) || 1));
+    if (!this.zoom) this.zoom = Math.max(0.25, Math.min(3, Number(store.get("openbus.mapZoom")) || 1));
     view.querySelector(".zoom .in").addEventListener("click", () => this.zoomBy(1.5));
     view.querySelector(".zoom .out").addEventListener("click", () => this.zoomBy(1 / 1.5));
     const canvas = view.querySelector("canvas");

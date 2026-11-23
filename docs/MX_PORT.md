@@ -152,6 +152,6 @@ From a Mac, without the platforms' C toolchains (`cargo check` only: nothing is 
 - `port2.py`: `ShaderSource::Wgsl(..)` to `&str`; `CommandEncoderDescriptor` to the label;
   `*PassTimestampWrites`; `set_bind_group(.., &[])`; `.expect` on the `create_*` calls that
   return `Result` in mX.
-- `gpu/schema.rs`: the camera and material groups' bindings as openOMSI's own data, still used
+- `gpu/schema.rs`: the camera and material groups' bindings as openBus's own data, still used
   to count GL texture units (`lamps_fit`) and by tests. `device_selection.rs` decides the array
   paths from `mx::Adapter::storage_buffers_per_stage` and `texture_units`.

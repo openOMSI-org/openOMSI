@@ -74,7 +74,7 @@ impl Soundscape {
     pub fn new(enabled: bool, volume: f32) -> Soundscape {
         let pack = Pack::find();
         if pack.is_none() {
-            log::info!("ambience: no recordings found (an `ambience` folder beside the program, ~/.openomsi/ambience or OMSI_AMBIENCE_DIR)");
+            log::info!("ambience: no recordings found (an `ambience` folder beside the program, ~/.openbus/ambience or OMSI_AMBIENCE_DIR)");
             if enabled {
                 Pack::fetch_if_missing();
             }

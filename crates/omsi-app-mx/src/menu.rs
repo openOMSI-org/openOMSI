@@ -189,7 +189,7 @@ impl Menu {
     pub fn lines(&self) -> Vec<String> {
         let mark = |r: usize| if self.row == r { ">" } else { " " };
         vec![
-            "openOMSI".to_string(),
+            "openBus".to_string(),
             String::new(),
             format!(
                 "{} Map:        {}",

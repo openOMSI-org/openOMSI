@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn a_bus_is_read_off_the_frame_and_then_handed_out() {
         // (no such bus: it is read on its thread all the same, and fails there)
-        let root = std::env::temp_dir().join(format!("openomsi-remote-load-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("openbus-remote-load-{}", std::process::id()));
         let path = root.join("Vehicles/None/none.bus");
         let before = generation();
         assert!(matches!(get(&root, &path, ""), Got::Reading));

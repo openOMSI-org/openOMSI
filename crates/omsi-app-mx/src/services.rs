@@ -181,7 +181,7 @@ mod tests {
         v.set_var("Fail_Gelenk_true", 1.0);
         let args = Args {
             repair: true,
-            ..Args::parse_from(["openomsi"])
+            ..Args::parse_from(["openbus"])
         };
         let mut clock = omsi_sim::SimClock::default();
         let msg = run_services(&args, &mut v, &mut clock, 30.0, false);
@@ -203,7 +203,7 @@ mod tests {
         v.set_var("broken", 1.0);
         let args = Args {
             repair: true,
-            ..Args::parse_from(["openomsi"])
+            ..Args::parse_from(["openbus"])
         };
         let mut clock = omsi_sim::SimClock::default();
         let was = clock.time;

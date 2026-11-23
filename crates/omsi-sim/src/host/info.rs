@@ -120,7 +120,7 @@ impl VehicleHost {
                     .unwrap_or_default();
                 stacks.push_str(s);
             }
-            // --- the bus radio (openOMSI): the station and its song as strings
+            // --- the bus radio (openBus): the station and its song as strings
             Some(Cb::GetRadioName) => stacks.push_str(self.radio_name.clone()),
             Some(Cb::GetRadioSong) => stacks.push_str(self.radio_song.clone()),
             // --- timetable callbacks

@@ -1609,7 +1609,7 @@ fn small_instrument_lights_keep_their_small_size() {
 /// glow in its dome (#1159).
 #[test]
 fn a_light_enh_has_its_bitmap_z_offset_factor_and_effects() {
-    let dir = std::env::temp_dir().join("openomsi-light-enh-test");
+    let dir = std::env::temp_dir().join("openbus-light-enh-test");
     std::fs::create_dir_all(dir.join("MAN_NL_NG/model")).unwrap();
     std::fs::create_dir_all(dir.join("MAN_NL_NG/Texture")).unwrap();
     std::fs::write(dir.join("MAN_NL_NG/Texture/D92_Haltewunsch.bmp"), b"BM").unwrap();
@@ -1680,7 +1680,7 @@ fn a_light_enh_2_left_a_number_short_is_not_drawn() {
 /// does it in the object's own frame, wherever the map puts the object (#961).
 #[test]
 fn a_crossing_far_over_the_ground_is_draped_by_its_height_field() {
-    let dir = std::env::temp_dir().join(format!("openomsi-deck-warp-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("openbus-deck-warp-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("global.cfg"), "[name]\nDeck\n").unwrap();
     std::fs::write(
@@ -1759,7 +1759,7 @@ fn a_crossing_far_over_the_ground_is_draped_by_its_height_field() {
 
 #[test]
 fn a_retexture_using_the_originals_model_shows_its_own_textures() {
-    let dir = std::env::temp_dir().join(format!("openomsi-retexture-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("openbus-retexture-{}", std::process::id()));
     for d in ["orig/model", "orig/texture", "retex/model", "retex/texture"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -1838,7 +1838,7 @@ fn standard_traffic_lamps_are_state_driven() {
 #[test]
 fn scenery_mouseevent_hit_and_trigger() {
     let dir = std::env::temp_dir().join(format!(
-        "openomsi-scenery-mouseevent-{}",
+        "openbus-scenery-mouseevent-{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()

@@ -34,7 +34,7 @@ fn light_theme_uses_shared_surface_ink_and_control_colors() {
             .any(|item| matches!(item, Item::Rounded { color, .. } if color.0[0] > 0.9))
     );
 
-    let dark = layout_typing_with_theme(&p, &fonts, 1.0, None, Palette::OPENOMSI);
+    let dark = layout_typing_with_theme(&p, &fonts, 1.0, None, Palette::OPENBUS);
     assert_eq!(
         dark.background.0[..3],
         [14.0 / 255.0, 16.0 / 255.0, 20.0 / 255.0]

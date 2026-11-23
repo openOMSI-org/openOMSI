@@ -1,6 +1,6 @@
-//! `openomsi-launcher`: the launcher's commands for a terminal (`--cli <command> [json]`), and
+//! `openbus-launcher`: the launcher's commands for a terminal (`--cli <command> [json]`), and
 //! otherwise the game binary beside this one with the same arguments (a plain start of it
-//! opens the desktop launcher, `openomsi-launcher-app`).
+//! opens the desktop launcher, `openbus-launcher-app`).
 
 fn main() {
     omsi_cfg::migrate_legacy_data_dir();
@@ -19,7 +19,7 @@ fn main() {
     }
     let game = omsi_launcher_lib::load_config().game;
     let game = if game.trim().is_empty() {
-        std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(if cfg!(windows) { "openomsi.exe" } else { "openomsi" }))).unwrap_or_default()
+        std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(if cfg!(windows) { "openbus.exe" } else { "openbus" }))).unwrap_or_default()
     } else {
         std::path::PathBuf::from(game)
     };

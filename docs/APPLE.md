@@ -1,27 +1,27 @@
-# openOMSI on iPhone, iPad and Mac
+# openBus on iPhone, iPad and Mac
 
 ## How it is put together
 
-- **The game** is the same Rust library as everywhere (`crates/omsi-app`, `openomsi_game`),
+- **The game** is the same Rust library as everywhere (`crates/omsi-app`, `openbus_game`),
   built as a static library for `aarch64-apple-ios`, `aarch64-apple-ios-sim` and the Mac
   (`scripts/build-apple.sh rust …`) and linked into a Swift app (`apple/`).
 - **iPhone and iPad** (`crates/omsi-app/src/ios.rs`): as on Android, the launcher and the
-  game share one process. `main.swift` calls `openomsi_ios_main`, which runs winit's event
+  game share one process. `main.swift` calls `openbus_ios_main`, which runs winit's event
   loop (that is UIKit's `UIApplicationMain`). The app keeps UIKit's scene life cycle: its
   scene delegate (`apple/iOS/SceneDelegate.swift`) shows the launcher in the scene's window,
   and for a drive the game's window is put on the same scene in front of it
   (`apple.rs` ↔ `apple/iOS/GameHost.swift`). When the session ends (the menu's Quit) the
   game's window goes and the launcher is back.
-- **Mac**: the app is the launcher (`apple/macOS/OpenOMSIApp.swift`); the game program
-  `openomsi` lies beside it in `Contents/MacOS` and runs every drive as a process of its own,
-  as the launcher starts it on the other computers. The app's own program is `openOMSI-Mac`:
-  a Mac's disk does not tell `openOMSI` from `openomsi`, and the game took its place.
+- **Mac**: the app is the launcher (`apple/macOS/OpenBusApp.swift`); the game program
+  `openbus` lies beside it in `Contents/MacOS` and runs every drive as a process of its own,
+  as the launcher starts it on the other computers. The app's own program is `openBus-Mac`:
+  a Mac's disk does not tell `openBus` from `openbus`, and the game took its place.
 - **The launcher** (`apple/Shared`) is SwiftUI in the look and structure of the desktop
   launcher (`launcher/ui`): neutral graphite surfaces without outlines, one amber accent,
   Inter for every text (`apple/Resources/Fonts`, with its licence), radius 8 for cards and 6
   for controls; Liquid Glass only where the system draws it (the tab bar). It is only a view: what it knows and does is the game
   launcher's own `launcher::state::State`, read and changed through `apple_bridge.rs`
-  (`openomsi_bridge(cmd, json)`); its `api` command answers every command of the desktop
+  (`openbus_bridge(cmd, json)`); its `api` command answers every command of the desktop
   launcher's page (`omsi-launcher-api`), as Android's web view gets them. The bus preview is drawn by the game's renderer (the
   launcher's showroom, off the screen), the Drive page's map from the same data the game's
   city map uses (`mapview::overview`).
@@ -44,11 +44,11 @@
 ## Files on the device
 
 - iPhone/iPad: the app's Documents are the content folder - the Files app shows them as
-  "openOMSI" (also reachable from a Mac's Finder over a cable). Put a complete OMSI 2 there
+  "openBus" (also reachable from a Mac's Finder over a cable). Put a complete OMSI 2 there
   as `OMSI 2`, or choose a copy on iCloud Drive or a USB drive under Setup (the access is kept
-  as a bookmark). Settings, profiles and logs are in `Library/Application Support/openOMSI`.
-  `game.log` and `crash.log` as on Android; `openOMSI/env.txt` takes `OMSI_*` switches.
-- Mac: as before (`~/.openomsi`, the content folder beside the app or `~/.openomsi/content`).
+  as a bookmark). Settings, profiles and logs are in `Library/Application Support/openBus`.
+  `game.log` and `crash.log` as on Android; `openBus/env.txt` takes `OMSI_*` switches.
+- Mac: as before (`~/.openbus`, the content folder beside the app or `~/.openbus/content`).
 
 ## Building
 
@@ -56,10 +56,10 @@ Needs Xcode 26 (with the iOS platform), Rust and XcodeGen (`brew install xcodege
 
 ```sh
 scripts/build-apple.sh sim                 # iOS Simulator: build, install, start
-scripts/build-apple.sh mac                 # dist/apple/openOMSI.app
-scripts/build-apple.sh project             # apple/openOMSI.xcodeproj to work in Xcode
-OPENOMSI_TEAM_ID=XXXXXXXXXX scripts/build-apple.sh ipa        # App Store .ipa
-OPENOMSI_TEAM_ID=XXXXXXXXXX scripts/build-apple.sh mac-store  # Mac App Store
+scripts/build-apple.sh mac                 # dist/apple/openBus.app
+scripts/build-apple.sh project             # apple/openBus.xcodeproj to work in Xcode
+OPENBUS_TEAM_ID=XXXXXXXXXX scripts/build-apple.sh ipa        # App Store .ipa
+OPENBUS_TEAM_ID=XXXXXXXXXX scripts/build-apple.sh mac-store  # Mac App Store
 scripts/build-apple.sh shots <dir> 1440x880 drive settings    # the launcher's pages as PNG
 ```
 
@@ -68,7 +68,7 @@ calling `scripts/build-apple.sh rust-for-xcode`).
 
 ## Releasing (to do once)
 
-1. Apple Developer: an App ID `io.github.turbo-devv.openomsi` (one for iPhone, iPad and Mac:
+1. Apple Developer: an App ID `io.github.rafaelkaiz.openbus` (one for iPhone, iPad and Mac:
    one purchase), with the capabilities *Increased Memory Limit* and *Extended Virtual
    Addressing*; for LAN sessions found by broadcast also *Multicast Networking* (Apple grants
    it on request).
@@ -83,7 +83,7 @@ App Store builds never look for or install updates (`updater::STORE_BUILD`): the
 ## Open points
 
 - The Mac App Store build runs in the sandbox: the game program inherits it
-  (`openomsi-game-AppStore.entitlements`); the OMSI 2 folder chosen in the launcher must be
+  (`openbus-game-AppStore.entitlements`); the OMSI 2 folder chosen in the launcher must be
   passed on to it (a bookmark it resolves itself) - not done yet.
 - The Swift launcher has no key-binding editor (the Cross-Platform Launcher's Controls page
   edits the same file) and no update dialog for the Developer ID Mac build yet.

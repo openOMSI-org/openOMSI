@@ -1,7 +1,7 @@
 # Map packages: a pre-built surface under the roads
 
-> **A map needs no package.** openOMSI reads every map's own picture off its tiles the
-> first time the map is driven (`omsi_scene::mapgen`, kept in `~/.openomsi/cache/mapgen`): the
+> **A map needs no package.** openBus reads every map's own picture off its tiles the
+> first time the map is driven (`omsi_scene::mapgen`, kept in `~/.openbus/cache/mapgen`): the
 > ground by what it is painted with, water, woods and trees, every paved surface as the splines
 > and objects lay it, rail and tram tracks, and the houses from their models' roofs with their
 > heights. A package as described here adds what lies **outside** the map's tiles (the
@@ -9,17 +9,17 @@
 > the tiles the map's own layers are drawn over its surface. `OMSI_NO_MAP_CACHE=1` reads the
 > layers again; the example `mapgen_dump` (crate `omsi-scene`) draws them into a picture.
 
-A map's author (or anyone) can ship a **pre-built** picture of the map next to the map itself. openOMSI
+A map's author (or anyone) can ship a **pre-built** picture of the map next to the map itself. openBus
 does not compute, convert or triangulate anything: it opens the package, picks the chunks near the
 camera and draws them under the roads of the navigator and the city map. All the work (where the data
 comes from, georeferencing, triangulation) is done once, beforehand, by the tool of whoever makes the
 package.
 
-Why a package and not "openOMSI reads OpenStreetMap or GeoJSON": loading costs a file read, never a
+Why a package and not "openBus reads OpenStreetMap or GeoJSON": loading costs a file read, never a
 geometry pipeline; the game never needs to know where the data came from; any author (a real city, a
 fictional map, any tool) produces the same files.
 
-It follows the precedent of `radio.cfg`: optional files in the map's folder, read only by openOMSI and
+It follows the precedent of `radio.cfg`: optional files in the map's folder, read only by openBus and
 ignored by Omsi.exe, so a map made for both games loses nothing. A map without the folder is drawn from its
 own tiles alone.
 
@@ -28,7 +28,7 @@ own tiles alone.
 ```
 <content folder or OMSI 2>/Maps/<Map>/
   global.cfg
-  openomsi-realmap/            the package (fixed name, lower case)
+  openbus-realmap/            the package (fixed name, lower case)
     manifest.cfg               required: its presence makes the package count
     surface.oms                the pre-built surface, the names and the named streets (section 4)
     markers.cfg                optional: icons on the map (section 7)
@@ -40,7 +40,7 @@ own tiles alone.
 - The folder name and the file names are fixed; nothing is searched or configured. A missing file is a
   feature that is off, never an error. No `manifest.cfg`: the package is ignored.
 - The folder may lie in the map's own folder or in the same place of another content root: a package for
-  a map one does not own goes in the game's content folder (`Maps/<Map>/openomsi-realmap/`), as a mod does,
+  a map one does not own goes in the game's content folder (`Maps/<Map>/openbus-realmap/`), as a mod does,
   so the OMSI 2 installation is never written to. The root with the most priority wins.
 - Other files an author may put in the folder are ignored.
 
@@ -73,7 +73,7 @@ light_water = #9cc3d6
 
 Positions are **metres of the author's tile grid**, the numbers OMSI 2 itself shows for the map's
 objects: `x = tile_column * grid + position_in_tile`, `y = tile_row * grid + position_in_tile`, x east,
-y north. openOMSI turns each position into its own game metres with the grid it uses for the map
+y north. openBus turns each position into its own game metres with the grid it uses for the map
 (`omsi_map::tile_local_to_world`), which is why the manifest states `grid`: a `[worldcoordinates]` map's
 grid is not 300 m. No latitude or longitude is stored, so a map may be bent, shortened or fictional. The
 file stores positions as `f32` offsets from an `origin` (an `f64` pair) to keep precision on large maps.
@@ -113,15 +113,15 @@ u32  n_labels  ; n_labels x { u8 kind, u8 rank, u32 name, f32 x, f32 y }   names
 - Everything that is wrong ends in "no package": a short file, a wrong magic or version, a chunk outside
   the file. The reader checks every length before reading and never panics on a bad file.
 
-## 5. What openOMSI does with it
+## 5. What openBus does with it
 
-At the map's load, in the background step that reads the road network, openOMSI parses the manifest and
+At the map's load, in the background step that reads the road network, openBus parses the manifest and
 the index of `surface.oms`. The small map (Shift+N) builds the chunks within its radius around the bus;
 the city map (Shift+M) builds all of them once. Both draw the surface **under the roads**, on the map's own
 ground colour and under the map's own layers, in the dark or light look, and the city map shows the credit.
 The package is drawn as it is, and nothing is fetched from the network.
 
-Settings (`~/.openomsi/settings.cfg`, the launcher's settings page and the pause menu): `nav_surface`
+Settings (`~/.openbus/settings.cfg`, the launcher's settings page and the pause menu): `nav_surface`
 (on by default) draws the surface; `nav_light` (off) gives the maps a light look.
 
 ## 6. Names
@@ -160,7 +160,7 @@ watermark in its box while zoomed out.
 
 The named streets are lines of class 3 (the name) or 4 (the name and the limits: `width_m` is the limit in km/h,
 `flags` the limit of heavy vehicles, 0 for the same or none) in `surface.oms`; the nearest piece within 30 m of the
-bus tells the street. With regions or named streets, openOMSI shows a **row under the next stop** of the small map
+bus tells the street. With regions or named streets, openBus shows a **row under the next stop** of the small map
 with the municipality and the street, and, on the city map, the municipality, "You are on: <street>" and the
 street's limit as a road sign (the heavy vehicles' limit smaller, when it is another). Without them none of it
 appears.
@@ -207,21 +207,21 @@ button, and a reader that does not know classes 5 and 6 skips them.
 
 The city map has a **compass**, bottom right, whose red tip points to real north (where the package's `north` says it
 lies; without it, the map's own up). A click on it changes how the map is turned: **Map** (as the map is drawn, the
-way openOMSI always showed it), **North** (real north up) or **Heading** (the way the bus faces up, the view turning
+way openBus always showed it), **North** (real north up) or **Heading** (the way the bus faces up, the view turning
 smoothly with it). The street names, the stops, the vehicles, the route and the houses turn with the map, and the
 mouse still drags and zooms where it points.
 
 ## 12. Trying it
 
-- **The example in this repository**, `docs/examples/openomsi-realmap/`: a few made-up shapes (a lake, a
+- **The example in this repository**, `docs/examples/openbus-realmap/`: a few made-up shapes (a lake, a
   river, a railway, a border, a park, a wood, a hill with its contour lines), three names, a street with a 30 km/h limit, two icons (a stop and a
   station), one region and three lines (two bus lines and a tram), in the tile grid of the tutorial map **Grundorf**,
   about 6 KB in all, with no data of
-  OMSI 2 or OpenStreetMap. Copy the folder to `Maps/Grundorf/openomsi-realmap/` in the content folder, start
+  OMSI 2 or OpenStreetMap. Copy the folder to `Maps/Grundorf/openbus-realmap/` in the content folder, start
   Grundorf and open the navigator (Shift+N) and the city map (Shift+M): near the start of the map the row under the
   next stop says "Exampleton | Example Street".
 - **Real packages and the generator** that makes them are not in this repository (their data is
   OpenStreetMap's, under the ODbL, a different licence from this project's). They live in
-  [lmonteirotech/openomsi-map-packages](https://github.com/lmonteirotech/openomsi-map-packages): its
+  [lmonteirotech/openbus-map-packages](https://github.com/lmonteirotech/openbus-map-packages): its
   releases hold test packages (Berlin-Spandau and Projekt Szczecin) and its README explains how to make a
   package for any map.

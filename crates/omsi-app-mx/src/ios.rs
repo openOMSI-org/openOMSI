@@ -1,17 +1,17 @@
-//! openOMSI on an iPhone or an iPad: the program the Swift app's `main` hands over to.
+//! openBus on an iPhone or an iPad: the program the Swift app's `main` hands over to.
 //!
 //! The app is the Swift one (`apple/`): it keeps UIKit's scene life cycle, and its scene
 //! shows the launcher made for Apple's systems (SwiftUI, `apple/Shared`). The game is this
-//! library: `openomsi_ios_main` runs winit's event loop (which is UIKit's `UIApplicationMain`),
+//! library: `openbus_ios_main` runs winit's event loop (which is UIKit's `UIApplicationMain`),
 //! and as on Android the launcher and the game share one process - the launcher hands the
 //! game's command line over (`omsi_launcher_lib::launch` keeps it, see `apple_bridge`), the
 //! game opens its window on the same scene, in front of the launcher's, and when the session
 //! ends (the menu's Quit) that window goes and the launcher is there again.
 //!
 //! What lives where on the device: the app's own data (settings, profiles, sessions, logs)
-//! in `Library/Application Support/openOMSI` (`HOME` for the rest of the program); the
+//! in `Library/Application Support/openBus` (`HOME` for the rest of the program); the
 //! original game, the mods and the screenshots in the app's Documents, which the Files app
-//! shows as "openOMSI" (on the device, and from a Mac's Finder over a cable).
+//! shows as "openBus" (on the device, and from a Mac's Finder over a cable).
 
 use super::*;
 use std::sync::Mutex;
@@ -26,7 +26,7 @@ static PROXY: Mutex<Option<EventLoopProxy<()>>> = Mutex::new(None);
 
 /// Where the original game, the mods and the screenshots go: the app's Documents.
 pub fn documents() -> PathBuf {
-    PathBuf::from(std::env::var_os("OPENOMSI_CONTAINER").unwrap_or_default()).join("Documents")
+    PathBuf::from(std::env::var_os("OPENBUS_CONTAINER").unwrap_or_default()).join("Documents")
 }
 
 /// Wake the event loop (from any thread).
@@ -38,11 +38,11 @@ pub(crate) fn wake() {
 
 /// The Swift app's `main`: never returns (UIKit's run loop runs the app from here on).
 // (exported by the wgpu game, which hands over to this one with mX Graphics on)
-pub extern "C" fn openomsi_ios_main() {
+pub extern "C" fn openbus_ios_main() {
     // HOME is the app's container on iOS: its root may not be written, its Library may
     let container = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
-    unsafe { std::env::set_var("OPENOMSI_CONTAINER", &container) };
-    let home = container.join("Library/Application Support/openOMSI");
+    unsafe { std::env::set_var("OPENBUS_CONTAINER", &container) };
+    let home = container.join("Library/Application Support/openBus");
     let _ = std::fs::create_dir_all(&home);
     unsafe { std::env::set_var("HOME", &home) };
     let content = documents();
@@ -67,10 +67,10 @@ pub extern "C" fn openomsi_ios_main() {
         }
     }));
     init_log();
-    log::info!("openOMSI {VERSION} for iOS, build {BUILD}");
+    log::info!("openBus {VERSION} for iOS, build {BUILD}");
     log::info!("home {}, content {}", home.display(), content.display());
     let _ = std::fs::write(content.join("README.txt"), README);
-    // `openOMSI/env.txt`: the OMSI_* switches a computer takes from its environment, one
+    // `openBus/env.txt`: the OMSI_* switches a computer takes from its environment, one
     // `NAME=value` a line (a phone has no environment to set; for looking into problems)
     if let Ok(t) = std::fs::read_to_string(content.join("env.txt")) {
         for line in t.lines() {
@@ -111,7 +111,7 @@ pub extern "C" fn openomsi_ios_main() {
 
 /// The Swift app's scene is connected: windows can be shown on it.
 // (exported by the wgpu game, which hands over to this one with mX Graphics on)
-pub extern "C" fn openomsi_ios_scene_ready() {
+pub extern "C" fn openbus_ios_scene_ready() {
     SCENE_READY.store(true, Ordering::Relaxed);
     wake();
 }
@@ -212,15 +212,15 @@ pub(crate) fn previous_run_crash() -> Option<(String, String)> {
     ))
 }
 
-const README: &str = "openOMSI\n\
+const README: &str = "openBus\n\
 \n\
 Put a complete copy of OMSI 2 (the folder with Omsi.exe, maps and Vehicles in it) into this\n\
 folder as \"OMSI 2\" - with the Files app, or from a Mac's Finder (the iPhone or iPad in the\n\
-sidebar, Files, openOMSI) - and choose it in the launcher under Setup. A copy on iCloud Drive\n\
+sidebar, Files, openBus) - and choose it in the launcher under Setup. A copy on iCloud Drive\n\
 or a USB drive can be chosen there as well.\n\
-Mods: copy them into openOMSI/Mods (they are installed when the launcher opens), or install a\n\
+Mods: copy them into openBus/Mods (they are installed when the launcher opens), or install a\n\
 folder or a .zip, .7z or .rar from the launcher's Mods page. Screenshots are written to\n\
-openOMSI/Screenshots.\n";
+openBus/Screenshots.\n";
 
 // --- the Swift launcher, or the game in front of it -----------------------------------------
 
@@ -231,7 +231,7 @@ struct Shell {
 /// A window for the game, put on the Swift app's scene in front of the Swift launcher.
 fn new_window(event_loop: &ActiveEventLoop) -> Option<Arc<Window>> {
     let attrs = Window::default_attributes()
-        .with_title("openOMSI")
+        .with_title("openBus")
         // (the game's own controls reach the edges: the system's swipes there wait for a
         // second swipe, and the home bar keeps out of the picture)
         .with_prefers_home_indicator_hidden(true)
@@ -282,7 +282,7 @@ impl Shell {
             return;
         };
         log::info!("starting the game: {}", line.join(" "));
-        let mut argv: Vec<String> = std::iter::once("openomsi".to_string())
+        let mut argv: Vec<String> = std::iter::once("openbus".to_string())
             .chain(line)
             .collect();
         // (`OMSI_APPLE_EXIT_AFTER=secs`: the session ends by itself, for checking the way back

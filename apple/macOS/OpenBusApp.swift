@@ -1,11 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// openOMSI on a Mac: this app is the launcher (SwiftUI); the game is the
-/// `openomsi` program beside it in the bundle, which the launcher starts as a process of its
+/// openBus on a Mac: this app is the launcher (SwiftUI); the game is the
+/// `openbus` program beside it in the bundle, which the launcher starts as a process of its
 /// own for every drive, as on the other computers.
 @main
-struct OpenOMSIApp: App {
+struct OpenBusApp: App {
     @State private var store = LauncherStore()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
@@ -15,7 +15,7 @@ struct OpenOMSIApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("openOMSI") {
+        WindowGroup("openBus") {
             LauncherRoot()
                 .environment(store)
                 .frame(minWidth: 1080, minHeight: 680)

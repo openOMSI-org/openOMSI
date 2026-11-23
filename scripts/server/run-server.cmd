@@ -1,5 +1,5 @@
 @echo off
-rem The openOMSI dedicated server with questions (a double click): see run-server.ps1.
+rem The openBus dedicated server with questions (a double click): see run-server.ps1.
 rem   run-server.cmd           the map (and the rest the first time)
 rem   run-server.cmd -Setup    the folder and the settings again
 rem (start.cmd stays as it was: start.cmd C:\path\to\OMSI2 [server.cfg])

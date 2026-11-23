@@ -141,10 +141,10 @@ fn place(src: &Path, dst: &Path, out: &mut Packed) -> Result<u64> {
     Ok(data.len() as u64)
 }
 
-/// What was packed, beside it (`openomsi-map-pack.txt`): the map, the sizes, what is missing.
+/// What was packed, beside it (`openbus-map-pack.txt`): the map, the sizes, what is missing.
 fn write_report(to: &Path, cfg: &str, p: &Packed) -> Result<()> {
     let mut text = format!(
-        "openOMSI map pack\nmap = {cfg}\nfiles = {}\nbytes = {}\nlinked = {}\ncopied = {}\nkept = {}\n",
+        "openBus map pack\nmap = {cfg}\nfiles = {}\nbytes = {}\nlinked = {}\ncopied = {}\nkept = {}\n",
         p.files, p.bytes, p.linked, p.copied, p.kept
     );
     if !p.missing.is_empty() {
@@ -154,7 +154,7 @@ fn write_report(to: &Path, cfg: &str, p: &Packed) -> Result<()> {
             text.push('\n');
         }
     }
-    let name = format!("openomsi-map-pack-{}.txt", cfg.split('/').nth(1).unwrap_or("map").replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "_"));
+    let name = format!("openbus-map-pack-{}.txt", cfg.split('/').nth(1).unwrap_or("map").replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "_"));
     std::fs::write(to.join(name), text)?;
     Ok(())
 }

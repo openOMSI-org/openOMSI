@@ -28,9 +28,9 @@ impl Dispatch for Game {
 /// `oop_callback` logs the arguments it gets.
 const GUEST: &str = r#"
 (module
-  (import "openomsi" "call" (func $call (param i32 i32 i32 i32) (result i64)))
-  (import "openomsi" "last_error" (func $last_error (result i64)))
-  (import "openomsi" "log" (func $log (param i32 i32 i32)))
+  (import "openbus" "call" (func $call (param i32 i32 i32 i32) (result i64)))
+  (import "openbus" "last_error" (func $last_error (result i64)))
+  (import "openbus" "log" (func $log (param i32 i32 i32)))
   (memory (export "memory") 2)
   (global $next (mut i32) (i32.const 4096))
   (data (i32.const 0) "speed")
@@ -104,7 +104,7 @@ fn modules_of_another_abi_or_without_one_are_refused() {
       (func (export "oop_alloc") (param i32) (result i32) (i32.const 0))
       (func (export "oop_free") (param i32 i32)))"#;
     let e = WasmPlugin::load("future", other.as_bytes()).err().expect("refused");
-    assert!(e.contains("ABI 2") && e.contains("update openOMSI"), "{e}");
+    assert!(e.contains("ABI 2") && e.contains("update openBus"), "{e}");
     let none = r#"(module (memory (export "memory") 1))"#;
     let e = WasmPlugin::load("plain", none.as_bytes()).err().expect("refused");
     assert!(e.contains("oop_abi"), "{e}");
@@ -115,7 +115,7 @@ fn modules_of_another_abi_or_without_one_are_refused() {
 fn memory_is_held_to_its_limit() {
     // 5000 pages = 312 MB, over the 256 MB limit: memory.grow answers -1
     let wat = r#"(module
-      (import "openomsi" "log" (func $log (param i32 i32 i32)))
+      (import "openbus" "log" (func $log (param i32 i32 i32)))
       (memory (export "memory") 1)
       (data (i32.const 0) "refused")
       (func (export "oop_abi") (result i32) (i32.const 1))
@@ -133,7 +133,7 @@ fn memory_is_held_to_its_limit() {
 #[test]
 fn bad_pointers_trap_instead_of_reading_the_host() {
     let wat = r#"(module
-      (import "openomsi" "log" (func $log (param i32 i32 i32)))
+      (import "openbus" "log" (func $log (param i32 i32 i32)))
       (memory (export "memory") 1)
       (func (export "oop_abi") (result i32) (i32.const 1))
       (func (export "oop_alloc") (param i32) (result i32) (i32.const 0))

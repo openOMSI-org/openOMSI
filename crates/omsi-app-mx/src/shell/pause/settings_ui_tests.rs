@@ -278,14 +278,14 @@ fn pause_nested_vehicle_and_world_draw_at_all_window_sizes() {
 }
 
 #[test]
-#[ignore = "Requires a graphics adapter and OPENOMSI_PAUSE_PREVIEW output directory"]
+#[ignore = "Requires a graphics adapter and OPENBUS_PAUSE_PREVIEW output directory"]
 fn pause_nested_write_preview() {
     omsi_ui::i18n::set_lookup(|lang, text| {
         crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned())
     });
     omsi_ui::i18n::set_language("zh-tw");
     let out = std::path::PathBuf::from(
-        std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set preview directory"),
+        std::env::var_os("OPENBUS_PAUSE_PREVIEW").expect("set preview directory"),
     );
     std::fs::create_dir_all(&out).unwrap();
     let instance = mx::Instance::default();
@@ -423,7 +423,7 @@ fn pause_settings_headings_draw_accent_markers_without_actions() {
 }
 
 #[test]
-#[ignore = "Requires a graphics adapter and OPENOMSI_PAUSE_PREVIEW output directory"]
+#[ignore = "Requires a graphics adapter and OPENBUS_PAUSE_PREVIEW output directory"]
 fn pause_section_markers_write_preview() {
     omsi_ui::i18n::set_lookup(|lang, text| {
         crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned())
@@ -514,7 +514,7 @@ fn pause_section_markers_write_preview() {
         row("Time speed", 'v', "x1", "How fast the world's clock runs"),
     ));
     let out = std::path::PathBuf::from(
-        std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set preview directory"),
+        std::env::var_os("OPENBUS_PAUSE_PREVIEW").expect("set preview directory"),
     );
     std::fs::create_dir_all(&out).unwrap();
     let instance = mx::Instance::default();
@@ -792,14 +792,14 @@ fn pause_read_only_date_does_not_open_a_calendar() {
 }
 
 #[test]
-#[ignore = "Requires a graphics adapter and OPENOMSI_PAUSE_PREVIEW output directory"]
+#[ignore = "Requires a graphics adapter and OPENBUS_PAUSE_PREVIEW output directory"]
 fn render_pause_date_calendar_preview() {
     omsi_ui::i18n::set_lookup(|lang, text| {
         crate::_rust_i18n_try_translate(lang, text).map(|value| value.into_owned())
     });
     omsi_ui::i18n::set_language("zh-tw");
     let out = std::path::PathBuf::from(
-        std::env::var_os("OPENOMSI_PAUSE_PREVIEW").expect("set preview directory"),
+        std::env::var_os("OPENBUS_PAUSE_PREVIEW").expect("set preview directory"),
     );
     std::fs::create_dir_all(&out).unwrap();
     let instance = mx::Instance::default();
@@ -928,7 +928,7 @@ fn settings_search_closes_phone_keyboard_and_keeps_desktop_text() {
     use clap::Parser;
     use winit::keyboard::KeyCode as K;
     let mut app = crate::assemble_app(
-        crate::cli::Args::parse_from(["openomsi"]),
+        crate::cli::Args::parse_from(["openbus"]),
         crate::settings::Settings::default(),
     );
     app.menus.game_menu = Some(0);

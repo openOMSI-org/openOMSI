@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "openOMSI Launcher",
+  "productName": "openBus Launcher",
   "version": "0.2.33",
-  "identifier": "io.github.turbo-devv.openomsi.launcher",
+  "identifier": "io.github.rafaelkaiz.openbus.launcher",
   "build": {
     "frontendDist": "../ui"
   },
@@ -24,9 +24,9 @@
   "bundle": {
     "active": false,
     "icon": [
-      "../../assets/icons/app/openomsi-512.png",
-      "../../assets/icons/app/openomsi.icns",
-      "../../assets/icons/app/openomsi.ico"
+      "../../assets/icons/app/openbus-512.png",
+      "../../assets/icons/app/openbus.icns",
+      "../../assets/icons/app/openbus.ico"
     ]
   }
 }

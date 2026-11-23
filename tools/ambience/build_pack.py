@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the openOMSI ambience sound pack from the raw recordings.
+"""Build the openBus ambience sound pack from the raw recordings.
 
     python3 -E build_pack.py <raw dir> <assign.csv> <slots.toml> <out dir> [--bed-seconds 45] [--jobs N]
 
@@ -697,7 +697,7 @@ def write_credits(path, sources):
     groups = [("CC0", "CC0 1.0 (public domain dedication)"), ("CC BY", "CC BY (attribution)"),
               ("CC BY-SA", "CC BY-SA (attribution, share-alike)"), ("Public domain", "Public domain")]
     lines = ["# Ambience sound credits", "",
-             "The openOMSI ambience pack is cut from the field recordings below. Every file was "
+             "The openBus ambience pack is cut from the field recordings below. Every file was "
              "trimmed, level-normalised and re-encoded (32 kHz MP3, impulse responses 32 kHz FLAC); "
              "nothing else was changed. The licence of each recording applies to the takes cut from it "
              "(listed in pack.json under `source`).", ""]

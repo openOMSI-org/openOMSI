@@ -69,7 +69,7 @@ pub struct Seat {
     /// among the `[passpos]` and `[drivpos]`, the sections behind counted on after those
     /// in front (0x7d39a4 asks the next one for a number past its own places).
     pub omsi_seat: usize,
-    /// openOMSI's variables of the place (#721): the one that switches it on and off, and the
+    /// openBus's variables of the place (#721): the one that switches it on and off, and the
     /// one its occupancy is written into.
     pub switch_var: Option<String>,
     pub taken_var: Option<String>,

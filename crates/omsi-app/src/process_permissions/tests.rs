@@ -4,10 +4,10 @@ fn example() -> ProcessPrompt {
     ProcessPrompt {
         id: 7,
         plugin: "Example plugin".into(),
-        entry: "C:/Games/openOMSI/Plugins/Example/main.lua".into(),
-        file: "C:/Games/openOMSI/Plugins/Example/RenderHelper.exe".into(),
+        entry: "C:/Games/openBus/Plugins/Example/main.lua".into(),
+        file: "C:/Games/openBus/Plugins/Example/RenderHelper.exe".into(),
         args: vec!["--render".into(), "dashboard".into()],
-        cwd: Some("C:/Games/openOMSI".into()),
+        cwd: Some("C:/Games/openBus".into()),
     }
 }
 
@@ -170,7 +170,7 @@ fn collapsed_summary_hides_paths_and_arguments_but_keeps_the_warning() {
                 && text.contains("Always allow remembers")
         );
         let details = dialog::content(&prompt, true, str::to_owned);
-        assert!(details.contains("C:/Games/openOMSI/Plugins/Example/RenderHelper.exe"));
+        assert!(details.contains("C:/Games/openBus/Plugins/Example/RenderHelper.exe"));
         assert!(details.contains(&format!("{:?}", prompt.args)));
     }
     prompt.plugin = "Literal {app} {count}\n\u{202e}".into();

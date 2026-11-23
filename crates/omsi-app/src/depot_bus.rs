@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn the_outing_goes_on_across_a_driver_change() {
-        let mut args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]);
+        let mut args = <crate::cli::Args as clap::Parser>::parse_from(["openbus"]);
         args.map = "maps/Grundorf".into();
         let mut old = Career::default();
         (old.metres, old.seconds, old.stops[0], old.tickets, old.crashes[0]) = (5000.0, 600.0, 4, (3, 6.0), 1);

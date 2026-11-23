@@ -402,7 +402,7 @@ mod tests {
     use super::*;
 
     fn app() -> crate::App {
-        let args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]);
+        let args = <crate::cli::Args as clap::Parser>::parse_from(["openbus"]);
         crate::assemble_app(args, Default::default())
     }
 
@@ -508,7 +508,7 @@ mod tests {
                 off: vec!["map"],
                 lit: vec!["arrows"],
             },
-            Palette::OPENOMSI,
+            Palette::OPENBUS,
         );
         let tiles: Vec<&Element> = p
             .children
@@ -559,7 +559,7 @@ mod tests {
 
     #[test]
     fn game_panels_follow_the_light_theme_setting() {
-        let args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]);
+        let args = <crate::cli::Args as clap::Parser>::parse_from(["openbus"]);
         let mut app = crate::assemble_app(args, Default::default());
         app.settings.ui_theme = "light".into();
         toggle(&mut app);

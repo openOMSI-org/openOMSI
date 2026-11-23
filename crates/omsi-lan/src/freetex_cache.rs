@@ -42,7 +42,7 @@ pub(super) fn identity(path: &Path, image: &Image) -> Option<[u8; 32]> {
         return None;
     }
     let mut hash = Sha256::new();
-    hash.update(b"openOMSI freetex SHA256 v1\0");
+    hash.update(b"openBus freetex SHA256 v1\0");
     hash.update(file_hash.finalize());
     hash.update(image.width.to_le_bytes());
     hash.update(image.height.to_le_bytes());

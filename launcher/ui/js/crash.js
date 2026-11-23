@@ -5,7 +5,7 @@ import { call, on } from './api.js';
 import { Button, Dialog } from './ui.js';
 import { saveSettings } from './data.js';
 
-const REPO = 'https://github.com/openOMSI-org/openOMSI';
+const REPO = 'https://github.com/rafaelkaiz/openBus';
 
 export function watchGameEnds() {
   on('game-crashed', (c) => set({ crash: c }));
@@ -13,14 +13,14 @@ export function watchGameEnds() {
 }
 
 function report(c) {
-  return `openOMSI ${c.version} (${c.os})\n${c.what}\n\n${c.tail}`;
+  return `openBus ${c.version} (${c.os})\n${c.what}\n\n${c.tail}`;
 }
 
 function issueUrl(c) {
   const cut = c.tail.indexOf(`\n${c.gap}\n`);
   const [machine, end] = cut >= 0 ? [c.tail.slice(0, cut), c.tail.slice(cut + c.gap.length + 2)] : ['', c.tail];
   const about = machine ? `The computer:\n\`\`\`\n${machine}\n\`\`\`\n\n` : '';
-  const body = (lines) => `openOMSI ${c.version} on ${c.os}\n\n\`\`\`\n${c.what}\n\`\`\`\n\n${about}The end of the log:\n\`\`\`\n${lines}\n\`\`\`\n`;
+  const body = (lines) => `openBus ${c.version} on ${c.os}\n\n\`\`\`\n${c.what}\n\`\`\`\n\n${about}The end of the log:\n\`\`\`\n${lines}\n\`\`\`\n`;
   const lines = end.split('\n');
   let shown = 0;
   while (shown < lines.length && encodeURIComponent(body(lines.slice(lines.length - shown - 1).join('\n'))).length <= 6500) shown++;

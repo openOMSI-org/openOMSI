@@ -1,9 +1,9 @@
 [package]
-name = "openomsi-launcher-app"
+name = "openbus-launcher-app"
 version = "0.2.33"
 edition = "2024"
 license = "AGPL-3.0-only"
-description = "openOMSI's desktop launcher: a Tauri 2 window over omsi-launcher-core"
+description = "openBus's desktop launcher: a Tauri 2 window over omsi-launcher-core"
 publish = false
 
 # (a workspace of its own: the game's workspace leaves this folder out, see its `exclude`,
@@ -11,7 +11,7 @@ publish = false
 [workspace]
 
 [[bin]]
-name = "openomsi-launcher-app"
+name = "openbus-launcher-app"
 path = "src/main.rs"
 
 [build-dependencies]
@@ -39,7 +39,7 @@ strip = "debuginfo"
 opt-level = 1
 debug = false
 
-# Tauri from the organisation's fork (openOMSI-org/tauri-openomsi, branch openomsi/v2 =
+# Tauri from the organisation's fork (openOMSI-org/tauri-openomsi, branch openbus/v2 =
 # tauri-v2.12.3 plus fixes): an application webview instead of a browser tab (`app_mode`), the
 # window shown with its first page instead of white (`show_when_loaded`), WebKitGTK's blank
 # window on NVIDIA. Every crate of the fork that Cargo.lock lists is patched.

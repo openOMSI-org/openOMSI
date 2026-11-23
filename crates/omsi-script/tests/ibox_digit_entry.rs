@@ -1,4 +1,4 @@
-//! Synthetic ibox digit-entry regression tests (original openOMSI fixture — not an add-on extract).
+//! Synthetic ibox digit-entry regression tests (original openBus fixture — not an add-on extract).
 //!
 //! Models the stock float/`$IntToStr` behaviours that Aachen-style units share so
 //! `compat::aachen_ibox_route_pad` can rewrite them: digit 0 is mouseevent `ibox_taste_D11`

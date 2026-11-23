@@ -1,5 +1,5 @@
 //! The user's settings: graphics and gameplay switches, kept as `key=value` lines in
-//! `~/.openomsi/settings.cfg` (the launcher writes the same file). Anything missing
+//! `~/.openbus/settings.cfg` (the launcher writes the same file). Anything missing
 //! keeps its default, so an old file never breaks a new build.
 
 use std::path::PathBuf;
@@ -158,7 +158,7 @@ pub struct Settings {
     /// Shift+right zooms. Off, the right button zooms and the middle one turns the view
     /// (TForm_main.Panel1MouseMove 0x82c5f8) - OMSI's default, but on here by default: a
     /// laptop's touchpad has no middle button to look round with, and right-drag looking
-    /// is what openOMSI always did.
+    /// is what openBus always did.
     pub alt_view: bool,
     /// Precision zoom: the both-drag zoom follows the FOV-multiplier curve
     /// instead of OMSI's linear way over 500 px. Off (OMSI's way).
@@ -281,7 +281,7 @@ pub struct Settings {
     pub ui_scale: f32,
     /// Ordered pause-menu action IDs as JSON; "default" keeps the built-in shortcuts.
     pub pause_quick_actions: String,
-    /// The interface theme (`themes`): its id, "" for openOMSI's own look.
+    /// The interface theme (`themes`): its id, "" for openBus's own look.
     pub ui_theme_pack: String,
     /// The interface grows with a window taller than 1080 lines (`ui::size_factor`); off,
     /// it keeps its size on any window, as before.
@@ -337,7 +337,7 @@ pub struct Settings {
     /// `sound_scenery`), 0..1.
     pub vol_ai: f32,
     pub vol_scenery: f32,
-    /// openOMSI's ambience from recordings (the place, the weather, the creatures, the town's
+    /// openBus's ambience from recordings (the place, the weather, the creatures, the town's
     /// life and the map's objects - see `soundscape`), and its volume 0..1.
     pub ambient: bool,
     pub vol_ambient: f32,
@@ -439,7 +439,7 @@ pub struct Settings {
     /// `dx12`, `gl` or `angle` (OpenGL ES on ANGLE over DirectX 11, Windows; see
     /// `startup::backend_order`).
     pub graphics_api: String,
-    /// mX Graphics (Experimental, read on a Mac only): the game drawn by mX, openOMSI's own
+    /// mX Graphics (Experimental, read on a Mac only): the game drawn by mX, openBus's own
     /// graphics library, through wgpu; where mX cannot open a device, wgpu's own backends take
     /// over (`startup::game_graphics_instance`; `OMSI_MX` overrides it on every system).
     pub mx_graphics: bool,
@@ -634,10 +634,10 @@ impl Settings {
         cfg!(windows) && (self.vr || omsi_cfg::flags::OMSI_OPENXR.is_set())
     }
 
-    /// `~/.openomsi/settings.cfg` (or `%USERPROFILE%` on Windows).
+    /// `~/.openbus/settings.cfg` (or `%USERPROFILE%` on Windows).
     pub fn path() -> Option<PathBuf> {
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-        Some(PathBuf::from(home).join(".openomsi").join("settings.cfg"))
+        Some(PathBuf::from(home).join(".openbus").join("settings.cfg"))
     }
 
     /// The window's size in pixels the settings ask for (`resolution=WxH`, #904); None:
@@ -1095,7 +1095,7 @@ impl Settings {
     #[cfg(test)]
     pub fn to_text(&self) -> String {
         let mut text = format!(
-            "# openOMSI settings\nversion={}\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nshadow_blobs={}\nlamp_shadows={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nvr={}\nvr_scale={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\npost_aa={}\nrender_scale={}\nlanguage={}\ntexture_compression={}\nvideo_memory={}\nauto_clutch={}\nmomentary_gears={}\nmin_obj_size={}\nmax_obj_dist={}\nmax_fps={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\nmirror_hud={}\nmirror_refresh={}\ndoppler={}\ndriver={}\ndriverview_smooth={}\n",
+            "# openBus settings\nversion={}\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nshadow_blobs={}\nlamp_shadows={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nvr={}\nvr_scale={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\npost_aa={}\nrender_scale={}\nlanguage={}\ntexture_compression={}\nvideo_memory={}\nauto_clutch={}\nmomentary_gears={}\nmin_obj_size={}\nmax_obj_dist={}\nmax_fps={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\nmirror_hud={}\nmirror_refresh={}\ndoppler={}\ndriver={}\ndriverview_smooth={}\n",
             SETTINGS_VERSION, self.msaa, self.anisotropy, self.ssao as u8, self.shadows as u8, self.shadow_size, self.shadow_blobs as u8, self.lamp_shadows as u8, self.navigator as u8, self.ui_opacity, self.navigator_corner, self.boarding, self.detail_textures as u8, self.exact_fare as u8, self.enhanced as u8, self.graphics, self.vr as u8, self.vr_scale, self.fullscreen as u8, self.vsync as u8, self.volume, self.drive_keys, self.post_aa, self.render_scale_text(), self.language, self.texture_compression as u8, self.video_memory, self.auto_clutch as u8, self.momentary_gears as u8, self.min_obj_size, if self.max_obj_dist < 0.0 { "auto".to_string() } else { self.max_obj_dist.to_string() }, self.max_fps, self.chat as u8, self.tooltips as u8, self.name_tags as u8, self.show_fps as u8, self.clouds as u8, self.pax_density, self.vol_ai, self.vol_scenery, self.mirror_size, self.mirror_hud, self.mirror_refresh, self.doppler as u8, self.driver as u8, self.driverview_smooth as u8
         );
         text.push_str(&format!(
@@ -1394,7 +1394,7 @@ impl Settings {
 }
 
 /// The player's own turn of a bus's mirrors (degrees yaw, pitch per `[add_camera_reflexion]`),
-/// kept per `.bus` file in `~/.openomsi/mirrors.cfg` as `<bus file>|<mirror>=<yaw>,<pitch>`.
+/// kept per `.bus` file in `~/.openbus/mirrors.cfg` as `<bus file>|<mirror>=<yaw>,<pitch>`.
 #[rustfmt::skip]
 pub fn mirror_offsets(bus: &std::path::Path) -> Vec<[f32; 2]> {
     let key = bus.to_string_lossy().to_ascii_lowercase();
@@ -1543,7 +1543,7 @@ mod full_tank_tests;
 #[rustfmt::skip]
 mod road_snow_tests;
 
-/// The driver's seat per bus (`~/.openomsi/seats.cfg`, a line `bus|x|y|z|pitch` each, the
+/// The driver's seat per bus (`~/.openbus/seats.cfg`, a line `bus|x|y|z|pitch` each, the
 /// bus by its `.bus` file relative to the installation, lower case). The seat set in the
 /// menu was one for every bus: fitted to a Solaris, every other bus put the driver
 /// somewhere else than its `.bus` file does (#1355). A bus that has none takes the

@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn a_player_who_played_before_is_no_first_start() {
-        let dir = std::env::temp_dir().join(format!("openomsi-first-start-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus-first-start-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("cache")).unwrap();
         assert!(first_start(&dir));
         std::fs::create_dir_all(dir.join("sessions")).unwrap();
@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn the_first_picture_is_drawn_with_the_preset() {
         let mut app = crate::assemble_app(
-            crate::cli::Args::parse_from(["openomsi"]),
+            crate::cli::Args::parse_from(["openbus"]),
             crate::settings::Settings::from_text("graphics=vanilla_plus\nmirror_size=256\n"),
         );
         take(
@@ -189,7 +189,7 @@ mod tests {
             crate::scene::host::GraphicsKind::Classic
         );
         let mut app = crate::assemble_app(
-            crate::cli::Args::parse_from(["openomsi"]),
+            crate::cli::Args::parse_from(["openbus"]),
             crate::settings::Settings::from_text("graphics=vanilla_plus\n"),
         );
         take(

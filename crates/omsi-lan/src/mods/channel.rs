@@ -39,7 +39,7 @@ pub(crate) fn proven(session: u64, client: &str, host: &str, public: &str, sig: 
     }
 }
 /// What a host tells a game of the old protocol.
-pub(crate) const OLD_PEER: &str = "ERR the host's openOMSI sends its mods encrypted (OMSIMODS/3): update openOMSI to join with them";
+pub(crate) const OLD_PEER: &str = "ERR the host's openBus sends its mods encrypted (OMSIMODS/3): update openBus to join with them";
 
 /// The most plain bytes one frame carries.
 const FRAME: usize = 64 * 1024;
@@ -70,7 +70,7 @@ impl Handshake {
     pub(crate) fn finish(self, session: u64, client: bool, peer: &str) -> io::Result<(LessSafeKey, LessSafeKey)> {
         let peer = unhex(peer).filter(|p| p.len() == 32).ok_or_else(|| bad("a bad key in the greeting"))?;
         let (client_pub, server_pub) = if client { (self.public.to_vec(), peer.clone()) } else { (peer.clone(), self.public.to_vec()) };
-        let mut salt = b"openOMSI LAN mods 2 ".to_vec();
+        let mut salt = b"openBus LAN mods 2 ".to_vec();
         salt.extend_from_slice(&session.to_be_bytes());
         let derive = |shared: &[u8]| -> Result<(LessSafeKey, LessSafeKey), ring::error::Unspecified> {
             let prk = Salt::new(HKDF_SHA256, &salt).extract(shared);

@@ -6,12 +6,12 @@ use serde_json::{json, Value};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
-const COPY_MARK: &str = ".openomsi-ttdata-copy";
-const CHRONO_CFG_MARK: &str = ".openomsi-chrono-cfg-copy";
+const COPY_MARK: &str = ".openbus-ttdata-copy";
+const CHRONO_CFG_MARK: &str = ".openbus-chrono-cfg-copy";
 /// The trips made in a map's own TTData folder (no copy of it): one name a line, so that a
 /// reset can take them away again.
-const NEW_TRIPS: &str = ".openomsi-new-trips";
-const PARTIAL: &str = "TTData.openomsi-partial";
+const NEW_TRIPS: &str = ".openbus-new-trips";
+const PARTIAL: &str = "TTData.openbus-partial";
 // (the quote is written as its code, so that a tool reading the file's string literals keeps in step)
 const NOT_IN_NAMES: [char; 9] = ['/', '\\', ':', '*', '?', '\u{22}', '<', '>', '|'];
 
@@ -371,7 +371,7 @@ fn ensure_writable_tt(place: &Place, layer_tt: &Path) -> Result<(PathBuf, bool),
             copy_whole(layer_tt, &dir)?;
         } else {
             std::fs::create_dir_all(&dir).map_err(err)?;
-            std::fs::write(dir.join(COPY_MARK), b"TTData copied by the openOMSI launcher's timetable editor; its reset deletes this folder\n").map_err(err)?;
+            std::fs::write(dir.join(COPY_MARK), b"TTData copied by the openBus launcher's timetable editor; its reset deletes this folder\n").map_err(err)?;
         }
         if let (Some(src_ev), Some(dst_ev)) = (layer_tt.parent(), dir.parent()) {
             let src_cfg = src_ev.join("Chrono.cfg");
@@ -417,7 +417,7 @@ fn copy_whole(original: &Path, dir: &Path) -> Result<(), String> {
             std::fs::write(partial.join(&name), bytes).map_err(err)?;
         }
     }
-    std::fs::write(partial.join(COPY_MARK), b"TTData copied by the openOMSI launcher's timetable editor; its reset deletes this folder\n").map_err(err)?;
+    std::fs::write(partial.join(COPY_MARK), b"TTData copied by the openBus launcher's timetable editor; its reset deletes this folder\n").map_err(err)?;
     std::fs::rename(&partial, dir).map_err(err)
 }
 
@@ -540,7 +540,7 @@ mod tests {
 
     fn dirs_at(name: &str, omsi: &str, content: &str) -> Dirs {
         omsi_launcher_lib::i18n::pin_language("ENG");
-        let top = std::env::temp_dir().join(format!("openomsi-timetable-{name}-{}", std::process::id()));
+        let top = std::env::temp_dir().join(format!("openbus-timetable-{name}-{}", std::process::id()));
         std::fs::remove_dir_all(&top).ok();
         let (omsi, content) = (top.join(omsi), top.join(content));
         std::fs::create_dir_all(&content).unwrap();
@@ -665,7 +665,7 @@ mod tests {
 
     #[test]
     fn a_content_folder_inside_the_omsi_folder_is_written_to() {
-        let d = dirs_at("contentinside", "OMSI 2", "OMSI 2/openOMSI");
+        let d = dirs_at("contentinside", "OMSI 2", "OMSI 2/openBus");
         let map = map_at(&d.omsi);
         let p = place(&d, &map);
         let before = snapshot(&map);

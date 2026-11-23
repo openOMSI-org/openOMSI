@@ -463,7 +463,7 @@ impl Photo {
         let iso = self.metered.map(|m| m.iso).unwrap_or(100.0);
         let model = if self.pro { exposure::SENSORS[s.sensor.min(exposure::SENSORS.len() - 1)].0 } else { "Photo mode" };
         format!(
-            "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?><x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description rdf:about=\"\" xmlns:tiff=\"http://ns.adobe.com/tiff/1.0/\" xmlns:exif=\"http://ns.adobe.com/exif/1.0/\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\" tiff:Make=\"openOMSI\" tiff:Model=\"{model}\" xmp:CreatorTool=\"openOMSI {ver}\" exif:FNumber=\"{f}\" exif:ExposureTime=\"{exposure_time}\" exif:FocalLength=\"{real:.1}\" exif:FocalLengthIn35mmFilm=\"{eq:.0}\" exif:SubjectDistance=\"{focus:.2}\"><exif:ISOSpeedRatings><rdf:Seq><rdf:li>{iso:.0}</rdf:li></rdf:Seq></exif:ISOSpeedRatings></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>",
+            "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?><x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description rdf:about=\"\" xmlns:tiff=\"http://ns.adobe.com/tiff/1.0/\" xmlns:exif=\"http://ns.adobe.com/exif/1.0/\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\" tiff:Make=\"openBus\" tiff:Model=\"{model}\" xmp:CreatorTool=\"openBus {ver}\" exif:FNumber=\"{f}\" exif:ExposureTime=\"{exposure_time}\" exif:FocalLength=\"{real:.1}\" exif:FocalLengthIn35mmFilm=\"{eq:.0}\" exif:SubjectDistance=\"{focus:.2}\"><exif:ISOSpeedRatings><rdf:Seq><rdf:li>{iso:.0}</rdf:li></rdf:Seq></exif:ISOSpeedRatings></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>",
             ver = crate::updater::current_version(),
             f = self.fstop(),
             focus = self.focus_distance(),
@@ -476,10 +476,10 @@ fn photo_path(root: &std::path::Path, suffix: &str) -> Result<std::path::PathBuf
     let dir = crate::startup::content_dir().unwrap_or_else(|| root.to_path_buf()).join("Screenshots");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let stamp = chrono_like_stamp();
-    let mut path = dir.join(format!("openOMSI_photo_{stamp}{suffix}.png"));
+    let mut path = dir.join(format!("openBus_photo_{stamp}{suffix}.png"));
     let mut n = 2;
     while path.exists() {
-        path = dir.join(format!("openOMSI_photo_{stamp}_{n}{suffix}.png"));
+        path = dir.join(format!("openBus_photo_{stamp}_{n}{suffix}.png"));
         n += 1;
     }
     Ok(path)
@@ -493,7 +493,7 @@ fn write_png(path: &std::path::Path, w: u32, h: u32, depth16: bool, data: &[u8],
     enc.set_depth(if depth16 { png::BitDepth::Sixteen } else { png::BitDepth::Eight });
     enc.set_source_srgb(png::SrgbRenderingIntent::Perceptual);
     enc.add_itxt_chunk("XML:com.adobe.xmp".into(), meta.into()).map_err(|e| e.to_string())?;
-    enc.add_text_chunk("Software".into(), format!("openOMSI {}", crate::updater::current_version())).map_err(|e| e.to_string())?;
+    enc.add_text_chunk("Software".into(), format!("openBus {}", crate::updater::current_version())).map_err(|e| e.to_string())?;
     let mut wr = enc.write_header().map_err(|e| e.to_string())?;
     wr.write_image_data(data).map_err(|e| e.to_string())?;
     wr.finish().map_err(|e| e.to_string())

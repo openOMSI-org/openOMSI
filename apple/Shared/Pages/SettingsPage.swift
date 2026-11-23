@@ -184,7 +184,7 @@ struct SettingsPage: View {
             }
             SettingToggle(label: "Simulation on its own thread", key: "sim_thread")
             #if os(macOS)
-            SettingToggle(label: "mX Graphics (Experimental)", key: "mx_graphics", help: "Draws the game with mX, openOMSI's own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before.")
+            SettingToggle(label: "mX Graphics (Experimental)", key: "mx_graphics", help: "Draws the game with mX, openBus's own graphics library, instead of wgpu (takes effect when the game starts the next time). Ray tracing and frame generation stay off with it; where mX cannot start, the game draws as before.")
             #endif
             SettingSelect(label: "Frame limit", key: "max_fps", options: phone ? [("0", "Screen refresh rate"), ("30", "30 fps"), ("45", "45 fps"), ("60", "60 fps"), ("120", "120 fps (ProMotion)")] : Choices.maxFps)
             SectionTitle("World & memory").padding(.top, 8)
@@ -498,9 +498,9 @@ struct SettingsPage: View {
             SettingToggle(label: "Count me in the website's \"playing now\" (anonymous)", key: "presence", fallback: true)
             SettingToggle(label: "Send servers an identifier for bans", key: "hardware_id", fallback: true, help: "Made from this computer's ID, different for each server owner, so servers cannot match you with each other. Some servers turn away players without it.")
             HStack {
-                Text("openOMSI \(store.version) (\(store.build))").font(.inter(12)).foregroundStyle(Theme.muted)
+                Text("openBus \(store.version) (\(store.build))").font(.inter(12)).foregroundStyle(Theme.muted)
                 Spacer()
-                Button("Privacy") { Platform.openURL("https://openomsi.org/privacy/") }.buttonStyle(.ghost)
+                Button("Privacy") { Platform.openURL("https://rafaelkaiz.github.io/openBus/privacy/") }.buttonStyle(.ghost)
             }
             SectionTitle("Reset").padding(.top, 8)
             HStack {

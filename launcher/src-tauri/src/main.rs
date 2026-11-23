@@ -1,7 +1,7 @@
-//! openOMSI's desktop launcher: a Tauri window whose page (`launcher/ui`) puts the duty
+//! openBus's desktop launcher: a Tauri window whose page (`launcher/ui`) puts the duty
 //! together, keeps the driver's profile, the settings, key bindings and mods, and starts the
 //! game. Everything it knows comes from `omsi-launcher-core` (the same functions the old
-//! launcher window and `openomsi-launcher --cli` use), called here as Tauri commands.
+//! launcher window and `openbus-launcher --cli` use), called here as Tauri commands.
 //!
 //! The game program finds this launcher beside itself and opens it on a plain start; when
 //! the webview cannot start here (no WebView2 runtime on an old Windows, no WebKitGTK), the
@@ -18,23 +18,23 @@ mod service;
 
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
-/// `OPENOMSI_LAUNCHER_SELFTEST=1`: the window stays hidden (and out of the Dock), the page
+/// `OPENBUS_LAUNCHER_SELFTEST=1`: the window stays hidden (and out of the Dock), the page
 /// checks itself - commands, the `omsi://` pictures, the font, every page - prints its report
 /// and the program ends with it (see `ui/js/selftest.js`). Checks never put a window on the
 /// screen.
 pub(crate) fn selftest() -> bool {
-    std::env::var_os("OPENOMSI_LAUNCHER_SELFTEST").is_some_and(|v| !v.is_empty() && v != "0")
+    std::env::var_os("OPENBUS_LAUNCHER_SELFTEST").is_some_and(|v| !v.is_empty() && v != "0")
 }
 
-/// `OPENOMSI_WEBVIEW_FRESH` (the game starts the launcher so after its window could not open
+/// `OPENBUS_WEBVIEW_FRESH` (the game starts the launcher so after its window could not open
 /// on a Windows that has WebView2): the web view's profile (`EBWebView` in the launcher's data
 /// folder) is set aside - a broken one stops WebView2 from starting - and where that folder
 /// cannot be written at all, one in the temporary folder is used. None: Tauri's own place.
 fn fresh_webview_profile(app: &tauri::App) -> Option<std::path::PathBuf> {
-    if !cfg!(windows) || std::env::var_os("OPENOMSI_WEBVIEW_FRESH").is_none() {
+    if !cfg!(windows) || std::env::var_os("OPENBUS_WEBVIEW_FRESH").is_none() {
         return None;
     }
-    let temp = std::env::temp_dir().join("openOMSI-webview");
+    let temp = std::env::temp_dir().join("openBus-webview");
     let Ok(dir) = app.path().app_local_data_dir() else { return Some(temp) };
     if std::fs::create_dir_all(&dir).is_err() {
         omsi_launcher_lib::log_to_file(&format!("webview: {} cannot be made, the profile goes to {}", dir.display(), temp.display()));
@@ -120,7 +120,7 @@ fn main() {
                 builder = builder.data_directory(dir);
             }
             let window = builder
-                .title("openOMSI")
+                .title("openBus")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(960.0, 620.0)
                 .center()

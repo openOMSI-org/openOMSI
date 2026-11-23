@@ -3,7 +3,7 @@ name = "omsi-world"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI's map as data: the map-wide index of splines and objects, and where the attached objects and spline rows go"
+description = "openBus's map as data: the map-wide index of splines and objects, and where the attached objects and spline rows go"
 
 [dependencies]
 omsi-cfg = { path = "../omsi-cfg" }

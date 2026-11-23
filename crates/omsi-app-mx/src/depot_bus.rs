@@ -162,7 +162,7 @@ mod tests {
 
     #[test]
     fn the_outing_goes_on_across_a_driver_change() {
-        let mut args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]);
+        let mut args = <crate::cli::Args as clap::Parser>::parse_from(["openbus"]);
         args.map = "maps/Grundorf".into();
         let mut old = Career::default();
         (

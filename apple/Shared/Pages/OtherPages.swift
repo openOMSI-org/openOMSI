@@ -58,7 +58,7 @@ struct MultiplayerPage: View {
 
     private var servers: some View {
         VStack(spacing: 16) {
-            Text("Sessions and servers are run by players, not by openOMSI. The host receives your driver name, network address, chat and voice, and may keep logs.").font(.inter(13)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity, alignment: .leading)
+            Text("Sessions and servers are run by players, not by openBus. The host receives your driver name, network address, chat and voice, and may keep logs.").font(.inter(13)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity, alignment: .leading)
             Card("Add server") {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 8) { nameField.frame(width: 180); addressField; addButton }
@@ -100,7 +100,7 @@ struct ServerCard: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text(server.info?.name?.isEmpty == false ? server.info!.name! : (server.name.isEmpty ? server.address : server.name)).font(.inter(15, .semibold)).lineLimit(1)
-                    Tag(text: server.official == true ? "Run by openOMSI" : "Community server")
+                    Tag(text: server.official == true ? "Run by openBus" : "Community server")
                     if joined { Tag(text: "Joined", kind: .accent) }
                     if server.info?.password == true { Tag(text: "Password") }
                 }
@@ -167,7 +167,7 @@ struct ServerCard: View {
 func udpByDefault(_ address: String, reachedAt: String?) -> Bool {
     let a = address.trimmingCharacters(in: .whitespaces)
     let host = a.split(whereSeparator: { "/?#\\".contains($0) }).first.map(String.init)?.split(separator: "@").last.map(String.init)?.replacingOccurrences(of: ":[0-9]*$", with: "", options: .regularExpression) ?? ""
-    let web = a.range(of: "^(https?|wss?)://", options: .regularExpression) != nil || a.lowercased() == "openomsi"
+    let web = a.range(of: "^(https?|wss?)://", options: .regularExpression) != nil || a.lowercased() == "openbus"
         || host.range(of: "^[a-z0-9-]+(\\.[a-z0-9-]+)*\\.trycloudflare\\.com$", options: [.regularExpression, .caseInsensitive]) != nil
     guard !web, let m = a.range(of: "^(?:[^:\\s/]+|\\[[^\\]\\s]+\\]):([0-9]+)$", options: .regularExpression) else { return false }
     let port = a[m].split(separator: ":").last.flatMap { Int($0) } ?? 99999
@@ -335,7 +335,7 @@ struct ControlsPage: View {
                 }
                 Card("Key bindings") {
                     if !keys {
-                        Notice(text: String(localized: "The keys of the game are OMSI's Inputs/keyboard.cfg: the openOMSI launcher of Windows and Linux sets them on its Controls page, which reads and writes the same file."))
+                        Notice(text: String(localized: "The keys of the game are OMSI's Inputs/keyboard.cfg: the openBus launcher of Windows and Linux sets them on its Controls page, which reads and writes the same file."))
                     }
                     SettingSelect(label: "Driving keys", key: "drive_keys", options: [("omsi", "Custom controls (Controls page)"), ("simple", "W A S D + arrows"), ("wasd", "W A S D only"), ("arrows", "Arrow keys only")])
                 }
@@ -760,13 +760,13 @@ struct SetupPage: View {
     @State private var root = ""
 
     var body: some View {
-        PageScroll("Setup", subtitle: "openOMSI plays the content of an OMSI 2 installation: the original game must be installed (Steam or another copy).", maxWidth: 900) {
+        PageScroll("Setup", subtitle: "openBus plays the content of an OMSI 2 installation: the original game must be installed (Steam or another copy).", maxWidth: 900) {
             Card("Folders") {
                 if !store.snapshot.root_ok {
                     Notice(text: store.snapshot.root_problem.isEmpty ? String(localized: "The original OMSI 2 was not found.") : store.snapshot.root_problem, kind: .danger)
                 }
                 Field("OMSI 2 folder", help: Platform.isPhone
-                    ? String(localized: "Copy a complete OMSI 2 (the folder with Omsi.exe, maps and Vehicles) into openOMSI in the Files app (On My iPhone / iPad), or from a Mac's Finder over a cable, and choose it here. A copy on iCloud Drive or a USB drive can be chosen as well.")
+                    ? String(localized: "Copy a complete OMSI 2 (the folder with Omsi.exe, maps and Vehicles) into openBus in the Files app (On My iPhone / iPad), or from a Mac's Finder over a cable, and choose it here. A copy on iCloud Drive or a USB drive can be chosen as well.")
                     : String(localized: "The OMSI 2 folder is the one with maps and Vehicles in it (any complete installation).")) {
                     HStack(spacing: 8) {
                         InputField(prompt: "/path/to/OMSI 2", text: $root) { store.act("root", ["path": root]) }

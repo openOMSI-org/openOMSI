@@ -3,7 +3,7 @@
 //! Shift+U start-up gets the electrics and the engine going.
 //!
 //! usage: bus_audit <content folder> [name filter] [--quiet]
-//! (the OMSI 2 installation is taken from $OMSI_ROOT or ~/.openomsi-root)
+//! (the OMSI 2 installation is taken from $OMSI_ROOT or ~/.openbus-root)
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -31,7 +31,7 @@ fn original_root() -> Option<PathBuf> {
         return Some(PathBuf::from(r));
     }
     let home = std::env::var("HOME").ok()?;
-    let s = std::fs::read_to_string(Path::new(&home).join(".openomsi-root")).ok()?;
+    let s = std::fs::read_to_string(Path::new(&home).join(".openbus-root")).ok()?;
     Some(PathBuf::from(s.trim()))
 }
 

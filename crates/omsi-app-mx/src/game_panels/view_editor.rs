@@ -498,7 +498,7 @@ fn store(
     let text = std::fs::read_to_string(&path).unwrap_or_default();
     let key = bus.trim().replace('\\', "/").to_ascii_lowercase();
     let mut out = String::from(
-        "# openOMSI: the driver's view and the mirrors of each vehicle as set in the view editor,\n# in the .bus file's own camera entries\n",
+        "# openBus: the driver's view and the mirrors of each vehicle as set in the view editor,\n# in the .bus file's own camera entries\n",
     );
     for (k, body) in blocks(&text).into_iter().filter(|(k, _)| *k != key) {
         out.push_str(&format!("[vehicle]\n{k}\n{body}"));

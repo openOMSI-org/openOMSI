@@ -3,7 +3,7 @@
 //! Direct3D's left-handed frame (x right, y up, z forward). A modeller exporting for OMSI
 //! builds in Blender with the vehicle's front along +y; Blender's glTF / FBX / OBJ export
 //! turns that into -z, so z is turned round (and the winding with it): the model comes in
-//! facing the way it faced in the modeller, as openOMSI's own `--export-glb` writes it out.
+//! facing the way it faced in the modeller, as openBus's own `--export-glb` writes it out.
 
 use crate::{Material, Mesh, Triangle, Vertex};
 use glam::{Vec2, Vec3};

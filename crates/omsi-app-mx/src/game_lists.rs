@@ -150,7 +150,7 @@ fn route_numbers(app: &App) -> Vec<String> {
     out
 }
 
-/// Whether a line can be represented by the numeric IBIS line/suffix variables openOMSI
+/// Whether a line can be represented by the numeric IBIS line/suffix variables openBus
 /// already knows how to encode. Everything else must stay as display text: turning "-10"
 /// or "EXP" into a number loses information.
 pub(crate) fn numeric_ibis_line(line: &str) -> bool {

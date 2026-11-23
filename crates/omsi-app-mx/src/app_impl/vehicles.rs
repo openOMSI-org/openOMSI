@@ -710,7 +710,7 @@ mod identity_tests {
     #[test]
     fn fresh_placement_does_not_inherit_previous_vehicle_identity() {
         let mut args = Args::parse_from([
-            "openomsi",
+            "openbus",
             "--bus",
             "Vehicles/old.bus",
             "--number",

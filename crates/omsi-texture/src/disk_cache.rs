@@ -65,11 +65,11 @@ impl DiskCache {
                     return None;
                 }
                 if cfg!(target_os = "ios") {
-                    let container = PathBuf::from(std::env::var_os("OPENOMSI_CONTAINER")?);
+                    let container = PathBuf::from(std::env::var_os("OPENBUS_CONTAINER")?);
                     return container.is_absolute().then(|| DiskCache::new(container.join("Library").join("Caches").join("textures"), DEFAULT_CAP));
                 }
                 let home = PathBuf::from(std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?);
-                home.is_absolute().then(|| DiskCache::new(home.join(".openomsi").join("cache").join("textures"), DEFAULT_CAP))
+                home.is_absolute().then(|| DiskCache::new(home.join(".openbus").join("cache").join("textures"), DEFAULT_CAP))
             })
             .as_ref()
     }

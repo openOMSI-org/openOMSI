@@ -1,5 +1,5 @@
 //! What a vehicle file says about its trolley gear: the poles on the roof and the traction
-//! drive. The blocks are openOMSI's own (OMSI 2 has no overhead wire of its own; its trolleybus
+//! drive. The blocks are openBus's own (OMSI 2 has no overhead wire of its own; its trolleybus
 //! add-ons run a plugin beside the game): a `[trolley_pole]` per pole, one `[trolley_rheostat]`
 //! or `[trolley_async]` drive, an optional `[trolley_battery]` and `[trolley_vars]`, or an empty
 //! `[trolley_none]` for a vehicle that moves its poles itself. Inside a block every line is

@@ -48,7 +48,7 @@ pub fn session_of(public: &[u8]) -> u64 {
 }
 
 fn framed(purpose: &str, msg: &[u8]) -> Vec<u8> {
-    let mut v = b"openOMSI host ".to_vec();
+    let mut v = b"openBus host ".to_vec();
     v.extend_from_slice(purpose.as_bytes());
     v.push(0);
     v.extend_from_slice(msg);

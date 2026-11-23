@@ -400,7 +400,7 @@ struct Targets {
 
 impl DriverFigure {
     /// Sit back on the seat with the hands off the wheel (OMSI 2's driver) or lean to hold it
-    /// (openOMSI's); the figure is seated again when this changes.
+    /// (openBus's); the figure is seated again when this changes.
     pub fn set_original_pose(&mut self, on: bool) {
         if self.original_pose == on {
             return;

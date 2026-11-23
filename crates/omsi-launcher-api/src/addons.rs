@@ -1,4 +1,4 @@
-//! The Add-ons page's list: projects others make for openOMSI, each a link to its own page
+//! The Add-ons page's list: projects others make for openBus, each a link to its own page
 //! (`launcher/ui/addons/addons.json`; `docs/ADDONS.md` says how one gets in). The launcher
 //! downloads, installs and runs nothing of them - the page opens the homepage in the browser.
 

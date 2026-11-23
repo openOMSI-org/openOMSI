@@ -21,7 +21,7 @@
 //!    linked inbox files removed from the inbox.
 //!
 //! The staging folder is removed whatever happens (done, failed, cancelled, or the launcher
-//! killed half-way: stale ones of launchers that died - and the old `~/.openomsi/unzip`
+//! killed half-way: stale ones of launchers that died - and the old `~/.openbus/unzip`
 //! - are removed on start).
 //!
 //! Every path inside a source goes through `safe_rel` before it is planned, so no entry

@@ -267,7 +267,7 @@ fn relay_loop(host: bool, session: u64, key: Option<&crate::hostkey::HostKey>, l
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(5))
         .timeout_read(Duration::from_secs(8))
-        .user_agent("openOMSI")
+        .user_agent("openBus")
         .build();
     let (mine, theirs) = if host { (topic(session), format!("{}-c", topic(session))) } else { (format!("{}-c", topic(session)), topic(session)) };
     let mut last_post: Option<(Instant, String)> = None;
@@ -419,7 +419,7 @@ pub fn post_tunnel(key: &crate::hostkey::HostKey, url: &str) {
     if cfg!(test) || omsi_cfg::flags::OMSI_NO_BRIDGE.live_os().is_some() {
         return;
     }
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(6)).user_agent("openOMSI").build();
+    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(6)).user_agent("openBus").build();
     let post = key.seal("relay", &format!("W {} {url}", crate::hostkey::now()));
     if let Err(e) = agent.post(&format!("{RELAY}/{}", topic(key.session()))).set("Cache", "yes").send_string(&post) {
         log::warn!("LAN bridge: the tunnel address could not be posted: {e}");
@@ -432,7 +432,7 @@ pub fn lookup_tunnel(session: u64) -> Option<String> {
     if cfg!(test) || omsi_cfg::flags::OMSI_NO_BRIDGE.live_os().is_some() {
         return None;
     }
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("openOMSI").build();
+    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("openBus").build();
     let body = agent.get(&format!("{RELAY}/{}/json?poll=1&since=6h", topic(session))).call().ok()?.into_string().ok()?;
     tunnel_of(session, &body, crate::hostkey::now())
 }
@@ -554,13 +554,13 @@ fn upnp_forward(port: u16) -> Option<(SocketAddr, Mapping)> {
     };
     soap(
         "AddPortMapping",
-        &format!("<NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort><NewProtocol>UDP</NewProtocol><NewInternalPort>{port}</NewInternalPort><NewInternalClient>{me}</NewInternalClient><NewEnabled>1</NewEnabled><NewPortMappingDescription>openOMSI</NewPortMappingDescription><NewLeaseDuration>{LEASE}</NewLeaseDuration>"),
+        &format!("<NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort><NewProtocol>UDP</NewProtocol><NewInternalPort>{port}</NewInternalPort><NewInternalClient>{me}</NewInternalClient><NewEnabled>1</NewEnabled><NewPortMappingDescription>openBus</NewPortMappingDescription><NewLeaseDuration>{LEASE}</NewLeaseDuration>"),
     )?;
     // the same port over TCP: the host's mods go to the joining players that way (with the
     // UDP port alone forwarded they timed out and were never fetched)
     let _ = soap(
         "AddPortMapping",
-        &format!("<NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort><NewProtocol>TCP</NewProtocol><NewInternalPort>{port}</NewInternalPort><NewInternalClient>{me}</NewInternalClient><NewEnabled>1</NewEnabled><NewPortMappingDescription>openOMSI mods</NewPortMappingDescription><NewLeaseDuration>{LEASE}</NewLeaseDuration>"),
+        &format!("<NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort><NewProtocol>TCP</NewProtocol><NewInternalPort>{port}</NewInternalPort><NewInternalClient>{me}</NewInternalClient><NewEnabled>1</NewEnabled><NewPortMappingDescription>openBus mods</NewPortMappingDescription><NewLeaseDuration>{LEASE}</NewLeaseDuration>"),
     );
     let mapping = Mapping { url: url.clone(), service: service.clone(), port };
     let ext = soap("GetExternalIPAddress", "")?;

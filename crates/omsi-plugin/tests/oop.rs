@@ -91,7 +91,7 @@ fn a_lua_oop_runs_from_memory_within_its_permissions() {
 /// reaches its own handler (run after the call into the module returns).
 const GUEST: &str = r#"
 (module
-  (import "openomsi" "call" (func $call (param i32 i32 i32 i32) (result i64)))
+  (import "openbus" "call" (func $call (param i32 i32 i32 i32) (result i64)))
   (memory (export "memory") 2)
   (global $next (mut i32) (i32.const 8192))
   (data (i32.const 0) "message")

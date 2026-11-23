@@ -1,7 +1,7 @@
 # Public server list
 
 A Cloudflare Worker with one Durable Object (the same shape as `../presence`) that lists the
-openOMSI servers whose owners set `public_server = 1` in `server.cfg`. The launcher
+openBus servers whose owners set `public_server = 1` in `server.cfg`. The launcher
 (Multiplayer -> Servers -> Public servers) and the game ask it for the list.
 
 ```

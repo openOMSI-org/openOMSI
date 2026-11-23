@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader};
 use std::net::{SocketAddr, TcpListener};
 
 fn temp(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("openomsi-vehicles-{name}-{}", std::process::id()));
+    let d = std::env::temp_dir().join(format!("openbus-vehicles-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d

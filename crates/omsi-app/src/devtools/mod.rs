@@ -1,7 +1,7 @@
 //! The developer tools: a panel over the game for those who build vehicles (Ctrl+Shift+D).
 //!
 //! * **Variables**: the bus's script variables and string variables - looked up by name,
-//!   watched (the list kept per bus in `~/.openomsi/devtools/`), set, or held at a value
+//!   watched (the list kept per bus in `~/.openbus/devtools/`), set, or held at a value
 //!   every frame against what the scripts write.
 //! * **Overlays** on the picture: the paths and their points, the seats and standing
 //!   places, the boxes, the axles and wheels, the interior lights with their variables,
@@ -78,11 +78,11 @@ pub(crate) struct DevTools {
     pub scripts_changed: bool,
 }
 
-/// Where the watch lists are kept: `~/.openomsi/devtools/<bus file>.watch`.
+/// Where the watch lists are kept: `~/.openbus/devtools/<bus file>.watch`.
 fn watch_file(bus: &std::path::Path) -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     let name = bus.file_name()?.to_string_lossy().to_string();
-    Some(PathBuf::from(home).join(".openomsi").join("devtools").join(format!("{name}.watch")))
+    Some(PathBuf::from(home).join(".openbus").join("devtools").join(format!("{name}.watch")))
 }
 
 /// A watch list as its file has it: a name per line, a string variable's after `$`.
@@ -98,7 +98,7 @@ fn parse_watch(text: &str) -> Vec<Watch> {
 }
 
 fn watch_text(list: &[Watch]) -> String {
-    let mut out = String::from("# openOMSI developer tools: the variables watched for this bus ($: a string variable)\n");
+    let mut out = String::from("# openBus developer tools: the variables watched for this bus ($: a string variable)\n");
     for w in list {
         out.push_str(&format!("{}{}\n", if w.string { "$" } else { "" }, w.name));
     }

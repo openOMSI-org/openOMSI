@@ -3,7 +3,7 @@ name = "omsi-weather"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI's weather as state and physics: the physical weather model, the weather cycle, the seasons' phases, the roads' wetness, the cabin air and the drops on the glass"
+description = "openBus's weather as state and physics: the physical weather model, the weather cycle, the seasons' phases, the roads' wetness, the cabin air and the drops on the glass"
 
 [dependencies]
 omsi-cfg = { path = "../omsi-cfg" }

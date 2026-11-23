@@ -599,7 +599,7 @@ mod tests {
     #[test]
     fn chrono_folders_of_every_content_root_are_listed() {
         let tmp = std::env::temp_dir().join(format!("omsi-chrono-roots-{}", std::process::id()));
-        let (overlay, base) = (tmp.join("openomsi"), tmp.join("omsi2"));
+        let (overlay, base) = (tmp.join("openbus"), tmp.join("omsi2"));
         for (root, folder) in [(&base, "Base"), (&base, "Shared"), (&overlay, "Mod"), (&overlay, "Shared")] {
             let d = root.join("maps/ChronoRoots/Chrono").join(folder);
             std::fs::create_dir_all(&d).unwrap();

@@ -245,7 +245,7 @@ mod script_action_tests {
     #[test]
     fn discovers_custom_triggers_from_a_bus_script() {
         let dir = std::env::temp_dir().join(format!(
-            "openomsi_key_actions_{}_{}",
+            "openbus_key_actions_{}_{}",
             std::process::id(),
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
         ));

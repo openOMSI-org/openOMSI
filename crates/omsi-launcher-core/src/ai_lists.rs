@@ -14,7 +14,7 @@ use omsi_timetable::CarUse;
 
 /// The names of the rule files made here; the `!` sorts them before the map's own records,
 /// and the first record to give a tour its bus keeps it.
-const RULE_PREFIX: &str = "!openomsi-ai-lists-";
+const RULE_PREFIX: &str = "!openbus-ai-lists-";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct VehicleJson {

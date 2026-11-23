@@ -1,12 +1,12 @@
-//! The loading screen: openOMSI's wordmark and striped bar, or an interface theme's colours and
+//! The loading screen: openBus's wordmark and striped bar, or an interface theme's colours and
 //! logo - which may itself be the bar, drawn along its path, with its marks popping in (`themes`,
 //! `omsi_ui::icons`). The time it follows is `Loading`'s (see the parent module).
 
 use super::*;
 use omsi_ui::icons::Stage;
 
-/// The openOMSI wordmark (white letters, the orange "OMSI"), for the loading screen.
-const WORDMARK: &str = include_str!("../../../../assets/logos/openomsi-wordmark-light.svg");
+/// The openBus wordmark (white letters, the orange "OMSI"), for the loading screen.
+const WORDMARK: &str = include_str!("../../../../assets/logos/openbus-wordmark-light.svg");
 
 /// The pixels of a stretch of the loading bar `w` x `h` with its stripes: 45 degree bands of
 /// the accent `dark` and a lighter one `light`, `period` pixels apart along the bar, moved
@@ -25,7 +25,7 @@ fn stripe_pixels(w: u32, h: u32, period: u32, phase: u32, alpha: u8, dark: [u8; 
 
 /// The loading screen's colours: the background, the texts (the map's name, the tips), how
 /// far (the per cent), the accent (the bar, "TIPS"), the bar's track, and the bar's stripes -
-/// openOMSI's, or an interface theme's (`themes`).
+/// openBus's, or an interface theme's (`themes`).
 struct LoadingLook {
     bg: [u8; 3],
     text: [u8; 3],
@@ -60,7 +60,7 @@ impl LoadingLook {
 }
 
 impl Ui {
-    /// The loading screen: the openOMSI wordmark large in the middle and the map's name under
+    /// The loading screen: the openBus wordmark large in the middle and the map's name under
     /// it; along the bottom a square amber bar whose stripes slide on (it is working), over
     /// it a rotating tip on the left and how far on the right. All of it `opacity` (fading
     /// over the first pictures of the session); `clock` moves the stripes and the tips.
@@ -87,7 +87,7 @@ impl Ui {
             }
             px
         };
-        // the logo, large, a little above the middle: openOMSI's wordmark, or the theme's
+        // the logo, large, a little above the middle: openBus's wordmark, or the theme's
         let theme_logo = theme.as_ref().and_then(|t| t.loading.logo.as_ref().map(|l| (t.id.as_str(), l, t.loading.progress)));
         let (logo, lw, lh, logo_is_bar) = match theme_logo {
             Some((id, l, mode)) => {

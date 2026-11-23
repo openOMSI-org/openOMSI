@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>openOMSI full vehicle dashboard (omsi.vehicle API v1)</title>
+    <title>openBus full vehicle dashboard (omsi.vehicle API v1)</title>
     <style>
         body { margin: 0px; width: 800px; height: 480px; background: #090e14; color: #e8f0f8; font-size: 14px; line-height: 20px; }
 
@@ -108,7 +108,7 @@
     var O = window.omsi;
 
     // In a plain browser there is no host: stub the calls and run a demo.
-    // (Written for the openOMSI engine: no `new`, `this`, `prototype`, or classes.)
+    // (Written for the openBus engine: no `new`, `this`, `prototype`, or classes.)
     var DEMO = !O.apiVersion;
     if (DEMO) {
         O.setVar = function (n, v) { console.log('setVar', n, v); };

@@ -1,4 +1,4 @@
-//! `openomsi --check <file or folder> [--root <folder>] [--deep]`: any piece of content
+//! `openbus --check <file or folder> [--root <folder>] [--deep]`: any piece of content
 //! loaded exactly as the game loads it - a vehicle (.bus/.ovh, with the parts coupled
 //! behind it), a scenery object (.sco), a spline (.sli), a human (.hum), a weather (.owt),
 //! a mesh (.o3d/.x), a whole map (its global.cfg or folder) or a mod (a folder or .zip with

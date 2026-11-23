@@ -7,7 +7,7 @@
 //!
 //! The game is this library; `main.rs` calls [`run`], and on Android the NativeActivity
 //! calls `android_main` (see `android.rs`), which runs the launcher and the game in one
-//! window of one process. On an iPhone or an iPad the Swift app calls `openomsi_ios_main`
+//! window of one process. On an iPhone or an iPad the Swift app calls `openbus_ios_main`
 //! (see `ios.rs`); its launcher, and the Mac's Swift launcher, read and change what the
 //! launcher knows through `apple_bridge`.
 
@@ -185,7 +185,7 @@ pub(crate) fn ui_language(code: &str) {
 }
 
 const MISSING_ORIGINAL: &str = "The original OMSI 2 was not found.\n\n\
-    openOMSI needs a complete installation of the original game (any version). \
+    openBus needs a complete installation of the original game (any version). \
     Choose its folder in the launcher (Setup), or start once with \
     --root \"/path/to/OMSI 2\", the folder with Omsi.exe, maps and Vehicles in it.\n\n\
     Missing in {folder}: {missing}";
@@ -281,7 +281,7 @@ pub fn run() -> Result<()> {
         default_hook(info);
     }));
     log::info!(
-        "openOMSI {VERSION}, build {BUILD}{}",
+        "openBus {VERSION}, build {BUILD}{}",
         if std::env::var_os("MallocLargeCache").is_some() {
             " (large allocations returned at once)"
         } else {
@@ -419,7 +419,7 @@ pub(crate) fn prepare(
                 log::warn!("the original OMSI 2 was not found; the launcher asks for it");
             }
             None => {
-                // openOMSI plays on the original game's content: without a complete
+                // openBus plays on the original game's content: without a complete
                 // installation of it there is nothing to play on, and every player must have
                 // the same base whatever copy of OMSI 2 they own
                 let missing = omsi_cfg::missing_original_essentials(&args.root);
@@ -429,7 +429,7 @@ pub(crate) fn prepare(
                 if server_cfg.is_some() || args.list_maps {
                     eprintln!("{text}");
                 } else {
-                    fatal_dialog(&omsi_ui::tr("openOMSI cannot start"), &text);
+                    fatal_dialog(&omsi_ui::tr("openBus cannot start"), &text);
                 }
                 if cfg!(any(target_os = "android", target_os = "ios")) {
                     // (a phone's app is not ended from inside: back to the launcher)
@@ -514,7 +514,7 @@ pub(crate) fn make_app(
         args.situation = Some(tutorial::SITUATIONS[n - 1].to_string());
     }
     apply_situation(&mut args)?;
-    // `openomsi`: the official server, wherever its tunnel is today (see omsi_net::official)
+    // `openbus`: the official server, wherever its tunnel is today (see omsi_net::official)
     if let Some(t) = args
         .lan_join
         .clone()

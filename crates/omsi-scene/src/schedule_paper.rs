@@ -1,7 +1,7 @@
 //! The paper timetable in the driver's cab.
 //!
 //! Stock vehicle models show this through `[matl_freetex] file_schedule`. OMSI supplies the
-//! bitmap named by that string; openOMSI makes it from the player's current duty and keeps
+//! bitmap named by that string; openBus makes it from the player's current duty and keeps
 //! it in its own cache so the original installation remains read-only.
 
 use omsi_sim::timetable_run::PlayerDuty;
@@ -120,8 +120,8 @@ fn cache_dir() -> Result<PathBuf> {
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
-        .ok_or_else(|| anyhow!("cannot locate the openOMSI user data folder"))?;
-    let dir = home.join(".openomsi").join("cache").join("schedules");
+        .ok_or_else(|| anyhow!("cannot locate the openBus user data folder"))?;
+    let dir = home.join(".openbus").join("cache").join("schedules");
     // (the bus is handed the sheet by its full path, outside the content folders)
     omsi_texture::trust_generated_dir(&dir);
     Ok(dir)
@@ -223,7 +223,7 @@ fn typewriter_font(lines: &[String]) -> Option<FontAtlas> {
     }
     Some(FontAtlas::new(
         Font {
-            name: "openOMSI timetable".into(),
+            name: "openBus timetable".into(),
             height: line_height as i32,
             gap: 0,
             chars,

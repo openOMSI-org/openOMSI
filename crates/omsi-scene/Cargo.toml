@@ -3,7 +3,7 @@ name = "omsi-scene"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI's scene: the map and its vehicles turned into the renderer's meshes, materials, lights and textures, and the world they were built from"
+description = "openBus's scene: the map and its vehicles turned into the renderer's meshes, materials, lights and textures, and the world they were built from"
 
 [dependencies]
 omsi-audio = { path = "../omsi-audio" }

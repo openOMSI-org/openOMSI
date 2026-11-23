@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build openOMSI's passenger avatar pack from the Microsoft Rocketbox avatar library (MIT).
+"""Build openBus's passenger avatar pack from the Microsoft Rocketbox avatar library (MIT).
 
     python3 -I tools/avatars/build_pack.py <tree.json> <out dir> [work dir]
 
@@ -8,7 +8,7 @@
 Every avatar of Assets/Avatars that suits a city's street and bus is taken (see EXCLUDE),
 one at a time: its `_facial.fbx` (the mesh with the facial blend shapes) as it is, its colour
 textures as JPEG (the hair and eyelash texture as PNG at half size, it has alpha), its normal maps at
-half size as `<colour texture>_normal.jpg`, which openOMSI's PBR lookup finds beside the
+half size as `<colour texture>_normal.jpg`, which openBus's PBR lookup finds beside the
 colour texture. The 2048x2048 TGAs (about 22 GB for the library) are fetched, converted and
 deleted one avatar at a time. The motion clips of CLIPS (walking, standing, sitting) are taken
 unchanged from Assets/Animations. Writes pack.json, LICENSE.md and CREDITS.md.

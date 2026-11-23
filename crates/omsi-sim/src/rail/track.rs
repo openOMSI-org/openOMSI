@@ -4,7 +4,7 @@
 //! metros, and it cannot be changed. A map maker therefore says what a track is in one of
 //! three ways, tried in this order:
 //!
-//! 1. A rule in `<map>/openomsi-rail.cfg` (see `docs/RAIL.md`): by the spline or object
+//! 1. A rule in `<map>/openbus-rail.cfg` (see `docs/RAIL.md`): by the spline or object
 //!    file the track belongs to, by its tile, id and path, or both.
 //! 2. The name of the spline profile or object: `tram_*`, `strassenbahn_*` and `*_tram`
 //!    are tram track; `metro_*`, `ubahn_*`, `subway_*` metro; `train_*`, `sbahn_*` and
@@ -46,7 +46,7 @@ fn name_hint(name: &str) -> Option<(Option<RailClass>, TrackClass, bool)> {
     }
 }
 
-/// One rule of `openomsi-rail.cfg`: what it matches (every given matcher must) and what it
+/// One rule of `openbus-rail.cfg`: what it matches (every given matcher must) and what it
 /// says.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TrackRule {
@@ -93,13 +93,13 @@ impl TrackRule {
     }
 }
 
-/// `openomsi-rail.cfg` of a map.
+/// `openbus-rail.cfg` of a map.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RailMapConfig {
     pub rules: Vec<TrackRule>,
 }
 
-pub const FILE: &str = "openomsi-rail.cfg";
+pub const FILE: &str = "openbus-rail.cfg";
 
 impl RailMapConfig {
     /// The rules of a map's `transport` folder (`network.cfg` and the diverging speeds of

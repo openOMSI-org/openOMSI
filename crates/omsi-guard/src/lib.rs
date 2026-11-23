@@ -85,10 +85,10 @@ fn self_test() -> i32 {
     let version = omsi_platform::VERSION;
     let ok = !version.is_empty() && std::env::current_exe().ok().and_then(|e| e.parent().map(|d| std::fs::read_dir(d).is_ok())).unwrap_or(false);
     if ok {
-        println!("openomsi {version} build {} self-test ok", omsi_platform::BUILD);
+        println!("openbus {version} build {} self-test ok", omsi_platform::BUILD);
         0
     } else {
-        println!("openomsi {version}: self-test failed (the program's own folder cannot be read)");
+        println!("openbus {version}: self-test failed (the program's own folder cannot be read)");
         1
     }
 }

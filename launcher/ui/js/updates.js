@@ -30,7 +30,7 @@ async function refresh() {
   if (u.state === 'restarting' && !relaunching && !onPhone) {
     relaunching = true;
     call('update_relaunch').catch((e) => {
-      relaunchError = t('openOMSI {version} is installed: start it again yourself ({e}).', { version: u.release.version, e: e.message });
+      relaunchError = t('openBus {version} is installed: start it again yourself ({e}).', { version: u.release.version, e: e.message });
       set({ updateAsked: true, update: { ...u, state: 'failed', message: relaunchError } });
     });
   }
@@ -54,7 +54,7 @@ async function dismissUpdate() {
 
 export function startUpdates() {
   if (S.boot?.updated) {
-    toast(t('Updated to openOMSI {version}', { version: S.boot.updated }), 'ok');
+    toast(t('Updated to openBus {version}', { version: S.boot.updated }), 'ok');
     if (S.boot.versions) openChangelog();
   }
   refresh();
@@ -78,10 +78,10 @@ export function UpdateDialog() {
   if (!shown) return null;
   const busy = u.state !== 'available' && u.state !== 'failed';
   const open = (url) => call('open_url', { url }).catch((e) => toast(t(e.message), 'error'));
-  const title = u.state === 'available' ? t('openOMSI {version} is available', { version: r.version })
-    : u.state === 'downloading' ? t('Downloading openOMSI {version}', { version: r.version })
+  const title = u.state === 'available' ? t('openBus {version} is available', { version: r.version })
+    : u.state === 'downloading' ? t('Downloading openBus {version}', { version: r.version })
     : u.state === 'failed' ? t('Not updated')
-    : t('Installing openOMSI {version}', { version: r.version });
+    : t('Installing openBus {version}', { version: r.version });
   const footer = u.state === 'available'
     ? html`<${Button} kind="ghost" icon="external" label="Open on GitHub" onClick=${() => open(r.page)} />
         <${Button} label="Not now" onClick=${dismissUpdate} />
@@ -95,7 +95,7 @@ export function UpdateDialog() {
     <div class="stack" style="gap:14px">
       ${u.state === 'available' && html`
         <p class="dim">${t(onPhone
-          ? 'You have {current}. The launcher downloads the new version ({size}) from GitHub and Android installs it; openOMSI then starts again. Your mods and settings stay as they are.'
+          ? 'You have {current}. The launcher downloads the new version ({size}) from GitHub and Android installs it; openBus then starts again. Your mods and settings stay as they are.'
           : 'You have {current}. The launcher downloads the new version ({size}) from GitHub, puts it in place of this one and starts again. Your mods and settings stay as they are.', { current: u.current, size: mb(r.size) })}</p>
         ${r.notes && html`<div class="update-notes"><${Notes} text=${r.notes} version=${r.version} /></div>`}
         <${Toggle} checked=${!!s.settings?.update_auto} label="Install updates without asking from now on" onChange=${(v) => saveSettings({ update_auto: v })} />`}
@@ -105,7 +105,7 @@ export function UpdateDialog() {
       ${(u.state === 'installing' || u.state === 'restarting') && html`
         <p class="dim">${t('The new version is put in place; the launcher starts again in a moment.')}</p>
         <div class="progress"><div style="width:100%"></div></div>`}
-      ${u.state === 'installer' && html`<p class="dim">${t('Android asks whether to update openOMSI: press Update there. The app then starts again by itself.')}</p>`}
+      ${u.state === 'installer' && html`<p class="dim">${t('Android asks whether to update openBus: press Update there. The app then starts again by itself.')}</p>`}
       ${u.state === 'failed' && html`<p class="dim selectable">${u.message}</p>`}
     </div>
   </${Dialog}>`;
@@ -116,10 +116,10 @@ export function UpdateRow() {
   const u = s.update;
   if (!u?.allowed) return null;
   const line = u.state === 'checking' ? t('Looking for updates…')
-    : u.state === 'up_to_date' ? t('openOMSI {version} is the latest version.', { version: u.current })
-    : u.state === 'available' ? t('openOMSI {version} is available', { version: u.release.version })
-    : u.state === 'downloading' ? `${t('Downloading openOMSI {version}', { version: u.release.version })} (${t('{done} of {total} from GitHub', { done: mb(u.done), total: mb(u.total) })})`
-    : u.state === 'installing' || u.state === 'installer' || u.state === 'restarting' ? t('Installing openOMSI {version}', { version: u.release.version })
+    : u.state === 'up_to_date' ? t('openBus {version} is the latest version.', { version: u.current })
+    : u.state === 'available' ? t('openBus {version} is available', { version: u.release.version })
+    : u.state === 'downloading' ? `${t('Downloading openBus {version}', { version: u.release.version })} (${t('{done} of {total} from GitHub', { done: mb(u.done), total: mb(u.total) })})`
+    : u.state === 'installing' || u.state === 'installer' || u.state === 'restarting' ? t('Installing openBus {version}', { version: u.release.version })
     : u.state === 'failed' ? u.message
     : '';
   return html`<div class="setting-row full">

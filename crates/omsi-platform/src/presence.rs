@@ -1,5 +1,5 @@
 //! "Playing now": while a game session runs it tells the project's presence service (a
-//! Cloudflare Worker, `services/presence/`) every few minutes that one more openOMSI is being
+//! Cloudflare Worker, `services/presence/`) every few minutes that one more openBus is being
 //! played, and says goodbye when it ends. The website and the README show the count.
 //!
 //! What goes out is a random id made for this session alone (not kept anywhere, a new one
@@ -16,7 +16,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// The project's presence service (`services/presence/`, deployed with wrangler).
-pub const SERVICE: &str = "https://openomsi.savvabestbrother.workers.dev";
+// TODO(openBus): placeholder host, point this at your own presence service.
+pub const SERVICE: &str = "https://presence.openbus.example";
 /// How often a running game says it is still there (the service forgets one after 25 min).
 /// (Every three minutes, a few hundred players used up the free plan's 100 000 requests a
 /// day by the evening, and the counter answered nobody until midnight UTC.)
@@ -110,7 +111,7 @@ impl Presence {
                 let agent = ureq::AgentBuilder::new()
                     .timeout_connect(Duration::from_secs(10))
                     .timeout(Duration::from_secs(15))
-                    .user_agent(&format!("openOMSI/{}", crate::updater::current_version()))
+                    .user_agent(&format!("openBus/{}", crate::updater::current_version()))
                     .build();
                 let id = session_id();
                 let hello = serde_json::json!({ "id": id, "v": crate::updater::current_version(), "os": system() });

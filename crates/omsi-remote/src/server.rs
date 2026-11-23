@@ -32,7 +32,7 @@ static FILES: &[(&str, &str, &str)] = &[
     ("/manifest.webmanifest", "application/manifest+json", include_str!("../page/manifest.webmanifest")),
 ];
 
-static APP_ICON: &[u8] = include_bytes!("../../../assets/icons/app/openomsi-256.png");
+static APP_ICON: &[u8] = include_bytes!("../../../assets/icons/app/openbus-256.png");
 
 pub(crate) fn nearby(ip: IpAddr) -> bool {
     match ip {

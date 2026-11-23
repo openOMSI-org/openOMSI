@@ -5,7 +5,7 @@
 //! knob). Here those variables tune in a list of internet stations, streamed while they
 //! play (see `omsi_audio::radio`); Shift+R steps through the list.
 //!
-//! The stations are kept in `~/.openomsi/radio.cfg`, one `name = address` per line
+//! The stations are kept in `~/.openbus/radio.cfg`, one `name = address` per line
 //! (MP3, AAC or Ogg streams, or .m3u/.pls playlists), with `volume = 0..1`; the file is
 //! written with a default list the first time. A map can bring stations of its own: a
 //! `radio.cfg` of the same kind beside its global.cfg, whose stations come before the
@@ -37,7 +37,7 @@ pub fn set_fx_setting(fx: &mut omsi_audio::radio_fx::RadioFxParams, key: &str, v
 
 /// The stream addresses an OMSI radio plugin keeps in its text files under `plugins`
 /// (SuperRadio's `.opl` and its lists; whatever the layout, a line with an http(s) address is
-/// a station, named by the text before the address or else by its host): "openOMSI does not
+/// a station, named by the text before the address or else by its host): "openBus does not
 /// load the stations I defined in the .opl".
 fn plugin_stations(dir: &std::path::Path) -> Vec<(String, String)> {
     let mut out = Vec::new();
@@ -426,7 +426,7 @@ impl Radio {
 
     pub fn toggle_power(&mut self, v: Option<&omsi_sim::VehicleInstance>) -> String {
         if self.stations.is_empty() {
-            return "No radio stations (see ~/.openomsi/radio.cfg)".into();
+            return "No radio stations (see ~/.openbus/radio.cfg)".into();
         }
         if v.is_some_and(|v| Self::has_radio(v) && Self::bus_button(v).is_some()) {
             return "The bus radio is on (switch it off in the cockpit)".into();
@@ -524,7 +524,7 @@ impl Radio {
     /// Shift+R: the next station of the list on every button.
     pub fn next_station(&mut self) -> String {
         if self.stations.is_empty() {
-            return "No radio stations (see ~/.openomsi/radio.cfg)".into();
+            return "No radio stations (see ~/.openbus/radio.cfg)".into();
         }
         self.offset = (self.offset + 1) % self.stations.len();
         match &self.playing {
@@ -539,7 +539,7 @@ impl Radio {
     /// The station before on every button (`radio_previous`, #1293).
     pub fn previous_station(&mut self) -> String {
         if self.stations.is_empty() {
-            return "No radio stations (see ~/.openomsi/radio.cfg)".into();
+            return "No radio stations (see ~/.openbus/radio.cfg)".into();
         }
         let n = self.stations.len();
         self.offset = (self.offset + n - 1) % n;
@@ -608,7 +608,7 @@ mod tests {
         assert!(r.power);
         assert_eq!(r.toggle_power(None), "Radio off");
         r.stations.clear();
-        assert_eq!(r.toggle_power(None), "No radio stations (see ~/.openomsi/radio.cfg)");
+        assert_eq!(r.toggle_power(None), "No radio stations (see ~/.openbus/radio.cfg)");
         assert!(!r.power);
     }
 

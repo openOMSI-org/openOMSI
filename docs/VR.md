@@ -1,6 +1,6 @@
 # Virtual reality (Windows)
 
-openOMSI can render through an OpenXR headset on Windows. An active OpenXR runtime
+openBus can render through an OpenXR headset on Windows. An active OpenXR runtime
 and a DirectX 12 capable graphics adapter are required. VR is off by default.
 The normal desktop controls and rendering remain available when VR is off.
 
@@ -59,7 +59,7 @@ normal view. The mouse remains usable while zoomed. Outside VR, right-drag retai
 its normal camera control.
 
 The headset runtime controls its own reprojection settings. No runtime debug tool
-setting is needed to enable openOMSI's VR mode.
+setting is needed to enable openBus's VR mode.
 
 ## VR navigator
 

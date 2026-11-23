@@ -1,13 +1,13 @@
 # Modding beyond OMSI 2
 
-openOMSI reads OMSI 2 content as it is: a bus, a map or an object made for OMSI 2 works
+openBus reads OMSI 2 content as it is: a bus, a map or an object made for OMSI 2 works
 without changes. It also lifts limits OMSI 2 put on modders. Everything on this page is an
 addition. A file that uses it still loads in OMSI 2, which ignores what it does not know.
 
 ## Interior lights: more than four per mesh
 
 OMSI 2 lights a mesh with at most four `[interiorlight]` lamps, the four numbers of its
-`[illumination_interior]`. openOMSI takes as many as you list, up to 63 per mesh. Write the
+`[illumination_interior]`. openBus takes as many as you list, up to 63 per mesh. Write the
 extra lamp numbers on the lines right after the first four; a blank line ends the list:
 
 ```
@@ -48,7 +48,7 @@ OMSI 2 reads the first four and skips the rest. A model may declare any number o
 - A texture named in a model (`bus.bmp`) is found as `bus.dds` first, then under its own
   name, then as `.bmp`, `.tga`, `.jpg`, `.png`, `.jpeg`, `.webp`, `.tif`, `.tiff`, `.gif`,
   `.ktx2`, `.ktx`, `.qoi`, `.hdr`, `.exr` and `.pnm`.
-- There is no 2 GB address-space limit: openOMSI is a 64-bit program.
+- There is no 2 GB address-space limit: openBus is a 64-bit program.
 - A texture keeps its full resolution within 150 m of the camera, so a bus's own 4K
   textures always stay sharp. Far scenery gives up detail only when the texture budget
   (`OMSI_TEXTURE_MEMORY`, in MB) or the video memory (`video_memory` in the settings, all
@@ -161,10 +161,10 @@ that camera sees from the rear section.
     `[matl] <picture> <n>` of the model's `.cfg` acts on it as on an `.o3d`'s material;
   - skins (bone names and weights) and blend shapes come along; an FBX may be ASCII or
     binary of any version, an OBJ has its `.mtl` (`Kd`, `d`, `map_Kd`) and any polygons;
-  - `cargo run -p omsi-o3d --example mesh_info <file>` shows what openOMSI reads of a model.
+  - `cargo run -p omsi-o3d --example mesh_info <file>` shows what openBus reads of a model.
 - `[led_glow_effect]` after a `[matl]` (a number from 0 to 1) says how much an LED panel's
   dots glow in the enhanced picture: 1 the full `LED glow` setting, 0.5 half of it, 0 not at
-  all (the slot is no LED panel). Without it openOMSI guesses: a slot with a `\S:n` script
+  all (the slot is no LED panel). Without it openBus guesses: a slot with a `\S:n` script
   mask and a white light map is taken for an LED panel. See [file formats](FORMATS.md).
 - A mesh may carry **several visibility conditions** - no script needed for a mesh
   shown by two variables at once:
@@ -196,15 +196,15 @@ that camera sees from the rear section.
 ## Passenger doors: sixteen entries and sixteen exits
 
 OMSI 2 has the door variables of eight `[entry]` and eight `[exit]` paths a vehicle
-has (`PAX_Entry0_Open` to `PAX_Entry7_Open`, the same with `_Req` and for `PAX_Exit`). openOMSI
+has (`PAX_Entry0_Open` to `PAX_Entry7_Open`, the same with `_Req` and for `PAX_Exit`). openBus
 has them for sixteen of each: `PAX_Entry8_Open` ... `PAX_Entry15_Open`, `PAX_Entry8_Req` ...
 and the same for the exits. An entry or exit past the eighth is a door of its own once the
 script sets its `_Open` variable (or lists it in a varlist); then its passengers wait for that
 variable and ask for the door through its own `_Req`. Without it, it opens with the eighth, as
-in OMSI 2. Its passengers' requests then go through the eighth's `_Req` in openOMSI, while
+in OMSI 2. Its passengers' requests then go through the eighth's `_Req` in openBus, while
 OMSI 2 loses them (its request arrays have eight slots).
 
-openOMSI also tells the script who stands in a doorway: `PAX_Entry<n>_Busy` and
+openBus also tells the script who stands in a doorway: `PAX_Entry<n>_Busy` and
 `PAX_Exit<n>_Busy` (n 0 to 15) are 1 while somebody is on the door's threshold or in the
 opening between it and the step outside - what a door's light barrier sees - and 0 otherwise;
 the people queueing outside a shut door, in the aisle or on the deck above do not count. A
@@ -214,7 +214,7 @@ eighth without variables of its own reports through the eighth's. OMSI 2 does no
 
 ## Passenger places switched by the script
 
-OMSI 2's `[passpos]` places are all there all the time. In openOMSI a `[passpos]` may name a
+OMSI 2's `[passpos]` places are all there all the time. In openBus a `[passpos]` may name a
 script variable on the line straight after its five values: while that variable is 0 no
 passenger takes the place (whoever sits there already stays until they get off), so a bus
 can have two seating layouts and switch between them with a setvar. A second name on the
@@ -239,7 +239,7 @@ list, and OMSI 2 passes over the lines.
 
 ## Ticket validators: one by every door
 
-OMSI 2 uses one `[stamper]` of a `passengercabin.cfg`, the last one written. openOMSI keeps
+OMSI 2 uses one `[stamper]` of a `passengercabin.cfg`, the last one written. openBus keeps
 every `[stamper]` of every section, and a passenger with a ticket to stamp uses the one
 nearest the door they came in by. Write one `[stamper]` block per validator (path point,
 then x, y, z of the device, as usual); OMSI 2 still takes the last of them.
@@ -297,7 +297,7 @@ coordinates on the globe: many maps shorten and bend their routes.
 
 **A bus's display.** A radio script that wants the station and the song in its display
 declares the string variable `Snd_Radio_Text` (in a `[stringvarnamelist]` file of the bus)
-and shows it in a text texture: openOMSI writes the text there, ten characters, a longer
+and shows it in a text texture: openBus writes the text there, ten characters, a longer
 text running through, while the radio plays. The variables the radio itself sets are those
 of OMSI's radio plugins - `Snd_Radio` (1 while a cassette or the radio plays: the first
 station), or `SndExt_Radio` (the station button, 0 = off) with `SndVol_Radio` (the volume,
@@ -307,11 +307,11 @@ place in its first line and the station and song in its second.
 
 ## Weather of a real place
 
-A map can have live weather from Tomorrow.io: add an `openomsi_weather.cfg` beside its
+A map can have live weather from Tomorrow.io: add an `openbus_weather.cfg` beside its
 `global.cfg`. See [weather areas](WEATHER_REGIONS.md) for the format, the player's setup
-and the [community config editor](https://openomsi.mxnticek.eu/weather/).
+and the [community config editor](https://openbus.mxnticek.eu/weather/).
 
-A map can also give its climate statistics in an `openomsi_climate.cfg` file. The `[temperature]`
+A map can also give its climate statistics in an `openbus_climate.cfg` file. The `[temperature]`
 section of the file should contain 12 monthly mean temperatures (January to December) in °C
 (one per line), and the optional (currently unused) `[precipitation]` section should have
 the same 12 values, but for the precipitation in millimetres. These values will be used
@@ -320,7 +320,7 @@ as baseline for natural weather preset.
 ## Trolleybuses: poles, drive and a wire
 
 OMSI 2 has no overhead wire of its own; its trolleybus add-ons ship a plugin DLL that reads the
-bus's place out of Omsi.exe and cannot run here. openOMSI simulates the wire itself, and a
+bus's place out of Omsi.exe and cannot run here. openBus simulates the wire itself, and a
 trolleybus add-on needs two things to use it:
 
 * in the vehicle's `.bus`, a `[trolley_pole]` for each pole (the hinge on the roof, the boom's

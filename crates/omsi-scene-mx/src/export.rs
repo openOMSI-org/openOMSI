@@ -294,7 +294,7 @@ pub fn export_glb(
         .map(|i| serde_json::json!({ "mesh": i }))
         .collect();
     let json = serde_json::json!({
-        "asset": { "version": "2.0", "generator": "openOMSI" },
+        "asset": { "version": "2.0", "generator": "openBus" },
         "scene": 0,
         "scenes": [{ "nodes": (0..nodes.len()).collect::<Vec<_>>() }],
         "nodes": nodes,

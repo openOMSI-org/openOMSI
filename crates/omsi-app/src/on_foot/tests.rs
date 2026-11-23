@@ -200,7 +200,7 @@ fn g_on_foot_sits_down_unless_it_is_the_get_up_chord() {
 #[test]
 fn foot_key_keeps_screenshot_chord_and_rebound_pause() {
     let mut app = crate::assemble_app(
-        <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]),
+        <crate::cli::Args as clap::Parser>::parse_from(["openbus"]),
         Default::default(),
     );
     app.session.on_foot = Some(walker());

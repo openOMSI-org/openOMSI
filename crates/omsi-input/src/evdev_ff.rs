@@ -136,14 +136,14 @@ fn constant_force_device(name: Option<&str>) -> bool {
     })
 }
 
-/// A device with a constant force is connected (a wheel: openOMSI drives its forces itself).
+/// A device with a constant force is connected (a wheel: openBus drives its forces itself).
 pub fn wheel_connected() -> bool {
     constant_force_device(None)
 }
 
 /// This gilrs device is also an evdev constant-force wheel.
 /// SDL mappings can describe wheels such as the G29 as gamepads; the kernel capability is
-/// authoritative for openOMSI's steering semantics and native force-feedback path.
+/// authoritative for openBus's steering semantics and native force-feedback path.
 pub fn wheel_named(name: &str) -> bool {
     constant_force_device(Some(name))
 }

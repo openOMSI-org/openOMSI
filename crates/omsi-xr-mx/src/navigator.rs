@@ -356,7 +356,7 @@ mod tests {
     #[test]
     fn profiles_survive_replacing_the_file_and_stay_separate_per_bus() {
         let dir = std::env::temp_dir().join(format!(
-            "openomsi-vr-nav-{}-{}",
+            "openbus-vr-nav-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

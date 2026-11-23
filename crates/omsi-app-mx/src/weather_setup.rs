@@ -746,7 +746,7 @@ mod tests {
 
     #[test]
     fn tomorrow_starts_with_fallback_without_a_natural_model() {
-        let args = Args::try_parse_from(["openomsi", "--weather", "tomorrow"]).unwrap();
+        let args = Args::try_parse_from(["openbus", "--weather", "tomorrow"]).unwrap();
         let (weather, model) = load_weather_run(&args);
         assert!(
             model.is_none(),

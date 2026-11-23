@@ -1,13 +1,13 @@
 # Add-ons
 
 The launcher's **Add-ons** page (in the menu under Content; on a phone under More) lists
-projects others make for openOMSI: tools, companions, content collections. Each entry is a
+projects others make for openBus: tools, companions, content collections. Each entry is a
 card with the project's name, author, a short description and an **Open website** button,
 which opens the project's own page in the browser after saying which site it leaves for.
 
 The page is a directory of links, nothing more. The launcher downloads, installs and runs
 nothing of an add-on, and shows no picture or text from the web: everything on the cards comes
-with openOMSI. An add-on is not part of openOMSI, and the maintainers do not vouch for it.
+with openBus. An add-on is not part of openBus, and the maintainers do not vouch for it.
 
 ## Adding your add-on
 
@@ -44,12 +44,12 @@ the page.
 
 What the maintainers look for before merging:
 
-* the homepage is a real project page for openOMSI: it says what the add-on does, who makes it
+* the homepage is a real project page for openBus: it says what the add-on does, who makes it
   and how to get it, and it works;
 * no advertising, no tracking pixels or link shorteners, no paid-only teaser without a word
   of what it costs;
 * nothing that harms players or breaks the rules of [CONTRIBUTING.md](../CONTRIBUTING.md) or
-  the [trademark policy](../TRADEMARKS.md) - an add-on does not present itself as openOMSI;
+  the [trademark policy](../TRADEMARKS.md) - an add-on does not present itself as openBus;
 * the icon is your own work (or one you may share under the project's licence).
 
 An entry is removed when its homepage is gone or no longer matches what the entry says.

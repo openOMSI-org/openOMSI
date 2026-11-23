@@ -93,9 +93,9 @@ pub struct ServerCfg {
     pub voice: omsi_net::VoicePolicy,
     /// The server is listed in the public server list (`public_list`): name, icon, map, players.
     pub public_server: bool,
-    /// The public list's address (`public_list_url`; empty: openOMSI's own).
+    /// The public list's address (`public_list_url`; empty: openBus's own).
     pub public_list_url: String,
-    /// The owner's ban list (`owner_bans`; None: `~/.openomsi/bans-owner.json`).
+    /// The owner's ban list (`owner_bans`; None: `~/.openbus/bans-owner.json`).
     pub owner_bans: Option<std::path::PathBuf>,
     /// A player whose game sends no hardware identifier is turned away.
     pub require_hardware_id: bool,
@@ -112,11 +112,11 @@ pub struct ServerCfg {
 }
 
 pub const DEFAULT_CFG: &str = "\
-# openOMSI dedicated server
+# openBus dedicated server
 # (key = value; lines starting with # are comments)
 
 # shown in the players' server list and when they join
-name = openOMSI server
+name = openBus server
 motd = Welcome! Drive safely.
 
 # the map (relative to the OMSI 2 folder), the start date (YYYY-MM-DD, empty: today),
@@ -231,7 +231,7 @@ share_positions = 0
 # a player whose bus this server does not have sends it the files that bus uses (the variant
 # and paint driven, not the whole pack); the server keeps them and passes them on to every
 # other player, so nobody sees a stand-in. Taken without asking and kept after a restart
-# (in ~/.openomsi/lan-store). With it on and vehicles empty, the players may choose any bus.
+# (in ~/.openbus/lan-store). With it on and vehicles empty, the players may choose any bus.
 # 1 = on, 0 = off
 accept_uploads = 1
 # days a bus players sent is kept when nobody drives it; when the disk runs short, the buses
@@ -268,7 +268,7 @@ public_server = 0
 
 # bans by the player's machine (not by name): the session's own list is bans.json beside this
 # file. owner_bans is the list of ALL your sessions - the admin's \"ban in all my sessions\"
-# goes there: empty = ~/.openomsi/bans-owner.json (every game and server you run from this
+# goes there: empty = ~/.openbus/bans-owner.json (every game and server you run from this
 # account reads it); give a file to share one list between servers (a synced folder).
 # require_hardware_id = 1 turns away players whose game does not send the machine identifier
 # (older games, or players who switched it off)
@@ -329,7 +329,7 @@ impl ServerCfg {
         let dir = path.parent().unwrap_or(Path::new("."));
         let icon = std::fs::read(dir.join("server-icon.png")).ok().filter(|b| b.starts_with(b"\x89PNG") && b.len() < 256 * 1024).unwrap_or_default();
         Ok(remote_needs_long_passwords(ServerCfg {
-            name: get("name", "openOMSI server"),
+            name: get("name", "openBus server"),
             motd: get("motd", ""),
             map: get("map", "maps/Berlin-Spandau/global.cfg"),
             date: kv.get("date").cloned().filter(|v| !v.is_empty()),

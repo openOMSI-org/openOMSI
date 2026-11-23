@@ -36,7 +36,7 @@ export async function boot() {
   }
   startPolling();
   on('vehicles-progress', (p) => set({ vehiclesProgress: p }));
-  if (b.updated) toast(t('openOMSI {version} is installed', { version: b.updated }), 'ok', 8000);
+  if (b.updated) toast(t('openBus {version} is installed', { version: b.updated }), 'ok', 8000);
 }
 
 export const LAUNCHER_SIZES = [['0.7', 'Smallest'], ['0.8', 'Very small'], ['0.9', 'Smaller'], ['1', 'Normal'], ['1.15', 'Larger'], ['1.3', 'Largest']];

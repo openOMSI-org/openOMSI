@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-USAGE = """Measure several openOMSI builds in several scenes and print one table.
+USAGE = """Measure several openBus builds in several scenes and print one table.
 
     python3 scripts/bench-matrix.py OUT_DIR LABEL=BINARY [LABEL=BINARY ...]
         [--scenarios clear,rain,snow,night] [--runs 2] [--seconds 75] [--report-only]

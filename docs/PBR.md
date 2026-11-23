@@ -1,6 +1,6 @@
 # PBR materials
 
-openOMSI can draw OMSI content with physically based materials: a normal map for small
+openBus can draw OMSI content with physically based materials: a normal map for small
 relief, and roughness, metalness and ambient occlusion maps for how a surface reflects
 light. OMSI 2 itself knows nothing of this, so these maps are purely an addition: a bus, a
 map object or a spline without them looks exactly as it always did, and content with them

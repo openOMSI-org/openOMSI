@@ -117,7 +117,7 @@ pub fn swapped() -> bool {
 
 pub fn list() -> Answer {
     if !available() {
-        return Err("openOMSI is installed by the store here".into());
+        return Err("openBus is installed by the store here".into());
     }
     let listed = updater::releases().map_err(err)?;
     let broken = recovery::listed_broken();
@@ -161,7 +161,7 @@ fn busy(s: &Status) -> bool {
 
 pub fn install(version: String) -> Answer {
     if !available() {
-        return Err("openOMSI is installed by the store here".into());
+        return Err("openBus is installed by the store here".into());
     }
     let (release, latest) = {
         let listed = lock(&LISTED);
@@ -175,7 +175,7 @@ pub fn install(version: String) -> Answer {
         return Err("Did not start on this computer".into());
     }
     if core::list_instances().iter().any(|i| i.running) {
-        return Err("Close the game first: openOMSI cannot be replaced while it runs.".into());
+        return Err("Close the game first: openBus cannot be replaced while it runs.".into());
     }
     let mut job = lock(&JOB);
     if job.as_ref().is_some_and(|j| busy(&j.updater.status())) {
@@ -203,11 +203,11 @@ pub fn status() -> Answer {
 }
 
 fn reason(e: &str) -> &str {
-    e.split_once(": ").filter(|(head, _)| head.starts_with("openOMSI was not updated to")).map_or(e, |(_, why)| why)
+    e.split_once(": ").filter(|(head, _)| head.starts_with("openBus was not updated to")).map_or(e, |(_, why)| why)
 }
 
 fn program(place: &updater::Place) -> PathBuf {
-    let game = place.exe.with_file_name(if cfg!(windows) { "openomsi.exe" } else { "openomsi" });
+    let game = place.exe.with_file_name(if cfg!(windows) { "openbus.exe" } else { "openbus" });
     if game.is_file() {
         game
     } else {
@@ -224,7 +224,7 @@ pub fn restart(p: &dyn Platform) -> Answer {
     let place = updater::install_place().map_err(err)?;
     let exe = program(&place);
     std::process::Command::new(&exe).current_dir(&place.dir).env_remove("OMSI_GUARD_STATE").env_remove("OMSI_SAFE_MODE").spawn().map_err(err)?;
-    core::log_to_file(&format!("launcher: openOMSI {version} installed, {} starts", exe.display()));
+    core::log_to_file(&format!("launcher: openBus {version} installed, {} starts", exe.display()));
     p.quit();
     Ok(Value::Null)
 }
@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn a_failure_says_why_once() {
-        assert_eq!(reason("openOMSI was not updated to 0.2.33: the download stopped at 5 of 9 bytes"), "the download stopped at 5 of 9 bytes");
+        assert_eq!(reason("openBus was not updated to 0.2.33: the download stopped at 5 of 9 bytes"), "the download stopped at 5 of 9 bytes");
         assert_eq!(reason("the folder x cannot be written"), "the folder x cannot be written");
     }
 }

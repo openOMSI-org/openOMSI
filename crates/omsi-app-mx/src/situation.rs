@@ -203,11 +203,11 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
                 .ok()
                 .filter(|&i| i < sit.vehicles.len())
         });
-    // Older openOMSI wrote ordinal ids here, not mileage: 1 for the player, then 2+k
+    // Older openBus wrote ordinal ids here, not mileage: 1 for the player, then 2+k
     // for placed buses (or 2+k alone without a player). Recognize the complete old
     // writer's pattern, including its description, so genuine OMSI starts at 8..10 km
     // survive and even the tenth legacy bus does not acquire a 10 km reading.
-    let legacy_odometer_ids = sit.description.starts_with("Saved by the openOMSI at ")
+    let legacy_odometer_ids = sit.description.starts_with("Saved by the openBus at ")
         && sit
             .vehicles
             .iter()
@@ -313,7 +313,7 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
     }
 }
 
-/// Prefer OMSI's saved total; old openOMSI only kept it in the script variables.
+/// Prefer OMSI's saved total; old openBus only kept it in the script variables.
 /// A new bus starts at least at 8 km (Omsi.exe 0x7D1E42), so smaller header values
 /// are placeholders. The old writer's ordinal pattern also excludes its 8, 9, 10...
 /// ids; rejecting every reading below 10 would discard legitimate OMSI situations.
@@ -445,7 +445,7 @@ pub(crate) fn build_situation(
         name: name.to_string(),
         name_chosen: false,
         description: format!(
-            "Saved by the openOMSI at {:02}:{:02}",
+            "Saved by the openBus at {:02}:{:02}",
             (clock.time / 3600.0) as i32,
             ((clock.time % 3600.0) / 60.0) as i32
         ),
@@ -550,7 +550,7 @@ mod tests {
             path: std::path::PathBuf::from("HOF2.hof"),
             ..Default::default()
         }));
-        let mut args = Args::parse_from(["openomsi", "--hof", "HOF1"]);
+        let mut args = Args::parse_from(["openbus", "--hof", "HOF1"]);
         apply_situation_parsed(
             &omsi_content::Situation {
                 vehicles: vec![omsi_content::situation::SituationVehicle {
@@ -598,7 +598,7 @@ mod tests {
     fn legacy_odometer_ids_fall_back_for_player_and_placed_buses() {
         use omsi_content::situation::{Situation, SituationVehicle};
         let mut sit = Situation {
-            description: "Saved by the openOMSI at 08:45".into(),
+            description: "Saved by the openBus at 08:45".into(),
             vehicles: (1..=10)
                 .map(|id| SituationVehicle {
                     odometer_km: id as f64,
@@ -612,7 +612,7 @@ mod tests {
                 .collect(),
             ..Default::default()
         };
-        let mut args = Args::parse_from(["openomsi"]);
+        let mut args = Args::parse_from(["openbus"]);
         apply_situation_parsed(&sit, &mut args);
         assert_eq!(args.situation_odometer_km, Some(12001.125));
         assert_eq!(args.situation_others[0].odometer_km, Some(12002.125));
@@ -633,7 +633,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let mut args = crate::cli::Args::parse_from(["openomsi", "--paint", "InterEssonne"]);
+        let mut args = crate::cli::Args::parse_from(["openbus", "--paint", "InterEssonne"]);
         apply_situation_parsed(&sit, &mut args);
         assert_eq!(args.paint, None);
     }
@@ -661,7 +661,7 @@ mod tests {
             ],
             ..Default::default()
         };
-        let mut args = crate::cli::Args::parse_from(["openomsi"]);
+        let mut args = crate::cli::Args::parse_from(["openbus"]);
         apply_situation_parsed(&sit, &mut args);
         assert_eq!(args.paint.as_deref(), Some("1"));
         assert_eq!(args.situation_odometer_km, Some(10001.125));
@@ -688,7 +688,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let mut args = crate::cli::Args::parse_from(["openomsi"]);
+        let mut args = crate::cli::Args::parse_from(["openbus"]);
         apply_situation_parsed(&sit, &mut args);
         assert_eq!(
             (
@@ -704,7 +704,7 @@ mod tests {
 
     #[test]
     fn legacy_and_invalid_saved_stop_fields_keep_legacy_selection() {
-        let mut args = crate::cli::Args::parse_from(["openomsi"]);
+        let mut args = crate::cli::Args::parse_from(["openbus"]);
         for fields in [
             vec!["109", "65104", "16"],
             vec!["109", "65104", "16", "-1"],
@@ -727,7 +727,7 @@ mod tests {
 
     #[test]
     fn a_string_only_snapshot_is_a_resume() {
-        let mut args = crate::cli::Args::parse_from(["openomsi"]);
+        let mut args = crate::cli::Args::parse_from(["openbus"]);
         assert!(!args.is_resuming());
         args.situation_strvars
             .push(("destination".into(), "Manual".into()));
@@ -736,7 +736,7 @@ mod tests {
 
     #[test]
     fn an_odometer_only_snapshot_is_a_resume() {
-        let mut args = Args::parse_from(["openomsi"]);
+        let mut args = Args::parse_from(["openbus"]);
         args.situation_odometer_km = Some(75556.639);
         assert!(args.is_resuming());
     }
@@ -752,7 +752,7 @@ mod tests {
                 }],
                 ..Default::default()
             };
-            let mut args = Args::parse_from(["openomsi"]);
+            let mut args = Args::parse_from(["openbus"]);
             apply_situation_parsed(&sit, &mut args);
             assert_eq!(
                 (args.situation_others.len(), args.spawn.as_deref()),

@@ -3,7 +3,7 @@ name = "omsi-remote"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI's remote cockpit: a page on a phone or tablet of the same network that shows the bus's switches and works them, with layouts of its own for every vehicle"
+description = "openBus's remote cockpit: a page on a phone or tablet of the same network that shows the bus's switches and works them, with layouts of its own for every vehicle"
 
 [dependencies]
 omsi-sim = { path = "../omsi-sim" }

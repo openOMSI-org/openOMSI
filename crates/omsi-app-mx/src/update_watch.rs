@@ -80,7 +80,7 @@ impl UpdateWatch {
                     );
                     if self.notify {
                         let text = format!(
-                            "openOMSI {} is out: it is downloaded in the background and installed when this session ends",
+                            "openBus {} is out: it is downloaded in the background and installed when this session ends",
                             r.version
                         );
                         push_notice(
@@ -100,17 +100,17 @@ impl UpdateWatch {
                 self.told_ready = Some(r.version.clone());
                 if self.notify {
                     // (a quick download: this card takes the place of "is out" still showing)
-                    let found = format!("openOMSI {} is out", r.version);
+                    let found = format!("openBus {} is out", r.version);
                     notices
                         .retain(|n| !(n.kind == NoticeKind::Update && n.text.starts_with(&found)));
                     let text = if cfg!(target_os = "android") || !self.auto {
                         format!(
-                            "openOMSI {} is downloaded: the launcher offers it when this session ends",
+                            "openBus {} is downloaded: the launcher offers it when this session ends",
                             r.version
                         )
                     } else {
                         format!(
-                            "openOMSI {} is downloaded: it is installed when this session ends",
+                            "openBus {} is downloaded: it is installed when this session ends",
                             r.version
                         )
                     };

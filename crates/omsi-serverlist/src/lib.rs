@@ -1,4 +1,4 @@
-//! openOMSI's public server list. A server with `public_server = 1` registers with a list
+//! openBus's public server list. A server with `public_server = 1` registers with a list
 //! service (`services/serverlist`, a Cloudflare Worker) and says it is alive every minute;
 //! the launcher and the game ask the service for the list. Nothing here trusts the service
 //! or the servers with what is shown: every name, message and icon passes the same
@@ -16,7 +16,8 @@ pub mod publish;
 pub use moderation::{BuiltinModerator, IconVerdict, ImageClassifier, Moderator, Verdict};
 
 /// The list service (a Cloudflare Worker, see `services/serverlist/README.md`).
-pub const DEFAULT_SERVICE: &str = "https://openomsi-serverlist.savvabestbrother.workers.dev";
+// TODO(openBus): placeholder host, point this at your own server-list service.
+pub const DEFAULT_SERVICE: &str = "https://serverlist.openbus.example";
 
 /// The service a setting names (`public_list_url`), else the default; only `https://`.
 pub fn service_url(setting: &str) -> String {

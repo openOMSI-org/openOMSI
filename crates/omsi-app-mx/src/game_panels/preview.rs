@@ -200,7 +200,7 @@ fn preview() {
                 focus: 7,
                 ..Default::default()
             }
-            .panel_of(&state, Palette::OPENOMSI),
+            .panel_of(&state, Palette::OPENBUS),
             Some("refuel"),
         )],
     );
@@ -217,7 +217,7 @@ fn preview() {
                     off: vec!["skipstop", "endduty", "players", "admin", "tobus"],
                     lit: vec![],
                 },
-                Palette::OPENOMSI,
+                Palette::OPENBUS,
             ),
             None,
         )],
@@ -225,7 +225,7 @@ fn preview() {
     picture(
         "game-panels-trip.png",
         &[(
-            trip_summary::TripPanel::new(summary()).panel(Palette::OPENOMSI),
+            trip_summary::TripPanel::new(summary()).panel(Palette::OPENBUS),
             Some("save"),
         )],
     );
@@ -236,7 +236,7 @@ fn preview() {
     };
     picture(
         "game-panels-dest.png",
-        &[(form.panel(Palette::OPENOMSI), Some("select"))],
+        &[(form.panel(Palette::OPENBUS), Some("select"))],
     );
     let values = view_editor::ViewValues {
         seat: [0.05, -0.12, 0.03],
@@ -248,14 +248,14 @@ fn preview() {
     picture(
         "game-panels-view.png",
         &[(
-            view_editor::ViewEditor::default().panel_of(&values, Palette::OPENOMSI),
+            view_editor::ViewEditor::default().panel_of(&values, Palette::OPENBUS),
             None,
         )],
     );
     picture(
         "game-panels-move.png",
         &[(
-            move_here::panel(glam::DVec3::new(-1948.9, -174.7, 8.8), Palette::OPENOMSI),
+            move_here::panel(glam::DVec3::new(-1948.9, -174.7, 8.8), Palette::OPENBUS),
             Some("yes"),
         )],
     );

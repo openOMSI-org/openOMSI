@@ -19,7 +19,7 @@ body:
       options:
         - label: I wrote this report in English.
           required: true
-        - label: I searched the [open and closed issues](https://github.com/openOMSI-org/openOMSI/issues?q=is%3Aissue) and this is not a duplicate.
+        - label: I searched the [open and closed issues](https://github.com/rafaelkaiz/openBus/issues?q=is%3Aissue) and this is not a duplicate.
           required: true
         - label: It still happens on the latest release.
           required: true
@@ -145,7 +145,7 @@ body:
     attributes:
       label: Logs
       description: |
-        Paste the relevant part of `game.log` (or `launcher.log` for launcher problems). Both are in the `.openomsi` folder in your user folder - on Windows `C:\Users\<you>\.openomsi`. This will be automatically formatted as code.
+        Paste the relevant part of `game.log` (or `launcher.log` for launcher problems). Both are in the `.openbus` folder in your user folder - on Windows `C:\Users\<you>\.openbus`. This will be automatically formatted as code.
       render: shell
     validations:
       required: false

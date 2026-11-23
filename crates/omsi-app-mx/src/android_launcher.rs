@@ -109,7 +109,7 @@ fn take(env: &mut JNIEnv, s: &JString) -> String {
 /// `LauncherBridge.call(cmd, args)`: a command of the page (on the bridge's worker thread);
 /// "1" and the JSON answer, or "0" and the error.
 // (exported by the wgpu game, which hands over to this one with mX Graphics on)
-pub extern "system" fn Java_org_openomsi_game_LauncherBridge_call<'a>(
+pub extern "system" fn Java_org_openbus_game_LauncherBridge_call<'a>(
     mut env: JNIEnv<'a>,
     class: JClass<'a>,
     cmd: JString<'a>,
@@ -138,7 +138,7 @@ pub extern "system" fn Java_org_openomsi_game_LauncherBridge_call<'a>(
 /// `LauncherBridge.bytes(cmd, args)`: a command answering bytes (the preview's pictures);
 /// the bytes after a 1, or a 0 and the error's text.
 // (exported by the wgpu game, which hands over to this one with mX Graphics on)
-pub extern "system" fn Java_org_openomsi_game_LauncherBridge_bytes<'a>(
+pub extern "system" fn Java_org_openbus_game_LauncherBridge_bytes<'a>(
     mut env: JNIEnv<'a>,
     _class: JClass<'a>,
     cmd: JString<'a>,

@@ -98,10 +98,10 @@ pub fn web_bases(target: &str) -> Vec<String> {
     out
 }
 
-/// Does an openOMSI server answer at the web address `base` within `within`? (A joining
+/// Does an openBus server answer at the web address `base` within `within`? (A joining
 /// game tries a server's direct address this way before it gives up its tunnel for it.)
 pub fn reachable(base: &str, within: std::time::Duration) -> bool {
-    let agent = ureq::AgentBuilder::new().timeout(within).user_agent("openOMSI").build();
+    let agent = ureq::AgentBuilder::new().timeout(within).user_agent("openBus").build();
     agent.get(&format!("{}/status", base.trim_end_matches('/'))).call().ok().and_then(|r| r.into_string().ok()).and_then(|b| super::ServerInfo::from_json(&b)).is_some()
 }
 

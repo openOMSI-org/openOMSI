@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2d3138"/><stop offset="1" stop-color="#14161a"/></linearGradient></defs>
+<rect width="1024" height="1024" fill="url(#bg)"/>
+<g transform="translate(512 512) scale(0.9) translate(-512 -512)">
+<g id="bus">
+<rect x="212" y="206" width="600" height="560" rx="96" fill="#f47f30"/>
+<rect x="268" y="266" width="488" height="230" rx="44" fill="#14161a"/>
+<rect x="392" y="226" width="240" height="26" rx="13" fill="#14161a" opacity=".55"/>
+<circle cx="346" cy="606" r="46" fill="#ffe9c8"/>
+<circle cx="678" cy="606" r="46" fill="#ffe9c8"/>
+<rect x="440" y="578" width="144" height="56" rx="16" fill="#14161a"/>
+<rect x="268" y="730" width="120" height="84" rx="26" fill="#0c0d0f"/>
+<rect x="636" y="730" width="120" height="84" rx="26" fill="#0c0d0f"/>
+<rect x="168" y="316" width="30" height="120" rx="14" fill="#c9631f"/>
+<rect x="826" y="316" width="30" height="120" rx="14" fill="#c9631f"/>
+</g>
+</g>
+</svg>

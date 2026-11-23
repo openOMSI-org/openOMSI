@@ -1,14 +1,14 @@
-# The Xcode project of openOMSI for iPhone, iPad and Mac (XcodeGen: `xcodegen` in this folder,
+# The Xcode project of openBus for iPhone, iPad and Mac (XcodeGen: `xcodegen` in this folder,
 # or scripts/build-apple.sh, which also builds the game library). The .xcodeproj is made from
 # this file and not kept in git.
 #
-# The game is the Rust library `openomsi_game` (crates/omsi-app) built as a static library
+# The game is the Rust library `openbus_game` (crates/omsi-app) built as a static library
 # for each platform (scripts/build-apple.sh rust …) and linked into the Swift app; the Mac app
-# carries the game program `openomsi` beside the launcher as well (it runs every drive as a
+# carries the game program `openbus` beside the launcher as well (it runs every drive as a
 # process of its own).
-name: openOMSI
+name: openBus
 options:
-  bundleIdPrefix: io.github.turbo-devv
+  bundleIdPrefix: io.github.rafaelkaiz
   createIntermediateGroups: true
   deploymentTarget:
     iOS: "18.0"
@@ -17,22 +17,22 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     # (from scripts/build-apple.sh: the version of the commit, the Apple Developer team)
-    MARKETING_VERSION: "${OPENOMSI_MARKETING_VERSION}"
-    CURRENT_PROJECT_VERSION: "${OPENOMSI_BUILD_NUMBER}"
-    DEVELOPMENT_TEAM: "${OPENOMSI_TEAM_ID}"
+    MARKETING_VERSION: "${OPENBUS_MARKETING_VERSION}"
+    CURRENT_PROJECT_VERSION: "${OPENBUS_BUILD_NUMBER}"
+    DEVELOPMENT_TEAM: "${OPENBUS_TEAM_ID}"
     CODE_SIGN_STYLE: Automatic
-    PRODUCT_NAME: openOMSI
-    PRODUCT_BUNDLE_IDENTIFIER: io.github.turbo-devv.openomsi
-    SWIFT_OBJC_BRIDGING_HEADER: Shared/Bridge/openomsi.h
+    PRODUCT_NAME: openBus
+    PRODUCT_BUNDLE_IDENTIFIER: io.github.rafaelkaiz.openbus
+    SWIFT_OBJC_BRIDGING_HEADER: Shared/Bridge/openbus.h
     # where cargo puts the game library (the repository's target folder unless the build says)
-    OPENOMSI_RUST_TARGET: $(SRCROOT)/../target
-    OPENOMSI_RUST_PROFILE: release
+    OPENBUS_RUST_TARGET: $(SRCROOT)/../target
+    OPENBUS_RUST_PROFILE: release
     DEAD_CODE_STRIPPING: YES
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 targets:
-  openOMSI-iOS:
+  openBus-iOS:
     type: application
     platform: iOS
     sources:
@@ -42,21 +42,21 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: iOS/Info.plist
-        CODE_SIGN_ENTITLEMENTS: iOS/openOMSI.entitlements
+        CODE_SIGN_ENTITLEMENTS: iOS/openBus.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
         # (the game library is built for arm64 only: Apple silicon Macs run the Simulator)
         "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
         SUPPORTS_MACCATALYST: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
-        OTHER_SWIFT_FLAGS: -Xcc -DOPENOMSI_IOS=1
-        "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]": '"$(OPENOMSI_RUST_TARGET)/aarch64-apple-ios/$(OPENOMSI_RUST_PROFILE)"'
-        "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]": '"$(OPENOMSI_RUST_TARGET)/aarch64-apple-ios-sim/$(OPENOMSI_RUST_PROFILE)"'
-        OTHER_LDFLAGS: -lopenomsi_game -lc++ -liconv -framework Metal -framework QuartzCore -framework UIKit -framework CoreGraphics -framework CoreAudio -framework AudioToolbox -framework AVFoundation -framework GameController -framework CoreMotion -framework Security -framework SystemConfiguration
+        OTHER_SWIFT_FLAGS: -Xcc -DOPENBUS_IOS=1
+        "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]": '"$(OPENBUS_RUST_TARGET)/aarch64-apple-ios/$(OPENBUS_RUST_PROFILE)"'
+        "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]": '"$(OPENBUS_RUST_TARGET)/aarch64-apple-ios-sim/$(OPENBUS_RUST_PROFILE)"'
+        OTHER_LDFLAGS: -lopenbus_game -lc++ -liconv -framework Metal -framework QuartzCore -framework UIKit -framework CoreGraphics -framework CoreAudio -framework AudioToolbox -framework AVFoundation -framework GameController -framework CoreMotion -framework Security -framework SystemConfiguration
     preBuildScripts:
       - name: Game library (Rust)
         script: '"$SRCROOT/../scripts/build-apple.sh" rust-for-xcode'
         basedOnDependencyAnalysis: false
-  openOMSI-macOS:
+  openBus-macOS:
     type: application
     platform: macOS
     sources:
@@ -66,12 +66,12 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: macOS/Info.plist
-        EXECUTABLE_NAME: openOMSI-Mac
-        CODE_SIGN_ENTITLEMENTS: macOS/openOMSI.entitlements
+        EXECUTABLE_NAME: openBus-Mac
+        CODE_SIGN_ENTITLEMENTS: macOS/openBus.entitlements
         ENABLE_HARDENED_RUNTIME: YES
-        LIBRARY_SEARCH_PATHS: '"$(OPENOMSI_RUST_TARGET)/universal-apple-darwin/$(OPENOMSI_RUST_PROFILE)" "$(SRCROOT)/../assets/steam_redist"'
+        LIBRARY_SEARCH_PATHS: '"$(OPENBUS_RUST_TARGET)/universal-apple-darwin/$(OPENBUS_RUST_PROFILE)" "$(SRCROOT)/../assets/steam_redist"'
         LD_RUNPATH_SEARCH_PATHS: "@executable_path @executable_path/../Frameworks"
-        OTHER_LDFLAGS: -lopenomsi_game -lsteam_api -lc++ -liconv -framework Accelerate -framework AudioUnit -framework CoreAudio -framework QuartzCore -framework Metal -framework ApplicationServices -framework CoreGraphics -framework CoreVideo -framework Carbon -framework AppKit -framework GameController -framework IOKit
+        OTHER_LDFLAGS: -lopenbus_game -lsteam_api -lc++ -liconv -framework Accelerate -framework AudioUnit -framework CoreAudio -framework QuartzCore -framework Metal -framework ApplicationServices -framework CoreGraphics -framework CoreVideo -framework Carbon -framework AppKit -framework GameController -framework IOKit
     preBuildScripts:
       - name: Game library (Rust)
         script: '"$SRCROOT/../scripts/build-apple.sh" rust-for-xcode'
@@ -81,17 +81,17 @@ targets:
         script: '"$SRCROOT/../scripts/build-apple.sh" embed-game'
         basedOnDependencyAnalysis: false
 schemes:
-  openOMSI-iOS:
+  openBus-iOS:
     build:
       targets:
-        openOMSI-iOS: all
+        openBus-iOS: all
     run:
       config: Release
     archive:
       config: Release
-  openOMSI-macOS:
+  openBus-macOS:
     build:
       targets:
-        openOMSI-macOS: all
+        openBus-macOS: all
     archive:
       config: Release

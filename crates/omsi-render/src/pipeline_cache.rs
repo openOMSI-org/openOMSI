@@ -1,4 +1,4 @@
-//! The driver's compiled pipelines kept between runs (`~/.openomsi/cache/pipelines-*.bin`).
+//! The driver's compiled pipelines kept between runs (`~/.openbus/cache/pipelines-*.bin`).
 //!
 //! Vulkan and OpenGL (the fork's `PIPELINE_CACHE` for program binaries: ANGLE, phones) compile
 //! every pipeline from the shader text at each start; with the cache the second start takes the
@@ -44,7 +44,7 @@ pub(crate) fn wanted(adapter: &wgpu::Adapter) -> wgpu::Features {
 fn path(info: &wgpu::AdapterInfo) -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     let home = PathBuf::from(home);
-    home.is_absolute().then(|| home.join(".openomsi/cache").join(file_name(info.backend, info.vendor, info.device)))
+    home.is_absolute().then(|| home.join(".openbus/cache").join(file_name(info.backend, info.vendor, info.device)))
 }
 
 // (one file per GPU: a laptop's two GPUs would throw each other's data away)

@@ -1,10 +1,10 @@
 # Dedicated server
 
 ```
-openomsi --root /path/to/OMSI2 --server /opt/openomsi-server/server.cfg
+openbus --root /path/to/OMSI2 --server /opt/openbus-server/server.cfg
 ```
 
-Every release has ready server packages: `openOMSI-<version>-server-linux-x64.zip` and
+Every release has ready server packages: `openBus-<version>-server-linux-x64.zip` and
 `-server-linux-arm64.zip` (started with `start.sh /path/to/OMSI2 [server.cfg]`), and for
 Windows 10/11 and Windows Server 2016 or later `-server-windows-x64.zip` and
 `-server-windows-arm64.zip` (started with `start.cmd C:\path\to\OMSI2 [server.cfg]`).
@@ -40,14 +40,14 @@ nothing is drawn. `server.cfg` is written with a comment for every key on the fi
 | `accept_uploads`, `uploads_keep_days` | players' buses (below) |
 | `share_maps` | a player who joins without the server's map gets it from the server (the map and everything it uses, gigabytes for a big map); off (the written default), players install it themselves and are told which one is missing |
 | `voice_*` | voice chat (below) |
-| `public_server`, `public_list_url` | list the server in the public server list ([below](#public-server-list)); the list service's address (empty: openOMSI's own) |
-| `owner_bans`, `require_hardware_id` | machine bans ([below](#machine-bans)): the file of the owner's list shared by all your sessions (empty: `~/.openomsi/bans-owner.json`), and turning away players whose game sends no machine identifier |
+| `public_server`, `public_list_url` | list the server in the public server list ([below](#public-server-list)); the list service's address (empty: openBus's own) |
+| `owner_bans`, `require_hardware_id` | machine bans ([below](#machine-bans)): the file of the owner's list shared by all your sessions (empty: `~/.openbus/bans-owner.json`), and turning away players whose game sends no machine identifier |
 
 `server-icon.png` beside `server.cfg` (64x64, a PNG under 256 KB) is the icon the players'
 list shows.
 
 **The start script that asks** (`run-server.cmd` on Windows, a double click; `run-server.sh`
-on Linux, both beside `openomsi` in the server's zip): the first time it asks for the OMSI 2
+on Linux, both beside `openbus` in the server's zip): the first time it asks for the OMSI 2
 folder (and checks it is a complete installation before going on), then for the main
 settings of `server.cfg` - name, players at most, the UDP and web ports, the tunnel, the admin
 password (typed hidden; 12 characters at least) - with what the file has in brackets, kept
@@ -65,7 +65,7 @@ the Windows PowerShell every Windows has. `start.cmd` / `start.sh` stay as they 
 service or another launcher.
 
 For a launcher of its own, the program has the two pieces the script uses:
-`openomsi --root <folder> --list-maps` prints the installed maps (one a line, as `server.cfg`
+`openbus --root <folder> --list-maps` prints the installed maps (one a line, as `server.cfg`
 names them; the content folder's too) and ends - with code 1 and what is missing when the
 folder is not a complete OMSI 2, never another installation found instead; with
 `--server <server.cfg>` it also writes a missing `server.cfg` with its defaults, nothing more
@@ -200,7 +200,7 @@ them on to every other player, so nobody sees a stand-in.
   else - a piece changed on the way, a file that is not what its list says - is thrown away
   and fetched again, never drawn.
 * **On the server:** taken without asking and with no size limit, and kept by its content:
-  every file sealed once in `~/.openomsi/lan-store` by its SHA-256 (a file several buses share
+  every file sealed once in `~/.openbus/lan-store` by its SHA-256 (a file several buses share
   is kept and sent once), every bus as its list of files in `lan-store/vehicles/<fingerprint>.json`
   - the fingerprint the server works out itself from what it checked. Two players with two
   versions of the same mod are two buses, both kept, neither in the place of the other; the
@@ -470,7 +470,7 @@ The game sends a *hardware identifier* when it joins, made for this host's owner
 answers the first hello with its *realm* (a random key kept in the owner's list, see below), and
 the game sends SHA-256 over a fixed text, the machine's own id (Windows `MachineGuid`, Linux
 `/etc/machine-id`, macOS `IOPlatformUUID`; on a system with none, a random number kept in
-`~/.openomsi/hardware-id`) and that realm, cut to 128 bits. The id itself never leaves the
+`~/.openbus/hardware-id`) and that realm, cut to 128 bits. The id itself never leaves the
 machine and cannot be got back from the hash; no disk or board serial number is read. Every
 session of one owner list gets the same identifier from a machine; another owner gets another.
 The host pins the identifier to the connection at its first hello (a later hello of the same
@@ -486,7 +486,7 @@ time only), and turns a joining machine away if a ban holds it:
 * **Scope, and what "my sessions" means.** *This session*: the list of the session -
   `bans.json` beside `server.cfg` for a dedicated server (kept across restarts); for a game
   hosting by code only while that game runs. *All my sessions*: the owner's list,
-  `~/.openomsi/bans-owner.json` of the account the host runs as, read by every game and
+  `~/.openbus/bans-owner.json` of the account the host runs as, read by every game and
   server started from that account on that machine, running ones within a second of the
   change. To share one list between servers (or machines), point `owner_bans` at a file in a
   synced folder. A ban may end (`hours`), else it holds until lifted. Lifting one (game menu:
@@ -513,7 +513,7 @@ time only), and turns a joining machine away if a ban holds it:
 
 `public_server = 1` lists the server in the list that the launcher (*Multiplayer -> Servers ->
 Public servers*) shows. The server registers with the list service (`public_list_url`, default
-openOMSI's own, a Cloudflare Worker in `services/serverlist`), is listed once the service has
+openBus's own, a Cloudflare Worker in `services/serverlist`), is listed once the service has
 read the server's `GET /status` and found the challenge it gave there (so the web port or the
 tunnel must be reachable from the internet; a tunnel is the sure way), says it is alive every
 minute, and is forgotten three minutes after its last word. Listed: name, message of the day,
@@ -551,7 +551,7 @@ end.
 | The players' internet addresses | the same log | A public address keeps only its network (`203.0.113.x`, `2001:db8:85a3::x`); the local network's and this machine's are written whole. `log_addresses = 1` writes them whole (for an abuse report) |
 | Logins, refused passwords, the admins' and moderators' operations; **whole source addresses** for web logins and refused passwords, regardless of `log_addresses` | `admin-audit.log` | Rotated past 1 MB, keeping `admin-audit.log.1` and `.2`: about 3 MB total |
 | Banned machines (their hardware identifier) | `bans.json`, `owner_bans` | Until the ban is lifted |
-| The players' buses (with `accept_uploads = 1`) | `~/.openomsi/lan-store` | `uploads_keep_days` (30) after the last use |
+| The players' buses (with `accept_uploads = 1`) | `~/.openbus/lan-store` | `uploads_keep_days` (30) after the last use |
 | Name, icon, map, players, motd (not the players' names) | the public list, with `public_server = 1` | Forgotten three minutes after the server stops |
 | Names, buses, lines and positions | anyone who asks `GET /players`, with `share_positions = 1` | Live only |
 
@@ -562,6 +562,6 @@ account's folder and name out of it (`~`, `<user>`) and the driver's name (`Driv
 
 ## License
 
-openOMSI is released under the GNU Affero General Public License, version 3 only (`LICENSE`).
+openBus is released under the GNU Affero General Public License, version 3 only (`LICENSE`).
 Its launcher preview encodes pictures with [jpeg-encoder](https://crates.io/crates/jpeg-encoder): this
 software is based in part on the work of the Independent JPEG Group.

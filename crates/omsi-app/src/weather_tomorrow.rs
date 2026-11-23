@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const CFG: &str = "openomsi_weather.cfg";
+const CFG: &str = "openbus_weather.cfg";
 pub(crate) fn selected(value: Option<&str>) -> bool {
     value.is_some_and(|v| v.eq_ignore_ascii_case("tomorrow"))
 }
@@ -114,7 +114,7 @@ impl crate::App {
                 .map(|p| p.1)
                 .unwrap_or_else(|| world.global.path.parent().unwrap().join(CFG));
             let cfg = std::fs::read(path)
-                .map_err(|_| "this map has no openomsi_weather.cfg")
+                .map_err(|_| "this map has no openbus_weather.cfg")
                 .and_then(|b| MapConfig::parse(&b));
             match cfg {
                 Ok(cfg) => {

@@ -1,4 +1,4 @@
-//! openOMSI's platform services: what the game and the launcher do with the world outside
+//! openBus's platform services: what the game and the launcher do with the world outside
 //! the simulation - the updates from GitHub (`updater`), Discord's rich presence (`discord`),
 //! the project's count of running games (`presence`), what the start guard needs to heal a
 //! broken release (`recovery`) - and the version stamp of the build.
@@ -24,7 +24,7 @@ pub mod webview2;
 pub const BUILD: &str = env!("OMSI_BUILD");
 
 /// The release version, `MAJOR.MINOR.PATCH` (see `build.rs` and docs/VERSIONING.md).
-pub const VERSION: &str = env!("OPENOMSI_VERSION");
+pub const VERSION: &str = env!("OPENBUS_VERSION");
 
 /// Android: the calls into Java the services need (the system's package installer, the
 /// browser), which only the app's activity can make - the app installs them at its start

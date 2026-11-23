@@ -141,7 +141,7 @@ fn check_scripts(root: &Path, verbose: bool) {
         root.to_path_buf()
     } else {
         std::env::var_os("HOME")
-            .and_then(|h| std::fs::read_to_string(Path::new(&h).join(".openomsi-root")).ok())
+            .and_then(|h| std::fs::read_to_string(Path::new(&h).join(".openbus-root")).ok())
             .map(|s| PathBuf::from(s.trim()))
             .filter(|p| p.join("program").is_dir())
             .unwrap_or_else(|| root.to_path_buf())

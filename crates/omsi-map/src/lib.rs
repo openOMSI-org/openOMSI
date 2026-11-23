@@ -154,7 +154,7 @@ mod world_tests {
     use super::*;
     #[test]
     fn spandau_rows() {
-        // the size openOMSI had measured on Spandau's cross-tile links, and the change
+        // the size openBus had measured on Spandau's cross-tile links, and the change
         // of 2.8 cm a row the joints show
         assert!((world_row_width(11281) - 371.9).abs() < 0.05);
         assert!(((world_row_width(11281) - world_row_width(11282)) - 0.0283).abs() < 0.002);

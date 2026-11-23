@@ -6,7 +6,7 @@
 //! and follows `self.f`, `self.m(..)`, `Self::m(..)`, `who.f` / `who.m(..)` in a function
 //! whose parameter of the type is `who`, and `f(.., self, ..)` (the value handed on). Methods
 //! are found by name, so a name defined twice (cfg variants) counts as both bodies. That is
-//! how openOMSI's app code is written; code that hides a field behind a macro or a trait
+//! how openBus's app code is written; code that hides a field behind a macro or a trait
 //! method of another type is not followed.
 
 use std::collections::{BTreeMap, BTreeSet};

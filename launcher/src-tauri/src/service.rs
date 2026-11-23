@@ -1,4 +1,4 @@
-//! The game program as the launcher's helper (`openomsi --launcher-service`, no window): the
+//! The game program as the launcher's helper (`openbus --launcher-service`, no window): the
 //! bus preview drawn by the game's own renderer, as the game's launcher window draws it, and
 //! the city map with a trip's route read the way the navigator reads it. Started once, on the
 //! first request, and again if it ended; requests carry a number and the answers find their

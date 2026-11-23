@@ -85,7 +85,7 @@ pub unsafe extern "system" fn AccessTrigger(index: u16, active: *mut u8) {
 
 static POINTER: AtomicU32 = AtomicU32::new(0);
 
-/// openOMSI's `AccessScriptTexturePointer`: remembers the last event (x, y, kind), which
+/// openBus's `AccessScriptTexturePointer`: remembers the last event (x, y, kind), which
 /// `AccessScriptTexture` shows in the second pixel.
 #[unsafe(no_mangle)]
 pub extern "system" fn AccessScriptTexturePointer(index: u16, kind: i32, x: f32, y: f32) {
@@ -94,7 +94,7 @@ pub extern "system" fn AccessScriptTexturePointer(index: u16, kind: i32, x: f32,
     }
 }
 
-/// openOMSI's `AccessScriptTexture`: entry 0 is painted with each pixel's x and y in red
+/// openBus's `AccessScriptTexture`: entry 0 is painted with each pixel's x and y in red
 /// and green, blue 7; the first pixel's alpha counts the calls, from what the buffer kept
 /// (so the buffer must persist between frames). Entry 1 is never written.
 ///
@@ -125,7 +125,7 @@ pub unsafe extern "system" fn AccessScriptTexture(index: u16, width: i32, height
     }
 }
 
-/// openOMSI's `AccessTicketRequest`: a child (under 15) needs no ticket; a ride of `n`
+/// openBus's `AccessTicketRequest`: a child (under 15) needs no ticket; a ride of `n`
 /// stops of the trip costs `n` x 10, is called "<destination>, <n> stops" and asked for
 /// with the voice line `Zone_<n>`; a ride the trip does not know is left as it is.
 ///

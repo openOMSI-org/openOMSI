@@ -37,12 +37,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             let mask: UIInterfaceOrientationMask = o == "portrait" ? .portrait : .landscapeRight
             DispatchQueue.main.async {
                 scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { e in
-                    NSLog("openOMSI: OMSI_APPLE_ORIENT: \(e)")
+                    NSLog("openBus: OMSI_APPLE_ORIENT: \(e)")
                 }
             }
         }
         // (the game may put its windows on the scene from now on)
-        openomsi_ios_scene_ready()
+        openbus_ios_scene_ready()
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {

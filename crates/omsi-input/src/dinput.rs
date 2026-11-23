@@ -417,7 +417,7 @@ unsafe extern "system" fn notify_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPAR
 fn notification_window() -> Option<HWND> {
     unsafe {
         let hinst: HINSTANCE = GetModuleHandleW(None).ok()?.into();
-        let class = w!("openOMSI game controllers");
+        let class = w!("openBus game controllers");
         let wc = WNDCLASSW {
             lpfnWndProc: Some(notify_proc),
             hInstance: hinst,
@@ -473,7 +473,7 @@ pub fn background_window() -> Option<isize> {
     }
     unsafe {
         let hinst: HINSTANCE = GetModuleHandleW(None).ok()?.into();
-        let class = w!("openOMSI launcher controllers");
+        let class = w!("openBus launcher controllers");
         let wc = WNDCLASSW {
             lpfnWndProc: Some(quiet_proc),
             hInstance: hinst,

@@ -37,7 +37,7 @@ fn run(buf: &StreamBuf, url: &str) {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(8))
         .timeout_read(Duration::from_secs(15))
-        .user_agent(&format!("openOMSI/{}", option_env!("OPENOMSI_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))))
+        .user_agent(&format!("openBus/{}", option_env!("OPENBUS_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))))
         .build();
     let mut wait = 2u64;
     while !buf.is_closed() {

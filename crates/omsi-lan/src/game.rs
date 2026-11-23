@@ -14,7 +14,7 @@
 //!   plus the horn and indicator relay of `[sound]`) play where it stands;
 //! - the chat line (V to type, Enter to send) with join and leave notices.
 //!
-//! While a session runs the game keeps `~/.openomsi/lan/<instance>.json` up to date
+//! While a session runs the game keeps `~/.openbus/lan/<instance>.json` up to date
 //! (role, session code, address, players, warnings), which is where the launcher reads the
 //! code to show it with a copy button. `<instance>` is the id the launcher gives the game in
 //! `OMSI_INSTANCE`, else the process id.

@@ -598,7 +598,7 @@ fn a_stalled_map_picture_does_not_hold_back_driving() {
 
 #[test]
 fn firewall_scripts_carry_the_path_only_as_hex() {
-    let exe = "C:\\Users\\Jean\u{2019}s O'Neil\\openomsi.exe";
+    let exe = "C:\\Users\\Jean\u{2019}s O'Neil\\openbus.exe";
     let hex: String = exe.encode_utf16().map(|u| format!("{u:04x}")).collect();
     for script in [crate::firewall::check_script(exe, "192.168.1.20", 8642), crate::firewall::allow_script(exe, 8642)] {
         assert!(script.contains(&hex), "{script}");

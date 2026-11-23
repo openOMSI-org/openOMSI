@@ -3,7 +3,7 @@ name = "omsi-career"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI's driver record: the personnel file's career (ratings, stops, tickets, crashes) and the real-time clock sync"
+description = "openBus's driver record: the personnel file's career (ratings, stops, tickets, crashes) and the real-time clock sync"
 
 [dependencies]
 omsi-cfg = { path = "../omsi-cfg" }

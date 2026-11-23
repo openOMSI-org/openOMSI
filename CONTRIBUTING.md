@@ -1,4 +1,4 @@
-# Contributing to openOMSI
+# Contributing to openBus
 
 Thanks for helping! A few rules keep the project healthy:
 
@@ -62,7 +62,7 @@ app.yml does not have. A pull request that changes the translations is checked a
   opens again by itself once it is edited into English. Logs and game text can stay as
   they are.
 * One problem or idea per issue, on the latest release. Questions go to the
-  [Discord server](https://discord.gg/openomsi).
+  [GitHub Discussions](https://github.com/rafaelkaiz/openBus/discussions).
 * New issues are sorted automatically: the form's "What is it about?" becomes an `area:`
   label and the issue gets a first milestone (a regression or a crash: v0.1.x), which the
   maintainers move when it fits better elsewhere. A crash report with the same panic as an

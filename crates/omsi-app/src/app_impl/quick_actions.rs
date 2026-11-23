@@ -63,7 +63,7 @@ mod tests {
     #[test]
     fn quick_actions_editor_keys_do_not_execute_or_close_the_game_menu() {
         // A headless fixture avoids initializing Steam's process-global native client.
-        let args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi", "--server", "test-server.cfg"]);
+        let args = <crate::cli::Args as clap::Parser>::parse_from(["openbus", "--server", "test-server.cfg"]);
         let mut app = crate::assemble_app(args, Default::default());
         app.open_game_menu();
         app.shell.quick_edit = true;
@@ -80,7 +80,7 @@ mod tests {
     #[test]
     fn leaving_the_editor_moves_the_focus_off_an_action_that_is_not_shown() {
         use crate::shell::pause::navigation::Category;
-        let args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi", "--server", "test-server.cfg"]);
+        let args = <crate::cli::Args as clap::Parser>::parse_from(["openbus", "--server", "test-server.cfg"]);
         let mut app = crate::assemble_app(args, Default::default());
         app.open_game_menu();
         let menu = app.game_menu_items();

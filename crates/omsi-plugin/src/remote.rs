@@ -44,7 +44,7 @@ enum Answer {
 const ANSWER_WAIT: Duration = Duration::from_millis(500);
 
 /// How long a plugin may owe an answer before it is given up: its host is ended and the
-/// plugin left out for the rest of the session (the bus radio still plays: openOMSI's own
+/// plugin left out for the rest of the session (the bus radio still plays: openBus's own
 /// radio has the stations of SuperRadio and the like, `omsi_soundscape::radio`).
 const GIVE_UP: Duration = Duration::from_secs(20);
 

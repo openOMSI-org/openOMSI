@@ -1,4 +1,4 @@
-//! Compiled plugins: `plugins/*.oop`, made by `oopc` of the openOMSI Development Tools.
+//! Compiled plugins: `plugins/*.oop`, made by `oopc` of the openBus Development Tools.
 //!
 //! A `.oop` holds build output only - a stripped WebAssembly module, or Lua compiled into one
 //! obfuscated chunk - encrypted and, when its author signed it, signed (the format is the
@@ -39,10 +39,10 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
         return Err("larger than 512 MB".into());
     }
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-    let oop = Oop::read(&bytes).map_err(|e| format!("not a usable .oop (damaged, changed after it was built, or made for another openOMSI): {e}"))?;
+    let oop = Oop::read(&bytes).map_err(|e| format!("not a usable .oop (damaged, changed after it was built, or made for another openBus): {e}"))?;
     let h = oop.header().clone();
     if h.api_abi > crate::wasm::ABI as u32 {
-        return Err(format!("made for plugin API {}, this openOMSI has {} - update openOMSI", h.api_abi, crate::wasm::ABI));
+        return Err(format!("made for plugin API {}, this openBus has {} - update openBus", h.api_abi, crate::wasm::ABI));
     }
     match oop.signer_fingerprint() {
         Some(f) => log::info!("{}: {} {} by {}, signed by {f}", path.display(), h.name, h.version, h.authors.join(", ")),
@@ -66,7 +66,7 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
             let save_file = dir.join(format!("{name}.save.lua"));
             Ok(Loaded::Lua(LuaSpec { name, source: Box::new(source), save_file, data_dir, folder, perms: Some(perms) }))
         }
-        other => Err(format!("a plugin of kind {} this openOMSI does not know - update openOMSI", other.as_str())),
+        other => Err(format!("a plugin of kind {} this openBus does not know - update openBus", other.as_str())),
     }
 }
 

@@ -33,12 +33,12 @@ else
 fi
 printf '%s' "$changes" | grep -q '[^[:space:]]' || changes="Small changes and fixes."
 
-echo "**openOMSI $version**"
+echo "**openBus $version**"
 echo
 if [ -z "$since" ]; then
-  echo "> **Beta, for testing.** The launcher keeps players on the stable release; this build is for anyone who wants to try what comes next. Report what breaks in an issue, with the version. openOMSI needs an original OMSI 2 installation to run; it contains no game content."
+  echo "> **Beta, for testing.** The launcher keeps players on the stable release; this build is for anyone who wants to try what comes next. Report what breaks in an issue, with the version. openBus needs an original OMSI 2 installation to run; it contains no game content."
 else
-  echo "> **Early release, expect bugs.** openOMSI needs an original OMSI 2 installation to run; it contains no game content."
+  echo "> **Early release, expect bugs.** openBus needs an original OMSI 2 installation to run; it contains no game content."
   echo
   echo "Changes since $since:"
 fi
@@ -50,15 +50,15 @@ cat <<NOTES
 
 | Platform | Download |
 | --- | --- |
-| Windows x64 | \`openOMSI-$version-windows-x64-setup.exe\` (installer) or \`openOMSI-$version-windows-x64.zip\` |
-| Windows ARM64 | \`openOMSI-$version-windows-arm64-setup.exe\` (installer) or \`openOMSI-$version-windows-arm64.zip\` |
-| macOS (Apple silicon) | \`openOMSI-$version-macos-arm64.dmg\` (disk image) or \`openOMSI-$version-macos-arm64.zip\` |
-| macOS (Intel) | \`openOMSI-$version-macos-x64.dmg\` (disk image) or \`openOMSI-$version-macos-x64.zip\` |
-| Linux x64 | \`openOMSI-$version-linux-x64.zip\` |
-| Linux ARM64 | \`openOMSI-$version-linux-arm64.zip\` |
-| Android (arm64, 8.0+) | \`openOMSI-$version-android-arm64.apk\` |
-| Dedicated server, Linux | \`openOMSI-$version-server-linux-x64.zip\`, \`openOMSI-$version-server-linux-arm64.zip\` |
-| Dedicated server, Windows | \`openOMSI-$version-server-windows-x64.zip\`, \`openOMSI-$version-server-windows-arm64.zip\` |
+| Windows x64 | \`openBus-$version-windows-x64-setup.exe\` (installer) or \`openBus-$version-windows-x64.zip\` |
+| Windows ARM64 | \`openBus-$version-windows-arm64-setup.exe\` (installer) or \`openBus-$version-windows-arm64.zip\` |
+| macOS (Apple silicon) | \`openBus-$version-macos-arm64.dmg\` (disk image) or \`openBus-$version-macos-arm64.zip\` |
+| macOS (Intel) | \`openBus-$version-macos-x64.dmg\` (disk image) or \`openBus-$version-macos-x64.zip\` |
+| Linux x64 | \`openBus-$version-linux-x64.zip\` |
+| Linux ARM64 | \`openBus-$version-linux-arm64.zip\` |
+| Android (arm64, 8.0+) | \`openBus-$version-android-arm64.apk\` |
+| Dedicated server, Linux | \`openBus-$version-server-linux-x64.zip\`, \`openBus-$version-server-linux-arm64.zip\` |
+| Dedicated server, Windows | \`openBus-$version-server-windows-x64.zip\`, \`openBus-$version-server-windows-arm64.zip\` |
 
 The SHA-256 of every file is in \`SHA256SUMS\`: \`sha256sum -c SHA256SUMS --ignore-missing\` checks the ones downloaded.
 NOTES

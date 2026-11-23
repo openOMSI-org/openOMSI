@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 /// The avatars' archive (a pre-release of the project's own), its SHA-256 and size.
-const PACK_URL: &str = "https://github.com/openOMSI-org/openOMSI/releases/download/avatars-2/openOMSI-avatars-2.zip";
+const PACK_URL: &str = "https://github.com/rafaelkaiz/openBus/releases/download/avatars-2/openBus-avatars-2.zip";
 const PACK_SHA256: &str = "fb6d40d34f51f1860b6b57934341f9bd032c987ceef8b4caf2aae63b8f21823d";
 const PACK_BYTES: u64 = 326_209_348;
 
@@ -47,7 +47,7 @@ pub fn clips(dir: &Path) -> Vec<ClipFile> {
 }
 
 /// Where the pack is looked for: `OMSI_AVATARS_DIR`, then `avatars` beside the program (and
-/// in the macOS bundle's resources), then in the user's openOMSI folder.
+/// in the macOS bundle's resources), then in the user's openBus folder.
 fn dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = Vec::new();
     if let Some(d) = omsi_cfg::flags::OMSI_AVATARS_DIR.var() {
@@ -63,7 +63,7 @@ fn dirs() -> Vec<PathBuf> {
 
 /// Where a downloaded pack goes.
 pub fn user_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".openomsi").join("avatars"))
+    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".openbus").join("avatars"))
 }
 
 /// The folder of the pack, if there is one.
@@ -131,7 +131,7 @@ pub fn fetching() -> bool {
 static FETCHING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Fetch the pack in the background when there is none yet: the release asset `avatars-2`
-/// of the project, checked and unpacked into the user's openOMSI folder. The avatars are
+/// of the project, checked and unpacked into the user's openBus folder. The avatars are
 /// drawn from the next drive on.
 pub fn fetch_if_missing() {
     static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -140,7 +140,7 @@ pub fn fetch_if_missing() {
     }
     let Some(dir) = user_dir() else { return };
     let part = dir.with_extension("zip.part");
-    // (another openOMSI process - the launcher, the game - is fetching it now)
+    // (another openBus process - the launcher, the game - is fetching it now)
     if std::fs::metadata(&part).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age.as_secs() < 120) {
         return;
     }

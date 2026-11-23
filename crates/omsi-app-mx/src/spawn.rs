@@ -1075,7 +1075,7 @@ mod preparation_tests {
     /// stop where it comes round, or the last carriage is left off the tram.
     #[test]
     fn a_consist_that_closes_on_itself_ends_at_the_part_it_returns_to() {
-        let dir = std::env::temp_dir().join(format!("openomsi-chain-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("openbus-chain-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let front = dir.join("NF6D_A.bus");

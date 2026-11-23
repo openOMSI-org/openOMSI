@@ -185,7 +185,7 @@ mod weather_cache_tests {
             vec![("Weather/test.owt".into(), "Cached weather".into())],
         ] {
             let mut app = crate::assemble_app(
-                crate::Args::parse_from(["openomsi"]),
+                crate::Args::parse_from(["openbus"]),
                 Default::default(),
             );
             app.net.lan = Some(omsi_net::LanSession::host(
@@ -216,7 +216,7 @@ mod weather_cache_tests {
     #[test]
     fn hidden_online_page_does_not_load_weather() {
         let app = crate::assemble_app(
-            crate::Args::parse_from(["openomsi"]),
+            crate::Args::parse_from(["openbus"]),
             Default::default(),
         );
         from_app(&app);

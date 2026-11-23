@@ -1,6 +1,6 @@
 # Transport modes
 
-OMSI 2 has buses and one flag for everything on rails. openOMSI lets a vehicle and a map say
+OMSI 2 has buses and one flag for everything on rails. openBus lets a vehicle and a map say
 what kind of public transport they are for, so that a tram map holds trams, a metro map metro
 trains, and so that modders can make each kind properly (their own physics, wires, stations and
 routes are described in the pages for each mode, linked below as they arrive).

@@ -1,4 +1,4 @@
-// Add-ons: projects others make for openOMSI, each a link to its own page (the list is
+// Add-ons: projects others make for openBus, each a link to its own page (the list is
 // launcher/ui/addons/addons.json, docs/ADDONS.md says how one gets in). Nothing is downloaded,
 // installed or run here: the button opens the project's page in the browser, after saying so.
 
@@ -21,7 +21,7 @@ export function AddonsPage() {
     call('open_url', { url: leaving.homepage }).catch((e) => toast(e.message, 'error'));
   };
   return html`
-    <${PageHead} title="Add-ons" text="Projects made for openOMSI by others. Their own websites say what they do and how to get them." />
+    <${PageHead} title="Add-ons" text="Projects made for openBus by others. Their own websites say what they do and how to get them." />
     ${s.cache.addons?.error && html`<${Notice} kind="danger">${s.cache.addons.error}</${Notice}>`}
     ${list == null && !s.cache.addons?.error && html`<div class="row muted"><${Spinner} /></div>`}
     ${list?.length === 0 && html`<${Card}><${Empty} icon="globe" title="No add-on yet" /></${Card}>`}
@@ -41,7 +41,7 @@ export function AddonsPage() {
     ${leaving && html`<${Dialog} title="Open the website?" onClose=${() => setLeaving(null)} footer=${html`
         <${Button} label="Cancel" onClick=${() => setLeaving(null)} />
         <${Button} kind="primary" icon="external" label="Open website" onClick=${open} />`}>
-      <p class="dim">${t('Opens {site} in your browser. The website is not part of openOMSI.', { site: new URL(leaving.homepage).host })}</p>
+      <p class="dim">${t('Opens {site} in your browser. The website is not part of openBus.', { site: new URL(leaving.homepage).host })}</p>
     </${Dialog}>`}
   `;
 }

@@ -1,6 +1,6 @@
 {
-  "name": "openOMSI Remote",
-  "short_name": "openOMSI",
+  "name": "openBus Remote",
+  "short_name": "openBus",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",

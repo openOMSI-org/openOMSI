@@ -128,7 +128,7 @@ pub(crate) fn export_graphics_profile_in(base: &Path, name: &str, path: &Path) -
         .duration_since(std::time::UNIX_EPOCH)?
         .as_nanos();
     let temporary = path.with_file_name(format!(
-        ".openomsi-graphics-{}-{nonce}.tmp",
+        ".openbus-graphics-{}-{nonce}.tmp",
         std::process::id()
     ));
     let mut file = std::fs::File::create_new(&temporary)?;

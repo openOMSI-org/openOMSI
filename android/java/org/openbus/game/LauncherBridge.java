@@ -1,4 +1,4 @@
-package org.openomsi.game;
+package org.openbus.game;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -45,7 +45,7 @@ public final class LauncherBridge {
     static {
         // (NativeActivity loads the game's library its own way: loaded here again, the
         // methods below find their native halves in it)
-        System.loadLibrary("openomsi_game");
+        System.loadLibrary("openbus_game");
     }
 
     static native String call(String cmd, String args);
@@ -273,7 +273,7 @@ public final class LauncherBridge {
             case "pick_folder":
             case "pick_file":
             case "pick_mod":
-                // (no file dialogs on a phone: mods go into openOMSI/Mods on the storage)
+                // (no file dialogs on a phone: mods go into openBus/Mods on the storage)
                 return "1null";
             case "open_path":
             case "selftest_done":

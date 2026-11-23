@@ -1,7 +1,7 @@
 //! OMSI plugins, driven the way OMSI drives them:
 //!
 //! * the original finds every `*.opl` under `<OMSI>\plugins` (recursively) and reads
-//!   `[dll]` (the library, relative to `plugins\`; openOMSI also looks beside the .opl), `[varlist]`, `[stringvarlist]`,
+//!   `[dll]` (the library, relative to `plugins\`; openBus also looks beside the .opl), `[varlist]`, `[stringvarlist]`,
 //!   `[systemvarlist]` and `[triggers]` - each a count, then that many names.
 //! * the original loads the library and looks up `PluginStart`, `PluginFinalize` (both
 //!   required: without them the plugin is not loaded) and `AccessVariable`,
@@ -19,7 +19,7 @@
 //!   the trigger fires - or coming up - `<trigger>_off`). Names nobody knows are skipped.
 //!   All are `stdcall`; the index is the position in the plugin's own list (a Word).
 //!
-//! openOMSI adds one optional procedure OMSI does not have: `AccessScriptTexture(index,
+//! openBus adds one optional procedure OMSI does not have: `AccessScriptTexture(index,
 //! width, height: Integer; pixels: Pointer; var write: Boolean)`, called after the
 //! triggers for each entry of the `.opl`'s `[scripttexturelist]` (a count, then that many
 //! `[scripttexture]` numbers of the player's vehicle, 0-based as `[useScriptTexture]`).
@@ -72,7 +72,7 @@ pub struct Opl {
     pub string_vars: Vec<String>,
     pub system_vars: Vec<String>,
     pub triggers: Vec<String>,
-    /// `[scripttexturelist]` (openOMSI only): numbers of the vehicle's script textures,
+    /// `[scripttexturelist]` (openBus only): numbers of the vehicle's script textures,
     /// as written (an entry that is no number is skipped, keeping the others' positions).
     pub script_textures: Vec<String>,
 }
@@ -177,7 +177,7 @@ pub struct Frame {
     pub tickets: Vec<TicketCall>,
 }
 
-/// One call of `AccessTicketRequest` (openOMSI only):
+/// One call of `AccessTicketRequest` (openBus only):
 ///
 /// ```pascal
 /// procedure AccessTicketRequest(person: Cardinal; age: Single;
@@ -306,11 +306,11 @@ pub struct Procs {
     pub trigger: bool,
     pub system: bool,
     pub string: bool,
-    /// `AccessScriptTexture` (openOMSI only).
+    /// `AccessScriptTexture` (openBus only).
     pub texture: bool,
-    /// `AccessScriptTexturePointer` (openOMSI only).
+    /// `AccessScriptTexturePointer` (openBus only).
     pub pointer: bool,
-    /// `AccessTicketRequest` (openOMSI only).
+    /// `AccessTicketRequest` (openBus only).
     pub ticket: bool,
 }
 
@@ -856,7 +856,7 @@ impl Plugin {
         }
         let dll = library_path(opl_path, plugins_dir, &opl.dll).ok_or_else(|| format!("{} not found", opl.dll))?;
         if patches_omsi_exe(&dll) {
-            return Err("it patches the code of OMSI.exe, which openOMSI does not run".into());
+            return Err("it patches the code of OMSI.exe, which openBus does not run".into());
         }
         let (backend, procs) = match Library::load(&dll) {
             Ok(lib) => {

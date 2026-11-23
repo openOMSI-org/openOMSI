@@ -1,4 +1,4 @@
-# openOMSI for iPhone, iPad and Mac as Apple's stores take it (scripts/build-apple.sh):
+# openBus for iPhone, iPad and Mac as Apple's stores take it (scripts/build-apple.sh):
 # the .ipa for the App Store (TestFlight first), the Mac app signed with the Developer ID and
 # notarised, and the Mac App Store package. Started by hand until the App Store listing is
 # ready; pull requests only build for the Simulator and unsigned for the Mac.
@@ -40,10 +40,10 @@ jobs:
   build:
     runs-on: macos-26
     env:
-      OPENOMSI_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      OPENOMSI_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      OPENOMSI_ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
-      OPENOMSI_MAC_ARCHS: arm64 x86_64
+      OPENBUS_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      OPENBUS_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      OPENBUS_ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+      OPENBUS_MAC_ARCHS: arm64 x86_64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -61,20 +61,20 @@ jobs:
           sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
           xcodebuild -version
       - name: App Store Connect key
-        if: ${{ github.event_name != 'pull_request' && env.OPENOMSI_ASC_KEY_ID != '' }}
+        if: ${{ github.event_name != 'pull_request' && env.OPENBUS_ASC_KEY_ID != '' }}
         env:
           KEY: ${{ secrets.ASC_KEY_P8_BASE64 }}
         run: |
           mkdir -p "$RUNNER_TEMP/asc"
           echo "$KEY" | base64 --decode > "$RUNNER_TEMP/asc/AuthKey.p8"
-          echo "OPENOMSI_ASC_KEY=$RUNNER_TEMP/asc/AuthKey.p8" >> "$GITHUB_ENV"
+          echo "OPENBUS_ASC_KEY=$RUNNER_TEMP/asc/AuthKey.p8" >> "$GITHUB_ENV"
       - name: iOS Simulator build (a check)
         if: ${{ github.event_name == 'pull_request' }}
         run: |
           scripts/build-apple.sh rust ios-sim
           scripts/build-apple.sh project
-          xcodebuild -project apple/openOMSI.xcodeproj -scheme openOMSI-iOS -configuration Release -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' OPENOMSI_RUST_TARGET="$PWD/target" OPENOMSI_SKIP_RUST=1 CODE_SIGNING_ALLOWED=NO build
+          xcodebuild -project apple/openBus.xcodeproj -scheme openBus-iOS -configuration Release -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' OPENBUS_RUST_TARGET="$PWD/target" OPENBUS_SKIP_RUST=1 CODE_SIGNING_ALLOWED=NO build
       - name: iPhone and iPad (.ipa)
         if: ${{ github.event_name != 'pull_request' }}
         run: scripts/build-apple.sh ipa
@@ -86,14 +86,14 @@ jobs:
       - name: Upload to App Store Connect
         if: ${{ inputs.upload }}
         run: |
-          xcrun altool --upload-app -f dist/apple/openOMSI.ipa -t ios --apiKey "$OPENOMSI_ASC_KEY_ID" --apiIssuer "$OPENOMSI_ASC_ISSUER" --p8-file-path "$OPENOMSI_ASC_KEY"
-          xcrun altool --upload-app -f dist/apple/store/openOMSI.pkg -t macos --apiKey "$OPENOMSI_ASC_KEY_ID" --apiIssuer "$OPENOMSI_ASC_ISSUER" --p8-file-path "$OPENOMSI_ASC_KEY"
+          xcrun altool --upload-app -f dist/apple/openBus.ipa -t ios --apiKey "$OPENBUS_ASC_KEY_ID" --apiIssuer "$OPENBUS_ASC_ISSUER" --p8-file-path "$OPENBUS_ASC_KEY"
+          xcrun altool --upload-app -f dist/apple/store/openBus.pkg -t macos --apiKey "$OPENBUS_ASC_KEY_ID" --apiIssuer "$OPENBUS_ASC_ISSUER" --p8-file-path "$OPENBUS_ASC_KEY"
       - name: Package
         run: |
           mkdir -p out
           v="$(sh scripts/version.sh)"
-          [ -f dist/apple/openOMSI.ipa ] && cp dist/apple/openOMSI.ipa "out/openOMSI-$v-ios.ipa" || true
-          ditto -c -k --keepParent dist/apple/openOMSI.app "out/openOMSI-$v-macos-universal.zip"
+          [ -f dist/apple/openBus.ipa ] && cp dist/apple/openBus.ipa "out/openBus-$v-ios.ipa" || true
+          ditto -c -k --keepParent dist/apple/openBus.app "out/openBus-$v-macos-universal.zip"
       - uses: actions/upload-artifact@v7
         with:
           retention-days: 14

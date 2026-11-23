@@ -309,7 +309,7 @@ impl Journey {
     /// The log as it is written.
     fn text(&self) -> String {
         let rule = "-".repeat(108);
-        let mut out = format!("openOMSI journey log\n{}\n", self.head);
+        let mut out = format!("openBus journey log\n{}\n", self.head);
         let (mut served, mut late, mut early) = (0, 0, 0);
         for (t, title) in self.trips.iter().enumerate() {
             let rows: Vec<&Row> = self.rows.iter().filter(|r| r.trip == t).collect();

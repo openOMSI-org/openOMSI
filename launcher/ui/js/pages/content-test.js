@@ -1,5 +1,5 @@
 // Model test (a tab of Troubleshooting): any content loaded by the game program itself
-// (`openomsi --check`) - a bus, a map, an installed mod, or any file or folder: a scenery
+// (`openbus --check`) - a bus, a map, an installed mod, or any file or folder: a scenery
 // object, a spline, a human, a weather, a mesh, a mod not installed yet (folder or zip) -
 // every warning and error of its loaders listed, what it names and lacks looked for. What a
 // modder used to read off the terminal while working on their content.

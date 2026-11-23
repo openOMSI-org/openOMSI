@@ -453,7 +453,7 @@ pub struct Navigator {
     /// The other (AI) vehicles are drawn on the maps (the `nav_ai` setting).
     pub show_ai: bool,
     pub show_cars: bool,
-    /// The map's own surface (`Maps/<Map>/openomsi-realmap`), once read, and a number that changes
+    /// The map's own surface (`Maps/<Map>/openbus-realmap`), once read, and a number that changes
     /// when it arrives (the meshes are built again).
     surface: Option<std::sync::Arc<omsi_map::package::Package>>,
     surface_version: u64,
@@ -731,7 +731,7 @@ impl Navigator {
             .name("navigator map".into())
             .spawn(move || {
                 let world = wm;
-                // (the map's package: Maps/<Map>/openomsi-realmap, if it has one)
+                // (the map's package: Maps/<Map>/openbus-realmap, if it has one)
                 let surface = omsi_map::package::Package::open(&world.map_dir);
                 let m = world.navigation_map();
                 let mut net = Network {

@@ -13,7 +13,7 @@ fn vehicle_type_label_falls_back_to_the_file_name() {
 
 #[test]
 fn a_part_found_from_the_vehicle_folder_is_no_missing_pack() {
-    let root = std::env::temp_dir().join(format!("openomsi-packs-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("openbus-packs-{}", std::process::id()));
     let obj = root.join("Sceneryobjects/X");
     let cfgs = root.join("Vehicles/B/model/Configuration Files");
     std::fs::create_dir_all(&obj).unwrap();
@@ -889,7 +889,7 @@ fn a_chosen_duty_date_keeps_its_year() {
 
 #[test]
 fn todays_year_is_kept_when_the_player_asks_for_it() {
-    let dir = std::env::temp_dir().join(format!("openomsi-real-year-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("openbus-real-year-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("maps/x")).unwrap();
     std::fs::write(dir.join("maps/x/global.cfg"), "[years]\n1988\n2000\n").unwrap();
     let d = Duty {
@@ -931,7 +931,7 @@ fn a_depot_bus_is_handed_to_the_game() {
 /// Same-number tours on alternating weekdays remain separate across date changes.
 #[test]
 fn duplicate_tour_numbers_have_distinct_stable_selections() {
-    let map = std::env::temp_dir().join(format!("openomsi-duplicate-tours-{}", std::process::id()));
+    let map = std::env::temp_dir().join(format!("openbus-duplicate-tours-{}", std::process::id()));
     let tt = map.join("TTData");
     std::fs::create_dir_all(&tt).unwrap();
     std::fs::write(

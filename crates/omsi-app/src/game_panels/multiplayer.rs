@@ -204,7 +204,7 @@ mod tests {
     use clap::Parser;
 
     fn app() -> crate::App {
-        crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default())
+        crate::assemble_app(crate::Args::parse_from(["openbus"]), Default::default())
     }
 
     #[test]

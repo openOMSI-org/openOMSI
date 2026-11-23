@@ -1,5 +1,5 @@
 //! The launcher's update from end to end, without a window: put this program into an
-//! installed openOMSI (as `openomsi-launcher-app`, in place of the launcher), point
+//! installed openBus (as `openbus-launcher-app`, in place of the launcher), point
 //! `OMSI_UPDATE_URL` at a release description, and it checks, downloads, installs and starts
 //! the new program the way the launcher's page does (`update_check`, `update_install`,
 //! `update_status` until "restarting", then the window's `update_relaunch`).
@@ -44,7 +44,7 @@ fn main() {
     }
     // (the window's `update_relaunch`)
     let place = omsi_platform::updater::install_place().expect("install place");
-    let game = place.exe.with_file_name(if cfg!(windows) { "openomsi.exe" } else { "openomsi" });
+    let game = place.exe.with_file_name(if cfg!(windows) { "openbus.exe" } else { "openbus" });
     let program = if game.is_file() { game } else { place.exe.clone() };
     println!("relaunch: {}", program.display());
     let status = std::process::Command::new(&program).current_dir(&place.dir).status().expect("start");

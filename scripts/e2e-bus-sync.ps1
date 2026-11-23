@@ -23,13 +23,13 @@ param(
     [int]$Port = 27015,
     [int]$WebPort = 27025,
     [int]$Seconds = 150,
-    [string]$Container = "openomsi-server"
+    [string]$Container = "openbus-server"
 )
 $ErrorActionPreference = "Stop"
 # (Windows PowerShell 5.1 has no $PSScriptRoot in a parameter's default)
-if (-not $Exe) { $Exe = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "..\target\release\openomsi.exe" }
+if (-not $Exe) { $Exe = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "..\target\release\openbus.exe" }
 $Exe = (Resolve-Path $Exe).Path
-$work = Join-Path ([IO.Path]::GetTempPath()) ("openomsi-e2e-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+$work = Join-Path ([IO.Path]::GetTempPath()) ("openbus-e2e-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
 New-Item -ItemType Directory -Force $work | Out-Null
 Write-Host "Work folder: $work"
 
@@ -47,7 +47,7 @@ $contentA = Join-Path $work "contentA"
 $contentB = Join-Path $work "contentB"
 New-Item -ItemType Directory -Force (Join-Path $contentA "Vehicles\MAN_SD200"), $contentB | Out-Null
 $stockBus = Join-Path $OmsiDir "Vehicles\MAN_SD200\MAN_SD77.bus"
-$copy = [IO.File]::ReadAllBytes($stockBus) + [Text.Encoding]::ASCII.GetBytes("`r`nThis copy differs from the stock one by this line (openOMSI end-to-end test, $(Get-Date -Format o)).`r`n")
+$copy = [IO.File]::ReadAllBytes($stockBus) + [Text.Encoding]::ASCII.GetBytes("`r`nThis copy differs from the stock one by this line (openBus end-to-end test, $(Get-Date -Format o)).`r`n")
 [IO.File]::WriteAllBytes((Join-Path $contentA "Vehicles\MAN_SD200\MAN_SD77.bus"), $copy)
 
 function Start-Game($name, $bus, $content, $drive, $join) {

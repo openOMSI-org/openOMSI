@@ -21,7 +21,7 @@ git commit -am "Version 1.2" && git push -u origin version-1.2
 ```
 
 `scripts/version.sh` prints the version of the checked-out commit; the game shows it in the
-launcher's side bar, in its log and in `openomsi --version` (baked in by
+launcher's side bar, in its log and in `openbus --version` (baked in by
 `crates/omsi-platform/build.rs`, which uses the same rule). A build of a commit that has no
 release shows the number of the next release, whichever commit that release comes from.
 
@@ -31,7 +31,7 @@ There are two channels:
 
 | Channel | What it is | Who gets it |
 | --- | --- | --- |
-| **Beta** | a build of `main` a maintainer starts by hand, published as a GitHub **pre-release** | testers: the launcher's **Settings → General → Updates → Update channel: Beta**, or the [Releases](https://github.com/openOMSI-org/openOMSI/releases) page |
+| **Beta** | a build of `main` a maintainer starts by hand, published as a GitHub **pre-release** | testers: the launcher's **Settings → General → Updates → Update channel: Beta**, or the [Releases](https://github.com/rafaelkaiz/openBus/releases) page |
 | **Stable** | a beta the maintainers have tested and promoted | every other player: on the Stable channel (the default) the launcher's updater, the start guard, the website's Download page, `releases/latest` and the README badge only ever see stable releases |
 
 On the Beta channel the updater offers the newest release, beta or stable, that has a file
@@ -51,7 +51,7 @@ Release → Run workflow** from `main` (or `gh workflow run release.yml --ref ma
    ARM64 and Android in parallel, and packs the dedicated server from the Linux and Windows
    builds;
 3. creates the pre-release `v<version>` (tag on that commit) with the archives
-   `openOMSI-<version>-windows-x64.zip`, `-windows-arm64.zip`, `-macos-arm64.zip`,
+   `openBus-<version>-windows-x64.zip`, `-windows-arm64.zip`, `-macos-arm64.zip`,
    `-macos-x64.zip`, `-linux-x64.zip`, `-linux-arm64.zip`, `-android-arm64.apk`,
    `-server-linux-x64.zip`, `-server-linux-arm64.zip`, `-server-windows-x64.zip`,
    `-server-windows-arm64.zip`, the installers `-windows-x64-setup.exe`,
@@ -103,8 +103,8 @@ A pull request's builds are test builds for anyone who wants to try the change:
 * their version names the pull request, `<version>-pr<number>` (e.g. `0.1.1313-pr1192`),
   in the launcher's side bar, `game.log` and crash reports;
 * the updater never offers them a release, so a test build stays until it is deleted;
-* the Android one is an app of its own, *openOMSI PR #N* (`org.openomsi.game.pr`), that
-  installs beside the release and shares its `openOMSI` folder;
+* the Android one is an app of its own, *openBus PR #N* (`org.openbus.game.pr`), that
+  installs beside the release and shares its `openBus` folder;
 * [`.github/workflows/pr_builds.yml`](../.github/workflows/pr_builds.yml) comments on the
   pull request with a download link per platform (through [nightly.link](https://nightly.link),
   no GitHub account needed) once they are built, and updates that comment on every push.
@@ -130,7 +130,7 @@ version has not been running long), and tells the player why with the message. T
 fix and promote its beta as soon as it is checked. The list is read from GitHub with a short wait at each start; offline,
 nothing happens. Take a version off the list once nobody runs it any more.
 
-Before any update replaces a program, the new one must pass `openomsi --self-test` (it starts,
+Before any update replaces a program, the new one must pass `openbus --self-test` (it starts,
 says its version and ends): a release that cannot even be loaded on a computer is refused there
 and never offered again.
 
@@ -139,7 +139,7 @@ and never offered again.
 
 [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) publishes `site/` together with
 the Markdown files of `docs/` to GitHub Pages
-(https://openomsi.org/) whenever they change on `main`. The site renders
+(https://rafaelkaiz.github.io/openBus/) whenever they change on `main`. The site renders
 the Markdown in the browser, so a documentation change is one edit in `docs/`.
 The Download page offers the latest stable release. Beta downloads have a separate page
 with the same platform cards and installation instructions; when no beta is newer than

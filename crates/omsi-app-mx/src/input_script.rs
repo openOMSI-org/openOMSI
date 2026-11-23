@@ -2022,7 +2022,7 @@ mod key_tests {
     #[test]
     fn shared_pause_and_vehicle_binding_triggers_both_once_without_double_toggle() {
         let mut app = crate::assemble_app(
-            <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]),
+            <crate::cli::Args as clap::Parser>::parse_from(["openbus"]),
             Default::default(),
         );
         let (p_scan, f6_scan) = (

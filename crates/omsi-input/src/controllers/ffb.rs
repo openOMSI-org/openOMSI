@@ -272,7 +272,7 @@ fn bump_strength(ripple: f32, impact_speed: f32, kmh: f32) -> f32 {
 /// How much of the full force `FF_Vib_Amp` 1 shakes the wheel with.
 pub(super) const VIB_SHARE: f32 = 0.25;
 
-/// Per-wheel force feedback tuning, `[openOMSI.FFTuning]` in gamectrler.cfg (OMSI 2 ignores it).
+/// Per-wheel force feedback tuning, `[openBus.FFTuning]` in gamectrler.cfg (OMSI 2 ignores it).
 ///
 /// Wheels differ more than the bus does: a direct-drive base passes on the smallest force
 /// as it is, while a belt- or gear-driven one swallows the first few per cent of its range

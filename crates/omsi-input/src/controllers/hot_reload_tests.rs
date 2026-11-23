@@ -267,7 +267,7 @@ fn hot_reload_custom_gamepad_layout_owns_analog_controls() {
 
 #[test]
 fn hot_reload_save_replaces_existing_file_and_rejects_invalid_input() {
-    let dir = std::env::temp_dir().join(format!("openomsi-controllers-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("openbus-controllers-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("gamectrler.cfg");
     let mut cfg = vec![wheel()];

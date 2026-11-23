@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use omsi_cfg::{CfgFile, CfgReader};
 
-/// Monthly climate statistics per location, specified in the map's `openomsi_climate.cfg`
+/// Monthly climate statistics per location, specified in the map's `openbus_climate.cfg`
 #[derive(Debug, Clone)]
 pub struct ClimateStats {
     /// Mean temperatures (°C)
@@ -15,7 +15,7 @@ impl ClimateStats {
     pub fn for_map(map: &str, root: &Path) -> Option<ClimateStats> {
         Path::new(map).parent().map(|dir| {
             let rel = dir.strip_prefix(root).unwrap_or(&dir);
-            const CLIMATE_CFG: &'static str = "openomsi_climate.cfg";
+            const CLIMATE_CFG: &'static str = "openbus_climate.cfg";
             let climate_path = omsi_cfg::find_in_roots(&rel.join(CLIMATE_CFG).to_string_lossy())
                 .map(|x| x.1)
                 .unwrap_or_else(|| dir.join(CLIMATE_CFG));
@@ -31,7 +31,7 @@ impl ClimateStats {
             .filter(|x| !x.is_empty())
             .map(|x| x.parse::<f32>())
             .collect::<Result<Vec<f32>, _>>()
-            .map_err(|e| log::warn!("openomsi_climate.cfg: float parsing error: {e}"))
+            .map_err(|e| log::warn!("openbus_climate.cfg: float parsing error: {e}"))
             .ok()
     }
 
@@ -48,7 +48,7 @@ impl ClimateStats {
                     precip = Self::read_monthly_values(&mut r);
                 }
                 _ => {
-                    log::warn!("openomsi_climate.cfg: unknown section [{k}] occurred");
+                    log::warn!("openbus_climate.cfg: unknown section [{k}] occurred");
                 }
             }
         }
@@ -57,20 +57,20 @@ impl ClimateStats {
             if t.iter().all(|x| (-100.0..=100.0).contains(x))
                 && p.iter().all(|x| (0.0..=5000.0).contains(x))
             {
-                let t = t.as_array().or_else(|| { log::warn!("openomsi_climate.cfg: temperature: {} elements provided, 12 expected; falling back to default", t.len()); None })?;
-                let p = p.as_array().or_else(||  { log::warn!("openomsi_climate.cfg: precipitation: {} elements provided, 12 expected; falling back to default", p.len()); None })?;
+                let t = t.as_array().or_else(|| { log::warn!("openbus_climate.cfg: temperature: {} elements provided, 12 expected; falling back to default", t.len()); None })?;
+                let p = p.as_array().or_else(||  { log::warn!("openbus_climate.cfg: precipitation: {} elements provided, 12 expected; falling back to default", p.len()); None })?;
                 Some(ClimateStats {
                     temp: *t,
                     precip: *p,
                 })
             } else {
                 log::warn!(
-                    "openomsi_climate.cfg: some values non-finite or outside the range (-100 to 100 °C, 0 to 5000 mm)"
+                    "openbus_climate.cfg: some values non-finite or outside the range (-100 to 100 °C, 0 to 5000 mm)"
                 );
                 None
             }
         } else {
-            log::warn!("openomsi_climate.cfg: incomplete configuration, falling back to default");
+            log::warn!("openbus_climate.cfg: incomplete configuration, falling back to default");
             None
         }
     }
@@ -88,7 +88,7 @@ mod tests {
         use crate::climate::ClimateStats;
 
         let f1 = CfgFile {
-            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
+            path: PathBuf::from("maps/test/openbus_climate.cfg"),
             lines: [
                 "[temperature]",
                 "1",
@@ -118,7 +118,7 @@ mod tests {
         );
 
         let f2 = CfgFile {
-            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
+            path: PathBuf::from("maps/test/openbus_climate.cfg"),
             lines: [
                 "[temperature]",
                 "1",
@@ -152,7 +152,7 @@ mod tests {
         );
 
         let f3 = CfgFile {
-            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
+            path: PathBuf::from("maps/test/openbus_climate.cfg"),
             lines: [
                 "[temperature]",
                 "1",
@@ -176,7 +176,7 @@ mod tests {
         assert!(s3.is_none());
 
         let f4 = CfgFile {
-            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
+            path: PathBuf::from("maps/test/openbus_climate.cfg"),
             lines: [
                 "[temperatures]",
                 "1",
@@ -200,7 +200,7 @@ mod tests {
         assert!(s4.is_none());
 
         let f5 = CfgFile {
-            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
+            path: PathBuf::from("maps/test/openbus_climate.cfg"),
             lines: [
                 "[temperature]",
                 "1",
@@ -224,7 +224,7 @@ mod tests {
         assert!(s5.is_none());
 
         let f6 = CfgFile {
-            path: PathBuf::from("maps/test/openomsi_climate.cfg"),
+            path: PathBuf::from("maps/test/openbus_climate.cfg"),
             lines: [
                 "[temperature]",
                 "1",

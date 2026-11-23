@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare two openOMSI profile summaries (schema 1).
+"""Compare two openBus profile summaries (schema 1).
 
 A summary is OMSI_PROFILE's exit summary written by a run with OMSI_PROFILE=1,
 OMSI_PROFILE_JSON=<file> and --exit-after <s>: frame times, stages and GPU passes after

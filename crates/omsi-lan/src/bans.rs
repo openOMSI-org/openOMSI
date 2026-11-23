@@ -3,7 +3,7 @@
 //!
 //! **The identifier.** 128 bits: SHA-256 over a fixed text and the machine's own id (the
 //! platform's machine GUID / `machine-id` / `IOPlatformUUID`; on a system with none, a random
-//! number kept in `~/.openomsi/hardware-id`), cut to 16 bytes. That one never leaves the
+//! number kept in `~/.openbus/hardware-id`), cut to 16 bytes. That one never leaves the
 //! machine: a host sends its realm (`REALM`, a random key kept in the owner's list), and the
 //! game sends `omsi_net::host_hardware_id` of the two. A host's sessions all get the same
 //! identifier, so a banned machine is known again; two owners get different ones, so they
@@ -20,7 +20,7 @@
 //! reason, who banned, when, optionally until when, and a scope:
 //! * `session` - this session's list, beside `server.cfg` (`bans.json`) for a dedicated
 //!   server; for a game hosting by code it lasts as long as that game runs;
-//! * `owner` ("all my sessions") - the owner's list, `~/.openomsi/bans-owner.json`, which every
+//! * `owner` ("all my sessions") - the owner's list, `~/.openbus/bans-owner.json`, which every
 //!   session hosted from this user account on this machine reads, dedicated servers and
 //!   hosting games alike; `owner_bans = <file>` in `server.cfg` points several servers (on
 //!   other machines too, by a synced file) at one list.
@@ -95,7 +95,7 @@ pub fn allow_hardware_id(on: bool) {
 
 /// The identifier a machine id makes (see the module's text).
 pub fn derive_hardware_id(machine_id: &str) -> String {
-    let h = Sha256::new().chain_update(b"openOMSI hardware id v1\0").chain_update(machine_id.trim().to_ascii_lowercase().as_bytes()).finalize();
+    let h = Sha256::new().chain_update(b"openBus hardware id v1\0").chain_update(machine_id.trim().to_ascii_lowercase().as_bytes()).finalize();
     h[..16].iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -207,7 +207,7 @@ impl BanStore {
         if s.realm.is_empty() {
             s.realm = random_realm();
             if !s.session.is_empty() || !s.owner.is_empty() {
-                log::warn!("bans: hardware bans made before openOMSI's per-owner identifiers (LAN protocol 16) no longer match anybody; ban those players again");
+                log::warn!("bans: hardware bans made before openBus's per-owner identifiers (LAN protocol 16) no longer match anybody; ban those players again");
             }
             let fresh = s.owner_path.as_deref().is_some_and(|p| !p.exists());
             if fresh {
@@ -223,7 +223,7 @@ impl BanStore {
         s
     }
 
-    /// The owner's list of this account (`~/.openomsi/bans-owner.json`).
+    /// The owner's list of this account (`~/.openbus/bans-owner.json`).
     pub fn default_owner_path() -> Option<PathBuf> {
         Some(crate::data_dir()?.join("bans-owner.json"))
     }
@@ -445,7 +445,7 @@ mod tests {
     }
 
     fn dir(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("openomsi-bans-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("openbus-bans-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d

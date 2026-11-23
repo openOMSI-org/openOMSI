@@ -57,13 +57,13 @@ pub(super) fn rail(sh: &mut Shell, v: &PauseView) {
     } else {
         ui.p().rect(r, th().sidebar);
     }
-    // the game's name and version: openOMSI's icon and name; a theme's wordmark across the top,
-    // or its icon and name, over openOMSI's version
+    // the game's name and version: openBus's icon and name; a theme's wordmark across the top,
+    // or its icon and name, over openBus's version
     if let (Some(tex), Some(aspect)) = (sh.logo_tex, sh.logo_wide) {
         // (as wide as the rail's buttons, at most 52 high: the version under it before Resume)
         let h = 52.0f32.min((RAIL_W - 32.0) / aspect);
         ui.image(Rect::new(16.0, 10.0, h * aspect, h), tex, 0.0);
-        ui.text_in(&format!("openOMSI {}", crate::startup::VERSION), Rect::new(18.0, 10.0 + h, RAIL_W - 36.0, 13.0), 9.5, Weight::Regular, th().ink_muted, Align::Left);
+        ui.text_in(&format!("openBus {}", crate::startup::VERSION), Rect::new(18.0, 10.0 + h, RAIL_W - 36.0, 13.0), 9.5, Weight::Regular, th().ink_muted, Align::Left);
     } else if let Some(tex) = sh.logo_tex {
         ui.image(Rect::new(18.0, 18.0, 32.0, 32.0), tex, 7.0);
     }
@@ -71,10 +71,10 @@ pub(super) fn rail(sh: &mut Shell, v: &PauseView) {
         _ if sh.logo_wide.is_some() => {}
         Some(title) => {
             ui.text_in(title, Rect::new(60.0, 17.0, RAIL_W - 72.0, 22.0), 18.0, Weight::Bold, th().ink, Align::Left);
-            ui.text_in(&format!("openOMSI {}", crate::startup::VERSION), Rect::new(60.0, 38.0, RAIL_W - 72.0, 18.0), 11.0, Weight::Regular, th().ink_muted, Align::Left);
+            ui.text_in(&format!("openBus {}", crate::startup::VERSION), Rect::new(60.0, 38.0, RAIL_W - 72.0, 18.0), 11.0, Weight::Regular, th().ink_muted, Align::Left);
         }
         None => {
-            ui.text("openOMSI", Vec2::new(60.0, 32.0), 18.0, Weight::Bold, th().ink, Align::Left);
+            ui.text("openBus", Vec2::new(60.0, 32.0), 18.0, Weight::Bold, th().ink, Align::Left);
             ui.text_in(crate::startup::VERSION, Rect::new(60.0, 38.0, RAIL_W - 72.0, 18.0), 11.0, Weight::Regular, th().ink_muted, Align::Left);
         }
     }

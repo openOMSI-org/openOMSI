@@ -1,4 +1,4 @@
-//! openOMSI on Android: the NativeActivity's `android_main`.
+//! openBus on Android: the NativeActivity's `android_main`.
 //!
 //! A phone runs one program in one window, so the launcher and the game share both: the
 //! launcher - the desktop launcher's page in a web view over the window (`android_launcher`)
@@ -6,7 +6,7 @@
 //! starting a process), the page steps aside for the game, and when the session ends
 //! (Escape, the menu's Quit) it comes back, kept as it was. The app's own data (settings, profiles, sessions) lives in its private folder
 //! (`HOME`); the original game, the mods and the screenshots are on the shared storage in
-//! `openOMSI/`, where a cable or a file manager reaches them.
+//! `openBus/`, where a cable or a file manager reaches them.
 //!
 //! The Java side (`android/java/.../OmsiActivity.java`) only adds what NativeActivity
 //! lacks: the full screen without the system bars, the screen kept on, asking for access
@@ -21,7 +21,7 @@ use winit::platform::android::activity::AndroidApp;
 static SAFER_TRIED: AtomicBool = AtomicBool::new(false);
 
 /// Where the app keeps what a person puts on the phone for it.
-pub const SHARED: &str = "/storage/emulated/0/openOMSI";
+pub const SHARED: &str = "/storage/emulated/0/openBus";
 
 /// mX Graphics, read once for the process: `android_main` and the launcher page's bridge
 /// (`android_launcher`) go to the same game, whichever of them asks first.
@@ -65,12 +65,12 @@ fn android_main(app: AndroidApp) {
         app.internal_data_path()
             .is_some_and(|home| crate::startup::mx_graphics_in(&home))
     }) {
-        return openomsi_game_mx::android::android_main(app);
+        return openbus_game_mx::android::android_main(app);
     }
     crate::view_sync::install_sim_decoder();
     crate::startup::install_scene_settings();
     // an error is also written where a person finds it without a computer:
-    // openOMSI/crash.log (or Android/data/org.openomsi.game/files/crash.log)
+    // openBus/crash.log (or Android/data/org.openbus.game/files/crash.log)
     let crash_files: Vec<PathBuf> = [Some(PathBuf::from(SHARED)), app.external_data_path()].into_iter().flatten().map(|d| d.join("crash.log")).collect();
     std::panic::set_hook(Box::new(move |info| {
         // (one the renderer catches - a graphics interface it cannot open, the next one is
@@ -88,7 +88,7 @@ fn android_main(app: AndroidApp) {
             let _ = std::fs::write(f, &text);
         }
     }));
-    log::info!("openOMSI {VERSION} for Android, build {BUILD}");
+    log::info!("openBus {VERSION} for Android, build {BUILD}");
     log::info!("device: {} {} (Android {}, API {})", prop("ro.product.manufacturer"), prop("ro.product.model"), prop("ro.build.version.release"), prop("ro.build.version.sdk"));
     // the Java activity (OmsiActivity) for the calls into it: ndk_context's context is the
     // Application, which has none of the activity's methods
@@ -132,7 +132,7 @@ fn android_main(app: AndroidApp) {
         let content = content.clone();
         std::thread::spawn(move || hide_from_gallery(&content));
     }
-    // `openOMSI/env.txt`: the OMSI_* switches a computer takes from its environment, one
+    // `openBus/env.txt`: the OMSI_* switches a computer takes from its environment, one
     // `NAME=value` a line (a phone has no environment to set; for looking into problems)
     if let Ok(t) = std::fs::read_to_string(content.join("env.txt")) {
         for line in t.lines() {
@@ -230,7 +230,7 @@ fn init_log() {
     let _ = std::fs::rename(&now, &prev);
     let file = std::fs::File::create(&now).ok();
     let logger = TeeLogger {
-        system: android_logger::AndroidLogger::new(android_logger::Config::default().with_max_level(log::LevelFilter::Info).with_tag("openOMSI")),
+        system: android_logger::AndroidLogger::new(android_logger::Config::default().with_max_level(log::LevelFilter::Info).with_tag("openBus")),
         file: std::sync::Mutex::new(file),
     };
     if log::set_boxed_logger(Box::new(logger)).is_ok() {
@@ -358,18 +358,18 @@ pub(crate) fn hide_content_from_gallery() {
 }
 
 fn is_writable(dir: &Path) -> bool {
-    let probe = dir.join(".openomsi-write-test");
+    let probe = dir.join(".openbus-write-test");
     let ok = std::fs::write(&probe, b"x").is_ok();
     let _ = std::fs::remove_file(&probe);
     ok
 }
 
-const README: &str = "openOMSI\n\
+const README: &str = "openBus\n\
 \n\
 Put a complete copy of OMSI 2 (the folder with Omsi.exe, maps and Vehicles in it) here as\n\
-\"OMSI 2\", e.g. openOMSI/OMSI 2, and choose it in the launcher under Setup.\n\
-Mods: copy them into openOMSI/Mods (they are installed when the launcher opens), or install\n\
-a folder or a .zip, .7z or .rar from the launcher's Mods page. Screenshots are written to openOMSI/Screenshots.\n\
+\"OMSI 2\", e.g. openBus/OMSI 2, and choose it in the launcher under Setup.\n\
+Mods: copy them into openBus/Mods (they are installed when the launcher opens), or install\n\
+a folder or a .zip, .7z or .rar from the launcher's Mods page. Screenshots are written to openBus/Screenshots.\n\
 The folders here hold a .nomedia file so that the gallery leaves the game's textures alone:\n\
 they are not photos - deleting them breaks buses and maps.\n";
 
@@ -390,7 +390,7 @@ impl Shell {
             return;
         }
         self.prepared = true;
-        if let Err(e) = prepare(Args::parse_from(["openomsi"]), true) {
+        if let Err(e) = prepare(Args::parse_from(["openbus"]), true) {
             log::error!("{e:#}");
         }
         if let Some(content) = crate::startup::content_dir() {
@@ -448,7 +448,7 @@ impl Shell {
             log::warn!("the last run closed in the middle of a drive: this one starts with safer graphics{}", if vulkan { " on OpenGL" } else { "" });
         }
         log::info!("starting the game: {}", line.join(" "));
-        let argv: Vec<String> = std::iter::once("openomsi".to_string()).chain(line).collect();
+        let argv: Vec<String> = std::iter::once("openbus".to_string()).chain(line).collect();
         let args = match Args::try_parse_from(&argv) {
             Ok(a) => a,
             Err(e) => {
@@ -616,7 +616,7 @@ fn tilt_thread() {
     // the sensor live as long as the thread (the program)
     unsafe {
         let looper = ALooper_prepare(0);
-        let manager = ASensorManager_getInstanceForPackage(c"org.openomsi.game".as_ptr());
+        let manager = ASensorManager_getInstanceForPackage(c"org.openbus.game".as_ptr());
         if manager.is_null() {
             log::warn!("tilt steering: no sensor manager");
             return;

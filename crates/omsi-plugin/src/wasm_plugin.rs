@@ -43,7 +43,7 @@ struct WasmBinding {
 }
 
 impl WasmBinding {
-    /// The registry, reached from the module's `openomsi.call`.
+    /// The registry, reached from the module's `openbus.call`.
     fn dispatch(&self) -> Option<Disp<'_>> {
         self.raw.get().map(|raw| Disp { raw, binding: self })
     }

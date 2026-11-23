@@ -10,7 +10,7 @@ further result counts, a failure as much as a success.
 - The Windows x64 build of this branch (the `windows-x64` artifact of its Release run). Its
   folder holds `sl.interposer.dll`, `sl.common.dll`, `sl.dlss.dll`, `nvngx_dlss.dll` and
   `amd_fidelityfx_loader_dx12.dll`, `amd_fidelityfx_upscaler_dx12.dll`,
-  `amd_fidelityfx_loader_vk.dll`, `amd_fidelityfx_upscaler_vk.dll` beside `openomsi.exe`.
+  `amd_fidelityfx_loader_vk.dll`, `amd_fidelityfx_upscaler_vk.dll` beside `openbus.exe`.
 - An up-to-date graphics driver. Note the card, the driver version and Windows' version.
 - One map and one bus for every run, the same time of day, so the pictures compare.
 

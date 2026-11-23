@@ -697,7 +697,7 @@ impl App {
             let made = self.renderer.as_ref().and_then(|r| r.frames_generated());
             self.perf.generated = (made.unwrap_or(0), made.map_or(0.0, |m| m.saturating_sub(self.perf.generated.0) as f32));
             let title = format!(
-                "openOMSI - {} fps{speed} - {:.0},{:.0},{:.0} yaw {:.0}",
+                "openBus - {} fps{speed} - {:.0},{:.0},{:.0} yaw {:.0}",
                 self.perf.frames,
                 cam.position.x,
                 cam.position.y,

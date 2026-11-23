@@ -51,7 +51,7 @@ mod tests {
 
     fn app_with_streets() -> App {
         let mut app = crate::assemble_app(
-            crate::cli::Args::parse_from(["openomsi"]),
+            crate::cli::Args::parse_from(["openbus"]),
             crate::settings::Settings::default(),
         );
         app.menus.navigator = Some(omsi_navigator::Navigator::new(true, 0.85, "bottom-left"));

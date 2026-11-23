@@ -45,13 +45,13 @@ pub(crate) fn optional_pipeline<T>(
     }
 }
 /// The file that remembers, per graphics adapter, the reduced renderer that worked there
-/// (`~/.openomsi/gpu-fallback.cfg`, lines `adapter|msaa|basic@<version>`: the game's version
+/// (`~/.openbus/gpu-fallback.cfg`, lines `adapter|msaa|basic@<version>`: the game's version
 /// that found the full set failing, see `build_with_fallbacks`; older lines have no version).
 pub(crate) fn fallback_path() -> Option<std::path::PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     Some(
         std::path::PathBuf::from(home)
-            .join(".openomsi")
+            .join(".openbus")
             .join("gpu-fallback.cfg"),
     )
 }
@@ -81,7 +81,7 @@ pub(crate) fn parse_fallbacks(text: &str) -> Vec<(String, u32, bool, String, boo
 
 /// The game's version, for the remembered fallbacks.
 pub(crate) fn game_version() -> &'static str {
-    option_env!("OPENOMSI_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))
+    option_env!("OPENBUS_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))
 }
 
 /// The reduced renderer (MSAA, basic pipelines) that worked on adapter `name` before, and

@@ -117,7 +117,7 @@ impl<'a> VariantStrIter<'a> {
 
     fn impl_get(&self, i: usize) -> &'a str {
         unsafe {
-            // (openOMSI: `p` is written by g_variant_get_child, so it is mutable and passed
+            // (openBus: `p` is written by g_variant_get_child, so it is mutable and passed
             // as `&mut p` - RUSTSEC-2024-0429, the fix of glib 0.20 brought to 0.18)
             let mut p: *mut libc::c_char = std::ptr::null_mut();
             let s = b"&s\0";

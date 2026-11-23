@@ -3,7 +3,7 @@ name = "omsi-mt"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "openOMSI's machine translation of the interface: texts the translation tables lack, translated on this machine by NLLB-200 through CTranslate2, cached per language, and offered to omsi-ui as its fallback"
+description = "openBus's machine translation of the interface: texts the translation tables lack, translated on this machine by NLLB-200 through CTranslate2, cached per language, and offered to omsi-ui as its fallback"
 
 [dependencies]
 omsi-cfg = { path = "../omsi-cfg" }

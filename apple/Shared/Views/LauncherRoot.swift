@@ -135,7 +135,7 @@ struct Sidebar: View {
                     .background(Theme.accent, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 if !railOnly {
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("openOMSI").font(.inter(17, .bold)).tracking(-0.3)
+                        Text("openBus").font(.inter(17, .bold)).tracking(-0.3)
                         Text(String(localized: "Launcher") + " \(store.version)").font(.inter(11.5, .medium)).foregroundStyle(Theme.muted)
                     }
                 }

@@ -778,12 +778,12 @@ mod file {
     fn the_tuning_is_kept_after_the_ffscale_and_read_back_as_it_was() {
         let tune = FfTune { centring: 1.25, damping: 2.0, parking: 0.5, min_force: 0.06, smoothing: 0.015 };
         let text = cfg_text(&[wheel(Some(tune))]);
-        assert!(text.contains("[FFScale]\r\n0.800\r\n1.200\r\n\r\n[openOMSI.FFTuning]\r\n1.250\r\n2.000\r\n0.500\r\n0.060\r\n0.015\r\n\r\n[openOMSI.FFInvert]\r\n1\r\n"), "{text}");
+        assert!(text.contains("[FFScale]\r\n0.800\r\n1.200\r\n\r\n[openBus.FFTuning]\r\n1.250\r\n2.000\r\n0.500\r\n0.060\r\n0.015\r\n\r\n[openBus.FFInvert]\r\n1\r\n"), "{text}");
         let back = parse_cfg(&text);
         assert_eq!(back[0].ff_tune, Some(tune));
         assert_eq!(cfg_text(&back), text);
         // and the save's own round-trip check lets it through
-        let path = std::env::temp_dir().join(format!("openomsi-fftuning-{}.cfg", std::process::id()));
+        let path = std::env::temp_dir().join(format!("openbus-fftuning-{}.cfg", std::process::id()));
         save_cfg_to(&path, &back).unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
         let _ = std::fs::remove_file(&path);
@@ -798,7 +798,7 @@ mod file {
         // what the file would round to the defaults is the defaults, or the save would fail
         // its own round-trip check
         assert_eq!(cfg_text(&[wheel(Some(FfTune { centring: 1.0002, min_force: -0.0, ..Default::default() }))]), old);
-        let path = std::env::temp_dir().join(format!("openomsi-fftuning-default-{}.cfg", std::process::id()));
+        let path = std::env::temp_dir().join(format!("openbus-fftuning-default-{}.cfg", std::process::id()));
         save_cfg_to(&path, &[wheel(Some(FfTune { damping: 1.0001, ..Default::default() }))]).unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), old);
         let _ = std::fs::remove_file(&path);
@@ -807,15 +807,15 @@ mod file {
     #[test]
     fn a_short_or_broken_tuning_section_falls_back_to_the_defaults() {
         let head = "\r\n[ctrl]\r\nWheel\r\n1\r\n\r\n[FFScale]\r\n1.000\r\n1.000\r\n\r\n";
-        let read = |section: &str| parse_cfg(&format!("{head}[openOMSI.FFTuning]\r\n{section}"));
+        let read = |section: &str| parse_cfg(&format!("{head}[openBus.FFTuning]\r\n{section}"));
         assert_eq!(read("0.5\r\n2\r\n\r\n")[0].ff_tune, Some(FfTune { centring: 0.5, damping: 2.0, ..Default::default() }));
         assert_eq!(read("9\r\n-1\r\nNaN\r\n1\r\n0.5\r\n")[0].ff_tune, Some(FfTune { centring: 2.0, damping: 0.0, parking: 1.0, min_force: 0.2, smoothing: 0.05 }));
         // a section that ends at once leaves everything at its default, and what follows is
         // still read
-        let empty = read("\r\n[openOMSI.FFInvert]\r\n1\r\n\r\n");
+        let empty = read("\r\n[openBus.FFInvert]\r\n1\r\n\r\n");
         assert_eq!(empty[0].ff_tune, Some(FfTune::default()));
         assert_eq!(empty[0].ff_invert, Some(true));
-        let cut = read("0.7\r\n[openOMSI.FFInvert]\r\n0\r\n");
+        let cut = read("0.7\r\n[openBus.FFInvert]\r\n0\r\n");
         assert_eq!(cut[0].ff_tune, Some(FfTune { centring: 0.7, ..Default::default() }));
         assert_eq!(cut[0].ff_invert, Some(false));
     }

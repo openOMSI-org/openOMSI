@@ -297,7 +297,7 @@ mod calendar_tests {
             time_sync: false,
             ..Default::default()
         };
-        let mut app = crate::assemble_app(crate::Args::parse_from(["openomsi"]), settings);
+        let mut app = crate::assemble_app(crate::Args::parse_from(["openbus"]), settings);
         app.clock = omsi_sim::SimClock::starting(Some("2026-11-03"), None, "13:24:56");
         app.menus.game_menu = Some(0);
         app.open_list(crate::game_lists::ListKind::World(0));

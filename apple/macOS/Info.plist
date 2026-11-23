@@ -36,8 +36,8 @@
 		<string>zh-Hant</string>
 	</array>
 	<key>CFBundleDevelopmentRegion</key><string>en</string>
-	<key>CFBundleDisplayName</key><string>openOMSI</string>
-	<key>CFBundleName</key><string>openOMSI</string>
+	<key>CFBundleDisplayName</key><string>openBus</string>
+	<key>CFBundleName</key><string>openBus</string>
 	<key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
@@ -49,7 +49,7 @@
 	<key>NSHighResolutionCapable</key><true/>
 	<key>ITSAppUsesNonExemptEncryption</key><false/>
 	<key>GCSupportsGameMode</key><true/>
-	<key>NSMicrophoneUsageDescription</key><string>openOMSI uses the microphone for voice chat in multiplayer, only while you hold a talk key (or with the open microphone) and only if you switch voice chat on. Nothing is recorded.</string>
-	<key>NSLocalNetworkUsageDescription</key><string>openOMSI finds and joins the multiplayer sessions of other players on your network, and lets your phone or tablet reach the remote cockpit once you switch it on.</string>
+	<key>NSMicrophoneUsageDescription</key><string>openBus uses the microphone for voice chat in multiplayer, only while you hold a talk key (or with the open microphone) and only if you switch voice chat on. Nothing is recorded.</string>
+	<key>NSLocalNetworkUsageDescription</key><string>openBus finds and joins the multiplayer sessions of other players on your network, and lets your phone or tablet reach the remote cockpit once you switch it on.</string>
 </dict>
 </plist>

@@ -1,4 +1,4 @@
-//! Tests of openOMSI's model additions and of the material order Omsi.exe's reader keeps.
+//! Tests of openBus's model additions and of the material order Omsi.exe's reader keeps.
 
 use super::*;
 

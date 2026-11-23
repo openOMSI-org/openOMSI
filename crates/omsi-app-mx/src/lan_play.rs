@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn a_hosts_natural_weather_or_cycle_is_taken_without_a_file() {
         use clap::Parser;
-        let full = crate::cli::Args::parse_from(["openomsi"]);
+        let full = crate::cli::Args::parse_from(["openbus"]);
         let args = full.lan_config();
         let host = AppLanHost {
             args: &full,

@@ -75,7 +75,7 @@ impl Default for Milezero {
 }
 
 fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(6)).timeout_read(Duration::from_secs(10)).user_agent("openOMSI").build()
+    ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(6)).timeout_read(Duration::from_secs(10)).user_agent("openBus").build()
 }
 
 fn get_json(agent: &ureq::Agent, url: &str) -> Option<serde_json::Value> {
@@ -162,7 +162,7 @@ impl Milezero {
         let shared = self.shared.clone();
         shared.lock().unwrap().request = Some(("Sending the request ...".into(), Instant::now()));
         let _ = std::thread::Builder::new().name("milezero-request".into()).spawn(move || {
-            let body = serde_json::json!({ "username": "openOMSI", "message": text.chars().take(2000).collect::<String>(), "type": "song" });
+            let body = serde_json::json!({ "username": "openBus", "message": text.chars().take(2000).collect::<String>(), "type": "song" });
             let res = agent().post(&format!("{HUB}/api/submit-request")).set("Content-Type", "application/json").set("Accept", "application/json").send_string(&body.to_string());
             let msg = match res {
                 Ok(_) => "Request sent".to_string(),

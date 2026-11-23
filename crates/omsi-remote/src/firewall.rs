@@ -62,7 +62,7 @@ fn path_literal(exe: &str) -> String {
     format!("$e = -join ('{hex}' -split '(.{{4}})' | Where-Object {{ $_ }} | ForEach-Object {{ [char][Convert]::ToInt32($_, 16) }})")
 }
 
-const RULE: &str = "openOMSI, allowed from the game";
+const RULE: &str = "openBus, allowed from the game";
 
 pub(crate) fn check_script(exe: &str, ip: &str, port: u16) -> String {
     format!(

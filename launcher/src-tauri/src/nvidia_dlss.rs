@@ -19,8 +19,8 @@ fn game_dir() -> Result<PathBuf, String> {
     let dir = exe
         .parent()
         .ok_or("Launcher has no installation directory")?;
-    if !dir.join("openomsi.exe").is_file() {
-        return Err("openomsi.exe must be in the same directory as the launcher".into());
+    if !dir.join("openbus.exe").is_file() {
+        return Err("openbus.exe must be in the same directory as the launcher".into());
     }
     Ok(dir.to_path_buf())
 }
@@ -109,7 +109,7 @@ pub fn install(accepted_terms: bool) -> Result<Value, String> {
             .map_err(|e| e.to_string())?
             .as_nanos();
         let temp =
-            std::env::temp_dir().join(format!("openomsi-dlss-{}-{unique}", std::process::id()));
+            std::env::temp_dir().join(format!("openbus-dlss-{}-{unique}", std::process::id()));
         std::fs::create_dir(&temp).map_err(|e| format!("Create installer workspace: {e}"))?;
         let _cleanup = TemporaryScripts(temp.clone());
         let package = temp.join("package-streamline.ps1");

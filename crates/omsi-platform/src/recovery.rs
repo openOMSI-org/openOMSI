@@ -15,10 +15,10 @@ use std::time::{Duration, Instant};
 use crate::updater::{self, Place, Release};
 
 /// The project's list of broken releases, read from the repository's main branch.
-const HEALTH_URL: &str = "https://raw.githubusercontent.com/openOMSI-org/openOMSI/main/release/health.json";
+const HEALTH_URL: &str = "https://raw.githubusercontent.com/rafaelkaiz/openBus/main/release/health.json";
 
 /// Beside the installed program: the version the `*.old-update` files belong to.
-pub(crate) const PREVIOUS: &str = ".openomsi-previous";
+pub(crate) const PREVIOUS: &str = ".openbus-previous";
 /// What a rollback sets aside (deleted with the `*.old-update` files once a start went well).
 pub(crate) const BAD: &str = ".bad-update";
 
@@ -26,7 +26,7 @@ pub(crate) const BAD: &str = ".bad-update";
 /// folder in a test, so that they never mark anything in the player's.
 pub fn guard_dir() -> PathBuf {
     #[cfg(test)]
-    let d = std::env::temp_dir().join(format!("openomsi-guard-test-{}", std::process::id()));
+    let d = std::env::temp_dir().join(format!("openbus-guard-test-{}", std::process::id()));
     #[cfg(not(test))]
     let d = omsi_launcher_lib::data_dir().join("guard");
     let _ = std::fs::create_dir_all(&d);
@@ -84,21 +84,21 @@ impl std::fmt::Display for SelfTestFailed {
 
 impl std::error::Error for SelfTestFailed {}
 
-/// The program an unpacked release holds in `staging`: `openomsi(.exe)` at its top, or the
+/// The program an unpacked release holds in `staging`: `openbus(.exe)` at its top, or the
 /// one inside its `.app` on macOS.
 pub(crate) fn staged_program(staging: &Path) -> Option<PathBuf> {
-    let exe = if cfg!(windows) { "openomsi.exe" } else { "openomsi" };
+    let exe = if cfg!(windows) { "openbus.exe" } else { "openbus" };
     if staging.join(exe).is_file() {
         return Some(staging.join(exe));
     }
-    std::fs::read_dir(staging).ok()?.flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("app"))).map(|app| app.join("Contents").join("MacOS").join("openomsi")).filter(|p| p.is_file())
+    std::fs::read_dir(staging).ok()?.flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("app"))).map(|app| app.join("Contents").join("MacOS").join("openbus")).filter(|p| p.is_file())
 }
 
 /// Start `program --self-test` and wait for it (at most `limit`): it must exit 0 and say
 /// `self-test ok`. A program that cannot even be loaded - a library missing, a broken build -
 /// fails here, before it has replaced anything.
 pub fn self_test(program: &Path, limit: Duration) -> Result<(), SelfTestFailed> {
-    let out = std::env::temp_dir().join(format!("openomsi-self-test-{}.txt", std::process::id()));
+    let out = std::env::temp_dir().join(format!("openbus-self-test-{}.txt", std::process::id()));
     let file = std::fs::File::create(&out).map_err(|e| SelfTestFailed(format!("no file for its answer: {e}")))?;
     let mut cmd = std::process::Command::new(program);
     cmd.arg("--self-test").stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null());
@@ -236,7 +236,7 @@ fn health() -> Option<String> {
     if let Some(p) = url.strip_prefix("file://") {
         return std::fs::read_to_string(p).ok();
     }
-    let agent = ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(4)).timeout_read(Duration::from_secs(4)).user_agent(&format!("openOMSI/{} (guard)", updater::current_version())).build();
+    let agent = ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(4)).timeout_read(Duration::from_secs(4)).user_agent(&format!("openBus/{} (guard)", updater::current_version())).build();
     agent.get(&url).call().ok()?.into_string().ok()
 }
 
@@ -285,7 +285,7 @@ mod tests {
 
     fn temp(name: &str) -> PathBuf {
         static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        let d = std::env::temp_dir().join(format!("openomsi-recovery-{name}-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+        let d = std::env::temp_dir().join(format!("openbus-recovery-{name}-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -294,38 +294,38 @@ mod tests {
     #[test]
     fn the_last_aside_of_a_file_is_the_one_with_the_highest_number() {
         let d = temp("asides");
-        for f in ["openomsi.old-update", "openomsi.2.old-update", "LICENSE.old-update", "README.md"] {
+        for f in ["openbus.old-update", "openbus.2.old-update", "LICENSE.old-update", "README.md"] {
             std::fs::write(d.join(f), f).unwrap();
         }
         let mut a = asides(&d);
         a.sort();
         assert_eq!(a.len(), 2);
         assert_eq!(a[0].0, "LICENSE");
-        assert_eq!(a[1].0, "openomsi");
-        assert!(a[1].1.ends_with("openomsi.2.old-update"));
+        assert_eq!(a[1].0, "openbus");
+        assert!(a[1].1.ends_with("openbus.2.old-update"));
         let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
     fn going_back_puts_the_old_files_in_place_and_sets_the_new_ones_aside() {
         let d = temp("rollback");
-        let place = Place { dir: d.clone(), bundle: None, exe: d.join("openomsi") };
+        let place = Place { dir: d.clone(), bundle: None, exe: d.join("openbus") };
         // as an update leaves it: the new program and a file it brought, the old program aside
-        std::fs::write(d.join("openomsi"), "new").unwrap();
+        std::fs::write(d.join("openbus"), "new").unwrap();
         std::fs::write(d.join("new-lib.dll"), "new lib").unwrap();
-        std::fs::write(d.join("openomsi.old-update"), "old").unwrap();
+        std::fs::write(d.join("openbus.old-update"), "old").unwrap();
         std::fs::write(d.join("gone.txt.old-update"), "a file the update took away").unwrap();
-        std::fs::write(d.join(updater::MANIFEST), "openomsi\nnew-lib.dll\n").unwrap();
+        std::fs::write(d.join(updater::MANIFEST), "openbus\nnew-lib.dll\n").unwrap();
         std::fs::write(d.join(PREVIOUS), "0.2.29").unwrap();
         std::fs::write(d.join("Mods-of-the-player.txt"), "mine").unwrap();
         assert_eq!(previous_version(&place).as_deref(), Some("0.2.29"));
         let back = rollback(&place).unwrap();
         assert_eq!(back, "0.2.29");
-        assert_eq!(std::fs::read_to_string(d.join("openomsi")).unwrap(), "old");
+        assert_eq!(std::fs::read_to_string(d.join("openbus")).unwrap(), "old");
         assert_eq!(std::fs::read_to_string(d.join("gone.txt")).unwrap(), "a file the update took away");
         assert!(!d.join("new-lib.dll").exists());
         assert!(d.join("new-lib.dll.bad-update").exists());
-        assert!(d.join("openomsi.bad-update").exists());
+        assert!(d.join("openbus.bad-update").exists());
         assert!(!d.join(PREVIOUS).exists());
         assert_eq!(std::fs::read_to_string(d.join("Mods-of-the-player.txt")).unwrap(), "mine");
         assert!(previous_version(&place).is_none());
@@ -339,30 +339,30 @@ mod tests {
     fn an_update_installed_and_taken_back_leaves_the_folder_as_it_was() {
         use std::io::Write;
         let d = temp("roundtrip");
-        std::fs::write(d.join("openomsi"), "old game").unwrap();
+        std::fs::write(d.join("openbus"), "old game").unwrap();
         std::fs::write(d.join("retired.dll"), "old lib").unwrap();
-        std::fs::write(d.join(updater::MANIFEST), "openomsi\nretired.dll\n").unwrap();
+        std::fs::write(d.join(updater::MANIFEST), "openbus\nretired.dll\n").unwrap();
         std::fs::create_dir_all(d.join("Vehicles")).unwrap();
         std::fs::write(d.join("Vehicles/bus.bus"), "mod").unwrap();
         let zip_path = d.join("new.zip");
         {
             let mut z = zip::ZipWriter::new(std::fs::File::create(&zip_path).unwrap());
-            for (n, body) in [("openomsi", "new game"), ("added.dll", "new lib")] {
+            for (n, body) in [("openbus", "new game"), ("added.dll", "new lib")] {
                 z.start_file(n, zip::write::SimpleFileOptions::default()).unwrap();
                 z.write_all(body.as_bytes()).unwrap();
             }
             z.finish().unwrap();
         }
-        let place = Place { dir: d.clone(), bundle: None, exe: d.join("openomsi") };
+        let place = Place { dir: d.clone(), bundle: None, exe: d.join("openbus") };
         updater::install_archive_with(&zip_path, &place, false).unwrap();
-        assert_eq!(std::fs::read_to_string(d.join("openomsi")).unwrap(), "new game");
+        assert_eq!(std::fs::read_to_string(d.join("openbus")).unwrap(), "new game");
         assert!(!d.join("retired.dll").exists());
         assert_eq!(previous_version(&place).as_deref(), Some(updater::current_version()));
         rollback(&place).unwrap();
-        assert_eq!(std::fs::read_to_string(d.join("openomsi")).unwrap(), "old game");
+        assert_eq!(std::fs::read_to_string(d.join("openbus")).unwrap(), "old game");
         assert_eq!(std::fs::read_to_string(d.join("retired.dll")).unwrap(), "old lib");
         assert!(!d.join("added.dll").exists());
-        assert_eq!(std::fs::read_to_string(d.join(updater::MANIFEST)).unwrap(), "openomsi\nretired.dll\n");
+        assert_eq!(std::fs::read_to_string(d.join(updater::MANIFEST)).unwrap(), "openbus\nretired.dll\n");
         assert_eq!(std::fs::read_to_string(d.join("Vehicles/bus.bus")).unwrap(), "mod");
         assert!(is_bad(updater::current_version()));
         let _ = std::fs::remove_dir_all(&d);
@@ -371,10 +371,10 @@ mod tests {
     #[test]
     fn nothing_to_go_back_to_is_said() {
         let d = temp("nothing");
-        let place = Place { dir: d.clone(), bundle: None, exe: d.join("openomsi") };
-        std::fs::write(d.join("openomsi"), "only").unwrap();
+        let place = Place { dir: d.clone(), bundle: None, exe: d.join("openbus") };
+        std::fs::write(d.join("openbus"), "only").unwrap();
         assert!(rollback(&place).is_err());
-        assert_eq!(std::fs::read_to_string(d.join("openomsi")).unwrap(), "only");
+        assert_eq!(std::fs::read_to_string(d.join("openbus")).unwrap(), "only");
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -389,7 +389,7 @@ mod tests {
             std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
             p
         };
-        assert!(self_test(&script("good", "echo 'openomsi 1.0 self-test ok'"), Duration::from_secs(10)).is_ok());
+        assert!(self_test(&script("good", "echo 'openbus 1.0 self-test ok'"), Duration::from_secs(10)).is_ok());
         assert!(self_test(&script("crash", "exit 3"), Duration::from_secs(10)).is_err());
         assert!(self_test(&script("silent", "exit 0"), Duration::from_secs(10)).is_err());
         let hang = self_test(&script("hang", "sleep 30"), Duration::from_millis(500));

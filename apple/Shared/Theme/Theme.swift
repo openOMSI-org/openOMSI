@@ -42,11 +42,11 @@ enum Theme {
     // --- Inter -----------------------------------------------------------------------------
 
     /// Inter (the variable font, bundled with its licence) for the whole process: from the
-    /// app's resources, or from `OPENOMSI_FONTS` (the screenshot tool, which has no bundle).
+    /// app's resources, or from `OPENBUS_FONTS` (the screenshot tool, which has no bundle).
     static func registerFonts() {
         var urls: [URL] = []
         if let u = Bundle.main.url(forResource: "InterVariable", withExtension: "ttf") { urls.append(u) }
-        if let dir = ProcessInfo.processInfo.environment["OPENOMSI_FONTS"] {
+        if let dir = ProcessInfo.processInfo.environment["OPENBUS_FONTS"] {
             urls.append(URL(fileURLWithPath: dir).appendingPathComponent("InterVariable.ttf"))
         }
         for u in urls where FileManager.default.fileExists(atPath: u.path) {

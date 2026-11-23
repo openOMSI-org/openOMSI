@@ -152,7 +152,7 @@ pub fn vehicle_lights(
             push_enhanced_spot(lights, at, d, level, &vals, share);
         }
     }
-    // [spotlight_2] (openOMSI): every spot its variable switches on, the leading vehicle's
+    // [spotlight_2] (openBus): every spot its variable switches on, the leading vehicle's
     // and its sections', where it is declared - a pair mirrored across the vehicle's axis
     // unless its flag keeps the one lamp - and as bright as a [spotlight] of its colour,
     // shared between the pair, times the variable (0..1)
@@ -170,7 +170,7 @@ pub fn vehicle_lights(
             }
         }
     }
-    // [spotlight_cookie] (openOMSI): lamps whose beam is a picture, the leading vehicle's
+    // [spotlight_cookie] (openBus): lamps whose beam is a picture, the leading vehicle's
     // and its sections'
     let parts = std::iter::once((&ty.model, v.position, body)).chain(
         v.trailers

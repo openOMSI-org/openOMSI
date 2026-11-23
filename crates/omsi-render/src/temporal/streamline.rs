@@ -649,7 +649,7 @@ fn init(
     let init: FnInit = load_fn(module, c"slInit")?;
     let plugin_dir = wide(dir);
     let plugin_paths = vec![plugin_dir.as_ptr()];
-    let engine_version = concat!("openOMSI ", env!("CARGO_PKG_VERSION"), "\0");
+    let engine_version = concat!("openBus ", env!("CARGO_PKG_VERSION"), "\0");
     let prefs = Preferences {
         base: Base::new(PREFERENCES, 1),
         show_console: false,

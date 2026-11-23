@@ -438,7 +438,7 @@ fn cache_path() -> Option<std::path::PathBuf> {
     let home = std::path::PathBuf::from(home);
     // An unavailable home or cache is harmless; do not write into the game/mod folders.
     home.is_absolute()
-        .then(|| home.join(".openomsi/cache/cloud-noise-v2.bin"))
+        .then(|| home.join(".openbus/cache/cloud-noise-v2.bin"))
 }
 
 fn generate() -> Noise {

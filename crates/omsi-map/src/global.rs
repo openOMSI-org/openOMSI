@@ -129,7 +129,7 @@ pub struct GlobalCfg {
     pub real_rail: bool,
     pub left_hand_traffic: bool,
     /// The modes the map is built for, from `[bus_transport]`, `[tram_transport]`,
-    /// `[railway_transport]`, `[metro_transport]` and `[trolleybus_transport]` (openOMSI
+    /// `[railway_transport]`, `[metro_transport]` and `[trolleybus_transport]` (openBus
     /// keywords). Empty: the map names none and takes every vehicle.
     pub transport: omsi_cfg::transport::ModeSet,
     pub background_image: Vec<String>,

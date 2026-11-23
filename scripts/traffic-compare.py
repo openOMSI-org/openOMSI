@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare the AI traffic of two openOMSI builds over many sessions, not one.
+"""Compare the AI traffic of two openBus builds over many sessions, not one.
 
 One run of a scene is one draw of a random process: which cars come, where and when
 (the session's seed, see `omsi_script::set_session_seed`). Two single runs of two builds
@@ -11,7 +11,7 @@ differences). A difference whose interval does not hold 0 is marked: only those 
 than chance. The invariants (overlaps, red runs) are summed as well: one of them in any
 run is a fault whatever the means say.
 
-    python3 scripts/traffic-compare.py --base <openomsi> --new <openomsi> --root <OMSI 2> \\
+    python3 scripts/traffic-compare.py --base <openbus> --new <openbus> --root <OMSI 2> \\
         --out <dir> [--seeds 8] [--secs 300] [--jobs 4] [--scene NAME=MAP@HH:MM[,ARGS]] \\
         [--base-env NAME=VALUE] [--new-env NAME=VALUE] ...
 

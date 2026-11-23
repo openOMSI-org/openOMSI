@@ -66,8 +66,8 @@ jobs:
                 echo "| $what | [$name.zip](https://nightly.link/$REPO/actions/runs/$RUN_ID/$name.zip) |"
               done
               echo
-              echo "- Unpack the download into a **new folder**, not over your openOMSI. The launcher shows the version as \`...-pr$pr\`, and a test build is never updated. It shares your settings and OMSI 2 folder; mods you installed into your openOMSI folder are only seen when you unpack it into a copy of that folder."
-              echo "- Android: the download holds an APK that installs as a separate app, *openOMSI PR #$pr*, beside the release, and shares its openOMSI folder."
+              echo "- Unpack the download into a **new folder**, not over your openBus. The launcher shows the version as \`...-pr$pr\`, and a test build is never updated. It shares your settings and OMSI 2 folder; mods you installed into your openBus folder are only seen when you unpack it into a copy of that folder."
+              echo "- Android: the download holds an APK that installs as a separate app, *openBus PR #$pr*, beside the release, and shares its openBus folder."
               echo "- What to try is under **How to test** in the description. Please comment with what you found and the version the launcher shows."
               echo "- The links work for 14 days after the build."
             fi

@@ -1,4 +1,4 @@
-//! The player's own buses (`~/.openomsi/depot.json`): each keeps its look, its counters and its wear.
+//! The player's own buses (`~/.openbus/depot.json`): each keeps its look, its counters and its wear.
 
 use crate::install::now_secs;
 use anyhow::{Context, Result};

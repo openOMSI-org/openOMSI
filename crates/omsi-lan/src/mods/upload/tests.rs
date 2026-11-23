@@ -8,7 +8,7 @@ use std::sync::Arc;
 type Ready = Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>;
 
 fn temp(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("openomsi-upload-{name}-{}", std::process::id()));
+    let d = std::env::temp_dir().join(format!("openbus-upload-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d

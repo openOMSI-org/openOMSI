@@ -163,7 +163,7 @@ mod tests {
         // (the NEOMAN Overhaul: a `malfunction_reset` and no `malfunction_gettime`)
         let mut v = scripted("{trigger:malfunction_reset}\n0 (S.L.Fail_Gelenk_true)\n{end}\n", "Fail_Gelenk_true\n");
         v.set_var("Fail_Gelenk_true", 1.0);
-        let args = Args { repair: true, ..Args::parse_from(["openomsi"]) };
+        let args = Args { repair: true, ..Args::parse_from(["openbus"]) };
         let mut clock = omsi_sim::SimClock::default();
         let msg = run_services(&args, &mut v, &mut clock, 30.0, false);
         assert_eq!(msg, vec!["repaired".to_string()]);
@@ -178,7 +178,7 @@ mod tests {
             "broken\n",
         );
         v.set_var("broken", 1.0);
-        let args = Args { repair: true, ..Args::parse_from(["openomsi"]) };
+        let args = Args { repair: true, ..Args::parse_from(["openbus"]) };
         let mut clock = omsi_sim::SimClock::default();
         let was = clock.time;
         let msg = run_services(&args, &mut v, &mut clock, 30.0, false);

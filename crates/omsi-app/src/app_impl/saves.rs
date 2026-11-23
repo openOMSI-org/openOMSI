@@ -228,7 +228,7 @@ impl App {
     /// Quick save: `Situations/quicksave.osn` next to the game, as OMSI's `quicksave`.
     pub(crate) fn quick_save(&mut self) {
         let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else { return };
-        // into openOMSI's content folder, never the original installation (the menu and
+        // into openBus's content folder, never the original installation (the menu and
         // --situation find it there as they find a mod's files)
         let dir = crate::startup::content_dir().unwrap_or_else(|| self.args.root.clone()).join("Situations");
         let out = dir.join("quicksave.osn");

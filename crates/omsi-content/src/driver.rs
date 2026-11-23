@@ -26,7 +26,7 @@ impl Driver {
     /// Write the personnel file the way OMSI does (UTF-16 LE with a BOM, CR LF).
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let mut t = String::from("-----------------------\r\nDriver File\r\n-----------------------\r\n\r\n");
-        t.push_str("Created with openOMSI\r\n\r\n");
+        t.push_str("Created with openBus\r\n\r\n");
         t.push_str(&format!("[ident]\r\n{}\r\n{}\r\n{}\r\n{}\r\n\r\n", self.name, if self.sex.is_empty() { "M" } else { &self.sex }, self.birth_date, self.employ_date));
         // served, late, early: the order of Omsi.exe's TDriver record (cnt_busstop_all,
         // cnt_busstop_late, cnt_busstop_early), which tools such as Busbetrieb-Simulator read
@@ -96,7 +96,7 @@ impl Driver {
     /// the original): the driving penalty P (0..1), passengers who stepped in
     /// without a complaint, tickets asked for, points for selling them (2 for the right
     /// change, 1 for the wrong), passengers who stepped in. Values that cannot be those (an
-    /// older openOMSI file kept averages there) are set back to zero.
+    /// older openBus file kept averages there) are set back to zero.
     fn check_ratings(&mut self) {
         let [p, content, asked, points, stepped] = self.rating;
         let ok = (0.0..=1.0).contains(&p) && content >= 0.0 && content <= stepped && asked >= 0.0 && points >= 0.0 && points <= 2.0 * asked + 1e-9 && self.rating.iter().all(|v| v.is_finite());

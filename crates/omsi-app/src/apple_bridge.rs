@@ -6,9 +6,9 @@
 //! timetable, profiles, mods, servers ...), read as JSON and changed by actions through two C
 //! functions:
 //!
-//! - `openomsi_bridge(cmd, json)` → a JSON reply `{"ok": true, "value": …}` or
-//!   `{"ok": false, "error": "…"}`, freed with `openomsi_bridge_free`;
-//! - `openomsi_preview_frame(…)`: the bus preview, drawn by the game's own renderer (the
+//! - `openbus_bridge(cmd, json)` → a JSON reply `{"ok": true, "value": …}` or
+//!   `{"ok": false, "error": "…"}`, freed with `openbus_bridge_free`;
+//! - `openbus_preview_frame(…)`: the bus preview, drawn by the game's own renderer (the
 //!   launcher's showroom) off the screen and copied into the Swift side's pixels.
 //!
 //! The commands: `init`, `tick {dt}` (the state's background work comes in; the reply is the
@@ -43,7 +43,7 @@ pub(crate) fn prepare_once() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         use clap::Parser;
-        let args = crate::cli::Args::parse_from(["openomsi"]);
+        let args = crate::cli::Args::parse_from(["openbus"]);
         if let Err(e) = crate::prepare(args, true) {
             log::error!("{e:#}");
         }
@@ -70,9 +70,9 @@ pub(crate) fn game_status(text: &str) {
 
 /// # Safety
 /// `cmd` and `arg` are nul-terminated strings (or null); the reply is freed with
-/// `openomsi_bridge_free`.
+/// `openbus_bridge_free`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn openomsi_bridge(cmd: *const c_char, arg: *const c_char) -> *mut c_char {
+pub unsafe extern "C" fn openbus_bridge(cmd: *const c_char, arg: *const c_char) -> *mut c_char {
     let read = |p: *const c_char| if p.is_null() { String::new() } else { unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned() };
     let (cmd, arg) = (read(cmd), read(arg));
     let reply = match std::panic::catch_unwind(|| call(&cmd, &arg)) {
@@ -84,9 +84,9 @@ pub unsafe extern "C" fn openomsi_bridge(cmd: *const c_char, arg: *const c_char)
 }
 
 /// # Safety
-/// `p` is a reply of `openomsi_bridge` (or null), freed once.
+/// `p` is a reply of `openbus_bridge` (or null), freed once.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn openomsi_bridge_free(p: *mut c_char) {
+pub unsafe extern "C" fn openbus_bridge_free(p: *mut c_char) {
     if !p.is_null() {
         drop(unsafe { CString::from_raw(p) });
     }
@@ -155,7 +155,7 @@ struct Apple;
 
 impl omsi_launcher_api::Platform for Apple {
     fn renderer(&self, _req: Value, _wait: std::time::Duration) -> Result<(Value, Vec<u8>), String> {
-        Err("the Apple launcher draws its pictures through openomsi_preview_frame".into())
+        Err("the Apple launcher draws its pictures through openbus_preview_frame".into())
     }
     #[cfg(target_os = "ios")]
     fn previous_run_crash(&self) -> Option<(String, String)> {
@@ -576,7 +576,7 @@ fn act(s: &mut State, a: &Value) -> anyhow::Result<Value> {
         "dismiss_disconnected" => s.disconnected = None,
         "diagnostics" => {
             let value = crate::support_bundle::snapshot(None, &crate::settings::Settings::load(), None, None, "launcher");
-            let out = core::data_dir().join("support").join(format!("openOMSI-support-{}.json", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)));
+            let out = core::data_dir().join("support").join(format!("openBus-support-{}.json", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)));
             if let Some(d) = out.parent() {
                 std::fs::create_dir_all(d)?;
             }
@@ -725,7 +725,7 @@ fn want_preview(s: &State) {
 /// # Safety
 /// `out` points at `cap` writable bytes; `out_w` and `out_h` at writable u32s.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn openomsi_preview_frame(w: u32, h: u32, out: *mut u8, cap: usize, out_w: *mut u32, out_h: *mut u32) -> i32 {
+pub unsafe extern "C" fn openbus_preview_frame(w: u32, h: u32, out: *mut u8, cap: usize, out_w: *mut u32, out_h: *mut u32) -> i32 {
     if let Some(s) = STATE.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
         want_preview(s);
     }
@@ -748,17 +748,17 @@ pub unsafe extern "C" fn openomsi_preview_frame(w: u32, h: u32, out: *mut u8, ca
 
 /// The preview turned by a drag (points) or zoomed (a factor).
 #[unsafe(no_mangle)]
-pub extern "C" fn openomsi_preview_orbit(dx: f32, dy: f32) {
+pub extern "C" fn openbus_preview_orbit(dx: f32, dy: f32) {
     preview_send(PreviewMsg::Orbit(dx, dy));
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn openomsi_preview_zoom(k: f32) {
+pub extern "C" fn openbus_preview_zoom(k: f32) {
     preview_send(PreviewMsg::Zoom(k.clamp(0.5, 2.0)));
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn openomsi_preview_view(view: u32) {
+pub extern "C" fn openbus_preview_view(view: u32) {
     if let Some(v) = crate::launcher::showroom::PreviewView::ALL.get(view as usize) {
         preview_send(PreviewMsg::View(*v));
     }
