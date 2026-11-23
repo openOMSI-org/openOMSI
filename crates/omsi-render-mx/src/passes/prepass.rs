@@ -175,114 +175,52 @@ impl Renderer {
         else {
             return;
         };
-        // (face, round, the old picture's share, rows, into the cube for the next eye): a
-        // whole new cube is every round of every face averaged; afterwards a slice or two
-        // a frame, blended in
+        // (face, round, the old picture's share, rows): a whole new cube is every round of
+        // every face averaged; afterwards a slice or two a frame, blended in
         let full = !probe.cube_filled || self.instant_exposure;
-        let mut draws: Vec<(u32, u32, f64, (u32, u32), bool)> = Vec::new();
+        let mut draws: Vec<(u32, u32, f64, (u32, u32))> = Vec::new();
         if full {
-            probe.sched.cancel_staging();
             draws.extend((0..6).flat_map(|f| {
                 (0..SKY_CUBE_ROUNDS)
-                    .map(move |r| (f, r, r as f64 / (r as f64 + 1.0), (0, SKY_CUBE_SIZE), false))
+                    .map(move |r| (f, r, r as f64 / (r as f64 + 1.0), (0, SKY_CUBE_SIZE)))
             }));
-        } else {
-            if std::mem::take(&mut probe.sched.swap) {
-                // the cube filled for the eye the frame's uniform has: over the one in use
-                if let Some((staging, _)) = probe.sched.staging.as_ref() {
-                    prepass_encoder.copy_texture_to_texture(
-                        staging.as_image_copy(),
-                        probe.cube_tex.as_image_copy(),
-                        mx::Extent3d {
-                            width: SKY_CUBE_SIZE,
-                            height: SKY_CUBE_SIZE,
-                            depth_or_array_layers: 6,
-                        },
-                    );
-                }
-            }
-            if lead_view {
-                let round = (probe.cube_round / 6) % SKY_CUBE_ROUNDS;
-                let (mut next, mut rounds) = (probe.cube_next, probe.cube_round);
-                for s in probe
-                    .sched
-                    .plan(
-                        &mut next,
-                        &mut rounds,
-                        if f.env.sky_cube_every_frame {
-                            SLICE_EVERY
-                        } else {
-                            f.dt
-                        },
-                    )
-                    .into_iter()
-                    .flatten()
-                {
-                    let history = if s.staging { 0.0 } else { SKY_CUBE_HISTORY };
-                    draws.push((
-                        s.face,
-                        round,
-                        history,
-                        slice_rows(s.first, s.count),
-                        s.staging,
-                    ));
-                }
-                (probe.cube_next, probe.cube_round) = (next, rounds);
-            } else {
-                // (a view of its own before the window's first frame: a whole face)
-                let round = (probe.cube_round / 6) % SKY_CUBE_ROUNDS;
+        } else if lead_view {
+            let round = (probe.cube_round / 6) % SKY_CUBE_ROUNDS;
+            let (mut next, mut rounds) = (probe.cube_next, probe.cube_round);
+            for s in probe
+                .sched
+                .plan(
+                    &mut next,
+                    &mut rounds,
+                    if f.env.sky_cube_every_frame {
+                        SLICE_EVERY
+                    } else {
+                        f.dt
+                    },
+                )
+                .into_iter()
+                .flatten()
+            {
                 draws.push((
-                    probe.cube_next,
+                    s.face,
                     round,
                     SKY_CUBE_HISTORY,
-                    (0, SKY_CUBE_SIZE),
-                    false,
+                    slice_rows(s.first, s.count),
                 ));
-                probe.cube_next = (probe.cube_next + 1) % 6;
-                probe.cube_round = probe.cube_round.wrapping_add(1);
             }
+            (probe.cube_next, probe.cube_round) = (next, rounds);
+        } else {
+            // (a view of its own before the window's first frame: a whole face)
+            let round = (probe.cube_round / 6) % SKY_CUBE_ROUNDS;
+            draws.push((probe.cube_next, round, SKY_CUBE_HISTORY, (0, SKY_CUBE_SIZE)));
+            probe.cube_next = (probe.cube_next + 1) % 6;
+            probe.cube_round = probe.cube_round.wrapping_add(1);
         }
         probe.cube_filled = true;
-        if draws.iter().any(|d| d.4) && probe.sched.staging.is_none() {
-            let tex = self
-                .device
-                .create_texture(&mx::TextureDescriptor {
-                    label: Some("sky cube, next eye"),
-                    size: mx::Extent3d {
-                        width: SKY_CUBE_SIZE,
-                        height: SKY_CUBE_SIZE,
-                        depth_or_array_layers: 6,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: mx::TextureDimension::D2,
-                    format: probe.cube_tex.format(),
-                    usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::COPY_SRC,
-                    view_formats: &[],
-                })
-                .expect("mX: a texture");
-            let faces = (0..6)
-                .map(|f| {
-                    tex.create_view(&mx::TextureViewDescriptor {
-                        label: Some("sky cube face, next eye"),
-                        dimension: Some(mx::TextureViewDimension::D2),
-                        base_array_layer: f,
-                        array_layer_count: Some(1),
-                        mip_level_count: Some(1),
-                        ..Default::default()
-                    })
-                    .expect("mX: a texture view")
-                })
-                .collect();
-            probe.sched.staging = Some((tex, faces));
-        }
         let single = draws.len() == 1;
-        for (f, round, history, (y0, rows), staging) in draws {
+        for (f, round, history, (y0, rows)) in draws {
             let whole = rows == SKY_CUBE_SIZE;
-            let view = match (staging, probe.sched.staging.as_ref()) {
-                (true, Some((_, faces))) => &faces[f as usize],
-                _ => &probe.cube_faces[f as usize],
-            };
+            let view = &probe.cube_faces[f as usize];
             let mut pass = prepass_encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("sky cube"),
                 color_attachments: &[Some(mx::RenderPassColorAttachment {

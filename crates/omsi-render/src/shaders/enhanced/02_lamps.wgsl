@@ -4,6 +4,10 @@ struct Surface {
     albedo: vec3<f32>,
     f0: vec3<f32>,
     rough: f32,
+    // what the specular reflection leaves the diffuse part (`spec_ms`), and the factor
+    // that gives the specular lobe back the light of its multiple scattering
+    kd: vec3<f32>,
+    comp: f32,
 };
 
 // How much of lamp `li` reaches the point (1 for a lamp without a shadow map): its map is
@@ -273,8 +277,8 @@ fn lamp_light(p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, sf: Surface, thin: bool,
         if (film.x > 0.0) {
             spec = mix(spec, d_beckmann(nh, a_film) * v_smith(nv, nl, a_film) * fr * film.z, film.x);
         }
-        spec = spec * facing;
-        sum = sum + irr * nl * (sf.albedo / PI + spec);
+        spec = spec * facing * sf.comp;
+        sum = sum + irr * nl * (sf.albedo / PI * sf.kd + spec);
     }
     // What the lit ground throws back up: a diffuse reflector of the street's albedo (asphalt
     // and paving about 0.18, under water darker, fresh snow 0.75), seen by a surface over the

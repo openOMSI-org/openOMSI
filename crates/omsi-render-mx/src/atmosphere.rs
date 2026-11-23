@@ -133,6 +133,9 @@ pub struct SkyInput {
     /// through the air up to there.
     pub cloud_base: f32,
     pub cloud_top: f32,
+    /// A thunderstorm's activity (0..1): its cumulonimbus holds several times a deck's
+    /// water, and under it the day goes dark.
+    pub storm: f32,
 }
 
 impl Default for SkyInput {
@@ -150,6 +153,7 @@ impl Default for SkyInput {
             deck_tau: 0.0,
             cloud_base: 1400.0,
             cloud_top: 2800.0,
+            storm: 0.0,
             rain: 0.0,
             ground_albedo: 0.2,
             tint: [Vec3::ONE; 3],
@@ -198,6 +202,11 @@ pub struct SkyState {
     /// The part of `e_rest` that stands for the lamps round the viewer when nothing better
     /// is known (the renderer measures them: `view_lamp_light`).
     pub e_artificial: f32,
+    /// The light (as `e_sun + e_rest` without the lamps) a clear sky would give at this
+    /// sun: what the weather's own dimming is measured against (`weather_dimming`).
+    pub e_clear: f32,
+    /// The deck's optical depth this sky was computed with (0 without a deck).
+    pub deck_tau: f32,
 }
 
 /// Optical depth per unit coefficient (Rayleigh, Mie, ozone) along a ray from altitude h
@@ -760,11 +769,13 @@ impl SkyState {
         // and what the ground throws back up, the deck sends down again: under a cover
         // the light of a snowy day is half again as bright as of a green one
         let clear_global = (raw.sun * s.z.max(0.0) + raw.sky_horizontal).dot(LUM);
+        // (a storm's cumulonimbus: an optical depth of a hundred and more over a deck's
+        // fifteen to sixty - a few per cent of the clear day's light gets down through it)
         let tau = if input.deck_tau > 0.0 {
             input.deck_tau
         } else {
             15.0 + 45.0 * input.rain.clamp(0.0, 1.0)
-        };
+        } * (1.0 + 3.0 * input.storm.clamp(0.0, 1.0));
         let deck_t = 1.0 / (1.0 + 0.75 * (1.0 - 0.85) * tau);
         let overcast_e =
             clear_global * deck_t / (1.0 - (1.0 - deck_t) * input.ground_albedo.clamp(0.0, 0.9));
@@ -960,6 +971,8 @@ impl SkyState {
             .dot(LUM)
             .max(sky_horizontal.dot(LUM))
             + e_artificial;
+        let e_clear =
+            (sun_disc_clear * sun_facing).dot(LUM) + (wb(raw.sky_horizontal) * tint[1]).dot(LUM);
         SkyState {
             input: *input,
             sun,
@@ -976,6 +989,8 @@ impl SkyState {
             e_rest,
             moon_light,
             e_artificial,
+            e_clear,
+            deck_tau: tau * oc,
         }
     }
 }
@@ -1007,6 +1022,30 @@ pub fn exposure_for(e_ref: f32) -> f32 {
     // adds as much again to the bright half), as a camera exposes a sunny street: its soft
     // shoulder holds the sunlit white
     1.6 * std::f32::consts::PI / e * adaptation_key(e) / adaptation_key(DAY_REFERENCE)
+}
+
+/// How much of the weather's dimming of the day the eye is left to see (log terms): it
+/// adapts to an overcast or a storm's gloom as to any light, but not all the way - a grey
+/// day looks darker than a sunny one, and a storm by day several times darker again. The
+/// exposure is set this share of the way back down from what `exposure_for` would adapt to.
+pub const WEATHER_DARKEN: f32 = 0.45;
+
+/// The weather's dimming of the natural light `e_nat` against the clear sky's `e_clear` at
+/// a sun `sun_z` high, as a factor on the exposure: 1 under a clear sky (and by night, when
+/// the lamps decide), down to about a fifth under a heavy storm by day.
+pub fn weather_dimming(e_nat: f32, e_clear: f32, sun_z: f32) -> f32 {
+    let day = smoothstep(-0.1, 0.05, sun_z);
+    let ratio = (e_nat / e_clear.max(1e-9)).clamp(0.005, 1.0);
+    (ratio.ln() * WEATHER_DARKEN * day).exp()
+}
+
+/// A downpour's own gloom by day on top of its clouds' (`weather_dimming`): the curtain of
+/// water between the eye and the sky takes the light again - a cloudburst at noon is a
+/// dusk, the street lamps' sensors switch on. 1 without rain and by night, some 0.3 at
+/// the heaviest rain (0..1).
+pub fn rain_gloom(rain: f32, sun_z: f32) -> f32 {
+    let day = smoothstep(-0.1, 0.05, sun_z);
+    1.0 - 0.7 * rain.clamp(0.0, 1.0).powf(1.3) * day
 }
 
 /// The eye's key (see `exposure_for`) for the adapting irradiance `e` (1 = 10 000 lux): the

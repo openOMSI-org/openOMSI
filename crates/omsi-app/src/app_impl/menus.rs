@@ -503,6 +503,12 @@ impl App {
                         .zip(menu.vehicle_meta)
                         .map(|(v, meta)| (v.1.clone(), meta))
                         .collect();
+                    self.menus.vehicle_about = menu
+                        .vehicles
+                        .iter()
+                        .zip(menu.vehicle_about)
+                        .map(|(v, about)| (v.1.clone(), about))
+                        .collect();
                     self.menus.vehicle_list = menu.vehicles;
                     // (alphabetical)
                     self.menus.vehicle_list.sort_by_key(|v| v.0.to_lowercase());

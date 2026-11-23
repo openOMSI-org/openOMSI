@@ -39,23 +39,57 @@ pub(crate) struct VanillaSkyUniform {
     pub(crate) haze: [f32; 4],
 }
 
-/// The enhanced clouds' noise textures (clouds.rs), made once: the shape map (2-D RGBA8)
-/// and the detail volume (3-D R8), both with their mip chains, and a repeating sampler.
-/// Without `enhanced_noise` (the launcher's preview, which draws no enhanced sky) both are
-/// a texel each, and nothing is generated.
-pub(crate) fn cloud_noise_textures(device: &wgpu::Device, queue: &wgpu::Queue, enhanced_noise: bool) -> (wgpu::TextureView, wgpu::TextureView, wgpu::Sampler, Vec<u8>) {
+/// The enhanced clouds' noise textures (clouds.rs), made once, with their mip chains: the
+/// weather map (2-D RGBA8), the detail volume (3-D R8), the base volume (3-D R8) and the
+/// curl map (2-D RG8), a repeating sampler, and the CPU's copy of what the clouds' shadow is
+/// worked out from. Without `enhanced_noise` (the launcher's preview, which draws no
+/// enhanced sky) each is a texel, and nothing is generated.
+pub(crate) struct CloudTextures {
+    pub weather: wgpu::TextureView,
+    pub detail: wgpu::TextureView,
+    pub base: wgpu::TextureView,
+    pub curl: wgpu::TextureView,
+    pub sampler: wgpu::Sampler,
+    pub cpu: crate::lighting::CloudCpu,
+}
+
+pub(crate) fn cloud_noise_textures(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    enhanced_noise: bool,
+) -> CloudTextures {
     let t0 = std::time::Instant::now();
     // (made once a process, and kept on the disk between starts: see `clouds::noise`)
-    let none = (vec![vec![0, 0, 0, 255]], vec![vec![0]]);
-    let (shape, detail) = match enhanced_noise.then(clouds::noise) {
-        Some(n) => (&n.shape, &n.detail),
-        None => (&none.0, &none.1),
+    let none = clouds::Noise {
+        weather: vec![vec![0, 0, 0, 0]],
+        base: vec![vec![0]],
+        detail: vec![vec![0]],
+        curl: vec![vec![128, 128]],
     };
-    let make = |label: &str, size: u32, dim: wgpu::TextureDimension, format: wgpu::TextureFormat, bpp: u32, levels: &[Vec<u8>]| {
-        let depth = if dim == wgpu::TextureDimension::D3 { size } else { 1 };
+    let n = if enhanced_noise {
+        clouds::noise()
+    } else {
+        &none
+    };
+    let make = |label: &str,
+                size: u32,
+                dim: wgpu::TextureDimension,
+                format: wgpu::TextureFormat,
+                bpp: u32,
+                levels: &[Vec<u8>]| {
+        let size = if enhanced_noise { size } else { 1 };
+        let depth = if dim == wgpu::TextureDimension::D3 {
+            size
+        } else {
+            1
+        };
         let tex = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
-            size: wgpu::Extent3d { width: size, height: size, depth_or_array_layers: depth },
+            size: wgpu::Extent3d {
+                width: size,
+                height: size,
+                depth_or_array_layers: depth,
+            },
             mip_level_count: levels.len() as u32,
             sample_count: 1,
             dimension: dim,
@@ -65,19 +99,53 @@ pub(crate) fn cloud_noise_textures(device: &wgpu::Device, queue: &wgpu::Queue, e
         });
         for (m, data) in levels.iter().enumerate() {
             let e = (size >> m).max(1);
-            let d = if dim == wgpu::TextureDimension::D3 { e } else { 1 };
+            let d = if dim == wgpu::TextureDimension::D3 {
+                e
+            } else {
+                1
+            };
             queue.write_texture(
-                wgpu::TexelCopyTextureInfo { texture: &tex, mip_level: m as u32, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+                wgpu::TexelCopyTextureInfo {
+                    texture: &tex,
+                    mip_level: m as u32,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
                 data,
-                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(e * bpp), rows_per_image: Some(e) },
-                wgpu::Extent3d { width: e, height: e, depth_or_array_layers: d },
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(e * bpp),
+                    rows_per_image: Some(e),
+                },
+                wgpu::Extent3d {
+                    width: e,
+                    height: e,
+                    depth_or_array_layers: d,
+                },
             );
         }
         tex.create_view(&wgpu::TextureViewDescriptor::default())
     };
-    let (shape_size, detail_size) = if enhanced_noise { (clouds::SHAPE_SIZE, clouds::DETAIL_SIZE) } else { (1, 1) };
-    let shape_view = make("cloud shape", shape_size, wgpu::TextureDimension::D2, wgpu::TextureFormat::Rgba8Unorm, 4, shape);
-    let detail_view = make("cloud detail", detail_size, wgpu::TextureDimension::D3, wgpu::TextureFormat::R8Unorm, 1, detail);
+    use wgpu::TextureDimension::{D2, D3};
+    use wgpu::TextureFormat::{R8Unorm, Rg8Unorm, Rgba8Unorm};
+    let weather = make(
+        "cloud weather",
+        clouds::WEATHER_SIZE,
+        D2,
+        Rgba8Unorm,
+        4,
+        &n.weather,
+    );
+    let detail = make(
+        "cloud detail",
+        clouds::DETAIL_SIZE,
+        D3,
+        R8Unorm,
+        1,
+        &n.detail,
+    );
+    let base = make("cloud base", clouds::BASE_SIZE, D3, R8Unorm, 1, &n.base);
+    let curl = make("cloud curl", clouds::CURL_SIZE, D2, Rg8Unorm, 2, &n.curl);
     let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         label: Some("cloud noise"),
         address_mode_u: wgpu::AddressMode::Repeat,
@@ -89,9 +157,20 @@ pub(crate) fn cloud_noise_textures(device: &wgpu::Device, queue: &wgpu::Queue, e
         ..Default::default()
     });
     log::info!("cloud noise made in {:.2} s", t0.elapsed().as_secs_f32());
-    // (the shape map's second level kept for the clouds' shadow, `cloud_sun_transmittance`)
-    let cpu = shape.get(1).cloned().unwrap_or_default();
-    (shape_view, detail_view, sampler, cpu)
+    // (the second levels kept for the clouds' shadow, `cloud_field`)
+    let cpu = if enhanced_noise {
+        crate::lighting::CloudCpu::new(&n.weather[1], &n.base[1])
+    } else {
+        Default::default()
+    };
+    CloudTextures {
+        weather,
+        detail,
+        base,
+        curl,
+        sampler,
+        cpu,
+    }
 }
 
 impl Renderer {
@@ -184,6 +263,10 @@ impl Renderer {
                         None => &self.black_texture.view,
                     }),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 12,
+                    resource: self.sky.cloud_view_buf.as_entire_binding(),
+                },
             ],
         });
         scene.sky_bind_group = Some(bg);
@@ -199,14 +282,17 @@ pub(crate) struct SkyRes {
     pub(crate) sky_sampler: wgpu::Sampler,
     /// The classic sky's weather (`VanillaSkyUniform`, sky bind group binding 10).
     pub(crate) vanilla_sky_buf: wgpu::Buffer,
-    /// The enhanced clouds' noise (clouds.rs): the shape map, the detail volume and their
+    /// The enhanced clouds' noise (clouds.rs): the weather map, the detail volume and their
     /// repeating, mip-mapped sampler (sky bind group bindings 6-8).
     pub(crate) cloud_shape_view: wgpu::TextureView,
     pub(crate) cloud_detail_view: wgpu::TextureView,
     pub(crate) cloud_sampler: wgpu::Sampler,
-    /// The shape map's second level (RGBA8), for the clouds' shadow on the street, and how
-    /// much of the sun the clouds let through over the camera now (smoothed).
-    pub(crate) cloud_shape_cpu: Vec<u8>,
+    /// Where the screen's clouds were traced from (cloud_pass.rs `CloudView`, sky bind group
+    /// binding 12): the dome looks them up through it.
+    pub(crate) cloud_view_buf: wgpu::Buffer,
+    /// The CPU's copy of the clouds' weather map and base volume, for their shadow on the
+    /// street, and how much of the sun the clouds let through over the camera now (smoothed).
+    pub(crate) cloud_shape_cpu: crate::lighting::CloudCpu,
     pub(crate) cloud_sun: Option<f32>,
     /// The clouds' shadow over the land, held in the sky table's texture (`cloud_field`).
     pub(crate) cloud_field: FieldState,

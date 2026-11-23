@@ -8,6 +8,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New
 
+- **Alt menu redone**: the quick menu's thirty tiles are flat, squarer and have pictograms of their own in the style of OMSI 2's menu (a bus with a plus, a cross or arrows for placing, removing and swapping it, a pump, a clock, a chequered flag...) in place of the generic symbols.
 - **Tunnel mouths are open**: a `[terrainhole]` standing upright, as in the Kartoffelphantom tram
   tunnels, is an opening: the ground is cut behind it up to where the hill is over it, and no wall
   stands across it. The walls of a cut in the ground show the ground's texture instead of streaks.
@@ -69,6 +70,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   → *Save under a name...* lets you type the save's name (Enter saves); it keeps that name when
   you save over it later. *Load the quicksave* became *Load a situation...*: the quicksave and
   every save of the map, by name, to load straight from the game (#3975).
+- **"Place a vehicle..." names and pictures as in the launcher**: a maker's buses are grouped into models as the launcher's bus picker groups them (*Citaro* with *C2*, *C2 G*, *C2 K* under it) instead of type names with folder and file beside them; the picture's second line is the bus's description, not its file's path; a maker's line shows its first bus; and the standard paint is called by the name the bus gives it, as in the launcher.
 - **Controls profiles**: the launcher's Controls page has profiles, each with every key and
   every controller setting: *Duplicate* makes a new one of the current settings, the list
   switches between them, and they can be renamed and deleted. One can be the *default for every
@@ -150,6 +152,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).
   Graphics has *Light has shadows* (`light_shadows`: Off, Street lamps and vehicles, Every light),
   *Cloud shadows and light shafts* (`cloud_shadows`), *Glow of lights* (`light_glow`),
+  *Volumetric fog* (`volumetric_fog`, on by default),
   *Real-Time Reflections* (the puddles' setting, now with the wet roads' and the water's) and
   *Reflective objects reflect* (the reflection maps), next to the street light and the mirrors. The
   presets are Low, Medium, High, Extra, Max and Ultra, and each sets the mode too: Low is Vanilla,
@@ -665,6 +668,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 - **The driver can sit as in OMSI 2**: Settings → Camera → Driver's view (and the options menu in the game) has *Driver sits as in OMSI 2*, off by default. On, the driver sits back on his seat with his hands off the wheel, as in OMSI 2; off, he moves up and leans forward to hold the wheel, as before. It can be switched while driving.
 
 ### Fixes
+
+- **mX Graphics no longer leaves a grey screen or a few frames a second**: a graphics device lost under mX (Direct3D 12 removing it, a lost Vulkan device) is recognised as lost - every frame was dropped before and the window stood grey - and the game starts again on the other graphics interface, and on wgpu if it is lost there too; where no graphics chip opens on mX, or only a software renderer (WARP, llvmpipe: three or four frames a second), the game starts again on wgpu by itself. The setting stays on. On Direct3D 12 the bindless heap's free slots hold empty views instead of the views of textures already freed, which a stale index read and the driver answered by removing the device (#4157).
+- **A lost graphics device says why**: on Direct3D 12 the game's log gets DRED's report (the reason, where each unfinished command list stopped and in which pass, a page fault's address and the resources there or just freed there), on Vulkan the driver's `VK_EXT_device_fault` report where it has one. `OMSI_MX=off` starts a run on wgpu, `OMSI_MX=on` on mX, whatever the setting says.
+- **Rain on the glass looks like rain again** (#4153): the windscreen shows drops instead of a grey mist, the runners no longer cut wide clear stripes, the mirrors show no dense noise of drops, and the falling rain is see-through again in Enhanced.
+- **Clouds without rings and stripes**: the Enhanced sky no longer slices into rings round the zenith or bands near the horizon; the cloud pass is skipped when the sky is clear or clouds are off.
+- **Rain and snow fall on phones**: Android and iOS never drew the falling rain or snow; they do now (a phone whose driver fails on them keeps without them from the next start).
 
 - **The next arrow shows in the pause menu's Line and shift page**: the button beside the start time (and the next arrow of the vehicle pages) was an empty square, as the game had no `arrow_forward` icon to draw on it.
 - **A broken sound file is named in the log**: when no sound can be read from a file under a
