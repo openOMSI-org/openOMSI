@@ -1,6 +1,3 @@
-//! Named saves in the game menu (#3975): typing a name, the slot a save writes, the
-//! situations offered to load and the plugin's quicksave action.
-
 use super::{NAME_MAX, newer_quicksave, slot_target};
 use crate::game_lists::ListKind;
 use omsi_launcher_lib::SavedSituation;

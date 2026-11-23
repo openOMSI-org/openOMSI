@@ -418,7 +418,6 @@ impl App {
         self.refresh_list();
     }
 
-    /// The longest text the open list's field takes: a route number, or a save's name.
     fn edit_max(&self) -> usize {
         if matches!(
             self.menus.list_kind,

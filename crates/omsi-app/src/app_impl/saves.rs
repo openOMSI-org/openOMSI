@@ -65,8 +65,6 @@ impl App {
         self.session.career.seconds = 0.0;
     }
 
-    /// The quicksave, where there is one: the newer of the content folder's and the fallback
-    /// folder's (see `save_or_fallback`).
     pub(crate) fn quicksave_file(&self) -> Option<PathBuf> {
         let file = crate::startup::content_dir()
             .unwrap_or_else(|| self.args.root.clone())
@@ -78,8 +76,8 @@ impl App {
         )
     }
 
-    /// "Load a situation..." (#3975): the list of saves; with the plugin command on,
-    /// `omsi.command('load')` loads `quicksave` straight away, as it did before the list.
+    /// (with the plugin command on, `omsi.command('load')` loads the quicksave at once, as it
+    /// did before the list)
     pub(crate) fn choose_load(&mut self, quicksave: Option<PathBuf>) {
         if !self.integrations.plugin_command {
             return self.open_list(crate::game_lists::ListKind::LoadSaves);
@@ -91,8 +89,8 @@ impl App {
         }
     }
 
-    /// Start the game again on the situation `file` (a fresh process, as OMSI loads a
-    /// situation into a fresh world); true when it started. The caller ends this session.
+    /// A fresh process, as OMSI loads a situation into a fresh world: the caller ends this
+    /// session.
     pub(crate) fn load_situation_file(&mut self, file: &Path) -> bool {
         let Ok(exe) = std::env::current_exe() else {
             return false;
@@ -383,8 +381,7 @@ impl App {
     /// the map's folder in the content folder, or with `over` into that slot of the map,
     /// which it replaces (#2556). The launcher offers them, with the last situation, to
     /// continue from.
-    /// `typed`: a name the player gave it in the menu (#3975), which it keeps when it is
-    /// saved over later, as a name given in the launcher does.
+    /// (`typed` is kept when the slot is saved over later, as a name given in the launcher is)
     pub(crate) fn save_slot_to(&mut self, over: Option<std::path::PathBuf>, typed: Option<String>) {
         let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else {
             return;
@@ -486,11 +483,8 @@ impl App {
 /// The folder of a map's save slots, inside the map's folder in the content folder (the
 /// launcher reads it as well: `omsi_launcher_lib::saved_situations`).
 pub(crate) const SAVES: &str = "Saves";
-/// The longest name a save is given in the game's menu.
 pub(crate) const NAME_MAX: usize = 60;
 
-/// The newer of the content folder's quicksave `main` and the fallback folder's, where
-/// there is one.
 pub(crate) fn newer_quicksave(main: PathBuf, fallback: Option<PathBuf>) -> Option<PathBuf> {
     let age = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
     let file = match fallback {
@@ -500,10 +494,8 @@ pub(crate) fn newer_quicksave(main: PathBuf, fallback: Option<PathBuf>) -> Optio
     file.exists().then_some(file)
 }
 
-/// Where a slot save goes: the slot's number (or name), its file and the name chosen for it.
-/// `over` is saved over in place and keeps its number ("Slot 3" stays the third) and a name
-/// chosen for it, unless one is `typed`; else the first number free in `dir` and `fallback`
-/// (a number is never given twice).
+/// (`over` keeps its number, "Slot 3" stays the third, and its chosen name unless one is
+/// `typed`; a new slot takes the first number free in both folders: none is given twice)
 pub(crate) fn slot_target(
     dir: &Path,
     fallback: Option<&Path>,

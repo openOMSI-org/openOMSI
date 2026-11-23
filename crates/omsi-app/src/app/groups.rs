@@ -480,8 +480,7 @@ pub(crate) struct MenuState {
     pub(crate) pane_scroll: Option<(usize, usize)>,
     /// The digits of a time being typed in the world page of the game menu (None: not typing).
     pub(crate) menu_edit: Option<String>,
-    /// A situation chosen in "Load a situation..." (#3975): loaded at the start of the next
-    /// frame, where the event loop is at hand to end this session.
+    /// (loaded at the start of the next frame, where the event loop can end this session)
     pub(crate) load_request: Option<std::path::PathBuf>,
     pub(crate) menu_edit_icao: bool,
     /// The fleet number being edited in the vehicle page

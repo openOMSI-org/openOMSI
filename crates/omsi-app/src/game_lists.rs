@@ -72,10 +72,8 @@ pub(crate) enum ListKind {
     PlaceType(String),
     PlaceLivery(String),
     PlaceHof(String, String),
-    /// Where to save the situation: a new slot, one under a name typed (#3975), or one of the
-    /// map's slots to save over (#2556).
+    /// Where to save the situation: a new slot, or one of the map's slots to save over (#2556).
     SaveSlots,
-    /// The situations to load: the quicksave and the map's saves, by their names (#3975).
     LoadSaves,
 }
 

@@ -1,8 +1,5 @@
-//! "Save to a slot..." and "Load a situation...": their lines and what a pick does (#2556, #3975).
-
 use super::*;
 
-/// The lines of "Load a situation..." (#3975): the quicksave, then the map's saves by name.
 pub(crate) fn load_rows(
     quicksave: Option<std::path::PathBuf>,
     slots: Vec<omsi_launcher_lib::SavedSituation>,
@@ -23,7 +20,6 @@ pub(crate) fn load_rows(
     }
 }
 
-/// A line of "Save to a slot..." or "Load a situation..." (#2556, #3975).
 pub(super) fn run_saves(app: &mut App, kind: &ListKind, verb: &str, arg: &str) -> Option<ListKind> {
     if matches!(kind, ListKind::LoadSaves) {
         if verb == "load" && !arg.is_empty() {
