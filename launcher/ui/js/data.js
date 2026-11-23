@@ -457,12 +457,51 @@ export async function loadSituations() {
 /** Page data kept between visits: answered at once from what was read last, read again
  * behind it (`fresh` = the command's answer is set into `S.cache[key]`). */
 export function cached(key, cmd, args) {
+  const had = S.cache[key];
+  const p = reread(key, cmd, args).catch(() => null);
+  return had !== undefined ? Promise.resolve(had) : p;
+}
+
+const asked = {};
+const latest = {};
+
+/** Rejects on a failed read: a failed read confirms no install, switch or delete (#4016, #4017). */
+export function reread(key, cmd, args) {
+  const n = (asked[key] = (asked[key] || 0) + 1);
   const before = S.cache[key];
+  if (!S.reading[key]) set({ reading: { ...S.reading, [key]: true } });
+  const keep = (v, error) => {
+    if (asked[key] !== n) return latest[key];
+    const last = S.cache[key];
+    const written = last !== before;
+    const kept = written || (error && last !== undefined && !last?.error);
+    set({
+      cache: { ...S.cache, [key]: kept ? last : error ? { error } : v },
+      reading: { ...S.reading, [key]: false },
+      readError: { ...S.readError, [key]: written ? null : error },
+    });
+    if (written) return last;
+    if (error) throw new Error(error);
+    return v;
+  };
   const p = call(cmd, args).then(
-    (v) => (S.cache[key] === before && set({ cache: { ...S.cache, [key]: v } }), v),
-    (e) => (S.cache[key] === before && set({ cache: { ...S.cache, [key]: { error: e.message } } }), null),
+    (v) => keep(v, null),
+    (e) => keep(null, e.message),
   );
-  return S.cache[key] !== undefined ? Promise.resolve(S.cache[key]) : p;
+  latest[key] = p;
+  return p;
+}
+
+export async function rereadUntil(key, cmd, args) {
+  for (let wait = 1000, told = false; ; wait = Math.min(wait * 2, 30000)) {
+    try {
+      return await reread(key, cmd, args);
+    } catch (e) {
+      if (!told) toast(t(e.message), 'error');
+      told = true;
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
 }
 
 /** What the pages show, read ahead while the launcher starts. */
@@ -656,7 +695,10 @@ export async function pollNow() {
     }
     if (changed || finished.length) {
       loadContent();
-      cached('mods', 'mods_status');
+      // (the read takes seconds on a big content folder, #4016)
+      const done = finished.filter((j) => j.state === 'done').map((j) => j.id);
+      if (done.length) set({ settling: [...S.settling, ...done] });
+      rereadUntil('mods', 'mods_status').then(() => done.length && set({ settling: S.settling.filter((id) => !done.includes(id)) }));
     }
   } catch {
     /* the next look */

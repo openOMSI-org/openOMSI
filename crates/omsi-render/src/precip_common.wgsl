@@ -88,3 +88,82 @@ fn in_box(p: vec3<f32>, a: vec4<f32>, b: vec4<f32>, c: vec4<f32>) -> bool {
     let h = b.yzw + vec3<f32>(0.3);
     return select(false, all(abs(q) < h), c.w >= 0.5);
 }
+
+// Enhanced: the sun's far shadow map (the scene's camera group), which keeps every caster -
+// a drop or a flake in the shade of a house or under the trees does not catch the sun.
+@group(0) @binding(6) var s_shadow: sampler_comparison;
+@group(0) @binding(7) var t_shadow_far: texture_depth_2d;
+
+// Enhanced: the procedural flake atlas (precip.rs `FlakeAtlas`): eight cells of snow
+// crystals and flakes, R how much of a texel they cover, G how bright it is.
+@group(1) @binding(2) var t_flakes: texture_2d<f32>;
+@group(1) @binding(3) var s_flakes: sampler;
+
+// How far `p` is over whatever stands uppermost there by the roof map (m): below 0 under a
+// roof, and far over everything where there is no map.
+fn roof_clearance(p: vec3<f32>, m: mat4x4<f32>, on: f32) -> f32 {
+    let c = m * vec4<f32>(p, 1.0);
+    let uv = vec2<f32>(c.x * 0.5 + 0.5, 0.5 - c.y * 0.5);
+    let side = f32(textureDimensions(roof_map).x);
+    let top = roof_depth(vec2<i32>(clamp(uv, vec2<f32>(0.0), vec2<f32>(0.9999)) * side));
+    // (the map looks straight down: its depth goes against the height, m[2].z < 0)
+    let h = (c.z - top) / m[2].z;
+    return select(1e4, h, on > 0.5 && all(abs(c.xy) < vec2<f32>(1.0)) && top < 0.9999);
+}
+
+// The wind's gusts: it swells and slackens over some seconds, each swell running downwind
+// over the ground as a wave some 70 m long, so that neighbouring drops and flakes are blown
+// together and a gust is seen to sweep through the rain. x: the time's worth of the mean
+// wind the gusts have added to a particle's way by `t` (the swell's integral, s), y: the
+// swell now (a share of the mean wind).
+fn precip_gust(x: vec2<f32>, t: f32, wind: vec2<f32>, strength: f32) -> vec2<f32> {
+    let speed = length(wind);
+    let along = dot(x, wind / max(speed, 1e-3)) * (6.2831853 / 70.0);
+    let across = dot(x, vec2<f32>(-wind.y, wind.x) / max(speed, 1e-3)) * (6.2831853 / 160.0);
+    let w1 = 0.42;
+    let w2 = 1.17;
+    let a1 = 0.38 * strength;
+    let a2 = 0.17 * strength;
+    let p1 = w1 * t - along + 0.6 * sin(across);
+    let p2 = w2 * t - 2.3 * along + 1.7 + across;
+    return vec2<f32>(-a1 * cos(p1) / w1 - a2 * cos(p2) / w2, a1 * sin(p1) + a2 * sin(p2));
+}
+
+// How much of the sun reaches `p` (Enhanced): one compare in the far cascade, lit beyond it
+// and without shadow maps.
+fn precip_sun(p: vec3<f32>) -> f32 {
+    if (camera.shadow.x < 0.5 || enh.sun.r + enh.sun.g < 1e-4) {
+        return 1.0;
+    }
+    let lp = camera.light_view_proj_far * vec4<f32>(p, 1.0);
+    let uv = vec2<f32>(lp.x * 0.5 + 0.5, 0.5 - lp.y * 0.5);
+    if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) || lp.z < 0.0 || lp.z > 1.0) {
+        return 1.0;
+    }
+    return textureSampleCompareLevel(t_shadow_far, s_shadow, uv, lp.z - 0.0004);
+}
+
+// A hash of a cell of the plane (0..1 each), its integer coordinates taken modulo 4096 so
+// that the world's large figures stay exact.
+fn cell_hash(c: vec2<f32>) -> vec4<f32> {
+    let w = c - 4096.0 * floor(c / 4096.0);
+    let i = vec2<u32>(w);
+    return hash4(i.x * 4099u + i.y * 7919u + 17u);
+}
+
+// The panels of a far veil of rain or snow (Enhanced): rings of upright panels round the
+// camera, twelve a ring, each a strip of four vertices. Beyond the particles' layers the
+// drops or flakes are too many and too small to draw one by one, and a heavy fall is seen
+// there as what it is, a grey sheet streaked or speckled by them, sweeping by with the
+// wind. `c`: the corner (0..1 each way); returns the corner's place (render frame) in xyz
+// and its ring's radius in w.
+fn veil_corner(panel: u32, c: vec2<f32>) -> vec4<f32> {
+    var radii = array<f32, 3>(30.0, 48.0, 78.0);
+    let ring = min(panel / 12u, 2u);
+    let r = radii[ring];
+    // (each panel a little wider than its twelfth, so that the chords close the ring; the
+    // rings turned against each other, so their joins do not line up)
+    let a = (f32(panel % 12u) + c.x * 1.04 - 0.02 + 0.37 * f32(ring)) * (6.2831853 / 12.0);
+    let z = camera.cam_pos.z + mix(-6.0, 26.0 + 0.4 * r, c.y);
+    return vec4<f32>(camera.cam_pos.xy + vec2<f32>(cos(a), sin(a)) * r, z, r);
+}

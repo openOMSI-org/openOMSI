@@ -9,24 +9,20 @@
 //! deleting them.
 
 use super::*;
-#[rustfmt::skip]
 use omsi_map::ailists::{AiGroup, AiLists, AiTypGroup, AiVehicleEntry, DepotEntry, USER_LISTS_FILE};
 use omsi_timetable::CarUse;
 
 /// The names of the rule files made here; the `!` sorts them before the map's own records,
 /// and the first record to give a tour its bus keeps it.
-#[rustfmt::skip]
 const RULE_PREFIX: &str = "!openomsi-ai-lists-";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[rustfmt::skip]
 pub struct VehicleJson {
     pub file: String,
     pub weight: f32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[rustfmt::skip]
 pub struct EntryJson {
     pub number: String,
     #[serde(default)]
@@ -40,7 +36,6 @@ pub struct EntryJson {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[rustfmt::skip]
 pub struct TypGroupJson {
     pub file: String,
     pub entries: Vec<EntryJson>,
@@ -49,7 +44,6 @@ pub struct TypGroupJson {
 /// One AI group as the page edits it: a car group (a weighted list of vehicle files) or a
 /// depot (types, each with the fleet numbers and repaints of its buses).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[rustfmt::skip]
 pub struct GroupJson {
     pub name: String,
     #[serde(default)]
@@ -62,7 +56,6 @@ pub struct GroupJson {
     pub typgroups: Vec<TypGroupJson>,
 }
 
-#[rustfmt::skip]
 impl From<&AiGroup> for GroupJson {
     fn from(g: &AiGroup) -> GroupJson {
         GroupJson {
@@ -82,7 +75,6 @@ impl From<&AiGroup> for GroupJson {
     }
 }
 
-#[rustfmt::skip]
 impl GroupJson {
     fn to_group(&self) -> AiGroup {
         AiGroup {
@@ -105,7 +97,6 @@ impl GroupJson {
 /// What a line's buses are limited to: `only` the types, or `prefer` them with a
 /// probability (the other tours drawing from the whole depot).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[rustfmt::skip]
 pub struct RuleJson {
     pub line: String,
     /// `only` or `prefer`
@@ -115,7 +106,6 @@ pub struct RuleJson {
     pub types: Vec<String>,
 }
 
-#[rustfmt::skip]
 fn one() -> f32 {
     1.0
 }
@@ -123,7 +113,6 @@ fn one() -> f32 {
 /// A vehicle of the library: any `.bus` or `.ovh` of the content (rail vehicles are not
 /// street traffic and left out).
 #[derive(Serialize, Clone, Debug)]
-#[rustfmt::skip]
 pub struct AiVehicle {
     /// As the lists name it: `Vehicles\Folder\file.bus`
     pub file: String,
@@ -134,14 +123,12 @@ pub struct AiVehicle {
     pub kind: String,
 }
 
-#[rustfmt::skip]
 struct Place {
     content: PathBuf,
     map_dir: PathBuf,
     rel: PathBuf,
 }
 
-#[rustfmt::skip]
 fn place(map: &str) -> Result<Place> {
     let global = resolve_content(map)?;
     let map_dir = global.parent().map(Path::to_path_buf).with_context(|| format!("{map} is not a map file"))?;
@@ -153,7 +140,6 @@ fn place(map: &str) -> Result<Place> {
     Ok(Place { content, map_dir, rel })
 }
 
-#[rustfmt::skip]
 impl Place {
     fn lists_file(&self) -> PathBuf {
         self.content.join(&self.rel).join(USER_LISTS_FILE)
@@ -163,7 +149,6 @@ impl Place {
     }
 }
 
-#[rustfmt::skip]
 fn files_of(dir: &Path, prefix: &str) -> Vec<PathBuf> {
     let Ok(rd) = std::fs::read_dir(dir) else { return Vec::new() };
     let mut v: Vec<PathBuf> = rd
@@ -177,7 +162,6 @@ fn files_of(dir: &Path, prefix: &str) -> Vec<PathBuf> {
 
 /// Every `.bus` and `.ovh` under the content's `Vehicles` folders, read once and kept until
 /// `refresh`.
-#[rustfmt::skip]
 pub fn vehicles(refresh: bool) -> Result<Vec<AiVehicle>> {
     use rayon::prelude::*;
     static KEPT: std::sync::Mutex<Option<Vec<AiVehicle>>> = std::sync::Mutex::new(None);
@@ -245,14 +229,12 @@ pub fn vehicles(refresh: bool) -> Result<Vec<AiVehicle>> {
 }
 
 /// The repaint names of one vehicle of the library (read on demand: it opens the model).
-#[rustfmt::skip]
 pub fn paints(file: &str) -> Result<Vec<String>> {
     let path = resolve_content(&file.replace('\\', "/"))?;
     let v = omsi_vehicle::Vehicle::load(&path).map_err(|e| anyhow!("{file}: {e}"))?;
     Ok(paint_schemes(&v).names)
 }
 
-#[rustfmt::skip]
 fn rule_of(c: &CarUse) -> Option<RuleJson> {
     let (mode, factor, types) = if !c.only_types.is_empty() {
         ("only", 1.0, c.only_types.clone())
@@ -264,7 +246,6 @@ fn rule_of(c: &CarUse) -> Option<RuleJson> {
 }
 
 /// Everything the page shows of one map on `date`.
-#[rustfmt::skip]
 pub fn view(map: &str, date: &str) -> Result<Value> {
     let p = place(map)?;
     let date = if date.trim().is_empty() { DEFAULT_DATE } else { date.trim() };
@@ -335,7 +316,6 @@ pub fn view(map: &str, date: &str) -> Result<Value> {
 /// Keep the player's version of the AI lists of `map`: of the groups given, the ones that
 /// differ from what the map gives on `date` are written; the lines' rules replace the old
 /// ones. Nothing differing and no rule: the player's files are gone, the map as it was.
-#[rustfmt::skip]
 pub fn save(map: &str, date: &str, groups: &[GroupJson], rules: &[RuleJson]) -> Result<Value> {
     let p = place(map)?;
     let date = if date.trim().is_empty() { DEFAULT_DATE } else { date.trim() };
@@ -401,7 +381,6 @@ pub fn save(map: &str, date: &str, groups: &[GroupJson], rules: &[RuleJson]) -> 
 }
 
 /// Back to what the map gives: the player's lists and rules of `map` deleted.
-#[rustfmt::skip]
 pub fn reset(map: &str) -> Result<()> {
     let p = place(map)?;
     let _ = std::fs::remove_file(p.lists_file());
@@ -413,7 +392,6 @@ pub fn reset(map: &str) -> Result<()> {
 }
 
 #[cfg(test)]
-#[rustfmt::skip]
 mod tests {
     use super::*;
 

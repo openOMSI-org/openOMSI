@@ -14,8 +14,8 @@
 //! shows as "openOMSI" (on the device, and from a Mac's Finder over a cable).
 
 use super::*;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use winit::event_loop::EventLoopProxy;
 use winit::platform::ios::{ValidOrientations, WindowAttributesExtIOS};
 
@@ -36,11 +36,20 @@ pub(crate) fn wake() {
     }
 }
 
+/// The game runs on mX (mX Graphics): the Swift app's calls go to it.
+static MX: AtomicBool = AtomicBool::new(false);
+
 /// The Swift app's `main`: never returns (UIKit's run loop runs the app from here on).
 #[unsafe(no_mangle)]
+#[rustfmt::skip]
 pub extern "C" fn openomsi_ios_main() {
     // HOME is the app's container on iOS: its root may not be written, its Library may
     let container = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+    // mX Graphics on: the game is mX's, wgpu is not touched
+    if crate::startup::mx_graphics_in(&container.join("Library/Application Support/openOMSI")) {
+        MX.store(true, Ordering::Relaxed);
+        return openomsi_game_mx::ios::openomsi_ios_main();
+    }
     unsafe { std::env::set_var("OPENOMSI_CONTAINER", &container) };
     let home = container.join("Library/Application Support/openOMSI");
     let _ = std::fs::create_dir_all(&home);
@@ -106,6 +115,9 @@ pub extern "C" fn openomsi_ios_main() {
 /// The Swift app's scene is connected: windows can be shown on it.
 #[unsafe(no_mangle)]
 pub extern "C" fn openomsi_ios_scene_ready() {
+    if MX.load(Ordering::Relaxed) {
+        return openomsi_game_mx::ios::openomsi_ios_scene_ready();
+    }
     SCENE_READY.store(true, Ordering::Relaxed);
     wake();
 }
@@ -115,6 +127,7 @@ pub extern "C" fn openomsi_ios_scene_ready() {
 /// The log to the console (Xcode's, the Mac's Console app) and to `game.log` in the app's
 /// data folder; the previous run's is kept as `game-prev.log` for the launcher's crash
 /// report (`previous_run_crash`), as on Android.
+#[rustfmt::skip]
 fn init_log() {
     let dir = omsi_launcher_lib::data_dir();
     let (now, prev) = (dir.join("game.log"), dir.join("game-prev.log"));
@@ -126,10 +139,12 @@ fn init_log() {
     }
 }
 
+#[rustfmt::skip]
 struct TeeLogger {
     file: Mutex<Option<std::fs::File>>,
 }
 
+#[rustfmt::skip]
 impl log::Log for TeeLogger {
     fn enabled(&self, m: &log::Metadata) -> bool {
         m.level() <= log::Level::Info && !m.target().starts_with("wgpu_hal") && !m.target().starts_with("naga")
@@ -161,6 +176,7 @@ impl log::Log for TeeLogger {
 
 /// When the app's previous run closed while a drive was going: what it said last and the
 /// end of its log, for the launcher's crash dialog (see `android::previous_run_crash`).
+#[rustfmt::skip]
 pub(crate) fn previous_run_crash() -> Option<(String, String)> {
     let p = omsi_launcher_lib::data_dir().join("game-prev.log");
     let text = std::fs::read_to_string(&p).ok()?;
@@ -201,6 +217,7 @@ struct Shell {
 }
 
 /// A window for the game, put on the Swift app's scene in front of the Swift launcher.
+#[rustfmt::skip]
 fn new_window(event_loop: &ActiveEventLoop) -> Option<Arc<Window>> {
     let attrs = Window::default_attributes()
         .with_title("openOMSI")
@@ -221,6 +238,7 @@ fn new_window(event_loop: &ActiveEventLoop) -> Option<Arc<Window>> {
     Some(window)
 }
 
+#[rustfmt::skip]
 impl Shell {
     /// After every event: a game the launcher asked for starts, a game that ended gives the
     /// screen back.
@@ -287,6 +305,7 @@ impl Shell {
     }
 }
 
+#[rustfmt::skip]
 impl ApplicationHandler for Shell {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         log::info!("app in front");

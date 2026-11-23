@@ -228,6 +228,9 @@ pub(crate) struct Args {
     pub(crate) situation_vars: Vec<(String, f32)>,
     #[arg(skip)]
     pub(crate) situation_strvars: Vec<(String, String)>,
+    /// The coupled cars' own variables in that snapshot (a tram's rear cab).
+    #[arg(skip)]
+    pub(crate) situation_cars: Vec<omsi_content::situation::SituationCar>,
     /// The saved bus odometer, applied after spawning so initialization cannot replace it.
     #[arg(skip)]
     pub(crate) situation_odometer_km: Option<f64>,
@@ -386,10 +389,10 @@ pub(crate) struct SituationOther {
     pub paint: Option<String>,
     pub vars: Vec<(String, f32)>,
     pub strvars: Vec<(String, String)>,
+    pub cars: Vec<omsi_content::situation::SituationCar>,
     pub odometer_km: Option<f64>,
 }
 
-#[rustfmt::skip]
 #[cfg(test)]
 mod passenger_connection_authority_tests {
     use super::*;

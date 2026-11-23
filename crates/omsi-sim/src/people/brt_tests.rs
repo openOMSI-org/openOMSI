@@ -29,9 +29,9 @@ pub(crate) fn setup(name: &str, trailer: Option<f32>) -> (PeopleSim, BusNow) {
         coupling_front_character: trailer.map(|kind| [30.0, -10.0, 10.0, kind]),
         ..def.clone()
     };
-    let mut parts = vec![(&def, Vec3::ZERO, f32::INFINITY)];
+    let mut parts = vec![(&def, Vec3::ZERO, f32::INFINITY, false)];
     if trailer.is_some() {
-        parts.push((&rear, Vec3::new(0.0, -10.0, 0.0), -5.0));
+        parts.push((&rear, Vec3::new(0.0, -10.0, 0.0), -5.0, false));
     }
     let cabin = Arc::new(Cabin::load_train(&parts).unwrap());
     let ty = Arc::new(HumanType::load(&dir.join("person.hum")).unwrap());
@@ -315,12 +315,29 @@ fn optional_hailing_is_cosmetic_and_ignores_out_of_service_buses() {
     let (mut h, mut bus) = setup("optional-hail", None);
     h.pax_mut(0).unwrap().task = Task::WaitingForBus;
     h.pax_mut(0).unwrap().line = Some(0);
-    h.stops.get_mut(&42).unwrap().lines = vec![("Elsewhere".into(), ["Elsewhere".into()].into_iter().collect())];
+    h.stops.get_mut(&42).unwrap().lines = vec![(
+        "Elsewhere".into(),
+        ["Elsewhere".into()].into_iter().collect(),
+    )];
     bus.pos = DVec3::new(-4.0, -20.0, 0.0);
     bus.speed = 4.0;
-    let before = (h.people[0].position, h.pax(0).unwrap().task, h.pax(0).unwrap().bus);
-    assert_eq!(h.visual_hail_bus(0, std::slice::from_ref(&bus)), Some((bus.id, true, bus.pos)));
-    assert_eq!((h.people[0].position, h.pax(0).unwrap().task, h.pax(0).unwrap().bus), before);
+    let before = (
+        h.people[0].position,
+        h.pax(0).unwrap().task,
+        h.pax(0).unwrap().bus,
+    );
+    assert_eq!(
+        h.visual_hail_bus(0, std::slice::from_ref(&bus)),
+        Some((bus.id, true, bus.pos))
+    );
+    assert_eq!(
+        (
+            h.people[0].position,
+            h.pax(0).unwrap().task,
+            h.pax(0).unwrap().bus
+        ),
+        before
+    );
     // Do not hail while walking towards an already chosen door: the torso
     // turn could visibly drag the feet despite changing no boarding task.
     for task in [Task::ToBus, Task::WalkingToBus] {
@@ -339,7 +356,10 @@ fn full_bus_snapshot_counts_standing_and_disabled_places() {
     h.visual_full_bus_reaction = true;
     h.pax_mut(0).unwrap().task = Task::WaitingForBus;
     h.pax_mut(0).unwrap().line = Some(0);
-    h.stops.get_mut(&42).unwrap().lines = vec![("Elsewhere".into(), ["Elsewhere".into()].into_iter().collect())];
+    h.stops.get_mut(&42).unwrap().lines = vec![(
+        "Elsewhere".into(),
+        ["Elsewhere".into()].into_iter().collect(),
+    )];
     bus.pos = DVec3::new(-4.0, -20.0, 0.0);
     bus.speed = 4.0;
     let mut standing = bus.cabin.seats[0].clone();
@@ -350,7 +370,10 @@ fn full_bus_snapshot_counts_standing_and_disabled_places() {
     h.last_buses = Arc::new(vec![bus.clone()]);
     let mut frame = crate::view_events::PeopleFrame::default();
     h.snapshot_into(&mut frame);
-    assert!(!frame.people[0].hail_full, "a standing place is still available");
+    assert!(
+        !frame.people[0].hail_full,
+        "a standing place is still available"
+    );
     h.seats.get_mut(&bus.id).unwrap()[1] = true;
     h.snapshot_into(&mut frame);
     assert!(frame.people[0].hail_full);
@@ -358,11 +381,17 @@ fn full_bus_snapshot_counts_standing_and_disabled_places() {
     h.last_buses = Arc::new(vec![bus.clone()]);
     h.seats.get_mut(&bus.id).unwrap()[1] = false;
     h.snapshot_into(&mut frame);
-    assert!(frame.people[0].hail_full, "script-disabled places do not add capacity");
+    assert!(
+        frame.people[0].hail_full,
+        "script-disabled places do not add capacity"
+    );
     bus.places_off = vec![true, true];
     h.last_buses = Arc::new(vec![bus]);
     h.snapshot_into(&mut frame);
-    assert!(!frame.people[0].hail_full, "zero known capacity is not proof of a full bus");
+    assert!(
+        !frame.people[0].hail_full,
+        "zero known capacity is not proof of a full bus"
+    );
     h.visual_full_bus_reaction = false;
     h.snapshot_into(&mut frame);
     assert!(frame.people[0].hail_target.is_none());
@@ -373,8 +402,10 @@ fn full_bus_detection_respects_all_four_settings_combinations() {
     let (mut h, mut bus) = setup("visual-combinations", None);
     h.pax_mut(0).unwrap().task = Task::WaitingForBus;
     h.pax_mut(0).unwrap().line = Some(0);
-    h.stops.get_mut(&42).unwrap().lines =
-        vec![("Elsewhere".into(), ["Elsewhere".into()].into_iter().collect())];
+    h.stops.get_mut(&42).unwrap().lines = vec![(
+        "Elsewhere".into(),
+        ["Elsewhere".into()].into_iter().collect(),
+    )];
     bus.pos = DVec3::new(-4.0, -20.0, 0.0);
     bus.speed = 4.0;
     h.last_buses = Arc::new(vec![bus.clone()]);
@@ -392,4 +423,27 @@ fn full_bus_detection_respects_all_four_settings_combinations() {
             assert_eq!(p.hail_reaction_enabled, reaction);
         }
     }
+}
+
+#[test]
+fn rhd_bus_with_left_entries_serves_ordinary_kerb_stop() {
+    let (mut h, bus) = setup("rhd-bus", None);
+    // Convert stop 42 to an ordinary kerb stop (side 0) on right-hand traffic (left = false)
+    h.stops.get_mut(&42).unwrap().side = 0;
+    // Bus with only left entries (RHD bus)
+    let mut rhd_bus = bus;
+    Arc::get_mut(&mut rhd_bus.cabin)
+        .unwrap()
+        .entries
+        .retain(|d| d.side < 0.0);
+    assert!(!rhd_bus.cabin.entries.is_empty());
+    assert!(rhd_bus.cabin.entries.iter().all(|d| d.side < 0.0));
+
+    h.register_buses(std::slice::from_ref(&rhd_bus), 0.0);
+    let ix = [(rhd_bus.id, 0)].into_iter().collect();
+    assert_eq!(
+        h.bus_for(0, 42, std::slice::from_ref(&rhd_bus), &ix),
+        Some((rhd_bus.id, Fit::Any)),
+        "an RHD bus with only left entries can board at an ordinary kerb stop (#4062)"
+    );
 }

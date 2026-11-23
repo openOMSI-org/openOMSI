@@ -1,16 +1,14 @@
 //! Script host for road vehicles: system variables, callbacks, sound triggers.
 
-use crate::SimClock;
 use crate::scripttex::{FontTable, ScriptTexture};
 use crate::texttex::FontLibrary;
+use crate::SimClock;
 use omsi_script::{Host, NameId, Stacks, State, SysVar};
 use omsi_vehicle::hof::Hof;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
-#[rustfmt::skip]
 mod draw;
-#[rustfmt::skip]
 mod info;
 
 /// How many stops a page's departures are kept for at the same time (`omsi.getDepartures`).
@@ -21,7 +19,6 @@ pub const MAX_HTML_DEPARTURE_STOPS: usize = 8;
 pub const AI_WEAR_LIFESPAN: f32 = 1.5e6;
 
 #[derive(Default)]
-#[rustfmt::skip]
 pub struct VehicleHost {
     /// The paint scheme the vehicle is made with (`Some(None)`: the model's own textures),
     /// set before it is made: `Colorscheme` and the scheme's `[setvar]`s are there for its
@@ -161,7 +158,6 @@ pub struct VehicleHost {
 
 /// A bus due at a stop (`GetArrBusLine`, `GetArrBusTerminus`, `GetArrBusTimeDiff`).
 #[derive(Debug, Clone, PartialEq, Default)]
-#[rustfmt::skip]
 pub struct Arrival {
     pub line: String,
     pub terminus: String,
@@ -258,20 +254,17 @@ callbacks! {
 static AMBIENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(u64::MAX);
 
 /// Tell vehicles made from now on what the weather is (see [`VehicleHost::new`]).
-#[rustfmt::skip]
 pub fn set_ambient_weather(temperature: f32, abs_humidity: f32) {
     let bits = ((temperature.to_bits() as u64) << 32) | abs_humidity.to_bits() as u64;
     AMBIENT.store(bits, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// The weather's temperature (°C) and absolute humidity, once a weather has been set.
-#[rustfmt::skip]
 pub fn ambient_weather() -> Option<(f32, f32)> {
     let bits = AMBIENT.load(std::sync::atomic::Ordering::Relaxed);
     (bits != u64::MAX).then(|| (f32::from_bits((bits >> 32) as u32), f32::from_bits(bits as u32)))
 }
 
-#[rustfmt::skip]
 impl VehicleHost {
     pub fn trigger_mark(&self) -> (usize, usize, usize, usize) {
         (
@@ -492,7 +485,6 @@ impl VehicleHost {
 }
 
 /// The `(M.V.…)` callbacks this host answers (lower case); anything else reads 0.
-#[rustfmt::skip]
 pub const PROVIDED_CALLBACKS: &[&str] = &[
     "getfontindex", "textlength", "stnewtex", "stlock", "stunlock", "stfilter", "stsetcolor", "stdrawpixel", "stdrawrect", "sttextout", "streadpixel", "stgetr", "stgetg", "stgetb", "stgeta", "stcopycolor", "stloadtex",
     "getrouteindex", "getrouteterminusindex", "getterminuscode", "getterminusindex", "getterminusstring", "getbusstopcount", "getroutebusstopident", "getbusstopindex", "getbusstopstring", "getdepotstringglobal",
@@ -505,18 +497,15 @@ pub const PROVIDED_CALLBACKS: &[&str] = &[
 /// integer, a half to the even one (`fistp` under Delphi's control word; TRoadVehicleInst
 /// 0x7d28c4 and TComplMapObjInst 0x7bb10c convert every argument with sub_404c7c), not cut
 /// off - 1100.9999 out of float arithmetic is 1101.
-#[rustfmt::skip]
 fn arg_i32(v: f32) -> i32 {
     v.round_ties_even() as i32
 }
 
 /// The same as an index (a negative one names nothing).
-#[rustfmt::skip]
 fn arg_idx(v: f32) -> usize {
     usize::try_from(arg_i32(v)).unwrap_or(usize::MAX)
 }
 
-#[rustfmt::skip]
 impl Host for VehicleHost {
     fn sys_var(&mut self, v: SysVar) -> f32 { self.read_sys_var(v) }
 
@@ -635,11 +624,9 @@ impl Host for VehicleHost {
 }
 
 #[cfg(test)]
-#[rustfmt::skip]
 mod tests {
     use super::*;
-    #[rustfmt::skip]
-use crate::scripttex::ScriptTexture;
+    use crate::scripttex::ScriptTexture;
     use omsi_script::{compile, CompileInput, Vm};
 
     /// Every callback is found by its name in any letter case, under any script name id,
@@ -1023,7 +1010,6 @@ use crate::scripttex::ScriptTexture;
     }
 }
 
-#[rustfmt::skip]
 fn debug_text() -> bool {
     omsi_cfg::flags::OMSI_DEBUG_TEXT.is_set()
 }
