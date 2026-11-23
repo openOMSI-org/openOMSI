@@ -449,11 +449,12 @@ impl Renderer {
             }
             // (an excavation coloured and sealed first, as `encode_main` does for an unsplit pass)
             if presurface_prefill {
-                encode_batches(
+                encode_main_batches(
                     &mut pass,
                     scene,
                     &plan.main_batches[..plan.presurface_batch_end],
-                    |pipe| main_pipeline(pp, pipe),
+                    pp,
+                    f.lean_frame,
                 );
                 self.encode_prefill(
                     &mut pass,
@@ -606,11 +607,12 @@ impl Renderer {
         if presurface_prefill && parts == 1 {
             // Colour and seal the excavation first; prefill ordinary scenery without
             // storing and reloading the colour attachments in a separate pass.
-            encode_batches(
+            encode_main_batches(
                 &mut pass,
                 scene,
                 &plan.main_batches[..plan.presurface_batch_end],
-                |pipe| main_pipeline(pp, pipe),
+                pp,
+                f.lean_frame,
             );
             // At 1x an excavation still prevents sharing the earlier prepass depth.
             // Refill ordinary scenery here, after its floor and cover have been coloured.
@@ -625,7 +627,7 @@ impl Renderer {
         }
         if bundles.is_empty() {
             pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
-            encode_batches(
+            encode_main_batches(
                 &mut pass,
                 scene,
                 if presurface_prefill {
@@ -633,7 +635,8 @@ impl Renderer {
                 } else {
                     &plan.main_batches
                 },
-                |pipe| main_pipeline(pp, pipe),
+                pp,
+                f.lean_frame,
             );
         } else {
             // the batches, recorded as bundles on several threads (see `record_bundles`)
@@ -766,7 +769,7 @@ impl Renderer {
         for late in [false, true] {
             if late && !cab_batches.is_empty() {
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
-                encode_batches(pass, scene, cab_batches, |pipe| main_pipeline(pp, pipe));
+                encode_main_batches(pass, scene, cab_batches, pp, f.lean_frame);
             }
             if let Some(cb) = scene.corona_buf.as_ref().filter(|_| coronas_on) {
                 pass.set_pipeline(&pp.corona_pipeline);

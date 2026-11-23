@@ -1027,6 +1027,7 @@ impl Renderer {
                 format,
                 self.options.msaa,
                 rt_gbuf() && !f.eye_color,
+                f.lean_frame,
             );
             let chunks = bundle_chunks(self.encoding_pool.as_ref(), batches);
             let mut reuse: Vec<Option<mx::RenderBundle>> = vec![None; chunks.len()];
@@ -1077,6 +1078,7 @@ impl Renderer {
                 format,
                 self.options.msaa,
                 rt_gbuf() && !f.eye_color,
+                f.lean_frame,
             );
             // (not when a part could not be recorded: it would be left out frame after frame;
             // and a mirror's or an eye's picture leaves the window's alone - it cleared them,
@@ -1122,7 +1124,7 @@ impl Renderer {
 
 /// The window's main-pass bundles as last recorded and what they were recorded from.
 pub(crate) struct MainBundles {
-    mode: (bool, bool, mx::TextureFormat, u32, bool),
+    mode: (bool, bool, mx::TextureFormat, u32, bool, bool),
     camera: mx::BindGroup,
     /// each bundle with the batches it was recorded from and what they bound (once they repeat)
     parts: Vec<(Vec<Batch>, Option<Vec<BatchResources>>, mx::RenderBundle)>,
@@ -1188,6 +1190,7 @@ mod tests {
             count: 3,
             material,
             instances: 0..1,
+            lean: false,
         };
         // opaque culled (pipe 2) and not culled (pipe 0) of two looks, then a blended one
         let batches = [b(0, 1), b(0, 2), b(2, 1), b(2, 2), b(8, 1)];

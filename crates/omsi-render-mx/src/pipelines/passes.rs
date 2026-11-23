@@ -53,14 +53,20 @@ pub(crate) fn leave_out_enhanced(options: &RenderOptions, adapter_name: &str) ->
 
 type Made = Option<mx::RenderPipeline>;
 
+/// The passes that get `LEAN` pipelines besides their full ones: the enhanced picture's.
+fn lean_pass(scene_fs: &str) -> bool {
+    scene_fs.starts_with("fs_enhanced")
+}
+
 fn one(made: &mut impl Iterator<Item = Made>) -> mx::RenderPipeline {
     made.next().flatten().expect("a pipeline of the main pass")
 }
 
-fn take(made: &mut impl Iterator<Item = Made>) -> PassPipelines {
+fn take(made: &mut impl Iterator<Item = Made>, lean: bool) -> PassPipelines {
     PassPipelines {
         pipelines: (0..SceneBase::PIPELINES).map(|_| one(made)).collect(),
         rain_pipelines: (0..SceneBase::PIPELINES).map(|_| one(made)).collect(),
+        lean_pipelines: lean.then(|| (0..SceneBase::PIPELINES).map(|_| one(made)).collect()),
         corona_pipeline: one(made),
         smoke_pipeline: one(made),
         snow_pipeline: made.next().flatten(),
@@ -83,7 +89,18 @@ impl PassKit<'_> {
                 jobs.push(Box::new(move || {
                     Some(
                         self.scene
-                            .pipeline_at_for(device, f, fs.scene, samples, i, surfaces),
+                            .pipeline_at_for(device, f, fs.scene, samples, i, surfaces, false),
+                    )
+                }));
+            }
+        }
+        // (the lean ones of the enhanced pass, multisampled as the main pass: see `main_key`)
+        if lean_pass(fs.scene) {
+            for i in 0..SceneBase::PIPELINES {
+                jobs.push(Box::new(move || {
+                    Some(
+                        self.scene
+                            .pipeline_at_for(device, f, fs.scene, self.msaa, i, surfaces, true),
                     )
                 }));
             }
@@ -148,7 +165,7 @@ impl PassKit<'_> {
             false,
             &mut jobs,
         );
-        take(&mut compile_all(self.device, jobs).into_iter())
+        take(&mut compile_all(self.device, jobs).into_iter(), true)
     }
 
     pub(crate) fn build(
@@ -213,11 +230,11 @@ impl PassKit<'_> {
             );
         }
         let mut made = compile_all(self.device, jobs).into_iter();
-        let pass = take(&mut made);
+        let pass = take(&mut made, false);
         let sky_mirror_pipeline = enhanced.then(|| one(&mut made));
-        let hdr_pass = enhanced.then(|| take(&mut made));
+        let hdr_pass = enhanced.then(|| take(&mut made, true));
         let hdr_eye_pass = None;
-        let reflection_pass = reflections.then(|| take(&mut made));
+        let reflection_pass = reflections.then(|| take(&mut made, false));
         Passes {
             pass,
             hdr_pass,

@@ -55,6 +55,9 @@ pub(crate) struct Batch {
     pub(crate) count: u32,
     pub(crate) material: u32,
     pub(crate) instances: std::ops::Range<u32>,
+    /// The material takes none of the enhanced shading's rarer branches (`material_lean`):
+    /// on a dry frame the main pass draws it with the `LEAN` pipelines.
+    pub(crate) lean: bool,
 }
 
 /// Turn draw items into batches, appending their entries to `list`. `sort`: the order does
@@ -81,6 +84,10 @@ pub(crate) fn batch_items(
             count,
             material: last.1,
             instances: start..list.len() as u32,
+            lean: scene
+                .materials
+                .get(last.1 as usize)
+                .is_some_and(|m| material_lean(&m.uniform)),
         });
     };
     if sort {
@@ -175,6 +182,36 @@ pub(crate) fn encode_batches_filtered<'a, E: mx::RenderEncoder>(
     include: impl Fn(&Batch) -> bool,
     pipeline: impl Fn(u8) -> &'a mx::RenderPipeline,
 ) {
+    encode_batches_keyed(pass, scene, batches, include, |b| b.pipe, pipeline);
+}
+
+/// The main pass's batches: each with its pipeline, the lean one where it may (`main_key`).
+pub(crate) fn encode_main_batches<'a, E: mx::RenderEncoder>(
+    pass: &mut E,
+    scene: &'a Scene,
+    batches: &[Batch],
+    pp: &'a PassPipelines,
+    lean_frame: bool,
+) {
+    encode_batches_keyed(
+        pass,
+        scene,
+        batches,
+        |_| true,
+        main_key(pp, lean_frame),
+        |key| main_pipeline(pp, key),
+    );
+}
+
+/// `encode_batches_filtered` with the pipeline chosen by `key` (a batch's `pipe` or more).
+pub(crate) fn encode_batches_keyed<'a, E: mx::RenderEncoder>(
+    pass: &mut E,
+    scene: &'a Scene,
+    batches: &[Batch],
+    include: impl Fn(&Batch) -> bool,
+    key: impl Fn(&Batch) -> u8,
+    pipeline: impl Fn(u8) -> &'a mx::RenderPipeline,
+) {
     let (mut pipe, mut mesh, mut material) = (u8::MAX, u32::MAX, u32::MAX);
     // (the materials' values: the scene's table, its rows at each draw's offset)
     pass.set_bind_group(1, &scene.material_table.group);
@@ -184,9 +221,10 @@ pub(crate) fn encode_batches_filtered<'a, E: mx::RenderEncoder>(
         if !include(b) {
             continue;
         }
-        if b.pipe != pipe {
-            pass.set_pipeline(pipeline(b.pipe));
-            pipe = b.pipe;
+        let k = key(b);
+        if k != pipe {
+            pass.set_pipeline(pipeline(k));
+            pipe = k;
         }
         if b.mesh != mesh {
             let m = &scene.meshes[b.mesh as usize];
@@ -368,9 +406,39 @@ pub(crate) fn pipe_code(kind: u8, cull: bool, surface: bool) -> u8 {
     kind * 4 + (cull as u8) * 2 + surface as u8
 }
 
-/// The pipeline of a main-pass batch (`DrawItem::pipe`).
+/// The pipeline of a main-pass batch (`DrawItem::pipe`), the lean one with `LEAN_PIPE` set
+/// (see `main_key`).
 pub(crate) fn main_pipeline(pp: &PassPipelines, pipe: u8) -> &mx::RenderPipeline {
-    &pp.pipelines[pipe as usize]
+    match &pp.lean_pipelines {
+        Some(lean) if pipe & LEAN_PIPE != 0 => &lean[(pipe & !LEAN_PIPE) as usize],
+        _ => &pp.pipelines[(pipe & !LEAN_PIPE) as usize],
+    }
+}
+
+/// The bit of a main-pass pipeline key that picks the lean pipelines (`override LEAN`).
+pub(crate) const LEAN_PIPE: u8 = 0x80;
+
+/// The main pass's pipeline key of a batch: its `pipe`, with `LEAN_PIPE` when the frame
+/// is dry (`lean_frame`), the pass has lean pipelines and the material needs no more.
+pub(crate) fn main_key(pp: &PassPipelines, lean_frame: bool) -> impl Fn(&Batch) -> u8 + '_ {
+    let lean = lean_frame && pp.lean_pipelines.is_some();
+    move |b: &Batch| b.pipe | if lean && b.lean { LEAN_PIPE } else { 0 }
+}
+
+/// Does a material take none of the branches the `LEAN` scene pipelines leave out (see
+/// `override LEAN` in the scene shader)? Opaque, alpha-tested or terrain, not the map's
+/// water, no bump or PBR maps, no LED panel, no pane's film, no glow, not a season's snow
+/// pane. (Glass is blended and never terrain: it is never lean.)
+pub(crate) fn material_lean(m: &MaterialUniform) -> bool {
+    let terrain = m.extra[0] > 0.5;
+    (m.params[0] < 1.5 || terrain)
+        && m.ambient[3] <= 1.5
+        && m.bump[1] <= 0.5
+        && m.pbr.iter().all(|&v| v <= 0.5)
+        && m.emissive[3] >= -1.5
+        && m.emissive[3] <= 1.5
+        && m.glow[0] <= 0.0
+        && !(m.wipe_bounds[2] != 0.0 && m.wipe_bounds[3] < 0.0)
 }
 
 /// Rasterizer state of a scene pipeline. The content meshes keep Direct3D's winding: the
@@ -442,6 +510,7 @@ pub(crate) fn record_bundles(
     format: mx::TextureFormat,
     samples: u32,
     surfaces: bool,
+    lean_frame: bool,
 ) -> Vec<Option<mx::RenderBundle>> {
     let color_formats = [
         Some(format),
@@ -467,7 +536,7 @@ pub(crate) fn record_bundles(
             sample_count: samples,
         });
         bundle.set_bind_group(0, camera);
-        encode_batches(&mut bundle, scene, chunk, |pipe| main_pipeline(pp, pipe));
+        encode_main_batches(&mut bundle, scene, chunk, pp, lean_frame);
         bundle.finish(Some("main pass part"))
     };
     // a bundle wgpu refuses (a buffer it names could not be made: the card ran out of

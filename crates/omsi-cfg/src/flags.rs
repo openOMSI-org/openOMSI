@@ -391,6 +391,7 @@ flags! {
     OMSI_NO_BRIDGE: Bool, Switch, Use, "off", "LAN: leave the internet alone - no rendezvous bridge, no tunnel (tests, LAN parties).";
     OMSI_NO_BUMP: Bool, Switch, Use, "off", "No bump maps.";
     OMSI_NO_BUNDLES: Bool, Switch, Frame, "off", "Record the main pass directly instead of from render bundles.";
+    OMSI_NO_LEAN: Bool, Switch, Frame, "off", "Enhanced main pass: draw every material with the full scene pipelines, not the lean ones of plain materials on a dry frame.";
     OMSI_NO_CABIN_SHADOWS: Bool, Switch, Frame, "off", "Enhanced: the lamps of the player's saloon cast no shadows (A/B).";
     OMSI_NO_CLOUDS: Bool, Switch, Use, "off", "No clouds.";
     OMSI_NO_CLOUD_SHADOW_FIELD: Bool, Switch, Use, "off", "Enhanced: the clouds' shadow is one number for the whole picture again, not a field over the land (A/B).";

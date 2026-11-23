@@ -59,6 +59,7 @@ pub(crate) struct FrameEnv {
     pub only_surfaces: bool,
     pub skip_pipe: Option<&'static str>,
     pub no_bundles: bool,
+    pub no_lean: bool,
     pub no_msaa_prepass: bool,
     pub main_split: bool,
     pub no_post_split: bool,
@@ -103,6 +104,7 @@ impl FrameEnv {
             only_surfaces: omsi_cfg::flags::OMSI_ONLY_SURFACES.is_set(),
             skip_pipe: omsi_cfg::flags::OMSI_SKIP_PIPE.var(),
             no_bundles: omsi_cfg::flags::OMSI_NO_BUNDLES.is_set(),
+            no_lean: omsi_cfg::flags::OMSI_NO_LEAN.is_set(),
             no_msaa_prepass: omsi_cfg::flags::OMSI_NO_MSAA_PREPASS.is_set(),
             main_split: omsi_cfg::flags::OMSI_MAIN_SPLIT.is_set(),
             no_post_split: omsi_cfg::flags::OMSI_NO_POST_SPLIT.is_set(),
@@ -176,6 +178,8 @@ pub(crate) struct FrameCtx<'a> {
     pub ground_ok: bool,
     pub prepass_on: bool,
     pub prepass_reach: f32,
+    /// No wet road, snow or debug view: plain materials take the `LEAN` pipelines (`main_key`).
+    pub lean_frame: bool,
     pub dt: f32,
     pub overlays: Vec<(TextureId, [f32; 4])>,
 }

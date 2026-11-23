@@ -120,6 +120,8 @@ struct PassPipelines {
     rain_pipelines: Vec<mx::RenderPipeline>,
     /// Indexed by `pipe_code`: 4 depth/blend kinds x culled x depth-biased.
     pipelines: Vec<mx::RenderPipeline>,
+    /// The same with `override LEAN` (the enhanced passes only; see `main_key`).
+    lean_pipelines: Option<Vec<mx::RenderPipeline>>,
     corona_pipeline: mx::RenderPipeline,
     /// Smoke particles (`[smoke]`): the corona sprite alpha-blended with the smoke texture.
     smoke_pipeline: mx::RenderPipeline,
