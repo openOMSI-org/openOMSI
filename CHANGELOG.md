@@ -6,6 +6,13 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ## Unreleased
 
+### Multiplayer
+
+- **A long tram is drawn whole in the others' games**: every coupled part of a player's train goes
+  to the others (up to 15), not only the first three. The NF6D is made of eleven, so its B car and
+  bogies stood off the rails or across the track in the other players' games. A game of the
+  previous release still draws the first three.
+
 ## 0.3.57 - 2026-11-23
 
 ### New and improved
