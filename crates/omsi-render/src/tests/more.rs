@@ -1076,6 +1076,10 @@ fn shaders_validate_and_match_the_uniforms() {
             "rain basic",
             lean_rain(precip_shader_source(include_str!("../rain.wgsl"))),
         ),
+        (
+            "snow basic",
+            lean_snow(precip_shader_source(include_str!("../snow.wgsl"))),
+        ),
         ("post", include_str!("../post.wgsl").to_string()),
         ("ssao", include_str!("../ssao.wgsl").to_string()),
         ("puddles", puddles::shader_source()),
@@ -2763,6 +2767,7 @@ fn the_rain_and_snow_shaders_translate_to_glsl_with_a_float_roof_map() {
         rain_shader_source(),
         snow_shader_source(),
         lean_rain(rain_shader_source()),
+        lean_snow(snow_shader_source()),
     ]
     .map(depth)
     {
