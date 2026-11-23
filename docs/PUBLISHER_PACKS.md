@@ -12,12 +12,17 @@ configured signer; it does not establish ownership of the content.
 
 Each installed `.oopp` directory goes under the content folder's `Packs` directory. The public
 manifest and detached signature describe the pack's exact version, licence and redistribution
-policy. `PackIndex` keeps verified signed manifest snapshots for provenance recognition. Each
-snapshot is checked against the current trust file when used; removing all trusted records
-also removes the ability to recognize those source bytes. Installed revisions are read first.
-Retained history past 1024 snapshots, 64 MiB of manifests or 32768 assets is skipped with a
-warning rather than disabling export; an installed revision that does not fit still fails
-closed. A snapshot left unfinished by an interrupted write is ignored.
+policy.
+
+Provenance recognition is a library interface for later tools; the game, the launcher and the
+editor do not use it yet, so nothing writes `PackIndex` while playing and exporting a map does
+not warn about publisher content. A tool that calls `omsi_cfg::publisher::Catalog::load` keeps
+verified signed manifest snapshots in the content folder's `PackIndex` directory. Each snapshot
+is checked against the current trust file when used; removing all trusted records also removes
+the ability to recognize those source bytes. Installed revisions are read first. Retained
+history past 1024 snapshots, 64 MiB of manifests or 32768 assets is skipped with a warning
+rather than failing the lookup; an installed revision that does not fit still fails closed. A
+snapshot left unfinished by an interrupted write is ignored.
 
 A map may carry `dependencies.json` beside `global.cfg`:
 
