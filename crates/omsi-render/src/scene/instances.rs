@@ -378,33 +378,28 @@ impl Renderer {
         }
     }
 
-    /// Keep a slot's draw-order depth step at or below a caller's limit.
-    pub fn limit_slot_depth_level(
-        &self,
-        scene: &mut Scene,
-        instance: usize,
-        slot: usize,
-        max_level: u8,
-    ) {
-        if let Some(i) = scene.instances.get_mut(instance) {
+    /// 淺層重疊支撐面最多提升一階；已覆蓋較高堆疊的支撐面保留原深度階數。
+    pub fn limit_duplicate_support_depth(&self, scene: &mut Scene, instance: usize) {
+        let Some(i) = scene.instances.get_mut(instance) else {
+            return;
+        };
+        let Some(mesh) = scene.meshes.get(i.mesh) else {
+            return;
+        };
+        let mut changed = false;
+        for &slot in &mesh.duplicate_surface_slots {
             if let Some(current) = i.slot_levels.get_mut(slot) {
                 let floor = i.slot_depth_floors.get(slot).copied().unwrap_or(0);
-                let limited =
-                    crate::scene::overlay::limited_depth_level(*current, floor, max_level);
+                let limited = crate::scene::overlay::duplicate_support_level(*current, floor);
                 if *current != limited {
                     *current = limited;
-                    Self::mark_changed(scene, instance);
+                    changed = true;
                 }
             }
         }
-    }
-    /// Material slots with a later, geometrically duplicated surface.
-    pub fn duplicate_surface_slots(&self, scene: &Scene, mesh: MeshId) -> Vec<usize> {
-        scene
-            .meshes
-            .get(mesh)
-            .map(|mesh| mesh.duplicate_surface_slots.clone())
-            .unwrap_or_default()
+        if changed {
+            Self::mark_changed(scene, instance);
+        }
     }
 
     /// How much snow lies on the roof of an instance's vehicle (see [`Instance::roof_snow`]).

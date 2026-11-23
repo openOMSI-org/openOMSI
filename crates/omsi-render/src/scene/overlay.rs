@@ -734,8 +734,8 @@ fn depth_cap_limits(caps: &[DepthCap]) -> DepthCaps {
     })
 }
 
-pub(crate) fn limited_depth_level(current: u8, floor: u8, max_level: u8) -> u8 {
-    current.min(max_level.max(floor).min(MAX_LEVEL))
+pub(crate) fn duplicate_support_level(current: u8, floor: u8) -> u8 {
+    if floor > 1 { current } else { current.min(1) }
 }
 
 #[cfg(test)]
@@ -1475,7 +1475,8 @@ mod tests {
 
         assert_eq!(levels[3], 3);
         assert_eq!(floors[3], 2);
-        assert_eq!(limited_depth_level(levels[3], floors[3], 1), 2);
+        assert_eq!(duplicate_support_level(levels[3], floors[3]), levels[3]);
+        assert_eq!(duplicate_support_level(2, 1), 1);
     }
 
     #[test]

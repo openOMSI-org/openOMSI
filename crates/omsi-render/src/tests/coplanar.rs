@@ -880,6 +880,44 @@ fn a_coplanar_display_frame_and_text_stay_visible_under_a_front_label() {
     }
 }
 
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn vehicle_duplicate_support_keeps_its_depth_above_earlier_meshes() {
+    let renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let material = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0; 4], true);
+    let support = renderer.add_mesh(
+        &mut scene,
+        &slotted(vec![
+            grid(0.0, 0.0, 0.0, 0.2, 1, 0.0, false),
+            grid(0.0, 0.0, 0.0, 0.2, 1, 0.0, true),
+        ]),
+    );
+    assert_eq!(scene.meshes[support].duplicate_surface_slots, [0]);
+    renderer.begin_object(&mut scene);
+    for half in [1.0, 0.8, 0.6] {
+        let mesh = renderer.add_mesh(&mut scene, &grid(0.0, 0.0, 0.0, half, 1, 0.0, false));
+        renderer.add_instance(
+            &mut scene,
+            mesh,
+            DVec3::ZERO,
+            Mat4::IDENTITY,
+            vec![material],
+        );
+    }
+    let instance = renderer.add_instance(
+        &mut scene,
+        support,
+        DVec3::ZERO,
+        Mat4::IDENTITY,
+        vec![material; 2],
+    );
+    assert_eq!(scene.instances[instance].slot_depth_floors[0], 2);
+    assert_eq!(scene.instances[instance].slot_levels[0], 3);
+    renderer.limit_duplicate_support_depth(&mut scene, instance);
+    assert_eq!(scene.instances[instance].slot_levels[0], 3);
+}
+
 /// Shading normals may be authored independently of a display's flat geometry.
 /// They must not bend the depth offset and lift an earlier layer through its print.
 #[test]

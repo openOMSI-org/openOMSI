@@ -856,11 +856,8 @@ impl World {
                 }
             }
         }
-        for (mi, &instance) in instances.iter().enumerate() {
-            let Some((mesh, _)) = set.meshes.get(mi) else { continue };
-            for slot in renderer.duplicate_surface_slots(scene, *mesh) {
-                renderer.limit_slot_depth_level(scene, instance, slot, 1);
-            }
+        for &instance in &instances {
+            renderer.limit_duplicate_support_depth(scene, instance);
         }
         let far = self.far_instances(
             renderer,
