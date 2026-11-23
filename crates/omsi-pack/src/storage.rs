@@ -5,7 +5,10 @@ use crate::{PackError, Result};
 #[cfg(windows)]
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
-use std::{fs, io, path::PathBuf};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 #[cfg(target_os = "macos")]
 mod keychain;
@@ -113,6 +116,36 @@ fn native_store(scope: &str, secret: &[u8]) -> Result<()> {
     write_windows_key(scope, &protected)
 }
 
+/// The DPAPI blob stored at `path`. The key file itself must not be a link, but a folder above
+/// it may be one: a player's `AppData\Local` moved to another drive with `mklink /J` is a
+/// junction. So the path is resolved first, as for the publisher trust file, and the bounded
+/// reader then sees only real folders.
+#[cfg(windows)]
+fn read_key_file(path: &Path) -> Result<Vec<u8>> {
+    match fs::symlink_metadata(path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Err(PackError::KeyNotFound);
+        }
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(PackError::Invalid(
+                "a stored key must not be a symbolic link",
+            ));
+        }
+        _ => {}
+    }
+    let resolved = path.canonicalize().map_err(|error| {
+        if error.kind() == io::ErrorKind::NotFound {
+            PackError::KeyNotFound
+        } else {
+            error.into()
+        }
+    })?;
+    read_bounded_file(&resolved, ENTITLEMENT_LIMIT + 4096).map_err(|error| match error {
+        PackError::Io(error) if error.kind() == io::ErrorKind::NotFound => PackError::KeyNotFound,
+        error => error,
+    })
+}
+
 #[cfg(windows)]
 fn native_load(scope: &str) -> Result<Vec<u8>> {
     use std::ffi::c_void;
@@ -123,21 +156,7 @@ fn native_load(scope: &str) -> Result<Vec<u8>> {
         },
     };
     validate_scope(scope)?;
-    let path = windows_key_path(scope)?;
-    // The bounded reader reports a missing file as an invalid path, not as NotFound.
-    match fs::symlink_metadata(&path) {
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            return Err(PackError::KeyNotFound);
-        }
-        _ => {}
-    }
-    let encrypted =
-        read_bounded_file(&path, ENTITLEMENT_LIMIT + 4096).map_err(|error| match error {
-            PackError::Io(error) if error.kind() == io::ErrorKind::NotFound => {
-                PackError::KeyNotFound
-            }
-            error => error,
-        })?;
+    let encrypted = read_key_file(&windows_key_path(scope)?)?;
     let input = CRYPT_INTEGER_BLOB {
         cbData: encrypted.len() as u32,
         pbData: encrypted.as_ptr() as *mut u8,
@@ -283,5 +302,40 @@ mod tests {
             keychain_error(security_framework::base::Error::from_code(-25293)),
             PackError::SecureStorage(_)
         ));
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn a_key_below_a_junction_is_read_but_the_pack_reader_still_refuses_it() {
+        let base =
+            std::env::temp_dir().join(format!("omsi-pack-key-junction-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let real = base.join("real");
+        fs::create_dir_all(&real).unwrap();
+        fs::write(real.join("key.dpapi"), b"sealed").unwrap();
+        let moved = base.join("moved");
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&moved)
+            .arg(&real)
+            .status()
+            .unwrap();
+        assert!(status.success(), "mklink /J failed");
+        let key = read_key_file(&moved.join("key.dpapi"));
+        let pack_rule = read_bounded_file(&moved.join("key.dpapi"), 64);
+        let absent = read_key_file(&moved.join("absent.dpapi"));
+        // (the junction first: removing the folder that holds it must not follow it)
+        let _ = fs::remove_dir(&moved);
+        let _ = fs::remove_dir_all(&base);
+        assert_eq!(key.unwrap(), b"sealed");
+        assert!(
+            pack_rule.is_err(),
+            "a junction in a pack path must stay refused"
+        );
+        assert!(matches!(absent, Err(PackError::KeyNotFound)));
     }
 }
