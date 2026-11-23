@@ -11,9 +11,11 @@ pub mod ai_lists;
 pub mod crash;
 pub mod depot;
 mod file_dialog;
+mod game_setting_options;
 mod graphics_profile_transfer;
 #[cfg(test)]
 mod graphics_profile_transfer_tests;
+pub use game_setting_options::game_setting_options;
 mod graphics_profiles;
 mod hof_sync;
 pub mod i18n;
@@ -1332,6 +1334,125 @@ pub struct VehicleInfo {
     /// The transport modes of the vehicle: what its file declares, else what its shape says.
     #[serde(default)]
     pub transport: Vec<String>,
+    /// The variables the bus's paint files set (`[setvar] name value` in a `.cti`), with the
+    /// values each is given and the paints that give them. The launcher offers the ones that
+    /// choose the onboard computer (an IBIS unit, a ticket printer) in the vehicle's options:
+    /// picking one is the same as picking the repaint that names it (#4077).
+    #[serde(default)]
+    pub variables: Vec<VehicleVariable>,
+}
+
+/// One variable of a bus's paint files, as the launcher offers it.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct VehicleVariable {
+    /// The name as the files write it.
+    pub name: String,
+    /// The launcher shows it as the vehicle's onboard computer (its IBIS, its ticket printer):
+    /// its name is one the modding community gives such a unit (`is_onboard_computer`).
+    pub onboard_computer: bool,
+    /// The values the paints give it, ascending; the paints that give them beside each.
+    pub values: Vec<VehicleVariableValue>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct VehicleVariableValue {
+    /// The value as the files write it (`1`, `0.5`): what the game's `setvar` takes.
+    pub value: String,
+    /// The paints (the `[item]`s of the `.cti` files) that set the variable to it.
+    pub paints: Vec<String>,
+}
+
+/// Whether the modding community names the onboard computer of a bus with this variable: the
+/// IBIS and its successors (Atron's AFR4, Almex, Krauth, the IVU box), the ticket printers
+/// (Kasse, Drucker) and the cockpit computers of the add-on packs. OMSI has no standard for it
+/// - each pack picks a name - so the launcher looks for the words the packs use and offers such
+/// a variable as the vehicle's "Onboard computer". A pack that names it differently shows no
+/// selector; the word it uses is a line in this list.
+pub fn is_onboard_computer(name: &str) -> bool {
+    const WORDS: [&str; 17] = [
+        "ibis",
+        "kasse",
+        "kassa",
+        "ticket",
+        "fahrschein",
+        "fahrkarte",
+        "entwerter",
+        "drucker",
+        "printer",
+        "bordcomputer",
+        "boardcomputer",
+        "board_comp",
+        "atron",
+        "afr4",
+        "almex",
+        "krauth",
+        "ticketbox",
+    ];
+    let lower = name.to_ascii_lowercase();
+    WORDS.iter().any(|w| lower.contains(w))
+}
+
+/// The variables of a bus's paints (paint name -> its `[setvar]` lines) as the launcher offers
+/// them: one entry per variable, its values ascending, the onboard computers first.
+fn vehicle_variables(paints: &[(String, Vec<(String, f32)>)]) -> Vec<VehicleVariable> {
+    // (lower-case name, the name as written, its values with the paints that give them)
+    let mut by: Vec<(String, String, Vec<(f32, Vec<String>)>)> = Vec::new();
+    for (paint, vars) in paints {
+        for (name, value) in vars {
+            let at = match by
+                .iter()
+                .position(|(key, _, _)| key.eq_ignore_ascii_case(name))
+            {
+                Some(at) => at,
+                None => {
+                    by.push((
+                        name.to_ascii_lowercase(),
+                        name.trim().to_string(),
+                        Vec::new(),
+                    ));
+                    by.len() - 1
+                }
+            };
+            let values = &mut by[at].2;
+            match values.iter_mut().find(|(v, _)| *v == *value) {
+                Some((_, paints_here)) => {
+                    if !paints_here.iter().any(|p| p.eq_ignore_ascii_case(paint)) {
+                        paints_here.push(paint.clone());
+                    }
+                }
+                None => values.push((*value, vec![paint.clone()])),
+            }
+        }
+    }
+    let mut out: Vec<VehicleVariable> = by
+        .into_iter()
+        .map(|(_, name, mut values)| {
+            values.sort_by(|a, b| a.0.total_cmp(&b.0));
+            VehicleVariable {
+                onboard_computer: is_onboard_computer(&name),
+                name,
+                values: values
+                    .into_iter()
+                    .map(|(v, mut paints)| {
+                        paints.sort();
+                        VehicleVariableValue {
+                            value: v.to_string(),
+                            paints,
+                        }
+                    })
+                    .collect(),
+            }
+        })
+        .collect();
+    // the onboard computers first, then by name, so that the one the player wants is at hand
+    out.sort_by(|a, b| {
+        b.onboard_computer.cmp(&a.onboard_computer).then_with(|| {
+            a.name
+                .to_ascii_lowercase()
+                .cmp(&b.name.to_ascii_lowercase())
+        })
+    });
+    out
 }
 
 /// Why `vehicle` may not run on `map`, or `None` when it may (a map that names no transport
@@ -1395,16 +1516,32 @@ fn missing_packs_of(model: &Path) -> Vec<String> {
 }
 
 /// `[item]` names of every `.cti` in the model's `[CTC]` folders (in every content root):
-/// the paint schemes, and the folders they were read from.
-fn paint_schemes(vehicle: &omsi_vehicle::Vehicle) -> (Vec<String>, Vec<PathBuf>) {
+/// the paint schemes, the folders they were read from, and the `[setvar]`s each sets.
+struct PaintScan {
+    names: Vec<String>,
+    dirs: Vec<PathBuf>,
+    /// paint name -> its `[setvar]` lines, in the order the files write them.
+    vars: Vec<(String, Vec<(String, f32)>)>,
+}
+
+fn paint_schemes(vehicle: &omsi_vehicle::Vehicle) -> PaintScan {
     let mut names: Vec<String> = Vec::new();
     let mut dirs_read: Vec<PathBuf> = Vec::new();
+    let mut vars: Vec<(String, Vec<(String, f32)>)> = Vec::new();
     let Some(model_rel) = vehicle.model.as_ref() else {
-        return (names, dirs_read);
+        return PaintScan {
+            names,
+            dirs: dirs_read,
+            vars,
+        };
     };
     let model_path = omsi_cfg::resolve_path(vehicle.dir(), model_rel);
     let Ok(model) = omsi_model::Model::load(&model_path) else {
-        return (names, dirs_read);
+        return PaintScan {
+            names,
+            dirs: dirs_read,
+            vars,
+        };
     };
     for c in &model.ctc {
         let dir = omsi_cfg::resolve_path(vehicle.dir(), &c.path);
@@ -1445,19 +1582,47 @@ fn paint_schemes(vehicle: &omsi_vehicle::Vehicle) -> (Vec<String>, Vec<PathBuf>)
                 continue;
             };
             let mut r = cfg.reader();
+            // (a `[setvar]` belongs to the `[item]` before it, as Omsi.exe files it)
+            let mut item: Option<String> = None;
             while let Some(k) = r.next_keyword() {
-                if k == "item" {
-                    let name = r.str().trim().to_string();
-                    if !name.is_empty() && !names.iter().any(|n| n.eq_ignore_ascii_case(&name)) {
-                        names.push(name);
+                match k.as_str() {
+                    "item" => {
+                        let name = r.str().trim().to_string();
+                        item = Some(name.clone()).filter(|n| !n.is_empty());
+                        if let Some(name) = &item {
+                            if !names.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+                                names.push(name.clone());
+                            }
+                            if !vars.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)) {
+                                vars.push((name.clone(), Vec::new()));
+                            }
+                        }
                     }
+                    "setvar" => {
+                        let var = r.str().trim().to_string();
+                        let value = r.f32();
+                        if let Some(item) = &item {
+                            if !var.is_empty() {
+                                if let Some((_, list)) =
+                                    vars.iter_mut().find(|(n, _)| n.eq_ignore_ascii_case(item))
+                                {
+                                    list.push((var, value));
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
     }
     dirs_read.sort();
     dirs_read.dedup();
-    (names, dirs_read)
+    PaintScan {
+        names,
+        dirs: dirs_read,
+        vars,
+    }
 }
 
 /// The `[name]`s of the depot files in the top-level `HOFs/` folder of every content root
@@ -1780,7 +1945,9 @@ fn read_vehicle_folder(
         let name = format!("{} {}", v.manufacturer.trim(), v.type_name.trim())
             .trim()
             .to_string();
-        let (paints, paint_dirs) = paint_schemes(&v);
+        let scan = paint_schemes(&v);
+        let (paints, paint_dirs) = (scan.names, scan.dirs);
+        let variables = vehicle_variables(&scan.vars);
         deps.extend(paint_dirs);
         // `<bus>_ENG.dsc` beside the bus file (the language of the settings) describes it
         let description = find_dsc(f, lang)
@@ -1814,6 +1981,7 @@ fn read_vehicle_folder(
                 .iter()
                 .map(|m| m.name().to_string())
                 .collect(),
+            variables,
         });
     }
     deps.sort();
@@ -3052,12 +3220,12 @@ pub fn graphics_presets() -> [(&'static str, Value); 6] {
     let msaa = [1, 4, 2, 4, 4, 4];
     let scale = ["0.75", "auto", "auto", "auto", "auto", "auto"];
     let anisotropy = [2, 8, 8, 8, 16, 16];
-    let shadow = [1024, 2048, 2048, 2048, 4096, 4096];
+    let shadow = [512, 2048, 2048, 2048, 4096, 4096];
     let mirror = [128, 256, 256, 512, 512, 512];
     let refresh = ["eco", "full", "full", "full", "full", "full"];
-    let view = ["600", "auto", "auto", "auto", "2000", "2000"];
+    let view = ["300", "auto", "auto", "auto", "2000", "2000"];
     let obj_size = [0.03, 0.013, 0.013, 0.01, 0.005, 0.005];
-    let obj_dist = ["500", "auto", "auto", "auto", "1500", "1500"];
+    let obj_dist = ["300", "auto", "auto", "auto", "1500", "1500"];
     let rain = ["low", "high", "high", "high", "high", "high"];
     let light_shadows = ["off", "off", "street", "street", "all", "all"];
     let street_light = ["off", "off", "off", "auto", "on", "on"];
@@ -3073,7 +3241,7 @@ pub fn graphics_presets() -> [(&'static str, Value); 6] {
             "view_distance": view[i], "min_obj_size": obj_size[i], "max_obj_dist": obj_dist[i],
             "mirror_size": mirror[i], "mirror_refresh": refresh[i], "mirror_quality": mirror_quality[i], "render_scale": scale[i],
             "detail_textures": !low, "ssao": !low, "shadows": !low, "reflections": 1.0, "road_glare": 1.0, "traffic_headlights": 1.0,
-            "light_shadows": light_shadows[i], "cloud_shadows": i >= 3, "light_glow": i >= 3,
+            "light_shadows": light_shadows[i], "cloud_shadows": i >= 3, "light_glow": i >= 3, "volumetric_fog": true,
             "street_light": street_light[i], "puddles": puddles[i],
         });
         let mut preset = preset;
@@ -3297,6 +3465,7 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["light_shadows"] = json!("off");
     v["cloud_shadows"] = json!(false);
     v["light_glow"] = json!(false);
+    v["volumetric_fog"] = json!(true);
     v["pause_quick_actions"] = json!("default");
     // (the interface theme's id: "openomsi" is openOMSI's own look)
     v["ui_theme_pack"] = json!("openomsi");
@@ -3686,7 +3855,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "street_light" => v[&k] = json!(street_light(val)),
             "ray_tracing" | "rt" => v["ray_tracing"] = json!(b(val)),
             "light_shadows" => v[&k] = json!(light_shadows(val)),
-            "cloud_shadows" | "light_glow" => v[&k] = json!(b(val)),
+            "cloud_shadows" | "light_glow" | "volumetric_fog" => v[&k] = json!(b(val)),
             "rain_quality" => v[&k] = json!(rain_quality(val)),
             "vehicle_smoke" => v[&k] = json!(vehicle_smoke(val)),
             "puddles" => v[&k] = json!(puddles(val)),
@@ -4249,6 +4418,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "mx_graphics" => v[&k] = json!(b(val)),
             "mirror_hud" => v[&k] = json!(val.trim().parse::<u8>().map(|x| x.min(7)).unwrap_or(0)),
             "windy_trees"
+            | "rain_lights"
             | "detailed_trees"
             | "road_snow"
             | "mirror_hud_every_frame"
@@ -4884,7 +5054,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         )
     ));
     text.push_str(&format!(
-        "ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\n",
+        "ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\nvolumetric_fog={}\n",
         b("ray_tracing", false)
             | (graphics_mode(
                 v.get("graphics")
@@ -4897,7 +5067,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
                 .unwrap_or("off")
         ),
         b("cloud_shadows", false),
-        b("light_glow", false)
+        b("light_glow", false),
+        b("volumetric_fog", true)
     ));
     text.push_str(&format!(
         "rain_quality={}\n",
@@ -4991,6 +5162,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         f("perf_size", 1.0).clamp(0.6, 2.0)
     ));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
+    text.push_str(&format!("rain_lights={}\n", b("rain_lights", true)));
     text.push_str(&format!("detailed_trees={}\n", b("detailed_trees", true)));
     text.push_str(&format!("road_snow={}\n", b("road_snow", false)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));
@@ -5225,6 +5397,11 @@ pub struct Duty {
     /// The fleet number picked from the bus's `[number]` list (none: its first).
     #[serde(default)]
     pub number: Option<String>,
+    /// The variables the player chose for this bus in the launcher - its onboard computer (the
+    /// IBIS unit or ticket printer its repaints name), a door type: set before the scripts'
+    /// `{init}` and kept over the paint scheme's own `[setvar]`s (`--setvar`, #4077).
+    #[serde(default)]
+    pub setvars: Option<std::collections::BTreeMap<String, String>>,
     pub hof: Option<String>,
     pub entry: Option<i32>,
     pub line: Option<String>,
@@ -5337,6 +5514,16 @@ fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Result<Vec<Stri
     }
     if let Some(n) = d.number.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
         a.extend(["--number".into(), n.to_string()]);
+    }
+    if let Some(vars) = d.setvars.as_ref().filter(|v| !v.is_empty()) {
+        let list: Vec<String> = vars
+            .iter()
+            .filter(|(k, _)| !k.trim().is_empty())
+            .map(|(k, v)| format!("{}={}", k.trim(), v.trim()))
+            .collect();
+        if !list.is_empty() {
+            a.extend(["--setvar".into(), list.join(",")]);
+        }
     }
     if let Some(id) = d.depot.as_deref().map(str::trim).filter(|i| !i.is_empty()) {
         a.extend(["--depot".into(), id.to_string()]);

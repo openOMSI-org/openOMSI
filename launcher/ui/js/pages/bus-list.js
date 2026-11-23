@@ -163,6 +163,17 @@ export function BusOptions() {
   const at = Math.max(0, paints.findIndex(([p]) => p === c.paint));
   const step = (d) => choose({ paint: paints[(at + d + paints.length) % paints.length][0] });
   const numbers = v.numbers || [];
+  // The onboard computer the bus's repaints name (an IBIS unit, a ticket printer): the player
+  // picks one of the values a paint gives the variable, and the game gets it over the paint's
+  // own [setvar], before its {init} - the pack's own [visible] mesh and script swap do the rest.
+  const setvars = c.setvars || {};
+  const computers = (v.variables || []).filter((x) => x.onboard_computer && x.values.length > 0);
+  const pickOnboard = (name, value) => {
+    const next = { ...setvars };
+    if (value === '') delete next[name];
+    else next[name] = value;
+    choose({ setvars: next });
+  };
   const hofs = [['', `${t('Automatic')}${s.hof ? ` (${s.hof})` : ''}`], ...v.hofs.map((h) => [h, h])];
   const flip = () => {
     setMore(!more);
@@ -179,6 +190,9 @@ export function BusOptions() {
         <span class="muted small num count">${at + 1} / ${paints.length}</span>
       </div>
     </${Field}>
+    ${computers.map((x, i) => html`<${Field} key=${x.name} label=${i === 0 ? 'Onboard computer' : `${t('Onboard computer')} (${x.name})`}>
+      <${Select} raw value=${setvars[x.name] ?? ''} options=${[['', t('Automatic')], ...x.values.map((val) => [val.value, `${val.value} - ${val.paints.join(', ')}`])]} onChange=${(value) => pickOnboard(x.name, value)} />
+    </${Field}>`)}
     ${v.missing_packs?.length > 0 && html`<${Notice} kind="warn">${t('Parts of this bus come from packs that are not installed: {packs}', { packs: v.missing_packs.join(', ') })}</${Notice}>`}
     <button type="button" class="disclose" aria-expanded=${more} onClick=${flip}>
       <${Icon} name=${more ? 'down' : 'right'} size=${18} /><span>${t('Vehicle settings & details')}</span>

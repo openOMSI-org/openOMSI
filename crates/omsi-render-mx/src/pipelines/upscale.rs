@@ -17,7 +17,7 @@ pub(crate) fn build(device: &mx::Device, format: mx::TextureFormat, use_fsr1: bo
         device,
         mx::ShaderModuleDescriptor {
             label: Some("upscale"),
-            source: &*(include_str!("../upscale.wgsl")),
+            source: &*(crate::shaders::hot_wgsl(include_str!("../upscale.wgsl"), "upscale.wgsl")),
         },
     );
     let targets = [target(format, None)];

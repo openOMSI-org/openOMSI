@@ -342,6 +342,15 @@ impl Player {
         Some((name, false))
     }
 
+    pub(crate) fn trigger_cab_control(&mut self, ev: &str) -> bool {
+        let was_interlocked = omsi_sim::input::is_stop_brake_interlocked(&self.vehicle);
+        let plain = self.vehicle.trigger(ev);
+        self.vehicle.update_scripts_only(0.0);
+        self.clear_momentary_mouse_flag(ev);
+        omsi_sim::input::maybe_release_held_brake(&self.vehicle, &mut self.axes, was_interlocked);
+        plain
+    }
+
     pub(crate) fn click(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
         self.release();
         if let Some(i) = self.pick(origin, dir, spread) {
@@ -350,16 +359,7 @@ impl Player {
                 .clone()
                 .unwrap();
             log::info!("mouse event {ev}");
-            let plain = self.vehicle.trigger(&ev);
-            // Momentary `[mouseevent]` buttons (Aachen ibox / ticket printer, #744) set a
-            // flag in the press trigger and clear it in `_drag` / `_off`. The frame script
-            // is what acts on the flag. Run that frame now, before the next redraw's
-            // `_drag` (or a quick `_off`) zeroes it and the click does nothing.
-            self.vehicle.update_scripts_only(0.0);
-            // Clear the press flag immediately after the frame consumed it. Otherwise a
-            // held click can be processed again on the next `tick` (digit keys append
-            // twice: `1`→`11`, and ibox `0`/`D11` becomes `1`→`10`→`100`).
-            self.clear_momentary_mouse_flag(&ev);
+            let plain = self.trigger_cab_control(&ev);
             self.pressed_mesh = Some(i);
             self.press_info = (plain, 0.0);
             self.auto_drag = None;
@@ -372,11 +372,13 @@ impl Player {
             .clone()
             .unwrap();
         log::info!("trailer mouse event {ev} (part {ti})");
+        let was_interlocked = omsi_sim::input::is_stop_brake_interlocked(&self.vehicle);
         if !self.vehicle.trigger_part(ti, &ev) {
             self.vehicle.trigger(&ev);
         }
         self.vehicle.update_scripts_only(0.0);
         self.clear_momentary_mouse_flag(&ev);
+        omsi_sim::input::maybe_release_held_brake(&self.vehicle, &mut self.axes, was_interlocked);
         self.pressed_trailer_mesh = Some((ti, i));
         Some(i)
     }
@@ -518,30 +520,75 @@ impl Player {
                 // a plain click on a control the scripts only know as a drag: dragged to its
                 // other end (a click opened the NL/NG driver's door by the mouse's jitter
                 // and a second click never shut it again)
-                let anim = def
-                    .animations
-                    .first()
-                    .map(|a| a.variable.clone())
-                    .filter(|v| !v.trim().is_empty() && v.trim().parse::<f32>().is_err());
-                if let (true, Some(var)) = (
-                    allow_auto_drag && auto_drag_click(&ev, self.press_info.0, self.press_info.1),
-                    anim,
-                ) {
-                    let now = self.vehicle.var(&var).unwrap_or(0.0);
-                    let target = if now > 0.5 { 0.0 } else { 1.0 };
-                    log::info!(
-                        "mouse event {ev}: a click on a drag control, {var} {now:.2} -> {target}"
-                    );
-                    self.auto_drag = Some(AutoDrag {
-                        ev,
-                        var,
-                        target,
-                        axis: 0,
-                        sign: if target > now { -1.0 } else { 1.0 },
-                        last: now,
-                        stalled: 0,
-                        t: 0.0,
-                    });
+                if auto_drag_click(&ev, self.press_info.0, self.press_info.1) {
+                    let has_drag = self.vehicle.has_trigger(&format!("{ev}_drag"));
+                    if has_drag && allow_auto_drag {
+                        let anim = def
+                            .animations
+                            .first()
+                            .map(|a| a.variable.clone())
+                            .filter(|v| !v.trim().is_empty() && v.trim().parse::<f32>().is_err())
+                            .or_else(|| {
+                                ty.model
+                                    .meshes
+                                    .iter()
+                                    .filter(|m| m.mouse_event.as_deref() == Some(ev.as_str()))
+                                    .flat_map(|m| m.animations.first().map(|a| a.variable.clone()))
+                                    .find(|v| {
+                                        !v.trim().is_empty() && v.trim().parse::<f32>().is_err()
+                                    })
+                            });
+                        if let Some(var) = anim {
+                            let now = self.vehicle.var(&var).unwrap_or(0.0);
+                            let target = if now > 0.5 { 0.0 } else { 1.0 };
+                            log::info!(
+                                "mouse event {ev}: a click on a drag control, {var} {now:.2} -> {target}"
+                            );
+                            self.auto_drag = Some(AutoDrag {
+                                ev,
+                                var,
+                                target,
+                                axis: 0,
+                                sign: if target > now { -1.0 } else { 1.0 },
+                                last: now,
+                                stalled: 0,
+                                t: 0.0,
+                            });
+                        }
+                    } else if !has_drag {
+                        // (a variable of the scripts is theirs to move; only one that the model
+                        // alone names is flipped here, #3887)
+                        let is_model_only = |v: &str| {
+                            !v.is_empty()
+                                && v.parse::<f32>().is_err()
+                                && ty.program.var(v).is_none()
+                        };
+                        let first_model_var = ty
+                            .model
+                            .meshes
+                            .iter()
+                            .filter(|m| m.mouse_event.as_deref() == Some(ev.as_str()))
+                            .flat_map(|m| m.animations.iter().map(|a| a.variable.trim()))
+                            .find(|v| is_model_only(v));
+                        if let Some(first_var) = first_model_var {
+                            let now = self.vehicle.var(first_var).unwrap_or(0.0);
+                            let target = if now > 0.5 { 0.0 } else { 1.0 };
+                            log::info!(
+                                "mouse event {ev}: toggle control, {first_var} {now:.2} -> {target}"
+                            );
+                            // all meshes sharing this control event flip their model-only variables together (#3887)
+                            for m in &ty.model.meshes {
+                                if m.mouse_event.as_deref() == Some(ev.as_str()) {
+                                    for a in &m.animations {
+                                        let v_name = a.variable.trim();
+                                        if is_model_only(v_name) {
+                                            self.vehicle.set_var(v_name, target);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

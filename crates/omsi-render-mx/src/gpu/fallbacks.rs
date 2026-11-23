@@ -17,11 +17,22 @@ pub fn basic_pipelines() -> bool {
 }
 pub(crate) static RAINFALL_LEFT_OUT: super::auxiliary::AdapterBool =
     super::auxiliary::AdapterBool::new(4);
+/// Whether the rainfall is made: with the basic pipelines too - a phone's as well, which
+/// always starts with them and so never saw rain fall - unless the device was lost making
+/// it once (`RAINFALL_LEFT_OUT`, remembered for the adapter).
 pub(crate) fn rainfall_pipeline() -> bool {
     !basic_pipelines()
-        || !(cfg!(any(target_os = "android", target_os = "ios"))
-            || RAINFALL_LEFT_OUT.load(std::sync::atomic::Ordering::Relaxed)
+        || !(RAINFALL_LEFT_OUT.load(std::sync::atomic::Ordering::Relaxed)
             || omsi_cfg::flags::OMSI_SAFE_MODE.is_set())
+}
+
+/// Whether the snowfall is made: with the full set; with the basic set on a phone only, as
+/// the rainfall (a phone always starts with the basic set and so never saw snow fall). A
+/// computer comes to the basic set after a driver lost the device on one of the optional
+/// pipelines - the snowfall among them on DirectX 12 - and keeps without it.
+pub(crate) fn snowfall_pipeline() -> bool {
+    !basic_pipelines()
+        || (cfg!(any(target_os = "android", target_os = "ios")) && rainfall_pipeline())
 }
 
 /// One of the pipelines a picture can do without (the snowfall, the lamps in the fog, the

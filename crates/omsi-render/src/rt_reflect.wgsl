@@ -2,17 +2,19 @@
 //
 // The enhanced pass left, per pixel, the surface a reflection starts from (its normal, its
 // distance from the eye, its roughness) and how much of the reflection lands on the screen
-// (GBUF_FORMAT), and drew the picture without the probe's reflection there. At half size
-// (each ray from the most reflective of four pixels) a ray goes out along the mirror
-// direction (one ray, the same every frame: a rough surface is blurred by the composite
-// instead of jittered rays that need frames to settle) and what it meets is
+// (GBUF_FORMAT: the split sum's Fresnel and lobe integral, so that a rough dielectric shows a
+// few per cent of it and glass, metal and a wet road much), and drew the picture without the
+// probe's reflection there. A ray per pixel (or per REFL_DIV x REFL_DIV, from the most
+// reflective of them) goes out along a direction of the surface's GGX lobe - the mirror
+// direction for a smooth one - and what it meets is
 // - on the screen and seen there: the picture's own colour at that place (lit, fogged,
 //   reflections and all, exactly as drawn);
 // - off the screen or hidden: the hit mesh's texel there (its texture's small copy in the
 //   atlas, rt_tex.rs; the texture's mean colour until that is made) times its material's
-//   colour, lit by the sun (a shadow ray from there) and the sky;
+//   colour, lit by the sun (a shadow ray from there) and the sky about its own normal;
 // - nothing: the sky probe.
-// The composite then adds it, times the weight, to the picture.
+// The denoiser (rt_denoise.wgsl) gathers the rays over the frames and the pixels round each,
+// and the composite adds the result, times the weight, to the picture.
 
 // The rays' grid: one per REFL_DIV x REFL_DIV pixels (1: every pixel).
 override REFL_DIV: i32 = 1;
@@ -34,7 +36,7 @@ const ALPHA_REF: f32 = 128.5 / 255.0;
 
 // Texture `t`'s texel at `uv`, from its tile in the atlas, addressed by `mode` (0 repeat,
 // 1 mirror, 2 clamp, 3 mirror once); w < 0 while the texture has no tile.
-fn tile_texel(t: u32, uv: vec2<f32>, mode: u32) -> vec4<f32> {
+fn tile_texel(t: u32, uv: vec2<f32>, mode: u32, cut: bool) -> vec4<f32> {
     let tile = tex_avg[t].tile;
     if (tile.z < 0.5) {
         return vec4<f32>(-1.0);
@@ -45,8 +47,28 @@ fn tile_texel(t: u32, uv: vec2<f32>, mode: u32) -> vec4<f32> {
         w = select(select(abs(uv), uv, mode == 2u), 1.0 - abs(fract(uv * 0.5) * 2.0 - 1.0), mode == 1u);
         w = clamp(w, vec2<f32>(1.0 / 60.0), vec2<f32>(59.0 / 60.0));
     }
-    let at = (tile.xy + vec2<f32>(1.0) + w * 30.0) / vec2<f32>(textureDimensions(t_atlas));
-    return textureSampleLevel(t_atlas, s_lin, at, 0.0);
+    if (!cut) {
+        let at = (tile.xy + vec2<f32>(1.0) + w * 30.0) / vec2<f32>(textureDimensions(t_atlas));
+        return textureSampleLevel(t_atlas, s_lin, at, 0.0);
+    }
+    // A cut-out texture's colour filtered by its coverage: the texels the alpha test throws
+    // away are white or black in most leaves' textures, and filtered in as they were they
+    // fringed every reflected crown with white specks.
+    let f = tile.xy + vec2<f32>(0.5) + w * 30.0;
+    let b = vec2<i32>(floor(f));
+    let fr = f - floor(f);
+    var rgb = vec3<f32>(0.0);
+    var a = 0.0;
+    for (var j = 0; j <= 1; j++) {
+        for (var i = 0; i <= 1; i++) {
+            let c = textureLoad(t_atlas, b + vec2<i32>(i, j), 0);
+            let k = select(1.0 - fr.x, fr.x, i == 1) * select(1.0 - fr.y, fr.y, j == 1);
+            rgb += c.rgb * c.a * k;
+            a += c.a * k;
+        }
+    }
+    let mean = tex_avg[t].c.rgb;
+    return vec4<f32>(select(mean, rgb / max(a, 1e-4), a > 1e-3), a);
 }
 
 // What a hit shows of its textures: rgb the diffuse texture's colour there (white without
@@ -56,20 +78,20 @@ fn hit_texel(r: Record, prim: u32, bary: vec2<f32>) -> vec4<f32> {
     if (r.uvs == 0xffffffffu) {
         return vec4<f32>(-1.0);
     }
-    let q = tri_uv[r.uvs + prim];
+    let q = tri_uv[(r.uvs + prim) * 2u];
     let base = vec2<f32>(f32(i32(q.w << 16u) >> 16u), f32(i32(q.w) >> 16u));
     let uv = base + unpack2x16float(q.x) * (1.0 - bary.x - bary.y) + unpack2x16float(q.y) * bary.x + unpack2x16float(q.z) * bary.y;
     let mode = (r.flags >> 3u) & 3u;
     var c = vec4<f32>(1.0);
     if (r.tex != 0xffffffffu) {
-        c = tile_texel(r.tex, (uv + r.uvt.yz) * r.uvt.x, mode);
+        c = tile_texel(r.tex, (uv + r.uvt.yz) * r.uvt.x, mode, (r.flags & 5u) == 1u);
         if (c.a < 0.0) {
             return c;
         }
     }
     if ((r.flags & 4u) != 0u && r.trans != 0xffffffffu) {
         // (the transmap without the offset and the ground's repeat, as the main pass reads it)
-        let m = tile_texel(r.trans, uv, mode);
+        let m = tile_texel(r.trans, uv, mode, false);
         if (m.a < 0.0) {
             return m;
         }
@@ -102,20 +124,63 @@ fn finite(c: vec3<f32>) -> vec3<f32> {
     return select(vec3<f32>(0.0), clamp(c, vec3<f32>(0.0), vec3<f32>(6.0e4)), all(e != vec3<u32>(0x7f800000u)));
 }
 
-// The roughness a reflection is spread by (0: a mirror). OMSI's materials say little about
-// it, and taken as they are a wet road at 0.12 mirrored like glass: rough surfaces are taken
-// rougher.
-fn glossy_rough(rough: f32) -> f32 {
-    return select(0.0, min(rough * 2.2, 0.8), rough > 0.05);
+// Heitz's visible-normal sampling of the GGX lobe (in Dupuy and Benyoub's spherical-cap
+// form): a microfacet normal round n as the eye at `wo` (towards the eye) sees them, for
+// roughness `rough` (alpha = rough^2) and two uniform numbers. Rays reflected about it follow
+// the lobe the main pass's split sum integrates, so many frames of them average to the
+// same blur the sky probe gives a surface that rough, with the street in it.
+fn ggx_vndf(n: vec3<f32>, wo: vec3<f32>, rough: f32, u: vec2<f32>) -> vec3<f32> {
+    let a = max(rough * rough, 1e-4);
+    let b = basis(n);
+    let wl = vec3<f32>(dot(wo, b[0]), dot(wo, b[1]), max(dot(wo, n), 1e-4));
+    let ws = normalize(vec3<f32>(wl.xy * a, wl.z));
+    let phi = 2.0 * PI * u.x;
+    let z = (1.0 - u.y) * (1.0 + ws.z) - ws.z;
+    let st = sqrt(clamp(1.0 - z * z, 0.0, 1.0));
+    let hs = vec3<f32>(st * cos(phi), st * sin(phi), z) + ws;
+    let hl = normalize(vec3<f32>(hs.xy * a, max(hs.z, 1e-6)));
+    return normalize(b * hl);
 }
 
-// A GGX microfacet normal around n (alpha = rough^2) for two uniform numbers.
-fn ggx_normal(n: vec3<f32>, rough: f32, u: vec2<f32>) -> vec3<f32> {
-    let a = max(rough * rough, 1e-4);
-    let phi = 2.0 * PI * u.x;
-    let ct = sqrt((1.0 - u.y) / (1.0 + (a * a - 1.0) * u.y));
-    let st = sqrt(max(1.0 - ct * ct, 0.0));
-    return normalize(basis(n) * vec3<f32>(st * cos(phi), st * sin(phi), ct));
+// This frame's two numbers for a pixel: a hash per pixel moved along the R2 sequence every
+// frame, so that the rays of a pixel cover its lobe evenly over the frames the history keeps.
+fn frame_noise(px: vec2<i32>) -> vec2<f32> {
+    let h = vec2<f32>(hash3(vec3<u32>(vec2<u32>(px), 11u)), hash3(vec3<u32>(vec2<u32>(px), 23u)));
+    let f = f32(u32(p.eye.w) % 1024u);
+    return fract(h + f * vec2<f32>(0.7548777, 0.5698403));
+}
+
+// A unit vector folded onto the octahedron (rt_uv.wgsl) and back.
+fn oct_encode(n: vec3<f32>) -> vec2<f32> {
+    let q = n.xy / (abs(n.x) + abs(n.y) + abs(n.z));
+    if (n.z >= 0.0) {
+        return q;
+    }
+    return (vec2<f32>(1.0) - abs(q.yx)) * select(vec2<f32>(-1.0), vec2<f32>(1.0), q >= vec2<f32>(0.0));
+}
+fn oct_decode(e: vec2<f32>) -> vec3<f32> {
+    var n = vec3<f32>(e, 1.0 - abs(e.x) - abs(e.y));
+    let t = max(-n.z, 0.0);
+    n = vec3<f32>(n.xy + select(vec2<f32>(t), vec2<f32>(-t), n.xy >= vec2<f32>(0.0)), n.z);
+    return normalize(n);
+}
+
+// The surface's normal where a ray met mesh record `r`'s triangle `prim` (its corners' normals
+// mixed by the barycentrics, turned into the world by the instance's transform; length 0
+// while the mesh's normals are not there yet).
+fn hit_normal(r: Record, prim: u32, bary: vec2<f32>, w2o: mat4x3<f32>) -> vec3<f32> {
+    if (r.uvs == 0xffffffffu) {
+        return vec3<f32>(0.0);
+    }
+    let q = tri_uv[(r.uvs + prim) * 2u + 1u];
+    let nl = oct_decode(unpack2x16snorm(q.x)) * (1.0 - bary.x - bary.y)
+        + oct_decode(unpack2x16snorm(q.y)) * bary.x + oct_decode(unpack2x16snorm(q.z)) * bary.y;
+    // (normals go by the inverse transpose: the world-to-object matrix's rows)
+    let nw = vec3<f32>(dot(w2o[0], nl), dot(w2o[1], nl), dot(w2o[2], nl));
+    if (dot(nw, nw) < 1e-12) {
+        return vec3<f32>(0.0);
+    }
+    return normalize(nw);
 }
 
 // Where a point a ray along `d` meets is on the screen: x 1 there and seen (the picture's
@@ -148,8 +213,8 @@ fn on_screen(pt: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
 }
 
 // The light a reflected ray brings back from where it meets the scene (`sc` its place on
-// the screen): the picture's own colour there, else the mesh's in the sun and the sky's light.
-fn hit_light(o: vec3<f32>, d: vec3<f32>, h: Hit, sc: vec3<f32>, texel: vec4<f32>) -> vec3<f32> {
+// the screen): the picture's own colour there, else the mesh lit as the main pass lights it.
+fn hit_light(o: vec3<f32>, d: vec3<f32>, h: Hit, sc: vec3<f32>, texel: vec4<f32>, nh: vec3<f32>) -> vec3<f32> {
     let pt = o + d * h.t;
     // (a cut-out mesh - leaves - seen through a gap shows what lies behind it there: the
     // picture's colour all the same, the same for the rays beside it; deciding leaf or gap
@@ -165,15 +230,29 @@ fn hit_light(o: vec3<f32>, d: vec3<f32>, h: Hit, sc: vec3<f32>, texel: vec4<f32>
         if (k >= 0.999) {
             return seen;
         }
-        return mix(mesh_light(pt, d, h, texel), seen, k);
+        return mix(mesh_light(pt, d, h, texel, nh), seen, k);
     }
-    return mesh_light(pt, d, h, texel);
+    return mesh_light(pt, d, h, texel, nh);
+}
+
+// The sky's light on a surface facing n (as the main pass's `sh_irradiance`) with what the
+// clouds scatter of the sun (its `sun_scattered`, the beam's share in `enh.pbr_ext.x`).
+fn sky_light(n: vec3<f32>) -> vec3<f32> {
+    var e = sh_irradiance(n);
+    if (enh.pbr_ext.y > 0.5 && enh.pbr_ext.x < 0.999) {
+        let s = p.sun.xyz;
+        let lobe = (1.0 + dot(n, s)) / (1.0 + max(s.z, 0.0));
+        e = e + enh.sun.rgb * (1.0 - clamp(enh.pbr_ext.x, 0.0, 1.0)) * max(s.z, 0.0) * mix(0.5 + 0.5 * n.z, lobe, 0.4);
+    }
+    return e;
 }
 
 // What a ray finds off the screen or hidden there: the hit mesh's colour (its texel there,
-// `hit_texel`, or its texture's mean colour, times its material's) lit by the sun (a shadow
-// ray from there) and the sky, and the air along the way.
-fn mesh_light(pt: vec3<f32>, d: vec3<f32>, h: Hit, texel: vec4<f32>) -> vec3<f32> {
+// `hit_texel`, or its texture's mean colour, times its material's) lit as the main pass
+// lights a matt surface - the sun's beam by its angle to the surface's own normal (`nh`,
+// from the mesh's normals; facing the ray where they are not known yet) where a shadow ray
+// finds the sun, the sky and the scattered sun over the hemisphere - and the air along the way.
+fn mesh_light(pt: vec3<f32>, d: vec3<f32>, h: Hit, texel: vec4<f32>, nh: vec3<f32>) -> vec3<f32> {
     let o = pt - d * h.t;
     let r = records[h.record];
     var albedo = r.color.rgb;
@@ -185,22 +264,32 @@ fn mesh_light(pt: vec3<f32>, d: vec3<f32>, h: Hit, texel: vec4<f32>) -> vec3<f32
     if ((r.flags & 2u) != 0u) {
         return albedo * enh.exposure.y;
     }
-    // (the face turned towards the ray: no normal is known at the hit)
-    let nf = -d;
+    // (two-sided: the face the ray met)
+    var nf = -d;
+    if (dot(nh, nh) > 0.5) {
+        nf = select(nh, -nh, dot(nh, d) > 0.0);
+    }
     var sun = vec3<f32>(0.0);
-    if (p.sun.w > 0.0 && dot(nf, p.sun.xyz) > -0.2) {
-        if (ray_hit(RT_FORCE_OPAQUE | RT_FIRST_HIT, MASK_SHADOW, 0.0, 1500.0, pt - d * 0.05, p.sun.xyz).kind == RAY_QUERY_INTERSECTION_NONE) {
-            sun = enh.sun.rgb * (0.35 + 0.4 * max(dot(nf, p.sun.xyz), 0.0));
+    let nl = dot(nf, p.sun.xyz);
+    if (p.sun.w > 0.0 && nl > 0.0) {
+        if (ray_hit(RT_FORCE_OPAQUE | RT_FIRST_HIT, MASK_SHADOW, 0.0, 1500.0, pt + nf * 0.03 - d * 0.02, p.sun.xyz).kind == RAY_QUERY_INTERSECTION_NONE) {
+            let beam = select(1.0, clamp(enh.pbr_ext.x, 0.0, 1.0), enh.pbr_ext.y > 0.5);
+            sun = enh.sun.rgb * beam * nl;
         }
     }
-    let sky = mix(sh_irradiance(vec3<f32>(0.0, 0.0, 1.0)), sh_irradiance(nf), 0.5) * 0.8;
-    var l = albedo / PI * (sun + sky) * enh.exposure.x;
+    var l = albedo / PI * (sun + sky_light(nf)) * enh.exposure.x;
     // the air along the way: from the eye to the surface and on to the hit
     let dist = length(o - p.eye.xyz) + h.t;
     let ext = exp(-(enh.fog.x + enh.fog.w) * dist);
     l = l * ext + enh.fog_color.rgb * enh.exposure.x * (1.0 - ext);
     return finite(l);
 }
+
+// The rays' second output: per ray the surface it left (x its distance from the eye, 0 where
+// no ray went; y its roughness; zw its normal folded onto the octahedron), for the denoiser
+// (rt_denoise.wgsl) and the composite.
+@group(0) @binding(15) var t_meta_out: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(16) var t_meta: texture_2d<f32>;
 
 @compute @workgroup_size(8, 8)
 fn cs_reflect(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -210,14 +299,14 @@ fn cs_reflect(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let size = vec2<i32>(p.size.xy);
-    // the most reflective of the four pixels
+    // the most reflective of the pixels the ray stands for
     var px = min(hp * REFL_DIV, size - vec2<i32>(1));
     var g = vec4<f32>(0.0);
     for (var j = 0; j < REFL_DIV; j++) {
         for (var i = 0; i < REFL_DIV; i++) {
             let q = min(hp * REFL_DIV + vec2<i32>(i, j), size - vec2<i32>(1));
             let s = textureLoad(t_gbuf, q, 0);
-            if (s.w > g.w) {
+            if (length(s.xyz) > length(g.xyz)) {
                 g = s;
                 px = q;
             }
@@ -225,29 +314,30 @@ fn cs_reflect(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     // (a reflection that hardly shows - a pane seen from the cab, a matt surface at a steep
     // angle - is as good from the sky probe: the composite takes that where no ray went)
-    if (g.w < 0.012 || length(g.xyz) < 1e-4) {
+    if (length(g.xyz) < 0.012 || g.w < 1e-4) {
         textureStore(t_out, hp, vec4<f32>(0.0));
+        textureStore(t_meta_out, hp, vec4<f32>(0.0));
         return;
     }
     let aux = textureLoad(t_aux, px, 0);
-    let w = g.w;
-    let n = normalize(g.xyz / w);
-    let dist = aux.r / w;
-    let rough = clamp(aux.g / w, 0.0, 1.0);
+    // (premultiplied by the coverage, gbuf.w: a pane's is 1, a surface's its weight)
+    let n = normalize(g.xyz);
+    let dist = aux.r / g.w;
+    let rough = clamp(aux.g / g.w, 0.0, 1.0);
     let uv = (vec2<f32>(px) + vec2<f32>(0.5)) * p.size.zw;
     let view = normalize(world_pos(uv, 0.001) - p.eye.xyz);
     let pt = p.eye.xyz + view * dist;
+    textureStore(t_meta_out, hp, vec4<f32>(dist, rough, oct_encode(n)));
     var d = reflect(view, n);
-    // A glossy surface (a wet road, paint) is no mirror: its rays spread over the GGX lobe,
-    // one of 16 fixed directions a pixel in a pattern of 4 x 4 that the composite averages
-    // away (the same every frame: nothing to settle, nothing that crawls). Only what is
-    // really smooth - a puddle, a pane, still water - mirrors sharply.
-    let gloss = glossy_rough(rough);
-    if (gloss > 0.0) {
-        let cell = u32(hp.x & 3) + u32(hp.y & 3) * 4u;
-        let u = vec2<f32>((f32(cell) + 0.5) / 16.0, f32(reverseBits(cell)) * 2.3283064e-10);
-        let dd = reflect(view, ggx_normal(n, gloss, u));
-        if (dot(dd, n) > 0.02) {
+    // A rough surface (a satin panel, dry plaster) is no mirror: its rays follow the GGX lobe
+    // of its roughness, a new one every frame, which the denoiser averages over the frames and
+    // the pixels round it. What is smoother - a pane, a polished coat, a wet road, a puddle -
+    // takes the one ray along the mirror direction, blurred by its lobe afterwards
+    // (`GLOSSY_MIRROR`).
+    if (rough > GLOSSY_MIRROR) {
+        let hn = ggx_vndf(n, -view, rough, frame_noise(hp));
+        let dd = reflect(view, hn);
+        if (dot(dd, n) > 0.01) {
             d = dd;
         }
     }
@@ -256,15 +346,24 @@ fn cs_reflect(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (below < 0.02) {
         d = normalize(d + n * (0.02 - below));
     }
+    // (a ray that leaves the scene takes the sky probe at a little of the lobe's blur: the
+    // rays themselves spread it, the rest keeps the sky's stars and edges from crawling)
+    let sky_rough = select(rough, rough * 0.5, rough > GLOSSY_MIRROR);
     var l: vec3<f32>;
+    // how far the ray went (the reprojection's mirror image is that far behind the surface);
+    // far for the sky
+    var reach = 1.0e4;
+    // (OMSI_DEBUG_RT=11: what each ray found - blue the sky, green the picture, yellow a
+    // gap in a cut-out on the screen, red a mesh off the screen or hidden)
+    var dbg = vec3<f32>(0.0, 0.0, 1.0);
     if (dist > p.proj.z) {
-        l = sky_probe(d, rough);
+        l = sky_probe(d, sky_rough);
     } else {
         let o = pt + n * (0.02 + dist * 0.0015);
         // (a cut-out mesh - leaves, a fence - is taken as solid, and the picture says where
         // its texels are: where it shows a gap there, the ray goes on)
         var start = 0.0;
-        l = sky_probe(d, rough);
+        l = sky_probe(d, sky_rough);
         // A pane first: what it mirrors itself (glass at the slant a reflection meets it
         // takes about a tenth) and the inside behind it, seen through its tint. The inside
         // is lit only through the panes as well: where the picture does not show it, the
@@ -273,10 +372,18 @@ fn cs_reflect(@builtin(global_invocation_id) gid: vec3<u32>) {
         var pane = vec3<f32>(0.0);
         let gh = ray_hit(RT_FORCE_OPAQUE, MASK_SEEN | MASK_GLASS_SEEN, 0.0, 400.0, o, d);
         if (gh.kind != RAY_QUERY_INTERSECTION_NONE && (records[gh.instance_custom_data + gh.geometry_index].flags & 64u) != 0u) {
-            pane = sky_probe(d, rough) * 0.1;
+            pane = sky_probe(d, sky_rough) * 0.1;
             through = 0.45;
             start = gh.t + 0.01;
+            reach = gh.t;
         }
+        // What the ray meets, front to back: a solid mesh ends it; a cut-out one (leaves, a
+        // fence) where it is not on the screen stops as much of it as its texels' filtered
+        // coverage there, and the rest goes on. (Taken all or nothing at the alpha test, one
+        // ray a pixel, every crown's edge in a window was a sprinkle of specks that changed
+        // with each frame's ray.)
+        var acc = vec3<f32>(0.0);
+        var left = 1.0;
         for (var k = 0; k < 4; k++) {
             let ch = ray_hit(RT_FORCE_OPAQUE, MASK_SEEN, start, 400.0, o, d);
             if (ch.kind == RAY_QUERY_INTERSECTION_NONE) {
@@ -290,22 +397,30 @@ fn cs_reflect(@builtin(global_invocation_id) gid: vec3<u32>) {
             let sc = on_screen(o + d * h.t, d);
             let texel = hit_texel(rec, ch.primitive_index, ch.barycentrics);
             let hidden = sc.x != 1.0 && sc.x != 2.0;
-            // (off the screen or hidden, a cut-out texel lets the ray through, as the main
-            // pass's alpha test does)
-            if (cut && hidden && texel.a >= 0.0 && texel.a < ALPHA_REF) {
-                start = ch.t + 0.002;
-                continue;
+            var a = 1.0;
+            if (cut && hidden) {
+                // (its texels not known yet: as much as they cover on average)
+                a = select(mix(coverage(rec), 1.0, 0.5), smoothstep(ALPHA_REF - 0.3, ALPHA_REF + 0.2, texel.a), texel.a >= 0.0);
             }
-            l = hit_light(o, d, h, sc, texel);
-            if (cut && hidden && texel.a < 0.0) {
-                // (its texels not known yet: as much of the sky through it as they leave)
-                l = mix(sky_probe(d, rough), l, mix(coverage(rec), 1.0, 0.5));
+            if (a > 0.01) {
+                let nh = hit_normal(rec, ch.primitive_index, ch.barycentrics, ch.world_to_object);
+                var lh = hit_light(o, d, h, sc, texel, nh);
+                if (through < 1.0 && sc.x != 1.0) {
+                    lh = lh * through;
+                }
+                acc += lh * a * left;
+                if (left > 0.5) {
+                    reach = min(reach, ch.t);
+                    dbg = select(select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 0.0), sc.x == 2.0), vec3<f32>(0.0, 1.0, 0.0), sc.x == 1.0);
+                }
+                left *= 1.0 - a;
             }
-            if (through < 1.0 && sc.x != 1.0) {
-                l = l * through;
+            if (left < 0.02) {
+                break;
             }
-            break;
+            start = ch.t + 0.002;
         }
+        l = acc + l * left;
         l = pane + l * through * select(1.0, 0.9, through < 1.0);
     }
     // (no single ray brighter than the sky's brightest: the sun's own glint on the surface
@@ -316,12 +431,15 @@ fn cs_reflect(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (p.temporal.z == 8.0) {
         l = vec3<f32>(f32(dist > p.proj.z), rough, 0.0);
     }
-    textureStore(t_out, hp, vec4<f32>(l, dist));
+    if (p.temporal.z == 11.0) {
+        l = dbg;
+    }
+    textureStore(t_out, hp, vec4<f32>(l, reach));
 }
 
-// --- the composite: the traced reflection times its weight, added to the picture (blended
-// additively). From the rays around the pixel at its own distance; a rough surface gathers
-// from further round.
+// --- the composite: the denoised reflection (rt_denoise.wgsl) times its weight, added to the
+// picture (blended additively). Where the rays are fewer than the pixels, from those round
+// the pixel on its own surface.
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
 };
@@ -337,7 +455,9 @@ fn vs_full(@builtin(vertex_index) i: u32) -> VsOut {
 fn fs_composite(in: VsOut) -> @location(0) vec4<f32> {
     let px = vec2<i32>(in.clip.xy);
     let g = textureLoad(t_gbuf, px, 0);
-    if (g.w < 0.002 || length(g.xyz) < 1e-4) {
+    // (the reflection's weight is the normal's length: see `cs_reflect`)
+    let weight = length(g.xyz);
+    if (weight < 0.002 || g.w < 1e-4) {
         discard;
     }
     let aux = textureLoad(t_aux, px, 0);
@@ -347,38 +467,34 @@ fn fs_composite(in: VsOut) -> @location(0) vec4<f32> {
     let hq = (vec2<f32>(px) + vec2<f32>(0.5)) / f32(REFL_DIV) - vec2<f32>(0.5);
     let base = vec2<i32>(floor(hq));
     let fr = hq - floor(hq);
-    let gloss = glossy_rough(rough);
-    // (a mirror-smooth pane takes the rays of the pixels round it as well: one ray per
-    // pixel, the same every frame, left every odd one standing out as a speck, #1907)
-    let reach = select(1, clamp(i32(round(1.5 + gloss * 4.0)), 2, 4), gloss > 0.0);
-    let tol = (0.02 + gloss * 0.06) * dist + 0.05;
+    let tol = (0.02 + rough * 0.06) * dist + 0.05;
     var sum = vec3<f32>(0.0);
     var wsum = 0.0;
-    for (var j = -reach; j <= reach + 1; j++) {
-        for (var i = -reach; i <= reach + 1; i++) {
+    // (the four rays round the pixel, bilinear, those on its own surface only)
+    for (var j = 0; j <= 1; j++) {
+        for (var i = 0; i <= 1; i++) {
             let q = clamp(base + vec2<i32>(i, j), vec2<i32>(0), hsize - vec2<i32>(1));
-            let s = textureLoad(t_hist, q, 0);
-            let dx = abs(f32(i) - fr.x);
-            let dy = abs(f32(j) - fr.y);
-            let k = max(1.0 - dx / (f32(reach) + 1.0), 0.0) * max(1.0 - dy / (f32(reach) + 1.0), 0.0);
-            // (weighed down by its brightness: a single bright ray among dark ones is a
-            // speck, not the light of the place)
-            let w = k * select(0.0, 1.0, s.a > 0.0 && abs(s.a - dist) < tol) / (1.0 + dot(s.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)));
-            sum += s.rgb * w;
+            let m = textureLoad(t_meta, q, 0);
+            let k = select(1.0 - fr.x, fr.x, i == 1) * select(1.0 - fr.y, fr.y, j == 1) + 1e-3;
+            let w = k * select(0.0, 1.0, m.x > 0.0 && abs(m.x - dist) < tol);
+            sum += textureLoad(t_hist, q, 0).rgb * w;
             wsum += w;
         }
     }
     var l: vec3<f32>;
     if (wsum < 1e-4) {
-        // (no ray at this distance nearby: the sky probe the way a mirror would see)
+        // (no ray at this distance nearby: the sky probe the way the surface's lobe looks)
         let uv = (vec2<f32>(px) + vec2<f32>(0.5)) * p.size.zw;
         let view = normalize(world_pos(uv, 0.001) - p.eye.xyz);
         l = sky_probe(reflect(view, normalize(g.xyz)), rough);
     } else {
         l = sum / wsum;
     }
-    if (p.temporal.z >= 8.0) {
-        return vec4<f32>(select(l * 0.3, vec3<f32>(0.0), p.temporal.z == 10.0) + vec3<f32>(0.0, 0.0, g.w * 10.0), 0.0);
+    if (p.temporal.z == 11.0) {
+        return vec4<f32>(l * 3.0, 0.0);
     }
-    return vec4<f32>(l * g.w, 0.0);
+    if (p.temporal.z >= 8.0) {
+        return vec4<f32>(select(l * 0.3, vec3<f32>(0.0), p.temporal.z == 10.0) + vec3<f32>(0.0, 0.0, weight * 10.0), 0.0);
+    }
+    return vec4<f32>(l * weight, 0.0);
 }

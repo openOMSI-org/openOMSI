@@ -584,6 +584,7 @@ pub(crate) fn weather_lighting(
         }
     }
     lighting.wetness = wetness;
+    lighting.air_temp = w.temp.0;
     // [wind] direction (deg) and speed (m/s): the snowfall drifts with it
     lighting.wind = glam::Vec3::new(
         w.wind.0.to_radians().sin() * w.wind.1,
