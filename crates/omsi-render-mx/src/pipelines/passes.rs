@@ -62,21 +62,11 @@ fn one(made: &mut impl Iterator<Item = Made>) -> mx::RenderPipeline {
     made.next().flatten().expect("a pipeline of the main pass")
 }
 
-fn take(made: &mut impl Iterator<Item = Made>, lean: bool) -> PassPipelines {
+fn take(made: &mut impl Iterator<Item = Made>, lean: Option<Arc<LeanPipelines>>) -> PassPipelines {
     PassPipelines {
         pipelines: (0..SceneBase::PIPELINES).map(|_| one(made)).collect(),
         rain_pipelines: (0..SceneBase::PIPELINES).map(|_| one(made)).collect(),
-        lean: lean.then(|| {
-            let mut plain = || (0..SceneBase::PIPELINES).map(|_| made.next().flatten()).collect();
-            let plain = [plain(), plain()];
-            let mut glass = || {
-                (0..SceneBase::PIPELINES)
-                    .map(|i| lean_glass_kind((i / 4) as u8).then(|| made.next().flatten()).flatten())
-                    .collect()
-            };
-            let glass = [glass(), glass()];
-            LeanPipelines { plain, glass }
-        }),
+        lean,
         corona_pipeline: one(made),
         smoke_pipeline: one(made),
         snow_pipeline: made.next().flatten(),
@@ -86,6 +76,64 @@ fn take(made: &mut impl Iterator<Item = Made>, lean: bool) -> PassPipelines {
 }
 
 impl PassKit<'_> {
+    /// The lean pipelines of the enhanced pass drawing `fs` (see `main_key`), made in the
+    /// background: the frames before one is there are drawn with the full one, and so are
+    /// they for good where the driver fails on it - or never comes back (Apple's compiler
+    /// service crashed on one variant of the renderer's tests and hung on it in another run).
+    fn lean_in_background(
+        &self,
+        f: mx::TextureFormat,
+        fs: &str,
+        surfaces: bool,
+    ) -> Option<Arc<LeanPipelines>> {
+        if !lean_pass(fs) || omsi_cfg::flags::OMSI_NO_LEAN.is_set() {
+            return None;
+        }
+        let lean = Arc::new(LeanPipelines::default());
+        // (plain dry first: a dry day's picture is the commonest; then the glass, then wet)
+        let mut todo: Vec<(usize, Lean, bool)> = Vec::new();
+        for dry in [true, false] {
+            todo.extend((0..SceneBase::PIPELINES).map(|i| (i, Lean::Plain, dry)));
+            todo.extend(
+                (0..SceneBase::PIPELINES)
+                    .filter(|i| lean_glass_kind((i / 4) as u8))
+                    .map(|i| (i, Lean::Glass, dry)),
+            );
+        }
+        let todo = Arc::new(std::sync::Mutex::new(todo.into_iter()));
+        let fs = fs.to_string();
+        // (two threads: a variant the compiler hangs on keeps one, not the rest)
+        for k in 0..2 {
+            let (lean, todo, fs) = (lean.clone(), todo.clone(), fs.clone());
+            let (device, scene, msaa) = (self.device.clone(), self.scene.clone(), self.msaa);
+            let context = crate::auxiliary_context();
+            let _ = std::thread::Builder::new()
+                .name(format!("lean pipelines {k}"))
+                .stack_size(32 << 20)
+                .spawn(move || {
+                    crate::with_auxiliary_context(context, || {
+                        loop {
+                            let next = todo.lock().unwrap_or_else(|e| e.into_inner()).next();
+                            let Some((i, kind, dry)) = next else { break };
+                            // (none while the renderer is gone: nothing left to draw with them)
+                            if Arc::strong_count(&lean) == 1 {
+                                break;
+                            }
+                            let made = optional_pipeline(&device, "a lean scene pipeline", || {
+                                scene.pipeline_at_for(&device, f, &fs, msaa, i, surfaces, kind, dry)
+                            });
+                            if let Some(p) = made {
+                                let _ = lean.slot(kind, dry, i).set(p);
+                                lean.ready
+                                    .fetch_add(1, std::sync::atomic::Ordering::Release);
+                            }
+                        }
+                    })
+                });
+        }
+        Some(lean)
+    }
+
     fn pass<'s>(
         &'s self,
         f: mx::TextureFormat,
@@ -97,37 +145,16 @@ impl PassKit<'_> {
         for samples in [self.msaa, 1] {
             for i in 0..SceneBase::PIPELINES {
                 jobs.push(Box::new(move || {
-                    Some(
-                        self.scene
-                            .pipeline_at_for(device, f, fs.scene, samples, i, surfaces, Lean::No, false),
-                    )
-                }));
-            }
-        }
-        // (the lean ones of the enhanced pass, multisampled as the main pass: see `main_key`)
-        if lean_pass(fs.scene) {
-            // (in the order `take` reads them: plain wet, plain dry, glass wet, glass dry)
-            let plain = (0..SceneBase::PIPELINES).map(|i| (i, Lean::Plain));
-            let glass = (0..SceneBase::PIPELINES)
-                .filter(|i| lean_glass_kind((i / 4) as u8))
-                .map(|i| (i, Lean::Glass));
-            let sets = [false, true]
-                .map(|dry| plain.clone().map(move |(i, l)| (i, l, dry)))
-                .into_iter()
-                .flatten()
-                .chain(
-                    [false, true]
-                        .map(|dry| glass.clone().map(move |(i, l)| (i, l, dry)))
-                        .into_iter()
-                        .flatten(),
-                );
-            for (i, lean, dry) in sets {
-                jobs.push(Box::new(move || {
-                    optional_pipeline(device, "a lean scene pipeline", || {
-                        self.scene.pipeline_at_for(
-                            device, f, fs.scene, self.msaa, i, surfaces, lean, dry,
-                        )
-                    })
+                    Some(self.scene.pipeline_at_for(
+                        device,
+                        f,
+                        fs.scene,
+                        samples,
+                        i,
+                        surfaces,
+                        Lean::No,
+                        false,
+                    ))
                 }));
             }
         }
@@ -191,7 +218,8 @@ impl PassKit<'_> {
             false,
             &mut jobs,
         );
-        take(&mut compile_all(self.device, jobs).into_iter(), true)
+        let lean = self.lean_in_background(HDR_FORMAT, "fs_enhanced_color", false);
+        take(&mut compile_all(self.device, jobs).into_iter(), lean)
     }
 
     pub(crate) fn build(
@@ -256,11 +284,14 @@ impl PassKit<'_> {
             );
         }
         let mut made = compile_all(self.device, jobs).into_iter();
-        let pass = take(&mut made, false);
+        let pass = take(&mut made, None);
         let sky_mirror_pipeline = enhanced.then(|| one(&mut made));
-        let hdr_pass = enhanced.then(|| take(&mut made, true));
+        let hdr_pass = enhanced.then(|| {
+            let lean = self.lean_in_background(hdr_format, "fs_enhanced", rt_gbuf());
+            take(&mut made, lean)
+        });
         let hdr_eye_pass = None;
-        let reflection_pass = reflections.then(|| take(&mut made, false));
+        let reflection_pass = reflections.then(|| take(&mut made, None));
         Passes {
             pass,
             hdr_pass,

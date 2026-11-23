@@ -415,9 +415,9 @@ pub(crate) fn main_pipeline(pp: &PassPipelines, key: u8) -> &mx::RenderPipeline 
     let dry = (key & DRY_PIPE != 0) as usize;
     let lean = pp.lean.as_ref().and_then(|l| {
         if key & LEAN_GLASS_PIPE != 0 {
-            l.glass[dry][pipe].as_ref()
+            l.glass[dry][pipe].get()
         } else if key & LEAN_PIPE != 0 {
-            l.plain[dry][pipe].as_ref()
+            l.plain[dry][pipe].get()
         } else {
             None
         }
@@ -433,12 +433,47 @@ pub(crate) const DRY_PIPE: u8 = 0x20;
 
 /// The main pass's lean pipelines (`override LEAN`), of a wet frame and a dry one (`DRY`):
 /// for plain materials, and for blended ones that may be glass (`lean_glass_kind`). A lean
-/// pipeline is a faster way to the same picture: where the driver fails on one (Apple's
-/// compiler service gave up on one variant of 288 in the renderer's tests) the full one
-/// draws in its place.
+/// pipeline is a faster way to the same picture, made in the background
+/// (`PassKit::lean_in_background`): until it is there, or where the driver fails on it, the
+/// full one draws in its place.
 pub(crate) struct LeanPipelines {
-    pub(crate) plain: [Vec<Option<mx::RenderPipeline>>; 2],
-    pub(crate) glass: [Vec<Option<mx::RenderPipeline>>; 2],
+    pub(crate) plain: [Vec<std::sync::OnceLock<mx::RenderPipeline>>; 2],
+    pub(crate) glass: [Vec<std::sync::OnceLock<mx::RenderPipeline>>; 2],
+    /// how many are there (the main pass's bundles are recorded again when it changes)
+    pub(crate) ready: std::sync::atomic::AtomicU32,
+}
+
+impl Default for LeanPipelines {
+    fn default() -> Self {
+        let set = || {
+            (0..crate::pipelines::scene::SceneBase::PIPELINES)
+                .map(|_| Default::default())
+                .collect()
+        };
+        LeanPipelines {
+            plain: [set(), set()],
+            glass: [set(), set()],
+            ready: Default::default(),
+        }
+    }
+}
+
+impl LeanPipelines {
+    pub(crate) fn slot(
+        &self,
+        lean: Lean,
+        dry: bool,
+        pipe: usize,
+    ) -> &std::sync::OnceLock<mx::RenderPipeline> {
+        match lean {
+            Lean::Glass => &self.glass[dry as usize][pipe],
+            _ => &self.plain[dry as usize][pipe],
+        }
+    }
+
+    pub(crate) fn ready(&self) -> u32 {
+        self.ready.load(std::sync::atomic::Ordering::Acquire)
+    }
 }
 
 /// Which lean pipelines a material may be drawn with (`material_lean`).

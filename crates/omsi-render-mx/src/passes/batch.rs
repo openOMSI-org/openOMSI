@@ -1028,6 +1028,8 @@ impl Renderer {
                 self.options.msaa,
                 rt_gbuf() && !f.eye_color,
                 f.lean,
+                // (a lean pipeline that came since: recorded again to draw with it)
+                pp.lean.as_ref().map_or(0, |l| l.ready()),
             );
             let chunks = bundle_chunks(self.encoding_pool.as_ref(), batches);
             let mut reuse: Vec<Option<mx::RenderBundle>> = vec![None; chunks.len()];
@@ -1124,7 +1126,7 @@ impl Renderer {
 
 /// The window's main-pass bundles as last recorded and what they were recorded from.
 pub(crate) struct MainBundles {
-    mode: (bool, bool, mx::TextureFormat, u32, bool, FrameLean),
+    mode: (bool, bool, mx::TextureFormat, u32, bool, FrameLean, u32),
     camera: mx::BindGroup,
     /// each bundle with the batches it was recorded from and what they bound (once they repeat)
     parts: Vec<(Vec<Batch>, Option<Vec<BatchResources>>, mx::RenderBundle)>,
