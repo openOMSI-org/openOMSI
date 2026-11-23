@@ -317,9 +317,11 @@ fn rain_drop(vid: u32, k: u32) -> RainOutE {
     // focused on the street, a few metres off, and a drop there is sharp), and spread over
     // its way as `vs_rain` spreads it
     let px_per_m = length(cu.xy / cu.w * half_px - sh);
-    let blur = sqrt(d * d + 1e-6);
+    // (a millimetre and a half at the least: at one millimetre the near drops drew as opaque
+    // grey lines)
+    let blur = sqrt(d * d + 0.0015 * 0.0015);
     let w = blur * px_per_m;
-    let spread = clamp(6.0 * max(w, 1.0) / max(len, 1.0), 0.2, 1.0);
+    let spread = clamp(6.0 * max(w, 1.0) / max(len, 1.0), 0.1, 1.0);
     let cover = min(w, 1.0) * (d / blur) * spread * fade * near * rp.view.z * clamp(sqrt(d / 0.002), 0.5, 1.4);
     let hw = max(0.5 * w, 0.4);
     let pad = hw + 1.5;
@@ -504,7 +506,7 @@ fn rain_surround(to_eye: vec3<f32>, sun: f32) -> vec3<f32> {
     // (a ball lens gathers the light of half the sky into the eye: a drop's streak is a
     // little brighter than the overcast behind it - a silvery line - and much brighter
     // than the street, the trees and the walls)
-    let l = mix(down, up, 0.8) * 1.35;
+    let l = mix(down, up, 0.8) * 1.0;
     let c = dot(-camera.sun_dir.xyz, to_eye);
     let forward = 0.85 * hg_phase(c, 0.82) + 0.15 / (4.0 * PI);
     let a = degrees(acos(clamp(-c, -1.0, 1.0)));

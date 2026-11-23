@@ -24,7 +24,7 @@ file 1775 crates/omsi-app/src/player.rs
 file 1502 crates/omsi-app/src/settings.rs
 file 1678 crates/omsi-app/src/ui.rs
 file 2707 crates/omsi-input/src/controllers.rs
-file 2704 crates/omsi-lan/src/game.rs
+file 2758 crates/omsi-lan/src/game.rs
 file 1569 crates/omsi-launcher-api/src/lib.rs
 file 5731 crates/omsi-launcher-core/src/lib.rs
 file 1585 crates/omsi-model/src/lib.rs
@@ -85,6 +85,7 @@ fn 435 crates/omsi-app-mx::world_pages crates/omsi-app-mx/src/game_lists/menu_pa
 fn 322 crates/omsi-app::game_action crates/omsi-app/src/app_impl/actions.rs
 fn 342 crates/omsi-app::host crates/omsi-app/src/lan_world.rs
 fn 510 crates/omsi-app::items crates/omsi-app/src/game_lists.rs
+fn 301 crates/omsi-app::from_text crates/omsi-app/src/settings.rs
 fn 371 crates/omsi-app::option_set crates/omsi-app/src/game_lists/options.rs
 fn 342 crates/omsi-app::options_pages crates/omsi-app/src/game_lists/menu_pages.rs
 fn 420 crates/omsi-app::run_input_script crates/omsi-app/src/input_script.rs

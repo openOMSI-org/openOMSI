@@ -453,7 +453,7 @@ fn glass_film_classic(in: FsIn, water: f32) -> vec4<f32> {
     let uv0 = in.clip.xy / dims;
     let mist_col = rain_env_vanilla(vec3<f32>(0.0, 0.0, 0.5)) * 0.9;
     // the view through the wet glass between the drops, softened by the film of water
-    let veil_lod = log2(max(dims.y * mix(0.005, 0.014, clamp(g.veil / 0.6, 0.0, 1.0)), 1.0));
+    let veil_lod = log2(max(dims.y * mix(0.002, 0.006, clamp(g.veil / 0.3, 0.0, 1.0)), 1.0));
     var behind = mist_col;
     if (has_picture) {
         behind = finite_or(glass_blur(uv0, veil_lod), mist_col);
@@ -488,7 +488,7 @@ fn glass_film_classic(in: FsIn, water: f32) -> vec4<f32> {
         }
         let detail = smoothstep(0.5, 1.6, g.size_px);
         drop_col = mix(behind * 0.93, c, detail);
-        a_drop = g.cover * mix(0.5, 0.95, detail) * (1.0 - smoothstep(5.0, 15.0, dist));
+        a_drop = g.cover * mix(select(0.15, 0.5, has_picture), 0.95, detail) * (1.0 - smoothstep(5.0, 15.0, dist));
     }
     let a_mist = g.mist * 0.5;
     var a_veil = 0.0;

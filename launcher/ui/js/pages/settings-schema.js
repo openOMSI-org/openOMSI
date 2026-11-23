@@ -145,7 +145,7 @@ const graphics = {
         { type: 'toggle', key: 'sim_thread', label: 'Simulation on its own thread' },
         { type: 'select', key: 'max_fps', label: 'Frame limit', options: [['0', 'Screen refresh rate'], ['30', '30 fps'], ['45', '45 fps'], ['60', '60 fps'], ['120', '120 fps'], ['144', '144 fps'], ['1000', 'Unlimited']] },
         // (a Mac has Metal only; ANGLE is Windows' path for a chip with none of the others)
-        { type: 'select', key: 'graphics_api', label: 'Graphics API', options: [['auto', 'Automatic'], ['vulkan', 'Vulkan'], ['dx12', 'DirectX 12'], ['dx11', 'DirectX 11 (mX Graphics)'], ['gl', 'OpenGL'], ['angle', 'ANGLE (DirectX 11)']], when: windows },
+        { type: 'select', key: 'graphics_api', label: 'Graphics API', options: [['auto', 'Automatic'], ['vulkan', 'Vulkan'], ['dx12', 'DirectX 12'], ['dx11', 'DirectX 11 (through ANGLE)'], ['gl', 'OpenGL'], ['angle', 'ANGLE (DirectX 11)']], when: windows },
         { type: 'select', key: 'graphics_api', label: 'Graphics API', options: [['auto', 'Automatic'], ['vulkan', 'Vulkan'], ['gl', 'OpenGL']], when: (s, p) => p !== 'windows' && p !== 'macos' },
         { type: 'toggle', key: 'mx_graphics', label: 'mX Graphics (Experimental)', help: 'Draws the game with mX, openOMSI\'s own graphics library, instead of wgpu (takes effect when the game starts the next time). On, the whole game runs on mX; off, it runs on wgpu alone.' },
         { type: 'section', title: 'World & memory' },

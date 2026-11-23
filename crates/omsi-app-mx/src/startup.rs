@@ -375,6 +375,14 @@ fn angle_available() -> bool {
 /// got round.
 pub(crate) fn backend_order() -> Vec<GraphicsApi> {
     if cfg!(any(target_os = "macos", target_os = "ios")) {
+        // (OMSI_BACKEND=vulkan on a Mac: mX's Vulkan through MoltenVK, the backend the
+        // players on Windows, Linux and Android run, tried here before Metal)
+        if cfg!(target_os = "macos") && omsi_cfg::flags::OMSI_BACKEND.var() == Some("vulkan") {
+            return vec![
+                GraphicsApi::Native(mx::Backends::VULKAN),
+                GraphicsApi::Native(mx::Backends::METAL),
+            ];
+        }
         return vec![GraphicsApi::Native(mx::Backends::METAL)];
     }
     let settings = crate::settings::Settings::load();
@@ -599,7 +607,10 @@ impl Opener {
                         log::info!("graphics: trying {b:?}");
                         self.made.push((Some(b), backend_instance(b)));
                     }
-                    None if !self.software_round => {
+                    // (a software renderer under mX - WARP, llvmpipe - drew the game at three
+                    // or four frames a second: a computer can draw on wgpu instead, see
+                    // `hand_over_to_wgpu`, and only a phone or `OMSI_MX_SOFTWARE` goes on)
+                    None if !self.software_round && software_allowed() => {
                         self.software_round = true;
                         self.k = 0;
                         continue;
@@ -669,6 +680,12 @@ impl Opener {
     }
 
     fn give_up(&self) -> anyhow::Error {
+        let why = if self.failures.is_empty() {
+            "no graphics chip opened".to_string()
+        } else {
+            self.failures.join("; ")
+        };
+        hand_over_to_wgpu(&why);
         anyhow!(
             "no graphics device could be opened ({}); updating the graphics driver usually helps",
             if self.failures.is_empty() {
@@ -715,6 +732,50 @@ fn as_urgent_as_the_main_thread() {
         unsafe {
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
+    }
+}
+
+/// Whether mX may draw on a software renderer: on a phone (it has nothing else), or with
+/// `OMSI_MX_SOFTWARE` (tests and checks on machines without a graphics chip).
+fn software_allowed() -> bool {
+    cfg!(any(target_os = "android", target_os = "ios"))
+        || omsi_cfg::flags::OMSI_MX_SOFTWARE.is_set()
+}
+
+/// mX could not draw on this computer (no graphics chip opened on any of its interfaces, or
+/// only a software renderer did): the same program again, with the same arguments, on wgpu
+/// (`OMSI_MX=off` for that run - the setting stays as the player left it). Returns only when
+/// that could not be done (a phone, `OMSI_MX=off` already, the program not found again).
+pub(crate) fn hand_over_to_wgpu(why: &str) {
+    if cfg!(any(target_os = "android", target_os = "ios"))
+        || omsi_cfg::flags::OMSI_MX.var().is_some_and(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "0" | "off" | "false" | "no"
+            )
+        })
+    {
+        return;
+    }
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    log::warn!(
+        "graphics: mX could not draw on this computer ({why}); the game starts again on wgpu"
+    );
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(std::env::args_os().skip(1)).env("OMSI_MX", "off");
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // (the same process: the launcher keeps the pid it knows)
+        let err = cmd.exec();
+        log::warn!("graphics: could not start again on wgpu: {err}");
+    }
+    #[cfg(not(unix))]
+    match cmd.spawn() {
+        Ok(_) => std::process::exit(0),
+        Err(e) => log::warn!("graphics: could not start again on wgpu: {e}"),
     }
 }
 

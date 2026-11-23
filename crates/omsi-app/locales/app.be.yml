@@ -3220,6 +3220,7 @@
 "At most 5": "Не больш за 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Тэчкі аб'ектаў і сплайнаў, якія не выкарыстоўвае ніводная іншая мапа, выдаляюцца разам з ім: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Тэчкі аб'ектаў і сплайнаў, якія яшчэ выкарыстоўвае іншая мапа, застаюцца: {n}."
+"Onboard computer": "Бартавы камп'ютар"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Профіль захоўвае ўсе клавішы і ўсе налады кантролераў. Перад кожнай паездкай лаўнчар пераключаецца на ўласны профіль аўтобуса або на профіль па змаўчанні."
 "Rename the profile": "Перайменаваць профіль"
 "Delete this profile?": "Выдаліць гэты профіль?"

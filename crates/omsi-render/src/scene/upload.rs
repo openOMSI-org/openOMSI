@@ -24,7 +24,7 @@ impl Renderer {
             (Mat4::from_translation((i.origin - ro).as_vec3()) * i.transform).to_cols_array_2d();
         let vis = if i.visible { 1.0 } else { 0.0 };
         let normal_matrix =
-            if mesh.depth_normals.is_empty() || !i.slot_levels.iter().any(|&l| l > 0) {
+            if mesh.depth_normals.is_empty() || !i.slot_levels.iter().any(|&level| level > 0) {
                 Mat4::IDENTITY
             } else {
                 i.transform.inverse().transpose()
@@ -32,7 +32,7 @@ impl Renderer {
         for (k, a) in i.slot_alpha.iter().enumerate() {
             let mut m = m;
             m[0][3] = draw_order_level(i, k);
-            let n = if i.slot_levels.get(k).copied().unwrap_or(0) > 0 {
+            let normal = if i.slot_levels.get(k).copied().unwrap_or(0) > 0 {
                 super::depth_plane::encode(
                     normal_matrix,
                     mesh.depth_normals.get(k).copied().unwrap_or(Vec3::ZERO),
@@ -40,8 +40,8 @@ impl Renderer {
             } else {
                 super::depth_plane::NO_PLANE
             };
-            m[1][3] = n[0];
-            m[2][3] = n[1];
+            m[1][3] = normal[0];
+            m[2][3] = normal[1];
             mats.push(m);
             let uv = i.slot_uv.get(k).copied().unwrap_or([0.0; 2]);
             params.push([*a, vis, uv[0], uv[1]]);
@@ -603,24 +603,37 @@ pub(crate) fn draw_order_level(i: &Instance, slot: usize) -> f32 {
     }
     let max = crate::scene::overlay::MAX_LEVEL as u64;
     let level = match mode {
-        0 => level,
+        0 => level as f32,
         _ => {
             let h = 1 + (slot as u64 ^ i.draw_order).wrapping_mul(0x9e37_79b9_7f4a_7c15) % max;
-            (if mode == 1 { h } else { max + 1 - h }) as u8
+            (if mode == 1 { h } else { max + 1 - h }) as f32
         }
     };
     if mode != 0 {
-        return level as f32;
+        return level;
     }
-    let Some(cap) = i
+    let Some(caps) = i
         .slot_depth_caps
         .get(slot)
         .copied()
-        .filter(|cap| cap.is_finite())
+        .filter(|caps| caps.positive.is_finite() || caps.negative.is_finite())
     else {
-        return level as f32;
+        return level;
     };
-    // Pack the cap into exactly representable float metadata.
-    let micrometres = (cap * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;
-    (4096 | (micrometres << 2) | level as u32) as f32
+    // Both 10-bit limits and side flags fit exactly in the f32 instance value.
+    let mut encoded = level.round() as u32;
+    if caps.positive.is_finite() {
+        let micrometres = (caps.positive * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;
+        encoded |= (1 << 22) | (micrometres << 2);
+    }
+    if caps.negative.is_finite() {
+        let micrometres = (caps.negative * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;
+        encoded |= (1 << 23) | (micrometres << 12);
+    }
+    // 負號標記共用上限，保留 24 位元整數的精度。
+    if caps.shared {
+        -(encoded as f32)
+    } else {
+        encoded as f32
+    }
 }

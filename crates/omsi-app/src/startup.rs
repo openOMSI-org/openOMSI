@@ -209,13 +209,29 @@ pub(crate) fn find_root() -> Option<PathBuf> {
 /// own graphics library (the `*-mx` crates, `openomsi_game_mx`), and wgpu is never started;
 /// off, the game runs on wgpu alone and nothing of mX is started. Read once at the start.
 pub fn mx_graphics() -> bool {
-    settings::Settings::load().mx_graphics
+    mx_asked().unwrap_or_else(|| settings::Settings::load().mx_graphics)
+}
+
+/// `OMSI_MX` for this run, over the setting: on (1, true) starts the game on mX, off (0,
+/// false) on wgpu; unset, the setting decides.
+fn mx_asked() -> Option<bool> {
+    let asked = omsi_cfg::flags::OMSI_MX
+        .var()
+        .map(|v| v.trim().to_ascii_lowercase());
+    match asked.as_deref() {
+        Some("1" | "on" | "true" | "yes") => Some(true),
+        Some("0" | "off" | "false" | "no") => Some(false),
+        _ => None,
+    }
 }
 
 /// [`mx_graphics`], from the settings under `home` (the phones' entry points ask before they
 /// set HOME, which the mX game sets again in its own).
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) fn mx_graphics_in(home: &std::path::Path) -> bool {
+    if let Some(asked) = mx_asked() {
+        return asked;
+    }
     let text =
         std::fs::read_to_string(home.join(".openomsi").join("settings.cfg")).unwrap_or_default();
     settings::Settings::from_text(&text).mx_graphics
