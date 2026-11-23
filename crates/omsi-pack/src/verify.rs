@@ -78,7 +78,6 @@ impl VerifiedPack {
         #[cfg(windows)]
         let mut folders = HashMap::new();
         // folders already found free of links while fingerprinting this asset
-        #[cfg(not(windows))]
         let mut dirs = HashSet::new();
         let plain = [format!(
             "assets/{}/plain.bin",
@@ -93,6 +92,9 @@ impl VerifiedPack {
             out.extend_from_slice(file.as_bytes());
             #[cfg(windows)]
             {
+                // a link anywhere in the path fails here, as it does in a full scan
+                ensure_regular_file(&self.root.join(file), &mut dirs)
+                    .map_err(|_| PackError::Invalid("chunk is missing, truncated, or changed"))?;
                 let Some(marker) = change_marker::file_marker(&self.root, file, &mut folders)?
                 else {
                     return Ok(None);

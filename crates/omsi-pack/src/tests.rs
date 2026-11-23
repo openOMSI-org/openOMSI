@@ -601,9 +601,12 @@ fn a_linked_folder_or_file_in_a_pack_is_rejected_on_every_scan() {
     fs::remove_dir_all(root).unwrap();
 }
 
-#[cfg(unix)]
 #[test]
 fn a_folder_swapped_for_a_link_after_the_first_open_is_rejected_when_opened_again() {
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink as link_dir;
+    #[cfg(windows)]
+    use std::os::windows::fs::symlink_dir as link_dir;
     let root = licence_scratch("verify-once-linked-folder");
     let signer = SigningKey::generate(&SystemRandom::new()).unwrap();
     let mut metadata = licence_metadata(&[0; 32]);
@@ -628,7 +631,11 @@ fn a_folder_swapped_for_a_link_after_the_first_open_is_rejected_when_opened_agai
     let moved = root.join("moved");
     // the files keep their inode, size and times; only the path to them changes
     fs::rename(&folder, &moved).unwrap();
-    std::os::unix::fs::symlink(&moved, &folder).unwrap();
+    if let Err(error) = link_dir(&moved, &folder) {
+        // (Windows without Developer Mode cannot create links)
+        eprintln!("skipped: {error}");
+        return fs::remove_dir_all(root).unwrap();
+    }
     assert!(
         VerifiedPack::open_unlocked(&pack, &trusted, &keys).is_err(),
         "a linked asset folder reused the cached verification"
