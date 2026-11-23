@@ -5,7 +5,7 @@
 use super::*;
 use std::path::Path;
 
-/// Nothing loaded but the ground under everybody: no walls, no parked cars, no stops.
+/// An empty world: the fixture adds the wall and the two thin parked boxes.
 #[derive(Default)]
 struct Bare {
     collision: Arc<crate::collision::CollisionWorld>,
@@ -88,6 +88,7 @@ impl Stuck {
         let net = pavement();
         let mut sim = PeopleSim::new(Path::new("/nonexistent"), 40);
         sim.players_only = true;
+        sim.lan_centers.push(DVec3::new(0.0, 2.0, 0.0));
         sim.max_people = 1;
         // one figure to put on the pavement (the map's own `.hum`s are not here)
         // (a folder of its own: the tests of this file run side by side)
@@ -135,18 +136,19 @@ impl Stuck {
             sim,
             world,
             traffic,
-            dt: 1.0 / 30.0,
+            dt: 1.0 / 15.0,
             wall_y: None,
         };
         s.set_wall(2.5);
+        s.place_bumper();
         s
     }
 
-    fn set_wall(&mut self, y: f64) {
-        self.wall_y = Some(y);
+    fn set_wall(&mut self, wall_y: f64) {
+        self.wall_y = Some(wall_y);
         let mut collision = crate::collision::CollisionWorld::default();
         collision.add(crate::collision::Obb {
-            center: DVec2::new(0.0, y),
+            center: DVec2::new(0.0, wall_y),
             half: DVec2::new(50.0, 0.25),
             heading: 0.0,
             z0: -1.0,
@@ -161,22 +163,29 @@ impl Stuck {
         self.sim.wall_key.0 = usize::MAX;
     }
 
-    fn clear_wall(&mut self) {
-        self.wall_y = None;
-        self.world.collision = Arc::new(crate::collision::CollisionWorld::default());
-        self.sim.wall_cells.clear();
-        self.sim.wall_key.0 = 0;
+    fn place_bumper(&mut self) {
+        let y = self.sim.people.first().map_or(2.0, |p| p.position.y);
+        let box_at = |cx: f64, id: i64| crate::collision::Obb {
+            center: DVec2::new(cx, y),
+            half: DVec2::new(0.01, 50.0),
+            heading: 0.0,
+            z0: -1.0,
+            z1: 3.0,
+            velocity: DVec2::ZERO,
+            mass: 0.0,
+            pole: None,
+            id,
+        };
+        self.world.parked = Arc::new(vec![box_at(-0.45, 2), box_at(0.45, 3)]);
     }
 
     /// One frame driven through normal people update (`tick_inner`).
-    fn frame(&mut self, moved: f64) {
-        if moved == 0.0 {
-            if self.wall_y.is_none() {
-                let y = self.sim.people.first().map(|p| p.position.y).unwrap_or(2.0);
-                self.set_wall(y + 0.50);
-            }
-        } else if self.wall_y.is_some() {
-            self.clear_wall();
+    fn frame(&mut self, wall_advance: f64) {
+        let y = self.sim.people.first().map_or(2.0, |p| p.position.y);
+        let wall_y = self.wall_y.unwrap_or(y + 0.50) + wall_advance;
+        if self.wall_y != Some(wall_y) {
+            self.set_wall(wall_y);
+            self.place_bumper();
         }
         self.sim
             .tick_inner(self.dt, &self.world, None, Some(&self.traffic));
@@ -215,18 +224,18 @@ fn a_step_frees_a_pedestrian_the_crowd_only_held_up() {
     // A jam that moves in bursts - encountering an obstruction throughout the run,
     // accumulating stuck time, then taking a step that resets the counter, over and over:
     // ten minutes in the crowd and never two minutes in one place.
-    for _ in 0..400 {
+    for _ in 0..150 {
         // Obstructed: counter rises
-        for _ in 0..30 {
+        for _ in 0..50 {
             s.frame(0.0);
         }
         assert_eq!(s.sim.people.len(), 1);
         let stuck = s.sim.people[0].stuck_total;
         assert!(stuck >= 0.9, "counter should rise while blocked: {stuck}");
 
-        // Freed: taking a step resets the counter
+        // Freed: the jam moves on and the step resets the counter
         for _ in 0..15 {
-            s.frame(1.0);
+            s.frame(0.09);
         }
         assert_eq!(s.sim.people.len(), 1);
         assert_eq!(
