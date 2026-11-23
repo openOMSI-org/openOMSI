@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/omsi-cfg",
+    "crates/omsi-pack",
     "crates/omsi-script",
     "crates/omsi-o3d",
     "crates/omsi-model",
