@@ -745,7 +745,22 @@ pub(crate) fn gpu_attempt<T>(make: impl FnOnce() -> T) -> Result<T, String> {
 
 /// The error behind a `gpu_attempt` that failed ("mX: what: Error"), for the error report.
 pub(crate) fn refused_error(text: String) -> mx::Error {
-    if text.contains("DeviceLost(") {
+    // (a call on a removed device panics with the call's own error - DXGI_ERROR_DEVICE_REMOVED,
+    // 0x887A0005 - not mX's DeviceLost: taken for an object refused, every frame was dropped
+    // and the window stood grey. The backend's own report says whether the device is gone.)
+    let lost_code = [
+        "0x887A0005",
+        "0x887A0006",
+        "0x887A0007",
+        "DEVICE_REMOVED",
+        "DEVICE_HUNG",
+        "ERROR_DEVICE_LOST",
+    ]
+    .iter()
+    .any(|c| text.contains(c));
+    if let Some(report) = mx::lost_report() {
+        mx::Error::DeviceLost(format!("{text}\n{report}"))
+    } else if text.contains("DeviceLost(") || lost_code {
         mx::Error::DeviceLost(text)
     } else if text.contains("OutOfMemory(") {
         mx::Error::OutOfMemory(text)

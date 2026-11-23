@@ -209,22 +209,19 @@ pub(crate) fn find_root() -> Option<PathBuf> {
 /// own graphics library (the `*-mx` crates, `openomsi_game_mx`), and wgpu is never started;
 /// off, the game runs on wgpu alone and nothing of mX is started. Read once at the start.
 pub fn mx_graphics() -> bool {
-    mx_allowed() && settings::Settings::load().mx_graphics
+    mx_asked().unwrap_or_else(|| settings::Settings::load().mx_graphics)
 }
 
-/// Whether this system may run the game on mX at all: on a Mac (Metal, the one backend mX
-/// has run a map on), elsewhere only with `OMSI_MX=on` for testing; `OMSI_MX=off` keeps a
-/// Mac on wgpu for a run. mX's DirectX 12, Vulkan and OpenGL paths have not drawn the game
-/// on a player's card yet: there the setting left players with a grey screen, the software
-/// renderer's few frames a second or a crash while loading (#4153, #4157).
-fn mx_allowed() -> bool {
+/// `OMSI_MX` for this run, over the setting: on (1, true) starts the game on mX, off (0,
+/// false) on wgpu; unset, the setting decides.
+fn mx_asked() -> Option<bool> {
     let asked = omsi_cfg::flags::OMSI_MX
         .var()
         .map(|v| v.trim().to_ascii_lowercase());
     match asked.as_deref() {
-        Some("1" | "on" | "true" | "yes") => true,
-        Some("0" | "off" | "false" | "no") => false,
-        _ => cfg!(target_os = "macos"),
+        Some("1" | "on" | "true" | "yes") => Some(true),
+        Some("0" | "off" | "false" | "no") => Some(false),
+        _ => None,
     }
 }
 
@@ -232,8 +229,8 @@ fn mx_allowed() -> bool {
 /// set HOME, which the mX game sets again in its own).
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) fn mx_graphics_in(home: &std::path::Path) -> bool {
-    if !mx_allowed() {
-        return false;
+    if let Some(asked) = mx_asked() {
+        return asked;
     }
     let text =
         std::fs::read_to_string(home.join(".openomsi").join("settings.cfg")).unwrap_or_default();
