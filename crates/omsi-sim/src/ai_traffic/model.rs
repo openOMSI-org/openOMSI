@@ -31,8 +31,7 @@ impl Passing {
     /// the oncoming traffic (`half_width` its own half width).
     pub fn clear_at(&self, half_width: f32) -> f32 {
         self.until
-            + self.back
-                * crate::traffic::ramp_progress_for(self.side, half_width + ONCOMING_ROOM)
+            + self.back * crate::traffic::ramp_progress_for(self.side, half_width + ONCOMING_ROOM)
     }
 }
 
@@ -223,7 +222,10 @@ impl AiCar {
 
     /// The side's doors to open at the stop it is boarding at (`AI_Scheduled_AtStation_Side`).
     pub fn at_station_side(&self) -> f32 {
-        self.bus.as_ref().map(|b| b.at_station_side()).unwrap_or(0.0)
+        self.bus
+            .as_ref()
+            .map(|b| b.at_station_side())
+            .unwrap_or(0.0)
     }
 
     /// Standing at one of its stops (doors open, waiting for the departure, pulling out).
@@ -246,7 +248,10 @@ impl AiCar {
 
     /// Seconds it will still stand at its stop.
     pub fn standing_for(&self, day_time: f64) -> f32 {
-        self.bus.as_ref().map(|b| b.standing_for(day_time)).unwrap_or(0.0)
+        self.bus
+            .as_ref()
+            .map(|b| b.standing_for(day_time))
+            .unwrap_or(0.0)
     }
 }
 
@@ -272,7 +277,16 @@ pub fn car_foot(c: &AiCar, ahead: f32) -> Footprint {
     let h = c.vehicle.heading.to_radians();
     let (fwd, right) = (DVec2::new(h.sin(), h.cos()), DVec2::new(h.cos(), -h.sin()));
     let center = c.vehicle.position.truncate() + fwd * ((st.front + ahead - st.rear) * 0.5) as f64;
-    Footprint { car: usize::MAX, center, fwd, right, half_len: ((st.front + ahead + st.rear) * 0.5) as f64, half_w: c.half_width as f64, speed: st.speed, z: c.vehicle.position.z }
+    Footprint {
+        car: usize::MAX,
+        center,
+        fwd,
+        right,
+        half_len: ((st.front + ahead + st.rear) * 0.5) as f64,
+        half_w: c.half_width as f64,
+        speed: st.speed,
+        z: c.vehicle.position.z,
+    }
 }
 
 impl Footprint {
@@ -386,8 +400,18 @@ pub fn vehicle_bodies(v: &VehicleInstance) -> Vec<crate::collision::Obb> {
 /// bus - its saloon display stood on the first stop for the whole trip. `remaining` is the
 /// number of stops still to come.
 pub fn ibis_to_next_stop(v: &mut VehicleInstance, remaining: usize) {
-    let Some(ri) = v.var("IBIS_RouteIndex").filter(|r| *r >= 0.0) else { return };
-    let Some(n) = v.host.hof.as_ref().and_then(|h| h.info_busstop_lists.get(ri as usize)).map(|l| l.len()) else { return };
+    let Some(ri) = v.var("IBIS_RouteIndex").filter(|r| *r >= 0.0) else {
+        return;
+    };
+    let Some(n) = v
+        .host
+        .hof
+        .as_ref()
+        .and_then(|h| h.info_busstop_lists.get(ri as usize))
+        .map(|l| l.len())
+    else {
+        return;
+    };
     if n == 0 || v.var("IBIS_busstop").is_none() {
         return;
     }
@@ -409,7 +433,11 @@ pub const RAIL_TRAIL: f64 = 400.0;
 
 /// Note where an AI rail vehicle is: `odometer` (m) and the point of its way there. A jump
 /// (put somewhere else, turned round at a terminus) starts the trail afresh.
-pub fn record_rail_trail(trail: &mut std::collections::VecDeque<(f64, DVec3)>, odometer: f64, here: DVec3) {
+pub fn record_rail_trail(
+    trail: &mut std::collections::VecDeque<(f64, DVec3)>,
+    odometer: f64,
+    here: DVec3,
+) {
     if let Some(&(u, p)) = trail.back() {
         if (here - p).truncate().length() > (odometer - u).abs() + 2.0 {
             trail.clear();
@@ -431,7 +459,12 @@ pub fn record_rail_trail(trail: &mut std::collections::VecDeque<(f64, DVec3)>, o
 /// came along. (Its way knows only the lane it came off; farther back it runs straight on,
 /// and a train's last cars stood beside the track after a pair of points.) Where the trail
 /// does not reach - the last half metre, a vehicle just put there - the way.
-pub fn rail_behind(trail: &std::collections::VecDeque<(f64, DVec3)>, state: &AiState, net: &Network, d: f64) -> DVec3 {
+pub fn rail_behind(
+    trail: &std::collections::VecDeque<(f64, DVec3)>,
+    state: &AiState,
+    net: &Network,
+    d: f64,
+) -> DVec3 {
     let u = state.odometer as f64 - d;
     let newest = trail.back().map_or(f64::MIN, |b| b.0);
     if u >= newest {
@@ -450,6 +483,55 @@ pub fn point_at(trail: &std::collections::VecDeque<(f64, DVec3)>, u: f64) -> Opt
     let (a, b) = (trail[i - 1], trail[i]);
     let t = ((u - a.0) / (b.0 - a.0).max(1e-6)).clamp(0.0, 1.0);
     Some(a.1 + (b.1 - a.1) * t)
+}
+
+/// The track behind a rail vehicle just put at `s` on `lane` (odometer `odometer` there), as a
+/// trail it could have come along: back along its lane, then on into the lane before it that
+/// runs on most nearly straight, a metre at a time (past as many short lanes as a metre takes).
+pub fn rail_track_behind(
+    net: &Network,
+    lane: usize,
+    s: f32,
+    odometer: f64,
+) -> std::collections::VecDeque<(f64, DVec3)> {
+    let mut points = Vec::new();
+    let (mut lane, mut s) = (lane, s.max(0.0));
+    let mut d = 0.0f64;
+    'walk: while d <= RAIL_TRAIL {
+        points.push((odometer - d, net.lanes[lane].at(s).0));
+        s -= 1.0;
+        // (a bounded number of lanes: a loop of lanes without length would never end)
+        for _ in 0..64 {
+            if s >= 0.0 {
+                break;
+            }
+            let start = net.lanes[lane].headings.first().copied().unwrap_or(0.0);
+            let before = net
+                .prev
+                .get(lane)
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|&p| net.lanes[p].kind == LaneKind::Rail)
+                .min_by(|&a, &b| {
+                    let turn = |p: usize| {
+                        crate::traffic::wrap_deg(
+                            start - net.lanes[p].headings.last().copied().unwrap_or(start),
+                        )
+                        .abs()
+                    };
+                    turn(a).total_cmp(&turn(b))
+                });
+            let Some(p) = before else { break 'walk };
+            s += net.lanes[p].length();
+            lane = p;
+        }
+        if s < 0.0 {
+            break;
+        }
+        d += 1.0;
+    }
+    points.into_iter().rev().collect()
 }
 
 /// A body for a vehicle that has just been put on the way `state` describes, with the
@@ -487,7 +569,9 @@ pub fn extents(ty: &VehicleType, length: f32) -> (f32, f32, f32) {
         // without a `[boundingbox]` the model's own box, as Omsi.exe takes it (0x7b5da4):
         // the Berlin S-Bahn's cars, 18 m long, counted as 12 m ones
         _ => match ty.model_box() {
-            Some((lo, hi)) if hi.y - lo.y > 1.0 => (hi.y.max(0.5), (-lo.y).max(0.5), (hi.x.max(-lo.x)).max(0.5)),
+            Some((lo, hi)) if hi.y - lo.y > 1.0 => {
+                (hi.y.max(0.5), (-lo.y).max(0.5), (hi.x.max(-lo.x)).max(0.5))
+            }
             _ => (length * 0.5, length * 0.5, 0.9),
         },
     };
@@ -511,28 +595,55 @@ pub fn scale_reaction(reaction: f32, factor: f32) -> f32 {
 }
 
 /// The driver of a random car: how fast, how close, how patient (see `AiState`).
-pub fn personality(state: &mut AiState, seed: u64, heavy: bool) {
+pub fn personality(state: &mut AiState, seed: u64, heavy: bool, rowdy_factor: Option<(f32, f32)>) {
     let ru = |k: u32| ((seed >> k) & 0xff) as f32 / 255.0;
     let rg = |k: u64| random::draw_gaussian(seed, 50000 + k);
 
-    state.desire = if heavy {
+    let rowdy = rowdy_factor.map(|(a, b)| {
+        let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+        lo + (hi - lo) * ru(3)
+    });
+
+    state.desire = if let Some(r) = rowdy {
+        // OMSI 2: -1.0 -> 87%, 0.0 -> 110%, +1.0 -> 131%
+        let base = if r < 0.0 {
+            1.10 + r * 0.23
+        } else {
+            1.10 + r * 0.21
+        };
+        if heavy {
+            // A lorry or a bus keeps a slower cruise, with floor at 0.80 to hold timetable, capped at 1.0.
+            (0.93 + (base - 1.10) + 0.02 * rg(3)).clamp(0.80, 1.0)
+        } else {
+            (base + 0.02 * rg(3)).clamp(0.5, 2.0)
+        }
+    } else if heavy {
         (0.93 + 0.05 * rg(3)).clamp(0.8, 1.2)
     } else {
         (1.01 + 0.11 * rg(3)).clamp(0.7, 1.3)
     };
-    state.headway = 1.4 + 0.2 * rg(11);
-    state.min_gap = 1.6 + 1.4 * ru(19);
-    state.accel = if heavy {
-        0.8 + 0.4 * ru(27)
-    } else {
-        1.3 + 1.0 * ru(27)
-    };
-    state.decel = if heavy { 1.6 } else { 2.0 + 0.8 * ru(35) };
-    state.accept_gap = (4.0 + 1.0 * rg(43)).max(2.0);
-    state.reaction = (0.8 + 0.2 * rg(51)).max(0.2);
 
-    state.honk_factor = (1.0 + 0.2 * rg(8)).max(0.2);
-    state.amber_factor = (0.03 + 0.01 * rg(9)).max(0.0);
+    let r_bias = rowdy.map(|r| r.clamp(-1.5, 1.5)).unwrap_or(0.0);
+
+    state.headway = (1.4 - 0.15 * r_bias + 0.2 * rg(11)).max(0.8);
+    state.min_gap = (1.6 - 0.2 * r_bias + 1.4 * ru(19)).max(1.0);
+    state.accel = if heavy {
+        (0.8 + 0.4 * ru(27) + 0.15 * r_bias).max(0.5)
+    } else {
+        (1.3 + 1.0 * ru(27) + 0.25 * r_bias).max(0.6)
+    };
+    state.decel = if heavy {
+        1.6
+    } else {
+        (2.0 + 0.8 * ru(35) + 0.2 * r_bias).max(1.0)
+    };
+    state.accept_gap =
+        (4.0 - 0.4 * r_bias + 1.0 * rg(43)).max(if rowdy.is_some() { 1.5 } else { 2.0 });
+    state.reaction = (0.8 - 0.1 * r_bias + 0.2 * rg(51)).max(0.2);
+
+    state.honk_factor =
+        (1.0 - 0.25 * r_bias + 0.2 * rg(8)).max(if rowdy.is_some() { 0.1 } else { 0.2 });
+    state.amber_factor = (0.03 + 0.02 * r_bias + 0.01 * rg(9)).clamp(0.0, 0.2);
     // the hardest braking of ordinary driving: a lorry's or a bus's driver stays further
     // under the emergency stop's ceiling than a car's
     let r2 = (((seed >> 7) ^ (seed >> 41)) & 0xff) as f32 / 255.0;
@@ -549,8 +660,101 @@ pub const AIRCRAFT_KMH: f32 = 280.0;
 pub fn is_bicycle(def: &omsi_vehicle::Vehicle) -> bool {
     let path = def.path.to_string_lossy().to_ascii_lowercase();
     path.rsplit(['/', '\\']).take(2).any(|part| {
-        part.contains("fahrrad") || part.contains("bicycle") || part.contains("bicicleta") || matches!(part, "bike" | "bike.ovh")
+        part.contains("fahrrad")
+            || part.contains("bicycle")
+            || part.contains("bicicleta")
+            || matches!(part, "bike" | "bike.ovh")
     })
+}
+
+#[cfg(test)]
+mod rail_track_tests {
+    use super::*;
+    use crate::traffic::LaneBuilder;
+
+    /// A tram put 10 m into a straight that follows a 30 m bend to the right: the track behind
+    /// it runs back round the bend, not on along the straight's line, and not into another
+    /// lane that meets the bend's end at a right angle.
+    #[test]
+    fn a_tram_put_on_its_track_has_the_bend_behind_it() {
+        let mut net = Network::default();
+        let r = 30.0;
+        let bend_len = r * std::f64::consts::FRAC_PI_2;
+        net.lanes.push(LaneBuilder::arc(
+            DVec3::ZERO,
+            0.0,
+            bend_len,
+            r,
+            0.0,
+            LaneKind::Rail,
+            1.5,
+        ));
+        net.lanes.push(LaneBuilder::arc(
+            DVec3::new(r, r, 0.0),
+            90.0,
+            50.0,
+            0.0,
+            0.0,
+            LaneKind::Rail,
+            1.5,
+        ));
+        net.lanes.push(LaneBuilder::arc(
+            DVec3::new(r, 0.0, 0.0),
+            0.0,
+            r,
+            0.0,
+            0.0,
+            LaneKind::Rail,
+            1.5,
+        ));
+        net.prev = vec![Vec::new(), vec![2, 0], Vec::new()];
+        let trail = rail_track_behind(&net, 1, 10.0, 500.0);
+        assert_eq!(
+            trail.back().map(|t| t.0),
+            Some(500.0),
+            "it ends where the tram stands"
+        );
+        let back = |d: f64| point_at(&trail, 500.0 - d).unwrap();
+        let on_bend =
+            |p: DVec3| ((p - DVec3::new(r, 0.0, 0.0)).truncate().length() - r).abs() < 0.3;
+        assert!(
+            on_bend(back(25.0)) && on_bend(back(40.0)),
+            "round the bend: {} {}",
+            back(25.0),
+            back(40.0)
+        );
+        assert!((back(5.0).y - r).abs() < 0.01, "on its own straight first");
+    }
+
+    /// Lanes shorter than the metre between two points of the trail are crossed in one go:
+    /// the trail runs on through them into the long lane behind, on the line of the track.
+    #[test]
+    fn the_track_behind_runs_through_short_lanes() {
+        let mut net = Network::default();
+        let mut y = 0.0;
+        for len in [20.0, 0.3, 0.4, 10.0] {
+            net.lanes.push(LaneBuilder::arc(
+                DVec3::new(0.0, y, 0.0),
+                0.0,
+                len,
+                0.0,
+                0.0,
+                LaneKind::Rail,
+                1.5,
+            ));
+            y += len;
+        }
+        net.prev = vec![Vec::new(), vec![0], vec![1], vec![2]];
+        let trail = rail_track_behind(&net, 3, 5.0, 500.0);
+        for back in 0..=20 {
+            let p = point_at(&trail, 500.0 - back as f64).unwrap();
+            let want = 25.7 - back as f64;
+            assert!(
+                p.x.abs() < 0.01 && (p.y - want).abs() < 0.01,
+                "{back} m back: {p}, not y = {want}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -567,7 +771,11 @@ mod bicycle_tests {
             "Vehicles/Bicicleta/bicicleta.ovh",
             "Vehicles\\Bicycle\\bike.ovh",
         ] {
-            let def = Vehicle { path: path.into(), mass: 0.3, ..Default::default() };
+            let def = Vehicle {
+                path: path.into(),
+                mass: 0.3,
+                ..Default::default()
+            };
             assert!(is_bicycle(&def), "{path}");
         }
     }
@@ -580,12 +788,81 @@ mod bicycle_tests {
             ("Vehicles/Motorcycles/Scooter.ovh", 0.3),
             ("Vehicles/Sedan/sedan.ovh", 0.95),
             ("/home/Bike/OMSI/Vehicles/Sedan/sedan.ovh", 0.95),
-            ("C:\\Bicycle\\OMSI\\Vehicles\\Motorcycles\\scooter.ovh", 0.125),
+            (
+                "C:\\Bicycle\\OMSI\\Vehicles\\Motorcycles\\scooter.ovh",
+                0.125,
+            ),
             ("/games/Fahrrad/OMSI/Vehicles/Sedan/sedan.ovh", 0.95),
         ] {
-            let def = Vehicle { path: path.into(), mass, ..Default::default() };
+            let def = Vehicle {
+                path: path.into(),
+                mass,
+                ..Default::default()
+            };
             assert!(!is_bicycle(&def), "{path} ({mass} t)");
         }
+    }
+}
+
+#[cfg(test)]
+mod personality_tests {
+    use super::personality;
+    use crate::traffic::AiState;
+
+    #[test]
+    fn rowdy_factor_influences_speed_desire_and_driving_personality() {
+        let mut slow_st = AiState::new(0, 0.0, 12345);
+        personality(&mut slow_st, 12345, false, Some((-1.0, -1.0)));
+        assert!(
+            (slow_st.desire - 0.87).abs() < 0.06,
+            "desire {:.3} expected ~0.87",
+            slow_st.desire
+        );
+
+        let mut neutral_st = AiState::new(0, 0.0, 12345);
+        personality(&mut neutral_st, 12345, false, Some((0.0, 0.0)));
+        assert!(
+            (neutral_st.desire - 1.10).abs() < 0.06,
+            "desire {:.3} expected ~1.10",
+            neutral_st.desire
+        );
+
+        let mut fast_st = AiState::new(0, 0.0, 12345);
+        personality(&mut fast_st, 12345, false, Some((1.0, 1.0)));
+        assert!(
+            (fast_st.desire - 1.31).abs() < 0.06,
+            "desire {:.3} expected ~1.31",
+            fast_st.desire
+        );
+
+        assert!(fast_st.desire > slow_st.desire);
+        assert!(fast_st.headway < slow_st.headway);
+        assert!(fast_st.accel > slow_st.accel);
+
+        let mut heavy_st = AiState::new(0, 0.0, 12345);
+        personality(&mut heavy_st, 12345, true, Some((0.0, 0.0)));
+        assert!(
+            (heavy_st.desire - 0.93).abs() < 0.06,
+            "desire {:.3} expected ~0.93",
+            heavy_st.desire
+        );
+        assert!(heavy_st.desire < neutral_st.desire);
+
+        let mut heavy_fast = AiState::new(0, 0.0, 12345);
+        personality(&mut heavy_fast, 12345, true, Some((1.0, 1.0)));
+        assert!(
+            heavy_fast.desire <= 1.0,
+            "heavy desire {:.3} should not exceed limit",
+            heavy_fast.desire
+        );
+
+        let mut heavy_slow = AiState::new(0, 0.0, 12345);
+        personality(&mut heavy_slow, 12345, true, Some((-1.0, -1.0)));
+        assert!(
+            heavy_slow.desire >= 0.80,
+            "heavy desire {:.3} should stay at or above 0.80 to hold timetable",
+            heavy_slow.desire
+        );
     }
 }
 
@@ -609,16 +886,23 @@ impl TrafficSim {
         bus: Option<BusSetup>,
     ) -> u64 {
         let mut state = AiState::new(lane, s, seed);
-        state.veh_type = if bus.is_some() { -1 } else { ty.def.ai_veh_type };
+        state.veh_type = if bus.is_some() {
+            -1
+        } else {
+            ty.def.ai_veh_type
+        };
         if bus.is_none() {
-            state.traffic_pool = self.types.iter().find(|t| Arc::ptr_eq(&t.0, &ty))
+            state.traffic_pool = self
+                .types
+                .iter()
+                .find(|t| Arc::ptr_eq(&t.0, &ty))
                 .and_then(|t| self.group_uvg[t.3])
                 .map(|pool| (pool, self.uvg_defaults.clone()));
         }
         state.plan_next(&self.net);
         // heavy vehicles (trucks, vans) cruise slower, which is what gets them overtaken
         let heavy = ty.def.mass > 6.0 || bus.is_some();
-        personality(&mut state, seed, heavy);
+        personality(&mut state, seed, heavy, ty.def.rowdy_factor);
         state.reaction = scale_reaction(state.reaction, self.reaction_factor);
         state.max_speed_kmh = if kind == LaneKind::Air {
             AIRCRAFT_KMH
@@ -775,6 +1059,13 @@ impl TrafficSim {
             scheme,
             guard: Default::default(),
         });
+        if kind == LaneKind::Rail && !self.cars[self.cars.len() - 1].vehicle.trailers.is_empty() {
+            let net = &self.net;
+            let c = self.cars.last_mut().unwrap();
+            c.rail_trail = rail_track_behind(net, lane, s, c.state.odometer as f64);
+            let (trail, state, vehicle) = (&c.rail_trail, &c.state, &mut c.vehicle);
+            vehicle.retrail(0.0, &|d| Some(rail_behind(trail, state, net, d)));
+        }
         if kind != LaneKind::Air {
             let i = self.cars.len() - 1;
             if let Some(gap) = self.red_ahead(i) {

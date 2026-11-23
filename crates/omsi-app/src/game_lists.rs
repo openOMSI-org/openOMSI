@@ -79,7 +79,17 @@ pub(crate) enum ListKind {
 /// The lists with a search line on top: the vehicles to place, the depot files and the
 /// destinations.
 pub(crate) fn searchable(kind: &ListKind) -> bool {
-    matches!(kind, ListKind::Hofs | ListKind::Liveries | ListKind::Streets | ListKind::Destinations | ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceHof(..) | ListKind::AdminPlayers)
+    matches!(
+        kind,
+        ListKind::Hofs
+            | ListKind::Liveries
+            | ListKind::Streets
+            | ListKind::Destinations
+            | ListKind::PlaceMaker
+            | ListKind::PlaceType(_)
+            | ListKind::PlaceHof(..)
+            | ListKind::AdminPlayers
+    )
 }
 
 /// The search typed (while it is) or set for the open list.
@@ -95,7 +105,9 @@ fn search_query(app: &App) -> &str {
 /// every word of it, whatever the case.
 fn search_matches(label: &str, action: &str, query: &str) -> bool {
     let haystack = format!("{label} {action}").to_lowercase();
-    query.split_whitespace().all(|word| haystack.contains(&word.to_lowercase()))
+    query
+        .split_whitespace()
+        .all(|word| haystack.contains(&word.to_lowercase()))
 }
 
 /// A vehicle file of the menu's list (`Vehicles/...`) as its definition.
@@ -111,7 +123,13 @@ fn route_numbers(app: &App) -> Vec<String> {
     if let Some(hof) = app.player.as_ref().and_then(|p| p.vehicle.host.hof.clone()) {
         for t in &hof.info_trips {
             let code = t.code.trim();
-            let l = if !t.line.trim().is_empty() { t.line.trim().to_string() } else if code.len() > 2 && code.chars().all(|c| c.is_ascii_digit()) { code[..code.len() - 2].trim_start_matches('0').to_string() } else { String::new() };
+            let l = if !t.line.trim().is_empty() {
+                t.line.trim().to_string()
+            } else if code.len() > 2 && code.chars().all(|c| c.is_ascii_digit()) {
+                code[..code.len() - 2].trim_start_matches('0').to_string()
+            } else {
+                String::new()
+            };
             // A route number is display text, not necessarily an alphanumeric IBIS code:
             // Brazilian matrices use values such as "-10". Keep the HOF spelling intact.
             let l = l.trim().to_string();
@@ -146,8 +164,10 @@ pub(crate) fn numeric_ibis_line(line: &str) -> bool {
     let mut chars = line.chars();
     if let Some(first) = chars.next() {
         let rest: String = chars.collect();
-        if matches!(first.to_ascii_uppercase(), 'E' | 'S' | 'A' | 'D' | 'C' | 'B' | 'U' | 'M' | 'N' | 'X')
-            && !rest.is_empty()
+        if matches!(
+            first.to_ascii_uppercase(),
+            'E' | 'S' | 'A' | 'D' | 'C' | 'B' | 'U' | 'M' | 'N' | 'X'
+        ) && !rest.is_empty()
             && rest.chars().all(|c| c.is_ascii_digit())
         {
             return true;
@@ -157,7 +177,10 @@ pub(crate) fn numeric_ibis_line(line: &str) -> bool {
     let suffix = &line[digits.len()..];
     !digits.is_empty()
         && suffix.chars().count() == 1
-        && matches!(suffix.chars().next().unwrap().to_ascii_uppercase(), 'E' | 'U' | 'N' | 'S' | 'M')
+        && matches!(
+            suffix.chars().next().unwrap().to_ascii_uppercase(),
+            'E' | 'U' | 'N' | 'S' | 'M'
+        )
 }
 
 /// The route number on the bus's IBIS and display, as picked or typed in the destination
@@ -171,7 +194,8 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
     }
     if let Some(p) = app.player.as_mut() {
         let shown_ti = p.vehicle.host.hof.clone().and_then(|hof| {
-            crate::schedule::shown_destination(&p.vehicle, &hof, p.blind_pick.as_ref()).map(|ti| (hof, ti))
+            crate::schedule::shown_destination(&p.vehicle, &hof, p.blind_pick.as_ref())
+                .map(|ti| (hof, ti))
         });
         let shown_row = shown_ti.as_ref().map(|(_, ti)| *ti);
         match (numeric_ibis_line(line), display_route_line(line), shown_ti) {
@@ -188,7 +212,13 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
             p.vehicle.var("IBIS_LinieKurs"),
             p.vehicle.str_var("Matrix_Nr")
         );
-        app.service_msg = Some((omsi_ui::i18n::said(format!("{} {line}", omsi_ui::tr("Route")), format!("Route {line}")), 3.0));
+        app.service_msg = Some((
+            omsi_ui::i18n::said(
+                format!("{} {line}", omsi_ui::tr("Route")),
+                format!("Route {line}"),
+            ),
+            3.0,
+        ));
     }
 }
 
@@ -196,9 +226,19 @@ pub(crate) fn route_keeps_blind(route: &str) -> bool {
     route.trim().is_empty() || !numeric_ibis_line(route.trim())
 }
 
-pub(crate) fn form_route(v: &omsi_sim::VehicleInstance, pick: Option<&crate::schedule::BlindPick>) -> String {
-    let blind = crate::schedule::has_roller_blind(v).then(|| pick.map(|p| p.line.trim().to_string()).unwrap_or_else(|| v.str_var("SetLineTo").trim().to_string()));
-    [blind, Some(v.str_var("Matrix_Nr").trim().to_string())].into_iter().flatten().find(|l| !l.is_empty() && !numeric_ibis_line(l)).unwrap_or_else(|| destination_line(v))
+pub(crate) fn form_route(
+    v: &omsi_sim::VehicleInstance,
+    pick: Option<&crate::schedule::BlindPick>,
+) -> String {
+    let blind = crate::schedule::has_roller_blind(v).then(|| {
+        pick.map(|p| p.line.trim().to_string())
+            .unwrap_or_else(|| v.str_var("SetLineTo").trim().to_string())
+    });
+    [blind, Some(v.str_var("Matrix_Nr").trim().to_string())]
+        .into_iter()
+        .flatten()
+        .find(|l| !l.is_empty() && !numeric_ibis_line(l))
+        .unwrap_or_else(|| destination_line(v))
 }
 
 pub(crate) fn kept_blind_line(shown: &str, keep: bool) -> Option<String> {
@@ -206,9 +246,16 @@ pub(crate) fn kept_blind_line(shown: &str, keep: bool) -> Option<String> {
     (keep && !shown.is_empty() && !numeric_ibis_line(shown)).then(|| shown.to_string())
 }
 
-fn blind_with_line(pick: Option<crate::schedule::BlindPick>, shown: Option<usize>, line: &str) -> Option<crate::schedule::BlindPick> {
+fn blind_with_line(
+    pick: Option<crate::schedule::BlindPick>,
+    shown: Option<usize>,
+    line: &str,
+) -> Option<crate::schedule::BlindPick> {
     let row = pick.map(|p| p.row).or(shown)?;
-    Some(crate::schedule::BlindPick { row, line: line.to_string() })
+    Some(crate::schedule::BlindPick {
+        row,
+        line: line.to_string(),
+    })
 }
 
 /// The route number the bus shows: its matrix's (`Matrix_Nr`), else the one it was set to
@@ -222,7 +269,9 @@ fn line_shown(v: &omsi_sim::VehicleInstance) -> Option<String> {
 }
 
 fn ibis_line_number(v: &omsi_sim::VehicleInstance) -> Option<String> {
-    v.var("IBIS_LinieKurs").filter(|l| *l > 0.0).map(|l| format!("{}", l as i64))
+    v.var("IBIS_LinieKurs")
+        .filter(|l| *l > 0.0)
+        .map(|l| format!("{}", l as i64))
 }
 
 pub(crate) fn display_route_line(s: &str) -> bool {
@@ -262,7 +311,10 @@ pub(crate) fn destination_line(v: &omsi_sim::VehicleInstance) -> String {
 
 /// Names in older packs often use underscores as spaces.
 fn bus_label(name: &str) -> String {
-    name.replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ")
+    name.replace('_', " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Numbers inside names sort as numbers (DL9 before DL10), case does not matter.
@@ -274,7 +326,10 @@ fn spot_groups(points: &[omsi_map::global::EntryPoint]) -> Vec<(Option<String>, 
         let name = e.name.trim();
         if name.is_empty() {
             groups.push((None, vec![i]));
-        } else if let Some(g) = groups.iter_mut().find(|g| g.0.as_deref().is_some_and(|n| n.to_lowercase() == name.to_lowercase())) {
+        } else if let Some(g) = groups.iter_mut().find(|g| {
+            g.0.as_deref()
+                .is_some_and(|n| n.to_lowercase() == name.to_lowercase())
+        }) {
             g.1.push(i);
         } else {
             groups.push((Some(name.to_string()), vec![i]));
@@ -298,10 +353,21 @@ fn spot_taken(app: &App, w: &omsi_scene::World, ep: &omsi_map::global::EntryPoin
         return false;
     };
     let def = &p.vehicle.ty.def;
-    let mut body = Obb::from_box(def.bounding_box.unwrap_or(omsi_sim::ai_traffic::model::DEFAULT_BOX), pos, omsi_sim::vehicle::body_heading(def, rot[0], false));
+    let mut body = Obb::from_box(
+        def.bounding_box
+            .unwrap_or(omsi_sim::ai_traffic::model::DEFAULT_BOX),
+        pos,
+        omsi_sim::vehicle::body_heading(def, rot[0], false),
+    );
     body.half += glam::DVec2::splat(0.5);
-    omsi_sim::ai_traffic::model::vehicle_bodies(&p.vehicle).iter().any(|o| body.overlaps(o))
-        || app.session.traffic.as_ref().is_some_and(|t| t.touches(&[body], pos))
+    omsi_sim::ai_traffic::model::vehicle_bodies(&p.vehicle)
+        .iter()
+        .any(|o| body.overlaps(o))
+        || app
+            .session
+            .traffic
+            .as_ref()
+            .is_some_and(|t| t.touches(&[body], pos))
 }
 
 fn bus_cmp(a: &str, b: &str) -> std::cmp::Ordering {
@@ -338,14 +404,32 @@ fn bus_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 /// server only those it offers (#1183).
 fn place_vehicles(app: &App, unknown: &str) -> Vec<(String, String, String, String)> {
     let offered = crate::lan::server_offers();
-    app.menus.vehicle_list
+    app.menus
+        .vehicle_list
         .iter()
-        .filter(|(_, path)| offered.as_deref().is_none_or(|o| crate::lan::offers(o, path)))
+        .filter(|(_, path)| {
+            offered
+                .as_deref()
+                .is_none_or(|o| crate::lan::offers(o, path))
+        })
         .map(|(name, path)| {
-            let (maker, ty) = app.menus.vehicle_meta.get(path).cloned().unwrap_or_default();
+            let (maker, ty) = app
+                .menus
+                .vehicle_meta
+                .get(path)
+                .cloned()
+                .unwrap_or_default();
             let maker = bus_label(&maker);
-            let ty = if ty.trim().is_empty() { bus_label(name) } else { bus_label(&ty) };
-            let shown = if maker.is_empty() { unknown.to_string() } else { maker.clone() };
+            let ty = if ty.trim().is_empty() {
+                bus_label(name)
+            } else {
+                bus_label(&ty)
+            };
+            let shown = if maker.is_empty() {
+                unknown.to_string()
+            } else {
+                maker.clone()
+            };
             (maker.to_lowercase(), shown, ty, path.clone())
         })
         .collect()
@@ -356,10 +440,21 @@ const ORIGINAL_PAINT: &str = "\u{1}original";
 
 /// The paint schemes of a vehicle file, by name (without loading its meshes).
 fn liveries(def: &omsi_vehicle::Vehicle) -> Vec<String> {
-    let Some(m) = def.model.as_ref() else { return Vec::new() };
+    let Some(m) = def.model.as_ref() else {
+        return Vec::new();
+    };
     let mp = omsi_cfg::resolve_path(def.dir(), m);
-    let Ok(model) = omsi_model::Model::load(&mp) else { return Vec::new() };
-    let mut names: Vec<String> = model.ctc.iter().flat_map(|c| omsi_sim::vehicle::load_paint_schemes(&omsi_cfg::resolve_path(def.dir(), &c.path))).map(|s| s.name).collect();
+    let Ok(model) = omsi_model::Model::load(&mp) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = model
+        .ctc
+        .iter()
+        .flat_map(|c| {
+            omsi_sim::vehicle::load_paint_schemes(&omsi_cfg::resolve_path(def.dir(), &c.path))
+        })
+        .map(|s| s.name)
+        .collect();
     names.dedup();
     names
 }
@@ -368,7 +463,12 @@ fn liveries(def: &omsi_vehicle::Vehicle) -> Vec<String> {
 fn fresh_seed() -> u64 {
     use std::hash::{BuildHasher, Hasher};
     let mut h = std::collections::hash_map::RandomState::new().build_hasher();
-    h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+    h.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0),
+    );
     h.finish()
 }
 
@@ -384,9 +484,22 @@ fn pick_random<T>(items: &[T], seed: u64) -> Option<&T> {
 
 /// A depot file's name for the lists: its `[name]`, and the file.
 fn hof_label(p: &std::path::Path) -> String {
-    let file = p.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
-    match omsi_vehicle::Hof::load(p).ok().map(|h| h.name).filter(|n| !n.trim().is_empty()) {
-        Some(n) if !file.to_ascii_lowercase().starts_with(&n.trim().to_ascii_lowercase()) => format!("{}  ({file})", n.trim()),
+    let file = p
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    match omsi_vehicle::Hof::load(p)
+        .ok()
+        .map(|h| h.name)
+        .filter(|n| !n.trim().is_empty())
+    {
+        Some(n)
+            if !file
+                .to_ascii_lowercase()
+                .starts_with(&n.trim().to_ascii_lowercase()) =>
+        {
+            format!("{}  ({file})", n.trim())
+        }
         _ => file,
     }
 }
@@ -416,7 +529,11 @@ pub(crate) const ADJUST: &str = " ±";
 
 pub(crate) fn keyboard_actions(app: &App) -> Vec<String> {
     let cfg = keyboard_cfg(app);
-    cfg.vehicles.into_iter().chain(cfg.game).map(|b| b.action).collect()
+    cfg.vehicles
+        .into_iter()
+        .chain(cfg.game)
+        .map(|b| b.action)
+        .collect()
 }
 
 fn keyboard_cfg(app: &App) -> omsi_content::KeyboardCfg {
@@ -427,7 +544,8 @@ fn keyboard_cfg(app: &App) -> omsi_content::KeyboardCfg {
 }
 
 fn write_keyboard_cfg(_app: &App, cfg: &omsi_content::KeyboardCfg) -> Result<(), String> {
-    let path = omsi_cfg::own_input("keyboard.cfg").ok_or_else(|| "No home folder was found to keep the key bindings in".to_string())?;
+    let path = omsi_cfg::own_input("keyboard.cfg")
+        .ok_or_else(|| "No home folder was found to keep the key bindings in".to_string())?;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
@@ -446,7 +564,8 @@ impl App {
             p.bindings = runtime.vehicles;
         }
         self.input.own_keys = crate::startup::own_keys(&self.args.root);
-        self.input.own_shift = crate::startup::own_bindings(&self.args.root, omsi_content::input::KEY_SHIFT);
+        self.input.own_shift =
+            crate::startup::own_bindings(&self.args.root, omsi_content::input::KEY_SHIFT);
         // A key changed by the player must win over the ready-made W/A/S/D or arrow
         // presets just as a key changed on the launcher's Controls page does.
         self.args.drive_keys = "omsi".into();
@@ -456,7 +575,10 @@ impl App {
 
     pub(crate) fn begin_key_capture(&mut self, game: bool, index: usize) {
         self.menus.key_capture = Some((game, index));
-        self.service_msg = Some(("Press a key for this action (Delete clears it, Esc cancels)".into(), 5.0));
+        self.service_msg = Some((
+            "Press a key for this action (Delete clears it, Esc cancels)".into(),
+            5.0,
+        ));
         self.refresh_list();
     }
 
@@ -468,9 +590,15 @@ impl App {
     }
 
     pub(crate) fn apply_key_capture(&mut self, scan: Option<i32>, chord: i32) {
-        let Some((game, index)) = self.menus.key_capture else { return };
+        let Some((game, index)) = self.menus.key_capture else {
+            return;
+        };
         let mut cfg = keyboard_cfg(self);
-        let list = if game { &mut cfg.game } else { &mut cfg.vehicles };
+        let list = if game {
+            &mut cfg.game
+        } else {
+            &mut cfg.vehicles
+        };
         let Some(binding) = list.get_mut(index) else {
             self.menus.key_capture = None;
             self.service_msg = Some(("That key entry no longer exists".into(), 3.0));
@@ -485,8 +613,17 @@ impl App {
             Ok(()) => {
                 self.menus.key_capture = None;
                 self.install_keyboard_cfg(cfg);
-                let key = scan.map(|s| crate::keys::key_name(s as i64, (hold | chord) as i64)).unwrap_or_else(|| "(unbound)".into());
-                self.service_msg = Some((format!("{}: {key}", crate::describe::names(&self.args.root, &self.settings.language).control(&action)), 3.0));
+                let key = scan
+                    .map(|s| crate::keys::key_name(s as i64, (hold | chord) as i64))
+                    .unwrap_or_else(|| "(unbound)".into());
+                self.service_msg = Some((
+                    format!(
+                        "{}: {key}",
+                        crate::describe::names(&self.args.root, &self.settings.language)
+                            .control(&action)
+                    ),
+                    3.0,
+                ));
                 self.refresh_list();
             }
             Err(e) => self.service_msg = Some((format!("Key binding was not saved ({e})"), 5.0)),
@@ -499,7 +636,11 @@ impl App {
             return;
         }
         let mut cfg = keyboard_cfg(self);
-        cfg.vehicles.push(omsi_content::KeyBinding { action: action.to_string(), scan_code: 0, modifier: 0 });
+        cfg.vehicles.push(omsi_content::KeyBinding {
+            action: action.to_string(),
+            scan_code: 0,
+            modifier: 0,
+        });
         let index = cfg.vehicles.len() - 1;
         match write_keyboard_cfg(self, &cfg) {
             Ok(()) => {
@@ -515,16 +656,34 @@ impl App {
 fn keyboard_pages(app: &App) -> Vec<Page> {
     let cfg = keyboard_cfg(app);
     let names = crate::describe::names(&app.args.root, &app.settings.language);
-    let mut vehicle = vec![opens("Add a vehicle event...", "Choose a control supplied by the bus or its mods", "key_events")];
+    let mut vehicle = vec![opens(
+        "Add a vehicle event...",
+        "Choose a control supplied by the bus or its mods",
+        "key_events",
+    )];
     let mut game = Vec::new();
-    for (is_game, bindings, rows) in [(false, &cfg.vehicles, &mut vehicle), (true, &cfg.game, &mut game)] {
+    for (is_game, bindings, rows) in [
+        (false, &cfg.vehicles, &mut vehicle),
+        (true, &cfg.game, &mut game),
+    ] {
         let mut bindings: Vec<_> = bindings.iter().enumerate().collect();
         bindings.sort_by_key(|(_, b)| names.control(&b.action).to_lowercase());
         for (i, b) in bindings {
-            let key = if app.menus.key_capture == Some((is_game, i)) { "press a key...".into() }
-                else { crate::keys::key_name(b.scan_code as i64, b.modifier as i64) };
-            rows.push((row(&names.control(&b.action), 'a', &key, "Enter to change; Delete clears; Esc cancels", None),
-                format!("keybind {} {i}", if is_game { "g" } else { "v" })));
+            let key = if app.menus.key_capture == Some((is_game, i)) {
+                "press a key...".into()
+            } else {
+                crate::keys::key_name(b.scan_code as i64, b.modifier as i64)
+            };
+            rows.push((
+                row(
+                    &names.control(&b.action),
+                    'a',
+                    &key,
+                    "Enter to change; Delete clears; Esc cancels",
+                    None,
+                ),
+                format!("keybind {} {i}", if is_game { "g" } else { "v" }),
+            ));
         }
     }
     vec![("Driving and bus", vehicle), ("Game and camera", game)]
@@ -534,27 +693,74 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
     let tr = |t: &str| omsi_ui::tr(t).into_owned();
     let mut out: Vec<(String, String)> = Vec::new();
     match kind {
-        ListKind::Admin if crate::admin_panel::remote(app) => out = crate::admin_panel::items(app, kind),
+        ListKind::Admin if crate::admin_panel::remote(app) => {
+            out = crate::admin_panel::items(app, kind)
+        }
         ListKind::Admin | ListKind::AdminClassic => return crate::admin::items(app),
-        ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) => out = crate::admin_panel::items(app, kind),
-        ListKind::PlayerList | ListKind::PlayerPage(_) | ListKind::PlayerDo(..) | ListKind::BanList => return crate::player_list::items(app, kind),
-        ListKind::GraphicsConfirm(_) => return vec![
-            (row("Apply graphics changes?", 'i', "", "Confirm within 20 seconds; otherwise the previous values are restored.", None), "noop".into()),
-            button("Apply now", "Confirm", "Apply compatible graphics options in-game. Renderer mode and device formats require restart.", "graphics_confirm"),
-            button("Cancel changes", "Revert", "Restore the graphics settings from before editing.", "graphics_cancel"),
-        ],
+        ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) => {
+            out = crate::admin_panel::items(app, kind)
+        }
+        ListKind::PlayerList
+        | ListKind::PlayerPage(_)
+        | ListKind::PlayerDo(..)
+        | ListKind::BanList => return crate::player_list::items(app, kind),
+        ListKind::GraphicsConfirm(_) => {
+            return vec![
+                (
+                    row(
+                        "Apply graphics changes?",
+                        'i',
+                        "",
+                        "Confirm within 20 seconds; otherwise the previous values are restored.",
+                        None,
+                    ),
+                    "noop".into(),
+                ),
+                button(
+                    "Apply now",
+                    "Confirm",
+                    "Apply compatible graphics options in-game. Renderer mode and device formats require restart.",
+                    "graphics_confirm",
+                ),
+                button(
+                    "Cancel changes",
+                    "Revert",
+                    "Restore the graphics settings from before editing.",
+                    "graphics_cancel",
+                ),
+            ];
+        }
         ListKind::Options(_) | ListKind::Vehicle(_) | ListKind::World(_) => {
-            let Some((mut pages, tab)) = pages_of(app, kind) else { return out };
+            let Some((mut pages, tab)) = pages_of(app, kind) else {
+                return out;
+            };
             if pages.is_empty() {
-                return vec![(row("Nothing to set here", 'i', "", "", None), "noop".to_string())];
+                return vec![(
+                    row("Nothing to set here", 'i', "", "", None),
+                    "noop".to_string(),
+                )];
             }
             return pages.swap_remove(tab).1;
         }
-        ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtons(_) | ListKind::ControllerButtonSettings(..) | ListKind::ControllerButton(..) | ListKind::ControllerCapture(_) => return crate::game_controller_menu::items(app, kind),
+        ListKind::ControllerDevices(_)
+        | ListKind::Controller(..)
+        | ListKind::ControllerAxis(..)
+        | ListKind::ControllerButtons(_)
+        | ListKind::ControllerButtonSettings(..)
+        | ListKind::ControllerButton(..)
+        | ListKind::ControllerCapture(_) => return crate::game_controller_menu::items(app, kind),
         ListKind::Controls => {
             return vec![
-                opens("Keyboard", "Change driving, vehicle, game and camera key bindings", "keyboard"),
-                opens("Game controllers", "Configure wheels, pedals, gamepads and force feedback", "controllers"),
+                opens(
+                    "Keyboard",
+                    "Change driving, vehicle, game and camera key bindings",
+                    "keyboard",
+                ),
+                opens(
+                    "Game controllers",
+                    "Configure wheels, pedals, gamepads and force feedback",
+                    "controllers",
+                ),
             ];
         }
         ListKind::Keyboard(tab) => {
@@ -570,9 +776,16 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                     }
                 }
             }
-            events.sort_by(|a, b| a.1.to_ascii_lowercase().cmp(&b.1.to_ascii_lowercase()).then_with(|| a.0.to_ascii_lowercase().cmp(&b.0.to_ascii_lowercase())));
+            events.sort_by(|a, b| {
+                a.1.to_ascii_lowercase()
+                    .cmp(&b.1.to_ascii_lowercase())
+                    .then_with(|| a.0.to_ascii_lowercase().cmp(&b.0.to_ascii_lowercase()))
+            });
             for (action, label) in events {
-                out.push((format!("{label}  |  KY_{action}"), format!("key_event {action}")));
+                out.push((
+                    format!("{label}  |  KY_{action}"),
+                    format!("key_event {action}"),
+                ));
             }
             if out.is_empty() {
                 out.push(("No vehicle events were found".into(), "back".into()));
@@ -581,10 +794,35 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
         }
         ListKind::Lines => {
             if let Some(sch) = crate::duty_book::timetable(app) {
-                let mut lines: Vec<&omsi_timetable::Line> = sch.data.lines.iter().filter(|l| l.user_allowed && l.tours.iter().any(|t| tour_listed(sch, &l.name, t, app.clock.time))).collect();
+                let mut lines: Vec<&omsi_timetable::Line> = sch
+                    .data
+                    .lines
+                    .iter()
+                    .filter(|l| {
+                        l.user_allowed
+                            && l.tours
+                                .iter()
+                                .any(|t| tour_listed(sch, &l.name, t, app.clock.time))
+                    })
+                    .collect();
                 lines.sort_by(|a, b| natural(&a.name, &b.name));
                 for l in lines {
-                    out.push((format!("{} {}  ({})", tr("Line"), l.name, tr("{n} tours").replace("{n}", &l.tours.iter().filter(|t| tour_listed(sch, &l.name, t, app.clock.time)).count().to_string())), format!("line {}", l.name)));
+                    out.push((
+                        format!(
+                            "{} {}  ({})",
+                            tr("Line"),
+                            l.name,
+                            tr("{n} tours").replace(
+                                "{n}",
+                                &l.tours
+                                    .iter()
+                                    .filter(|t| tour_listed(sch, &l.name, t, app.clock.time))
+                                    .count()
+                                    .to_string()
+                            )
+                        ),
+                        format!("line {}", l.name),
+                    ));
                 }
             }
             if out.is_empty() {
@@ -592,16 +830,35 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             }
         }
         ListKind::Tours(line, _) => {
-            if let Some(l) = crate::duty_book::timetable(app).and_then(|s| s.data.lines.iter().find(|l| l.name == *line)) {
-                for t in sorted_tours(l).into_iter().filter(|t| crate::duty_book::timetable(app).is_some_and(|s| tour_listed(s, line, t, app.clock.time))) {
+            if let Some(l) = crate::duty_book::timetable(app)
+                .and_then(|s| s.data.lines.iter().find(|l| l.name == *line))
+            {
+                for t in sorted_tours(l).into_iter().filter(|t| {
+                    crate::duty_book::timetable(app)
+                        .is_some_and(|s| tour_listed(s, line, t, app.clock.time))
+                }) {
                     // (the tours in order of the time they start)
-                    out.push((format!("{} {}", tr("Tour"), t.number.trim()), format!("tour {}\u{1}{}", line, t.number)));
+                    out.push((
+                        format!("{} {}", tr("Tour"), t.number.trim()),
+                        format!("tour {}\u{1}{}", line, t.number),
+                    ));
                 }
             }
         }
         ListKind::Drivers => {
             for name in driver_names(app) {
-                let mark = if app.session.career.path.as_ref().and_then(|p| p.file_stem()).is_some_and(|s| s.to_string_lossy().eq_ignore_ascii_case(&name)) { format!("  {}", tr("(now)")) } else { String::new() };
+                let mark = if app
+                    .session
+                    .career
+                    .path
+                    .as_ref()
+                    .and_then(|p| p.file_stem())
+                    .is_some_and(|s| s.to_string_lossy().eq_ignore_ascii_case(&name))
+                {
+                    format!("  {}", tr("(now)"))
+                } else {
+                    String::new()
+                };
                 out.push((format!("{name}{mark}"), format!("driver {name}")));
             }
         }
@@ -614,42 +871,75 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 // (in the depot file's order, as OMSI lists them, not alphabetical; picked by
                 // its row, since several may share a name or a code)
                 for (i, t) in hof.termini.iter().enumerate() {
-                    out.push((format!("{:>3}  {}", t.code, t.menu_name().trim()), format!("dest {i}")));
+                    out.push((
+                        format!("{:>3}  {}", t.code, t.menu_name().trim()),
+                        format!("dest {i}"),
+                    ));
                 }
             }
             if out.is_empty() {
-                out.push((tr("This bus has no depot file (.hof) with destinations"), "back".into()));
+                out.push((
+                    tr("This bus has no depot file (.hof) with destinations"),
+                    "back".into(),
+                ));
             }
         }
         ListKind::RouteNumbers => {
             // any route number, typed as on OMSI's own field (#836): the scripts that read
             // it (a bus that switches its functions by route number) take what is typed
             match app.menus.menu_edit.as_ref() {
-                Some(t) => out.push((format!("{}: {t}_  ({})", tr("Route number"), tr("Enter sets it, Esc cancels")), "route_type".into())),
-                None => out.push((format!("{}...", tr("Type a route number")), "route_type".into())),
+                Some(t) => out.push((
+                    format!(
+                        "{}: {t}_  ({})",
+                        tr("Route number"),
+                        tr("Enter sets it, Esc cancels")
+                    ),
+                    "route_type".into(),
+                )),
+                None => out.push((
+                    format!("{}...", tr("Type a route number")),
+                    "route_type".into(),
+                )),
             }
             for l in route_numbers(app) {
                 out.push((format!("{} {l}", tr("Route")), format!("route {l}")));
             }
             if out.len() == 1 {
-                out.push((tr("No route numbers in the depot file or the timetable"), "back".into()));
+                out.push((
+                    tr("No route numbers in the depot file or the timetable"),
+                    "back".into(),
+                ));
             }
         }
         ListKind::SaveSlots => {
             out.push((tr("A new slot"), "new".into()));
             for slot in app.save_slots() {
-                out.push((format!("{} {}", tr("Save over:"), slot.name), format!("over {}", slot.file.to_string_lossy())));
+                out.push((
+                    format!("{} {}", tr("Save over:"), slot.name),
+                    format!("over {}", slot.file.to_string_lossy()),
+                ));
             }
         }
         ListKind::Hofs => {
             if let Some(p) = app.player.as_ref() {
                 let now = p.vehicle.host.hof.as_ref().map(|h| h.path.clone());
-                let mut files: Vec<(String, std::path::PathBuf)> = omsi_vehicle::hof::depot_files(p.vehicle.ty.def.dir()).into_iter().map(|f| (hof_label(&f), f)).collect();
+                let mut files: Vec<(String, std::path::PathBuf)> =
+                    omsi_vehicle::hof::depot_files(p.vehicle.ty.def.dir())
+                        .into_iter()
+                        .map(|f| (hof_label(&f), f))
+                        .collect();
                 // (alphabetical)
                 files.sort_by_key(|(label, _)| label.to_lowercase());
                 for (label, f) in files {
-                    let mark = if now.as_ref() == Some(&f) { format!("  {}", tr("(now)")) } else { String::new() };
-                    out.push((format!("{label}{mark}"), format!("hof {}", f.to_string_lossy())));
+                    let mark = if now.as_ref() == Some(&f) {
+                        format!("  {}", tr("(now)"))
+                    } else {
+                        String::new()
+                    };
+                    out.push((
+                        format!("{label}{mark}"),
+                        format!("hof {}", f.to_string_lossy()),
+                    ));
                 }
             }
             if out.is_empty() {
@@ -661,8 +951,17 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 // (the map's entry points as OMSI's list shows them: a name once, in its
                 // order, and left out where every place of it is taken)
                 for (name, places) in spot_groups(&w.global.entry_points) {
-                    if places.iter().any(|&i| !spot_taken(app, w, &w.global.entry_points[i])) {
-                        let label = name.unwrap_or_else(|| format!("{} {}", tr("entry"), w.global.entry_points[places[0]].index + 1));
+                    if places
+                        .iter()
+                        .any(|&i| !spot_taken(app, w, &w.global.entry_points[i]))
+                    {
+                        let label = name.unwrap_or_else(|| {
+                            format!(
+                                "{} {}",
+                                tr("entry"),
+                                w.global.entry_points[places[0]].index + 1
+                            )
+                        });
                         out.push((label, format!("spot {}", places[0])));
                     }
                 }
@@ -675,13 +974,26 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             if search_query(app).trim().is_empty() {
                 let offered = crate::lan::server_offers();
                 let driven = app.args.depot.clone().filter(|_| app.player.is_some());
-                for b in crate::depot_bus::listed().into_iter().filter(|b| offered.as_ref().is_none_or(|o| crate::lan::offers(o, &b.bus)) && driven.as_deref() != Some(b.id.as_str())) {
-                    let plate = if b.plate.trim().is_empty() { String::new() } else { format!("  |  {}", b.plate.trim()) };
-                    out.push((format!("{} {}{plate}", tr("My depot:"), b.name.trim()), format!("depot {}", b.id)));
+                for b in crate::depot_bus::listed().into_iter().filter(|b| {
+                    offered
+                        .as_ref()
+                        .is_none_or(|o| crate::lan::offers(o, &b.bus))
+                        && driven.as_deref() != Some(b.id.as_str())
+                }) {
+                    let plate = if b.plate.trim().is_empty() {
+                        String::new()
+                    } else {
+                        format!("  |  {}", b.plate.trim())
+                    };
+                    out.push((
+                        format!("{} {}{plate}", tr("My depot:"), b.name.trim()),
+                        format!("depot {}", b.id),
+                    ));
                 }
             }
             let all = place_vehicles(app, &tr("Unknown manufacturer"));
-            let mut groups: Vec<(String, String, Vec<&(String, String, String, String)>)> = Vec::new();
+            let mut groups: Vec<(String, String, Vec<&(String, String, String, String)>)> =
+                Vec::new();
             for v in &all {
                 match groups.iter_mut().find(|g| g.0 == v.0) {
                     Some(g) => g.2.push(v),
@@ -698,25 +1010,48 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                     }
                 } else if vs.len() == 1 {
                     // (a manufacturer with one type: that type at once)
-                    out.push((format!("{name}  |  {}", vs[0].2), format!("bus {}", vs[0].3)));
+                    out.push((
+                        format!("{name}  |  {}", vs[0].2),
+                        format!("bus {}", vs[0].3),
+                    ));
                 } else {
-                    out.push((format!("{name}  ({})", tr("{n} models").replace("{n}", &vs.len().to_string())), format!("maker {key}")));
+                    out.push((
+                        format!(
+                            "{name}  ({})",
+                            tr("{n} models").replace("{n}", &vs.len().to_string())
+                        ),
+                        format!("maker {key}"),
+                    ));
                 }
             }
         }
         ListKind::PlaceType(key) => {
             let all = place_vehicles(app, &tr("Unknown manufacturer"));
-            let mut types: Vec<(String, String)> = all.iter().filter(|v| v.0 == *key).map(|v| (v.2.clone(), v.3.clone())).collect();
+            let mut types: Vec<(String, String)> = all
+                .iter()
+                .filter(|v| v.0 == *key)
+                .map(|v| (v.2.clone(), v.3.clone()))
+                .collect();
             types.sort_by(|a, b| bus_cmp(&a.0, &b.0).then_with(|| a.1.cmp(&b.1)));
             // (a type name used twice: with its pack's folder, then with its file)
-            let same = |t: &[(String, String)], n: &str| t.iter().filter(|x| x.0.to_lowercase() == n.to_lowercase()).count();
+            let same = |t: &[(String, String)], n: &str| {
+                t.iter()
+                    .filter(|x| x.0.to_lowercase() == n.to_lowercase())
+                    .count()
+            };
             let counts: Vec<usize> = types.iter().map(|t| same(&types, &t.0)).collect();
             for (t, n) in types.iter().zip(counts) {
                 let mut label = t.0.clone();
                 if n > 1 {
                     let parts: Vec<&str> = t.1.split('/').collect();
                     let folder = parts.get(1).copied().unwrap_or_default();
-                    let file = parts.last().copied().unwrap_or_default().rsplit_once('.').map(|x| x.0).unwrap_or_default();
+                    let file = parts
+                        .last()
+                        .copied()
+                        .unwrap_or_default()
+                        .rsplit_once('.')
+                        .map(|x| x.0)
+                        .unwrap_or_default();
                     label = format!("{label}  |  {}  |  {}", bus_label(folder), bus_label(file));
                 }
                 out.push((label, format!("bus {}", t.1)));
@@ -740,7 +1075,14 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             if let Some(d) = bus_def(app, bus) {
                 let mut files: Vec<(String, String)> = omsi_vehicle::hof::depot_files(d.dir())
                     .into_iter()
-                    .map(|f| (hof_label(&f), f.file_name().map(|x| x.to_string_lossy().into_owned()).unwrap_or_default()))
+                    .map(|f| {
+                        (
+                            hof_label(&f),
+                            f.file_name()
+                                .map(|x| x.to_string_lossy().into_owned())
+                                .unwrap_or_default(),
+                        )
+                    })
                     .collect();
                 // (alphabetical)
                 files.sort_by_key(|(label, _)| label.to_lowercase());
@@ -751,7 +1093,11 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
         }
         ListKind::SwitchTo => {
             // (the nearest first; the line's action is its place in `placed`)
-            let here = app.player.as_ref().map(|p| p.vehicle.position).or_else(|| app.camera.as_ref().map(|c| c.position));
+            let here = app
+                .player
+                .as_ref()
+                .map(|p| p.vehicle.position)
+                .or_else(|| app.camera.as_ref().map(|c| c.position));
             let mut rows: Vec<(f64, String, String)> = app
                 .session
                 .placed
@@ -759,11 +1105,25 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 .enumerate()
                 .map(|(k, q)| {
                     let def = &q.vehicle.ty.def;
-                    let name = format!("{} {}", def.manufacturer.trim(), def.type_name.trim()).trim().to_string();
-                    let number = q.vehicle.ty.program.str_var("number").and_then(|i| q.vehicle.state.str_vars.get(i as usize)).map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
-                    let dist = here.map(|h| (q.vehicle.position - h).truncate().length()).unwrap_or(0.0);
+                    let name = format!("{} {}", def.manufacturer.trim(), def.type_name.trim())
+                        .trim()
+                        .to_string();
+                    let number = q
+                        .vehicle
+                        .ty
+                        .program
+                        .str_var("number")
+                        .and_then(|i| q.vehicle.state.str_vars.get(i as usize))
+                        .map(|n| n.trim().to_string())
+                        .filter(|n| !n.is_empty());
+                    let dist = here
+                        .map(|h| (q.vehicle.position - h).truncate().length())
+                        .unwrap_or(0.0);
                     let label = match number {
-                        Some(n) => format!("{name}  |  {n}  |  {}", crate::units::Units::now().distance(dist)),
+                        Some(n) => format!(
+                            "{name}  |  {n}  |  {}",
+                            crate::units::Units::now().distance(dist)
+                        ),
                         None => format!("{name}  |  {}", crate::units::Units::now().distance(dist)),
                     };
                     (dist, label, format!("switchto {k}"))
@@ -775,27 +1135,60 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 out.push((tr("There is no other vehicle to drive"), "back".into()));
             }
         }
-        ListKind::Streets => out = street_rows(app.menus.navigator.as_ref().map_or(Some(Vec::new()), |n| n.street_names())),
+        ListKind::Streets => {
+            out = street_rows(
+                app.menus
+                    .navigator
+                    .as_ref()
+                    .map_or(Some(Vec::new()), |n| n.street_names()),
+            )
+        }
         ListKind::Numbers => {
             if let Some(p) = app.player.as_ref() {
                 let mut numbers = fleet_numbers(&p.vehicle);
                 // (in order of the numbers)
                 numbers.sort_by(|a, b| natural(&a.0, &b.0));
                 for (n, reg) in numbers {
-                    out.push((if reg.is_empty() { n.clone() } else { format!("{n}  ({reg})") }, format!("number {n}\u{1}{reg}")));
+                    out.push((
+                        if reg.is_empty() {
+                            n.clone()
+                        } else {
+                            format!("{n}  ({reg})")
+                        },
+                        format!("number {n}\u{1}{reg}"),
+                    ));
                 }
             }
             if out.is_empty() {
                 out.push((tr("This bus has no list of fleet numbers"), "back".into()));
             }
         }
-        ListKind::Liveries => out.extend(app.player.iter().flat_map(|p| liveries::items(p.vehicle.host.paint_scheme.flatten(), &p.vehicle.ty.paint_schemes))),
+        ListKind::Liveries => out.extend(app.player.iter().flat_map(|p| {
+            liveries::items(
+                p.vehicle.host.paint_scheme.flatten(),
+                &p.vehicle.ty.paint_schemes,
+            )
+        })),
     }
     if searchable(kind) {
         let query = search_query(app);
-        out.retain(|(label, action)| search_matches(label, if matches!(kind, ListKind::Streets) { "" } else { action }, query));
+        out.retain(|(label, action)| {
+            search_matches(
+                label,
+                if matches!(kind, ListKind::Streets) {
+                    ""
+                } else {
+                    action
+                },
+                query,
+            )
+        });
         let label = if app.menus.menu_edit_search {
-            format!("{}: {query}_  ({})", tr("Search..."), tr("Enter sets it, Esc cancels"))
+            format!(
+                "{}: {query}_  ({})",
+                tr("Search..."),
+                tr("Enter sets it, Esc cancels")
+            )
         } else if query.is_empty() {
             tr("Search...")
         } else {
@@ -815,12 +1208,24 @@ pub(crate) fn menu_extras(
     sel: Option<usize>,
     schedule: Option<&crate::schedule::Schedule>,
     now: f64,
-) -> (crate::ui::MenuKind, Option<(String, String)>, Option<crate::ui::Preview>) {
+) -> (
+    crate::ui::MenuKind,
+    Option<(String, String)>,
+    Option<crate::ui::Preview>,
+) {
     use crate::ui::{MenuKind, Preview};
-    let Some(sel) = sel else { return (MenuKind::Game, None, None) };
+    let Some(sel) = sel else {
+        return (MenuKind::Game, None, None);
+    };
     let tr = |t: &str| omsi_ui::tr(t).into_owned();
     // (the menu's own labels, translated, without their dots)
-    let title = |t: &str| tr(t).trim_end_matches("...").trim_end_matches('…').trim_end().to_string();
+    let title = |t: &str| {
+        tr(t)
+            .trim_end_matches("...")
+            .trim_end_matches('…')
+            .trim_end()
+            .to_string()
+    };
     let head = |t: &str| Some((title(t), String::new()));
     let hm = |m: f32| format!("{:02}:{:02}", (m / 60.0) as i32 % 24, (m % 60.0) as i32);
     // a trip's line and terminus
@@ -830,9 +1235,14 @@ pub(crate) fn menu_extras(
             .map(|x| (x.line.trim().to_string(), x.terminus.trim().to_string()))
             .unwrap_or_default()
     };
-    let action = list.and_then(|l| l.get(sel)).map(|x| x.1.as_str()).unwrap_or("");
+    let action = list
+        .and_then(|l| l.get(sel))
+        .map(|x| x.1.as_str())
+        .unwrap_or("");
     // (no kind: the vehicle chooser)
-    let Some(kind) = kind else { return (MenuKind::List, head("Place a vehicle..."), None) };
+    let Some(kind) = kind else {
+        return (MenuKind::List, head("Place a vehicle..."), None);
+    };
     match kind {
         ListKind::Options(_) => (MenuKind::Options, head("Options..."), None),
         ListKind::GraphicsConfirm(_) => (MenuKind::List, head("Confirm graphics changes"), None),
@@ -841,11 +1251,36 @@ pub(crate) fn menu_extras(
         ListKind::Controls => (MenuKind::Options, head("Controls..."), None),
         ListKind::Keyboard(_) => (MenuKind::Options, head("Keyboard"), None),
         ListKind::ControllerDevices(_) => (MenuKind::Options, head("Game controllers"), None),
-        ListKind::Controller(name, _) => (MenuKind::Options, Some((name.clone(), String::new())), None),
-        ListKind::ControllerAxis(name, a) => (MenuKind::Options, Some((format!("{} | {} {}", name, tr("Axis"), a + 1), String::new())), None),
-        ListKind::ControllerButtons(name) => (MenuKind::List, Some(("Choose a button".into(), name.clone())), None),
-        ListKind::ControllerButtonSettings(name, b) => (MenuKind::Options, Some((crate::game_controller_menu::button_label(*b), name.clone())), None),
-        ListKind::ControllerButton(_, b) => (MenuKind::List, Some((tr("{button}: choose an action").replace("{button}", &crate::game_controller_menu::button_label(*b)), String::new())), None),
+        ListKind::Controller(name, _) => {
+            (MenuKind::Options, Some((name.clone(), String::new())), None)
+        }
+        ListKind::ControllerAxis(name, a) => (
+            MenuKind::Options,
+            Some((
+                format!("{} | {} {}", name, tr("Axis"), a + 1),
+                String::new(),
+            )),
+            None,
+        ),
+        ListKind::ControllerButtons(name) => (
+            MenuKind::List,
+            Some(("Choose a button".into(), name.clone())),
+            None,
+        ),
+        ListKind::ControllerButtonSettings(name, b) => (
+            MenuKind::Options,
+            Some((crate::game_controller_menu::button_label(*b), name.clone())),
+            None,
+        ),
+        ListKind::ControllerButton(_, b) => (
+            MenuKind::List,
+            Some((
+                tr("{button}: choose an action")
+                    .replace("{button}", &crate::game_controller_menu::button_label(*b)),
+                String::new(),
+            )),
+            None,
+        ),
         ListKind::ControllerCapture(_) => (MenuKind::List, head("Assign a physical button"), None),
         ListKind::Events => (MenuKind::List, Some((tr("Add event"), String::new())), None),
         ListKind::Lines => {
@@ -856,20 +1291,55 @@ pub(crate) fn menu_extras(
                     .filter(|t| schedule.is_some_and(|s| tour_listed(s, &line.name, t, now)))
                     .map(|t| {
                         // (the trip and the time the tour has from the game's time on)
-                        let next = schedule.and_then(|s| s.tour_stops_from(&line.name, &t.number, now).first().cloned());
+                        let next = schedule.and_then(|s| {
+                            s.tour_stops_from(&line.name, &t.number, now)
+                                .first()
+                                .cloned()
+                        });
                         let end = match (schedule, next.as_ref()) {
-                            (Some(s), Some(n)) => tour_trip_name(s, t, n.0).map(|name| trip_of(&name).1).unwrap_or_default(),
-                            _ => t.trips.first().map(|tt| trip_of(&tt.trip).1).unwrap_or_default(),
+                            (Some(s), Some(n)) => tour_trip_name(s, t, n.0)
+                                .map(|name| trip_of(&name).1)
+                                .unwrap_or_default(),
+                            _ => t
+                                .trips
+                                .first()
+                                .map(|tt| trip_of(&tt.trip).1)
+                                .unwrap_or_default(),
                         };
-                        let what = if end.is_empty() { format!("{} {}", tr("Tour"), t.number.trim()) } else { format!("{} {}  ›  {}", tr("Tour"), t.number.trim(), end) };
+                        let what = if end.is_empty() {
+                            format!("{} {}", tr("Tour"), t.number.trim())
+                        } else {
+                            format!("{} {}  ›  {}", tr("Tour"), t.number.trim(), end)
+                        };
                         let when = match next {
                             Some(n) => hm((n.3 / 60.0) as f32),
-                            None => t.trips.first().map(|tt| hm(tt.departure)).unwrap_or_default(),
+                            None => t
+                                .trips
+                                .first()
+                                .map(|tt| hm(tt.departure))
+                                .unwrap_or_default(),
                         };
                         (what, when)
                     })
                     .collect();
-                Some(Preview { title: format!("{} {}", tr("Line"), line.name), meta: tr("{n} tours").replace("{n}", &line.tours.iter().filter(|t| schedule.is_some_and(|s| tour_listed(s, &line.name, t, now))).count().to_string()), rows, chosen: None, button: None, time: None })
+                Some(Preview {
+                    title: format!("{} {}", tr("Line"), line.name),
+                    meta: tr("{n} tours").replace(
+                        "{n}",
+                        &line
+                            .tours
+                            .iter()
+                            .filter(|t| {
+                                schedule.is_some_and(|s| tour_listed(s, &line.name, t, now))
+                            })
+                            .count()
+                            .to_string(),
+                    ),
+                    rows,
+                    chosen: None,
+                    button: None,
+                    time: None,
+                })
             });
             (MenuKind::Lines, head("Line and tour..."), preview)
         }
@@ -880,34 +1350,86 @@ pub(crate) fn menu_extras(
                 let line = sch.data.lines.iter().find(|l| l.name == ln)?;
                 let tour = line.tours.iter().find(|t| t.number == num)?;
                 let n_trips = sch.tour_trip_count(ln, num);
-                let trip = pick.as_ref().filter(|p| p.0 == num).map(|p| p.2).unwrap_or_else(|| sch.tour_trip_now(ln, num, now)).min(n_trips.saturating_sub(1));
+                let trip = pick
+                    .as_ref()
+                    .filter(|p| p.0 == num)
+                    .map(|p| p.2)
+                    .unwrap_or_else(|| sch.tour_trip_now(ln, num, now))
+                    .min(n_trips.saturating_sub(1));
                 let stops = sch.tour_trip_stops(ln, num, trip);
-                stops.first().and_then(|s| tour_trip_name(sch, tour, s.0)).map(|n| trip_of(&n).0).filter(|l| !l.is_empty())
+                stops
+                    .first()
+                    .and_then(|s| tour_trip_name(sch, tour, s.0))
+                    .map(|n| trip_of(&n).0)
+                    .filter(|l| !l.is_empty())
             };
-            let preview = action.strip_prefix("tour ").and_then(|rest| rest.split_once('\u{1}')).and_then(|(ln, num)| {
-                let sch = schedule?;
-                let line = sch.data.lines.iter().find(|l| l.name == ln)?;
-                let tour = line.tours.iter().find(|t| t.number == num)?;
-                let n_trips = sch.tour_trip_count(ln, num);
-                let trip = pick.as_ref().filter(|p| p.0 == num).map(|p| p.2).unwrap_or_else(|| sch.tour_trip_now(ln, num, now)).min(n_trips.saturating_sub(1));
-                let stops = sch.tour_trip_stops(ln, num, trip);
-                let at = stops.first().map(|s| s.3).unwrap_or_else(|| tour_start(tour).unwrap_or(0.0));
-                let chosen = pick.as_ref().filter(|p| p.0 == num).map(|p| p.1).unwrap_or(0).min(stops.len().saturating_sub(1));
-                let rows = stops.iter().map(|s| (s.2.trim().to_string(), hm((s.3 / 60.0) as f32))).collect();
-                let trip_line = tour_line(ln, num).unwrap_or_else(|| line_sign(schedule, line));
-                Some(Preview {
-                    title: format!("{} {}", tr("Tour"), num.trim()),
-                    meta: format!("{} {}  |  {} {}/{}  |  {}", tr("Line"), trip_line, tr("Trip"), trip + 1, n_trips.max(1), tr("Choose the stop to start from")),
-                    rows,
-                    chosen: Some(chosen),
-                    button: Some(tr("Start trip")),
-                    // (the time of the trip: between the arrows that step through the tour's trips)
-                    time: Some(hm((at / 60.0) as f32)),
+            let preview = action
+                .strip_prefix("tour ")
+                .and_then(|rest| rest.split_once('\u{1}'))
+                .and_then(|(ln, num)| {
+                    let sch = schedule?;
+                    let line = sch.data.lines.iter().find(|l| l.name == ln)?;
+                    let tour = line.tours.iter().find(|t| t.number == num)?;
+                    let n_trips = sch.tour_trip_count(ln, num);
+                    let trip = pick
+                        .as_ref()
+                        .filter(|p| p.0 == num)
+                        .map(|p| p.2)
+                        .unwrap_or_else(|| sch.tour_trip_now(ln, num, now))
+                        .min(n_trips.saturating_sub(1));
+                    let stops = sch.tour_trip_stops(ln, num, trip);
+                    let at = stops
+                        .first()
+                        .map(|s| s.3)
+                        .unwrap_or_else(|| tour_start(tour).unwrap_or(0.0));
+                    let chosen = pick
+                        .as_ref()
+                        .filter(|p| p.0 == num)
+                        .map(|p| p.1)
+                        .unwrap_or(0)
+                        .min(stops.len().saturating_sub(1));
+                    let rows = stops
+                        .iter()
+                        .map(|s| (s.2.trim().to_string(), hm((s.3 / 60.0) as f32)))
+                        .collect();
+                    let trip_line = tour_line(ln, num).unwrap_or_else(|| line_sign(schedule, line));
+                    Some(Preview {
+                        title: format!("{} {}", tr("Tour"), num.trim()),
+                        meta: format!(
+                            "{} {}  |  {} {}/{}  |  {}",
+                            tr("Line"),
+                            trip_line,
+                            tr("Trip"),
+                            trip + 1,
+                            n_trips.max(1),
+                            tr("Choose the stop to start from")
+                        ),
+                        rows,
+                        chosen: Some(chosen),
+                        button: Some(tr("Start trip")),
+                        // (the time of the trip: between the arrows that step through the tour's trips)
+                        time: Some(hm((at / 60.0) as f32)),
+                    })
+                });
+            let chosen_line = action
+                .strip_prefix("tour ")
+                .and_then(|rest| rest.split_once('\u{1}'))
+                .and_then(|(ln, num)| tour_line(ln, num));
+            let sign = chosen_line
+                .or_else(|| {
+                    schedule
+                        .and_then(|s| s.data.lines.iter().find(|l| l.name == *line_name))
+                        .map(|l| line_sign(schedule, l))
                 })
-            });
-            let chosen_line = action.strip_prefix("tour ").and_then(|rest| rest.split_once('\u{1}')).and_then(|(ln, num)| tour_line(ln, num));
-            let sign = chosen_line.or_else(|| schedule.and_then(|s| s.data.lines.iter().find(|l| l.name == *line_name)).map(|l| line_sign(schedule, l))).unwrap_or_else(|| line_name.clone());
-            (MenuKind::Tours, Some((title("Line and tour..."), format!("{} {}", tr("Line"), sign))), preview)
+                .unwrap_or_else(|| line_name.clone());
+            (
+                MenuKind::Tours,
+                Some((
+                    title("Line and tour..."),
+                    format!("{} {}", tr("Line"), sign),
+                )),
+                preview,
+            )
         }
         ListKind::Drivers => (MenuKind::List, head("Driver..."), None),
         ListKind::Numbers => (MenuKind::List, head("Fleet number..."), None),
@@ -915,14 +1437,35 @@ pub(crate) fn menu_extras(
         ListKind::Streets => (MenuKind::List, head("Find a street..."), None),
         ListKind::SwitchTo => (MenuKind::List, head("Drive another vehicle..."), None),
         ListKind::Destinations => (MenuKind::List, head("Destination display..."), None),
-        ListKind::RouteNumbers => (MenuKind::List, Some((tr("Route number"), String::new())), None),
+        ListKind::RouteNumbers => (
+            MenuKind::List,
+            Some((tr("Route number"), String::new())),
+            None,
+        ),
         ListKind::Hofs => (MenuKind::List, head("Depot file (HOF)..."), None),
         ListKind::SaveSlots => (MenuKind::List, head("Save to a slot..."), None),
         ListKind::Spots => (MenuKind::List, head("Teleport to a start point..."), None),
-        ListKind::PlaceMaker | ListKind::PlaceType(_) | ListKind::PlaceLivery(_) | ListKind::PlaceHof(..) => (MenuKind::List, head("Place a vehicle..."), None),
-        ListKind::Admin | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) | ListKind::AdminClassic => (MenuKind::List, Some((tr("Administration"), String::new())), None),
+        ListKind::PlaceMaker
+        | ListKind::PlaceType(_)
+        | ListKind::PlaceLivery(_)
+        | ListKind::PlaceHof(..) => (MenuKind::List, head("Place a vehicle..."), None),
+        ListKind::Admin
+        | ListKind::AdminPlayer(_)
+        | ListKind::AdminConfirm(..)
+        | ListKind::AdminClassic => (
+            MenuKind::List,
+            Some((tr("Administration"), String::new())),
+            None,
+        ),
         ListKind::AdminPlayers => (MenuKind::List, Some((tr("Players"), String::new())), None),
-        ListKind::PlayerList | ListKind::PlayerPage(_) | ListKind::PlayerDo(..) | ListKind::BanList => (MenuKind::List, Some((tr("Player list"), String::new())), None),
+        ListKind::PlayerList
+        | ListKind::PlayerPage(_)
+        | ListKind::PlayerDo(..)
+        | ListKind::BanList => (
+            MenuKind::List,
+            Some((tr("Player list"), String::new())),
+            None,
+        ),
     }
 }
 
@@ -933,14 +1476,23 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
 
 fn graphics_back(app: &App, kind: &ListKind) -> Option<ListKind> {
     match kind {
-        ListKind::Options(tab) if app.menus.graphics_before.is_some() => Some(ListKind::GraphicsConfirm(*tab)),
+        ListKind::Options(tab) if app.menus.graphics_before.is_some() => {
+            Some(ListKind::GraphicsConfirm(*tab))
+        }
         _ => None,
     }
 }
 
 /// Handle the two buttons of the graphics confirmation.
-fn graphics_confirmation_action(app: &mut App, tab: usize, action: &str, mv: Move) -> Option<ListKind> {
-    if !matches!(mv, Move::Next) { return Some(ListKind::GraphicsConfirm(tab)); }
+fn graphics_confirmation_action(
+    app: &mut App,
+    tab: usize,
+    action: &str,
+    mv: Move,
+) -> Option<ListKind> {
+    if !matches!(mv, Move::Next) {
+        return Some(ListKind::GraphicsConfirm(tab));
+    }
     match action {
         "graphics_confirm" => apply_graphics_changes(app),
         "graphics_cancel" => cancel_graphics_changes(app),
@@ -965,25 +1517,48 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
         return crate::player_list::back(kind);
     }
     if action == "back" {
-        if let Some(next) = graphics_back(app, kind) { return Some(next); }
+        if let Some(next) = graphics_back(app, kind) {
+            return Some(next);
+        }
         return match kind {
             ListKind::Tours(..) => Some(ListKind::Lines),
             ListKind::Events => Some(ListKind::Keyboard(0)),
             ListKind::Keyboard(_) => Some(ListKind::Controls),
-            ListKind::PlaceType(_) | ListKind::PlaceLivery(_) | ListKind::PlaceHof(..) => Some(ListKind::PlaceMaker),
+            ListKind::PlaceType(_) | ListKind::PlaceLivery(_) | ListKind::PlaceHof(..) => {
+                Some(ListKind::PlaceMaker)
+            }
             ListKind::AdminPlayers | ListKind::AdminClassic => Some(ListKind::Admin),
             ListKind::AdminPlayer(_) => Some(ListKind::AdminPlayers),
             ListKind::AdminConfirm(_, t) => Some(ListKind::AdminPlayer(*t)),
-            ListKind::GraphicsConfirm(tab) => { cancel_graphics_changes(app); Some(ListKind::Options(*tab)) },
+            ListKind::GraphicsConfirm(tab) => {
+                cancel_graphics_changes(app);
+                Some(ListKind::Options(*tab))
+            }
             _ => None,
         };
     }
     let (verb, arg) = action.split_once(' ').unwrap_or((action, ""));
     match kind {
         ListKind::GraphicsConfirm(tab) => graphics_confirmation_action(app, *tab, action, mv),
-        ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtons(_) | ListKind::ControllerButtonSettings(..) | ListKind::ControllerButton(..) | ListKind::ControllerCapture(_) => unreachable!("controller lists handled above"),
-        ListKind::PlayerList | ListKind::PlayerPage(_) | ListKind::PlayerDo(..) | ListKind::BanList => crate::player_list::run(app, kind, action),
-        ListKind::Admin | ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..) if crate::admin_panel::remote(app) => crate::admin_panel::run(app, kind, action),
+        ListKind::ControllerDevices(_)
+        | ListKind::Controller(..)
+        | ListKind::ControllerAxis(..)
+        | ListKind::ControllerButtons(_)
+        | ListKind::ControllerButtonSettings(..)
+        | ListKind::ControllerButton(..)
+        | ListKind::ControllerCapture(_) => unreachable!("controller lists handled above"),
+        ListKind::PlayerList
+        | ListKind::PlayerPage(_)
+        | ListKind::PlayerDo(..)
+        | ListKind::BanList => crate::player_list::run(app, kind, action),
+        ListKind::Admin
+        | ListKind::AdminPlayers
+        | ListKind::AdminPlayer(_)
+        | ListKind::AdminConfirm(..)
+            if crate::admin_panel::remote(app) =>
+        {
+            crate::admin_panel::run(app, kind, action)
+        }
         ListKind::Admin | ListKind::AdminClassic => {
             crate::admin::run(app, action);
             Some(kind.clone())
@@ -997,8 +1572,15 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             // (the arrows and a click on a stepper only change values: no buttons)
             let step = matches!(mv, Move::Next);
             match verb {
-                "graphics_apply" if step => return Some(ListKind::GraphicsConfirm(match kind { ListKind::Options(tab) => *tab, _ => 0 })),
-                "graphics_discard" if step => { cancel_graphics_changes(app); }
+                "graphics_apply" if step => {
+                    return Some(ListKind::GraphicsConfirm(match kind {
+                        ListKind::Options(tab) => *tab,
+                        _ => 0,
+                    }));
+                }
+                "graphics_discard" if step => {
+                    cancel_graphics_changes(app);
+                }
                 "vr_nav_edit" if step && app.vr_active() && app.player.is_some() => {
                     app.start_vr_nav_edit();
                     return None;
@@ -1008,14 +1590,30 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     app.menus.list_dirty = true;
                 }
                 // (the preset, the clouds and the precipitation are picked from a drop-down: `App::chooser_pick`)
-                "weather" | "cloudkind" | "precipkind" | "metar_src" | "sel" | "preset" | "gfxprofile" | "reset" => {}
+                "weather" | "cloudkind" | "precipkind" | "metar_src" | "sel" | "preset"
+                | "gfxprofile" | "reset" => {}
                 "metar_icao_edit" if step => {
-                    if app.menus.menu_edit_icao { app.apply_icao_edit(); } else { app.start_icao_edit(); }
+                    if app.menus.menu_edit_icao {
+                        app.apply_icao_edit();
+                    } else {
+                        app.start_icao_edit();
+                    }
                 }
-                "time_edit" | "clock_ontime" | "clock_set" | "clock_shift" if step => clock_lines::clock_action(app, verb, arg),
-                "view_editor" if step => { crate::game_panels::view_editor::open(app); return None; }
-                "mirror_hud_edit" if step => { app.page_action(verb); return None; }
-                "remote_panel" if step => { crate::game_panels::remote_panel::open(app); return None; }
+                "time_edit" | "clock_ontime" | "clock_set" | "clock_shift" if step => {
+                    clock_lines::clock_action(app, verb, arg)
+                }
+                "view_editor" if step => {
+                    crate::game_panels::view_editor::open(app);
+                    return None;
+                }
+                "mirror_hud_edit" if step => {
+                    app.page_action(verb);
+                    return None;
+                }
+                "remote_panel" if step => {
+                    crate::game_panels::remote_panel::open(app);
+                    return None;
+                }
                 "seat_reset" if step => {
                     // (this bus's views as its .bus file has them again)
                     app.settings.seat = [0.0; 3];
@@ -1048,21 +1646,31 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             if matches!(mv, Move::Next) {
                 match verb {
                     "custom_number_edit" => {
-                        if app.menus.menu_edit_number { app.apply_number_edit(); } else { app.start_number_edit(); }
+                        if app.menus.menu_edit_number {
+                            app.apply_number_edit();
+                        } else {
+                            app.start_number_edit();
+                        }
                     }
                     "custom_ident_edit" => {
-                        if app.menus.menu_edit_ident { app.apply_ident_edit(); } else { app.start_ident_edit(); }
+                        if app.menus.menu_edit_ident {
+                            app.apply_ident_edit();
+                        } else {
+                            app.start_ident_edit();
+                        }
                     }
                     _ => {
                         app.page_action(verb);
-                        return None
-                    },
+                        return None;
+                    }
                 }
             }
             Some(kind.clone())
         }
         ListKind::Controls => {
-            if !matches!(mv, Move::Next) { return Some(kind.clone()); }
+            if !matches!(mv, Move::Next) {
+                return Some(kind.clone());
+            }
             match verb {
                 "keyboard" => Some(ListKind::Keyboard(0)),
                 "controllers" => Some(ListKind::ControllerDevices(0)),
@@ -1070,7 +1678,9 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             }
         }
         ListKind::Keyboard(_) => {
-            if !matches!(mv, Move::Next) { return Some(kind.clone()); }
+            if !matches!(mv, Move::Next) {
+                return Some(kind.clone());
+            }
             match verb {
                 "key_events" => Some(ListKind::Events),
                 "keybind" => {
@@ -1093,9 +1703,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             }
         }
         ListKind::Lines => match verb {
-            "line" => {
-                Some(ListKind::Tours(arg.to_string(), None))
-            }
+            "line" => Some(ListKind::Tours(arg.to_string(), None)),
             "free" => {
                 end_duty(app);
                 None
@@ -1104,8 +1712,20 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
         },
         ListKind::Tours(_, pick) => {
             if let Some((line, tour)) = arg.split_once('\u{1}') {
-                let chosen = pick.as_ref().filter(|p| p.0 == tour).map(|p| p.1).unwrap_or(0);
-                let trip = pick.as_ref().filter(|p| p.0 == tour).map(|p| p.2).unwrap_or_else(|| crate::duty_book::timetable(app).map(|s| s.tour_trip_now(line, tour, app.clock.time)).unwrap_or(0));
+                let chosen = pick
+                    .as_ref()
+                    .filter(|p| p.0 == tour)
+                    .map(|p| p.1)
+                    .unwrap_or(0);
+                let trip = pick
+                    .as_ref()
+                    .filter(|p| p.0 == tour)
+                    .map(|p| p.2)
+                    .unwrap_or_else(|| {
+                        crate::duty_book::timetable(app)
+                            .map(|s| s.tour_trip_now(line, tour, app.clock.time))
+                            .unwrap_or(0)
+                    });
                 start_duty_at(app, line, tour, trip, chosen);
             }
             None
@@ -1129,28 +1749,54 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     Ok(h) => {
                         let name = h.name.clone();
                         p.vehicle.host.hof = Some(std::sync::Arc::new(h));
-                        app.service_msg = Some((omsi_ui::i18n::tr_fill("Depot file: {}", &[("{}", &name.trim())]), 3.0));
+                        p.vehicle.set_yard(&name);
+                        app.service_msg = Some((
+                            omsi_ui::i18n::tr_fill("Depot file: {}", &[("{}", &name.trim())]),
+                            3.0,
+                        ));
                     }
-                    Err(e) => app.service_msg = Some((omsi_ui::i18n::tr_fill_words("Depot file: {e}", &[("{e}", &e.to_string())]), 4.0)),
+                    Err(e) => {
+                        app.service_msg = Some((
+                            omsi_ui::i18n::tr_fill_words(
+                                "Depot file: {e}",
+                                &[("{e}", &e.to_string())],
+                            ),
+                            4.0,
+                        ))
+                    }
                 }
             }
             None
         }
         ListKind::Spots => {
             let found = app.world.clone().and_then(|w| {
-                let first = arg.trim().parse::<usize>().ok().filter(|&i| i < w.global.entry_points.len())?;
+                let first = arg
+                    .trim()
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|&i| i < w.global.entry_points.len())?;
                 // (the entry points of tiles that are not loaded come from the map index)
                 w.index();
                 // the first place of that name nobody stands on, in global.cfg's order: as
                 // in OMSI, choosing the name again moves the bus on to the next one
-                let (_, places) = spot_groups(&w.global.entry_points).into_iter().find(|(_, p)| p.contains(&first))?;
-                let free = places.iter().copied().find(|&i| !spot_taken(app, &w, &w.global.entry_points[i])).unwrap_or(first);
-                w.entry_point_place(&w.global.entry_points[free]).map(|(pos, rot)| (pos, rot[0]))
+                let (_, places) = spot_groups(&w.global.entry_points)
+                    .into_iter()
+                    .find(|(_, p)| p.contains(&first))?;
+                let free = places
+                    .iter()
+                    .copied()
+                    .find(|&i| !spot_taken(app, &w, &w.global.entry_points[i]))
+                    .unwrap_or(first);
+                w.entry_point_place(&w.global.entry_points[free])
+                    .map(|(pos, rot)| (pos, rot[0]))
             });
             match found {
                 Some((pos, heading)) => {
                     if crate::admin::request_teleport(app, pos, heading) {
-                        app.service_msg = Some((omsi_ui::tr("The bus stands at the start point").into_owned(), 3.0));
+                        app.service_msg = Some((
+                            omsi_ui::tr("The bus stands at the start point").into_owned(),
+                            3.0,
+                        ));
                         app.service_event("teleport", app.menu_by(), None);
                     }
                 }
@@ -1158,13 +1804,17 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             }
             None
         }
-        ListKind::PlaceMaker | ListKind::PlaceType(_) if verb == "maker" => Some(ListKind::PlaceType(arg.to_string())),
+        ListKind::PlaceMaker | ListKind::PlaceType(_) if verb == "maker" => {
+            Some(ListKind::PlaceType(arg.to_string()))
+        }
         ListKind::PlaceMaker if verb == "depot" => {
             app.close_game_menu();
             app.take_depot_bus(arg.trim());
             None
         }
-        ListKind::PlaceMaker | ListKind::PlaceType(_) => Some(ListKind::PlaceLivery(arg.to_string())),
+        ListKind::PlaceMaker | ListKind::PlaceType(_) => {
+            Some(ListKind::PlaceLivery(arg.to_string()))
+        }
         ListKind::PlaceLivery(bus) => Some(ListKind::PlaceHof(bus.clone(), arg.to_string())),
         ListKind::PlaceHof(bus, paint) => {
             let (bus, mut paint, hof) = (bus.clone(), paint.clone(), arg.trim().to_string());
@@ -1174,10 +1824,16 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                 paint.clear();
             } else if paint.trim().is_empty() {
                 let names = bus_def(app, &bus).map(|d| liveries(&d)).unwrap_or_default();
-                paint = pick_random(&names, fresh_seed()).cloned().unwrap_or_default();
+                paint = pick_random(&names, fresh_seed())
+                    .cloned()
+                    .unwrap_or_default();
             }
             app.close_game_menu();
-            app.place_vehicle(&bus, Some(paint).filter(|p| !p.is_empty()), Some(hof).filter(|h| !h.is_empty()));
+            app.place_vehicle(
+                &bus,
+                Some(paint).filter(|p| !p.is_empty()),
+                Some(hof).filter(|h| !h.is_empty()),
+            );
             None
         }
         ListKind::Destinations if verb == "routes" => Some(ListKind::RouteNumbers),
@@ -1203,13 +1859,25 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             if let Some(p) = app.player.as_mut() {
                 let hof = p.vehicle.host.hof.clone();
                 let ti: usize = arg.trim().parse().unwrap_or(usize::MAX);
-                if let Some((hof, t)) = hof.as_ref().and_then(|h| h.termini.get(ti).map(|t| (h, t))) {
+                if let Some((hof, t)) = hof.as_ref().and_then(|h| h.termini.get(ti).map(|t| (h, t)))
+                {
                     // (the line on the IBIS stays; only the destination changes)
                     let line = destination_line(&p.vehicle);
                     let name = t.menu_name();
                     p.set_destination_by_hand(hof, &line, ti, true);
-                    log::info!("destination display set by hand: {} {} (terminus code now {:?})", t.code, name.trim(), p.vehicle.var("IBIS_TerminusCode"));
-                    app.service_msg = Some((omsi_ui::i18n::said(format!("{} {}", omsi_ui::tr("Destination:"), name.trim()), format!("Destination: {}", name.trim())), 3.0));
+                    log::info!(
+                        "destination display set by hand: {} {} (terminus code now {:?})",
+                        t.code,
+                        name.trim(),
+                        p.vehicle.var("IBIS_TerminusCode")
+                    );
+                    app.service_msg = Some((
+                        omsi_ui::i18n::said(
+                            format!("{} {}", omsi_ui::tr("Destination:"), name.trim()),
+                            format!("Destination: {}", name.trim()),
+                        ),
+                        3.0,
+                    ));
                 }
             }
             None
@@ -1231,7 +1899,10 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
         ListKind::Numbers => {
             if let (Some((n, reg)), Some(p)) = (arg.split_once('\u{1}'), app.player.as_mut()) {
                 set_identity_to_player_vehicle(p, n, Some(reg));
-                app.service_msg = Some((omsi_ui::i18n::tr_fill("Fleet number {n}", &[("{n}", &n)]), 3.0));
+                app.service_msg = Some((
+                    omsi_ui::i18n::tr_fill("Fleet number {n}", &[("{n}", &n)]),
+                    3.0,
+                ));
             }
             None
         }
@@ -1241,7 +1912,11 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
 /// Updates the fleet number and license plate of the player vehicle
 /// If `number` or `ident` is empty, leaves it unchanged; if `ident` is None, automatically
 /// generates a plate based on the number.
-pub(crate) fn set_identity_to_player_vehicle(p: &mut crate::player::Player, number: &str, ident: Option<&str>) {
+pub(crate) fn set_identity_to_player_vehicle(
+    p: &mut crate::player::Player,
+    number: &str,
+    ident: Option<&str>,
+) {
     let v = &mut p.vehicle;
     if !number.is_empty() {
         if let Some(i) = v.ty.program.str_var("number") {
@@ -1257,25 +1932,24 @@ pub(crate) fn set_identity_to_player_vehicle(p: &mut crate::player::Player, numb
             v.state.str_vars[i as usize] = ident.to_string();
         }
     }
-
 }
 
 // the settings windows (options, vehicle, world), one concern a file
-mod rows;
-mod options;
-mod dropdowns;
-mod menu_pages;
 mod clock_lines;
+mod dropdowns;
 mod duty;
 mod graphics;
 mod liveries;
+mod menu_pages;
+mod options;
+mod rows;
 mod streets;
-pub(crate) use rows::*;
-pub(crate) use options::*;
 pub(crate) use dropdowns::*;
-pub(crate) use menu_pages::*;
 pub(crate) use duty::*;
 pub(crate) use graphics::*;
+pub(crate) use menu_pages::*;
+pub(crate) use options::*;
+pub(crate) use rows::*;
 pub(crate) use streets::*;
 
 #[cfg(test)]
@@ -1283,15 +1957,44 @@ mod tests {
     #[test]
     fn a_typed_route_with_a_letter_goes_onto_the_roller_blind() {
         use crate::schedule::BlindPick;
-        let pending = Some(BlindPick { row: 3, line: "41".into() });
-        assert_eq!(super::blind_with_line(pending, Some(7), "92A"), Some(BlindPick { row: 3, line: "92A".into() }));
-        assert_eq!(super::blind_with_line(None, Some(7), "4X"), Some(BlindPick { row: 7, line: "4X".into() }));
+        let pending = Some(BlindPick {
+            row: 3,
+            line: "41".into(),
+        });
+        assert_eq!(
+            super::blind_with_line(pending, Some(7), "92A"),
+            Some(BlindPick {
+                row: 3,
+                line: "92A".into()
+            })
+        );
+        assert_eq!(
+            super::blind_with_line(None, Some(7), "4X"),
+            Some(BlindPick {
+                row: 7,
+                line: "4X".into()
+            })
+        );
         assert_eq!(super::blind_with_line(None, None, "1A"), None);
-        assert_eq!(super::kept_blind_line("92A", true), Some("92A".into()), "a destination picked: the letter stays");
-        assert_eq!(super::kept_blind_line("92A", false), None, "92A then 41 typed: the new number goes up");
+        assert_eq!(
+            super::kept_blind_line("92A", true),
+            Some("92A".into()),
+            "a destination picked: the letter stays"
+        );
+        assert_eq!(
+            super::kept_blind_line("92A", false),
+            None,
+            "92A then 41 typed: the new number goes up"
+        );
         assert_eq!(super::kept_blind_line("41", true), None);
-        assert!(super::route_keeps_blind("") && super::route_keeps_blind("92A"), "a route the IBIS cannot take leaves the blind's text");
-        assert!(!super::route_keeps_blind("41") && !super::route_keeps_blind("92E"), "a number the IBIS takes goes up");
+        assert!(
+            super::route_keeps_blind("") && super::route_keeps_blind("92A"),
+            "a route the IBIS cannot take leaves the blind's text"
+        );
+        assert!(
+            !super::route_keeps_blind("41") && !super::route_keeps_blind("92E"),
+            "a number the IBIS takes goes up"
+        );
     }
 
     /// "Random livery" draws among all liveries (#2410: it always gave the same one).
@@ -1311,20 +2014,52 @@ mod tests {
     /// one name are one line), its places in global.cfg's order, the names in OMSI's order.
     #[test]
     fn start_points_are_grouped_by_name_in_omsis_order() {
-        let ep = |name: &str| omsi_map::global::EntryPoint { name: name.into(), ..Default::default() };
-        let points = [ep("beta"), ep("Nordspitze Bauernhof"), ep("Äpfel"), ep(""), ep("nordspitze bauernhof"), ep("ab"), ep("Nordspitze Bauernhof")];
+        let ep = |name: &str| omsi_map::global::EntryPoint {
+            name: name.into(),
+            ..Default::default()
+        };
+        let points = [
+            ep("beta"),
+            ep("Nordspitze Bauernhof"),
+            ep("Äpfel"),
+            ep(""),
+            ep("nordspitze bauernhof"),
+            ep("ab"),
+            ep("Nordspitze Bauernhof"),
+        ];
         let groups = super::spot_groups(&points);
         let names: Vec<Option<&str>> = groups.iter().map(|g| g.0.as_deref()).collect();
-        assert_eq!(names, [Some("ab"), Some("Äpfel"), Some("beta"), Some("Nordspitze Bauernhof"), None]);
+        assert_eq!(
+            names,
+            [
+                Some("ab"),
+                Some("Äpfel"),
+                Some("beta"),
+                Some("Nordspitze Bauernhof"),
+                None
+            ]
+        );
         assert_eq!(groups[3].1, [1, 4, 6]);
         assert_eq!(groups[4].1, [3]);
     }
 
     #[test]
     fn searches_model_and_hof_names_and_paths_without_losing_their_actions() {
-        assert!(super::search_matches("Volvo BRT", "bus Vehicles/Pack/biarticulado.bus", "VOLVO biarticulado"));
-        assert!(super::search_matches("Curitiba", "hof Vehicles/Bus/curitiba.hof", "curitiba .hof"));
-        assert!(!super::search_matches("Curitiba", "hof curitiba.hof", "recife"));
+        assert!(super::search_matches(
+            "Volvo BRT",
+            "bus Vehicles/Pack/biarticulado.bus",
+            "VOLVO biarticulado"
+        ));
+        assert!(super::search_matches(
+            "Curitiba",
+            "hof Vehicles/Bus/curitiba.hof",
+            "curitiba .hof"
+        ));
+        assert!(!super::search_matches(
+            "Curitiba",
+            "hof curitiba.hof",
+            "recife"
+        ));
         assert!(super::search_matches("Anything", "bus x.bus", "  "));
     }
 
@@ -1334,10 +2069,16 @@ mod tests {
     #[test]
     fn the_preset_is_recognised_from_any_mode() {
         for mode in ["vanilla", "vanilla_plus", "enhanced", "enhanced_plus"] {
-            for (i, (_, preset)) in omsi_launcher_lib::graphics_presets().into_iter().enumerate() {
-                let mut file = omsi_launcher_lib::settings_from_text(Some(&format!("graphics={mode}\n")));
+            for (i, (_, preset)) in omsi_launcher_lib::graphics_presets()
+                .into_iter()
+                .enumerate()
+            {
+                let mut file =
+                    omsi_launcher_lib::settings_from_text(Some(&format!("graphics={mode}\n")));
                 omsi_launcher_lib::apply_graphics_profile(&preset, &mut file);
-                let mut file = omsi_launcher_lib::settings_from_text(Some(&omsi_launcher_lib::settings_to_text(&file, None)));
+                let mut file = omsi_launcher_lib::settings_from_text(Some(
+                    &omsi_launcher_lib::settings_to_text(&file, None),
+                ));
                 assert_eq!(super::preset_now(&file), Some(i), "{mode}: {i}");
                 file["mirror_size"] = serde_json::json!(1024);
                 assert_eq!(super::preset_now(&file), None);
@@ -1349,7 +2090,11 @@ mod tests {
     /// too (92E, IBIS 92 and suffix 10).
     #[test]
     fn a_destination_picked_from_the_list_keeps_the_lines_letter() {
-        let mut v = crate::schedule::tests::script_test_vehicle("{frame}\n{end}\n", "IBIS_LinieKurs\nIBIS_Linie_Suffix\nIBIS_Linie_Complex\nIBIS_TerminusCode\n", "Matrix_Nr\nSetLineTo\n");
+        let mut v = crate::schedule::tests::script_test_vehicle(
+            "{frame}\n{end}\n",
+            "IBIS_LinieKurs\nIBIS_Linie_Suffix\nIBIS_Linie_Complex\nIBIS_TerminusCode\n",
+            "Matrix_Nr\nSetLineTo\n",
+        );
         let set_str = |v: &mut omsi_sim::VehicleInstance, name: &str, s: &str| {
             let i = v.ty.program.str_var(name).unwrap();
             v.state.str_vars[i as usize] = s.to_string();
@@ -1359,10 +2104,26 @@ mod tests {
         v.set_var("IBIS_Linie_Complex", 9210.0);
         set_str(&mut v, "Matrix_Nr", "92E");
         assert_eq!(super::destination_line(&v), "92E");
-        let hof = omsi_vehicle::Hof { termini: vec![omsi_vehicle::hof::Terminus { code: 211, texture_id: "U Rathaus Spandau".into(), strings: vec!["RATHAUS SPANDAU".into()], ..Default::default() }], ..Default::default() };
+        let hof = omsi_vehicle::Hof {
+            termini: vec![omsi_vehicle::hof::Terminus {
+                code: 211,
+                texture_id: "U Rathaus Spandau".into(),
+                strings: vec!["RATHAUS SPANDAU".into()],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
         let line = super::destination_line(&v);
         crate::schedule::set_player_destination_at(&mut v, &hof, &line, 0, &[]);
-        assert_eq!((v.var("IBIS_LinieKurs"), v.var("IBIS_Linie_Suffix"), v.var("IBIS_Linie_Complex"), v.var("IBIS_TerminusCode")), (Some(92.0), Some(10.0), Some(9210.0), Some(211.0)));
+        assert_eq!(
+            (
+                v.var("IBIS_LinieKurs"),
+                v.var("IBIS_Linie_Suffix"),
+                v.var("IBIS_Linie_Complex"),
+                v.var("IBIS_TerminusCode")
+            ),
+            (Some(92.0), Some(10.0), Some(9210.0), Some(211.0))
+        );
         // a route number the IBIS cannot take is left to the display: the IBIS keeps its own
         set_str(&mut v, "Matrix_Nr", "-10");
         assert_eq!(super::destination_line(&v), "92");
@@ -1382,7 +2143,11 @@ mod tests {
         set_str(&mut v, "SetLineTo", "5");
         v.set_var("IBIS_LinieKurs", 145.0);
         assert_eq!(super::destination_line(&v), "145");
-        let mut blind = crate::schedule::tests::script_test_vehicle("{trigger:rollband_sync}\n{end}\n", "IBIS_LinieKurs\n", "SetLineTo\n");
+        let mut blind = crate::schedule::tests::script_test_vehicle(
+            "{trigger:rollband_sync}\n{end}\n",
+            "IBIS_LinieKurs\n",
+            "SetLineTo\n",
+        );
         set_str(&mut blind, "SetLineTo", "  5");
         blind.set_var("IBIS_LinieKurs", 145.0);
         assert_eq!(super::destination_line(&blind), "5");
@@ -1392,14 +2157,35 @@ mod tests {
         let route = super::form_route(&blind, None);
         assert_eq!(route, "92A");
         assert!(super::route_keeps_blind(&route));
-        assert_eq!(super::kept_blind_line(&blind.str_var("SetLineTo"), super::route_keeps_blind(&route)), Some("92A".into()));
+        assert_eq!(
+            super::kept_blind_line(
+                &blind.str_var("SetLineTo"),
+                super::route_keeps_blind(&route)
+            ),
+            Some("92A".into())
+        );
         set_str(&mut v, "Matrix_Nr", "92A");
-        assert_eq!(super::form_route(&v, None), "92A", "a matrix showing 92A: the form offers it, not the IBIS's 145");
+        assert_eq!(
+            super::form_route(&v, None),
+            "92A",
+            "a matrix showing 92A: the form offers it, not the IBIS's 145"
+        );
         set_str(&mut v, "Matrix_Nr", "");
-        assert_eq!(super::form_route(&v, None), super::destination_line(&v), "nothing lettered shown: the form offers the IBIS's line");
+        assert_eq!(
+            super::form_route(&v, None),
+            super::destination_line(&v),
+            "nothing lettered shown: the form offers the IBIS's line"
+        );
         set_str(&mut blind, "SetLineTo", " 41");
-        let pending = crate::schedule::BlindPick { row: 2, line: "92A".into() };
-        assert_eq!(super::form_route(&blind, Some(&pending)), "92A", "a bus still off: the pick waiting for it, not what the IBIS wrote");
+        let pending = crate::schedule::BlindPick {
+            row: 2,
+            line: "92A".into(),
+        };
+        assert_eq!(
+            super::form_route(&blind, Some(&pending)),
+            "92A",
+            "a bus still off: the pick waiting for it, not what the IBIS wrote"
+        );
     }
 
     #[test]
@@ -1441,6 +2227,14 @@ mod tests {
     }
 
     #[test]
+    fn visibility_goes_down_to_50_m_like_omsi() {
+        let steps = super::steps_of("visibility").unwrap();
+        assert_eq!(steps.first(), Some(&50.0));
+        assert_eq!(steps.last(), Some(&50000.0));
+        assert!(steps.windows(2).all(|w| w[0] < w[1]) && steps.contains(&100.0));
+    }
+
+    #[test]
     fn lines_sort_as_numbers() {
         let mut v = vec!["13N", "5", "137", "N30", "92"];
         v.sort_by(|a, b| super::natural(a, b));
@@ -1457,4 +2251,3 @@ mod tests {
         assert!(!super::numeric_ibis_line("EXP"));
     }
 }
-

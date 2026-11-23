@@ -22,7 +22,11 @@ pub const DEPTH_FAR: f32 = 25_000.0;
 
 impl Camera {
     pub fn depth_far(&self) -> f32 {
-        if self.far >= 450.0 { self.far.max(DEPTH_FAR) } else { self.far }
+        if self.far >= 450.0 {
+            self.far.max(DEPTH_FAR)
+        } else {
+            self.far
+        }
     }
 
     pub fn forward(&self) -> Vec3 {
@@ -53,13 +57,22 @@ impl Camera {
     /// View-projection relative to a render origin (the camera itself when `origin` is its
     /// position), so that GPU maths stays in small numbers.
     pub fn view_proj(&self, aspect: f32, origin: DVec3) -> Mat4 {
-        let view = Mat4::look_to_rh((self.position - origin).as_vec3(), self.forward(), self.up());
+        let view = Mat4::look_to_rh(
+            (self.position - origin).as_vec3(),
+            self.forward(),
+            self.up(),
+        );
         // Reversed Z (near and far swapped): the depth buffer then spends its float
         // precision where the scene is far away instead of where it is close, which is what
         // stops distant roads, kerbs and painted ground from flickering against each other
         // - with a plain 0..1 depth the resolution at a kilometre is a good quarter of a
         // metre, less than the gap between a road surface and the ground under it.
-        let proj = Mat4::perspective_rh(self.fov_deg.to_radians(), aspect, self.depth_far(), self.near);
+        let proj = Mat4::perspective_rh(
+            self.fov_deg.to_radians(),
+            aspect,
+            self.depth_far(),
+            self.near,
+        );
         proj * view
     }
 
@@ -112,6 +125,12 @@ pub struct Lighting {
     pub shadows: bool,
     /// How wet the roads are (0..1): rain darkens them and makes them mirror the sky.
     pub wetness: f32,
+    /// The air's temperature (degC): the water on the panes spreads into a film in a cold
+    /// rain and beads up in a warm one (scene/08_rain_glass.wgsl `glass_water`).
+    pub air_temp: f32,
+    /// By day in a downpour, the share of the windows round the street lit from inside (0..1,
+    /// `omsi_scene::lights::apply_weather`; 0 with the setting `rain_lights` off).
+    pub rain_lights: f32,
     /// Snow cover on the ground and the roads (0..1).
     pub snow: f32,
     /// The roads are kept clear of the snow (the weather's "snow on road" off): no cover is
@@ -171,6 +190,13 @@ pub struct Lighting {
     /// light they scatter is 1 - e^-depth): windscreen, side windows, rear window, and how
     /// far the defroster has cleared the windscreen (0..1; enhanced path).
     pub condensation: [f32; 4],
+    /// The pitch and roll of `inside` as sin, cos, sin, cos (its `body_rotation`'s): the
+    /// condensation is laid on its panes in the bus's own frame, so it stays on the glass on
+    /// a hill (#3958). Level: `[0, 1, 0, 1]`.
+    pub pane_tilt: [f32; 4],
+    /// How brightly the saloon of the bus the camera is in is lit (0..1, its brightest
+    /// `[interiorlight]`): its glass mirrors the lit cabin at night (enhanced path).
+    pub cabin_light: f32,
     pub fog_base: Option<f64>,
     pub envir_tint: [Vec3; 3],
     /// How bright an LED panel's dots burn (`MaterialExtra::led`; the settings' 16 levels
@@ -281,8 +307,12 @@ impl Default for Lighting {
             snowfall: 0.0,
             wind: Vec3::ZERO,
             condensation: [0.0; 4],
+            pane_tilt: [0.0, 1.0, 0.0, 1.0],
+            cabin_light: 0.0,
             lamp_shadows: false,
             wetness: 0.0,
+            air_temp: 12.0,
+            rain_lights: 0.0,
             snow: 0.0,
             roads_clear: false,
             road_snow: None,
@@ -332,8 +362,18 @@ mod depth_far_tests {
 
     #[test]
     fn a_backdrop_20_km_away_is_inside_the_depth_range() {
-        let cam = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 6000.0 };
-        let p = cam.view_proj(16.0 / 9.0, DVec3::ZERO).project_point3(cam.forward() * 20_000.0);
+        let cam = Camera {
+            position: DVec3::ZERO,
+            yaw: 0.0,
+            pitch: 0.0,
+            roll: 0.0,
+            fov_deg: 60.0,
+            near: 0.1,
+            far: 6000.0,
+        };
+        let p = cam
+            .view_proj(16.0 / 9.0, DVec3::ZERO)
+            .project_point3(cam.forward() * 20_000.0);
         assert!(p.z > 0.0 && p.z < 1.0, "{p:?}");
         assert_eq!(cam.far, 6000.0);
     }

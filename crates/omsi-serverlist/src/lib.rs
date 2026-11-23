@@ -16,7 +16,7 @@ pub mod publish;
 pub use moderation::{BuiltinModerator, IconVerdict, ImageClassifier, Moderator, Verdict};
 
 /// The list service (a Cloudflare Worker, see `services/serverlist/README.md`).
-pub const DEFAULT_SERVICE: &str = "https://serverlist.openomsi.workers.dev";
+pub const DEFAULT_SERVICE: &str = "https://openomsi-serverlist.savvabestbrother.workers.dev";
 
 /// The service a setting names (`public_list_url`), else the default; only `https://`.
 pub fn service_url(setting: &str) -> String {
@@ -36,7 +36,10 @@ mod tests {
     fn only_an_https_service_is_taken() {
         assert_eq!(service_url(""), DEFAULT_SERVICE);
         assert_eq!(service_url("http://insecure.example"), DEFAULT_SERVICE);
-        assert_eq!(service_url("https://list.example.org/"), "https://list.example.org");
+        assert_eq!(
+            service_url("https://list.example.org/"),
+            "https://list.example.org"
+        );
         assert_eq!(service_url("https://a b"), DEFAULT_SERVICE);
     }
 }

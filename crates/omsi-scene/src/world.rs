@@ -114,7 +114,16 @@ pub struct World {
     pub(super) departed: Mutex<std::collections::HashSet<i64>>,
     /// What a parked car that drove off left behind: its object and its boxes, for an AI
     /// car of the same kind that parks in the space again (`return_parked`).
-    pub(super) departed_objects: Mutex<std::collections::HashMap<i64, (ParkedObject, Vec<omsi_sim::collision::Obb>, Vec<omsi_sim::collision::Obb>)>>,
+    pub(super) departed_objects: Mutex<
+        std::collections::HashMap<
+            i64,
+            (
+                ParkedObject,
+                Vec<omsi_sim::collision::Obb>,
+                Vec<omsi_sim::collision::Obb>,
+            ),
+        >,
+    >,
     /// The loaded tiles' own objects by map id, for the object editor (`crate::editor`).
     pub edit_objects: Mutex<HashMap<i64, EditObject>>,
     /// What the object editor did this run, by map id: kept over tile reloads until saved.
@@ -270,7 +279,16 @@ pub fn model_lights_faded(
     fades: &[f32],
 ) -> Vec<omsi_render::Corona> {
     let mut out = Vec::new();
-    model_lights_into(model, mesh_transforms, pos, value_of, fades, &[], &mut out, None);
+    model_lights_into(
+        model,
+        mesh_transforms,
+        pos,
+        value_of,
+        fades,
+        &[],
+        &mut out,
+        LampSource::Model(None),
+    );
     out
 }
 
@@ -284,7 +302,36 @@ pub fn model_lights_extend(
     fades: &[f32],
     out: &mut Vec<omsi_render::Corona>,
 ) {
-    model_lights_into(model, mesh_transforms, pos, value_of, fades, &[], out, None);
+    model_lights_into(
+        model,
+        mesh_transforms,
+        pos,
+        value_of,
+        fades,
+        &[],
+        out,
+        LampSource::Model(None),
+    );
+}
+
+pub(crate) fn vehicle_model_lights_extend(
+    model: &Model,
+    mesh_transforms: &dyn Fn(usize) -> Mat4,
+    pos: DVec3,
+    value_of: &dyn Fn(&str) -> f32,
+    fades: &[f32],
+    out: &mut Vec<omsi_render::Corona>,
+) {
+    model_lights_into(
+        model,
+        mesh_transforms,
+        pos,
+        value_of,
+        fades,
+        &[],
+        out,
+        LampSource::Vehicle,
+    );
 }
 
 /// Every light of a model in the order [`model_lights_owned`] numbers them: the mesh it
@@ -300,7 +347,15 @@ pub fn model_light_sources(model: &Model) -> Vec<(usize, glam::Vec3, glam::Vec3)
             out.push((i, glam::Vec3::from(l.pos), glam::Vec3::ZERO));
         }
         for l in &md.light_enh_2 {
-            out.push((i, glam::Vec3::from(l.pos), if l.omni { glam::Vec3::ZERO } else { glam::Vec3::from(l.dir) }));
+            out.push((
+                i,
+                glam::Vec3::from(l.pos),
+                if l.omni {
+                    glam::Vec3::ZERO
+                } else {
+                    glam::Vec3::from(l.dir)
+                },
+            ));
         }
     }
     out
@@ -312,7 +367,13 @@ pub fn model_light_sources(model: &Model) -> Vec<(usize, glam::Vec3, glam::Vec3)
 /// (corona.wgsl, flag bit 8); without bit 2 a halo round it in fog, seen from in front
 /// (sizes and strengths in `lights::collect` and corona.wgsl, like the cone's) - `size` is
 /// the light's size, `halo_cone` its outer and inner half cone angles (radians).
-pub(super) fn push_lamp_sprites(out: &mut Vec<omsi_render::Corona>, glow: omsi_render::Corona, effect: u8, size: f32, halo_cone: (f32, f32)) {
+pub(super) fn push_lamp_sprites(
+    out: &mut Vec<omsi_render::Corona>,
+    glow: omsi_render::Corona,
+    effect: u8,
+    size: f32,
+    halo_cone: (f32, f32),
+) {
     if effect & 4 == 0 {
         out.push(glow);
     }
@@ -336,6 +397,7 @@ pub(super) fn push_lamp_sprites(out: &mut Vec<omsi_render::Corona>, glow: omsi_r
             inner_cos: halo_cone.1,
             texture: crate::lights::glow_texture_id(),
             halo: true,
+            vehicle_lamp: glow.vehicle_lamp,
             ..Default::default()
         });
     }
@@ -364,8 +426,45 @@ pub(super) fn model_lights_owned_with_texture_dirs(
 ) -> Vec<(omsi_render::Corona, usize)> {
     let mut out = Vec::new();
     let mut owners: Vec<usize> = Vec::new();
-    model_lights_into(model, mesh_transforms, pos, value_of, fades, publisher_texture_dirs, &mut out, Some(&mut owners));
+    model_lights_into(
+        model,
+        mesh_transforms,
+        pos,
+        value_of,
+        fades,
+        publisher_texture_dirs,
+        &mut out,
+        LampSource::Model(Some(&mut owners)),
+    );
     out.into_iter().zip(owners).collect()
+}
+
+enum LampSource<'a> {
+    Model(Option<&'a mut Vec<usize>>),
+    Vehicle,
+}
+
+fn is_exterior_lamp_channel(variable: &str) -> bool {
+    // The lamp tags have no interior flag. Unknown mod channels keep their authored appearance.
+    omsi_script::compile::with_lower(variable.trim(), |name| {
+        matches!(
+            name,
+            "ai_light"
+                | "ai_brakelight"
+                | "ai_blinker_l"
+                | "ai_blinker_r"
+                | "lights_abbl"
+                | "lights_main"
+                | "lights_fern"
+                | "lights_stand"
+                | "lights_brems"
+                | "lights_blinker_l"
+                | "lights_blinker_r"
+                | "lights_rueckfahr"
+                | "lights_nebel"
+                | "lights_nebelschluss"
+        )
+    })
 }
 
 /// The sprites of a model's lights added to `out`, and with `owners` the light each of them
@@ -378,8 +477,12 @@ fn model_lights_into(
     fades: &[f32],
     publisher_texture_dirs: &[PathBuf],
     out: &mut Vec<omsi_render::Corona>,
-    mut owners: Option<&mut Vec<usize>>,
+    source: LampSource<'_>,
 ) {
+    let (vehicle, mut owners) = match source {
+        LampSource::Model(owners) => (false, owners),
+        LampSource::Vehicle => (true, None),
+    };
     let base = out.len();
     let mut seq = 0usize;
     let mut li = 0usize;
@@ -393,6 +496,8 @@ fn model_lights_into(
         let first_li = li;
         li += md.light_enh_2.len();
         let xf = mesh_transforms(i);
+        // A cab-only mesh can reuse an exterior lamp's script channel.
+        let exterior_mesh = vehicle && (md.viewpoint == 0 || md.viewpoint & 0b101 != 0);
         for l in &md.light_enh {
             if let Some(o) = owners.as_deref_mut() {
                 o.resize(out.len() - base, seq.wrapping_sub(1));
@@ -405,7 +510,12 @@ fn model_lights_into(
             // lamp, the stop request lamp of the MAN NL and SD202 (`D92_Haltewunsch.bmp`,
             // 5 cm to the front) showed as a ring round its dome (#1159). (Its fade time is
             // not followed: such a lamp is on or off at once.)
-            let factor = l.values.first().copied().filter(|f| *f > 0.0).unwrap_or(1.0);
+            let factor = l
+                .values
+                .first()
+                .copied()
+                .filter(|f| *f > 0.0)
+                .unwrap_or(1.0);
             let b = (value_of(&l.variable) * factor).clamp(0.0, 2.0);
             if !(b > 0.0) || !b.is_finite() {
                 continue;
@@ -419,12 +529,18 @@ fn model_lights_into(
                 size: (l.size * 0.5).max(0.0),
                 color: [l.color[0] / 255.0, l.color[1] / 255.0, l.color[2] / 255.0],
                 brightness: b,
+                vehicle_lamp: exterior_mesh && is_exterior_lamp_channel(&l.variable),
                 direction: glam::Vec3::ZERO,
                 cone_cos: -1.0,
                 rotating: 2,
                 z_offset: l.values.get(1).copied().unwrap_or(0.1).max(0.0),
                 flags: effect & !1,
-                texture: l.texture.as_deref().map(|b| crate::lights::corona_texture_id_with_texture_dirs(model_dir, b, publisher_texture_dirs)).filter(|t| *t != 0).unwrap_or_else(crate::lights::glow_texture_id),
+                texture: l
+                    .texture
+                    .as_deref()
+                    .map(|b| crate::lights::corona_texture_id_with_texture_dirs(model_dir, b, publisher_texture_dirs))
+                    .filter(|t| *t != 0)
+                    .unwrap_or_else(crate::lights::glow_texture_id),
                 ..Default::default()
             };
             push_lamp_sprites(out, glow, effect, l.size, (0.0, 0.0));
@@ -438,7 +554,8 @@ fn model_lights_into(
             // the lamp has come on or gone out (`timeconst`)
             let b = match fades.get(first_li + k) {
                 Some(f) => *f,
-                None => (value_of(&l.variable) * if l.factor > 0.0 { l.factor } else { 1.0 }).clamp(0.0, 2.0),
+                None => (value_of(&l.variable) * if l.factor > 0.0 { l.factor } else { 1.0 })
+                    .clamp(0.0, 2.0),
             };
             if !(b > 0.0) || !b.is_finite() {
                 continue;
@@ -457,10 +574,20 @@ fn model_lights_into(
                 xf.transform_vector3(glam::Vec3::from(l.dir))
                     .normalize_or_zero()
             };
-            let up = xf.transform_vector3(glam::Vec3::from(l.up)).normalize_or(glam::Vec3::Z);
+            let up = xf
+                .transform_vector3(glam::Vec3::from(l.up))
+                .normalize_or(glam::Vec3::Z);
             let half_cos = |deg: f32| (deg.max(1.0) * 0.5).min(180.0).to_radians().cos();
-            let (outer, inner) = (l.cone_outer.max(l.cone_inner), l.cone_inner.min(l.cone_outer));
-            let flags = l.values.first().map(|v| omsi_cfg::parse_f32(v) as i32).unwrap_or(0).clamp(0, 7) as u8;
+            let (outer, inner) = (
+                l.cone_outer.max(l.cone_inner),
+                l.cone_inner.min(l.cone_outer),
+            );
+            let flags = l
+                .values
+                .first()
+                .map(|v| omsi_cfg::parse_f32(v) as i32)
+                .unwrap_or(0)
+                .clamp(0, 7) as u8;
             let color = [l.color[0] / 255.0, l.color[1] / 255.0, l.color[2] / 255.0];
             // the original: the glow, the light's own bitmap (else licht.bmp) as wide as its
             // size, with its star and its halo in fog (`push_lamp_sprites`)
@@ -469,24 +596,49 @@ fn model_lights_into(
                 size: (l.size * 0.5).max(0.0),
                 color,
                 brightness: b,
+                vehicle_lamp: exterior_mesh && is_exterior_lamp_channel(&l.variable),
                 direction: dir,
                 cone_cos: half_cos(outer),
                 inner_cos: if inner > 0.0 { half_cos(inner) } else { -2.0 },
                 // an omnidirectional light has no face to show: it turns to the viewer
-                rotating: if l.omni { 2 } else { l.rotating.clamp(0, 2) as u8 },
+                rotating: if l.omni {
+                    2
+                } else {
+                    l.rotating.clamp(0, 2) as u8
+                },
                 up,
                 z_offset: l.z_offset.max(0.0),
                 flags: flags & !1,
-                texture: l.bitmap.as_deref().map(|b| crate::lights::corona_texture_id_with_texture_dirs(model_dir, b, publisher_texture_dirs)).filter(|t| *t != 0).unwrap_or_else(crate::lights::glow_texture_id),
+                texture: l
+                    .bitmap
+                    .as_deref()
+                    .map(|b| crate::lights::corona_texture_id_with_texture_dirs(model_dir, b, publisher_texture_dirs))
+                    .filter(|t| *t != 0)
+                    .unwrap_or_else(crate::lights::glow_texture_id),
                 ..Default::default()
             };
-            push_lamp_sprites(out, glow, flags, l.size, ((outer * 0.5).to_radians(), (inner.max(0.0) * 0.5).to_radians()));
+            push_lamp_sprites(
+                out,
+                glow,
+                flags,
+                l.size,
+                (
+                    (outer * 0.5).to_radians(),
+                    (inner.max(0.0) * 0.5).to_radians(),
+                ),
+            );
             // the light's cone in fog (the original: built for a directional light
             // with the cone flag whose cone angles make sense; effect bit 2 leaves it out).
             // Its size and strength follow the weather and the viewer (`lights::collect`,
             // corona.wgsl), so the raw values go along: the light's size and brightness and
             // the half cone angles in radians.
-            if l.cone && !l.omni && dir.length_squared() > 0.5 && l.cone_inner >= 0.0 && l.cone_outer >= l.cone_inner && flags & 2 == 0 {
+            if l.cone
+                && !l.omni
+                && dir.length_squared() > 0.5
+                && l.cone_inner >= 0.0
+                && l.cone_outer >= l.cone_inner
+                && flags & 2 == 0
+            {
                 out.push(omsi_render::Corona {
                     position: p,
                     size: l.size,
@@ -507,6 +659,82 @@ fn model_lights_into(
     }
 }
 
+#[cfg(test)]
+#[test]
+fn vehicle_coronas_keep_interior_lamps_on_the_original_path() {
+    let model = omsi_model::Model {
+        meshes: vec![
+            omsi_model::MeshDef {
+                light_enh: vec![
+                    omsi_model::LightEnh {
+                        pos: [-0.635, 5.435, 1.288],
+                        color: [255.0, 150.0, 0.0],
+                        size: 0.05,
+                        variable: "haltewunschlampe_all".into(),
+                        values: vec![1.0, 0.05, 3.0, 0.05],
+                        texture: Some("D92_Haltewunsch.bmp".into()),
+                    },
+                    omsi_model::LightEnh {
+                        pos: [1.0, -5.0, 1.0],
+                        size: 0.1,
+                        variable: "AI_Brakelight".into(),
+                        values: vec![1.0, 0.05, 0.0],
+                        ..Default::default()
+                    },
+                ],
+                light_enh_2: vec![omsi_model::LightEnh2 {
+                    pos: [1.0, 6.0, 1.0],
+                    dir: [0.0, 1.0, 0.0],
+                    size: 0.2,
+                    variable: "lights_abbl".into(),
+                    cone: true,
+                    cone_outer: 60.0,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            omsi_model::MeshDef {
+                viewpoint: 2,
+                light_enh: vec![omsi_model::LightEnh {
+                    size: 0.05,
+                    variable: "lights_blinker_l".into(),
+                    values: vec![1.0, 0.05, 2.0],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let mut sprites = Vec::new();
+    crate::vehicle_model_lights_extend(
+        &model,
+        &|_| glam::Mat4::IDENTITY,
+        DVec3::ZERO,
+        &|_| 1.0,
+        &[],
+        &mut sprites,
+    );
+    let [
+        stop_glow,
+        stop_star,
+        brake_glow,
+        brake_halo,
+        head_glow,
+        head_halo,
+        head_beam,
+        cab_indicator,
+    ] = sprites.as_slice()
+    else {
+        panic!("unexpected vehicle lamp sprites: {sprites:?}");
+    };
+    assert!(!stop_glow.vehicle_lamp && !stop_star.vehicle_lamp);
+    assert!(!cab_indicator.vehicle_lamp);
+    assert!(brake_glow.vehicle_lamp && brake_halo.vehicle_lamp && brake_halo.halo);
+    assert!(head_glow.vehicle_lamp && head_halo.vehicle_lamp && head_halo.halo);
+    assert!(head_beam.beam && !head_beam.vehicle_lamp);
+}
+
 /// The size (m) past which a `[light_enh_2]` is a damaged one, not a lamp.
 const MAX_LAMP_SIZE: f32 = 50.0;
 
@@ -514,7 +742,9 @@ const MAX_LAMP_SIZE: f32 = 50.0;
 /// a `[collision_mesh]` it is a step the wheels climb (a traffic island).
 pub const LOW_OBJECT: f32 = 0.3;
 
-pub use omsi_sim::world_data::{probe_tile, tile_key, LiveGround, BURIED_FACE, PAINT_LAYER, WALL_TOP_STEP};
+pub use omsi_sim::world_data::{
+    BURIED_FACE, LiveGround, PAINT_LAYER, WALL_TOP_STEP, probe_tile, tile_key,
+};
 
 /// Raster resolution of the per-tile surface mask (texels per tile edge).
 pub const SURFACE_RASTER: usize = 512;
@@ -567,23 +797,49 @@ impl World {
     /// tile in the `[map]` list, and the place within that tile). An object of that id on
     /// another tile (a map joined from two, whose ids repeat) is not it: the record's own
     /// place is taken then.
-    pub fn entry_point_place(&self, ep: &omsi_map::global::EntryPoint) -> Option<(DVec3, [f64; 3])> {
+    pub fn entry_point_place(
+        &self,
+        ep: &omsi_map::global::EntryPoint,
+    ) -> Option<(DVec3, [f64; 3])> {
         let s = tile_size();
-        let tile = usize::try_from(ep.group).ok().and_then(|i| self.global.raw_tiles.get(i)).copied();
+        let tile = usize::try_from(ep.group)
+            .ok()
+            .and_then(|i| self.global.raw_tiles.get(i))
+            .copied();
         if let Some(t) = tile {
             if let Some(p) = self.data.peek().objects.dup(t, ep.object_id) {
                 return Some(*p);
             }
         }
         let found = self.data.peek().objects.get(&ep.object_id).copied();
-        let recorded = tile.filter(|_| ep.pos.iter().chain(ep.quat.iter()).all(|v| v.is_finite())).map(|(tx, ty)| {
-            let heading = (2.0 * ep.quat[1].atan2(ep.quat[3])).to_degrees().rem_euclid(360.0);
-            (DVec3::new(tx as f64 * s + ep.pos[0], ty as f64 * s + ep.pos[1], ep.pos[2]), [heading, 0.0, 0.0])
-        });
+        let recorded = tile
+            .filter(|_| ep.pos.iter().chain(ep.quat.iter()).all(|v| v.is_finite()))
+            .map(|(tx, ty)| {
+                let heading = (2.0 * ep.quat[1].atan2(ep.quat[3]))
+                    .to_degrees()
+                    .rem_euclid(360.0);
+                (
+                    DVec3::new(
+                        tx as f64 * s + ep.pos[0],
+                        ty as f64 * s + ep.pos[1],
+                        ep.pos[2],
+                    ),
+                    [heading, 0.0, 0.0],
+                )
+            });
         match (found, recorded) {
             // (an object may stand a little outside its tile's square: far off only is another)
             (Some(f), Some(r)) if (f.0.truncate() - r.0.truncate()).length() > 50.0 => {
-                log::info!("entry point {} \"{}\": object {} stands at ({:.0}, {:.0}), on another tile than the entry point's ({:.0}, {:.0}): the entry point's own place", ep.index, ep.name, ep.object_id, f.0.x, f.0.y, r.0.x, r.0.y);
+                log::info!(
+                    "entry point {} \"{}\": object {} stands at ({:.0}, {:.0}), on another tile than the entry point's ({:.0}, {:.0}): the entry point's own place",
+                    ep.index,
+                    ep.name,
+                    ep.object_id,
+                    f.0.x,
+                    f.0.y,
+                    r.0.x,
+                    r.0.y
+                );
                 Some(r)
             }
             (Some(f), _) => Some(f),
@@ -674,7 +930,11 @@ impl World {
 
     /// The clock a scenery script starts on: the simulation's, else the run's start.
     pub fn script_clock(&self) -> omsi_sim::SimClock {
-        self.timetable_boards.lock().clock.clone().unwrap_or_else(|| self.start_clock.lock().clone())
+        self.timetable_boards
+            .lock()
+            .clock
+            .clone()
+            .unwrap_or_else(|| self.start_clock.lock().clone())
     }
 }
 

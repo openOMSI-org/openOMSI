@@ -158,53 +158,20 @@ fn matl_glow_light(buv: vec2<f32>, col: vec3<f32>) -> vec3<f32> {
     return col * dot(gm.rgb, vec3<f32>(0.299, 0.587, 0.114)) * material.glow.x * max(enh.exposure.z * 2.0, 0.8);
 }
 
-// How much of the light crossing the player's bus's pane at `world` its condensation
-// scatters (0..1): 1 - e^-depth of the windscreen's, the side windows' or the rear
-// window's film (enh.condensation, optical depths from omsi-app condensation.rs), the film
-// heavier low down, where the glass is coldest, and in patches; on the windscreen cleared
-// in a widening fan above the defroster.
+// How much of the light crossing the player's bus's pane its condensation scatters (0..1,
+// 07_glass.wgsl `glass_condensation`), for the screen mask.
 var<private> glass_fog: f32;
 // The screen mask's r for a pane scattering all the light (post.wgsl `MIST_MASK`).
 const MIST_MASK: f32 = 0.24;
-fn pane_condensation(world: vec3<f32>) -> f32 {
-    if (camera.inside_c.w < 0.5 || near_player_vehicle(world) < 0.5) {
-        return 0.0;
-    }
-    let l = fn_box_local(world);
-    let h = camera.inside_b.yzw;
-    let fy = l.y / max(h.y, 0.1);
-    let fz = l.z / max(h.z, 0.1);
-    let fx = l.x / max(h.x, 0.1);
-    // (the panes in the body's skin only - not the instruments' glass behind the windscreen
-    // or a partition in the saloon)
-    var f = 0.0;
-    var front = false;
-    if (fy > 0.96) {
-        f = enh.condensation.x;
-        front = true;
-    } else if (fy < -0.96) {
-        f = enh.condensation.z;
-    } else if (abs(fx) > 0.8) {
-        f = enh.condensation.y;
-    }
-    if (f <= 0.001) {
-        return 0.0;
-    }
-    // (cold low down and along the frames; patches of a hand's breadth)
-    let low = mix(1.2, 0.8, clamp(fz * 0.5 + 0.5, 0.0, 1.0));
-    let q = select(vec2<f32>(l.y, l.z), vec2<f32>(l.x, l.z), front || fy < -0.96) * 4.0;
-    let cq = floor(q);
-    let fq = q - cq;
-    let w = fq * fq * (3.0 - 2.0 * fq);
-    let hh = fract(sin(vec4<f32>(dot(cq, vec2<f32>(12.9898, 78.233)), dot(cq + vec2<f32>(1.0, 0.0), vec2<f32>(12.9898, 78.233)), dot(cq + vec2<f32>(0.0, 1.0), vec2<f32>(12.9898, 78.233)), dot(cq + vec2<f32>(1.0, 1.0), vec2<f32>(12.9898, 78.233)))) * 43758.547);
-    let patchy = mix(mix(hh.x, hh.y, w.x), mix(hh.z, hh.w, w.x), w.y);
-    var amount = 1.0 - exp(-f * low * (0.75 + 0.5 * patchy));
-    if (front) {
-        // the defroster's warm air clears a fan from the bottom of the windscreen
-        let d = length(vec2<f32>(l.x / max(h.x, 0.1), (fz + 0.2) * 1.6));
-        let clear = 1.0 - smoothstep(enh.condensation.w * 1.3 - 0.25, enh.condensation.w * 1.3, d);
-        amount = amount * (1.0 - clear * step(0.02, enh.condensation.w));
-    }
-    return amount;
+// Heading, pitch and roll: with the heading alone the film slid along the glass on a hill (#3958).
+fn pane_local(world: vec3<f32>) -> vec3<f32> {
+    let d = world - camera.inside_a.xyz;
+    let sh = camera.inside_a.w;
+    let ch = camera.inside_b.x;
+    let v = vec3<f32>(d.x * ch - d.y * sh, d.x * sh + d.y * ch, d.z);
+    let t = enh.pane_tilt;
+    let p = vec3<f32>(v.x, v.y * t.y + v.z * t.x, v.z * t.y - v.y * t.x);
+    let b = vec3<f32>(p.x * t.w - p.z * t.z, p.y, p.z * t.w + p.x * t.z);
+    return b - camera.inside_c.xyz;
 }
 

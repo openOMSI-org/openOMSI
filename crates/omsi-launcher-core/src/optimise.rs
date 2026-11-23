@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Result};
-use serde_json::{json, Map, Value};
+use anyhow::{Result, anyhow};
+use serde_json::{Map, Value, json};
 use std::path::{Path, PathBuf};
 
-use crate::{data_dir, effective_mode, get_settings, save_settings, GRAPHICS_PROFILE_KEYS};
+use crate::{GRAPHICS_PROFILE_KEYS, data_dir, effective_mode, get_settings, save_settings};
 
 const AUTO_MOST: u32 = 100;
 const SETTLE_S: f32 = 2.0;
@@ -54,7 +54,11 @@ pub struct Machine {
 
 impl Default for Machine {
     fn default() -> Self {
-        Machine { cores: 4, msaa_counts: 1 | 2 | 4 | 8, ssao: true }
+        Machine {
+            cores: 4,
+            msaa_counts: 1 | 2 | 4 | 8,
+            ssao: true,
+        }
     }
 }
 
@@ -100,7 +104,10 @@ fn distance(s: &Value, key: &str, auto: f64) -> f64 {
 /// DLSS, FSR 3 or MetalFX at work: the MSAA and the render scale are not in use, nothing to gain there.
 fn upscaler_takes_over(s: &Value) -> bool {
     let word = text(s, "upscaler", "default");
-    (word == "dlss" || word == "fsr3" || word == "metalfx") && s.get("temporal_upscalers").and_then(Value::as_array).is_none_or(|list| list.iter().any(|u| u.as_str() == Some(&*word)))
+    (word == "dlss" || word == "fsr3" || word == "metalfx")
+        && s.get("temporal_upscalers")
+            .and_then(Value::as_array)
+            .is_none_or(|list| list.iter().any(|u| u.as_str() == Some(&*word)))
 }
 
 fn scale(s: &Value) -> f64 {
@@ -115,11 +122,19 @@ pub fn lighter_steps(s: &Value, limit: Limit, m: &Machine) -> Vec<Step> {
     let classic = mode == "vanilla";
     let traced = mode == "enhanced_plus";
     let enhanced = traced || mode == "enhanced";
-    let msaa = if upscaler_takes_over(s) { 1 } else { num(s, "msaa", 4.0) as i64 };
+    let msaa = if upscaler_takes_over(s) {
+        1
+    } else {
+        num(s, "msaa", 4.0) as i64
+    };
     let shadow = num(s, "shadow_size", 2048.0) as i64;
     let mirror = num(s, "mirror_size", 256.0) as i64;
     let refresh = text(s, "mirror_refresh", "full");
-    let render = if upscaler_takes_over(s) { 0.0 } else { scale(s) };
+    let render = if upscaler_takes_over(s) {
+        0.0
+    } else {
+        scale(s)
+    };
     let lit = !classic && !traced;
     let mut out = Vec::new();
     let mut add = |ok: bool, st: Step| {
@@ -130,39 +145,124 @@ pub fn lighter_steps(s: &Value, limit: Limit, m: &Machine) -> Vec<Step> {
     let mirrors_redrawn = mirror > 0 && matches!(refresh, "full" | "every");
     match limit {
         Limit::Gpu => {
-            add(mirrors_redrawn, step("mirror_refresh", json!("eco"), Apply::Now));
-            add(!on(s, "texture_compression", true) && on(s, "gpu_texture_compression", true), step("texture_compression", json!(true), Apply::NextStart));
-            add(msaa > 2 && m.msaa(2), step("msaa", json!(2), Apply::Rebuild));
-            add(mirror > 512, step("mirror_size", json!(512), Apply::NextStart));
+            add(
+                mirrors_redrawn,
+                step("mirror_refresh", json!("eco"), Apply::Now),
+            );
+            add(
+                !on(s, "texture_compression", true) && on(s, "gpu_texture_compression", true),
+                step("texture_compression", json!(true), Apply::NextStart),
+            );
+            add(
+                msaa > 2 && m.msaa(2),
+                step("msaa", json!(2), Apply::Rebuild),
+            );
+            add(
+                mirror > 512,
+                step("mirror_size", json!(512), Apply::NextStart),
+            );
             // (what Enhanced's light adds, dearest first: the ray tracing, every light's shadows, the
-            // clouds' shadow, the glow - the street lamps' shadows go last, with the sun's)
+            // clouds' shadow, the fog you see the light in, the glow - the street lamps' shadows go
+            // last, with the sun's)
             add(traced, step("ray_tracing", json!(false), Apply::NextStart));
-            add(enhanced && text(s, "light_shadows", "street") == "all", step("light_shadows", json!("street"), Apply::Now));
-            add(enhanced && on(s, "cloud_shadows", false), step("cloud_shadows", json!(false), Apply::Now));
-            add(enhanced && on(s, "light_glow", false), step("light_glow", json!(false), Apply::Now));
+            add(
+                enhanced && text(s, "light_shadows", "street") == "all",
+                step("light_shadows", json!("street"), Apply::Now),
+            );
+            add(
+                enhanced && on(s, "cloud_shadows", false),
+                step("cloud_shadows", json!(false), Apply::Now),
+            );
+            add(
+                enhanced && on(s, "volumetric_fog", true),
+                step("volumetric_fog", json!(false), Apply::Now),
+            );
+            add(
+                enhanced && on(s, "light_glow", false),
+                step("light_glow", json!(false), Apply::Now),
+            );
             // (the street light first: it is the cheaper cut, and turning the AO off takes it along)
-            add(mode == "enhanced" && on(s, "ssao", true) && text(s, "street_light", "off") != "off", step("street_light", json!("off"), Apply::Now));
-            add(lit && on(s, "ssao", true), step("ssao", json!(false), Apply::Now));
-            add(enhanced && on(s, "clouds", true) && text(s, "cloud_quality", "high") == "high", step("cloud_quality", json!("low"), Apply::Now));
-            add(!classic && shadow > 2048, step("shadow_size", json!(2048), Apply::Rebuild));
-            add(text(s, "rain_quality", "high") == "high", step("rain_quality", json!("medium"), Apply::Now));
+            add(
+                mode == "enhanced"
+                    && on(s, "ssao", true)
+                    && text(s, "street_light", "off") != "off",
+                step("street_light", json!("off"), Apply::Now),
+            );
+            add(
+                lit && on(s, "ssao", true),
+                step("ssao", json!(false), Apply::Now),
+            );
+            add(
+                enhanced && on(s, "clouds", true) && text(s, "cloud_quality", "high") == "high",
+                step("cloud_quality", json!("low"), Apply::Now),
+            );
+            add(
+                !classic && shadow > 2048,
+                step("shadow_size", json!(2048), Apply::Rebuild),
+            );
+            add(
+                text(s, "rain_quality", "high") == "high",
+                step("rain_quality", json!("medium"), Apply::Now),
+            );
             add(msaa > 1, step("msaa", json!(1), Apply::Rebuild));
-            add(render > 0.86, step("render_scale", json!("0.85"), Apply::Now));
-            add(!classic && shadow > 1024, step("shadow_size", json!(1024), Apply::Rebuild));
-            add(mirror > 256, step("mirror_size", json!(256), Apply::NextStart));
-            add(render > 0.76, step("render_scale", json!("0.75"), Apply::Now));
-            add(enhanced && text(s, "light_shadows", "street") == "street", step("light_shadows", json!("off"), Apply::Now));
-            add(lit && on(s, "shadows", true), step("shadows", json!(false), Apply::Now));
-            add(render > 0.68, step("render_scale", json!("0.67"), Apply::Now));
+            add(
+                render > 0.86,
+                step("render_scale", json!("0.85"), Apply::Now),
+            );
+            add(
+                !classic && shadow > 1024,
+                step("shadow_size", json!(1024), Apply::Rebuild),
+            );
+            add(
+                mirror > 256,
+                step("mirror_size", json!(256), Apply::NextStart),
+            );
+            add(
+                render > 0.76,
+                step("render_scale", json!("0.75"), Apply::Now),
+            );
+            add(
+                enhanced && text(s, "light_shadows", "street") == "street",
+                step("light_shadows", json!("off"), Apply::Now),
+            );
+            add(
+                lit && on(s, "shadows", true),
+                step("shadows", json!(false), Apply::Now),
+            );
+            add(
+                render > 0.68,
+                step("render_scale", json!("0.67"), Apply::Now),
+            );
         }
         Limit::Cpu => {
-            add(mirrors_redrawn, step("mirror_refresh", json!("eco"), Apply::Now));
-            add(!on(s, "sim_thread", false) && m.cores >= 4, step("sim_thread", json!(true), Apply::NextStart));
-            add(distance(s, "max_obj_dist", 900.0) > 650.0, step("max_obj_dist", json!("650"), Apply::Now));
-            add(num(s, "min_obj_size", 0.013) < 0.02, step("min_obj_size", json!(0.02), Apply::Now));
-            add(distance(s, "view_distance", 1200.0) > 900.0, step("view_distance", json!("900"), Apply::NextStart));
-            add(distance(s, "max_obj_dist", 900.0) > 500.0, step("max_obj_dist", json!("500"), Apply::Now));
-            add(num(s, "min_obj_size", 0.013) < 0.03, step("min_obj_size", json!(0.03), Apply::Now));
+            add(
+                mirrors_redrawn,
+                step("mirror_refresh", json!("eco"), Apply::Now),
+            );
+            add(
+                !on(s, "sim_thread", false) && m.cores >= 4,
+                step("sim_thread", json!(true), Apply::NextStart),
+            );
+            add(
+                distance(s, "max_obj_dist", 900.0) > 650.0,
+                step("max_obj_dist", json!("650"), Apply::Now),
+            );
+            add(
+                num(s, "min_obj_size", 0.013) < 0.02,
+                step("min_obj_size", json!(0.02), Apply::Now),
+            );
+            add(
+                distance(s, "view_distance", 1200.0) > 900.0,
+                step("view_distance", json!("900"), Apply::NextStart),
+            );
+            add(
+                distance(s, "max_obj_dist", 900.0) > 500.0,
+                step("max_obj_dist", json!("500"), Apply::Now),
+            );
+            add(
+                num(s, "min_obj_size", 0.013) < 0.03,
+                step("min_obj_size", json!(0.03), Apply::Now),
+            );
         }
     }
     out
@@ -179,20 +279,60 @@ pub fn heavier_steps(s: &Value, start: &Value, m: &Machine) -> Vec<Step> {
             out.push(st);
         }
     };
-    let render = if upscaler_takes_over(s) { 1.0 } else { scale(s) };
-    add(render < 0.99, step("render_scale", json!("auto"), Apply::Now));
-    add(lit && !on(s, "shadows", true), step("shadows", json!(true), Apply::Now));
-    let msaa = if upscaler_takes_over(s) { 8 } else { num(s, "msaa", 4.0) as i64 };
+    let render = if upscaler_takes_over(s) {
+        1.0
+    } else {
+        scale(s)
+    };
+    add(
+        render < 0.99,
+        step("render_scale", json!("auto"), Apply::Now),
+    );
+    add(
+        lit && !on(s, "shadows", true),
+        step("shadows", json!(true), Apply::Now),
+    );
+    let msaa = if upscaler_takes_over(s) {
+        8
+    } else {
+        num(s, "msaa", 4.0) as i64
+    };
     let most = if traced { 2 } else { 4 };
-    if let Some(n) = [2, 4].into_iter().find(|&n| n > msaa && n <= most && m.msaa(n)) {
+    if let Some(n) = [2, 4]
+        .into_iter()
+        .find(|&n| n > msaa && n <= most && m.msaa(n))
+    {
         add(true, step("msaa", json!(n), Apply::Rebuild));
     }
-    add(lit && m.ssao && !on(s, "ssao", true), step("ssao", json!(true), Apply::Now));
+    add(
+        lit && m.ssao && !on(s, "ssao", true),
+        step("ssao", json!(true), Apply::Now),
+    );
     let shadow = num(s, "shadow_size", 2048.0) as i64;
-    add(!classic && shadow < 2048, step("shadow_size", json!(2048), Apply::Rebuild));
-    add(distance(s, "max_obj_dist", 900.0) < distance(start, "max_obj_dist", 900.0), step("max_obj_dist", start.get("max_obj_dist").cloned().unwrap_or(json!("auto")), Apply::Now));
-    add(num(s, "min_obj_size", 0.013) > num(start, "min_obj_size", 0.013), step("min_obj_size", start.get("min_obj_size").cloned().unwrap_or(json!(0.013)), Apply::Now));
-    add(text(s, "rain_quality", "high") != "high", step("rain_quality", json!("high"), Apply::Now));
+    add(
+        !classic && shadow < 2048,
+        step("shadow_size", json!(2048), Apply::Rebuild),
+    );
+    add(
+        distance(s, "max_obj_dist", 900.0) < distance(start, "max_obj_dist", 900.0),
+        step(
+            "max_obj_dist",
+            start.get("max_obj_dist").cloned().unwrap_or(json!("auto")),
+            Apply::Now,
+        ),
+    );
+    add(
+        num(s, "min_obj_size", 0.013) > num(start, "min_obj_size", 0.013),
+        step(
+            "min_obj_size",
+            start.get("min_obj_size").cloned().unwrap_or(json!(0.013)),
+            Apply::Now,
+        ),
+    );
+    add(
+        text(s, "rain_quality", "high") != "high",
+        step("rain_quality", json!("high"), Apply::Now),
+    );
     out
 }
 
@@ -397,11 +537,19 @@ impl Tuner {
                 self.settle = Self::settle_for(back.apply);
                 return Action::Apply(vec![back]);
             }
-            self.changes.push(Change { key: trial.step.key.to_string(), from: trial.was, to: trial.step.to });
+            self.changes.push(Change {
+                key: trial.step.key.to_string(),
+                from: trial.was,
+                to: trial.step.to,
+            });
         }
         self.last = Some(r);
         if self.mode == Mode::Baseline {
-            self.mode = if r.meets(target) && r.fps >= RAISE_FROM * target { Mode::Raise } else { Mode::Lower };
+            self.mode = if r.meets(target) && r.fps >= RAISE_FROM * target {
+                Mode::Raise
+            } else {
+                Mode::Lower
+            };
         }
         if self.mode == Mode::Lower && r.meets(target) || self.steps >= MAX_STEPS {
             return self.finish(Vec::new());
@@ -411,12 +559,20 @@ impl Tuner {
 
     fn next(&mut self, r: Reading) -> Action {
         let limit = r.limit();
-        let other = if limit == Limit::Gpu { Limit::Cpu } else { Limit::Gpu };
+        let other = if limit == Limit::Gpu {
+            Limit::Cpu
+        } else {
+            Limit::Gpu
+        };
         let candidates = match self.mode {
             Mode::Raise => heavier_steps(&self.settings, &self.start, &self.machine),
             _ => {
                 let mut c = lighter_steps(&self.settings, limit, &self.machine);
-                c.extend(lighter_steps(&self.settings, other, &self.machine).into_iter().filter(|st| st.apply != Apply::NextStart));
+                c.extend(
+                    lighter_steps(&self.settings, other, &self.machine)
+                        .into_iter()
+                        .filter(|st| st.apply != Apply::NextStart),
+                );
                 c
             }
         };
@@ -436,14 +592,21 @@ impl Tuner {
             self.settings[st.key] = st.to.clone();
             self.steps += 1;
             self.settle = Self::settle_for(st.apply);
-            self.trial = Some(Trial { step: st.clone(), was, before: r });
+            self.trial = Some(Trial {
+                step: st.clone(),
+                was,
+                before: r,
+            });
             return Action::Apply(vec![st]);
         }
         self.finish(Vec::new())
     }
 
     fn finish(&mut self, mut apply: Vec<Step>) -> Action {
-        let reached = self.last.or(self.first).is_some_and(|r| r.meets(self.target as f32));
+        let reached = self
+            .last
+            .or(self.first)
+            .is_some_and(|r| r.meets(self.target as f32));
         if !reached && self.mode != Mode::Raise {
             for st in std::mem::take(&mut self.later) {
                 let was = self.settings.get(st.key).cloned().unwrap_or(Value::Null);
@@ -451,7 +614,11 @@ impl Tuner {
                     continue;
                 }
                 self.settings[st.key] = st.to.clone();
-                self.changes.push(Change { key: st.key.to_string(), from: was, to: st.to.clone() });
+                self.changes.push(Change {
+                    key: st.key.to_string(),
+                    from: was,
+                    to: st.to.clone(),
+                });
                 self.restart = true;
                 apply.push(st);
             }
@@ -459,7 +626,11 @@ impl Tuner {
         if num(&self.settings, "max_fps", 0.0) >= 1000.0 {
             let was = self.settings["max_fps"].clone();
             self.settings["max_fps"] = json!(0);
-            self.changes.push(Change { key: "max_fps".into(), from: was, to: json!(0) });
+            self.changes.push(Change {
+                key: "max_fps".into(),
+                from: was,
+                to: json!(0),
+            });
             apply.push(step("max_fps", json!(0), Apply::Now));
         }
         Action::Finish(apply, self.outcome())
@@ -498,7 +669,9 @@ const ARMED: &str = "optimise-next-drive.json";
 const RUNNING: &str = "optimise-running.json";
 
 fn read(dir: &Path, name: &str) -> Option<Value> {
-    std::fs::read_to_string(file(dir, name)).ok().and_then(|t| serde_json::from_str(&t).ok())
+    std::fs::read_to_string(file(dir, name))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
 }
 
 fn kept_keys() -> impl Iterator<Item = &'static str> {
@@ -506,7 +679,9 @@ fn kept_keys() -> impl Iterator<Item = &'static str> {
 }
 
 fn graphics_of(settings: &Value) -> Map<String, Value> {
-    kept_keys().filter_map(|k| settings.get(k).map(|v| (k.to_string(), v.clone()))).collect()
+    kept_keys()
+        .filter_map(|k| settings.get(k).map(|v| (k.to_string(), v.clone())))
+        .collect()
 }
 
 fn back_up_in(dir: &Path, settings: &Value) -> Result<()> {
@@ -514,18 +689,26 @@ fn back_up_in(dir: &Path, settings: &Value) -> Result<()> {
     if backup_in(dir).is_some() && ours.is_some_and(|o| o == Value::Object(graphics_of(settings))) {
         return Ok(());
     }
-    std::fs::write(file(dir, BACKUP), serde_json::to_string_pretty(&Value::Object(graphics_of(settings)))?)?;
+    std::fs::write(
+        file(dir, BACKUP),
+        serde_json::to_string_pretty(&Value::Object(graphics_of(settings)))?,
+    )?;
     Ok(())
 }
 
 fn begin_in(dir: &Path, settings: &Value) -> Result<()> {
     back_up_in(dir, settings)?;
-    std::fs::write(file(dir, RUNNING), serde_json::to_string_pretty(&Value::Object(graphics_of(settings)))?)?;
+    std::fs::write(
+        file(dir, RUNNING),
+        serde_json::to_string_pretty(&Value::Object(graphics_of(settings)))?,
+    )?;
     Ok(())
 }
 
 fn recover_from(dir: &Path, settings: &mut Value) -> bool {
-    let Some(before) = read(dir, RUNNING).filter(Value::is_object) else { return false };
+    let Some(before) = read(dir, RUNNING).filter(Value::is_object) else {
+        return false;
+    };
     if let Some(m) = before.as_object() {
         for (k, v) in m {
             settings[k] = v.clone();
@@ -539,7 +722,9 @@ fn backup_in(dir: &Path) -> Option<Value> {
 }
 
 fn restore_into_from(dir: &Path, settings: &mut Value) -> bool {
-    let Some(saved) = backup_in(dir) else { return false };
+    let Some(saved) = backup_in(dir) else {
+        return false;
+    };
     if let Some(m) = saved.as_object() {
         for (k, v) in m {
             settings[k] = v.clone();
@@ -562,16 +747,29 @@ fn save_result_in(dir: &Path, outcome: &Outcome) -> Result<()> {
 }
 
 fn arm_in(dir: &Path, target: u32) -> Result<()> {
-    std::fs::write(file(dir, ARMED), serde_json::to_string(&json!({ "target": target }))?)?;
+    std::fs::write(
+        file(dir, ARMED),
+        serde_json::to_string(&json!({ "target": target }))?,
+    )?;
     Ok(())
 }
 
 fn armed_in(dir: &Path) -> Option<u32> {
-    read(dir, ARMED)?.get("target").and_then(Value::as_u64).map(|t| t as u32)
+    read(dir, ARMED)?
+        .get("target")
+        .and_then(Value::as_u64)
+        .map(|t| t as u32)
 }
 
 fn chosen_target_in(dir: &Path) -> u32 {
-    armed_in(dir).or_else(|| read(dir, RESULT)?.get("target").and_then(Value::as_u64).map(|t| t as u32)).unwrap_or(0)
+    armed_in(dir)
+        .or_else(|| {
+            read(dir, RESULT)?
+                .get("target")
+                .and_then(Value::as_u64)
+                .map(|t| t as u32)
+        })
+        .unwrap_or(0)
 }
 
 pub fn begin(settings: &Value) -> Result<()> {
@@ -611,11 +809,15 @@ pub fn forget() {
 
 pub fn restore() -> Result<Value> {
     if running() {
-        return Err(anyhow!(crate::i18n::tr("Close the game first: it is optimising the settings.")));
+        return Err(anyhow!(crate::i18n::tr(
+            "Close the game first: it is optimising the settings."
+        )));
     }
     let mut settings = get_settings()?;
     if !restore_into(&mut settings) {
-        return Err(anyhow!(crate::i18n::tr("No settings were saved before an optimisation.")));
+        return Err(anyhow!(crate::i18n::tr(
+            "No settings were saved before an optimisation."
+        )));
     }
     save_settings(&settings)?;
     forget();
@@ -652,7 +854,9 @@ pub fn status() -> Value {
 
 pub fn target_for(asked: u32, refresh_hz: Option<u32>) -> u32 {
     match asked {
-        0 => refresh_hz.filter(|&r| r >= 30).map_or(60, |r| r.clamp(60, AUTO_MOST)),
+        0 => refresh_hz
+            .filter(|&r| r >= 30)
+            .map_or(60, |r| r.clamp(60, AUTO_MOST)),
         t => t.clamp(30, 240),
     }
 }
