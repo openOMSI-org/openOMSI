@@ -44,5 +44,8 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site/dist
+      # (the artifact is listed a moment after it is uploaded; deploy-pages looks for it at once)
+      - name: Wait for the artifact to be listed
+        run: sleep 20
       - id: deployment
         uses: actions/deploy-pages@v5
