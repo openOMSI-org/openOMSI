@@ -886,8 +886,7 @@ impl State {
         match m {
             Msg::Crashed(why) => {
                 log::error!("launcher: a background job stopped: {why}");
-                self.loading_content = false;
-                self.loading_lines = false;
+                (self.loading_content, self.loading_lines) = (false, false);
                 self.set_status(format!("Reading the content stopped on an error ({why})"), true);
             }
             Msg::Server { address, info } => {
