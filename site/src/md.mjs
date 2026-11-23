@@ -388,20 +388,20 @@ export function createMarkdown({ resolveLink } = {}) {
       let size = 0;
       for (const sn of parts) {
         const l = len(sn);
-        if (groups[groups.length - 1].length && size + l > 520) { groups.push([]); size = 0; }
+        if (groups[groups.length - 1].length && size + l > 330) { groups.push([]); size = 0; }
         const target = groups[groups.length - 1];
         if (target.length) target.push(text(" "));
         target.push(...sn);
         size += l;
       }
-      if (groups.length > 1 && len(groups[groups.length - 1]) < 100) { const l = groups.pop(); groups[groups.length - 1].push(text(" "), ...l); }
+      if (groups.length > 1 && len(groups[groups.length - 1]) < 90) { const l = groups.pop(); groups[groups.length - 1].push(text(" "), ...l); }
       return groups.length > 1 ? groups : null;
     };
     // sentences first; a sentence that is itself long is cut at its semicolons
     const split = (kids) => {
       const out = [];
       for (const sn of pieces(kids, ".!?")) {
-        if (len(sn) > 520) out.push(...pieces(sn, ";")); else out.push(sn);
+        if (len(sn) > 340) out.push(...pieces(sn, ";")); else out.push(sn);
       }
       return out;
     };
@@ -448,7 +448,7 @@ export function createMarkdown({ resolveLink } = {}) {
           return { html: l.html + kvHtml({ ...kv, lead: [], tail: [] }) + t.html, changed: true };
         }
       }
-      if (text0 > 800) {
+      if (text0 > 380) {
         const groups = grouped(split(kids));
         if (groups) return { html: groups.map(para).join(""), changed: true };
       }
@@ -460,7 +460,7 @@ export function createMarkdown({ resolveLink } = {}) {
       if (open.type !== "paragraph_open" || open.meta) continue;
       const inline = toks[i + 1], close = toks[i + 2];
       if (inline?.type !== "inline" || close?.type !== "paragraph_close") continue;
-      if (inline.content.length < 520) continue;
+      if (inline.content.length < 340) continue;
       const { html, changed } = toHtml(inline.children || []);
       if (!changed) continue;
       inline.meta = { text: inlineText(inline) };
