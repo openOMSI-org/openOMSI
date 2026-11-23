@@ -11,19 +11,33 @@ pub(super) fn batch_static_splines(
     if omsi_cfg::flags::OMSI_NO_SPLINE_BATCHING.is_set() {
         return splines;
     }
-    let mut groups: Vec<(Vec<Arc<MeshData>>, Arc<SplineType>, bool, DVec3, SplineLayer)> = Vec::new();
+    let mut groups: Vec<(
+        Vec<Arc<MeshData>>,
+        Arc<SplineType>,
+        bool,
+        DVec3,
+        SplineLayer,
+    )> = Vec::new();
     let mut cells = HashMap::new();
     let mut signatures = HashMap::new();
     let mut type_materials = HashMap::new();
     let material_batching = !omsi_cfg::flags::OMSI_NO_MATERIAL_SPLINE_BATCHING.is_set();
     for (mesh, ty, casts, sort_origin, level) in splines {
         let (lo, hi) = mesh.positions.iter().fold(
-            (glam::Vec3::splat(f32::INFINITY), glam::Vec3::splat(f32::NEG_INFINITY)),
+            (
+                glam::Vec3::splat(f32::INFINITY),
+                glam::Vec3::splat(f32::NEG_INFINITY),
+            ),
             |(lo, hi), &p| (lo.min(p), hi.max(p)),
         );
         let centre = (lo + hi) * 0.5;
         // Blended segments retain their individual placement origins and draw order.
-        let blended = mesh.ranges.iter().any(|r| ty.def.textures.get(r.2 as usize).is_some_and(|t| t.alpha >= 2));
+        let blended = mesh.ranges.iter().any(|r| {
+            ty.def
+                .textures
+                .get(r.2 as usize)
+                .is_some_and(|t| t.alpha >= 2)
+        });
         let short = !blended && centre.is_finite() && (hi - lo).length() <= 48.0;
         let group = if short {
             let slots: Vec<_> = mesh.ranges.iter().map(|r| r.2).collect();
@@ -31,15 +45,28 @@ pub(super) fn batch_static_splines(
             // ranges matter now; an unused terrain slot must not split identical curbs.
             // Keep the lookup directory and alpha mode exact so similarly named files
             // in different content packs cannot be combined.
-            let material_type = if material_batching && slots.iter().all(|&s| (s as usize) < ty.def.textures.len()) {
-                (true, *type_materials.entry((Arc::as_ptr(&ty) as usize, slots.clone())).or_insert_with(|| {
-                    let signature = (ty.dir.clone(), slots.iter().map(|&s| {
-                        let texture = &ty.def.textures[s as usize];
-                        (s, texture.file.clone(), texture.alpha)
-                    }).collect::<Vec<_>>());
-                    let next = signatures.len();
-                    *signatures.entry(signature).or_insert(next)
-                }))
+            let material_type = if material_batching
+                && slots.iter().all(|&s| (s as usize) < ty.def.textures.len())
+            {
+                (
+                    true,
+                    *type_materials
+                        .entry((Arc::as_ptr(&ty) as usize, slots.clone()))
+                        .or_insert_with(|| {
+                            let signature = (
+                                ty.dir.clone(),
+                                slots
+                                    .iter()
+                                    .map(|&s| {
+                                        let texture = &ty.def.textures[s as usize];
+                                        (s, texture.file.clone(), texture.alpha)
+                                    })
+                                    .collect::<Vec<_>>(),
+                            );
+                            let next = signatures.len();
+                            *signatures.entry(signature).or_insert(next)
+                        }),
+                )
             } else {
                 (false, Arc::as_ptr(&ty) as usize)
             };
@@ -65,14 +92,19 @@ pub(super) fn batch_static_splines(
         };
         groups[group].0.push(mesh);
     }
-    groups.into_iter().map(|(mut meshes, ty, casts, sort_origin, level)| {
-        let mesh = if meshes.len() == 1 {
-            meshes.pop().unwrap()
-        } else {
-            Arc::new(MeshData::merge_static(&meshes.iter().map(AsRef::as_ref).collect::<Vec<_>>()))
-        };
-        (mesh, ty, casts, sort_origin, level)
-    }).collect()
+    groups
+        .into_iter()
+        .map(|(mut meshes, ty, casts, sort_origin, level)| {
+            let mesh = if meshes.len() == 1 {
+                meshes.pop().unwrap()
+            } else {
+                Arc::new(MeshData::merge_static(
+                    &meshes.iter().map(AsRef::as_ref).collect::<Vec<_>>(),
+                ))
+            };
+            (mesh, ty, casts, sort_origin, level)
+        })
+        .collect()
 }
 
 /// These faces all use the tile's ground materials, irrespective of the source .sli.
@@ -82,7 +114,10 @@ pub(super) fn batch_ground_splines(meshes: Vec<Arc<MeshData>>) -> Vec<Arc<MeshDa
     let mut cells = HashMap::new();
     for mesh in meshes {
         let (lo, hi) = mesh.positions.iter().fold(
-            (glam::Vec3::splat(f32::INFINITY), glam::Vec3::splat(f32::NEG_INFINITY)),
+            (
+                glam::Vec3::splat(f32::INFINITY),
+                glam::Vec3::splat(f32::NEG_INFINITY),
+            ),
             |(lo, hi), &p| (lo.min(p), hi.max(p)),
         );
         let centre = (lo + hi) * 0.5;
@@ -105,13 +140,18 @@ pub(super) fn batch_ground_splines(meshes: Vec<Arc<MeshData>>) -> Vec<Arc<MeshDa
         };
         groups[group].push(mesh);
     }
-    groups.into_iter().map(|mut meshes| {
-        if meshes.len() == 1 {
-            meshes.pop().unwrap()
-        } else {
-            Arc::new(MeshData::merge_static(&meshes.iter().map(AsRef::as_ref).collect::<Vec<_>>()))
-        }
-    }).collect()
+    groups
+        .into_iter()
+        .map(|mut meshes| {
+            if meshes.len() == 1 {
+                meshes.pop().unwrap()
+            } else {
+                Arc::new(MeshData::merge_static(
+                    &meshes.iter().map(AsRef::as_ref).collect::<Vec<_>>(),
+                ))
+            }
+        })
+        .collect()
 }
 
 /// The GPU side of the loaded tiles: shared resources with their users, and the freed ids
@@ -147,12 +187,22 @@ pub struct GpuCache {
 }
 
 impl GpuCache {
-    pub(super) fn add_mesh(&mut self, renderer: &Renderer, scene: &mut Scene, data: &MeshData) -> MeshId {
+    pub(super) fn add_mesh(
+        &mut self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        data: &MeshData,
+    ) -> MeshId {
         let id = renderer.add_mesh(scene, data);
         self.take_mesh_slot(renderer, scene, id)
     }
 
-    pub(super) fn take_mesh_slot(&mut self, renderer: &Renderer, scene: &mut Scene, id: MeshId) -> MeshId {
+    pub(super) fn take_mesh_slot(
+        &mut self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        id: MeshId,
+    ) -> MeshId {
         match self.free_meshes.pop() {
             Some(slot) => {
                 let r = renderer.recycle_mesh(scene, id, slot);
@@ -187,7 +237,13 @@ impl GpuCache {
         self.take_texture_slot(renderer, scene, id)
     }
 
-    pub(super) fn add_script_slot(&mut self, renderer: &Renderer, scene: &mut Scene, model: &omsi_model::Model, index: usize) -> TextureId {
+    pub(super) fn add_script_slot(
+        &mut self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        model: &omsi_model::Model,
+        index: usize,
+    ) -> TextureId {
         let (w, h) = model.script_textures[index];
         let (w, h) = (w.max(1) as u32, h.max(1) as u32);
         if model.script_texture_drawn_by_game(index) {
@@ -197,14 +253,26 @@ impl GpuCache {
         }
     }
 
-    pub(super) fn add_screen(&mut self, renderer: &Renderer, scene: &mut Scene, width: u32, height: u32) -> TextureId {
+    pub(super) fn add_screen(
+        &mut self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        width: u32,
+        height: u32,
+    ) -> TextureId {
         let id = renderer.add_render_texture(scene, width, height);
         let id = self.take_texture_slot(renderer, scene, id);
         renderer.clear_texture(scene, id, wgpu::Color::BLACK);
         id
     }
 
-    pub(super) fn add_blank(&mut self, renderer: &Renderer, scene: &mut Scene, width: u32, height: u32) -> TextureId {
+    pub(super) fn add_blank(
+        &mut self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        width: u32,
+        height: u32,
+    ) -> TextureId {
         let id = renderer.add_blank_texture(scene, width, height, false);
         self.take_texture_slot(renderer, scene, id)
     }
@@ -212,7 +280,13 @@ impl GpuCache {
     /// A transparent dynamic text texture with a full mip chain. Text textures are often
     /// viewed much smaller than their authored pixel size; without lower levels the sampler
     /// minifies level zero directly and thin glyph strokes break into unstable pixels.
-    pub(super) fn add_blank_mips(&mut self, renderer: &Renderer, scene: &mut Scene, width: u32, height: u32) -> TextureId {
+    pub(super) fn add_blank_mips(
+        &mut self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        width: u32,
+        height: u32,
+    ) -> TextureId {
         let id = renderer.add_blank_texture(scene, width, height, true);
         self.take_texture_slot(renderer, scene, id)
     }
@@ -235,7 +309,12 @@ impl GpuCache {
         }
     }
 
-    pub(super) fn material(&mut self, renderer: &Renderer, scene: &mut Scene, id: MaterialId) -> MaterialId {
+    pub(super) fn material(
+        &mut self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        id: MaterialId,
+    ) -> MaterialId {
         match self.free_materials.pop() {
             Some(slot) => {
                 let r = renderer.recycle_material(scene, id, slot);
@@ -321,10 +400,8 @@ impl GpuCache {
         };
         let id = self.add_data(renderer, scene, &img);
         attach_pbr(renderer, scene, &path, id);
-        self.textures.insert(
-            path.clone(),
-            TexEntry::uploaded(id, &img, scene),
-        );
+        self.textures
+            .insert(path.clone(), TexEntry::uploaded(id, &img, scene));
         Some((id, path))
     }
 
@@ -403,7 +480,11 @@ impl GpuCache {
                     continue;
                 };
                 let mut dirs = ot.texture_dirs(root);
-                crate::world::insert_publisher_texture_dirs(&mut dirs, publisher_texture_dirs, root);
+                crate::world::insert_publisher_texture_dirs(
+                    &mut dirs,
+                    publisher_texture_dirs,
+                    root,
+                );
                 dirs.insert(0, scheme_dir.clone());
                 let Some((texture, path)) = self.texture(renderer, scene, file, &dirs, images)
                 else {
@@ -464,7 +545,10 @@ impl GpuCache {
         let id = self.add_data(renderer, scene, &data);
         self.textures.insert(
             key.clone(),
-            TexEntry { alpha: true, ..TexEntry::uploaded(id, &data, scene) },
+            TexEntry {
+                alpha: true,
+                ..TexEntry::uploaded(id, &data, scene)
+            },
         );
         Some((id, key))
     }
@@ -488,7 +572,12 @@ impl GpuCache {
     }
 
     /// Give back everything a tile held.
-    pub(super) fn release_tile(&mut self, renderer: &Renderer, scene: &mut Scene, tg: TileGpu) -> usize {
+    pub(super) fn release_tile(
+        &mut self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        tg: TileGpu,
+    ) -> usize {
         let mut freed_types = 0;
         for i in tg.instances {
             renderer.remove_instance(scene, i);
