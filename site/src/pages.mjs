@@ -12,13 +12,37 @@ export function homePage(ctx) {
   const { groups } = ctx;
   const docLinks = groups.filter((g) => g.id !== "notes").map((g) => `<div><h3>${esc(g.title)}</h3><ul>${g.items.slice(0, 4).map((d) => `<li><a href="${u(d.url)}">${esc(d.title)}</a></li>`).join("")}</ul></div>`).join("");
   const body = `<main id="main" class="wrap home-main">
-<section class="intro">
-  <div class="intro-text">
-    <h1 class="wordmark"><img class="on-dark" src="${u("assets/logos/openomsi-wordmark-light.svg")}" alt="openOMSI" height="56"><img class="on-light" src="${u("assets/logos/openomsi-wordmark-dark.svg")}" alt="" height="56"></h1>
+<div class="home-text">
+  <header class="intro">
+    <h1 class="wordmark"><img class="on-dark" src="${u("assets/logos/openomsi-wordmark-light.svg")}" alt="openOMSI" height="52"><img class="on-light" src="${u("assets/logos/openomsi-wordmark-dark.svg")}" alt="" height="52"></h1>
     <p class="lead">A from-scratch recreation of the bus simulator OMSI&nbsp;2, written in Rust. It loads your OMSI&nbsp;2 maps, buses and mods as they are, on a 64-bit, multithreaded engine for Windows, macOS, Linux and Android.</p>
     <p class="status"><span id="home-version">Latest release …</span><span id="home-players" hidden></span><span class="warn">Early development: expect bugs</span></p>
     <aside class="notice" role="note"><p>${NEEDS_OMSI}</p></aside>
-  </div>
+  </header>
+
+  <section class="about" aria-labelledby="h-about">
+    <h2 id="h-about">What it does</h2>
+    <ul class="about-list">
+      <li><b>Runs your content as it is.</b> Maps, splines, scenery, buses, scripts, timetables, HOF files, weather, tickets and plugins load the way OMSI&nbsp;2.2.032 loads them. Existing mods need no conversion, and the OMSI&nbsp;2 folder is never written to. <a href="${u("docs/formats/")}">File formats</a></li>
+      <li><b>A new engine.</b> 64-bit with no 2&nbsp;GB limit, tiles and textures loaded on worker threads, Metal, Vulkan and DirectX&nbsp;12. Four graphics modes, from Vanilla, which looks like OMSI&nbsp;2, to Enhanced+ with physically based light, ray-traced shadows and reflections. <a href="${u("docs/architecture/")}">Architecture</a></li>
+      <li><b>A real launcher.</b> Map, line, tour and bus on one screen with a route map and a live bus preview. Mods from a folder or an archive, wheels and pedals with force feedback, updates on a Stable or Beta channel. <a href="${u("docs/user-guide/the-launcher/")}">The launcher</a></li>
+      <li><b>Driving as in OMSI&nbsp;2.</b> Timetables, tickets, passengers and AI traffic as the original runs them, a navigator in the cab, a city map, a photo mode and a remote cockpit on a phone or tablet. <a href="${u("docs/user-guide/")}">User guide</a></li>
+      <li><b>Trams, metros, trains and trolleybuses.</b> Rail vehicles on their own tracks and a real overhead wire. <a href="${u("docs/rail/")}">Rail</a>, <a href="${u("docs/trolleybus/")}">trolleybuses</a></li>
+      <li><b>Multiplayer.</b> LAN sessions, and a dedicated server that runs the whole map without a window. <a href="${u("docs/server/")}">Dedicated server</a></li>
+      <li><b>Android and VR.</b> The full game on a phone with on-screen wheel or tilt steering and a cab panel; OpenXR headsets on Windows. <a href="${u("docs/android/")}">Android</a>, <a href="${u("docs/vr/")}">VR</a></li>
+      <li><b>More for modders.</b> PBR materials, textures up to 16K, any number of interior lights, HTML textures, and plugins as Lua, compiled <code>.oop</code> (Lua or WebAssembly) or OMSI's own DLLs. <a href="${u("docs/modding/")}">Modding</a>, <a href="${u("docs/plugins/")}">plugins</a></li>
+      <li><b>openMapper.</b> A map editor: draw roads, place buildings and trees, shape the ground and drive the map in openOMSI on one key. <a href="${u("docs/openmapper/")}">openMapper</a></li>
+    </ul>
+  </section>
+
+  <section class="community" aria-labelledby="h-comm">
+    <h2 id="h-comm">Community and support</h2>
+    <p>Questions, screenshots and mods are on <a href="${DISCORD}">Discord</a>. Bugs and wishes go to <a href="${u("issues/")}">Issues</a>. The project is free and open source under the GNU AGPL v3; if you want to support its development: ${DONATE.map((d) => `<a href="${d.url}" rel="noopener">${esc(d.name)}</a>`).join(" or ")}.</p>
+    <p>Also from the family: the <a href="https://github.com/openOMSI-org/openOMSI-Plugins">plugin catalog</a> of reviewed open source plugins and the <a href="https://github.com/openOMSI-org/openOMSI-Development-Tools">Development Tools</a>, a workbench for plugins.</p>
+  </section>
+</div>
+
+<div class="home-rail">
   <aside class="panel get" aria-labelledby="h-get">
     <h2 id="h-get">Download</h2>
     <a class="btn primary wide" id="hero-download" href="${u("download/")}">Download</a>
@@ -26,41 +50,19 @@ export function homePage(ctx) {
     <ul class="get-others" id="get-others"></ul>
     <p class="get-links"><a href="${u("download/")}">All downloads and installing</a> · <a href="${u("download/beta/")}">Beta</a> · <a href="https://github.com/${REPO}">Source code</a></p>
   </aside>
-</section>
 
-<section class="cols">
-  <div class="panel" aria-labelledby="h-rel">
+  <section class="panel" aria-labelledby="h-rel">
     <h2 id="h-rel">Latest release</h2>
     <div class="gh rel-notes" id="home-notes"><p class="muted">Loading…</p></div>
     <p class="get-links"><a href="${u("releases/")}">All release notes</a></p>
-  </div>
-  <div class="panel" aria-labelledby="h-docs">
+  </section>
+
+  <section class="panel" aria-labelledby="h-docs">
     <h2 id="h-docs">Documentation</h2>
     <div class="doc-cols">${docLinks}</div>
     <p class="get-links"><a href="${u("docs/")}">All documents</a> · press <kbd>/</kbd> to search</p>
-  </div>
-</section>
-
-<section class="about" aria-labelledby="h-about">
-  <h2 id="h-about">What it does</h2>
-  <ul class="about-list">
-    <li><b>Runs your content as it is.</b> Maps, splines, scenery, buses, scripts, timetables, HOF files, weather, tickets and plugins load the way OMSI&nbsp;2.2.032 loads them. Existing mods need no conversion, and the OMSI&nbsp;2 folder is never written to. <a href="${u("docs/formats/")}">File formats</a></li>
-    <li><b>A new engine.</b> 64-bit with no 2&nbsp;GB limit, tiles and textures loaded on worker threads, Metal, Vulkan and DirectX&nbsp;12. Four graphics modes, from Vanilla, which looks like OMSI&nbsp;2, to Enhanced+ with physically based light, ray-traced shadows and reflections. <a href="${u("docs/architecture/")}">Architecture</a></li>
-    <li><b>A real launcher.</b> Map, line, tour and bus on one screen with a route map and a live bus preview. Mods from a folder or an archive, wheels and pedals with force feedback, updates on a Stable or Beta channel. <a href="${u("docs/user-guide/the-launcher/")}">The launcher</a></li>
-    <li><b>Driving as in OMSI&nbsp;2.</b> Timetables, tickets, passengers and AI traffic as the original runs them, a navigator in the cab, a city map, a photo mode and a remote cockpit on a phone or tablet. <a href="${u("docs/user-guide/")}">User guide</a></li>
-    <li><b>Trams, metros, trains and trolleybuses.</b> Rail vehicles on their own tracks and a real overhead wire. <a href="${u("docs/rail/")}">Rail</a>, <a href="${u("docs/trolleybus/")}">trolleybuses</a></li>
-    <li><b>Multiplayer.</b> LAN sessions, and a dedicated server that runs the whole map without a window. <a href="${u("docs/server/")}">Dedicated server</a></li>
-    <li><b>Android and VR.</b> The full game on a phone with on-screen wheel or tilt steering and a cab panel; OpenXR headsets on Windows. <a href="${u("docs/android/")}">Android</a>, <a href="${u("docs/vr/")}">VR</a></li>
-    <li><b>More for modders.</b> PBR materials, textures up to 16K, any number of interior lights, HTML textures, and plugins as Lua, compiled <code>.oop</code> (Lua or WebAssembly) or OMSI's own DLLs. <a href="${u("docs/modding/")}">Modding</a>, <a href="${u("docs/plugins/")}">plugins</a></li>
-    <li><b>openMapper.</b> A map editor: draw roads, place buildings and trees, shape the ground and drive the map in openOMSI on one key. <a href="${u("docs/openmapper/")}">openMapper</a></li>
-  </ul>
-</section>
-
-<section class="community" aria-labelledby="h-comm">
-  <h2 id="h-comm">Community and support</h2>
-  <p>Questions, screenshots and mods are on <a href="${DISCORD}">Discord</a>. Bugs and wishes go to <a href="${u("issues/")}">Issues</a>. The project is free and open source under the GNU AGPL v3; if you want to support its development: ${DONATE.map((d) => `<a href="${d.url}" rel="noopener">${esc(d.name)}</a>`).join(" or ")}.</p>
-  <p>Also from the family: the <a href="https://github.com/openOMSI-org/openOMSI-Plugins">plugin catalog</a> of reviewed open source plugins and the <a href="https://github.com/openOMSI-org/openOMSI-Development-Tools">Development Tools</a>, a workbench for plugins.</p>
-</section>
+  </section>
+</div>
 </main>`;
   return pageShell({
     title: "",
