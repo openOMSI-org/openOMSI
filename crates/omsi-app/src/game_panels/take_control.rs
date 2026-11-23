@@ -24,8 +24,7 @@ pub(crate) fn panel(name: &str, pal: Palette) -> Panel {
     )
 }
 
-/// Where the cursor's ray first meets an AI bus's body (its `[boundingbox]`, as the
-/// collisions take it): the bus's id.
+/// (the `[boundingbox]`, as the collisions take it)
 pub(crate) fn bus_under_cursor(app: &crate::App) -> Option<u64> {
     let (o, d, _) = app.cursor_ray_now()?;
     let d = d.as_dvec3();
@@ -69,8 +68,8 @@ fn ray_box(b: &omsi_sim::collision::Obb, o: glam::DVec3, d: glam::DVec3) -> Opti
     Some(t0)
 }
 
-/// A click of the map camera on an AI bus: the question (not in a LAN client, whose traffic
-/// is the host's; not with a timetable running, as OMSI 2 changes no bus then).
+/// Not in a LAN client, whose traffic is the host's, nor with a timetable running: OMSI 2
+/// changes no bus then.
 pub(crate) fn ask(app: &mut crate::App, id: u64) -> bool {
     if app
         .net
@@ -109,8 +108,7 @@ pub(crate) fn name_of(app: &crate::App, id: u64) -> Option<String> {
     })
 }
 
-/// Drops the question once its bus has left the traffic: no panel shows it then, yet it would
-/// still hold the mouse and keys.
+/// (with its bus gone no panel shows the question, yet it would hold the mouse and keys)
 pub(crate) fn forget_gone(app: &mut crate::App) {
     if app
         .menus
@@ -137,7 +135,6 @@ pub(crate) fn click(app: &mut crate::App, el: &str) {
     }
 }
 
-/// The AI bus `id` becomes the player's at once, where and as it is.
 fn take(app: &mut crate::App, id: u64) -> anyhow::Result<()> {
     let w = app
         .world
@@ -200,7 +197,7 @@ fn take(app: &mut crate::App, id: u64) -> anyhow::Result<()> {
         .schedule
         .as_ref()
         .and_then(|s| s.sim.tour_of_car(id));
-    // read in this frame: in OMSI 2 it is the same vehicle, never without a driver
+    // (in OMSI 2 it is the same vehicle, never without a driver)
     let r = app
         .renderer
         .as_ref()

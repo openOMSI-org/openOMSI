@@ -49,7 +49,6 @@ pub(crate) struct GamePanels {
     pub(crate) remote: Option<remote_panel::RemotePanel>,
     /// Where the map camera's click asks to move the bus to.
     pub(crate) move_to: Option<glam::DVec3>,
-    /// The AI bus the map camera's click asks to take control of (`take_control`).
     pub(crate) take: Option<u64>,
 }
 
