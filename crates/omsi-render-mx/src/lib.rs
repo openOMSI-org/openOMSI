@@ -124,7 +124,7 @@ struct PassPipelines {
     /// Smoke particles (`[smoke]`): the corona sprite alpha-blended with the smoke texture.
     smoke_pipeline: mx::RenderPipeline,
     /// The snowfall (snow.wgsl), opaque over the scene (premultiplied); with
-    /// `basic_pipelines` too, as the rainfall (`rainfall_pipeline`).
+    /// `basic_pipelines` on a phone only (`snowfall_pipeline`).
     snow_pipeline: Option<mx::RenderPipeline>,
     /// The rainfall (rain.wgsl), as the snowfall; with `basic_pipelines` too (`rainfall_pipeline`).
     rain_fall_pipeline: Option<mx::RenderPipeline>,

@@ -287,11 +287,12 @@ fn glass_meander(s: f32, seed: vec2<f32>, amp: f32) -> f32 {
 // slides a hand's breadth or two down, in fits and starts, wandering a little from side to
 // side, and stops again. It sweeps a narrow clear track through the small drops, which
 // fill in again as the rain falls on it; behind it lies a short wet trail that drains
-// within a second, and a few beads it left. One chance a cell of 3 cm x 0.5 m; a pixel
+// within a second, and a few beads it left. One chance a cell of 4.5 cm x 1.2 m; a pixel
 // looks at its own cell and the one above, whose drop may have slid into it.
 fn glass_runners(a: ptr<function, DropAcc>, qr: vec2<f32>, mr: mat2x2<f32>, seed: f32, wet: f32, heavy: f32, blow: f32, size: f32, t: f32, px: f32) {
-    // (lanes of 4.5 cm and cells 1.2 m tall, few of them running at once: denser, their
-    // tracks cut the glass into wide clear stripes)
+    // (lanes of 4.5 cm and cells 1.2 m tall, few of them running at once: with lanes of 2 cm
+    // and cells of 0.8 m nearly every lane ran in a downpour, and their tracks cut the glass
+    // into wide clear stripes, #4153)
     let lane_w = 0.045;
     let seg_h = 1.2;
     let lane = floor(qr.x / lane_w);

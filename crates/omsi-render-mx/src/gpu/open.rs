@@ -620,10 +620,12 @@ impl Renderer {
                             "{}: drawing with {}x MSAA{}",
                             info.name,
                             msaa,
-                            match (basic, rainfall_pipeline()) {
-                                (true, true) =>
+                            match (basic, rainfall_pipeline(), snowfall_pipeline()) {
+                                (true, true, true) =>
                                     ", without the lamps in the fog and the street lamps' shadows",
-                                (true, false) =>
+                                (true, true, false) =>
+                                    ", without the snowfall, the lamps in the fog and the street lamps' shadows",
+                                (true, false, _) =>
                                     ", without the snowfall, the rainfall, the lamps in the fog and the street lamps' shadows",
                                 _ => "",
                             }

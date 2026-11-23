@@ -213,11 +213,19 @@ pub fn mx_graphics() -> bool {
 }
 
 /// Whether this system may run the game on mX at all: on a Mac (Metal, the one backend mX
-/// has run a map on), elsewhere only with `OMSI_MX=1` for testing. mX's DirectX 12, Vulkan
-/// and OpenGL paths have not drawn the game on a player's card yet: there the setting left
-/// players with a grey screen or the software renderer's few frames a second (#4153).
+/// has run a map on), elsewhere only with `OMSI_MX=on` for testing; `OMSI_MX=off` keeps a
+/// Mac on wgpu for a run. mX's DirectX 12, Vulkan and OpenGL paths have not drawn the game
+/// on a player's card yet: there the setting left players with a grey screen, the software
+/// renderer's few frames a second or a crash while loading (#4153, #4157).
 fn mx_allowed() -> bool {
-    cfg!(target_os = "macos") || std::env::var("OMSI_MX").is_ok_and(|v| v == "1")
+    let asked = omsi_cfg::flags::OMSI_MX
+        .var()
+        .map(|v| v.trim().to_ascii_lowercase());
+    match asked.as_deref() {
+        Some("1" | "on" | "true" | "yes") => true,
+        Some("0" | "off" | "false" | "no") => false,
+        _ => cfg!(target_os = "macos"),
+    }
 }
 
 /// [`mx_graphics`], from the settings under `home` (the phones' entry points ask before they

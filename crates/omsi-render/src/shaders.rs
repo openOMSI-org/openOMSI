@@ -238,7 +238,7 @@ mod tests {
             super::SCENE.replace("\r\n", "\n"),
             super::ENHANCED.replace("\r\n", "\n"),
         );
-        assert_eq!((scene.len(), fnv1a(&scene)), (151954, 8217718661534893052));
+        assert_eq!((scene.len(), fnv1a(&scene)), (152041, 16478430361663833047));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),
             (120309, 14136318524526509786)
