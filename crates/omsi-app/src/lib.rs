@@ -890,7 +890,9 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             foot_in: None,
             voices_waiting: Vec::new(),
         },
-        clock: omsi_sim::SimClock::default(), started, view,
+        clock: omsi_sim::SimClock::default(),
+        started,
+        view,
         input: InputState {
             cursor: (0.0, 0.0),
             window_focused: false,

@@ -1143,7 +1143,9 @@ impl State {
                 }
                 self.poll_now();
             }
-            Msg::LogTail { pid, lines } => { self.logs.insert(pid, lines); }
+            Msg::LogTail { pid, lines } => {
+                self.logs.insert(pid, lines);
+            }
             Msg::Mods(Ok(m)) => {
                 for c in &m.cleaned {
                     core::log_to_file(&format!("cleanup: {c}"));
