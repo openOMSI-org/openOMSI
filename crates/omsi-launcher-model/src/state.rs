@@ -8,12 +8,15 @@ mod vehicle;
 
 use crate::host::host;
 use omsi_launcher_lib as core;
+#[rustfmt::skip]
 pub use omsi_launcher_lib::crash::{crash_of, disconnect_of, CRASH_TAIL_GAP};
 use serde::{Deserialize, Serialize};
+#[rustfmt::skip]
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Instant;
 
 /// Results of background work.
+#[rustfmt::skip]
 pub enum Msg {
     Content(Result<(Vec<core::MapInfo>, Vec<core::VehicleInfo>, Vec<core::WeatherInfo>), String>),
     /// The first reading of the content: the maps and weathers (quick to read), before the
@@ -71,6 +74,7 @@ pub enum JoinProto {
 
 /// Select the gameplay address only after a gateway has answered. A bare explicit
 /// port in Auto names the game port unless that exact HTTP endpoint answered status.
+#[rustfmt::skip]
 fn server_join_address(address: &str, proto: JoinProto, info: Option<&omsi_net::ws::ServerInfo>) -> Result<(String, JoinProto), &'static str> {
     let address = address.trim();
     let is_web = omsi_net::ws::ws_url(address).is_some() || omsi_net::official::is_alias(address);
@@ -105,6 +109,7 @@ fn host_status(code: &str) -> Result<omsi_net::ws::ServerInfo, String> {
 }
 
 /// The list as saved, with the official server first when it is not in it.
+#[rustfmt::skip]
 fn with_official(mut list: Vec<ServerEntry>) -> Vec<ServerEntry> {
     if !list.iter().any(|s| omsi_net::official::is_alias(&s.address)) {
         list.insert(0, ServerEntry { name: omsi_net::official::NAME.into(), address: omsi_net::official::ALIAS.into(), protocol: JoinProto::Auto });
@@ -211,6 +216,7 @@ fn choice_path() -> std::path::PathBuf {
     core::data_dir().join("launcher-duty.json")
 }
 
+#[rustfmt::skip]
 impl Choice {
     pub fn load() -> Choice {
         let c: Choice = std::fs::read_to_string(choice_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
@@ -249,6 +255,7 @@ impl Choice {
     }
 }
 
+#[rustfmt::skip]
 pub struct State {
     pub config: core::Config,
     pub maps: Vec<core::MapInfo>,
@@ -328,6 +335,7 @@ pub struct State {
     rx: Receiver<Msg>,
 }
 
+#[rustfmt::skip]
 impl State {
     pub fn new() -> State {
         let (tx, rx) = channel();
@@ -1306,6 +1314,7 @@ fn game_listed(pid: Option<u32>, instances: &[core::Instance]) -> bool {
 }
 
 /// The trip a tour starts with at `now`, shared by the route preview and the launch choice.
+#[rustfmt::skip]
 pub(super) fn trip_index_at(tour: &core::TourInfo, now: f64) -> Option<usize> {
     tour.trips.iter().position(|x| x.departure >= now - 120.0).or(if tour.trips.is_empty() { None } else { Some(tour.trips.len() - 1) })
 }
@@ -1326,11 +1335,13 @@ pub fn fmt_bytes(b: u64) -> String {
     }
 }
 
+#[rustfmt::skip]
 pub fn short_map(m: &str) -> String {
     m.trim_start_matches("maps/").trim_end_matches("/global.cfg").to_string()
 }
 
 /// Why `root` is not an OMSI 2 to play on, said so that the player knows what to choose.
+#[rustfmt::skip]
 pub fn root_problem(root: &str) -> String {
     let root = root.trim();
     let p = std::path::Path::new(root);
@@ -1349,6 +1360,7 @@ pub fn root_problem(root: &str) -> String {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod choice_tests {
     #[test]
     fn server_join_protocol_matrix() {
@@ -1454,6 +1466,7 @@ mod choice_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod launch_tests {
     use omsi_launcher_lib::Instance;
 
