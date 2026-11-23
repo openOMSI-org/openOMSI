@@ -514,6 +514,7 @@ fn latest_on(beta: bool) -> anyhow::Result<Option<Release>> {
             current_version(),
             &broken,
             !cfg!(any(target_os = "android", target_os = "ios")),
+            crate::recovery::is_bad,
         ),
         // (the API: an address over its limit gets 403 for an hour, and some networks reach
         // github.com but not api.github.com - github.com says the latest tag as well)
@@ -531,6 +532,7 @@ fn stable_release(
     current: &str,
     broken: &[String],
     can_downgrade: bool,
+    locally_bad: impl Fn(&str) -> bool,
 ) -> anyhow::Result<Option<Release>> {
     let version = v["tag_name"]
         .as_str()
@@ -539,7 +541,7 @@ fn stable_release(
     if broken.iter().any(|b| b == version) {
         return Ok(None);
     }
-    if let Some(upgrade) = parse_release(v, current, false)? {
+    if let Some(upgrade) = parse_release_with_health(v, current, false, &locally_bad)? {
         return Ok(Some(upgrade));
     }
     if !can_downgrade
@@ -549,7 +551,7 @@ fn stable_release(
         || v["prerelease"].as_bool() != Some(false)
         || !newer(current, version)
         || newer(FIRST_SELF_TESTED, version)
-        || crate::recovery::is_bad(version)
+        || locally_bad(version)
     {
         return Ok(None);
     }
@@ -635,6 +637,15 @@ fn parse_release(
     current: &str,
     beta: bool,
 ) -> anyhow::Result<Option<Release>> {
+    parse_release_with_health(v, current, beta, crate::recovery::is_bad)
+}
+
+fn parse_release_with_health(
+    v: &serde_json::Value,
+    current: &str,
+    beta: bool,
+    locally_bad: impl Fn(&str) -> bool,
+) -> anyhow::Result<Option<Release>> {
     let tag = v["tag_name"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("the release has no tag"))?;
@@ -653,7 +664,7 @@ fn parse_release(
     }
     // (a release that failed to start here, or would not even run its self-test, is not
     // offered again: only a newer one is, see `recovery`)
-    if crate::recovery::is_bad(&version) {
+    if locally_bad(&version) {
         log::info!(
             "update check: {version} failed on this computer before and is not offered again"
         );

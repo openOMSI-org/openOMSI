@@ -130,8 +130,10 @@ Every start of a listed version notes it. On the next start, the guard tries the
 candidate, then the locally preserved previous version if one is available, and tells the
 player why. For a download of an older stable build, the updater requires the platform
 archive's SHA-256 from the GitHub API and uses the same staged self-test as a regular update.
-The list is read from GitHub with a short wait. Take a version off the list once nobody runs
-it any more.
+The guard can install this replacement regardless of the launcher's automatic-update setting.
+The list is read from GitHub with a short wait. Push the fix and promote its beta as soon as
+it is checked so players without a working previous build can update. Take a version off the
+list once nobody runs it any more.
 
 Before any update replaces a program, the new one must pass `openomsi --self-test` (it starts,
 says its version and ends): a release that cannot even be loaded on a computer is refused there
