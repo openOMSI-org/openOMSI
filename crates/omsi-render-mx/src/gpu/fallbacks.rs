@@ -17,10 +17,12 @@ pub fn basic_pipelines() -> bool {
 }
 pub(crate) static RAINFALL_LEFT_OUT: super::auxiliary::AdapterBool =
     super::auxiliary::AdapterBool::new(4);
+/// Whether the rainfall and the snowfall are made: with the basic pipelines too - a phone's
+/// as well, which always starts with them and so never saw rain or snow fall - unless the
+/// device was lost making them once (`RAINFALL_LEFT_OUT`, remembered for the adapter).
 pub(crate) fn rainfall_pipeline() -> bool {
     !basic_pipelines()
-        || !(cfg!(any(target_os = "android", target_os = "ios"))
-            || RAINFALL_LEFT_OUT.load(std::sync::atomic::Ordering::Relaxed)
+        || !(RAINFALL_LEFT_OUT.load(std::sync::atomic::Ordering::Relaxed)
             || omsi_cfg::flags::OMSI_SAFE_MODE.is_set())
 }
 

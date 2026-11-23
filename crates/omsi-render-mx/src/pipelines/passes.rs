@@ -105,7 +105,7 @@ impl PassKit<'_> {
             )
         }));
         jobs.push(Box::new(move || {
-            (!basic_pipelines())
+            rainfall_pipeline()
                 .then(|| {
                     optional_pipeline(device, "the snowfall", || {
                         self.snow

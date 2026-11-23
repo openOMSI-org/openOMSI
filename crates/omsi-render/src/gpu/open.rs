@@ -687,7 +687,7 @@ impl Opened {
             }
             if basic_pipelines() && rainfall_pipeline() {
                 log::warn!(
-                    "{}: the graphics device was lost while the basic pipelines were made ({why}); opening it again without the rainfall",
+                    "{}: the graphics device was lost while the basic pipelines were made ({why}); opening it again without the rainfall and the snowfall",
                     info.name
                 );
                 RAINFALL_LEFT_OUT.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -829,7 +829,7 @@ impl Renderer {
                             msaa,
                             match (basic, rainfall_pipeline()) {
                                 (true, true) =>
-                                    ", without the snowfall, the lamps in the fog and the street lamps' shadows",
+                                    ", without the lamps in the fog and the street lamps' shadows",
                                 (true, false) =>
                                     ", without the snowfall, the rainfall, the lamps in the fog and the street lamps' shadows",
                                 _ => "",

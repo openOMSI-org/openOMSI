@@ -491,7 +491,21 @@ pub(crate) fn sky_shader_source() -> String {
 /// The snowfall (snow.wgsl), with the lamps the enhanced picture lights it by (none
 /// without storage buffers).
 pub(crate) fn snow_shader_source() -> String {
-    precip_shader_source(include_str!("../snow.wgsl"))
+    let src = precip_shader_source(include_str!("../snow.wgsl"));
+    if basic_pipelines() {
+        lean_snow(src)
+    } else {
+        src
+    }
+}
+
+/// The snowfall as the basic set makes it: lit without the loop over the lamps (one more
+/// thing a phone's compiler can fail on, see `lean_scene`), by the sky's light from above.
+pub(crate) fn lean_snow(src: String) -> String {
+    // (no line end in the pattern: a Windows checkout turns the file's into CRLF)
+    const LAMPS: &str = "l = (precip_light(in.pos, to_eye, true) + up) * 0.5 * 0.85";
+    debug_assert_eq!(src.matches(LAMPS).count(), 1);
+    src.replace(LAMPS, "l = (up + up) * 0.5 * 0.85")
 }
 
 /// The rainfall (rain.wgsl), as the snowfall.

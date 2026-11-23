@@ -124,10 +124,10 @@ struct PassPipelines {
     corona_pipeline: wgpu::RenderPipeline,
     /// Smoke particles (`[smoke]`): the corona sprite alpha-blended with the smoke texture.
     smoke_pipeline: wgpu::RenderPipeline,
-    /// The snowfall (snow.wgsl), opaque over the scene (premultiplied); none with
-    /// `basic_pipelines`.
+    /// The snowfall (snow.wgsl), opaque over the scene (premultiplied); with
+    /// `basic_pipelines` too, as the rainfall (`rainfall_pipeline`).
     snow_pipeline: Option<wgpu::RenderPipeline>,
-    /// The rainfall (rain.wgsl), as the snowfall; with `basic_pipelines` on computers too.
+    /// The rainfall (rain.wgsl), as the snowfall; with `basic_pipelines` too (`rainfall_pipeline`).
     rain_fall_pipeline: Option<wgpu::RenderPipeline>,
     sky_pipeline: wgpu::RenderPipeline,
 }
