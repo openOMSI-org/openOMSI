@@ -71,41 +71,8 @@ impl VehicleInstance {
         if let Some(i) = var_index.get("wearlifespan") {
             state.vars[*i as usize] = host.wear_lifespan.max(0.01);
         }
-        // These are engine-owned visual inputs, not script variables.  They still need
-        // to exist before {init}: material/prop setup can read them while the scene is
-        // created, which otherwise makes stock buses (notably GN92) start with the dirt
-        // layer at full opacity until the first simulation tick repairs it.
-        for (name, value) in [
-            ("Dirt_Norm", 0.0),
-            ("DirtRate", 0.0),
-            ("PrecipRate", 0.0),
-            ("StreetCond", 0.0),
-        ] {
-            let key = name.to_ascii_lowercase();
-            let id = match var_index.get(&key).copied() {
-                Some(id) => id,
-                None => {
-                    let id = state.vars.len() as omsi_script::VarId;
-                    state.vars.push(value);
-                    var_index.insert(key, id);
-                    id
-                }
-            };
-            state.vars[id as usize] = value;
-        }
-        let mut model_only_vars: Vec<String> = Vec::new();
-        for c in ty
-            .model
-            .meshes
-            .iter()
-            .flat_map(|m| m.visible_groups())
-            .flatten()
-        {
-            let key = c.variable.to_ascii_lowercase();
-            if !var_index.contains_key(&key) && !model_only_vars.contains(&key) {
-                model_only_vars.push(key);
-            }
-        }
+        init_engine_visual_inputs(&mut state, &mut var_index);
+        let model_only_vars = collect_model_vars(&ty, &var_index);
 
         // `Axle_Springfactor_*` (varlist_roadvehicle.txt): the engine's spring scale, which
         // air-suspension scripts overwrite with their bellows pressure; a steel-sprung bus
@@ -155,7 +122,13 @@ impl VehicleInstance {
         let mut animators: Vec<MeshAnimator> = ty
             .meshes
             .iter()
-            .map(|m| MeshAnimator::new(&ty.model.meshes[m.def_index], m.pivot, |n| program.var(n)))
+            .map(|m| {
+                MeshAnimator::new(&ty.model.meshes[m.def_index], m.pivot, |n| {
+                    program
+                        .var(n)
+                        .or_else(|| var_index.get(&n.to_ascii_lowercase()).copied())
+                })
+            })
             .collect();
         crate::anim::link_parents(
             &mut animators,
@@ -613,4 +586,59 @@ pub(super) fn control_cables(ty: &VehicleType) -> Vec<(omsi_script::VarId, omsi_
     cables.sort_unstable();
     cables.dedup();
     cables
+}
+
+/// The variables only the model names (its visibility conditions and animations), which the
+/// scripts do not declare. They stay out of `var_index` until something sets them
+/// ([`VehicleInstance::set_var`]): a visibility condition on a missing variable is ignored,
+/// while one on a variable at zero is compared (`MeshDef::visible_by`).
+fn collect_model_vars(
+    ty: &VehicleType,
+    var_index: &HashMap<String, omsi_script::VarId>,
+) -> Vec<String> {
+    let mut model_only_vars: Vec<String> = Vec::new();
+    let mut add = |name: &str| {
+        let key = name.to_ascii_lowercase();
+        if !key.is_empty()
+            && key.parse::<f32>().is_err()
+            && !var_index.contains_key(&key)
+            && !model_only_vars.contains(&key)
+        {
+            model_only_vars.push(key);
+        }
+    };
+    for m in &ty.model.meshes {
+        for c in m.visible_groups().flatten() {
+            add(&c.variable);
+        }
+        for a in &m.animations {
+            add(&a.variable);
+        }
+    }
+    model_only_vars
+}
+
+/// Initialise engine visual inputs before `{init}` so stock buses (like the GN92) do not start with full dirt until the first tick.
+fn init_engine_visual_inputs(
+    state: &mut State,
+    var_index: &mut HashMap<String, omsi_script::VarId>,
+) {
+    for (name, value) in [
+        ("Dirt_Norm", 0.0),
+        ("DirtRate", 0.0),
+        ("PrecipRate", 0.0),
+        ("StreetCond", 0.0),
+    ] {
+        let key = name.to_ascii_lowercase();
+        let id = match var_index.get(&key).copied() {
+            Some(id) => id,
+            None => {
+                let id = state.vars.len() as omsi_script::VarId;
+                state.vars.push(value);
+                var_index.insert(key, id);
+                id
+            }
+        };
+        state.vars[id as usize] = value;
+    }
 }

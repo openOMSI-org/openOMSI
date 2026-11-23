@@ -296,10 +296,10 @@ impl World {
         let outside = |b: &[f64; 4]| b[2] < x0 || b[0] > x1 || b[3] < y0 || b[1] > y1;
         let src = Self::sources(layout, staged, key);
         let mut order: Vec<&Arc<StagedTile>> = src.values().collect();
-        let mut openings = Vec::new();
         order.sort_by_key(|q| (q.tx, q.ty));
         let mut ts = TileSurface::new(SURFACE_RASTER);
         let mut hole_rims = Vec::new();
+        let mut openings: Vec<Vec<DVec2>> = Vec::new();
         // meshes the wheels stand on, and of them low objects they climb
         let mut wheel_meshes = 0usize;
         let report =
@@ -368,6 +368,7 @@ impl World {
                     continue;
                 }
                 for h in &ot.holes {
+                    // (a tunnel mouth's cut can reach a tile the sheet itself is not on)
                     if let Some(portal) = omsi_geometry::hole_portal(h, &pose.rot, pose.pos) {
                         let data = self.data.peek();
                         let dz = p.origin.z;

@@ -591,8 +591,10 @@ square of nine kilometres worked out from the heaps the sky shows, in cloud spac
 wind moves it for free, read by the ground's sun and by the air, which scatters the sun's shafts
 through the gaps of a broken sky out to seven kilometres. *Glow of lights* (`light_glow=0|1`)
 draws the glare of a lens round every bright light, falling as the cube of the distance, and the
-lamps' halo in the haze of the night air. Wet roads and still water mirror what stands round
-them (*Real-Time Reflections*, `puddles=high|low|off`): the lamps and the lit windows of a
+lamps' halo in the haze of the night air. *Volumetric fog* (`volumetric_fog=0|1`, on by
+default) is fog you can see the light in: the sun's shafts, drifting banks of mist, the clouds'
+shadows in the air; off, it saves about a millisecond a frame. Wet roads and still water mirror
+what stands round them (*Real-Time Reflections*, `puddles=high|low|off`): the lamps and the lit windows of a
 street stream down a wet road at night.
 
 *Real-Time Ray Tracing* (`ray_tracing=1`, `--enhanced-plus`; a file of the days of Enhanced+,

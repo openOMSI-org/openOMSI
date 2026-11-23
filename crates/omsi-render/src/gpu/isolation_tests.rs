@@ -94,6 +94,9 @@ fn auxiliary_adapter_state_device_open_does_not_publish_metadata_body() {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .clone();
+    // (counted on this thread: other tests publish their own options meanwhile)
+    let published = || super::open::ADAPTER_PUBLISHED.with(|n| n.get());
+    let published_before = published();
     with_auxiliary_renderer(|| {
         let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
         descriptor.backends = wgpu::Backends::NOOP;
@@ -114,7 +117,7 @@ fn auxiliary_adapter_state_device_open_does_not_publish_metadata_body() {
         fallback_store(name, Some((1, true)));
         assert_eq!(fallback_path().and_then(|p| std::fs::read(p).ok()), before);
         assert!(ceiling().is_some());
-        assert_eq!(omsi_texture::gpu_options(), gpu_options);
+        assert_eq!(published(), published_before);
         assert!(fallback_load("auxiliary must not load fallbacks").is_none());
         assert_eq!(ADAPTER_TEXTURE_MB.load(Relaxed), texture);
         assert_eq!(ADAPTER_VRAM_MB.load(Relaxed), vram);
@@ -146,6 +149,7 @@ fn auxiliary_adapter_state_device_open_does_not_publish_metadata_body() {
         *ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()),
         info
     );
+    assert_eq!(published(), published_before);
 }
 
 #[test]

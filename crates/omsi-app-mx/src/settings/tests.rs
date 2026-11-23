@@ -530,7 +530,7 @@ fn graphics_modes() {
 #[test]
 fn enhanced_options_and_ray_tracing() {
     let on = Settings::from_text(
-        "graphics=enhanced\nray_tracing=1\nlight_shadows=all\ncloud_shadows=0\nlight_glow=0\n",
+        "graphics=enhanced\nray_tracing=1\nlight_shadows=all\ncloud_shadows=0\nlight_glow=0\nvolumetric_fog=0\n",
     );
     assert!(
         on.ray_tracing()
@@ -544,15 +544,17 @@ fn enhanced_options_and_ray_tracing() {
             o.ray_tracing,
             o.light_shadows,
             o.cloud_shadows,
-            o.light_glow
+            o.light_glow,
+            o.volumetric_fog
         ),
-        (true, 2, false, false)
+        (true, 2, false, false, false)
     );
     let text = on.to_text();
     assert!(
         text.contains("graphics=enhanced\n")
             && text.contains("ray_tracing=1\n")
-            && text.contains("light_shadows=all\n"),
+            && text.contains("light_shadows=all\n")
+            && text.contains("volumetric_fog=0\n"),
         "{text}"
     );
     assert_eq!(Settings::from_text(&text), on);
@@ -569,9 +571,10 @@ fn enhanced_options_and_ray_tracing() {
             d.light_shadows,
             d.cloud_shadows,
             d.light_glow,
+            d.volumetric_fog,
             d.ray_tracing
         ),
-        (0, false, false, false)
+        (0, false, false, true, false)
     );
     assert_eq!(
         ["off", "street", "all", "every", "x", "0"]

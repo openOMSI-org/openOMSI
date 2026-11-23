@@ -407,6 +407,7 @@ pub(crate) fn build_situation(
             vars,
             string_vars,
             timetable: Vec::new(),
+            cars: v.car_states(),
             riders: if mine {
                 v.host.humans_count.max(0.0) as usize
             } else {

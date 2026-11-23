@@ -471,7 +471,7 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 17,
-                    resource: wgpu::BindingResource::TextureView(&probe.cube_view),
+                    resource: wgpu::BindingResource::TextureView(probe.clouds.display_view()),
                 },
             ]);
         }
@@ -612,7 +612,12 @@ pub(crate) fn draw_order_level(i: &Instance, slot: usize) -> f32 {
     if mode != 0 {
         return level;
     }
-    let Some(caps) = i.slot_depth_caps.get(slot).copied() else {
+    let Some(caps) = i
+        .slot_depth_caps
+        .get(slot)
+        .copied()
+        .filter(|caps| caps.positive.is_finite() || caps.negative.is_finite())
+    else {
         return level;
     };
     // Both 10-bit limits and side flags fit exactly in the f32 instance value.

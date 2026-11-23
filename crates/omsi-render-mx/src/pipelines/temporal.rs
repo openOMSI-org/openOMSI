@@ -27,7 +27,13 @@ pub(crate) fn build(
         device,
         mx::ShaderModuleDescriptor {
             label: Some("temporal motion"),
-            source: &*(scene_shader_with(false, include_str!("../temporal/motion.wgsl"))),
+            source: &*(scene_shader_with(
+                false,
+                crate::shaders::hot_wgsl(
+                    include_str!("../temporal/motion.wgsl"),
+                    "temporal/motion.wgsl",
+                ),
+            )),
         },
     );
     let motion_target = [Some(mx::ColorTargetState {
