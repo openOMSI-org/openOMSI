@@ -13,8 +13,8 @@ endorsed by usonskyyyy or the openOMSI organization.
 ## The openBus name and logos
 
 The **openBus** name and the logos in `assets/logos` and `assets/icons/app` are the project's
-own. The logos currently in the repository are placeholders. The openOMSI name and original
-logos are marks of their creator and are not used by this project.
+own, drawn for this project. The openOMSI name and original logos are marks of their
+creator and are not used by this project.
 
 These notices do not claim that any of these marks are registered trademarks.
 

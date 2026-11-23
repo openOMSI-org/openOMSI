@@ -14,9 +14,11 @@
 > [!WARNING]
 > **Early development. Expect bugs.** Things may be missing, broken or change between
 > versions. Please report problems in [Issues](https://github.com/rafaelkaiz/openBus/issues).
-**openBus** is a from-scratch recreation of the bus simulator **OMSI 2**, written in Rust:
-64-bit, multithreaded, with a modern renderer (Metal / Vulkan / DirectX 12 through wgpu).
-It loads the existing OMSI 2 maps, buses, scenery and mods as they are.
+
+**openBus is a modernized OMSI 2.** It keeps full compatibility with native OMSI 2 and gives
+it an improved *vanilla* look: the game you know, running on a 64-bit, multithreaded engine
+written in Rust, with a modern renderer (Metal / Vulkan / DirectX 12 through wgpu). Your
+existing OMSI 2 maps, buses, scenery and mods load as they are.
 
 > [!IMPORTANT]
 > **openBus needs an installed copy of OMSI 2.** It contains no game content of its own: it
@@ -133,11 +135,15 @@ window) or put into the `Mods` folder next to the game.
 
 ## Goals
 
-1. **1:1 behaviour.** Every content format of the original loads and behaves as in OMSI
-   2.2.032. Existing maps and mods work unchanged.
-2. **No original code or assets.** Nothing from the original is copied; the formats are
+1. **Compatibility first.** Every content format of the original loads and behaves as in OMSI
+   2.2.032. Existing maps, buses and mods work unchanged, and the OMSI 2 folder is never
+   modified.
+2. **Vanilla, improved.** The art direction stays that of OMSI 2. Better lighting, shadows,
+   textures, anti-aliasing and performance make it look like a cleaner, sharper OMSI 2, not a
+   different game. Anything that goes beyond the original is optional.
+3. **A modern foundation.** 64-bit, multithreaded, multiplayer and every platform.
+4. **No original code or assets.** Nothing from the original is copied; the formats are
    described in [docs/FORMATS.md](docs/FORMATS.md).
-3. **A better engine.** 64-bit, multithreaded, multiplayer, and every platform.
 
 ## Documentation
 
