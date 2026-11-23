@@ -1114,12 +1114,10 @@ impl State {
                 }
             }
             Msg::Ibis { key, info } => self.ibis = Some((key, info)),
-            Msg::Args(r) => {
-                self.cmdline = match r {
-                    Ok(a) => format!("omsi {}", a.iter().map(|x| if x.contains(' ') { format!("\"{x}\"") } else { x.clone() }).collect::<Vec<_>>().join(" ")),
-                    Err(e) => e,
-                }
-            }
+            Msg::Args(r) => self.cmdline = match r {
+                Ok(a) => format!("omsi {}", a.iter().map(|x| if x.contains(' ') { format!("\"{x}\"") } else { x.clone() }).collect::<Vec<_>>().join(" ")),
+                Err(e) => e,
+            },
             Msg::Launched(Ok(l)) => {
                 core::log_to_file(&format!("launched pid {} ({} other game(s) running): {}", l.pid, l.others, l.command));
                 self.launched_pid = Some(l.pid);
