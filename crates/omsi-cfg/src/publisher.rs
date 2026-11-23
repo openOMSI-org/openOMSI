@@ -824,6 +824,11 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
             .filter(|r| same(&r.dependency, &dependency(pack.manifest())))
         {
             let canonical = pack.asset_by_id(&reference.asset_id).unwrap().path.clone();
+            // An alias that only changes the case of the signed path names that path: the
+            // mount ignores case, and a second entry would collide with it.
+            if path_key(&reference.path) == path_key(&canonical) {
+                continue;
+            }
             pack_aliases.insert(reference.path.clone(), canonical);
         }
         if pack_aliases.is_empty() {

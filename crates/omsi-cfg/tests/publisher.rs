@@ -574,3 +574,65 @@ fn an_installed_pack_does_not_supply_a_file_an_ordinary_map_is_missing() {
     }
     std::fs::remove_dir_all(base).unwrap();
 }
+
+#[test]
+fn an_alias_that_only_changes_the_case_of_its_signed_path_is_no_collision() {
+    let _guard = TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let root =
+        std::env::temp_dir().join(format!("omsi-publisher-case-alias-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("Packs")).unwrap();
+    let signer = SigningKey::generate(&ring::rand::SystemRandom::new()).unwrap();
+    let mut trust = TrustedPublishers::default();
+    trust.insert("fixture", signer.key_id(), signer.public_key());
+    trust.save_file(&root.join("Publishers.json")).unwrap();
+    // (each fixture pack holds one asset, "fixture-asset" at Sceneryobjects/Fixture/<pack>.sco)
+    fixture_pack(&root, &signer, "scenery", vec![]);
+    fixture_pack(&root, &signer, "other", vec![]);
+    let dep = |pack: &str| serde_json::json!({"publisher_id": "fixture", "pack_id": pack, "version": "1.0.0"});
+    let map = root.join("maps/Fixture");
+    std::fs::create_dir_all(&map).unwrap();
+    std::fs::write(
+        map.join("dependencies.json"),
+        serde_json::json!({
+            "format_version": 1,
+            "dependencies": [dep("scenery")],
+            "assets": [{"path": "sceneryobjects/fixture/scenery.sco", "dependency": dep("scenery"), "asset_id": "fixture-asset"}]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    omsi_cfg::add_content_root(root.clone());
+    let case_only = omsi_cfg::publisher::validate_map(&map)
+        .map(|mounts| {
+            mounts
+                .resolve_map_alias(&map, "sceneryobjects/fixture/scenery.sco")
+                .and_then(|file| omsi_cfg::vfs::read(&file).ok())
+        })
+        .map_err(|error| error.to_string());
+    // one pack's alias over another pack's signed path is a real collision
+    std::fs::write(
+        map.join("dependencies.json"),
+        serde_json::json!({
+            "format_version": 1,
+            "dependencies": [dep("scenery"), dep("other")],
+            "assets": [{"path": "Sceneryobjects/Fixture/other.sco", "dependency": dep("scenery"), "asset_id": "fixture-asset"}]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let collision = omsi_cfg::publisher::validate_map(&map)
+        .err()
+        .map(|error| error.to_string());
+    omsi_cfg::remove_content_root(&root);
+    std::fs::remove_dir_all(root).unwrap();
+    assert_eq!(case_only, Ok(Some(b"fixture".to_vec())));
+    assert!(
+        collision
+            .as_deref()
+            .is_some_and(|error| error.contains("collide")),
+        "{collision:?}"
+    );
+}
