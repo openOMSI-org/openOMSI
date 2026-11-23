@@ -65,28 +65,172 @@ fn stem(file: &str) -> String {
 fn never_a_house(file: &str) -> bool {
     let n = stem(file);
     let (dir, base) = n.rsplit_once('/').unwrap_or(("", &n));
-    let mut words = n.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty());
-    has_any(&n, &["/streetobjects", "/verkehrszeichen", "/trees", "/static_vehicles", "/animals", "/agriculture", "/generic/", "/vegetation", "/terrain"])
-        || words.any(|w| {
-            matches!(
-                w,
-                "bus" | "buses" | "car" | "cars" | "truck" | "trucks" | "lkw" | "pkw" | "tram" | "trams" | "wall" | "walls" | "mur" | "murs" | "mauer" | "fence" | "abri" | "abribus" | "shelter" | "shelters" | "statique" | "statiques" | "static" | "vehicle" | "vehicles" | "vehicule" | "vehicules" | "fahrzeug" | "fahrzeuge" | "busstop" | "haltestelle"
-            ) || w.ends_with("bus")
-        })
-        || has_any(dir, &["vehicule", "vehicle", "fahrzeug", "statique", "busstop", "haltestelle", "wartehalle"])
-        || has_any(
-            base,
-            &[
-                "bruecke", "brücke", "bridge", "viadukt", "viaduct", "tunnel", "mauer", "wall", "zaun", "fence", "laerm", "lärm", "noise", "baum", "tree", "hecke", "hedge", "busch", "bush", "gleis", "track", "mast", "lampe", "lamp", "ampel", "signal", "schild", "sign", "dummy", "helper", "invis", "unsicht", "kreuzung", "crossing", "junction", "strasse", "straße", "road", "parkplatz", "parking", "haltestelle", "busstop", "wartehalle", "shelter", "terrain", "boden", "ground", "wiese", "wald", "forest", "water", "wasser", "berg", "felsen", "rock", "pkw", "lkw", "_car", "vehicle", "fahrzeug", "bus_", "tram", "strab", "zug", "train", "oberleitung", "catenary", "wire", "kabel", "pole", "embankment", "damm", "fountain", "brunnen", "arbor", "waterside", "backdrop",
-            ],
-        )
+    let mut words = n
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty());
+    has_any(
+        &n,
+        &[
+            "/streetobjects",
+            "/verkehrszeichen",
+            "/trees",
+            "/static_vehicles",
+            "/animals",
+            "/agriculture",
+            "/generic/",
+            "/vegetation",
+            "/terrain",
+        ],
+    ) || words.any(|w| {
+        matches!(
+            w,
+            "bus"
+                | "buses"
+                | "car"
+                | "cars"
+                | "truck"
+                | "trucks"
+                | "lkw"
+                | "pkw"
+                | "tram"
+                | "trams"
+                | "wall"
+                | "walls"
+                | "mur"
+                | "murs"
+                | "mauer"
+                | "fence"
+                | "abri"
+                | "abribus"
+                | "shelter"
+                | "shelters"
+                | "statique"
+                | "statiques"
+                | "static"
+                | "vehicle"
+                | "vehicles"
+                | "vehicule"
+                | "vehicules"
+                | "fahrzeug"
+                | "fahrzeuge"
+                | "busstop"
+                | "haltestelle"
+        ) || w.ends_with("bus")
+    }) || has_any(
+        dir,
+        &[
+            "vehicule",
+            "vehicle",
+            "fahrzeug",
+            "statique",
+            "busstop",
+            "haltestelle",
+            "wartehalle",
+        ],
+    ) || has_any(
+        base,
+        &[
+            "bruecke",
+            "brücke",
+            "bridge",
+            "viadukt",
+            "viaduct",
+            "tunnel",
+            "mauer",
+            "wall",
+            "zaun",
+            "fence",
+            "laerm",
+            "lärm",
+            "noise",
+            "baum",
+            "tree",
+            "hecke",
+            "hedge",
+            "busch",
+            "bush",
+            "gleis",
+            "track",
+            "mast",
+            "lampe",
+            "lamp",
+            "ampel",
+            "signal",
+            "schild",
+            "sign",
+            "dummy",
+            "helper",
+            "invis",
+            "unsicht",
+            "kreuzung",
+            "crossing",
+            "junction",
+            "strasse",
+            "straße",
+            "road",
+            "parkplatz",
+            "parking",
+            "haltestelle",
+            "busstop",
+            "wartehalle",
+            "shelter",
+            "terrain",
+            "boden",
+            "ground",
+            "wiese",
+            "wald",
+            "forest",
+            "water",
+            "wasser",
+            "berg",
+            "felsen",
+            "rock",
+            "pkw",
+            "lkw",
+            "_car",
+            "vehicle",
+            "fahrzeug",
+            "bus_",
+            "tram",
+            "strab",
+            "zug",
+            "train",
+            "oberleitung",
+            "catenary",
+            "wire",
+            "kabel",
+            "pole",
+            "embankment",
+            "damm",
+            "fountain",
+            "brunnen",
+            "arbor",
+            "waterside",
+            "backdrop",
+        ],
+    )
 }
 
 fn tree_name(file: &str) -> bool {
     let n = stem(file);
     let base = n.rsplit('/').next().unwrap_or(&n);
-    has_any(&n, &["/trees/", "/baeume/", "/bäume/", "/vegetation/", "/pflanzen/"])
-        || has_any(base, &["baum", "tree", "busch", "bush", "strauch", "hecke", "hedge", "tanne", "fichte", "kiefer", "birke", "eiche", "linde", "buche", "ahorn", "kastanie", "pappel", "weide", "pine", "spruce", "birch", "oak", "maple", "poplar", "willow", "conifer", "shrub"])
+    has_any(
+        &n,
+        &[
+            "/trees/",
+            "/baeume/",
+            "/bäume/",
+            "/vegetation/",
+            "/pflanzen/",
+        ],
+    ) || has_any(
+        base,
+        &[
+            "baum", "tree", "busch", "bush", "strauch", "hecke", "hedge", "tanne", "fichte",
+            "kiefer", "birke", "eiche", "linde", "buche", "ahorn", "kastanie", "pappel", "weide",
+            "pine", "spruce", "birch", "oak", "maple", "poplar", "willow", "conifer", "shrub",
+        ],
+    )
 }
 
 /// A texture of road (carriageway), pavement, or neither.
@@ -96,10 +240,48 @@ fn paving_of(texture: &str) -> Option<usize> {
     if has_any(base, &["gruen", "grün", "gras", "rasen", "wiese", "lawn"]) {
         return Some(layers::PAVE_GREEN);
     }
-    if has_any(base, &["gehweg", "gw_", "sidewalk", "pavement", "trottoir", "bordst", "kerb", "curb", "fussweg", "fußweg", "footpath", "plaster_gw", "radweg", "cycle", "str_side", "side1", "side2"]) {
+    if has_any(
+        base,
+        &[
+            "gehweg",
+            "gw_",
+            "sidewalk",
+            "pavement",
+            "trottoir",
+            "bordst",
+            "kerb",
+            "curb",
+            "fussweg",
+            "fußweg",
+            "footpath",
+            "plaster_gw",
+            "radweg",
+            "cycle",
+            "str_side",
+            "side1",
+            "side2",
+        ],
+    ) {
         return Some(layers::PAVE_FOOT);
     }
-    if crate::open::road_surface_name(texture) || has_any(base, &["asphalt", "asph", "teer", "tarmac", "fahrbahn", "kopfstein", "cobble", "pflaster", "beton", "concrete", "parkpl"]) {
+    if crate::open::road_surface_name(texture)
+        || has_any(
+            base,
+            &[
+                "asphalt",
+                "asph",
+                "teer",
+                "tarmac",
+                "fahrbahn",
+                "kopfstein",
+                "cobble",
+                "pflaster",
+                "beton",
+                "concrete",
+                "parkpl",
+            ],
+        )
+    {
         return Some(layers::PAVE_ROAD);
     }
     None
@@ -108,7 +290,13 @@ fn paving_of(texture: &str) -> Option<usize> {
 fn water_name(texture: &str) -> bool {
     let n = stem(texture);
     let base = n.rsplit('/').next().unwrap_or(&n);
-    has_any(base, &["wasser", "water", "fluss", "river", "bach", "kanal", "canal", "see_", "lake", "teich", "pond", "havel", "spree"]) && !has_any(base, &["rinne", "gully", "puddle", "pfuetze", "drain"])
+    has_any(
+        base,
+        &[
+            "wasser", "water", "fluss", "river", "bach", "kanal", "canal", "see_", "lake", "teich",
+            "pond", "havel", "spree",
+        ],
+    ) && !has_any(base, &["rinne", "gully", "puddle", "pfuetze", "drain"])
 }
 
 /// The ground class of a `[groundtex]`: its `[surface]` or name, and where that says nothing
@@ -118,7 +306,11 @@ fn land_class(texture: &str, dirs: &[&Path]) -> usize {
     if water_name(&n) {
         return layers::LAND_WATER;
     }
-    if has_any(&n, &["wald", "forest", "nadel", "laubstreu", "moos", "moss"]) && !n.contains("waldweg") {
+    if has_any(
+        &n,
+        &["wald", "forest", "nadel", "laubstreu", "moos", "moss"],
+    ) && !n.contains("waldweg")
+    {
         return layers::LAND_FOREST;
     }
     let by_name = crate::terrain_paint::surface_by_name(texture);
@@ -151,9 +343,17 @@ fn class_by_color(c: Vec3) -> usize {
     if b > r * 1.15 && b > g * 1.05 && sat > 0.2 {
         layers::LAND_WATER
     } else if g >= r && g >= b && sat > 0.12 {
-        if max < 0.28 { layers::LAND_FOREST } else { layers::LAND_GRASS }
+        if max < 0.28 {
+            layers::LAND_FOREST
+        } else {
+            layers::LAND_GRASS
+        }
     } else if r > b * 1.15 && sat > 0.15 {
-        if r > 0.55 && g > 0.45 { layers::LAND_SAND } else { layers::LAND_FIELD }
+        if r > 0.55 && g > 0.45 {
+            layers::LAND_SAND
+        } else {
+            layers::LAND_FIELD
+        }
     } else {
         layers::LAND_PAVED
     }
@@ -195,7 +395,10 @@ fn type_info(
     let (model, model_dir) = match &sco.model_file {
         Some(m) => {
             let mp = omsi_cfg::resolve_path(&sco_dir, m);
-            (omsi_model::Model::load(&mp).ok()?, mp.parent()?.to_path_buf())
+            (
+                omsi_model::Model::load(&mp).ok()?,
+                mp.parent()?.to_path_buf(),
+            )
         }
         None => (sco.model.clone(), sco_dir.clone()),
     };
@@ -218,13 +421,33 @@ fn type_info(
             continue;
         }
         let mp = omsi_cfg::resolve_path(&omsi_cfg::resolve_path(&model_dir, "model"), &md.file);
-        let mp = if omsi_cfg::vfs::is_file(&mp) { mp } else { omsi_cfg::resolve_path(&model_dir, &md.file) };
-        let Ok(m) = omsi_o3d::load_mesh(&mp) else { continue };
+        let mp = if omsi_cfg::vfs::is_file(&mp) {
+            mp
+        } else {
+            omsi_cfg::resolve_path(&model_dir, &md.file)
+        };
+        let Ok(m) = omsi_o3d::load_mesh(&mp) else {
+            continue;
+        };
         let swap = |v: Vec3| Vec3::new(v.x, v.z, v.y);
         for t in &m.triangles {
-            let p = t.indices.map(|i| m.vertices.get(i as usize).map(|v| swap(v.position)).unwrap_or(Vec3::ZERO));
-            let uv = t.indices.map(|i| m.vertices.get(i as usize).map(|v| v.uv).unwrap_or(Vec2::ZERO));
-            let tex = m.materials.get(t.material as usize).map(|mt| mt.texture.as_str()).unwrap_or("");
+            let p = t.indices.map(|i| {
+                m.vertices
+                    .get(i as usize)
+                    .map(|v| swap(v.position))
+                    .unwrap_or(Vec3::ZERO)
+            });
+            let uv = t.indices.map(|i| {
+                m.vertices
+                    .get(i as usize)
+                    .map(|v| v.uv)
+                    .unwrap_or(Vec2::ZERO)
+            });
+            let tex = m
+                .materials
+                .get(t.material as usize)
+                .map(|mt| mt.texture.as_str())
+                .unwrap_or("");
             let slot = texs.iter().position(|x| x == tex).unwrap_or_else(|| {
                 texs.push(tex.to_string());
                 texs.len() - 1
@@ -255,13 +478,25 @@ fn type_info(
     for (t, class, uv, slot) in &tris {
         let Some(class) = class else { continue };
         let n = (t[1] - t[0]).cross(t[2] - t[0]);
-        if n.length_squared() < 1e-6 || n.z.abs() < n.length() * 0.5 || t.iter().any(|p| p.z > lo.z + 1.5) {
+        if n.length_squared() < 1e-6
+            || n.z.abs() < n.length() * 0.5
+            || t.iter().any(|p| p.z > lo.z + 1.5)
+        {
             continue;
         }
-        let class = if *class == layers::PAVE_ROAD && sco.paths.is_empty() { layers::PAVE_AREA } else { *class };
-        info.paved.push((class, [t[0].truncate(), t[1].truncate(), t[2].truncate()]));
+        let class = if *class == layers::PAVE_ROAD && sco.paths.is_empty() {
+            layers::PAVE_AREA
+        } else {
+            *class
+        };
+        info.paved
+            .push((class, [t[0].truncate(), t[1].truncate(), t[2].truncate()]));
         if class == layers::PAVE_ROAD || class == layers::PAVE_AREA {
-            flats.push(([t[0].truncate(), t[1].truncate(), t[2].truncate()], *uv, *slot));
+            flats.push((
+                [t[0].truncate(), t[1].truncate(), t[2].truncate()],
+                *uv,
+                *slot,
+            ));
         }
     }
     if !flats.is_empty() {
@@ -273,7 +508,12 @@ fn type_info(
         crate::world::insert_publisher_texture_dirs(&mut dirs, publisher_texture_dirs, root);
         info.paint = crate::road_paint::face_paint(&flats, &texs, &dirs, paints);
     }
-    if sco.surface || !sco.paths.is_empty() || sco.is_traffic_light || sco.is_bus_stop || never_a_house(file) {
+    if sco.surface
+        || !sco.paths.is_empty()
+        || sco.is_traffic_light
+        || sco.is_bus_stop
+        || never_a_house(file)
+    {
         return Some(info);
     }
     let size = hi - lo;
@@ -284,14 +524,21 @@ fn type_info(
     // building: a garage, a greenhouse), seen from above
     let base = lo.z.max(-1.0);
     let roof_min = base + (size.z * 0.5).min(2.0);
-    let top_tris: Vec<[Vec2; 3]> = tris.iter().filter(|(t, ..)| t.iter().all(|p| p.z > roof_min)).map(|(t, ..)| [t[0].truncate(), t[1].truncate(), t[2].truncate()]).collect();
+    let top_tris: Vec<[Vec2; 3]> = tris
+        .iter()
+        .filter(|(t, ..)| t.iter().all(|p| p.z > roof_min))
+        .map(|(t, ..)| [t[0].truncate(), t[1].truncate(), t[2].truncate()])
+        .collect();
     if top_tris.is_empty() {
         return Some(info);
     }
     // (a quarter of a metre, coarser for the biggest objects: the grids stay under 800 cells a side, and
     // so does what many of them cost side by side)
     let cell = HOUSE_CELL.max(size.x.max(size.y) / 800.0);
-    let (w, h) = (((size.x / cell).ceil() as usize + 3).min(900), ((size.y / cell).ceil() as usize + 3).min(900));
+    let (w, h) = (
+        ((size.x / cell).ceil() as usize + 3).min(900),
+        ((size.y / cell).ceil() as usize + 3).min(900),
+    );
     let org = lo.truncate() - Vec2::splat(cell * 1.5);
     let mut cells = vec![false; w * h];
     for t in &top_tris {
@@ -301,8 +548,14 @@ fn type_info(
         }
         let tlo = t[0].min(t[1]).min(t[2]);
         let thi = t[0].max(t[1]).max(t[2]);
-        let (x0, y0) = (((tlo.x - org.x) / cell).floor().max(0.0) as usize, ((tlo.y - org.y) / cell).floor().max(0.0) as usize);
-        let (x1, y1) = ((((thi.x - org.x) / cell).ceil() as usize).min(w), (((thi.y - org.y) / cell).ceil() as usize).min(h));
+        let (x0, y0) = (
+            ((tlo.x - org.x) / cell).floor().max(0.0) as usize,
+            ((tlo.y - org.y) / cell).floor().max(0.0) as usize,
+        );
+        let (x1, y1) = (
+            (((thi.x - org.x) / cell).ceil() as usize).min(w),
+            (((thi.y - org.y) / cell).ceil() as usize).min(h),
+        );
         for y in y0..y1 {
             for x in x0..x1 {
                 let q = org + Vec2::new((x as f32 + 0.5) * cell, (y as f32 + 0.5) * cell);
@@ -321,8 +574,15 @@ fn type_info(
         let mut out = c.to_vec();
         for y in 0..h {
             for x in 0..w {
-                let n = [(x.wrapping_sub(1), y), (x + 1, y), (x, y.wrapping_sub(1)), (x, y + 1)];
-                let any = n.iter().any(|&(i, j)| i < w && j < h && c[j * w + i] == set);
+                let n = [
+                    (x.wrapping_sub(1), y),
+                    (x + 1, y),
+                    (x, y.wrapping_sub(1)),
+                    (x, y + 1),
+                ];
+                let any = n
+                    .iter()
+                    .any(|&(i, j)| i < w && j < h && c[j * w + i] == set);
                 if c[y * w + x] != set && any {
                     out[y * w + x] = set;
                 }
@@ -341,19 +601,38 @@ fn type_info(
     let roofs: Vec<(Vec2, f32)> = tris
         .iter()
         .filter(|(t, ..)| t.iter().all(|p| p.z > roof_min))
-        .map(|(t, ..)| (Vec2::new(t[0].x + t[1].x + t[2].x, t[0].y + t[1].y + t[2].y) / 3.0, t[0].z.max(t[1].z).max(t[2].z)))
+        .map(|(t, ..)| {
+            (
+                Vec2::new(t[0].x + t[1].x + t[2].x, t[0].y + t[1].y + t[2].y) / 3.0,
+                t[0].z.max(t[1].z).max(t[2].z),
+            )
+        })
         .collect();
     // the walls that reach the ground, seen from above (a line each)
     let mut walls = vec![false; w * h];
     for (t, ..) in &tris {
         let n = (t[1] - t[0]).cross(t[2] - t[0]);
-        let (zlo, zhi) = (t[0].z.min(t[1].z).min(t[2].z), t[0].z.max(t[1].z).max(t[2].z));
-        if n.length_squared() < 1e-8 || n.z.abs() > n.length() * 0.35 || zlo > base + 1.5 || zhi < base + 1.8 {
+        let (zlo, zhi) = (
+            t[0].z.min(t[1].z).min(t[2].z),
+            t[0].z.max(t[1].z).max(t[2].z),
+        );
+        if n.length_squared() < 1e-8
+            || n.z.abs() > n.length() * 0.35
+            || zlo > base + 1.5
+            || zhi < base + 1.8
+        {
             continue;
         }
         // (the face seen from above is a line: its two farthest corners)
         let pts = [t[0].truncate(), t[1].truncate(), t[2].truncate()];
-        let (a, b) = [(0, 1), (1, 2), (0, 2)].iter().map(|&(i, j)| (pts[i], pts[j])).max_by(|x, y| x.0.distance_squared(x.1).total_cmp(&y.0.distance_squared(y.1))).unwrap();
+        let (a, b) = [(0, 1), (1, 2), (0, 2)]
+            .iter()
+            .map(|&(i, j)| (pts[i], pts[j]))
+            .max_by(|x, y| {
+                x.0.distance_squared(x.1)
+                    .total_cmp(&y.0.distance_squared(y.1))
+            })
+            .unwrap();
         let steps = ((b - a).length() / (cell * 0.5)).ceil().max(1.0) as usize;
         for k in 0..=steps {
             let q = (a.lerp(b, k as f32 / steps as f32) - org) / cell;
@@ -372,20 +651,46 @@ fn type_info(
     for (mask, is_open) in [(&solid, false), (&open, true)] {
         let rings: Vec<Vec<Vec2>> = layers::trace_cells(mask, w, h)
             .into_iter()
-            .map(|r| layers::simplify_ring(&r, 0.45).into_iter().map(|p| org + p * cell).collect::<Vec<Vec2>>())
-            .filter(|r: &Vec<Vec2>| r.len() >= 3 && layers::area2(r).abs() * 0.5 >= if is_open { 6.0 } else { 4.0 })
+            .map(|r| {
+                layers::simplify_ring(&r, 0.45)
+                    .into_iter()
+                    .map(|p| org + p * cell)
+                    .collect::<Vec<Vec2>>()
+            })
+            .filter(|r: &Vec<Vec2>| {
+                r.len() >= 3 && layers::area2(r).abs() * 0.5 >= if is_open { 6.0 } else { 4.0 }
+            })
             .collect();
         for outer in rings.iter().filter(|r| layers::area2(r) > 0.0) {
-            let (blo, bhi) = outer.iter().fold((Vec2::splat(f32::MAX), Vec2::splat(f32::MIN)), |(l, h), p| (l.min(*p), h.max(*p)));
-            let mut zs: Vec<f32> = roofs.iter().filter(|(c, _)| c.x >= blo.x && c.x <= bhi.x && c.y >= blo.y && c.y <= bhi.y && inside_ring(*c, outer)).map(|(_, z)| *z).collect();
+            let (blo, bhi) = outer.iter().fold(
+                (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN)),
+                |(l, h), p| (l.min(*p), h.max(*p)),
+            );
+            let mut zs: Vec<f32> = roofs
+                .iter()
+                .filter(|(c, _)| {
+                    c.x >= blo.x
+                        && c.x <= bhi.x
+                        && c.y >= blo.y
+                        && c.y <= bhi.y
+                        && inside_ring(*c, outer)
+                })
+                .map(|(_, z)| *z)
+                .collect();
             if zs.is_empty() {
                 continue;
             }
             zs.sort_by(|a, b| a.total_cmp(b));
             let top = zs[((zs.len() as f32 * 0.97) as usize).min(zs.len() - 1)];
             let mut group = vec![outer.clone()];
-            group.extend(rings.iter().filter(|r| layers::area2(r) < 0.0 && inside_ring(r[0], outer)).cloned());
-            info.houses.push((group, (top - base).clamp(2.2, 250.0), is_open));
+            group.extend(
+                rings
+                    .iter()
+                    .filter(|r| layers::area2(r) < 0.0 && inside_ring(r[0], outer))
+                    .cloned(),
+            );
+            info.houses
+                .push((group, (top - base).clamp(2.2, 250.0), is_open));
         }
     }
     if !info.houses.is_empty() {
@@ -395,7 +700,8 @@ fn type_info(
             .filter_map(|(t, ..)| {
                 let area = (t[1] - t[0]).cross(t[2] - t[0]).length() * 0.5;
                 let zhi = t[0].z.max(t[1].z).max(t[2].z);
-                (area >= 0.04 && zhi > base + 0.15).then(|| (area, t.map(|p| Vec3::new(p.x, p.y, (p.z - base).max(0.0)))))
+                (area >= 0.04 && zhi > base + 0.15)
+                    .then(|| (area, t.map(|p| Vec3::new(p.x, p.y, (p.z - base).max(0.0)))))
             })
             .collect();
         faces.sort_by(|a, b| b.0.total_cmp(&a.0));
@@ -431,7 +737,10 @@ fn solid_roof_cells(roof: &[bool], walls: &[bool], w: usize, h: usize, cell: f32
     let closed = spread(walls, 2);
     // (what the outside reaches without crossing a wall; the rest is enclosed)
     let mut outside = vec![false; w * h];
-    let mut stack: Vec<usize> = (0..w).flat_map(|x| [x, (h - 1) * w + x]).chain((0..h).flat_map(|y| [y * w, y * w + w - 1])).collect();
+    let mut stack: Vec<usize> = (0..w)
+        .flat_map(|x| [x, (h - 1) * w + x])
+        .chain((0..h).flat_map(|y| [y * w, y * w + w - 1]))
+        .collect();
     while let Some(k) = stack.pop() {
         if outside[k] || closed[k] {
             continue;
@@ -452,7 +761,9 @@ fn solid_roof_cells(roof: &[bool], walls: &[bool], w: usize, h: usize, cell: f32
         }
     }
     let near = spread(walls, (1.6 / cell).ceil() as i64);
-    (0..w * h).map(|k| roof[k] && (near[k] || !outside[k])).collect()
+    (0..w * h)
+        .map(|k| roof[k] && (near[k] || !outside[k]))
+        .collect()
 }
 
 /// Whether `p` lies inside the closed polygon `ring`.
@@ -471,7 +782,11 @@ fn inside_ring(p: Vec2, ring: &[Vec2]) -> bool {
 /// A roof's triangles from its rings (outer anticlockwise, holes clockwise): each hole is
 /// bridged to the outline, then the one ring is clipped.
 pub(crate) fn roof_of(rings: &[Vec<Vec2>]) -> (Vec<Vec2>, Vec<[u16; 3]>) {
-    let mut outers: Vec<Vec<Vec2>> = rings.iter().filter(|r| layers::area2(r) > 0.0).cloned().collect();
+    let mut outers: Vec<Vec<Vec2>> = rings
+        .iter()
+        .filter(|r| layers::area2(r) > 0.0)
+        .cloned()
+        .collect();
     if outers.is_empty() {
         return (Vec::new(), Vec::new());
     }
@@ -496,10 +811,26 @@ pub(crate) fn roof_of(rings: &[Vec<Vec2>]) -> (Vec<Vec2>, Vec<[u16; 3]>) {
     };
     for hole in holes {
         // (only a hole inside this outline)
-        let Some((hi, hp)) = hole.iter().enumerate().max_by(|a, b| a.1.x.total_cmp(&b.1.x)).map(|(i, p)| (i, *p)) else { continue };
+        let Some((hi, hp)) = hole
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.x.total_cmp(&b.1.x))
+            .map(|(i, p)| (i, *p))
+        else {
+            continue;
+        };
         let mut cands: Vec<usize> = (0..outline.len()).collect();
-        cands.sort_by(|&a, &b| outline[a].distance_squared(hp).total_cmp(&outline[b].distance_squared(hp)));
-        let Some(oi) = cands.into_iter().find(|&i| !crosses(hp, outline[i], &outline) && !crosses(hp, outline[i], hole)) else { continue };
+        cands.sort_by(|&a, &b| {
+            outline[a]
+                .distance_squared(hp)
+                .total_cmp(&outline[b].distance_squared(hp))
+        });
+        let Some(oi) = cands
+            .into_iter()
+            .find(|&i| !crosses(hp, outline[i], &outline) && !crosses(hp, outline[i], hole))
+        else {
+            continue;
+        };
         let mut merged = Vec::with_capacity(outline.len() + hole.len() + 2);
         merged.extend_from_slice(&outline[..=oi]);
         for k in 0..=hole.len() {
@@ -516,7 +847,15 @@ pub(crate) fn roof_of(rings: &[Vec<Vec2>]) -> (Vec<Vec2>, Vec<[u16; 3]>) {
 /// Marching squares over a grid of `nx` x `ny` node values (row-major, row 0 at y = 0): the
 /// triangles of where the value is `iso` or more, `cell` metres a cell from `org`. Whole
 /// cells in a row are joined into one rectangle.
-pub(crate) fn iso_fill(v: &[f32], nx: usize, ny: usize, cell: f32, org: Vec2, iso: f32, out: &mut Vec<Vec2>) {
+pub(crate) fn iso_fill(
+    v: &[f32],
+    nx: usize,
+    ny: usize,
+    cell: f32,
+    org: Vec2,
+    iso: f32,
+    out: &mut Vec<Vec2>,
+) {
     let at = |x: usize, y: usize| v[y * nx + x];
     for y in 0..ny.saturating_sub(1) {
         let mut run: Option<usize> = None;
@@ -540,7 +879,12 @@ pub(crate) fn iso_fill(v: &[f32], nx: usize, ny: usize, cell: f32, org: Vec2, is
             if !inside.iter().any(|i| *i) {
                 continue;
             }
-            let corners = [Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0), Vec2::new(1.0, 1.0), Vec2::new(0.0, 1.0)];
+            let corners = [
+                Vec2::new(0.0, 0.0),
+                Vec2::new(1.0, 0.0),
+                Vec2::new(1.0, 1.0),
+                Vec2::new(0.0, 1.0),
+            ];
             let mut poly: Vec<Vec2> = Vec::with_capacity(6);
             for k in 0..4 {
                 let j = (k + 1) % 4;
@@ -554,7 +898,11 @@ pub(crate) fn iso_fill(v: &[f32], nx: usize, ny: usize, cell: f32, org: Vec2, is
             }
             let base = org + Vec2::new(x as f32, y as f32) * cell;
             for k in 1..poly.len().saturating_sub(1) {
-                out.extend([base + poly[0] * cell, base + poly[k] * cell, base + poly[k + 1] * cell]);
+                out.extend([
+                    base + poly[0] * cell,
+                    base + poly[k] * cell,
+                    base + poly[k + 1] * cell,
+                ]);
             }
         }
         flush(&mut run, nx - 1, out);
@@ -588,8 +936,21 @@ struct Part {
 
 /// The map's layers from physical installation paths only. Use `cached_with_mounts` when a
 /// validated publisher map scope is active. `tiles`: (x, y, path) of every tile.
-pub fn generate(root: &Path, map_dir: &Path, ground_textures: &[omsi_map::global::GroundTex], tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[PathBuf]) -> Layers {
-    generate_with_mounts(root, map_dir, &omsi_cfg::publisher::DependencyMounts::default(), ground_textures, tiles, chrono_dirs)
+pub fn generate(
+    root: &Path,
+    map_dir: &Path,
+    ground_textures: &[omsi_map::global::GroundTex],
+    tiles: &[(i32, i32, PathBuf)],
+    chrono_dirs: &[PathBuf],
+) -> Layers {
+    generate_with_mounts(
+        root,
+        map_dir,
+        &omsi_cfg::publisher::DependencyMounts::default(),
+        ground_textures,
+        tiles,
+        chrono_dirs,
+    )
 }
 
 fn generate_with_mounts(
@@ -603,9 +964,15 @@ fn generate_with_mounts(
     use rayon::prelude::*;
     let t0 = std::time::Instant::now();
     let ts = tile_size();
-    let origin = tiles.first().map(|t| DVec2::new(t.0 as f64 * ts, t.1 as f64 * ts)).unwrap_or(DVec2::ZERO);
+    let origin = tiles
+        .first()
+        .map(|t| DVec2::new(t.0 as f64 * ts, t.1 as f64 * ts))
+        .unwrap_or(DVec2::ZERO);
     let dirs = [root];
-    let ground: Vec<usize> = ground_textures.iter().map(|g| land_class(&g.texture, &dirs)).collect();
+    let ground: Vec<usize> = ground_textures
+        .iter()
+        .map(|g| land_class(&g.texture, &dirs))
+        .collect();
     let base_class = ground.first().copied().unwrap_or(layers::LAND_GRASS);
     // (the pictures' paint is read once for this generation, and let go of with it)
     let paints = crate::road_paint::PaintCache::default();
@@ -615,44 +982,91 @@ fn generate_with_mounts(
     let type_of = |file: &str| -> Option<Arc<TypeInfo>> {
         let key = stem(file.trim());
         let cell = types.lock().entry(key).or_default().clone();
-        cell.get_or_init(|| type_info(root, map_dir, mounts, &publisher_texture_dirs, file, &paints).map(Arc::new)).clone()
+        cell.get_or_init(|| {
+            type_info(
+                root,
+                map_dir,
+                mounts,
+                &publisher_texture_dirs,
+                file,
+                &paints,
+            )
+            .map(Arc::new)
+        })
+        .clone()
     };
     let slis: Mutex<HashMap<String, Once<omsi_scenery::sli::Spline>>> = Mutex::new(HashMap::new());
     let sli_of = |file: &str| -> Option<Arc<omsi_scenery::sli::Spline>> {
         let key = stem(file.trim());
         let cell = slis.lock().entry(key).or_default().clone();
-        cell.get_or_init(|| omsi_scenery::sli::Spline::load(&crate::world::map_asset_path(root, map_dir, mounts, file)).ok().map(Arc::new)).clone()
+        cell.get_or_init(|| {
+            omsi_scenery::sli::Spline::load(&crate::world::map_asset_path(
+                root, map_dir, mounts, file,
+            ))
+            .ok()
+            .map(Arc::new)
+        })
+        .clone()
     };
     let mut parts: Vec<Part> = tiles
         .par_iter()
         .map(|(tx, ty, path)| {
-            let mut part = Part { land: vec![Vec::new(); layers::LAND_CLASSES], paved: vec![Vec::new(); layers::PAVE_CLASSES], paint: vec![Vec::new(); layers::PAINT_CLASSES], ..Default::default() };
+            let mut part = Part {
+                land: vec![Vec::new(); layers::LAND_CLASSES],
+                paved: vec![Vec::new(); layers::PAVE_CLASSES],
+                paint: vec![Vec::new(); layers::PAINT_CLASSES],
+                ..Default::default()
+            };
             let o2 = DVec2::new(*tx as f64 * ts, *ty as f64 * ts);
             let lo = (o2 - origin).as_vec2();
             part.tile = [lo.x, lo.y, lo.x + ts as f32, lo.y + ts as f32];
-            let Some(tile) = omsi_world::map_index::read_tile(path, chrono_dirs) else { return part };
-            let terrain = omsi_map::terrain::Terrain::load(&omsi_world::map_index::terrain_file(&tile, path)).unwrap_or_else(|_| omsi_map::terrain::Terrain::flat());
+            let Some(tile) = omsi_world::map_index::read_tile(path, chrono_dirs) else {
+                return part;
+            };
+            let terrain =
+                omsi_map::terrain::Terrain::load(&omsi_world::map_index::terrain_file(&tile, path))
+                    .unwrap_or_else(|_| omsi_map::terrain::Terrain::flat());
             ground_of(&mut part, map_dir, path, &ground, base_class, lo, ts as f32);
             if tile.has_water {
                 water_of(&mut part, &tile, path, &terrain, lo, ts as f32);
             }
             // splines: paved profiles, water, rail and tram
-            for sp in tile.splines.iter().filter(|s| !s.deleted && !s.file.trim().is_empty()) {
-                let Some(def) = sli_of(&sp.file) else { continue };
+            for sp in tile
+                .splines
+                .iter()
+                .filter(|s| !s.deleted && !s.file.trim().is_empty())
+            {
+                let Some(def) = sli_of(&sp.file) else {
+                    continue;
+                };
                 if def.only_editor || sp.length < 0.5 {
                     continue;
                 }
-                spline_of(&mut part, root, &publisher_texture_dirs, sp, &def, o2, origin, &paints);
+                spline_of(
+                    &mut part,
+                    root,
+                    &publisher_texture_dirs,
+                    sp,
+                    &def,
+                    o2,
+                    origin,
+                    &paints,
+                );
             }
             // objects and the rows along splines
             let mut placed: Vec<(String, DVec2, f64)> = Vec::new();
             for o in &tile.objects {
                 if !o.file.trim().is_empty() {
-                    placed.push((o.file.clone(), o2 + DVec2::new(o.pos[0], o.pos[1]), o.rot[0]));
+                    placed.push((
+                        o.file.clone(),
+                        o2 + DVec2::new(o.pos[0], o.pos[1]),
+                        o.rot[0],
+                    ));
                 }
             }
             for att in &tile.spline_attachments {
-                for (_, ro) in omsi_world::map_index::tile_row_objects(att, &tile.splines, o2, None) {
+                for (_, ro) in omsi_world::map_index::tile_row_objects(att, &tile.splines, o2, None)
+                {
                     placed.push((att.file.clone(), ro.pose.pos.truncate(), ro.pose.heading()));
                 }
             }
@@ -671,16 +1085,27 @@ fn generate_with_mounts(
                 let inst = if info.houses.is_empty() {
                     u32::MAX
                 } else {
-                    part.instances.push((stem(&file), (at - origin).as_vec2(), heading as f32));
+                    part.instances
+                        .push((stem(&file), (at - origin).as_vec2(), heading as f32));
                     part.instances.len() as u32 - 1
                 };
                 for (rings, height, open) in &info.houses {
-                    let rings: Vec<Vec<Vec2>> = rings.iter().map(|r| r.iter().map(|q| place(*q, at, heading, origin)).collect()).collect();
+                    let rings: Vec<Vec<Vec2>> = rings
+                        .iter()
+                        .map(|r| r.iter().map(|q| place(*q, at, heading, origin)).collect())
+                        .collect();
                     let (outline, roof) = roof_of(&rings);
                     if roof.is_empty() {
                         continue;
                     }
-                    part.buildings.push(Building { outline, roof, height: *height, open: *open, has_mesh: true, inst });
+                    part.buildings.push(Building {
+                        outline,
+                        roof,
+                        height: *height,
+                        open: *open,
+                        has_mesh: true,
+                        inst,
+                    });
                 }
             }
             woods_of(&mut part, lo, ts as f32);
@@ -697,7 +1122,12 @@ fn generate_with_mounts(
         carriageways.extend_from_slice(&p.carriageways);
         let mut global: Vec<u32> = Vec::with_capacity(p.instances.len());
         for (key, at, heading) in p.instances.drain(..) {
-            let spot = (key.clone(), (at.x * 20.0).round() as i32, (at.y * 20.0).round() as i32, (heading * 10.0).round() as i32);
+            let spot = (
+                key.clone(),
+                (at.x * 20.0).round() as i32,
+                (at.y * 20.0).round() as i32,
+                (heading * 10.0).round() as i32,
+            );
             if let Some(&id) = seen_at.get(&spot) {
                 global.push(id);
                 continue;
@@ -777,7 +1207,15 @@ fn inner_streets(l: &Layers) -> Vec<Vec2> {
     use rayon::prelude::*;
     const B: f32 = 20.0;
     let key = |p: Vec2| ((p.x / B).floor() as i32, (p.y / B).floor() as i32);
-    let tris: Vec<([Vec2; 3], bool)> = [layers::PAVE_ROAD, layers::PAVE_FOOT].iter().flat_map(|&c| l.paved[c].chunks_exact(3).map(move |t| ([t[0], t[1], t[2]], c == layers::PAVE_ROAD))).filter(|(t, _)| (t[1] - t[0]).perp_dot(t[2] - t[0]).abs() > 1e-4).collect();
+    let tris: Vec<([Vec2; 3], bool)> = [layers::PAVE_ROAD, layers::PAVE_FOOT]
+        .iter()
+        .flat_map(|&c| {
+            l.paved[c]
+                .chunks_exact(3)
+                .map(move |t| ([t[0], t[1], t[2]], c == layers::PAVE_ROAD))
+        })
+        .filter(|(t, _)| (t[1] - t[0]).perp_dot(t[2] - t[0]).abs() > 1e-4)
+        .collect();
     let mut grid: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
     for (i, (t, _)) in tris.iter().enumerate() {
         let (a, b) = (key(t[0].min(t[1]).min(t[2])), key(t[0].max(t[1]).max(t[2])));
@@ -797,67 +1235,73 @@ fn inner_streets(l: &Layers) -> Vec<Vec2> {
     let pool = rayon::ThreadPoolBuilder::new().num_threads(4).build();
     let work = || -> Vec<Vec2> {
         l.tiles
-        .par_iter()
-        .flat_map_iter(|t| {
-            let (tlo, thi) = (Vec2::new(t[0], t[1]), Vec2::new(t[2], t[3]));
-            let core = ((thi.x - tlo.x) / RIM_CELL).round() as usize;
-            let n = core + 1 + 2 * margin;
-            let org = tlo - Vec2::splat(margin as f32 * RIM_CELL);
-            // the nodes on the streets (a little generous: pieces meet without a hairline)
-            let mut inside = vec![false; n * n];
-            let mut carriageway = vec![false; n * n];
-            let mut seen = hashbrown::HashSet::new();
-            let (ka, kb) = (key(org), key(org + Vec2::splat(n as f32 * RIM_CELL)));
-            for gy in ka.1..=kb.1 {
-                for gx in ka.0..=kb.0 {
-                    for &i in grid.get(&(gx, gy)).map(|v| v.as_slice()).unwrap_or(&[]) {
-                        if !seen.insert(i) {
-                            continue;
-                        }
-                        let (t, is_road) = &tris[i as usize];
-                        let sg = (t[1] - t[0]).perp_dot(t[2] - t[0]).signum();
-                        let (lo, hi) = (t[0].min(t[1]).min(t[2]) - org, t[0].max(t[1]).max(t[2]) - org);
-                        let x0 = ((lo.x / RIM_CELL).floor().max(0.0) as usize).min(n);
-                        let y0 = ((lo.y / RIM_CELL).floor().max(0.0) as usize).min(n);
-                        let x1 = ((hi.x / RIM_CELL).ceil().max(0.0) as usize).min(n - 1);
-                        let y1 = ((hi.y / RIM_CELL).ceil().max(0.0) as usize).min(n - 1);
-                        for y in y0..=y1 {
-                            for x in x0..=x1 {
-                                let q = org + Vec2::new(x as f32, y as f32) * RIM_CELL;
-                                let e = |u: Vec2, v: Vec2| (v - u).perp_dot(q - u) * sg / (v - u).length().max(1e-4) >= -0.15;
-                                if e(t[0], t[1]) && e(t[1], t[2]) && e(t[2], t[0]) {
-                                    inside[y * n + x] = true;
-                                    carriageway[y * n + x] |= *is_road;
+            .par_iter()
+            .flat_map_iter(|t| {
+                let (tlo, thi) = (Vec2::new(t[0], t[1]), Vec2::new(t[2], t[3]));
+                let core = ((thi.x - tlo.x) / RIM_CELL).round() as usize;
+                let n = core + 1 + 2 * margin;
+                let org = tlo - Vec2::splat(margin as f32 * RIM_CELL);
+                // the nodes on the streets (a little generous: pieces meet without a hairline)
+                let mut inside = vec![false; n * n];
+                let mut carriageway = vec![false; n * n];
+                let mut seen = hashbrown::HashSet::new();
+                let (ka, kb) = (key(org), key(org + Vec2::splat(n as f32 * RIM_CELL)));
+                for gy in ka.1..=kb.1 {
+                    for gx in ka.0..=kb.0 {
+                        for &i in grid.get(&(gx, gy)).map(|v| v.as_slice()).unwrap_or(&[]) {
+                            if !seen.insert(i) {
+                                continue;
+                            }
+                            let (t, is_road) = &tris[i as usize];
+                            let sg = (t[1] - t[0]).perp_dot(t[2] - t[0]).signum();
+                            let (lo, hi) = (
+                                t[0].min(t[1]).min(t[2]) - org,
+                                t[0].max(t[1]).max(t[2]) - org,
+                            );
+                            let x0 = ((lo.x / RIM_CELL).floor().max(0.0) as usize).min(n);
+                            let y0 = ((lo.y / RIM_CELL).floor().max(0.0) as usize).min(n);
+                            let x1 = ((hi.x / RIM_CELL).ceil().max(0.0) as usize).min(n - 1);
+                            let y1 = ((hi.y / RIM_CELL).ceil().max(0.0) as usize).min(n - 1);
+                            for y in y0..=y1 {
+                                for x in x0..=x1 {
+                                    let q = org + Vec2::new(x as f32, y as f32) * RIM_CELL;
+                                    let e = |u: Vec2, v: Vec2| {
+                                        (v - u).perp_dot(q - u) * sg / (v - u).length().max(1e-4)
+                                            >= -0.15
+                                    };
+                                    if e(t[0], t[1]) && e(t[1], t[2]) && e(t[2], t[0]) {
+                                        inside[y * n + x] = true;
+                                        carriageway[y * n + x] |= *is_road;
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            if !inside.iter().any(|b| *b) {
-                return Vec::new().into_iter();
-            }
-            // (hairline gaps between two pieces of paving - a spline against another, a spline's
-            // chord against a junction's face - are closed: left open each lets the rim grow
-            // round it as a bead on the street)
-            let inside = seal_hairlines(&inside, n, 2);
-            let carriageway = seal_hairlines(&carriageway, n, 2);
-            let d = distance_to_outside(&inside, n);
-            drop(inside);
-            // (the tile's own nodes: the neighbours' parts are theirs)
-            let m = core + 1;
-            let mut v = vec![0.0f32; m * m];
-            for y in 0..m {
-                for x in 0..m {
-                    let k = (y + margin) * n + x + margin;
-                    v[y * m + x] = if carriageway[k] { d[k] } else { 0.0 };
+                if !inside.iter().any(|b| *b) {
+                    return Vec::new().into_iter();
                 }
-            }
-            let mut out = Vec::new();
-            iso_fill(&v, m, m, RIM_CELL, tlo, RIM, &mut out);
-            out.into_iter()
-        })
-        .collect()
+                // (hairline gaps between two pieces of paving - a spline against another, a spline's
+                // chord against a junction's face - are closed: left open each lets the rim grow
+                // round it as a bead on the street)
+                let inside = seal_hairlines(&inside, n, 2);
+                let carriageway = seal_hairlines(&carriageway, n, 2);
+                let d = distance_to_outside(&inside, n);
+                drop(inside);
+                // (the tile's own nodes: the neighbours' parts are theirs)
+                let m = core + 1;
+                let mut v = vec![0.0f32; m * m];
+                for y in 0..m {
+                    for x in 0..m {
+                        let k = (y + margin) * n + x + margin;
+                        v[y * m + x] = if carriageway[k] { d[k] } else { 0.0 };
+                    }
+                }
+                let mut out = Vec::new();
+                iso_fill(&v, m, m, RIM_CELL, tlo, RIM, &mut out);
+                out.into_iter()
+            })
+            .collect()
     };
     match pool {
         Ok(pool) => pool.install(work),
@@ -873,9 +1317,23 @@ fn seal_hairlines(m: &[bool], n: usize, r: usize) -> Vec<bool> {
     let pass = |src: &[bool], dst: &mut [bool], want: bool, horizontal: bool| {
         for y in 0..n {
             for x in 0..n {
-                let (lo, hi) = if horizontal { (x.saturating_sub(r), (x + r).min(n - 1)) } else { (y.saturating_sub(r), (y + r).min(n - 1)) };
-                let at = |k: usize| if horizontal { src[y * n + k] } else { src[k * n + x] };
-                dst[y * n + x] = if want { (lo..=hi).any(at) } else { (lo..=hi).all(at) };
+                let (lo, hi) = if horizontal {
+                    (x.saturating_sub(r), (x + r).min(n - 1))
+                } else {
+                    (y.saturating_sub(r), (y + r).min(n - 1))
+                };
+                let at = |k: usize| {
+                    if horizontal {
+                        src[y * n + k]
+                    } else {
+                        src[k * n + x]
+                    }
+                };
+                dst[y * n + x] = if want {
+                    (lo..=hi).any(at)
+                } else {
+                    (lo..=hi).all(at)
+                };
             }
         }
     };
@@ -895,7 +1353,10 @@ fn seal_hairlines(m: &[bool], n: usize, r: usize) -> Vec<bool> {
 /// carriageway or a yard (cells of 0.4 m).
 fn keep_paint_on_paving(l: &mut Layers) {
     let mut paved = CellSet::new(0.4);
-    for t in l.paved[layers::PAVE_ROAD].chunks_exact(3).chain(l.paved[layers::PAVE_AREA].chunks_exact(3)) {
+    for t in l.paved[layers::PAVE_ROAD]
+        .chunks_exact(3)
+        .chain(l.paved[layers::PAVE_AREA].chunks_exact(3))
+    {
         paved.fill_triangle(t);
     }
     let on = |p: Vec2| {
@@ -903,7 +1364,12 @@ fn keep_paint_on_paving(l: &mut Layers) {
         (-1..=1).any(|dy| (-1..=1).any(|dx| paved.contains(cx + dx, cy + dy)))
     };
     for paint in &mut l.paint {
-        let kept: Vec<Vec2> = paint.chunks_exact(3).filter(|t| on(t[0]) && on(t[1]) && on(t[2])).flatten().copied().collect();
+        let kept: Vec<Vec2> = paint
+            .chunks_exact(3)
+            .filter(|t| on(t[0]) && on(t[1]) && on(t[2]))
+            .flatten()
+            .copied()
+            .collect();
         *paint = kept;
     }
 }
@@ -918,20 +1384,31 @@ struct CellSet {
 
 impl CellSet {
     fn new(cell: f32) -> CellSet {
-        CellSet { cell, blocks: HashMap::new() }
+        CellSet {
+            cell,
+            blocks: HashMap::new(),
+        }
     }
 
     fn cell_of(&self, p: Vec2) -> (i32, i32) {
-        ((p.x / self.cell).floor() as i32, (p.y / self.cell).floor() as i32)
+        (
+            (p.x / self.cell).floor() as i32,
+            (p.y / self.cell).floor() as i32,
+        )
     }
 
     fn insert(&mut self, x: i32, y: i32) {
-        let block = self.blocks.entry((x.div_euclid(64), y.div_euclid(64))).or_insert_with(|| Box::new([0; 64]));
+        let block = self
+            .blocks
+            .entry((x.div_euclid(64), y.div_euclid(64)))
+            .or_insert_with(|| Box::new([0; 64]));
         block[y.rem_euclid(64) as usize] |= 1u64 << x.rem_euclid(64);
     }
 
     fn contains(&self, x: i32, y: i32) -> bool {
-        self.blocks.get(&(x.div_euclid(64), y.div_euclid(64))).is_some_and(|b| b[y.rem_euclid(64) as usize] >> x.rem_euclid(64) & 1 == 1)
+        self.blocks
+            .get(&(x.div_euclid(64), y.div_euclid(64)))
+            .is_some_and(|b| b[y.rem_euclid(64) as usize] >> x.rem_euclid(64) & 1 == 1)
     }
 
     /// Every cell whose middle lies in the triangle `t` (not a hair-thin one, nor one over 400 m).
@@ -946,7 +1423,10 @@ impl CellSet {
         for y in c0.1..=c1.1 {
             for x in c0.0..=c1.0 {
                 let q = Vec2::new((x as f32 + 0.5) * self.cell, (y as f32 + 0.5) * self.cell);
-                if (t[1] - t[0]).perp_dot(q - t[0]) * s >= 0.0 && (t[2] - t[1]).perp_dot(q - t[1]) * s >= 0.0 && (t[0] - t[2]).perp_dot(q - t[2]) * s >= 0.0 {
+                if (t[1] - t[0]).perp_dot(q - t[0]) * s >= 0.0
+                    && (t[2] - t[1]).perp_dot(q - t[1]) * s >= 0.0
+                    && (t[0] - t[2]).perp_dot(q - t[2]) * s >= 0.0
+                {
                     self.insert(x, y);
                 }
             }
@@ -969,7 +1449,8 @@ fn distance_to_outside(inside: &[bool], n: usize) -> Vec<f32> {
         for q in 1..len {
             loop {
                 let p = v[k];
-                let s = ((line[q] + (q * q) as f32) - (line[p] + (p * p) as f32)) / (2.0 * (q - p) as f32);
+                let s = ((line[q] + (q * q) as f32) - (line[p] + (p * p) as f32))
+                    / (2.0 * (q - p) as f32);
                 if s <= z[k] && k > 0 {
                     k -= 1;
                     continue;
@@ -1010,7 +1491,9 @@ fn distance_to_outside(inside: &[bool], n: usize) -> Vec<f32> {
             f[y * n + x] = col[y];
         }
     }
-    f.into_iter().map(|d| d.min(INF).sqrt() * RIM_CELL).collect()
+    f.into_iter()
+        .map(|d| d.min(INF).sqrt() * RIM_CELL)
+        .collect()
 }
 
 /// Roofs that cover carriageways (a bridge, a canopy over a street) are open ones: drawn solid
@@ -1022,7 +1505,10 @@ fn open_roofs_over_roads(b: &mut [Building], carriageways: &[Vec2]) {
         covered.fill_triangle(t);
     }
     for h in b.iter_mut() {
-        let (lo, hi) = h.outline.iter().fold((Vec2::splat(f32::MAX), Vec2::splat(f32::MIN)), |(l, m), p| (l.min(*p), m.max(*p)));
+        let (lo, hi) = h.outline.iter().fold(
+            (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN)),
+            |(l, m), p| (l.min(*p), m.max(*p)),
+        );
         let (mut n, mut on) = (0u32, 0u32);
         let mut y = lo.y + 0.75;
         while y < hi.y {
@@ -1049,24 +1535,41 @@ fn dedupe_buildings(b: &mut Vec<Building>) {
     let mut seen: hashbrown::HashSet<(i32, i32, i32)> = hashbrown::HashSet::new();
     b.retain(|h| {
         let c = h.outline.iter().fold(Vec2::ZERO, |a, p| a + *p) / h.outline.len().max(1) as f32;
-        seen.insert(((c.x * 2.0).round() as i32, (c.y * 2.0).round() as i32, h.outline.len() as i32))
+        seen.insert((
+            (c.x * 2.0).round() as i32,
+            (c.y * 2.0).round() as i32,
+            h.outline.len() as i32,
+        ))
     });
 }
 
 /// The painted ground of a tile: its base class everywhere, and each painted layer's class
 /// where the brush put it (the later layer over the earlier).
-fn ground_of(part: &mut Part, map_dir: &Path, tile_path: &Path, ground: &[usize], base: usize, lo: Vec2, ts: f32) {
+fn ground_of(
+    part: &mut Part,
+    map_dir: &Path,
+    tile_path: &Path,
+    ground: &[usize],
+    base: usize,
+    lo: Vec2,
+    ts: f32,
+) {
     let n = LAND_CELLS;
     // per cell: the class on top
     let mut top = vec![base; n * n];
     let mut painted_any = false;
-    if let Some(name) = tile_path.file_name().map(|n| n.to_string_lossy().to_string()) {
+    if let Some(name) = tile_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+    {
         for (layer, &class) in ground.iter().enumerate().skip(1) {
             let p = omsi_cfg::resolve_path(map_dir, &format!("texture/map/{name}.{layer}.dds"));
             if !omsi_cfg::vfs::is_file(&p) {
                 continue;
             }
-            let Ok(img) = omsi_texture::decode_file(&p) else { continue };
+            let Ok(img) = omsi_texture::decode_file(&p) else {
+                continue;
+            };
             let (w, h) = (img.width as usize, img.height as usize);
             if w == 0 || h == 0 {
                 continue;
@@ -1075,7 +1578,10 @@ fn ground_of(part: &mut Part, map_dir: &Path, tile_path: &Path, ground: &[usize]
                 for i in 0..n {
                     // (the mask's first row is north; the cell's row 0 south)
                     let (u, v) = ((i as f32 + 0.5) / n as f32, (j as f32 + 0.5) / n as f32);
-                    let (px, py) = (((u * w as f32) as usize).min(w - 1), (((1.0 - v) * h as f32) as usize).min(h - 1));
+                    let (px, py) = (
+                        ((u * w as f32) as usize).min(w - 1),
+                        (((1.0 - v) * h as f32) as usize).min(h - 1),
+                    );
                     if img.rgba[(py * w + px) * 4 + 3] > 127 {
                         top[j * n + i] = class;
                         painted_any = true;
@@ -1086,8 +1592,19 @@ fn ground_of(part: &mut Part, map_dir: &Path, tile_path: &Path, ground: &[usize]
     }
     let cell = ts / n as f32;
     // the base class under the whole tile (water as land: the tile's own water says where it is)
-    let base = if base == layers::LAND_WATER { layers::LAND_GRASS } else { base };
-    part.land[base].extend([lo, lo + Vec2::new(ts, 0.0), lo + Vec2::new(ts, ts), lo, lo + Vec2::new(ts, ts), lo + Vec2::new(0.0, ts)]);
+    let base = if base == layers::LAND_WATER {
+        layers::LAND_GRASS
+    } else {
+        base
+    };
+    part.land[base].extend([
+        lo,
+        lo + Vec2::new(ts, 0.0),
+        lo + Vec2::new(ts, ts),
+        lo,
+        lo + Vec2::new(ts, ts),
+        lo + Vec2::new(0.0, ts),
+    ]);
     if !painted_any {
         return;
     }
@@ -1119,15 +1636,29 @@ fn ground_of(part: &mut Part, map_dir: &Path, tile_path: &Path, ground: &[usize]
 }
 
 /// Where a tile's water stands over its ground (the plane through its four corner heights).
-fn water_of(part: &mut Part, tile: &omsi_map::Tile, path: &Path, terrain: &omsi_map::terrain::Terrain, lo: Vec2, ts: f32) {
-    let w = match omsi_cfg::vfs::read(&omsi_world::map_index::water_file(tile, path)).ok().map(|b| omsi_map::terrain::Water::parse(&b)) {
-        Some(w) if w.count == 1 && w.values.len() >= 4 => [w.values[0], w.values[1], w.values[2], w.values[3]],
+fn water_of(
+    part: &mut Part,
+    tile: &omsi_map::Tile,
+    path: &Path,
+    terrain: &omsi_map::terrain::Terrain,
+    lo: Vec2,
+    ts: f32,
+) {
+    let w = match omsi_cfg::vfs::read(&omsi_world::map_index::water_file(tile, path))
+        .ok()
+        .map(|b| omsi_map::terrain::Water::parse(&b))
+    {
+        Some(w) if w.count == 1 && w.values.len() >= 4 => {
+            [w.values[0], w.values[1], w.values[2], w.values[3]]
+        }
         _ => return,
     };
     let level = (w[0] + w[1] + w[2] + w[3]) * 0.25;
     let n = 61;
     let cell = ts / (n - 1) as f32;
-    let v: Vec<f32> = (0..n * n).map(|k| level - terrain.sample_bilinear((k % n) as f32 * cell, (k / n) as f32 * cell)).collect();
+    let v: Vec<f32> = (0..n * n)
+        .map(|k| level - terrain.sample_bilinear((k % n) as f32 * cell, (k / n) as f32 * cell))
+        .collect();
     if v.iter().all(|x| *x < 0.0) {
         return;
     }
@@ -1135,30 +1666,70 @@ fn water_of(part: &mut Part, tile: &omsi_map::Tile, path: &Path, terrain: &omsi_
 }
 
 /// A spline's paved profile sections, water and tracks.
-fn spline_of(part: &mut Part, root: &Path, publisher_texture_dirs: &[PathBuf], sp: &omsi_map::tile::MapSpline, def: &omsi_scenery::sli::Spline, o2: DVec2, origin: DVec2, paints: &crate::road_paint::PaintCache) {
+fn spline_of(
+    part: &mut Part,
+    root: &Path,
+    publisher_texture_dirs: &[PathBuf],
+    sp: &omsi_map::tile::MapSpline,
+    def: &omsi_scenery::sli::Spline,
+    o2: DVec2,
+    origin: DVec2,
+    paints: &crate::road_paint::PaintCache,
+) {
     // (the cross-sections the game builds the spline with, shifted by its skew: the map's road
     // is the road's own mesh, pressed flat)
     let raw = omsi_geometry::SplineCurve::from_map(sp, o2);
     // (the game limits a spline type's cross-sections to what its buffers hold, so a wide road
     // of many profiles is cut in long chords on a bend; the map's picture is cut at least every
     // degree of turn - the road is the same curve, only its chords are shorter)
-    let turn_deg = if raw.radius != 0.0 { (raw.length / raw.radius).abs().to_degrees() } else { 0.0 };
-    let n = omsi_geometry::spline_station_count(def, &raw).max((turn_deg / MAP_TURN_STEP).ceil() as usize).clamp(1, 400);
+    let turn_deg = if raw.radius != 0.0 {
+        (raw.length / raw.radius).abs().to_degrees()
+    } else {
+        0.0
+    };
+    let n = omsi_geometry::spline_station_count(def, &raw)
+        .max((turn_deg / MAP_TURN_STEP).ceil() as usize)
+        .clamp(1, 400);
     let curve = raw.with_sli(def);
     let side = if sp.mirror { -1.0 } else { 1.0 };
-    let at = |s: f64, x: f64| -> Vec2 { (omsi_geometry::skewed_point(&curve, s, side * x, 0.0).0.truncate() - origin).as_vec2() };
+    let at = |s: f64, x: f64| -> Vec2 {
+        (omsi_geometry::skewed_point(&curve, s, side * x, 0.0)
+            .0
+            .truncate()
+            - origin)
+            .as_vec2()
+    };
     let has_cars = def.paths.iter().any(|p| p.kind == 0);
-    let rails: Vec<f32> = def.paths.iter().filter(|p| p.kind == 2).map(|p| p.start[0]).collect();
+    let rails: Vec<f32> = def
+        .paths
+        .iter()
+        .filter(|p| p.kind == 2)
+        .map(|p| p.start[0])
+        .collect();
     let file = stem(&def.path.to_string_lossy());
     let mut tex_dirs = crate::terrain_paint::texture_dirs(root, def.path.parent().unwrap_or(root));
     crate::world::insert_publisher_texture_dirs(&mut tex_dirs, publisher_texture_dirs, root);
     let tex_dirs: Vec<&Path> = tex_dirs.iter().map(|d| d.as_path()).collect();
     for profile in &def.profiles {
-        let tex = def.textures.get(profile.texture).map(|t| t.file.as_str()).unwrap_or("");
+        let tex = def
+            .textures
+            .get(profile.texture)
+            .map(|t| t.file.as_str())
+            .unwrap_or("");
         let class = if water_name(tex) {
             Some(usize::MAX)
         } else {
-            paving_of(tex).map(|c| if c == layers::PAVE_ROAD && !has_cars && rails.is_empty() && !crate::open::road_surface_name(&file) { layers::PAVE_AREA } else { c })
+            paving_of(tex).map(|c| {
+                if c == layers::PAVE_ROAD
+                    && !has_cars
+                    && rails.is_empty()
+                    && !crate::open::road_surface_name(&file)
+                {
+                    layers::PAVE_AREA
+                } else {
+                    c
+                }
+            })
         };
         let Some(class) = class else { continue };
         for pair in profile.points.windows(2) {
@@ -1174,8 +1745,17 @@ fn spline_of(part: &mut Part, root: &Path, publisher_texture_dirs: &[PathBuf], s
                 let tex = def.textures.get(profile.texture);
                 if let Some(t) = tex.filter(|t| t.patchwork.is_none() && !t.scale_by_length) {
                     if let Some(paint) = paints.get(&t.file, &tex_dirs) {
-                        let at_s = |s: f64, x: f64| -> Vec2 { (curve.offset_point(s, side * x, 0.0).truncate() - origin).as_vec2() };
-                        let paint = crate::road_paint::lane_paint(&paint, [a, b], curve.length, curve.tex_offset, sp.mirror, &at_s);
+                        let at_s = |s: f64, x: f64| -> Vec2 {
+                            (curve.offset_point(s, side * x, 0.0).truncate() - origin).as_vec2()
+                        };
+                        let paint = crate::road_paint::lane_paint(
+                            &paint,
+                            [a, b],
+                            curve.length,
+                            curve.tex_offset,
+                            sp.mirror,
+                            &at_s,
+                        );
                         for (c, tris) in paint {
                             part.paint[c].extend(tris);
                         }
@@ -1184,14 +1764,21 @@ fn spline_of(part: &mut Part, root: &Path, publisher_texture_dirs: &[PathBuf], s
             }
             let mut quads: Vec<Vec2> = Vec::with_capacity(n * 6);
             for k in 0..n {
-                let (s0, s1) = (curve.length * k as f64 / n as f64, curve.length * (k + 1) as f64 / n as f64);
+                let (s0, s1) = (
+                    curve.length * k as f64 / n as f64,
+                    curve.length * (k + 1) as f64 / n as f64,
+                );
                 let (p0, p1, p2, p3) = (at(s0, x0), at(s0, x1), at(s1, x1), at(s1, x0));
                 quads.extend([p0, p1, p2, p0, p2, p3]);
             }
             if class == layers::PAVE_ROAD || class == layers::PAVE_AREA {
                 part.carriageways.extend_from_slice(&quads);
             }
-            let target = if class == usize::MAX { &mut part.land[layers::LAND_WATER] } else { &mut part.paved[class] };
+            let target = if class == usize::MAX {
+                &mut part.land[layers::LAND_WATER]
+            } else {
+                &mut part.paved[class]
+            };
             target.extend(quads);
         }
     }
@@ -1200,8 +1787,18 @@ fn spline_of(part: &mut Part, root: &Path, publisher_texture_dirs: &[PathBuf], s
         let span = rails.iter().fold(0.0f32, |m, r| m.max((r - mid).abs())) * 2.0;
         let tram = has_cars || has_any(&file, &["tram", "strab", "stadtbahn", "lightrail"]);
         let m = ((curve.length / 4.0).ceil() as usize).clamp(1, 500);
-        let pts: Vec<Vec2> = (0..=m).map(|k| at(curve.length * k as f64 / m as f64, mid as f64)).collect();
-        part.lines.push(Line { class: if tram { layers::LINE_TRAM } else { layers::LINE_RAIL }, width: span + 1.5, points: pts });
+        let pts: Vec<Vec2> = (0..=m)
+            .map(|k| at(curve.length * k as f64 / m as f64, mid as f64))
+            .collect();
+        part.lines.push(Line {
+            class: if tram {
+                layers::LINE_TRAM
+            } else {
+                layers::LINE_RAIL
+            },
+            width: span + 1.5,
+            points: pts,
+        });
     }
 }
 
@@ -1238,7 +1835,11 @@ pub(crate) fn key_of(map_dir: &Path, tiles: &[(i32, i32, PathBuf)]) -> u64 {
     let stamp = |p: &Path, h: &mut std::collections::hash_map::DefaultHasher| {
         if let Ok(m) = std::fs::metadata(p) {
             m.len().hash(h);
-            m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).hash(h);
+            m.modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .hash(h);
         }
     };
     stamp(&map_dir.join("global.cfg"), &mut h);
@@ -1252,8 +1853,21 @@ pub(crate) fn key_of(map_dir: &Path, tiles: &[(i32, i32, PathBuf)]) -> u64 {
 }
 
 /// The map's layers from physical installation paths. Use `cached_with_mounts` for publisher maps.
-pub fn cached(root: &Path, map_dir: &Path, ground_textures: &[omsi_map::global::GroundTex], tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[PathBuf]) -> Layers {
-    cached_with_mounts(root, map_dir, &omsi_cfg::publisher::DependencyMounts::default(), ground_textures, tiles, chrono_dirs)
+pub fn cached(
+    root: &Path,
+    map_dir: &Path,
+    ground_textures: &[omsi_map::global::GroundTex],
+    tiles: &[(i32, i32, PathBuf)],
+    chrono_dirs: &[PathBuf],
+) -> Layers {
+    cached_with_mounts(
+        root,
+        map_dir,
+        &omsi_cfg::publisher::DependencyMounts::default(),
+        ground_textures,
+        tiles,
+        chrono_dirs,
+    )
 }
 
 pub fn cached_with_mounts(
@@ -1265,9 +1879,13 @@ pub fn cached_with_mounts(
     chrono_dirs: &[PathBuf],
 ) -> Layers {
     let key = key_of(map_dir, tiles);
-    let name = map_dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "map".into());
+    let name = map_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "map".into());
     let has_publisher_metadata = omsi_cfg::vfs::is_file(&map_dir.join("dependencies.json"));
-    let path = layers::cache_path(&name).filter(|_| !has_publisher_metadata && !omsi_cfg::flags::OMSI_NO_MAP_CACHE.is_set());
+    let path = layers::cache_path(&name)
+        .filter(|_| !has_publisher_metadata && !omsi_cfg::flags::OMSI_NO_MAP_CACHE.is_set());
     if let Some(l) = path.as_ref().and_then(|p| Layers::open(p, key)) {
         log::info!("map layers: {} houses from the cache", l.buildings.len());
         return l;
@@ -1291,8 +1909,19 @@ pub fn cached_with_mounts(
 impl crate::World {
     /// The map's layers (`mapgen`): from the cache or read now - call it off the main thread.
     pub fn map_layers(&self) -> Layers {
-        let tiles: Vec<(i32, i32, PathBuf)> = self.map_tiles().into_iter().map(|(_, x, y, p)| (x, y, p)).collect();
-        cached_with_mounts(&self.root, &self.map_dir, &self._publisher_mounts, &self.global.ground_textures, &tiles, &self.chrono_dirs())
+        let tiles: Vec<(i32, i32, PathBuf)> = self
+            .map_tiles()
+            .into_iter()
+            .map(|(_, x, y, p)| (x, y, p))
+            .collect();
+        cached_with_mounts(
+            &self.root,
+            &self.map_dir,
+            &self._publisher_mounts,
+            &self.global.ground_textures,
+            &tiles,
+            &self.chrono_dirs(),
+        )
     }
 }
 
@@ -1324,11 +1953,32 @@ mod tests {
 
     #[test]
     fn a_roof_over_a_carriageway_is_open_and_one_beside_it_is_not() {
-        let square = |x: f32| vec![Vec2::new(x, 0.0), Vec2::new(x + 10.0, 0.0), Vec2::new(x + 10.0, 10.0), Vec2::new(x, 10.0)];
-        let house = |x: f32| Building { outline: square(x), roof: vec![[0, 1, 2], [0, 2, 3]], height: 5.0, open: false, has_mesh: false, inst: u32::MAX };
+        let square = |x: f32| {
+            vec![
+                Vec2::new(x, 0.0),
+                Vec2::new(x + 10.0, 0.0),
+                Vec2::new(x + 10.0, 10.0),
+                Vec2::new(x, 10.0),
+            ]
+        };
+        let house = |x: f32| Building {
+            outline: square(x),
+            roof: vec![[0, 1, 2], [0, 2, 3]],
+            height: 5.0,
+            open: false,
+            has_mesh: false,
+            inst: u32::MAX,
+        };
         let mut b = vec![house(0.0), house(100.0)];
         // a carriageway under the first house only
-        let road = [Vec2::new(-5.0, -5.0), Vec2::new(20.0, -5.0), Vec2::new(20.0, 15.0), Vec2::new(-5.0, -5.0), Vec2::new(20.0, 15.0), Vec2::new(-5.0, 15.0)];
+        let road = [
+            Vec2::new(-5.0, -5.0),
+            Vec2::new(20.0, -5.0),
+            Vec2::new(20.0, 15.0),
+            Vec2::new(-5.0, -5.0),
+            Vec2::new(20.0, 15.0),
+            Vec2::new(-5.0, 15.0),
+        ];
         open_roofs_over_roads(&mut b, &road);
         assert!(b[0].open && !b[1].open);
     }
@@ -1356,22 +2006,42 @@ mod tests {
         let solid = solid_roof_cells(&roof, &walls, w, h, HOUSE_CELL);
         assert!(solid[20 * w + 30], "a room's roof is solid, walled in");
         assert!(solid[11 * w + 54], "within the eaves of a wall: solid");
-        assert!(!solid[11 * w + 60], "past the eaves, with the wall far off: open");
+        assert!(
+            !solid[11 * w + 60],
+            "past the eaves, with the wall far off: open"
+        );
         assert!(!solid[20 * w + 80], "far from every wall, on posts: open");
         // no walls at all: all open
         assert!(solve_none(&roof, w, h));
     }
 
     fn solve_none(roof: &[bool], w: usize, h: usize) -> bool {
-        solid_roof_cells(roof, &vec![false; w * h], w, h, HOUSE_CELL).iter().all(|c| !c)
+        solid_roof_cells(roof, &vec![false; w * h], w, h, HOUSE_CELL)
+            .iter()
+            .all(|c| !c)
     }
 
     #[test]
     fn paint_off_the_paving_is_left_out() {
         let mut l = Layers::empty(DVec2::ZERO);
-        let quad = |x0: f32, x1: f32| [Vec2::new(x0, 0.0), Vec2::new(x1, 0.0), Vec2::new(x1, 6.0), Vec2::new(x0, 0.0), Vec2::new(x1, 6.0), Vec2::new(x0, 6.0)];
+        let quad = |x0: f32, x1: f32| {
+            [
+                Vec2::new(x0, 0.0),
+                Vec2::new(x1, 0.0),
+                Vec2::new(x1, 6.0),
+                Vec2::new(x0, 0.0),
+                Vec2::new(x1, 6.0),
+                Vec2::new(x0, 6.0),
+            ]
+        };
         l.paved[layers::PAVE_ROAD].extend(quad(0.0, 10.0));
-        let bar = |x: f32| [Vec2::new(x, 2.0), Vec2::new(x + 0.2, 2.0), Vec2::new(x + 0.2, 3.0)];
+        let bar = |x: f32| {
+            [
+                Vec2::new(x, 2.0),
+                Vec2::new(x + 0.2, 2.0),
+                Vec2::new(x + 0.2, 3.0),
+            ]
+        };
         l.paint[0].extend(bar(4.0));
         l.paint[0].extend(bar(14.0));
         keep_paint_on_paving(&mut l);
@@ -1408,10 +2078,27 @@ mod tests {
 
     #[test]
     fn a_courtyard_house_keeps_its_yard() {
-        let outer = vec![Vec2::new(0.0, 0.0), Vec2::new(20.0, 0.0), Vec2::new(20.0, 20.0), Vec2::new(0.0, 20.0)];
-        let hole = vec![Vec2::new(6.0, 6.0), Vec2::new(6.0, 14.0), Vec2::new(14.0, 14.0), Vec2::new(14.0, 6.0)];
+        let outer = vec![
+            Vec2::new(0.0, 0.0),
+            Vec2::new(20.0, 0.0),
+            Vec2::new(20.0, 20.0),
+            Vec2::new(0.0, 20.0),
+        ];
+        let hole = vec![
+            Vec2::new(6.0, 6.0),
+            Vec2::new(6.0, 14.0),
+            Vec2::new(14.0, 14.0),
+            Vec2::new(14.0, 6.0),
+        ];
         let (outline, tris) = roof_of(&[outer, hole]);
-        let area: f32 = tris.iter().map(|t| (outline[t[1] as usize] - outline[t[0] as usize]).perp_dot(outline[t[2] as usize] - outline[t[0] as usize]) * 0.5).sum();
+        let area: f32 = tris
+            .iter()
+            .map(|t| {
+                (outline[t[1] as usize] - outline[t[0] as usize])
+                    .perp_dot(outline[t[2] as usize] - outline[t[0] as usize])
+                    * 0.5
+            })
+            .sum();
         assert!((area - (400.0 - 64.0)).abs() < 0.5, "{area}");
     }
 
@@ -1421,7 +2108,10 @@ mod tests {
         let v = [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0];
         let mut out = Vec::new();
         iso_fill(&v, 3, 3, 1.0, Vec2::ZERO, 0.5, &mut out);
-        let area: f32 = out.chunks_exact(3).map(|t| (t[1] - t[0]).perp_dot(t[2] - t[0]).abs() * 0.5).sum();
+        let area: f32 = out
+            .chunks_exact(3)
+            .map(|t| (t[1] - t[0]).perp_dot(t[2] - t[0]).abs() * 0.5)
+            .sum();
         assert!((area - 0.5).abs() < 1e-4, "{area}");
         // all over: two rows of one rectangle each
         let mut out = Vec::new();
@@ -1431,31 +2121,59 @@ mod tests {
 
     #[test]
     fn street_names_are_told_from_stations_and_crossings() {
-        for n in ["Hoher Steinweg", "Moritzstr", "Falkenseer Chaussee", "Hauptstraße", "Station Road", "ul. Piotrkowska", "Rue de Rivoli", "Westerwaldstraße", "улица Ленина"] {
+        for n in [
+            "Hoher Steinweg",
+            "Moritzstr",
+            "Falkenseer Chaussee",
+            "Hauptstraße",
+            "Station Road",
+            "ul. Piotrkowska",
+            "Rue de Rivoli",
+            "Westerwaldstraße",
+            "улица Ленина",
+        ] {
             assert!(crate::street_name_of(n).is_some(), "{n}");
         }
         assert_eq!(crate::clean_sign_text("F_Hamburger Str"), "Hamburger Str");
-        assert_eq!(crate::street_name_of("B_Moritzstr").as_deref(), Some("Moritzstr"));
-        for n in ["U Rathaus Spandau", "Heerstr/Wilhelmstr", "S+U Bf. Zoo", "Am Omnibushof", "Kino", "Maxim-Kolbe"] {
+        assert_eq!(
+            crate::street_name_of("B_Moritzstr").as_deref(),
+            Some("Moritzstr")
+        );
+        for n in [
+            "U Rathaus Spandau",
+            "Heerstr/Wilhelmstr",
+            "S+U Bf. Zoo",
+            "Am Omnibushof",
+            "Kino",
+            "Maxim-Kolbe",
+        ] {
             assert!(crate::street_name_of(n).is_none(), "{n}");
         }
     }
 
     #[test]
     fn ground_textures_are_told_by_colour_where_the_name_says_nothing() {
-        assert_eq!(class_by_color(Vec3::new(0.35, 0.5, 0.2)), layers::LAND_GRASS);
+        assert_eq!(
+            class_by_color(Vec3::new(0.35, 0.5, 0.2)),
+            layers::LAND_GRASS
+        );
     }
 
     #[test]
     fn the_distance_to_the_outside_is_exact() {
         // a 9 x 9 node square on the streets in a 13 x 13 grid
         let n = 13;
-        let inside: Vec<bool> = (0..n * n).map(|k| (2..=10).contains(&(k % n)) && (2..=10).contains(&(k / n))).collect();
+        let inside: Vec<bool> = (0..n * n)
+            .map(|k| (2..=10).contains(&(k % n)) && (2..=10).contains(&(k / n)))
+            .collect();
         let d = distance_to_outside(&inside, n);
         assert_eq!(d[6 * n + 6], 5.0 * RIM_CELL);
         assert_eq!(d[6 * n + 2], RIM_CELL);
         assert_eq!(d[0], 0.0);
         assert_eq!(class_by_color(Vec3::new(0.5, 0.5, 0.5)), layers::LAND_PAVED);
-        assert_eq!(class_by_color(Vec3::new(0.45, 0.33, 0.2)), layers::LAND_FIELD);
+        assert_eq!(
+            class_by_color(Vec3::new(0.45, 0.33, 0.2)),
+            layers::LAND_FIELD
+        );
     }
 }

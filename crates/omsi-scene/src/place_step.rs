@@ -196,7 +196,15 @@ impl World {
         mesh: &MeshData,
         g: &GroundIds,
     ) {
-        let GroundIds { ground_id, plain_terrain_mat, ground_detail, ground_repeats, ground_wet, water_mat, .. } = *g;
+        let GroundIds {
+            ground_id,
+            plain_terrain_mat,
+            ground_detail,
+            ground_repeats,
+            ground_wet,
+            water_mat,
+            ..
+        } = *g;
         let id = gpu.add_mesh(renderer, scene, mesh);
         tg.meshes.push(id);
         // the tile's night light map (lamp light pools on the ground)
@@ -326,8 +334,7 @@ impl World {
                     tg.shared_textures.push(path);
                     (id, gt.detail_repeats())
                 });
-            let gdirs: Vec<&Path> =
-                ground_dirs.iter().map(|p| p.as_path()).collect();
+            let gdirs: Vec<&Path> = ground_dirs.iter().map(|p| p.as_path()).collect();
             let gcfg = self.textures.cfg(&gt.texture, &gdirs);
             let wet = gcfg.wetness_kind();
             let m = renderer.add_terrain_layer_material(
@@ -353,7 +360,14 @@ impl World {
                 inst.render_phase = RenderPhase::Terrain;
             }
             if omsi_cfg::flags::OMSI_DEBUG_SURFACES.is_set() {
-                log::info!("tile ({}, {}): ground layer {layer} '{}' painted on {:.1} % of the tile, mask {:?}", p.tx, p.ty, gt.texture, painted * 100.0, mask.format);
+                log::info!(
+                    "tile ({}, {}): ground layer {layer} '{}' painted on {:.1} % of the tile, mask {:?}",
+                    p.tx,
+                    p.ty,
+                    gt.texture,
+                    painted * 100.0,
+                    mask.format
+                );
             }
         }
         // Exposed sides keep the original brush layers. The horizontal ground's
@@ -377,8 +391,7 @@ impl World {
                         tg.shared_textures.push(path);
                         (id, gt.detail_repeats())
                     });
-                let gdirs: Vec<&Path> =
-                    ground_dirs.iter().map(|p| p.as_path()).collect();
+                let gdirs: Vec<&Path> = ground_dirs.iter().map(|p| p.as_path()).collect();
                 let cfg = self.textures.cfg(&gt.texture, &gdirs);
                 let m = renderer.add_terrain_layer_material(
                     scene,
@@ -494,16 +507,28 @@ impl World {
             sg.materials.clone()
         };
         if omsi_cfg::flags::OMSI_DEBUG_SPLINES.is_set() {
-            let mean_nz = mesh.normals.iter().map(|n| n.z).sum::<f32>()
-                / mesh.normals.len().max(1) as f32;
-            log::info!("upload spline {} origin={:?} ranges={:?} mats={:?} mean normal z={mean_nz:+.2} verts={} first positions {:?}", st.def.path.display(), p.origin, &mesh.ranges[..mesh.ranges.len().min(3)], mats, mesh.positions.len(), &mesh.positions[..mesh.positions.len().min(3)]);
+            let mean_nz =
+                mesh.normals.iter().map(|n| n.z).sum::<f32>() / mesh.normals.len().max(1) as f32;
+            log::info!(
+                "upload spline {} origin={:?} ranges={:?} mats={:?} mean normal z={mean_nz:+.2} verts={} first positions {:?}",
+                st.def.path.display(),
+                p.origin,
+                &mesh.ranges[..mesh.ranges.len().min(3)],
+                mats,
+                mesh.positions.len(),
+                &mesh.positions[..mesh.positions.len().min(3)]
+            );
         }
         // [terrainmapping] slots take only the first ground texture. The
         // spline mesh is already in tile space, which supplies the ground UVs.
         let terrain: Vec<usize> = if pl.terrain_mapping_mat.is_none() {
             Vec::new()
         } else {
-            sg.terrain.iter().copied().filter(|t| mesh.ranges.iter().any(|r| r.2 as usize == *t)).collect()
+            sg.terrain
+                .iter()
+                .copied()
+                .filter(|t| mesh.ranges.iter().any(|r| r.2 as usize == *t))
+                .collect()
         };
         if !terrain.is_empty() {
             let ground = terrain_ground(mesh, &terrain, p.origin, Mat4::IDENTITY, p.origin);
@@ -533,8 +558,13 @@ impl World {
         // instead, it stood over the ground the editor had aligned to it (the
         // footways of Spandau's Hansastr. lie at the ground's height), and under
         // every kerb and footway edge one saw into the hole cut beneath it (#823).
-        for (data, phase) in [(road, RenderPhase::Spline), (paint, RenderPhase::BeforeNormal)] {
-            if data.is_empty() { continue; }
+        for (data, phase) in [
+            (road, RenderPhase::Spline),
+            (paint, RenderPhase::BeforeNormal),
+        ] {
+            if data.is_empty() {
+                continue;
+            }
             let id = gpu.add_mesh(renderer, scene, &data);
             tg.meshes.push(id);
             scene.meshes[id].source = Some(st.def.path.display().to_string());
@@ -553,7 +583,9 @@ impl World {
             // a spline laid on an earlier one at its height is drawn over it (`spline_layers`)
             renderer.set_spline_layer(scene, si, level.level);
             // Preserve the deck's shadow geometry after splitting its slots.
-            if *casts_shadow { renderer.set_casts_shadow(scene, si, true); }
+            if *casts_shadow {
+                renderer.set_casts_shadow(scene, si, true);
+            }
         }
     }
 
@@ -618,8 +650,7 @@ impl World {
                     *width as f32,
                     *height as f32,
                 ));
-            let _ =
-                instance!(gpu, renderer, scene, tg; renderer.add_instance(scene, tree_mesh, *pos, xf, vec![mat]));
+            let _ = instance!(gpu, renderer, scene, tg; renderer.add_instance(scene, tree_mesh, *pos, xf, vec![mat]));
             pl.trees += 1;
         }
         pl.next = end;
@@ -668,13 +699,27 @@ impl World {
             gpu.types.get_mut(&tkey).unwrap().users += 1;
             tg.types.push(tkey);
         }
-        let (type_meshes, type_variants, mut type_lods, type_auto_night, lod0_lo, lod0_max, terrain_slots) = {
+        let (
+            type_meshes,
+            type_variants,
+            mut type_lods,
+            type_auto_night,
+            lod0_lo,
+            lod0_max,
+            terrain_slots,
+        ) = {
             let t = &gpu.types[&tkey];
-            (t.meshes.clone(), t.variants.clone(), t.lods.clone(), t.auto_night, t.lod0_lo, t.lod0_max, t.terrain_slots.clone())
+            (
+                t.meshes.clone(),
+                t.variants.clone(),
+                t.lods.clone(),
+                t.auto_night,
+                t.lod0_lo,
+                t.lod0_max,
+                t.terrain_slots.clone(),
+            )
         };
-        let surface =
-            ot.sco.render_type.is_ground_layer()
-                || ot.sco.surface;
+        let surface = ot.sco.render_type.is_ground_layer() || ot.sco.surface;
         let render_phase = scenery_render_phase(ot.sco.render_type);
         let has_lower = !type_lods.is_empty();
         let mut made = ObjectMade::default();
@@ -729,8 +774,17 @@ impl World {
         // (the meshes' own instances: a script poses them one by one, the ground
         // drawn in the [terrainmapping] slots after them keeps the object's place)
         let mesh_instances = made.all_instances.len();
-        let lod_instances =
-            place_object_lods(renderer, scene, gpu, tg, pl, &obj, &ground_meshes, &type_lods, &mut made.all_instances);
+        let lod_instances = place_object_lods(
+            renderer,
+            scene,
+            gpu,
+            tg,
+            pl,
+            &obj,
+            &ground_meshes,
+            &type_lods,
+            &mut made.all_instances,
+        );
         let all_instances = &made.all_instances;
         // the object is drawn, left out and switched to another LOD as one
         // (performance_minObjSize, performance_maxObjDist, [detail_factor],
@@ -786,8 +840,14 @@ impl World {
             // game menu's button switches them, 0x686e3c). Left out for good, the
             // stock maps' arrows to Grundorf's hospital and round Spandau's
             // junctions never showed (#954).
-            let instances: Vec<usize> = all_instances.iter().chain(&lod_instances).copied().collect();
-            let shown = self.help_arrows_shown.load(std::sync::atomic::Ordering::Relaxed);
+            let instances: Vec<usize> = all_instances
+                .iter()
+                .chain(&lod_instances)
+                .copied()
+                .collect();
+            let shown = self
+                .help_arrows_shown
+                .load(std::sync::atomic::Ordering::Relaxed);
             for inst in &instances {
                 // (no shadow, as the game's own arrows)
                 renderer.set_casts_shadow(scene, *inst, false);
@@ -795,10 +855,18 @@ impl World {
                     hide_instance(renderer, scene, *inst);
                 }
             }
-            self.help_arrows.lock().entry(key).or_default().extend(instances);
+            self.help_arrows
+                .lock()
+                .entry(key)
+                .or_default()
+                .extend(instances);
         }
         if parked {
-            let instances: Vec<usize> = all_instances.iter().chain(&lod_instances).copied().collect();
+            let instances: Vec<usize> = all_instances
+                .iter()
+                .chain(&lod_instances)
+                .copied()
+                .collect();
             if self.departed.lock().contains(&collision_key) {
                 for inst in &instances {
                     hide_instance(renderer, scene, *inst);
@@ -806,13 +874,30 @@ impl World {
             } else {
                 self.parked_objects.lock().insert(
                     collision_key,
-                    ParkedObject { tile: key, pos, heading: Pose { pos, rot: xf }.heading(), sco: ot.sco.path.clone(), instances },
+                    ParkedObject {
+                        tile: key,
+                        pos,
+                        heading: Pose { pos, rot: xf }.heading(),
+                        sco: ot.sco.path.clone(),
+                        instances,
+                    },
                 );
             }
         }
         if editable {
-            let instances: Vec<usize> = all_instances.iter().chain(&lod_instances).copied().collect();
-            let eo = EditObject { tile: key, pos, xf, key: collision_key, instances, sco: ot.sco.path.clone() };
+            let instances: Vec<usize> = all_instances
+                .iter()
+                .chain(&lod_instances)
+                .copied()
+                .collect();
+            let eo = EditObject {
+                tile: key,
+                pos,
+                xf,
+                key: collision_key,
+                instances,
+                sco: ot.sco.path.clone(),
+            };
             // an object edited before its tile went shows the edit again
             if let Some(e) = self.object_edits.lock().get(&map_id).copied() {
                 show_edit(renderer, scene, &eo, e);
@@ -835,30 +920,39 @@ impl World {
         lamp: Option<(i64, usize, bool)>,
         mut early_script: Option<omsi_sim::scenery::SceneryInstance>,
         script_strings: &[String],
-    ) -> (Option<omsi_sim::scenery::SceneryInstance>, Option<omsi_sim::scenery::SceneryInstance>, bool) {
+    ) -> (
+        Option<omsi_sim::scenery::SceneryInstance>,
+        Option<omsi_sim::scenery::SceneryInstance>,
+        bool,
+    ) {
         // Run {init} once for this placement: its variable values choose CTC
         // schemes and its strings can name [matl_freetex] pictures.
         let needs_own_script = lamp.is_none()
-            || ot.meshes.iter().any(|(_, _, overrides)| {
-                overrides.iter().any(|o| !o.item && o.freetex.is_some())
-            });
+            || ot
+                .meshes
+                .iter()
+                .any(|(_, _, overrides)| overrides.iter().any(|o| !o.item && o.freetex.is_some()));
         // (a model with `[htmltexture]` pages or `[matl_freetex]` needs a script instance to feed them,
         // also when the object has no script of its own)
         let has_pages = lamp.is_none() && !ot.model.html_textures.is_empty();
-        let has_freetex = ot.meshes.iter().any(|(_, _, overrides)| {
-            overrides.iter().any(|o| !o.item && o.freetex.is_some())
-        });
+        let has_freetex = ot
+            .meshes
+            .iter()
+            .any(|(_, _, overrides)| overrides.iter().any(|o| !o.item && o.freetex.is_some()));
         let object_script = if needs_own_script {
             let program = ot.program.clone().or_else(|| {
-                (has_pages || (has_freetex && !script_strings.is_empty())).then(|| Arc::new(omsi_script::Program::default()))
+                (has_pages || (has_freetex && !script_strings.is_empty()))
+                    .then(|| Arc::new(omsi_script::Program::default()))
             });
             program.map(|program| {
-                let mut inst = early_script.take().unwrap_or_else(|| omsi_sim::scenery::SceneryInstance::new(
-                    program,
-                    &ot.mesh_defs(),
-                    self.script_clock(),
-                    script_strings,
-                ));
+                let mut inst = early_script.take().unwrap_or_else(|| {
+                    omsi_sim::scenery::SceneryInstance::new(
+                        program,
+                        &ot.mesh_defs(),
+                        self.script_clock(),
+                        script_strings,
+                    )
+                });
                 if has_pages {
                     let object_dir = ot.sco.path.parent().unwrap_or(std::path::Path::new(""));
                     inst.init_html_textures(&ot.model.html_textures, &ot.model_dir, object_dir);
@@ -871,19 +965,30 @@ impl World {
         // Some signs derive filenames in {frame}. Probe on a separate
         // instance: its placeholder inputs must not mutate the live script
         // state or retain queued sounds/animations.
-        let freetex_probe = if ot.meshes.iter().any(|(_, _, overrides)| {
-            overrides.iter().any(|o| !o.item && o.freetex.is_some())
-        }) {
+        let freetex_probe = if ot
+            .meshes
+            .iter()
+            .any(|(_, _, overrides)| overrides.iter().any(|o| !o.item && o.freetex.is_some()))
+        {
             ot.program.as_ref().map(|program| {
                 let mut probe = omsi_sim::scenery::SceneryInstance::new(
-                    program.clone(), &ot.mesh_defs(), self.script_clock(), script_strings,
+                    program.clone(),
+                    &ot.mesh_defs(),
+                    self.script_clock(),
+                    script_strings,
                 );
-                probe.update(0.0, &omsi_sim::scenery::SceneryVars {
-                    in_use: 1.0, ..Default::default()
-                });
+                probe.update(
+                    0.0,
+                    &omsi_sim::scenery::SceneryVars {
+                        in_use: 1.0,
+                        ..Default::default()
+                    },
+                );
                 probe
             })
-        } else { None };
+        } else {
+            None
+        };
         (object_script, freetex_probe, has_pages)
     }
 
@@ -900,10 +1005,41 @@ impl World {
         obj: &ObjectCx,
         (mi, mesh_id, mats): (usize, &MeshId, &Vec<MaterialId>),
         made: &mut ObjectMade,
-        (object_script, freetex_probe): (Option<&omsi_sim::scenery::SceneryInstance>, Option<&omsi_sim::scenery::SceneryInstance>),
+        (object_script, freetex_probe): (
+            Option<&omsi_sim::scenery::SceneryInstance>,
+            Option<&omsi_sim::scenery::SceneryInstance>,
+        ),
     ) {
-        let ObjectCx { ot, pos, xf, lamp, map_id, tkey: _, type_variants, type_auto_night, lod0_lo, lod0_max, surface, render_phase, has_lower, has_pages, images, script_strings, .. } = *obj;
-        let ObjectMade { lamp_instances, lamp_slots, all_instances, object_variants, script_texts, lamp_texts, text_slot_mats, html_pages, html_mats } = made;
+        let ObjectCx {
+            ot,
+            pos,
+            xf,
+            lamp,
+            map_id,
+            tkey: _,
+            type_variants,
+            type_auto_night,
+            lod0_lo,
+            lod0_max,
+            surface,
+            render_phase,
+            has_lower,
+            has_pages,
+            images,
+            script_strings,
+            ..
+        } = *obj;
+        let ObjectMade {
+            lamp_instances,
+            lamp_slots,
+            all_instances,
+            object_variants,
+            script_texts,
+            lamp_texts,
+            text_slot_mats,
+            html_pages,
+            html_mats,
+        } = made;
         let inst = if surface || ot.mesh_shadow.get(mi).copied().unwrap_or(false) {
             let i = instance!(gpu, renderer, scene, tg; renderer.add_surface_instance(
                 scene,
@@ -919,7 +1055,10 @@ impl World {
             // threw no shadow at all (#1503).
             if surface && !ot.mesh_shadow.get(mi).copied().unwrap_or(false) {
                 let tagged = ot.mesh_casts.get(mi).copied().unwrap_or(false);
-                let tall = ot.meshes.get(mi).is_some_and(|(m, _, _)| m.positions.iter().any(|p| p.z > 1.5));
+                let tall = ot
+                    .meshes
+                    .get(mi)
+                    .is_some_and(|(m, _, _)| m.positions.iter().any(|p| p.z > 1.5));
                 if tagged || tall {
                     renderer.set_casts_shadow(scene, i, true);
                     renderer.set_omsi_caster(scene, i, tagged);
@@ -951,8 +1090,12 @@ impl World {
         // {init} may make the file name of them: read after it has run)
         if let Some((_, o3d_mats, overrides)) = ot.meshes.get(mi) {
             for override_ in overrides.iter().filter(|o| !o.item && o.freetex.is_some()) {
-                let Some(slot) = omsi_sim::vehicle::override_slot(o3d_mats, override_) else { continue };
-                let Some((_, var)) = &override_.freetex else { continue };
+                let Some(slot) = omsi_sim::vehicle::override_slot(o3d_mats, override_) else {
+                    continue;
+                };
+                let Some((_, var)) = &override_.freetex else {
+                    continue;
+                };
                 let Some(name) = resolve_scenery_freetex_name(
                     var,
                     override_,
@@ -964,18 +1107,49 @@ impl World {
                     continue;
                 };
                 let dirs = self.object_texture_dirs(ot);
-                let Some((tex, path)) = gpu.texture(renderer, scene, name, &dirs, images) else { continue };
+                let Some((tex, path)) = gpu.texture(renderer, scene, name, &dirs, images) else {
+                    continue;
+                };
                 let Some(base) = mats.get(slot).and_then(|id| scene.materials.get(*id)) else {
                     gpu.release_texture(renderer, scene, &path);
                     continue;
                 };
-                let (alpha, color, unlit, transmap, night, light, env, emissive) =
-                    (base.alpha, base.color, base.unlit, base.transmap, base.nightmap, base.lightmap, base.envmap, base.emissive);
-                let slot_ov: Vec<&MaterialDef> = overrides.iter().filter(|o| !o.item && omsi_sim::vehicle::override_slot(o3d_mats, o) == Some(slot)).collect();
+                let (alpha, color, unlit, transmap, night, light, env, emissive) = (
+                    base.alpha,
+                    base.color,
+                    base.unlit,
+                    base.transmap,
+                    base.nightmap,
+                    base.lightmap,
+                    base.envmap,
+                    base.emissive,
+                );
+                let slot_ov: Vec<&MaterialDef> = overrides
+                    .iter()
+                    .filter(|o| {
+                        !o.item && omsi_sim::vehicle::override_slot(o3d_mats, o) == Some(slot)
+                    })
+                    .collect();
                 let mut extra = material_extra(&slot_ov, base.env_mask, base.bump, [0.0; 4]);
-                extra.ambient = o3d_mats.get(slot).map(|m| d3d_material(m, slot_ov.iter().find_map(|o| o.allcolor), true).3);
-                renderer.address_next.set(tex_addressing(slot_ov.iter().copied()));
-                let mat = renderer.add_material_extra(scene, Some(tex), alpha, color, unlit, transmap, night, light, env, emissive, extra);
+                extra.ambient = o3d_mats
+                    .get(slot)
+                    .map(|m| d3d_material(m, slot_ov.iter().find_map(|o| o.allcolor), true).3);
+                renderer
+                    .address_next
+                    .set(tex_addressing(slot_ov.iter().copied()));
+                let mat = renderer.add_material_extra(
+                    scene,
+                    Some(tex),
+                    alpha,
+                    color,
+                    unlit,
+                    transmap,
+                    night,
+                    light,
+                    env,
+                    emissive,
+                    extra,
+                );
                 let mat = gpu.material(renderer, scene, mat);
                 tg.materials.push(mat);
                 tg.shared_textures.push(path);
@@ -989,8 +1163,7 @@ impl World {
             renderer.set_lod_range(scene, inst, lod0_lo, lod0_max);
         }
         // [matl_change] variants of this mesh
-        for (_, slot, base, item, var) in type_variants.iter().filter(|v| v.0 == mi)
-        {
+        for (_, slot, base, item, var) in type_variants.iter().filter(|v| v.0 == mi) {
             // Traffic lamps are updated by Traffic::sync; keep their
             // switches even when no custom script was loaded.
             if lamp.is_some() || ot.program.is_some() {
@@ -1006,32 +1179,63 @@ impl World {
             lamp_slots.push(
                 ot.meshes
                     .get(mi)
-                    .map(|(_, o3d_mats, overrides)| LampSlots::of_mesh(o3d_mats, overrides, mats.len()))
+                    .map(|(_, o3d_mats, overrides)| {
+                        LampSlots::of_mesh(o3d_mats, overrides, mats.len())
+                    })
                     .unwrap_or_default(),
             );
         }
         if type_auto_night && (2..=4).contains(&ot.sco.night_map_mode) {
             // each house its own hours (OMSI draws them once per object)
-            pl.night_modes.push(NightMode { inst, use_: InUse::new(ot.sco.night_map_mode, map_id as u64), slots: mats.len().max(1) });
+            pl.night_modes.push(NightMode {
+                inst,
+                use_: InUse::new(ot.sco.night_map_mode, map_id as u64),
+                slots: mats.len().max(1),
+            });
         }
         // [texttexture] + [useTextTexture]: street names etc. from the map strings
-        self.object_text_textures(renderer, scene, gpu, tg, obj, (mi, inst), (&mut *text_slot_mats, &mut *script_texts, &mut *lamp_texts));
+        self.object_text_textures(
+            renderer,
+            scene,
+            gpu,
+            tg,
+            obj,
+            (mi, inst),
+            (&mut *text_slot_mats, &mut *script_texts, &mut *lamp_texts),
+        );
         // A slot a `[matl_change]` switches keeps the material this
         // placement's own `[texttexture]` drew it with: the switch puts the
         // type's plain materials back every frame (`update_scripted`), and a
         // bus stop sign's route numbers went blank with them (#1756).
         for v in object_variants.iter_mut().filter(|v| v.0 == inst) {
-            if let Some(&(_, _, m)) = text_slot_mats.iter().rev().find(|(s, it, _)| *s == v.1 && *it) {
+            if let Some(&(_, _, m)) = text_slot_mats
+                .iter()
+                .rev()
+                .find(|(s, it, _)| *s == v.1 && *it)
+            {
                 v.3 = m;
             }
-            if let Some(&(_, _, m)) = text_slot_mats.iter().rev().find(|(s, it, _)| *s == v.1 && !*it) {
+            if let Some(&(_, _, m)) = text_slot_mats
+                .iter()
+                .rev()
+                .find(|(s, it, _)| *s == v.1 && !*it)
+            {
                 v.2 = m;
             }
         }
         // [htmltexture] + [useHtmlTexture]: a page drawn onto the slot; the
         // pictures come from `update_scripted`
         if has_pages && object_script.is_some() {
-            object_html_pages(renderer, scene, gpu, tg, ot, (mi, inst), html_pages, html_mats);
+            object_html_pages(
+                renderer,
+                scene,
+                gpu,
+                tg,
+                ot,
+                (mi, inst),
+                html_pages,
+                html_mats,
+            );
         }
         all_instances.push(inst);
     }
@@ -1052,7 +1256,12 @@ impl World {
             &mut Vec<(TextureId, omsi_sim::texttex::TextTextureState)>,
         ),
     ) {
-        let ObjectCx { ot, lamp, script_strings, .. } = *obj;
+        let ObjectCx {
+            ot,
+            lamp,
+            script_strings,
+            ..
+        } = *obj;
         if !ot.model.text_textures.is_empty() {
             if let Some((_, o3d_mats, overrides)) = ot.meshes.get(mi) {
                 for o in overrides.iter().filter(|o| o.use_text_texture.is_some()) {
@@ -1079,12 +1288,8 @@ impl World {
                                 .ok()
                                 .map(|i| (i.width, i.height, i.rgba))
                         });
-                        let state = omsi_sim::texttex::TextTextureState::new(
-                            tt.clone(),
-                            atlas,
-                        );
-                        let (w, h) =
-                            (tt.width.max(1) as u32, tt.height.max(1) as u32);
+                        let state = omsi_sim::texttex::TextTextureState::new(tt.clone(), atlas);
+                        let (w, h) = (tt.width.max(1) as u32, tt.height.max(1) as u32);
                         let tex = gpu.add_blank_mips(renderer, scene, w, h);
                         let mat = renderer.add_material(
                             scene,
@@ -1114,8 +1319,17 @@ impl World {
                         .cloned()
                         .unwrap_or_default();
                     let alpha = text_alpha(o3d_mats, slot, overrides);
-                    let slot_ov: Vec<&MaterialDef> = overrides.iter().filter(|o| !o.item && omsi_sim::vehicle::override_slot(o3d_mats, o) == Some(slot)).collect();
-                    let key = text_material_key(scenery_text_key(tt, &text, alpha), &slot_ov, o3d_mats.get(slot));
+                    let slot_ov: Vec<&MaterialDef> = overrides
+                        .iter()
+                        .filter(|o| {
+                            !o.item && omsi_sim::vehicle::override_slot(o3d_mats, o) == Some(slot)
+                        })
+                        .collect();
+                    let key = text_material_key(
+                        scenery_text_key(tt, &text, alpha),
+                        &slot_ov,
+                        o3d_mats.get(slot),
+                    );
                     if let Some(e) = gpu.text_textures.get_mut(&key) {
                         e.2 += 1;
                         let mat = e.1;
@@ -1134,10 +1348,15 @@ impl World {
                     // read transposed (upside down), the stop name plates are not
                     // (a route arrow's name in letters its font lacks: as on the
                     // game's own arrows)
-                    let helper = if ot.sco.is_help_arrow { helper_text_image(tt, atlas.as_deref(), &text) } else { None };
+                    let helper = if ot.sco.is_help_arrow {
+                        helper_text_image(tt, atlas.as_deref(), &text)
+                    } else {
+                        None
+                    };
                     let image = helper.unwrap_or_else(|| scenery_text_image(tt, atlas, &text));
                     let tex = gpu.add_image(renderer, scene, &image, true);
-                    let mat = text_material(renderer, scene, tex, alpha, &slot_ov, o3d_mats.get(slot));
+                    let mat =
+                        text_material(renderer, scene, tex, alpha, &slot_ov, o3d_mats.get(slot));
                     let mat = gpu.material(renderer, scene, mat);
                     gpu.text_textures.insert(key.clone(), (tex, mat, 1));
                     tg.texts.push(key);
@@ -1150,37 +1369,84 @@ impl World {
 
     /// Keep a traffic lamp (or another object a crossing's light program drives) for the
     /// traffic to switch.
-    fn keep_light_object(&self, pl: &mut Placing, obj: &ObjectCx, lamp: (i64, usize, bool), made: ObjectMade) {
-        let ObjectCx { ot, pos, xf, script_strings, key: tile, .. } = *obj;
-        let ObjectMade { lamp_instances, lamp_slots, object_variants, lamp_texts, .. } = made;
+    fn keep_light_object(
+        &self,
+        pl: &mut Placing,
+        obj: &ObjectCx,
+        lamp: (i64, usize, bool),
+        made: ObjectMade,
+    ) {
+        let ObjectCx {
+            ot,
+            pos,
+            xf,
+            script_strings,
+            key: tile,
+            ..
+        } = *obj;
+        let ObjectMade {
+            lamp_instances,
+            lamp_slots,
+            object_variants,
+            lamp_texts,
+            ..
+        } = made;
         let (parent, index, any_light) = lamp;
         let names: Mutex<Vec<LightSwitch>> = Mutex::new(Vec::new());
-        let lights = model_lights_owned_with_texture_dirs(&ot.model, &|_| xf, pos, &|var| {
-            names.lock().push(LightSwitch::parse(var));
-            1.0
-        }, &[], &self.publisher_texture_dirs);
+        let lights = model_lights_owned_with_texture_dirs(
+            &ot.model,
+            &|_| xf,
+            pos,
+            &|var| {
+                names.lock().push(LightSwitch::parse(var));
+                1.0
+            },
+            &[],
+            &self.publisher_texture_dirs,
+        );
         let names = names.into_inner();
         let sources = model_light_sources(&ot.model);
-        let (coronas, corona_mesh): (Vec<(omsi_render::Corona, String)>, Vec<(usize, glam::Vec3, glam::Vec3)>) = lights
+        let (coronas, corona_mesh): (
+            Vec<(omsi_render::Corona, String)>,
+            Vec<(usize, glam::Vec3, glam::Vec3)>,
+        ) = lights
             .into_iter()
             .filter_map(|(c, k)| match names.get(k) {
-                Some(LightSwitch::Variable(v)) => Some(((c, v.clone()), sources.get(k).copied().unwrap_or((0, glam::Vec3::ZERO, glam::Vec3::ZERO)))),
+                Some(LightSwitch::Variable(v)) => Some((
+                    (c, v.clone()),
+                    sources
+                        .get(k)
+                        .copied()
+                        .unwrap_or((0, glam::Vec3::ZERO, glam::Vec3::ZERO)),
+                )),
                 _ => None,
             })
             .unzip();
         // (the script goes to the simulation's scenery state, the lamp keeps its key)
         let mut animated = false;
         let script = ot.program.as_ref().map(|p| {
-            let inst = omsi_sim::scenery::SceneryInstance::new(p.clone(), &ot.mesh_defs(), self.script_clock(), script_strings);
+            let inst = omsi_sim::scenery::SceneryInstance::new(
+                p.clone(),
+                &ot.mesh_defs(),
+                self.script_clock(),
+                script_strings,
+            );
             animated = inst.animated();
             let inbox = self.scripted.lock().inbox.clone();
             let key = inbox.next_key();
-            inbox.push(omsi_sim::scenery::SceneryChange::Lamp(omsi_sim::scenery::LampScript { key, tile, inst }));
+            inbox.push(omsi_sim::scenery::SceneryChange::Lamp(
+                omsi_sim::scenery::LampScript { key, tile, inst },
+            ));
             key
         });
         let lit = vec![0.0; coronas.len()];
         let sound = ot.sco.sound.as_ref().map(|rel| {
-            let dir = ot.sco.path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+            let dir = ot
+                .sco
+                .path
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_default();
             omsi_cfg::resolve_path(&dir, rel)
         });
         pl.light_objects.push(LightObject {
@@ -1217,8 +1483,27 @@ impl World {
         made: ObjectMade,
         mesh_instances: usize,
     ) {
-        let ObjectCx { ot, pos, xf, lamp, map_id, controller, strings, var_parent, key, tkey, images, .. } = *obj;
-        let ObjectMade { mut all_instances, object_variants, script_texts, html_pages, .. } = made;
+        let ObjectCx {
+            ot,
+            pos,
+            xf,
+            lamp,
+            map_id,
+            controller,
+            strings,
+            var_parent,
+            key,
+            tkey,
+            images,
+            ..
+        } = *obj;
+        let ObjectMade {
+            mut all_instances,
+            object_variants,
+            script_texts,
+            html_pages,
+            ..
+        } = made;
         let texture_selection = scenery_texture_selection(ot, &|n| inst.var(n));
         if !ot.dynamic_textures.is_empty() {
             if let Some(rows) = gpu.dynamic_texture_variant(
@@ -1267,8 +1552,18 @@ impl World {
                 .take(mesh_instances)
                 .enumerate()
                 .map(|(mi, &id)| {
-                    let count = scene.instances.get(id).map(|i| i.materials.len()).unwrap_or(0);
-                    let mut l = ot.meshes.get(mi).map(|(_, o3d_mats, overrides)| LampSlots::of_mesh(o3d_mats, overrides, count)).unwrap_or_default();
+                    let count = scene
+                        .instances
+                        .get(id)
+                        .map(|i| i.materials.len())
+                        .unwrap_or(0);
+                    let mut l = ot
+                        .meshes
+                        .get(mi)
+                        .map(|(_, o3d_mats, overrides)| {
+                            LampSlots::of_mesh(o3d_mats, overrides, count)
+                        })
+                        .unwrap_or_default();
                     l.light.clear();
                     l
                 })
@@ -1276,7 +1571,9 @@ impl World {
         } else {
             Vec::new()
         };
-        let faded = alpha_slots.iter().any(|l| !l.alpha.is_empty() || !l.uv.is_empty());
+        let faded = alpha_slots
+            .iter()
+            .any(|l| !l.alpha.is_empty() || !l.uv.is_empty());
         let mut alpha_last = Vec::new();
         if faded {
             for (l, &id) in alpha_slots.iter().zip(&all_instances) {
@@ -1287,7 +1584,11 @@ impl World {
                 alpha_last.push((a, uv));
             }
         }
-        let script_lamps = if lamp.is_none() { crate::place::lamps_switched_by_script(ot, pos, xf, &self.publisher_texture_dirs) } else { Vec::new() };
+        let script_lamps = if lamp.is_none() {
+            crate::place::lamps_switched_by_script(ot, pos, xf, &self.publisher_texture_dirs)
+        } else {
+            Vec::new()
+        };
         // (a Lua script drives it: it is stepped every frame and kept for them)
         inst.lua_driven = !ot.sco.scripts.lua.is_empty();
         if inst.is_dynamic()

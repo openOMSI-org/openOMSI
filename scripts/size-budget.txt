@@ -46,11 +46,15 @@ file 2075 crates/omsi-scene-mx/src/tests.rs
 file 2067 crates/omsi-scene-mx/src/vehicles.rs
 file 1534 crates/omsi-scene-mx/src/window_wipers.rs
 file 1715 crates/omsi-scene/src/driver.rs
+file 2179 crates/omsi-scene/src/mapgen.rs
+file 1921 crates/omsi-scene/src/place.rs
+file 1637 crates/omsi-scene/src/place_step.rs
 file 1566 crates/omsi-scene/src/stage.rs
 file 2067 crates/omsi-scene/src/vehicles.rs
 file 1916 crates/omsi-sim/src/people/tests.rs
 file 2393 crates/omsi-ui-mx/src/kit.rs
 file 1609 crates/omsi-ui/src/kit.rs
+file 2386 crates/omsi-world/src/map_index.rs
 fn 354 crates/omsi-app-mx::act crates/omsi-app-mx/src/apple_bridge.rs
 fn 315 crates/omsi-app-mx::assemble_app crates/omsi-app-mx/src/lib.rs
 fn 422 crates/omsi-app-mx::draw crates/omsi-app-mx/src/ui.rs
@@ -126,6 +130,10 @@ fn 338 crates/omsi-scene-mx::type_gpu crates/omsi-scene-mx/src/upload.rs
 fn 325 crates/omsi-scene-mx::type_info crates/omsi-scene-mx/src/mapgen.rs
 fn 373 crates/omsi-scene-mx::update crates/omsi-scene-mx/src/tiles.rs
 fn 625 crates/omsi-scene-mx::vehicle_slot_material crates/omsi-scene-mx/src/vehicles.rs
+fn 341 crates/omsi-scene::place_tile crates/omsi-scene/src/place.rs
+fn 308 crates/omsi-scene::read_object_type crates/omsi-scene/src/open.rs
+fn 338 crates/omsi-scene::type_gpu crates/omsi-scene/src/upload.rs
+fn 333 crates/omsi-scene::type_info crates/omsi-scene/src/mapgen.rs
 fn 625 crates/omsi-scene::vehicle_slot_material crates/omsi-scene/src/vehicles.rs
 fn 334 crates/omsi-sim::load_train crates/omsi-sim/src/people/cabin.rs
 fn 313 crates/omsi-sim::new crates/omsi-sim/src/vehicle/instance.rs
