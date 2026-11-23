@@ -17,7 +17,7 @@ fn an_axis_without_a_zone_of_its_own_follows_the_general_setting() {
 
 #[test]
 fn the_setting_is_read_back_as_it_was_written() {
-    let s = "steer=0.05;throttle=0.12;brake=0.075;clutch=0";
+    let s = "steer=0.05;throttle=0.12;brake=0.075;throttlebrake=0.09;clutch=0";
     let z = Zones::parse(s);
     assert_eq!(
         z,
@@ -25,17 +25,20 @@ fn the_setting_is_read_back_as_it_was_written() {
             steer: Some(0.05),
             throttle: Some(0.12),
             brake: Some(0.075),
+            throttlebrake: Some(0.09),
             clutch: Some(0.0)
         }
     );
-    assert_eq!(z.write(), "steer=0.05;throttle=0.12;brake=0.075;clutch=0");
+    assert_eq!(z.write(), s);
     assert_eq!(
         Zones::parse(&z.write()),
         z,
         "written and read again, the same"
     );
     // the other names, a decimal comma, spacing, and a value out of range
-    let z = Zones::parse(" gas = 0,9 ; steering=bad ; brake=-1 ; nonsense=0.1 ");
+    let z = Zones::parse(
+        " gas = 0,9 ; steering=bad ; brake=-1 ; throttlebrake=9 ; nonsense=0.1 ",
+    );
     assert_eq!(
         z.throttle,
         Some(Zones::MAX),
@@ -43,6 +46,7 @@ fn the_setting_is_read_back_as_it_was_written() {
     );
     assert_eq!(z.steer, None, "unreadable");
     assert_eq!(z.brake, Some(0.0), "nothing narrower than nothing");
+    assert_eq!(z.throttlebrake, Some(Zones::MAX));
     assert_eq!(Zones::parse("").write(), "", "an empty setting stays empty");
 }
 
@@ -76,20 +80,18 @@ fn a_pedal_that_trembles_at_rest_is_held_at_its_rest_by_its_own_zone() {
 }
 
 #[test]
-fn a_combined_throttle_and_brake_axis_follows_whichever_of_the_two_is_set() {
-    assert_eq!(
-        Zones::parse("throttle=0.12").of(Func::ThrottleBrake, 0.0),
-        0.12
-    );
-    assert_eq!(
-        Zones::parse("brake=0.08").of(Func::ThrottleBrake, 0.0),
-        0.08
-    );
-    assert_eq!(
-        Zones::parse("throttle=0.12;brake=0.08").of(Func::ThrottleBrake, 0.0),
-        0.12
-    );
+fn the_combined_axis_has_its_own_override_apart_from_the_pedals() {
+    let z = Zones::parse("throttlebrake=0.12;throttle=0.2;brake=0.08");
+    assert_eq!(z.of(Func::ThrottleBrake, 0.04), 0.12);
+    assert_eq!(z.of(Func::Throttle, 0.04), 0.2);
+    assert_eq!(z.of(Func::Brake, 0.04), 0.08);
+    for spec in ["throttle=0.12", "brake=0.08", "throttle=0.12;brake=0.08"] {
+        assert_eq!(
+            Zones::parse(spec).of(Func::ThrottleBrake, 0.04),
+            0.04,
+            "{spec} only moves its own pedal"
+        );
+    }
     assert_eq!(Zones::default().of(Func::ThrottleBrake, 0.04), 0.04);
-    // looking never has one: its own centre is where the head rests
     assert_eq!(Zones::parse("steer=0.2").of(Func::LookX, 0.0), 0.0);
 }

@@ -9,6 +9,7 @@ pub struct Zones {
     pub steer: Option<f32>,
     pub throttle: Option<f32>,
     pub brake: Option<f32>,
+    pub throttlebrake: Option<f32>,
     pub clutch: Option<f32>,
 }
 
@@ -30,8 +31,9 @@ impl Zones {
             let v = v.clamp(0.0, Self::MAX);
             match name.trim().to_ascii_lowercase().as_str() {
                 "steer" | "steering" | "wheel" => z.steer = Some(v),
-                "throttle" | "gas" | "throttlebrake" => z.throttle = Some(v),
+                "throttle" | "gas" => z.throttle = Some(v),
                 "brake" => z.brake = Some(v),
+                "throttlebrake" => z.throttlebrake = Some(v),
                 "clutch" => z.clutch = Some(v),
                 _ => {}
             }
@@ -45,6 +47,7 @@ impl Zones {
             ("steer", self.steer),
             ("throttle", self.throttle),
             ("brake", self.brake),
+            ("throttlebrake", self.throttlebrake),
             ("clutch", self.clutch),
         ] {
             if let Some(v) = v {
@@ -60,7 +63,7 @@ impl Zones {
             Func::Throttle => self.throttle,
             Func::Brake => self.brake,
             Func::Clutch => self.clutch,
-            Func::ThrottleBrake => self.throttle.or(self.brake),
+            Func::ThrottleBrake => self.throttlebrake,
             Func::LookX | Func::LookY => None,
         };
         own.unwrap_or(all).clamp(0.0, Self::MAX)
