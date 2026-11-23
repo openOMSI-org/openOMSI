@@ -36,9 +36,7 @@ fn the_setting_is_read_back_as_it_was_written() {
         "written and read again, the same"
     );
     // the other names, a decimal comma, spacing, and a value out of range
-    let z = Zones::parse(
-        " gas = 0,9 ; steering=bad ; brake=-1 ; throttlebrake=9 ; nonsense=0.1 ",
-    );
+    let z = Zones::parse(" gas = 0,9 ; steering=bad ; brake=-1 ; throttlebrake=9 ; nonsense=0.1 ");
     assert_eq!(
         z.throttle,
         Some(Zones::MAX),
