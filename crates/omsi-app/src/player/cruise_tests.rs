@@ -1,6 +1,5 @@
 use super::*;
 
-/// A bus of a crude kind: throttle accelerates, brake and drag slow it, a slope pulls.
 fn drive(target: f32, start: f32, slope: f32, secs: f32) -> f32 {
     let mut c = Cruise::new(target);
     let mut v = start;
@@ -20,7 +19,6 @@ fn it_holds_the_speed_on_the_flat_uphill_and_downhill() {
         let v = drive(50.0, 50.0, slope, 120.0);
         assert!((v - 50.0).abs() < 2.0, "slope {slope}: {v}");
     }
-    // it catches up from below
     assert!((drive(50.0, 40.0, 0.0, 120.0) - 50.0).abs() < 2.0);
 }
 
@@ -39,7 +37,6 @@ fn cresting_a_hill_releases_the_throttle() {
 #[test]
 fn a_light_analog_brake_goes_through_and_a_firm_one_switches_it_off() {
     let mut c = Cruise::new(50.0);
-    // well below the speed, so the controller alone would give throttle
     assert!(c.with_driver(40.0, 0.016, 0.0, 0.0, false).unwrap().0 > 0.0);
     assert_eq!(
         c.with_driver(40.0, 0.016, 0.0, 0.03, false),
@@ -52,7 +49,6 @@ fn a_light_analog_brake_goes_through_and_a_firm_one_switches_it_off() {
 #[test]
 fn its_pedals_shift_an_automated_manual_up() {
     use omsi_input::auto_shift::auto_shift_gear;
-    // the keys let go a little below the speed held: the driver's pedals alone keep second
     let mut c = Cruise::new(50.0);
     let (t, b) = c.with_driver(47.0, 0.016, 0.0, 0.0, false).unwrap();
     assert_eq!(auto_shift_gear(2, 5, 2.8, 0.0, 0.0, 0.0, 47.0), 2);
