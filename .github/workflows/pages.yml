@@ -1,10 +1,18 @@
-# Publishes the website (site/) with the documentation (docs/*.md) to GitHub Pages.
+# Builds the website (site/: a static generator, see site/README.md) from the documentation
+# (docs/*.md) and publishes it to GitHub Pages. It is rebuilt when a release is published or changed
+# (the site carries the releases and the issue list, read at build time) and every day (openMapper's
+# documents are read from its own repository).
 name: Website
 
 on:
   push:
     branches: [main]
-    paths: ["site/**", "docs/**", "assets/logos/**", "assets/icons/app/**", "README.md", ".github/workflows/pages.yml"]
+    paths: ["site/**", "docs/**", "assets/logos/**", "assets/icons/app/**", ".github/workflows/pages.yml"]
+  # a new or changed release: the site bakes the releases in (site/src/github.mjs)
+  release:
+    types: [published, edited, deleted, released, prereleased]
+  schedule:
+    - cron: "23 4 * * *"
   workflow_dispatch:
 
 permissions:
@@ -24,17 +32,17 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
-      - name: Assemble the site
+      - name: Build the site
+        working-directory: site
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p _site/docs _site/assets
-          cp -R site/. _site/
-          cp docs/*.md _site/docs/
-          cp -R assets/logos _site/assets/logos
-          cp assets/icons/app/openomsi-256.png _site/assets/icon.png
-          cp assets/icons/app/openomsi.svg _site/assets/icon.svg
+          node --version
+          npm ci --no-audit --no-fund
+          node build.mjs --check
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: _site
+          path: site/dist
       - id: deployment
         uses: actions/deploy-pages@v5
