@@ -417,7 +417,7 @@ pub(crate) fn main_pipeline(pp: &PassPipelines, key: u8) -> &mx::RenderPipeline 
         if key & LEAN_GLASS_PIPE != 0 {
             l.glass[dry][pipe].as_ref()
         } else if key & LEAN_PIPE != 0 {
-            Some(&l.plain[dry][pipe])
+            l.plain[dry][pipe].as_ref()
         } else {
             None
         }
@@ -432,9 +432,12 @@ pub(crate) const LEAN_GLASS_PIPE: u8 = 0x40;
 pub(crate) const DRY_PIPE: u8 = 0x20;
 
 /// The main pass's lean pipelines (`override LEAN`), of a wet frame and a dry one (`DRY`):
-/// for plain materials, and for blended ones that may be glass (`lean_glass_kind`).
+/// for plain materials, and for blended ones that may be glass (`lean_glass_kind`). A lean
+/// pipeline is a faster way to the same picture: where the driver fails on one (Apple's
+/// compiler service gave up on one variant of 288 in the renderer's tests) the full one
+/// draws in its place.
 pub(crate) struct LeanPipelines {
-    pub(crate) plain: [Vec<mx::RenderPipeline>; 2],
+    pub(crate) plain: [Vec<Option<mx::RenderPipeline>>; 2],
     pub(crate) glass: [Vec<Option<mx::RenderPipeline>>; 2],
 }
 

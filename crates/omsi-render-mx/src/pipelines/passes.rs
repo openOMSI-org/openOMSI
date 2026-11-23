@@ -67,11 +67,11 @@ fn take(made: &mut impl Iterator<Item = Made>, lean: bool) -> PassPipelines {
         pipelines: (0..SceneBase::PIPELINES).map(|_| one(made)).collect(),
         rain_pipelines: (0..SceneBase::PIPELINES).map(|_| one(made)).collect(),
         lean: lean.then(|| {
-            let mut plain = || (0..SceneBase::PIPELINES).map(|_| one(made)).collect();
+            let mut plain = || (0..SceneBase::PIPELINES).map(|_| made.next().flatten()).collect();
             let plain = [plain(), plain()];
             let mut glass = || {
                 (0..SceneBase::PIPELINES)
-                    .map(|i| lean_glass_kind((i / 4) as u8).then(|| one(made)))
+                    .map(|i| lean_glass_kind((i / 4) as u8).then(|| made.next().flatten()).flatten())
                     .collect()
             };
             let glass = [glass(), glass()];
@@ -123,9 +123,11 @@ impl PassKit<'_> {
                 );
             for (i, lean, dry) in sets {
                 jobs.push(Box::new(move || {
-                    Some(self.scene.pipeline_at_for(
-                        device, f, fs.scene, self.msaa, i, surfaces, lean, dry,
-                    ))
+                    optional_pipeline(device, "a lean scene pipeline", || {
+                        self.scene.pipeline_at_for(
+                            device, f, fs.scene, self.msaa, i, surfaces, lean, dry,
+                        )
+                    })
                 }));
             }
         }

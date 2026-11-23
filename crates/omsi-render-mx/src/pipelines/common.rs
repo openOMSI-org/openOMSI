@@ -73,7 +73,7 @@ pub(crate) fn compile_pipeline(
         || {
             device
                 .create_render_pipeline(descriptor)
-                .expect("mX: a render pipeline")
+                .unwrap_or_else(|e| panic!("mX: a render pipeline ({}): {e:?}", begin()))
         },
     )
 }
