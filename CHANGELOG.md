@@ -6,6 +6,15 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ## Unreleased
 
+### Multiplayer
+
+- **Rail points lie the same way for every player**: the hosting game's points go to each
+  player's game with the traffic lights (those within 600 m of its vehicle, once a second), and
+  points a player's tram throws (driving over them, the J key, a click) go to the host and from
+  there to the others. Each game used to keep its own points, so a tram that turned off in one
+  game drove straight on in the others'. With a host of the previous release each game still
+  keeps its own.
+
 ## 0.3.57 - 2026-11-23
 
 ### New and improved
