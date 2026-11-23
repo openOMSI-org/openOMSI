@@ -313,8 +313,7 @@ impl RailDrive {
         )
     }
 
-    /// Net metres along the tracks since the vehicle was put on them: backing up takes them
-    /// off, below zero too (not an odometer).
+    /// Net, not an odometer: backing up takes metres off, below zero too.
     pub(crate) fn travelled(&self) -> f64 {
         self.u
     }
@@ -380,7 +379,6 @@ impl RailDrive {
                 p.vehicle.set_speed(0.0);
             }
         } else {
-            // (`step` adds what it moved to `u`: at a buffer, nothing)
             if !self.step(net, Some((world, &mut *scenery)), ds, blinker) {
                 p.vehicle.set_speed(0.0);
             }
@@ -637,8 +635,6 @@ impl RailDrive {
         true
     }
 
-    /// Counts what was moved of `ds` (the vehicle's forward) into the distance travelled: all
-    /// of it but the `short` metres along the lane it did not get.
     fn travel(&mut self, ds: f32, short: f32) {
         let short = if self.along { short } else { -short };
         self.u += (ds - short) as f64;
