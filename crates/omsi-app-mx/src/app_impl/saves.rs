@@ -278,6 +278,11 @@ impl App {
             cmd.arg("--depot").arg(d);
         }
         cmd.env("OMSI_SAFE_GPU", (n + 1).to_string());
+        // (lost a second time on mX - on both of a Windows machine's interfaces, or twice on
+        // the only one - the next start of this session draws on wgpu: the setting stays)
+        if n >= 1 {
+            cmd.env("OMSI_MX", "off");
+        }
         // (on Windows the other interface: DirectX 12 after Vulkan, Vulkan after DirectX 12 -
         // an AMD Radeon's DX12 driver lost the device where its Vulkan one did not, #274)
         let name = self

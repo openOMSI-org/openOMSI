@@ -312,7 +312,7 @@ pub(crate) fn array_layout_entry_on(
 }
 
 /// The camera group's textures only the enhanced path reads: the reflection probe, the sky
-/// table and the sky cube.
+/// table and the window's clouds.
 pub(crate) const ENHANCED_CAMERA_TEXTURES: [u32; 3] = [12, 14, 17];
 
 /// wgpu's OpenGL backend has sixteen texture units for a pipeline - for all its groups and
@@ -442,7 +442,7 @@ pub(crate) fn camera_layout_entries(
             visibility: crate::gpu::schema::ShaderStages::FRAGMENT,
             ty: crate::gpu::schema::BindingType::Texture {
                 sample_type: mx::TextureSampleType::Float { filterable: true },
-                view_dimension: mx::TextureViewDimension::Cube,
+                view_dimension: mx::TextureViewDimension::D2,
                 multisampled: false,
             },
             count: None,
@@ -745,7 +745,22 @@ pub(crate) fn gpu_attempt<T>(make: impl FnOnce() -> T) -> Result<T, String> {
 
 /// The error behind a `gpu_attempt` that failed ("mX: what: Error"), for the error report.
 pub(crate) fn refused_error(text: String) -> mx::Error {
-    if text.contains("DeviceLost(") {
+    // (a call on a removed device panics with the call's own error - DXGI_ERROR_DEVICE_REMOVED,
+    // 0x887A0005 - not mX's DeviceLost: taken for an object refused, every frame was dropped
+    // and the window stood grey. The backend's own report says whether the device is gone.)
+    let lost_code = [
+        "0x887A0005",
+        "0x887A0006",
+        "0x887A0007",
+        "DEVICE_REMOVED",
+        "DEVICE_HUNG",
+        "ERROR_DEVICE_LOST",
+    ]
+    .iter()
+    .any(|c| text.contains(c));
+    if let Some(report) = mx::lost_report() {
+        mx::Error::DeviceLost(format!("{text}\n{report}"))
+    } else if text.contains("DeviceLost(") || lost_code {
         mx::Error::DeviceLost(text)
     } else if text.contains("OutOfMemory(") {
         mx::Error::OutOfMemory(text)

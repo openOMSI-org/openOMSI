@@ -308,6 +308,10 @@ impl Renderer {
             scene.camera_bind_group = None;
             self.targets.hdr_targets.clear();
         }
+        // (the window's clouds at its size: the camera group reads them)
+        if enhanced && lead_view && self.ensure_cloud_targets(width, height) {
+            scene.camera_bind_group = None;
+        }
         // (the ground albedo picture only while that pass can run)
         if prepass_on && self.ensure_ground(width, height, self.ground_eligible()) {
             scene.camera_bind_group = None;
@@ -530,7 +534,12 @@ impl Renderer {
                     .unwrap_or(-1.0),
                 lighting.snow_fallen.rem_euclid(65536.0) as f32,
                 lighting.snow_ruts.clamp(0.0, 1.0),
-                0.0,
+                // (Enhanced: how far it thaws to slush, `precip::precip_ext`)
+                if enhanced {
+                    crate::precip::precip_ext(lighting)[1]
+                } else {
+                    0.0
+                },
             ];
             self.queue
                 .write_buffer(&self.lights.snow_track_uniform, 0, bytemuck::cast_slice(&v))
@@ -663,7 +672,7 @@ impl Renderer {
                 if lighting.detail { 1.0 } else { 0.0 },
                 if enhanced { 1.0 } else { 0.0 },
                 // (below zero: the rain films have the clean current picture to look through,
-                // see `rain_behind`; above zero is an old branch never taken)
+                // see `glass_film`; above zero is an old branch never taken)
                 if glass_on { -1.0 } else { 0.0 },
                 if shadows { SHADOW_RANGE_CLOSE } else { 0.0 },
             ],
@@ -672,7 +681,7 @@ impl Renderer {
                 lighting.glass_wind.x,
                 lighting.glass_wind.y,
                 lighting.glass_wind.z,
-                1.0,
+                1.0 + lighting.rain_lights.clamp(0.0, 1.0),
             ],
             lamp_view_proj: std::array::from_fn(|k| lamp_mats[k].to_cols_array_2d()),
             lamp_atlas: self.shadows.lamp_atlas.uniform(),
@@ -730,7 +739,7 @@ impl Renderer {
                 self.fsr_mip_bias(f),
                 0.0,
                 lighting.road_glare.clamp(0.0, 2.0),
-                0.0,
+                lighting.air_temp.clamp(-40.0, 45.0),
             ],
             spot: classic_spot(&scene.lights, ro),
         };

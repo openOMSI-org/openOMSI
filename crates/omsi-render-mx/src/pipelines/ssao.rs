@@ -21,7 +21,7 @@ pub(crate) fn ssao(device: &mx::Device, gl: bool) -> Ssao {
         device,
         mx::ShaderModuleDescriptor {
             label: Some("ssao"),
-            source: &*(include_str!("../ssao.wgsl")),
+            source: &*(crate::shaders::hot_wgsl(include_str!("../ssao.wgsl"), "ssao.wgsl")),
         },
     );
     let ao_buf = uniform_buffer(

@@ -123,44 +123,11 @@ fn window_wetness(in: FsIn) -> f32 {
 }
 
 // The snow variant of a tracked pane (`wipe_bounds.w` < 0): the snow the mask holds while it
-// snows, drawn here instead of water drops. The mask value is the cover: 0 clear glass, up
-// to 1 a pane closed by snow, above 1 the bank a blade pushed to the end of its sweep, below
-// 0 glass a blade has just cleared. Crystals settle first, sparse and of two sizes; as the
-// cover grows they close into a milky layer, thickest in the banks.
+// snows, drawn instead of water drops (scene/08_rain_glass.wgsl `glass_snow_with`). The mask
+// value is the cover: 0 clear glass, up to 1 a pane closed by snow, above 1 the bank a blade
+// pushed to the end of its sweep, below 0 glass a blade has just cleared.
 fn is_snow_pane() -> bool {
     return material.wipe_bounds.z != 0.0 && material.wipe_bounds.w < 0.0;
-}
-
-fn snow_on_pane(in: FsIn, cover: f32) -> vec4<f32> {
-    if (cover <= 0.0) {
-        return vec4<f32>(1.0, 1.0, 1.0, 0.0);
-    }
-    // the position on the pane in metres, so that crystals keep their size on every pane:
-    // the film mesh's own coordinates, laid out in metres on each pane's glass when the mesh
-    // is uploaded (omsi-scene `pane_uv`). Not the mask's projection, which is one plane for
-    // all the slot's panes - a rear window in the slot of the side windows lay edge-on in it,
-    // and its snow came out as streaks.
-    let m = in.uv - in.params.zw;
-    var flakes = 0.0;
-    for (var layer = 0; layer < 2; layer++) {
-        let cell = select(0.011, 0.02, layer == 1);
-        let p = m / cell + f32(layer) * 37.0;
-        let h = rain_hash(p);
-        let h2 = rain_hash(p + vec2<f32>(91.0, 13.0));
-        let centre = floor(p) + 0.25 + 0.5 * h;
-        let r = 0.16 + 0.2 * h2.x;
-        // a crystal shows once the cover passes its own threshold: they appear one by one
-        let shown = step(h2.y, cover * select(1.15, 0.85, layer == 1));
-        let edge = 1.0 - smoothstep(r * 0.55, r, length(p - centre));
-        flakes = max(flakes, shown * edge * (0.6 + 0.4 * h.x));
-    }
-    // settled snow is never even: a smooth noise of a few centimetres and a finer one break
-    // up where the layer closes and give a blade's bank its ragged edge and lumpy body
-    let lumps = snow_noise(m / 0.045) * 0.65 + snow_noise(m / 0.012 + 7.0) * 0.35;
-    let c = cover * (0.7 + 0.6 * lumps);
-    let sheet = smoothstep(0.5, 1.2, c) * 0.75 + smoothstep(1.0, 1.7, c) * 0.22;
-    let white = mix(vec3<f32>(0.9, 0.92, 0.96), vec3<f32>(0.97, 0.98, 1.0), smoothstep(1.0, 1.8, c));
-    return vec4<f32>(white, clamp(max(flakes * 0.92, sheet), 0.0, 0.97));
 }
 
 // Smooth value noise (0..1) from the cell hash: the corners' values blended with a
@@ -176,3 +143,22 @@ fn snow_noise(p: vec2<f32>) -> f32 {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+// By day in a downpour some of the houses' windows are lit, as people switch the light on when
+// it gets that dark (`camera.wind.w` - 1: the share, `Lighting::rain_lights`, 0 with the
+// setting off): the night maps of a few rooms here and there, chosen by a cell of the
+// object's own frame some four metres wide and three high (`local`: the same rooms of a
+// house stay lit, and a bus driving by does not flicker as it crosses cells of the world),
+// each fading in at its own point of the rain. What a night map shows: the night's own
+// strength or, where such a room is lit, the full light.
+fn rain_lit_windows(local: vec3<f32>) -> f32 {
+    let night = clamp(camera.sun_color.w, 0.0, 1.0);
+    let share = clamp(camera.wind.w - 1.0, 0.0, 1.0);
+    if (share <= 0.0) {
+        return night;
+    }
+    let cell = floor(vec3<f32>(local.xy / 4.0, local.z / 3.0));
+    let h = rain_hash(cell.xy + vec2<f32>(cell.z * 17.3, cell.z * 5.1));
+    // (some a third of the rooms at the heaviest rain)
+    let lit = smoothstep(h.x, h.x + 0.08, share * 0.38);
+    return max(night, lit * (0.75 + 0.25 * h.y));
+}

@@ -32,6 +32,11 @@ fn without_tree_fade(src: &str) -> String {
 }
 
 fn stub_fn(src: &str, head: &str, value: &str) -> String {
+    stub_body(src, head, &format!("return {value};"))
+}
+
+/// `head`'s function with `body` for all it does.
+fn stub_body(src: &str, head: &str, body: &str) -> String {
     let start = src
         .find(head)
         .unwrap_or_else(|| panic!("scene shader: {head} not found"));
@@ -40,11 +45,7 @@ fn stub_fn(src: &str, head: &str, value: &str) -> String {
             .find("\n}")
             .unwrap_or_else(|| panic!("scene shader: {head} has no end"))
         + 2;
-    format!(
-        "{}{head}\n    return {value};\n}}{}",
-        &src[..start],
-        &src[close..]
-    )
+    format!("{}{head}\n    {body}\n}}{}", &src[..start], &src[close..])
 }
 
 /// The sun's shadow tent with each gather of four depth comparisons taken as four single
@@ -218,22 +219,28 @@ pub(crate) fn scene_shader_text(gl: bool) -> String {
 
 pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shading: bool) -> String {
     let src = [
-        include_str!("../colour.wgsl"),
-        shaders::SCENE,
+        crate::shaders::hot_wgsl(include_str!("../colour.wgsl"), "colour.wgsl"),
+        shaders::scene_part(),
         if road_snow_supported_on(
             gl,
             omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set(),
             array_path(),
         ) {
-            include_str!("../road_snow.wgsl")
+            crate::shaders::hot_wgsl(include_str!("../road_snow.wgsl"), "road_snow.wgsl")
         } else {
-            include_str!("../road_snow_off.wgsl")
+            crate::shaders::hot_wgsl(include_str!("../road_snow_off.wgsl"), "road_snow_off.wgsl")
         },
-        include_str!("../enhanced_common.wgsl"),
-        include_str!("../puddle_common.wgsl"),
-        include_str!("../beam_shadow_none.wgsl"),
-        include_str!("../lamp_air.wgsl"),
-        shaders::ENHANCED,
+        crate::shaders::hot_wgsl(
+            include_str!("../enhanced_common.wgsl"),
+            "enhanced_common.wgsl",
+        ),
+        crate::shaders::hot_wgsl(include_str!("../puddle_common.wgsl"), "puddle_common.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../beam_shadow_none.wgsl"),
+            "beam_shadow_none.wgsl",
+        ),
+        crate::shaders::hot_wgsl(include_str!("../lamp_air.wgsl"), "lamp_air.wgsl"),
+        shaders::enhanced_part(),
     ]
     .join("\n");
     // Enhanced+: the enhanced pass writes the reflections' surfaces as well (`GBUF_FORMAT`)
@@ -306,16 +313,27 @@ pub(crate) fn lean_scene(src: String) -> String {
         );
     debug_assert_eq!(out.matches("sun_shadow_soft(in.world").count(), 1);
     debug_assert!(!out.contains("* lamp_shadow_at("));
-    out
+    // and no drops on the panes, only their film and blur: FXC unrolls the drops' cell
+    // loops into each of the shader's glass paths, and Direct3D 11 on WARP spent over two
+    // minutes on the scene pipelines (the ANGLE startup check timed out)
+    stub_body(
+        &out,
+        "fn glass_drops(a: ptr<function, DropAcc>, b: PaneBase, p: PaneProj, w: f32, wet: f32, heavy: f32, bank: f32, size: f32, world: vec3<f32>, t: f32) {",
+        "",
+    )
 }
 
 /// The sky dome (both paths) and the enhanced reflection probe.
 pub(crate) fn sky_shader_source() -> String {
     [
-        include_str!("../colour.wgsl"),
-        include_str!("../sky.wgsl"),
-        include_str!("../enhanced_common.wgsl"),
-        include_str!("../sky_enhanced.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../colour.wgsl"), "colour.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../sky.wgsl"), "sky.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../enhanced_common.wgsl"),
+            "enhanced_common.wgsl",
+        ),
+        crate::shaders::hot_wgsl(include_str!("../sky_enhanced.wgsl"), "sky_enhanced.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../clouds_ss.wgsl"), "clouds_ss.wgsl"),
     ]
     .join("\n")
 }
@@ -323,12 +341,32 @@ pub(crate) fn sky_shader_source() -> String {
 /// The snowfall (snow.wgsl), with the lamps the enhanced picture lights it by (none
 /// without storage buffers).
 pub(crate) fn snow_shader_source() -> String {
-    precip_shader_source(include_str!("../snow.wgsl"))
+    let src = precip_shader_source(crate::shaders::hot_wgsl(
+        include_str!("../snow.wgsl"),
+        "snow.wgsl",
+    ));
+    if basic_pipelines() {
+        lean_snow(src)
+    } else {
+        src
+    }
+}
+
+/// The snowfall as the basic set makes it: lit without the loop over the lamps (one more
+/// thing a phone's compiler can fail on, see `lean_scene`), by the sky's light from above.
+pub(crate) fn lean_snow(src: String) -> String {
+    // (no line end in the pattern: a Windows checkout turns the file's into CRLF)
+    const LAMPS: &str = "l = (precip_light(in.pos, to_eye, true) + up) * 0.5 * 0.85";
+    debug_assert_eq!(src.matches(LAMPS).count(), 1);
+    src.replace(LAMPS, "l = (up + up) * 0.5 * 0.85")
 }
 
 /// The rainfall (rain.wgsl), as the snowfall.
 pub(crate) fn rain_shader_source() -> String {
-    let src = precip_shader_source(include_str!("../rain.wgsl"));
+    let src = precip_shader_source(crate::shaders::hot_wgsl(
+        include_str!("../rain.wgsl"),
+        "rain.wgsl",
+    ));
     if basic_pipelines() {
         lean_rain(src)
     } else {
@@ -337,7 +375,9 @@ pub(crate) fn rain_shader_source() -> String {
 }
 
 pub(crate) fn lean_rain(src: String) -> String {
-    const LAMPS: &str = "precip_light(in.pos, to_eye, false) * 0.3 + ";
+    // (no line end in the pattern: a Windows checkout turns the file's into CRLF)
+    const LAMPS: &str =
+        "l = max(precip_light(in.pos, to_eye, true) - round, vec3<f32>(0.0)) * 1.5 + l;";
     debug_assert_eq!(src.matches(LAMPS).count(), 1);
     src.replace(LAMPS, "")
 }
@@ -355,12 +395,18 @@ pub(crate) fn roof_as_float(src: String) -> String {
 
 pub(crate) fn precip_shader_source(own: &str) -> String {
     let src = [
-        include_str!("../precip_common.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../precip_common.wgsl"), "precip_common.wgsl"),
         own,
-        include_str!("../enhanced_common.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../enhanced_common.wgsl"),
+            "enhanced_common.wgsl",
+        ),
         FOG_LAMP_LIGHTS,
-        include_str!("../beam_shadow_none.wgsl"),
-        include_str!("../lamp_air.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../beam_shadow_none.wgsl"),
+            "beam_shadow_none.wgsl",
+        ),
+        crate::shaders::hot_wgsl(include_str!("../lamp_air.wgsl"), "lamp_air.wgsl"),
     ]
     .join("\n");
     let src = if gl_backend() {
@@ -389,6 +435,9 @@ pub(crate) struct SnowUniform {
     /// The roof map's matrix, and x 1 when there is one (`passes::PrecipMap::uniform`).
     pub(crate) roof: [[f32; 4]; 4],
     pub(crate) roof_on: [f32; 4],
+    /// Enhanced: where the veil's panels begin, how many, the gusts' strength, the picture's
+    /// height (px).
+    pub(crate) ext: [f32; 4],
 }
 
 /// The snowfall's flakes for a snowfall of strength `s` (0..1): how many each layer of
@@ -416,6 +465,15 @@ pub(crate) struct RainUniform {
     pub(crate) view: [f32; 4],
     pub(crate) roof: [[f32; 4]; 4],
     pub(crate) roof_on: [f32; 4],
+    /// Enhanced: where the veil's panels begin, how many, the gusts' strength, the quality.
+    pub(crate) ext: [f32; 4],
+}
+
+/// The enhanced rain's and snow's far veil (rain.wgsl, snow.wgsl `veil_corner`): twelve
+/// panels a ring, one ring on the `rain_quality` setting's low, two on medium, three on
+/// high.
+pub(crate) fn veil_panels(quality: u8) -> u32 {
+    12 * (quality.min(2) as u32 + 1)
 }
 
 /// How many drops each layer of rain.wgsl holds in a rain of strength `r` (0..1) at the
@@ -438,15 +496,21 @@ pub(crate) fn rainfall_drops(r: f32, quality: u8) -> [u32; 4] {
 /// without storage buffers, where there are no lamps).
 pub(crate) fn fog_lamps_shader_source() -> String {
     [
-        include_str!("../fog_lamps.wgsl"),
-        include_str!("../enhanced_common.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../fog_lamps.wgsl"), "fog_lamps.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../enhanced_common.wgsl"),
+            "enhanced_common.wgsl",
+        ),
         FOG_LAMP_LIGHTS,
         if omsi_cfg::flags::OMSI_NO_BEAM_SHADOWS.is_set() {
-            include_str!("../beam_shadow_none.wgsl")
+            crate::shaders::hot_wgsl(
+                include_str!("../beam_shadow_none.wgsl"),
+                "beam_shadow_none.wgsl",
+            )
         } else {
-            include_str!("../beam_shadow.wgsl")
+            crate::shaders::hot_wgsl(include_str!("../beam_shadow.wgsl"), "beam_shadow.wgsl")
         },
-        include_str!("../lamp_air.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../lamp_air.wgsl"), "lamp_air.wgsl"),
     ]
     .join("\n")
 }
@@ -467,11 +531,17 @@ const CELL_CAP: u32 = 32u;
 /// The light coronas (both paths).
 pub(crate) fn corona_shader_source() -> String {
     let src = [
-        include_str!("../corona.wgsl"),
-        include_str!("../enhanced_common.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../corona.wgsl"), "corona.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../enhanced_common.wgsl"),
+            "enhanced_common.wgsl",
+        ),
         FOG_LAMP_LIGHTS,
-        include_str!("../beam_shadow_none.wgsl"),
-        include_str!("../lamp_air.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../beam_shadow_none.wgsl"),
+            "beam_shadow_none.wgsl",
+        ),
+        crate::shaders::hot_wgsl(include_str!("../lamp_air.wgsl"), "lamp_air.wgsl"),
     ]
     .join("\n");
     // (the basic set lights rain by the sky alone: the loop over the lamps is one more

@@ -24,7 +24,7 @@ pub(crate) fn build(
         device,
         mx::ShaderModuleDescriptor {
             label: Some("post"),
-            source: &*(include_str!("../post.wgsl")),
+            source: &*(crate::shaders::hot_wgsl(include_str!("../post.wgsl"), "post.wgsl")),
         },
     );
     let post_buf = uniform_buffer(

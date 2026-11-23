@@ -78,6 +78,14 @@ pub(crate) fn selection(app: &App) -> (Option<Look>, String, String) {
     } else {
         vehicle_paint(kind, action)
             .or_else(|| {
+                let key = action.strip_prefix("maker ")?;
+                let rows = super::items(app, &ListKind::PlaceType(key.to_string()));
+                let first = rows
+                    .into_iter()
+                    .find_map(|r| r.1.strip_prefix("bus ").map(str::to_string))?;
+                Some((first, String::new()))
+            })
+            .or_else(|| {
                 let id = action.strip_prefix("depot ")?;
                 let bus = crate::depot_bus::listed()
                     .into_iter()
@@ -91,8 +99,12 @@ pub(crate) fn selection(app: &App) -> (Option<Look>, String, String) {
     };
     let title = app
         .menus
-        .vehicle_meta
-        .get(&bus)
+        .vehicle_list
+        .iter()
+        .find(|v| v.1 == bus)
+        .map(|v| (String::new(), v.0.clone()))
+        .or_else(|| app.menus.vehicle_meta.get(&bus).cloned())
+        .as_ref()
         .map(|(maker, model)| {
             format!("{} {}", maker.trim(), model.trim())
                 .trim()
@@ -118,7 +130,13 @@ pub(crate) fn selection(app: &App) -> (Option<Look>, String, String) {
     ) {
         label.clone()
     } else {
-        bus.clone()
+        let description = app
+            .menus
+            .vehicle_about
+            .get(&bus)
+            .map(|a| a.0.as_str())
+            .unwrap_or_default();
+        super::place_names::about(description, &bus)
     };
     (
         Some(Look {

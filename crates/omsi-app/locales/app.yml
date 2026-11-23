@@ -1897,6 +1897,8 @@ _version: 2
   en: "MOD"
 "Fleet number":
   en: "Fleet number"
+"Onboard computer":
+  en: "Onboard computer"
 "Parts missing: needs %{packs}":
   en: "Parts missing: needs %{packs}"
 "manufacturer":
@@ -8253,6 +8255,8 @@ _version: 2
   en: "Graphics set to {preset} for this computer (Options › Graphics changes it)"
 "Glow of lights":
   en: "Glow of lights"
+"Volumetric fog":
+  en: "Volumetric fog"
 "Street lamps and vehicles":
   en: "Street lamps and vehicles"
 "Every light":
@@ -8269,6 +8273,8 @@ _version: 2
   en: "Enhanced: the clouds' shadow moving over the land and the sun's shafts through the gaps of a broken sky"
 "Enhanced: the glare round bright lights and the lamps' halo in the night air":
   en: "Enhanced: the glare round bright lights and the lamps' halo in the night air"
+"Enhanced: fog you can see the light in - the sun's shafts, drifting banks of mist, the clouds' shadows in the air":
+  en: "Enhanced: fog you can see the light in - the sun's shafts, drifting banks of mist, the clouds' shadows in the air"
 "Sets the graphics mode and most of the options at once, from Low (Vanilla) to Ultra (Enhanced with everything on)":
   en: "Sets the graphics mode and most of the options at once, from Low (Vanilla) to Ultra (Enhanced with everything on)"
 "AI Lists":
@@ -8833,3 +8839,7 @@ _version: 2
   en: "to the left"
 "to the right":
   en: "to the right"
+"Lights on in a downpour":
+  en: "Lights on in a downpour"
+"By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on":
+  en: "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on"

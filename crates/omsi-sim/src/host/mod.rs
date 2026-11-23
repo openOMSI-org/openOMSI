@@ -29,6 +29,11 @@ pub struct VehicleHost {
     /// script's `number` / `ident` strings before `{init}`, like Omsi.exe does.
     pub initial_number: Option<String>,
     pub initial_ident: Option<String>,
+    /// Variables the player chose for this vehicle before it was made - the launcher's
+    /// onboard computer (an IBIS unit the repaint does not name), a door or mirror type.
+    /// They are set over the paint scheme's own `[setvar]`s before `{init}` reads them and
+    /// stay over them every frame (`scheme_overrides`), as `--setvar` does after the spawn.
+    pub initial_vars: Vec<(String, f32)>,
     /// A time of day a script wrote to `(S.S.Time)` this frame: the game's clock takes it.
     pub time_written: Option<f64>,
     pub clock: SimClock,
@@ -344,6 +349,7 @@ impl VehicleHost {
         VehicleHost {
             clock: self.clock.clone(),
             external_ai_clock: self.external_ai_clock,
+            initial_vars: self.initial_vars.clone(),
             schedule_active: self.schedule_active,
             humans_count: self.humans_count,
             mouse: self.mouse,

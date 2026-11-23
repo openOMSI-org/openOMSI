@@ -66,28 +66,30 @@ fn standing_time() {
 }
 
 #[test]
-fn only_the_ends_of_the_trip_and_an_early_bus_stop_for_nobody() {
+fn only_trip_ends_and_explicit_profile_settings_force_an_on_demand_stop() {
     let stop = |id: i64, depart: f64| Stop::from_tuple((0, 0.0, 0.0, depart, id, 0.0));
     let mut s = BusService::new(vec![stop(1, 100.0), stop(2, 200.0), stop(3, 300.0)]);
     s.last_stop = Some(3);
-    // on time at a stop in the middle: only if somebody wants it
+    // An ordinary on-demand stop is never forced by the timetable clock,
+    // whether the bus is one second or several minutes early.
+    assert!(!s.must_serve(&stop(2, 200.0), 199.0));
     assert!(!s.must_serve(&stop(2, 200.0), 150.0));
-    // over two minutes early: it stops and waits
-    assert!(s.must_serve(&stop(2, 200.0), 70.0));
-    // the trip's terminus, and the last stop it knows of with the route complete
+    assert!(!s.must_serve(&stop(2, 200.0), 70.0));
+    // The trip's terminus, and the last stop it knows of with the route complete.
     assert!(s.must_serve(&stop(3, 300.0), 300.0));
     s.stops = vec![stop(2, 200.0)].into();
     assert!(s.must_serve(&stop(2, 200.0), 200.0));
     s.route_open = true;
     assert!(!s.must_serve(&stop(2, 200.0), 200.0));
-    // its first stop, where it stands out its layover
+    // Its first stop, where it stands out its layover.
     s.layover = true;
     assert!(s.must_serve(&stop(2, 200.0), 200.0));
     s.layover = false;
-    // `[profile_otherstopping]` 1/4 (always) and 3 (when early)
+    // [profile_otherstopping] 1/4 (always) is independent of departure waiting.
     s.always = vec![2];
     assert!(s.must_serve(&stop(2, 200.0), 200.0));
     s.always.clear();
+    // Kind 3 is still served when early, but not when on time or only 10 s early.
     s.serve_early = vec![2];
     assert!(!s.must_serve(&stop(2, 200.0), 190.0));
     assert!(s.must_serve(&stop(2, 200.0), 170.0));

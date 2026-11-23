@@ -232,7 +232,7 @@ pub fn vehicles(refresh: bool) -> Result<Vec<AiVehicle>> {
 pub fn paints(file: &str) -> Result<Vec<String>> {
     let path = resolve_content(&file.replace('\\', "/"))?;
     let v = omsi_vehicle::Vehicle::load(&path).map_err(|e| anyhow!("{file}: {e}"))?;
-    Ok(paint_schemes(&v).0)
+    Ok(paint_schemes(&v).names)
 }
 
 fn rule_of(c: &CarUse) -> Option<RuleJson> {
