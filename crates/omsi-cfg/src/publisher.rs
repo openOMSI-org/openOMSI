@@ -617,7 +617,7 @@ fn dependency_closure(
     }
     let (_, manifest) = available.get(&key).ok_or_else(|| {
         invalid(format!(
-            "missing or wrong-version publisher dependency {}/{}/{}",
+            "publisher dependency {}/{}/{} is missing, has another version, or its publisher is not trusted in Publishers.json",
             required.publisher_id, required.pack_id, required.version
         ))
     })?;
@@ -764,7 +764,7 @@ pub fn validate_map(map_dir: &Path) -> io::Result<DependencyMounts> {
             .any(|(_, p)| same(required, &dependency(p.manifest())))
         {
             return Err(invalid(format!(
-                "missing or wrong-version publisher dependency {}/{}/{}",
+                "publisher dependency {}/{}/{} is missing, has another version, or its publisher is not trusted in Publishers.json",
                 required.publisher_id, required.pack_id, required.version
             )));
         }

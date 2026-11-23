@@ -126,7 +126,9 @@ impl Host for AppHost {
         tiles: &[(i32, i32, PathBuf)],
         chrono: &[PathBuf],
     ) -> Option<omsi_map::layers::Layers> {
-        let publisher_mounts = omsi_cfg::publisher::validate_map(map_dir).ok()?;
+        let publisher_mounts = omsi_cfg::publisher::validate_map(map_dir)
+            .map_err(|error| log::warn!("map layers publisher dependencies: {error}"))
+            .ok()?;
         let global = omsi_map::GlobalCfg::load(&map_dir.join("global.cfg")).ok()?;
         Some(crate::scene::mapgen::cached_with_mounts(
             root,

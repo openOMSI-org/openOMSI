@@ -636,3 +636,35 @@ fn an_alias_that_only_changes_the_case_of_its_signed_path_is_no_collision() {
         "{collision:?}"
     );
 }
+
+#[test]
+fn a_pack_whose_publisher_is_not_trusted_is_reported_with_publishers_json() {
+    let _guard = TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let root =
+        std::env::temp_dir().join(format!("omsi-publisher-untrusted-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("Packs")).unwrap();
+    let signer = SigningKey::generate(&ring::rand::SystemRandom::new()).unwrap();
+    // the pack is installed, but Publishers.json does not list its publisher
+    TrustedPublishers::default()
+        .save_file(&root.join("Publishers.json"))
+        .unwrap();
+    fixture_pack(&root, &signer, "scenery", vec![]);
+    let map = root.join("maps/Fixture");
+    std::fs::create_dir_all(&map).unwrap();
+    std::fs::write(map.join("dependencies.json"), serde_json::json!({"format_version":1,"dependencies":[{"publisher_id":"fixture","pack_id":"scenery","version":"1.0.0"}],"assets":[]}).to_string()).unwrap();
+    omsi_cfg::add_content_root(root.clone());
+    let error = omsi_cfg::publisher::validate_map(&map)
+        .err()
+        .map(|error| error.to_string());
+    omsi_cfg::remove_content_root(&root);
+    std::fs::remove_dir_all(root).unwrap();
+    assert!(
+        error
+            .as_deref()
+            .is_some_and(|error| error.contains("Publishers.json")),
+        "{error:?}"
+    );
+}
