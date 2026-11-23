@@ -82,6 +82,22 @@ pub fn opl_key(opl: &Path, dir: &Path) -> String {
         .join("/"))
 }
 
+/// The name an `.opl` is switched by: [`opl_key`], or `path@dll` for a later content root's
+/// `.opl` of a path already `taken` whose DLL differs, as the game loads both.
+pub fn opl_name(
+    opl: &Path,
+    dir: &Path,
+    dll: Option<String>,
+    taken: &mut std::collections::HashSet<String>,
+) -> String {
+    let mut name = opl_key(opl, dir);
+    if taken.contains(&name) {
+        name = format!("{name}@{}", dll.unwrap_or_default());
+    }
+    taken.insert(name.clone());
+    name
+}
+
 /// A Lua or `.oop` plugin's name: its path under the `plugins` folder `dir` (`foo.lua`,
 /// `foo.oop`), a folder plugin's folder with a `/` after it (`foo/` for `foo/main.lua`), so
 /// `foo.lua` and `foo/main.lua` are switched apart.
@@ -236,6 +252,28 @@ mod tests {
         assert_ne!(
             opl_key(&dir.join("Pablo").join("Config.opl"), dir),
             opl_key(&dir.join("Config.opl"), dir)
+        );
+    }
+
+    #[test]
+    fn a_later_opl_of_a_taken_path_is_named_by_its_dll() {
+        let mut taken = std::collections::HashSet::new();
+        let (content, omsi) = (Path::new("content/plugins"), Path::new("omsi/plugins"));
+        let first = opl_name(
+            &content.join("Pablo/MBAS.opl"),
+            content,
+            Some("mbas.dll".into()),
+            &mut taken,
+        );
+        let second = opl_name(
+            &omsi.join("Pablo/MBAS.opl"),
+            omsi,
+            Some("mbas2.dll".into()),
+            &mut taken,
+        );
+        assert_eq!(
+            (first.as_str(), second.as_str()),
+            ("pablo/mbas.opl", "pablo/mbas.opl@mbas2.dll")
         );
     }
 

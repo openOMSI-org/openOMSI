@@ -96,6 +96,60 @@ fn find_opls(plugins: &Path, dir: &Path, out: &mut Vec<Found>) {
     }
 }
 
+/// The file name of the DLL an `.opl` names (`omsi_plugin::parse_opl`), in lower case; None
+/// when the file cannot be read.
+fn opl_dll(opl: &Path) -> Option<String> {
+    let text = String::from_utf8_lossy(&std::fs::read(opl).ok()?).into_owned();
+    let mut lines = text.lines().map(str::trim);
+    let mut dll = "";
+    while let Some(l) = lines.next() {
+        if l == "[dll]" {
+            dll = lines.next().unwrap_or("");
+        }
+    }
+    Some(
+        dll.rsplit(['\\', '/'])
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase(),
+    )
+}
+
+/// Every root's plugins as the game takes them: a Lua or `.oop` plugin of a path no earlier
+/// root has, an `.opl` unless an earlier root has one of its file name and DLL
+/// (`omsi_plugin::plugin_opls`). The game loads a later `.opl` of a path already taken when its
+/// DLL differs, so that one is named `path@dll` (`omsi_plugin::status::opl_name`).
+pub fn find_all(dirs: &[PathBuf]) -> Vec<Found> {
+    let mut names = std::collections::HashSet::new();
+    let mut opls = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for dir in dirs {
+        let earlier = opls.clone();
+        for mut f in find(dir) {
+            if f.kind == "opl" {
+                let dll = opl_dll(&f.path);
+                let file = f
+                    .path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_ascii_lowercase());
+                if earlier.contains(&(file.clone(), dll.clone())) {
+                    continue;
+                }
+                opls.insert((file, dll.clone()));
+                if names.contains(&(key(&f.name), "opl")) {
+                    f.name = format!("{}@{}", f.name, dll.unwrap_or_default());
+                    f.stem = f.name.clone();
+                }
+            }
+            if names.insert((key(&f.name), f.kind)) {
+                out.push(f);
+            }
+        }
+    }
+    out
+}
+
 /// The plugins of one `plugins` folder, as the game finds them: the `.opl` files of every
 /// subfolder, then `omsi_plugin::lua::find_lua`'s and `oop::find_oop`'s.
 pub fn find(dir: &Path) -> Vec<Found> {
@@ -203,7 +257,7 @@ pub fn set_enabled_in(data: &Path, dirs: &[PathBuf], name: &str, on: bool) -> Re
         return Err(anyhow!("no plugin name"));
     }
     let mut off = off_list(data);
-    let found: Vec<Found> = dirs.iter().flat_map(|d| find(d)).collect();
+    let found = find_all(dirs);
     if let Some(f) = found.iter().find(|f| key(&f.name) == k) {
         let stem = key(&f.stem);
         if on && stem != k && off.contains(&stem) {
@@ -255,37 +309,30 @@ pub fn status_in(data: &Path, dirs: &[PathBuf]) -> Value {
                 .cloned()
         })
     };
-    let mut names = std::collections::HashSet::new();
     let mut list = Vec::new();
-    for dir in dirs {
-        for f in find(dir) {
-            // (the game takes the first plugin of a path, the content folder's before OMSI's)
-            if !names.insert((key(&f.name), f.kind)) {
-                continue;
-            }
-            let last = seen(&f.name, f.kind);
-            let schema = f
-                .data_dir
-                .as_ref()
-                .and_then(|d| read_json(&d.join(SCHEMA_FILE)));
-            let values = f
-                .data_dir
-                .as_ref()
-                .and_then(|d| read_json(&d.join(SETTINGS_FILE)));
-            list.push(json!({
-                "name": f.name,
-                "title": schema.as_ref().and_then(|s| s["title"].as_str()).map(str::to_string).unwrap_or_else(|| if f.kind == "opl" { f.path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default() } else { f.stem.clone() }),
-                "kind": f.kind,
-                "path": f.path.display().to_string(),
-                "enabled": !is_off(&off, &f),
-                "state": last.as_ref().map(|e| e["state"].clone()).unwrap_or(Value::Null),
-                "error": last.as_ref().and_then(|e| e["error"].as_str()).unwrap_or(""),
-                "settings": schema.as_ref().map(|s| s["settings"].clone()).filter(|s| s.as_array().is_some_and(|a| !a.is_empty())).unwrap_or(Value::Null),
-                "values": values.unwrap_or(Value::Null),
-                // (a folder plugin the catalog installed: its id and version there)
-                "catalog": (f.kind == "lua" && f.path.is_dir()).then(|| f.path.file_name().and_then(|n| crate::plugin_catalog::installed(dir, &n.to_string_lossy()))).flatten(),
-            }));
-        }
+    for f in find_all(dirs) {
+        let last = seen(&f.name, f.kind);
+        let schema = f
+            .data_dir
+            .as_ref()
+            .and_then(|d| read_json(&d.join(SCHEMA_FILE)));
+        let values = f
+            .data_dir
+            .as_ref()
+            .and_then(|d| read_json(&d.join(SETTINGS_FILE)));
+        list.push(json!({
+            "name": f.name,
+            "title": schema.as_ref().and_then(|s| s["title"].as_str()).map(str::to_string).unwrap_or_else(|| if f.kind == "opl" { f.path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default() } else { f.stem.clone() }),
+            "kind": f.kind,
+            "path": f.path.display().to_string(),
+            "enabled": !is_off(&off, &f),
+            "state": last.as_ref().map(|e| e["state"].clone()).unwrap_or(Value::Null),
+            "error": last.as_ref().and_then(|e| e["error"].as_str()).unwrap_or(""),
+            "settings": schema.as_ref().map(|s| s["settings"].clone()).filter(|s| s.as_array().is_some_and(|a| !a.is_empty())).unwrap_or(Value::Null),
+            "values": values.unwrap_or(Value::Null),
+            // (a folder plugin the catalog installed: its id and version there)
+            "catalog": (f.kind == "lua" && f.path.is_dir()).then(|| f.path.file_name().and_then(|n| f.path.parent().and_then(|dir| crate::plugin_catalog::installed(dir, &n.to_string_lossy())))).flatten(),
+        }));
     }
     json!({ "dirs": dirs.iter().map(|d| d.display().to_string()).collect::<Vec<_>>(), "session": at, "plugins": list })
 }
@@ -327,9 +374,8 @@ fn fit(setting: &Value, v: &Value) -> Option<Value> {
 /// Save the plugin's settings the player changed (only keys its description has, each held
 /// to its range); the game reads them when the plugin starts.
 pub fn save_settings_in(dirs: &[PathBuf], name: &str, values: &Value) -> Result<()> {
-    let f = dirs
-        .iter()
-        .flat_map(|d| find(d))
+    let f = find_all(dirs)
+        .into_iter()
         .find(|f| key(&f.name) == key(name))
         .ok_or_else(|| anyhow!("no plugin {name}"))?;
     let data = f
@@ -391,6 +437,31 @@ mod tests {
         let after = status_in(&data, &dirs);
         assert_eq!(after["session"], 9);
         assert_eq!(after["plugins"][0]["state"], Value::Null);
+    }
+
+    #[test]
+    fn an_opl_of_one_path_in_two_roots_with_two_dlls_is_two_plugins() {
+        let data = tmp("data-opl2");
+        let content = tmp("content-opl2");
+        let omsi = tmp("omsi-opl2");
+        for (root, dll) in [(&content, "MBAS.dll"), (&omsi, "Plugins\\MBAS2.dll")] {
+            std::fs::create_dir_all(root.join("Pablo")).unwrap();
+            std::fs::write(root.join("Pablo/MBAS.opl"), format!("[dll]\n{dll}\n")).unwrap();
+        }
+        let dirs = vec![content.clone(), omsi.clone()];
+        let names: Vec<String> = find_all(&dirs).into_iter().map(|f| f.name).collect();
+        assert_eq!(names, ["Pablo/MBAS.opl", "Pablo/MBAS.opl@mbas2.dll"]);
+        set_enabled_in(&data, &dirs, "Pablo/MBAS.opl@mbas2.dll", false).unwrap();
+        let list = status_in(&data, &dirs);
+        let enabled: Vec<bool> = list["plugins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["enabled"].as_bool().unwrap())
+            .collect();
+        assert_eq!(enabled, [true, false]);
+        std::fs::write(omsi.join("Pablo/MBAS.opl"), "[dll]\nmbas.dll\n").unwrap();
+        assert_eq!(find_all(&dirs).len(), 1);
     }
 
     #[test]

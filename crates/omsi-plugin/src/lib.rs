@@ -157,20 +157,25 @@ pub fn resolve_path(base: &Path, rel: &str) -> Option<PathBuf> {
     Some(cur)
 }
 
+/// The file name of the DLL an `.opl` names, in lower case; None when it cannot be read.
+pub(crate) fn opl_dll(o: &Path) -> Option<String> {
+    std::fs::read(o).ok().map(|t| {
+        parse_opl(&String::from_utf8_lossy(&t))
+            .dll
+            .rsplit(['\\', '/'])
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase()
+    })
+}
+
 fn plugin_opls(dirs: &[PathBuf]) -> Vec<(PathBuf, &PathBuf)> {
     let name = |o: &Path| {
         (
             o.file_name()
                 .map(|n| n.to_string_lossy().to_ascii_lowercase()),
-            std::fs::read(o).ok().map(|t| {
-                parse_opl(&String::from_utf8_lossy(&t))
-                    .dll
-                    .rsplit(['\\', '/'])
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-                    .to_ascii_lowercase()
-            }),
+            opl_dll(o),
         )
     };
     let (mut earlier, mut out) = (std::collections::HashSet::new(), Vec::new());
@@ -1403,8 +1408,9 @@ impl Plugins {
         let mut loaded: Vec<Plugin> = Vec::new();
         let mut status = status::Status::new(hosts.status_file.clone());
         let off = |name: &str, stem: &str| status::is_off(&hosts.off, name, stem);
+        let mut taken = std::collections::HashSet::new();
         for (opl, dir) in plugin_opls(dirs) {
-            let name = status::opl_key(&opl, dir);
+            let name = status::opl_name(&opl, dir, opl_dll(&opl), &mut taken);
             if off(&name, &name) {
                 log::info!(
                     "plugin {} left off (switched off in the launcher)",
