@@ -343,6 +343,20 @@ pub(super) fn vehicle_pages(app: &App) -> Vec<Page> {
         ("Display and driver", sectioned_rows(display, "Destination and depot", &[("number", "Vehicle identification"), ("driver", "Driver")])),
         ("Vehicles", sectioned_rows(fleet, "Switch and place vehicles", &[("couple", "Coupling"), ("getout", "Driver"), ("remove", "Replace and remove vehicles")])),
         ("Service", sectioned_rows(service, "Vehicle maintenance", &[("reset", "Recovery and relocation")])),
+        ("Tag axle", if let Some(rb) = app.player.as_ref().and_then(|p| p.vehicle.rigid.as_ref()) {
+            let mut rows = Vec::new();
+            if rb.wheel_axle.iter().copied().max().unwrap_or(0) >= 2 {
+                rows.extend(slider_row(app, "tag_preset", "Steering preset", "Choose a starting profile; moving an individual slider changes it to Custom", &|v| tag_preset_name(v).to_string()));
+                rows.extend(switch_row(app, "tag_steering", "Enable tag-axle override", "Change the rear axle's physical steering while driving; off follows the original bus physics"));
+                if rb.tag_axle_steering.is_some() {
+                    rows.extend(slider_row(app, "tag_axle", "Steered axle", "Axle number, counting the front axle as 1", &|v| format!("Axle {:.0}", v)));
+                    rows.extend(slider_row(app, "tag_multiplier", "Steering strength", "Multiplier of rear steering at low speed", &|v| format!("{v:.2}×")));
+                    rows.extend(slider_row(app, "tag_fade_start", "Fade begins", "Start reducing rear steering above this speed", &|v| format!("{v:.0} km/h")));
+                    rows.extend(slider_row(app, "tag_fade_end", "Fully straight at", "No rear steering at or above this speed", &|v| format!("{v:.0} km/h")));
+                }
+            }
+            rows
+        } else { Vec::new() }),
     ]
 }
 

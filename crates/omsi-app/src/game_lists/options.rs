@@ -2,10 +2,50 @@
 
 use super::*;
 
+// Built-in steering profiles. These are gameplay tuning choices, not vehicle-specific
+// factory specifications. Profile 5 is a read-only indication of custom slider values.
+fn tag_preset_value(rb: &omsi_sim::rigid::RigidBody) -> f32 {
+    let Some(tag) = rb.tag_axle_steering else { return 0.0 };
+    let matches = |strength: f32, start: f32, end: f32| {
+        (tag.multiplier - strength).abs() < 0.001
+            && (tag.fade_start_kmh - start).abs() < 0.001
+            && (tag.fade_end_kmh - end).abs() < 0.001
+    };
+    if matches(0.5, 10.0, 30.0) { 1.0 }
+    else if matches(1.0, 15.0, 40.0) { 2.0 }
+    else if matches(1.5, 15.0, 40.0) { 3.0 }
+    else if matches(2.0, 15.0, 40.0) { 4.0 }
+    else { 5.0 }
+}
+
+pub(super) fn tag_preset_name(value: f32) -> &'static str {
+    match value.round() as i32 {
+        0 => "Original (off)",
+        1 => "Gentle · 0.5×",
+        2 => "Standard · 1.0×",
+        3 => "Agile · 1.5×",
+        4 => "Tight turns · 2.0×",
+        _ => "Custom",
+    }
+}
+
+
 /// The value of the slider setting `verb` (`arg`: the seat's axis).
 pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
     if let Some(field) = verb.strip_prefix("vr_nav_") {
         return if app.vr_active() && app.player.is_some() { app.vr_nav_profile().value(field) } else { None };
+    }
+    if verb.starts_with("tag_") {
+        let rb = app.player.as_ref()?.vehicle.rigid.as_ref()?;
+        if verb == "tag_preset" { return Some(tag_preset_value(rb)) }
+        let tag = rb.tag_axle_steering?;
+        return match verb {
+            "tag_axle" => Some((tag.axle + 1) as f32),
+            "tag_multiplier" => Some(tag.multiplier),
+            "tag_fade_start" => Some(tag.fade_start_kmh),
+            "tag_fade_end" => Some(tag.fade_end_kmh),
+            _ => None,
+        };
     }
     let s = &app.settings;
     Some(match verb {
@@ -95,6 +135,50 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
     if let Some(field) = verb.strip_prefix("vr_nav_") {
         app.vr_nav_set(field, v);
         return None; // Stored per bus, never in the desktop settings file.
+    }
+    if verb.starts_with("tag_") {
+        if let Some(rb) = app.player.as_mut().and_then(|p| p.vehicle.rigid.as_mut()) {
+            if verb == "tag_preset" {
+                // Keep the chosen rear axle when switching between presets.
+                let axle = rb.tag_axle_steering.map_or_else(
+                    || rb.wheel_axle.iter().copied().max().unwrap_or(0),
+                    |p| p.axle,
+                );
+                let defaults = match v.round() as i32 {
+                    0 => None,
+                    1 => Some((0.5, 10.0, 30.0)),
+                    2 => Some((1.0, 15.0, 40.0)),
+                    3 => Some((1.5, 15.0, 40.0)),
+                    4 => Some((2.0, 15.0, 40.0)),
+                    // 'Custom' is an indicator, not a destructive preset.
+                    _ => return None,
+                };
+                rb.set_tag_axle_steering(defaults.map(|(multiplier, fade_start_kmh, fade_end_kmh)|
+                    omsi_sim::rigid::TagAxleSteering { axle, multiplier, fade_start_kmh, fade_end_kmh }
+                ));
+                return None;
+            }
+            if let Some(mut profile) = rb.tag_axle_steering {
+                match verb {
+                    "tag_axle" => {
+                        let last = rb.wheel_axle.iter().copied().max().unwrap_or(1);
+                        profile.axle = (v.round().max(2.0) as usize - 1).min(last);
+                    },
+                    "tag_multiplier" => profile.multiplier = v.clamp(0.0, 2.0),
+                    "tag_fade_start" => {
+                        profile.fade_start_kmh = v.clamp(0.0, 79.0);
+                        profile.fade_end_kmh = profile.fade_end_kmh.max(profile.fade_start_kmh + 1.0);
+                    }
+                    "tag_fade_end" => {
+                        profile.fade_end_kmh = v.clamp(1.0, 80.0);
+                        profile.fade_start_kmh = profile.fade_start_kmh.min(profile.fade_end_kmh - 1.0);
+                    }
+                    _ => return None,
+                }
+                rb.set_tag_axle_steering(Some(profile));
+            }
+        }
+        return None; // Vehicle-local live setting, not a global preference.
     }
     match verb {
         "speed" => {
@@ -419,6 +503,11 @@ fn set_cab_wheel_rotation(app: &mut App, v: f32) -> (&'static str, String) {
 
 /// Whether the switch `id` is on (None: `id` is no switch).
 pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
+    if id == "tag_steering" {
+        let rb = app.player.as_ref()?.vehicle.rigid.as_ref()?;
+        return (rb.wheel_axle.iter().copied().max().unwrap_or(0) >= 2)
+            .then_some(rb.tag_axle_steering.is_some());
+    }
     let s = &app.settings;
     Some(match id {
         "passenger_connections" => s.passenger_connections,
@@ -534,6 +623,19 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
 
 /// Switch `id` on or off; the key and value to keep for the next game.
 pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String)> {
+    if id == "tag_steering" {
+        if let Some(rb) = app.player.as_mut().and_then(|p| p.vehicle.rigid.as_mut()) {
+            if on {
+                let rear = rb.wheel_axle.iter().copied().max().unwrap_or(0);
+                rb.set_tag_axle_steering(Some(omsi_sim::rigid::TagAxleSteering {
+                    axle: rear, multiplier: 1.0, fade_start_kmh: 15.0, fade_end_kmh: 40.0,
+                }));
+            } else {
+                rb.set_tag_axle_steering(None);
+            }
+        }
+        return None;
+    }
     let bit = (on as u8).to_string();
     match id {
         "passenger_connections" => {

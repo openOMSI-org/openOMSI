@@ -80,6 +80,10 @@ pub(crate) fn slider_row(app: &App, id: &str, name: &str, desc: &str, fmt: &dyn 
 /// The values a slider's setting runs through.
 pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
     Some(match verb {
+        "tag_preset" => (0..=5).map(|n| n as f32).collect(),
+        "tag_axle" => (2..=8).map(|n| n as f32).collect(),
+        "tag_multiplier" => (0..=40).map(|n| n as f32 * 0.05).collect(),
+        "tag_fade_start" | "tag_fade_end" => (0..=80).map(|n| n as f32).collect(),
         "vr_nav_x" | "vr_nav_y" | "vr_nav_z" => (-100..=100).map(|v| v as f32 * 0.02).collect(),
         "triple_width_mm" => (20..=200).map(|v| v as f32 * 10.0).collect(),
         "triple_distance_mm" => (20..=300).map(|v| v as f32 * 10.0).collect(),

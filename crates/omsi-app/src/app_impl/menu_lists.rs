@@ -409,7 +409,7 @@ impl App {
     pub(crate) fn list_adjust(&mut self, k: usize, mv: crate::game_lists::Move) {
         use crate::game_lists::ListKind;
         let Some(kind) = self.menus.list_kind.clone() else { return };
-        if !matches!(kind, ListKind::Options(_) | ListKind::World(_) | ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtonSettings(..)) {
+        if !matches!(kind, ListKind::Options(_) | ListKind::Vehicle(_) | ListKind::World(_) | ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtonSettings(..)) {
             return;
         }
         let Some(action) = self.menus.admin_list.as_ref().and_then(|l| l.get(k)).map(|x| x.1.clone()) else { return };
