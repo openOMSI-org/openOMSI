@@ -366,11 +366,10 @@ impl Renderer {
         if with_overlays {
             self.prepare_overlays(scene, full_w, full_h);
         }
-        let lean_frame = !env.no_lean
-            && lighting.wetness <= 0.0
-            && lighting.snow <= 0.0
-            && lighting.road_snow.is_none()
-            && crate::lighting::debug_view() == 0.0;
+        let lean = FrameLean {
+            lean: !env.no_lean && crate::lighting::debug_view() == 0.0,
+            dry: lighting.wetness <= 0.0 && lighting.snow <= 0.0 && lighting.road_snow.is_none(),
+        };
         FrameCtx {
             env,
             target,
@@ -406,7 +405,7 @@ impl Renderer {
             ground_ok,
             prepass_on,
             prepass_reach,
-            lean_frame,
+            lean,
             dt,
             overlays,
         }

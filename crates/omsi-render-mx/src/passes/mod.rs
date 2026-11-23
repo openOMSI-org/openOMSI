@@ -178,8 +178,9 @@ pub(crate) struct FrameCtx<'a> {
     pub ground_ok: bool,
     pub prepass_on: bool,
     pub prepass_reach: f32,
-    /// No wet road, snow or debug view: plain materials take the `LEAN` pipelines (`main_key`).
-    pub lean_frame: bool,
+    /// Plain materials take the `LEAN` pipelines (no debug view), the dry ones on a dry
+    /// frame (`main_key`).
+    pub lean: FrameLean,
     pub dt: f32,
     pub overlays: Vec<(TextureId, [f32; 4])>,
 }

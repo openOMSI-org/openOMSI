@@ -8,14 +8,16 @@ override ALPHA_TEST: bool = true;
 // Multisampled cutout pipelines can turn filtered alpha directly into sample coverage.
 override ALPHA_TO_COVERAGE: bool = false;
 override DETAILED_TREES: bool = false;
-// The enhanced shading without the branches a plain material on a dry day never takes (the
-// wet road and its puddles, snow, glass and its films, water, bump and PBR maps, LED panels,
-// glow, the debug views): `Batch::lean` and a dry frame pick these pipelines. The branches
-// are uniform per draw, but their code alone took registers from every pixel - the lean
-// variant shaded the city half again as fast (21 against 11 ms of a 1080p cab view on an M4).
+// The enhanced shading without the branches a plain material never takes (glass and its
+// films, water, bump and PBR maps, LED panels, glow, the debug views): `Batch::lean` picks
+// these pipelines. The branches are uniform per draw, but their code alone took registers
+// from every pixel - the lean variant of a dry frame shaded the city about twice as fast
+// (21 against 11 ms of a 1080p cab view on an M4).
 override LEAN: bool = false;
-// With LEAN: the glass's branch kept (a lean blended draw: a window on a dry day).
+// With LEAN: the glass's branch kept (a lean blended draw: a window).
 override LEAN_GLASS: bool = false;
+// With LEAN: a dry frame's - no wet road or puddles, no snow (`FrameCtx::dry_frame`).
+override DRY: bool = false;
 @group(0) @binding(5) var t_shadow: texture_depth_2d;
 @group(0) @binding(6) var s_shadow: sampler_comparison;
 @group(0) @binding(7) var t_shadow_far: texture_depth_2d;

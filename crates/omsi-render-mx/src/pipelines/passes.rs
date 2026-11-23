@@ -66,14 +66,16 @@ fn take(made: &mut impl Iterator<Item = Made>, lean: bool) -> PassPipelines {
     PassPipelines {
         pipelines: (0..SceneBase::PIPELINES).map(|_| one(made)).collect(),
         rain_pipelines: (0..SceneBase::PIPELINES).map(|_| one(made)).collect(),
-        lean_pipelines: lean.then(|| (0..SceneBase::PIPELINES).map(|_| one(made)).collect()),
-        lean_glass_pipelines: lean.then(|| {
-            (0..SceneBase::PIPELINES)
-                .map(|i| {
-                    lean_glass_kind((i / 4) as u8)
-                        .then(|| one(made))
-                })
-                .collect()
+        lean: lean.then(|| {
+            let mut plain = || (0..SceneBase::PIPELINES).map(|_| one(made)).collect();
+            let plain = [plain(), plain()];
+            let mut glass = || {
+                (0..SceneBase::PIPELINES)
+                    .map(|i| lean_glass_kind((i / 4) as u8).then(|| one(made)))
+                    .collect()
+            };
+            let glass = [glass(), glass()];
+            LeanPipelines { plain, glass }
         }),
         corona_pipeline: one(made),
         smoke_pipeline: one(made),
@@ -97,26 +99,33 @@ impl PassKit<'_> {
                 jobs.push(Box::new(move || {
                     Some(
                         self.scene
-                            .pipeline_at_for(device, f, fs.scene, samples, i, surfaces, Lean::No),
+                            .pipeline_at_for(device, f, fs.scene, samples, i, surfaces, Lean::No, false),
                     )
                 }));
             }
         }
         // (the lean ones of the enhanced pass, multisampled as the main pass: see `main_key`)
         if lean_pass(fs.scene) {
-            for (i, lean) in (0..SceneBase::PIPELINES)
-                .map(|i| (i, Lean::Plain))
+            // (in the order `take` reads them: plain wet, plain dry, glass wet, glass dry)
+            let plain = (0..SceneBase::PIPELINES).map(|i| (i, Lean::Plain));
+            let glass = (0..SceneBase::PIPELINES)
+                .filter(|i| lean_glass_kind((i / 4) as u8))
+                .map(|i| (i, Lean::Glass));
+            let sets = [false, true]
+                .map(|dry| plain.clone().map(move |(i, l)| (i, l, dry)))
+                .into_iter()
+                .flatten()
                 .chain(
-                    (0..SceneBase::PIPELINES)
-                        .filter(|i| lean_glass_kind((i / 4) as u8))
-                        .map(|i| (i, Lean::Glass)),
-                )
-            {
+                    [false, true]
+                        .map(|dry| glass.clone().map(move |(i, l)| (i, l, dry)))
+                        .into_iter()
+                        .flatten(),
+                );
+            for (i, lean, dry) in sets {
                 jobs.push(Box::new(move || {
-                    Some(
-                        self.scene
-                            .pipeline_at_for(device, f, fs.scene, self.msaa, i, surfaces, lean),
-                    )
+                    Some(self.scene.pipeline_at_for(
+                        device, f, fs.scene, self.msaa, i, surfaces, lean, dry,
+                    ))
                 }));
             }
         }

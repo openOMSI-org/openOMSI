@@ -192,14 +192,14 @@ pub(crate) fn encode_main_batches<'a, E: mx::RenderEncoder>(
     scene: &'a Scene,
     batches: &[Batch],
     pp: &'a PassPipelines,
-    lean_frame: bool,
+    lean: FrameLean,
 ) {
     encode_batches_keyed(
         pass,
         scene,
         batches,
         |_| true,
-        main_key(pp, lean_frame),
+        main_key(pp, lean),
         |key| main_pipeline(pp, key),
     );
 }
@@ -409,23 +409,34 @@ pub(crate) fn pipe_code(kind: u8, cull: bool, surface: bool) -> u8 {
 }
 
 /// The pipeline of a main-pass batch (`DrawItem::pipe`), a lean one with `LEAN_PIPE` or
-/// `LEAN_GLASS_PIPE` set (see `main_key`).
+/// `LEAN_GLASS_PIPE` set, of a dry frame with `DRY_PIPE` too (see `main_key`).
 pub(crate) fn main_pipeline(pp: &PassPipelines, key: u8) -> &mx::RenderPipeline {
-    let pipe = (key & !(LEAN_PIPE | LEAN_GLASS_PIPE)) as usize;
-    let lean = if key & LEAN_GLASS_PIPE != 0 {
-        pp.lean_glass_pipelines.as_ref().and_then(|l| l[pipe].as_ref())
-    } else if key & LEAN_PIPE != 0 {
-        pp.lean_pipelines.as_ref().map(|l| &l[pipe])
-    } else {
-        None
-    };
+    let pipe = (key & !(LEAN_PIPE | LEAN_GLASS_PIPE | DRY_PIPE)) as usize;
+    let dry = (key & DRY_PIPE != 0) as usize;
+    let lean = pp.lean.as_ref().and_then(|l| {
+        if key & LEAN_GLASS_PIPE != 0 {
+            l.glass[dry][pipe].as_ref()
+        } else if key & LEAN_PIPE != 0 {
+            Some(&l.plain[dry][pipe])
+        } else {
+            None
+        }
+    });
     lean.unwrap_or(&pp.pipelines[pipe])
 }
 
-/// The bits of a main-pass pipeline key that pick the lean pipelines (`override LEAN`) and
-/// the lean ones that keep the glass (`LEAN_GLASS`).
+/// The bits of a main-pass pipeline key that pick the lean pipelines (`override LEAN`), the
+/// lean ones that keep the glass (`LEAN_GLASS`), and those of a dry frame (`DRY`).
 pub(crate) const LEAN_PIPE: u8 = 0x80;
 pub(crate) const LEAN_GLASS_PIPE: u8 = 0x40;
+pub(crate) const DRY_PIPE: u8 = 0x20;
+
+/// The main pass's lean pipelines (`override LEAN`), of a wet frame and a dry one (`DRY`):
+/// for plain materials, and for blended ones that may be glass (`lean_glass_kind`).
+pub(crate) struct LeanPipelines {
+    pub(crate) plain: [Vec<mx::RenderPipeline>; 2],
+    pub(crate) glass: [Vec<Option<mx::RenderPipeline>>; 2],
+}
 
 /// Which lean pipelines a material may be drawn with (`material_lean`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -437,21 +448,27 @@ pub(crate) enum Lean {
     Plain,
 }
 
-/// The main pass's pipeline key of a batch: its `pipe`, with a lean bit when the frame is
-/// dry (`lean_frame`), the pass has those pipelines and the material needs no more.
-pub(crate) fn main_key(pp: &PassPipelines, lean_frame: bool) -> impl Fn(&Batch) -> u8 + '_ {
-    let plain = lean_frame && pp.lean_pipelines.is_some();
-    let glass = lean_frame && pp.lean_glass_pipelines.is_some();
+/// The main pass's pipeline key of a batch: its `pipe`, with a lean bit when the frame may
+/// (`FrameCtx::lean`), the pass has those pipelines and the material needs no more, and the
+/// dry bit with it on a dry frame.
+pub(crate) fn main_key(pp: &PassPipelines, frame: FrameLean) -> impl Fn(&Batch) -> u8 + '_ {
+    let lean = frame.lean && pp.lean.is_some();
+    let dry = if frame.dry { DRY_PIPE } else { 0 };
     move |b: &Batch| {
         b.pipe
             | match b.lean {
-                Lean::Plain if plain => LEAN_PIPE,
-                Lean::Glass | Lean::Plain if glass && lean_glass_kind(b.pipe / 4) => {
-                    LEAN_GLASS_PIPE
-                }
+                Lean::Plain if lean => LEAN_PIPE | dry,
+                Lean::Glass if lean && lean_glass_kind(b.pipe / 4) => LEAN_GLASS_PIPE | dry,
                 _ => 0,
             }
     }
+}
+
+/// What a frame allows the lean pipelines (`main_key`): at all (no debug view), and the dry ones.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub(crate) struct FrameLean {
+    pub(crate) lean: bool,
+    pub(crate) dry: bool,
 }
 
 /// The pipeline kinds that have `LEAN_GLASS` pipelines: the blended ones.
@@ -550,7 +567,7 @@ pub(crate) fn record_bundles(
     format: mx::TextureFormat,
     samples: u32,
     surfaces: bool,
-    lean_frame: bool,
+    lean: FrameLean,
 ) -> Vec<Option<mx::RenderBundle>> {
     let color_formats = [
         Some(format),
@@ -576,7 +593,7 @@ pub(crate) fn record_bundles(
             sample_count: samples,
         });
         bundle.set_bind_group(0, camera);
-        encode_main_batches(&mut bundle, scene, chunk, pp, lean_frame);
+        encode_main_batches(&mut bundle, scene, chunk, pp, lean);
         bundle.finish(Some("main pass part"))
     };
     // a bundle wgpu refuses (a buffer it names could not be made: the card ran out of

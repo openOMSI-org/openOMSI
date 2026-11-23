@@ -454,7 +454,7 @@ impl Renderer {
                     scene,
                     &plan.main_batches[..plan.presurface_batch_end],
                     pp,
-                    f.lean_frame,
+                    f.lean,
                 );
                 self.encode_prefill(
                     &mut pass,
@@ -612,7 +612,7 @@ impl Renderer {
                 scene,
                 &plan.main_batches[..plan.presurface_batch_end],
                 pp,
-                f.lean_frame,
+                f.lean,
             );
             // At 1x an excavation still prevents sharing the earlier prepass depth.
             // Refill ordinary scenery here, after its floor and cover have been coloured.
@@ -636,7 +636,7 @@ impl Renderer {
                     &plan.main_batches
                 },
                 pp,
-                f.lean_frame,
+                f.lean,
             );
         } else {
             // the batches, recorded as bundles on several threads (see `record_bundles`)
@@ -769,7 +769,7 @@ impl Renderer {
         for late in [false, true] {
             if late && !cab_batches.is_empty() {
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
-                encode_main_batches(pass, scene, cab_batches, pp, f.lean_frame);
+                encode_main_batches(pass, scene, cab_batches, pp, f.lean);
             }
             if let Some(cb) = scene.corona_buf.as_ref().filter(|_| coronas_on) {
                 pass.set_pipeline(&pp.corona_pipeline);
