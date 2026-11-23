@@ -43,6 +43,12 @@ pub(crate) struct VrState {
     pub(crate) vr_zoom_active: bool,
 }
 
+/// The bus path the host check last saw.
+#[derive(Default)]
+pub(crate) struct HostBusCheck {
+    pub(crate) path: Option<std::path::PathBuf>,
+}
+
 /// The multiplayer session: the LAN or server connection and the other players seen in it.
 /// (none at the start)
 #[derive(Default)]
@@ -69,8 +75,10 @@ pub(crate) struct NetState {
     pub(crate) session_buses: Option<Vec<String>>,
     /// Peers whose vehicle has already been checked against `session_buses` (#1464).
     pub(crate) session_buses_checked: std::collections::HashMap<u32, String>,
-    /// The host's own vehicle checked against `session_buses` (#1464).
-    pub(crate) host_bus_checked: Option<String>,
+    /// The host's own vehicle checked against `session_buses` (#1464), so a path is read only
+    /// when the vehicle changes.
+    pub(crate) host_bus_checked: Option<HostBusCheck>,
+
     pub(crate) mods_server: Option<omsi_lan::mods::Server>,
     pub(crate) remotes: lan::LanGame,
     /// The shared world: the host's traffic and people, sent (host) or mirrored (client).
@@ -459,6 +467,8 @@ pub(crate) struct MenuState {
     pub(crate) online_weather: std::cell::OnceCell<Vec<(String, String)>>,
     /// (manufacturer, type) of each vehicle of `vehicle_list`, by its path.
     pub(crate) vehicle_meta: std::collections::HashMap<String, (String, String)>,
+    /// (description, standard paint's name) of each vehicle of `vehicle_list`, by its path.
+    pub(crate) vehicle_about: std::collections::HashMap<String, (String, String)>,
     pub(crate) hud: Option<hud::Hud>,
     /// The route navigator (ETS2-style map in a corner).
     pub(crate) navigator: Option<navigator::Navigator>,

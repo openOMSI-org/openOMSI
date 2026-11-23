@@ -3612,6 +3612,7 @@
 "At most 5": "最多5辆"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地图都未使用的物体和样条文件夹会一并删除：{n} 个，{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "其他地图仍在使用的物体和样条文件夹会保留：{n} 个。"
+"Onboard computer": "车载电脑"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "配置文件保存所有按键和所有控制器设置。每次驾驶前,启动器会切换到该公交车专属的配置文件或默认配置文件。"
 "Rename the profile": "重命名配置文件"
 "Delete this profile?": "要删除这个配置文件吗?"

@@ -173,6 +173,106 @@ fn vr_menu_release_keeps_a_short_drag_and_stops_automatic_motion() {
 }
 
 #[test]
+fn clicking_control_shared_by_two_meshes_toggles_both_model_only_variables_both_ways() {
+    let seed = crate::schedule::tests::script_test_vehicle(
+        "{init}\n0.42 (S.L.script_var)\n{end}\n",
+        "script_var\n",
+        "",
+    );
+    let mut ty = (*seed.ty).clone();
+    let mesh_anims = [
+        vec![],
+        vec![omsi_model::Animation {
+            variable: "script_var".into(),
+            ..Default::default()
+        }],
+        vec![omsi_model::Animation {
+            variable: "sched".into(),
+            ..Default::default()
+        }],
+        vec![omsi_model::Animation {
+            variable: "sched1".into(),
+            ..Default::default()
+        }],
+    ];
+    for anims in mesh_anims {
+        ty.model.meshes.push(omsi_model::MeshDef {
+            mouse_event: Some("cp_sched_toggle".into()),
+            animations: anims,
+            ..Default::default()
+        });
+        ty.meshes.push(omsi_sim::vehicle::VehicleMesh {
+            def_index: ty.model.meshes.len() - 1,
+            data: Default::default(),
+            file: Default::default(),
+            materials: vec![],
+            overrides: vec![],
+            pivot: glam::Mat4::IDENTITY,
+            viewpoint: 0,
+            skin: vec![],
+            keep_winding: false,
+        });
+    }
+    let ty = Arc::new(ty);
+    let mut vehicle =
+        omsi_sim::VehicleInstance::new(ty.clone(), omsi_sim::VehicleHost::new(Default::default()));
+    vehicle.mesh_props.resize_with(4, Default::default);
+    let render = scene::VehicleRender {
+        window_wipers: None,
+        instances: vec![],
+        far: vec![],
+        own_materials: vec![],
+        set: None,
+        variants: vec![],
+        text_textures: vec![],
+        script_textures: vec![],
+        shared_script: false,
+        displays_far: false,
+        display_tick: 0,
+        skinned: vec![],
+        damaged: vec![],
+        glass_cracks: vec![],
+        hidden: false,
+        interior_lamps: Default::default(),
+        interior_blocks: Default::default(),
+        own_set: None,
+    };
+    let mut player = new_player(vehicle, render, vec![], vec![], false, &ty);
+
+    assert_eq!(player.vehicle.var("sched"), None);
+    assert_eq!(player.vehicle.var("sched1"), None);
+    assert_eq!(player.vehicle.var("script_var"), Some(0.42));
+
+    // First click: press mesh 0 (no animation of its own) and release (0 -> 1)
+    player.pressed_mesh = Some(0);
+    player.press_info = (false, 0.0);
+    player.release();
+
+    assert_eq!(player.vehicle.var("sched"), Some(1.0));
+    assert_eq!(player.vehicle.var("sched1"), Some(1.0));
+    assert_eq!(player.vehicle.var("script_var"), Some(0.42));
+
+    // Second click: press mesh 1 (script-owned variable first) and release (1 -> 0)
+    player.pressed_mesh = Some(1);
+    player.press_info = (false, 0.0);
+    player.release();
+
+    assert_eq!(player.vehicle.var("sched"), Some(0.0));
+    assert_eq!(player.vehicle.var("sched1"), Some(0.0));
+    assert_eq!(player.vehicle.var("script_var"), Some(0.42));
+
+    for target in [1.0, 0.0] {
+        player.pressed_mesh = Some(0);
+        player.press_info = (false, 0.0);
+        player.release_precise();
+        assert_eq!(player.vehicle.var("sched"), Some(target));
+        assert_eq!(player.vehicle.var("sched1"), Some(target));
+        assert_eq!(player.vehicle.var("script_var"), Some(0.42));
+        assert!(player.auto_drag.is_none());
+    }
+}
+
+#[test]
 fn stop_brake_interlock_releases_held_brake_only_when_disengaging() {
     let mut vehicle = crate::schedule::tests::script_test_vehicle(
         "{trigger:bus_20h-switch}\n(L.L.bremse_halte_sw) ! (S.L.bremse_halte_sw)\n{end}\n\

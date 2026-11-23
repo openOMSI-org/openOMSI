@@ -1057,6 +1057,10 @@ fn shaders_validate_and_match_the_uniforms() {
             "rain basic",
             lean_rain(precip_shader_source(include_str!("../rain.wgsl"))),
         ),
+        (
+            "snow basic",
+            lean_snow(precip_shader_source(include_str!("../snow.wgsl"))),
+        ),
         ("post", include_str!("../post.wgsl").to_string()),
         ("ssao", include_str!("../ssao.wgsl").to_string()),
         ("puddles", puddles::shader_source()),

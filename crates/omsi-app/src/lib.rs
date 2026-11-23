@@ -804,6 +804,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             vehicle_list: Vec::new(),
             dropdown: None,
             vehicle_meta: std::collections::HashMap::new(),
+            vehicle_about: std::collections::HashMap::new(),
             hud: None,
             navigator: None,
             menu: None,
@@ -889,9 +890,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             foot_in: None,
             voices_waiting: Vec::new(),
         },
-        clock: omsi_sim::SimClock::default(),
-        started,
-        view,
+        clock: omsi_sim::SimClock::default(), started, view,
         input: InputState {
             cursor: (0.0, 0.0),
             window_focused: false,

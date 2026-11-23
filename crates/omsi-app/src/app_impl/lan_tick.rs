@@ -270,56 +270,64 @@ impl App {
     }
 
     fn enforce_host_session_bus(&mut self) {
-        if self
+        if !self
             .net
             .lan
             .as_ref()
             .is_some_and(|l| l.role == omsi_net::Role::Host)
         {
-            if self.net.session_buses.is_none() {
-                self.net.session_buses = Some(self.args.session_bus_list());
-            }
-            let list = self.net.session_buses.as_deref().unwrap_or_default();
-            if !list.is_empty() {
-                let driven_bus = self
-                    .player
-                    .as_ref()
-                    .map(|p| p.vehicle.ty.def.path.to_string_lossy().to_string())
-                    .filter(|s| !s.is_empty());
-                let host_bus = driven_bus
-                    .as_deref()
-                    .or(self.args.bus.as_deref())
-                    .filter(|b| !b.is_empty());
-                if host_bus == self.net.host_bus_checked.as_deref() {
-                    return;
-                }
-                if let Some(host_bus) = host_bus {
-                    if !omsi_lan::server_cfg::allows(list, host_bus) {
-                        log::warn!(
-                            "session: host bus {host_bus} is not in session_buses list: removed"
-                        );
-                        self.args.bus = None;
-                        self.net.host_bus_checked = None;
-                        let names: Vec<&str> = list
-                            .iter()
-                            .map(|v| v.rsplit('/').next().unwrap_or(v))
-                            .collect();
-                        let reason = omsi_ui::i18n::tr_fill(
-                            "only these buses can be driven here ({list})",
-                            &[("{list}", &names.join(", "))],
-                        );
-                        if self.player.is_some() {
-                            self.remove_driven_vehicle();
-                        }
-                        self.service_msg = Some((reason, 4.0));
-                    } else {
-                        self.net.host_bus_checked = Some(host_bus.to_string());
-                    }
-                } else {
-                    self.net.host_bus_checked = None;
-                }
-            }
+            return;
         }
+        if self.net.session_buses.is_none() {
+            self.net.session_buses = Some(self.args.session_bus_list());
+        }
+        let list = self.net.session_buses.as_deref().unwrap_or_default();
+        if list.is_empty() {
+            return;
+        }
+        let current = self
+            .player
+            .as_ref()
+            .map(|p| p.vehicle.ty.def.path.as_path())
+            .filter(|p| !p.as_os_str().is_empty())
+            .or_else(|| self.args.bus.as_deref().map(std::path::Path::new))
+            .filter(|p| !p.as_os_str().is_empty());
+        if self
+            .net
+            .host_bus_checked
+            .as_ref()
+            .is_some_and(|c| c.path.as_deref() == current)
+        {
+            return;
+        }
+        let Some(path) = current else {
+            self.net.host_bus_checked = Some(HostBusCheck { path: None });
+            return;
+        };
+        let bus = path.to_string_lossy();
+        if omsi_lan::server_cfg::allows(list, &bus) {
+            self.net.host_bus_checked = Some(HostBusCheck {
+                path: Some(path.to_path_buf()),
+            });
+            return;
+        }
+        log::warn!("session: host bus {bus} is not in session_buses list: removed");
+        let names: Vec<&str> = list
+            .iter()
+            .map(|v| v.rsplit('/').next().unwrap_or(v))
+            .collect();
+        let reason = omsi_ui::i18n::tr_fill(
+            "only these buses can be driven here ({list})",
+            &[("{list}", &names.join(", "))],
+        );
+        self.net.host_bus_checked = Some(HostBusCheck {
+            path: Some(path.to_path_buf()),
+        });
+        self.args.bus = None;
+        if self.player.is_some() {
+            self.remove_driven_vehicle();
+        }
+        self.service_msg = Some((reason, 4.0));
     }
 
     /// A command another player's game sent ours (`LanSession::command`): read by the session

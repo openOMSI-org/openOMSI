@@ -126,6 +126,10 @@ pub struct Choice {
     pub plate: String,
     /// The fleet number picked from the bus's `[number]` list (empty: no selection yet).
     pub number: String,
+    /// The variables the player picked for this bus - its onboard computer (the IBIS unit or
+    /// ticket printer its repaints name), a door type: name to the value a paint gives it
+    /// (empty: the paint's own, `--setvar`, #4077).
+    pub setvars: std::collections::BTreeMap<String, String>,
     pub hof: String,
     /// The depot file was chosen by hand (else it follows the map and the date).
     pub hof_manual: bool,
@@ -173,6 +177,7 @@ impl Default for Choice {
             paint: String::new(),
             plate: String::new(),
             number: String::new(),
+            setvars: Default::default(),
             hof: String::new(),
             hof_manual: false,
             map: String::new(),
@@ -701,6 +706,8 @@ impl State {
             paint: Some(c.paint.clone()).filter(|p| !p.is_empty()),
             plate: Some(c.plate.clone()).filter(|p| !p.trim().is_empty()),
             number: Some(c.number.clone()).filter(|n| !n.trim().is_empty()),
+            setvars: Some(c.setvars.iter().filter(|(k, v)| !k.trim().is_empty() && !v.trim().is_empty()).map(|(k, v)| (k.clone(), v.clone())).collect())
+                .filter(|m: &std::collections::BTreeMap<String, String>| !m.is_empty()),
             hof: Some(if c.hof_manual { c.hof.clone() } else { self.default_hof() }).filter(|p| !p.is_empty()),
             entry: Some(c.entry),
             line: if c.free { None } else { c.line.clone() },
@@ -951,6 +958,7 @@ impl State {
                         self.choice.bus = v.file.clone();
                         self.choice.paint.clear();
                         self.choice.number = self.random_bus_number();
+                        self.choice.setvars.clear();
                         self.choice.hof = self.default_hof();
                     }
                 }
@@ -1135,9 +1143,7 @@ impl State {
                 }
                 self.poll_now();
             }
-            Msg::LogTail { pid, lines } => {
-                self.logs.insert(pid, lines);
-            }
+            Msg::LogTail { pid, lines } => { self.logs.insert(pid, lines); }
             Msg::Mods(Ok(m)) => {
                 for c in &m.cleaned {
                     core::log_to_file(&format!("cleanup: {c}"));
@@ -1204,6 +1210,7 @@ impl State {
         self.choice.bus = file.to_string();
         self.choice.paint.clear();
         self.choice.number = self.random_bus_number();
+        self.choice.setvars.clear();
         // (a hand-picked depot file stays when the new bus has one of that name)
         let keep = self.choice.hof_manual && self.bus().is_some_and(|v| v.hofs.iter().any(|h| h.eq_ignore_ascii_case(&self.choice.hof)));
         if !keep {

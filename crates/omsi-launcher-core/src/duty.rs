@@ -13,6 +13,11 @@ pub struct Duty {
     /// The fleet number picked from the bus's `[number]` list (none: its first).
     #[serde(default)]
     pub number: Option<String>,
+    /// The variables the player chose for this bus in the launcher - its onboard computer (the
+    /// IBIS unit or ticket printer its repaints name), a door type: set before the scripts'
+    /// `{init}` and kept over the paint scheme's own `[setvar]`s (`--setvar`, #4077).
+    #[serde(default)]
+    pub setvars: Option<std::collections::BTreeMap<String, String>>,
     pub hof: Option<String>,
     pub entry: Option<i32>,
     pub line: Option<String>,
@@ -129,6 +134,16 @@ pub(crate) fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Resu
     }
     if let Some(n) = d.number.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
         a.extend(["--number".into(), n.to_string()]);
+    }
+    if let Some(vars) = d.setvars.as_ref().filter(|v| !v.is_empty()) {
+        let list: Vec<String> = vars
+            .iter()
+            .filter(|(k, _)| !k.trim().is_empty())
+            .map(|(k, v)| format!("{}={}", k.trim(), v.trim()))
+            .collect();
+        if !list.is_empty() {
+            a.extend(["--setvar".into(), list.join(",")]);
+        }
     }
     if let Some(id) = d.depot.as_deref().map(str::trim).filter(|i| !i.is_empty()) {
         a.extend(["--depot".into(), id.to_string()]);

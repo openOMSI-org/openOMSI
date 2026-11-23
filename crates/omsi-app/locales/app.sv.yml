@@ -3826,6 +3826,7 @@
 "At most 5": "Högst 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Mappar med objekt och splines som ingen annan karta använder tas bort samtidigt: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Mappar med objekt och splines som en annan karta fortfarande använder blir kvar: {n}."
+"Onboard computer": "Fordonsdator"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "En profil sparar alla tangenter och alla handkontrollsinställningar. Före varje körning byter startprogrammet till bussens egen profil eller till standardprofilen."
 "Rename the profile": "Byt namn på profilen"
 "Delete this profile?": "Radera den här profilen?"

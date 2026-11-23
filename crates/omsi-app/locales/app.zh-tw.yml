@@ -4380,6 +4380,7 @@
 "At most 5": "最多 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "其他地圖都未使用的物件與樣條資料夾會一併刪除：{n} 個，{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "其他地圖仍在使用的物件與樣條資料夾會保留：{n} 個。"
+"Onboard computer": "車上電腦"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "設定檔會保存所有按鍵和所有控制器設定。每次駕駛前,啟動器會切換到該公車專屬的設定檔或預設設定檔。"
 "Rename the profile": "重新命名設定檔"
 "Delete this profile?": "要刪除這個設定檔嗎?"

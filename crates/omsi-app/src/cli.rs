@@ -114,7 +114,9 @@ pub(crate) struct Args {
     /// Fire script triggers after spawning: name[@seconds],… (times apply during --drive).
     #[arg(long)]
     pub(crate) triggers: Option<String>,
-    /// Set script variables after spawning: name=value[,name=value…].
+    /// Set script variables: name=value[,name=value…]. They are there before the scripts'
+    /// {init} (over the paint scheme's own [setvar]s, which they also win over every frame)
+    /// and are set once more after the spawn, as --drive's tests ask for.
     #[arg(long)]
     pub(crate) setvar: Option<String>,
     /// Offscreen: simulate this many seconds with full throttle before rendering.

@@ -1334,6 +1334,125 @@ pub struct VehicleInfo {
     /// The transport modes of the vehicle: what its file declares, else what its shape says.
     #[serde(default)]
     pub transport: Vec<String>,
+    /// The variables the bus's paint files set (`[setvar] name value` in a `.cti`), with the
+    /// values each is given and the paints that give them. The launcher offers the ones that
+    /// choose the onboard computer (an IBIS unit, a ticket printer) in the vehicle's options:
+    /// picking one is the same as picking the repaint that names it (#4077).
+    #[serde(default)]
+    pub variables: Vec<VehicleVariable>,
+}
+
+/// One variable of a bus's paint files, as the launcher offers it.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct VehicleVariable {
+    /// The name as the files write it.
+    pub name: String,
+    /// The launcher shows it as the vehicle's onboard computer (its IBIS, its ticket printer):
+    /// its name is one the modding community gives such a unit (`is_onboard_computer`).
+    pub onboard_computer: bool,
+    /// The values the paints give it, ascending; the paints that give them beside each.
+    pub values: Vec<VehicleVariableValue>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct VehicleVariableValue {
+    /// The value as the files write it (`1`, `0.5`): what the game's `setvar` takes.
+    pub value: String,
+    /// The paints (the `[item]`s of the `.cti` files) that set the variable to it.
+    pub paints: Vec<String>,
+}
+
+/// Whether the modding community names the onboard computer of a bus with this variable: the
+/// IBIS and its successors (Atron's AFR4, Almex, Krauth, the IVU box), the ticket printers
+/// (Kasse, Drucker) and the cockpit computers of the add-on packs. OMSI has no standard for it
+/// - each pack picks a name - so the launcher looks for the words the packs use and offers such
+/// a variable as the vehicle's "Onboard computer". A pack that names it differently shows no
+/// selector; the word it uses is a line in this list.
+pub fn is_onboard_computer(name: &str) -> bool {
+    const WORDS: [&str; 17] = [
+        "ibis",
+        "kasse",
+        "kassa",
+        "ticket",
+        "fahrschein",
+        "fahrkarte",
+        "entwerter",
+        "drucker",
+        "printer",
+        "bordcomputer",
+        "boardcomputer",
+        "board_comp",
+        "atron",
+        "afr4",
+        "almex",
+        "krauth",
+        "ticketbox",
+    ];
+    let lower = name.to_ascii_lowercase();
+    WORDS.iter().any(|w| lower.contains(w))
+}
+
+/// The variables of a bus's paints (paint name -> its `[setvar]` lines) as the launcher offers
+/// them: one entry per variable, its values ascending, the onboard computers first.
+fn vehicle_variables(paints: &[(String, Vec<(String, f32)>)]) -> Vec<VehicleVariable> {
+    // (lower-case name, the name as written, its values with the paints that give them)
+    let mut by: Vec<(String, String, Vec<(f32, Vec<String>)>)> = Vec::new();
+    for (paint, vars) in paints {
+        for (name, value) in vars {
+            let at = match by
+                .iter()
+                .position(|(key, _, _)| key.eq_ignore_ascii_case(name))
+            {
+                Some(at) => at,
+                None => {
+                    by.push((
+                        name.to_ascii_lowercase(),
+                        name.trim().to_string(),
+                        Vec::new(),
+                    ));
+                    by.len() - 1
+                }
+            };
+            let values = &mut by[at].2;
+            match values.iter_mut().find(|(v, _)| *v == *value) {
+                Some((_, paints_here)) => {
+                    if !paints_here.iter().any(|p| p.eq_ignore_ascii_case(paint)) {
+                        paints_here.push(paint.clone());
+                    }
+                }
+                None => values.push((*value, vec![paint.clone()])),
+            }
+        }
+    }
+    let mut out: Vec<VehicleVariable> = by
+        .into_iter()
+        .map(|(_, name, mut values)| {
+            values.sort_by(|a, b| a.0.total_cmp(&b.0));
+            VehicleVariable {
+                onboard_computer: is_onboard_computer(&name),
+                name,
+                values: values
+                    .into_iter()
+                    .map(|(v, mut paints)| {
+                        paints.sort();
+                        VehicleVariableValue {
+                            value: v.to_string(),
+                            paints,
+                        }
+                    })
+                    .collect(),
+            }
+        })
+        .collect();
+    // the onboard computers first, then by name, so that the one the player wants is at hand
+    out.sort_by(|a, b| {
+        b.onboard_computer.cmp(&a.onboard_computer).then_with(|| {
+            a.name
+                .to_ascii_lowercase()
+                .cmp(&b.name.to_ascii_lowercase())
+        })
+    });
+    out
 }
 
 /// Why `vehicle` may not run on `map`, or `None` when it may (a map that names no transport
@@ -1397,16 +1516,32 @@ fn missing_packs_of(model: &Path) -> Vec<String> {
 }
 
 /// `[item]` names of every `.cti` in the model's `[CTC]` folders (in every content root):
-/// the paint schemes, and the folders they were read from.
-fn paint_schemes(vehicle: &omsi_vehicle::Vehicle) -> (Vec<String>, Vec<PathBuf>) {
+/// the paint schemes, the folders they were read from, and the `[setvar]`s each sets.
+struct PaintScan {
+    names: Vec<String>,
+    dirs: Vec<PathBuf>,
+    /// paint name -> its `[setvar]` lines, in the order the files write them.
+    vars: Vec<(String, Vec<(String, f32)>)>,
+}
+
+fn paint_schemes(vehicle: &omsi_vehicle::Vehicle) -> PaintScan {
     let mut names: Vec<String> = Vec::new();
     let mut dirs_read: Vec<PathBuf> = Vec::new();
+    let mut vars: Vec<(String, Vec<(String, f32)>)> = Vec::new();
     let Some(model_rel) = vehicle.model.as_ref() else {
-        return (names, dirs_read);
+        return PaintScan {
+            names,
+            dirs: dirs_read,
+            vars,
+        };
     };
     let model_path = omsi_cfg::resolve_path(vehicle.dir(), model_rel);
     let Ok(model) = omsi_model::Model::load(&model_path) else {
-        return (names, dirs_read);
+        return PaintScan {
+            names,
+            dirs: dirs_read,
+            vars,
+        };
     };
     for c in &model.ctc {
         let dir = omsi_cfg::resolve_path(vehicle.dir(), &c.path);
@@ -1447,19 +1582,47 @@ fn paint_schemes(vehicle: &omsi_vehicle::Vehicle) -> (Vec<String>, Vec<PathBuf>)
                 continue;
             };
             let mut r = cfg.reader();
+            // (a `[setvar]` belongs to the `[item]` before it, as Omsi.exe files it)
+            let mut item: Option<String> = None;
             while let Some(k) = r.next_keyword() {
-                if k == "item" {
-                    let name = r.str().trim().to_string();
-                    if !name.is_empty() && !names.iter().any(|n| n.eq_ignore_ascii_case(&name)) {
-                        names.push(name);
+                match k.as_str() {
+                    "item" => {
+                        let name = r.str().trim().to_string();
+                        item = Some(name.clone()).filter(|n| !n.is_empty());
+                        if let Some(name) = &item {
+                            if !names.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+                                names.push(name.clone());
+                            }
+                            if !vars.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)) {
+                                vars.push((name.clone(), Vec::new()));
+                            }
+                        }
                     }
+                    "setvar" => {
+                        let var = r.str().trim().to_string();
+                        let value = r.f32();
+                        if let Some(item) = &item {
+                            if !var.is_empty() {
+                                if let Some((_, list)) =
+                                    vars.iter_mut().find(|(n, _)| n.eq_ignore_ascii_case(item))
+                                {
+                                    list.push((var, value));
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
     }
     dirs_read.sort();
     dirs_read.dedup();
-    (names, dirs_read)
+    PaintScan {
+        names,
+        dirs: dirs_read,
+        vars,
+    }
 }
 
 /// The `[name]`s of the depot files in the top-level `HOFs/` folder of every content root
@@ -1782,7 +1945,9 @@ fn read_vehicle_folder(
         let name = format!("{} {}", v.manufacturer.trim(), v.type_name.trim())
             .trim()
             .to_string();
-        let (paints, paint_dirs) = paint_schemes(&v);
+        let scan = paint_schemes(&v);
+        let (paints, paint_dirs) = (scan.names, scan.dirs);
+        let variables = vehicle_variables(&scan.vars);
         deps.extend(paint_dirs);
         // `<bus>_ENG.dsc` beside the bus file (the language of the settings) describes it
         let description = find_dsc(f, lang)
@@ -1816,6 +1981,7 @@ fn read_vehicle_folder(
                 .iter()
                 .map(|m| m.name().to_string())
                 .collect(),
+            variables,
         });
     }
     deps.sort();
