@@ -640,6 +640,7 @@ impl PeopleSim {
             age,
             stuck: 0.0,
             ghost: 0.0,
+            stuck_total: 0.0,
             car_wait: 0.0,
             detour: 0.0,
             detour_side: 0.0,
