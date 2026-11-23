@@ -391,7 +391,6 @@ flags! {
     OMSI_NO_BRIDGE: Bool, Switch, Use, "off", "LAN: leave the internet alone - no rendezvous bridge, no tunnel (tests, LAN parties).";
     OMSI_NO_BUMP: Bool, Switch, Use, "off", "No bump maps.";
     OMSI_NO_BUNDLES: Bool, Switch, Frame, "off", "Record the main pass directly instead of from render bundles.";
-    OMSI_NO_LEAN: Bool, Switch, Frame, "off", "Enhanced main pass: draw every material with the full scene pipelines, not the lean ones of plain materials on a dry frame.";
     OMSI_NO_CABIN_SHADOWS: Bool, Switch, Frame, "off", "Enhanced: the lamps of the player's saloon cast no shadows (A/B).";
     OMSI_NO_CLOUDS: Bool, Switch, Use, "off", "No clouds.";
     OMSI_NO_CLOUD_SHADOW_FIELD: Bool, Switch, Use, "off", "Enhanced: the clouds' shadow is one number for the whole picture again, not a field over the land (A/B).";
@@ -413,6 +412,7 @@ flags! {
     OMSI_NO_LAMP_SIGHT: Bool, Switch, Use, "off", "Enhanced by night: every lamp near the line of sight dazzles, hidden or not.";
     OMSI_NO_LAN_MODS: Bool, Switch, Use, "off", "LAN: do not exchange mods.";
     OMSI_NO_LAN_UPLOADS: Bool, Switch, Use, "off", "LAN: a game hosting a session takes no buses from the players who join.";
+    OMSI_NO_LEAN: Bool, Switch, Frame, "off", "Enhanced main pass: draw every material with the full scene pipelines, not the lean ones of plain materials on a dry frame.";
     OMSI_NO_LIGHT_MAP: Bool, Switch, Use, "off", "No night light maps on the tiles (A/B).";
     OMSI_NO_MAP_CACHE: Bool, Test, Use, "off", "Read the map's navigator layers (houses, ground, paving) again instead of from the cache.";
     OMSI_NO_MATERIAL_SPLINE_BATCHING: Bool, Switch, Use, "off", "No batching of splines by material.";
