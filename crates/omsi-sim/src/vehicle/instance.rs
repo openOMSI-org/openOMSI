@@ -94,25 +94,33 @@ impl VehicleInstance {
             state.str_vars[i as usize] = h.name.clone();
         }
         let before_paint = scheme_values(&ty, &var_index, &state.vars);
+        let mut put = |name: &str, v: f32| {
+            let key = name.to_ascii_lowercase();
+            match var_index.get(&key) {
+                Some(id) => state.vars[*id as usize] = v,
+                None if model_only_vars.contains(&key) => {
+                    var_index.insert(key, state.vars.len() as omsi_script::VarId);
+                    state.vars.push(v);
+                }
+                None => {}
+            }
+        };
         if let Some(scheme) = host.paint_scheme {
             let scheme = scheme.filter(|i| *i < ty.paint_schemes.len());
-            let mut put = |name: &str, v: f32| {
-                let key = name.to_ascii_lowercase();
-                match var_index.get(&key) {
-                    Some(id) => state.vars[*id as usize] = v,
-                    None if model_only_vars.contains(&key) => {
-                        var_index.insert(key, state.vars.len() as omsi_script::VarId);
-                        state.vars.push(v);
-                    }
-                    None => {}
-                }
-            };
             put("Colorscheme", scheme.map(|i| i as f32).unwrap_or(-1.0));
             if let Some(i) = scheme {
                 for (var, v) in &ty.paint_schemes[i].set_vars {
                     put(var, *v);
                 }
             }
+        }
+        // What the player chose for this vehicle (the launcher's onboard computer: an IBIS
+        // unit, a ticket printer): over the repaint's [setvar]s, and before {init}, which
+        // reads the unit's type to build its keys, its display and its tickets. The value is
+        // kept over the scheme's each frame too (see `scheme_overrides`), as --setvar's is.
+        let chosen_vars = host.initial_vars.clone();
+        for (name, value) in &chosen_vars {
+            put(name, *value);
         }
         if let Some(i) = var_index.get("schedule_active") {
             state.vars[*i as usize] = host.schedule_active;
@@ -286,7 +294,7 @@ impl VehicleInstance {
             trailers_stepped: false,
             var_index: std::sync::Arc::new(var_index),
             model_only_vars,
-            scheme_overrides: Vec::new(),
+            scheme_overrides: chosen_vars,
             paint_base,
             props_plan: PropsPlan::default(),
             pax_vars: std::sync::OnceLock::new(),
