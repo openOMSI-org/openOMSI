@@ -3,7 +3,9 @@
 //! A release a maintainer starts from main publishes `v<MAJOR.MINOR.PATCH>` with one archive
 //! per platform (see .github/workflows/release.yml). The launcher asks the GitHub API for the
 //! latest release when it starts (setting `update_check`), and when it is newer than this
-//! build it offers it - or, with `update_auto`, installs it at once:
+//! build it offers it - or, with `update_auto`, installs it at once. On desktop the stable
+//! channel can also return to an older stable release when the project flags the installed
+//! release as broken and GitHub supplies a SHA-256 for the replacement:
 //!
 //! * **Windows, macOS, Linux**: the archive is downloaded (and checked against the SHA-256
 //!   GitHub lists for it), unpacked into `.openomsi-update` beside the program, and every
@@ -390,7 +392,11 @@ fn latest_on(beta: bool) -> anyhow::Result<Option<Release>> {
         return Ok(None);
     }
     let url = omsi_cfg::flags::OMSI_UPDATE_URL.var().map(str::to_string).unwrap_or_else(|| LATEST_API.to_string());
-    if url == LATEST_API && beta {
+    if url != LATEST_API {
+        let v = serde_json::from_str(&fetch_text(&url)?)?;
+        return parse_release(&v, current_version(), false);
+    }
+    if beta {
         return match fetch_text(NEWEST_API).and_then(|t| Ok(serde_json::from_str::<serde_json::Value>(&t)?)) {
             Ok(v) => newest_of(&v, current_version(), &crate::recovery::listed_broken()),
             Err(e) => {
@@ -399,16 +405,33 @@ fn latest_on(beta: bool) -> anyhow::Result<Option<Release>> {
             }
         };
     }
+    let broken = crate::recovery::listed_broken();
     match fetch_text(&url).and_then(|t| Ok(serde_json::from_str::<serde_json::Value>(&t)?)) {
-        Ok(v) => parse_release(&v, current_version(), false),
+        Ok(v) => stable_release(&v, current_version(), &broken, !cfg!(any(target_os = "android", target_os = "ios"))),
         // (the API: an address over its limit gets 403 for an hour, and some networks reach
         // github.com but not api.github.com - github.com says the latest tag as well)
-        Err(e) if url == LATEST_API => {
+        Err(e) => {
             log::info!("update check: the GitHub API: {e:#} - asking github.com");
-            latest_from_site().map_err(|e2| anyhow::anyhow!("{e} (and github.com: {e2})"))
+            latest_from_site().map(|r| r.filter(|r| !broken.contains(&r.version))).map_err(|e2| anyhow::anyhow!("{e} (and github.com: {e2})"))
         }
-        Err(e) => Err(e),
     }
+}
+
+fn stable_release(v: &serde_json::Value, current: &str, broken: &[String], can_downgrade: bool) -> anyhow::Result<Option<Release>> {
+    let version = v["tag_name"].as_str().ok_or_else(|| anyhow::anyhow!("the release has no tag"))?.trim_start_matches(['v', 'V']);
+    if broken.iter().any(|b| b == version) {
+        return Ok(None);
+    }
+    if let Some(upgrade) = parse_release(v, current, false)? {
+        return Ok(Some(upgrade));
+    }
+    if !can_downgrade || is_test_build(current) || !broken.iter().any(|b| b == current)
+        || v["draft"].as_bool() != Some(false) || v["prerelease"].as_bool() != Some(false)
+        || !newer(current, version) || newer(FIRST_SELF_TESTED, version) || crate::recovery::is_bad(version)
+    {
+        return Ok(None);
+    }
+    Ok(release_of(v)?.filter(|r| r.sha256.as_deref().is_some_and(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit()))))
 }
 
 /// The latest release as github.com's `releases/latest` redirect names it, with this
@@ -1121,6 +1144,35 @@ mod tests {
         // a pull request's test build keeps itself, however new the release
         assert!(parse_release(&v, "0.1.7-pr12", false).unwrap().is_none());
         assert!(is_test_build("0.1.1313-pr1192") && !is_test_build("0.1.1313"));
+    }
+
+    #[test]
+    fn stable_can_downgrade_only_a_listed_broken_build_to_a_verified_release() {
+        let stable = serde_json::json!({
+            "tag_name": "v0.3.52", "draft": false, "prerelease": false,
+            "assets": [{
+                "name": asset_name("0.3.52").unwrap(),
+                "browser_download_url": "https://github.com/openOMSI-org/openOMSI/releases/download/v0.3.52/package.zip",
+                "size": 42, "digest": format!("sha256:{}", "a".repeat(64))
+            }]
+        });
+        let broken = ["0.3.56".to_string(), "0.3.56-pr12".to_string()];
+        let selected = |release, current, broken, allowed| stable_release(release, current, broken, allowed).unwrap().map(|r| r.version);
+        assert_eq!(selected(&stable, "0.3.56", &broken, true), Some("0.3.52".into()));
+        assert_eq!(selected(&stable, "0.3.51", &broken, true), Some("0.3.52".into()));
+        assert_eq!(selected(&stable, "0.3.56", &[], true), None);
+        assert_eq!(selected(&stable, "0.3.56", &broken, false), None);
+        assert_eq!(selected(&stable, "0.3.56-pr12", &broken, true), None);
+        assert_eq!(selected(&stable, "0.3.52", &broken, true), None);
+        let both_broken = ["0.3.56".to_string(), "0.3.52".to_string()];
+        assert_eq!(selected(&stable, "0.3.56", &both_broken, true), None);
+        assert_eq!(selected(&stable, "0.3.51", &both_broken, true), None);
+        let mut unverified = stable.clone();
+        unverified["assets"][0]["digest"] = serde_json::Value::Null;
+        assert_eq!(selected(&unverified, "0.3.56", &broken, true), None);
+        let mut beta = stable;
+        beta["prerelease"] = serde_json::json!(true);
+        assert_eq!(selected(&beta, "0.3.56", &broken, true), None);
     }
 
     #[test]

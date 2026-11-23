@@ -36,9 +36,11 @@ There are two channels:
 
 On the Beta channel the updater offers the newest release, beta or stable, that has a file
 for this computer and is not listed in `release/health.json`, and *Choose a version…* lists
-the betas too (marked *Beta*). Changing the channel looks for an update again at once. Back on Stable, nothing is taken away: the
-beta installed stays until a newer stable release comes out, or an older one is chosen in
-*Choose a version…*.
+the betas too (marked *Beta*). Changing the channel looks for an update again at once.
+On Stable, an installed beta normally stays until a newer stable release comes out or the
+player picks an older one in *Choose a version…*. If the installed version is listed as
+broken, the desktop updater can offer the current stable release even when it is older.
+With automatic updates on, the existing update flow installs it when the game is closed.
 
 ### Beta: a release started by hand
 
@@ -124,11 +126,12 @@ on `main`:
 { "bad": ["0.2.31"], "message": "0.2.31 loses the timetable after a stop" }
 ```
 
-Every start of a listed version notes it; the next start installs a newer release when there
-is one, else goes back to the version before (when its files are still kept, i.e. the listed
-version has not been running long), and tells the player why with the message. Then push the
-fix and promote its beta as soon as it is checked. The list is read from GitHub with a short wait at each start; offline,
-nothing happens. Take a version off the list once nobody runs it any more.
+Every start of a listed version notes it. On the next start, the guard tries the updater's
+candidate, then the locally preserved previous version if one is available, and tells the
+player why. For a download of an older stable build, the updater requires the platform
+archive's SHA-256 from the GitHub API and uses the same staged self-test as a regular update.
+The list is read from GitHub with a short wait. Take a version off the list once nobody runs
+it any more.
 
 Before any update replaces a program, the new one must pass `openomsi --self-test` (it starts,
 says its version and ends): a release that cannot even be loaded on a computer is refused there

@@ -1,4 +1,4 @@
 {
-  "bad": [],
-  "message": ""
+  "bad": ["0.3.56"],
+  "message": "0.3.56 can exhaust graphics memory and freeze during a drive on Vulkan."
 }
