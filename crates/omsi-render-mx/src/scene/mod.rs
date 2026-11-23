@@ -249,11 +249,10 @@ pub struct Scene {
     /// The frame's draw list (see `Batch`), shared by the shadow, prepass and main passes.
     pub(crate) draw_buf: Option<GpuArray>,
     pub(crate) camera_bind_group: Option<mx::BindGroup>,
+    /// The frame's places in the heap (`FrameHeap`), written before its passes are encoded.
+    pub(crate) frame_heap: FrameHeap,
     /// Which snow track field `camera_bind_group` binds (see `LightRes::snow_track_made`).
     pub(crate) snow_track_seen: u32,
-    /// The same with slot 8 not the ground albedo picture, for the pass that draws into it
-    /// (a texture is not read and drawn into at once).
-    pub(crate) ground_camera_bind_group: Option<mx::BindGroup>,
     pub(crate) shadow_bind_group: Option<mx::BindGroup>,
     /// As `shadow_bind_group`, with the precipitation roof map's camera.
     pub(crate) precip_bind_group: Option<mx::BindGroup>,

@@ -184,7 +184,7 @@ impl SceneBase {
 
     /// The ground albedo pass's pipelines (`fs_ground`): the terrain's opaque base (0 to 3:
     /// two-sided or culled, without or with the surface bias) and its paint layers blended
-    /// over it (4 to 7). Depth is only tested, against the depth prepass's.
+    /// over it (4 to 7), into a depth of the terrain's own (see `encode_ground`).
     pub(crate) fn ground_pipeline_at(
         &self,
         device: &mx::Device,
@@ -217,9 +217,10 @@ impl SceneBase {
                     buffers: &[self.vertex_layout.clone()],
                 },
                 primitive: one_sided_primitive(cull),
+                // (the terrain's own depth: the base writes it, its paint is tested against it)
                 depth_stencil: Some(mx::DepthStencilState {
                     format: DEPTH_FORMAT,
-                    depth_write_enabled: false,
+                    depth_write_enabled: !paint,
                     depth_compare: mx::CompareFunction::GreaterEqual,
                     stencil: Default::default(),
                     bias: mx::DepthBiasState {

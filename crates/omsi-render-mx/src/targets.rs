@@ -215,11 +215,11 @@ impl Renderer {
 
     /// The ambient-occlusion textures for a target of this size (rebuilt on resize).
     /// The ground albedo picture at this size when `wanted`, let go of when not. True when it
-    /// came, went or changed size (the camera group must be made again).
+    /// came, went or changed size.
     pub(crate) fn ensure_ground(&mut self, w: u32, h: u32, wanted: bool) -> bool {
         match (&self.targets.ground, wanted) {
             (None, false) => false,
-            (Some((size, _)), true) if *size == (w, h) => false,
+            (Some((size, ..)), true) if *size == (w, h) => false,
             (_, false) => {
                 self.targets.ground = None;
                 true
@@ -245,7 +245,26 @@ impl Renderer {
                     .expect("mX: a texture")
                     .create_view(&Default::default())
                     .expect("mX: a texture view");
-                self.targets.ground = Some(((w, h), view));
+                let depth = self
+                    .device
+                    .create_texture(&mx::TextureDescriptor {
+                        label: Some("ground depth"),
+                        size: mx::Extent3d {
+                            width: w,
+                            height: h,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: mx::TextureDimension::D2,
+                        format: DEPTH_FORMAT,
+                        usage: mx::TextureUsages::RENDER_ATTACHMENT,
+                        view_formats: &[],
+                    })
+                    .expect("mX: a texture")
+                    .create_view(&Default::default())
+                    .expect("mX: a texture view");
+                self.targets.ground = Some(((w, h), view, depth));
                 true
             }
         }
@@ -734,9 +753,10 @@ pub(crate) struct Targets {
     pub(crate) msaa_targets: HashMap<(u32, u32), (Option<mx::TextureView>, mx::TextureView)>,
     /// Screen-space ambient occlusion: depth prepass and AO textures of the window's size.
     pub(crate) ao: Option<AoTargets>,
-    /// The ground albedo picture (`fs_ground`) of the window's size, made only while the
-    /// ground pass can run (`Renderer::ground_eligible`): the camera group's slot 8 holds it.
-    pub(crate) ground: Option<((u32, u32), mx::TextureView)>,
+    /// The ground albedo picture (`fs_ground`) of the window's size and the terrain's own
+    /// depth it is drawn with, made only while the ground pass can run
+    /// (`Renderer::ground_eligible`): the main pass reads it through the heap (`FrameHeap`).
+    pub(crate) ground: Option<((u32, u32), mx::TextureView, mx::TextureView)>,
     /// Enhanced path: the HDR targets per size, the post pipelines and their resources.
     pub(crate) hdr_targets: HashMap<(u32, u32), HdrTargets>,
     pub(crate) scale_targets: HashMap<(u32, u32), (mx::TextureView, mx::BindGroup)>,

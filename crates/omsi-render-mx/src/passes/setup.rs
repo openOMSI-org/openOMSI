@@ -278,15 +278,13 @@ impl Renderer {
             || temporal_frame;
         let prepass_on = ao_on || depth_wanted;
         // the terrain's paint laid into one albedo picture first: the window's enhanced
-        // picture, single-sampled, with the camera group's slot 8 free of the AO
+        // picture (any number of samples, with or without the ambient occlusion: the picture
+        // has a depth of its own, and the main pass reads it through the heap)
         let ground_ok = with_overlays
             && enhanced
             && projection.is_none()
             && !second_eye
-            && !ao_on
-            && !rt_frame
             && prepass_on
-            && self.options.msaa <= 1
             && exclude_texture.is_none()
             && !env.no_ground_pass
             && self.ground_eligible();
@@ -312,14 +310,15 @@ impl Renderer {
         if enhanced && lead_view && self.ensure_cloud_targets(width, height) {
             scene.camera_bind_group = None;
         }
-        // (the ground albedo picture only while that pass can run)
-        if prepass_on && self.ensure_ground(width, height, self.ground_eligible()) {
-            scene.camera_bind_group = None;
+        // (the ground albedo picture only while that pass can run; read through the heap)
+        if prepass_on {
+            self.ensure_ground(width, height, self.ground_eligible());
         }
-        // (slot 8 holds the AO's picture or the ground albedo's: the group is made again when that changes)
-        if prepass_on && self.ground_bound.get() != self.ground_should_bind() {
-            scene.camera_bind_group = None;
-        }
+        scene.frame_heap.ground = self
+            .targets
+            .ground
+            .as_ref()
+            .map_or(self.white_texture.view.index(), |g| g.1.index());
         if rt_frame
             && self
                 .rt

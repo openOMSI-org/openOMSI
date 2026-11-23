@@ -943,7 +943,6 @@ impl Renderer {
             pane_mask: prepass.pane_mask,
             pane_depth: None,
             ground_pipelines,
-            ground_bound: std::cell::Cell::new(false),
             ssao_pipeline: ssao.ssao_pipeline,
             blur_pipeline: ssao.blur_pipeline,
             plain_ssao_pipeline: ssao.plain_ssao_pipeline,

@@ -40,13 +40,14 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     let pic_lod = led_lod(duv, vec2<f32>(textureDimensions(t_diffuse)));
     let led_pic = material.emissive.w < -1.5 && enh.led.y < pic_lod;
     // The painted ground's albedo comes from the picture `fs_ground` laid (the base's and its
-    // layers', the frame's `camera.lod.y`): the terrain's base is lit once for all of them.
+    // layers', the frame's `camera.lod.y`; read from the heap at `FrameHeap::ground`): the
+    // terrain's base is lit once for all of them.
     // (A condition of the draw alone, so the texture reads below stay in uniform control flow;
     // `Renderer::plan_ground` has seen to it that every draw this holds for is in that picture.)
     let from_ground = camera.lod.y > 0.5 && terrain && !TERRAIN_PAINT && !capture && material.params.x < 0.5 && material.params.z < 0.5;
     var tex = vec4<f32>(1.0);
     if (from_ground) {
-        tex = vec4<f32>(textureLoad(t_ao, vec2<i32>(in.clip.xy), 0).rgb, 1.0);
+        tex = vec4<f32>(textureLoad(mx_tex2d[mx_mat.ground], vec2<i32>(in.clip.xy), 0).rgb, 1.0);
     } else {
         tex = diffuse_border(textureSampleBias(t_diffuse, s_diffuse, duv, camera.lod.x), duv);
         if (!LEAN && is_snow_pane()) {

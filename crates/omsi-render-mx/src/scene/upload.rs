@@ -363,8 +363,6 @@ impl Renderer {
         ) else {
             return;
         };
-        let ground_bound = self.ground_should_bind();
-        self.ground_bound.set(ground_bound);
         let snow_field = self.lights.snow_track.borrow();
         scene.snow_track_seen = self.lights.snow_track_made.get();
         let mut entries = vec![
@@ -395,18 +393,12 @@ impl Renderer {
             mx::BindGroupEntry {
                 binding: 8,
                 // (Enhanced+: the traced lighting, full size, in place of the SSAO)
-                // (while the AO is off the ground albedo picture is bound here, see `ground_should_bind`)
                 resource: mx::BindingResource::TextureView(
                     self.rt
                         .as_ref()
                         .and_then(|r| r.targets.as_ref())
                         .map(|t| &t.out)
-                        .or(self.targets.ao.as_ref().map(|a| {
-                            match self.targets.ground.as_ref().filter(|_| ground_bound) {
-                                Some((_, g)) => g,
-                                None => &a.blur_view,
-                            }
-                        }))
+                        .or(self.targets.ao.as_ref().map(|a| &a.blur_view))
                         .unwrap_or(&self.white_texture.view),
                 ),
             },
@@ -478,16 +470,6 @@ impl Renderer {
         let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
             label: Some("camera"),
             entries: &entries,
-        });
-        scene.ground_camera_bind_group = ground_bound.then(|| {
-            let mut other = entries.clone();
-            if let Some(e) = other.iter_mut().find(|e| e.binding == 8) {
-                e.resource = mx::BindingResource::TextureView(&self.white_texture.view);
-            }
-            self.device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("camera, ground albedo pass"),
-                entries: &other,
-            })
         });
         scene.camera_bind_group = Some(bg);
         let sbg = self.device.create_bind_group(&mx::BindGroupDescriptor {

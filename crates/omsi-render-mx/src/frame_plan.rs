@@ -214,6 +214,7 @@ pub(crate) fn encode_batches_keyed<'a, E: mx::RenderEncoder>(
     pipeline: impl Fn(u8) -> &'a mx::RenderPipeline,
 ) {
     let (mut pipe, mut mesh, mut material) = (u8::MAX, u32::MAX, u32::MAX);
+    pass.set_immediates(FrameHeap::OFFSET, bytemuck::bytes_of(&scene.frame_heap));
     // (the materials' values: the scene's table, its rows at each draw's offset)
     pass.set_bind_group(1, &scene.material_table.group);
     let mut page: Option<(&mx::Buffer, &mx::Buffer)> = None;

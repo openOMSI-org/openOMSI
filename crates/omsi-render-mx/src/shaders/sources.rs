@@ -289,7 +289,8 @@ pub(crate) fn materials_from_heap(src: &str) -> String {
         &format!(
             "{decl}
 // (the material's textures and samplers by their places in the heap, see `materials_from_heap`)
-struct MxMaterial {{ row: u32, diffuse: u32, sampler: u32, trans: u32, night: u32, light: u32, env: u32, envmask: u32, bump: u32, pbr_normal: u32, pbr_orm: u32, tile_sampler: u32 }};
+// (and after them the frame's places, set once a pass: `FrameHeap`)
+struct MxMaterial {{ row: u32, diffuse: u32, sampler: u32, trans: u32, night: u32, light: u32, env: u32, envmask: u32, bump: u32, pbr_normal: u32, pbr_orm: u32, tile_sampler: u32, ground: u32 }};
 var<immediate> mx_mat: MxMaterial;"
         ),
     );

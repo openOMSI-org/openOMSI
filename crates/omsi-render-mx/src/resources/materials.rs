@@ -106,6 +106,21 @@ impl PartialEq for MaterialBinding {
     }
 }
 
+/// The frame's places in the heap the scene shader reads, after a material's in the
+/// immediates (`mx_mat` in the scene shader): set once at the start of every pass and
+/// bundle that draws with it (`encode_batches_keyed`).
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub(crate) struct FrameHeap {
+    /// the ground albedo picture (`fs_ground`), the white texture without one
+    pub(crate) ground: u32,
+}
+
+impl FrameHeap {
+    /// Where it lies in the immediates: after the material's slots.
+    pub(crate) const OFFSET: u32 = (MATERIAL_SLOTS * 4) as u32;
+}
+
 impl MaterialBinding {
     /// The immediates of a draw with it.
     pub(crate) fn immediates(&self) -> &[u8] {
