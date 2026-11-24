@@ -33,8 +33,10 @@ GET  /v1/servers/<id>/icon.png
   comma separated) adds the operator's own words.
 * **Privacy.** Nothing about players is sent or kept: only the server's name, message, map,
   player count, version and address. The sender's address is kept as a hash for the rate limit
-  and in the listing only as the server's address when it has no tunnel. Everything is in
-  memory; nothing is written to storage.
+  and in the listing only as the server's address when it has no tunnel. The listings are
+  kept in the Durable Object's storage (Cloudflare hibernates an idle object within seconds
+  and its memory goes with it) and deleted with the listing: on unlist, or 3 minutes after
+  the last heartbeat.
 * **The service is not the only check.** The server's name, message and icon pass the game's
   moderation (`crates/omsi-serverlist`) before it registers, and every launcher and game checks
   each listing again before showing it (a flagged text is covered, an icon is shown only if the

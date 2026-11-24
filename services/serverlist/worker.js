@@ -1,8 +1,8 @@
 // The public server list of openOMSI (see README.md beside this file). A server with
 // `public_server = 1` registers here and says it is alive every minute; the launcher and the
-// game read the list. One Durable Object keeps the listings in memory (a listing lives three
-// minutes past its last heartbeat, so a restarted object is right again within a minute) and
-// nothing is written to storage. A listing is shown only after the service has read the
+// game read the list. One Durable Object keeps the listings in its storage (an idle object is
+// hibernated within seconds and loses its memory: see `ListingStore`); a listing lives three
+// minutes past its last heartbeat. A listing is shown only after the service has read the
 // server's own status page and found the challenge it gave at registration there.
 //
 //   POST /v1/register   {name, motd, map, max_players, version, protocol, web_port, address?, icon?}
@@ -13,7 +13,7 @@
 //   GET  /v1/servers/<id>/icon.png
 
 import { DurableObject } from "cloudflare:workers";
-import { TTL_MS, MIN_BEAT_MS, REVERIFY_MS, MAX_LISTINGS, MAX_PER_SOURCE, REGISTERS_PER_HOUR, MAX_BODY, Limiter, checkRegistration, checkIcon, statusProves, sourceKey, hex } from "./logic.js";
+import { TTL_MS, MIN_BEAT_MS, REVERIFY_MS, MAX_LISTINGS, MAX_PER_SOURCE, REGISTERS_PER_HOUR, MAX_BODY, Limiter, ListingStore, checkRegistration, checkIcon, statusProves, sourceKey, hex } from "./logic.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -35,14 +35,16 @@ export class List extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.env = env;
-    this.listings = new Map();
+    this.listings = new ListingStore(ctx.storage);
+    // (no request is served before the listings are back from storage)
+    ctx.blockConcurrencyWhile(() => this.listings.load());
     // (a source is kept as a hash for the limits only, and forgotten with its listings)
     this.registers = new Limiter(REGISTERS_PER_HOUR, 60 * 60 * 1000);
     this.swept = 0;
   }
 
   forget(now) {
-    for (const [id, l] of this.listings) if (l.beat < now - TTL_MS) this.listings.delete(id);
+    for (const [id, l] of [...this.listings]) if (l.beat < now - TTL_MS) this.listings.delete(id);
     if (now - this.swept > 60000) { this.registers.sweep(now); this.swept = now; }
   }
 
@@ -66,13 +68,13 @@ export class List extends DurableObject {
     for (const [id, o] of this.listings) {
       if (o.address !== l.address) continue;
       if (o.source !== source && o.verified) return { status: 409, body: { error: "this address is listed already" } };
-      this.listings.delete(id);
+      await this.listings.delete(id);
     }
     const mine = [...this.listings.values()].filter((o) => o.source === source).length;
     if (mine >= MAX_PER_SOURCE) return { status: 429, body: { error: `at most ${MAX_PER_SOURCE} servers per address` } };
     if (this.listings.size >= MAX_LISTINGS) return { status: 503, body: { error: "the list is full" } };
     const id = randomHex(8), token = randomHex(24), challenge = randomHex(16);
-    this.listings.set(id, { id, tokenHash: await sha256(token), challenge, ...l, icon, source, players: 0, registered: now, beat: now, verified: false, verifiedAt: 0, lastTry: 0, error: "not checked yet" });
+    await this.listings.save({ id, tokenHash: await sha256(token), challenge, ...l, icon, source, players: 0, registered: now, beat: now, verified: false, verifiedAt: 0, lastTry: 0, error: "not checked yet" });
     return { status: 200, body: { id, token, challenge, ttl: TTL_MS / 1000, interval: 60 } };
   }
 
@@ -106,12 +108,13 @@ export class List extends DurableObject {
     if (Number.isFinite(p)) l.players = Math.max(0, Math.min(l.max_players || 1000, Math.trunc(p)));
     if (!l.verified && now - l.lastTry > 15000) await this.verify(l, now);
     else if (l.verified && now - l.verifiedAt > REVERIFY_MS) await this.verify(l, now);
+    await this.listings.save(l);
     return { status: 200, body: l.verified ? { verified: true } : { verified: false, error: l.error } };
   }
 
   async unlist(body) {
     const l = this.listings.get(String(body.id));
-    if (l && l.tokenHash === await sha256(String(body.token))) this.listings.delete(l.id);
+    if (l && l.tokenHash === await sha256(String(body.token))) await this.listings.delete(l.id);
     return { status: 204 };
   }
 
