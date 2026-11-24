@@ -3833,3 +3833,6 @@
 "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Automatiska utrop: denna linjes HOF-fil har en inspelning per hållplats, så det finns inget att trycka för."
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Automatiska utrop: denna buss saknar IBIS-\"nästa hållplats\"-tangent, så dess utrop förblir dess egna."
 "Automatic announcements are off.": "Automatiska utrop är avstängda."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+  en: "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."

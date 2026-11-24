@@ -3492,3 +3492,6 @@
 "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Automatyczne zapowiedzi: plik HOF tej trasy zawiera jedno nagranie na przystanek, więc nie trzeba nic naciskać."
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Automatyczne zapowiedzi: ten autobus nie ma klawisza IBIS \"następny przystanek\", więc zachowuje własne zapowiedzi."
 "Automatic announcements are off.": "Automatyczne zapowiedzi są wyłączone."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+  en: "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."

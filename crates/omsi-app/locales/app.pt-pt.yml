@@ -4388,3 +4388,6 @@
 "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Avisos automáticos: o ficheiro HOF desta rota tem uma gravação por paragem, não sendo necessário premir nada."
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Avisos automáticos: este autocarro não tem tecla IBIS de \"próxima paragem\", pelo que os seus avisos permanecem próprios."
 "Automatic announcements are off.": "Os avisos automáticos estão desativados."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+  en: "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."

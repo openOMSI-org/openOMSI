@@ -485,6 +485,9 @@ pub(crate) fn duty_step(
                 QuietReason::NoIbisKey => {
                     "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own."
                 }
+                QuietReason::NoBusstopCounter => {
+                    "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+                }
                 QuietReason::Off => "Automatic announcements are off.",
             };
             note = Some(omsi_ui::tr(text).into_owned());

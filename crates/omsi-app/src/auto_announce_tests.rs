@@ -280,12 +280,11 @@ fn a_previously_unavailable_hof_is_retried_on_a_new_trip() {
     assert_eq!(a.layout, Some((0, None)));
     assert_eq!(a.layout_lookup(0, Some(&hof)), None);
 
-    // A new trip clears the cached route layout
     a.new_trip(1, true);
 
     assert_eq!(
         a.layout_lookup(0, Some(&hof)),
-        Some(TwoRecordings { first: 2, pairs: 3 })
+        Some(LayoutStatus::Two(TwoRecordings { first: 2, pairs: 3 }))
     );
 }
 
@@ -321,6 +320,28 @@ fn a_bus_without_the_counter_is_reported_without_pressing_a_key() {
     a.press_step(&mut bus, 1.0);
     assert!(!bus.pressed);
     assert!(a.off);
-    assert_eq!(a.take_note(), Some(announce::QuietReason::NoIbisKey));
+    assert_eq!(a.take_note(), Some(announce::QuietReason::NoBusstopCounter));
     assert!(a.want.is_none());
+}
+
+#[test]
+fn a_bus_without_the_counter_is_reported_at_first_stop() {
+    struct NoCounterBus;
+    impl Ibis for NoCounterBus {
+        fn var(&self, _name: &str) -> Option<f32> {
+            None
+        }
+        fn trigger(&mut self, _name: &str) -> bool {
+            true
+        }
+        fn recordings(&self) -> u64 {
+            0
+        }
+    }
+
+    let mut a = AutoAnnounce::new();
+    a.at_stop = Some(true);
+    a.park(&NoCounterBus, 0, Some(TwoRecordings { first: 2, pairs: 3 }), 1.0);
+    assert!(a.off);
+    assert_eq!(a.take_note(), Some(announce::QuietReason::NoBusstopCounter));
 }

@@ -22,7 +22,7 @@
 
 use omsi_sim::VehicleInstance;
 use omsi_sim::timetable_run::PlayerDuty;
-use omsi_sim::timetable_run::announce::{self, TwoRecordings};
+use omsi_sim::timetable_run::announce::{self, LayoutStatus, TwoRecordings};
 
 /// The least time between two presses of a key (s): one press a frame at most, and the
 /// scripts a moment to run their own step in between.
@@ -81,9 +81,8 @@ pub(crate) struct AutoAnnounce {
     /// When a key was pressed last, and the entry the IBIS stood at then: a press that leaves
     /// the counter there is one the script did not take, and is given a second.
     pressed: Option<(f64, f32)>,
-    /// The route whose depot file was last looked at, and its layout (None: one recording per
-    /// stop): the same for every stop of a trip, and reading it compares stop names.
-    layout: Option<(usize, Option<TwoRecordings>)>,
+    /// The route whose depot file was last looked at, and its layout.
+    layout: Option<(usize, Option<LayoutStatus>)>,
     /// The vehicle has no `IBIS_vor` at all (an ibox or an Atron unit announces on its own).
     /// Looked at again at every new trip, not once a session (#3281): a bus swapped in under a
     /// running game, or a script that mounts late, gets its chance.
@@ -124,8 +123,6 @@ impl AutoAnnounce {
     /// (`SimClock::run_time`, which never wraps - a night line runs past midnight).
     pub(crate) fn step(&mut self, d: &PlayerDuty, bus: &mut VehicleInstance, now: f64) {
         if self.trip != Some(d.trip_index) {
-            // (a trip of its own: its first stop is due, and the counter stands where the
-            // previous trip left it; depot files and keys are looked for again - #3281)
             self.new_trip(d.trip_index, d.at_stop());
         }
         if self.off {
@@ -135,15 +132,15 @@ impl AutoAnnounce {
         let left = self.at_stop.replace(at) == Some(true) && !at;
         let layout = self.layout_of(bus);
         self.pairs = layout.map_or(0, |l| l.pairs);
-        // (one line a trip: a depot file confirmed to have one recording per stop leaves
-        // nothing to press for, and the player is told rather than left wondering - #3281)
         if !self.noted && layout.is_some_and(|l| l.pairs == 0) && route(bus).is_some() {
             self.noted = true;
-            self.note = announce::quiet(announce::Keys::Both, 0);
+            let keys = announce::keys(
+                bus.has_trigger("IBIS_vor"),
+                bus.has_trigger("IBIS_vor_stumm"),
+            );
+            self.note = announce::quiet(keys, 0);
         }
         if at {
-            // (both are dropped again by `press_step` while the other one is under way: the
-            // counter takes one step a frame)
             self.park(bus, d.next_stop, layout, now);
             self.arrive(bus, d, layout, now);
         } else if left {
@@ -153,25 +150,27 @@ impl AutoAnnounce {
         self.watch_step(bus, now);
     }
 
-    /// The depot file's layout of the route the IBIS shows, read once per route.
     fn layout_of(&mut self, bus: &VehicleInstance) -> Option<TwoRecordings> {
         let route = route(bus)?;
-        self.layout_lookup(route, bus.host.hof.as_deref())
+        match self.layout_lookup(route, bus.host.hof.as_deref())? {
+            LayoutStatus::Two(l) => Some(l),
+            LayoutStatus::Single => Some(TwoRecordings { first: 0, pairs: 0 }),
+        }
     }
 
     fn layout_lookup(
         &mut self,
         route: usize,
         hof: Option<&omsi_vehicle::Hof>,
-    ) -> Option<TwoRecordings> {
+    ) -> Option<LayoutStatus> {
         if let Some((known, layout)) = self.layout {
             if known == route {
                 return layout;
             }
         }
-        let layout = hof.and_then(|h| announce::layout(h, route));
+        let layout = hof.and_then(|h| announce::layout_status(h, route));
         self.layout = Some((route, layout));
-        if let Some(l) = layout {
+        if let Some(LayoutStatus::Two(l)) = layout {
             log::info!(
                 "auto-announce: route {route} keeps {} pairs of recordings, its first next stop is entry {}",
                 l.pairs,
@@ -202,11 +201,14 @@ impl AutoAnnounce {
         if route.is_some() && self.parked == route {
             return;
         }
+        if bus.var("IBIS_busstop").is_none() {
+            self.off = true;
+            self.note = Some(announce::QuietReason::NoBusstopCounter);
+            return;
+        }
         let Some(entry) = park_target(layout, bus.var("IBIS_busstop")) else {
             return;
         };
-        // (one silent step a frame, so that a script's own press in between is seen; once a
-        // route, see `press_step`)
         if self.want.is_none() {
             self.want = Some(Want {
                 entry,
@@ -315,9 +317,8 @@ impl AutoAnnounce {
             return;
         }
         let Some(at) = bus.var("IBIS_busstop") else {
-            // (a bus without the counter cannot be stepped on, reported without pressing a key)
             self.off = true;
-            self.note = announce::quiet(announce::Keys::Neither, self.pairs.max(1));
+            self.note = Some(announce::QuietReason::NoBusstopCounter);
             self.want = None;
             return;
         };

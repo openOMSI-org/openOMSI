@@ -4387,3 +4387,6 @@
 "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Automatische Ansagen: Die HOF dieser Route hat eine Ansage pro Haltestelle, es muss nichts gedrückt werden."
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Automatische Ansagen: Dieser Bus hat keine IBIS-\"Nächste Haltestelle\"-Taste, daher bleiben die Ansagen busintern."
 "Automatic announcements are off.": "Automatische Ansagen sind ausgeschaltet."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+  en: "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."

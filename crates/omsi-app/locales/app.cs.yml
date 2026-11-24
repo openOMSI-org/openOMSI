@@ -3242,3 +3242,6 @@
 "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Automatická hlášení: soubor HOF této trasy má jednu nahrávku na zastávku, není třeba nic mačkat."
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Automatická hlášení: tento autobus nemá klávesu IBIS \"další zastávka\", takže jeho hlášení zůstávají vlastní."
 "Automatic announcements are off.": "Automatická hlášení jsou vypnuta."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+  en: "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."

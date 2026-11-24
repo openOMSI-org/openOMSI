@@ -18,6 +18,12 @@ pub struct TwoRecordings {
     pub pairs: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayoutStatus {
+    Two(TwoRecordings),
+    Single,
+}
+
 /// An ident without what only tells two recordings of one stop apart: the line number in
 /// front of it (`102-FuNiuLuLongHaiLu`, as GreenCity writes them) and the digits at its end
 /// that number them (`Anzhenli1`, `Anzhenli2`), in lower case.
@@ -51,15 +57,28 @@ pub fn first_preview(list: &[String]) -> Option<usize> {
         .find(|&j| is_pair(&list[j], &list[j + 1]) && !is_pair(&list[j - 1], &list[j]))
 }
 
+pub fn layout_status(hof: &Hof, route: usize) -> Option<LayoutStatus> {
+    let list = hof.info_busstop_lists.get(route)?;
+    let pairs = list.windows(2).filter(|w| is_pair(&w[0], &w[1])).count();
+    let first = first_preview(list);
+    let two = first
+        .filter(|f| pairs >= 3 && *f <= 4)
+        .map(|first| TwoRecordings { first, pairs });
+    Some(match two {
+        Some(l) => LayoutStatus::Two(l),
+        None => LayoutStatus::Single,
+    })
+}
+
 /// The two-recordings layout of `route`, when it has one: at least three pairs, and its first
 /// one near the start. A depot file that keeps one recording per stop has no pair at all
 /// (Spandau, Grundorf and the other German maps), and one whose start holds more than two
 /// entries before its first pair is not built the way the Chinese maps are.
 pub fn layout(hof: &Hof, route: usize) -> Option<TwoRecordings> {
-    let list = hof.info_busstop_lists.get(route)?;
-    let pairs = list.windows(2).filter(|w| is_pair(&w[0], &w[1])).count();
-    let first = first_preview(list)?;
-    (pairs >= 3 && first <= 4).then_some(TwoRecordings { first, pairs })
+    match layout_status(hof, route)? {
+        LayoutStatus::Two(l) => Some(l),
+        LayoutStatus::Single => None,
+    }
 }
 
 /// The entry that holds the arrival recording of the `k`th stop of a trip (0-based; the first
@@ -226,6 +245,7 @@ pub fn usable(keys: Keys, pairs: usize) -> bool {
 pub enum QuietReason {
     SingleRecordingHof,
     NoIbisKey,
+    NoBusstopCounter,
     Off,
 }
 

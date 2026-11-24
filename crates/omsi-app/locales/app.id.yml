@@ -2935,3 +2935,6 @@
 "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Pengumuman otomatis: HOF rute ini memiliki satu rekaman per halte, jadi tidak ada tombol yang perlu ditekan."
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Pengumuman otomatis: bus ini tidak memiliki tombol IBIS \"halte berikutnya\", sehingga pengumumannya tetap mandiri."
 "Automatic announcements are off.": "Pengumuman otomatis nonaktif."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+  en: "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."

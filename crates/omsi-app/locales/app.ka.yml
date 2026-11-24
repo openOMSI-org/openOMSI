@@ -4386,3 +4386,6 @@
 "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "ავტომატური განცხადებები: ამ მარშრუტის HOF ინახავს ერთ ჩანაწერს თითო გაჩერებაზე, ამიტომ დასაჭერი არაფერია."
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "ავტომატური განცხადებები: ამ ავტობუსს არ აქვს IBIS \"შემდეგი გაჩერების\" ღილაკი, ამიტომ მისი განცხადებები რჩება საკუთარი."
 "Automatic announcements are off.": "ავტომატური განცხადებები გამორთულია."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+  en: "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."

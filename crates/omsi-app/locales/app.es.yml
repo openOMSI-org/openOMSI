@@ -4386,4 +4386,5 @@
 "Profile {name} in use": "Perfil {name} en uso"
 "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Anuncios automáticos: el archivo HOF de esta ruta tiene una grabación por parada, por lo que no es necesario pulsar nada."
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Anuncios automáticos: este autobús no tiene tecla IBIS de «siguiente parada», por lo que sus anuncios se mantienen propios."
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
 "Automatic announcements are off.": "Los anuncios automáticos están desactivados."

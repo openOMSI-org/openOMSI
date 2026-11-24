@@ -4386,4 +4386,5 @@
 "Profile {name} in use": "使用中的設定檔:{name}"
 "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "自動報站：此路線的 HOF 檔案每站僅保留一條錄音，無需按鍵。"
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "自動報站：此公車沒有 IBIS 「下一站」按鍵，因此報站保持原樣。"
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
 "Automatic announcements are off.": "自動報站已關閉。"

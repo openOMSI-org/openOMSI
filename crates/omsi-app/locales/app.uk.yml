@@ -3333,4 +3333,5 @@
 "Profile {name} in use": "Використовується профіль {name}"
 "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Автоматичні оголошення: HOF-файл цього маршруту містить один запис на зупинку, натискати нічого не потрібно."
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Автоматичні оголошення: цей автобус не має клавіші IBIS «наступна зупинка», тому його оголошення залишаються власними."
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
 "Automatic announcements are off.": "Автоматичні оголошення вимкнено."
