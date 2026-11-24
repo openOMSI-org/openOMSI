@@ -4380,7 +4380,11 @@
 "At most 5": "Como máximo 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Las carpetas de objetos y splines que no usa ningún otro mapa se eliminan con él: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Las carpetas de objetos y splines que otro mapa aún usa se conservan: {n}."
-<<<<<<< HEAD
+"Yes": "Sí"
+"Take control of this bus?": "¿Tomar el control de este autobús?"
+"The bus cannot be changed while a timetable is active": "No se puede cambiar de autobús mientras hay un horario activo"
+"The bus could not be taken over": "No se pudo tomar el control del autobús"
+"You have control of the bus": "Ahora controlas el autobús"
 "Plugins": "Plugins"
 "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.": "Plugins Lua y OMSI de las carpetas plugins del juego. Uno desactivado aquí no se carga en la próxima partida; sus archivos y ajustes se conservan."
 "No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder.": "Todavía no hay plugins. Pon un archivo .lua, una carpeta de plugin o un archivo .oop en la carpeta plugins."
@@ -4400,13 +4404,6 @@
 "Its files, settings and saved data are deleted.": "Se borran sus archivos, ajustes y datos guardados."
 "Reviewed, open source plugins of the openOMSI plugin catalog.": "Plugins revisados y de código abierto del catálogo de plugins de openOMSI."
 "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.": "Los plugins ejecutan código en tu juego. Los del catálogo son de código abierto y los mantenedores de openOMSI los leen antes de añadirlos; puedes leer el código primero."
-=======
-"Yes": "Sí"
-"Take control of this bus?": "¿Tomar el control de este autobús?"
-"The bus cannot be changed while a timetable is active": "No se puede cambiar de autobús mientras hay un horario activo"
-"The bus could not be taken over": "No se pudo tomar el control del autobús"
-"You have control of the bus": "Ahora controlas el autobús"
->>>>>>> origin/main
 "Onboard computer": "Ordenador de a bordo"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Un perfil guarda todas las teclas y todos los ajustes de los mandos. Antes de cada viaje, el lanzador cambia al perfil propio del autobús o al perfil predeterminado."
 "Rename the profile": "Cambiar el nombre del perfil"
@@ -4430,3 +4427,8 @@
 
 "Read the map's passenger numbers exactly": "Leer exactamente los números de pasajeros del mapa"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Pasajeros: una parada con 0,7 mantiene 0,7 personas en lugar de redondear a 1 antes de multiplicar por la densidad; desactivado: redondeo de OMSI 2"
+"Load a situation...": "Cargar una situación..."
+"Enter saves, Esc cancels": "Intro guarda, Esc cancela"
+"Save under a name...": "Guardar con un nombre..."
+"No saved situation of this map yet": "Aún no hay ninguna situación guardada de este mapa"
+"Saved as \"{}\"": "Guardado como «{}»"

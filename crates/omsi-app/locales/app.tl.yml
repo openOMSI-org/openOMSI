@@ -2927,7 +2927,11 @@
 "At most 5": "Hanggang 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Kasamang buburahin ang mga folder ng object at spline na hindi ginagamit ng ibang mapa: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Mananatili ang mga folder ng object at spline na ginagamit pa ng ibang mapa: {n}."
-<<<<<<< HEAD
+"Yes": "Oo"
+"Take control of this bus?": "Kunin ang kontrol sa bus na ito?"
+"The bus cannot be changed while a timetable is active": "Hindi mapapalitan ang bus habang aktibo ang timetable"
+"The bus could not be taken over": "Hindi makuha ang bus"
+"You have control of the bus": "Ikaw na ang may kontrol sa bus"
 "Plugins": "Mga plugin"
 "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.": "Mga Lua at OMSI plugin sa mga plugins folder ng laro. Ang plugin na pinatay dito ay hindi ilo-load sa susunod na laro; nananatili ang mga file at setting nito."
 "No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder.": "Wala pang plugin. Maglagay ng .lua file, plugin folder o .oop file sa plugins folder."
@@ -2947,13 +2951,6 @@
 "Its files, settings and saved data are deleted.": "Mabubura ang mga file, setting at naka-save na data nito."
 "Reviewed, open source plugins of the openOMSI plugin catalog.": "Mga nasuring open source na plugin mula sa plugin catalog ng openOMSI."
 "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.": "Nagpapatakbo ng code ang mga plugin sa laro mo. Open source ang mga plugin ng catalog at binabasa ng mga maintainer ng openOMSI bago idagdag; maaari mo munang basahin ang code."
-=======
-"Yes": "Oo"
-"Take control of this bus?": "Kunin ang kontrol sa bus na ito?"
-"The bus cannot be changed while a timetable is active": "Hindi mapapalitan ang bus habang aktibo ang timetable"
-"The bus could not be taken over": "Hindi makuha ang bus"
-"You have control of the bus": "Ikaw na ang may kontrol sa bus"
->>>>>>> origin/main
 "Onboard computer": "Computer sa sasakyan"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Iniingatan ng profile ang lahat ng key at lahat ng setting ng controller. Bago ang bawat biyahe, lumilipat ang launcher sa sariling profile ng bus, o sa default."
 "Rename the profile": "Palitan ang pangalan ng profile"
@@ -2977,3 +2974,8 @@
 
 "Read the map's passenger numbers exactly": "Basahin nang eksakto ang bilang ng pasahero sa mapa"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Mga pasahero: ang hintuan na may 0.7 ay nagpapanatili ng 0.7 tao sa halip na i-round up sa 1; naka-off: pag-round ng OMSI 2"
+"Load a situation...": "Mag-load ng sitwasyon..."
+"Enter saves, Esc cancels": "Enter para i-save, Esc para kanselahin"
+"Save under a name...": "I-save sa isang pangalan..."
+"No saved situation of this map yet": "Wala pang naka-save na sitwasyon ng mapang ito"
+"Saved as \"{}\"": "Na-save bilang \"{}\""

@@ -17,6 +17,7 @@ file 2016 crates/omsi-app-mx/src/touch.rs
 file 2276 crates/omsi-app-mx/src/ui.rs
 file 2122 crates/omsi-app-mx/src/ui/menu.rs
 file 1501 crates/omsi-app/src/app.rs
+file 1611 crates/omsi-app/src/app_events.rs
 file 2252 crates/omsi-app/src/game_lists.rs
 file 2091 crates/omsi-app/src/input_script.rs
 file 1703 crates/omsi-app/src/lan_world.rs
@@ -102,6 +103,7 @@ fn 404 crates/omsi-app::run_move crates/omsi-app/src/game_lists.rs
 fn 308 crates/omsi-app::spawn_player_prepared crates/omsi-app/src/spawn.rs
 fn 336 crates/omsi-app::start_world crates/omsi-app/src/app.rs
 fn 414 crates/omsi-app::tick crates/omsi-app/src/on_foot.rs
+fn 382 crates/omsi-app::window_event crates/omsi-app/src/app_events.rs
 fn 324 crates/omsi-app::toggle_set crates/omsi-app/src/game_lists/options.rs
 fn 435 crates/omsi-app::world_pages crates/omsi-app/src/game_lists/menu_pages.rs
 # Two functions at 301 lines came in with the merge of main, not this change.

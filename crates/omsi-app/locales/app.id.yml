@@ -2928,7 +2928,11 @@
 "At most 5": "Maksimal 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Folder objek dan spline yang tidak dipakai peta lain ikut dihapus: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Folder objek dan spline yang masih dipakai peta lain tetap ada: {n}."
-<<<<<<< HEAD
+"Yes": "Ya"
+"Take control of this bus?": "Ambil alih kendali bus ini?"
+"The bus cannot be changed while a timetable is active": "Bus tidak dapat diganti selama jadwal aktif"
+"The bus could not be taken over": "Bus tidak dapat diambil alih"
+"You have control of the bus": "Anda mengendalikan bus"
 "Plugins": "Plugin"
 "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.": "Plugin Lua dan OMSI di folder plugins game. Plugin yang dimatikan di sini tidak dimuat pada permainan berikutnya; file dan pengaturannya tetap ada."
 "No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder.": "Belum ada plugin. Letakkan file .lua, folder plugin, atau file .oop ke folder plugins."
@@ -2948,13 +2952,6 @@
 "Its files, settings and saved data are deleted.": "File, pengaturan, dan data tersimpannya akan dihapus."
 "Reviewed, open source plugins of the openOMSI plugin catalog.": "Plugin sumber terbuka yang sudah ditinjau dari katalog plugin openOMSI."
 "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.": "Plugin menjalankan kode di game Anda. Plugin katalog bersumber terbuka dan dibaca oleh pengelola openOMSI sebelum ditambahkan; Anda bisa membaca kodenya dulu."
-=======
-"Yes": "Ya"
-"Take control of this bus?": "Ambil alih kendali bus ini?"
-"The bus cannot be changed while a timetable is active": "Bus tidak dapat diganti selama jadwal aktif"
-"The bus could not be taken over": "Bus tidak dapat diambil alih"
-"You have control of the bus": "Anda mengendalikan bus"
->>>>>>> origin/main
 "Onboard computer": "Komputer kendaraan"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Profil menyimpan semua tombol dan semua pengaturan kontroler. Sebelum setiap perjalanan, peluncur beralih ke profil milik bus itu, atau ke profil bawaan."
 "Rename the profile": "Ganti nama profil"
@@ -2978,3 +2975,8 @@
 
 "Read the map's passenger numbers exactly": "Baca jumlah penumpang peta secara tepat"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Penumpang: halte bernilai 0,7 mempertahankan 0,7 orang alih-alih dibulatkan ke 1 sebelum kepadatan; mati: pembulatan OMSI 2"
+"Load a situation...": "Muat situasi..."
+"Enter saves, Esc cancels": "Enter menyimpan, Esc membatalkan"
+"Save under a name...": "Simpan dengan nama..."
+"No saved situation of this map yet": "Belum ada situasi tersimpan untuk peta ini"
+"Saved as \"{}\"": "Disimpan sebagai \"{}\""

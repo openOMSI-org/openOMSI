@@ -104,6 +104,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   of the next game, its files and settings stay where they are), shows whether it ran, did not
   load (with the error, e.g. a syntax error) or was stopped after errors in the last game, and
   a plugin that declares settings with `plugin.settings` gets a settings form there too (#3919).
+- **Saves with names of your own, and loaded by name in the game**: Esc → *Save to a slot...*
+  → *Save under a name...* lets you type the save's name (Enter saves); it keeps that name when
+  you save over it later. *Load the quicksave* became *Load a situation...*: the quicksave and
+  every save of the map, by name, to load straight from the game (#3975).
 - **"Place a vehicle..." names and pictures as in the launcher**: a maker's buses are grouped into models as the launcher's bus picker groups them (*Citaro* with *C2*, *C2 G*, *C2 K* under it) instead of type names with folder and file beside them; the picture's second line is the bus's description, not its file's path; a maker's line shows its first bus; and the standard paint is called by the name the bus gives it, as in the launcher.
 - **Controls profiles**: the launcher's Controls page has profiles, each with every key and
   every controller setting: *Duplicate* makes a new one of the current settings, the list

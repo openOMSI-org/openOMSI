@@ -74,6 +74,7 @@ pub(crate) enum ListKind {
     PlaceHof(String, String),
     /// Where to save the situation: a new slot, or one of the map's slots to save over (#2556).
     SaveSlots,
+    LoadSaves,
 }
 
 /// The lists with a search line on top: the vehicles to place, the depot files and the
@@ -912,6 +913,13 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             }
         }
         ListKind::SaveSlots => {
+            match app.menus.menu_edit.as_ref() {
+                Some(t) => out.push((
+                    format!("{}: {t}_  ({})", tr("Name"), tr("Enter saves, Esc cancels")),
+                    "named".into(),
+                )),
+                None => out.push((tr("Save under a name..."), "named".into())),
+            }
             out.push((tr("A new slot"), "new".into()));
             for slot in app.save_slots() {
                 out.push((
@@ -920,6 +928,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 ));
             }
         }
+        ListKind::LoadSaves => out = load_rows(app.quicksave_file(), app.save_slots()),
         ListKind::Hofs => {
             if let Some(p) = app.player.as_ref() {
                 let now = p.vehicle.host.hof.as_ref().map(|h| h.path.clone());
@@ -1451,6 +1460,7 @@ pub(crate) fn menu_extras(
         ),
         ListKind::Hofs => (MenuKind::List, head("Depot file (HOF)..."), None),
         ListKind::SaveSlots => (MenuKind::List, head("Save to a slot..."), None),
+        ListKind::LoadSaves => (MenuKind::List, head("Load a situation..."), None),
         ListKind::Spots => (MenuKind::List, head("Teleport to a start point..."), None),
         ListKind::PlaceMaker
         | ListKind::PlaceType(_)
@@ -1741,15 +1751,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             switch_driver(app, arg);
             Some(ListKind::Drivers)
         }
-        ListKind::SaveSlots => {
-            match verb {
-                "new" => app.save_slot_to(None),
-                "over" => app.save_slot_to(Some(std::path::PathBuf::from(arg))),
-                _ => return Some(ListKind::SaveSlots),
-            }
-            app.close_game_menu();
-            None
-        }
+        ListKind::SaveSlots | ListKind::LoadSaves => run_saves(app, kind, verb, arg),
         ListKind::Hofs => {
             if let Some(p) = app.player.as_mut() {
                 match omsi_vehicle::Hof::load(std::path::Path::new(arg)) {
@@ -1951,6 +1953,7 @@ mod menu_pages;
 mod options;
 pub(crate) mod place_names;
 mod rows;
+mod saves;
 mod streets;
 pub(crate) use dropdowns::*;
 pub(crate) use duty::*;
@@ -1958,6 +1961,7 @@ pub(crate) use graphics::*;
 pub(crate) use menu_pages::*;
 pub(crate) use options::*;
 pub(crate) use rows::*;
+pub(crate) use saves::*;
 pub(crate) use streets::*;
 
 #[cfg(test)]

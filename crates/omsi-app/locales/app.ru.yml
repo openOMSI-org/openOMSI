@@ -4379,7 +4379,11 @@
 "At most 5": "Не больше 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Папки объектов и сплайнов, которые не использует ни одна другая карта, удаляются вместе с ним: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Папки объектов и сплайнов, которые ещё использует другая карта, остаются: {n}."
-<<<<<<< HEAD
+"Yes": "Да"
+"Take control of this bus?": "Взять управление этим автобусом?"
+"The bus cannot be changed while a timetable is active": "Нельзя сменить автобус, пока активно расписание"
+"The bus could not be taken over": "Не удалось перехватить автобус"
+"You have control of the bus": "Вы управляете автобусом"
 "Plugins": "Плагины"
 "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.": "Плагины Lua и OMSI в папках plugins игры. Выключенный здесь плагин не загрузится в следующей игре; его файлы и настройки остаются."
 "No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder.": "Плагинов пока нет. Положите файл .lua, папку плагина или файл .oop в папку plugins."
@@ -4399,13 +4403,6 @@
 "Its files, settings and saved data are deleted.": "Его файлы, настройки и сохранённые данные будут удалены."
 "Reviewed, open source plugins of the openOMSI plugin catalog.": "Проверенные плагины с открытым кодом из каталога плагинов openOMSI."
 "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.": "Плагины выполняют код в вашей игре. Плагины каталога имеют открытый код, и мейнтейнеры openOMSI читают его перед добавлением; вы можете сначала посмотреть код."
-=======
-"Yes": "Да"
-"Take control of this bus?": "Взять управление этим автобусом?"
-"The bus cannot be changed while a timetable is active": "Нельзя сменить автобус, пока активно расписание"
-"The bus could not be taken over": "Не удалось перехватить автобус"
-"You have control of the bus": "Вы управляете автобусом"
->>>>>>> origin/main
 "Onboard computer": "Бортовой компьютер"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Профиль хранит все клавиши и все настройки контроллеров. Перед каждой поездкой лаунчер переключается на собственный профиль автобуса или на профиль по умолчанию."
 "Rename the profile": "Переименовать профиль"
@@ -4429,3 +4426,8 @@
 
 "Read the map's passenger numbers exactly": "Точное чтение числа пассажиров с карты"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Пассажиры: остановка с 0,7 сохраняет 0,7 человека вместо округления до 1 перед умножением на плотность; выкл: округление OMSI 2"
+"Load a situation...": "Загрузить ситуацию..."
+"Enter saves, Esc cancels": "Enter сохраняет, Esc отменяет"
+"Save under a name...": "Сохранить под именем..."
+"No saved situation of this map yet": "Для этой карты пока нет сохранённых ситуаций"
+"Saved as \"{}\"": "Сохранено как «{}»"

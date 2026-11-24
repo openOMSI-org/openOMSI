@@ -8767,7 +8767,16 @@ _version: 2
   en: "Folders of objects and splines that no other map uses go with it: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.":
   en: "Folders of objects and splines that another map still uses stay: {n}."
-<<<<<<< HEAD
+"Yes":
+  en: "Yes"
+"Take control of this bus?":
+  en: "Take control of this bus?"
+"The bus cannot be changed while a timetable is active":
+  en: "The bus cannot be changed while a timetable is active"
+"The bus could not be taken over":
+  en: "The bus could not be taken over"
+"You have control of the bus":
+  en: "You have control of the bus"
 "Plugins":
   en: "Plugins"
 "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.":
@@ -8806,18 +8815,6 @@ _version: 2
   en: "Reviewed, open source plugins of the openOMSI plugin catalog."
 "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.":
   en: "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first."
-=======
-"Yes":
-  en: "Yes"
-"Take control of this bus?":
-  en: "Take control of this bus?"
-"The bus cannot be changed while a timetable is active":
-  en: "The bus cannot be changed while a timetable is active"
-"The bus could not be taken over":
-  en: "The bus could not be taken over"
-"You have control of the bus":
-  en: "You have control of the bus"
->>>>>>> origin/main
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.":
   en: "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one."
 "Rename the profile":
@@ -8861,3 +8858,8 @@ _version: 2
   en: "Read the map's passenger numbers exactly"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding":
   en: "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding"
+"Load a situation...":
+"Enter saves, Esc cancels":
+"Save under a name...":
+"No saved situation of this map yet":
+"Saved as \"{}\"":

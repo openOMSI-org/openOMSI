@@ -203,8 +203,9 @@ the picture of the game beside it with a card of what is being driven and **Resu
 lines: *Resume*, *Options* (the settings, as in the launcher), *Controls*, *Camera* (the seat,
 the field of view, the view and mirror editor), *Vehicle options*, *World options*, *City
 map*, *Line and tour*, *Skip the next stop* (also **Ctrl+Shift+H**: for a stop the bus cannot
-reach or never registers at), *End the tour*, *Save the situation*, *Save to a slot*, *Load
-the quicksave*, *Screenshot*, *Photo mode* (below) and *End the session*. *Vehicle options*
+reach or never registers at), *End the tour*, *Save the situation*, *Save to a slot* (a
+new slot, one under a name you type, or one to save over), *Load a situation* (the quicksave
+or any save of the map, by its name), *Screenshot*, *Photo mode* (below) and *End the session*. *Vehicle options*
 has the destination display, the depot file, the fleet number and the driver; driving
 another placed vehicle, placing any vehicle of the installation, coupling and uncoupling,
 getting out, swapping or reloading the vehicle; and the service - refuel and wash (only at a
