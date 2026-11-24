@@ -13,6 +13,7 @@ pub mod admin;
 pub mod bans;
 pub mod commands;
 pub mod config;
+pub mod crew;
 pub mod game;
 pub mod gateway;
 pub mod handover;

@@ -88,7 +88,7 @@ pub(crate) fn count(app: &App) -> usize {
     players(app).len()
 }
 
-fn describe(p: &Player, tr: &dyn Fn(&str) -> String) -> String {
+fn describe(app: &App, p: &Player, tr: &dyn Fn(&str) -> String) -> String {
     let what = match p.state {
         PlayerState::Driving => tr("driving"),
         PlayerState::OnFoot => tr("on foot"),
@@ -99,7 +99,24 @@ fn describe(p: &Player, tr: &dyn Fn(&str) -> String) -> String {
         .filter(|b| !b.is_empty())
         .map(|b| format!(", {b}"))
         .unwrap_or_default();
-    format!("{what}{bus}")
+    // (#2859) the conductor of a bus: ours, or another player's that told the session
+    let crew = if app.net.crew.is_conductor(p.id) {
+        format!(", {}", tr("the conductor of my bus"))
+    } else if let Some(owner) = app
+        .net
+        .conductors
+        .iter()
+        .find(|(_, c)| **c == p.id)
+        .map(|(o, _)| *o)
+    {
+        format!(
+            ", {}",
+            tr("the conductor of #{owner}'s bus").replace("{owner}", &owner.to_string())
+        )
+    } else {
+        String::new()
+    };
+    format!("{what}{bus}{crew}")
 }
 
 /// The role a player is shown with: the host of a session, an admin or a moderator.
@@ -155,7 +172,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                     "{} (#{}){you} - {}{}{silenced}",
                     p.name,
                     p.id,
-                    describe(p, &tr),
+                    describe(app, p, &tr),
                     role_word(p, &tr)
                 );
                 // (a page of their own for every other player: their voice is muted there, and
@@ -190,7 +207,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                     "{} (#{}) - {}{}",
                     p.name,
                     p.id,
-                    describe(p, &tr),
+                    describe(app, p, &tr),
                     role_word(p, &tr)
                 )),
                 // (a mute is this player's own: by name, kept between sessions)
@@ -206,6 +223,24 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                     )
                 },
             ];
+            // (#2859) the conductor of our bus: the player who sells the tickets and gives the
+            // change at our cash desk while we drive (only somebody riding in the bus)
+            if let Some(lan) = app.net.lan.as_ref() {
+                let bus = app.player.as_ref().map(|p| &p.vehicle);
+                if omsi_lan::passenger::aboard_inside(lan, p.id, bus) {
+                    out.push(if app.net.crew.is_conductor(p.id) {
+                        (
+                            tr("No longer the conductor of my bus"),
+                            format!("crew none {}", t.tag()),
+                        )
+                    } else {
+                        (
+                            tr("Make them the conductor of my bus"),
+                            format!("crew take {}", t.tag()),
+                        )
+                    });
+                }
+            }
             // (an admin's: silencing a player's voice for the whole session, or taking them away)
             let acts = rights.is_some()
                 && !(rights == Some(Role::Moderator) && p.admin == Some(Role::Admin));
@@ -385,6 +420,38 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
                 Ordering::Relaxed,
             );
             Some(kind.clone())
+        }
+        // (#2859) our bus's conductor: named by us alone, and told to the session
+        "crew" => {
+            let t = target()?;
+            let (what, tg) = arg.split_once(' ')?;
+            let peer = Target::parse_tag(tg)?.id;
+            let driver = app.net.lan.as_ref().map_or(0, |l| l.my_id);
+            if !app
+                .net
+                .crew
+                .assign(driver, (what == "take").then_some(peer))
+            {
+                log::warn!("LAN: player {peer} cannot be the conductor of our own bus");
+                return Some(ListKind::PlayerPage(t));
+            }
+            let line = omsi_lan::crew::announce(app.net.crew.conductor());
+            log::info!("LAN: our bus's crew: {line}");
+            if let Some(l) = app.net.lan.as_mut() {
+                let ids: Vec<u32> = l.peers().map(|p| p.pose.id).collect();
+                for id in ids {
+                    l.command(id, &line);
+                }
+            }
+            app.service_msg = Some((
+                match app.net.crew.conductor() {
+                    Some(_) => "They serve your bus's cash desk now",
+                    None => "Nobody serves your bus's cash desk now",
+                }
+                .to_string(),
+                3.0,
+            ));
+            Some(ListKind::PlayerPage(t))
         }
         // (the administration's own line, checked once more where it is done)
         "run" if rights(app).is_some() => {
