@@ -137,6 +137,7 @@ pub(super) fn option_set(app: &mut App, verb: &str, arg: &str, v: f32) -> Option
         return None; // Stored per bus, never in the desktop settings file.
     }
     if verb.starts_with("tag_") {
+        if !super::menu_pages::tag_axle_available(app) { return None; }
         if let Some(rb) = app.player.as_mut().and_then(|p| p.vehicle.rigid.as_mut()) {
             if verb == "tag_preset" {
                 // Keep the chosen rear axle when switching between presets.
@@ -624,6 +625,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
 /// Switch `id` on or off; the key and value to keep for the next game.
 pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String)> {
     if id == "tag_steering" {
+        if !super::menu_pages::tag_axle_available(app) { return None; }
         if let Some(rb) = app.player.as_mut().and_then(|p| p.vehicle.rigid.as_mut()) {
             if on {
                 let rear = rb.wheel_axle.iter().copied().max().unwrap_or(0);

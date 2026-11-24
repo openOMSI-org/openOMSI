@@ -343,7 +343,7 @@ pub(super) fn vehicle_pages(app: &App) -> Vec<Page> {
         ("Display and driver", sectioned_rows(display, "Destination and depot", &[("number", "Vehicle identification"), ("driver", "Driver")])),
         ("Vehicles", sectioned_rows(fleet, "Switch and place vehicles", &[("couple", "Coupling"), ("getout", "Driver"), ("remove", "Replace and remove vehicles")])),
         ("Service", sectioned_rows(service, "Vehicle maintenance", &[("reset", "Recovery and relocation")])),
-        ("Tag axle", if let Some(rb) = app.player.as_ref().and_then(|p| p.vehicle.rigid.as_ref()) {
+        (if tag_axle_available(app) { "Tag axle" } else { "Tag axle (unavailable)" }, if let Some(rb) = app.player.as_ref().and_then(|p| p.vehicle.rigid.as_ref()) {
             let mut rows = Vec::new();
             if rb.wheel_axle.iter().copied().max().unwrap_or(0) >= 2 {
                 rows.extend(slider_row(app, "tag_preset", "Steering preset", "Choose a starting profile; moving an individual slider changes it to Custom", &|v| tag_preset_name(v).to_string()));
@@ -355,9 +355,21 @@ pub(super) fn vehicle_pages(app: &App) -> Vec<Page> {
                     rows.extend(slider_row(app, "tag_fade_end", "Fully straight at", "No rear steering at or above this speed", &|v| format!("{v:.0} km/h")));
                 }
             }
+            if rows.is_empty() {
+                rows.push((row("Requires a vehicle with at least three physics axles", 'i', "", "", None), "noop".to_string()));
+            }
             rows
-        } else { Vec::new() }),
+        } else {
+            vec![(row("No vehicle loaded", 'i', "", "", None), "noop".to_string())]
+        }),
     ]
+}
+
+/// The tab-axle override is only available for vehicles with three or more physics axles.
+pub(crate) fn tag_axle_available(app: &App) -> bool {
+    app.player.as_ref()
+        .and_then(|p| p.vehicle.rigid.as_ref())
+        .is_some_and(|rb| rb.wheel_axle.iter().copied().max().is_some_and(|last| last >= 2))
 }
 
 pub(super) fn world_pages(app: &App) -> Vec<Page> {

@@ -365,6 +365,14 @@ impl App {
             Some(ListKind::Controller(name, _)) => ListKind::Controller(name.clone(), i.min(3)),
             _ => return,
         };
+        // Leave unavailable tag-axle tabs visible, but do not allow selection.
+        if matches!(&next, ListKind::Vehicle(_)) {
+            if let Some((titles, _)) = crate::game_lists::page_titles(self, &next) {
+                if titles.get(i).is_some_and(|title| title == "Tag axle (unavailable)") {
+                    return;
+                }
+            }
+        }
         self.menus.menu_top = None;
         self.menus.menu_edit = None;
         self.menus.key_capture = None;
@@ -385,7 +393,14 @@ impl App {
         let Some(kind) = self.menus.list_kind.clone() else { return };
         let Some((titles, at)) = crate::game_lists::page_titles(self, &kind) else { return };
         let n = titles.len().max(1);
-        self.settings_tab(if forward { (at + 1) % n } else { (at + n - 1) % n });
+        for offset in 1..=n {
+            let candidate = if forward { (at + offset) % n } else { (at + n - offset) % n };
+            if titles.get(candidate).is_some_and(|title| title == "Tag axle (unavailable)") {
+                continue;
+            }
+            self.settings_tab(candidate);
+            break;
+        }
     }
 
     /// A click on the sidebar of a settings window: page `i`, or (the last box) the way back.
