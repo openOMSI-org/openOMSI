@@ -1610,21 +1610,34 @@ mod embedded_light_tests {
         let position = DVec3::new(10.0, 20.0, 30.0);
         let transform = Mat4::from_rotation_x(std::f32::consts::FRAC_PI_2);
         object_lights(&mut state, &fixture, position, transform, None, 123, &[]);
-        assert_eq!(state.lights.len(), 2);
-        assert_eq!(state.lights[0].shadow_owner, Some(123));
-        assert_eq!(state.lights[1].shadow_owner, None);
-        for (placed, source) in state.lights.iter().zip(&fixture.sco.map_lights) {
-            assert_eq!(
-                placed.position,
-                position
-                    + transform
-                        .transform_point3(glam::Vec3::from(source.pos))
-                        .as_dvec3()
-            );
-            assert_eq!(placed.core, source.radius);
-            assert_eq!(placed.radius, source.radius * 6.0);
-            assert_eq!(placed.color, source.color);
-            assert_eq!(placed.intensity, 1.0);
+        // (a pole's source is two lights: the plain picture's, and the Enhanced one whose core
+        // reaches the street from the head's height)
+        assert_eq!(state.lights.len(), 4);
+        for (pair, (source, owner)) in state
+            .lights
+            .chunks(2)
+            .zip(fixture.sco.map_lights.iter().zip([Some(123), None]))
+        {
+            let held = source.radius.max(0.5).min(15.0);
+            let street = held.max(0.7 * source.pos[2].max(0.0)).min(15.0);
+            for (placed, (core, mode)) in pair.iter().zip([
+                (held, omsi_render::LightMode::Vanilla),
+                (street, omsi_render::LightMode::Enhanced),
+            ]) {
+                assert_eq!(placed.shadow_owner, owner);
+                assert_eq!(
+                    placed.position,
+                    position
+                        + transform
+                            .transform_point3(glam::Vec3::from(source.pos))
+                            .as_dvec3()
+                );
+                assert_eq!(placed.mode, mode);
+                assert_eq!(placed.core, core);
+                assert_eq!(placed.radius, core * 6.0);
+                assert_eq!(placed.color, source.color);
+                assert_eq!(placed.intensity, 1.0);
+            }
         }
     }
 
