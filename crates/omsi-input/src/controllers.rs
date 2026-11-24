@@ -1625,7 +1625,10 @@ impl Controllers {
         }
         for (name, n, down) in &self.raw_buttons {
             if self.editing {
-                self.held.while_editing(&self.cfg, name, *n, *down);
+                // (a switch put in on a device that is off, or with the controllers off,
+                // works nothing once the menu closes either)
+                let live = self.enabled && !self.off(name);
+                self.held.while_editing(&self.cfg, name, *n, *down, live);
             }
             if self.editing || !self.enabled || self.off(name) {
                 continue;

@@ -106,6 +106,7 @@ impl HeldButtons {
         name: &str,
         button: usize,
         down: bool,
+        live: bool,
     ) {
         if let Some(i) = self
             .0
@@ -120,7 +121,7 @@ impl HeldButtons {
             }
             return;
         }
-        if !down {
+        if !down || !live {
             return;
         }
         let Some(d) = find_device_cfg(cfg, name) else {
@@ -250,7 +251,7 @@ mod tests {
         held.event(&cfg, "Wheel", 1, true, &mut actions);
         held.repeating();
         held.release_momentary(&mut actions);
-        held.while_editing(&cfg, "Wheel", 1, false);
+        held.while_editing(&cfg, "Wheel", 1, false, true);
         assert!(held.repeating().is_empty());
         actions.clear();
         held.resume(&cfg, &mut actions);
@@ -268,7 +269,7 @@ mod tests {
         let mut cfg = wheel();
         cfg[0].latching = vec![0];
         let (mut held, mut actions) = (HeldButtons::default(), Vec::new());
-        held.while_editing(&cfg, "Wheel", 0, true);
+        held.while_editing(&cfg, "Wheel", 0, true, true);
         assert!(actions.is_empty());
         assert!(held.repeating().is_empty());
         held.resume(&cfg, &mut actions);
@@ -296,11 +297,23 @@ mod tests {
         let mut cfg = wheel();
         cfg[0].latching = vec![0];
         let (mut held, mut actions) = (HeldButtons::default(), Vec::new());
-        held.while_editing(&cfg, "Wheel", 0, true);
-        held.while_editing(&cfg, "Wheel", 0, false);
-        held.while_editing(&cfg, "Wheel", 2, true);
+        held.while_editing(&cfg, "Wheel", 0, true, true);
+        held.while_editing(&cfg, "Wheel", 0, false, true);
+        held.while_editing(&cfg, "Wheel", 2, true, true);
         held.resume(&cfg, &mut actions);
         held.release(&mut actions);
+        assert!(actions.is_empty());
+    }
+
+    /// A latch put in during the menu on a device that is switched off (or with the
+    /// controllers off) works nothing when the menu closes.
+    #[test]
+    fn a_latch_put_in_on_a_device_that_is_off_does_nothing() {
+        let mut cfg = wheel();
+        cfg[0].latching = vec![0];
+        let (mut held, mut actions) = (HeldButtons::default(), Vec::new());
+        held.while_editing(&cfg, "Wheel", 0, true, false);
+        held.resume(&cfg, &mut actions);
         assert!(actions.is_empty());
     }
 }
