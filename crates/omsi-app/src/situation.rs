@@ -258,13 +258,18 @@ pub(crate) fn apply_situation_parsed(sit: &omsi_content::situation::Situation, a
         args.situation_vars = v.vars.iter().map(|(n, x)| (n.clone(), *x as f32)).collect();
         args.situation_odometer_km = saved_odometer_km(v, legacy_odometer_ids);
         // the livery it was driven in: the scheme's index is the `Colorscheme` variable (the
-        // bus came back in its default paint - the variable alone repaints nothing)
+        // bus came back in its default paint - the variable alone repaints nothing). -1 is
+        // the default paint, which is what loads unless the starter named one itself with
+        // `--paint`: Bus Company Simulator starts its buses as `--situation laststn.osn
+        // --paint N` over a situation whose vehicle says -1, and clearing the paint named
+        // there put every one of them in plain white (#3748).
         if let Some((_, c)) = v
             .vars
             .iter()
             .find(|(n, _)| n.eq_ignore_ascii_case("Colorscheme"))
+            .filter(|(_, c)| *c >= 0.0)
         {
-            args.paint = (*c >= 0.0).then(|| format!("{}", *c as i64));
+            args.paint = Some(format!("{}", *c as i64));
         }
         args.situation_strvars = v.string_vars.clone();
         args.situation_cars = v.cars.clone();
@@ -635,9 +640,27 @@ mod tests {
             }],
             ..Default::default()
         };
-        let mut args = crate::cli::Args::parse_from(["openomsi", "--paint", "InterEssonne"]);
+        let mut args = crate::cli::Args::parse_from(["openomsi"]);
         apply_situation_parsed(&sit, &mut args);
         assert_eq!(args.paint, None);
+    }
+
+    /// #3748: Bus Company Simulator names the paint on the command line over a situation
+    /// whose vehicle is in its default paint (-1); the paint named is the one it wears.
+    #[test]
+    fn a_paint_named_with_the_situation_wins_over_its_default_paint() {
+        let sit = omsi_content::situation::Situation {
+            vehicles: vec![omsi_content::situation::SituationVehicle {
+                file: "Vehicles/MAN_NL_NG/MAN_EN92.bus".into(),
+                is_my_vehicle: true,
+                vars: vec![("Colorscheme".into(), -1.0)],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let mut args = crate::cli::Args::parse_from(["openomsi", "--paint", "156"]);
+        apply_situation_parsed(&sit, &mut args);
+        assert_eq!(args.paint.as_deref(), Some("156"));
     }
 
     #[test]
