@@ -7,9 +7,14 @@ pub fn pick_mod(zip: bool) -> Option<PathBuf> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         if zip {
-            rfd::FileDialog::new().set_title(crate::i18n::tr("Choose a mod archive")).add_filter(crate::i18n::tr("Mod archive"), &["zip", "7z", "rar"]).pick_file()
+            rfd::FileDialog::new()
+                .set_title(crate::i18n::tr("Choose a mod archive"))
+                .add_filter(crate::i18n::tr("Mod archive"), &["zip", "7z", "rar"])
+                .pick_file()
         } else {
-            rfd::FileDialog::new().set_title(crate::i18n::tr("Choose the mod folder")).pick_folder()
+            rfd::FileDialog::new()
+                .set_title(crate::i18n::tr("Choose the mod folder"))
+                .pick_folder()
         }
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -48,7 +53,10 @@ pub fn pick_file(title: &str) -> Option<PathBuf> {
 pub fn pick_hofs(title: &str, filter: &str) -> Option<Vec<PathBuf>> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        rfd::FileDialog::new().set_title(title).add_filter(filter, &["hof"]).pick_files()
+        rfd::FileDialog::new()
+            .set_title(title)
+            .add_filter(filter, &["hof"])
+            .pick_files()
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
@@ -61,8 +69,14 @@ pub fn pick_hofs(title: &str, filter: &str) -> Option<Vec<PathBuf>> {
 pub fn pick_graphics_profile(export: bool) -> Option<PathBuf> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        let title = if export { "Export graphics profile" } else { "Import graphics profile" };
-        let dialog = rfd::FileDialog::new().set_title(crate::i18n::tr(title)).add_filter("JSON", &["json"]);
+        let title = if export {
+            "Export graphics profile"
+        } else {
+            "Import graphics profile"
+        };
+        let dialog = rfd::FileDialog::new()
+            .set_title(crate::i18n::tr(title))
+            .add_filter("JSON", &["json"]);
         if export {
             dialog.set_file_name("graphics-profile.json").save_file()
         } else {

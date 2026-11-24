@@ -71,18 +71,28 @@ pub fn png_size(png: &[u8]) -> Option<(u32, u32)> {
     if png.len() < 24 || !png.starts_with(b"\x89PNG\r\n\x1a\n") || &png[12..16] != b"IHDR" {
         return None;
     }
-    Some((u32::from_be_bytes(png[16..20].try_into().ok()?), u32::from_be_bytes(png[20..24].try_into().ok()?)))
+    Some((
+        u32::from_be_bytes(png[16..20].try_into().ok()?),
+        u32::from_be_bytes(png[20..24].try_into().ok()?),
+    ))
 }
 
 static CLASSIFIER: OnceLock<RwLock<Option<Arc<dyn ImageClassifier>>>> = OnceLock::new();
 
 /// Plug in the icon classifier of this process (replacing an earlier one).
 pub fn set_image_classifier(c: Arc<dyn ImageClassifier>) {
-    *CLASSIFIER.get_or_init(Default::default).write().unwrap_or_else(|e| e.into_inner()) = Some(c);
+    *CLASSIFIER
+        .get_or_init(Default::default)
+        .write()
+        .unwrap_or_else(|e| e.into_inner()) = Some(c);
 }
 
 fn classifier() -> Option<Arc<dyn ImageClassifier>> {
-    CLASSIFIER.get()?.read().unwrap_or_else(|e| e.into_inner()).clone()
+    CLASSIFIER
+        .get()?
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
 }
 
 /// The moderation the game uses: `rustrict` and our rules for text, the plugged-in classifier
@@ -98,7 +108,10 @@ impl Moderator for BuiltinModerator {
             return Verdict::Flagged("hidden or control characters");
         }
         let low = t.to_lowercase();
-        if ["http:", "https:", "www.", "discord.gg", "t.me/"].iter().any(|m| low.contains(m)) {
+        if ["http:", "https:", "www.", "discord.gg", "t.me/"]
+            .iter()
+            .any(|m| low.contains(m))
+        {
             return Verdict::Flagged("an address");
         }
         if t.is(rustrict::Type::INAPPROPRIATE) {
@@ -115,12 +128,18 @@ impl Moderator for BuiltinModerator {
 /// An icon's verdict with this classifier (None: none plugged in).
 pub fn icon_verdict(classifier: Option<&dyn ImageClassifier>, png: &[u8]) -> IconVerdict {
     // (a picture that is not a small PNG is never shown, whatever the classifier thinks)
-    let Some((w, h)) = png_size(png) else { return IconVerdict::Flagged("not a PNG") };
+    let Some((w, h)) = png_size(png) else {
+        return IconVerdict::Flagged("not a PNG");
+    };
     if png.len() > MAX_ICON_BYTES || w == 0 || h == 0 || w > MAX_ICON_SIDE || h > MAX_ICON_SIDE {
         return IconVerdict::Flagged("too big (at most 128x128 and 256 KB)");
     }
-    let Some(c) = classifier else { return IconVerdict::Unchecked };
-    let Some(rgba) = decode_rgba(png) else { return IconVerdict::Flagged("not a readable PNG") };
+    let Some(c) = classifier else {
+        return IconVerdict::Unchecked;
+    };
+    let Some(rgba) = decode_rgba(png) else {
+        return IconVerdict::Flagged("not a readable PNG");
+    };
     match c.score(&rgba.0, rgba.1, rgba.2) {
         Some(s) if s >= ICON_THRESHOLD => IconVerdict::Flagged("flagged by the image check"),
         Some(s) if s.is_finite() => IconVerdict::Cleared,
@@ -129,7 +148,9 @@ pub fn icon_verdict(classifier: Option<&dyn ImageClassifier>, png: &[u8]) -> Ico
 }
 
 fn decode_rgba(png: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
-    let img = image::load_from_memory_with_format(png, image::ImageFormat::Png).ok()?.to_rgba8();
+    let img = image::load_from_memory_with_format(png, image::ImageFormat::Png)
+        .ok()?
+        .to_rgba8();
     let (w, h) = img.dimensions();
     Some((img.into_raw(), w, h))
 }
@@ -148,8 +169,19 @@ pub struct Shown {
 /// A text as the list keeps it: no control characters, runs of spaces as one, at most `max`
 /// characters.
 pub fn clean(text: &str, max: usize) -> String {
-    let spaced: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
-    spaced.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(max).collect::<String>().trim_end().to_string()
+    let spaced: String = text
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    spaced
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(max)
+        .collect::<String>()
+        .trim_end()
+        .to_string()
 }
 
 /// What stands in the place of a covered text.
@@ -171,23 +203,40 @@ pub fn show_listing(m: &dyn Moderator, name: &str, motd: &str, icon: Option<&[u8
     let (name, c1) = show_text(m, name, MAX_NAME);
     let (motd, c2) = show_text(m, motd, MAX_MOTD);
     let icon_ok = icon.is_some_and(|i| m.check_icon(i) == IconVerdict::Cleared);
-    Shown { name, motd, icon_ok, covered: c1 || c2 }
+    Shown {
+        name,
+        motd,
+        icon_ok,
+        covered: c1 || c2,
+    }
 }
 
 /// Why a host may not list itself, if it may not: its name or message is flagged, or its icon
 /// is. (An icon that cannot be checked does not stop the listing: it goes without an icon.)
-pub fn listing_refusal(m: &dyn Moderator, name: &str, motd: &str, icon: Option<&[u8]>) -> Option<String> {
+pub fn listing_refusal(
+    m: &dyn Moderator,
+    name: &str,
+    motd: &str,
+    icon: Option<&[u8]>,
+) -> Option<String> {
     if name.trim().is_empty() {
         return Some("the server has no name".into());
     }
     if let Verdict::Flagged(why) = m.check_text(name) {
-        return Some(format!("the server's name is not allowed in the public list ({why}): change `name` in server.cfg"));
+        return Some(format!(
+            "the server's name is not allowed in the public list ({why}): change `name` in server.cfg"
+        ));
     }
     if let Verdict::Flagged(why) = m.check_text(motd) {
-        return Some(format!("the server's message is not allowed in the public list ({why}): change `motd` in server.cfg"));
+        return Some(format!(
+            "the server's message is not allowed in the public list ({why}): change `motd` in server.cfg"
+        ));
     }
-    if let Some(IconVerdict::Flagged(why)) = icon.filter(|i| !i.is_empty()).map(|i| m.check_icon(i)) {
-        return Some(format!("the server's icon is not allowed in the public list ({why}): change server-icon.png"));
+    if let Some(IconVerdict::Flagged(why)) = icon.filter(|i| !i.is_empty()).map(|i| m.check_icon(i))
+    {
+        return Some(format!(
+            "the server's icon is not allowed in the public list ({why}): change server-icon.png"
+        ));
     }
     None
 }
@@ -228,10 +277,22 @@ mod tests {
     fn a_registration_is_refused_for_a_flagged_name_message_or_icon() {
         let m = Double;
         assert_eq!(listing_refusal(&m, "Fine server", "Welcome", None), None);
-        assert!(listing_refusal(&m, "A FLAGGED name", "x", None).unwrap().contains("name"));
-        assert!(listing_refusal(&m, "Fine", "FLAGGED", None).unwrap().contains("message"));
+        assert!(
+            listing_refusal(&m, "A FLAGGED name", "x", None)
+                .unwrap()
+                .contains("name")
+        );
+        assert!(
+            listing_refusal(&m, "Fine", "FLAGGED", None)
+                .unwrap()
+                .contains("message")
+        );
         assert!(listing_refusal(&m, "  ", "", None).is_some());
-        assert!(listing_refusal(&m, "Fine", "", Some(b"xF")).unwrap().contains("icon"));
+        assert!(
+            listing_refusal(&m, "Fine", "", Some(b"xF"))
+                .unwrap()
+                .contains("icon")
+        );
         // an icon nobody could check does not stop the listing (it goes without one)
         assert_eq!(listing_refusal(&m, "Fine", "", Some(b"x?")), None);
         assert_eq!(listing_refusal(&m, "Fine", "", Some(b"xC")), None);
@@ -241,21 +302,48 @@ mod tests {
     fn a_client_covers_flagged_text_and_shows_only_an_icon_it_cleared() {
         let m = Double;
         let s = show_listing(&m, "Nice\nbus  server", "FLAGGED words", Some(b"xC"));
-        assert_eq!(s, Shown { name: "Nice bus server".into(), motd: COVERED.into(), icon_ok: true, covered: true });
+        assert_eq!(
+            s,
+            Shown {
+                name: "Nice bus server".into(),
+                motd: COVERED.into(),
+                icon_ok: true,
+                covered: true
+            }
+        );
         assert!(!show_listing(&m, "ok", "ok", Some(b"xF")).icon_ok);
-        assert!(!show_listing(&m, "ok", "ok", Some(b"x?")).icon_ok, "unchecked is not shown");
+        assert!(
+            !show_listing(&m, "ok", "ok", Some(b"x?")).icon_ok,
+            "unchecked is not shown"
+        );
         assert!(!show_listing(&m, "ok", "ok", None).icon_ok);
         // too long is cut, not refused
-        assert_eq!(show_listing(&m, &"n".repeat(200), "", None).name.chars().count(), MAX_NAME);
+        assert_eq!(
+            show_listing(&m, &"n".repeat(200), "", None)
+                .name
+                .chars()
+                .count(),
+            MAX_NAME
+        );
     }
 
     #[test]
     fn the_builtin_rules_for_the_list() {
         let m = BuiltinModerator;
-        for fine in ["Berlin Spandau 24/7", "Bus Simulator Brasil", "Welcome! Drive safely.", "Linha 100 - Bahnhof"] {
+        for fine in [
+            "Berlin Spandau 24/7",
+            "Bus Simulator Brasil",
+            "Welcome! Drive safely.",
+            "Linha 100 - Bahnhof",
+        ] {
             assert_eq!(m.check_text(fine), Verdict::Clean, "{fine}");
         }
-        for (bad, why) in [("join www.example.com", "an address"), ("https://x.example", "an address"), ("a\u{202e}b", "hidden or control characters"), ("tab\there", "hidden or control characters")] {
+        for (bad, why) in [
+            ("join www.example.com", "an address"),
+            ("https://x.example", "an address"),
+            ("a\u{202e}b", "hidden or control characters"),
+            ("tab\there", "hidden or control characters"),
+        ] {
             assert_eq!(m.check_text(bad), Verdict::Flagged(why), "{bad}");
         }
         // a word the filter's own tests carry
@@ -269,7 +357,13 @@ mod tests {
     impl ImageClassifier for Reddish {
         fn score(&self, rgba: &[u8], w: u32, h: u32) -> Option<f32> {
             assert_eq!(rgba.len(), (w * h * 4) as usize);
-            self.0.or_else(|| Some(rgba.chunks(4).map(|p| p[0] as f32).sum::<f32>() / (rgba.len() / 4) as f32 / 255.0))
+            self.0.or_else(|| {
+                Some(
+                    rgba.chunks(4).map(|p| p[0] as f32).sum::<f32>()
+                        / (rgba.len() / 4) as f32
+                        / 255.0,
+                )
+            })
         }
     }
 
@@ -283,23 +377,44 @@ mod tests {
     #[test]
     fn a_classifier_clears_or_flags_a_decoded_icon_and_not_ready_is_unchecked() {
         let (blue, red) = (png_of([10, 10, 200]), png_of([250, 10, 10]));
-        assert_eq!(icon_verdict(Some(&Reddish(None)), &blue), IconVerdict::Cleared);
-        assert!(matches!(icon_verdict(Some(&Reddish(None)), &red), IconVerdict::Flagged(_)));
-        assert_eq!(icon_verdict(Some(&Reddish(Some(f32::NAN))), &blue), IconVerdict::Unchecked);
+        assert_eq!(
+            icon_verdict(Some(&Reddish(None)), &blue),
+            IconVerdict::Cleared
+        );
+        assert!(matches!(
+            icon_verdict(Some(&Reddish(None)), &red),
+            IconVerdict::Flagged(_)
+        ));
+        assert_eq!(
+            icon_verdict(Some(&Reddish(Some(f32::NAN))), &blue),
+            IconVerdict::Unchecked
+        );
         assert_eq!(icon_verdict(None, &blue), IconVerdict::Unchecked);
         // what is not a picture is flagged whatever the classifier says
         let mut broken = png_header(8, 8);
         broken.extend_from_slice(b"garbage");
-        assert!(matches!(icon_verdict(Some(&Reddish(Some(0.0))), &broken), IconVerdict::Flagged(_)));
+        assert!(matches!(
+            icon_verdict(Some(&Reddish(Some(0.0))), &broken),
+            IconVerdict::Flagged(_)
+        ));
     }
 
     #[test]
     fn an_icon_is_never_cleared_without_a_classifier() {
         let m = BuiltinModerator;
         assert_eq!(m.check_icon(&png_header(64, 64)), IconVerdict::Unchecked);
-        assert!(matches!(m.check_icon(b"GIF89a....................."), IconVerdict::Flagged(_)));
-        assert!(matches!(m.check_icon(&png_header(5000, 5000)), IconVerdict::Flagged(_)));
-        assert!(matches!(m.check_icon(&png_header(0, 64)), IconVerdict::Flagged(_)));
+        assert!(matches!(
+            m.check_icon(b"GIF89a....................."),
+            IconVerdict::Flagged(_)
+        ));
+        assert!(matches!(
+            m.check_icon(&png_header(5000, 5000)),
+            IconVerdict::Flagged(_)
+        ));
+        assert!(matches!(
+            m.check_icon(&png_header(0, 64)),
+            IconVerdict::Flagged(_)
+        ));
         assert_eq!(png_size(&png_header(64, 32)), Some((64, 32)));
         assert_eq!(png_size(b"nope"), None);
     }

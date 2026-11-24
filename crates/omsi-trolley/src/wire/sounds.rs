@@ -11,7 +11,9 @@ pub enum SoundChoice {
 impl SoundChoice {
     pub fn parse(v: &[&str]) -> SoundChoice {
         match v.first().map(|s| s.to_ascii_lowercase()).as_deref() {
-            None | Some("on" | "1" | "yes" | "true" | "builtin" | "default") => SoundChoice::Builtin,
+            None | Some("on" | "1" | "yes" | "true" | "builtin" | "default") => {
+                SoundChoice::Builtin
+            }
             Some("off" | "0" | "no" | "false" | "none") => SoundChoice::Off,
             Some(_) => SoundChoice::File(v.join(" ")),
         }
@@ -27,6 +29,9 @@ pub struct WireSounds {
 
 impl Default for WireSounds {
     fn default() -> Self {
-        Self { frog: SoundChoice::Builtin, switch: SoundChoice::Off }
+        Self {
+            frog: SoundChoice::Builtin,
+            switch: SoundChoice::Off,
+        }
     }
 }

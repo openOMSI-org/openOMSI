@@ -116,7 +116,11 @@ impl Jitter {
             // nothing later either: the sender stopped, or the network did
             self.lost_run += 1;
             if self.lost_run > MAX_CONCEAL {
-                *self = Jitter { late: self.late, dropped: self.dropped, ..Jitter::default() };
+                *self = Jitter {
+                    late: self.late,
+                    dropped: self.dropped,
+                    ..Jitter::default()
+                };
                 return Playout::Dead;
             }
             self.next = Some(next + 1);
@@ -132,7 +136,11 @@ impl Jitter {
 
     /// Start over (the speaker stopped).
     pub fn reset(&mut self) {
-        *self = Jitter { late: self.late, dropped: self.dropped, ..Jitter::default() };
+        *self = Jitter {
+            late: self.late,
+            dropped: self.dropped,
+            ..Jitter::default()
+        };
     }
 }
 
@@ -169,7 +177,15 @@ mod tests {
             j.push(s, p(s as u8));
         }
         let got: Vec<_> = (0..4).map(|_| j.pop()).collect();
-        assert_eq!(got, vec![Playout::Frame(p(254)), Playout::Frame(p(255)), Playout::Frame(p(0)), Playout::Frame(p(1))]);
+        assert_eq!(
+            got,
+            vec![
+                Playout::Frame(p(254)),
+                Playout::Frame(p(255)),
+                Playout::Frame(p(0)),
+                Playout::Frame(p(1))
+            ]
+        );
     }
 
     #[test]

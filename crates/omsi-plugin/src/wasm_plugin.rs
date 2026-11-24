@@ -6,10 +6,10 @@
 //! `emit` reaching its own handlers) cannot enter the module again there - it is run right
 //! after the module's call returns, in order. Its result is not seen by the caller (nil).
 
-use crate::api::runtime::{self, Binding, CallError, PluginState, SharedHub};
-use crate::api::{self, json, Ctx, Perm, Value};
-use crate::wasm::{Dispatch, WasmPlugin};
 use crate::PluginIo;
+use crate::api::runtime::{self, Binding, CallError, PluginState, SharedHub};
+use crate::api::{self, Ctx, Perm, Value, json};
+use crate::wasm::{Dispatch, WasmPlugin};
 use std::cell::{Cell, RefCell};
 use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
@@ -57,15 +57,22 @@ impl WasmBinding {
         }
         // (taken one at a time: a callback may queue more)
         loop {
-            let Some((cb, args)) = self.pending.borrow_mut().pop_front() else { break };
+            let Some((cb, args)) = self.pending.borrow_mut().pop_front() else {
+                break;
+            };
             let text = json::encode(&Value::List(args));
-            let Ok(mut m) = self.module.try_borrow_mut() else { break };
+            let Ok(mut m) = self.module.try_borrow_mut() else {
+                break;
+            };
             m.callback(&mut d, cb as i64, &text);
         }
     }
 
     fn disabled(&self) -> Option<String> {
-        self.module.try_borrow().ok().and_then(|m| m.disabled.clone())
+        self.module
+            .try_borrow()
+            .ok()
+            .and_then(|m| m.disabled.clone())
     }
 }
 
@@ -101,8 +108,16 @@ impl Dispatch for Disp<'_> {
         };
         // SAFETY: the pointers are set by `WasmHost::with_ctx` for the length of the call
         // into the module that is calling here, on this thread (as Lua's binding does)
-        let mut ctx = unsafe { Ctx::from_raw(self.raw.io, self.raw.state, self.binding as &dyn Binding as *const dyn Binding) };
-        api::call(&mut ctx, name, args).map(|v| json::encode(&v)).map_err(|e| e.0)
+        let mut ctx = unsafe {
+            Ctx::from_raw(
+                self.raw.io,
+                self.raw.state,
+                self.binding as &dyn Binding as *const dyn Binding,
+            )
+        };
+        api::call(&mut ctx, name, args)
+            .map(|v| json::encode(&v))
+            .map_err(|e| e.0)
     }
 
     fn log(&mut self, level: i32, text: &str) {
@@ -128,15 +143,42 @@ pub struct WasmHost {
 
 impl WasmHost {
     /// Load the module and start it (`oop_start`, then the `start` event).
-    pub fn start(spec: WasmSpec, path: &Path, io: &mut dyn PluginIo, hub: SharedHub) -> Result<WasmHost, String> {
+    pub fn start(
+        spec: WasmSpec,
+        path: &Path,
+        io: &mut dyn PluginIo,
+        hub: SharedHub,
+    ) -> Result<WasmHost, String> {
         let module = WasmPlugin::load(&spec.name, &spec.wasm)?;
         let owner = crate::lua::next_owner();
-        let mut state = PluginState::new(&spec.name, "WASM plugin", "wasm", owner, hub, spec.folder.clone(), spec.data_dir.clone());
+        let mut state = PluginState::new(
+            &spec.name,
+            "WASM plugin",
+            "wasm",
+            owner,
+            hub,
+            spec.folder.clone(),
+            spec.data_dir.clone(),
+        );
         state.perms = spec.perms.clone();
-        state.process_allowed = state.hub.process_permissions.is_some() || state.hub.process_grants.has_candidate(path, state.folder.as_deref());
+        state.process_allowed = state.hub.process_permissions.is_some()
+            || state
+                .hub
+                .process_grants
+                .has_candidate(path, state.folder.as_deref());
         state.process_entry = Some(path.to_path_buf());
-        let binding = WasmBinding { module: RefCell::new(module), raw: Cell::new(None), pending: RefCell::new(VecDeque::new()) };
-        let mut p = WasmHost { name: spec.name.clone(), path: path.to_path_buf(), binding: Box::new(binding), state: Box::new(state), disabled: false };
+        let binding = WasmBinding {
+            module: RefCell::new(module),
+            raw: Cell::new(None),
+            pending: RefCell::new(VecDeque::new()),
+        };
+        let mut p = WasmHost {
+            name: spec.name.clone(),
+            path: path.to_path_buf(),
+            binding: Box::new(binding),
+            state: Box::new(state),
+            disabled: false,
+        };
         let r = p.with_ctx(io, |ctx, b| {
             b.run(|m, d| m.start(d));
             if let Some(why) = b.disabled() {
@@ -146,7 +188,14 @@ impl WasmHost {
         });
         if let Err(e) = r {
             log::warn!("{} {}", p.state.tag, e.msg);
-            io.message(&format!("WASM plugin {} failed: {}", p.name, e.msg.lines().next().unwrap_or("")), 8.0);
+            io.message(
+                &format!(
+                    "WASM plugin {} failed: {}",
+                    p.name,
+                    e.msg.lines().next().unwrap_or("")
+                ),
+                8.0,
+            );
             p.with_ctx(io, |ctx, _| runtime::finish(ctx));
             return Err(format!("{} did not start", p.name));
         }
@@ -158,16 +207,26 @@ impl WasmHost {
         &self.state
     }
 
-    fn with_ctx<R>(&mut self, io: &mut dyn PluginIo, f: impl FnOnce(&mut Ctx<'_>, &WasmBinding) -> R) -> R {
+    fn with_ctx<R>(
+        &mut self,
+        io: &mut dyn PluginIo,
+        f: impl FnOnce(&mut Ctx<'_>, &WasmBinding) -> R,
+    ) -> R {
         // SAFETY: the lifetime is erased only for the length of this call; the pointers are
         // cleared before `io` goes out of reach
         let io_ptr: *mut (dyn PluginIo + '_) = io;
-        let io_ptr = unsafe { std::mem::transmute::<*mut (dyn PluginIo + '_), *mut (dyn PluginIo + 'static)>(io_ptr) };
-        let raw = Raw { io: io_ptr, state: &mut *self.state };
+        let io_ptr = unsafe {
+            std::mem::transmute::<*mut (dyn PluginIo + '_), *mut (dyn PluginIo + 'static)>(io_ptr)
+        };
+        let raw = Raw {
+            io: io_ptr,
+            state: &mut *self.state,
+        };
         let b: &WasmBinding = &self.binding;
         b.raw.set(Some(raw));
         // SAFETY: both live while `self` and `io` are borrowed here
-        let mut ctx = unsafe { Ctx::from_raw(raw.io, raw.state, b as &dyn Binding as *const dyn Binding) };
+        let mut ctx =
+            unsafe { Ctx::from_raw(raw.io, raw.state, b as &dyn Binding as *const dyn Binding) };
         let r = f(&mut ctx, b);
         b.raw.set(None);
         r

@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// What started: the launcher (watched) or a game session it started (noted only).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -90,12 +90,21 @@ fn path() -> PathBuf {
 }
 
 fn strings(v: &Value) -> Vec<String> {
-    v.as_array().map(|a| a.iter().filter_map(|s| s.as_str().map(str::to_string)).collect()).unwrap_or_default()
+    v.as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|s| s.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 impl Journal {
     pub fn load() -> Journal {
-        let Some(v) = std::fs::read_to_string(path()).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else {
+        let Some(v) = std::fs::read_to_string(path())
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        else {
             return Journal::default();
         };
         let starts = v["starts"]
@@ -112,21 +121,44 @@ impl Journal {
                     .collect()
             })
             .unwrap_or_default();
-        let remote_bad = v["remote_bad"]["version"].as_str().map(|ver| (ver.to_string(), v["remote_bad"]["message"].as_str().unwrap_or("").to_string()));
-        Journal { starts, safe_tried: strings(&v["safe_tried"]), gave_up: strings(&v["gave_up"]), remote_bad }
+        let remote_bad = v["remote_bad"]["version"].as_str().map(|ver| {
+            (
+                ver.to_string(),
+                v["remote_bad"]["message"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string(),
+            )
+        });
+        Journal {
+            starts,
+            safe_tried: strings(&v["safe_tried"]),
+            gave_up: strings(&v["gave_up"]),
+            remote_bad,
+        }
     }
 
     pub fn save(&self) {
         let starts: Vec<Value> = self.starts.iter().map(|e| json!({"kind": e.kind, "version": e.version, "pid": e.pid, "healthy": e.healthy, "end": e.end})).collect();
-        let mut v = json!({"starts": starts, "safe_tried": self.safe_tried, "gave_up": self.gave_up});
+        let mut v =
+            json!({"starts": starts, "safe_tried": self.safe_tried, "gave_up": self.gave_up});
         if let Some((ver, msg)) = &self.remote_bad {
             v["remote_bad"] = json!({"version": ver, "message": msg});
         }
-        let _ = omsi_platform::recovery::write_atomic(&path(), &serde_json::to_string_pretty(&v).unwrap_or_default());
+        let _ = omsi_platform::recovery::write_atomic(
+            &path(),
+            &serde_json::to_string_pretty(&v).unwrap_or_default(),
+        );
     }
 
     pub fn begin(&mut self, kind: Kind, version: &str, _build: &str, pid: u32) {
-        self.starts.push(Entry { kind: kind.name().to_string(), version: version.to_string(), pid, healthy: false, end: String::new() });
+        self.starts.push(Entry {
+            kind: kind.name().to_string(),
+            version: version.to_string(),
+            pid,
+            healthy: false,
+            end: String::new(),
+        });
         let n = self.starts.len();
         if n > KEEP {
             self.starts.drain(..n - KEEP);
@@ -134,7 +166,10 @@ impl Journal {
     }
 
     fn entry(&mut self, pid: u32) -> Option<&mut Entry> {
-        self.starts.iter_mut().rev().find(|e| e.pid == pid && e.end.is_empty())
+        self.starts
+            .iter_mut()
+            .rev()
+            .find(|e| e.pid == pid && e.end.is_empty())
     }
 
     pub fn mark_healthy(&mut self, pid: u32) {
@@ -152,9 +187,18 @@ impl Journal {
     /// The failed starts of `kind` of `version` since its last good one, and whether it ever
     /// started well here.
     pub fn record(&self, kind: Kind, version: &str, alive: impl Fn(u32) -> bool) -> (usize, bool) {
-        let mine: Vec<&Entry> = self.starts.iter().filter(|e| e.kind == kind.name() && e.version == version).collect();
+        let mine: Vec<&Entry> = self
+            .starts
+            .iter()
+            .filter(|e| e.kind == kind.name() && e.version == version)
+            .collect();
         let ever_healthy = mine.iter().any(|e| e.healthy);
-        let failures = mine.iter().rev().take_while(|e| !e.healthy).filter(|e| e.failed(&alive)).count();
+        let failures = mine
+            .iter()
+            .rev()
+            .take_while(|e| !e.healthy)
+            .filter(|e| e.failed(&alive))
+            .count();
         (failures, ever_healthy)
     }
 
@@ -179,23 +223,39 @@ mod tests {
     use super::*;
 
     fn entry(kind: &str, version: &str, pid: u32, healthy: bool, end: &str) -> Entry {
-        Entry { kind: kind.into(), version: version.into(), pid, healthy, end: end.into() }
+        Entry {
+            kind: kind.into(),
+            version: version.into(),
+            pid,
+            healthy,
+            end: end.into(),
+        }
     }
 
     #[test]
     fn a_fresh_version_that_fails_once_is_broken_an_old_good_one_after_two() {
         let dead = |_| false;
         let mut j = Journal::default();
-        j.starts.push(entry("launcher", "0.2.31", 10, false, "crash"));
+        j.starts
+            .push(entry("launcher", "0.2.31", 10, false, "crash"));
         assert!(j.broken(Kind::Launcher, "0.2.31", dead));
         let mut j = Journal::default();
         j.starts.push(entry("launcher", "0.2.30", 9, true, "clean"));
-        j.starts.push(entry("launcher", "0.2.30", 10, false, "crash"));
-        assert!(!j.broken(Kind::Launcher, "0.2.30", dead), "one crash of a version that ran well is no broken release");
-        j.starts.push(entry("launcher", "0.2.30", 11, false, "hang"));
+        j.starts
+            .push(entry("launcher", "0.2.30", 10, false, "crash"));
+        assert!(
+            !j.broken(Kind::Launcher, "0.2.30", dead),
+            "one crash of a version that ran well is no broken release"
+        );
+        j.starts
+            .push(entry("launcher", "0.2.30", 11, false, "hang"));
         assert!(j.broken(Kind::Launcher, "0.2.30", dead));
-        j.starts.push(entry("launcher", "0.2.30", 12, true, "clean"));
-        assert!(!j.broken(Kind::Launcher, "0.2.30", dead), "a good start clears it");
+        j.starts
+            .push(entry("launcher", "0.2.30", 12, true, "clean"));
+        assert!(
+            !j.broken(Kind::Launcher, "0.2.30", dead),
+            "a good start clears it"
+        );
     }
 
     #[test]
@@ -206,7 +266,8 @@ mod tests {
         assert!(j.broken(Kind::Game, "0.2.31", |_| false));
         // a clean end before the first frames (the player closed it) is no failure
         let mut j = Journal::default();
-        j.starts.push(entry("launcher", "0.2.31", 21, false, "clean"));
+        j.starts
+            .push(entry("launcher", "0.2.31", 21, false, "clean"));
         assert!(!j.broken(Kind::Launcher, "0.2.31", |_| false));
         // other kinds and versions do not count
         assert!(!j.broken(Kind::Game, "0.2.31", |_| false));

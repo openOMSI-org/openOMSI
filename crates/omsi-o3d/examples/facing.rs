@@ -2,7 +2,9 @@
 //! their own normals - `facing <files>`.
 fn main() {
     for p in std::env::args().skip(1) {
-        let Ok(m) = omsi_o3d::load_mesh(std::path::Path::new(&p)) else { continue };
+        let Ok(m) = omsi_o3d::load_mesh(std::path::Path::new(&p)) else {
+            continue;
+        };
         let (mut against, mut counted) = (0usize, 0usize);
         for t in &m.triangles {
             let v = t.indices.map(|i| &m.vertices[i as usize]);

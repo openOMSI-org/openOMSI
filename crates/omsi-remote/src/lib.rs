@@ -1,4 +1,6 @@
 pub mod cockpit;
+mod doors;
+pub mod firewall;
 mod json;
 mod layouts;
 pub mod nav;
@@ -8,8 +10,6 @@ mod queue;
 mod server;
 mod session;
 pub mod sign;
-mod doors;
-pub mod firewall;
 pub use doors::{doorways, tried_doors};
 mod skins;
 mod texts;
@@ -109,7 +109,11 @@ impl Shared {
         let mut skins: Vec<String> = lock(&self.skins).keys().cloned().collect();
         skins.sort();
         let vehicle = lock(&self.vehicle).clone();
-        let msg = Arc::new(json::vehicle_message(vehicle.as_deref(), &self.store, &skins));
+        let msg = Arc::new(json::vehicle_message(
+            vehicle.as_deref(),
+            &self.store,
+            &skins,
+        ));
         let mut f = self.feed();
         f.vehicle_msg = msg;
         f.vehicle_seq += 1;
@@ -159,7 +163,12 @@ impl Remote {
         let port = server::start(port, shared.clone())?;
         log::info!("remote cockpit: listening on port {port}");
         let map_tx = picture::encoder(shared.pictures.clone());
-        Ok(Remote { shared, port, last_state: serde_json::Value::Null, map_tx })
+        Ok(Remote {
+            shared,
+            port,
+            last_state: serde_json::Value::Null,
+            map_tx,
+        })
     }
 
     pub fn port(&self) -> u16 {
@@ -190,7 +199,10 @@ impl Remote {
     }
 
     pub fn holds_a_door(&self) -> bool {
-        lock(&self.shared.held).values().flatten().any(|n| n.to_ascii_lowercase().starts_with("door"))
+        lock(&self.shared.held)
+            .values()
+            .flatten()
+            .any(|n| n.to_ascii_lowercase().starts_with("door"))
     }
 
     pub fn release_held(&self) {
@@ -200,7 +212,10 @@ impl Remote {
     }
 
     pub fn release_all(&self) -> Vec<String> {
-        let mut names: Vec<String> = lock(&self.shared.held).drain().flat_map(|(_, v)| v).collect();
+        let mut names: Vec<String> = lock(&self.shared.held)
+            .drain()
+            .flat_map(|(_, v)| v)
+            .collect();
         names.sort();
         names.dedup();
         names
@@ -225,7 +240,11 @@ impl Remote {
     pub fn set_doors(&self, doors: Vec<Vec<usize>>, aliases: Vec<(String, String)>) {
         let mut slot = lock(&self.shared.vehicle);
         let Some(old) = slot.as_deref() else { return };
-        *slot = Some(Arc::new(Vehicle { doors, aliases, ..old.clone() }));
+        *slot = Some(Arc::new(Vehicle {
+            doors,
+            aliases,
+            ..old.clone()
+        }));
         drop(slot);
         self.shared.rebuild_vehicle();
     }
@@ -269,7 +288,13 @@ impl Remote {
 
     pub fn set_map_picture(&self, w: u32, h: u32, row: u32, bgra: bool, data: Vec<u8>) {
         if let Some(tx) = self.map_tx.as_ref() {
-            let _ = tx.try_send(picture::Raw { w, h, row, bgra, data });
+            let _ = tx.try_send(picture::Raw {
+                w,
+                h,
+                row,
+                bgra,
+                data,
+            });
         }
     }
 
@@ -287,7 +312,12 @@ impl Remote {
             *d = None;
         }
         d.map(|x| match x.at.elapsed() > DRIVE_FRESH {
-            true => Drive { throttle: 0.0, brake: 0.0, held: false, ..x },
+            true => Drive {
+                throttle: 0.0,
+                brake: 0.0,
+                held: false,
+                ..x
+            },
             false => x,
         })
     }
@@ -300,7 +330,10 @@ pub fn pairing_url(ip: &str, port: u16, pin: &str) -> String {
 pub fn qr(text: &str) -> Option<(usize, Vec<bool>)> {
     let code = qrcodegen::QrCode::encode_text(text, qrcodegen::QrCodeEcc::Medium).ok()?;
     let n = code.size();
-    let cells = (0..n).flat_map(|y| (0..n).map(move |x| (x, y))).map(|(x, y)| code.get_module(x, y)).collect();
+    let cells = (0..n)
+        .flat_map(|y| (0..n).map(move |x| (x, y)))
+        .map(|(x, y)| code.get_module(x, y))
+        .collect();
     Some((n as usize, cells))
 }
 

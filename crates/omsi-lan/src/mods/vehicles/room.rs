@@ -52,7 +52,9 @@ impl Drop for Lease<'_> {
 
 /// When the bus `fp` was last used: its list's time (touched by `in_use`).
 pub(super) fn last_used(v: &Vehicles, fp: &str) -> std::time::SystemTime {
-    std::fs::metadata(v.dir.join(format!("{fp}.json"))).and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH)
+    std::fs::metadata(v.dir.join(format!("{fp}.json")))
+        .and_then(|m| m.modified())
+        .unwrap_or(std::time::UNIX_EPOCH)
 }
 
 /// What a collection did.
@@ -65,7 +67,8 @@ pub(in crate::mods) struct Collected {
 
 impl Buses {
     pub(super) fn keep_for_days(&self, days: u64) {
-        *self.keep.lock().unwrap_or_else(|e| e.into_inner()) = std::time::Duration::from_secs(days.max(1) * 86_400);
+        *self.keep.lock().unwrap_or_else(|e| e.into_inner()) =
+            std::time::Duration::from_secs(days.max(1) * 86_400);
     }
 
     fn leases(&self) -> std::sync::MutexGuard<'_, HashMap<String, u32>> {
@@ -74,7 +77,12 @@ impl Buses {
 
     /// `m` held against a collection while it is being sent (`Lease`).
     pub(super) fn lease(&self, m: &VehicleManifest) -> Lease<'_> {
-        let shas: Vec<String> = m.entries.iter().map(|e| e.sha256.to_ascii_lowercase()).chain(std::iter::once(m.fingerprint())).collect();
+        let shas: Vec<String> = m
+            .entries
+            .iter()
+            .map(|e| e.sha256.to_ascii_lowercase())
+            .chain(std::iter::once(m.fingerprint()))
+            .collect();
         // (taken with the store held, in the order a collection takes them - store, then
         // leases: a collection under way finishes first, and one that comes after sees the
         // lease. Taken beside it, a collection could pass a file by as unleased and drop it
@@ -103,7 +111,9 @@ impl Buses {
                 Err(std::sync::TryLockError::WouldBlock) => return,
             };
             let Some(v) = g.as_ref() else { return };
-            fps.filter(|fp| v.manifests.iter().any(|(f, _)| f == fp)).map(|fp| v.dir.join(format!("{fp}.json"))).collect()
+            fps.filter(|fp| v.manifests.iter().any(|(f, _)| f == fp))
+                .map(|fp| v.dir.join(format!("{fp}.json")))
+                .collect()
         };
         for file in files {
             if let Ok(f) = std::fs::OpenOptions::new().write(true).open(&file) {
@@ -121,13 +131,19 @@ impl Buses {
         let keep = *self.keep.lock().unwrap_or_else(|e| e.into_inner());
         let now = std::time::SystemTime::now();
         let mut g = self.lock();
-        let Some(v) = g.as_mut() else { return Collected::default() };
+        let Some(v) = g.as_mut() else {
+            return Collected::default();
+        };
         // (pieces of a file left unfinished that long - its player gone - go too)
         let stale = v.store.remove_stale_pieces(keep.min(PIECES_KEEP));
         if stale > 0 {
             log::info!("vehicles: {stale} pieces of files never finished removed");
         }
-        let mut by_age: Vec<(std::time::SystemTime, String)> = v.manifests.iter().map(|(f, _)| (last_used(v, f), f.clone())).collect();
+        let mut by_age: Vec<(std::time::SystemTime, String)> = v
+            .manifests
+            .iter()
+            .map(|(f, _)| (last_used(v, f), f.clone()))
+            .collect();
         by_age.sort();
         let age = |t: std::time::SystemTime| now.duration_since(t).unwrap_or_default();
         let mut gone: Vec<VehicleManifest> = Vec::new();
@@ -138,7 +154,9 @@ impl Buses {
             if !(expired || wanted_room) {
                 continue;
             }
-            let Some(k) = v.manifests.iter().position(|(f, _)| *f == fp) else { continue };
+            let Some(k) = v.manifests.iter().position(|(f, _)| *f == fp) else {
+                continue;
+            };
             if self.leased(&fp) {
                 continue;
             }
@@ -155,8 +173,15 @@ impl Buses {
             freed += m.size();
             gone.push(m);
         }
-        let kept: HashSet<String> = v.manifests.iter().flat_map(|(_, m)| m.entries.iter().map(|e| e.sha256.to_ascii_lowercase())).collect();
-        let mut out = Collected { buses: gone.len(), ..Default::default() };
+        let kept: HashSet<String> = v
+            .manifests
+            .iter()
+            .flat_map(|(_, m)| m.entries.iter().map(|e| e.sha256.to_ascii_lowercase()))
+            .collect();
+        let mut out = Collected {
+            buses: gone.len(),
+            ..Default::default()
+        };
         let mut done: HashSet<String> = HashSet::new();
         for e in gone.iter().flat_map(|m| m.entries.iter()) {
             let sha = e.sha256.to_ascii_lowercase();
@@ -174,15 +199,26 @@ impl Buses {
         }
         if out.buses > 0 {
             write_cache_pins(v);
-            log::info!("vehicles: {} buses nobody uses let go - {} files, {:.1} MB", out.buses, out.files, out.bytes as f64 / 1e6);
+            log::info!(
+                "vehicles: {} buses nobody uses let go - {} files, {:.1} MB",
+                out.buses,
+                out.files,
+                out.bytes as f64 / 1e6
+            );
         }
         out
     }
 
     /// Room on the disk for a file of `size`: the buses nobody has used for `unused_for` go
     /// until there is; an error only when even then the disk cannot hold it.
-    pub(super) fn make_room(&self, size: u64, unused_for: std::time::Duration) -> Result<(), String> {
-        let Some(dir) = self.lock().as_ref().map(|v| v.store.dir().to_path_buf()) else { return Ok(()) };
+    pub(super) fn make_room(
+        &self,
+        size: u64,
+        unused_for: std::time::Duration,
+    ) -> Result<(), String> {
+        let Some(dir) = self.lock().as_ref().map(|v| v.store.dir().to_path_buf()) else {
+            return Ok(());
+        };
         let free = || crate::mods::store::free_space(&dir);
         let Some(have) = free() else { return Ok(()) };
         if have >= size + KEEP_FREE {
@@ -195,14 +231,20 @@ impl Buses {
         if let Some(store) = store {
             let freed = store.remove_pieces_for_room(size + KEEP_FREE - have, PIECES_GRACE);
             if freed > 0 {
-                log::info!("vehicles: {:.1} MB of loose pieces let go to make room", freed as f64 / 1e6);
+                log::info!(
+                    "vehicles: {:.1} MB of loose pieces let go to make room",
+                    freed as f64 / 1e6
+                );
             }
         }
         if let Some(have) = free().filter(|h| *h < size + KEEP_FREE) {
             self.collect(size + KEEP_FREE - have, unused_for);
         }
         match free() {
-            Some(now) if now < size + KEEP_FREE => Err(format!("the server's disk is full ({:.1} GB free)", now as f64 / 1e9)),
+            Some(now) if now < size + KEEP_FREE => Err(format!(
+                "the server's disk is full ({:.1} GB free)",
+                now as f64 / 1e9
+            )),
             _ => Ok(()),
         }
     }

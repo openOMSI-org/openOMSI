@@ -50,7 +50,10 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options { turn: 2.5, edges: false }
+        Options {
+            turn: 2.5,
+            edges: false,
+        }
     }
 }
 
@@ -116,17 +119,26 @@ impl Tobii {
         #[cfg(windows)]
         {
             let (s, st, o) = (shared.clone(), stop.clone(), opts.clone());
-            let _ = std::thread::Builder::new().name("tobii".into()).spawn(move || engine::run(s, st, o));
+            let _ = std::thread::Builder::new()
+                .name("tobii".into())
+                .spawn(move || engine::run(s, st, o));
         }
         #[cfg(not(windows))]
         {
             shared.lock().unwrap_or_else(|e| e.into_inner()).status = Status::NoRuntime;
         }
-        Tobii { shared, stop, options: opts }
+        Tobii {
+            shared,
+            stop,
+            options: opts,
+        }
     }
 
     pub fn status(&self) -> Status {
-        self.shared.lock().map(|s| s.status.clone()).unwrap_or_default()
+        self.shared
+            .lock()
+            .map(|s| s.status.clone())
+            .unwrap_or_default()
     }
 
     pub fn set_options(&self, o: Options) {
@@ -172,8 +184,17 @@ impl Tobii {
     /// A reader with no runtime behind it, the head at `pos` (mm) and `rot` (radians) and
     /// centred there.
     pub(crate) fn holding(pos: [f32; 3], rot: [f32; 3]) -> Tobii {
-        let shared = Shared { latest: Some((pos, rot)), centre: Some((pos, rot)), at: Some(Instant::now()), ..Default::default() };
-        Tobii { shared: Arc::new(Mutex::new(shared)), stop: Arc::new(AtomicBool::new(false)), options: Arc::default() }
+        let shared = Shared {
+            latest: Some((pos, rot)),
+            centre: Some((pos, rot)),
+            at: Some(Instant::now()),
+            ..Default::default()
+        };
+        Tobii {
+            shared: Arc::new(Mutex::new(shared)),
+            stop: Arc::new(AtomicBool::new(false)),
+            options: Arc::default(),
+        }
     }
 
     pub(crate) fn has_centre(&self) -> bool {
@@ -192,13 +213,20 @@ impl Drop for Tobii {
 /// held to what looks at the screen) and way (cm), not yet made larger.
 fn head_pose(pos: [f32; 3], rot: [f32; 3], cp: [f32; 3], cr: [f32; 3]) -> HeadPose {
     let d = [pos[0] - cp[0], pos[1] - cp[1], pos[2] - cp[2]];
-    let r = [(rot[0] - cr[0]).to_degrees(), (rot[1] - cr[1]).to_degrees(), (rot[2] - cr[2]).to_degrees()];
+    let r = [
+        (rot[0] - cr[0]).to_degrees(),
+        (rot[1] - cr[1]).to_degrees(),
+        (rot[2] - cr[2]).to_degrees(),
+    ];
     // (x: the tracker's is to the player's right, opentrack's to the left; z: both away from
     // the screen. A turn about y to the left is positive for the tracker, opentrack's yaw is
     // to the right; about x up is positive for both.)
     let yaw = -r[1].clamp(-MAX_YAW, MAX_YAW);
     let pitch = r[0].clamp(-MAX_PITCH, MAX_PITCH);
-    HeadPose { pos: [-d[0] / 10.0, d[1] / 10.0, d[2] / 10.0], rot: [yaw, pitch, r[2]] }
+    HeadPose {
+        pos: [-d[0] / 10.0, d[1] / 10.0, d[2] / 10.0],
+        rot: [yaw, pitch, r[2]],
+    }
 }
 
 /// The extra yaw a look at the screen's edge asks (degrees): nothing in the middle three fifths,
@@ -215,7 +243,9 @@ impl Shared {
     /// all the same), and while the middle is being taken gathered for it.
     fn take(&mut self, raw: Raw, now: Instant) {
         self.last = Some((raw, now));
-        let (Some(pos), [Some(rx), Some(ry), Some(rz)]) = (raw.pos, raw.rot) else { return };
+        let (Some(pos), [Some(rx), Some(ry), Some(rz)]) = (raw.pos, raw.rot) else {
+            return;
+        };
         let rot = [rx, ry, rz];
         // (a jump no head makes is the tracker losing the face: left out - three in a row, and
         // it is where the head is now)
@@ -249,7 +279,12 @@ impl Shared {
                 }
                 self.centre = Some((cp, cr));
                 self.gathering.clear();
-                log::info!("tobii: the head's middle taken at ({:.0}, {:.0}, {:.0}) mm", cp[0], cp[1], cp[2]);
+                log::info!(
+                    "tobii: the head's middle taken at ({:.0}, {:.0}, {:.0}) mm",
+                    cp[0],
+                    cp[1],
+                    cp[2]
+                );
             }
         }
     }
@@ -259,13 +294,18 @@ impl Shared {
     /// (Each step counts from the last word of the tracker: counted from the last valid gaze,
     /// a blink took the turn away faster and faster and it swung back after it.)
     fn gazed(&mut self, at: Option<[f32; 2]>, now: Instant) {
-        let dt = self.gaze_heard.map_or(0.0, |t| now.saturating_duration_since(t).as_secs_f32()).min(0.5);
+        let dt = self
+            .gaze_heard
+            .map_or(0.0, |t| now.saturating_duration_since(t).as_secs_f32())
+            .min(0.5);
         self.gaze_heard = Some(now);
         if let Some(g) = at {
             self.gaze = Some((g, now));
         }
         let want = match self.gaze {
-            Some((g, t)) if now.saturating_duration_since(t) < Duration::from_millis(300) => edge_yaw(g[0], 40.0),
+            Some((g, t)) if now.saturating_duration_since(t) < Duration::from_millis(300) => {
+                edge_yaw(g[0], 40.0)
+            }
             _ => 0.0,
         };
         let k = 1.0 - (-dt / 0.35).exp();
@@ -279,13 +319,15 @@ mod engine {
     //! the 2.x opentrack ships).
 
     use super::{Options, Raw, Shared, Status};
-    use std::ffi::{c_char, c_void, CStr};
+    use std::ffi::{CStr, c_char, c_void};
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
+    use windows::Win32::System::LibraryLoader::{
+        GetProcAddress, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
+    };
     use windows::core::{HSTRING, PCSTR};
-    use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryExW, LOAD_WITH_ALTERED_SEARCH_PATH};
 
     type Api = c_void;
     type Device = c_void;
@@ -347,12 +389,20 @@ mod engine {
         if let Ok(p) = omsi_cfg::env::var("OMSI_TOBII_DLL") {
             v.push(PathBuf::from(p));
         }
-        if let Some(d) = std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf())) {
+        if let Some(d) = std::env::current_exe()
+            .ok()
+            .and_then(|e| e.parent().map(|p| p.to_path_buf()))
+        {
             v.push(d.join("tobii_stream_engine.dll"));
         }
         for var in ["ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"] {
             if let Some(base) = std::env::var_os(var).map(PathBuf::from) {
-                for sub in ["Tobii\\Tobii EyeX", "Tobii\\Tobii Experience", "Tobii\\Service", "opentrack\\modules"] {
+                for sub in [
+                    "Tobii\\Tobii EyeX",
+                    "Tobii\\Tobii Experience",
+                    "Tobii\\Service",
+                    "opentrack\\modules",
+                ] {
                     v.push(base.join(sub).join("tobii_stream_engine.dll"));
                 }
             }
@@ -366,12 +416,20 @@ mod engine {
             // SAFETY: a DLL loaded by its full path (its own folder first for what it needs);
             // the functions are looked up by name and called as `tobii.h` declares them.
             unsafe {
-                let Ok(module) = LoadLibraryExW(&HSTRING::from(path.as_os_str()), None, LOAD_WITH_ALTERED_SEARCH_PATH) else { continue };
+                let Ok(module) = LoadLibraryExW(
+                    &HSTRING::from(path.as_os_str()),
+                    None,
+                    LOAD_WITH_ALTERED_SEARCH_PATH,
+                ) else {
+                    continue;
+                };
                 let get = |name: &[u8]| GetProcAddress(module, PCSTR(name.as_ptr()));
                 macro_rules! f {
                     ($name:literal) => {
                         match get(concat!($name, "\0").as_bytes()) {
-                            Some(p) => std::mem::transmute::<unsafe extern "system" fn() -> isize, _>(p),
+                            Some(p) => {
+                                std::mem::transmute::<unsafe extern "system" fn() -> isize, _>(p)
+                            }
                             None => {
                                 log::warn!("tobii: {} has no {}", path.display(), $name);
                                 continue;
@@ -394,7 +452,13 @@ mod engine {
                     version: Version::default(),
                 };
                 (lib.get_api_version)(&mut lib.version);
-                log::info!("tobii: Stream Engine {}.{}.{} from {}", lib.version.major, lib.version.minor, lib.version.revision, path.display());
+                log::info!(
+                    "tobii: Stream Engine {}.{}.{} from {}",
+                    lib.version.major,
+                    lib.version.minor,
+                    lib.version.revision,
+                    path.display()
+                );
                 return Some((lib, path));
             }
         }
@@ -407,7 +471,11 @@ mod engine {
         }
         // SAFETY: `data` is the Vec handed to the enumeration below, alive through it.
         let urls = unsafe { &mut *(data as *mut Vec<String>) };
-        urls.push(unsafe { CStr::from_ptr(url) }.to_string_lossy().into_owned());
+        urls.push(
+            unsafe { CStr::from_ptr(url) }
+                .to_string_lossy()
+                .into_owned(),
+        );
     }
 
     extern "C" fn head_pose(pose: *const HeadPoseT, data: *mut c_void) {
@@ -419,7 +487,8 @@ mod engine {
         let (p, shared) = unsafe { (&*pose, &*(data as *const Mutex<Shared>)) };
         let raw = Raw {
             pos: (p.position_validity == VALID).then_some(p.position_xyz),
-            rot: [0, 1, 2].map(|i| (p.rotation_validity_xyz[i] == VALID).then_some(p.rotation_xyz[i])),
+            rot: [0, 1, 2]
+                .map(|i| (p.rotation_validity_xyz[i] == VALID).then_some(p.rotation_xyz[i])),
             ts_us: p.timestamp_us,
         };
         if let Ok(mut s) = shared.lock() {
@@ -434,7 +503,10 @@ mod engine {
         // SAFETY: as `head_pose`.
         let (g, shared) = unsafe { (&*g, &*(data as *const Mutex<Shared>)) };
         if let Ok(mut s) = shared.lock() {
-            s.gazed((g.validity == VALID).then_some(g.position_xy), Instant::now());
+            s.gazed(
+                (g.validity == VALID).then_some(g.position_xy),
+                Instant::now(),
+            );
         }
     }
 
@@ -447,21 +519,34 @@ mod engine {
         }
     }
 
-    pub(super) fn run(shared: Arc<Mutex<Shared>>, stop: Arc<AtomicBool>, options: Arc<Mutex<Options>>) {
+    pub(super) fn run(
+        shared: Arc<Mutex<Shared>>,
+        stop: Arc<AtomicBool>,
+        options: Arc<Mutex<Options>>,
+    ) {
         let Some((lib, _)) = load() else {
             set(&shared, Status::NoRuntime);
             return;
         };
         let mut api: *mut Api = std::ptr::null_mut();
-        if (lib.api_create)(&mut api, std::ptr::null(), std::ptr::null()) != NO_ERROR || api.is_null() {
-            set(&shared, Status::Failed("the Stream Engine did not start".into()));
+        if (lib.api_create)(&mut api, std::ptr::null(), std::ptr::null()) != NO_ERROR
+            || api.is_null()
+        {
+            set(
+                &shared,
+                Status::Failed("the Stream Engine did not start".into()),
+            );
             return;
         }
         let data = Arc::as_ptr(&shared) as *mut c_void;
         'devices: while !stop.load(Ordering::Relaxed) {
             // a tracker: the first one connected (looked for again every few seconds)
             let mut urls: Vec<String> = Vec::new();
-            (lib.enumerate_local_device_urls)(api, url_found, &mut urls as *mut Vec<String> as *mut c_void);
+            (lib.enumerate_local_device_urls)(
+                api,
+                url_found,
+                &mut urls as *mut Vec<String> as *mut c_void,
+            );
             let Some(url) = urls.first().cloned() else {
                 set(&shared, Status::NoDevice);
                 for _ in 0..30 {
@@ -474,20 +559,35 @@ mod engine {
             };
             let c_url = std::ffi::CString::new(url.clone()).unwrap_or_default();
             let mut dev: *mut Device = std::ptr::null_mut();
-            let made = if lib.version.major >= 4 { (lib.device_create4)(api, c_url.as_ptr(), INTERACTIVE, &mut dev) } else { (lib.device_create2)(api, c_url.as_ptr(), &mut dev) };
+            let made = if lib.version.major >= 4 {
+                (lib.device_create4)(api, c_url.as_ptr(), INTERACTIVE, &mut dev)
+            } else {
+                (lib.device_create2)(api, c_url.as_ptr(), &mut dev)
+            };
             if made != NO_ERROR || dev.is_null() {
-                set(&shared, Status::Failed(format!("the tracker {url} could not be opened (error {made})")));
+                set(
+                    &shared,
+                    Status::Failed(format!(
+                        "the tracker {url} could not be opened (error {made})"
+                    )),
+                );
                 std::thread::sleep(Duration::from_secs(3));
                 continue;
             }
             let e = (lib.head_pose_subscribe)(dev, head_pose, data);
             if e != NO_ERROR {
-                set(&shared, Status::Failed(format!("the tracker gives no head pose (error {e})")));
+                set(
+                    &shared,
+                    Status::Failed(format!("the tracker gives no head pose (error {e})")),
+                );
                 (lib.device_destroy)(dev);
                 break;
             }
             let mut gaze_on = false;
-            set(&shared, Status::Connected(url.trim_start_matches("tobii-ttp://").to_string()));
+            set(
+                &shared,
+                Status::Connected(url.trim_start_matches("tobii-ttp://").to_string()),
+            );
             let mut failures = 0;
             while !stop.load(Ordering::Relaxed) {
                 // (the edges' gaze only while it is asked for)
@@ -528,8 +628,13 @@ mod tests {
     #[test]
     #[ignore]
     fn record_the_tracker_here() {
-        let Ok(file) = omsi_cfg::env::var("OMSI_TOBII_RAW") else { return };
-        let secs: u64 = omsi_cfg::env::var("OMSI_TOBII_SECS").ok().and_then(|v| v.parse().ok()).unwrap_or(8);
+        let Ok(file) = omsi_cfg::env::var("OMSI_TOBII_RAW") else {
+            return;
+        };
+        let secs: u64 = omsi_cfg::env::var("OMSI_TOBII_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8);
         let t = Tobii::start(Options::default());
         let start = Instant::now();
         let mut out = String::new();
@@ -539,9 +644,21 @@ mod tests {
                 if let Some((raw, at)) = s.last {
                     if last != Some(at) {
                         last = Some(at);
-                        let p = raw.pos.map(|p| format!("{:.0} {:.0} {:.0}", p[0], p[1], p[2])).unwrap_or_else(|| "- - -".into());
-                        let r = raw.rot.map(|r| r.map(|v| format!("{:.1}", v.to_degrees())).unwrap_or_else(|| "-".into())).join(" ");
-                        out.push_str(&format!("{:.3} {p} {r}\n", at.duration_since(start).as_secs_f32()));
+                        let p = raw
+                            .pos
+                            .map(|p| format!("{:.0} {:.0} {:.0}", p[0], p[1], p[2]))
+                            .unwrap_or_else(|| "- - -".into());
+                        let r = raw
+                            .rot
+                            .map(|r| {
+                                r.map(|v| format!("{:.1}", v.to_degrees()))
+                                    .unwrap_or_else(|| "-".into())
+                            })
+                            .join(" ");
+                        out.push_str(&format!(
+                            "{:.3} {p} {r}\n",
+                            at.duration_since(start).as_secs_f32()
+                        ));
                     }
                 }
             }
@@ -568,11 +685,20 @@ mod tests {
             }
             if let Ok(s) = t.shared.lock() {
                 if let (Some((raw, _)), true) = (s.last, n % 25 == 0) {
-                    println!("raw: pos {:?} rot {:?} centre {:?} -> {:?}", raw.pos, raw.rot.map(|r| r.map(f32::to_degrees)), s.centre.map(|c| c.0), None::<()>);
+                    println!(
+                        "raw: pos {:?} rot {:?} centre {:?} -> {:?}",
+                        raw.pos,
+                        raw.rot.map(|r| r.map(f32::to_degrees)),
+                        s.centre.map(|c| c.0),
+                        None::<()>
+                    );
                 }
             }
             if n % 25 == 0 {
-                println!("pose for the camera's filter: {:?}", t.sample().map(|s| s.pose));
+                println!(
+                    "pose for the camera's filter: {:?}",
+                    t.sample().map(|s| s.pose)
+                );
             }
             n += 1;
             std::thread::sleep(Duration::from_millis(20));
@@ -585,9 +711,20 @@ mod tests {
     #[test]
     fn the_trackers_pose_in_the_cameras_terms() {
         let c = ([0.0, 0.0, 600.0], [0.0, 0.0, 0.0]);
-        let p = head_pose([30.0, 0.0, 600.0], [4f32.to_radians(), 10f32.to_radians(), 0.0], c.0, c.1);
-        assert!((p.rot[0] + 10.0).abs() < 1e-3 && (p.rot[1] - 4.0).abs() < 1e-3, "{p:?}");
-        assert!((p.pos[0] + 3.0).abs() < 1e-4 && p.pos[1].abs() < 1e-4, "{p:?}");
+        let p = head_pose(
+            [30.0, 0.0, 600.0],
+            [4f32.to_radians(), 10f32.to_radians(), 0.0],
+            c.0,
+            c.1,
+        );
+        assert!(
+            (p.rot[0] + 10.0).abs() < 1e-3 && (p.rot[1] - 4.0).abs() < 1e-3,
+            "{p:?}"
+        );
+        assert!(
+            (p.pos[0] + 3.0).abs() < 1e-4 && p.pos[1].abs() < 1e-4,
+            "{p:?}"
+        );
         // (a head turned past what looks at the screen: held there)
         let far = head_pose([0.0, 0.0, 600.0], [0.0, 80f32.to_radians(), 0.0], c.0, c.1);
         assert!((far.rot[0] + MAX_YAW).abs() < 1e-3, "{far:?}");
@@ -599,7 +736,11 @@ mod tests {
     fn the_interval_comes_from_the_trackers_clock() {
         let mut s = Shared::default();
         let now = Instant::now();
-        let pose = |ts_us| Raw { pos: Some([0.0, 0.0, 600.0]), rot: [Some(0.0); 3], ts_us };
+        let pose = |ts_us| Raw {
+            pos: Some([0.0, 0.0, 600.0]),
+            rot: [Some(0.0); 3],
+            ts_us,
+        };
         s.take(pose(1_000_000), now);
         let seq = s.seq;
         s.take(pose(1_033_000), now + Duration::from_millis(5));
@@ -613,15 +754,35 @@ mod tests {
     #[test]
     fn a_lost_face_gives_no_pose() {
         let now = Instant::now();
-        let Some(then) = now.checked_sub(Duration::from_millis(700)) else { return };
+        let Some(then) = now.checked_sub(Duration::from_millis(700)) else {
+            return;
+        };
         let mut s = Shared::default();
         for k in 0..CENTRE_POSES as i64 {
-            s.take(Raw { pos: Some([0.0, 0.0, 600.0]), rot: [Some(0.0); 3], ts_us: 33_000 * k }, then);
+            s.take(
+                Raw {
+                    pos: Some([0.0, 0.0, 600.0]),
+                    rot: [Some(0.0); 3],
+                    ts_us: 33_000 * k,
+                },
+                then,
+            );
         }
         s.take(Raw::default(), now);
-        let t = Tobii { shared: Arc::new(Mutex::new(s)), stop: Arc::default(), options: Arc::default() };
+        let t = Tobii {
+            shared: Arc::new(Mutex::new(s)),
+            stop: Arc::default(),
+            options: Arc::default(),
+        };
         assert!(t.sample().is_none());
-        t.shared.lock().unwrap().take(Raw { pos: Some([0.0, 0.0, 600.0]), rot: [Some(0.0); 3], ts_us: 1_000_000 }, Instant::now());
+        t.shared.lock().unwrap().take(
+            Raw {
+                pos: Some([0.0, 0.0, 600.0]),
+                rot: [Some(0.0); 3],
+                ts_us: 1_000_000,
+            },
+            Instant::now(),
+        );
         assert!(t.sample().is_some());
     }
 
@@ -639,7 +800,11 @@ mod tests {
         for k in 60..70 {
             s.gazed(None, ms(16 * k));
         }
-        assert!((s.edge_turn - turned).abs() < 1.0, "{} after a blink", s.edge_turn);
+        assert!(
+            (s.edge_turn - turned).abs() < 1.0,
+            "{} after a blink",
+            s.edge_turn
+        );
         for k in 70..200 {
             s.gazed(None, ms(16 * k));
         }
@@ -660,13 +825,27 @@ mod tests {
         let mut s = Shared::default();
         let now = Instant::now();
         for k in 0..CENTRE_POSES {
-            s.take(Raw { pos: Some([k as f32, 0.0, 600.0]), rot: [Some(0.0); 3], ts_us: 33_000 * k as i64 }, now + Duration::from_millis(33 * k as u64));
+            s.take(
+                Raw {
+                    pos: Some([k as f32, 0.0, 600.0]),
+                    rot: [Some(0.0); 3],
+                    ts_us: 33_000 * k as i64,
+                },
+                now + Duration::from_millis(33 * k as u64),
+            );
         }
         let (cp, _) = s.centre.expect("a middle");
         assert!((cp[0] - (CENTRE_POSES - 1) as f32 / 2.0).abs() < 1e-4);
         // (a turn of 40 degrees in a thirtieth of a second: a glitch, left out)
         let before = (s.latest, s.seq);
-        s.take(Raw { pos: Some([0.0, 0.0, 600.0]), rot: [Some(0.0), Some(40f32.to_radians()), Some(0.0)], ts_us: 500_000 }, now + Duration::from_millis(500));
+        s.take(
+            Raw {
+                pos: Some([0.0, 0.0, 600.0]),
+                rot: [Some(0.0), Some(40f32.to_radians()), Some(0.0)],
+                ts_us: 500_000,
+            },
+            now + Duration::from_millis(500),
+        );
         assert_eq!((s.latest, s.seq), before);
         // (a pose with nothing valid is kept as the last, not used)
         s.take(Raw::default(), now + Duration::from_secs(1));

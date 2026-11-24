@@ -97,7 +97,9 @@ pub fn horizon(speed: f32) -> f32 {
 /// The speed an emergency vehicle drives at under the lane's posted `limit` (km/h) on an
 /// active drive, with its own top speed `max` (km/h).
 pub fn bonus_limit(limit: f32, max: f32) -> f32 {
-    (limit * EMERGENCY_LIMIT_FACTOR).min(limit + EMERGENCY_LIMIT_PLUS).min(max)
+    (limit * EMERGENCY_LIMIT_FACTOR)
+        .min(limit + EMERGENCY_LIMIT_PLUS)
+        .min(max)
 }
 
 /// An emergency vehicle on an active drive as this step sees it.
@@ -209,18 +211,25 @@ impl Emergency {
     }
 
     pub fn siren(&self, id: u64) -> Option<&Siren> {
-        self.sirens.binary_search_by_key(&id, |s| s.id).ok().map(|k| &self.sirens[k])
+        self.sirens
+            .binary_search_by_key(&id, |s| s.id)
+            .ok()
+            .map(|k| &self.sirens[k])
     }
 
     /// Does `owner` hold the junction whose first lane on its way is `lane`?
     pub fn holds_movement(&self, owner: u64, lane: usize) -> bool {
-        self.reservations.iter().any(|r| r.owner == owner && r.movement.contains(&lane))
+        self.reservations
+            .iter()
+            .any(|r| r.owner == owner && r.movement.contains(&lane))
     }
 
     /// Does vehicle `id` cross against a red light under a reservation now (the emergency
     /// vehicle, or one leading it through)?
     pub fn crawling(&self, id: u64) -> bool {
-        self.reservations.iter().any(|r| r.crawl && (r.owner == id || r.leaders.contains(&id)))
+        self.reservations
+            .iter()
+            .any(|r| r.crawl && (r.owner == id || r.leaders.contains(&id)))
     }
 }
 
@@ -273,7 +282,11 @@ impl TrafficSim {
             }
             let st = &c.state;
             let reach = horizon(st.speed).max(RESERVE_KEEP) + st.front + 30.0;
-            let way = self.way_lanes(st, reach).into_iter().map(|(l, d)| (l, d - st.front)).collect();
+            let way = self
+                .way_lanes(st, reach)
+                .into_iter()
+                .map(|(l, d)| (l, d - st.front))
+                .collect();
             out.push(Siren {
                 id: c.id,
                 car: Some(k),
@@ -311,12 +324,26 @@ impl TrafficSim {
         };
         if self.player_priority {
             if let Some(p) = ts.player.as_ref() {
-                user(super::stats::WAITS_ON_PLAYER, p, self.player_blinker, ts.player_standing);
+                user(
+                    super::stats::WAITS_ON_PLAYER,
+                    p,
+                    self.player_blinker,
+                    ts.player_standing,
+                );
             }
         }
-        for (id, b) in ts.others.iter().filter(|(id, _)| *id < 0xFFF0_0000 && self.other_priority.contains(id)) {
+        for (id, b) in ts
+            .others
+            .iter()
+            .filter(|(id, _)| *id < 0xFFF0_0000 && self.other_priority.contains(id))
+        {
             let still = self.others_still.get(id).copied().unwrap_or(0.0);
-            user(lan_siren_id(*id), b, self.other_blinkers.get(id).copied().unwrap_or(0), still);
+            user(
+                lan_siren_id(*id),
+                b,
+                self.other_blinkers.get(id).copied().unwrap_or(0),
+                still,
+            );
         }
         out.sort_by_key(|s| s.id);
         out
@@ -328,15 +355,27 @@ impl TrafficSim {
     pub fn corridor_offset(&self, l: usize) -> Option<f32> {
         let lane = &self.net.lanes[l];
         // (the inner side is the left, or the right on a left-hand-traffic map)
-        let (inner, outer, sign) = if self.net.left_hand { (lane.right, lane.left, 1.0) } else { (lane.left, lane.right, -1.0) };
+        let (inner, outer, sign) = if self.net.left_hand {
+            (lane.right, lane.left, 1.0)
+        } else {
+            (lane.left, lane.right, -1.0)
+        };
         let half = |o: usize| {
             let d = (self.net.lanes[o].offset - lane.offset).abs();
-            0.5 * if d > 1.5 && d < 6.0 { d } else { 0.5 * (lane.width.max(3.0) + self.net.lanes[o].width.max(3.0)) }
+            0.5 * if d > 1.5 && d < 6.0 {
+                d
+            } else {
+                0.5 * (lane.width.max(3.0) + self.net.lanes[o].width.max(3.0))
+            }
         };
         match (inner, outer) {
             (None, Some(o)) => Some(-sign * half(o)),
             (Some(n), _) if self.net.lanes[n].kind == LaneKind::Street => {
-                let nn = if self.net.left_hand { self.net.lanes[n].right } else { self.net.lanes[n].left };
+                let nn = if self.net.left_hand {
+                    self.net.lanes[n].right
+                } else {
+                    self.net.lanes[n].left
+                };
                 nn.is_none().then(|| sign * half(n))
             }
             _ => None,
@@ -351,7 +390,9 @@ impl TrafficSim {
             let mut at = l;
             for k in 0..8 {
                 let lane = &self.net.lanes[at];
-                let Some(n) = (if side < 0 { lane.left } else { lane.right }) else { break };
+                let Some(n) = (if side < 0 { lane.left } else { lane.right }) else {
+                    break;
+                };
                 if out.iter().any(|e| e.0 == n) {
                     break;
                 }
@@ -381,20 +422,41 @@ impl TrafficSim {
                     for &(j, sj, _, out) in by_lane.get(&m).map(|v| v.as_slice()).unwrap_or(&[]) {
                         let c = &self.cars[j];
                         // (the cars leading it through a junction kept for it drive on)
-                        if out || c.state.lane != m || Some(j) == s.car || c.is_rail() || em.is_siren(c.id) || em.reservations.iter().any(|r| r.leaders.contains(&c.id)) {
+                        if out
+                            || c.state.lane != m
+                            || Some(j) == s.car
+                            || c.is_rail()
+                            || em.is_siren(c.id)
+                            || em.reservations.iter().any(|r| r.leaders.contains(&c.id))
+                        {
                             continue;
                         }
-                        let along = d + if side == 0 { sj } else { self.net.beside_s(m, l, sj) };
+                        let along = d + if side == 0 {
+                            sj
+                        } else {
+                            self.net.beside_s(m, l, sj)
+                        };
                         let gap = along - c.state.rear;
                         // (alongside or ahead of its rear; one it is passing until it is by)
                         let was = c.make_way.is_some_and(|w| w.from == s.id);
-                        let by = if was { -(PASSED.max(s.length + 2.0)) } else { -s.length };
+                        let by = if was {
+                            -(PASSED.max(s.length + 2.0))
+                        } else {
+                            -s.length
+                        };
                         if gap > h || along + c.state.front < by {
                             continue;
                         }
-                        let r = Request { from: s.id, gap, side, adjacent };
+                        let r = Request {
+                            from: s.id,
+                            gap,
+                            side,
+                            adjacent,
+                        };
                         match req.get(&c.id) {
-                            Some(o) if o.gap.abs() < gap.abs() || (o.gap.abs() == gap.abs() && o.from < s.id) => {}
+                            Some(o)
+                                if o.gap.abs() < gap.abs()
+                                    || (o.gap.abs() == gap.abs() && o.from < s.id) => {}
                             _ => {
                                 req.insert(c.id, r);
                             }
@@ -405,15 +467,30 @@ impl TrafficSim {
         }
         // a siren that has stood for long lets go those it cannot get past (all of them
         // after longer): they drive on rather than wait for one that does not come
-        let mut released: Vec<(u64, u64)> = em.released.iter().copied().filter(|p| req.get(&p.0).is_some_and(|r| r.from == p.1)).collect();
+        let mut released: Vec<(u64, u64)> = em
+            .released
+            .iter()
+            .copied()
+            .filter(|p| req.get(&p.0).is_some_and(|r| r.from == p.1))
+            .collect();
         for s in em.sirens.iter().filter(|s| s.stopped > STUCK_RELEASE) {
-            let mut ids: Vec<u64> = req.iter().filter(|(_, r)| r.from == s.id).map(|(&id, _)| id).collect();
+            let mut ids: Vec<u64> = req
+                .iter()
+                .filter(|(_, r)| r.from == s.id)
+                .map(|(&id, _)| id)
+                .collect();
             ids.sort_unstable();
             for id in ids {
-                let Some(&k) = self.index_of.get(&id) else { continue };
+                let Some(&k) = self.index_of.get(&id) else {
+                    continue;
+                };
                 let c = &self.cars[k];
-                let target = c.make_way.filter(|w| w.from == s.id).map_or(c.state.lateral, |w| w.target);
-                let blocks = c.make_way.is_none_or(|w| w.drive_on) || !self.passable(c.state.lane, c.state.s, target, c.half_width, &req[&id], s);
+                let target = c
+                    .make_way
+                    .filter(|w| w.from == s.id)
+                    .map_or(c.state.lateral, |w| w.target);
+                let blocks = c.make_way.is_none_or(|w| w.drive_on)
+                    || !self.passable(c.state.lane, c.state.s, target, c.half_width, &req[&id], s);
                 if (blocks || s.stopped > STUCK_RELEASE_ALL) && !released.contains(&(id, s.id)) {
                     released.push((id, s.id));
                 }
@@ -432,14 +509,29 @@ impl TrafficSim {
     /// Can siren `s` get past a car (`half_width`) standing on `lane` at `at`, `target` m
     /// across it (where it moves to)? By the lateral room the planners judge a lead by
     /// (`obstacle_from`), or, on a road of one lane, over the other half of the road.
-    fn passable(&self, lane_i: usize, at: f32, target: f32, half_width: f32, r: &Request, s: &Siren) -> bool {
+    fn passable(
+        &self,
+        lane_i: usize,
+        at: f32,
+        target: f32,
+        half_width: f32,
+        r: &Request,
+        s: &Siren,
+    ) -> bool {
         let lane = &self.net.lanes[lane_i];
         let need = half_width + s.half_width + 0.3;
         if lane.left.is_none() && lane.right.is_none() {
             // (a road of one lane: round it on the other half, `plan_pass` - not in a
             // junction, nor right after one: there it drives on, out of the way)
-            let clear_behind = at > 30.0 || self.net.prev.get(lane_i).is_none_or(|p| p.iter().all(|&b| self.net.crossings[b].is_empty() && self.net.walks[b].is_empty()));
-            return clear_behind && self.net.opposite(lane_i, at).is_some_and(|(o, _, side)| side >= 2.3 && !super::planning::divided_carriageway(&self.net, lane_i, o, side));
+            let clear_behind = at > 30.0
+                || self.net.prev.get(lane_i).is_none_or(|p| {
+                    p.iter()
+                        .all(|&b| self.net.crossings[b].is_empty() && self.net.walks[b].is_empty())
+                });
+            return clear_behind
+                && self.net.opposite(lane_i, at).is_some_and(|(o, _, side)| {
+                    side >= 2.3 && !super::planning::divided_carriageway(&self.net, lane_i, o, side)
+                });
         }
         let e_lat = s.corridor.unwrap_or(s.lateral);
         match r.side {
@@ -457,11 +549,15 @@ impl TrafficSim {
     fn keep_reservations(&self, em: &mut Emergency) {
         let sirens = std::mem::take(&mut em.sirens);
         em.reservations.retain_mut(|r| {
-            let Some(s) = sirens.iter().find(|s| s.id == r.owner) else { return false };
+            let Some(s) = sirens.iter().find(|s| s.id == r.owner) else {
+                return false;
+            };
             let on = self.body_on(s, &r.group);
             if on {
                 r.entered = true;
-                if s.car.is_some_and(|k| r.group.binary_search(&self.cars[k].state.lane).is_ok()) {
+                if s.car
+                    .is_some_and(|k| r.group.binary_search(&self.cars[k].state.lane).is_ok())
+                {
                     r.left_at = None;
                     r.left_pos = None;
                 }
@@ -470,20 +566,32 @@ impl TrafficSim {
                 // its origin off the lanes kept: until its rear (its last section's) is out
                 let off = match s.car {
                     Some(k) => r.group.binary_search(&self.cars[k].state.lane).is_err(),
-                    None => s.way.first().is_none_or(|w| r.group.binary_search(&w.0).is_err()),
+                    None => s
+                        .way
+                        .first()
+                        .is_none_or(|w| r.group.binary_search(&w.0).is_err()),
                 };
                 if !off {
                     return true;
                 }
                 let gone = match s.car {
                     Some(_) => s.odometer - *r.left_at.get_or_insert(s.odometer) > s.tail + 0.5,
-                    None => (s.pos - *r.left_pos.get_or_insert(s.pos)).truncate().length() as f32 > s.tail + 1.0,
+                    None => {
+                        (s.pos - *r.left_pos.get_or_insert(s.pos))
+                            .truncate()
+                            .length() as f32
+                            > s.tail + 1.0
+                    }
                 };
                 return on || !gone;
             }
             // not in it yet: kept while it still comes (it may have turned away, or stand
             // before it - see `STANDING_LETS_GO`)
-            let entry = s.way.iter().find(|w| r.movement.contains(&w.0)).map(|w| w.1);
+            let entry = s
+                .way
+                .iter()
+                .find(|w| r.movement.contains(&w.0))
+                .map(|w| w.1);
             entry.is_some_and(|e| e <= RESERVE_KEEP && !s.lets_go(e))
         });
         em.sirens = sirens;
@@ -494,8 +602,15 @@ impl TrafficSim {
     /// the light with it).
     fn find_leaders(&self, em: &mut Emergency, by_lane: &ByLane) {
         for r in em.reservations.iter_mut() {
-            let Some(s) = em.sirens.iter().find(|s| s.id == r.owner) else { continue };
-            let through = s.way.iter().filter(|w| r.movement.contains(&w.0)).map(|w| w.1 + self.net.lanes[w.0].length()).fold(0.0f32, f32::max);
+            let Some(s) = em.sirens.iter().find(|s| s.id == r.owner) else {
+                continue;
+            };
+            let through = s
+                .way
+                .iter()
+                .filter(|w| r.movement.contains(&w.0))
+                .map(|w| w.1 + self.net.lanes[w.0].length())
+                .fold(0.0f32, f32::max);
             let mut leaders = Vec::new();
             for &(l, d) in &s.way {
                 if d > through {
@@ -503,7 +618,12 @@ impl TrafficSim {
                 }
                 for &(j, sj, _, out) in by_lane.get(&l).map(|v| v.as_slice()).unwrap_or(&[]) {
                     let c = &self.cars[j];
-                    if !out && Some(j) != s.car && c.state.lane == l && d + sj - c.state.rear > -0.5 && d + sj < through {
+                    if !out
+                        && Some(j) != s.car
+                        && c.state.lane == l
+                        && d + sj - c.state.rear > -0.5
+                        && d + sj < through
+                    {
                         leaders.push(c.id);
                     }
                 }
@@ -521,7 +641,9 @@ impl TrafficSim {
             Some(k) => {
                 let c = &self.cars[k];
                 has(c.state.lane)
-                    || c.state.prev_lane.is_some_and(|p| has(p) && c.state.s < c.tail + 1.0)
+                    || c.state
+                        .prev_lane
+                        .is_some_and(|p| has(p) && c.state.s < c.tail + 1.0)
                     || c.tail_claims.iter().any(|t| has(t.0))
             }
             None => s.way.first().is_some_and(|w| has(w.0)),
@@ -546,37 +668,80 @@ impl TrafficSim {
         let mut asks: Vec<(bool, u64, Reservation)> = Vec::new();
         let sirens = std::mem::take(&mut em.sirens);
         for s in &sirens {
-            let Some(jn) = self.junction_ahead(&s.way) else { continue };
+            let Some(jn) = self.junction_ahead(&s.way) else {
+                continue;
+            };
             let entry = jn.lanes[0].1;
             if !jn.inside && (entry > RESERVE_REACH || s.lets_go(entry)) {
                 continue;
             }
             let l0 = jn.lanes[0].0;
-            let Some(k) = self.net.lanes[l0].key.filter(|_| self.net.lanes[l0].source == 2) else { continue };
+            let Some(k) = self.net.lanes[l0]
+                .key
+                .filter(|_| self.net.lanes[l0].source == 2)
+            else {
+                continue;
+            };
             let object = (k.tile, k.id);
-            if em.reservations.iter().any(|r| r.owner == s.id && r.object == object) {
+            if em
+                .reservations
+                .iter()
+                .any(|r| r.owner == s.id && r.object == object)
+            {
                 continue;
             }
             let mut group: Vec<usize> = self.object_lanes(em, object).to_vec();
-            let crossing: Vec<usize> = group.iter().flat_map(|&l| self.net.crossings[l].iter().map(|c| c.other)).collect();
+            let crossing: Vec<usize> = group
+                .iter()
+                .flat_map(|&l| self.net.crossings[l].iter().map(|c| c.other))
+                .collect();
             group.extend(crossing);
             group.extend(jn.lanes.iter().map(|x| x.0));
             group.sort_unstable();
             group.dedup();
             let movement: Vec<usize> = jn.lanes.iter().map(|x| x.0).collect();
-            let mut blocks: Vec<usize> = movement.iter().flat_map(|&l| std::iter::once(l).chain(self.net.crossings[l].iter().map(|c| c.other))).collect();
+            let mut blocks: Vec<usize> = movement
+                .iter()
+                .flat_map(|&l| {
+                    std::iter::once(l).chain(self.net.crossings[l].iter().map(|c| c.other))
+                })
+                .collect();
             blocks.sort_unstable();
             blocks.dedup();
-            asks.push((jn.inside, s.id, Reservation { owner: s.id, object, group, movement, blocks, crawl: false, entered: false, left_at: None, left_pos: None, leaders: Vec::new() }));
+            asks.push((
+                jn.inside,
+                s.id,
+                Reservation {
+                    owner: s.id,
+                    object,
+                    group,
+                    movement,
+                    blocks,
+                    crawl: false,
+                    entered: false,
+                    left_at: None,
+                    left_pos: None,
+                    leaders: Vec::new(),
+                },
+            ));
         }
         em.sirens = sirens;
         asks.sort_by_key(|a| (!a.0, a.1));
         for (_, _, r) in asks {
-            if em.reservations.iter().any(|o| o.owner != r.owner && meet(&o.group, &r.group)) {
+            if em
+                .reservations
+                .iter()
+                .any(|o| o.owner != r.owner && meet(&o.group, &r.group))
+            {
                 continue;
             }
             if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
-                log::info!("t={:.1}: junction {:?} kept for emergency vehicle {}", self.time, r.object, r.owner);
+                log::info!(
+                    "t={:.1}: junction {:?} kept for emergency vehicle {}",
+                    self.time,
+                    r.object,
+                    r.owner
+                );
             }
             em.reservations.push(r);
         }
@@ -597,29 +762,54 @@ impl TrafficSim {
         self.emergency
             .reservations
             .iter()
-            .find(|r| r.owner != c.id && !r.leaders.contains(&c.id) && jn.lanes.iter().any(|x| r.blocks.binary_search(&x.0).is_ok()))
+            .find(|r| {
+                r.owner != c.id
+                    && !r.leaders.contains(&c.id)
+                    && jn
+                        .lanes
+                        .iter()
+                        .any(|x| r.blocks.binary_search(&x.0).is_ok())
+            })
             .map(|r| r.owner)
     }
 
     /// Car `j` stands aside for car `i` (an emergency vehicle) where it can get past: it is
     /// no queue on its exit.
     pub fn aside_for(&self, j: usize, i: usize) -> bool {
-        self.cars[j].make_way.is_some_and(|w| w.from == self.cars[i].id && !w.drive_on && w.hold.is_some())
+        self.cars[j]
+            .make_way
+            .is_some_and(|w| w.from == self.cars[i].id && !w.drive_on && w.hold.is_some())
     }
 
     /// The light ahead of car `i` (`light`, distance from its origin to the line): an
     /// emergency vehicle crosses against it on the movement kept for it, and so do the
     /// vehicles leading it through (crawling from then on). None when it goes.
-    pub fn emergency_light(&mut self, i: usize, way: &[(usize, f32)], light: Option<f32>) -> Option<f32> {
+    pub fn emergency_light(
+        &mut self,
+        i: usize,
+        way: &[(usize, f32)],
+        light: Option<f32>,
+    ) -> Option<f32> {
         let d = light?;
         let id = self.cars[i].id;
         if self.emergency.reservations.is_empty() {
             return light;
         }
-        let Some(&(lane, _)) = way.iter().find(|w| (w.1 - d).abs() < 0.01) else { return light };
-        let Some(r) = self.emergency.reservations.iter_mut().find(|r| (r.owner == id && r.movement.contains(&lane)) || (r.leaders.contains(&id) && r.group.binary_search(&lane).is_ok())) else { return light };
+        let Some(&(lane, _)) = way.iter().find(|w| (w.1 - d).abs() < 0.01) else {
+            return light;
+        };
+        let Some(r) = self.emergency.reservations.iter_mut().find(|r| {
+            (r.owner == id && r.movement.contains(&lane))
+                || (r.leaders.contains(&id) && r.group.binary_search(&lane).is_ok())
+        }) else {
+            return light;
+        };
         if !r.crawl && omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
-            log::info!("t={:.1}: car {id} crosses against the light of lane {lane} for emergency vehicle {}", self.time, r.owner);
+            log::info!(
+                "t={:.1}: car {id} crosses against the light of lane {lane} for emergency vehicle {}",
+                self.time,
+                r.owner
+            );
         }
         r.crawl = true;
         if r.owner == id {
@@ -635,11 +825,22 @@ impl TrafficSim {
         let siren = !self.emergency.sirens.is_empty() && self.emergency.is_siren(id);
         let car = &self.cars[i];
         let st = &car.state;
-        let mut cap = car.make_way.filter(|w| !w.drive_on && (st.lateral - w.target).abs() > 0.05).map(|_| WALK);
+        let mut cap = car
+            .make_way
+            .filter(|w| !w.drive_on && (st.lateral - w.target).abs() > 0.05)
+            .map(|_| WALK);
         // (the owner of a junction crossed against the light, and those leading it through,
         // from the speed that braking gently brings down to the crawl at the line)
-        if let Some(r) = self.emergency.reservations.iter().find(|r| r.crawl && (r.owner == id || r.leaders.contains(&id))) {
-            let to_line = way.iter().find(|w| r.group.binary_search(&w.0).is_ok()).map(|w| w.1 - st.front);
+        if let Some(r) = self
+            .emergency
+            .reservations
+            .iter()
+            .find(|r| r.crawl && (r.owner == id || r.leaders.contains(&id)))
+        {
+            let to_line = way
+                .iter()
+                .find(|w| r.group.binary_search(&w.0).is_ok())
+                .map(|w| w.1 - st.front);
             if r.owner == id || to_line.is_some() {
                 // (aimed half a metre a second under it: the speed follows the cap with a lag)
                 let aim = CRAWL - 0.5;
@@ -659,13 +860,19 @@ impl TrafficSim {
     /// at every look ahead and sets it so).
     pub fn priority_warning(&self, i: usize, lead: Option<Lead>) -> bool {
         let id = self.cars[i].id;
-        self.emergency.is_siren(id) && (self.emergency.ran_red.contains(&id) || lead.is_some_and(|l| l.gap < WARN_GAP))
+        self.emergency.is_siren(id)
+            && (self.emergency.ran_red.contains(&id) || lead.is_some_and(|l| l.gap < WARN_GAP))
     }
 
     /// Car `i` makes way for the emergency vehicle that asks it to (see the module): its
     /// place across the lane is set here. None when it is not asked (or drives on in a
     /// junction or on a ring); else where it stops (from its origin), None while it rolls.
-    pub fn emergency_way(&mut self, i: usize, ts: &TickScene, sc: &super::lateral::SideScene) -> Option<Option<f32>> {
+    pub fn emergency_way(
+        &mut self,
+        i: usize,
+        ts: &TickScene,
+        sc: &super::lateral::SideScene,
+    ) -> Option<Option<f32>> {
         let id = self.cars[i].id;
         let Some(req) = self.emergency.requests.get(&id).copied() else {
             self.cars[i].make_way = None;
@@ -675,7 +882,11 @@ impl TrafficSim {
         let st = &car.state;
         let lane = &self.net.lanes[st.lane];
         // (a timetable bus's place across the lane is its service's)
-        if lane.ring || !self.net.crossings[st.lane].is_empty() || car.is_bus() || lane.kind != LaneKind::Street {
+        if lane.ring
+            || !self.net.crossings[st.lane].is_empty()
+            || car.is_bus()
+            || lane.kind != LaneKind::Street
+        {
             self.cars[i].make_way = None;
             return None;
         }
@@ -699,7 +910,9 @@ impl TrafficSim {
         let mut stop = None;
         if over && !w.drive_on {
             let odo = st.odometer;
-            let at = *w.hold.get_or_insert(odo + st.speed * st.speed / (2.0 * st.decel.max(1.0)) + 0.3);
+            let at = *w
+                .hold
+                .get_or_insert(odo + st.speed * st.speed / (2.0 * st.decel.max(1.0)) + 0.3);
             // (a stop point is kept 0.6 m off)
             stop = Some(st.front + (at - odo).max(0.0) + 0.6);
         }
@@ -710,12 +923,22 @@ impl TrafficSim {
     /// Where car `i` moves to for the siren of `req`, along which S-curve, and whether it
     /// waits there; the whole way over is checked first (a move that is not clear is not
     /// made: the car stays where it is across its lane).
-    fn begin_make_way(&self, i: usize, req: Request, ts: &TickScene, sc: &super::lateral::SideScene) -> MakeWay {
+    fn begin_make_way(
+        &self,
+        i: usize,
+        req: Request,
+        ts: &TickScene,
+        sc: &super::lateral::SideScene,
+    ) -> MakeWay {
         let car = &self.cars[i];
         let st = &car.state;
         let lane = &self.net.lanes[st.lane];
         let kerb = if self.net.left_hand { -1.0 } else { 1.0 };
-        let inner = if self.net.left_hand { lane.right.is_none() } else { lane.left.is_none() };
+        let inner = if self.net.left_hand {
+            lane.right.is_none()
+        } else {
+            lane.left.is_none()
+        };
         let several = lane.left.is_some() || lane.right.is_some();
         let dir = if several && inner { -kerb } else { kerb };
         // (within the lane: a path counts at least 3 m wide)
@@ -734,22 +957,63 @@ impl TrafficSim {
             hyp.lateral_target = target;
             hyp.lateral_ramp = (st.lateral, target, odo, len);
             // (the cars ahead in its lane it keeps behind anyway)
-            let skip: Vec<usize> = ts.by_lane.get(&st.lane).into_iter().flatten().filter(|e| !e.3 && e.0 != i && e.1 > st.s).map(|e| e.0).collect();
+            let skip: Vec<usize> = ts
+                .by_lane
+                .get(&st.lane)
+                .into_iter()
+                .flatten()
+                .filter(|e| !e.3 && e.0 != i && e.1 > st.s)
+                .map(|e| e.0)
+                .collect();
             let parked = self.parked_along(i, len + st.front + 2.0);
             let net = &self.net;
-            if let Some(what) = self.ghost_blocked(i, &|d| hyp.way_point(net, d), len + 1.0, &ts.feet, &skip, &parked) {
+            if let Some(what) = self.ghost_blocked(
+                i,
+                &|d| hyp.way_point(net, d),
+                len + 1.0,
+                &ts.feet,
+                &skip,
+                &parked,
+            ) {
                 if ts.debug {
-                    log::info!("t={:.1}: car {} does not move aside for emergency vehicle {}: {what}", self.time, car.id, req.from);
+                    log::info!(
+                        "t={:.1}: car {} does not move aside for emergency vehicle {}: {what}",
+                        self.time,
+                        car.id,
+                        req.from
+                    );
                 }
                 target = st.lateral;
                 vetoed = true;
             }
         }
-        let ramp = if (target - st.lateral).abs() < 0.05 { (target, target, odo, 1.0) } else { (st.lateral, target, odo, len) };
-        let drive_on = self.emergency.siren(req.from).is_none_or(|s| !self.passable(st.lane, st.s, target, car.half_width, &req, s));
-        let w = MakeWay { from: req.from, target, ramp, hold: None, drive_on, vetoed, time: self.time };
+        let ramp = if (target - st.lateral).abs() < 0.05 {
+            (target, target, odo, 1.0)
+        } else {
+            (st.lateral, target, odo, len)
+        };
+        let drive_on = self
+            .emergency
+            .siren(req.from)
+            .is_none_or(|s| !self.passable(st.lane, st.s, target, car.half_width, &req, s));
+        let w = MakeWay {
+            from: req.from,
+            target,
+            ramp,
+            hold: None,
+            drive_on,
+            vetoed,
+            time: self.time,
+        };
         if ts.debug {
-            log::info!("t={:.1}: car {} makes way for emergency vehicle {} ({:.1} m behind): to {target:+.2} m{}", self.time, car.id, req.from, req.gap, if w.drive_on { ", driving on" } else { "" });
+            log::info!(
+                "t={:.1}: car {} makes way for emergency vehicle {} ({:.1} m behind): to {target:+.2} m{}",
+                self.time,
+                car.id,
+                req.from,
+                req.gap,
+                if w.drive_on { ", driving on" } else { "" }
+            );
         }
         w
     }
@@ -776,10 +1040,17 @@ impl TrafficSim {
     /// car ahead of it has moved aside for it, if the way over is clear. True when it does.
     pub fn emergency_corridor(&mut self, i: usize, ts: &TickScene) -> bool {
         let id = self.cars[i].id;
-        let Some(s) = self.emergency.siren(id) else { return false };
+        let Some(s) = self.emergency.siren(id) else {
+            return false;
+        };
         let Some(off) = s.corridor else { return false };
         let made_room = self.emergency.requests.iter().any(|(&cid, r)| {
-            r.from == id && r.gap > -1.0 && self.index_of.get(&cid).is_some_and(|&k| self.aside_for(k, i))
+            r.from == id
+                && r.gap > -1.0
+                && self
+                    .index_of
+                    .get(&cid)
+                    .is_some_and(|&k| self.aside_for(k, i))
         });
         let st = &self.cars[i].state;
         if !made_room {
@@ -791,7 +1062,10 @@ impl TrafficSim {
             hyp.lateral_target = off;
             hyp.lateral_ramp = (st.lateral, off, st.odometer, len);
             let net = &self.net;
-            if self.ghost_blocked(i, &|d| hyp.way_point(net, d), len, &ts.feet, &[], &[]).is_some() {
+            if self
+                .ghost_blocked(i, &|d| hyp.way_point(net, d), len, &ts.feet, &[], &[])
+                .is_some()
+            {
                 return false;
             }
         }
@@ -805,9 +1079,17 @@ impl TrafficSim {
         let mut k = j;
         let mut len = self.cars[j].state.front + self.cars[j].state.rear;
         for _ in 0..8 {
-            let Some((id, gap)) = self.cars[k].lead_info else { break };
-            let Some(&n) = self.index_of.get(&id) else { break };
-            if gap > 15.0 || self.cars[n].make_way.is_none_or(|w| w.from != self.cars[i].id) {
+            let Some((id, gap)) = self.cars[k].lead_info else {
+                break;
+            };
+            let Some(&n) = self.index_of.get(&id) else {
+                break;
+            };
+            if gap > 15.0
+                || self.cars[n]
+                    .make_way
+                    .is_none_or(|w| w.from != self.cars[i].id)
+            {
                 break;
             }
             len += gap.max(0.0) + self.cars[n].state.front + self.cars[n].state.rear;

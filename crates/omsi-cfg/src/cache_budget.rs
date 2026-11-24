@@ -36,39 +36,73 @@ struct Candidate {
 /// Missing directories and inaccessible entries fail closed (no deletion).
 fn scan(root: &Path, kind: Kind) -> (Usage, Vec<Candidate>) {
     let mut usage = Usage::default();
-    let Ok(meta) = fs::symlink_metadata(root) else { return (usage, vec![]) };
-    if !meta.file_type().is_dir() { return (usage, vec![]) }
-    let pins = if kind == Kind::ClientLan { server_pins(root) } else { Some(std::collections::HashSet::new()) };
+    let Ok(meta) = fs::symlink_metadata(root) else {
+        return (usage, vec![]);
+    };
+    if !meta.file_type().is_dir() {
+        return (usage, vec![]);
+    }
+    let pins = if kind == Kind::ClientLan {
+        server_pins(root)
+    } else {
+        Some(std::collections::HashSet::new())
+    };
     usage.server_store = pins.as_ref().is_none_or(|p| !p.is_empty());
     let mut dirs = vec![root.to_path_buf()];
     let mut files = Vec::new();
     while let Some(dir) = dirs.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else { continue };
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
-            let Ok(md) = fs::symlink_metadata(&path) else { continue };
-            if md.file_type().is_symlink() { continue }
-            if md.file_type().is_dir() {
-                if kind == Kind::Local { dirs.push(path); }
+            let Ok(md) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if md.file_type().is_symlink() {
                 continue;
             }
-            if !md.file_type().is_file() { continue; }
+            if md.file_type().is_dir() {
+                if kind == Kind::Local {
+                    dirs.push(path);
+                }
+                continue;
+            }
+            if !md.file_type().is_file() {
+                continue;
+            }
             if kind == Kind::ClientLan {
                 // The client store's sealed objects; never the encryption key, a manifest,
                 // metadata or an unknown file. The server also uses this directory, so
                 // only blobs named in the server retention index are protected.
-                if !matches!(path.extension().and_then(|x| x.to_str()),
-                    Some("blob" | "piece" | "zpiece" | "partpiece" | "part")) { continue; }
+                if !matches!(
+                    path.extension().and_then(|x| x.to_str()),
+                    Some("blob" | "piece" | "zpiece" | "partpiece" | "part")
+                ) {
+                    continue;
+                }
             }
             // Server-retained blobs are outside the joining player's cache budget.
-            if kind == Kind::ClientLan && pins.as_ref().is_none_or(|pins| path.file_name().is_some_and(|n| pins.contains(n.to_string_lossy().as_ref()))) { continue; }
+            if kind == Kind::ClientLan
+                && pins.as_ref().is_none_or(|pins| {
+                    path.file_name()
+                        .is_some_and(|n| pins.contains(n.to_string_lossy().as_ref()))
+                })
+            {
+                continue;
+            }
             let modified = md.modified().unwrap_or(UNIX_EPOCH);
             usage.bytes = usage.bytes.saturating_add(md.len());
             // In-progress files are never reaped immediately. The packed zpiece is
             // itself a partial transfer artifact and must receive the same grace.
             let temporary = temporary(&path, kind);
             let eligible = !temporary || modified.elapsed().is_ok_and(|age| age >= TRANSFER_GRACE);
-            files.push(Candidate { path, bytes: md.len(), modified, eligible });
+            files.push(Candidate {
+                path,
+                bytes: md.len(),
+                modified,
+                eligible,
+            });
         }
     }
     (usage, files)
@@ -78,17 +112,30 @@ fn scan(root: &Path, kind: Kind) -> (Usage, Vec<Candidate>) {
 /// A directory created by merely opening uploads does not disable cleanup.
 fn server_pins(root: &Path) -> Option<std::collections::HashSet<String>> {
     let dir = root.join("vehicles");
-    let Ok(md) = fs::symlink_metadata(&dir) else { return Some(Default::default()) };
-    if !md.is_dir() || md.file_type().is_symlink() { return None; }
-    let has_manifests = fs::read_dir(&dir).ok()?.flatten().any(|e| e.path().extension().is_some_and(|x| x == "json"));
-    if !has_manifests { return Some(Default::default()); }
+    let Ok(md) = fs::symlink_metadata(&dir) else {
+        return Some(Default::default());
+    };
+    if !md.is_dir() || md.file_type().is_symlink() {
+        return None;
+    }
+    let has_manifests = fs::read_dir(&dir)
+        .ok()?
+        .flatten()
+        .any(|e| e.path().extension().is_some_and(|x| x == "json"));
+    if !has_manifests {
+        return Some(Default::default());
+    }
     let file = dir.join("cache-pins");
-    if !fs::symlink_metadata(&file).ok()?.file_type().is_file() { return None; }
+    if !fs::symlink_metadata(&file).ok()?.file_type().is_file() {
+        return None;
+    }
     let text = fs::read_to_string(file).ok()?;
     let mut pins = std::collections::HashSet::new();
     for line in text.lines() {
         let hex = line.strip_suffix(".blob")?;
-        if hex.len() != 64 || !hex.bytes().all(|c| c.is_ascii_hexdigit()) { return None; }
+        if hex.len() != 64 || !hex.bytes().all(|c| c.is_ascii_hexdigit()) {
+            return None;
+        }
         pins.insert(line.to_string());
     }
     Some(pins)
@@ -112,17 +159,32 @@ pub fn usage(root: &Path, kind: Kind) -> Usage {
 /// when it is safe; for a large session, exceeding the limit is explicitly allowed.
 pub fn trim(root: &Path, kind: Kind, budget: u64) -> Usage {
     let (mut usage, mut candidates) = scan(root, kind);
-    if usage.bytes <= budget { return usage }
+    if usage.bytes <= budget {
+        return usage;
+    }
     candidates.retain(|c| c.eligible);
     candidates.sort_by_key(|c| c.modified);
     for item in candidates {
-        if usage.bytes <= budget { break; }
+        if usage.bytes <= budget {
+            break;
+        }
         // Do not follow newly substituted symlinks or delete a file replaced/reused since scan.
-        let Ok(md) = fs::symlink_metadata(&item.path) else { continue };
-        if !md.file_type().is_file() || md.len() != item.bytes ||
-            md.modified().ok() != Some(item.modified) { continue; }
-        if temporary(&item.path, kind) &&
-            md.modified().ok().and_then(|t| t.elapsed().ok()).is_none_or(|d| d < TRANSFER_GRACE) {
+        let Ok(md) = fs::symlink_metadata(&item.path) else {
+            continue;
+        };
+        if !md.file_type().is_file()
+            || md.len() != item.bytes
+            || md.modified().ok() != Some(item.modified)
+        {
+            continue;
+        }
+        if temporary(&item.path, kind)
+            && md
+                .modified()
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .is_none_or(|d| d < TRANSFER_GRACE)
+        {
             continue;
         }
         if fs::remove_file(&item.path).is_ok() {
@@ -145,8 +207,12 @@ mod tests {
     }
 
     fn age(path: &Path, secs: u64) {
-        fs::File::options().write(true).open(path).unwrap()
-            .set_modified(SystemTime::now() - Duration::from_secs(secs)).unwrap();
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(secs))
+            .unwrap();
     }
 
     #[test]
@@ -174,7 +240,9 @@ mod tests {
         let old = root.join("old.blob");
         let new = root.join("new.blob");
         let piece = root.join("active.piece");
-        for path in [&old, &new, &piece] { fs::write(path, [7; 8]).unwrap(); }
+        for path in [&old, &new, &piece] {
+            fs::write(path, [7; 8]).unwrap();
+        }
         fs::write(root.join("store.key"), [5; 32]).unwrap();
         age(&old, 7200);
         age(&new, 3600);
@@ -230,7 +298,10 @@ mod tests {
         let result = trim(&root, Kind::ClientLan, 0);
         assert!(result.server_store && root.join(pinned).exists());
         assert_eq!(result.freed, 10);
-        assert_eq!(result.bytes, 0, "retained server files have a separate policy");
+        assert_eq!(
+            result.bytes, 0,
+            "retained server files have a separate policy"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

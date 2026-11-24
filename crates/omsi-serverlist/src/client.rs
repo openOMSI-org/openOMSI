@@ -3,7 +3,7 @@
 //! here (`moderation::show_listing`), an icon is shown only if this client cleared it, and
 //! an entry that is no joinable address is dropped.
 
-use crate::moderation::{show_listing, IconVerdict, Moderator, Shown, MAX_ICON_BYTES};
+use crate::moderation::{IconVerdict, MAX_ICON_BYTES, Moderator, Shown, show_listing};
 use serde_json::Value;
 
 /// The most servers one list shows.
@@ -33,12 +33,25 @@ pub fn address_ok(a: &str) -> bool {
     let rest = match a.strip_prefix("https://") {
         Some(r) => r,
         None => match a.strip_prefix("http://") {
-            Some(r) if r.rsplit_once(':').is_some_and(|(_, p)| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit())) => r,
+            Some(r)
+                if r.rsplit_once(':').is_some_and(|(_, p)| {
+                    !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit())
+                }) =>
+            {
+                r
+            }
             _ => return false,
         },
     };
     let host = rest.split('/').next().unwrap_or("");
-    !host.is_empty() && host.len() <= 80 && !host.contains('@') && a.len() <= 200 && a.bytes().all(|b| b.is_ascii_graphic()) && host.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b':' | b'[' | b']'))
+    !host.is_empty()
+        && host.len() <= 80
+        && !host.contains('@')
+        && a.len() <= 200
+        && a.bytes().all(|b| b.is_ascii_graphic())
+        && host
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b':' | b'[' | b']'))
 }
 
 fn text(v: &Value, k: &str) -> String {
@@ -51,17 +64,38 @@ fn count(v: &Value, k: &str) -> u32 {
 
 /// The entries of the service's answer (`{"servers":[…]}`), moderated. `icon` fetches the PNG
 /// of an entry by its id (called only for entries that say they have one, a few at most).
-pub fn entries_of(answer: &Value, m: &dyn Moderator, icon: &mut dyn FnMut(&str) -> Option<Vec<u8>>) -> Vec<Entry> {
-    let Some(list) = answer.get("servers").and_then(Value::as_array) else { return Vec::new() };
+pub fn entries_of(
+    answer: &Value,
+    m: &dyn Moderator,
+    icon: &mut dyn FnMut(&str) -> Option<Vec<u8>>,
+) -> Vec<Entry> {
+    let Some(list) = answer.get("servers").and_then(Value::as_array) else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     for s in list.iter().take(MAX_ENTRIES) {
         let address = text(s, "address");
         let id = text(s, "id");
-        if !address_ok(&address) || id.is_empty() || id.len() > 40 || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+        if !address_ok(&address)
+            || id.is_empty()
+            || id.len() > 40
+            || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        {
             continue;
         }
-        let png = s.get("has_icon").and_then(Value::as_bool).unwrap_or(false).then(|| icon(&id)).flatten().filter(|p| p.len() <= MAX_ICON_BYTES);
-        let Shown { name, motd, icon_ok, covered } = show_listing(m, &text(s, "name"), &text(s, "motd"), png.as_deref());
+        let png = s
+            .get("has_icon")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+            .then(|| icon(&id))
+            .flatten()
+            .filter(|p| p.len() <= MAX_ICON_BYTES);
+        let Shown {
+            name,
+            motd,
+            icon_ok,
+            covered,
+        } = show_listing(m, &text(s, "name"), &text(s, "motd"), png.as_deref());
         out.push(Entry {
             id,
             address,
@@ -80,12 +114,20 @@ pub fn entries_of(answer: &Value, m: &dyn Moderator, icon: &mut dyn FnMut(&str) 
 
 /// Ask the service for the list (blocking; a few seconds at most) and moderate it.
 pub fn fetch(service: &str, m: &dyn Moderator) -> Result<Vec<Entry>, String> {
-    let agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(8)).build();
-    let body = agent.get(&format!("{}/v1/servers", service.trim_end_matches('/'))).call().map_err(|e| format!("the server list could not be reached ({e})"))?.into_string().map_err(|e| e.to_string())?;
+    let agent = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(8))
+        .build();
+    let body = agent
+        .get(&format!("{}/v1/servers", service.trim_end_matches('/')))
+        .call()
+        .map_err(|e| format!("the server list could not be reached ({e})"))?
+        .into_string()
+        .map_err(|e| e.to_string())?;
     if body.len() > 1 << 20 {
         return Err("the server list answered with too much".into());
     }
-    let v: Value = serde_json::from_str(&body).map_err(|_| "the server list answered with something else".to_string())?;
+    let v: Value = serde_json::from_str(&body)
+        .map_err(|_| "the server list answered with something else".to_string())?;
     let mut icons = 0;
     let mut get_icon = |id: &str| -> Option<Vec<u8>> {
         // (a client does not fetch hundreds of pictures: the first few entries have theirs)
@@ -93,9 +135,19 @@ pub fn fetch(service: &str, m: &dyn Moderator) -> Result<Vec<Entry>, String> {
         if icons > 60 {
             return None;
         }
-        let r = agent.get(&format!("{}/v1/servers/{id}/icon.png", service.trim_end_matches('/'))).call().ok()?;
+        let r = agent
+            .get(&format!(
+                "{}/v1/servers/{id}/icon.png",
+                service.trim_end_matches('/')
+            ))
+            .call()
+            .ok()?;
         let mut buf = Vec::new();
-        std::io::Read::read_to_end(&mut std::io::Read::take(r.into_reader(), MAX_ICON_BYTES as u64 + 1), &mut buf).ok()?;
+        std::io::Read::read_to_end(
+            &mut std::io::Read::take(r.into_reader(), MAX_ICON_BYTES as u64 + 1),
+            &mut buf,
+        )
+        .ok()?;
         Some(buf)
     };
     Ok(entries_of(&v, m, &mut get_icon))
@@ -124,19 +176,44 @@ mod tests {
     struct Double;
     impl Moderator for Double {
         fn check_text(&self, t: &str) -> Verdict {
-            if t.contains("FLAGGED") { Verdict::Flagged("test") } else { Verdict::Clean }
+            if t.contains("FLAGGED") {
+                Verdict::Flagged("test")
+            } else {
+                Verdict::Clean
+            }
         }
         fn check_icon(&self, png: &[u8]) -> IconVerdict {
-            if png == b"good" { IconVerdict::Cleared } else if png == b"bad" { IconVerdict::Flagged("test") } else { IconVerdict::Unchecked }
+            if png == b"good" {
+                IconVerdict::Cleared
+            } else if png == b"bad" {
+                IconVerdict::Flagged("test")
+            } else {
+                IconVerdict::Unchecked
+            }
         }
     }
 
     #[test]
     fn addresses_of_the_list() {
-        for ok in ["https://abc-def.trycloudflare.com", "https://play.example.org/", "http://203.0.113.9:27025", "http://[2001:db8::1]:27025"] {
+        for ok in [
+            "https://abc-def.trycloudflare.com",
+            "https://play.example.org/",
+            "http://203.0.113.9:27025",
+            "http://[2001:db8::1]:27025",
+        ] {
             assert!(address_ok(ok), "{ok}");
         }
-        for bad in ["", "http://203.0.113.9", "ftp://x.example", "https://user@x.example", "https://x y", "javascript:alert(1)", "https://", "http://host:", "https://x.example/\u{7f}"] {
+        for bad in [
+            "",
+            "http://203.0.113.9",
+            "ftp://x.example",
+            "https://user@x.example",
+            "https://x y",
+            "javascript:alert(1)",
+            "https://",
+            "http://host:",
+            "https://x.example/\u{7f}",
+        ] {
             assert!(!address_ok(bad), "{bad}");
         }
     }
@@ -156,13 +233,24 @@ mod tests {
         let mut asked = Vec::new();
         let mut icon = |id: &str| {
             asked.push(id.to_string());
-            Some(match id { "a1" => b"good".to_vec(), "a2" => b"good".to_vec(), _ => b"bad".to_vec() })
+            Some(match id {
+                "a1" => b"good".to_vec(),
+                "a2" => b"good".to_vec(),
+                _ => b"bad".to_vec(),
+            })
         };
         let list = entries_of(&answer, &Double, &mut icon);
-        assert_eq!(list.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), vec!["a1", "a2", "a4"]);
+        assert_eq!(
+            list.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+            vec!["a1", "a2", "a4"]
+        );
         assert_eq!(list[0].icon.as_deref(), Some(&b"good"[..]));
         assert!(list[1].covered && list[1].name == "[hidden]");
-        assert_eq!(list[1].icon.as_deref(), Some(&b"good"[..]), "the icon is judged on its own");
+        assert_eq!(
+            list[1].icon.as_deref(),
+            Some(&b"good"[..]),
+            "the icon is judged on its own"
+        );
         assert_eq!(list[2].icon, None);
         assert_eq!(list[2].players, 10_000);
         // nothing at all: an empty list, no panic
@@ -174,7 +262,9 @@ mod tests {
     #[test]
     fn with_the_builtin_moderator_no_custom_icon_is_shown() {
         let answer = json!({"servers": [{"id": "a1", "address": "https://one.example.org", "name": "Fine", "has_icon": true}]});
-        let list = entries_of(&answer, &BuiltinModerator, &mut |_| Some(vec![0x89, b'P', b'N', b'G']));
+        let list = entries_of(&answer, &BuiltinModerator, &mut |_| {
+            Some(vec![0x89, b'P', b'N', b'G'])
+        });
         assert_eq!(list.len(), 1);
         assert!(!has_icon(&list[0]));
     }

@@ -39,16 +39,26 @@ impl LanSession {
     /// Tell each player (`viewers`: its id and where it is) what is within its range of the
     /// host's traffic `table`, as the byte budget `bytes_per_second` allows (host). Call
     /// once a frame; the snapshots themselves come ten times a second. Returns the bytes sent.
-    pub fn traffic_publish(&mut self, table: &TrafficTable, viewers: &[(u32, [f64; 3])], dt: f32, bytes_per_second: f64) -> usize {
+    pub fn traffic_publish(
+        &mut self,
+        table: &TrafficTable,
+        viewers: &[(u32, [f64; 3])],
+        dt: f32,
+        bytes_per_second: f64,
+    ) -> usize {
         if self.role != Role::Host {
             return 0;
         }
         let now = self.started.elapsed().as_secs_f64();
         let stamp = self.stamp_ms();
-        self.traffic.host.retain(|id, _| viewers.iter().any(|(v, _)| v == id));
+        self.traffic
+            .host
+            .retain(|id, _| viewers.iter().any(|(v, _)| v == id));
         let mut n = 0;
         for (id, at) in viewers {
-            let Some(to) = self.peer_addr(*id) else { continue };
+            let Some(to) = self.peer_addr(*id) else {
+                continue;
+            };
             if !self.traffic.host.contains_key(id) {
                 self.traffic.epochs = self.traffic.epochs.wrapping_add(1);
                 let mut s = ClientSync::new(self.traffic.epochs.max(1));
@@ -81,7 +91,10 @@ impl LanSession {
     }
 
     pub fn traffic_stats(&self) -> TrafficNetStats {
-        let mut s = TrafficNetStats { acks_heard: self.traffic.acks_heard, ..Default::default() };
+        let mut s = TrafficNetStats {
+            acks_heard: self.traffic.acks_heard,
+            ..Default::default()
+        };
         for c in self.traffic.host.values() {
             s.tracked += c.tracked();
             s.datagrams += c.stats.datagrams;
@@ -123,12 +136,24 @@ impl LanSession {
         if self.role != Role::Host {
             return;
         }
-        let Some(id) = self.peers.iter().find(|(_, p)| p.addr == Some(from)).map(|(id, _)| *id) else { return };
+        let Some(id) = self
+            .peers
+            .iter()
+            .find(|(_, p)| p.addr == Some(from))
+            .map(|(id, _)| *id)
+        else {
+            return;
+        };
         // (a player's answers come at the rate of the datagrams they answer, not faster)
-        if self.checked_peer(id, from, TACK_RATE, PeerTraffic::Tack).is_none() {
+        if self
+            .checked_peer(id, from, TACK_RATE, PeerTraffic::Tack)
+            .is_none()
+        {
             return;
         }
-        let Some(ack) = wire::decode_ack(data, PROTOCOL as u8) else { return };
+        let Some(ack) = wire::decode_ack(data, PROTOCOL as u8) else {
+            return;
+        };
         if let Some(sync) = self.traffic.host.get_mut(&id) {
             sync.on_ack(&ack);
             self.traffic.acks_heard += 1;

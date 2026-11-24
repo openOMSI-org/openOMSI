@@ -5,7 +5,8 @@ use super::*;
 #[test]
 fn body_damping_does_not_depend_on_the_frame_rate() {
     let f = ((2.0 * 240.0 + 2.0 * 280.0) / 12.0f32).sqrt();
-    let second = |fps: f32| (0..fps as usize).fold(1.0f32, |k, _| k * super::body_damping(f, 1.0 / fps));
+    let second =
+        |fps: f32| (0..fps as usize).fold(1.0f32, |k, _| k * super::body_damping(f, 1.0 / fps));
     let (a, b, c) = (second(30.0), second(60.0), second(144.0));
     assert!((a - b).abs() < 1e-3 && (a - c).abs() < 1e-3, "{a} {b} {c}");
     assert!(a > 0.2 && a < 0.5, "{a}");
@@ -13,8 +14,31 @@ fn body_damping_does_not_depend_on_the_frame_rate() {
 use omsi_vehicle::vehicle::Axle;
 
 fn bus() -> Vehicle {
-    let axle = |long: f32, spring: f32, max_force: f32, driven: bool| Axle { long, max_width: 2.4, min_width: 1.76, wheel_diameter: 0.94, spring, max_force, damper: 20.0, driven, inertia_inv: 0.0 };
-    Vehicle { mass: 10.2, moment_of_inertia: [600.0, 90.0, 400.0], cog_height: 1.2, rolling_resistance: 1000.0, rot_pnt_long: -2.7, inv_min_turn_radius: 0.13, axles: vec![axle(3.238, 240.0, 90.0, false), axle(-2.637, 280.0, 116.0, true)], bounding_box: Some([2.472, 11.663, 2.491, 0.0, 0.001, 1.622]), ..Default::default() }
+    let axle = |long: f32, spring: f32, max_force: f32, driven: bool| Axle {
+        long,
+        max_width: 2.4,
+        min_width: 1.76,
+        wheel_diameter: 0.94,
+        spring,
+        max_force,
+        damper: 20.0,
+        driven,
+        inertia_inv: 0.0,
+    };
+    Vehicle {
+        mass: 10.2,
+        moment_of_inertia: [600.0, 90.0, 400.0],
+        cog_height: 1.2,
+        rolling_resistance: 1000.0,
+        rot_pnt_long: -2.7,
+        inv_min_turn_radius: 0.13,
+        axles: vec![
+            axle(3.238, 240.0, 90.0, false),
+            axle(-2.637, 280.0, 116.0, true),
+        ],
+        bounding_box: Some([2.472, 11.663, 2.491, 0.0, 0.001, 1.622]),
+        ..Default::default()
+    }
 }
 
 /// Flat road at height 0 with an optional step of `step` metres from y = `at` on.
@@ -22,14 +46,26 @@ fn road(at: f64, step: f64) -> impl Fn(f64, f64, f64) -> GroundProbe {
     move |_x, y, z_top| {
         let z = if y >= at { step } else { 0.0 };
         if z <= z_top {
-            GroundProbe { below: Some(z), above: None }
+            GroundProbe {
+                below: Some(z),
+                above: None,
+            }
         } else {
-            GroundProbe { below: Some(0.0), above: Some(z) }
+            GroundProbe {
+                below: Some(0.0),
+                above: Some(z),
+            }
         }
     }
 }
 
-fn run(rb: &mut RigidBody, secs: f32, torque: f32, brake: f32, g: &dyn Fn(f64, f64, f64) -> GroundProbe) {
+fn run(
+    rb: &mut RigidBody,
+    secs: f32,
+    torque: f32,
+    brake: f32,
+    g: &dyn Fn(f64, f64, f64) -> GroundProbe,
+) {
     let brakes = vec![brake; rb.wheels.len()];
     for _ in 0..(secs * 60.0) as usize {
         rb.step(1.0 / 60.0, torque, &brakes, 0.0, g);
@@ -39,15 +75,30 @@ fn run(rb: &mut RigidBody, secs: f32, torque: f32, brake: f32, g: &dyn Fn(f64, f
 #[test]
 fn driving_past_a_thin_roadside_triangle_has_no_false_wall() {
     let mut grid = omsi_geometry::DriveGrid::default();
-    grid.push([Vec3::ZERO, Vec3::new(30.0, 0.0, 0.0), Vec3::new(0.0, 50.0, 0.0)]);
-    grid.push([Vec3::new(30.0, 0.0, 0.0), Vec3::new(30.0, 50.0, 0.0), Vec3::new(0.0, 50.0, 0.0)]);
+    grid.push([
+        Vec3::ZERO,
+        Vec3::new(30.0, 0.0, 0.0),
+        Vec3::new(0.0, 50.0, 0.0),
+    ]);
+    grid.push([
+        Vec3::new(30.0, 0.0, 0.0),
+        Vec3::new(30.0, 50.0, 0.0),
+        Vec3::new(0.0, 50.0, 0.0),
+    ]);
     // Entirely beside the bus's wheel track. A tolerance on the infinite
     // edge lines extended this face into the road and extrapolated its height.
-    grid.push([Vec3::new(10.0, 10.0, 0.0), Vec3::new(12.0, 9.6, 0.8), Vec3::new(10.0, 9.999, 0.0)]);
+    grid.push([
+        Vec3::new(10.0, 10.0, 0.0),
+        Vec3::new(12.0, 9.6, 0.8),
+        Vec3::new(10.0, 9.999, 0.0),
+    ]);
     grid.build(300.0);
     let ground = |x: f64, y: f64, top: f64| {
         let p = grid.probe(x as f32, y as f32, top as f32);
-        GroundProbe { below: p.below.map(f64::from), above: p.above.map(f64::from) }
+        GroundProbe {
+            below: p.below.map(f64::from),
+            above: p.above.map(f64::from),
+        }
     };
     for fps in [30, 60] {
         for kmh in [5.0, 40.0, 45.0, 60.0] {
@@ -56,18 +107,35 @@ fn driving_past_a_thin_roadside_triangle_has_no_false_wall() {
             run(&mut rb, 2.0, 0.0, 0.0, &ground);
             let speed = kmh / 3.6;
             rb.velocity = Vec3::Y * speed;
-            for w in &mut rb.wheels { w.spin = speed / w.radius; }
+            for w in &mut rb.wheels {
+                w.spin = speed / w.radius;
+            }
             let radius = rb.wheels.iter().find(|w| w.driven).unwrap().radius;
             let dt = 1.0 / fps as f32;
             // Hold speed with drive torque so the slow case crosses too.
             for _ in 0..(18.0 / speed / dt).ceil() as usize {
-                let torque = ((speed - rb.forward_speed()) * rb.mass * 2.0 + rb.rolling_resistance) * radius;
+                let torque =
+                    ((speed - rb.forward_speed()) * rb.mass * 2.0 + rb.rolling_resistance) * radius;
                 rb.step(dt, torque, &[0.0; 4], 0.0, &ground);
-                assert!(rb.wheel_impacts.is_empty(), "{kmh} km/h at {fps} fps: {:?}", rb.wheel_impacts);
-                assert!(rb.wheels.iter().all(|w| w.walls.is_empty()), "{kmh} km/h at {fps} fps: false wheel wall");
+                assert!(
+                    rb.wheel_impacts.is_empty(),
+                    "{kmh} km/h at {fps} fps: {:?}",
+                    rb.wheel_impacts
+                );
+                assert!(
+                    rb.wheels.iter().all(|w| w.walls.is_empty()),
+                    "{kmh} km/h at {fps} fps: false wheel wall"
+                );
             }
-            assert!(rb.position.y > 20.0, "{kmh} km/h at {fps} fps: stopped at {:?}", rb.position);
-            assert!(rb.forward_speed() > speed * 0.9, "{kmh} km/h at {fps} fps: lost speed");
+            assert!(
+                rb.position.y > 20.0,
+                "{kmh} km/h at {fps} fps: stopped at {:?}",
+                rb.position
+            );
+            assert!(
+                rb.forward_speed() > speed * 0.9,
+                "{kmh} km/h at {fps} fps: lost speed"
+            );
         }
     }
 }
@@ -83,7 +151,12 @@ fn the_axle_steers_as_far_left_as_right() {
         for _ in 0..5 {
             rb.step(1.0 / 60.0, 0.0, &[0.0; 4], steer, &g);
         }
-        (rb.axle_steer(0), rb.axle_steer(1), rb.wheels[0].steer, rb.wheels[1].steer)
+        (
+            rb.axle_steer(0),
+            rb.axle_steer(1),
+            rb.wheels[0].steer,
+            rb.wheels[1].steer,
+        )
     };
     let (l0, r0, tl0, tr0) = at(-1.0);
     let (l1, r1, tl1, tr1) = at(1.0);
@@ -93,7 +166,10 @@ fn the_axle_steers_as_far_left_as_right() {
     // (the full lock of 0.13 1/m, 5.94 m ahead of the turning line)
     assert!((l1 - (5.938f32 * 0.13).atan()).abs() < 1e-3, "{l1}");
     // the inner tyre turns further than the outer
-    assert!(tl0.abs() > tr0.abs() && tr1.abs() > tl1.abs(), "{tl0} {tr0} {tl1} {tr1}");
+    assert!(
+        tl0.abs() > tr0.abs() && tr1.abs() > tl1.abs(),
+        "{tl0} {tr0} {tl1} {tr1}"
+    );
 }
 
 /// A brake stronger than the road takes locks the wheels (the ABS scripts see the
@@ -113,7 +189,12 @@ fn a_brake_beyond_the_grip_locks_the_wheels() {
         let v = rb.velocity.length();
         let locked = rb.wheels.iter().all(|w| w.spin.abs() * w.radius < 0.5);
         assert!(v > 5.0, "still moving: {v}");
-        assert_eq!(locked, locks, "brake {brake}: spins {:?} at {v} m/s", rb.wheels.iter().map(|w| w.spin).collect::<Vec<_>>());
+        assert_eq!(
+            locked,
+            locks,
+            "brake {brake}: spins {:?} at {v} m/s",
+            rb.wheels.iter().map(|w| w.spin).collect::<Vec<_>>()
+        );
     }
 }
 
@@ -128,7 +209,11 @@ fn sags_by_its_own_springs() {
     let origin = rb.origin();
     assert!((origin.z + 0.097).abs() < 0.01, "origin {origin:?}");
     for w in &rb.wheels {
-        assert!((w.compression - 0.097).abs() < 0.015, "compression {}", w.compression);
+        assert!(
+            (w.compression - 0.097).abs() < 0.015,
+            "compression {}",
+            w.compression
+        );
         assert!(w.ground_z.abs() < 1e-6);
     }
     // a softer air spring lowers it further
@@ -159,7 +244,10 @@ fn a_long_frame_does_not_bounce_the_body() {
             worst = worst.max((w.compression - b).abs());
         }
     }
-    assert!(worst < 0.02, "the suspension moved {worst} m after a long frame");
+    assert!(
+        worst < 0.02,
+        "the suspension moved {worst} m after a long frame"
+    );
 }
 
 #[test]
@@ -167,9 +255,15 @@ fn rides_over_a_hump() {
     let hump = |_x: f64, y: f64, z_top: f64| {
         let z = if (20.0..20.6).contains(&y) { 0.06 } else { 0.0 };
         if z <= z_top {
-            GroundProbe { below: Some(z), above: None }
+            GroundProbe {
+                below: Some(z),
+                above: None,
+            }
         } else {
-            GroundProbe { below: Some(0.0), above: Some(z) }
+            GroundProbe {
+                below: Some(0.0),
+                above: Some(z),
+            }
         }
     };
     let mut rb = RigidBody::from_definition(&bus(), &[]);
@@ -194,7 +288,10 @@ fn rides_over_a_hump() {
     assert!(lift < 0.05, "the body lifted {lift:.3} m");
     // (Omsi.exe's wheel stands on the point under it: at the hump's edge its travel
     // takes the hump's height at once, no more)
-    assert!(jump < 0.065, "a wheel's travel jumped {jump:.3} m in a frame");
+    assert!(
+        jump < 0.065,
+        "a wheel's travel jumped {jump:.3} m in a frame"
+    );
     assert!(air < 16, "wheels off the road for {air} wheel-frames");
 }
 
@@ -217,12 +314,22 @@ fn climbs_a_kerb_but_not_a_wall() {
     let kerb = road(6.0, 0.15);
     let (rb, front) = climb(&kerb, 9500.0, 10.0);
     assert!(front > 9.0, "front axle at {front}");
-    assert!((rb.wheels[0].ground_z - 0.15).abs() < 0.01, "front wheel on the kerb: {}", rb.wheels[0].ground_z);
+    assert!(
+        (rb.wheels[0].ground_z - 0.15).abs() < 0.01,
+        "front wheel on the kerb: {}",
+        rb.wheels[0].ground_z
+    );
     let (_, front) = climb(&kerb, 1400.0, 10.0);
-    assert!(front < 6.0, "idle creep climbed the kerb: front axle at {front}");
+    assert!(
+        front < 6.0,
+        "idle creep climbed the kerb: front axle at {front}"
+    );
     let lowered = road(6.0, 0.03);
     let (_, front) = climb(&lowered, 1400.0, 15.0);
-    assert!(front > 7.0, "idle creep stuck at a lowered kerb: front axle at {front}");
+    assert!(
+        front > 7.0,
+        "idle creep stuck at a lowered kerb: front axle at {front}"
+    );
 
     let mut rb = RigidBody::from_definition(&bus(), &[]);
     rb.place(DVec3::ZERO, 0.0);
@@ -244,7 +351,17 @@ fn climbs_a_kerb_but_not_a_wall() {
 fn pusher_front_section_is_pushed_through_the_joint() {
     let mut def = bus();
     def.axles.iter_mut().for_each(|a| a.driven = false);
-    let rear = CoupledPart { point: Vec3::new(0.0, -4.456, 0.503), dir: Vec3::Y, mass: 0.0, driven_wheels: 2, radius: 0.47, driven_load: 70_000.0, brake: 0.0, load: 70_000.0, joint_load: 0.0 };
+    let rear = CoupledPart {
+        point: Vec3::new(0.0, -4.456, 0.503),
+        dir: Vec3::Y,
+        mass: 0.0,
+        driven_wheels: 2,
+        radius: 0.47,
+        driven_load: 70_000.0,
+        brake: 0.0,
+        load: 70_000.0,
+        joint_load: 0.0,
+    };
     let g = road(1e9, 0.0);
     let start = |def: &Vehicle, parts: Vec<CoupledPart>| {
         let mut rb = RigidBody::from_definition(def, &[]);
@@ -267,14 +384,25 @@ fn pusher_front_section_is_pushed_through_the_joint() {
     let mut own = start(&bus(), Vec::new());
     run(&mut own, 5.0, 9000.0, 0.0, &g);
     let driven = own.origin().y;
-    assert!(pushed > 5.0 && (pushed - driven).abs() < 0.1 * driven, "pushed {pushed} m, driven {driven} m");
+    assert!(
+        pushed > 5.0 && (pushed - driven).abs() < 0.1 * driven,
+        "pushed {pushed} m, driven {driven} m"
+    );
     let (heading, _, _) = rb.heading_pitch_bank();
-    assert!(rb.origin().x.abs() < 0.05 && heading.min(360.0 - heading) < 0.5, "{:?} {heading}", rb.origin());
+    assert!(
+        rb.origin().x.abs() < 0.05 && heading.min(360.0 - heading) < 0.5,
+        "{:?} {heading}",
+        rb.origin()
+    );
     // the rear section's brakes stop the train
     let v = rb.forward_speed();
     rb.coupled[0].brake = 30_000.0;
     run(&mut rb, 1.0, 0.0, 0.0, &g);
-    assert!(rb.forward_speed() < v - 2.0, "{v} -> {}", rb.forward_speed());
+    assert!(
+        rb.forward_speed() < v - 2.0,
+        "{v} -> {}",
+        rb.forward_speed()
+    );
     // and backwards
     rb.coupled[0].brake = 0.0;
     run(&mut rb, 1.0, 0.0, 20_000.0, &g);
@@ -282,22 +410,47 @@ fn pusher_front_section_is_pushed_through_the_joint() {
     run(&mut rb, 6.0, -9000.0, 0.0, &g);
     assert!(rb.origin().y < y0 - 1.0, "{} -> {}", y0, rb.origin().y);
     // a towed mass as heavy as the body halves the acceleration
-    let mut heavy = start(&def, vec![CoupledPart { mass: rb.mass, ..rear }]);
+    let mut heavy = start(
+        &def,
+        vec![CoupledPart {
+            mass: rb.mass,
+            ..rear
+        }],
+    );
     run(&mut heavy, 5.0, 9000.0, 0.0, &g);
     let ratio = heavy.origin().y / pushed;
-    assert!((ratio - 0.5).abs() < 0.08, "heavy train went {} m, light {pushed} m", heavy.origin().y);
+    assert!(
+        (ratio - 0.5).abs() < 0.08,
+        "heavy train went {} m, light {pushed} m",
+        heavy.origin().y
+    );
     // a joint bent by 30 degrees pushes with its share along the body and does not turn
     // it, standing against the brakes or driving
     let bent_dir = Vec3::new(0.5, 0.866, 0.0);
-    let mut bent = start(&def, vec![CoupledPart { dir: bent_dir, brake: 30_000.0, ..rear }]);
+    let mut bent = start(
+        &def,
+        vec![CoupledPart {
+            dir: bent_dir,
+            brake: 30_000.0,
+            ..rear
+        }],
+    );
     run(&mut bent, 5.0, 9000.0, 20_000.0, &g);
     let (heading, _, _) = bent.heading_pitch_bank();
-    assert!(bent.origin().truncate().length() < 0.05 && heading.min(360.0 - heading) < 0.2, "{:?} {heading}", bent.origin());
+    assert!(
+        bent.origin().truncate().length() < 0.05 && heading.min(360.0 - heading) < 0.2,
+        "{:?} {heading}",
+        bent.origin()
+    );
     bent.coupled[0].brake = 0.0;
     run(&mut bent, 5.0, 9000.0, 0.0, &g);
     let (heading, _, _) = bent.heading_pitch_bank();
     let ratio = bent.origin().y / pushed;
-    assert!((ratio - 0.866).abs() < 0.08 && heading.min(360.0 - heading) < 0.5, "{:?} {heading} ({ratio})", bent.origin());
+    assert!(
+        (ratio - 0.866).abs() < 0.08 && heading.min(360.0 - heading) < 0.5,
+        "{:?} {heading} ({ratio})",
+        bent.origin()
+    );
 }
 
 /// A towed part on a grade pulls the body down it, and its brakes hold it there.
@@ -306,14 +459,31 @@ fn towed_weight_on_a_grade() {
     let mut def = bus();
     def.axles.iter_mut().for_each(|a| a.driven = false);
     let g = ramp(0.08);
-    let part = CoupledPart { point: Vec3::new(0.0, -4.456, 0.503), dir: Vec3::Y, mass: 7000.0, driven_wheels: 0, radius: 0.47, driven_load: 0.0, brake: 0.0, load: 70_000.0, joint_load: 0.0 };
+    let part = CoupledPart {
+        point: Vec3::new(0.0, -4.456, 0.503),
+        dir: Vec3::Y,
+        mass: 7000.0,
+        driven_wheels: 0,
+        radius: 0.47,
+        driven_load: 0.0,
+        brake: 0.0,
+        load: 70_000.0,
+        joint_load: 0.0,
+    };
     let mut rb = RigidBody::from_definition(&def, &[]);
-    rb.coupled = vec![CoupledPart { brake: 40_000.0, ..part }];
+    rb.coupled = vec![CoupledPart {
+        brake: 40_000.0,
+        ..part
+    }];
     rb.place(DVec3::new(0.0, 50.0, 4.0), 0.0);
     run(&mut rb, 3.0, 0.0, 0.0, &g);
     let y0 = rb.origin().y;
     run(&mut rb, 3.0, 0.0, 0.0, &g);
-    assert!((rb.origin().y - y0).abs() < 0.02, "rolled from {y0} to {}", rb.origin().y);
+    assert!(
+        (rb.origin().y - y0).abs() < 0.02,
+        "rolled from {y0} to {}",
+        rb.origin().y
+    );
     rb.coupled[0].brake = 0.0;
     run(&mut rb, 3.0, 0.0, 0.0, &g);
     assert!(rb.origin().y < y0 - 1.0, "stayed at {}", rb.origin().y);
@@ -323,7 +493,17 @@ fn towed_weight_on_a_grade() {
 fn ramp(s: f64) -> impl Fn(f64, f64, f64) -> GroundProbe {
     move |_x, y, top| {
         let z = y * s;
-        if z <= top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: None, above: Some(z) } }
+        if z <= top {
+            GroundProbe {
+                below: Some(z),
+                above: None,
+            }
+        } else {
+            GroundProbe {
+                below: None,
+                above: Some(z),
+            }
+        }
     }
 }
 
@@ -341,7 +521,17 @@ fn kerb_along_the_tread_lifts_smoothly() {
         let e = 0.3 - k as f64 * 0.003;
         let probe = move |x: f64, _y: f64, top: f64| {
             let z = if x > e { h } else { 0.0 };
-            if z <= top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: None, above: Some(z) } }
+            if z <= top {
+                GroundProbe {
+                    below: Some(z),
+                    above: None,
+                }
+            } else {
+                GroundProbe {
+                    below: None,
+                    above: Some(z),
+                }
+            }
         };
         let hub = DVec3::new(0.0, 0.0, r as f64);
         let z_top = (CLIMB * r) as f64;
@@ -353,7 +543,11 @@ fn kerb_along_the_tread_lifts_smoothly() {
         }
         last = Some(need);
     }
-    assert!((last.unwrap() - (r as f64 + h)).abs() < 1e-3, "ends on the kerb: {:?}", last);
+    assert!(
+        (last.unwrap() - (r as f64 + h)).abs() < 1e-3,
+        "ends on the kerb: {:?}",
+        last
+    );
     assert!(max_jump < 0.02, "a jump of {max_jump:.3} m");
 }
 
@@ -365,7 +559,9 @@ fn kerb_along_the_tread_lifts_smoothly() {
 fn tyre_reads_any_grade_as_a_grade() {
     let r = 0.47f32;
     let a = (r * ENVELOPE) as f64;
-    for pct in [0.0, 2.0, 5.0, 6.3, 6.5, 8.0, 9.0, 10.0, 12.0, 15.0, 20.0, 25.0] {
+    for pct in [
+        0.0, 2.0, 5.0, 6.3, 6.5, 8.0, 9.0, 10.0, 12.0, 15.0, 20.0, 25.0,
+    ] {
         let s = pct / 100.0;
         let count = std::cell::Cell::new(0);
         let g = ramp(s);
@@ -384,9 +580,18 @@ fn tyre_reads_any_grade_as_a_grade() {
             let t = s * a / r as f64;
             let xs = a * t / (1.0 + t * t).sqrt();
             let want = s * (y + xs) + r as f64 * (1.0 - (xs / a).powi(2)).sqrt();
-            assert!((slope as f64 - s).abs() < 1e-4, "{pct} %: slope {slope} at {y}");
-            assert!((need - want).abs() < 1e-5, "{pct} %: need {need}, want {want}");
-            assert!((x as f64 - xs).abs() < 1e-3, "{pct} %: contact at {x}, want {xs}");
+            assert!(
+                (slope as f64 - s).abs() < 1e-4,
+                "{pct} %: slope {slope} at {y}"
+            );
+            assert!(
+                (need - want).abs() < 1e-5,
+                "{pct} %: need {need}, want {want}"
+            );
+            assert!(
+                (x as f64 - xs).abs() < 1e-3,
+                "{pct} %: contact at {x}, want {xs}"
+            );
             assert!(line.faces == [None, None] && line.clear);
             assert!(count.get() <= LATTICE, "{pct} %: {} probes", count.get());
         }
@@ -400,16 +605,47 @@ fn tyre_reads_any_grade_as_a_grade() {
 #[test]
 fn climbing_a_face_costs_what_it_lifts() {
     let r = 0.47f32;
-    for (grade, height, angle) in [(0.0, 0.15, 90.0f64), (0.0, 0.2, 72.0), (0.0, 0.2, 60.0), (0.0, 0.1, 45.0), (0.0, 0.3, 80.0), (0.0, 0.05, 20.0), (0.0, 0.37, 90.0), (0.0, 0.37, 70.0), (0.1, 0.15, 90.0), (-0.08, 0.2, 75.0)] {
+    for (grade, height, angle) in [
+        (0.0, 0.15, 90.0f64),
+        (0.0, 0.2, 72.0),
+        (0.0, 0.2, 60.0),
+        (0.0, 0.1, 45.0),
+        (0.0, 0.3, 80.0),
+        (0.0, 0.05, 20.0),
+        (0.0, 0.37, 90.0),
+        (0.0, 0.37, 70.0),
+        (0.1, 0.15, 90.0),
+        (-0.08, 0.2, 75.0),
+    ] {
         let run = height / angle.to_radians().tan();
         let face = move |_x: f64, y: f64, top: f64| {
             let z = grade * y + ((y - 5.0) / run.max(1e-9)).clamp(0.0, 1.0) * height;
-            if z <= top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: Some(0.0), above: Some(z) } }
+            if z <= top {
+                GroundProbe {
+                    below: Some(z),
+                    above: None,
+                }
+            } else {
+                GroundProbe {
+                    below: Some(0.0),
+                    above: Some(z),
+                }
+            }
         };
         let need_at = |y: f64| {
             let hub = DVec3::new(0.3, y, r as f64 + grade * y);
             let top = hub.z - r as f64 + (CLIMB * r) as f64;
-            tyre_line(&face, hub, Vec3::Y, r, top.max(grade * 5.0 + height), hub.z + WALL_HEIGHT, 0.0).ground.expect("ground")
+            tyre_line(
+                &face,
+                hub,
+                Vec3::Y,
+                r,
+                top.max(grade * 5.0 + height),
+                hub.z + WALL_HEIGHT,
+                0.0,
+            )
+            .ground
+            .expect("ground")
         };
         let (y0, y1, dy) = (2.5, 7.0, 0.0005);
         let (mut work, mut y, mut need) = (0.0, y0, need_at(y0).0);
@@ -418,13 +654,23 @@ fn climbing_a_face_costs_what_it_lifts() {
             work += slope * dy;
             y += dy;
             let next = need_at(y).0;
-            assert!((next - need - slope * dy).abs() < 1e-3, "{height} m at {angle}° on {grade}: the hub jumped by {} at {y}", next - need - slope * dy);
+            assert!(
+                (next - need - slope * dy).abs() < 1e-3,
+                "{height} m at {angle}° on {grade}: the hub jumped by {} at {y}",
+                next - need - slope * dy
+            );
             need = next;
         }
         let lift = need_at(y).0 - need_at(y0).0;
         let want = height + grade * (y - y0);
-        assert!((lift - want).abs() < 1e-3, "{height} m at {angle}° on {grade}: lifted {lift}, want {want}");
-        assert!((work - lift).abs() < 0.003 * height.max(0.1), "{height} m at {angle}° on {grade}: pushed back {work} for {lift}");
+        assert!(
+            (lift - want).abs() < 1e-3,
+            "{height} m at {angle}° on {grade}: lifted {lift}, want {want}"
+        );
+        assert!(
+            (work - lift).abs() < 0.003 * height.max(0.1),
+            "{height} m at {angle}° on {grade}: pushed back {work} for {lift}"
+        );
     }
 }
 
@@ -447,7 +693,11 @@ fn a_step_asks_for_few_points() {
         rb.step(1.0 / 60.0, 0.0, &[30_000.0; 4], 0.0, &probe);
         // (and three across the tread, `tread_step`, and the point under the wheel
         // Omsi.exe's suspension stands on)
-        assert!(count.get() <= 4 * rb.wheels.len() * (LATTICE + 6), "{s}: {} probes", count.get());
+        assert!(
+            count.get() <= 4 * rb.wheels.len() * (LATTICE + 6),
+            "{s}: {} probes",
+            count.get()
+        );
     }
 }
 
@@ -466,7 +716,10 @@ fn rolls_down_a_grade_at_its_own_pace() {
         run(&mut rb, 2.0, 0.0, 0.0, &g);
         let accel = (rb.forward_speed() - v0) / 2.0;
         let want = -(9.81 * s / (1.0 + s * s).sqrt()) as f32 + 1000.0 / rb.mass;
-        assert!((accel - want).abs() < 0.04 * want.abs(), "{pct} %: {accel} m/s², want {want}");
+        assert!(
+            (accel - want).abs() < 0.04 * want.abs(),
+            "{pct} %: {accel} m/s², want {want}"
+        );
     }
 }
 
@@ -478,7 +731,11 @@ fn a_step_near_the_radius_is_a_wall() {
     let step = road(6.0, 0.45);
     let (rb, front) = climb(&step, 9500.0, 10.0);
     assert!(front < 6.0 - 0.4, "front axle at {front}");
-    assert!(rb.wheels[0].ground_z.abs() < 0.01, "on the step: {}", rb.wheels[0].ground_z);
+    assert!(
+        rb.wheels[0].ground_z.abs() < 0.01,
+        "on the step: {}",
+        rb.wheels[0].ground_z
+    );
     let mut rb = RigidBody::from_definition(&bus(), &[]);
     rb.place(DVec3::ZERO, 0.0);
     run(&mut rb, 1.0, 0.0, 5000.0, &step);
@@ -492,8 +749,16 @@ fn a_step_near_the_radius_is_a_wall() {
     run(&mut rb, 1.0, 0.0, 5000.0, &low);
     rb.velocity = Vec3::new(0.0, 15.0 / 3.6, 0.0);
     run(&mut rb, 5.0, 9500.0, 0.0, &low);
-    assert!(rb.origin().y > 6.0, "stuck at {} before a 0.3 m step", rb.origin().y);
-    assert!(rb.wheels.iter().all(|w| (w.ground_z - 0.3).abs() < 0.01), "{:?}", rb.wheels.iter().map(|w| w.ground_z).collect::<Vec<_>>());
+    assert!(
+        rb.origin().y > 6.0,
+        "stuck at {} before a 0.3 m step",
+        rb.origin().y
+    );
+    assert!(
+        rb.wheels.iter().all(|w| (w.ground_z - 0.3).abs() < 0.01),
+        "{:?}",
+        rb.wheels.iter().map(|w| w.ground_z).collect::<Vec<_>>()
+    );
 }
 
 /// A platform's face stops the front wheels at any speed and frame rate (the body has no
@@ -514,19 +779,36 @@ fn a_face_stops_the_wheels_at_any_speed() {
                 rb.step(1.0 / fps, 0.0, &[0.0; 4], 0.0, &wall);
                 front = front.max(rb.origin().y + 3.238);
                 top = top.max(rb.origin().z);
-                for hit in rb.wheel_impacts.iter().filter(|h| h.speed > CRASH_SPEED && h.energy > 1000.0) {
-                    assert!(hit.obstacle < 2 && hit.point.y > 3.238 && hit.point.z < 1.1, "{hit:?}");
+                for hit in rb
+                    .wheel_impacts
+                    .iter()
+                    .filter(|h| h.speed > CRASH_SPEED && h.energy > 1000.0)
+                {
+                    assert!(
+                        hit.obstacle < 2 && hit.point.y > 3.238 && hit.point.z < 1.1,
+                        "{hit:?}"
+                    );
                     crash += hit.energy;
                 }
             }
             // the crash is the wheels' (the bus has no box here), and it took most of the
             // bus's motion
-            assert!(crash > 0.5 * kinetic && crash < 1.05 * kinetic, "{kmh} km/h at {fps} fps: crash of {crash} J for {kinetic} J");
-            assert!(front < 6.0 - 0.47 + 0.03, "{kmh} km/h at {fps} fps: front axle reached {front}");
+            assert!(
+                crash > 0.5 * kinetic && crash < 1.05 * kinetic,
+                "{kmh} km/h at {fps} fps: crash of {crash} J for {kinetic} J"
+            );
+            assert!(
+                front < 6.0 - 0.47 + 0.03,
+                "{kmh} km/h at {fps} fps: front axle reached {front}"
+            );
             assert!(top < 0.3, "{kmh} km/h at {fps} fps: thrown up to {top}");
             // (a rebound of a metre or so: with the moments of inertia on Omsi.exe's axes
             // the body's lower yaw inertia takes a little more of the blow back)
-            assert!(rb.forward_speed().abs() < 1.5, "{kmh} km/h at {fps} fps: still at {}", rb.forward_speed());
+            assert!(
+                rb.forward_speed().abs() < 1.5,
+                "{kmh} km/h at {fps} fps: still at {}",
+                rb.forward_speed()
+            );
         }
     }
 }
@@ -537,7 +819,17 @@ fn a_face_stops_the_wheels_at_any_speed() {
 fn a_face_beside_the_tyres_stops_a_slide() {
     let platform = |x: f64, _y: f64, top: f64| {
         let z = if x >= 1.5 { 0.6 } else { 0.0 };
-        if z <= top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: Some(0.0), above: Some(z) } }
+        if z <= top {
+            GroundProbe {
+                below: Some(z),
+                above: None,
+            }
+        } else {
+            GroundProbe {
+                below: Some(0.0),
+                above: Some(z),
+            }
+        }
     };
     let mut rb = RigidBody::from_definition(&bus(), &[]);
     rb.place(DVec3::ZERO, 0.0);
@@ -552,8 +844,18 @@ fn a_face_beside_the_tyres_stops_a_slide() {
         }
     }
     let limit = 1.5 - (HALF_WIDTH * 0.47) as f64;
-    assert!(right < limit + 0.02, "a right hub reached {right} (face at 1.5)");
-    assert!(rb.wheels.iter().filter(|w| w.attach.x > 0.0).all(|w| !w.walls.is_empty()), "{:?}", rb.wheels.iter().map(|w| &w.walls).collect::<Vec<_>>());
+    assert!(
+        right < limit + 0.02,
+        "a right hub reached {right} (face at 1.5)"
+    );
+    assert!(
+        rb.wheels
+            .iter()
+            .filter(|w| w.attach.x > 0.0)
+            .all(|w| !w.walls.is_empty()),
+        "{:?}",
+        rb.wheels.iter().map(|w| &w.walls).collect::<Vec<_>>()
+    );
     let (_, _, bank) = rb.heading_pitch_bank();
     assert!(bank.abs() < 5.0, "banked {bank}");
 }
@@ -564,7 +866,17 @@ fn a_face_beside_the_tyres_stops_a_slide() {
 fn holds_on_a_slope_and_brakes_to_a_stand() {
     let slope = |_x: f64, y: f64, top: f64| {
         let z = y * 0.08;
-        if z <= top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: None, above: Some(z) } }
+        if z <= top {
+            GroundProbe {
+                below: Some(z),
+                above: None,
+            }
+        } else {
+            GroundProbe {
+                below: None,
+                above: Some(z),
+            }
+        }
     };
     let mut rb = RigidBody::from_definition(&bus(), &[]);
     rb.place(DVec3::ZERO, 0.0);
@@ -580,12 +892,25 @@ fn holds_on_a_slope_and_brakes_to_a_stand() {
     for _ in 0..600 {
         rb.step(1.0 / 60.0, 0.0, &park, 0.0, &slope);
     }
-    eprintln!("parked on 8 %: {:+.4} m in the first 10 s, {:+.4} m in the next", y1 - y0, rb.origin().y - y1);
-    assert!((rb.origin().y - y1).abs() < 0.005, "crept {} m", rb.origin().y - y1);
+    eprintln!(
+        "parked on 8 %: {:+.4} m in the first 10 s, {:+.4} m in the next",
+        y1 - y0,
+        rb.origin().y - y1
+    );
+    assert!(
+        (rb.origin().y - y1).abs() < 0.005,
+        "crept {} m",
+        rb.origin().y - y1
+    );
     for _ in 0..180 {
         rb.step(1.0 / 60.0, 0.0, &[0.0; 4], 0.0, &slope);
     }
-    assert!(rb.origin().y < y0 - 1.0 && rb.forward_speed() < -0.5, "rolled back to {} at {}", rb.origin().y, rb.forward_speed());
+    assert!(
+        rb.origin().y < y0 - 1.0 && rb.forward_speed() < -0.5,
+        "rolled back to {} at {}",
+        rb.origin().y,
+        rb.forward_speed()
+    );
 
     let flat = road(1e9, 0.0);
     let mut rb = RigidBody::from_definition(&bus(), &[]);
@@ -601,7 +926,11 @@ fn holds_on_a_slope_and_brakes_to_a_stand() {
     assert!(t > 2.0 && t < 3.0, "stopped after {t} s");
     let y = rb.origin().y;
     run(&mut rb, 3.0, 0.0, 15_000.0, &flat);
-    assert!((rb.origin().y - y).abs() < 0.02, "moved {} m after stopping", rb.origin().y - y);
+    assert!(
+        (rb.origin().y - y).abs() < 0.02,
+        "moved {} m after stopping",
+        rb.origin().y - y
+    );
 }
 
 /// The same full braking from 50 km/h on a dry road and on black ice: the tyres cannot
@@ -623,7 +952,10 @@ fn brakes_slide_on_ice() {
         }
         rb.origin().y - y0
     };
-    let (dry, ice) = (stop(crate::vehicle::road_grip(0.0, 15.0)), stop(crate::vehicle::road_grip(0.4, -6.0)));
+    let (dry, ice) = (
+        stop(crate::vehicle::road_grip(0.0, 15.0)),
+        stop(crate::vehicle::road_grip(0.4, -6.0)),
+    );
     eprintln!("50 km/h to a stand: {dry:.1} m dry, {ice:.1} m on ice");
     assert!(dry > 12.0 && dry < 20.0, "dry {dry}");
     assert!(ice > dry * 4.0, "ice {ice} dry {dry}");
@@ -639,10 +971,19 @@ fn a_standing_bus_spins_its_driven_wheels_on_ice() {
         rb.friction = mu;
         run(&mut rb, 0.5, 12_000.0, 0.0, &flat);
         let v = rb.forward_speed();
-        rb.wheels.iter().filter(|w| w.driven).all(|w| w.spin * w.radius > v + 1.0)
+        rb.wheels
+            .iter()
+            .filter(|w| w.driven)
+            .all(|w| w.spin * w.radius > v + 1.0)
     };
-    assert!(spins(crate::vehicle::road_grip(0.4, -6.0)), "no wheelspin on ice");
-    assert!(!spins(crate::vehicle::road_grip(0.0, 15.0)), "wheelspin on a dry road");
+    assert!(
+        spins(crate::vehicle::road_grip(0.4, -6.0)),
+        "no wheelspin on ice"
+    );
+    assert!(
+        !spins(crate::vehicle::road_grip(0.0, 15.0)),
+        "wheelspin on a dry road"
+    );
 }
 
 /// Straight into a wall at 40 km/h: the bus stops at the wall, bounces off a little, and
@@ -656,13 +997,21 @@ fn crash_bounces_and_releases() {
     let g = road(1e9, 0.0);
     run(&mut rb, 1.0, 0.0, 5000.0, &g);
     rb.velocity = Vec3::new(0.0, 40.0 / 3.6, 0.0);
-    let wall = [Obb::from_box([20.0, 1.0, 3.0, 0.0, 0.0, 1.5], DVec3::new(0.0, 12.0, 0.0), 0.0)];
+    let wall = [Obb::from_box(
+        [20.0, 1.0, 3.0, 0.0, 0.0, 1.5],
+        DVec3::new(0.0, 12.0, 0.0),
+        0.0,
+    )];
     let mut impacts = Vec::new();
     for _ in 0..90 {
         rb.step(1.0 / 30.0, 0.0, &[0.0; 4], 0.0, &g);
         impacts.extend(rb.collide(bb, &wall, &|_| false, 1.0 / 30.0));
     }
-    assert_eq!(impacts.iter().filter(|i| i.speed > CRASH_SPEED).count(), 1, "{impacts:?}");
+    assert_eq!(
+        impacts.iter().filter(|i| i.speed > CRASH_SPEED).count(),
+        1,
+        "{impacts:?}"
+    );
     let hit = impacts[0];
     assert!(hit.speed > 10.0 && hit.energy > 400_000.0, "{hit:?}");
     assert!(hit.point.y > 5.5, "{hit:?}");
@@ -691,7 +1040,11 @@ fn glancing_blow_turns_the_bus() {
     rb.place(DVec3::ZERO, 20.0);
     run(&mut rb, 0.5, 0.0, 0.0, &g);
     rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * 30.0 / 3.6;
-    let wall = [Obb::from_box([1.0, 60.0, 3.0, 0.0, 0.0, 1.5], DVec3::new(4.5, 10.0, 0.0), 0.0)];
+    let wall = [Obb::from_box(
+        [1.0, 60.0, 3.0, 0.0, 0.0, 1.5],
+        DVec3::new(4.5, 10.0, 0.0),
+        0.0,
+    )];
     let mut hits = 0;
     for _ in 0..60 {
         rb.step(1.0 / 30.0, 0.0, &[0.0; 4], 0.0, &g);
@@ -699,8 +1052,15 @@ fn glancing_blow_turns_the_bus() {
     }
     let (heading, _, _) = rb.heading_pitch_bank();
     assert!(hits > 0);
-    assert!(heading < 15.0 || heading > 300.0, "turned away from the wall: {heading}");
-    assert!(rb.velocity.y > 1.0, "still sliding along: {:?}", rb.velocity);
+    assert!(
+        heading < 15.0 || heading > 300.0,
+        "turned away from the wall: {heading}"
+    );
+    assert!(
+        rb.velocity.y > 1.0,
+        "still sliding along: {:?}",
+        rb.velocity
+    );
 }
 
 /// A car (1 t, kinematic: it keeps its speed) drives into the side of the standing bus
@@ -716,7 +1076,12 @@ fn a_car_does_not_bulldoze_the_bus() {
     let (x0, mut hits, mut energy) = (rb.origin().x, 0, 0.0f32);
     for k in 0..30 {
         // from the left, heading east
-        let car = Obb::from_box([1.7, 4.2, 1.4, 0.0, 0.0, 0.7], DVec3::new(-4.0 + 50.0 / 3.6 * k as f64 / 30.0, 0.0, 0.0), 90.0).moving(glam::DVec2::new(50.0 / 3.6, 0.0), 1000.0, 7);
+        let car = Obb::from_box(
+            [1.7, 4.2, 1.4, 0.0, 0.0, 0.7],
+            DVec3::new(-4.0 + 50.0 / 3.6 * k as f64 / 30.0, 0.0, 0.0),
+            90.0,
+        )
+        .moving(glam::DVec2::new(50.0 / 3.6, 0.0), 1000.0, 7);
         rb.step(1.0 / 30.0, 0.0, &[5000.0; 4], 0.0, &g);
         for hit in rb.collide(bb, &[car], &|_| false, 1.0 / 30.0) {
             hits += 1;
@@ -726,7 +1091,11 @@ fn a_car_does_not_bulldoze_the_bus() {
     run(&mut rb, 2.0, 0.0, 5000.0, &g);
     let (_, _, bank) = rb.heading_pitch_bank();
     assert!(hits > 0 && energy > 20_000.0, "{hits} hits, {energy} J");
-    assert!((rb.origin().x - x0).abs() < 1.0, "shoved {} m", rb.origin().x - x0);
+    assert!(
+        (rb.origin().x - x0).abs() < 1.0,
+        "shoved {} m",
+        rb.origin().x - x0
+    );
     assert!(bank.abs() < 3.0, "banked {bank}");
 }
 
@@ -741,14 +1110,23 @@ fn a_car_strike_counts_once() {
     let g = road(1e9, 0.0);
     run(&mut rb, 1.0, 0.0, 5000.0, &g);
     let v = 50.0f32 / 3.6;
-    let car = Obb::from_box([1.7, 4.2, 1.4, 0.0, 0.0, 0.7], DVec3::new(-2.0, 0.0, 0.0), 90.0).moving(glam::DVec2::new(v as f64, 0.0), 1000.0, 7);
+    let car = Obb::from_box(
+        [1.7, 4.2, 1.4, 0.0, 0.0, 0.7],
+        DVec3::new(-2.0, 0.0, 0.0),
+        90.0,
+    )
+    .moving(glam::DVec2::new(v as f64, 0.0), 1000.0, 7);
     let hits = rb.collide(bb, &[car], &|_| false, 1.0 / 30.0);
     assert_eq!(hits.len(), 1, "{hits:?}");
     let n = Vec3::X;
     let r = Vec3::new(-1.236, 0.0, 0.0);
     let k = rb.inv_mass_at(r, n) + 1.0 / 1000.0;
     let want = 0.5 * v * v * (1.0 - RESTITUTION * RESTITUTION) / k;
-    assert!((hits[0].energy - want).abs() < 0.15 * want, "{} J, want about {want}", hits[0].energy);
+    assert!(
+        (hits[0].energy - want).abs() < 0.15 * want,
+        "{} J, want about {want}",
+        hits[0].energy
+    );
     assert!(hits[0].energy < 100_000.0, "{hits:?}");
 }
 
@@ -772,7 +1150,11 @@ fn moving_car_overlap_does_not_bulldoze_bus_and_clears_when_receding() {
 
     assert_eq!(impacts.len(), 1);
     assert!(rb.body_box(bb).overlaps(&car));
-    assert!(rb.origin().x > 0.0 && rb.origin().x < 0.02, "{}", rb.origin().x);
+    assert!(
+        rb.origin().x > 0.0 && rb.origin().x < 0.02,
+        "{}",
+        rb.origin().x
+    );
     let receding = Obb {
         center: car.center - glam::DVec2::new(0.5, 0.0),
         velocity: glam::DVec2::new(-8.0, 0.0),
@@ -794,13 +1176,21 @@ fn a_creeping_car_does_not_shove_the_standing_bus() {
     let g = road(1e9, 0.0);
     run(&mut rb, 1.0, 0.0, 5000.0, &g);
     let x0 = rb.origin().x;
-    let mut car = Obb::from_box([1.7, 4.2, 1.4, 0.0, 0.0, 0.7], DVec3::new(-3.3, 0.0, 0.0), 90.0)
-        .moving(glam::DVec2::new(0.3, 0.0), 1000.0, 7);
+    let mut car = Obb::from_box(
+        [1.7, 4.2, 1.4, 0.0, 0.0, 0.7],
+        DVec3::new(-3.3, 0.0, 0.0),
+        90.0,
+    )
+    .moving(glam::DVec2::new(0.3, 0.0), 1000.0, 7);
     for _ in 0..60 {
         car.center += car.velocity / 30.0;
         rb.collide(bb, &[car], &|_| false, 1.0 / 30.0);
     }
-    assert!(rb.origin().x - x0 < 0.1, "the bus was shoved {:.2} m", rb.origin().x - x0);
+    assert!(
+        rb.origin().x - x0 < 0.1,
+        "the bus was shoved {:.2} m",
+        rb.origin().x - x0
+    );
 }
 
 /// The scripts hear where the bodies meet - low down at the bumpers - not the height of
@@ -818,20 +1208,56 @@ fn impacts_are_reported_at_bumper_height() {
         rb.velocity = v;
         for _ in 0..60 {
             rb.step(1.0 / 30.0, 0.0, &[0.0; 4], 0.0, &g);
-            if let Some(h) = rb.collide(bb, &[obstacle], &|_| false, 1.0 / 30.0).into_iter().find(|h| h.speed > CRASH_SPEED) {
+            if let Some(h) = rb
+                .collide(bb, &[obstacle], &|_| false, 1.0 / 30.0)
+                .into_iter()
+                .find(|h| h.speed > CRASH_SPEED)
+            {
                 return h;
             }
         }
         panic!("no hit on {obstacle:?}");
     };
     let back = Vec3::new(0.0, -15.0 / 3.6, 0.0);
-    let wall = hit(Obb::from_box([20.0, 1.0, 5.0, 0.0, 0.0, 2.5], DVec3::new(0.0, -8.0, 0.0), 0.0), back);
-    assert!(wall.point.z < 1.1 && wall.point.z > 0.5 && wall.point.y < -4.7, "{wall:?}");
-    let car = hit(Obb::from_box([1.7, 4.2, 1.4, 0.0, 0.0, 0.7], DVec3::new(0.0, -9.0, 0.0), 0.0).moving(glam::DVec2::ZERO, 1000.0, 3), back);
+    let wall = hit(
+        Obb::from_box(
+            [20.0, 1.0, 5.0, 0.0, 0.0, 2.5],
+            DVec3::new(0.0, -8.0, 0.0),
+            0.0,
+        ),
+        back,
+    );
+    assert!(
+        wall.point.z < 1.1 && wall.point.z > 0.5 && wall.point.y < -4.7,
+        "{wall:?}"
+    );
+    let car = hit(
+        Obb::from_box(
+            [1.7, 4.2, 1.4, 0.0, 0.0, 0.7],
+            DVec3::new(0.0, -9.0, 0.0),
+            0.0,
+        )
+        .moving(glam::DVec2::ZERO, 1000.0, 3),
+        back,
+    );
     assert!(car.point.z < 1.1 && car.point.y < -4.7, "{car:?}");
-    let front = hit(Obb::from_box([20.0, 1.0, 5.0, 0.0, 0.0, 2.5], DVec3::new(0.0, 8.0, 0.0), 0.0), -back);
+    let front = hit(
+        Obb::from_box(
+            [20.0, 1.0, 5.0, 0.0, 0.0, 2.5],
+            DVec3::new(0.0, 8.0, 0.0),
+            0.0,
+        ),
+        -back,
+    );
     assert!(front.point.z < 1.1 && front.point.y > 4.7, "{front:?}");
-    let beam = hit(Obb::from_box([20.0, 1.0, 1.0, 0.0, 0.0, 2.5], DVec3::new(0.0, 8.0, 0.0), 0.0), -back);
+    let beam = hit(
+        Obb::from_box(
+            [20.0, 1.0, 1.0, 0.0, 0.0, 2.5],
+            DVec3::new(0.0, 8.0, 0.0),
+            0.0,
+        ),
+        -back,
+    );
     assert!(beam.point.z > 2.0, "{beam:?}");
 }
 
@@ -846,7 +1272,12 @@ fn rear_ends_a_standing_car() {
     let g = road(1e9, 0.0);
     run(&mut rb, 1.0, 0.0, 5000.0, &g);
     rb.velocity = Vec3::new(0.0, 30.0 / 3.6, 0.0);
-    let car = [Obb::from_box([1.7, 4.2, 1.4, 0.0, 0.0, 0.7], DVec3::new(0.0, 12.0, 0.0), 0.0).moving(glam::DVec2::ZERO, 1000.0, 3)];
+    let car = [Obb::from_box(
+        [1.7, 4.2, 1.4, 0.0, 0.0, 0.7],
+        DVec3::new(0.0, 12.0, 0.0),
+        0.0,
+    )
+    .moving(glam::DVec2::ZERO, 1000.0, 3)];
     let mut first = None;
     for k in 0..90 {
         rb.step(1.0 / 30.0, 0.0, &[0.0; 4], 0.0, &g);
@@ -856,9 +1287,20 @@ fn rear_ends_a_standing_car() {
     }
     let (_, y_hit) = first.expect("hit the car");
     let front = rb.origin().y + 5.83;
-    assert!(rb.forward_speed().abs() < 0.3, "still at {} km/h", rb.forward_speed() * 3.6);
-    assert!(front < 12.0 - 2.1 + 0.3, "drove into the car: front at {front}");
-    assert!(rb.origin().y - y_hit < 3.0, "pushed on {} m", rb.origin().y - y_hit);
+    assert!(
+        rb.forward_speed().abs() < 0.3,
+        "still at {} km/h",
+        rb.forward_speed() * 3.6
+    );
+    assert!(
+        front < 12.0 - 2.1 + 0.3,
+        "drove into the car: front at {front}"
+    );
+    assert!(
+        rb.origin().y - y_hit < 3.0,
+        "pushed on {} m",
+        rb.origin().y - y_hit
+    );
 }
 
 /// A lamp post breaks off: the bus hardly slows down.
@@ -871,7 +1313,11 @@ fn a_post_breaks_off() {
     let g = road(1e9, 0.0);
     run(&mut rb, 1.0, 0.0, 5000.0, &g);
     rb.velocity = Vec3::new(0.0, 30.0 / 3.6, 0.0);
-    let mut post = Obb::from_box([0.2, 0.2, 6.0, 0.0, 0.0, 3.0], DVec3::new(0.5, 10.0, 0.0), 0.0);
+    let mut post = Obb::from_box(
+        [0.2, 0.2, 6.0, 0.0, 0.0, 3.0],
+        DVec3::new(0.5, 10.0, 0.0),
+        0.0,
+    );
     post.pole = Some((0.05, 0.5));
     let mut broke = false;
     for _ in 0..30 {
@@ -880,15 +1326,24 @@ fn a_post_breaks_off() {
         broke |= hits.iter().any(|h| h.broke);
     }
     assert!(broke);
-    assert!(rb.forward_speed() > 25.0 / 3.6, "{}", rb.forward_speed() * 3.6);
+    assert!(
+        rb.forward_speed() > 25.0 / 3.6,
+        "{}",
+        rb.forward_speed() * 3.6
+    );
 }
-
 
 /// A drive torque, steering or brake force that is no number (a script's 0/0) is taken
 /// as none: the body keeps its place and speed instead of turning to NaN (#1045).
 #[test]
 fn inputs_that_are_no_number_leave_the_body_whole() {
-    for (torque, brake, steer) in [(f32::NAN, 0.0, 0.0), (3000.0, f32::INFINITY, 0.0), (3000.0, f32::NAN, 0.0), (3000.0, 0.0, f32::NAN), (f32::NEG_INFINITY, 0.0, 0.0)] {
+    for (torque, brake, steer) in [
+        (f32::NAN, 0.0, 0.0),
+        (3000.0, f32::INFINITY, 0.0),
+        (3000.0, f32::NAN, 0.0),
+        (3000.0, 0.0, f32::NAN),
+        (f32::NEG_INFINITY, 0.0, 0.0),
+    ] {
         let mut rb = RigidBody::from_definition(&bus(), &[]);
         rb.place(DVec3::ZERO, 0.0);
         let g = road(1e9, 0.0);
@@ -896,9 +1351,22 @@ fn inputs_that_are_no_number_leave_the_body_whole() {
         for _ in 0..60 {
             rb.step(1.0 / 60.0, torque, &[brake; 4], steer, &g);
         }
-        assert!(rb.position.is_finite() && rb.velocity.is_finite(), "{torque} {brake} {steer}: {:?} {:?}", rb.position, rb.velocity);
-        assert!(rb.forward_speed() > 0.1, "{torque} {brake} {steer}: {}", rb.forward_speed());
-        assert!(rb.wheels.iter().all(|w| w.compression.is_finite() && w.spin.is_finite()));
+        assert!(
+            rb.position.is_finite() && rb.velocity.is_finite(),
+            "{torque} {brake} {steer}: {:?} {:?}",
+            rb.position,
+            rb.velocity
+        );
+        assert!(
+            rb.forward_speed() > 0.1,
+            "{torque} {brake} {steer}: {}",
+            rb.forward_speed()
+        );
+        assert!(
+            rb.wheels
+                .iter()
+                .all(|w| w.compression.is_finite() && w.spin.is_finite())
+        );
     }
     // a body whose own values are no number stays put
     let mut rb = RigidBody::from_definition(&bus(), &[]);
@@ -908,7 +1376,11 @@ fn inputs_that_are_no_number_leave_the_body_whole() {
     let at = rb.position;
     rb.mass = f32::NAN;
     rb.step(1.0 / 60.0, 3000.0, &[0.0; 4], 0.0, &g);
-    assert!(rb.position.is_finite() && (rb.position - at).length() < 1e-9, "{:?}", rb.position);
+    assert!(
+        rb.position.is_finite() && (rb.position - at).length() < 1e-9,
+        "{:?}",
+        rb.position
+    );
     assert_eq!(rb.velocity, Vec3::ZERO);
 }
 
@@ -919,7 +1391,17 @@ fn inputs_that_are_no_number_leave_the_body_whole() {
 fn moves_alike_at_any_frame_rate() {
     let hump = |_x: f64, y: f64, z_top: f64| {
         let z = if (30.0..30.6).contains(&y) { 0.06 } else { 0.0 };
-        if z <= z_top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: Some(0.0), above: Some(z) } }
+        if z <= z_top {
+            GroundProbe {
+                below: Some(z),
+                above: None,
+            }
+        } else {
+            GroundProbe {
+                below: Some(0.0),
+                above: Some(z),
+            }
+        }
     };
     let drive = |fps: f32| {
         let dt = 1.0 / fps;
@@ -946,15 +1428,35 @@ fn moves_alike_at_any_frame_rate() {
     let (a, b) = (drive(60.0), drive(240.0));
     eprintln!("60 fps {a:?}\n240 fps {b:?}");
     assert!((a.0 - b.0).abs() < 0.003, "sag {} / {}", a.0, b.0);
-    assert!(a.1 > 30.6 && (a.1 - b.1).abs() < 0.01 * a.1, "pulled away {} / {} m", a.1, b.1);
+    assert!(
+        a.1 > 30.6 && (a.1 - b.1).abs() < 0.01 * a.1,
+        "pulled away {} / {} m",
+        a.1,
+        b.1
+    );
     assert!((a.2 - b.2).abs() < 0.01 * a.2, "speed {} / {}", a.2, b.2);
-    assert!(b.3 < 0.05 && b.3 < a.3 + 0.01, "the body lifted {} / {} m", a.3, b.3);
+    assert!(
+        b.3 < 0.05 && b.3 < a.3 + 0.01,
+        "the body lifted {} / {} m",
+        a.3,
+        b.3
+    );
     assert!((a.4 - b.4).abs() < 0.25, "stood at {} / {} m", a.4, b.4);
     assert!((a.5 - b.5).abs() < 0.1, "stopped after {} / {} s", a.5, b.5);
 
     let slope = |_x: f64, y: f64, top: f64| {
         let z = y * 0.08;
-        if z <= top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: None, above: Some(z) } }
+        if z <= top {
+            GroundProbe {
+                below: Some(z),
+                above: None,
+            }
+        } else {
+            GroundProbe {
+                below: None,
+                above: Some(z),
+            }
+        }
     };
     let mut rb = RigidBody::from_definition(&bus(), &[]);
     rb.place(DVec3::ZERO, 0.0);
@@ -966,7 +1468,11 @@ fn moves_alike_at_any_frame_rate() {
     for _ in 0..240 * 5 {
         rb.step(1.0 / 240.0, 0.0, &park, 0.0, &slope);
     }
-    assert!((rb.origin().y - y).abs() < 0.005, "crept {} m at 240 fps", rb.origin().y - y);
+    assert!(
+        (rb.origin().y - y).abs() < 0.005,
+        "crept {} m at 240 fps",
+        rb.origin().y - y
+    );
 }
 
 /// A body of the realistic road model (the setting on).
@@ -1014,16 +1520,24 @@ fn a_rough_road_shakes_the_bus() {
     let slabs = vertical_shake(1, 40.0, 8.0);
     let cobbles = vertical_shake(2, 40.0, 8.0);
     let gravel = vertical_shake(5, 40.0, 8.0);
-    eprintln!("vertical shake at 40 km/h (m/s² rms): asphalt {asphalt:.3}, slabs {slabs:.3}, cobbles {cobbles:.3}, gravel {gravel:.3}");
+    eprintln!(
+        "vertical shake at 40 km/h (m/s² rms): asphalt {asphalt:.3}, slabs {slabs:.3}, cobbles {cobbles:.3}, gravel {gravel:.3}"
+    );
     assert!(asphalt < 0.15, "asphalt {asphalt}");
     assert!(slabs > asphalt * 1.5, "slabs {slabs} asphalt {asphalt}");
-    assert!(cobbles > asphalt * 2.5, "cobbles {cobbles} asphalt {asphalt}");
+    assert!(
+        cobbles > asphalt * 2.5,
+        "cobbles {cobbles} asphalt {asphalt}"
+    );
     assert!(gravel > cobbles, "gravel {gravel} cobbles {cobbles}");
     // the bus's own springs keep a dirt road within what a passenger bears (ISO 2631: a
     // bus on a poor road is "a little uncomfortable" to "uncomfortable": 0.5-1.6 m/s²)
     assert!(gravel < 3.0, "gravel {gravel}");
     let fast = vertical_shake(2, 60.0, 8.0);
-    assert!(fast > cobbles, "the faster, the harder: {cobbles} at 40 km/h, {fast} at 60 (asphalt {asphalt}, slabs {slabs}, gravel {gravel})");
+    assert!(
+        fast > cobbles,
+        "the faster, the harder: {cobbles} at 40 km/h, {fast} at 60 (asphalt {asphalt}, slabs {slabs}, gravel {gravel})"
+    );
 }
 
 /// A bus brakes harder on dry asphalt than on grass or in the snow, with the same brakes.
@@ -1056,7 +1570,10 @@ fn the_surface_decides_how_far_a_braking_bus_goes() {
     let wet = stop(0, 1.0);
     let cobbles_wet = stop(2, 1.0);
     let grass = stop(4, 0.0);
-    assert!(dry < wet && wet < cobbles_wet, "dry {dry}, wet {wet}, wet cobbles {cobbles_wet}, grass {grass}");
+    assert!(
+        dry < wet && wet < cobbles_wet,
+        "dry {dry}, wet {wet}, wet cobbles {cobbles_wet}, grass {grass}"
+    );
     // 16 m/s at 0.85 g would stop in 15 m, on grass (0.5 x 0.85) in 30 m or more
     assert!(dry > 14.0 && dry < 22.0, "dry {dry}");
     assert!(grass > dry * 1.5, "grass {grass}");
@@ -1085,8 +1602,14 @@ fn the_weather_changes_the_drag_the_scripts_give() {
     // (only the rolling resistance of the file slows it: 1 kN on 10 t for 10 s)
     assert!(calm > 23.5 && calm < 25.0, "{calm}");
     assert!(coast(1.4, Vec3::ZERO) < calm, "a denser air takes more");
-    assert!(coast(realism::SCRIPT_DENSITY, Vec3::new(0.0, -12.0, 0.0)) < calm - 0.5, "a headwind takes more");
-    assert!(coast(realism::SCRIPT_DENSITY, Vec3::new(0.0, 12.0, 0.0)) > calm, "a tailwind takes less");
+    assert!(
+        coast(realism::SCRIPT_DENSITY, Vec3::new(0.0, -12.0, 0.0)) < calm - 0.5,
+        "a headwind takes more"
+    );
+    assert!(
+        coast(realism::SCRIPT_DENSITY, Vec3::new(0.0, 12.0, 0.0)) > calm,
+        "a tailwind takes less"
+    );
 }
 
 /// The OMSI 2 model (the setting off) is as it was: a bus follows its wheels at any speed
@@ -1101,7 +1624,12 @@ fn without_the_setting_the_body_is_omsi_s() {
     }
     let g = road(1e9, 0.0);
     run(&mut rb, 2.0, 0.0, 0.0, &g);
-    assert!(rb.wheels.iter().all(|w| w.rough == 0.0 && w.mu_scale == 1.0), "no road unevenness or surface grip");
+    assert!(
+        rb.wheels
+            .iter()
+            .all(|w| w.rough == 0.0 && w.mu_scale == 1.0),
+        "no road unevenness or surface grip"
+    );
     rb.wind = Vec3::new(-25.0, 0.0, 0.0);
     let before = rb.velocity;
     run(&mut rb, 1.0, 0.0, 0.0, &g);
@@ -1139,7 +1667,10 @@ fn a_tyre_in_the_air_forgets_its_patch() {
     run(&mut rb, 1.0, 0.0, 0.0, &g);
     rb.wheels[1].lat_defl = 0.04;
     // (no ground at all: every tyre is in the air)
-    let air = |_x: f64, _y: f64, _t: f64| GroundProbe { below: None, above: None };
+    let air = |_x: f64, _y: f64, _t: f64| GroundProbe {
+        below: None,
+        above: None,
+    };
     rb.step(1.0 / 60.0, 0.0, &[0.0; 4], 0.0, &air);
     assert_eq!(rb.wheels[1].lat_defl, 0.0);
 }
@@ -1159,8 +1690,15 @@ fn a_crosswind_leans_and_pushes_the_bus() {
     run(&mut calm, 3.0, 0.0, 0.0, &g);
     let (_, _, calm_bank) = calm.heading_pitch_bank();
     // a bus on its tyres does not blow away, but its body leans from the gale
-    assert!((bank - calm_bank).abs() > 0.05, "no lean: {bank} against {calm_bank}");
-    assert!(rb.velocity.length() < 0.5, "a standing bus holds its place: {:?}", rb.velocity);
+    assert!(
+        (bank - calm_bank).abs() > 0.05,
+        "no lean: {bank} against {calm_bank}"
+    );
+    assert!(
+        rb.velocity.length() < 0.5,
+        "a standing bus holds its place: {:?}",
+        rb.velocity
+    );
 }
 
 /// The yaw rate the bus settles to in a steady bend of `steer` at `kmh`, against the
@@ -1209,9 +1747,21 @@ fn a_bus_understeers_as_it_speeds_up() {
 /// A bus on a road that falls away sideways stays where it is: the tyres hold it across.
 #[test]
 fn the_tyres_hold_a_parked_bus_on_a_cross_slope() {
-    let slope = |grade: f64| move |x: f64, _y: f64, top: f64| {
-        let z = -grade * x;
-        if z <= top { GroundProbe { below: Some(z), above: None } } else { GroundProbe { below: Some(z - 1.0), above: Some(z) } }
+    let slope = |grade: f64| {
+        move |x: f64, _y: f64, top: f64| {
+            let z = -grade * x;
+            if z <= top {
+                GroundProbe {
+                    below: Some(z),
+                    above: None,
+                }
+            } else {
+                GroundProbe {
+                    below: Some(z - 1.0),
+                    above: Some(z),
+                }
+            }
+        }
     };
     for (grade, holds) in [(0.08, true), (0.3, true)] {
         let mut rb = realistic_body();
@@ -1244,21 +1794,37 @@ fn physics_cost() {
         let steps = 20_000;
         let t = std::time::Instant::now();
         for i in 0..steps {
-            rb.step(1.0 / 120.0, 3000.0, &[0.0; 4], (i as f32 * 0.01).sin() * 0.2, &g);
+            rb.step(
+                1.0 / 120.0,
+                3000.0,
+                &[0.0; 4],
+                (i as f32 * 0.01).sin() * 0.2,
+                &g,
+            );
         }
         let us = t.elapsed().as_secs_f64() * 1e6 / steps as f64;
-        eprintln!("{} road model: {us:.1} us per step of 1/120 s", if realistic { "realistic" } else { "OMSI 2   " });
+        eprintln!(
+            "{} road model: {us:.1} us per step of 1/120 s",
+            if realistic { "realistic" } else { "OMSI 2   " }
+        );
     }
 }
 
 fn with_strut(kind: omsi_vehicle::vehicle::SuspensionKind) -> Vehicle {
     let mut v = bus();
-    v.suspensions.push(omsi_vehicle::vehicle::Suspension::parse(&[&format!("type {}", match kind {
-        omsi_vehicle::vehicle::SuspensionKind::Coil => "coil",
-        omsi_vehicle::vehicle::SuspensionKind::Leaf => "leaf",
-        omsi_vehicle::vehicle::SuspensionKind::Air => "air",
-        omsi_vehicle::vehicle::SuspensionKind::Progressive => "progressive",
-    }), "level_time 2"]));
+    v.suspensions
+        .push(omsi_vehicle::vehicle::Suspension::parse(&[
+            &format!(
+                "type {}",
+                match kind {
+                    omsi_vehicle::vehicle::SuspensionKind::Coil => "coil",
+                    omsi_vehicle::vehicle::SuspensionKind::Leaf => "leaf",
+                    omsi_vehicle::vehicle::SuspensionKind::Air => "air",
+                    omsi_vehicle::vehicle::SuspensionKind::Progressive => "progressive",
+                }
+            ),
+            "level_time 2",
+        ]));
     v
 }
 
@@ -1300,7 +1866,10 @@ fn leaf_springs_damp_a_drop_with_their_friction() {
     };
     let (coil, leaf) = (late_swing(Coil), late_swing(Leaf));
     assert!(coil < 0.06 && leaf < 0.06, "coil {coil}, leaf {leaf}");
-    assert!(leaf <= coil + 1e-4, "friction does not add swing: coil {coil}, leaf {leaf}");
+    assert!(
+        leaf <= coil + 1e-4,
+        "friction does not add swing: coil {coil}, leaf {leaf}"
+    );
 }
 
 /// Air bellows hold the ride height when the bus is loaded; a coil spring sags.
@@ -1319,8 +1888,14 @@ fn air_bellows_hold_the_ride_height_under_load() {
     };
     let (coil_empty, coil_loaded) = height_after_load(Coil);
     let (air_empty, air_loaded) = height_after_load(Air);
-    assert!(coil_empty - coil_loaded > 0.03, "a coil spring sags with 4 t: {coil_empty} -> {coil_loaded}");
-    assert!((air_empty - air_loaded).abs() < 0.02, "air holds the height: {air_empty} -> {air_loaded}");
+    assert!(
+        coil_empty - coil_loaded > 0.03,
+        "a coil spring sags with 4 t: {coil_empty} -> {coil_loaded}"
+    );
+    assert!(
+        (air_empty - air_loaded).abs() < 0.02,
+        "air holds the height: {air_empty} -> {air_loaded}"
+    );
 }
 
 /// An AI car whose box came out at NaN, standing on the bus: the bus stays where it is
@@ -1333,10 +1908,19 @@ fn nan_obstacle_leaves_the_bus_alone() {
     rb.place(DVec3::ZERO, 0.0);
     let g = road(1e9, 0.0);
     run(&mut rb, 1.0, 0.0, 5000.0, &g);
-    let car = Obb::from_box([2.0, 4.5, 1.5, 0.0, 0.0, 0.75], DVec3::new(f64::NAN, 0.0, 0.0), 0.0).moving(glam::DVec2::ZERO, 1500.0, 7);
+    let car = Obb::from_box(
+        [2.0, 4.5, 1.5, 0.0, 0.0, 0.75],
+        DVec3::new(f64::NAN, 0.0, 0.0),
+        0.0,
+    )
+    .moving(glam::DVec2::ZERO, 1500.0, 7);
     for _ in 0..30 {
         rb.step(1.0 / 30.0, 0.0, &[0.0; 4], 0.0, &g);
         rb.collide(bb, &[car], &|_| false, 1.0 / 30.0);
     }
-    assert!(rb.position.is_finite() && rb.velocity.is_finite(), "{:?}", rb.position);
+    assert!(
+        rb.position.is_finite() && rb.velocity.is_finite(),
+        "{:?}",
+        rb.position
+    );
 }

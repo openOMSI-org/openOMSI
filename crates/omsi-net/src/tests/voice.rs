@@ -35,7 +35,13 @@ fn voice_is_relayed_by_range_and_the_radio_reaches_everybody() {
     }
     voice_round(&mut host, &mut a, &mut b, &poses);
     let at_host = host.take_voice();
-    assert_eq!(at_host.iter().map(|v| (v.from, v.channel, v.seq)).collect::<Vec<_>>(), (0..5).map(|s| (a.my_id, 0, s)).collect::<Vec<_>>());
+    assert_eq!(
+        at_host
+            .iter()
+            .map(|v| (v.from, v.channel, v.seq))
+            .collect::<Vec<_>>(),
+        (0..5).map(|s| (a.my_id, 0, s)).collect::<Vec<_>>()
+    );
     assert!(at_host.iter().all(|v| v.payload == vec![v.seq as u8; 40]));
     assert!(b.take_voice().is_empty() && a.take_voice().is_empty());
     // the radio: b speaks, everybody else hears, b does not hear itself
@@ -44,7 +50,13 @@ fn voice_is_relayed_by_range_and_the_radio_reaches_everybody() {
     voice_round(&mut host, &mut a, &mut b, &poses);
     for (who, s) in [("host", &mut host), ("a", &mut a)] {
         let got = s.take_voice();
-        assert_eq!(got.iter().map(|v| (v.from, v.channel, v.seq, v.end)).collect::<Vec<_>>(), vec![(b.my_id, 1, 9, false), (b.my_id, 1, 10, true)], "{who}");
+        assert_eq!(
+            got.iter()
+                .map(|v| (v.from, v.channel, v.seq, v.end))
+                .collect::<Vec<_>>(),
+            vec![(b.my_id, 1, 9, false), (b.my_id, 1, 10, true)],
+            "{who}"
+        );
     }
     assert!(b.take_voice().is_empty());
     // the host speaks nearby: a hears
@@ -64,16 +76,27 @@ fn voice_policy_mutes_and_limits_are_enforced_by_the_host() {
     assert!(host.take_voice().is_empty() && b.take_voice().is_empty());
     host.set_voice_muted(a.my_id, false);
     // the session without a radio
-    host.set_voice_policy(VoicePolicy { radio: false, ..VoicePolicy::default() });
+    host.set_voice_policy(VoicePolicy {
+        radio: false,
+        ..VoicePolicy::default()
+    });
     a.voice_send(voice_net::RADIO, false, 2, &[1]);
     voice_round(&mut host, &mut a, &mut b, &poses);
     assert!(host.take_voice().is_empty() && b.take_voice().is_empty());
     host.set_voice_policy(VoicePolicy::default());
     // another client cannot speak with a's name
     let spoof = voice_net::encode(PROTOCOL as u8, voice_net::RADIO, false, a.my_id, 3, &[9]);
-    b.send(&spoof, SocketAddr::from(([127, 0, 0, 1], host.local_addr().unwrap().port())));
+    b.send(
+        &spoof,
+        SocketAddr::from(([127, 0, 0, 1], host.local_addr().unwrap().port())),
+    );
     // an oversized frame is not sent at all
-    a.voice_send(voice_net::RADIO, false, 4, &vec![0; voice_net::MAX_PAYLOAD + 1]);
+    a.voice_send(
+        voice_net::RADIO,
+        false,
+        4,
+        &vec![0; voice_net::MAX_PAYLOAD + 1],
+    );
     voice_round(&mut host, &mut a, &mut b, &poses);
     assert!(host.take_voice().is_empty() && b.take_voice().is_empty() && a.take_voice().is_empty());
     // a flood is cut at the rate: far fewer than 1000 frames get through

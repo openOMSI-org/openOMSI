@@ -12,10 +12,16 @@ pub(super) fn object_meshes(
     tg: &mut TileGpu,
     terrain_mapping: bool,
     obj: &ObjectCx,
-    (warped, type_meshes, terrain_slots): (Option<&Vec<MeshData>>, &[(MeshId, Vec<MaterialId>)], &[(usize, usize, usize)]),
+    (warped, type_meshes, terrain_slots): (
+        Option<&Vec<MeshData>>,
+        &[(MeshId, Vec<MaterialId>)],
+        &[(usize, usize, usize)],
+    ),
     type_lods: &mut [(f32, f32, Vec<(MeshId, Vec<MaterialId>)>)],
 ) -> (Vec<(MeshId, Vec<MaterialId>)>, Vec<(usize, usize, MeshId)>) {
-    let ObjectCx { ot, pos, xf, tkey, .. } = *obj;
+    let ObjectCx {
+        ot, pos, xf, tkey, ..
+    } = *obj;
     // a crossing warped onto the ground has meshes of its own
     let own_meshes: Option<Vec<(MeshId, Vec<MaterialId>)>> = warped.as_ref().map(|ms| {
         ms.iter()
@@ -34,8 +40,7 @@ pub(super) fn object_meshes(
     // of this placement's own (see split_terrain_mapped); (level, mesh, id)
     let mut ground_meshes: Vec<(usize, usize, MeshId)> = Vec::new();
     if terrain_mapping {
-        let mut parts: Vec<(usize, usize)> =
-            terrain_slots.iter().map(|t| (t.0, t.1)).collect();
+        let mut parts: Vec<(usize, usize)> = terrain_slots.iter().map(|t| (t.0, t.1)).collect();
         parts.dedup();
         for (level, mi) in parts {
             let slots: Vec<usize> = terrain_slots
@@ -44,9 +49,15 @@ pub(super) fn object_meshes(
                 .map(|t| t.2)
                 .collect();
             let src = if level == 0 {
-                warped.as_ref().and_then(|w| w.get(mi)).or(ot.meshes.get(mi).map(|m| &m.0))
+                warped
+                    .as_ref()
+                    .and_then(|w| w.get(mi))
+                    .or(ot.meshes.get(mi).map(|m| &m.0))
             } else {
-                ot.lower_lods.get(level - 1).and_then(|l| l.1.get(mi)).map(|m| &m.0)
+                ot.lower_lods
+                    .get(level - 1)
+                    .and_then(|l| l.1.get(mi))
+                    .map(|m| &m.0)
             };
             let Some(src) = src else { continue };
             let ground = terrain_ground(src, &slots, pos, xf, p.origin);
@@ -60,7 +71,11 @@ pub(super) fn object_meshes(
                 scene.meshes[id].source = Some(ot.sco.path.display().to_string());
                 tg.meshes.push(id);
                 id
-            } else if let Some(&(_, id)) = gpu.types[&tkey].terrain_rest.iter().find(|r| r.0 == (level, mi)) {
+            } else if let Some(&(_, id)) = gpu.types[&tkey]
+                .terrain_rest
+                .iter()
+                .find(|r| r.0 == (level, mi))
+            {
                 id
             } else {
                 let id = gpu.add_mesh(renderer, scene, &terrain_rest(src, &slots));
@@ -101,9 +116,15 @@ pub(super) fn object_html_pages(
 ) {
     if let Some((_, o3d_mats, overrides)) = ot.meshes.get(mi) {
         for o in overrides.iter().filter(|o| !o.item) {
-            let Some(page) = o.use_script_texture.map(|n| n.max(0) as usize) else { continue };
-            let Some(def) = ot.model.html_page(page) else { continue };
-            let Some(slot) = omsi_sim::vehicle::override_slot(o3d_mats, o) else { continue };
+            let Some(page) = o.use_script_texture.map(|n| n.max(0) as usize) else {
+                continue;
+            };
+            let Some(def) = ot.model.html_page(page) else {
+                continue;
+            };
+            let Some(slot) = omsi_sim::vehicle::override_slot(o3d_mats, o) else {
+                continue;
+            };
             let mat = match html_mats.get(&page) {
                 Some(m) => *m,
                 None => {
@@ -112,7 +133,12 @@ pub(super) fn object_html_pages(
                         renderer,
                         scene,
                         // (black until the page first draws: a page far away starts later)
-                        &Image { width: w, height: h, rgba: [0, 0, 0, 255].repeat((w * h) as usize), has_alpha: true },
+                        &Image {
+                            width: w,
+                            height: h,
+                            rgba: [0, 0, 0, 255].repeat((w * h) as usize),
+                            has_alpha: true,
+                        },
                         false,
                     );
                     // A page declared `lit` (the word after its path, see
@@ -120,7 +146,13 @@ pub(super) fn object_html_pages(
                     // the sun, the street's lamps, the fog, the eye's own metering - so a
                     // sign face dims with the night it stands in. Left out, the page is a
                     // display, drawn at its own brightness: an outdoor screen.
-                    let mat = renderer.add_material(scene, Some(tex), text_alpha(o3d_mats, slot, overrides), [1.0; 4], !def.lit);
+                    let mat = renderer.add_material(
+                        scene,
+                        Some(tex),
+                        text_alpha(o3d_mats, slot, overrides),
+                        [1.0; 4],
+                        !def.lit,
+                    );
                     let mat = gpu.material(renderer, scene, mat);
                     tg.textures.push(tex);
                     tg.materials.push(mat);
@@ -148,7 +180,18 @@ pub(super) fn place_object_lods(
     type_lods: &[(f32, f32, Vec<(MeshId, Vec<MaterialId>)>)],
     all_instances: &mut Vec<usize>,
 ) -> Vec<usize> {
-    let ObjectCx { ot, pos, xf, lamp, lod0_lo, lod0_max, surface, render_phase, has_lower, .. } = *obj;
+    let ObjectCx {
+        ot,
+        pos,
+        xf,
+        lamp,
+        lod0_lo,
+        lod0_max,
+        surface,
+        render_phase,
+        has_lower,
+        ..
+    } = *obj;
     let mut lod_instances = Vec::new();
     let lod_drawn = has_lower && !surface && lamp.is_none() && ot.program.is_none();
     for &(level, _, ground_id) in ground_meshes {
@@ -205,7 +248,14 @@ pub(super) fn place_object_lods(
 }
 
 /// The water of a tile (`p.water`).
-pub(super) fn place_water(renderer: &Renderer, scene: &mut Scene, gpu: &mut GpuCache, p: &Prepared, tg: &mut TileGpu, water_mat: MaterialId) {
+pub(super) fn place_water(
+    renderer: &Renderer,
+    scene: &mut Scene,
+    gpu: &mut GpuCache,
+    p: &Prepared,
+    tg: &mut TileGpu,
+    water_mat: MaterialId,
+) {
     // the tile's water surface: one quad at the four corner heights, drawn over the
     // riverbed. OMSI keeps it in `tile.map.water`, one height per corner.
     if let Some(h) = p.water {
@@ -213,7 +263,15 @@ pub(super) fn place_water(renderer: &Renderer, scene: &mut Scene, gpu: &mut GpuC
         let wid = gpu.add_mesh(renderer, scene, &wm);
         tg.meshes.push(wid);
         if omsi_cfg::flags::OMSI_DEBUG_SURFACES.is_set() {
-            log::info!("tile ({}, {}): water at {:.1}..{:.1} m, centred ({:.0}, {:.0})", p.tx, p.ty, h.iter().cloned().fold(f32::MAX, f32::min), h.iter().cloned().fold(f32::MIN, f32::max), p.origin.x + tile_size() / 2.0, p.origin.y + tile_size() / 2.0);
+            log::info!(
+                "tile ({}, {}): water at {:.1}..{:.1} m, centred ({:.0}, {:.0})",
+                p.tx,
+                p.ty,
+                h.iter().cloned().fold(f32::MAX, f32::min),
+                h.iter().cloned().fold(f32::MIN, f32::max),
+                p.origin.x + tile_size() / 2.0,
+                p.origin.y + tile_size() / 2.0
+            );
         }
         // an ordinary instance, not a surface: the surface depth bias would let a
         // tile-wide water quad win the depth test against the banks and flood the

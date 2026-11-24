@@ -53,7 +53,11 @@ impl UiState {
     /// game has no theme of that id.
     pub fn ask_theme(&mut self, id: &str) -> Result<(), String> {
         let id = id.trim();
-        let id = if id.eq_ignore_ascii_case("openomsi") { "" } else { id };
+        let id = if id.eq_ignore_ascii_case("openomsi") {
+            ""
+        } else {
+            id
+        };
         let Some(t) = self.themes.iter().find(|t| t.id.eq_ignore_ascii_case(id)) else {
             return Err(format!("no theme \"{id}\" (ui.themes() lists them)"));
         };
@@ -74,8 +78,20 @@ mod tests {
     #[test]
     fn a_plugin_asks_for_a_theme_the_game_has() {
         let mut ui = UiState::default();
-        assert!(ui.ask_theme("omsihub").is_err(), "the game told of none yet");
-        let themes = vec![ThemeInfo { id: String::new(), name: "openOMSI".into() }, ThemeInfo { id: "OmsiHub".into(), name: "Omsi-Hub".into() }];
+        assert!(
+            ui.ask_theme("omsihub").is_err(),
+            "the game told of none yet"
+        );
+        let themes = vec![
+            ThemeInfo {
+                id: String::new(),
+                name: "openOMSI".into(),
+            },
+            ThemeInfo {
+                id: "OmsiHub".into(),
+                name: "Omsi-Hub".into(),
+            },
+        ];
         ui.set_themes(themes.clone(), "");
         assert_eq!((ui.themes(), ui.theme()), (&themes[..], ""));
         // (any case; the game's spelling is kept)
@@ -92,7 +108,16 @@ mod tests {
     /// A plugin's main chunk, run as the game loads it, already knows the themes.
     #[test]
     fn the_themes_are_known_as_the_plugins_load() {
-        let themes = vec![ThemeInfo { id: String::new(), name: "openOMSI".into() }, ThemeInfo { id: "omsihub".into(), name: "Omsi-Hub".into() }];
+        let themes = vec![
+            ThemeInfo {
+                id: String::new(),
+                name: "openOMSI".into(),
+            },
+            ThemeInfo {
+                id: "omsihub".into(),
+                name: "Omsi-Hub".into(),
+            },
+        ];
         themes_for_load(themes.clone(), "");
         let mut ui = UiState::default();
         assert_eq!((ui.themes(), ui.theme()), (&themes[..], ""));

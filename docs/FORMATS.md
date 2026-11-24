@@ -629,7 +629,8 @@ rim the reflection running on away from the camera.
   `coll_pos_z` < 1.10 (vehicle frame, m) - so `coll_pos_*` is where the bodies meet, down at
   the bumpers, not the height of the centre of gravity.
 * Engine callbacks the stock scripts still needed: `(M.V.GetHeightAbovePoint)` takes x y z in
-  the vehicle frame and returns how high that point stands over the ground below it
+  the vehicle frame and returns how high that point stands over the first face a ray meets
+  coming down from 3 m above it, -3 at the least and 1000 with nothing there
   (positive with room underneath: the NL/NG lift may drop by it, up to 0.3 m, and the Solaris
   Urbino's kneeling sensor reads under 0.05 once the body touches the kerb - its level
   control vents the right-hand bellows only above that); `(M.V.GetHumanCountOnPathLink)`

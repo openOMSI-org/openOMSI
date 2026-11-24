@@ -7,8 +7,8 @@
 
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The two counters on cache lines of their own (each is written by one side only).
 #[repr(align(128))]
@@ -56,12 +56,25 @@ pub struct Consumer<T> {
 pub fn channel<T>(capacity: usize) -> (Producer<T>, Consumer<T>) {
     let cap = capacity.max(2).next_power_of_two();
     let ring = Arc::new(Ring {
-        slots: (0..cap).map(|_| UnsafeCell::new(MaybeUninit::uninit())).collect(),
+        slots: (0..cap)
+            .map(|_| UnsafeCell::new(MaybeUninit::uninit()))
+            .collect(),
         mask: cap - 1,
         head: Padded(AtomicUsize::new(0)),
         tail: Padded(AtomicUsize::new(0)),
     });
-    (Producer { ring: ring.clone(), tail: 0, head: 0 }, Consumer { ring, head: 0, tail: 0 })
+    (
+        Producer {
+            ring: ring.clone(),
+            tail: 0,
+            head: 0,
+        },
+        Consumer {
+            ring,
+            head: 0,
+            tail: 0,
+        },
+    )
 }
 
 impl<T> Producer<T> {
@@ -128,7 +141,9 @@ impl<T> Consumer<T> {
                 return None;
             }
         }
-        Some(unsafe { (*self.ring.slots[(self.head + i) & self.ring.mask].get()).assume_init_ref() })
+        Some(unsafe {
+            (*self.ring.slots[(self.head + i) & self.ring.mask].get()).assume_init_ref()
+        })
     }
 
     /// How many values wait.

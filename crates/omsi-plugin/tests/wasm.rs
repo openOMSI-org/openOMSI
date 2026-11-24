@@ -71,7 +71,10 @@ fn a_module_calls_the_api_and_is_called_back() {
     p.start(&mut game);
     assert_eq!(p.disabled, None);
     assert_eq!(game.calls[0], ("speed".into(), "[]".into()));
-    assert_eq!(game.calls[2], ("on".into(), r#"["frame",{"$cb":7}]"#.into()));
+    assert_eq!(
+        game.calls[2],
+        ("on".into(), r#"["frame",{"$cb":7}]"#.into())
+    );
     assert_eq!(game.logs[0], (1, "42.5".into()));
     assert_eq!(game.logs[1], (3, "nope: no such function".into()));
     p.callback(&mut game, 7, "[0.016]");
@@ -90,7 +93,13 @@ fn an_endless_loop_stops_the_plugin_not_the_game() {
     let mut p = WasmPlugin::load("looper", wat.as_bytes()).expect("load");
     let t = std::time::Instant::now();
     p.start(&mut game);
-    assert!(p.disabled.as_deref().is_some_and(|w| w.contains("ran too long")), "{:?}", p.disabled);
+    assert!(
+        p.disabled
+            .as_deref()
+            .is_some_and(|w| w.contains("ran too long")),
+        "{:?}",
+        p.disabled
+    );
     assert!(t.elapsed().as_secs_f32() < 2.0, "{:?}", t.elapsed());
     // and it is called no more
     p.callback(&mut game, 1, "[]");
@@ -103,10 +112,14 @@ fn modules_of_another_abi_or_without_one_are_refused() {
       (func (export "oop_abi") (result i32) (i32.const 2))
       (func (export "oop_alloc") (param i32) (result i32) (i32.const 0))
       (func (export "oop_free") (param i32 i32)))"#;
-    let e = WasmPlugin::load("future", other.as_bytes()).err().expect("refused");
+    let e = WasmPlugin::load("future", other.as_bytes())
+        .err()
+        .expect("refused");
     assert!(e.contains("ABI 2") && e.contains("update openOMSI"), "{e}");
     let none = r#"(module (memory (export "memory") 1))"#;
-    let e = WasmPlugin::load("plain", none.as_bytes()).err().expect("refused");
+    let e = WasmPlugin::load("plain", none.as_bytes())
+        .err()
+        .expect("refused");
     assert!(e.contains("oop_abi"), "{e}");
     assert!(WasmPlugin::load("junk", b"\0asm junk").is_err());
 }
@@ -142,6 +155,10 @@ fn bad_pointers_trap_instead_of_reading_the_host() {
     let mut game = Game::default();
     let mut p = WasmPlugin::load("wild", wat.as_bytes()).expect("load");
     p.start(&mut game);
-    assert!(p.disabled.as_deref().is_some_and(|w| w.contains("outside")), "{:?}", p.disabled);
+    assert!(
+        p.disabled.as_deref().is_some_and(|w| w.contains("outside")),
+        "{:?}",
+        p.disabled
+    );
     assert!(game.logs.is_empty());
 }

@@ -1,7 +1,10 @@
 pub fn absolute_like(s: &str) -> bool {
     let t = s.trim_start();
     let b = t.as_bytes();
-    t.starts_with(['/', '\\']) || (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':') || t.contains(":\\") || t.contains(":/")
+    t.starts_with(['/', '\\'])
+        || (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':')
+        || t.contains(":\\")
+        || t.contains(":/")
 }
 
 pub fn freetex_ok(s: &str) -> bool {
@@ -18,7 +21,10 @@ pub fn remote_string_ok(s: &str, picture: bool) -> bool {
 }
 
 pub(crate) fn only_relative(pictures: Vec<String>) -> Vec<String> {
-    pictures.into_iter().map(|p| if freetex_ok(&p) { p } else { String::new() }).collect()
+    pictures
+        .into_iter()
+        .map(|p| if freetex_ok(&p) { p } else { String::new() })
+        .collect()
 }
 
 /// Is `s` a vehicle's fingerprint (`v2-`, or the older `v1-`, and 64 lower-case hex digits)?
@@ -27,7 +33,11 @@ pub(crate) fn only_relative(pictures: Vec<String>) -> Vec<String> {
 pub fn is_fingerprint(s: &str) -> bool {
     s.strip_prefix("v2-")
         .or_else(|| s.strip_prefix("v1-"))
-        .is_some_and(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+        .is_some_and(|h| {
+            h.len() == 64
+                && h.bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
 }
 
 #[cfg(test)]
@@ -36,7 +46,12 @@ mod tests {
 
     #[test]
     fn a_picture_from_the_network_stays_relative() {
-        for good in ["", r"..\..\Anzeigen\Rollband_FC\Paris\17.tga", "Texture/blind.bmp", "17.tga"] {
+        for good in [
+            "",
+            r"..\..\Anzeigen\Rollband_FC\Paris\17.tga",
+            "Texture/blind.bmp",
+            "17.tga",
+        ] {
             assert!(freetex_ok(good), "{good}");
         }
         for bad in [
@@ -51,7 +66,10 @@ mod tests {
         ] {
             assert!(!freetex_ok(bad), "{bad}");
         }
-        assert_eq!(only_relative(vec!["a.tga".into(), r"\\h\s\x.bmp".into(), "b.tga".into()]), vec!["a.tga".to_string(), String::new(), "b.tga".to_string()]);
+        assert_eq!(
+            only_relative(vec!["a.tga".into(), r"\\h\s\x.bmp".into(), "b.tga".into()]),
+            vec!["a.tga".to_string(), String::new(), "b.tga".to_string()]
+        );
     }
 
     #[test]

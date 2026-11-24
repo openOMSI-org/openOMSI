@@ -1,6 +1,6 @@
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub(crate) type Job<'a, T> = Box<dyn FnOnce() -> T + Send + 'a>;
 
@@ -32,8 +32,14 @@ fn threads() -> usize {
     if crate::gl_backend() || omsi_cfg::flags::OMSI_SERIAL_PIPELINES.is_set() {
         return 1;
     }
-    let most = if cfg!(any(target_os = "android", target_os = "ios")) { 4 } else { 8 };
-    std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, most)
+    let most = if cfg!(any(target_os = "android", target_os = "ios")) {
+        4
+    } else {
+        8
+    };
+    std::thread::available_parallelism()
+        .map_or(1, |n| n.get())
+        .clamp(1, most)
 }
 
 pub(crate) fn compile_all<'a, T: Send>(device: &wgpu::Device, jobs: Vec<Job<'a, T>>) -> Vec<T> {
@@ -43,7 +49,8 @@ pub(crate) fn compile_all<'a, T: Send>(device: &wgpu::Device, jobs: Vec<Job<'a, 
         return jobs.into_iter().map(|job| job()).collect();
     }
     let scoped = CAUGHT.with(|c| c.borrow().is_some());
-    let jobs: Vec<Mutex<Option<Job<'a, T>>>> = jobs.into_iter().map(|j| Mutex::new(Some(j))).collect();
+    let jobs: Vec<Mutex<Option<Job<'a, T>>>> =
+        jobs.into_iter().map(|j| Mutex::new(Some(j))).collect();
     let made: Vec<Mutex<Option<T>>> = (0..n).map(|_| Mutex::new(None)).collect();
     let next = AtomicUsize::new(0);
     let work = || loop {
@@ -63,13 +70,31 @@ pub(crate) fn compile_all<'a, T: Send>(device: &wgpu::Device, jobs: Vec<Job<'a, 
                 std::thread::Builder::new()
                     .name(format!("renderer pipelines {i}"))
                     .stack_size(STACK)
-                    .spawn_scoped(s, move || crate::with_auxiliary_context(context, || {
-                        let scopes = scoped.then(|| [wgpu::ErrorFilter::Internal, wgpu::ErrorFilter::OutOfMemory, wgpu::ErrorFilter::Validation].map(|f| device.push_error_scope(f)));
-                        work();
-                        scopes.map_or_else(Vec::new, |[internal, memory, validation]| {
-                            pollster::block_on(async { [validation.pop().await, memory.pop().await, internal.pop().await] }).into_iter().flatten().collect()
+                    .spawn_scoped(s, move || {
+                        crate::with_auxiliary_context(context, || {
+                            let scopes = scoped.then(|| {
+                                [
+                                    wgpu::ErrorFilter::Internal,
+                                    wgpu::ErrorFilter::OutOfMemory,
+                                    wgpu::ErrorFilter::Validation,
+                                ]
+                                .map(|f| device.push_error_scope(f))
+                            });
+                            work();
+                            scopes.map_or_else(Vec::new, |[internal, memory, validation]| {
+                                pollster::block_on(async {
+                                    [
+                                        validation.pop().await,
+                                        memory.pop().await,
+                                        internal.pop().await,
+                                    ]
+                                })
+                                .into_iter()
+                                .flatten()
+                                .collect()
+                            })
                         })
-                    }))
+                    })
                     .ok()
             })
             .collect();
@@ -86,7 +111,13 @@ pub(crate) fn compile_all<'a, T: Send>(device: &wgpu::Device, jobs: Vec<Job<'a, 
     if scoped && !caught.is_empty() {
         CAUGHT.with(|c| c.borrow_mut().get_or_insert_with(Vec::new).extend(caught));
     }
-    made.into_iter().map(|m| m.into_inner().unwrap_or_else(|e| e.into_inner()).expect("every pipeline job ran")).collect()
+    made.into_iter()
+        .map(|m| {
+            m.into_inner()
+                .unwrap_or_else(|e| e.into_inner())
+                .expect("every pipeline job ran")
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -98,8 +129,12 @@ mod tests {
         descriptor.backends = wgpu::Backends::NOOP;
         descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
         let instance = wgpu::Instance::new(descriptor);
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap().0
+        let adapter =
+            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+                .unwrap();
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+            .unwrap()
+            .0
     }
 
     #[test]
@@ -108,12 +143,17 @@ mod tests {
         let jobs: Vec<Job<usize>> = (0..97usize)
             .map(|i| -> Job<usize> {
                 Box::new(move || {
-                    std::thread::sleep(std::time::Duration::from_micros(((i * 37) % 11) as u64 * 100));
+                    std::thread::sleep(std::time::Duration::from_micros(
+                        ((i * 37) % 11) as u64 * 100,
+                    ));
                     i * 3
                 })
             })
             .collect();
-        assert_eq!(compile_all(&device, jobs), (0..97).map(|i| i * 3).collect::<Vec<_>>());
+        assert_eq!(
+            compile_all(&device, jobs),
+            (0..97).map(|i| i * 3).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -124,17 +164,29 @@ mod tests {
         let jobs: Vec<Job<()>> = (0..24)
             .map(|_| -> Job<()> {
                 Box::new(move || {
-                    let _ = device_ref.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("broken"), source: wgpu::ShaderSource::Wgsl("fn broken( {".into()) });
+                    let _ = device_ref.create_shader_module(wgpu::ShaderModuleDescriptor {
+                        label: Some("broken"),
+                        source: wgpu::ShaderSource::Wgsl("fn broken( {".into()),
+                    });
                 })
             })
             .collect();
         let escaped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let flag = escaped.clone();
-        device.on_uncaptured_error(std::sync::Arc::new(move |_| flag.store(true, Ordering::Relaxed)));
+        device.on_uncaptured_error(std::sync::Arc::new(move |_| {
+            flag.store(true, Ordering::Relaxed)
+        }));
         let (_, caught) = catching(|| compile_all(&device, jobs));
         let own = pollster::block_on(validation.pop());
         assert!(own.is_some() || !caught.is_empty());
-        assert!(caught.iter().all(|e| matches!(e, wgpu::Error::Validation { .. })));
-        assert!(!escaped.load(Ordering::Relaxed), "an error went past the scopes");
+        assert!(
+            caught
+                .iter()
+                .all(|e| matches!(e, wgpu::Error::Validation { .. }))
+        );
+        assert!(
+            !escaped.load(Ordering::Relaxed),
+            "an error went past the scopes"
+        );
     }
 }

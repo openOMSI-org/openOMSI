@@ -64,8 +64,8 @@
 //! * `js`: the JavaScript subset (`lexer`, `parser`, `interp`).
 //! * `renderer`: [`EngineRenderer`], the [`HtmlRenderer`] backend that ties them together.
 
+use ab_glyph::{Font, FontRef, PxScale, ScaleFont, VariableFont, point};
 use omsi_sim::htmltex::{HtmlRenderer, PointerKind};
-use ab_glyph::{point, Font, FontRef, PxScale, ScaleFont, VariableFont};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -99,7 +99,9 @@ thread_local! {
 }
 
 /// Run `f` with the regular and the bold face; `None` when the font does not parse.
-pub(crate) fn with_fonts<R>(f: impl FnOnce(&FontRef<'static>, &FontRef<'static>) -> R) -> Option<R> {
+pub(crate) fn with_fonts<R>(
+    f: impl FnOnce(&FontRef<'static>, &FontRef<'static>) -> R,
+) -> Option<R> {
     FONTS.with(|p| p.as_ref().map(|(reg, bold)| f(reg, bold)))
 }
 
@@ -112,7 +114,10 @@ fn fallback_bytes() -> Option<&'static (Vec<u8>, Vec<u8>)> {
     BYTES
         .get_or_init(|| {
             let read = |p: &std::path::Path| std::fs::read(p).ok();
-            if let Some(reg) = omsi_cfg::flags::OMSI_HTML_FALLBACK_FONT.os().and_then(|p| read(p.as_ref())) {
+            if let Some(reg) = omsi_cfg::flags::OMSI_HTML_FALLBACK_FONT
+                .os()
+                .and_then(|p| read(p.as_ref()))
+            {
                 let bold = omsi_cfg::flags::OMSI_HTML_FALLBACK_FONT_BOLD
                     .os()
                     .and_then(|p| read(p.as_ref()))
@@ -120,10 +125,15 @@ fn fallback_bytes() -> Option<&'static (Vec<u8>, Vec<u8>)> {
                 return Some((reg, bold));
             }
             if cfg!(target_os = "macos") {
-                let reg = read(std::path::Path::new("/System/Library/Fonts/Supplemental/AppleGothic.ttf"))?;
+                let reg = read(std::path::Path::new(
+                    "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
+                ))?;
                 return Some((reg.clone(), reg));
             }
-            let dir = std::path::PathBuf::from(std::env::var_os("WINDIR").unwrap_or_else(|| "C:\\Windows".into())).join("Fonts");
+            let dir = std::path::PathBuf::from(
+                std::env::var_os("WINDIR").unwrap_or_else(|| "C:\\Windows".into()),
+            )
+            .join("Fonts");
             let reg = read(&dir.join("malgun.ttf"))?;
             let bold = read(&dir.join("malgunbd.ttf")).unwrap_or_else(|| reg.clone());
             Some((reg, bold))
@@ -139,7 +149,12 @@ thread_local! {
 
 /// The face that draws `ch`, its glyph and which face it is (0 = `font`, 1 = the fallback):
 /// `font` itself, or the fallback face when `font` has no glyph for it.
-pub(crate) fn face_for<R>(font: &FontRef<'static>, bold: bool, ch: char, f: impl FnOnce(&FontRef<'static>, ab_glyph::GlyphId, u8) -> R) -> R {
+pub(crate) fn face_for<R>(
+    font: &FontRef<'static>,
+    bold: bool,
+    ch: char,
+    f: impl FnOnce(&FontRef<'static>, ab_glyph::GlyphId, u8) -> R,
+) -> R {
     let id = font.glyph_id(ch);
     if id.0 != 0 || ch.is_ascii() {
         return f(font, id, 0);
@@ -148,7 +163,11 @@ pub(crate) fn face_for<R>(font: &FontRef<'static>, bold: bool, ch: char, f: impl
         Some((reg, b)) => {
             let face = if bold { b } else { reg };
             let fid = face.glyph_id(ch);
-            if fid.0 != 0 { f(face, fid, 1) } else { f(font, id, 0) }
+            if fid.0 != 0 {
+                f(face, fid, 1)
+            } else {
+                f(font, id, 0)
+            }
         }
         None => f(font, id, 0),
     })

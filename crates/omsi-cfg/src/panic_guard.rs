@@ -17,8 +17,14 @@ pub fn catching() -> bool {
 /// Run `f`; a panic in it (a driver wgpu cannot use, taking it down in a way it does not
 /// turn into an error) is caught and gives None, and is not reported as the end of the game.
 pub fn catch<R>(f: impl FnOnce() -> R) -> Option<R> {
+    catch_unwind(f).ok()
+}
+
+/// As [`catch`], keeping the panic's payload (to look at it, or to go on with it by
+/// `std::panic::resume_unwind`).
+pub fn catch_unwind<R>(f: impl FnOnce() -> R) -> std::thread::Result<R> {
     let was = CATCHING.with(|c| c.replace(true));
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
     CATCHING.with(|c| c.set(was));
-    r.ok()
+    r
 }
