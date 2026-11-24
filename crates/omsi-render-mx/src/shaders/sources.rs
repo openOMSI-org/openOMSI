@@ -369,7 +369,7 @@ pub(crate) fn glsl_through_mx(
 /// (`FrameHeap`). The last step of the scene shader's forms: the others match the bound names.
 pub(crate) fn frame_from_heap(src: &str) -> String {
     // (the variable, the immediates' field it is read at)
-    const FIELDS: [(&str, &str); 28] = [
+    const FIELDS: [(&str, &str); 29] = [
         ("vehicle_reflection", "ground"),
         ("t_shadow", "shadow"),
         ("t_shadow_far", "shadow_far"),
@@ -399,6 +399,8 @@ pub(crate) fn frame_from_heap(src: &str) -> String {
         // (the motion pipelines', temporal/motion.wgsl: they read no lights)
         ("motion", "lights"),
         ("prev_models", "grid"),
+        // (the masked prefill's, `encode_masked`: it reads no ground picture)
+        ("t_pane_depth", "ground"),
     ];
     let mut out = src.replace('\r', "");
     let mut views: Vec<(String, String)> = Vec::new(); // (type, view array)
@@ -408,11 +410,9 @@ pub(crate) fn frame_from_heap(src: &str) -> String {
     let mut swaps: Vec<(String, String)> = Vec::new();
     for line in lines {
         let t = line.trim_start();
-        // (group 3's multisampled pane depth stays a root binding: no such array in the heap)
         let group = ["@group(0)", "@group(1)", "@group(2)", "@group(3)"]
             .iter()
-            .any(|g| t.starts_with(g))
-            && !t.contains("multisampled");
+            .any(|g| t.starts_with(g));
         let Some(var) = t.find(" var").filter(|_| group) else {
             kept.push(line);
             continue;
@@ -437,6 +437,7 @@ pub(crate) fn frame_from_heap(src: &str) -> String {
             ("", "texture_2d<f32>") => format!("mx_tex2d[{place}]"),
             ("", "texture_2d<u32>") => format!("mx_tex2d_u32[{place}]"),
             ("", "texture_depth_2d") => format!("mx_texdepth[{place}]"),
+            ("", "texture_depth_multisampled_2d") => format!("mx_texdepth_ms[{place}]"),
             ("", "texture_cube<f32>") => format!("mx_texcube[{place}]"),
             ("", "sampler") => format!("mx_samplers[{place}]"),
             ("", "sampler_comparison") => format!("mx_samplers_cmp[{place}]"),
