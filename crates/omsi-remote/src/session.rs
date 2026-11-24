@@ -1,7 +1,7 @@
-use crate::layouts::{Scope, MAX_LAYOUT};
+use crate::layouts::{MAX_LAYOUT, Scope};
 use crate::pairing::Pairing;
-use crate::{json, lock, Command, Shared};
-use serde_json::{json as j, Value};
+use crate::{Command, Shared, json, lock};
+use serde_json::{Value, json as j};
 use std::io::ErrorKind;
 use std::net::{IpAddr, TcpStream};
 use std::sync::atomic::Ordering;
@@ -37,8 +37,14 @@ fn receive(ws: &mut Ws, last_in: &mut Instant) -> Result<Got, String> {
         }
         Ok(Message::Close(_)) => Ok(Got::Closed),
         Ok(_) => Ok(Got::Nothing),
-        Err(tungstenite::Error::Io(e)) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => Ok(Got::Nothing),
-        Err(tungstenite::Error::ConnectionClosed) | Err(tungstenite::Error::AlreadyClosed) => Ok(Got::Closed),
+        Err(tungstenite::Error::Io(e))
+            if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+        {
+            Ok(Got::Nothing)
+        }
+        Err(tungstenite::Error::ConnectionClosed) | Err(tungstenite::Error::AlreadyClosed) => {
+            Ok(Got::Closed)
+        }
         Err(e) => Err(e.to_string()),
     }
 }
@@ -46,7 +52,11 @@ fn receive(ws: &mut Ws, last_in: &mut Instant) -> Result<Got, String> {
 fn written(r: tungstenite::Result<()>) -> Result<bool, String> {
     match r {
         Ok(()) => Ok(true),
-        Err(tungstenite::Error::Io(e)) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => Ok(false),
+        Err(tungstenite::Error::Io(e))
+            if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+        {
+            Ok(false)
+        }
         Err(e) => Err(e.to_string()),
     }
 }
@@ -72,7 +82,9 @@ fn authenticate(ws: &mut Ws, shared: &Shared, from: IpAddr) -> Result<bool, Stri
         let answer = match field("t").as_str() {
             "hello" if lock(&shared.devices).knows(&field("token")) => return Ok(true),
             "hello" => j!({ "t": "denied", "reason": "token" }),
-            "pair" if !shared.pairing_open.load(Ordering::Relaxed) => j!({ "t": "denied", "reason": "closed" }),
+            "pair" if !shared.pairing_open.load(Ordering::Relaxed) => {
+                j!({ "t": "denied", "reason": "closed" })
+            }
             "pair" => {
                 let pin = lock(&shared.pin).clone();
                 let result = lock(&shared.devices).pair(&pin, &field("pin"), &field("name"), from);
@@ -101,18 +113,32 @@ fn authenticate(ws: &mut Ws, shared: &Shared, from: IpAddr) -> Result<bool, Stri
 }
 
 fn handle(ws: &mut Ws, text: &str, shared: &Shared, id: u64) -> Result<(), String> {
-    let Ok(v) = serde_json::from_str::<Value>(text) else { return Ok(()) };
+    let Ok(v) = serde_json::from_str::<Value>(text) else {
+        return Ok(());
+    };
     let t = v.get("t").and_then(Value::as_str).unwrap_or("");
     if t == "ping" {
-        send(ws, &j!({ "t": "pong", "id": v.get("id").cloned().unwrap_or(Value::Null) }).to_string())?;
+        send(
+            ws,
+            &j!({ "t": "pong", "id": v.get("id").cloned().unwrap_or(Value::Null) }).to_string(),
+        )?;
         let _ = ws.flush();
         return Ok(());
     }
     if t == "layout.save" || t == "layout.reset" {
-        let Some(scope) = v.get("scope").and_then(Value::as_str).and_then(Scope::parse) else { return Ok(()) };
-        let Some(key) = lock(&shared.vehicle).as_ref().map(|x| x.key.clone()) else { return Ok(()) };
+        let Some(scope) = v
+            .get("scope")
+            .and_then(Value::as_str)
+            .and_then(Scope::parse)
+        else {
+            return Ok(());
+        };
+        let Some(key) = lock(&shared.vehicle).as_ref().map(|x| x.key.clone()) else {
+            return Ok(());
+        };
         let done = if t == "layout.save" {
-            v.get("layout").is_some_and(|l| shared.store.save(&key, scope, l))
+            v.get("layout")
+                .is_some_and(|l| shared.store.save(&key, scope, l))
         } else {
             shared.store.reset(&key, scope);
             true
@@ -126,7 +152,11 @@ fn handle(ws: &mut Ws, text: &str, shared: &Shared, id: u64) -> Result<(), Strin
         return Ok(());
     }
     if t == "map.view" {
-        let side = |k: &str| v.get(k).and_then(Value::as_u64).map_or(0, |n| n.min(u64::from(u32::MAX)) as u32);
+        let side = |k: &str| {
+            v.get(k)
+                .and_then(Value::as_u64)
+                .map_or(0, |n| n.min(u64::from(u32::MAX)) as u32)
+        };
         shared.pictures.want(id, side("w"), side("h"));
         return Ok(());
     }
@@ -134,12 +164,21 @@ fn handle(ws: &mut Ws, text: &str, shared: &Shared, id: u64) -> Result<(), Strin
         if let Some((steering, throttle, brake, held)) = json::drive(&v) {
             let mut drive = lock(&shared.drive);
             if drive.is_none_or(|d| d.session == id || d.at.elapsed() > crate::STEER_FRESH) {
-                *drive = Some(crate::Drive { session: id, at: Instant::now(), steering, throttle, brake, held });
+                *drive = Some(crate::Drive {
+                    session: id,
+                    at: Instant::now(),
+                    steering,
+                    throttle,
+                    brake,
+                    held,
+                });
             }
         }
         return Ok(());
     }
-    let Some(cmd) = json::command(&v) else { return Ok(()) };
+    let Some(cmd) = json::command(&v) else {
+        return Ok(());
+    };
     let admitted = match &cmd {
         Command::Action { name, down } => {
             let mut held = lock(&shared.held);
@@ -240,7 +279,9 @@ fn pump(ws: &mut Ws, shared: &Shared, id: u64, generation: u64) -> Result<(), St
         if sign_now != sign {
             sign = sign_now;
             let has = lock(&shared.sign).is_some();
-            out.push(std::sync::Arc::new(j!({ "t": "sign", "v": sign_now, "has": has }).to_string()));
+            out.push(std::sync::Arc::new(
+                j!({ "t": "sign", "v": sign_now, "has": has }).to_string(),
+            ));
         }
         if let Some(now) = now {
             if let Some(delta) = json::state_delta(sent.as_deref(), &now) {
@@ -282,10 +323,15 @@ fn pump(ws: &mut Ws, shared: &Shared, id: u64, generation: u64) -> Result<(), St
 }
 
 pub(crate) fn local_host(host: &str) -> bool {
-    let name = host.rsplit_once(':').filter(|(h, p)| !h.ends_with(':') && p.bytes().all(|b| b.is_ascii_digit())).map_or(host, |(h, _)| h);
+    let name = host
+        .rsplit_once(':')
+        .filter(|(h, p)| !h.ends_with(':') && p.bytes().all(|b| b.is_ascii_digit()))
+        .map_or(host, |(h, _)| h);
     let name = name.trim_start_matches('[').trim_end_matches(']');
     let lower = name.to_ascii_lowercase();
-    let local = [".local", ".lan", ".home.arpa", ".internal", ".localdomain"].iter().any(|s| lower.ends_with(s));
+    let local = [".local", ".lan", ".home.arpa", ".internal", ".localdomain"]
+        .iter()
+        .any(|s| lower.ends_with(s));
     !lower.is_empty() && (!lower.contains('.') || local || name.parse::<IpAddr>().is_ok())
 }
 
@@ -293,7 +339,12 @@ fn same_origin(req: &Request) -> bool {
     let header = |n: &str| req.headers().get(n).and_then(|v| v.to_str().ok());
     match (header("origin"), header("host")) {
         (None, _) => true,
-        (Some(origin), Some(host)) => local_host(host) && origin.strip_prefix("http://").is_some_and(|o| o.eq_ignore_ascii_case(host)),
+        (Some(origin), Some(host)) => {
+            local_host(host)
+                && origin
+                    .strip_prefix("http://")
+                    .is_some_and(|o| o.eq_ignore_ascii_case(host))
+        }
         _ => false,
     }
 }
@@ -302,7 +353,10 @@ pub(crate) fn run(stream: TcpStream, shared: &Shared) -> Result<(), String> {
     let ip = stream.peer_addr().map_err(|e| e.to_string())?.ip();
     let peer = ip.to_string();
     let _ = stream.set_nodelay(true);
-    let config = WebSocketConfig::default().max_message_size(Some(UNPAIRED_MESSAGE)).max_frame_size(Some(UNPAIRED_MESSAGE)).max_write_buffer_size(MAX_BACKLOG);
+    let config = WebSocketConfig::default()
+        .max_message_size(Some(UNPAIRED_MESSAGE))
+        .max_frame_size(Some(UNPAIRED_MESSAGE))
+        .max_write_buffer_size(MAX_BACKLOG);
     let check = |req: &Request, res: Response| -> Result<Response, ErrorResponse> {
         if same_origin(req) {
             return Ok(res);
@@ -311,9 +365,14 @@ pub(crate) fn run(stream: TcpStream, shared: &Shared) -> Result<(), String> {
         *refuse.status_mut() = tungstenite::http::StatusCode::FORBIDDEN;
         Err(refuse)
     };
-    let mut ws = tungstenite::accept_hdr_with_config(stream, check, Some(config)).map_err(|e| e.to_string())?;
-    ws.get_mut().set_read_timeout(Some(Duration::from_millis(20))).map_err(|e| e.to_string())?;
-    ws.get_mut().set_write_timeout(Some(Duration::from_secs(2))).map_err(|e| e.to_string())?;
+    let mut ws = tungstenite::accept_hdr_with_config(stream, check, Some(config))
+        .map_err(|e| e.to_string())?;
+    ws.get_mut()
+        .set_read_timeout(Some(Duration::from_millis(20)))
+        .map_err(|e| e.to_string())?;
+    ws.get_mut()
+        .set_write_timeout(Some(Duration::from_secs(2)))
+        .map_err(|e| e.to_string())?;
     let texts = shared.feed().texts.clone();
     if !texts.is_empty() {
         let _ = send(&mut ws, &texts);
@@ -331,14 +390,19 @@ pub(crate) fn run(stream: TcpStream, shared: &Shared) -> Result<(), String> {
         return Ok(());
     }
     lock(&shared.trusted).insert(ip);
-    ws.get_mut().set_nonblocking(true).map_err(|e| e.to_string())?;
+    ws.get_mut()
+        .set_nonblocking(true)
+        .map_err(|e| e.to_string())?;
     ws.set_config(|c| {
         c.max_message_size = Some(MAX_LAYOUT * 2);
         c.max_frame_size = Some(MAX_LAYOUT * 2);
     });
     if shared.clients.fetch_add(1, Ordering::Relaxed) >= MAX_CLIENTS {
         shared.clients.fetch_sub(1, Ordering::Relaxed);
-        let _ = send(&mut ws, &j!({ "t": "denied", "reason": "full" }).to_string());
+        let _ = send(
+            &mut ws,
+            &j!({ "t": "denied", "reason": "full" }).to_string(),
+        );
         let _ = ws.close(None);
         return Ok(());
     }

@@ -7,7 +7,9 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Tok>, String> {
     let mut out = Vec::new();
     let mut i = 0;
     const PUNCT3: &[&str] = &["===", "!=="];
-    const PUNCT2: &[&str] = &["==", "!=", "<=", ">=", "&&", "||", "+=", "-=", "*=", "/=", "++", "--", "=>"];
+    const PUNCT2: &[&str] = &[
+        "==", "!=", "<=", ">=", "&&", "||", "+=", "-=", "*=", "/=", "++", "--", "=>",
+    ];
     while i < c.len() {
         let ch = c[i];
         if ch.is_whitespace() {
@@ -22,7 +24,9 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Tok>, String> {
                 i += 1;
             }
             i += 2;
-        } else if ch.is_ascii_digit() || (ch == '.' && c.get(i + 1).map_or(false, |d| d.is_ascii_digit())) {
+        } else if ch.is_ascii_digit()
+            || (ch == '.' && c.get(i + 1).map_or(false, |d| d.is_ascii_digit()))
+        {
             let s = i;
             while i < c.len() && (c[i].is_ascii_digit() || c[i] == '.') {
                 i += 1;
@@ -84,4 +88,7 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Tok>, String> {
     Ok(out)
 }
 
-pub(crate) const KEYWORDS: &[&str] = &["function", "return", "if", "else", "var", "let", "const", "for", "while", "typeof", "in", "break", "continue"];
+pub(crate) const KEYWORDS: &[&str] = &[
+    "function", "return", "if", "else", "var", "let", "const", "for", "while", "typeof", "in",
+    "break", "continue",
+];

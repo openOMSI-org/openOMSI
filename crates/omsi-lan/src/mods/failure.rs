@@ -69,12 +69,17 @@ impl Failure {
     /// Asking failed before the host could answer: no way to it yet, out of reach, the
     /// connection, or a host too busy for one more.
     pub(crate) fn unreached(&self) -> bool {
-        matches!(self, Failure::NoHost | Failure::Unreachable(_) | Failure::ConnectionLost(_)) || self.host_says(says::BUSY)
+        matches!(
+            self,
+            Failure::NoHost | Failure::Unreachable(_) | Failure::ConnectionLost(_)
+        ) || self.host_says(says::BUSY)
     }
 
     /// A bus that is still to come: asked for again, never given up.
     pub(crate) fn coming(&self) -> bool {
-        matches!(self, Failure::NotDriven | Failure::NotHereYet) || self.host_says(says::NO_SUCH_BUS) || self.unreached()
+        matches!(self, Failure::NotDriven | Failure::NotHereYet)
+            || self.host_says(says::NO_SUCH_BUS)
+            || self.unreached()
     }
 
     /// Settled for the session: never asked for again, and another bus stands in at once.
@@ -85,7 +90,11 @@ impl Failure {
     /// How long to wait before asking again: soon for a bus on its way, a little longer for a
     /// host out of reach, `otherwise` for anything else.
     pub(crate) fn retry_after(&self, otherwise: Duration) -> Duration {
-        if matches!(self, Failure::NoHost | Failure::NotDriven | Failure::NotHereYet) || self.host_says(says::NO_SUCH_BUS) {
+        if matches!(
+            self,
+            Failure::NoHost | Failure::NotDriven | Failure::NotHereYet
+        ) || self.host_says(says::NO_SUCH_BUS)
+        {
             Duration::from_secs(5)
         } else if self.unreached() {
             Duration::from_secs(15)
@@ -144,7 +153,11 @@ impl From<&str> for Failure {
 }
 
 /// A connection to the host's mods, greeted (`open_waiting`), its failure as a kind.
-pub(super) fn connect(host: SocketAddr, session: u64, wait: Duration) -> Result<super::Connection, Failure> {
+pub(super) fn connect(
+    host: SocketAddr,
+    session: u64,
+    wait: Duration,
+) -> Result<super::Connection, Failure> {
     super::open_waiting(host, session, wait).map_err(Failure::from)
 }
 
@@ -166,12 +179,26 @@ mod tests {
     fn the_words_of_the_connection_code_become_kinds_and_read_the_same() {
         let lost = format!("{}: closed by the host", super::super::CONNECTION_LOST);
         let cases = [
-            (lost.as_str(), Failure::ConnectionLost("closed by the host".into())),
-            ("the host says: no such bus", Failure::HostSays(says::NO_SUCH_BUS.into())),
+            (
+                lost.as_str(),
+                Failure::ConnectionLost("closed by the host".into()),
+            ),
+            (
+                "the host says: no such bus",
+                Failure::HostSays(says::NO_SUCH_BUS.into()),
+            ),
             ("the host says: busy", Failure::HostSays(says::BUSY.into())),
-            ("cannot reach the host's mods on TCP 127.0.0.1:1: refused", Failure::Unreachable("cannot reach the host's mods on TCP 127.0.0.1:1: refused".into())),
+            (
+                "cannot reach the host's mods on TCP 127.0.0.1:1: refused",
+                Failure::Unreachable(
+                    "cannot reach the host's mods on TCP 127.0.0.1:1: refused".into(),
+                ),
+            ),
             ("no host to ask yet", Failure::NoHost),
-            ("bad list: expected value", Failure::Other("bad list: expected value".into())),
+            (
+                "bad list: expected value",
+                Failure::Other("bad list: expected value".into()),
+            ),
         ];
         for (words, kind) in cases {
             let f = Failure::from(words);
@@ -185,16 +212,36 @@ mod tests {
     fn what_is_still_to_come_is_asked_for_again_and_how_soon() {
         let minute = Duration::from_secs(60);
         assert!(Failure::HostSays(says::NO_SUCH_BUS.into()).coming());
-        assert!(Failure::NotDriven.coming() && Failure::NotHereYet.coming() && Failure::NoHost.coming());
+        assert!(
+            Failure::NotDriven.coming() && Failure::NotHereYet.coming() && Failure::NoHost.coming()
+        );
         assert!(Failure::HostSays(says::BUSY.into()).unreached());
         assert!(!Failure::Other("the host's list is another bus".into()).coming());
-        assert!(Failure::OwnBusesOnly.settled() && !Failure::OwnBusesOnly.coming() && !Failure::NoHost.settled());
+        assert!(
+            Failure::OwnBusesOnly.settled()
+                && !Failure::OwnBusesOnly.coming()
+                && !Failure::NoHost.settled()
+        );
         assert!(Failure::HostSays(says::WHAT.into()).older_host());
-        assert_eq!(Failure::HostSays(says::NO_SUCH_BUS.into()).retry_after(minute), Duration::from_secs(5));
-        assert_eq!(Failure::ConnectionLost("reset".into()).retry_after(minute), Duration::from_secs(15));
+        assert_eq!(
+            Failure::HostSays(says::NO_SUCH_BUS.into()).retry_after(minute),
+            Duration::from_secs(5)
+        );
+        assert_eq!(
+            Failure::ConnectionLost("reset".into()).retry_after(minute),
+            Duration::from_secs(15)
+        );
         assert_eq!(Failure::Other("bad".into()).retry_after(minute), minute);
         // (a file's name for the log, the kind kept)
-        assert!(Failure::ConnectionLost("reset".into()).about("Vehicles/X/a.dds").unreached());
-        assert!(Failure::HostSays(says::WHAT.into()).about("Vehicles/X/a.dds").older_host());
+        assert!(
+            Failure::ConnectionLost("reset".into())
+                .about("Vehicles/X/a.dds")
+                .unreached()
+        );
+        assert!(
+            Failure::HostSays(says::WHAT.into())
+                .about("Vehicles/X/a.dds")
+                .older_host()
+        );
     }
 }

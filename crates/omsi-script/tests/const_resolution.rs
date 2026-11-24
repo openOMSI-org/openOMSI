@@ -1,6 +1,6 @@
 //! Synthetic constfile resolution tests; no original OMSI assets required.
 
-use omsi_script::{compile, CompileInput, NullHost, State, Vm};
+use omsi_script::{CompileInput, NullHost, State, Vm, compile};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 

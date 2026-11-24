@@ -10,7 +10,7 @@
 //!
 //! Blob layout: `OOSEAL1\n` (8 bytes), nonce (12), ciphertext, tag (16).
 
-use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, CHACHA20_POLY1305, NONCE_LEN};
+use ring::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, NONCE_LEN, Nonce, UnboundKey};
 use ring::rand::{SecureRandom, SystemRandom};
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -32,7 +32,9 @@ pub fn sealed_len(plain: u64) -> u64 {
 /// 32 random bytes from the operating system (a key).
 pub fn random_key() -> io::Result<[u8; 32]> {
     let mut k = [0u8; 32];
-    SystemRandom::new().fill(&mut k).map_err(|_| io::Error::other("no random numbers from the system"))?;
+    SystemRandom::new()
+        .fill(&mut k)
+        .map_err(|_| io::Error::other("no random numbers from the system"))?;
     Ok(k)
 }
 
@@ -41,7 +43,9 @@ pub struct SealKey(LessSafeKey);
 
 impl SealKey {
     pub fn new(bytes: &[u8; 32]) -> SealKey {
-        SealKey(LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, bytes).expect("a 32-byte key")))
+        SealKey(LessSafeKey::new(
+            UnboundKey::new(&CHACHA20_POLY1305, bytes).expect("a 32-byte key"),
+        ))
     }
 }
 
@@ -54,13 +58,21 @@ impl std::fmt::Debug for SealKey {
 /// Seal `plain` into a blob (`aad` is bound to it: [`unseal`] wants the same).
 pub fn seal(key: &SealKey, aad: &[u8], plain: &[u8]) -> io::Result<Vec<u8>> {
     let mut nonce = [0u8; NONCE_LEN];
-    SystemRandom::new().fill(&mut nonce).map_err(|_| io::Error::other("no random numbers from the system"))?;
+    SystemRandom::new()
+        .fill(&mut nonce)
+        .map_err(|_| io::Error::other("no random numbers from the system"))?;
     let mut out = Vec::with_capacity(sealed_len(plain.len() as u64) as usize);
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(&nonce);
     out.extend_from_slice(plain);
     let mut body = out.split_off(MAGIC.len() + NONCE_LEN);
-    key.0.seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce), Aad::from(aad), &mut body).map_err(|_| io::Error::other("cannot seal"))?;
+    key.0
+        .seal_in_place_append_tag(
+            Nonce::assume_unique_for_key(nonce),
+            Aad::from(aad),
+            &mut body,
+        )
+        .map_err(|_| io::Error::other("cannot seal"))?;
     out.append(&mut body);
     Ok(out)
 }
@@ -69,15 +81,27 @@ pub fn seal(key: &SealKey, aad: &[u8], plain: &[u8]) -> io::Result<Vec<u8>> {
 /// for other associated data.
 pub fn unseal(key: &SealKey, aad: &[u8], mut blob: Vec<u8>) -> io::Result<Vec<u8>> {
     if blob.len() < SEALED_OVERHEAD as usize || &blob[..MAGIC.len()] != MAGIC {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "not a sealed blob"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "not a sealed blob",
+        ));
     }
     let mut nonce = [0u8; NONCE_LEN];
     nonce.copy_from_slice(&blob[MAGIC.len()..MAGIC.len() + NONCE_LEN]);
     let start = MAGIC.len() + NONCE_LEN;
     let n = key
         .0
-        .open_in_place(Nonce::assume_unique_for_key(nonce), Aad::from(aad), &mut blob[start..])
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "a sealed blob does not open (changed, or another key)"))?
+        .open_in_place(
+            Nonce::assume_unique_for_key(nonce),
+            Aad::from(aad),
+            &mut blob[start..],
+        )
+        .map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "a sealed blob does not open (changed, or another key)",
+            )
+        })?
         .len();
     blob.copy_within(start..start + n, 0);
     blob.truncate(n);
@@ -99,7 +123,8 @@ pub struct SealedFile {
 
 pub(super) struct SealedMount {
     pub(super) path: PathBuf,
-    key: Arc<SealKey>,
+    key: Option<Arc<SealKey>>,
+    publisher: Option<Arc<omsi_pack::VerifiedPack>>,
     /// Files by lower-case relative path.
     entries: HashMap<String, SealedFile>,
     /// Folder contents by lower-case folder path ("" = the root): (name as given, is folder).
@@ -108,10 +133,38 @@ pub(super) struct SealedMount {
 
 impl SealedMount {
     pub(super) fn read(&self, key: &str) -> io::Result<Vec<u8>> {
-        let f = self.entries.get(key).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, format!("{}: no file {key}", self.path.display())))?;
-        let plain = unseal(&self.key, &f.aad, std::fs::read(&f.blob)?).map_err(|e| io::Error::new(e.kind(), format!("{}/{}: {e}", self.path.display(), f.rel)))?;
+        let f = self.entries.get(key).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("{}: no file {key}", self.path.display()),
+            )
+        })?;
+        if let Some(pack) = &self.publisher {
+            if pack.manifest().key_id.is_some() {
+                PROTECTED_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            return pack
+                .read(&f.blob.to_string_lossy())
+                .map_err(io::Error::other);
+        }
+        let key = self
+            .key
+            .as_ref()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "sealed store has no key"))?;
+        let plain = unseal(key, &f.aad, std::fs::read(&f.blob)?).map_err(|e| {
+            io::Error::new(e.kind(), format!("{}/{}: {e}", self.path.display(), f.rel))
+        })?;
         if plain.len() as u64 != f.size {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, format!("{}/{}: {} bytes, {} expected", self.path.display(), f.rel, plain.len(), f.size)));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{}/{}: {} bytes, {} expected",
+                    self.path.display(),
+                    f.rel,
+                    plain.len(),
+                    f.size
+                ),
+            ));
         }
         Ok(plain)
     }
@@ -129,19 +182,97 @@ impl SealedMount {
     }
 
     pub(super) fn list(&self, key: &str) -> Option<Vec<(OsString, bool)>> {
-        self.dirs.get(key).map(|l| l.iter().map(|(n, d)| (OsString::from(n), *d)).collect())
+        self.dirs
+            .get(key)
+            .map(|l| l.iter().map(|(n, d)| (OsString::from(n), *d)).collect())
     }
 }
 
 static SEALED: RwLock<Vec<Arc<SealedMount>>> = RwLock::new(Vec::new());
+static PROTECTED_READS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many files of encrypted publisher packs were read so far. Anything derived while it
+/// grows may hold protected content, so it must not be cached on disk. Multiplayer session
+/// stores are sealed too, but they hold no publisher-protected content and are not counted.
+pub fn protected_reads() -> u64 {
+    PROTECTED_READS.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 /// Mount `files` (sealed with `key`) as the folder `mount`, which need not exist on disk;
 /// a store mounted there before is replaced. Returns the mount point.
 pub fn mount_sealed(mount: &Path, key: Arc<SealKey>, files: Vec<SealedFile>) -> PathBuf {
-    let mut m = SealedMount { path: mount.to_path_buf(), key, entries: HashMap::new(), dirs: HashMap::new() };
+    mount_store(mount, Some(key), files, None)
+}
+
+/// Mount an authenticated publisher pack without writing decoded content to disk.
+pub fn mount_publisher(
+    mount: &Path,
+    pack: Arc<omsi_pack::VerifiedPack>,
+    aliases: std::collections::BTreeMap<String, String>,
+) -> io::Result<PathBuf> {
+    let aliases = if aliases.is_empty() {
+        pack.assets()
+            .iter()
+            .map(|a| (a.path.clone(), a.path.clone()))
+            .collect()
+    } else {
+        aliases
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    let mut files = Vec::new();
+    for (alias, original) in aliases {
+        if alias.is_empty()
+            || alias.len() > 1024
+            || alias.contains(['\\', ':', '\0'])
+            || alias
+                .split('/')
+                .any(|p| p.is_empty() || p == "." || p == ".." || p.ends_with(['.', ' ']))
+            || !seen.insert(alias.to_lowercase())
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "unsafe or duplicate publisher asset alias",
+            ));
+        }
+        let asset = pack
+            .asset_by_path(&original)
+            .filter(|a| a.path == original)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "publisher asset alias was not found",
+                )
+            })?;
+        files.push(SealedFile {
+            rel: alias,
+            blob: PathBuf::from(original),
+            aad: Vec::new(),
+            size: asset.size,
+        });
+    }
+    Ok(mount_store(mount, None, files, Some(pack)))
+}
+
+fn mount_store(
+    mount: &Path,
+    key: Option<Arc<SealKey>>,
+    files: Vec<SealedFile>,
+    publisher: Option<Arc<omsi_pack::VerifiedPack>>,
+) -> PathBuf {
+    let mut m = SealedMount {
+        path: mount.to_path_buf(),
+        key,
+        publisher,
+        entries: HashMap::new(),
+        dirs: HashMap::new(),
+    };
     m.dirs.insert(String::new(), Vec::new());
     for f in files {
-        let parts: Vec<&str> = f.rel.split(['/', '\\']).filter(|c| !c.is_empty() && *c != "." && *c != "..").collect();
+        let parts: Vec<&str> = f
+            .rel
+            .split(['/', '\\'])
+            .filter(|c| !c.is_empty() && *c != "." && *c != "..")
+            .collect();
         if parts.is_empty() {
             continue;
         }
@@ -153,14 +284,21 @@ pub fn mount_sealed(mount: &Path, key: Arc<SealKey>, files: Vec<SealedFile>) -> 
             if is_dir && m.dirs.contains_key(&here) || !is_dir && m.entries.contains_key(&here) {
                 continue;
             }
-            m.dirs.entry(parent).or_default().push((parts[k].to_string(), is_dir));
+            m.dirs
+                .entry(parent)
+                .or_default()
+                .push((parts[k].to_string(), is_dir));
             if is_dir {
                 m.dirs.insert(here, Vec::new());
             }
         }
         m.entries.insert(lower.join("/"), f);
     }
-    log::info!("sealed store {}: {} files mounted", mount.display(), m.entries.len());
+    log::info!(
+        "sealed store {}: {} files mounted",
+        mount.display(),
+        m.entries.len()
+    );
     let mut all = SEALED.write().unwrap();
     all.retain(|x| x.path != mount);
     all.push(Arc::new(m));
@@ -175,7 +313,11 @@ pub fn unmount_sealed(mount: &Path) {
 /// Does `path` lie in a sealed mount (content that must never be written out in plain
 /// form, nor anything derived from it be cached on disk)?
 pub fn is_sealed(path: &Path) -> bool {
-    locate(path).is_some()
+    locate(path).is_some_and(|(m, _)| {
+        m.publisher
+            .as_ref()
+            .is_none_or(|p| p.manifest().key_id.is_some())
+    })
 }
 
 /// The sealed mount `path` lies in, and its lower-case path inside it.
@@ -184,22 +326,24 @@ pub(super) fn locate(path: &Path) -> Option<(Arc<SealedMount>, String)> {
     if mounts.is_empty() {
         return None;
     }
-    for m in mounts.iter() {
-        if let Ok(rest) = path.strip_prefix(&m.path) {
-            let mut parts: Vec<String> = Vec::new();
-            for c in rest.components() {
-                match c {
-                    Component::Normal(s) => parts.push(s.to_string_lossy().to_lowercase()),
-                    Component::ParentDir => {
-                        parts.pop();
-                    }
-                    _ => {}
-                }
+    // The deepest mount answers: a publisher pack is mounted inside its map's folder, and in
+    // LAN that folder lies in the session store.
+    let m = mounts
+        .iter()
+        .filter(|m| path.starts_with(&m.path))
+        .max_by_key(|m| m.path.components().count())?;
+    let rest = path.strip_prefix(&m.path).ok()?;
+    let mut parts: Vec<String> = Vec::new();
+    for c in rest.components() {
+        match c {
+            Component::Normal(s) => parts.push(s.to_string_lossy().to_lowercase()),
+            Component::ParentDir => {
+                parts.pop();
             }
-            return Some((m.clone(), parts.join("/")));
+            _ => {}
         }
     }
-    None
+    Some((m.clone(), parts.join("/")))
 }
 
 #[cfg(test)]
@@ -212,8 +356,14 @@ mod tests {
     fn store(dir: &Path, key: &SealKey) -> Vec<SealedFile> {
         std::fs::create_dir_all(dir).unwrap();
         let files: [(&str, Vec<u8>); 3] = [
-            ("maps/Test Map/global.cfg", [b"[name]\r\n".as_slice(), MARKER, b"\r\n"].concat()),
-            ("Sceneryobjects/Stra\u{df}e/Schild.sco", [b"[mesh]\r\n".as_slice(), MARKER].concat()),
+            (
+                "maps/Test Map/global.cfg",
+                [b"[name]\r\n".as_slice(), MARKER, b"\r\n"].concat(),
+            ),
+            (
+                "Sceneryobjects/Stra\u{df}e/Schild.sco",
+                [b"[mesh]\r\n".as_slice(), MARKER].concat(),
+            ),
             ("maps/Test Map/tile_0_0.map", MARKER.repeat(100)),
         ];
         files
@@ -223,7 +373,12 @@ mod tests {
                 let aad = format!("file {i}").into_bytes();
                 let blob = dir.join(format!("{i:064x}"));
                 std::fs::write(&blob, seal(key, &aad, data).unwrap()).unwrap();
-                SealedFile { rel: rel.to_string(), blob, aad, size: data.len() as u64 }
+                SealedFile {
+                    rel: rel.to_string(),
+                    blob,
+                    aad,
+                    size: data.len() as u64,
+                }
             })
             .collect()
     }
@@ -236,7 +391,11 @@ mod tests {
         // nothing on disk carries a plain byte of the files, nor their names
         for e in std::fs::read_dir(dir.join("blobs")).unwrap().flatten() {
             let b = std::fs::read(e.path()).unwrap();
-            assert!(!b.windows(MARKER.len()).any(|w| w == MARKER), "plain text in {}", e.path().display());
+            assert!(
+                !b.windows(MARKER.len()).any(|w| w == MARKER),
+                "plain text in {}",
+                e.path().display()
+            );
             assert!(!e.file_name().to_string_lossy().contains("global"));
             assert_eq!(&b[..8], MAGIC);
         }
@@ -245,16 +404,40 @@ mod tests {
         let cfg = mount.join("MAPS").join("test map").join("Global.CFG");
         assert!(super::super::is_file(&cfg));
         assert!(super::super::exists(&cfg));
-        assert_eq!(super::super::read(&cfg).unwrap(), [b"[name]\r\n".as_slice(), MARKER, b"\r\n"].concat());
-        assert!(super::super::read_text(&cfg).unwrap().contains("PLAINTEXT-MARKER"));
-        assert_eq!(super::super::file_size(&cfg), Some(MARKER.len() as u64 + 10));
+        assert_eq!(
+            super::super::read(&cfg).unwrap(),
+            [b"[name]\r\n".as_slice(), MARKER, b"\r\n"].concat()
+        );
+        assert!(
+            super::super::read_text(&cfg)
+                .unwrap()
+                .contains("PLAINTEXT-MARKER")
+        );
+        assert_eq!(
+            super::super::file_size(&cfg),
+            Some(MARKER.len() as u64 + 10)
+        );
         assert!(super::super::is_dir(&mount.join("maps")));
         assert!(super::super::is_dir(&mount));
         assert!(!super::super::exists(&mount.join("Vehicles")));
-        let top: Vec<String> = super::super::list_dir(&mount).unwrap().into_iter().map(|(n, _)| n.to_string_lossy().into_owned()).collect();
+        let top: Vec<String> = super::super::list_dir(&mount)
+            .unwrap()
+            .into_iter()
+            .map(|(n, _)| n.to_string_lossy().into_owned())
+            .collect();
         assert_eq!(top, ["maps", "Sceneryobjects"]);
-        let map: Vec<(String, bool)> = super::super::list_dir(&mount.join("maps/test map")).unwrap().into_iter().map(|(n, d)| (n.to_string_lossy().into_owned(), d)).collect();
-        assert_eq!(map, [("global.cfg".to_string(), false), ("tile_0_0.map".to_string(), false)]);
+        let map: Vec<(String, bool)> = super::super::list_dir(&mount.join("maps/test map"))
+            .unwrap()
+            .into_iter()
+            .map(|(n, d)| (n.to_string_lossy().into_owned(), d))
+            .collect();
+        assert_eq!(
+            map,
+            [
+                ("global.cfg".to_string(), false),
+                ("tile_0_0.map".to_string(), false)
+            ]
+        );
         // the original spelling, found the way Windows finds it
         let sco = crate::resolve_path(&mount, "Sceneryobjects\\straße\\schild.sco");
         assert!(super::super::is_file(&sco), "{}", sco.display());
@@ -291,6 +474,58 @@ mod tests {
         assert!(unseal(&key, b"a", blob[..10].to_vec()).is_err());
         // a fresh nonce every time
         assert_ne!(seal(&key, b"a", b"hello").unwrap(), blob);
-        assert_eq!(unseal(&key, b"", seal(&key, b"", b"").unwrap()).unwrap(), b"");
+        assert_eq!(
+            unseal(&key, b"", seal(&key, b"", b"").unwrap()).unwrap(),
+            b""
+        );
+    }
+
+    #[test]
+    fn session_stores_are_not_publisher_protected_content() {
+        let dir =
+            std::env::temp_dir().join(format!("omsi-cfg-session-store-{}", std::process::id()));
+        let key = SealKey::new(&random_key().unwrap());
+        let files = store(&dir, &key);
+        let mount = dir.join("mount");
+        mount_sealed(&mount, Arc::new(key), files);
+        let before = protected_reads();
+        super::super::read(&mount.join("maps/Test Map/global.cfg")).unwrap();
+        unmount_sealed(&mount);
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(
+            protected_reads(),
+            before,
+            "a multiplayer session store counted as publisher-protected content"
+        );
+    }
+
+    #[test]
+    fn a_store_mounted_inside_another_answers_for_its_own_files() {
+        let dir =
+            std::env::temp_dir().join(format!("omsi-cfg-sealed-nested-{}", std::process::id()));
+        let key = Arc::new(SealKey::new(&random_key().unwrap()));
+        let outer_files = store(&dir.join("outer-blobs"), &key);
+        let inner_files = store(&dir.join("inner-blobs"), &key);
+        // a LAN session store, and a publisher pack mounted inside the map folder it holds
+        let outer = dir.join("session");
+        let inner = outer.join("maps/Test Map/.publisher-world/1/1-0");
+        mount_sealed(&outer, key.clone(), outer_files);
+        mount_sealed(&inner, key.clone(), inner_files);
+        let inner_cfg = inner.join("maps/Test Map/global.cfg");
+        let outer_cfg = outer.join("maps/Test Map/global.cfg");
+        let inner_read = super::super::read(&inner_cfg);
+        let inner_is_file = super::super::is_file(&inner_cfg);
+        let outer_is_file = super::super::is_file(&outer_cfg);
+        let inner_sealed = is_sealed(&inner_cfg);
+        unmount_sealed(&inner);
+        unmount_sealed(&outer);
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(
+            inner_read.unwrap(),
+            [b"[name]\r\n".as_slice(), MARKER, b"\r\n"].concat()
+        );
+        assert!(inner_is_file, "the inner store's file is not found");
+        assert!(outer_is_file, "the outer store lost its own file");
+        assert!(inner_sealed);
     }
 }

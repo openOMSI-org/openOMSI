@@ -16,7 +16,10 @@ impl LanSession {
             else {
                 return;
             };
-            if self.checked_peer(id, from, STATE_RATE, PeerTraffic::State).is_none() {
+            if self
+                .checked_peer(id, from, STATE_RATE, PeerTraffic::State)
+                .is_none()
+            {
                 return;
             }
             if let Some(mut f) = world::decode(data, PROTOCOL as u8) {

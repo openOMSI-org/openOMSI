@@ -131,7 +131,10 @@ pub fn classify(red: bool, all_standing: bool, holds: &[Hold]) -> Circle {
         Circle::StaleClaims
     } else if all_standing && !holds.is_empty() && holds.iter().all(|h| *h == Hold::Rule) {
         Circle::Yielding
-    } else if all_standing && !holds.contains(&Hold::Body) && holds.iter().any(|h| matches!(h, Hold::Rule | Hold::Claim)) {
+    } else if all_standing
+        && !holds.contains(&Hold::Body)
+        && holds.iter().any(|h| matches!(h, Hold::Rule | Hold::Claim))
+    {
         // Since 0.2.28 such a circle counted as a full road and was never sorted out (the
         // timer escape before it let one of any circle go): a side road's car giving way to
         // a main road's car that queues behind cars waiting, in the end, for the side road's
@@ -187,17 +190,31 @@ impl TrafficSim {
         if kinds.iter().all(|k| k.is_empty()) {
             return;
         }
-        let edges: Vec<Vec<usize>> = kinds.iter().map(|k| k.iter().map(|e| e.0).collect()).collect();
+        let edges: Vec<Vec<usize>> = kinds
+            .iter()
+            .map(|k| k.iter().map(|e| e.0).collect())
+            .collect();
         for part in circles(&edges) {
             let inside: Vec<Hold> = part
                 .iter()
-                .flat_map(|&k| kinds[k].iter().filter(|e| part.binary_search(&e.0).is_ok()).map(|e| e.1))
+                .flat_map(|&k| {
+                    kinds[k]
+                        .iter()
+                        .filter(|e| part.binary_search(&e.0).is_ok())
+                        .map(|e| e.1)
+                })
                 .collect();
-            let red = part.iter().any(|&k| self.cars[k].light_hold && self.cars[k].why.0 == "light");
+            let red = part
+                .iter()
+                .any(|&k| self.cars[k].light_hold && self.cars[k].why.0 == "light");
             let standing = part.iter().all(|&k| self.cars[k].state.speed < 0.3);
             let kind = classify(red, standing, &inside);
-            let members: Vec<(usize, f32, u64)> = part.iter().map(|&k| (k, self.cars[k].state.yield_time, self.cars[k].id)).collect();
-            let debug = omsi_cfg::flags::OMSI_DEBUG_STUCK.is_set() || omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set();
+            let members: Vec<(usize, f32, u64)> = part
+                .iter()
+                .map(|&k| (k, self.cars[k].state.yield_time, self.cars[k].id))
+                .collect();
+            let debug = omsi_cfg::flags::OMSI_DEBUG_STUCK.is_set()
+                || omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set();
             match kind {
                 Circle::StaleClaims => {
                     let keep = longest_waiter(&members);
@@ -208,20 +225,33 @@ impl TrafficSim {
                         }
                     }
                     if debug {
-                        log::info!("t={:.1}: cars {:?} hold each other's claims: car {:?} keeps its own", self.time, members.iter().map(|m| m.2).collect::<Vec<_>>(), keep.map(|k| self.cars[k].id));
+                        log::info!(
+                            "t={:.1}: cars {:?} hold each other's claims: car {:?} keeps its own",
+                            self.time,
+                            members.iter().map(|m| m.2).collect::<Vec<_>>(),
+                            keep.map(|k| self.cars[k].id)
+                        );
                     }
                 }
                 Circle::Yielding => {
                     if part.iter().any(|&k| self.cars[k].yield_pass > self.time) {
                         continue; // one of them is going already
                     }
-                    if part.iter().any(|&k| self.cars[k].state.yield_time < YIELD_CYCLE_WAIT) {
+                    if part
+                        .iter()
+                        .any(|&k| self.cars[k].state.yield_time < YIELD_CYCLE_WAIT)
+                    {
                         continue;
                     }
                     if let Some(go) = longest_waiter(&members) {
                         self.cars[go].yield_pass = self.time + YIELD_PASS;
                         if debug {
-                            log::info!("t={:.1}: cars {:?} only give way to each other: car {} goes", self.time, members.iter().map(|m| m.2).collect::<Vec<_>>(), self.cars[go].id);
+                            log::info!(
+                                "t={:.1}: cars {:?} only give way to each other: car {} goes",
+                                self.time,
+                                members.iter().map(|m| m.2).collect::<Vec<_>>(),
+                                self.cars[go].id
+                            );
                         }
                     }
                 }
@@ -230,17 +260,28 @@ impl TrafficSim {
                         continue; // one of them is going already
                     }
                     // (the followers' wait at a junction is not counted: how long they stood)
-                    if part.iter().any(|&k| self.cars[k].stopped < YIELD_CYCLE_WAIT) {
+                    if part
+                        .iter()
+                        .any(|&k| self.cars[k].stopped < YIELD_CYCLE_WAIT)
+                    {
                         continue;
                     }
                     // of those the rules or a claim hold, the one that has waited longest (not
                     // one a full exit holds as well: let go by the rules, it would still stand)
                     let held: Vec<(usize, f32, u64)> = part
                         .iter()
-                        .filter(|&&k| !self.cars[k].exit_wait && kinds[k].iter().any(|e| matches!(e.1, Hold::Rule | Hold::Claim) && part.binary_search(&e.0).is_ok()))
+                        .filter(|&&k| {
+                            !self.cars[k].exit_wait
+                                && kinds[k].iter().any(|e| {
+                                    matches!(e.1, Hold::Rule | Hold::Claim)
+                                        && part.binary_search(&e.0).is_ok()
+                                })
+                        })
                         .map(|&k| (k, self.cars[k].state.yield_time, self.cars[k].id))
                         .collect();
-                    let Some(go) = longest_waiter(&held) else { continue };
+                    let Some(go) = longest_waiter(&held) else {
+                        continue;
+                    };
                     for &k in &part {
                         if k != go {
                             self.cars[k].reserved.clear();
@@ -249,7 +290,12 @@ impl TrafficSim {
                     }
                     self.cars[go].yield_pass = self.time + YIELD_PASS;
                     if debug {
-                        log::info!("t={:.1}: cars {:?} hold each other by the rules and their claims: car {} goes", self.time, members.iter().map(|m| m.2).collect::<Vec<_>>(), self.cars[go].id);
+                        log::info!(
+                            "t={:.1}: cars {:?} hold each other by the rules and their claims: car {} goes",
+                            self.time,
+                            members.iter().map(|m| m.2).collect::<Vec<_>>(),
+                            self.cars[go].id
+                        );
                     }
                 }
                 Circle::Courtesy => {
@@ -258,10 +304,18 @@ impl TrafficSim {
                     // (the queue behind him held the room on the exit the other car waited
                     // for, Grundorf at 17:00). Bodies, lights and a full exit still hold him.
                     for &k in &part {
-                        if kinds[k].iter().any(|e| e.1 == Hold::Courtesy && part.binary_search(&e.0).is_ok()) {
+                        if kinds[k]
+                            .iter()
+                            .any(|e| e.1 == Hold::Courtesy && part.binary_search(&e.0).is_ok())
+                        {
                             self.cars[k].yield_pass = self.time + YIELD_PASS;
                             if debug {
-                                log::info!("t={:.1}: car {} lets in a car that waits for it in turn ({:?}): it goes", self.time, self.cars[k].id, members.iter().map(|m| m.2).collect::<Vec<_>>());
+                                log::info!(
+                                    "t={:.1}: car {} lets in a car that waits for it in turn ({:?}): it goes",
+                                    self.time,
+                                    self.cars[k].id,
+                                    members.iter().map(|m| m.2).collect::<Vec<_>>()
+                                );
                             }
                         }
                     }
@@ -295,8 +349,14 @@ mod tests {
     fn circles_are_told_apart_by_what_holds_them() {
         use Hold::*;
         assert_eq!(classify(true, true, &[Rule, Rule]), Circle::Legal);
-        assert_eq!(classify(false, true, &[Claim, Claim, Claim]), Circle::StaleClaims);
-        assert_eq!(classify(false, true, &[Rule, Rule, Rule, Rule]), Circle::Yielding);
+        assert_eq!(
+            classify(false, true, &[Claim, Claim, Claim]),
+            Circle::StaleClaims
+        );
+        assert_eq!(
+            classify(false, true, &[Rule, Rule, Rule, Rule]),
+            Circle::Yielding
+        );
         // one of them still rolls: not (yet) a circle of cars standing for each other
         assert_eq!(classify(false, false, &[Rule, Rule]), Circle::Full);
         // a body in the way is physically full, never forced
@@ -308,13 +368,19 @@ mod tests {
         // nothing but following and full exits: the road is full
         assert_eq!(classify(false, true, &[Lead, Exit, Lead]), Circle::Full);
         // a queue waiting behind a driver who lets in a car that waits for the queue
-        assert_eq!(classify(false, true, &[Lead, Lead, Courtesy, Exit]), Circle::Courtesy);
+        assert_eq!(
+            classify(false, true, &[Lead, Lead, Courtesy, Exit]),
+            Circle::Courtesy
+        );
         assert_eq!(classify(true, true, &[Lead, Courtesy, Exit]), Circle::Legal);
     }
 
     #[test]
     fn the_longest_waiter_is_chosen_a_tie_to_the_lower_id() {
-        assert_eq!(longest_waiter(&[(0, 9.0, 5), (1, 12.0, 7), (2, 3.0, 1)]), Some(1));
+        assert_eq!(
+            longest_waiter(&[(0, 9.0, 5), (1, 12.0, 7), (2, 3.0, 1)]),
+            Some(1)
+        );
         assert_eq!(longest_waiter(&[(0, 12.0, 5), (1, 12.03, 7)]), Some(0));
     }
 }

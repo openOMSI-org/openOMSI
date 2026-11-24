@@ -77,6 +77,38 @@ ever; a vehicle can have both.
 Other `.lua` files are not started on their own, so a folder plugin's modules stay modules.
 `OMSI_NO_PLUGINS=1` leaves every plugin out, Lua ones included.
 
+### The launcher's plugin list
+
+The launcher's **Plugins** page lists every plugin of the `plugins` folders (Lua, `.oop` and
+`.opl`). Players switch each on or off there without moving its files, see what the last game
+made of it, and change the settings it declared with `plugin.settings`:
+
+* The plugins switched off are in `~/.openomsi/plugins-off.txt`, one a line, in lower case,
+  each by its path under `plugins`: `foo.lua`, a folder plugin's folder with a `/` after it
+  (`foo/` for `foo/main.lua`), `foo.oop`, and an `.opl`'s path (`pablo/mbas.opl`). So
+  `foo.lua` and `foo/main.lua` are two plugins, switched and set apart. A bare stem an older
+  launcher wrote (`foo`) still leaves out every Lua or `.oop` plugin of that stem.
+  The game reads it before it loads the plugins and leaves those out.
+* After loading, the game writes `~/.openomsi/plugins-status.json`: every plugin, by the same
+  name, with its `state` (`loaded`, `off`, `failed` with the load error, e.g. a syntax error)
+  and, when one is switched off during the game for its errors, `switched_off` with the error.
+* `plugin.settings(...)` also writes `settings.schema.json` into the plugin's data folder,
+  beside `settings.json`: `{title, settings: [{key, type, label, default, min, max, step,
+  choices}]}`. The launcher makes a form of it and writes the values into `settings.json`,
+  which the plugin gets back from `plugin.settings` the next time it starts. A plugin that has
+  not run yet has no settings to show.
+
+#### Publishing a plugin in the catalog
+
+The page's **Browse** tab lists the plugins of
+[openOMSI-org/openOMSI-Plugins](https://github.com/openOMSI-org/openOMSI-Plugins): a folder
+plugin (`main.lua` and its files) with a `plugin.json` (name, author, version, description,
+an open source licence), sent as a pull request and read by a maintainer before it is merged.
+The launcher installs it as `plugins/<id>/` only when each file's size and SHA-256 are the ones
+in the repository's `catalog.json`, offers an update when `version` goes up, and keeps
+`plugins/<id>/data/` (settings and saved data) on an update. The repository's CONTRIBUTING.md
+has the rules.
+
 ### How a plugin runs
 
 The file's top level runs once when the game starts. After that the plugin reacts to
@@ -338,7 +370,7 @@ end)
 F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
 [`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `7` (`6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
+`omsi.ui.version` is `8` (`7` before cards over the map, `6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
 element, `4` before `grab`, `3` before boxes, stop lists and the other
 elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
 test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
@@ -429,6 +461,31 @@ omsi.ui.set("phone", { anchor = "navigator", frame = true, grab = true, padding 
 } })
 ```
 
+With `overlay` (`omsi.ui.version` 8) the `map` element takes cards of the plugin's own over the
+map, in place of the navigator's or beside them: a list of small panels, each with a panel
+table's keys - `place` (the anchors, `navigator` aside; default `top_left`), `x` and `y` (the
+room kept from the map's edges, default 8), `width` (default: what is in it needs, never more
+than the map less `x` on both sides), `padding` (default 10), `gap` (6), `background` (default
+the game's card colour), `radius` (10) and `children` (any elements); a key of a card that the game does not know is left alone, so a
+plugin written for a later game still shows. A card is laid out at its
+place in the map and drawn with the panel, which lies over the map. It is held inside the map
+(never wider than it, never above its top); what still crosses the map's edge - the bottom of a
+card taller than the map - is left out: its background stops at the edge with its corners still
+rounded, and a text, an icon or a picture that does not wholly fit is not drawn. Its buttons
+and other clickable parts take clicks as in the panel; a press on the map beside them is still
+the navigator's. A `map` element outside a panel in the whole frame is empty room, and its cards
+are laid out in that room the same way. An older openOMSI leaves `overlay` out and shows the map
+without them; [`navigator_map.lua`](examples/plugins/navigator_map.lua) is a whole example.
+
+```lua
+omsi.ui.set("phone", { anchor = "navigator", frame = true, padding = 10, children = {
+  { type = "map", height = 360, cards = false, overlay = {
+    { place = "top_left", width = 220, children = { { type = "text", text = "Line 5 → Hauptbahnhof", weight = "bold" } } },
+    { place = "bottom_right", background = "#14161ACC", children = { { type = "text", text = "48 km/h" } } },
+  } },
+} })
+```
+
 #### Elements
 
 Every element can have an `id`, a `color` and `visible = false` (left out, no room kept).
@@ -443,7 +500,7 @@ Every element can have an `id`, a `color` and `visible = false` (left out, no ro
 | `box` (4) | `children`, `gap` (default 4), `color` (default amber) | its children stacked in a box tinted with `color`, a stripe of it on the left: a note, an advice |
 | `stops` (4) | `stops` (`{ { name, time, expected, expected_color, state, tag }, ... }`, up to 128), `size` (13), `color` (the rail, default amber) | stops on a rail, a row each: `state` `"done"` (behind the bus: grey), `"now"` (the one it heads for: marked, bold) or `"ahead"` (the default); `time` on the right, `expected` before it in `expected_color`, and `tag` (`"terminus"`) before them |
 | `divider` | `color` | a thin line (in a row: upright) |
-| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`); elsewhere empty room of its height |
+| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`), `overlay` (8: a list of cards, see [In the navigator](#in-the-navigator)) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`, and the plugin's `overlay` cards); elsewhere empty room of its height, with the `overlay` cards in it |
 | `space` | `size` (default 8) | empty room (in a row: across) |
 | `button` | `id` (needed), `text`, `icon`, `color` | a button 34 high, across the panel (in a row as wide as its label, or what it grows to); a click on it is `ui_click(panel id, button id)` |
 | `image` | `src` (a PNG, JPEG, BMP or TGA of the plugin's folder), `width`, `height` (default 64) | the picture, made smaller to fit the width it has |
@@ -460,7 +517,7 @@ button is. Texts are shown as they are: they are not translated into the game's 
 Keys the game does not know are left alone and an element of an unknown `type` is left out,
 so a plugin written for a later openOMSI still shows its panels here. A key of the wrong
 kind makes `set` return `false` and the reason. Limits, each plugin: 16 panels, 200
-elements in a panel (those in rows and boxes counted), 500 characters in a text, 64 in an id,
+elements in a panel (those in rows, boxes and cards over a map counted, and each card), 500 characters in a text, 64 in an id,
 rows and boxes 8 deep, 512 values in a chart or cells in a table.
 
 #### A line in the pause menu
@@ -506,6 +563,7 @@ Complete plugins to start from (each runs in the tests against a stand-in game):
 | Plugin | What it shows |
 | --- | --- |
 | [`trip_panel.lua`](examples/plugins/trip_panel.lua) | a panel with the line, the next stop and a button |
+| [`navigator_map.lua`](examples/plugins/navigator_map.lua) | the navigator's frame with its map and three cards of the plugin's own over it: the line, the next stop, the speed |
 | [`dispatcher/`](examples/plugins/dispatcher/main.lua) | a dispatcher and a small career: a draggable panel with tabs, the duty's next stops in a table, a chart of the delays, pay for stops and trips kept in the storage, today's duties offered and taken with a click, settings, hotkeys |
 | [`telemetry_hud.lua`](examples/plugins/telemetry_hud.lua) | a HUD: the speed with a chart of the last minute, gear, rpm, fuel, passengers, the speed limit and the traffic light ahead; a warning before a red light; the values as JSON over UDP for a program beside the game |
 | [`passenger_log.lua`](examples/plugins/passenger_log.lua) | every passenger boarding the bus in `game.log`: age, boarding stop and destination, the ticket they will ask for (`passenger_ticket`, `people.get`) |
@@ -610,13 +668,6 @@ only to ports from 1024 up. It holds at most 256 MB of memory.
 * `omsi.ui.update` changes one element of a panel; setting the whole panel every frame
   costs more.
 
-### Reference
-
-Every function and event, as the game's API registry describes them (also as JSON in
-[`plugin-api.json`](plugin-api.json), for tools and other plugin languages). `[x]` is an
-optional argument; a permission is what a plugin packed with a list of permissions must have
-declared to call the function (a plain `.lua` file has all except native process access, which always requires player opt-in).
-
 ### Native helper programs
 
 The interactive game asks for permission when a plugin first tries to start a native helper. The host-owned window initially shows the plugin name, the application's filename and the number of arguments, together with the safety warning and decision descriptions. **Details** reveals the full executable path, plugin entry path, individual arguments and working directory; **Hide details** collapses them again. Each new request starts collapsed, and opening details never approves execution. **Allow once** covers only that launch. **Always allow** stores a hash-bound approval in `~/.openomsi/plugin-process-permissions.json` (on Windows, `%USERPROFILE%\.openomsi\plugin-process-permissions.json`). It applies only to that entry, folder snapshot and helper; changed content asks again. **Deny** blocks all native helpers for that canonical plugin entry for the current game session, even if helper names, content or arguments change. Escape also denies; Enter never automatically approves. The game and other plugins keep running while a request waits. Unload/reload cancels it. Packages must still declare `process`. Dialog text and buttons are translated into every supported interface language; plugin names, file paths and arguments are displayed literally and are never sent to translation.
@@ -643,6 +694,13 @@ Load/reload only selects a manifest candidate by its absolute lexical entry/fold
 `process.start` returns a plugin-owned handle; `status` and `exit_code` poll without blocking. Lua `process.wait` suspends the top-level callback while the game and other plugins continue. Nested event callbacks and manual coroutines cannot wait. Stop, disable and reload cancel pending waits and terminate direct children. Windows assigns children atomically to a kill-on-close Job Object, including descendants, so abrupt game termination also cleans them up. Linux sets `PR_SET_PDEATHSIG` for direct children with a parent-race check; descendants are not covered. On macOS only normal plugin lifecycle cleanup is provided. Completed handles retain status until `forget`; the limit is 32 handles per plugin. Windows closes the job on forget, killing any remaining descendants. Plugins without consent keep direct callback dispatch; approved Lua plugins reuse completed callback coroutines.
 
 On macOS, helpers extracted from ZIP files may need their executable bit restored (`chmod +x /absolute/path/to/helper`) and may be blocked by Gatekeeper quarantine. Review the downloaded helper and use macOS's normal security approval flow before running it; the plugin host does not remove quarantine automatically.
+
+### Reference
+
+Every function and event, as the game's API registry describes them (also as JSON in
+[`plugin-api.json`](plugin-api.json), for tools and other plugin languages). `[x]` is an
+optional argument; a permission is what a plugin packed with a list of permissions must have
+declared to call the function (a plain `.lua` file has all except native process access, which always requires player opt-in).
 
 <!-- api:begin (written from the registry: OMSI_API_BLESS=1 cargo test -p omsi-plugin api_manifest) -->
 
@@ -702,6 +760,7 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | `omsi.bus.tickets()` | list of tables | The tickets the map sells: `{name, price, day_ticket}`. | 0.2.22 |
 | `omsi.bus.toggle_door([n])` | boolean | Presses the key of doorway `n` (from 1; 0 or none: all doors), as the player would. *Permission: `vehicle_write`.* | 0.2.22 |
 | `omsi.bus.toggle_handbrake()` | boolean | Puts the parking brake on or off, as its key does. *Permission: `vehicle_write`.* | 0.2.22 |
+| `omsi.bus.track()` | table or nil | Where the player's rail vehicle (tram, metro, train) is on its track, as distances along it rather than x and y: `{lane, s, lane_length, forward, travelled}` - the track (an index into the map's lanes), the metres from its start and its length, whether the vehicle faces the track's direction, and the net metres it has moved along the tracks since it was put on them (they go down, below zero too, while it backs up). `nil` for a road vehicle. A plugin can work out block sections, distances to a signal or a stop, or a train protection system from it. | 0.3.55 |
 | `omsi.bus.trailers()` | integer or nil | Parts coupled behind the bus (an articulated bus's rear counts). | 0.2.22 |
 | `omsi.bus.triggers()` | list of strings | The names of the bus's script triggers (for `trigger`, `press`). | 0.2.22 |
 | `omsi.bus.velocity()` | number or nil | The bus's speed in km/h, negative backwards. | 0.2.22 |

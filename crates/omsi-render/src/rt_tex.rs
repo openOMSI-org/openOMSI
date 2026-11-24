@@ -1,11 +1,13 @@
-//! Enhanced+: what a reflected ray sees of the textures where it hits (rt.rs, rt_reflect.wgsl).
+//! Enhanced+: what a reflected ray sees of the textures where it hits, and which way the
+//! surface faces there (rt.rs, rt_reflect.wgsl).
 //!
 //! The rays carry no texture bindings of their own (there are thousands of textures, and no
 //! bindless arrays on every device), so each texture a traced geometry names gets a small
 //! copy - a tile of 30 x 30 texels inside a texel of border that repeats the opposite edge, so
 //! that filtering wraps - in one atlas, made with its mean colour (rt_avg.wgsl); and each
-//! traced mesh gets its triangles' texture coordinates in one buffer, copied once from its
-//! page's vertices and indices when it is first traced (rt_uv.wgsl). A hit's texel is then its
+//! traced mesh gets its triangles' texture coordinates and corner normals in one buffer,
+//! copied once from its page's vertices and indices when it is first traced (rt_uv.wgsl). A
+//! hit's texel is then its
 //! triangle's three coordinates mixed by the hit's barycentrics, addressed as its material
 //! addresses them, read from the texture's tile. Until a texture's tile or a mesh's
 //! coordinates are there, a hit shows the texture's mean colour, as all hits did before.
@@ -22,8 +24,8 @@ const PER_ROW: u32 = ATLAS_W / TILE;
 const MAX_TILES: usize = (PER_ROW * PER_ROW) as usize;
 /// Meshes whose coordinates are copied per frame at most (as many as structures are built).
 pub(super) const UV_BUDGET: usize = 320;
-/// Bytes per triangle in the coordinates' buffer (rt_uv.wgsl).
-const UV_TRI: u64 = 16;
+/// Bytes per triangle in the coordinates' buffer (rt_uv.wgsl: its coordinates, its normals).
+const UV_TRI: u64 = 32;
 /// A record without coordinates.
 pub(super) const NO_UV: u32 = u32::MAX;
 
@@ -65,32 +67,57 @@ pub(super) struct TexStore {
     uv_pipeline: wgpu::ComputePipeline,
 }
 
-fn make_atlas(device: &wgpu::Device, h: u32) -> (wgpu::Texture, wgpu::TextureView, wgpu::TextureView) {
+fn make_atlas(
+    device: &wgpu::Device,
+    h: u32,
+) -> (wgpu::Texture, wgpu::TextureView, wgpu::TextureView) {
     let t = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("rt texture atlas"),
-        size: wgpu::Extent3d { width: ATLAS_W, height: h, depth_or_array_layers: 1 },
+        size: wgpu::Extent3d {
+            width: ATLAS_W,
+            height: h,
+            depth_or_array_layers: 1,
+        },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
+        usage: wgpu::TextureUsages::STORAGE_BINDING
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::COPY_DST,
         view_formats: &[wgpu::TextureFormat::Rgba8UnormSrgb],
     });
     // (sampled only: an sRGB view cannot be a storage binding)
-    let sampled = t.create_view(&wgpu::TextureViewDescriptor { format: Some(wgpu::TextureFormat::Rgba8UnormSrgb), usage: Some(wgpu::TextureUsages::TEXTURE_BINDING), ..Default::default() });
+    let sampled = t.create_view(&wgpu::TextureViewDescriptor {
+        format: Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        usage: Some(wgpu::TextureUsages::TEXTURE_BINDING),
+        ..Default::default()
+    });
     let store = t.create_view(&Default::default());
     (t, sampled, store)
 }
 
 fn make_uvs(device: &wgpu::Device, tris: u64) -> wgpu::Buffer {
-    device.create_buffer(&wgpu::BufferDescriptor { label: Some("rt texture coordinates"), size: tris * UV_TRI, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false })
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("rt texture coordinates"),
+        size: tris * UV_TRI,
+        usage: wgpu::BufferUsages::STORAGE
+            | wgpu::BufferUsages::COPY_DST
+            | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    })
 }
 
 fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,
-        ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: true, min_binding_size: wgpu::BufferSize::new(16) },
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: true,
+            min_binding_size: wgpu::BufferSize::new(16),
+        },
         count: None,
     }
 }
@@ -99,19 +126,44 @@ impl TexStore {
     pub(super) fn new(device: &wgpu::Device) -> TexStore {
         let (atlas, atlas_view, atlas_store) = make_atlas(device, 256);
         let stride = (device.limits().min_uniform_buffer_offset_alignment as u64).max(256);
-        let uniforms = |label: &str, n: usize| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: n as u64 * stride, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let uniforms = |label: &str, n: usize| {
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: n as u64 * stride,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
+        };
         let read = |binding: u32, read_only: bool| wgpu::BindGroupLayoutEntry {
             binding,
             visibility: wgpu::ShaderStages::COMPUTE,
-            ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only }, has_dynamic_offset: false, min_binding_size: None },
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
             count: None,
         };
         let uv_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("rt texture coordinates"),
-            entries: &[read(0, true), read(1, true), read(2, false), uniform_entry(3)],
+            entries: &[
+                read(0, true),
+                read(1, true),
+                read(2, false),
+                uniform_entry(3),
+            ],
         });
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("rt texture coordinates"), source: wgpu::ShaderSource::Wgsl(include_str!("rt_uv.wgsl").into()) });
-        let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("rt texture coordinates"), bind_group_layouts: &[Some(&uv_layout)], immediate_size: 0 });
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("rt texture coordinates"),
+            source: wgpu::ShaderSource::Wgsl(
+                crate::shaders::hot_wgsl(include_str!("rt_uv.wgsl"), "rt_uv.wgsl").into(),
+            ),
+        });
+        let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("rt texture coordinates"),
+            bind_group_layouts: &[Some(&uv_layout)],
+            immediate_size: 0,
+        });
         let uv_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("rt texture coordinates"),
             layout: Some(&pl),
@@ -146,7 +198,11 @@ impl TexStore {
             wgpu::BindGroupLayoutEntry {
                 binding: 3,
                 visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba8Unorm, view_dimension: wgpu::TextureViewDimension::D2 },
+                ty: wgpu::BindingType::StorageTexture {
+                    access: wgpu::StorageTextureAccess::WriteOnly,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                },
                 count: None,
             },
             uniform_entry(4),
@@ -155,7 +211,13 @@ impl TexStore {
 
     /// Where mesh `id`'s triangles' coordinates are (in triangles), queued for a copy when it
     /// has none yet - at most `UV_BUDGET` a frame; None while it has none.
-    pub(super) fn mesh_uvs(&mut self, device: &wgpu::Device, id: MeshId, m: &GpuMesh, frame: u64) -> Option<u32> {
+    pub(super) fn mesh_uvs(
+        &mut self,
+        device: &wgpu::Device,
+        id: MeshId,
+        m: &GpuMesh,
+        frame: u64,
+    ) -> Option<u32> {
         if let Some(e) = self.meshes.get_mut(&id) {
             if e.generation == m.generation {
                 e.used = frame;
@@ -167,7 +229,11 @@ impl TexStore {
         let tris = m.index_bytes / 12;
         let limits = device.limits();
         let max_binding = limits.max_storage_buffer_binding_size;
-        if tris == 0 || self.jobs.len() >= UV_BUDGET || m.vertex_buf.size() > max_binding || m.index_buf.size() > max_binding {
+        if tris == 0
+            || self.jobs.len() >= UV_BUDGET
+            || m.vertex_buf.size() > max_binding
+            || m.index_buf.size() > max_binding
+        {
             return None;
         }
         let at = match page_take(&mut self.uv_free, &mut self.uv_top, self.uv_cap, tris) {
@@ -189,8 +255,25 @@ impl TexStore {
             page_give(&mut self.uv_free, &mut self.uv_top, at, tris);
             return None;
         }
-        self.meshes.insert(id, MeshUv { generation: m.generation, at, tris, used: frame });
-        self.jobs.push(UvJob { vb: m.vertex_buf.clone(), ib: m.index_buf.clone(), job: [m.base_vertex.max(0) as u32, m.first_index, tris as u32, at as u32] });
+        self.meshes.insert(
+            id,
+            MeshUv {
+                generation: m.generation,
+                at,
+                tris,
+                used: frame,
+            },
+        );
+        self.jobs.push(UvJob {
+            vb: m.vertex_buf.clone(),
+            ib: m.index_buf.clone(),
+            job: [
+                m.base_vertex.max(0) as u32,
+                m.first_index,
+                tris as u32,
+                at as u32,
+            ],
+        });
         Some(at as u32)
     }
 
@@ -212,7 +295,12 @@ impl TexStore {
     }
 
     /// Copy this frame's meshes' coordinates (and what the buffer held, when it grew).
-    pub(super) fn encode_uvs(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder) {
+    pub(super) fn encode_uvs(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
         if let Some(old) = self.uvs_old.take() {
             encoder.copy_buffer_to_buffer(&old, 0, &self.uvs, 0, old.size().min(self.uvs.size()));
         }
@@ -233,15 +321,34 @@ impl TexStore {
                     label: Some("rt texture coordinates"),
                     layout: &self.uv_layout,
                     entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: j.vb.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: j.ib.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 2, resource: self.uvs.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &self.job_buf, offset: 0, size: wgpu::BufferSize::new(16) }) },
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: j.vb.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: j.ib.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: self.uvs.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: &self.job_buf,
+                                offset: 0,
+                                size: wgpu::BufferSize::new(16),
+                            }),
+                        },
                     ],
                 })
             })
             .collect();
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("rt texture coordinates"), timestamp_writes: None });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("rt texture coordinates"),
+            timestamp_writes: None,
+        });
         pass.set_pipeline(&self.uv_pipeline);
         for (k, (j, bg)) in self.jobs.iter().zip(&groups).enumerate() {
             pass.set_bind_group(0, bg, &[(k as u64 * self.stride) as u32]);
@@ -255,15 +362,32 @@ impl TexStore {
 
     /// The atlas tall enough for textures `wanted` (grown: the tiles made so far copied over);
     /// true when it was made anew.
-    pub(super) fn ensure_atlas(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, wanted: &[usize]) -> bool {
-        let Some(&last) = wanted.iter().filter(|&&t| t < MAX_TILES).max() else { return false };
-        let need = ((last as u32 / PER_ROW + 1) * TILE).next_power_of_two().min(ATLAS_W);
+    pub(super) fn ensure_atlas(
+        &mut self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        wanted: &[usize],
+    ) -> bool {
+        let Some(&last) = wanted.iter().filter(|&&t| t < MAX_TILES).max() else {
+            return false;
+        };
+        let need = ((last as u32 / PER_ROW + 1) * TILE)
+            .next_power_of_two()
+            .min(ATLAS_W);
         let have = self.atlas.height();
         if need <= have {
             return false;
         }
         let (atlas, view, store) = make_atlas(device, need);
-        encoder.copy_texture_to_texture(self.atlas.as_image_copy(), atlas.as_image_copy(), wgpu::Extent3d { width: ATLAS_W, height: have, depth_or_array_layers: 1 });
+        encoder.copy_texture_to_texture(
+            self.atlas.as_image_copy(),
+            atlas.as_image_copy(),
+            wgpu::Extent3d {
+                width: ATLAS_W,
+                height: have,
+                depth_or_array_layers: 1,
+            },
+        );
         (self.atlas, self.atlas_view, self.atlas_store) = (atlas, view, store);
         true
     }
@@ -273,7 +397,16 @@ impl TexStore {
     pub(super) fn write_tiles(&self, queue: &wgpu::Queue, wanted: &[usize]) {
         let mut bytes = vec![0u8; wanted.len() * self.stride as usize];
         for (k, &t) in wanted.iter().enumerate() {
-            let tile = if t < MAX_TILES { [(t as u32 % PER_ROW * TILE) as f32, (t as u32 / PER_ROW * TILE) as f32, 1.0, 0.0] } else { [0.0; 4] };
+            let tile = if t < MAX_TILES {
+                [
+                    (t as u32 % PER_ROW * TILE) as f32,
+                    (t as u32 / PER_ROW * TILE) as f32,
+                    1.0,
+                    0.0,
+                ]
+            } else {
+                [0.0; 4]
+            };
             let at = k * self.stride as usize;
             bytes[at..at + 16].copy_from_slice(bytemuck::cast_slice(&tile));
         }
@@ -285,8 +418,18 @@ impl TexStore {
     /// The texture means' bind group entries for the atlas and the `k`-th tile's uniform.
     pub(super) fn avg_bindings(&self) -> [wgpu::BindGroupEntry<'_>; 2] {
         [
-            wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&self.atlas_store) },
-            wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &self.tile_buf, offset: 0, size: wgpu::BufferSize::new(16) }) },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::TextureView(&self.atlas_store),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &self.tile_buf,
+                    offset: 0,
+                    size: wgpu::BufferSize::new(16),
+                }),
+            },
         ]
     }
 

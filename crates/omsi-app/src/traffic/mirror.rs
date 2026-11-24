@@ -136,14 +136,20 @@ impl Traffic {
             guard: Default::default(),
         });
         self.looks.forget(id);
-        self.events.push(TrafficEvent::Spawned { id, ty: ty.clone(), scheme, trailers });
+        self.events.push(TrafficEvent::Spawned {
+            id,
+            ty: ty.clone(),
+            scheme,
+            trailers,
+        });
         self.sim.cars.len() - 1
     }
 
     /// A vehicle type the traffic has loaded already (the random traffic's types and the
     /// coupled parts), by file.
     pub fn loaded_type(&self, path: &Path) -> Option<Arc<VehicleType>> {
-        self.sim.types
+        self.sim
+            .types
             .iter()
             .map(|t| &t.0)
             .chain(self.sim.trailer_types.values().flatten())

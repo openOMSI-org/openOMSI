@@ -26,8 +26,8 @@ use omsi_cfg::transport::ModeSet;
 use std::path::Path;
 
 pub use electric::Electrification;
-pub use power::Supply;
 pub use infra::{Depots, Network, Signals, Switches};
+pub use power::Supply;
 pub use routes::Routes;
 pub use stations::Stations;
 
@@ -65,7 +65,12 @@ impl TransitData {
                 Ok(bytes) => Some(omsi_cfg::decode_text(&bytes)),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
                 Err(e) => {
-                    issues.push(Issue { file: name.to_string(), line: 0, error: true, message: format!("cannot read: {e}") });
+                    issues.push(Issue {
+                        file: name.to_string(),
+                        line: 0,
+                        error: true,
+                        message: format!("cannot read: {e}"),
+                    });
                     None
                 }
             }
@@ -110,11 +115,25 @@ impl TransitData {
     /// Cross-file checks: routes against stations and depots, depots against stations, stations
     /// against the map's modes, switches' signals. `map_modes` is the map's `global.cfg` modes.
     pub fn check(&self, map_modes: ModeSet, issues: &mut Vec<Issue>) {
-        self.routes.check("routes.cfg", &self.stations, &self.depots.ids(), map_modes, issues);
+        self.routes.check(
+            "routes.cfg",
+            &self.stations,
+            &self.depots.ids(),
+            map_modes,
+            issues,
+        );
         let mut is = doc::Issues::new("stations.cfg");
         for s in &self.stations.list {
             if !map_modes.is_empty() && !s.modes.is_empty() && !s.modes.intersects(map_modes) {
-                is.warn(s.line, format!("station {} serves {}; the map is made for {}", s.id, s.modes.describe(), map_modes.describe()));
+                is.warn(
+                    s.line,
+                    format!(
+                        "station {} serves {}; the map is made for {}",
+                        s.id,
+                        s.modes.describe(),
+                        map_modes.describe()
+                    ),
+                );
             }
         }
         issues.append(&mut is.list);
@@ -122,7 +141,10 @@ impl TransitData {
         for d in &self.depots.list {
             if let Some(st) = &d.station {
                 if self.stations.get(st).is_none() {
-                    is.error(d.line, format!("depot {}: station {st} is not in stations.cfg", d.id));
+                    is.error(
+                        d.line,
+                        format!("depot {}: station {st} is not in stations.cfg", d.id),
+                    );
                 }
             }
         }
@@ -130,8 +152,16 @@ impl TransitData {
         let mut is = doc::Issues::new("switches.cfg");
         for w in &self.switches.list {
             if let Some(sig) = &w.locked_by {
-                if !self.signals.signals.iter().any(|s| s.id.eq_ignore_ascii_case(sig)) {
-                    is.error(w.line, format!("switch {}: signal {sig} is not in signals.cfg", w.id));
+                if !self
+                    .signals
+                    .signals
+                    .iter()
+                    .any(|s| s.id.eq_ignore_ascii_case(sig))
+                {
+                    is.error(
+                        w.line,
+                        format!("switch {}: signal {sig} is not in signals.cfg", w.id),
+                    );
                 }
             }
         }
@@ -154,18 +184,37 @@ mod tests {
 
     #[test]
     fn a_whole_map_loads_and_checks() {
-        let dir = std::env::temp_dir().join(format!("omsi-transit-full-test-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("omsi-transit-full-test-{}", std::process::id()));
         let tdir = dir.join(FOLDER);
         std::fs::create_dir_all(&tdir).unwrap();
         let w = |n: &str, t: &str| std::fs::write(tdir.join(n), t).unwrap();
-        w("stations.cfg", "[station]\nid A\nmodes metro\n[station]\nid B\nmodes metro\n[station]\nid Dep_stop\nmodes metro\n");
-        w("depots.cfg", "[depot]\nid Dep\nmodes metro\ngate 0 0 0\nstation Dep_stop\n");
-        w("routes.cfg", "[route]\nid M\nmode metro\n[segment]\nid s\nfrom A\nto B\n[service]\nid x\nsegments s\nheadway 3 min\ndepot Dep\n");
-        w("thirdrail.cfg", "[thirdrail_net]\n[thirdrail_section]\nid T\n[thirdrail_span]\nsection T\np 0 0 0\np 10 0 0\n");
-        w("switches.cfg", "[switch]\nid W\nmodes metro\npos 1 2 3\nlocked_by S9\n");
+        w(
+            "stations.cfg",
+            "[station]\nid A\nmodes metro\n[station]\nid B\nmodes metro\n[station]\nid Dep_stop\nmodes metro\n",
+        );
+        w(
+            "depots.cfg",
+            "[depot]\nid Dep\nmodes metro\ngate 0 0 0\nstation Dep_stop\n",
+        );
+        w(
+            "routes.cfg",
+            "[route]\nid M\nmode metro\n[segment]\nid s\nfrom A\nto B\n[service]\nid x\nsegments s\nheadway 3 min\ndepot Dep\n",
+        );
+        w(
+            "thirdrail.cfg",
+            "[thirdrail_net]\n[thirdrail_section]\nid T\n[thirdrail_span]\nsection T\np 0 0 0\np 10 0 0\n",
+        );
+        w(
+            "switches.cfg",
+            "[switch]\nid W\nmodes metro\npos 1 2 3\nlocked_by S9\n",
+        );
         let mut issues = Vec::new();
         let t = TransitData::load(&dir, &mut issues);
-        t.check(ModeSet::of(omsi_cfg::transport::TransportMode::Metro), &mut issues);
+        t.check(
+            ModeSet::of(omsi_cfg::transport::TransportMode::Metro),
+            &mut issues,
+        );
         let all: Vec<String> = issues.iter().map(|i| i.to_string()).collect();
         assert_eq!(all.len(), 1, "{all:?}");
         assert!(all[0].contains("signal S9"));

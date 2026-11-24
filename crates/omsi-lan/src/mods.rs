@@ -40,15 +40,17 @@ mod budget;
 mod bus_files;
 mod channel;
 pub(crate) mod failure;
-mod host_bus;
 pub mod hofs;
+mod host_bus;
 pub mod identity;
 mod paced;
 mod pieces;
 pub mod placeholder;
 mod quarantine;
 mod server_fleet;
-pub use server_fleet::{fingerprint as fleet_fingerprint, fingerprint_loaded as fleet_fingerprint_loaded};
+pub use server_fleet::{
+    fingerprint as fleet_fingerprint, fingerprint_loaded as fleet_fingerprint_loaded,
+};
 mod store;
 pub mod upload;
 pub mod vehicles;
@@ -72,12 +74,101 @@ const KEEP_FREE: u64 = 3 << 30;
 const MAX_FILES: usize = 400_000;
 
 /// The top-level content folders a session may bring files into.
-const FOLDERS: &[&str] = &["maps", "vehicles", "sceneryobjects", "splines", "humans", "fonts", "ticketpacks", "money", "weather", "texture", "sound", "sounds", "trains", "announcements", "scripts"];
+const FOLDERS: &[&str] = &[
+    "maps",
+    "vehicles",
+    "sceneryobjects",
+    "splines",
+    "humans",
+    "fonts",
+    "ticketpacks",
+    "money",
+    "weather",
+    "texture",
+    "sound",
+    "sounds",
+    "trains",
+    "announcements",
+    "scripts",
+];
 
 /// Names that run code somewhere (Windows, macOS, Linux, the JVM, Office macros, OMSI
 /// plugins and their configuration).
 const REFUSED: &[&str] = &[
-    "exe", "dll", "com", "bat", "cmd", "scr", "ps1", "psm1", "psd1", "vbs", "vbe", "js", "jse", "wsf", "wsh", "msi", "msp", "mst", "jar", "hta", "cpl", "sys", "drv", "ocx", "ax", "lnk", "url", "reg", "inf", "sh", "bash", "zsh", "csh", "ksh", "command", "tool", "app", "dylib", "so", "py", "pyc", "pyw", "pl", "rb", "php", "lua", "apk", "run", "pif", "gadget", "appx", "msix", "iso", "img", "dmg", "pkg", "vhd", "vhdx", "opl", "docm", "xlsm", "pptm", "dotm", "xlam", "scpt", "applescript", "workflow", "action", "zip", "rar", "7z", "cab", "tar", "gz",
+    "exe",
+    "dll",
+    "com",
+    "bat",
+    "cmd",
+    "scr",
+    "ps1",
+    "psm1",
+    "psd1",
+    "vbs",
+    "vbe",
+    "js",
+    "jse",
+    "wsf",
+    "wsh",
+    "msi",
+    "msp",
+    "mst",
+    "jar",
+    "hta",
+    "cpl",
+    "sys",
+    "drv",
+    "ocx",
+    "ax",
+    "lnk",
+    "url",
+    "reg",
+    "inf",
+    "sh",
+    "bash",
+    "zsh",
+    "csh",
+    "ksh",
+    "command",
+    "tool",
+    "app",
+    "dylib",
+    "so",
+    "py",
+    "pyc",
+    "pyw",
+    "pl",
+    "rb",
+    "php",
+    "lua",
+    "apk",
+    "run",
+    "pif",
+    "gadget",
+    "appx",
+    "msix",
+    "iso",
+    "img",
+    "dmg",
+    "pkg",
+    "vhd",
+    "vhdx",
+    "opl",
+    "docm",
+    "xlsm",
+    "pptm",
+    "dotm",
+    "xlam",
+    "scpt",
+    "applescript",
+    "workflow",
+    "action",
+    "zip",
+    "rar",
+    "7z",
+    "cab",
+    "tar",
+    "gz",
 ];
 
 /// One file of the list: path relative to a content root (`/`-separated, as the host
@@ -105,7 +196,8 @@ pub fn refuse_path(path: &str) -> Option<String> {
     if path.is_empty() || path.len() > 400 {
         return Some("empty or too long".into());
     }
-    if path.starts_with('/') || path.starts_with('\\') || path.contains(':') || path.contains('\\') {
+    if path.starts_with('/') || path.starts_with('\\') || path.contains(':') || path.contains('\\')
+    {
         return Some("not a plain relative name".into());
     }
     let comps: Vec<&str> = path.split('/').collect();
@@ -113,13 +205,22 @@ pub fn refuse_path(path: &str) -> Option<String> {
         return Some("not inside a content folder".into());
     }
     for c in &comps {
-        if c.is_empty() || *c == "." || *c == ".." || c.chars().any(|ch| ch.is_control() || matches!(ch, '<' | '>' | '"' | '|' | '?' | '*')) || c.trim() != *c && c.trim().is_empty() {
+        if c.is_empty()
+            || *c == "."
+            || *c == ".."
+            || c.chars()
+                .any(|ch| ch.is_control() || matches!(ch, '<' | '>' | '"' | '|' | '?' | '*'))
+            || c.trim() != *c && c.trim().is_empty()
+        {
             return Some(format!("bad name component {c:?}"));
         }
     }
     let top = comps[0].to_ascii_lowercase();
     if !FOLDERS.contains(&top.as_str()) {
-        return Some(format!("{} is no content folder a session brings", comps[0]));
+        return Some(format!(
+            "{} is no content folder a session brings",
+            comps[0]
+        ));
     }
     if comps.iter().any(|c| c.eq_ignore_ascii_case("plugins")) {
         return Some("plugins are never taken from another machine".into());
@@ -179,12 +280,20 @@ pub struct ModSource {
 /// from (a folder or a mounted archive).
 fn collect(args: &ModSource) -> (Manifest, Vec<PathBuf>) {
     let t0 = Instant::now();
-    let (list, _) = session_files(&args.map, args.bus.as_deref(), args.weather.as_deref(), Some(&args.root));
+    let (list, _) = session_files(
+        &args.map,
+        args.bus.as_deref(),
+        args.weather.as_deref(),
+        Some(&args.root),
+    );
     // (streamed by two private workers, with hashes remembered by size and time: thousands of
     // files - put on a server through a slow shared folder - is read once, not at each start)
     let entries = upload::hashed(&list);
     let by_rel: HashMap<&str, &PathBuf> = list.iter().map(|(r, p)| (r.as_str(), p)).collect();
-    let sources: Vec<PathBuf> = entries.iter().filter_map(|e| by_rel.get(e.path.as_str()).map(|p| (*p).clone())).collect();
+    let sources: Vec<PathBuf> = entries
+        .iter()
+        .filter_map(|e| by_rel.get(e.path.as_str()).map(|p| (*p).clone()))
+        .collect();
     let total: u64 = entries.iter().map(|e| e.size).sum();
     log::info!(
         "LAN mods: {} files ({:.1} MB) of this session are not stock content and go to joining players (listed in {:.1} s)",
@@ -193,7 +302,11 @@ fn collect(args: &ModSource) -> (Manifest, Vec<PathBuf>) {
         t0.elapsed().as_secs_f64()
     );
     (
-        Manifest { map: args.map.replace('\\', "/"), bus: args.bus.clone().unwrap_or_default().replace('\\', "/"), entries },
+        Manifest {
+            map: args.map.replace('\\', "/"),
+            bus: args.bus.clone().unwrap_or_default().replace('\\', "/"),
+            entries,
+        },
         sources,
     )
 }
@@ -204,7 +317,12 @@ fn collect(args: &ModSource) -> (Manifest, Vec<PathBuf>) {
 /// read from), and what its files name that is nowhere here. Those of the content root
 /// `original` (the OMSI 2 installation, found on every machine) are left out; with none,
 /// everything the map needs is in (`map_pack`: a server without this installation).
-pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, original: Option<&Path>) -> (Vec<(String, PathBuf)>, Vec<String>) {
+pub fn session_files(
+    map: &str,
+    bus: Option<&str>,
+    weather: Option<&str>,
+    original: Option<&Path>,
+) -> (Vec<(String, PathBuf)>, Vec<String>) {
     let original = original.map(Path::to_path_buf);
     let mut missing: Vec<String> = Vec::new();
     // (lower-case relative path) -> (spelling, source)
@@ -226,7 +344,13 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
     };
     // a folder (relative) and everything in it, from the content roots that are not the
     // original installation (a mod's copy of a stock folder brings only what it adds)
-    fn add_folder(rel: &str, original: Option<&Path>, files: &mut HashMap<String, (String, PathBuf)>, text_todo: &mut Vec<(String, PathBuf)>, depth: usize) {
+    fn add_folder(
+        rel: &str,
+        original: Option<&Path>,
+        files: &mut HashMap<String, (String, PathBuf)>,
+        text_todo: &mut Vec<(String, PathBuf)>,
+        depth: usize,
+    ) {
         if depth > 12 {
             return;
         }
@@ -240,7 +364,9 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
             let dir = comps.iter().fold(r.clone(), |p, c| p.join(c));
             let Some(list) = omsi_cfg::vfs::list_dir(&dir).or_else(|| {
                 // (case-insensitively, as Windows would find it)
-                omsi_cfg::find_in_roots(rel).filter(|(root, _)| *root == r).and_then(|(_, p)| omsi_cfg::vfs::list_dir(&p))
+                omsi_cfg::find_in_roots(rel)
+                    .filter(|(root, _)| *root == r)
+                    .and_then(|(_, p)| omsi_cfg::vfs::list_dir(&p))
             }) else {
                 continue;
             };
@@ -262,7 +388,12 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
                             continue;
                         }
                         let lower = name.to_lowercase();
-                        if [".cfg", ".sco", ".sli", ".bus", ".ovh", ".zug", ".hum", ".txt", ".hof"].iter().any(|e| lower.ends_with(e)) {
+                        if [
+                            ".cfg", ".sco", ".sli", ".bus", ".ovh", ".zug", ".hum", ".txt", ".hof",
+                        ]
+                        .iter()
+                        .any(|e| lower.ends_with(e))
+                        {
                             text_todo.push((child.clone(), path.clone()));
                         }
                         files.insert(key, (child, path));
@@ -285,12 +416,20 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
         }
         Some(comps[..comps.len() - 1].join("/"))
     };
-    let mut want_folder = |rel: String, files: &mut HashMap<String, (String, PathBuf)>, text_todo: &mut Vec<(String, PathBuf)>| {
+    let mut want_folder = |rel: String,
+                           files: &mut HashMap<String, (String, PathBuf)>,
+                           text_todo: &mut Vec<(String, PathBuf)>| {
         if folders_done.insert(rel.to_lowercase()) {
             add_folder(&rel, original.as_deref(), files, text_todo, 0);
         }
     };
-    let map_dir = norm(Path::new(map).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default().as_str());
+    let map_dir = norm(
+        Path::new(map)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default()
+            .as_str(),
+    );
     if !map_dir.is_empty() {
         want_folder(map_dir.clone(), &mut files, &mut text_todo);
     }
@@ -334,8 +473,13 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
             if !scanned.insert(rel.to_lowercase()) {
                 continue;
             }
-            let Ok(text) = omsi_cfg::vfs::read_text(&path) else { continue };
-            let here = rel.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default();
+            let Ok(text) = omsi_cfg::vfs::read_text(&path) else {
+                continue;
+            };
+            let here = rel
+                .rsplit_once('/')
+                .map(|(d, _)| d.to_string())
+                .unwrap_or_default();
             // the fonts its text textures write with (`[texttexture]`: variable, font, …)
             let lines: Vec<&str> = text.lines().collect();
             for (i, l) in lines.iter().enumerate() {
@@ -351,15 +495,20 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
                     continue;
                 }
                 let lower = t.to_ascii_lowercase();
-                let is_ref = [".sco", ".sli", ".bus", ".ovh", ".zug", ".hum", ".owt"].iter().any(|e| lower.ends_with(e));
+                let is_ref = [".sco", ".sli", ".bus", ".ovh", ".zug", ".hum", ".owt"]
+                    .iter()
+                    .any(|e| lower.ends_with(e));
                 let relative = t.contains("..");
                 // a picture named from the root: a map's ground textures (`[groundtex]` of its
                 // global.cfg: `Texture\<map>\gras.jpg`) - without them its ground was white
-                let picture = [".bmp", ".jpg", ".jpeg", ".dds", ".tga", ".png"].iter().any(|e| lower.ends_with(e));
+                let picture = [".bmp", ".jpg", ".jpeg", ".dds", ".tga", ".png"]
+                    .iter()
+                    .any(|e| lower.ends_with(e));
                 // a script named from the root (`Scripts\AI_Cars\x.osc` of a parked car):
                 // its folder, with the variable lists beside it - else the server's traffic
                 // ran without it
-                let script = lower.ends_with(".osc") || (lower.starts_with("scripts") && lower.ends_with(".txt"));
+                let script = lower.ends_with(".osc")
+                    || (lower.starts_with("scripts") && lower.ends_with(".txt"));
                 if !is_ref && !relative && !picture && !script {
                     continue;
                 }
@@ -374,12 +523,18 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
                     if !FOLDERS.contains(&top.as_str()) {
                         continue;
                     }
-                    let Some((root, _)) = omsi_cfg::find_in_roots(&c) else { continue };
+                    let Some((root, _)) = omsi_cfg::find_in_roots(&c) else {
+                        continue;
+                    };
                     found = true;
                     if original.as_ref().is_some_and(|o| is_original(&root, o)) {
                         break;
                     }
-                    let folder = if is_ref { owner_folder(&c) } else { c.rsplit_once('/').map(|(d, _)| d.to_string()) };
+                    let folder = if is_ref {
+                        owner_folder(&c)
+                    } else {
+                        c.rsplit_once('/').map(|(d, _)| d.to_string())
+                    };
                     match folder.filter(|f| f.split('/').count() >= 2) {
                         Some(f) => want_folder(f, &mut files, &mut next),
                         // (one right in a content folder, `Texture\x.bmp`: that file alone)
@@ -393,7 +548,17 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
                     break;
                 }
                 // (a name that is a path into a content folder, found nowhere: missing here)
-                if !found && (is_ref || picture || script) && FOLDERS.contains(&norm(t).split('/').next().unwrap_or("").to_ascii_lowercase().as_str()) {
+                if !found
+                    && (is_ref || picture || script)
+                    && FOLDERS.contains(
+                        &norm(t)
+                            .split('/')
+                            .next()
+                            .unwrap_or("")
+                            .to_ascii_lowercase()
+                            .as_str(),
+                    )
+                {
                     missing.push(format!("{} (named in {rel})", norm(t)));
                 }
             }
@@ -406,19 +571,30 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
         if original.as_ref().is_some_and(|o| is_original(&r, o)) {
             continue;
         }
-        let Some(dir) = omsi_cfg::find_in_roots("Fonts").filter(|(root, _)| *root == r).map(|(_, p)| p).or_else(|| Some(r.join("Fonts"))) else { continue };
+        let Some(dir) = omsi_cfg::find_in_roots("Fonts")
+            .filter(|(root, _)| *root == r)
+            .map(|(_, p)| p)
+            .or_else(|| Some(r.join("Fonts")))
+        else {
+            continue;
+        };
         for (name, is_dir) in omsi_cfg::vfs::list_dir(&dir).unwrap_or_default() {
             let n = name.to_string_lossy().to_string();
             if is_dir || !n.to_lowercase().ends_with(".oft") {
                 continue;
             }
-            let Ok(text) = omsi_cfg::vfs::read_text(&dir.join(&n)) else { continue };
+            let Ok(text) = omsi_cfg::vfs::read_text(&dir.join(&n)) else {
+                continue;
+            };
             let lines: Vec<&str> = text.lines().map(|l| l.trim()).collect();
             let mut wanted = false;
             let mut bitmaps: Vec<String> = Vec::new();
             for (i, l) in lines.iter().enumerate() {
                 if l.eq_ignore_ascii_case("[newfont]") {
-                    let name = lines.get(i + 1).map(|x| x.to_lowercase()).unwrap_or_default();
+                    let name = lines
+                        .get(i + 1)
+                        .map(|x| x.to_lowercase())
+                        .unwrap_or_default();
                     if fonts_used.contains(&name) {
                         wanted = true;
                         bitmaps.extend(lines.iter().skip(i + 2).take(2).map(|b| b.to_string()));
@@ -438,7 +614,10 @@ pub fn session_files(map: &str, bus: Option<&str>, weather: Option<&str>, origin
             }
         }
     }
-    let mut list: Vec<(String, PathBuf)> = files.into_values().filter(|(rel, _)| refuse_path(rel).is_none()).collect();
+    let mut list: Vec<(String, PathBuf)> = files
+        .into_values()
+        .filter(|(rel, _)| refuse_path(rel).is_none())
+        .collect();
     list.sort_by(|a, b| a.0.cmp(&b.0));
     missing.sort();
     missing.dedup();
@@ -475,7 +654,11 @@ fn read_line_limited(input: &mut impl BufRead, line: &mut String) -> std::io::Re
     read_line_within(input, line, MAX_LINE)
 }
 
-fn read_line_within(input: &mut impl BufRead, line: &mut String, max: u64) -> std::io::Result<usize> {
+fn read_line_within(
+    input: &mut impl BufRead,
+    line: &mut String,
+    max: u64,
+) -> std::io::Result<usize> {
     let n = input.by_ref().take(max).read_line(line)?;
     if n as u64 >= max && !line.ends_with('\n') {
         return Err(std::io::Error::other("line too long"));
@@ -483,7 +666,14 @@ fn read_line_within(input: &mut impl BufRead, line: &mut String, max: u64) -> st
     Ok(n)
 }
 
-fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>, stopped: &std::sync::atomic::AtomicBool, fleet_cache: &server_fleet::Cache, root: &Path) -> std::io::Result<()> {
+fn handle(
+    stream: TcpStream,
+    key: &omsi_net::hostkey::HostKey,
+    ready: &Mutex<Option<Arc<(Manifest, Vec<PathBuf>)>>>,
+    stopped: &std::sync::atomic::AtomicBool,
+    fleet_cache: &server_fleet::Cache,
+    root: &Path,
+) -> std::io::Result<()> {
     let session = key.session();
     stream.set_read_timeout(Some(Duration::from_secs(120)))?;
     stream.set_nodelay(true).ok();
@@ -497,14 +687,19 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
         writeln!(out, "{}", channel::OLD_PEER)?;
         return Ok(());
     }
-    if hello.len() != 3 || hello[0] != channel::MAGIC || u64::from_str_radix(hello[1], 16).ok() != Some(session) {
+    if hello.len() != 3
+        || hello[0] != channel::MAGIC
+        || u64::from_str_radix(hello[1], 16).ok() != Some(session)
+    {
         out.write_all(b"ERR not this session\n")?;
         return Ok(());
     }
     // the list may still be being made (hashing a big map takes a while)
     let t0 = Instant::now();
     let data = loop {
-        if stopped.load(std::sync::atomic::Ordering::Acquire) { return Ok(()); }
+        if stopped.load(std::sync::atomic::Ordering::Acquire) {
+            return Ok(());
+        }
         if let Some(d) = ready.lock().unwrap_or_else(|e| e.into_inner()).clone() {
             break d;
         }
@@ -515,7 +710,12 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
         std::thread::sleep(Duration::from_millis(100));
     };
     let keys = channel::Handshake::new()?;
-    writeln!(out, "OK {} {}", keys.public_hex(), channel::prove(key, hello[2], &keys.public_hex()))?;
+    writeln!(
+        out,
+        "OK {} {}",
+        keys.public_hex(),
+        channel::prove(key, hello[2], &keys.public_hex())
+    )?;
     let (send, receive) = keys.finish(session, false, hello[2])?;
     let mut out = SecureWriter::new(out, send);
     let mut input = SecureReader::new(input, receive);
@@ -523,7 +723,9 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
     let mut buses = upload::BusRequests::default();
     let mut active = data.clone();
     loop {
-        if stopped.load(std::sync::atomic::Ordering::Acquire) { return Ok(()); }
+        if stopped.load(std::sync::atomic::Ordering::Acquire) {
+            return Ok(());
+        }
         // (what was answered goes out before the next request is waited for)
         out.flush()?;
         line.clear();
@@ -539,12 +741,16 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                 out.write_all(&body)?;
             }
             ["LISTBUS", bus_hex, paint_hex] => {
-                let Some((bus, paint)) = server_fleet::unhex_text(bus_hex).zip(server_fleet::unhex_text(paint_hex)) else {
+                let Some((bus, paint)) =
+                    server_fleet::unhex_text(bus_hex).zip(server_fleet::unhex_text(paint_hex))
+                else {
                     writeln!(out, "ERR invalid selected bus or paint")?;
                     continue;
                 };
                 let key = server_fleet::cache_key(false, &bus, &paint);
-                let selected = server_fleet::cached(fleet_cache, key, || server_fleet::package(root, &data, &bus, &paint));
+                let selected = server_fleet::cached(fleet_cache, key, || {
+                    server_fleet::package(root, &data, &bus, &paint)
+                });
                 match selected {
                     Ok(package) => {
                         active = package;
@@ -560,16 +766,21 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                 // without requiring other players to upload their own files.
                 // The viewer MUST independently compare the returned fingerprint
                 // to the one that player announced before requesting any GETs.
-                let Some((bus, paint)) = server_fleet::unhex_text(bus_hex).zip(server_fleet::unhex_text(paint_hex)) else {
+                let Some((bus, paint)) =
+                    server_fleet::unhex_text(bus_hex).zip(server_fleet::unhex_text(paint_hex))
+                else {
                     writeln!(out, "ERR invalid selected bus or paint")?;
                     continue;
                 };
                 let key = server_fleet::cache_key(true, &bus, &paint);
-                let selected = server_fleet::cached(fleet_cache, key, || server_fleet::exact(root, &bus, &paint));
+                let selected = server_fleet::cached(fleet_cache, key, || {
+                    server_fleet::exact(root, &bus, &paint)
+                });
                 match selected {
                     Ok(package) => {
                         let m = identity::VehicleManifest {
-                            bus: package.0.bus.clone(), entries: package.0.entries.clone()
+                            bus: package.0.bus.clone(),
+                            entries: package.0.entries.clone(),
                         };
                         active = package;
                         let body = serde_json::to_vec(&m).unwrap_or_default();
@@ -596,13 +807,16 @@ fn handle(stream: TcpStream, key: &omsi_net::hostkey::HostKey, ready: &Mutex<Opt
                     continue;
                 }
                 if omsi_cfg::vfs::archive_of(src).is_none() && !omsi_cfg::vfs::is_sealed(src) {
-                    match std::fs::File::open(src).and_then(|f| f.metadata().map(|m| (f, m.len()))) {
+                    match std::fs::File::open(src).and_then(|f| f.metadata().map(|m| (f, m.len())))
+                    {
                         Ok((f, len)) => {
                             writeln!(out, "OK {len}")?;
                             let sent = std::io::copy(&mut f.take(len), &mut out)?;
                             if sent != len {
                                 // (the file shrank meanwhile: the stream is out of step)
-                                return Err(std::io::Error::other("a file changed while it was sent"));
+                                return Err(std::io::Error::other(
+                                    "a file changed while it was sent",
+                                ));
                             }
                         }
                         Err(e) => writeln!(out, "ERR {e}")?,
@@ -656,7 +870,9 @@ pub fn remove_stale() {
         store::remove_legacy(&s);
     }
     let Some(base) = sandbox_base() else { return };
-    let Ok(rd) = std::fs::read_dir(&base) else { return };
+    let Ok(rd) = std::fs::read_dir(&base) else {
+        return;
+    };
     for e in rd.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
         let alive = name.parse::<u32>().map(process_alive).unwrap_or(false);
@@ -691,22 +907,32 @@ pub fn clean_up() {
     if let Some(dir) = taken {
         omsi_cfg::remove_content_root(&dir);
         omsi_cfg::vfs::unmount_sealed(&dir);
-        log::info!("LAN mods: the host's mods of this session were taken away (they stay sealed in the store)");
+        log::info!(
+            "LAN mods: the host's mods of this session were taken away (they stay sealed in the store)"
+        );
         // A process-held lease also protects games started outside the launcher.
         // Our own game lease defers this trim until its final drop, after all
         // session resources are gone; the last game then returns to the budgets.
-        if cfg!(any(target_os = "android", target_os = "ios")) { return; }
+        if cfg!(any(target_os = "android", target_os = "ios")) {
+            return;
+        }
         if let Some(_maintenance) = sandbox_base().and_then(|p| {
-            if other_registered_game_running() { return None; }
+            if other_registered_game_running() {
+                return None;
+            }
             omsi_cfg::cache_activity::maintenance(p.parent()?)
         }) {
             if let Some(store_path) = store_dir() {
                 let usage = omsi_cfg::cache_budget::trim(
-                    &store_path, omsi_cfg::cache_budget::Kind::ClientLan,
+                    &store_path,
+                    omsi_cfg::cache_budget::Kind::ClientLan,
                     omsi_cfg::cache_budget::LAN_LIMIT,
                 );
                 if usage.freed > 0 {
-                    log::info!("LAN mods: reclaimed {} bytes of old client downloads", usage.freed);
+                    log::info!(
+                        "LAN mods: reclaimed {} bytes of old client downloads",
+                        usage.freed
+                    );
                 }
             }
         }
@@ -715,13 +941,29 @@ pub fn clean_up() {
 
 /// Older launcher-started games may not hold the shared cache lease yet.
 fn other_registered_game_running() -> bool {
-    let Some(base) = sandbox_base() else { return true };
-    let Some(data_dir) = base.parent() else { return true };
-    let Ok(entries) = std::fs::read_dir(data_dir.join("instances")) else { return false };
+    let Some(base) = sandbox_base() else {
+        return true;
+    };
+    let Some(data_dir) = base.parent() else {
+        return true;
+    };
+    let Ok(entries) = std::fs::read_dir(data_dir.join("instances")) else {
+        return false;
+    };
     entries.flatten().any(|e| {
-        let Ok(bytes) = std::fs::read(e.path()) else { return false };
-        let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else { return false };
-        let Some(pid) = json.get("pid").and_then(|x| x.as_u64()).and_then(|v| u32::try_from(v).ok()) else { return false };
+        let Ok(bytes) = std::fs::read(e.path()) else {
+            return false;
+        };
+        let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+            return false;
+        };
+        let Some(pid) = json
+            .get("pid")
+            .and_then(|x| x.as_u64())
+            .and_then(|v| u32::try_from(v).ok())
+        else {
+            return false;
+        };
         pid != std::process::id() && process_alive(pid)
     })
 }
@@ -751,14 +993,21 @@ pub struct Report {
 /// `.bus` the host's map uses) comes, and hides nothing of the player's.
 fn own_vehicle_file(rel: &str, root: &Path) -> bool {
     let comps: Vec<&str> = rel.split('/').collect();
-    if comps.len() < 3 || !(comps[0].eq_ignore_ascii_case("vehicles") || comps[0].eq_ignore_ascii_case("trains")) {
+    if comps.len() < 3
+        || !(comps[0].eq_ignore_ascii_case("vehicles") || comps[0].eq_ignore_ascii_case("trains"))
+    {
         return false;
     }
-    let mut roots: Vec<PathBuf> = omsi_cfg::content_roots().into_iter().filter(|r| !omsi_cfg::is_sandbox(r)).collect();
+    let mut roots: Vec<PathBuf> = omsi_cfg::content_roots()
+        .into_iter()
+        .filter(|r| !omsi_cfg::is_sandbox(r))
+        .collect();
     if !roots.iter().any(|r| r == root) {
         roots.push(root.to_path_buf());
     }
-    roots.iter().any(|r| omsi_cfg::vfs::is_file(&omsi_cfg::resolve_path(r, rel)))
+    roots
+        .iter()
+        .any(|r| omsi_cfg::vfs::is_file(&omsi_cfg::resolve_path(r, rel)))
 }
 
 /// Is `rel` a script (`Scripts/...`) this machine has of its own? The host's comes only
@@ -766,13 +1015,19 @@ fn own_vehicle_file(rel: &str, root: &Path) -> bool {
 /// so a host's `Scripts/AI_Cars/<stock name>.osc` ran in every AI car of every player who
 /// joined, in place of the game's own.
 fn own_script(rel: &str) -> bool {
-    rel.split('/').next().is_some_and(|top| top.eq_ignore_ascii_case("scripts")) && omsi_cfg::find_in_roots(rel).is_some_and(|(r, _)| !omsi_cfg::is_sandbox(&r))
+    rel.split('/')
+        .next()
+        .is_some_and(|top| top.eq_ignore_ascii_case("scripts"))
+        && omsi_cfg::find_in_roots(rel).is_some_and(|(r, _)| !omsi_cfg::is_sandbox(&r))
 }
 
 fn read_reply(input: &mut impl BufRead) -> Result<Option<u64>, String> {
     let mut line = String::new();
     // (the connection closed, the host restarted: asked again soon; a line longer than a reply ends it)
-    if read_line_within(input, &mut line, MAX_REPLY).map_err(|e| format!("{CONNECTION_LOST}: {e}"))? == 0 {
+    if read_line_within(input, &mut line, MAX_REPLY)
+        .map_err(|e| format!("{CONNECTION_LOST}: {e}"))?
+        == 0
+    {
         return Err(format!("{CONNECTION_LOST}: closed by the host"));
     }
     let t = line.trim();
@@ -781,9 +1036,15 @@ fn read_reply(input: &mut impl BufRead) -> Result<Option<u64>, String> {
         if rest.is_empty() {
             return Ok(None);
         }
-        return rest.parse::<u64>().map(Some).map_err(|_| format!("bad reply {t:?}"));
+        return rest
+            .parse::<u64>()
+            .map(Some)
+            .map_err(|_| format!("bad reply {t:?}"));
     }
-    Err(format!("the host says: {}", t.strip_prefix("ERR").unwrap_or(t).trim()))
+    Err(format!(
+        "the host says: {}",
+        t.strip_prefix("ERR").unwrap_or(t).trim()
+    ))
 }
 
 /// Local files' hashes by path: (size, modification time, SHA-256).
@@ -800,7 +1061,13 @@ static HASH_CACHE: Mutex<Option<HashCache>> = Mutex::new(None);
 
 fn hash_cache() -> HashCache {
     let mut c = HASH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    c.get_or_insert_with(|| hash_cache_path().and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()).clone()
+    c.get_or_insert_with(|| {
+        hash_cache_path()
+            .and_then(|p| std::fs::read(p).ok())
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default()
+    })
+    .clone()
 }
 
 fn save_hash_cache(c: &HashCache) {
@@ -818,8 +1085,15 @@ fn write_hash_cache(path: &Path, cache: &HashCache) -> std::io::Result<()> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let bytes = serde_json::to_vec(cache)?;
-    let tmp = path.with_extension(format!("json.{}.{}.tmp", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
-    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp)?;
+    let tmp = path.with_extension(format!(
+        "json.{}.{}.tmp",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)?;
     let result = (|| {
         file.write_all(&bytes)?;
         file.sync_all()?;
@@ -827,7 +1101,9 @@ fn write_hash_cache(path: &Path, cache: &HashCache) -> std::io::Result<()> {
         // Same-directory rename replaces the old snapshot without exposing partial JSON.
         std::fs::rename(&tmp, path)
     })();
-    if result.is_err() { let _ = std::fs::remove_file(&tmp); }
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
     result
 }
 
@@ -836,7 +1112,11 @@ fn write_hash_cache(path: &Path, cache: &HashCache) -> std::io::Result<()> {
 /// first content root; the host's map becomes ours. `progress` is told (done, total bytes).
 /// A connection to the host's mods, greeted and its keys agreed: the socket (to shut it
 /// down), and the encrypted halves.
-type Connection = (TcpStream, SecureWriter<TcpStream>, SecureReader<BufReader<paced::Paced<TcpStream>>>);
+type Connection = (
+    TcpStream,
+    SecureWriter<TcpStream>,
+    SecureReader<BufReader<paced::Paced<TcpStream>>>,
+);
 
 /// A connection to the host's mods, greeted.
 fn open(host: SocketAddr, session: u64) -> Result<Connection, String> {
@@ -846,7 +1126,8 @@ fn open(host: SocketAddr, session: u64) -> Result<Connection, String> {
 /// A connection to the host's mods, greeted, whose answers are waited for up to `wait` (on
 /// the handle that reads: a copy of the socket set later did not change it on Windows).
 fn open_waiting(host: SocketAddr, session: u64, wait: Duration) -> Result<Connection, String> {
-    let stream = TcpStream::connect_timeout(&host, Duration::from_secs(6)).map_err(|e| format!("cannot reach the host's mods on TCP {host}: {e}"))?;
+    let stream = TcpStream::connect_timeout(&host, Duration::from_secs(6))
+        .map_err(|e| format!("cannot reach the host's mods on TCP {host}: {e}"))?;
     // the host greets once its list is made, which takes a while on a big map (it waits
     // up to ten minutes for it): after 25 s a join gave up on a big add-on map, and the
     // player was left without the host's map
@@ -856,10 +1137,20 @@ fn open_waiting(host: SocketAddr, session: u64, wait: Duration) -> Result<Connec
     let mut out = stream.try_clone().map_err(|e| e.to_string())?;
     let mut input = BufReader::with_capacity(1 << 20, paced::Paced::greeting(stream));
     let keys = channel::Handshake::new().map_err(|e| e.to_string())?;
-    writeln!(out, "{} {} {}", channel::MAGIC, omsi_net::session_hex(session), keys.public_hex()).map_err(|e| e.to_string())?;
+    writeln!(
+        out,
+        "{} {} {}",
+        channel::MAGIC,
+        omsi_net::session_hex(session),
+        keys.public_hex()
+    )
+    .map_err(|e| e.to_string())?;
     let mut line = String::new();
     // (a connection the host closed or broke before it greeted: asked again soon; a line longer than a reply ends it)
-    if read_line_within(&mut input, &mut line, MAX_REPLY).map_err(|e| format!("{CONNECTION_LOST}: {e}"))? == 0 {
+    if read_line_within(&mut input, &mut line, MAX_REPLY)
+        .map_err(|e| format!("{CONNECTION_LOST}: {e}"))?
+        == 0
+    {
         return Err(format!("{CONNECTION_LOST}: closed by the host"));
     }
     let t = line.trim();
@@ -878,11 +1169,17 @@ fn open_waiting(host: SocketAddr, session: u64, wait: Duration) -> Result<Connec
     if !channel::proven(session, &keys.public_hex(), host_key, public, sig) {
         return Err("the host could not prove it runs this session: its mods are not taken".into());
     }
-    let (send, receive) = keys.finish(session, true, host_key).map_err(|e| e.to_string())?;
+    let (send, receive) = keys
+        .finish(session, true, host_key)
+        .map_err(|e| e.to_string())?;
     // (then a stalled transfer ends the attempt instead of holding the game's start for ever)
     input.get_ref().get_ref().set_read_timeout(Some(wait)).ok();
     input.get_mut().pace();
-    Ok((raw, SecureWriter::new(out, send), SecureReader::new(input, receive)))
+    Ok((
+        raw,
+        SecureWriter::new(out, send),
+        SecureReader::new(input, receive),
+    ))
 }
 
 /// The downloads kept between sessions, sealed (`~/.openomsi/lan-store`, see `store`): a
@@ -891,14 +1188,30 @@ fn store_dir() -> Option<PathBuf> {
     sandbox_base().map(|b| b.with_file_name("lan-store"))
 }
 
-pub fn fetch(root: &Path, map: &mut String, host: SocketAddr, session: u64, progress: &mut dyn FnMut(u64, u64, &str)) -> Result<Report, String> {
+pub fn fetch(
+    root: &Path,
+    map: &mut String,
+    host: SocketAddr,
+    session: u64,
+    progress: &mut dyn FnMut(u64, u64, &str),
+) -> Result<Report, String> {
     fetch_with(root, map, host, session, progress, false, None)
 }
 
 /// Join with a selected server bus and repaint. The authenticated host serves only
 /// content explicitly allowed in server.cfg. Old player-hosted sessions still use LIST.
-pub fn fetch_selected(root: &Path, map: &mut String, host: SocketAddr, session: u64, bus: Option<&str>, paint: Option<&str>, progress: &mut dyn FnMut(u64, u64, &str)) -> Result<Report, String> {
-    let selected = bus.filter(|v| !v.trim().is_empty()).map(|v| (v.to_string(), paint.unwrap_or("").to_string()));
+pub fn fetch_selected(
+    root: &Path,
+    map: &mut String,
+    host: SocketAddr,
+    session: u64,
+    bus: Option<&str>,
+    paint: Option<&str>,
+    progress: &mut dyn FnMut(u64, u64, &str),
+) -> Result<Report, String> {
+    let selected = bus
+        .filter(|v| !v.trim().is_empty())
+        .map(|v| (v.to_string(), paint.unwrap_or("").to_string()));
     fetch_with(root, map, host, session, progress, false, selected)
 }
 
@@ -906,11 +1219,17 @@ pub fn fetch_selected(root: &Path, map: &mut String, host: SocketAddr, session: 
 /// so GET indexes always refer to the selected package, not the host's map-only list.
 fn request_mod_manifest(conn: &mut Connection, request: &str) -> Result<Manifest, String> {
     let (_, out, input) = conn;
-    writeln!(out, "{request}").and_then(|_| out.flush()).map_err(|e| e.to_string())?;
+    writeln!(out, "{request}")
+        .and_then(|_| out.flush())
+        .map_err(|e| e.to_string())?;
     let len = read_reply(input)?.ok_or("no list")?;
-    if len > 256 << 20 { return Err("the list is too large".into()); }
+    if len > 256 << 20 {
+        return Err("the list is too large".into());
+    }
     let mut body = vec![0u8; len as usize];
-    input.read_exact(&mut body).map_err(|e| format!("{CONNECTION_LOST}: {e}"))?;
+    input
+        .read_exact(&mut body)
+        .map_err(|e| format!("{CONNECTION_LOST}: {e}"))?;
     serde_json::from_slice(&body).map_err(|e| format!("bad list: {e}"))
 }
 
@@ -920,14 +1239,26 @@ static MOUNTED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize:
 /// `fetch`, or (`again`) a look at the host's list in the middle of the session: then the
 /// session's content is mounted again only when it has more files than before. `root` is
 /// the game's own root (its vehicles' files are never covered by the host's).
-fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, progress: &mut dyn FnMut(u64, u64, &str), again: bool, selected: Option<(String, String)>) -> Result<Report, String> {
+fn fetch_with(
+    root: &Path,
+    map: &mut String,
+    host: SocketAddr,
+    session: u64,
+    progress: &mut dyn FnMut(u64, u64, &str),
+    again: bool,
+    selected: Option<(String, String)>,
+) -> Result<Report, String> {
     if omsi_cfg::flags::OMSI_NO_LAN_MODS.is_set() {
         return Err("switched off (OMSI_NO_LAN_MODS)".into());
     }
     let mut conn = open(host, session)?;
-    let selected_request = selected.as_ref().map(|(bus, paint)| format!(
-        "LISTBUS {} {}", server_fleet::hex_text(bus), server_fleet::hex_text(paint)
-    ));
+    let selected_request = selected.as_ref().map(|(bus, paint)| {
+        format!(
+            "LISTBUS {} {}",
+            server_fleet::hex_text(bus),
+            server_fleet::hex_text(paint)
+        )
+    });
     // A selected server bus is authoritative: never turn a failed LISTBUS into
     // a successful map-only LIST. That would spawn a missing or different bus.
     // The ordinary LIST remains the default for player-hosted/legacy sessions
@@ -963,7 +1294,10 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
                 .and_then(|(_, p)| omsi_cfg::vfs::read(&p).ok())
                 .is_some_and(|data| data.len() as u64 == e.size && sha256_of(&data) == e.sha256);
             if !exact {
-                return Err(format!("{} differs from the local shared script; cannot safely replace it for one bus", e.path));
+                return Err(format!(
+                    "{} differs from the local shared script; cannot safely replace it for one bus",
+                    e.path
+                ));
             }
             report.had += 1;
             continue;
@@ -973,7 +1307,11 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
             continue;
         }
         // (the hash names the file in the store: nothing but 64 hex digits may go there)
-        if e.size > MAX_FILE || e.sha256.len() != 64 || !e.sha256.bytes().all(|b| b.is_ascii_hexdigit()) || !seen.insert(e.path.to_lowercase()) {
+        if e.size > MAX_FILE
+            || e.sha256.len() != 64
+            || !e.sha256.bytes().all(|b| b.is_ascii_hexdigit())
+            || !seen.insert(e.path.to_lowercase())
+        {
             report.refused.push(format!("{}: refused", e.path));
             continue;
         }
@@ -988,23 +1326,37 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         todo.par_iter()
             .map(|&k| {
                 let e = &manifest.entries[k];
-                let Some((_, p)) = omsi_cfg::find_in_roots(&e.path).filter(|(root, _)| !omsi_cfg::is_sandbox(root)) else { return (k, false, None) };
+                let Some((_, p)) = omsi_cfg::find_in_roots(&e.path)
+                    .filter(|(root, _)| !omsi_cfg::is_sandbox(root))
+                else {
+                    return (k, false, None);
+                };
                 let key = p.to_string_lossy().to_string();
                 if let Ok(md) = std::fs::metadata(&p) {
                     if md.len() != e.size {
                         return (k, false, None);
                     }
-                    let mtime = md.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+                    let mtime = md
+                        .modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
                     if let Some((sz, mt, h)) = cache.get(&key) {
                         if *sz == md.len() && *mt == mtime {
                             return (k, *h == e.sha256, None);
                         }
                     }
-                    let Ok(d) = std::fs::read(&p) else { return (k, false, None) };
+                    let Ok(d) = std::fs::read(&p) else {
+                        return (k, false, None);
+                    };
                     let h = sha256_of(&d);
                     return (k, h == e.sha256, Some((key, (md.len(), mtime, h))));
                 }
-                let same = omsi_cfg::vfs::read(&p).ok().map(|d| d.len() as u64 == e.size && sha256_of(&d) == e.sha256).unwrap_or(false);
+                let same = omsi_cfg::vfs::read(&p)
+                    .ok()
+                    .map(|d| d.len() as u64 == e.size && sha256_of(&d) == e.sha256)
+                    .unwrap_or(false);
                 (k, same, None)
             })
             .collect()
@@ -1043,8 +1395,12 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
                     && sha256_of(&bytes) == e.sha256
                     && quarantine::screen(&e.path, &bytes).is_ok()
                 {
-                    let file = store.put(e, &bytes)
-                        .map_err(|err| format!("{}: could not reuse the remote vehicle cache: {err}", e.path))?;
+                    let file = store.put(e, &bytes).map_err(|err| {
+                        format!(
+                            "{}: could not reuse the remote vehicle cache: {err}",
+                            e.path
+                        )
+                    })?;
                     mounted.push(file);
                     report.had += 1;
                     continue;
@@ -1058,22 +1414,43 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
     // A selected bus cannot be considered ready if even one required file was
     // rejected; silently continuing can produce missing meshes or white paint.
     if selected_request.is_some() && !report.refused.is_empty() {
-        return Err(format!("selected server bus has {} refused files, first: {}", report.refused.len(), report.refused[0]));
+        return Err(format!(
+            "selected server bus has {} refused files, first: {}",
+            report.refused.len(),
+            report.refused[0]
+        ));
     }
     if total > MAX_TOTAL {
-        return Err(format!("the host's mods are {:.1} GB, more than a session takes ({:.0} GB)", total as f64 / 1e9, MAX_TOTAL as f64 / 1e9));
+        return Err(format!(
+            "the host's mods are {:.1} GB, more than a session takes ({:.0} GB)",
+            total as f64 / 1e9,
+            MAX_TOTAL as f64 / 1e9
+        ));
     }
     *SANDBOX.lock().unwrap_or_else(|e| e.into_inner()) = Some(dir.clone());
-    log::info!("LAN mods: {} files of the host's are here already, {} to fetch ({:.1} MB)", report.had, todo.len(), total as f64 / 1e6);
+    log::info!(
+        "LAN mods: {} files of the host's are here already, {} to fetch ({:.1} MB)",
+        report.had,
+        todo.len(),
+        total as f64 / 1e6
+    );
     if !todo.is_empty() {
-        let some: Vec<&str> = todo.iter().take(6).map(|k| manifest.entries[*k].path.as_str()).collect();
+        let some: Vec<&str> = todo
+            .iter()
+            .take(6)
+            .map(|k| manifest.entries[*k].path.as_str())
+            .collect();
         log::info!("LAN mods: to fetch, e.g. {}", some.join(", "));
     }
     // (nothing to fetch needs no room: a nearly full disk turned away a join that had
     // everything already)
     if let Some(free) = free_space(store.dir()).filter(|_| total > 0) {
         if free < total + KEEP_FREE {
-            return Err(format!("{:.1} GB are needed for the host's mods, {:.1} GB are free", (total + KEEP_FREE) as f64 / 1e9, free as f64 / 1e9));
+            return Err(format!(
+                "{:.1} GB are needed for the host's mods, {:.1} GB are free",
+                (total + KEEP_FREE) as f64 / 1e9,
+                free as f64 / 1e9
+            ));
         }
     }
     // every request at once (one after the other took a round trip per file: through a
@@ -1101,7 +1478,10 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         // A new connection starts with its original map-only manifest. Re-select
         // the exact fleet package before GET, and verify the indexes did not change.
         if attempt > 1 {
-            if let Some(cmd) = &selected_request { req.push_str(cmd); req.push('\n'); }
+            if let Some(cmd) = &selected_request {
+                req.push_str(cmd);
+                req.push('\n');
+            }
         }
         for k in &left {
             req.push_str(&format!("GET {k}\n"));
@@ -1116,19 +1496,25 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         if attempt > 1 && selected_request.is_some() {
             let selected_again = (|| -> Result<Manifest, String> {
                 let n = read_reply(&mut input)?.ok_or("no selected list")?;
-                if n > 256 << 20 { return Err("selected list too large".into()); }
+                if n > 256 << 20 {
+                    return Err("selected list too large".into());
+                }
                 let mut b = vec![0u8; n as usize];
                 input.read_exact(&mut b).map_err(|e| e.to_string())?;
                 serde_json::from_slice(&b).map_err(|e| format!("bad selected list: {e}"))
             })();
             match selected_again {
-                Ok(next) if next.bus == manifest.bus && next.entries.iter().eq(manifest.entries.iter().map(|e| e)) => {}
+                Ok(next)
+                    if next.bus == manifest.bus
+                        && next.entries.iter().eq(manifest.entries.iter().map(|e| e)) => {}
                 Ok(_) => failed = Some("host changed the selected vehicle during download".into()),
                 Err(e) => failed = Some(e),
             }
         }
         for &k in &left {
-            if failed.is_some() { break; }
+            if failed.is_some() {
+                break;
+            }
             let e = &manifest.entries[k];
             let r = (|| -> Result<Option<Vec<u8>>, String> {
                 let len = read_reply(&mut input)?.ok_or("no size")?;
@@ -1136,7 +1522,9 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
                     return Err(format!("{}: {len} bytes, the list said {}", e.path, e.size));
                 }
                 let mut data = vec![0u8; len as usize];
-                input.read_exact(&mut data).map_err(|x| format!("{}: {x}", e.path))?;
+                input
+                    .read_exact(&mut data)
+                    .map_err(|x| format!("{}: {x}", e.path))?;
                 if sha256_of(&data) != e.sha256 {
                     return Err(format!("{}: not the file the list names (hash)", e.path));
                 }
@@ -1159,7 +1547,11 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
                 continue;
             }
             // (sealed straight away: the plain bytes never reach the disk)
-            mounted.push(store.put(e, &data).map_err(|x| format!("{}: {x}", e.path))?);
+            mounted.push(
+                store
+                    .put(e, &data)
+                    .map_err(|x| format!("{}: {x}", e.path))?,
+            );
             done += len;
             report.fetched += 1;
             report.bytes += len;
@@ -1176,7 +1568,11 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
         }
     }
     if selected_request.is_some() && !report.refused.is_empty() {
-        return Err(format!("selected server vehicle contains {} unsafe or refused files: {}", report.refused.len(), report.refused[0]));
+        return Err(format!(
+            "selected server vehicle contains {} unsafe or refused files: {}",
+            report.refused.len(),
+            report.refused[0]
+        ));
     }
     if again && mounted.len() <= MOUNTED.load(std::sync::atomic::Ordering::Relaxed) {
         upload::remember_host(host, session);
@@ -1189,18 +1585,43 @@ fn fetch_with(root: &Path, map: &mut String, host: SocketAddr, session: u64, pro
     omsi_cfg::mark_sandbox(dir.clone());
     omsi_cfg::add_content_root_first(dir.clone());
     // the host's map (now that we have it)
-    let map_ok = refuse_path(&manifest.map).is_none() && omsi_cfg::find_in_roots(&manifest.map).is_some();
-    if map_ok && !manifest.map.is_empty() && !manifest.map.eq_ignore_ascii_case(&map.replace('\\', "/")) {
-        log::info!("LAN mods: the session is on the host's map {}", manifest.map);
+    let map_ok =
+        refuse_path(&manifest.map).is_none() && omsi_cfg::find_in_roots(&manifest.map).is_some();
+    if map_ok
+        && !manifest.map.is_empty()
+        && !manifest.map.eq_ignore_ascii_case(&map.replace('\\', "/"))
+    {
+        log::info!(
+            "LAN mods: the session is on the host's map {}",
+            manifest.map
+        );
         *map = manifest.map.clone();
     }
     if !report.refused.is_empty() {
-        log::warn!("LAN mods: {} files refused: {}", report.refused.len(), report.refused.iter().take(8).cloned().collect::<Vec<_>>().join("; "));
+        log::warn!(
+            "LAN mods: {} files refused: {}",
+            report.refused.len(),
+            report
+                .refused
+                .iter()
+                .take(8)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        );
     }
     if report.kept_own > 0 {
-        log::info!("LAN mods: {} files of vehicles this machine has of its own were left as they are here", report.kept_own);
+        log::info!(
+            "LAN mods: {} files of vehicles this machine has of its own were left as they are here",
+            report.kept_own
+        );
     }
-    log::info!("LAN mods: fetched {} files ({:.1} MB), {} were here already", report.fetched, report.bytes as f64 / 1e6, report.had);
+    log::info!(
+        "LAN mods: fetched {} files ({:.1} MB), {} were here already",
+        report.fetched,
+        report.bytes as f64 / 1e6,
+        report.had
+    );
     upload::remember_host(host, session);
     Ok(report)
 }
@@ -1240,23 +1661,46 @@ mod tests {
     fn serve_files(files: &[(&str, Vec<u8>)]) -> (SocketAddr, PathBuf, u64) {
         let key = Arc::new(omsi_net::hostkey::HostKey::generate().unwrap());
         let session = key.session();
-        let dir = std::env::temp_dir().join(format!("openomsi-lan-serve-{}-{session:x}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "openomsi-lan-serve-{}-{session:x}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let mut entries = Vec::new();
         let mut sources = Vec::new();
         for (k, (rel, data)) in files.iter().enumerate() {
             let p = dir.join(format!("{k}"));
             std::fs::write(&p, data).unwrap();
-            entries.push(Entry { path: rel.to_string(), size: data.len() as u64, sha256: sha256_of(data) });
+            entries.push(Entry {
+                path: rel.to_string(),
+                size: data.len() as u64,
+                sha256: sha256_of(data),
+            });
             sources.push(p);
         }
-        let ready = Arc::new(Mutex::new(Some(Arc::new((Manifest { map: "maps/M/global.cfg".into(), bus: String::new(), entries }, sources)))));
+        let ready = Arc::new(Mutex::new(Some(Arc::new((
+            Manifest {
+                map: "maps/M/global.cfg".into(),
+                bus: String::new(),
+                entries,
+            },
+            sources,
+        )))));
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let addr = listener.local_addr().unwrap();
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
                 let (ready, key) = (ready.clone(), key.clone());
-                std::thread::spawn(move || handle(stream, &key, &ready, &std::sync::atomic::AtomicBool::new(false), &Mutex::new(Default::default()), &std::env::temp_dir()));
+                std::thread::spawn(move || {
+                    handle(
+                        stream,
+                        &key,
+                        &ready,
+                        &std::sync::atomic::AtomicBool::new(false),
+                        &Mutex::new(Default::default()),
+                        &std::env::temp_dir(),
+                    )
+                });
             }
         });
         (addr, dir, session)
@@ -1266,7 +1710,10 @@ mod tests {
     fn mods_go_encrypted_over_tcp() {
         let marker = b"[name]\nPLAINTEXT-MARKER-wire\n".repeat(5000);
         let small = b"[mesh]\nPLAINTEXT-MARKER-two\n".to_vec();
-        let (addr, dir, session) = serve_files(&[("maps/M/global.cfg", marker.clone()), ("maps/M/x.sco", small.clone())]);
+        let (addr, dir, session) = serve_files(&[
+            ("maps/M/global.cfg", marker.clone()),
+            ("maps/M/x.sco", small.clone()),
+        ]);
         // what goes over the wire: a relay in between records it
         let relay = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let relay_addr = relay.local_addr().unwrap();
@@ -1290,7 +1737,10 @@ mod tests {
             });
         }
         let (raw, mut out, mut input) = open(relay_addr, session).unwrap();
-        out.write_all(b"LIST\nGET 0\nGET 1\nGET 7\nGET ../../etc/passwd\nGET maps/M/global.cfg\nBYE\n").unwrap();
+        out.write_all(
+            b"LIST\nGET 0\nGET 1\nGET 7\nGET ../../etc/passwd\nGET maps/M/global.cfg\nBYE\n",
+        )
+        .unwrap();
         out.flush().unwrap();
         let len = read_reply(&mut input).unwrap().unwrap();
         let mut body = vec![0u8; len as usize];
@@ -1312,10 +1762,21 @@ mod tests {
         std::thread::sleep(Duration::from_millis(100));
         let wire = seen.lock().unwrap().clone();
         assert!(wire.len() > marker.len(), "{} bytes seen", wire.len());
-        assert!(!wire.windows(16).any(|w| w == b"PLAINTEXT-MARKER"), "plain text on the wire");
-        assert!(!wire.windows(10).any(|w| w == b"global.cfg"), "a file name on the wire");
+        assert!(
+            !wire.windows(16).any(|w| w == b"PLAINTEXT-MARKER"),
+            "plain text on the wire"
+        );
+        assert!(
+            !wire.windows(10).any(|w| w == b"global.cfg"),
+            "a file name on the wire"
+        );
         // another session's id gets nothing
-        assert!(open(addr, session ^ 1).err().unwrap().contains("not this session"));
+        assert!(
+            open(addr, session ^ 1)
+                .err()
+                .unwrap()
+                .contains("not this session")
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1325,7 +1786,15 @@ mod tests {
         let (addr, dir, session) = serve_files(&[("maps/M/global.cfg", b"x".to_vec())]);
         for magic in ["OMSIMODS/1", "OMSIMODS/2"] {
             let mut s = TcpStream::connect(addr).unwrap();
-            s.write_all(format!("{magic} {} {}\n", omsi_net::session_hex(session), "00".repeat(32)).as_bytes()).unwrap();
+            s.write_all(
+                format!(
+                    "{magic} {} {}\n",
+                    omsi_net::session_hex(session),
+                    "00".repeat(32)
+                )
+                .as_bytes(),
+            )
+            .unwrap();
             let reply = read_reply(&mut BufReader::new(s)).unwrap_err();
             assert!(reply.contains("update openOMSI"), "{reply}");
         }
@@ -1336,11 +1805,16 @@ mod tests {
         std::thread::spawn(move || {
             let (s, _) = old.accept().unwrap();
             let mut line = String::new();
-            BufReader::new(s.try_clone().unwrap()).read_line(&mut line).unwrap();
+            BufReader::new(s.try_clone().unwrap())
+                .read_line(&mut line)
+                .unwrap();
             (&s).write_all(b"ERR not this session\n").unwrap();
         });
         let err = open(old_addr, 0x01d).err().unwrap();
-        assert!(err.contains("older") && err.contains("same version"), "{err}");
+        assert!(
+            err.contains("older") && err.contains("same version"),
+            "{err}"
+        );
     }
 
     /// A vehicle's file this machine has of its own is never covered by the host's (its
@@ -1348,16 +1822,36 @@ mod tests {
     /// does everything else of the map.
     #[test]
     fn the_hosts_vehicle_files_never_cover_ours() {
-        let root = std::env::temp_dir().join(format!("openomsi-own-vehicles-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("openomsi-own-vehicles-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("Vehicles").join("MyBus").join("Texture")).unwrap();
-        std::fs::write(root.join("Vehicles").join("MyBus").join("Texture").join("repaints.cti"), b"[item]\nMine\nx\ny.dds\n").unwrap();
-        assert!(own_vehicle_file("Vehicles/MyBus/Texture/repaints.cti", &root));
-        assert!(own_vehicle_file("vehicles/mybus/texture/REPAINTS.cti", &root), "as Windows finds it");
+        std::fs::write(
+            root.join("Vehicles")
+                .join("MyBus")
+                .join("Texture")
+                .join("repaints.cti"),
+            b"[item]\nMine\nx\ny.dds\n",
+        )
+        .unwrap();
+        assert!(own_vehicle_file(
+            "Vehicles/MyBus/Texture/repaints.cti",
+            &root
+        ));
+        assert!(
+            own_vehicle_file("vehicles/mybus/texture/REPAINTS.cti", &root),
+            "as Windows finds it"
+        );
         // what the player lacks of a bus it has: an add-on repaint, a .bus the map uses
-        assert!(!own_vehicle_file("Vehicles/MyBus/Texture/addon_repaint.dds", &root));
+        assert!(!own_vehicle_file(
+            "Vehicles/MyBus/Texture/addon_repaint.dds",
+            &root
+        ));
         assert!(!own_vehicle_file("Vehicles/MyBus/MyBus_newer.bus", &root));
-        assert!(!own_vehicle_file("Vehicles/TheirBus/Texture/repaints.cti", &root));
+        assert!(!own_vehicle_file(
+            "Vehicles/TheirBus/Texture/repaints.cti",
+            &root
+        ));
         assert!(!own_vehicle_file("maps/Town/global.cfg", &root));
         assert!(!own_vehicle_file("Sceneryobjects/X/x.sco", &root));
         let _ = std::fs::remove_dir_all(&root);
@@ -1374,11 +1868,21 @@ mod tests {
             for i in 0..2 {
                 let (s, _) = fake.accept().unwrap();
                 let mut line = String::new();
-                BufReader::new(s.try_clone().unwrap()).read_line(&mut line).unwrap();
+                BufReader::new(s.try_clone().unwrap())
+                    .read_line(&mut line)
+                    .unwrap();
                 let client = line.split_whitespace().nth(2).unwrap_or("").to_string();
                 let keys = channel::Handshake::new().unwrap();
                 let host = keys.public_hex();
-                let reply = if i == 0 { channel::prove(&impostor, &client, &host) } else { format!("{} {}", omsi_net::hostkey::hex(real.public()), "00".repeat(64)) };
+                let reply = if i == 0 {
+                    channel::prove(&impostor, &client, &host)
+                } else {
+                    format!(
+                        "{} {}",
+                        omsi_net::hostkey::hex(real.public()),
+                        "00".repeat(64)
+                    )
+                };
                 let _ = (&s).write_all(format!("OK {host} {reply}\n").as_bytes());
             }
         });
@@ -1390,13 +1894,19 @@ mod tests {
 
     #[test]
     fn a_host_that_never_ends_a_line_is_given_up() {
-        assert!(read_reply(&mut std::io::Cursor::new(vec![b'A'; 1 << 20])).unwrap_err().contains("too long"));
+        assert!(
+            read_reply(&mut std::io::Cursor::new(vec![b'A'; 1 << 20]))
+                .unwrap_err()
+                .contains("too long")
+        );
         let host = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let addr = host.local_addr().unwrap();
         std::thread::spawn(move || {
             let (mut s, _) = host.accept().unwrap();
             let mut line = String::new();
-            BufReader::new(s.try_clone().unwrap()).read_line(&mut line).unwrap();
+            BufReader::new(s.try_clone().unwrap())
+                .read_line(&mut line)
+                .unwrap();
             let _ = s.write_all(&[b'A'; 64 * 1024]);
             std::thread::sleep(Duration::from_secs(2));
         });

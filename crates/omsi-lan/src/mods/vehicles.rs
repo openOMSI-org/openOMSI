@@ -9,10 +9,10 @@
 //! its manifest, a sealed mount that is no content root - nothing of another bus or of the
 //! machine's own mods is seen through it.
 
+use super::Entry;
 use super::identity::{self, VehicleManifest};
 use super::pieces;
 use super::store::Store;
-use super::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -121,7 +121,11 @@ fn mounts() -> Option<PathBuf> {
 /// The kept bus `path` is a file of (it lies in that bus's mount): the bus's fingerprint,
 /// and the file as the bus's list names it.
 pub(crate) fn mounted(path: &Path) -> Option<(String, String)> {
-    let rel = path.strip_prefix(mounts()?).ok()?.to_string_lossy().replace('\\', "/");
+    let rel = path
+        .strip_prefix(mounts()?)
+        .ok()?
+        .to_string_lossy()
+        .replace('\\', "/");
     let (fp, file) = rel.split_once('/')?;
     omsi_net::is_fingerprint(fp).then(|| (fp.to_string(), file.to_string()))
 }
@@ -137,8 +141,8 @@ pub(crate) use kept::*;
 pub(in crate::mods) use local_files::*;
 pub(in crate::mods) use recompress::*;
 pub use room::*;
-pub(crate) use viewer::*;
 pub use viewer::SharedFonts;
+pub(crate) use viewer::*;
 
 #[cfg(test)]
 pub(super) fn open_for_test(dir: &Path) {

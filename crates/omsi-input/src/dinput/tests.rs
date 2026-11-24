@@ -107,7 +107,10 @@ fn invalid_state_releases_shared_wheel_shifter_and_cannot_drive() {
     state.pov[3] = 18000;
     let mut valid = true;
     let mut events = Vec::new();
-    assert_eq!(state_axes(&state, valid, &[true; 8], &[(-RANGE, RANGE); 8])[0], (0, 1.0));
+    assert_eq!(
+        state_axes(&state, valid, &[true; 8], &[(-RANGE, RANGE); 8])[0],
+        (0, 1.0)
+    );
     invalidate_state("G27", &mut state, &mut valid, &mut events);
     assert!(!valid);
     assert!(state_axes(&state, valid, &[true; 8], &[(-RANGE, RANGE); 8]).is_empty());
@@ -117,7 +120,7 @@ fn invalid_state_releases_shared_wheel_shifter_and_cannot_drive() {
     }
     invalidate_state("G27", &mut state, &mut valid, &mut events);
     assert_eq!(events.len(), 4); // no repeated releases
-                                 // The first valid reconnect sample compares against an empty snapshot.
+    // The first valid reconnect sample compares against an empty snapshot.
     assert_eq!(state.buttons[8], 0);
 }
 
@@ -147,17 +150,15 @@ fn button_offsets_follow_instances_not_enumeration_order() {
 /// The window that hears of devices plugged in or out opens (it is a thread's own).
 #[test]
 fn notification_window_opens() {
-    let w = std::thread::spawn(|| {
-        notification_window().map(|w| unsafe { DestroyWindow(w).is_ok() })
-    })
-    .join()
-    .unwrap();
+    let w =
+        std::thread::spawn(|| notification_window().map(|w| unsafe { DestroyWindow(w).is_ok() }))
+            .join()
+            .unwrap();
     assert_eq!(w, Some(true));
 }
 
 #[test]
-fn controller_device_filter_accepts_controllers_and_rejects_mice_keyboards_and_vendor_devices()
-{
+fn controller_device_filter_accepts_controllers_and_rejects_mice_keyboards_and_vendor_devices() {
     assert!(is_controller_device(DI8DEVTYPE_JOYSTICK, 0, 0));
     assert!(is_controller_device(DI8DEVTYPE_GAMEPAD, 0, 0));
     assert!(is_controller_device(DI8DEVTYPE_DRIVING, 0, 0));
@@ -243,8 +244,14 @@ fn the_force_goes_to_the_lowest_axis_with_a_motor_whatever_the_drivers_order() {
 
 #[test]
 fn xinput_hid_paths_are_detected_by_ig_marker_only() {
-    assert!(is_xinput_hid_path(r"\\?\hid#vid_045e&pid_028e&ig_00#7&123456&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"));
-    assert!(is_xinput_hid_path(r"\\?\HID#VID_045E&PID_028E&IG_01#8&ABCDEF&0&0000#"));
-    assert!(!is_xinput_hid_path(r"\\?\hid#vid_046d&pid_c262#6&123456&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"));
+    assert!(is_xinput_hid_path(
+        r"\\?\hid#vid_045e&pid_028e&ig_00#7&123456&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+    ));
+    assert!(is_xinput_hid_path(
+        r"\\?\HID#VID_045E&PID_028E&IG_01#8&ABCDEF&0&0000#"
+    ));
+    assert!(!is_xinput_hid_path(
+        r"\\?\hid#vid_046d&pid_c262#6&123456&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+    ));
     assert!(!is_xinput_hid_path(""));
 }

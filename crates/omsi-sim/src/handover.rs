@@ -18,7 +18,10 @@ pub struct Inbox<T> {
 
 impl<T> Default for Inbox<T> {
     fn default() -> Inbox<T> {
-        Inbox { pending: AtomicBool::new(false), items: Mutex::new(Vec::new()) }
+        Inbox {
+            pending: AtomicBool::new(false),
+            items: Mutex::new(Vec::new()),
+        }
     }
 }
 

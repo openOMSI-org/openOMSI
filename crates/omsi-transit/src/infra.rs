@@ -52,7 +52,7 @@
 //! next B8
 //! ```
 
-use crate::doc::{parse, Block, Issue, Issues};
+use crate::doc::{Block, Issue, Issues, parse};
 use omsi_cfg::transport::ModeSet;
 
 fn modes_of(b: &Block, is: &mut Issues, required: bool) -> ModeSet {
@@ -111,7 +111,9 @@ pub struct TrackRule {
 impl TrackRule {
     /// Does the rule apply to a spline/object of this file, tile and id?
     pub fn matches(&self, file: &str, tile: (i32, i32), id: i64) -> bool {
-        self.file.as_deref().is_none_or(|g| glob(g, file)) && self.tile.is_none_or(|t| t == tile) && self.id.is_none_or(|i| i == id)
+        self.file.as_deref().is_none_or(|g| glob(g, file))
+            && self.tile.is_none_or(|t| t == tile)
+            && self.id.is_none_or(|i| i == id)
     }
 }
 
@@ -175,7 +177,10 @@ impl Network {
                 continue;
             }
             let tile = b.get("tile").and_then(|v| {
-                let n: Vec<i32> = v.split_whitespace().filter_map(|w| w.parse().ok()).collect();
+                let n: Vec<i32> = v
+                    .split_whitespace()
+                    .filter_map(|w| w.parse().ok())
+                    .collect();
                 (n.len() == 2).then(|| (n[0], n[1]))
             });
             if b.get("tile").is_some() && tile.is_none() {
@@ -184,12 +189,18 @@ impl Network {
             let power = match b.get("power") {
                 None => Power::Unspecified,
                 Some(v) => Power::from_name(v).unwrap_or_else(|| {
-                    is.error(b.line_of("power"), format!("power {v} is not catenary, third_rail, diesel or none"));
+                    is.error(
+                        b.line_of("power"),
+                        format!("power {v} is not catenary, third_rail, diesel or none"),
+                    );
                     Power::Unspecified
                 }),
             };
             if b.get("file").is_none() && tile.is_none() && b.get("id").is_none() {
-                is.error(b.line, "a [track] rule needs file, tile or id (else it would match everything)");
+                is.error(
+                    b.line,
+                    "a [track] rule needs file, tile or id (else it would match everything)",
+                );
             }
             out.rules.push(TrackRule {
                 file: b.get("file").map(str::to_string),
@@ -269,7 +280,11 @@ pub struct Switch {
 impl Switch {
     /// The `[path]` the switch rests in: the straight way, or the first diverging one.
     pub fn default_path(&self) -> Option<u16> {
-        if self.default_diverging { self.diverging_paths.first().copied() } else { Some(self.straight_path) }
+        if self.default_diverging {
+            self.diverging_paths.first().copied()
+        } else {
+            Some(self.straight_path)
+        }
     }
 }
 
@@ -386,7 +401,10 @@ impl Switches {
                 Some(d) if d == "manual" => Drive::Manual,
                 Some(d) if d == "interlocked" => Drive::Interlocked,
                 Some(d) => {
-                    is.error(b.line_of("drive"), format!("drive {d} is not auto, manual or interlocked"));
+                    is.error(
+                        b.line_of("drive"),
+                        format!("drive {d} is not auto, manual or interlocked"),
+                    );
                     Drive::Auto
                 }
             };
@@ -395,7 +413,10 @@ impl Switches {
                 Some(d) if d == "straight" => false,
                 Some(d) if d == "diverging" => true,
                 Some(d) => {
-                    is.error(b.line_of("default"), format!("default {d} is not straight or diverging"));
+                    is.error(
+                        b.line_of("default"),
+                        format!("default {d} is not straight or diverging"),
+                    );
                     false
                 }
             };
@@ -411,11 +432,22 @@ impl Switches {
                 diverging_speed: b.speed("diverging_speed"),
                 locked_by: b.get("locked_by").map(|s| s.trim().to_string()),
                 tile: b.get("tile").and_then(|v| {
-                    let n: Vec<i32> = v.split_whitespace().filter_map(|w| w.parse().ok()).collect();
+                    let n: Vec<i32> = v
+                        .split_whitespace()
+                        .filter_map(|w| w.parse().ok())
+                        .collect();
                     (n.len() == 2).then(|| (n[0], n[1]))
                 }),
                 straight_path: b.i32("straight_path").unwrap_or(0).clamp(0, 255) as u16,
-                diverging_paths: b.all("diverging_path").flat_map(|e| e.value.split_whitespace().filter_map(|w| w.parse().ok()).collect::<Vec<u16>>()).collect(),
+                diverging_paths: b
+                    .all("diverging_path")
+                    .flat_map(|e| {
+                        e.value
+                            .split_whitespace()
+                            .filter_map(|w| w.parse().ok())
+                            .collect::<Vec<u16>>()
+                    })
+                    .collect(),
                 line: b.line,
             };
             if sw.diverging_speed.is_some() && sw.diverging_paths.is_empty() {
@@ -426,7 +458,11 @@ impl Switches {
             }
             out.list.push(sw);
         }
-        id_check(&mut is, "switch", out.list.iter().map(|s| (s.id.as_str(), s.line)));
+        id_check(
+            &mut is,
+            "switch",
+            out.list.iter().map(|s| (s.id.as_str(), s.line)),
+        );
         issues.append(&mut is.list);
         out
     }
@@ -448,7 +484,11 @@ impl Depots {
             }
             let mut gates = Vec::new();
             for e in b.all("gate") {
-                let n: Vec<f64> = e.value.split_whitespace().filter_map(|w| w.parse().ok()).collect();
+                let n: Vec<f64> = e
+                    .value
+                    .split_whitespace()
+                    .filter_map(|w| w.parse().ok())
+                    .collect();
                 if n.len() == 3 {
                     gates.push([n[0], n[1], n[2]]);
                 } else {
@@ -457,7 +497,10 @@ impl Depots {
             }
             let id = b.str("id");
             out.list.push(Depot {
-                name: b.get("name").map(str::to_string).unwrap_or_else(|| id.clone()),
+                name: b
+                    .get("name")
+                    .map(str::to_string)
+                    .unwrap_or_else(|| id.clone()),
                 id,
                 modes: modes_of(b, &mut is, true),
                 capacity: b.i32("capacity").unwrap_or(0).max(0) as u32,
@@ -468,10 +511,17 @@ impl Depots {
                 line: b.line,
             });
         }
-        id_check(&mut is, "depot", out.list.iter().map(|d| (d.id.as_str(), d.line)));
+        id_check(
+            &mut is,
+            "depot",
+            out.list.iter().map(|d| (d.id.as_str(), d.line)),
+        );
         for d in &out.list {
             if d.gates.is_empty() {
-                is.warn(d.line, format!("depot {} has no gate: vehicles cannot enter or leave", d.id));
+                is.warn(
+                    d.line,
+                    format!("depot {} has no gate: vehicles cannot enter or leave", d.id),
+                );
             }
         }
         issues.append(&mut is.list);
@@ -486,7 +536,11 @@ impl Depots {
 impl Signals {
     /// The signal that guards block `id`.
     pub fn signal_of(&self, block: &str) -> Option<&Signal> {
-        self.signals.iter().find(|s| s.block.as_deref().is_some_and(|b| b.eq_ignore_ascii_case(block)))
+        self.signals.iter().find(|s| {
+            s.block
+                .as_deref()
+                .is_some_and(|b| b.eq_ignore_ascii_case(block))
+        })
     }
 
     pub fn parse(text: &str, file: &str, issues: &mut Vec<Issue>) -> Signals {
@@ -499,35 +553,75 @@ impl Signals {
                     let kind = match b.get("kind") {
                         None => SignalKind::Main,
                         Some(k) => SignalKind::from_name(k).unwrap_or_else(|| {
-                            is.error(b.line_of("kind"), format!("kind {k} is not main, distant, shunt, block, speed or tram"));
+                            is.error(
+                                b.line_of("kind"),
+                                format!(
+                                    "kind {k} is not main, distant, shunt, block, speed or tram"
+                                ),
+                            );
                             SignalKind::Main
                         }),
                     };
-                    out.signals.push(Signal { id: b.str("id"), modes: modes_of(b, &mut is, true), kind, object: b.get("object").and_then(|v| v.trim().parse().ok()), block: b.get("block").map(|s| s.trim().to_string()), line: b.line });
+                    out.signals.push(Signal {
+                        id: b.str("id"),
+                        modes: modes_of(b, &mut is, true),
+                        kind,
+                        object: b.get("object").and_then(|v| v.trim().parse().ok()),
+                        block: b.get("block").map(|s| s.trim().to_string()),
+                        line: b.line,
+                    });
                 }
-                "block" => out.blocks.push(Block_ { id: b.str("id"), modes: modes_of(b, &mut is, true), length_m: b.metres("length").unwrap_or(0.0), next: b.list("next", false), from: b.vec3("from"), to: b.vec3("to"), line: b.line }),
+                "block" => out.blocks.push(Block_ {
+                    id: b.str("id"),
+                    modes: modes_of(b, &mut is, true),
+                    length_m: b.metres("length").unwrap_or(0.0),
+                    next: b.list("next", false),
+                    from: b.vec3("from"),
+                    to: b.vec3("to"),
+                    line: b.line,
+                }),
                 other => is.warn(b.line, format!("unknown block [{other}]")),
             }
         }
-        id_check(&mut is, "signal", out.signals.iter().map(|s| (s.id.as_str(), s.line)));
-        id_check(&mut is, "block", out.blocks.iter().map(|s| (s.id.as_str(), s.line)));
+        id_check(
+            &mut is,
+            "signal",
+            out.signals.iter().map(|s| (s.id.as_str(), s.line)),
+        );
+        id_check(
+            &mut is,
+            "block",
+            out.blocks.iter().map(|s| (s.id.as_str(), s.line)),
+        );
         for s in &out.signals {
             if let Some(bl) = &s.block {
                 if !out.blocks.iter().any(|x| x.id.eq_ignore_ascii_case(bl)) {
-                    is.error(s.line, format!("signal {}: block {bl} does not exist", s.id));
+                    is.error(
+                        s.line,
+                        format!("signal {}: block {bl} does not exist", s.id),
+                    );
                 }
             }
         }
         for b in &out.blocks {
             if b.length_m <= 0.0 && (b.from.is_none() || b.to.is_none()) {
-                is.error(b.line, format!("block {} has no length (give length, or from and to)", b.id));
+                is.error(
+                    b.line,
+                    format!("block {} has no length (give length, or from and to)", b.id),
+                );
             }
             if b.from.is_some() != b.to.is_some() {
-                is.error(b.line, format!("block {}: give both from and to, or neither", b.id));
+                is.error(
+                    b.line,
+                    format!("block {}: give both from and to, or neither", b.id),
+                );
             }
             for n in &b.next {
                 if !out.blocks.iter().any(|x| x.id.eq_ignore_ascii_case(n)) {
-                    is.error(b.line, format!("block {}: next block {n} does not exist", b.id));
+                    is.error(
+                        b.line,
+                        format!("block {}: next block {n} does not exist", b.id),
+                    );
                 }
             }
         }
@@ -558,7 +652,10 @@ mod tests {
         assert!(f.modes.contains(TransportMode::Tram) && !f.modes.contains(TransportMode::Railway));
         assert_eq!((f.street, f.power), (Some(true), Power::Catenary));
         assert!((f.speed.unwrap() - 40.0 / 3.6).abs() < 1e-3);
-        assert_eq!(n.facts("rail_x.sli", (0, 0), 1).modes, ModeSet::of(TransportMode::Railway));
+        assert_eq!(
+            n.facts("rail_x.sli", (0, 0), 1).modes,
+            ModeSet::of(TransportMode::Railway)
+        );
         assert_eq!(n.facts("x", (1, 2), 9).tunnel, Some(true));
         assert_eq!(n.facts("x", (1, 2), 8).tunnel, None);
     }
@@ -566,13 +663,31 @@ mod tests {
     #[test]
     fn switches_depots_signals() {
         let mut issues = Vec::new();
-        let sw = Switches::parse("[switch]\nid W1\nmodes tram railway\nkind scissors\nobject 5\ntile 3 4\ndiverging_path 1\ndiverging_path 2\nbranches 3\ndefault diverging\ndrive interlocked\ndiverging_speed 25 km/h\nlocked_by S1\n", "switches.cfg", &mut issues);
-        let d = Depots::parse("[depot]\nid D\nmodes tram\ncapacity 20\nai_group G\ngate 1 2 3\nturning_loop yes\n", "depots.cfg", &mut issues);
-        let sg = Signals::parse("[signal]\nid S1\nmodes railway\nkind distant\nblock B1\n[block]\nid B1\nmodes railway\nlength 850 m\nnext B2\n[block]\nid B2\nmodes railway\nfrom 0 0 0\nto 1000 0 0\n", "signals.cfg", &mut issues);
+        let sw = Switches::parse(
+            "[switch]\nid W1\nmodes tram railway\nkind scissors\nobject 5\ntile 3 4\ndiverging_path 1\ndiverging_path 2\nbranches 3\ndefault diverging\ndrive interlocked\ndiverging_speed 25 km/h\nlocked_by S1\n",
+            "switches.cfg",
+            &mut issues,
+        );
+        let d = Depots::parse(
+            "[depot]\nid D\nmodes tram\ncapacity 20\nai_group G\ngate 1 2 3\nturning_loop yes\n",
+            "depots.cfg",
+            &mut issues,
+        );
+        let sg = Signals::parse(
+            "[signal]\nid S1\nmodes railway\nkind distant\nblock B1\n[block]\nid B1\nmodes railway\nlength 850 m\nnext B2\n[block]\nid B2\nmodes railway\nfrom 0 0 0\nto 1000 0 0\n",
+            "signals.cfg",
+            &mut issues,
+        );
         assert!(issues.is_empty(), "{issues:?}");
         let w = sw.get("w1").unwrap();
-        assert_eq!((w.kind, w.drive, w.branches, w.default_diverging), (SwitchKind::Scissors, Drive::Interlocked, 3, true));
-        assert_eq!((w.tile, w.diverging_paths.clone()), (Some((3, 4)), vec![1, 2]));
+        assert_eq!(
+            (w.kind, w.drive, w.branches, w.default_diverging),
+            (SwitchKind::Scissors, Drive::Interlocked, 3, true)
+        );
+        assert_eq!(
+            (w.tile, w.diverging_paths.clone()),
+            (Some((3, 4)), vec![1, 2])
+        );
         assert!(d.list[0].turning_loop && d.list[0].gates.len() == 1);
         assert_eq!(sg.blocks[1].to, Some([1000.0, 0.0, 0.0]));
         assert_eq!(sg.signal_of("b1").map(|s| s.id.as_str()), Some("S1"));
@@ -583,13 +698,34 @@ mod tests {
     #[test]
     fn mistakes_are_reported() {
         let mut issues = Vec::new();
-        Switches::parse("[switch]\nid W\nkind weird\n[switch]\nid w\nmodes tram\nobject 1\n", "switches.cfg", &mut issues);
+        Switches::parse(
+            "[switch]\nid W\nkind weird\n[switch]\nid w\nmodes tram\nobject 1\n",
+            "switches.cfg",
+            &mut issues,
+        );
         Depots::parse("[depot]\nid D\nmodes tram\n", "depots.cfg", &mut issues);
-        Signals::parse("[signal]\nid S\nmodes metro\nblock X\n[block]\nid B\nmodes metro\nnext Y\n", "signals.cfg", &mut issues);
+        Signals::parse(
+            "[signal]\nid S\nmodes metro\nblock X\n[block]\nid B\nmodes metro\nnext Y\n",
+            "signals.cfg",
+            &mut issues,
+        );
         Network::parse("[track]\nmodes tram\n", "network.cfg", &mut issues);
         let all: Vec<String> = issues.iter().map(|i| i.to_string()).collect();
-        for want in ["kind weird", "[switch] needs modes", "needs object or pos", "used twice", "has no gate", "block X does not exist", "has no length", "next block Y", "would match everything"] {
-            assert!(all.iter().any(|t| t.contains(want)), "missing `{want}` in {all:#?}");
+        for want in [
+            "kind weird",
+            "[switch] needs modes",
+            "needs object or pos",
+            "used twice",
+            "has no gate",
+            "block X does not exist",
+            "has no length",
+            "next block Y",
+            "would match everything",
+        ] {
+            assert!(
+                all.iter().any(|t| t.contains(want)),
+                "missing `{want}` in {all:#?}"
+            );
         }
     }
 }

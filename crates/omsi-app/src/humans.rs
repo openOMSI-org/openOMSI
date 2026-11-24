@@ -10,10 +10,10 @@ use crate::scene::World;
 use crate::traffic::Traffic;
 use glam::DVec3;
 use omsi_render::Camera;
+use omsi_sim::VehicleInstance;
 use omsi_sim::human::HumanType;
 use omsi_sim::people::pax::{StopPlan, TripPlan};
 use omsi_sim::people::{DutyTrip, PeopleSim};
-use omsi_sim::VehicleInstance;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -22,14 +22,16 @@ use crate::view_sync::people::PeopleView;
 
 // The module's API, at the paths it always had (some only returned, never named outside).
 #[allow(unused_imports)]
-pub use omsi_sim::people::{AvatarCmd, SeatSpot};
-#[allow(unused_imports)]
-pub use omsi_sim::people::{placed_bus_id, remote_bus_id, remote_bus_player, LanPerson, MirrorPose};
-pub use omsi_sim::people::{BusId, DoorWants};
-#[allow(unused_imports)]
 pub use omsi_sim::people::Person;
 #[allow(unused_imports)]
 pub use omsi_sim::people::VoiceLine;
+#[allow(unused_imports)]
+pub use omsi_sim::people::{AvatarCmd, SeatSpot};
+pub use omsi_sim::people::{BusId, DoorWants};
+#[allow(unused_imports)]
+pub use omsi_sim::people::{
+    LanPerson, MirrorPose, placed_bus_id, remote_bus_id, remote_bus_player,
+};
 
 /// The map's traffic keeps left (its stops are on the left): see the doors of `Cabin`.
 
@@ -60,7 +62,12 @@ pub struct Eye;
 
 impl Eye {
     pub fn of(cam: &Camera, aspect: f32) -> omsi_sim::people::Eye {
-        omsi_sim::people::Eye::looking(cam.position, cam.forward().as_dvec3(), cam.fov_deg as f64, aspect)
+        omsi_sim::people::Eye::looking(
+            cam.position,
+            cam.forward().as_dvec3(),
+            cam.fov_deg as f64,
+            aspect,
+        )
     }
 }
 
@@ -78,14 +85,27 @@ impl Humans {
     /// Returns true when a passenger took the printed ticket (the caller resets
     /// `GivenTicket`). What the step did is shown and the step closed by
     /// `steps::tick_humans` (`view_sync::apply_people`, then [`Humans::tick_done`]).
-    pub fn tick(&mut self, dt: f32, world: &World, bus: Option<&omsi_sim::people::PlayerBusView>, traffic: Option<&Traffic>) -> bool {
+    pub fn tick(
+        &mut self,
+        dt: f32,
+        world: &World,
+        bus: Option<&omsi_sim::people::PlayerBusView>,
+        traffic: Option<&Traffic>,
+    ) -> bool {
         self.sim.tick_stages.clear();
-        self.sim.tick_inner(dt, &*world.data(), bus, traffic.map(|t| &t.sim))
+        self.sim
+            .tick_inner(dt, &*world.data(), bus, traffic.map(|t| &t.sim))
     }
 
     /// The end of a step begun `started` with [`Humans::tick`], whose people who came and
     /// went were shown in `bodies_ms` (see `PeopleSim::tick_done`).
-    pub fn tick_done(&mut self, dt: f32, world: &World, started: std::time::Instant, bodies_ms: f64) {
+    pub fn tick_done(
+        &mut self,
+        dt: f32,
+        world: &World,
+        started: std::time::Instant,
+        bodies_ms: f64,
+    ) {
         self.sim.tick_stages.push(("bodies", bodies_ms));
         let ms = started.elapsed().as_secs_f64() * 1000.0;
         self.sim.tick_done(dt, &*world.data(), ms);
@@ -128,7 +148,8 @@ impl Humans {
 
     /// The stop the player's duty is due at next (see `PeopleSim::set_player_next_stop`).
     pub fn set_player_next_stop(&mut self, stop: Option<&crate::schedule::PlannedStop>) {
-        self.sim.set_player_next_stop(stop.map(|s| (s.object_id, s.name.as_str(), s.position)));
+        self.sim
+            .set_player_next_stop(stop.map(|s| (s.object_id, s.name.as_str(), s.position)));
     }
 
     /// The player's duty this frame; None in free drive, where the bus takes whom its terminus
@@ -154,7 +175,12 @@ impl Humans {
         self.sim
             .take_footfalls()
             .into_iter()
-            .map(|f| ambience::Footfall { position: f.position, inside: f.inside, own_bus: f.own_bus, pack: f.pack })
+            .map(|f| ambience::Footfall {
+                position: f.position,
+                inside: f.inside,
+                own_bus: f.own_bus,
+                pack: f.pack,
+            })
             .collect()
     }
 
@@ -192,6 +218,14 @@ fn trip_plan(trip: &crate::schedule::PlannedTrip) -> TripPlan {
         line: trip.line.clone(),
         terminus: trip.terminus.clone(),
         departure: trip.departure,
-        stops: trip.stops.iter().map(|s| StopPlan { object_id: s.object_id, name: s.name.clone(), stops: s.stops }).collect(),
+        stops: trip
+            .stops
+            .iter()
+            .map(|s| StopPlan {
+                object_id: s.object_id,
+                name: s.name.clone(),
+                stops: s.stops,
+            })
+            .collect(),
     }
 }

@@ -17,9 +17,11 @@
 
 pub mod angle;
 pub mod atmosphere;
+mod cloud_pass;
 pub mod clouds;
 mod cookies;
 pub use cookies::{COOKIE_LAYERS, Cookie};
+mod glass_mips;
 mod gpu_memory;
 pub use gpu_memory::{Ceiling, GpuMemory, card_vram_mb, set_system_memory_mb};
 mod device_selection;
@@ -31,6 +33,7 @@ mod gpu;
 mod lighting;
 pub mod pipeline_cache;
 mod pipelines;
+mod precip;
 mod puddles;
 mod render;
 mod resources;
@@ -46,6 +49,7 @@ pub mod temporal;
 mod triple;
 mod uniforms;
 mod view;
+mod vol_fog;
 pub(crate) use frame_plan::*;
 pub use gpu::*;
 pub use lighting::*;
@@ -120,10 +124,10 @@ struct PassPipelines {
     corona_pipeline: wgpu::RenderPipeline,
     /// Smoke particles (`[smoke]`): the corona sprite alpha-blended with the smoke texture.
     smoke_pipeline: wgpu::RenderPipeline,
-    /// The snowfall (snow.wgsl), opaque over the scene (premultiplied); none with
-    /// `basic_pipelines`.
+    /// The snowfall (snow.wgsl), opaque over the scene (premultiplied); with
+    /// `basic_pipelines` on a phone only (`snowfall_pipeline`).
     snow_pipeline: Option<wgpu::RenderPipeline>,
-    /// The rainfall (rain.wgsl), as the snowfall; with `basic_pipelines` on computers too.
+    /// The rainfall (rain.wgsl), as the snowfall; with `basic_pipelines` too (`rainfall_pipeline`).
     rain_fall_pipeline: Option<wgpu::RenderPipeline>,
     sky_pipeline: wgpu::RenderPipeline,
 }
@@ -382,6 +386,10 @@ pub struct RenderOptions {
     /// The glare round bright lights and the lamps' halo in the night air (the settings'
     /// `light_glow`).
     pub light_glow: bool,
+    /// The Enhanced picture's volumetric fog (the settings' `volumetric_fog`): the air
+    /// marched through, with the sun's shafts, the clouds' shadows and drifting banks of
+    /// fog (volumetric_fog.wgsl). Off, the analytic fog of the main pass as before.
+    pub volumetric_fog: bool,
     pub puddle_reflections: bool,
     pub max_scene: Option<(u32, u32)>,
     pub detailed_trees: bool,
@@ -418,6 +426,7 @@ impl Default for RenderOptions {
             light_shadows: 1,
             cloud_shadows: false,
             light_glow: false,
+            volumetric_fog: true,
             puddle_reflections: true,
             max_scene: None,
             detailed_trees: false,

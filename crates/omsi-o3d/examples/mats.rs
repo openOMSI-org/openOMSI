@@ -12,10 +12,17 @@ fn main() {
                 lo = lo.min(v.position);
                 hi = hi.max(v.position);
                 n += 1;
-                if samples.len() < 6 { samples.push((v.position, v.uv)); }
+                if samples.len() < 6 {
+                    samples.push((v.position, v.uv));
+                }
             }
         }
-        println!("mat {mi} {:?}: {n} verts, bounds {:?}..{:?}", mat.texture, lo, hi);
-        for (p, uv) in samples { println!("   pos {:?} uv {:?}", p, uv); }
+        println!(
+            "mat {mi} {:?}: {n} verts, bounds {:?}..{:?}",
+            mat.texture, lo, hi
+        );
+        for (p, uv) in samples {
+            println!("   pos {:?} uv {:?}", p, uv);
+        }
     }
 }

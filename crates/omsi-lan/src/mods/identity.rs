@@ -76,7 +76,8 @@ impl VehicleManifest {
     pub fn validated(mut self) -> Result<VehicleManifest, String> {
         let mut seen = HashSet::new();
         for e in &mut self.entries {
-            let k = key(&e.path).ok_or_else(|| format!("{}: not a path inside the game", e.path))?;
+            let k =
+                key(&e.path).ok_or_else(|| format!("{}: not a path inside the game", e.path))?;
             if !seen.insert(k.clone()) {
                 return Err(format!("{} is listed twice (once in another case)", e.path));
             }
@@ -90,7 +91,8 @@ impl VehicleManifest {
         if !seen.contains(&bus) {
             return Err(format!("{} is not among its files", self.bus));
         }
-        self.entries.sort_by_cached_key(|e| key(&e.path).unwrap_or_default().into_bytes());
+        self.entries
+            .sort_by_cached_key(|e| key(&e.path).unwrap_or_default().into_bytes());
         Ok(self)
     }
 
@@ -102,7 +104,11 @@ impl VehicleManifest {
         let bus = key(&self.bus).unwrap_or_default();
         h.update((bus.len() as u32).to_le_bytes());
         h.update(bus.as_bytes());
-        let mut keyed: Vec<(String, &Entry)> = self.entries.iter().map(|e| (key(&e.path).unwrap_or_default(), e)).collect();
+        let mut keyed: Vec<(String, &Entry)> = self
+            .entries
+            .iter()
+            .map(|e| (key(&e.path).unwrap_or_default(), e))
+            .collect();
         keyed.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
         for (k, e) in keyed {
             h.update((k.len() as u32).to_le_bytes());
@@ -110,12 +116,19 @@ impl VehicleManifest {
             h.update(e.size.to_le_bytes());
             let mut raw = [0u8; 32];
             for (i, b) in raw.iter_mut().enumerate() {
-                *b = u8::from_str_radix(e.sha256.get(i * 2..i * 2 + 2).unwrap_or("00"), 16).unwrap_or(0);
+                *b = u8::from_str_radix(e.sha256.get(i * 2..i * 2 + 2).unwrap_or("00"), 16)
+                    .unwrap_or(0);
             }
             h.update(raw);
         }
         let digest = h.finalize();
-        format!("{PREFIX}{}", digest.iter().map(|b| format!("{b:02x}")).collect::<String>())
+        format!(
+            "{PREFIX}{}",
+            digest
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        )
     }
 
     /// The bytes all its files take.
@@ -129,25 +142,51 @@ mod tests {
     use super::*;
 
     fn e(path: &str, data: &[u8]) -> Entry {
-        Entry { path: path.into(), size: data.len() as u64, sha256: super::super::sha256_of(data) }
+        Entry {
+            path: path.into(),
+            size: data.len() as u64,
+            sha256: super::super::sha256_of(data),
+        }
     }
 
     fn bus(entries: Vec<Entry>) -> VehicleManifest {
-        VehicleManifest { bus: "Vehicles/B/b.bus".into(), entries }
+        VehicleManifest {
+            bus: "Vehicles/B/b.bus".into(),
+            entries,
+        }
     }
 
     #[test]
     fn keys_are_the_file_windows_opens() {
-        assert_eq!(key("Vehicles\\MAN\\model\\..\\..\\Anzeigen\\X.o3d").as_deref(), Some("vehicles/anzeigen/x.o3d"));
-        assert_eq!(key("./Vehicles//B/b.BUS").as_deref(), Some("vehicles/b/b.bus"));
+        assert_eq!(
+            key("Vehicles\\MAN\\model\\..\\..\\Anzeigen\\X.o3d").as_deref(),
+            Some("vehicles/anzeigen/x.o3d")
+        );
+        assert_eq!(
+            key("./Vehicles//B/b.BUS").as_deref(),
+            Some("vehicles/b/b.bus")
+        );
         assert_eq!(key("Vehicles/../../x"), None);
         assert_eq!(key(""), None);
     }
 
     #[test]
     fn the_same_files_give_the_same_fingerprint_in_any_order_and_spelling() {
-        let a = bus(vec![e("Vehicles/B/b.bus", b"bus"), e("Vehicles/B/t.dds", b"tex")]).validated().unwrap();
-        let b = VehicleManifest { bus: "vehicles\\b\\B.bus".into(), entries: vec![e("vehicles\\b\\T.DDS", b"tex"), e("VEHICLES/B/B.BUS", b"bus")] }.validated().unwrap();
+        let a = bus(vec![
+            e("Vehicles/B/b.bus", b"bus"),
+            e("Vehicles/B/t.dds", b"tex"),
+        ])
+        .validated()
+        .unwrap();
+        let b = VehicleManifest {
+            bus: "vehicles\\b\\B.bus".into(),
+            entries: vec![
+                e("vehicles\\b\\T.DDS", b"tex"),
+                e("VEHICLES/B/B.BUS", b"bus"),
+            ],
+        }
+        .validated()
+        .unwrap();
         assert_eq!(a.fingerprint(), b.fingerprint());
         // (in the form the protocol takes: omsi_net::is_fingerprint)
         assert!(omsi_net::is_fingerprint(&a.fingerprint()));
@@ -156,18 +195,43 @@ mod tests {
 
     #[test]
     fn any_change_is_another_fingerprint() {
-        let base = bus(vec![e("Vehicles/B/b.bus", b"bus"), e("Vehicles/B/t.dds", b"tex")]).validated().unwrap().fingerprint();
+        let base = bus(vec![
+            e("Vehicles/B/b.bus", b"bus"),
+            e("Vehicles/B/t.dds", b"tex"),
+        ])
+        .validated()
+        .unwrap()
+        .fingerprint();
         // another texture (a paint), another file, a file moved
         for other in [
-            bus(vec![e("Vehicles/B/b.bus", b"bus"), e("Vehicles/B/t.dds", b"TEX")]),
-            bus(vec![e("Vehicles/B/b.bus", b"bus"), e("Vehicles/B/t.dds", b"tex"), e("Vehicles/B/n.dds", b"night")]),
-            bus(vec![e("Vehicles/B/b.bus", b"bus"), e("Vehicles/B/x/t.dds", b"tex")]),
+            bus(vec![
+                e("Vehicles/B/b.bus", b"bus"),
+                e("Vehicles/B/t.dds", b"TEX"),
+            ]),
+            bus(vec![
+                e("Vehicles/B/b.bus", b"bus"),
+                e("Vehicles/B/t.dds", b"tex"),
+                e("Vehicles/B/n.dds", b"night"),
+            ]),
+            bus(vec![
+                e("Vehicles/B/b.bus", b"bus"),
+                e("Vehicles/B/x/t.dds", b"tex"),
+            ]),
         ] {
             assert_ne!(other.validated().unwrap().fingerprint(), base);
         }
         // (a key and a size cannot be mistaken for another key: both are delimited)
-        let one = bus(vec![e("Vehicles/B/b.bus", b"bus"), e("Vehicles/B/ab", b"x")]).validated().unwrap().fingerprint();
-        let two = bus(vec![e("Vehicles/B/b.bus", b"bus"), e("Vehicles/B/a", b"x")]).validated().unwrap().fingerprint();
+        let one = bus(vec![
+            e("Vehicles/B/b.bus", b"bus"),
+            e("Vehicles/B/ab", b"x"),
+        ])
+        .validated()
+        .unwrap()
+        .fingerprint();
+        let two = bus(vec![e("Vehicles/B/b.bus", b"bus"), e("Vehicles/B/a", b"x")])
+            .validated()
+            .unwrap()
+            .fingerprint();
         assert_ne!(one, two);
     }
 
@@ -179,20 +243,51 @@ mod tests {
         let decomposed = "Vehicles/B/Bahnu\u{0308}bergang.dds";
         assert_ne!(composed, decomposed);
         assert_eq!(key(composed), key(decomposed));
-        let fp = |p: &str| bus(vec![e("Vehicles/B/b.bus", b"bus"), e(p, b"tex")]).validated().unwrap().fingerprint();
+        let fp = |p: &str| {
+            bus(vec![e("Vehicles/B/b.bus", b"bus"), e(p, b"tex")])
+                .validated()
+                .unwrap()
+                .fingerprint()
+        };
         assert_eq!(fp(composed), fp(decomposed));
         // (and the two spellings in one list are one file listed twice)
-        assert!(bus(vec![e("Vehicles/B/b.bus", b"bus"), e(composed, b"1"), e(decomposed, b"2")]).validated().is_err());
+        assert!(
+            bus(vec![
+                e("Vehicles/B/b.bus", b"bus"),
+                e(composed, b"1"),
+                e(decomposed, b"2")
+            ])
+            .validated()
+            .is_err()
+        );
     }
 
     /// The same files with a different `bus` are a different bus (v2): a player cannot claim a
     /// popular bus's fingerprint by listing its files with `bus` pointing at another of them.
     #[test]
     fn the_bus_file_is_part_of_the_fingerprint() {
-        let files = vec![e("Vehicles/B/b.bus", b"[model]\nmodel.cfg\n"), e("Vehicles/B/other.bus", b"[model]\nother.cfg\n"), e("Vehicles/B/t.dds", b"tex")];
-        let a = VehicleManifest { bus: "Vehicles/B/b.bus".into(), entries: files.clone() }.validated().unwrap();
-        let b = VehicleManifest { bus: "Vehicles/B/other.bus".into(), entries: files }.validated().unwrap();
-        assert_ne!(a.fingerprint(), b.fingerprint(), "same files, another bus file: another fingerprint");
+        let files = vec![
+            e("Vehicles/B/b.bus", b"[model]\nmodel.cfg\n"),
+            e("Vehicles/B/other.bus", b"[model]\nother.cfg\n"),
+            e("Vehicles/B/t.dds", b"tex"),
+        ];
+        let a = VehicleManifest {
+            bus: "Vehicles/B/b.bus".into(),
+            entries: files.clone(),
+        }
+        .validated()
+        .unwrap();
+        let b = VehicleManifest {
+            bus: "Vehicles/B/other.bus".into(),
+            entries: files,
+        }
+        .validated()
+        .unwrap();
+        assert_ne!(
+            a.fingerprint(),
+            b.fingerprint(),
+            "same files, another bus file: another fingerprint"
+        );
         // (the form the protocol takes - v2 now)
         assert!(a.fingerprint().starts_with("v2-") && omsi_net::is_fingerprint(&a.fingerprint()));
     }
@@ -200,12 +295,32 @@ mod tests {
     #[test]
     fn lists_that_are_not_one_bus_are_refused() {
         // one file twice on Windows
-        assert!(bus(vec![e("Vehicles/B/b.bus", b"bus"), e("Vehicles/B/T.dds", b"1"), e("vehicles/b/t.DDS", b"2")]).validated().is_err());
+        assert!(
+            bus(vec![
+                e("Vehicles/B/b.bus", b"bus"),
+                e("Vehicles/B/T.dds", b"1"),
+                e("vehicles/b/t.DDS", b"2")
+            ])
+            .validated()
+            .is_err()
+        );
         // outside the game
-        assert!(bus(vec![e("Vehicles/B/b.bus", b"bus"), e("../x.dds", b"1")]).validated().is_err());
+        assert!(
+            bus(vec![e("Vehicles/B/b.bus", b"bus"), e("../x.dds", b"1")])
+                .validated()
+                .is_err()
+        );
         // without its bus file
         assert!(bus(vec![e("Vehicles/B/t.dds", b"1")]).validated().is_err());
         // no hash
-        assert!(bus(vec![Entry { path: "Vehicles/B/b.bus".into(), size: 1, sha256: "x".into() }]).validated().is_err());
+        assert!(
+            bus(vec![Entry {
+                path: "Vehicles/B/b.bus".into(),
+                size: 1,
+                sha256: "x".into()
+            }])
+            .validated()
+            .is_err()
+        );
     }
 }

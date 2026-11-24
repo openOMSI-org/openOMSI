@@ -20,7 +20,9 @@ pub fn wire_profile(def: &omsi_scenery::sli::Spline) -> Option<(f64, f64, f64)> 
         if pts.len() < 2 {
             continue;
         }
-        let (x0, x1) = pts.iter().fold((f32::MAX, f32::MIN), |a, q| (a.0.min(q.x), a.1.max(q.x)));
+        let (x0, x1) = pts
+            .iter()
+            .fold((f32::MAX, f32::MIN), |a, q| (a.0.min(q.x), a.1.max(q.x)));
         let zmin = pts.iter().fold(f32::MAX, |a, q| a.min(q.z));
         let zmax = pts.iter().fold(f32::MIN, |a, q| a.max(q.z));
         // (thin, high over the road, and thin in height too: a wire, not a mast or a fence)
@@ -35,11 +37,19 @@ pub fn wire_profile(def: &omsi_scenery::sli::Spline) -> Option<(f64, f64, f64)> 
     if !(0.2..=1.2).contains(&spacing) {
         return None;
     }
-    Some(((strips[0].0 + strips[1].0) * 0.5, spacing, (strips[0].1 + strips[1].1) * 0.5))
+    Some((
+        (strips[0].0 + strips[1].0) * 0.5,
+        spacing,
+        (strips[0].1 + strips[1].1) * 0.5,
+    ))
 }
 
 /// The wire network of a map's tiles, or `None` where there is none.
-pub fn derive(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[PathBuf]) -> Option<WireNet> {
+pub fn derive(
+    root: &Path,
+    tiles: &[(i32, i32, PathBuf)],
+    chrono_dirs: &[PathBuf],
+) -> Option<WireNet> {
     let text = derive_text(root, tiles, chrono_dirs)?;
     let mut net = WireNet::parse(&text);
     net.drawn_by_map = true;
@@ -47,28 +57,53 @@ pub fn derive(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[PathBuf
 }
 
 /// The centre lines of the map's wire splines at the wires' height: (spacing of the pair, points).
-pub fn wire_spans(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[PathBuf]) -> Vec<(f64, Vec<[f64; 3]>)> {
+pub fn wire_spans(
+    root: &Path,
+    tiles: &[(i32, i32, PathBuf)],
+    chrono_dirs: &[PathBuf],
+) -> Vec<(f64, Vec<[f64; 3]>)> {
     let ts = omsi_map::tile_size();
-    let mut slis: HashMap<String, Option<(f64, f64, f64, omsi_scenery::sli::Spline)>> = HashMap::new();
+    let mut slis: HashMap<String, Option<(f64, f64, f64, omsi_scenery::sli::Spline)>> =
+        HashMap::new();
     let mut spans: Vec<(f64, Vec<[f64; 3]>)> = Vec::new();
     for (tx, ty, path) in tiles {
-        let Some(tile) = omsi_world::map_index::read_tile(path, chrono_dirs) else { continue };
+        let Some(tile) = omsi_world::map_index::read_tile(path, chrono_dirs) else {
+            continue;
+        };
         let o2 = DVec2::new(*tx as f64 * ts, *ty as f64 * ts);
-        for sp in tile.splines.iter().filter(|s| !s.deleted && !s.file.trim().is_empty() && s.length >= 0.5) {
+        for sp in tile
+            .splines
+            .iter()
+            .filter(|s| !s.deleted && !s.file.trim().is_empty() && s.length >= 0.5)
+        {
             let key = sp.file.trim().replace('\\', "/").to_ascii_lowercase();
             let entry = slis.entry(key).or_insert_with(|| {
-                let def = omsi_scenery::sli::Spline::load(&omsi_cfg::resolve_path(root, &sp.file)).ok()?;
+                let def = omsi_scenery::sli::Spline::load(&omsi_cfg::resolve_path(root, &sp.file))
+                    .ok()?;
                 let (c, s, h) = wire_profile(&def)?;
                 Some((c, s, h, def))
             });
-            let Some((centre, spacing, height, def)) = entry.as_ref() else { continue };
+            let Some((centre, spacing, height, def)) = entry.as_ref() else {
+                continue;
+            };
             let curve = omsi_geometry::SplineCurve::from_map(sp, o2).with_sli(def);
             let side = if sp.mirror { -1.0 } else { 1.0 };
-            let turn_deg = if curve.radius != 0.0 { (curve.length / curve.radius).abs().to_degrees() } else { 0.0 };
-            let n = ((curve.length / 3.0).ceil() as usize).max((turn_deg / 1.5).ceil() as usize).clamp(1, 600);
+            let turn_deg = if curve.radius != 0.0 {
+                (curve.length / curve.radius).abs().to_degrees()
+            } else {
+                0.0
+            };
+            let n = ((curve.length / 3.0).ceil() as usize)
+                .max((turn_deg / 1.5).ceil() as usize)
+                .clamp(1, 600);
             let pts: Vec<[f64; 3]> = (0..=n)
                 .map(|k| {
-                    let (p, _) = omsi_geometry::skewed_point(&curve, curve.length * k as f64 / n as f64, side * centre, *height);
+                    let (p, _) = omsi_geometry::skewed_point(
+                        &curve,
+                        curve.length * k as f64 / n as f64,
+                        side * centre,
+                        *height,
+                    );
                     [p.x, p.y, p.z]
                 })
                 .collect();
@@ -102,7 +137,10 @@ pub fn split_t_junctions(spans: &mut Vec<(f64, Vec<[f64; 3]>)>) {
         let mut c = vec![0.0];
         for (k, w) in pts.windows(2).enumerate() {
             c.push(c[k] + (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]));
-            let (c0, c1) = (cell(w[0][0].min(w[1][0]) - join, w[0][1].min(w[1][1]) - join), cell(w[0][0].max(w[1][0]) + join, w[0][1].max(w[1][1]) + join));
+            let (c0, c1) = (
+                cell(w[0][0].min(w[1][0]) - join, w[0][1].min(w[1][1]) - join),
+                cell(w[0][0].max(w[1][0]) + join, w[0][1].max(w[1][1]) + join),
+            );
             for cx in c0.0..=c1.0 {
                 for cy in c0.1..=c1.1 {
                     segs.entry((cx, cy)).or_default().push((j, k));
@@ -116,9 +154,19 @@ pub fn split_t_junctions(spans: &mut Vec<(f64, Vec<[f64; 3]>)>) {
     let mut moves: Vec<(usize, u8, [f64; 3])> = Vec::new();
     for (i, (_, pts)) in spans.iter().enumerate() {
         for end in 0..2u8 {
-            let p = if end == 0 { pts[0] } else { *pts.last().unwrap() };
+            let p = if end == 0 {
+                pts[0]
+            } else {
+                *pts.last().unwrap()
+            };
             let (cx, cy) = cell(p[0], p[1]);
-            let lone = !(-1..=1).flat_map(|dx| (-1..=1).map(move |dy| (cx + dx, cy + dy))).filter_map(|c| ends.get(&c)).flatten().any(|(j, q)| *j != i && (q[0] - p[0]).hypot(q[1] - p[1]).hypot(q[2] - p[2]) <= join);
+            let lone = !(-1..=1)
+                .flat_map(|dx| (-1..=1).map(move |dy| (cx + dx, cy + dy)))
+                .filter_map(|c| ends.get(&c))
+                .flatten()
+                .any(|(j, q)| {
+                    *j != i && (q[0] - p[0]).hypot(q[1] - p[1]).hypot(q[2] - p[2]) <= join
+                });
             if !lone {
                 continue;
             }
@@ -162,7 +210,11 @@ pub fn split_t_junctions(spans: &mut Vec<(f64, Vec<[f64; 3]>)>) {
         }
         accepted.insert(j, kept);
     }
-    let kept_cuts: std::collections::HashSet<[u64; 3]> = accepted.values().flatten().map(|c| [c.2[0].to_bits(), c.2[1].to_bits(), c.2[2].to_bits()]).collect();
+    let kept_cuts: std::collections::HashSet<[u64; 3]> = accepted
+        .values()
+        .flatten()
+        .map(|c| [c.2[0].to_bits(), c.2[1].to_bits(), c.2[2].to_bits()])
+        .collect();
     let mut tails: Vec<(f64, Vec<[f64; 3]>)> = Vec::new();
     for (j, list) in &accepted {
         let spacing = spans[*j].0;
@@ -181,21 +233,33 @@ pub fn split_t_junctions(spans: &mut Vec<(f64, Vec<[f64; 3]>)>) {
         // (only the branches whose cut was kept: its end is within the join distance of the cut)
         let b = &mut spans[i].1;
         let e = if end == 0 { b[0] } else { *b.last().unwrap() };
-        if (e[0] - q[0]).hypot(e[1] - q[1]).hypot(e[2] - q[2]) <= join && kept_cuts.contains(&[q[0].to_bits(), q[1].to_bits(), q[2].to_bits()]) {
-            if end == 0 { b[0] = q } else { *b.last_mut().unwrap() = q }
+        if (e[0] - q[0]).hypot(e[1] - q[1]).hypot(e[2] - q[2]) <= join
+            && kept_cuts.contains(&[q[0].to_bits(), q[1].to_bits(), q[2].to_bits()])
+        {
+            if end == 0 {
+                b[0] = q
+            } else {
+                *b.last_mut().unwrap() = q
+            }
         }
     }
 }
 
 /// The same as the `trolley.txt` text that says it.
-pub fn derive_text(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[PathBuf]) -> Option<String> {
+pub fn derive_text(
+    root: &Path,
+    tiles: &[(i32, i32, PathBuf)],
+    chrono_dirs: &[PathBuf],
+) -> Option<String> {
     let mut spans = wire_spans(root, tiles, chrono_dirs);
     // (a piece shorter than the joining distance would join its own two ends: the wire
     // closes over it as it is; measured in 3-D, as `WireNet::parse` does)
     let join = omsi_trolley::JOIN;
     spans.retain(|(_, pts)| {
         let (a, b) = (pts[0], pts[pts.len() - 1]);
-        let d = |p: &[f64; 3], q: &[f64; 3]| ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt();
+        let d = |p: &[f64; 3], q: &[f64; 3]| {
+            ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt()
+        };
         let len: f64 = pts.windows(2).map(|w| d(&w[0], &w[1])).sum();
         !(d(&a, &b) <= join && len < 2.0 * join)
     });
@@ -203,20 +267,31 @@ pub fn derive_text(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[Pa
     if spans.is_empty() {
         return None;
     }
-    let mut out = String::from("[trolley_net]\nvoltage 600\nspacing 0.52\n\n[trolley_section]\nid 1\nname map\nlive 1\nregen_kw 0\nfeeder_ohm 0.04\n\n");
+    let mut out = String::from(
+        "[trolley_net]\nvoltage 600\nspacing 0.52\n\n[trolley_section]\nid 1\nname map\nlive 1\nregen_kw 0\nfeeder_ohm 0.04\n\n",
+    );
     // (`OMSI_TROLLEY_DEAD_AT=x,y,r;...`: the wire within r metres of a point is a dead section)
     let zones: Vec<[f64; 3]> = omsi_cfg::flags::OMSI_TROLLEY_DEAD_AT
         .var()
-        .map(|v| v.split(';').filter_map(|z| {
-            let n: Vec<f64> = z.split(',').filter_map(|x| x.trim().parse().ok()).collect();
-            (n.len() == 3).then(|| [n[0], n[1], n[2]])
-        }).collect())
+        .map(|v| {
+            v.split(';')
+                .filter_map(|z| {
+                    let n: Vec<f64> = z.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+                    (n.len() == 3).then(|| [n[0], n[1], n[2]])
+                })
+                .collect()
+        })
         .unwrap_or_default();
     if !zones.is_empty() {
         out.push_str("[trolley_section]\nid 2\nname dead\nlive 0\n\n");
     }
-    let dead = |p: &[f64; 3]| zones.iter().any(|z| (p[0] - z[0]).hypot(p[1] - z[1]) <= z[2]);
-    let seg_dead = |a: &[f64; 3], b: &[f64; 3]| dead(&[(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5, 0.0]);
+    let dead = |p: &[f64; 3]| {
+        zones
+            .iter()
+            .any(|z| (p[0] - z[0]).hypot(p[1] - z[1]) <= z[2])
+    };
+    let seg_dead =
+        |a: &[f64; 3], b: &[f64; 3]| dead(&[(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5, 0.0]);
     for (spacing, pts) in &spans {
         // runs of segments on one side of a zone's edge, each a span of its own (the next one
         // starts where it ends: a dead section is joined to a live one by an insulator)
@@ -226,7 +301,10 @@ pub fn derive_text(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[Pa
             let change = !last && seg_dead(&pts[k - 1], &pts[k]) != seg_dead(&pts[k], &pts[k + 1]);
             if last || change {
                 let d = !zones.is_empty() && seg_dead(&pts[start], &pts[start + 1]);
-                out.push_str(&format!("[trolley_span]\nsection {}\nspacing {spacing:.3}\n", if d { 2 } else { 1 }));
+                out.push_str(&format!(
+                    "[trolley_span]\nsection {}\nspacing {spacing:.3}\n",
+                    if d { 2 } else { 1 }
+                ));
                 for p in &pts[start..=k] {
                     out.push_str(&format!("p {:.3} {:.3} {:.3}\n", p[0], p[1], p[2]));
                 }
@@ -261,7 +339,12 @@ pub fn derive_text(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[Pa
             .filter_map(|c| grid.get(&c))
             .flatten()
             .copied()
-            .filter(|j| (ends[*j][0] - ends[i][0]).hypot(ends[*j][1] - ends[i][1]).hypot(ends[*j][2] - ends[i][2]) <= join)
+            .filter(|j| {
+                (ends[*j][0] - ends[i][0])
+                    .hypot(ends[*j][1] - ends[i][1])
+                    .hypot(ends[*j][2] - ends[i][2])
+                    <= join
+            })
             .collect();
         for j in &near {
             used[*j] = true;
@@ -273,7 +356,11 @@ pub fn derive_text(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[Pa
             n_frogs += 1;
         }
     }
-    log::info!("trolley wire derived from the map's splines: {} spans, {} frogs", spans.len(), n_frogs);
+    log::info!(
+        "trolley wire derived from the map's splines: {} spans, {} frogs",
+        spans.len(),
+        n_frogs
+    );
     Some(out)
 }
 
@@ -287,8 +374,18 @@ mod tests {
             s.profiles.push(omsi_scenery::sli::SplineProfile {
                 texture: 0,
                 points: vec![
-                    omsi_scenery::sli::SplineProfilePoint { x: x - 0.01, z: *z, u: 0.0, v_scale: 0.2 },
-                    omsi_scenery::sli::SplineProfilePoint { x: x + 0.01, z: *z + 0.02, u: 0.0, v_scale: 0.2 },
+                    omsi_scenery::sli::SplineProfilePoint {
+                        x: x - 0.01,
+                        z: *z,
+                        u: 0.0,
+                        v_scale: 0.2,
+                    },
+                    omsi_scenery::sli::SplineProfilePoint {
+                        x: x + 0.01,
+                        z: *z + 0.02,
+                        u: 0.0,
+                        v_scale: 0.2,
+                    },
                 ],
             });
         }
@@ -313,7 +410,15 @@ mod tests {
         split_t_junctions(&mut spans);
         assert_eq!(spans.len(), 3);
         // a branch that only ends beside the wire's end or near its start is left alone
-        let mut alone = vec![(0.52, (0..=10).map(|k| [k as f64 * 10.0, 0.0, 5.0]).collect::<Vec<_>>()), (0.52, vec![[0.5, 0.5, 5.0], [10.0, 5.0, 5.0]])];
+        let mut alone = vec![
+            (
+                0.52,
+                (0..=10)
+                    .map(|k| [k as f64 * 10.0, 0.0, 5.0])
+                    .collect::<Vec<_>>(),
+            ),
+            (0.52, vec![[0.5, 0.5, 5.0], [10.0, 5.0, 5.0]]),
+        ];
         split_t_junctions(&mut alone);
         assert_eq!(alone.len(), 2);
     }
@@ -330,12 +435,22 @@ mod tests {
         split_t_junctions(&mut spans);
         // the long wire in four pieces, every piece starting where the last ended
         assert_eq!(spans.len(), 7);
-        let long: Vec<&Vec<[f64; 3]>> = spans.iter().filter(|s| s.1.len() > 2 || s.1[0][0] == s.1[1][0] - 10.0).map(|s| &s.1).collect();
+        let long: Vec<&Vec<[f64; 3]>> = spans
+            .iter()
+            .filter(|s| s.1.len() > 2 || s.1[0][0] == s.1[1][0] - 10.0)
+            .map(|s| &s.1)
+            .collect();
         assert!(long.len() >= 4);
         // the branches start exactly on a cut
         for b in 1..4 {
             let e = spans[b].1[0];
-            assert!(spans.iter().enumerate().any(|(n, s)| n != b && (s.1[0] == e || *s.1.last().unwrap() == e)), "branch {b}");
+            assert!(
+                spans
+                    .iter()
+                    .enumerate()
+                    .any(|(n, s)| n != b && (s.1[0] == e || *s.1.last().unwrap() == e)),
+                "branch {b}"
+            );
         }
     }
 
@@ -347,7 +462,10 @@ mod tests {
         ];
         let original = spans.clone();
         split_t_junctions(&mut spans);
-        assert_eq!(spans, original, "a crossing above the wire must not be snapped down");
+        assert_eq!(
+            spans, original,
+            "a crossing above the wire must not be snapped down"
+        );
     }
 
     #[test]
@@ -366,10 +484,25 @@ mod tests {
     #[test]
     fn the_cut_spans_come_in_the_same_order_every_time() {
         let make = || {
-            let mut v: Vec<(f64, Vec<[f64; 3]>)> = (0..6).map(|n| (0.52, (0..=20).map(|k| [k as f64 * 10.0, n as f64 * 40.0, 5.0]).collect())).collect();
+            let mut v: Vec<(f64, Vec<[f64; 3]>)> = (0..6)
+                .map(|n| {
+                    (
+                        0.52,
+                        (0..=20)
+                            .map(|k| [k as f64 * 10.0, n as f64 * 40.0, 5.0])
+                            .collect(),
+                    )
+                })
+                .collect();
             for n in 0..6 {
                 for x in [40.0, 100.0, 160.0] {
-                    v.push((0.52, vec![[x, n as f64 * 40.0 + 0.3, 5.0], [x + 8.0, n as f64 * 40.0 + 9.0, 5.0]]));
+                    v.push((
+                        0.52,
+                        vec![
+                            [x, n as f64 * 40.0 + 0.3, 5.0],
+                            [x + 8.0, n as f64 * 40.0 + 9.0, 5.0],
+                        ],
+                    ));
                 }
             }
             split_t_junctions(&mut v);

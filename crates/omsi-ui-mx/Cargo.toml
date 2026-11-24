@@ -1,0 +1,28 @@
+[package]
+name = "omsi-ui-mx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Interface drawing shared by the game's navigator and the launcher: Inter text, Material Symbols icons, anti-aliased shapes and a wgpu pipeline for them"
+
+[dependencies]
+omsi-cfg = { path = "../omsi-cfg" }
+mx.workspace = true
+bytemuck.workspace = true
+half = "2"
+glam.workspace = true
+log.workspace = true
+ab_glyph.workspace = true
+resvg = { version = "0.49", default-features = false }
+hashbrown.workspace = true
+pollster.workspace = true
+# (the widget kit's key codes and cursor shapes)
+winit.workspace = true
+
+[features]
+# what an app's tests see of the widget kit: every clickable thing's place (`kit::Ui::drawn`)
+test-support = []
+
+[dev-dependencies]
+naga = { version = "30", features = ["wgsl-in"] }
+image.workspace = true

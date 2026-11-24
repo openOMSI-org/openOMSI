@@ -22,7 +22,11 @@ const NONE: [u8; 4] = [0, 0, 0, 0];
 fn child_and_sibling_combinators() {
     let r = EngineRenderer::new(20, 60, "<style>body{margin:0}p{margin:0;height:2px}#a>p{background:#f00}#a p+p{background:#008000}</style><div id=a><p></p><p></p></div>").poll_frame().unwrap();
     assert_eq!(px(&r, 20, 5, 1), RED, "child combinator");
-    assert_eq!(px(&r, 20, 5, 3), GREEN, "adjacent sibling (later rule, same specificity wins by order)");
+    assert_eq!(
+        px(&r, 20, 5, 3),
+        GREEN,
+        "adjacent sibling (later rule, same specificity wins by order)"
+    );
 }
 
 #[test]
@@ -31,8 +35,16 @@ fn nth_child_and_not_and_attribute_selectors() {
     let r = EngineRenderer::new(20, 20, &format!("<style>body{{margin:0}}ul{{margin:0;padding:0}}{li}li:first-child{{background:#00f}}li:nth-child(even){{background:#f00}}li:last-child{{background:#008000}}</style><ul><li></li><li></li><li></li><li></li></ul>")).poll_frame().unwrap();
     assert_eq!(px(&r, 20, 5, 1), BLUE);
     assert_eq!(px(&r, 20, 5, 3), RED);
-    assert_eq!(px(&r, 20, 5, 5), NONE, "the third is neither even, first nor last");
-    assert_eq!(px(&r, 20, 5, 7), GREEN, "last-child comes after even in the sheet");
+    assert_eq!(
+        px(&r, 20, 5, 5),
+        NONE,
+        "the third is neither even, first nor last"
+    );
+    assert_eq!(
+        px(&r, 20, 5, 7),
+        GREEN,
+        "last-child comes after even in the sheet"
+    );
     let r = EngineRenderer::new(20, 20, "<style>body{margin:0}div{height:2px}.x:not(.y){background:#f00}[data-k=v]{background:#00f}</style><div class=x></div><div class='x y'></div><div data-k=v></div>").poll_frame().unwrap();
     assert_eq!(px(&r, 20, 5, 1), RED);
     assert_eq!(px(&r, 20, 5, 3), NONE);
@@ -47,7 +59,11 @@ fn hover_and_pseudo_elements_never_match() {
 
 #[test]
 fn query_selector_uses_the_same_selectors() {
-    let r = EngineRenderer::new(8, 8, "<body><div id=a><span class=k>x</span><span class=k id=second>y</span></div><p id=o></p><script>document.getElementById('o').textContent = document.querySelector('#a > .k:last-child').id;</script></body>");
+    let r = EngineRenderer::new(
+        8,
+        8,
+        "<body><div id=a><span class=k>x</span><span class=k id=second>y</span></div><p id=o></p><script>document.getElementById('o').textContent = document.querySelector('#a > .k:last-child').id;</script></body>",
+    );
     assert_eq!(r.text_of("o").as_deref(), Some("second"));
 }
 
@@ -62,7 +78,11 @@ fn calc_var_and_units() {
     assert_eq!(px(&f, 40, 15, 1), RED);
     assert_eq!(px(&f, 40, 16, 1), NONE);
     assert_eq!(px(&f, 40, 17, 1), NONE);
-    assert_eq!(px(&f, 40, 17, 4), NONE, "3px tall: below it only #b, which is 12 wide");
+    assert_eq!(
+        px(&f, 40, 17, 4),
+        NONE,
+        "3px tall: below it only #b, which is 12 wide"
+    );
     // #b: 12 wide (var), 4 tall
     assert_eq!(px(&f, 40, 11, 4), BLUE);
     assert_eq!(px(&f, 40, 12, 4), NONE);
@@ -169,14 +189,22 @@ fn relative_position_shifts_without_moving_the_flow() {
     let html = "<style>body{margin:0}div{height:4px;width:4px}#a{position:relative;left:6px;top:1px;background:#f00}#b{background:#00f}</style><div id=a></div><div id=b></div>";
     let f = frame(20, 20, html);
     assert_eq!(px(&f, 20, 7, 2), RED);
-    assert_eq!(px(&f, 20, 2, 5), BLUE, "the next box is where it would have been");
+    assert_eq!(
+        px(&f, 20, 2, 5),
+        BLUE,
+        "the next box is where it would have been"
+    );
 }
 
 #[test]
 fn z_index_orders_absolute_boxes() {
     let html = "<style>body{margin:0}.a{position:absolute;top:0;left:0;width:6px;height:6px}#lo{background:#f00;z-index:1}#hi{background:#00f;z-index:2}</style><div id=hi class=a></div><div id=lo class=a></div>";
     let f = frame(10, 10, html);
-    assert_eq!(px(&f, 10, 2, 2), BLUE, "the higher z-index is on top whatever the order in the file");
+    assert_eq!(
+        px(&f, 10, 2, 2),
+        BLUE,
+        "the higher z-index is on top whatever the order in the file"
+    );
 }
 
 #[test]
@@ -214,7 +242,11 @@ fn linear_gradients_and_shadows() {
 
 #[test]
 fn text_transform_and_nowrap_ellipsis() {
-    let r = EngineRenderer::new(8, 8, "<body><p id=o style='text-transform:uppercase'>abc</p><script>var e = document.getElementById('o');</script></body>");
+    let r = EngineRenderer::new(
+        8,
+        8,
+        "<body><p id=o style='text-transform:uppercase'>abc</p><script>var e = document.getElementById('o');</script></body>",
+    );
     // (the transform is for painting: the DOM text stays as written)
     assert_eq!(r.text_of("o").as_deref(), Some("abc"));
     // nowrap keeps one line even where it overflows: the second word is not pushed down
@@ -227,12 +259,21 @@ fn text_transform_and_nowrap_ellipsis() {
 // ─────────────── flexbox ───────────────
 
 fn flex_page(container: &str, kids: &str) -> String {
-    format!("<style>body{{margin:0}}#f{{{container}}}#f>div{{height:4px}}.r{{background:#f00}}.g{{background:#008000}}.b{{background:#00f}}</style><body><div id=f>{kids}</div></body>")
+    format!(
+        "<style>body{{margin:0}}#f{{{container}}}#f>div{{height:4px}}.r{{background:#f00}}.g{{background:#008000}}.b{{background:#00f}}</style><body><div id=f>{kids}</div></body>"
+    )
 }
 
 #[test]
 fn a_row_puts_items_side_by_side() {
-    let f = frame(40, 10, &flex_page("display:flex;width:40px", "<div class=r style='width:10px'></div><div class=g style='width:10px'></div>"));
+    let f = frame(
+        40,
+        10,
+        &flex_page(
+            "display:flex;width:40px",
+            "<div class=r style='width:10px'></div><div class=g style='width:10px'></div>",
+        ),
+    );
     assert_eq!(px(&f, 40, 5, 1), RED);
     assert_eq!(px(&f, 40, 15, 1), GREEN);
     assert_eq!(px(&f, 40, 25, 1), NONE);
@@ -240,7 +281,14 @@ fn a_row_puts_items_side_by_side() {
 
 #[test]
 fn grow_shares_the_free_space() {
-    let f = frame(40, 10, &flex_page("display:flex;width:40px", "<div class=r style='flex:1'></div><div class=g style='flex:3'></div>"));
+    let f = frame(
+        40,
+        10,
+        &flex_page(
+            "display:flex;width:40px",
+            "<div class=r style='flex:1'></div><div class=g style='flex:3'></div>",
+        ),
+    );
     // 10 and 30
     assert_eq!(px(&f, 40, 9, 1), RED);
     assert_eq!(px(&f, 40, 10, 1), GREEN);
@@ -249,7 +297,14 @@ fn grow_shares_the_free_space() {
 
 #[test]
 fn shrink_squeezes_items_that_do_not_fit() {
-    let f = frame(40, 10, &flex_page("display:flex;width:30px", "<div class=r style='width:20px'></div><div class=g style='width:20px'></div>"));
+    let f = frame(
+        40,
+        10,
+        &flex_page(
+            "display:flex;width:30px",
+            "<div class=r style='width:20px'></div><div class=g style='width:20px'></div>",
+        ),
+    );
     // 40 wanted in 30: 15 each
     assert_eq!(px(&f, 40, 14, 1), RED);
     assert_eq!(px(&f, 40, 15, 1), GREEN);
@@ -260,14 +315,29 @@ fn shrink_squeezes_items_that_do_not_fit() {
 #[test]
 fn justify_content_places_the_free_space() {
     let kids = "<div class=r style='width:10px'></div><div class=g style='width:10px'></div>";
-    let centre = frame(40, 10, &flex_page("display:flex;width:40px;justify-content:center", kids));
+    let centre = frame(
+        40,
+        10,
+        &flex_page("display:flex;width:40px;justify-content:center", kids),
+    );
     assert_eq!(px(&centre, 40, 9, 1), NONE);
     assert_eq!(px(&centre, 40, 10, 1), RED);
     assert_eq!(px(&centre, 40, 29, 1), GREEN);
-    let end = frame(40, 10, &flex_page("display:flex;width:40px;justify-content:flex-end", kids));
+    let end = frame(
+        40,
+        10,
+        &flex_page("display:flex;width:40px;justify-content:flex-end", kids),
+    );
     assert_eq!(px(&end, 40, 19, 1), NONE);
     assert_eq!(px(&end, 40, 20, 1), RED);
-    let between = frame(40, 10, &flex_page("display:flex;width:40px;justify-content:space-between", kids));
+    let between = frame(
+        40,
+        10,
+        &flex_page(
+            "display:flex;width:40px;justify-content:space-between",
+            kids,
+        ),
+    );
     assert_eq!(px(&between, 40, 0, 1), RED);
     assert_eq!(px(&between, 40, 39, 1), GREEN);
     assert_eq!(px(&between, 40, 20, 1), NONE);
@@ -275,7 +345,14 @@ fn justify_content_places_the_free_space() {
 
 #[test]
 fn gap_separates_items() {
-    let f = frame(40, 10, &flex_page("display:flex;gap:5px", "<div class=r style='width:10px'></div><div class=g style='width:10px'></div>"));
+    let f = frame(
+        40,
+        10,
+        &flex_page(
+            "display:flex;gap:5px",
+            "<div class=r style='width:10px'></div><div class=g style='width:10px'></div>",
+        ),
+    );
     assert_eq!(px(&f, 40, 9, 1), RED);
     assert_eq!(px(&f, 40, 12, 1), NONE);
     assert_eq!(px(&f, 40, 15, 1), GREEN);
@@ -284,7 +361,11 @@ fn gap_separates_items() {
 #[test]
 fn align_items_in_the_cross_axis() {
     let kids = "<div class=r style='width:6px;height:2px'></div>";
-    let page = |align: &str| format!("<style>body{{margin:0}}#f{{display:flex;height:10px;align-items:{align}}}.r{{background:#f00}}</style><body><div id=f>{kids}</div></body>");
+    let page = |align: &str| {
+        format!(
+            "<style>body{{margin:0}}#f{{display:flex;height:10px;align-items:{align}}}.r{{background:#f00}}</style><body><div id=f>{kids}</div></body>"
+        )
+    };
     let start = frame(20, 12, &page("flex-start"));
     assert_eq!(px(&start, 20, 2, 1), RED);
     assert_eq!(px(&start, 20, 2, 5), NONE);
@@ -294,13 +375,21 @@ fn align_items_in_the_cross_axis() {
     let end = frame(20, 12, &page("flex-end"));
     assert_eq!(px(&end, 20, 2, 9), RED);
     // stretch (the default) makes an auto-height item as tall as the line
-    let stretch = frame(20, 12, "<style>body{margin:0}#f{display:flex;height:10px}.r{background:#f00;width:6px}</style><body><div id=f><div class=r></div></div></body>");
+    let stretch = frame(
+        20,
+        12,
+        "<style>body{margin:0}#f{display:flex;height:10px}.r{background:#f00;width:6px}</style><body><div id=f><div class=r></div></div></body>",
+    );
     assert_eq!(px(&stretch, 20, 2, 9), RED);
 }
 
 #[test]
 fn a_column_stacks_and_stretches_across() {
-    let f = frame(20, 30, "<style>body{margin:0}#f{display:flex;flex-direction:column;width:20px}.r{background:#f00;height:4px}.g{background:#008000;height:4px}</style><body><div id=f><div class=r></div><div class=g></div></div></body>");
+    let f = frame(
+        20,
+        30,
+        "<style>body{margin:0}#f{display:flex;flex-direction:column;width:20px}.r{background:#f00;height:4px}.g{background:#008000;height:4px}</style><body><div id=f><div class=r></div><div class=g></div></div></body>",
+    );
     assert_eq!(px(&f, 20, 19, 1), RED, "stretched to the full width");
     assert_eq!(px(&f, 20, 19, 5), GREEN);
     assert_eq!(px(&f, 20, 2, 9), NONE);
@@ -308,7 +397,11 @@ fn a_column_stacks_and_stretches_across() {
 
 #[test]
 fn a_column_with_a_height_shares_it_by_grow() {
-    let f = frame(20, 40, "<style>body{margin:0}#f{display:flex;flex-direction:column;height:30px}.r{background:#f00;flex:1}.g{background:#008000;flex:2}</style><body><div id=f><div class=r></div><div class=g></div></div></body>");
+    let f = frame(
+        20,
+        40,
+        "<style>body{margin:0}#f{display:flex;flex-direction:column;height:30px}.r{background:#f00;flex:1}.g{background:#008000;flex:2}</style><body><div id=f><div class=r></div><div class=g></div></div></body>",
+    );
     assert_eq!(px(&f, 20, 2, 9), RED);
     assert_eq!(px(&f, 20, 2, 10), GREEN);
     assert_eq!(px(&f, 20, 2, 29), GREEN);
@@ -317,16 +410,34 @@ fn a_column_with_a_height_shares_it_by_grow() {
 
 #[test]
 fn wrap_starts_a_new_line() {
-    let f = frame(30, 20, &flex_page("display:flex;flex-wrap:wrap;width:25px", "<div class=r style='width:10px'></div><div class=g style='width:10px'></div><div class=b style='width:10px'></div>"));
+    let f = frame(
+        30,
+        20,
+        &flex_page(
+            "display:flex;flex-wrap:wrap;width:25px",
+            "<div class=r style='width:10px'></div><div class=g style='width:10px'></div><div class=b style='width:10px'></div>",
+        ),
+    );
     assert_eq!(px(&f, 30, 5, 1), RED);
     assert_eq!(px(&f, 30, 15, 1), GREEN);
-    assert_eq!(px(&f, 30, 25, 1), NONE, "the third does not fit on the line");
+    assert_eq!(
+        px(&f, 30, 25, 1),
+        NONE,
+        "the third does not fit on the line"
+    );
     assert_eq!(px(&f, 30, 5, 5), BLUE, "it starts the next one");
 }
 
 #[test]
 fn auto_margins_push_flex_items_apart() {
-    let f = frame(40, 10, &flex_page("display:flex;width:40px", "<div class=r style='width:10px'></div><div class=g style='width:10px;margin-left:auto'></div>"));
+    let f = frame(
+        40,
+        10,
+        &flex_page(
+            "display:flex;width:40px",
+            "<div class=r style='width:10px'></div><div class=g style='width:10px;margin-left:auto'></div>",
+        ),
+    );
     assert_eq!(px(&f, 40, 5, 1), RED);
     assert_eq!(px(&f, 40, 20, 1), NONE);
     assert_eq!(px(&f, 40, 35, 1), GREEN);
@@ -334,7 +445,11 @@ fn auto_margins_push_flex_items_apart() {
 
 #[test]
 fn centring_with_flex() {
-    let f = frame(20, 20, "<style>body{margin:0}#f{display:flex;justify-content:center;align-items:center;width:20px;height:20px}#c{width:6px;height:6px;background:#f00}</style><body><div id=f><div id=c></div></div></body>");
+    let f = frame(
+        20,
+        20,
+        "<style>body{margin:0}#f{display:flex;justify-content:center;align-items:center;width:20px;height:20px}#c{width:6px;height:6px;background:#f00}</style><body><div id=f><div id=c></div></div></body>",
+    );
     assert_eq!(px(&f, 20, 10, 10), RED);
     assert_eq!(px(&f, 20, 6, 10), NONE);
     assert_eq!(px(&f, 20, 10, 6), NONE);
@@ -342,11 +457,29 @@ fn centring_with_flex() {
 
 #[test]
 fn order_and_reverse() {
-    let f = frame(40, 10, &flex_page("display:flex", "<div class=r style='width:10px;order:2'></div><div class=g style='width:10px;order:1'></div>"));
+    let f = frame(
+        40,
+        10,
+        &flex_page(
+            "display:flex",
+            "<div class=r style='width:10px;order:2'></div><div class=g style='width:10px;order:1'></div>",
+        ),
+    );
     assert_eq!(px(&f, 40, 5, 1), GREEN);
     assert_eq!(px(&f, 40, 15, 1), RED);
-    let r = frame(40, 10, &flex_page("display:flex;flex-direction:row-reverse;width:40px", "<div class=r style='width:10px'></div><div class=g style='width:10px'></div>"));
-    assert_eq!(px(&r, 40, 35, 1), RED, "row-reverse starts at the right edge");
+    let r = frame(
+        40,
+        10,
+        &flex_page(
+            "display:flex;flex-direction:row-reverse;width:40px",
+            "<div class=r style='width:10px'></div><div class=g style='width:10px'></div>",
+        ),
+    );
+    assert_eq!(
+        px(&r, 40, 35, 1),
+        RED,
+        "row-reverse starts at the right edge"
+    );
     assert_eq!(px(&r, 40, 25, 1), GREEN);
 }
 
@@ -354,6 +487,10 @@ fn order_and_reverse() {
 fn text_in_flex_items_and_nested_flex() {
     let html = "<style>body{margin:0;font-size:10px}#f{display:flex;width:60px}#f>div{flex:1}.r{background:#f00}.g{background:#008000}#in{display:flex;flex-direction:column}</style><body><div id=f><div class=r>AB</div><div class=g id=in><div>x</div><div>y</div></div></div></body>";
     let f = frame(60, 40, html);
-    assert_eq!(px(&f, 60, 29, 15), RED, "both columns are as tall as the tallest: 2 lines");
+    assert_eq!(
+        px(&f, 60, 29, 15),
+        RED,
+        "both columns are as tall as the tallest: 2 lines"
+    );
     assert_eq!(px(&f, 60, 59, 15), GREEN);
 }

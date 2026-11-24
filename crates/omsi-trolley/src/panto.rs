@@ -122,7 +122,13 @@ pub struct WireAbove {
 
 impl Default for WireAbove {
     fn default() -> Self {
-        WireAbove { height: 5.5, lateral: 0.0, live: true, hard: 0.0, roughness: 1.0 }
+        WireAbove {
+            height: 5.5,
+            lateral: 0.0,
+            live: true,
+            hard: 0.0,
+            roughness: 1.0,
+        }
     }
 }
 
@@ -222,7 +228,8 @@ impl Pantograph {
         let tau = std::f64::consts::TAU;
         let dropper = (run * tau / 8.0 + self.phase[0]).sin() as f32 * 0.0025;
         let span = (run * tau / 40.0 + self.phase[1]).sin() as f32 * 0.005;
-        let wear = ((run * tau / 2.3 + self.phase[2]).sin() * (run * tau / 5.9).cos()) as f32 * 0.0035;
+        let wear =
+            ((run * tau / 2.3 + self.phase[2]).sin() * (run * tau / 5.9).cos()) as f32 * 0.0035;
         (dropper + span + wear) * q + wire.hard.clamp(0.0, 1.0) * 0.016
     }
 
@@ -239,7 +246,9 @@ impl Pantograph {
         let dt = i.dt.clamp(0.0, 0.1);
         let kinematic = cmd < RAISED_FROM;
         // the wire the head can meet: in reach, under its strip, and fed or not
-        let wire = i.wire.filter(|w| w.height <= top + 0.02 && w.lateral.abs() <= shape.half_width.max(0.2));
+        let wire = i
+            .wire
+            .filter(|w| w.height <= top + 0.02 && w.lateral.abs() <= shape.half_width.max(0.2));
         let was_contact = self.contact;
         let mut remaining = dt;
         let mut contact_acc = 0.0;
@@ -256,7 +265,9 @@ impl Pantograph {
                 let free_at = shape.height_at(cmd);
                 // (and pressing it down by what its static force bends it)
                 let (target, hit) = match w {
-                    Some(w) if free_at >= w => (free_at.min(w + STATIC_FORCE / WIRE_STIFFNESS), true),
+                    Some(w) if free_at >= w => {
+                        (free_at.min(w + STATIC_FORCE / WIRE_STIFFNESS), true)
+                    }
                     _ => (free_at, false),
                 };
                 // (the mechanism has a speed: a pantograph does not jump)
@@ -302,11 +313,20 @@ impl Pantograph {
             contact_acc += if self.contact { 1.0 } else { 0.0 };
             steps += 1.0;
         }
-        let contact_share = if steps > 0.0 { contact_acc / steps } else { 0.0 };
-        self.force = if steps > 0.0 { force_acc / steps } else { self.force };
+        let contact_share = if steps > 0.0 {
+            contact_acc / steps
+        } else {
+            0.0
+        };
+        self.force = if steps > 0.0 {
+            force_acc / steps
+        } else {
+            self.force
+        };
         // (the step's contact is made if it was made for most of it: a step of a frame is many
         // integration steps, and a break of a few milliseconds is a break all the same)
-        let contact = wire.is_some() && (contact_share > 0.5 || (self.contact && contact_share > 0.0));
+        let contact =
+            wire.is_some() && (contact_share > 0.5 || (self.contact && contact_share > 0.0));
         self.contact = contact;
         let live = i.wire.is_none_or(|w| w.live);
         let amps = i.amps.abs();
@@ -318,7 +338,11 @@ impl Pantograph {
             self.open_for += dt;
         }
         let bridged = !contact && self.open_for < RIDE_THROUGH && self.out.powered;
-        let powered = if i.wire.is_none() { !kinematic } else { live && (contact || bridged) };
+        let powered = if i.wire.is_none() {
+            !kinematic
+        } else {
+            live && (contact || bridged)
+        };
         // arcs: the current broken, made again, or a little of it all the time
         let at = i.head_at;
         let burn = |amps: f32, volts: f32| -> f32 {
@@ -329,11 +353,21 @@ impl Pantograph {
         if was_contact && !contact && amps > 15.0 && wire.is_some() {
             self.losses += 1;
             let e = burn(amps, i.volts);
-            self.push_spark(Spark { pos: at, energy: e, amps, kind: SparkKind::Break });
+            self.push_spark(Spark {
+                pos: at,
+                energy: e,
+                amps,
+                kind: SparkKind::Break,
+            });
             self.arc = (amps / 300.0).clamp(0.15, 1.0);
         } else if !was_contact && contact && amps > 15.0 {
             let e = 0.15 * burn(amps, i.volts) + 1.0;
-            self.push_spark(Spark { pos: at, energy: e, amps, kind: SparkKind::Make });
+            self.push_spark(Spark {
+                pos: at,
+                energy: e,
+                amps,
+                kind: SparkKind::Make,
+            });
         } else if was_contact && !contact && wire.is_some() {
             self.losses += 1;
         }
@@ -344,14 +378,30 @@ impl Pantograph {
             let rate = (amps / 200.0).min(3.0) * (i.speed / 10.0).min(2.5) * rough * 0.35;
             if self.rand() < rate * dt {
                 let e = 1.5 + 6.0 * self.rand() * (amps / 250.0).min(2.0);
-                self.push_spark(Spark { pos: at, energy: e, amps, kind: SparkKind::Make });
+                self.push_spark(Spark {
+                    pos: at,
+                    energy: e,
+                    amps,
+                    kind: SparkKind::Make,
+                });
             }
         }
         if contact || !(self.open_for < RIDE_THROUGH) {
             self.arc = (self.arc - dt / 0.12).max(0.0);
         }
-        let shown = if self.x >= top - 1e-4 { 1.0 } else { shape.travel_for(self.x).unwrap_or(1.0).min(1.0) };
-        self.out = PantoOut { shown, contact, powered, force: self.force, height: self.x, arc: self.arc };
+        let shown = if self.x >= top - 1e-4 {
+            1.0
+        } else {
+            shape.travel_for(self.x).unwrap_or(1.0).min(1.0)
+        };
+        self.out = PantoOut {
+            shown,
+            contact,
+            powered,
+            force: self.force,
+            height: self.x,
+            arc: self.arc,
+        };
         self.out
     }
 
@@ -387,7 +437,13 @@ mod tests {
     /// A pantograph that lifts its head from 3.4 m (folded) to 5.9 m (full travel) in a
     /// slightly curved law, as a scissor arm does.
     fn shape() -> PantoShape {
-        PantoShape { heights: (0..=32).map(|i| 3.4 + 2.5 * ((i as f32 / 32.0).powf(0.9))).collect(), head: [0.0, -1.0], half_width: 0.55 }
+        PantoShape {
+            heights: (0..=32)
+                .map(|i| 3.4 + 2.5 * ((i as f32 / 32.0).powf(0.9)))
+                .collect(),
+            head: [0.0, -1.0],
+            half_width: 0.55,
+        }
     }
 
     /// The script's variable rises 0 -> 1 over three seconds and the pantograph is up.
@@ -396,18 +452,45 @@ mod tests {
         let mut out = PantoOut::default();
         for k in 0..450 {
             let cmd = (k as f32 * 0.01 / 3.0).min(1.0);
-            out = p.step(&PantoIn { dt: 0.01, shape: &s, cmd, wire, run: 0.0, speed: 0.0, amps: 0.0, volts: 600.0, head_at: DVec3::ZERO });
+            out = p.step(&PantoIn {
+                dt: 0.01,
+                shape: &s,
+                cmd,
+                wire,
+                run: 0.0,
+                speed: 0.0,
+                amps: 0.0,
+                volts: 600.0,
+                head_at: DVec3::ZERO,
+            });
         }
         p.losses = 0;
         out
     }
 
-    fn run(p: &mut Pantograph, wire: Option<WireAbove>, cmd: f32, secs: f32, speed: f32, amps: f32) -> PantoOut {
+    fn run(
+        p: &mut Pantograph,
+        wire: Option<WireAbove>,
+        cmd: f32,
+        secs: f32,
+        speed: f32,
+        amps: f32,
+    ) -> PantoOut {
         let s = shape();
         let mut out = PantoOut::default();
         let mut run = 0.0f64;
         for _ in 0..(secs / 0.01) as usize {
-            out = p.step(&PantoIn { dt: 0.01, shape: &s, cmd, wire, run, speed, amps, volts: 600.0, head_at: DVec3::ZERO });
+            out = p.step(&PantoIn {
+                dt: 0.01,
+                shape: &s,
+                cmd,
+                wire,
+                run,
+                speed,
+                amps,
+                volts: 600.0,
+                head_at: DVec3::ZERO,
+            });
             run += (speed * 0.01) as f64;
         }
         out
@@ -427,19 +510,35 @@ mod tests {
     #[test]
     fn a_raised_pantograph_stops_at_the_wire_and_does_not_grow_beyond_it() {
         let mut p = Pantograph::new(1);
-        let wire = WireAbove { height: 4.7, ..Default::default() };
+        let wire = WireAbove {
+            height: 4.7,
+            ..Default::default()
+        };
         // the script's variable rises 0 -> 1 over three seconds
         let s = shape();
         let mut worst: f32 = 0.0;
         let mut out = PantoOut::default();
         for k in 0..400 {
             let cmd = (k as f32 * 0.01 / 3.0).min(1.0);
-            out = p.step(&PantoIn { dt: 0.01, shape: &s, cmd, wire: Some(wire), run: 0.0, speed: 0.0, amps: 0.0, volts: 600.0, head_at: DVec3::ZERO });
+            out = p.step(&PantoIn {
+                dt: 0.01,
+                shape: &s,
+                cmd,
+                wire: Some(wire),
+                run: 0.0,
+                speed: 0.0,
+                amps: 0.0,
+                volts: 600.0,
+                head_at: DVec3::ZERO,
+            });
             worst = worst.max(out.height);
         }
         assert!(out.contact && out.powered, "{out:?}");
         // it presses the wire down by its static force over the wire's stiffness: 2.8 cm
-        assert!(worst < 4.7 + 0.06, "the head went up to {worst} m through a wire at 4.7 m");
+        assert!(
+            worst < 4.7 + 0.06,
+            "the head went up to {worst} m through a wire at 4.7 m"
+        );
         assert!(out.height > 4.7, "{}", out.height);
         // what the model shows is the travel at which the head is there, not the full travel
         assert!(out.shown < 0.8 && out.shown > 0.4, "{}", out.shown);
@@ -449,7 +548,17 @@ mod tests {
     #[test]
     fn a_wire_out_of_reach_leaves_the_pantograph_at_its_stop_without_current() {
         let mut p = Pantograph::new(2);
-        let out = run(&mut p, Some(WireAbove { height: 6.4, ..Default::default() }), 1.0, 4.0, 0.0, 0.0);
+        let out = run(
+            &mut p,
+            Some(WireAbove {
+                height: 6.4,
+                ..Default::default()
+            }),
+            1.0,
+            4.0,
+            0.0,
+            0.0,
+        );
         assert!(!out.contact && !out.powered);
         assert_eq!(out.shown, 1.0);
         assert!((out.height - 5.9).abs() < 1e-3);
@@ -458,11 +567,34 @@ mod tests {
     #[test]
     fn a_lowered_pantograph_has_no_current_and_one_under_a_dead_wire_neither() {
         let mut p = Pantograph::new(3);
-        let wire = WireAbove { height: 4.7, ..Default::default() };
+        let wire = WireAbove {
+            height: 4.7,
+            ..Default::default()
+        };
         assert!(!run(&mut p, Some(wire), 0.0, 1.0, 0.0, 0.0).powered);
-        let out = run(&mut p, Some(WireAbove { live: false, ..wire }), 1.0, 4.0, 0.0, 0.0);
-        assert!(out.contact && !out.powered, "on a dead wire: contact but no current: {out:?}");
-        let out = run(&mut p, Some(WireAbove { live: true, ..wire }), 1.0, 1.0, 0.0, 0.0);
+        let out = run(
+            &mut p,
+            Some(WireAbove {
+                live: false,
+                ..wire
+            }),
+            1.0,
+            4.0,
+            0.0,
+            0.0,
+        );
+        assert!(
+            out.contact && !out.powered,
+            "on a dead wire: contact but no current: {out:?}"
+        );
+        let out = run(
+            &mut p,
+            Some(WireAbove { live: true, ..wire }),
+            1.0,
+            1.0,
+            0.0,
+            0.0,
+        );
         assert!(out.powered);
     }
 
@@ -479,12 +611,20 @@ mod tests {
     #[test]
     fn lowering_the_pantograph_under_current_strikes_an_arc() {
         let mut p = Pantograph::new(5);
-        let wire = WireAbove { height: 4.7, ..Default::default() };
+        let wire = WireAbove {
+            height: 4.7,
+            ..Default::default()
+        };
         raise(&mut p, Some(wire));
         p.take_sparks();
         run(&mut p, Some(wire), 0.3, 0.5, 0.0, 250.0);
         let sparks = p.take_sparks();
-        assert!(sparks.iter().any(|s| s.kind == SparkKind::Break && s.energy > 100.0), "{sparks:?}");
+        assert!(
+            sparks
+                .iter()
+                .any(|s| s.kind == SparkKind::Break && s.energy > 100.0),
+            "{sparks:?}"
+        );
         // the same without current is quiet
         let mut q = Pantograph::new(5);
         raise(&mut q, Some(wire));
@@ -496,12 +636,23 @@ mod tests {
     #[test]
     fn a_rough_wire_at_speed_loses_the_contact_and_a_good_one_at_walking_pace_does_not() {
         let mut worn = Pantograph::new(6);
-        let bad = WireAbove { height: 4.7, roughness: 3.5, ..Default::default() };
+        let bad = WireAbove {
+            height: 4.7,
+            roughness: 3.5,
+            ..Default::default()
+        };
         raise(&mut worn, Some(bad));
         run(&mut worn, Some(bad), 1.0, 40.0, 20.0, 200.0);
-        assert!(worn.losses > 0, "a worn wire at 72 km/h under 200 A must lose the contact now and then");
+        assert!(
+            worn.losses > 0,
+            "a worn wire at 72 km/h under 200 A must lose the contact now and then"
+        );
         let mut good = Pantograph::new(6);
-        let ok = WireAbove { height: 4.7, roughness: 1.0, ..Default::default() };
+        let ok = WireAbove {
+            height: 4.7,
+            roughness: 1.0,
+            ..Default::default()
+        };
         raise(&mut good, Some(ok));
         run(&mut good, Some(ok), 1.0, 40.0, 3.0, 200.0);
         assert_eq!(good.losses, 0, "a wire in order at 11 km/h is never lost");
@@ -510,13 +661,28 @@ mod tests {
     #[test]
     fn a_short_loss_of_contact_does_not_cut_the_power() {
         let mut p = Pantograph::new(7);
-        let wire = WireAbove { height: 4.7, roughness: 4.0, hard: 0.0, ..Default::default() };
+        let wire = WireAbove {
+            height: 4.7,
+            roughness: 4.0,
+            hard: 0.0,
+            ..Default::default()
+        };
         raise(&mut p, Some(wire));
         let s = shape();
         let mut dark = 0;
         let mut run_s = 0.0f64;
         for _ in 0..4000 {
-            let out = p.step(&PantoIn { dt: 0.01, shape: &s, cmd: 1.0, wire: Some(wire), run: run_s, speed: 22.0, amps: 150.0, volts: 600.0, head_at: DVec3::ZERO });
+            let out = p.step(&PantoIn {
+                dt: 0.01,
+                shape: &s,
+                cmd: 1.0,
+                wire: Some(wire),
+                run: run_s,
+                speed: 22.0,
+                amps: 150.0,
+                volts: 600.0,
+                head_at: DVec3::ZERO,
+            });
             run_s += 0.22;
             if !out.powered {
                 dark += 1;
@@ -529,7 +695,18 @@ mod tests {
     #[test]
     fn the_wire_beside_the_strip_is_not_touched() {
         let mut p = Pantograph::new(8);
-        let out = run(&mut p, Some(WireAbove { height: 4.7, lateral: 1.4, ..Default::default() }), 1.0, 4.0, 0.0, 0.0);
+        let out = run(
+            &mut p,
+            Some(WireAbove {
+                height: 4.7,
+                lateral: 1.4,
+                ..Default::default()
+            }),
+            1.0,
+            4.0,
+            0.0,
+            0.0,
+        );
         assert!(!out.contact && !out.powered);
     }
 }

@@ -11,7 +11,9 @@ const MAX_DEVICES: usize = 32;
 
 fn random_bytes<const N: usize>() -> [u8; N] {
     let mut b = [0u8; N];
-    SystemRandom::new().fill(&mut b).expect("the system's random numbers");
+    SystemRandom::new()
+        .fill(&mut b)
+        .expect("the system's random numbers");
     b
 }
 
@@ -39,8 +41,13 @@ pub(crate) fn same(a: &str, b: &str) -> bool {
 
 fn network(ip: IpAddr) -> IpAddr {
     match ip {
-        IpAddr::V6(v6) if v6.to_ipv4_mapped().is_none() => IpAddr::V6((u128::from(v6) & !((1u128 << 64) - 1)).into()),
-        IpAddr::V6(v6) => IpAddr::V4(v6.to_ipv4_mapped().unwrap_or(std::net::Ipv4Addr::UNSPECIFIED)),
+        IpAddr::V6(v6) if v6.to_ipv4_mapped().is_none() => {
+            IpAddr::V6((u128::from(v6) & !((1u128 << 64) - 1)).into())
+        }
+        IpAddr::V6(v6) => IpAddr::V4(
+            v6.to_ipv4_mapped()
+                .unwrap_or(std::net::Ipv4Addr::UNSPECIFIED),
+        ),
         v4 => v4,
     }
 }
@@ -65,17 +72,27 @@ impl Devices {
             .lines()
             .filter_map(|l| {
                 let (h, name) = l.split_once('\t').unwrap_or((l, ""));
-                (h.len() == 64 && h.bytes().all(|c| c.is_ascii_hexdigit())).then(|| (h.to_string(), name.to_string()))
+                (h.len() == 64 && h.bytes().all(|c| c.is_ascii_hexdigit()))
+                    .then(|| (h.to_string(), name.to_string()))
             })
             .collect();
-        Devices { path, known, failures: Vec::new(), wrong: 0 }
+        Devices {
+            path,
+            known,
+            failures: Vec::new(),
+            wrong: 0,
+        }
     }
 
     fn save(&self) {
         if let Some(dir) = self.path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        let text: String = self.known.iter().map(|(h, n)| format!("{h}\t{n}\n")).collect();
+        let text: String = self
+            .known
+            .iter()
+            .map(|(h, n)| format!("{h}\t{n}\n"))
+            .collect();
         if let Err(e) = std::fs::write(&self.path, text) {
             log::warn!("remote cockpit: cannot write {}: {e}", self.path.display());
         }
@@ -83,7 +100,9 @@ impl Devices {
 
     pub(crate) fn knows(&self, token: &str) -> bool {
         let h = hash(token);
-        self.known.iter().fold(false, |found, (k, _)| found | same(k, &h))
+        self.known
+            .iter()
+            .fold(false, |found, (k, _)| found | same(k, &h))
     }
 
     fn locked(&mut self, from: IpAddr) -> bool {
@@ -99,7 +118,9 @@ impl Devices {
         if !same(pin, wanted.trim()) {
             self.failures.push((network(from), Instant::now()));
             self.wrong += 1;
-            return Pairing::Wrong { renew: self.wrong % RENEW_AFTER == 0 };
+            return Pairing::Wrong {
+                renew: self.wrong % RENEW_AFTER == 0,
+            };
         }
         let token = hex(&random_bytes::<32>());
         let name: String = name.chars().filter(|c| !c.is_control()).take(48).collect();

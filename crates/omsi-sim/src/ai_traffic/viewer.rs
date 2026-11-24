@@ -82,7 +82,14 @@ impl Viewer {
     /// The view of a camera at `position` looking along `forward`, with a vertical field of
     /// view of `fov_deg` and its far plane at `far`, a picture `aspect` wide to high, in fog
     /// that hides everything beyond `fog_range`.
-    pub fn from_camera(position: DVec3, forward: DVec3, fov_deg: f32, far: f32, aspect: f64, fog_range: f64) -> Viewer {
+    pub fn from_camera(
+        position: DVec3,
+        forward: DVec3,
+        fov_deg: f32,
+        far: f32,
+        aspect: f64,
+        fog_range: f64,
+    ) -> Viewer {
         let tan_y = (fov_deg as f64 * 0.5).to_radians().tan();
         Viewer {
             pos: position,
@@ -161,15 +168,18 @@ impl TrafficSim {
                 let p = c.vehicle.position;
                 let r = (c.state.front + c.state.rear).abs().max(4.0) as f64 + 2.0;
                 let d = (p - v.pos).length();
-                c.vehicle.ai_visuals = d < UNSEEN_NEAR || (d < MIRROR_REACH && (p - v.pos).dot(v.forward) < 0.0) || v.frames(p, r);
+                c.vehicle.ai_visuals = d < UNSEEN_NEAR
+                    || (d < MIRROR_REACH && (p - v.pos).dot(v.forward) < 0.0)
+                    || v.frames(p, r);
                 // (a car nobody sees, well out of earshot of the mirrors: its script runs a
                 // few times a second, not every frame - each car at its own beat, so the
                 // runs do not all fall in one frame; a bus keeps its stop handshake)
-                c.vehicle.ai_script_period = if !c.vehicle.ai_visuals && d > UNSEEN_SCRIPT_RANGE && c.bus.is_none() {
-                    0.2 + 0.05 * (c.id % 5) as f32
-                } else {
-                    0.0
-                };
+                c.vehicle.ai_script_period =
+                    if !c.vehicle.ai_visuals && d > UNSEEN_SCRIPT_RANGE && c.bus.is_none() {
+                        0.2 + 0.05 * (c.id % 5) as f32
+                    } else {
+                        0.0
+                    };
             }
         }
     }
@@ -191,7 +201,10 @@ impl TrafficSim {
     /// Whether `test` holds for everybody looking (the player's camera and the LAN eyes);
     /// true when nobody looks.
     pub fn every_eye(&self, mut test: impl FnMut(&Viewer) -> bool) -> bool {
-        self.viewer.iter().chain(self.lan_eyes.iter()).all(|v| test(v))
+        self.viewer
+            .iter()
+            .chain(self.lan_eyes.iter())
+            .all(|v| test(v))
     }
 
     /// How far the nearest one looking (the player's camera or a LAN player's eye) is from

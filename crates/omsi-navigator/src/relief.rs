@@ -6,7 +6,14 @@ use super::*;
 impl Navigator {
     /// The Terrain button, only where the package has contour lines: `bs` high at `y`, its right edge at `right`;
     /// returns the new `right`. A click turns the terrain view on or off (see `show_contours`).
-    pub(super) fn draw_terrain_button(&mut self, ui: &mut Painter, y: f32, bs: f32, right: f32, s: f32) -> f32 {
+    pub(super) fn draw_terrain_button(
+        &mut self,
+        ui: &mut Painter,
+        y: f32,
+        bs: f32,
+        right: f32,
+        s: f32,
+    ) -> f32 {
         // (with the map's surface off there are no contour lines to show, so no button)
         if !self.show_surface || !self.surface.as_ref().is_some_and(|sf| sf.has_contours()) {
             return right;
@@ -16,13 +23,48 @@ impl Navigator {
         let bw = (self.fonts.width(&label, 13.5 * s, Weight::Bold) + 44.0 * s).max(96.0 * s);
         let r = Rect::new(right - bw, y, bw, bs);
         ui.shadow(r, bs * 0.5, 8.0 * s, Color::rgba(0, 0, 0, 0.14));
-        ui.rounded(r, bs * 0.5, if self.show_contours { pal.route } else { pal.card });
-        let ink = if self.show_contours { Color::WHITE } else { pal.card_text };
+        ui.rounded(
+            r,
+            bs * 0.5,
+            if self.show_contours {
+                pal.route
+            } else {
+                pal.card
+            },
+        );
+        let ink = if self.show_contours {
+            Color::WHITE
+        } else {
+            pal.card_text
+        };
         // (a mountain: two peaks)
         let (c, k) = (Vec2::new(r.x + 20.0 * s, r.center().y + 2.0 * s), 6.5 * s);
-        ui.tri(c + Vec2::new(-k * 1.3, k), c + Vec2::new(-k * 0.2, -k), c + Vec2::new(k * 0.9, k), ink, ink, ink);
-        ui.tri(c + Vec2::new(-k * 0.1, k), c + Vec2::new(k * 0.7, -k * 0.5), c + Vec2::new(k * 1.5, k), ink, ink, ink);
-        ui.text_in(&mut self.atlas, &self.fonts, &label, 13.5 * s, Weight::Bold, Rect::new(r.x + 32.0 * s, r.y, r.w - 34.0 * s, r.h), Align::Center, ink);
+        ui.tri(
+            c + Vec2::new(-k * 1.3, k),
+            c + Vec2::new(-k * 0.2, -k),
+            c + Vec2::new(k * 0.9, k),
+            ink,
+            ink,
+            ink,
+        );
+        ui.tri(
+            c + Vec2::new(-k * 0.1, k),
+            c + Vec2::new(k * 0.7, -k * 0.5),
+            c + Vec2::new(k * 1.5, k),
+            ink,
+            ink,
+            ink,
+        );
+        ui.text_in(
+            &mut self.atlas,
+            &self.fonts,
+            &label,
+            13.5 * s,
+            Weight::Bold,
+            Rect::new(r.x + 32.0 * s, r.y, r.w - 34.0 * s, r.h),
+            Align::Center,
+            ink,
+        );
         self.city.buttons.push((r, 6));
         r.x - 8.0 * s
     }
@@ -31,7 +73,10 @@ impl Navigator {
     /// stand out) and the band it belongs to (the ground is built again when the band changes); `None` with the
     /// terrain view off.
     pub(super) fn contour_band(&self) -> Option<(f32, u64)> {
-        if !self.show_contours || !self.show_surface || !self.surface.as_ref().is_some_and(|sf| sf.has_contours()) {
+        if !self.show_contours
+            || !self.show_surface
+            || !self.surface.as_ref().is_some_and(|sf| sf.has_contours())
+        {
             return None;
         }
         let band = if self.city.mpp < 4.0 {
@@ -52,16 +97,27 @@ impl Navigator {
         }
         self.marks_started = self.surface_version + 1;
         let sf = sf.clone();
-        let _ = std::thread::Builder::new().name("navigator contours".into()).spawn(move || {
-            sf.contour_marks();
-        });
+        let _ = std::thread::Builder::new()
+            .name("navigator contours".into())
+            .spawn(move || {
+                sf.contour_marks();
+            });
     }
 
     /// The height written on the contour lines, in metres: on every mark up close, from further away on the index
     /// lines only; each with a halo, none over another and none over what the map has written already (`taken`: street names,
     /// stop labels, the icons...).
-    pub(super) fn terrain_labels(&mut self, ui: &mut Painter, on_screen: &dyn Fn(DVec3) -> Vec2, win: Rect, s: f32, taken: &mut Vec<Rect>) {
-        let (Some(sf), true) = (self.surface.clone(), self.city.mpp < 40.0) else { return };
+    pub(super) fn terrain_labels(
+        &mut self,
+        ui: &mut Painter,
+        on_screen: &dyn Fn(DVec3) -> Vec2,
+        win: Rect,
+        s: f32,
+        taken: &mut Vec<Rect>,
+    ) {
+        let (Some(sf), true) = (self.surface.clone(), self.city.mpp < 40.0) else {
+            return;
+        };
         // (terrain off: nothing is done for it, and the marks are not even asked for)
         if self.contour_band().is_none() {
             return;
@@ -80,22 +136,54 @@ impl Navigator {
                 continue;
             }
             let p = on_screen(DVec3::new(at.0, at.1, 0.0));
-            if !win.pad(30.0 * s, 30.0 * s).contains(p) || shown.iter().any(|q| (*q - p).length() < if close { 64.0 * s } else { 120.0 * s }) {
+            if !win.pad(30.0 * s, 30.0 * s).contains(p)
+                || shown
+                    .iter()
+                    .any(|q| (*q - p).length() < if close { 64.0 * s } else { 120.0 * s })
+            {
                 continue;
             }
             let text = format!("{height} {}", omsi_ui::tr("m"));
             let tw = self.fonts.width(&text, px, Weight::Medium);
-            let box_ = Rect::new(p.x - tw * 0.5 - 3.0 * s, p.y - px * 0.7, tw + 6.0 * s, px * 1.4);
+            let box_ = Rect::new(
+                p.x - tw * 0.5 - 3.0 * s,
+                p.y - px * 0.7,
+                tw + 6.0 * s,
+                px * 1.4,
+            );
             if taken.iter().any(|t| rects_overlap(t, &box_)) {
                 continue;
             }
             taken.push(box_);
             shown.push(p);
             let at = p + Vec2::new(0.0, px * 0.35);
-            for o in [Vec2::new(1.0, 0.0), Vec2::new(-1.0, 0.0), Vec2::new(0.0, 1.0), Vec2::new(0.0, -1.0)] {
-                ui.text(&mut self.atlas, &self.fonts, &text, px, Weight::Medium, at + o * s, Align::Center, pal.label_halo);
+            for o in [
+                Vec2::new(1.0, 0.0),
+                Vec2::new(-1.0, 0.0),
+                Vec2::new(0.0, 1.0),
+                Vec2::new(0.0, -1.0),
+            ] {
+                ui.text(
+                    &mut self.atlas,
+                    &self.fonts,
+                    &text,
+                    px,
+                    Weight::Medium,
+                    at + o * s,
+                    Align::Center,
+                    pal.label_halo,
+                );
             }
-            ui.text(&mut self.atlas, &self.fonts, &text, px, Weight::Medium, at, Align::Center, col);
+            ui.text(
+                &mut self.atlas,
+                &self.fonts,
+                &text,
+                px,
+                Weight::Medium,
+                at,
+                Align::Center,
+                col,
+            );
         }
     }
 }

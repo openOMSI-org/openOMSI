@@ -50,8 +50,17 @@ impl Traffic {
             cfg
         });
         if rail_lanes > 0 {
-            let of = |c: omsi_sim::rail::TrackClass| net.lanes.iter().filter(|l| l.track.is_some_and(|t| t.class == c)).count();
-            log::info!("rail: {rail_lanes} rail lanes ({} in the street, {} railway)", of(omsi_sim::rail::TrackClass::Street), of(omsi_sim::rail::TrackClass::Mainline));
+            let of = |c: omsi_sim::rail::TrackClass| {
+                net.lanes
+                    .iter()
+                    .filter(|l| l.track.is_some_and(|t| t.class == c))
+                    .count()
+            };
+            log::info!(
+                "rail: {rail_lanes} rail lanes ({} in the street, {} railway)",
+                of(omsi_sim::rail::TrackClass::Street),
+                of(omsi_sim::rail::TrackClass::Mainline)
+            );
             let mut names: Vec<(&str, usize)> = Vec::new();
             for l in net.lanes.iter().filter(|l| l.track.is_some()) {
                 match names.iter_mut().find(|(n, _)| *n == l.name) {
@@ -60,9 +69,23 @@ impl Traffic {
                 }
             }
             names.sort_by_key(|(_, c)| std::cmp::Reverse(*c));
-            log::info!("rail: lanes by file: {}", names.iter().take(16).map(|(n, c)| format!("{n} x{c}")).collect::<Vec<_>>().join(", "));
+            log::info!(
+                "rail: lanes by file: {}",
+                names
+                    .iter()
+                    .take(16)
+                    .map(|(n, c)| format!("{n} x{c}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
-        let RandomTypes { types, groups, group_curves, group_uvg, uvg_defaults } = random_types(root, world);
+        let RandomTypes {
+            types,
+            groups,
+            group_curves,
+            group_uvg,
+            uvg_defaults,
+        } = random_types(root, world);
         // No buses in the random road traffic: the depot groups of `ailists.cfg` are the
         // fleet the *timetable* drives, and OMSI puts a bus on a street only because a trip
         // of the map's TTData runs there. Mixing the depot fleet into the random pool put
@@ -80,8 +103,10 @@ impl Traffic {
                 }
             }
         }
-        let controller_of_object: hashbrown::HashMap<i64, usize> = new_lights.iter().map(|(i, o, _)| (*o, *i)).collect();
-        let lights: Vec<omsi_sim::traffic::TrafficLightController> = new_lights.into_iter().map(|(_, _, c)| c).collect();
+        let controller_of_object: hashbrown::HashMap<i64, usize> =
+            new_lights.iter().map(|(i, o, _)| (*o, *i)).collect();
+        let lights: Vec<omsi_sim::traffic::TrafficLightController> =
+            new_lights.into_iter().map(|(_, _, c)| c).collect();
         let turning = net.lanes.iter().filter(|l| l.turn != 0).count();
         let with_side = net
             .lanes
@@ -116,7 +141,14 @@ impl Traffic {
             .iter()
             .filter(|l| (l.priority - omsi_sim::traffic::DEFAULT_PRIORITY).abs() > 0.5)
             .count();
-        log::info!("traffic: {} lanes ({turning} turning, {with_side} with a neighbour, {turn_lanes} where a turn lane applies, {closed} closed to cars of which {closed_junctions} are junctions, {quiet} with less traffic by [rule], {prio} with a [rule] priority), {} AI vehicle types in {} groups, {} light programs, {} lamps", net.lanes.len(), types.len(), groups.len(), lights.len(), world.light_objects.lock().len());
+        log::info!(
+            "traffic: {} lanes ({turning} turning, {with_side} with a neighbour, {turn_lanes} where a turn lane applies, {closed} closed to cars of which {closed_junctions} are junctions, {quiet} with less traffic by [rule], {prio} with a [rule] priority), {} AI vehicle types in {} groups, {} light programs, {} lamps",
+            net.lanes.len(),
+            types.len(),
+            groups.len(),
+            lights.len(),
+            world.light_objects.lock().len()
+        );
         // lights on paths a car reaches from a lit path of the same crossing (they hold
         // only a car that comes into the crossing there, see `light_at_entry`)
         let inner_lights = (0..net.lanes.len())
@@ -127,17 +159,37 @@ impl Traffic {
                     && net.prev.get(l).is_some_and(|ps| {
                         ps.iter().any(|&p| {
                             let q = &net.lanes[p];
-                            q.source == 2 && q.traffic_light.is_some() && q.key.map(|k| (k.tile, k.id)) == lane.key.map(|k| (k.tile, k.id))
+                            q.source == 2
+                                && q.traffic_light.is_some()
+                                && q.key.map(|k| (k.tile, k.id)) == lane.key.map(|k| (k.tile, k.id))
                         })
                     })
             })
             .count();
-        log::info!("traffic: {inner_lights} lit paths inside crossings (a car already in the crossing is not held there again)");
+        log::info!(
+            "traffic: {inner_lights} lit paths inside crossings (a car already in the crossing is not held there again)"
+        );
         let density_curve = world.global.traffic_density_road.clone();
         let unsched_factor = crate::settings::Settings::load().ai_unsched_factor;
         let max_scheduled = crate::settings::Settings::load().ai_max_scheduled;
-        let random = RandomTypes { types, groups, group_curves, group_uvg, uvg_defaults };
-        let mut sim = TrafficSim::assemble(root, net, random, lights, controller_of_object, (parked_cars, lane_tiles), density_curve, (unsched_factor, max_scheduled), target);
+        let random = RandomTypes {
+            types,
+            groups,
+            group_curves,
+            group_uvg,
+            uvg_defaults,
+        };
+        let mut sim = TrafficSim::assemble(
+            root,
+            net,
+            random,
+            lights,
+            controller_of_object,
+            (parked_cars, lane_tiles),
+            density_curve,
+            (unsched_factor, max_scheduled),
+            target,
+        );
         // (#1773: off, an early timetable bus waits at every stop, as in OMSI)
         let settings = crate::settings::Settings::load();
         sim.timed_waits_only = settings.ai_wait_timed_stops_only;
@@ -155,7 +207,10 @@ impl Traffic {
         if n > 0 {
             added = self.sim.net.extend(new, omsi_sim::traffic::LINK_TOLERANCE);
             self.sim.set_spawn_densities(added.clone());
-            self.sim.street_weight += self.sim.net.lanes[added.clone()].iter().filter_map(street_lane_weight).sum::<f64>();
+            self.sim.street_weight += self.sim.net.lanes[added.clone()]
+                .iter()
+                .filter_map(street_lane_weight)
+                .sum::<f64>();
             log::debug!(
                 "traffic: {} lanes added ({} in all)",
                 added.len(),
@@ -170,7 +225,11 @@ impl Traffic {
         // new crossings bring their light programs; the running ones keep their clocks
         // (a program is never taken away again: the numbers only grow)
         for (index, object, c) in new_lights {
-            debug_assert_eq!(index, self.sim.lights.len(), "light programs arrive in the order of their numbers");
+            debug_assert_eq!(
+                index,
+                self.sim.lights.len(),
+                "light programs arrive in the order of their numbers"
+            );
             self.sim.light_prev.push(vec![-100; c.lights.len()]);
             self.sim.lights.push(c);
             self.sim.controller_of_object.insert(object, index);
@@ -190,7 +249,12 @@ pub(super) fn take_from_tiles(
     Vec<(i32, i32)>,
     Vec<(usize, i64, omsi_sim::traffic::TrafficLightController)>,
 ) {
-    let TrafficArrivals { lanes: mut new, parked, tiles, lights } = TrafficArrivals::gather(inbox.take());
+    let TrafficArrivals {
+        lanes: mut new,
+        parked,
+        tiles,
+        lights,
+    } = TrafficArrivals::gather(inbox.take());
     // The tiles are read in parallel and hand in their lanes in the order they finish:
     // sorted by their map identity, the lanes a set of tiles brings are numbered alike in
     // every run, and so is the random traffic drawn from them (a run can be repeated to
@@ -269,7 +333,10 @@ fn random_types(root: &Path, world: &World) -> RandomTypes {
         // or a lorry) in a group of its own had one car in four of that kind (#1025).
         if unscheduled.is_none() && !all_groups {
             if let Some(g) = lists.groups.get(lists.default_group) {
-                log::info!("random traffic: no unsched_vehgroups.txt, only the default AI group {}", g.name);
+                log::info!(
+                    "random traffic: no unsched_vehgroups.txt, only the default AI group {}",
+                    g.name
+                );
             }
         }
         for (_, g) in lists.groups.iter().enumerate().filter(|(i, g)| {
@@ -321,8 +388,20 @@ fn random_types(root: &Path, world: &World) -> RandomTypes {
                 match VehicleType::load_ai(root, &path) {
                     // a vehicle that declares its modes stays off a map built for others (cars and
                     // lorries declare none: they are scenery on any street)
-                    Ok(t) if !t.def.transport.is_empty() && !omsi_cfg::transport::admit(world.global.transport, t.def.transport, true).is_allowed() => {
-                        log::debug!("AI vehicle {} is made for {}, not for this map", v.file, t.def.transport.describe());
+                    Ok(t)
+                        if !t.def.transport.is_empty()
+                            && !omsi_cfg::transport::admit(
+                                world.global.transport,
+                                t.def.transport,
+                                true,
+                            )
+                            .is_allowed() =>
+                    {
+                        log::debug!(
+                            "AI vehicle {} is made for {}, not for this map",
+                            v.file,
+                            t.def.transport.describe()
+                        );
                     }
                     Ok(t) => {
                         // rail (only as scheduled trains), 3 = aircraft on flight paths
@@ -330,10 +409,7 @@ fn random_types(root: &Path, world: &World) -> RandomTypes {
                         let air =
                             matches!(t.def.kind, omsi_vehicle::vehicle::VehicleKind::Other(3));
                         if rail {
-                            log::debug!(
-                                "AI vehicle {} is rail-bound, not street traffic",
-                                v.file
-                            );
+                            log::debug!("AI vehicle {} is rail-bound, not street traffic", v.file);
                         } else {
                             types.push((
                                 Arc::new(t),
@@ -348,7 +424,13 @@ fn random_types(root: &Path, world: &World) -> RandomTypes {
             }
         }
     }
-    RandomTypes { types, groups, group_curves, group_uvg, uvg_defaults }
+    RandomTypes {
+        types,
+        groups,
+        group_curves,
+        group_uvg,
+        uvg_defaults,
+    }
 }
 
 /// `OMSI_DEBUG_LANES`: the chosen lanes as the network has them.
@@ -399,7 +481,23 @@ fn log_debug_lanes(net: &Network) {
                     )
                 })
                 .collect();
-            log::info!("lane {i}: {} {:?} rev {} turn {} prio {} len {:.1} start ({:.1}, {:.1}) end ({:.1}, {:.1}) next {:?} light {:?} crossings {:?} {}", l.name, l.key, l.reversed, l.turn, l.priority, l.length(), l.start().x, l.start().y, l.end().x, l.end().y, l.next, l.traffic_light, net.crossings.get(i), samples.join(" "));
+            log::info!(
+                "lane {i}: {} {:?} rev {} turn {} prio {} len {:.1} start ({:.1}, {:.1}) end ({:.1}, {:.1}) next {:?} light {:?} crossings {:?} {}",
+                l.name,
+                l.key,
+                l.reversed,
+                l.turn,
+                l.priority,
+                l.length(),
+                l.start().x,
+                l.start().y,
+                l.end().x,
+                l.end().y,
+                l.next,
+                l.traffic_light,
+                net.crossings.get(i),
+                samples.join(" ")
+            );
         }
     }
 }

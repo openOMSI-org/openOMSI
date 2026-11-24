@@ -6,11 +6,7 @@ type Key = (i64, i64, i64);
 type Edge = (Key, Key);
 
 fn edge(a: Key, b: Key) -> Edge {
-    if a < b {
-        (a, b)
-    } else {
-        (b, a)
-    }
+    if a < b { (a, b) } else { (b, a) }
 }
 
 /// Rotate around `b` through adjacent faces until the next open edge is reached.
@@ -74,7 +70,7 @@ pub(super) fn trace_faces(
 
 #[cfg(test)]
 mod tests {
-    use crate::{hole_mesh_rims, terrain_hole_walls, MeshData};
+    use crate::{MeshData, hole_mesh_rims, terrain_hole_walls};
     use glam::{DVec3, Mat4, Vec3};
     use omsi_map::Terrain;
 
@@ -123,9 +119,10 @@ mod tests {
         assert_eq!(rims.len(), 3); // Six open edges meet at the welded shared corner.
         for points in profiles {
             let expected = points.map(|p| origin + transform.transform_point3(p).as_dvec3());
-            assert!(rims
-                .iter()
-                .any(|r| r.len() == 4 && expected.iter().all(|p| r.contains(p))));
+            assert!(
+                rims.iter()
+                    .any(|r| r.len() == 4 && expected.iter().all(|p| r.contains(p)))
+            );
         }
         assert_eq!(rims, hole_mesh_rims(&mesh, &transform, origin));
 

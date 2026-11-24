@@ -123,20 +123,35 @@ impl Shape {
     /// The vehicle `v` as it stands, with its box `extent` (origin to front bumper, to
     /// rear bumper, half width) and the road `road_z` under it, and where its sections
     /// stand now.
-    pub fn of(v: &VehicleInstance, extent: (f32, f32, f32), road_z: f64) -> (Shape, Vec<SectionPose>) {
+    pub fn of(
+        v: &VehicleInstance,
+        extent: (f32, f32, f32),
+        road_z: f64,
+    ) -> (Shape, Vec<SectionPose>) {
         let (front, rear, half_width) = extent;
         let height = match v.ty.def.bounding_box {
             Some(bb) => (v.position.z + (bb[5] + 0.5 * bb[2]) as f64 - road_z).max(0.5),
             None => 1.5,
         };
-        let mut shape = Shape { front: front as f64, rear: rear as f64, half_width: half_width as f64, height, sections: Vec::new() };
+        let mut shape = Shape {
+            front: front as f64,
+            rear: rear as f64,
+            half_width: half_width as f64,
+            height,
+            sections: Vec::new(),
+        };
         let mut poses = Vec::new();
         let (mut lead_pos, mut lead_rot) = (v.position, v.body_rotation());
         let (mut reference, mut heading) = (v.position.truncate(), v.heading);
         for t in &v.trailers {
             let c = t.coupling_point(lead_pos, lead_rot).truncate();
-            shape.sections.push(section_of(t, c, reference, heading, road_z));
-            poses.push(SectionPose { coupling: c, heading: t.heading });
+            shape
+                .sections
+                .push(section_of(t, c, reference, heading, road_z));
+            poses.push(SectionPose {
+                coupling: c,
+                heading: t.heading,
+            });
             (lead_pos, lead_rot) = (t.position, t.body_rotation());
             (reference, heading) = (c, t.heading);
         }
@@ -153,14 +168,21 @@ impl Shape {
             let c = reference + to_world(s.hitch, lead);
             let axle = p.coupling - fwd(p.heading) * s.length;
             let d = c - axle;
-            let mut h = if d.length() > 1e-6 { d.x.atan2(d.y).to_degrees() } else { p.heading };
+            let mut h = if d.length() > 1e-6 {
+                d.x.atan2(d.y).to_degrees()
+            } else {
+                p.heading
+            };
             if let Some(a) = s.max_alpha {
                 let rel = wrap(lead - h);
                 if rel.abs() > a {
                     h = lead - rel.clamp(-a, a);
                 }
             }
-            *p = SectionPose { coupling: c, heading: h };
+            *p = SectionPose {
+                coupling: c,
+                heading: h,
+            };
             reference = c;
             lead = h;
         }
@@ -175,7 +197,13 @@ impl Shape {
     }
 
     /// Every box of the vehicle: the main body's, then each section's.
-    pub fn boxes(&self, origin: DVec2, heading: f64, road_z: f64, poses: &[SectionPose]) -> Vec<Obb> {
+    pub fn boxes(
+        &self,
+        origin: DVec2,
+        heading: f64,
+        road_z: f64,
+        poses: &[SectionPose],
+    ) -> Vec<Obb> {
         let mut out = vec![self.main_box(origin, heading, road_z)];
         for (s, p) in self.sections.iter().zip(poses) {
             out.push(Obb {
@@ -198,13 +226,35 @@ fn section_of(t: &TrailerPart, c: DVec2, reference: DVec2, heading: f64, road_z:
     let (center, half, turned, height) = match t.ty.def.bounding_box {
         Some(bb) => {
             let b = Obb::from_box(bb, t.position, t.body_heading());
-            (to_local(b.center - c, t.heading), b.half, b.heading - t.heading.to_radians(), (b.z1 - road_z).max(0.5))
+            (
+                to_local(b.center - c, t.heading),
+                b.half,
+                b.heading - t.heading.to_radians(),
+                (b.z1 - road_z).max(0.5),
+            )
         }
         // (no box: a body as long as its coupling is from its axle, and a metre more)
-        None => (DVec2::new(0.0, -0.5 * length - 0.5), DVec2::new(1.0, 0.5 * length + 1.0), 0.0, 2.5),
+        None => (
+            DVec2::new(0.0, -0.5 * length - 0.5),
+            DVec2::new(1.0, 0.5 * length + 1.0),
+            0.0,
+            2.5,
+        ),
     };
-    let max_alpha = t.ty.def.coupling_front_character.filter(|c| c[3] != 0.0 && c[0] > 0.0).map(|c| c[0] as f64);
-    Section { hitch: to_local(c - reference, heading), length, center, half, turned, height, max_alpha }
+    let max_alpha =
+        t.ty.def
+            .coupling_front_character
+            .filter(|c| c[3] != 0.0 && c[0] > 0.0)
+            .map(|c| c[0] as f64);
+    Section {
+        hitch: to_local(c - reference, heading),
+        length,
+        center,
+        half,
+        turned,
+        height,
+        max_alpha,
+    }
 }
 
 /// Where a vehicle driven ahead first touches something.
@@ -226,7 +276,13 @@ pub struct Hit {
 fn hit_of(bx: &Obb, o: &Obb, part: usize) -> Option<Hit> {
     let c = bx.contact(o)?;
     let lateral = (c.point - bx.center).dot(bx.axes()[0]);
-    Some(Hit { at: 0.0, obstacle: *o, part, lateral, side: lateral.abs() > SIDE_SHARE * bx.half.x })
+    Some(Hit {
+        at: 0.0,
+        obstacle: *o,
+        part,
+        lateral,
+        side: lateral.abs() > SIDE_SHARE * bx.half.x,
+    })
 }
 
 /// How deep box `b` is in `o` (m; None apart).
@@ -242,7 +298,17 @@ fn depth(b: &Obb, o: &Obb) -> Option<f64> {
 /// Between two poses that touch and do not, the boxes are taken at fifths of the way
 /// between, so that the distance comes out to a tenth of a metre.
 #[allow(clippy::too_many_arguments)]
-pub fn first_contact(body: &AiBody, shape: &Shape, poses: &[SectionPose], way: &dyn Fn(f32) -> DVec3, road_z: f64, speed: f32, distance: f32, obstacles: &[Obb], frontal_now: bool) -> Option<Hit> {
+pub fn first_contact(
+    body: &AiBody,
+    shape: &Shape,
+    poses: &[SectionPose],
+    way: &dyn Fn(f32) -> DVec3,
+    road_z: f64,
+    speed: f32,
+    distance: f32,
+    obstacles: &[Obb],
+    frontal_now: bool,
+) -> Option<Hit> {
     if obstacles.is_empty() {
         return None;
     }
@@ -251,9 +317,12 @@ pub fn first_contact(body: &AiBody, shape: &Shape, poses: &[SectionPose], way: &
     let mut touching = vec![false; obstacles.len()];
     for (k, o) in obstacles.iter().enumerate() {
         for (part, b) in now.iter().enumerate() {
-            let Some(hit) = hit_of(b, o, part) else { continue };
+            let Some(hit) = hit_of(b, o, part) else {
+                continue;
+            };
             // (in front of the main body's middle: ahead of it, not beside)
-            if frontal_now && !hit.side && part == 0 && (o.center - b.center).dot(b.axes()[1]) > 0.0 {
+            if frontal_now && !hit.side && part == 0 && (o.center - b.center).dot(b.axes()[1]) > 0.0
+            {
                 return Some(hit);
             }
             touching[k] = true;
@@ -283,9 +352,19 @@ pub fn first_contact(body: &AiBody, shape: &Shape, poses: &[SectionPose], way: &
             for k in 1..=5 {
                 let u = k as f64 / 5.0;
                 let lerp = |a: f64, b: f64| a + wrap(b - a) * u;
-                let mid: Vec<SectionPose> = s0.iter().zip(&sections).map(|(a, b)| SectionPose { coupling: a.coupling.lerp(b.coupling, u), heading: lerp(a.heading, b.heading) }).collect();
+                let mid: Vec<SectionPose> = s0
+                    .iter()
+                    .zip(&sections)
+                    .map(|(a, b)| SectionPose {
+                        coupling: a.coupling.lerp(b.coupling, u),
+                        heading: lerp(a.heading, b.heading),
+                    })
+                    .collect();
                 if let Some(h) = touches(o0.lerp(origin, u), lerp(*h0, b.heading), z, &mid) {
-                    hit = Some(Hit { at: x0 + (x - x0) * u as f32, ..h });
+                    hit = Some(Hit {
+                        at: x0 + (x - x0) * u as f32,
+                        ..h
+                    });
                     return true;
                 }
             }
@@ -332,7 +411,14 @@ impl SceneryGuard {
     /// `dt` seconds), watched near the scenery - a recovering body picks its look-ahead
     /// first, and a step into something is taken back - and what the planner learns of
     /// where the body got to (`body_link`).
-    pub fn step(&mut self, body: &mut AiBody, (state, net, dt): (&AiState, &Network, f32), way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::rigid::Ground>) -> crate::traffic::BodyLink {
+    pub fn step(
+        &mut self,
+        body: &mut AiBody,
+        (state, net, dt): (&AiState, &Network, f32),
+        way: &dyn Fn(f32) -> DVec3,
+        ground: Option<&dyn Fn(f64, f64) -> Option<f64>>,
+        contact: Option<&dyn crate::rigid::Ground>,
+    ) -> crate::traffic::BodyLink {
         let before = self.watching(body.kind).then(|| body.clone());
         if before.is_some() {
             self.pick_horizon(body, way, state.speed);
@@ -378,9 +464,20 @@ impl SceneryGuard {
     /// After a step from `before` to `body`: a step that took the main body deeper into
     /// something is taken back, and the body recovers.
     pub fn after_step(&mut self, before: AiBody, body: &mut AiBody, dt: f32) {
-        let old = self.shape.main_box(before.position.truncate(), before.heading, before.position.z);
-        let new = self.shape.main_box(body.position.truncate(), body.heading, body.position.z);
-        let into: Vec<Obb> = self.near.iter().filter(|o| depth(&new, o).is_some_and(|d| d > depth(&old, o).unwrap_or(0.0) + DEEPER)).copied().collect();
+        let old = self.shape.main_box(
+            before.position.truncate(),
+            before.heading,
+            before.position.z,
+        );
+        let new = self
+            .shape
+            .main_box(body.position.truncate(), body.heading, body.position.z);
+        let into: Vec<Obb> = self
+            .near
+            .iter()
+            .filter(|o| depth(&new, o).is_some_and(|d| d > depth(&old, o).unwrap_or(0.0) + DEEPER))
+            .copied()
+            .collect();
         self.rejected = !into.is_empty();
         if self.rejected {
             body.take_back(before);
@@ -411,8 +508,16 @@ impl TrafficSim {
     /// Car `i` and the scenery ahead: a look along its way when one is due, a nudge round
     /// something at the side, and where it has to stop short of the scenery (folded into
     /// `stop_at` and `why`, as `stop_points` does).
-    pub(super) fn scenery_stop(&mut self, i: usize, ts: &TickScene, stop_at: Option<f32>, why: (&'static str, f32)) -> (Option<f32>, (&'static str, f32)) {
-        let Some(world) = self.occluders.clone() else { return (stop_at, why) };
+    pub(super) fn scenery_stop(
+        &mut self,
+        i: usize,
+        ts: &TickScene,
+        stop_at: Option<f32>,
+        why: (&'static str, f32),
+    ) -> (Option<f32>, (&'static str, f32)) {
+        let Some(world) = self.occluders.clone() else {
+            return (stop_at, why);
+        };
         if (world.boxes.is_empty() && world.meshes.is_empty())
             || self.cars[i].body.kind != MotionKind::Road
             || self.net.lanes[self.cars[i].state.lane].kind == LaneKind::Air
@@ -428,7 +533,11 @@ impl TrafficSim {
             self.look_at_scenery(i, &world, ts);
         }
         let car = &mut self.cars[i];
-        if car.guard.nudge_until.is_some_and(|u| car.state.odometer > u) {
+        if car
+            .guard
+            .nudge_until
+            .is_some_and(|u| car.state.odometer > u)
+        {
             // past it: back to the middle of the lane, gently
             car.state.nudge_to(0.0, 12.0);
             car.guard.nudge_until = None;
@@ -462,7 +571,14 @@ impl TrafficSim {
         car.guard.held = 0.0;
         car.guard.near.retain(|o| !same(o, &what));
         if !self.scenery_through.iter().any(|o| same(o, &what)) {
-            log::info!("t={:.1}: car {} {how} the scenery (object {}, at ({:.1}, {:.1})) for {PATIENCE:.0} s: its way runs through it, the traffic drives through it from now on", self.time, car.id, what.id, what.center.x, what.center.y);
+            log::info!(
+                "t={:.1}: car {} {how} the scenery (object {}, at ({:.1}, {:.1})) for {PATIENCE:.0} s: its way runs through it, the traffic drives through it from now on",
+                self.time,
+                car.id,
+                what.id,
+                what.center.x,
+                what.center.y
+            );
             self.scenery_through.push(what);
         }
     }
@@ -477,14 +593,27 @@ impl TrafficSim {
         let road_z = car.body.position.z;
         let (shape, poses) = Shape::of(&car.vehicle, (st.front, st.rear, car.half_width), road_z);
         let reach = scenery_reach(st);
-        let hit = first_contact(&car.body, &shape, &poses, &|d| st.way_point(net, d), road_z, st.speed, reach, &near, true);
+        let hit = first_contact(
+            &car.body,
+            &shape,
+            &poses,
+            &|d| st.way_point(net, d),
+            road_z,
+            st.speed,
+            reach,
+            &near,
+            true,
+        );
         // round it at the side, if a nudge within the lane clears it and everybody else -
         // or away from what a corner touches already
         let beside_now = || {
             let me = shape.main_box(car.body.position.truncate(), car.body.heading, road_z);
-            near.iter().find_map(|o| hit_of(&me, o, 0).filter(|h| h.side))
+            near.iter()
+                .find_map(|o| hit_of(&me, o, 0).filter(|h| h.side))
         };
-        let side = hit.filter(|h| h.side).or_else(|| hit.is_none().then(beside_now).flatten());
+        let side = hit
+            .filter(|h| h.side)
+            .or_else(|| hit.is_none().then(beside_now).flatten());
         let nudge = side.and_then(|h| self.nudge_round(i, &h, &shape, &poses, &near, ts));
         let was = self.cars[i].guard.contact.is_some();
         let car = &mut self.cars[i];
@@ -505,7 +634,15 @@ impl TrafficSim {
                         s.window.scenery_stops += 1;
                     }
                     if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
-                        log::info!("t={:.1}: car {} would touch the scenery (object {}, part {}{}) in {:.1} m: it stops short", self.time, car.id, h.obstacle.id, h.part, if h.side { ", at the side" } else { "" }, h.at);
+                        log::info!(
+                            "t={:.1}: car {} would touch the scenery (object {}, part {}{}) in {:.1} m: it stops short",
+                            self.time,
+                            car.id,
+                            h.obstacle.id,
+                            h.part,
+                            if h.side { ", at the side" } else { "" },
+                            h.at
+                        );
                     }
                 }
             }
@@ -520,7 +657,14 @@ impl TrafficSim {
         let car = &self.cars[i];
         let st = &car.state;
         let reach = scenery_reach(st);
-        let height = car.vehicle.ty.def.bounding_box.map(|bb| (bb[5] + 0.5 * bb[2]) as f64).unwrap_or(1.5).max(1.0);
+        let height = car
+            .vehicle
+            .ty
+            .def
+            .bounding_box
+            .map(|bb| (bb[5] + 0.5 * bb[2]) as f64)
+            .unwrap_or(1.5)
+            .max(1.0);
         let wide = car.half_width as f64 + 2.0 + 0.5 * car.vehicle.trailers.len() as f64;
         let parked: Vec<DVec2> = self
             .way_lanes(st, reach + 10.0)
@@ -528,18 +672,25 @@ impl TrafficSim {
             .chain(st.prev_lane.map(|p| (p, 0.0)))
             .flat_map(|(l, _)| {
                 let lane = &self.net.lanes[l];
-                self.parked.get(&l).into_iter().flatten().map(move |&(s, lat)| {
-                    let (q, h) = lane.at(s);
-                    let hr = (h as f64).to_radians();
-                    q.truncate() + DVec2::new(hr.cos(), -hr.sin()) * lat as f64
-                })
+                self.parked
+                    .get(&l)
+                    .into_iter()
+                    .flatten()
+                    .map(move |&(s, lat)| {
+                        let (q, h) = lane.at(s);
+                        let hr = (h as f64).to_radians();
+                        q.truncate() + DVec2::new(hr.cos(), -hr.sin()) * lat as f64
+                    })
             })
             .collect();
         let mut out: Vec<Obb> = Vec::new();
         let behind = -(st.rear + 2.0 + 12.0 * car.vehicle.trailers.len() as f32);
         let mut d = behind;
         while d < reach + st.front {
-            let (p, q) = (st.way_point(&self.net, d), st.way_point(&self.net, d + 10.0));
+            let (p, q) = (
+                st.way_point(&self.net, d),
+                st.way_point(&self.net, d + 10.0),
+            );
             let along = (q - p).truncate();
             let chunk = Obb {
                 center: (p.truncate() + q.truncate()) * 0.5,
@@ -550,7 +701,12 @@ impl TrafficSim {
                 ..Obb::point(DVec3::ZERO, 0.0)
             };
             for o in world.obstacles_near(&chunk) {
-                if out.iter().any(|x| same(x, &o)) || self.scenery_through.iter().any(|x| same(x, &o)) || parked.iter().any(|p| (*p - o.center).length() < PARKED_NEAR) {
+                if out.iter().any(|x| same(x, &o))
+                    || self.scenery_through.iter().any(|x| same(x, &o))
+                    || parked
+                        .iter()
+                        .any(|p| (*p - o.center).length() < PARKED_NEAR)
+                {
                     continue;
                 }
                 out.push(o);
@@ -563,7 +719,15 @@ impl TrafficSim {
     /// A nudge within the lane that takes car `i` clear of what it would touch at the side
     /// (`hit`) and of everybody else: (where to, over how many metres), the first of the
     /// candidates that clears.
-    fn nudge_round(&self, i: usize, hit: &Hit, shape: &Shape, poses: &[SectionPose], near: &[Obb], ts: &TickScene) -> Option<(f32, f32)> {
+    fn nudge_round(
+        &self,
+        i: usize,
+        hit: &Hit,
+        shape: &Shape,
+        poses: &[SectionPose],
+        near: &[Obb],
+        ts: &TickScene,
+    ) -> Option<(f32, f32)> {
         let car = &self.cars[i];
         let st = &car.state;
         let lane = &self.net.lanes[st.lane];
@@ -585,7 +749,14 @@ impl TrafficSim {
             .feet
             .near(pos, reach as f64 + 15.0)
             .filter(|f| f.car != i)
-            .map(|f| Obb { center: f.center, half: DVec2::new(f.half_w, f.half_len), heading: f.fwd.x.atan2(f.fwd.y), z0: f.z - 1.0, z1: f.z + 4.0, ..Obb::point(DVec3::ZERO, 0.0) })
+            .map(|f| Obb {
+                center: f.center,
+                half: DVec2::new(f.half_w, f.half_len),
+                heading: f.fwd.x.atan2(f.fwd.y),
+                z0: f.z - 1.0,
+                z1: f.z + 4.0,
+                ..Obb::point(DVec3::ZERO, 0.0)
+            })
             .collect();
         let road_z = car.body.position.z;
         let mut candidates: Vec<f32> = NUDGES.to_vec();
@@ -600,7 +771,22 @@ impl TrafficSim {
             let mut alt = st.clone();
             alt.nudge_to(to, ramp);
             let way = |d: f32| alt.way_point(&self.net, d);
-            let clear = first_contact(&car.body, shape, poses, &way, road_z, st.speed, reach, near, false).is_none() && first_contact(&car.body, shape, poses, &way, road_z, st.speed, reach.min(hit.at + 10.0), &bodies, false).is_none();
+            let clear = first_contact(
+                &car.body, shape, poses, &way, road_z, st.speed, reach, near, false,
+            )
+            .is_none()
+                && first_contact(
+                    &car.body,
+                    shape,
+                    poses,
+                    &way,
+                    road_z,
+                    st.speed,
+                    reach.min(hit.at + 10.0),
+                    &bodies,
+                    false,
+                )
+                .is_none();
             if clear {
                 return Some((to, ramp));
             }
@@ -621,15 +807,39 @@ mod tests {
     use super::*;
 
     fn wall(center: DVec2, half: DVec2) -> Obb {
-        Obb { center, half, heading: 0.0, z0: -1.0, z1: 5.0, ..Obb::point(DVec3::ZERO, 0.0) }
+        Obb {
+            center,
+            half,
+            heading: 0.0,
+            z0: -1.0,
+            z1: 5.0,
+            ..Obb::point(DVec3::ZERO, 0.0)
+        }
     }
 
     /// An articulated bus: a 12 m front body, a section of 8 m on a joint 5 m behind the
     /// origin with its axle 5 m behind the joint, the joint stopping at 52.5°.
     fn artic() -> (Shape, Vec<SectionPose>) {
-        let section = Section { hitch: DVec2::new(0.0, -5.0), length: 5.0, center: DVec2::new(0.0, -4.5), half: DVec2::new(1.25, 4.5), turned: 0.0, height: 3.0, max_alpha: Some(52.5) };
-        let shape = Shape { front: 7.0, rear: 5.0, half_width: 1.25, height: 3.0, sections: vec![section] };
-        let poses = vec![SectionPose { coupling: DVec2::new(0.0, -5.0), heading: 0.0 }];
+        let section = Section {
+            hitch: DVec2::new(0.0, -5.0),
+            length: 5.0,
+            center: DVec2::new(0.0, -4.5),
+            half: DVec2::new(1.25, 4.5),
+            turned: 0.0,
+            height: 3.0,
+            max_alpha: Some(52.5),
+        };
+        let shape = Shape {
+            front: 7.0,
+            rear: 5.0,
+            half_width: 1.25,
+            height: 3.0,
+            sections: vec![section],
+        };
+        let poses = vec![SectionPose {
+            coupling: DVec2::new(0.0, -5.0),
+            heading: 0.0,
+        }];
         (shape, poses)
     }
 
@@ -653,22 +863,49 @@ mod tests {
             inside = inside.max(hitch_r - (axle - centre).length());
         }
         // (12 m steady: the axle 1 m inside its coupling's circle)
-        assert!(inside > 0.6 && inside < 1.05, "the rear axle cut in by {inside:.2} m");
+        assert!(
+            inside > 0.6 && inside < 1.05,
+            "the rear axle cut in by {inside:.2} m"
+        );
         // the section's tail stays inside the coupling's circle; one long box from the
         // front's origin would have swung it out to 18 m
         let p = poses[0];
         let tail = p.coupling + to_world(DVec2::new(0.0, -9.0), p.heading);
-        assert!((tail - centre).length() < hitch_r, "tail {:.2} m from the centre", (tail - centre).length());
+        assert!(
+            (tail - centre).length() < hitch_r,
+            "tail {:.2} m from the centre",
+            (tail - centre).length()
+        );
         // jackknifed: the front turned 90° on the spot, the joint holds at 52.5°
         let (shape, mut poses) = artic();
         shape.follow(DVec2::ZERO, 90.0, &mut poses);
-        assert!((wrap(90.0 - poses[0].heading) - 52.5).abs() < 1e-6, "{:?}", poses[0]);
+        assert!(
+            (wrap(90.0 - poses[0].heading) - 52.5).abs() < 1e-6,
+            "{:?}",
+            poses[0]
+        );
     }
 
     fn golf() -> omsi_vehicle::Vehicle {
         use omsi_vehicle::vehicle::Axle;
-        let mut v = omsi_vehicle::Vehicle { mass: 1.0, rot_pnt_long: -1.3, inv_min_turn_radius: 0.19, ..Default::default() };
-        v.axles = vec![Axle { long: 1.2, max_width: 1.6, ..Default::default() }, Axle { long: -1.3, max_width: 1.6, ..Default::default() }];
+        let mut v = omsi_vehicle::Vehicle {
+            mass: 1.0,
+            rot_pnt_long: -1.3,
+            inv_min_turn_radius: 0.19,
+            ..Default::default()
+        };
+        v.axles = vec![
+            Axle {
+                long: 1.2,
+                max_width: 1.6,
+                ..Default::default()
+            },
+            Axle {
+                long: -1.3,
+                max_width: 1.6,
+                ..Default::default()
+            },
+        ];
         v
     }
 
@@ -680,19 +917,86 @@ mod tests {
         let way = |d: f32| DVec3::new(0.0, d as f64, 0.0);
         let mut body = AiBody::new(&golf(), MotionKind::Road);
         body.place(&way, None, None, 0.0);
-        let shape = Shape { front: 2.1, rear: 2.2, half_width: 0.85, height: 1.5, sections: Vec::new() };
-        let hit = first_contact(&body, &shape, &[], &way, 0.0, 8.0, 40.0, &[wall(DVec2::new(0.0, 20.0), DVec2::new(3.0, 0.2))], false).expect("the wall");
+        let shape = Shape {
+            front: 2.1,
+            rear: 2.2,
+            half_width: 0.85,
+            height: 1.5,
+            sections: Vec::new(),
+        };
+        let hit = first_contact(
+            &body,
+            &shape,
+            &[],
+            &way,
+            0.0,
+            8.0,
+            40.0,
+            &[wall(DVec2::new(0.0, 20.0), DVec2::new(3.0, 0.2))],
+            false,
+        )
+        .expect("the wall");
         assert!((hit.at - 17.7).abs() < 0.6 && !hit.side, "{hit:?}");
-        let hit = first_contact(&body, &shape, &[], &way, 0.0, 8.0, 40.0, &[wall(DVec2::new(1.0, 15.0), DVec2::new(0.2, 0.2))], false).expect("the post");
+        let hit = first_contact(
+            &body,
+            &shape,
+            &[],
+            &way,
+            0.0,
+            8.0,
+            40.0,
+            &[wall(DVec2::new(1.0, 15.0), DVec2::new(0.2, 0.2))],
+            false,
+        )
+        .expect("the post");
         assert!(hit.side, "{hit:?}");
-        assert!(first_contact(&body, &shape, &[], &way, 0.0, 8.0, 40.0, &[wall(DVec2::new(0.0, 1.0), DVec2::new(0.3, 0.3))], false).is_none());
-        assert!(first_contact(&body, &shape, &[], &way, 0.0, 8.0, 40.0, &[wall(DVec2::new(1.4, 15.0), DVec2::new(0.2, 0.2))], false).is_none());
+        assert!(
+            first_contact(
+                &body,
+                &shape,
+                &[],
+                &way,
+                0.0,
+                8.0,
+                40.0,
+                &[wall(DVec2::new(0.0, 1.0), DVec2::new(0.3, 0.3))],
+                false
+            )
+            .is_none()
+        );
+        assert!(
+            first_contact(
+                &body,
+                &shape,
+                &[],
+                &way,
+                0.0,
+                8.0,
+                40.0,
+                &[wall(DVec2::new(1.4, 15.0), DVec2::new(0.2, 0.2))],
+                false
+            )
+            .is_none()
+        );
         // a kerb-high block is driven over, an overhead sign under
         let mut low = wall(DVec2::new(0.0, 20.0), DVec2::new(3.0, 0.2));
         low.z1 = 0.1;
         let mut high = low;
         (high.z0, high.z1) = (4.5, 5.0);
-        assert!(first_contact(&body, &shape, &[], &way, 0.0, 8.0, 40.0, &[low, high], false).is_none());
+        assert!(
+            first_contact(
+                &body,
+                &shape,
+                &[],
+                &way,
+                0.0,
+                8.0,
+                40.0,
+                &[low, high],
+                false
+            )
+            .is_none()
+        );
     }
 
     /// The rear section of an articulated bus turning right cuts in: a post just inside
@@ -717,7 +1021,10 @@ mod tests {
         let mut body = AiBody::new(&def, MotionKind::Road);
         body.place(&way, None, None, 0.0);
         let (shape, poses) = artic();
-        let front_only = Shape { sections: Vec::new(), ..shape.clone() };
+        let front_only = Shape {
+            sections: Vec::new(),
+            ..shape.clone()
+        };
         // a post just inside where the rear section's inner side passes once the bus has
         // come round (the section cuts in further than the front body)
         let mut probe = poses.clone();
@@ -726,9 +1033,27 @@ mod tests {
             false
         });
         let s = probe[0];
-        let post = wall(s.coupling + to_world(DVec2::new(1.25 - 0.1, -6.0), s.heading), DVec2::new(0.05, 0.05));
-        assert!(first_contact(&body, &front_only, &[], &way, 0.0, 4.0, 18.0, &[post], false).is_none(), "the front body touches the post");
-        let hit = first_contact(&body, &shape, &poses, &way, 0.0, 4.0, 18.0, &[post], false).expect("the section touches it");
+        let post = wall(
+            s.coupling + to_world(DVec2::new(1.25 - 0.1, -6.0), s.heading),
+            DVec2::new(0.05, 0.05),
+        );
+        assert!(
+            first_contact(
+                &body,
+                &front_only,
+                &[],
+                &way,
+                0.0,
+                4.0,
+                18.0,
+                &[post],
+                false
+            )
+            .is_none(),
+            "the front body touches the post"
+        );
+        let hit = first_contact(&body, &shape, &poses, &way, 0.0, 4.0, 18.0, &[post], false)
+            .expect("the section touches it");
         assert_eq!(hit.part, 1, "{hit:?}");
     }
 }

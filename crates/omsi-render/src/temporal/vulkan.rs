@@ -7,7 +7,7 @@
 //! memory barrier opens and closes every buffer of ours, and the vendors' own barriers move each
 //! image from the layout wgpu left it in and back.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use ash::vk;
 
 #[derive(Clone)]
@@ -36,17 +36,20 @@ impl VkGpu {
 }
 
 pub(super) fn queue(queue: &wgpu::Queue) -> Result<vk::Queue> {
-    let hal = unsafe { queue.as_hal::<wgpu_hal::api::Vulkan>() }.ok_or_else(|| anyhow!("no Vulkan queue under wgpu's"))?;
+    let hal = unsafe { queue.as_hal::<wgpu_hal::api::Vulkan>() }
+        .ok_or_else(|| anyhow!("no Vulkan queue under wgpu's"))?;
     Ok(hal.as_raw())
 }
 
 pub(super) fn image(t: &wgpu::Texture) -> Result<vk::Image> {
-    let hal = unsafe { t.as_hal::<wgpu_hal::api::Vulkan>() }.ok_or_else(|| anyhow!("no Vulkan image under an upscaler's texture"))?;
+    let hal = unsafe { t.as_hal::<wgpu_hal::api::Vulkan>() }
+        .ok_or_else(|| anyhow!("no Vulkan image under an upscaler's texture"))?;
     Ok(unsafe { hal.raw_handle() })
 }
 
 pub(super) fn image_and_memory(t: &wgpu::Texture) -> Result<(vk::Image, vk::DeviceMemory)> {
-    let hal = unsafe { t.as_hal::<wgpu_hal::api::Vulkan>() }.ok_or_else(|| anyhow!("no Vulkan image under an upscaler's texture"))?;
+    let hal = unsafe { t.as_hal::<wgpu_hal::api::Vulkan>() }
+        .ok_or_else(|| anyhow!("no Vulkan image under an upscaler's texture"))?;
     let memory = match unsafe { hal.memory() } {
         wgpu_hal::vulkan::TextureMemory::Allocation(a) => unsafe { a.memory() },
         wgpu_hal::vulkan::TextureMemory::Dedicated(m) => *m,
@@ -56,7 +59,8 @@ pub(super) fn image_and_memory(t: &wgpu::Texture) -> Result<(vk::Image, vk::Devi
 }
 
 pub(super) fn view(v: &wgpu::TextureView) -> Result<vk::ImageView> {
-    let hal = unsafe { v.as_hal::<wgpu_hal::api::Vulkan>() }.ok_or_else(|| anyhow!("no Vulkan image view under an upscaler's view"))?;
+    let hal = unsafe { v.as_hal::<wgpu_hal::api::Vulkan>() }
+        .ok_or_else(|| anyhow!("no Vulkan image view under an upscaler's view"))?;
     Ok(unsafe { hal.raw_handle() })
 }
 
@@ -92,7 +96,11 @@ pub(super) fn usage(u: wgpu::TextureUsages, depth: bool) -> vk::ImageUsageFlags 
         out |= vk::ImageUsageFlags::STORAGE;
     }
     if u.contains(wgpu::TextureUsages::RENDER_ATTACHMENT) {
-        out |= if depth { vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT } else { vk::ImageUsageFlags::COLOR_ATTACHMENT };
+        out |= if depth {
+            vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
+        } else {
+            vk::ImageUsageFlags::COLOR_ATTACHMENT
+        };
     }
     out
 }
@@ -115,20 +123,44 @@ impl VkRing {
     pub(super) fn new(gpu: &VkGpu) -> Result<VkRing> {
         let device = gpu.device.clone();
         let pool = unsafe {
-            device.create_command_pool(&vk::CommandPoolCreateInfo::default().queue_family_index(gpu.family).flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER), None)
+            device.create_command_pool(
+                &vk::CommandPoolCreateInfo::default()
+                    .queue_family_index(gpu.family)
+                    .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
+                None,
+            )
         }
         .context("creating a command pool")?;
         let made = (|| -> Result<Vec<Slot>> {
-            let buffers = unsafe { device.allocate_command_buffers(&vk::CommandBufferAllocateInfo::default().command_pool(pool).level(vk::CommandBufferLevel::PRIMARY).command_buffer_count(3)) }.context("allocating command buffers")?;
+            let buffers = unsafe {
+                device.allocate_command_buffers(
+                    &vk::CommandBufferAllocateInfo::default()
+                        .command_pool(pool)
+                        .level(vk::CommandBufferLevel::PRIMARY)
+                        .command_buffer_count(3),
+                )
+            }
+            .context("allocating command buffers")?;
             let mut slots = Vec::new();
             for buffer in buffers {
-                let fence = unsafe { device.create_fence(&vk::FenceCreateInfo::default(), None) }.context("creating a fence")?;
-                slots.push(Slot { buffer, fence, pending: false });
+                let fence = unsafe { device.create_fence(&vk::FenceCreateInfo::default(), None) }
+                    .context("creating a fence")?;
+                slots.push(Slot {
+                    buffer,
+                    fence,
+                    pending: false,
+                });
             }
             Ok(slots)
         })();
         match made {
-            Ok(slots) => Ok(VkRing { device, pool, slots, next: 0, open: None }),
+            Ok(slots) => Ok(VkRing {
+                device,
+                pool,
+                slots,
+                next: 0,
+                open: None,
+            }),
             Err(e) => {
                 unsafe { device.destroy_command_pool(pool, None) };
                 Err(e)
@@ -138,22 +170,40 @@ impl VkRing {
 
     fn full_barrier(&self, buffer: vk::CommandBuffer) {
         let all = vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE;
-        let barrier = vk::MemoryBarrier::default().src_access_mask(all).dst_access_mask(all);
-        unsafe { self.device.cmd_pipeline_barrier(buffer, vk::PipelineStageFlags::ALL_COMMANDS, vk::PipelineStageFlags::ALL_COMMANDS, vk::DependencyFlags::empty(), &[barrier], &[], &[]) };
+        let barrier = vk::MemoryBarrier::default()
+            .src_access_mask(all)
+            .dst_access_mask(all);
+        unsafe {
+            self.device.cmd_pipeline_barrier(
+                buffer,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::DependencyFlags::empty(),
+                &[barrier],
+                &[],
+                &[],
+            )
+        };
     }
 
     pub(super) fn begin(&mut self) -> Result<vk::CommandBuffer> {
         let i = self.next;
         let slot = &mut self.slots[i];
         if slot.pending {
-            unsafe { self.device.wait_for_fences(&[slot.fence], true, u64::MAX) }.context("waiting for a command buffer")?;
+            unsafe { self.device.wait_for_fences(&[slot.fence], true, u64::MAX) }
+                .context("waiting for a command buffer")?;
             unsafe { self.device.reset_fences(&[slot.fence]) }.context("resetting a fence")?;
             slot.pending = false;
         }
         let buffer = slot.buffer;
         unsafe {
-            self.device.reset_command_buffer(buffer, vk::CommandBufferResetFlags::empty())?;
-            self.device.begin_command_buffer(buffer, &vk::CommandBufferBeginInfo::default().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT))?;
+            self.device
+                .reset_command_buffer(buffer, vk::CommandBufferResetFlags::empty())?;
+            self.device.begin_command_buffer(
+                buffer,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )?;
         }
         self.full_barrier(buffer);
         self.open = Some(i);
@@ -161,25 +211,51 @@ impl VkRing {
     }
 
     pub(super) fn submit(&mut self, queue: vk::Queue) -> Result<()> {
-        let i = self.open.take().ok_or_else(|| anyhow!("no command buffer open"))?;
+        let i = self
+            .open
+            .take()
+            .ok_or_else(|| anyhow!("no command buffer open"))?;
         self.next = (i + 1) % self.slots.len();
         let slot = &mut self.slots[i];
         let buffer = slot.buffer;
         let all = vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE;
-        let barrier = vk::MemoryBarrier::default().src_access_mask(all).dst_access_mask(all);
+        let barrier = vk::MemoryBarrier::default()
+            .src_access_mask(all)
+            .dst_access_mask(all);
         unsafe {
-            self.device.cmd_pipeline_barrier(buffer, vk::PipelineStageFlags::ALL_COMMANDS, vk::PipelineStageFlags::ALL_COMMANDS, vk::DependencyFlags::empty(), &[barrier], &[], &[]);
+            self.device.cmd_pipeline_barrier(
+                buffer,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::DependencyFlags::empty(),
+                &[barrier],
+                &[],
+                &[],
+            );
             self.device.end_command_buffer(buffer)?;
             let buffers = [buffer];
-            self.device.queue_submit(queue, &[vk::SubmitInfo::default().command_buffers(&buffers)], slot.fence).context("submitting to wgpu's queue")?;
+            self.device
+                .queue_submit(
+                    queue,
+                    &[vk::SubmitInfo::default().command_buffers(&buffers)],
+                    slot.fence,
+                )
+                .context("submitting to wgpu's queue")?;
         }
         slot.pending = true;
         Ok(())
     }
 
     pub(super) fn wait(&mut self) {
-        let fences: Vec<vk::Fence> = self.slots.iter().filter(|s| s.pending).map(|s| s.fence).collect();
-        if !fences.is_empty() && unsafe { self.device.wait_for_fences(&fences, true, u64::MAX) }.is_ok() {
+        let fences: Vec<vk::Fence> = self
+            .slots
+            .iter()
+            .filter(|s| s.pending)
+            .map(|s| s.fence)
+            .collect();
+        if !fences.is_empty()
+            && unsafe { self.device.wait_for_fences(&fences, true, u64::MAX) }.is_ok()
+        {
             let _ = unsafe { self.device.reset_fences(&fences) };
             for s in &mut self.slots {
                 s.pending = false;

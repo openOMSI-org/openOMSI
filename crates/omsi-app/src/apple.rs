@@ -3,7 +3,7 @@
 //! motion sensor, the haptic engine, the clipboard and the browser are the app's; the game
 //! only says when it needs them.
 
-use std::ffi::{c_char, c_void, CString};
+use std::ffi::{CString, c_char, c_void};
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -70,7 +70,9 @@ pub(crate) fn buzz(ms: u32) {
 
 /// The text onto the system's clipboard (UIPasteboard).
 pub(crate) fn set_clipboard(text: &str) -> bool {
-    let Ok(t) = CString::new(text) else { return false };
+    let Ok(t) = CString::new(text) else {
+        return false;
+    };
     // SAFETY: a nul-terminated string the call only reads
     unsafe { openomsi_swift_set_clipboard(t.as_ptr()) != 0 }
 }

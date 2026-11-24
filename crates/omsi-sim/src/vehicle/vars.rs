@@ -3,7 +3,62 @@
 
 use super::*;
 
+/// The control cables' `write` variables of a vehicle (`p`, `def`) named after variable
+/// `name` that its scripts store in one run of stores with it (see
+/// `VehicleInstance::set_var_with_cables`).
+fn cable_partners(
+    p: &omsi_script::Program,
+    def: &omsi_vehicle::Vehicle,
+    name: &str,
+) -> Vec<omsi_script::VarId> {
+    let Some(id) = p.var(name) else {
+        return Vec::new();
+    };
+    let low = name.trim().to_ascii_lowercase();
+    let writes: Vec<omsi_script::VarId> = def
+        .control_cable_front
+        .iter()
+        .chain(&def.control_cable_back)
+        .filter_map(|c| c.lines.get(3))
+        .filter(|w| w.to_ascii_lowercase().contains(&low))
+        .filter_map(|w| p.var(w))
+        .collect();
+    if writes.is_empty() {
+        return Vec::new();
+    }
+    let mut partners = Vec::new();
+    for block in &p.blocks {
+        // (a run of stores one after another: they all take the value on the stack)
+        for run in block
+            .ops
+            .split(|op| !matches!(op, omsi_script::Op::Store(_)))
+        {
+            if run
+                .iter()
+                .any(|op| matches!(op, omsi_script::Op::Store(s) if *s == id))
+            {
+                partners.extend(run.iter().filter_map(|op| match op {
+                    omsi_script::Op::Store(s) if *s != id && writes.contains(s) => Some(*s),
+                    _ => None,
+                }));
+            }
+        }
+    }
+    partners
+}
+
 impl VehicleInstance {
+    /// How many of the train's `[add_camera_reflexion]` cameras come before part `part`'s.
+    pub fn mirror_base(&self, part: usize) -> usize {
+        self.ty.def.cameras_reflexion.len()
+            + self
+                .trailers
+                .iter()
+                .take(part)
+                .map(|t| t.ty.def.cameras_reflexion.len())
+                .sum::<usize>()
+    }
+
     pub(super) fn get(&self, id: Option<omsi_script::VarId>) -> f32 {
         id.map(|i| self.state.vars[i as usize]).unwrap_or(0.0)
     }
@@ -15,7 +70,14 @@ impl VehicleInstance {
     }
 
     pub(super) fn put_turn(&mut self, id: Option<omsi_script::VarId>, axle: usize, side: usize) {
-        let Some(w) = self.physics.wheels.get_mut(axle).and_then(|a| a.get_mut(side)) else { return };
+        let Some(w) = self
+            .physics
+            .wheels
+            .get_mut(axle)
+            .and_then(|a| a.get_mut(side))
+        else {
+            return;
+        };
         let step = w.turned - w.turned_put;
         w.turned_put = w.turned;
         if let Some(i) = id {
@@ -69,11 +131,20 @@ impl VehicleInstance {
     /// The door release to fire now: the bus's own, the C2's switch turned over, else `bus_dooraft`.
     pub fn door_release_trigger(&self) -> Option<&'static str> {
         let p = &self.ty.program;
-        if let Some(t) = ["bus_doorall", "CG_active", "C2_CP_doorall_1"].into_iter().find(|t| p.trigger(t).is_some()) {
+        if let Some(t) = ["bus_doorall", "CG_active", "C2_CP_doorall_1"]
+            .into_iter()
+            .find(|t| p.trigger(t).is_some())
+        {
             return Some(t);
         }
-        if p.trigger("C2_CP_Tuerfreigabe_1").is_some() && p.trigger("C2_CP_Tuerfreigabe_0").is_some() {
-            return Some(if self.var("C2_CP_Tuerfreigabe").is_some_and(|x| x > 0.5) { "C2_CP_Tuerfreigabe_0" } else { "C2_CP_Tuerfreigabe_1" });
+        if p.trigger("C2_CP_Tuerfreigabe_1").is_some()
+            && p.trigger("C2_CP_Tuerfreigabe_0").is_some()
+        {
+            return Some(if self.var("C2_CP_Tuerfreigabe").is_some_and(|x| x > 0.5) {
+                "C2_CP_Tuerfreigabe_0"
+            } else {
+                "C2_CP_Tuerfreigabe_1"
+            });
         }
         p.trigger("bus_dooraft").is_some().then_some("bus_dooraft")
     }
@@ -88,14 +159,55 @@ impl VehicleInstance {
 
     pub fn set_var(&mut self, name: &str, v: f32) -> bool {
         let slot = omsi_script::compile::with_lower(name, |k| {
-            self.var_index.get(k).copied().ok_or_else(|| self.model_only_vars.iter().any(|n| n == k))
+            self.var_index
+                .get(k)
+                .copied()
+                .ok_or_else(|| self.model_only_vars.iter().any(|n| n == k))
         });
         match slot {
             Ok(i) => self.state.vars[i as usize] = v,
-            Err(true) => self.add_var(name, v),
+            Err(true) => {
+                self.add_var(name, v);
+                // a variable only the model names (#3887): its animations move from now on
+                let id = (self.state.vars.len() - 1) as omsi_script::VarId;
+                for a in &mut self.animators {
+                    a.bind_missing(name, id);
+                }
+            }
             Err(false) => return false,
         }
         true
+    }
+
+    /// [`Self::set_var`], and the control cables' `write` variables the scripts store the same
+    /// value into in one go (`(S.L.IBIS_Linie_Complex) (S.L.SLW_IBIS_Linie_Complex_A)`): what
+    /// the game sets by hand on the IBIS reaches the train's other cab as the IBIS's own keys
+    /// would send it. Only cables named after the variable count (`SLW_IBIS_Linie_Complex_A`):
+    /// the NF6D's IBIS reset zeroes all its cables in one run of stores.
+    ///
+    /// The cars of a train that run their own scripts and work out the variable themselves (the
+    /// NF6D's rear cab has an IBIS of its own) are set the same way.
+    pub fn set_var_with_cables(&mut self, name: &str, v: f32) -> bool {
+        let set = self.set_var(name, v);
+        for s in cable_partners(&self.ty.program, &self.ty.def, name) {
+            self.state.vars[s as usize] = v;
+        }
+        for t in &mut self.trailers {
+            let ty = t.ty.clone();
+            let Some(run) = t.run.as_deref_mut() else {
+                continue;
+            };
+            if !ty.program.var(name).is_some_and(|id| ty.program.stores(id)) {
+                continue;
+            }
+            run.set_own(name, v);
+            for s in cable_partners(&ty.program, &ty.def, name) {
+                if let Some(w) = ty.program.var_names.get(s as usize) {
+                    run.set_own(w, v);
+                }
+            }
+        }
+        set
     }
 
     /// Variables the engine feeds the model directly (`Dirt_Norm`, `AI`, …): OMSI's
@@ -116,6 +228,15 @@ impl VehicleInstance {
     }
 
     pub fn trigger(&mut self, name: &str) -> bool {
+        if let Some(part) = self.active_cab {
+            if self.trigger_part(part, name) {
+                return true;
+            }
+            // (a control the other cab has under its own letter: `cp_venta` / `cp_ventb`)
+            if let Some(twin) = self.cab_twin_trigger(part, name) {
+                return self.trigger_part(part, &twin);
+            }
+        }
         let p = self.ty.program.clone();
         let coins_before = self.host.change_coins.len();
         let fired = self
@@ -123,11 +244,96 @@ impl VehicleInstance {
             .run_trigger(&p, name, &mut self.state, &mut self.host);
         if let Some(value) = changer_value(name) {
             let given = &mut self.host.change_coins[coins_before..];
-            let each = value / given.len().max(1) as f32;
-            for coin in given {
-                coin.1 = each;
+            let dm_euro_lever = match (
+                name.to_ascii_lowercase().strip_prefix("cashdesk_change_"),
+                given.first().map(|c| c.0),
+            ) {
+                (Some("0050"), Some(2)) => true,
+                (Some("0100"), Some(3)) => true,
+                (Some("0200"), Some(4)) => true,
+                (Some("0500"), Some(5)) => true,
+                _ => false,
+            };
+            if !dm_euro_lever {
+                let each = value / given.len().max(1) as f32;
+                for coin in given {
+                    coin.1 = each;
+                }
             }
         }
+        fired
+    }
+
+    pub fn has_trigger(&self, name: &str) -> bool {
+        self.ty.program.trigger(name).is_some()
+    }
+
+    /// Whether the own scripts of coupled part `part` have one of the triggers `names`.
+    pub fn part_has_trigger(&self, part: usize, names: &[&str]) -> bool {
+        self.trailers
+            .get(part)
+            .and_then(|t| t.run.as_deref())
+            .is_some_and(|r| names.iter().any(|n| r.has_trigger(n)))
+    }
+
+    /// Set variable `name` in the own scripts of coupled part `part`.
+    pub fn set_part_var(&mut self, part: usize, name: &str, v: f32) {
+        if let Some(run) = self
+            .trailers
+            .get_mut(part)
+            .and_then(|t| t.run.as_deref_mut())
+        {
+            run.set_own(name, v);
+        }
+    }
+
+    /// Set string variable `name` in the own scripts of coupled part `part`.
+    pub fn set_part_str(&mut self, part: usize, name: &str, text: &str) {
+        if let Some(run) = self
+            .trailers
+            .get_mut(part)
+            .and_then(|t| t.run.as_deref_mut())
+        {
+            run.set_own_str(name, text);
+        }
+    }
+
+    /// The trigger of coupled part `part`'s cab that is the leading vehicle's `name` under the
+    /// other cab's letter: `name` with one of its `a`s made a `b` (`cp_venta` -> `cp_ventb`,
+    /// `spiegel_al_init` -> `spiegel_bl_init`), where exactly one such the part has and the
+    /// leading vehicle has `name` itself.
+    pub fn cab_twin_trigger(&self, part: usize, name: &str) -> Option<String> {
+        self.ty.program.trigger(name)?;
+        let run = self.trailers.get(part)?.run.as_deref()?;
+        let low = name.to_ascii_lowercase();
+        let mut twins = low
+            .char_indices()
+            .filter(|&(_, c)| c == 'a')
+            .map(|(i, _)| format!("{}b{}", &low[..i], &low[i + 1..]))
+            .filter(|t| run.has_trigger(t));
+        let twin = twins.next()?;
+        twins.next().is_none().then_some(twin)
+    }
+
+    /// Fire trigger `name` in the own scripts of coupled part `part` (one that runs them, see
+    /// `car_run`). False when it runs none or its scripts have no such trigger: the caller
+    /// then gives it to the leading vehicle's.
+    pub fn trigger_part(&mut self, part: usize, name: &str) -> bool {
+        if !self
+            .trailers
+            .get(part)
+            .and_then(|t| t.run.as_deref())
+            .is_some_and(|r| r.has_trigger(name))
+        {
+            return false;
+        }
+        let mut trailers = std::mem::take(&mut self.trailers);
+        let t = &mut trailers[part];
+        let fired = t
+            .run
+            .as_deref_mut()
+            .is_some_and(|r| r.trigger(self, name, &mut t.script_textures));
+        self.trailers = trailers;
         fired
     }
 
@@ -136,13 +342,21 @@ impl VehicleInstance {
     /// sounds and messages the triggers asked for.
     pub fn trial_triggers(&mut self, names: &[&str]) -> Vec<f32> {
         let (state, vm) = (self.state.clone(), self.vm.clone());
-        let (fired, fired_files, messages, time_written) = (self.host.fired_triggers.len(), self.host.fired_file_triggers.len(), self.host.messages.clone(), self.host.time_written);
+        let (fired, fired_files, messages, time_written) = (
+            self.host.fired_triggers.len(),
+            self.host.fired_file_triggers.len(),
+            self.host.messages.clone(),
+            self.host.time_written,
+        );
         let last_message = self.host.last_message.clone();
         let fired_vars = self.host.fired_trigger_vars.len();
         let network_sounds = self.host.network_sound_triggers.len();
+        // (the leading vehicle's alone: a coupled part's run is not put back afterwards)
+        let cab = self.active_cab.take();
         for n in names {
             self.trigger(n);
         }
+        self.active_cab = cab;
         let out = self.state.vars.clone();
         self.state = state;
         self.vm = vm;
@@ -231,10 +445,16 @@ impl VehicleInstance {
 
 fn changer_value(name: &str) -> Option<f32> {
     let name = name.to_ascii_lowercase();
-    if let Some(cents) = name.strip_prefix("cashdesk_change_").filter(|c| c.len() == 4) {
+    if let Some(cents) = name
+        .strip_prefix("cashdesk_change_")
+        .filter(|c| c.len() == 4)
+    {
         return Some(cents.parse::<u32>().ok()? as f32 / 100.0);
     }
-    let (units, cents) = name.strip_prefix("cashdesk_changer_")?.split_once('_').filter(|(_, c)| c.len() == 2)?;
+    let (units, cents) = name
+        .strip_prefix("cashdesk_changer_")?
+        .split_once('_')
+        .filter(|(_, c)| c.len() == 2)?;
     Some(units.parse::<u32>().ok()? as f32 + cents.parse::<u32>().ok()? as f32 / 100.0)
 }
 
@@ -250,25 +470,55 @@ mod tests {
         assert_eq!(changer_value("cashdesk_changer_0_5"), None);
         assert_eq!(changer_value("ticket_give"), None);
         assert_eq!(changer_value("cashdesk_change_0500"), Some(5.0));
+        assert_eq!(changer_value("cashdesk_change_0050"), Some(0.5));
         assert_eq!(changer_value("cashdesk_change_1000_off"), None);
     }
+
+    #[test]
+    fn dm_lever_names_on_euro_scripts_keep_the_script_coin() {
+        let osc = "{trigger:cashdesk_change_0050}\n2 (M.V.GiveChangeCoin)\n{end}\n{trigger:cashdesk_change_0500}\n5 (M.V.GiveChangeCoin)\n{end}\n{trigger:cashdesk_changer_0_50}\n0 (M.V.GiveChangeCoin)\n{end}\n";
+        let mut v = crate::timetable_run::tests::script_test_vehicle(osc, "", "");
+        v.trigger("cashdesk_change_0050");
+        assert_eq!(v.host.change_coins.pop(), Some((2, 0.0)));
+        v.trigger("cashdesk_change_0500");
+        assert_eq!(v.host.change_coins.pop(), Some((5, 0.0)));
+        v.trigger("cashdesk_changer_0_50");
+        assert_eq!(v.host.change_coins.pop(), Some((0, 0.5)));
+    }
 }
-
-
 #[cfg(test)]
 mod turn_tests {
     #[test]
     fn a_wheel_turn_counts_on_by_its_whole_step_and_from_a_script_s_reset() {
-        let mut v = crate::timetable_run::tests::script_test_vehicle("", "Wheel_Rotation_0_L\n", "");
+        let mut v =
+            crate::timetable_run::tests::script_test_vehicle("", "Wheel_Rotation_0_L\n", "");
         let id = v.ty.program.var("Wheel_Rotation_0_L");
-        let w = crate::physics::WheelState { long: 0.0, lat: 0.0, radius: 0.5, driven: true, rotation_deg: 0.0, turned: 0.0, turned_put: 0.0, rpm: 0.0, suspension: 0.0 };
+        let w = crate::physics::WheelState {
+            long: 0.0,
+            lat: 0.0,
+            radius: 0.5,
+            driven: true,
+            rotation_deg: 0.0,
+            turned: 0.0,
+            turned_put: 0.0,
+            rpm: 0.0,
+            suspension: 0.0,
+        };
         v.physics.wheels = vec![[w.clone(), w]];
         v.physics.wheels[0][0].turned += 3.3;
         v.put_turn(id, 0, 0);
-        assert!((v.get(id) - 3.3).abs() < 1e-5, "a step over half a turn counts forward: {}", v.get(id));
+        assert!(
+            (v.get(id) - 3.3).abs() < 1e-5,
+            "a step over half a turn counts forward: {}",
+            v.get(id)
+        );
         v.put(id, 0.0);
         v.physics.wheels[0][0].turned += 0.5;
         v.put_turn(id, 0, 0);
-        assert!((v.get(id) - 0.5).abs() < 1e-5, "a script's reset counts on from 0: {}", v.get(id));
+        assert!(
+            (v.get(id) - 0.5).abs() < 1e-5,
+            "a script's reset counts on from 0: {}",
+            v.get(id)
+        );
     }
 }

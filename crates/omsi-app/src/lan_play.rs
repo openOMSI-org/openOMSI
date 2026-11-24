@@ -4,8 +4,8 @@
 //! of the game (`AppLanHost`, see `app_impl::lan_tick`).
 
 pub(crate) use crate::app_impl::lan_tick::AppLanHost;
-pub(crate) use omsi_lan::game::*;
 use glam::DVec3;
+pub(crate) use omsi_lan::game::*;
 use std::path::PathBuf;
 
 /// The HUD's LAN lines (see `omsi_lan::game::hud_lines`), in the game's language.
@@ -26,15 +26,33 @@ pub(crate) fn settle_spawn(
     wait: std::time::Duration,
 ) {
     let figure = p.driver.as_ref().map(|d| d.human_type().def.path.clone());
-    let host = AppLanHost { args, world: Some(world) };
-    omsi_lan::game::settle_spawn(lan, game, &mut p.vehicle, figure.as_deref(), &args.lan_config(), &host, net, wait);
+    let host = AppLanHost {
+        args,
+        world: Some(world),
+    };
+    omsi_lan::game::settle_spawn(
+        lan,
+        game,
+        &mut p.vehicle,
+        figure.as_deref(),
+        &args.lan_config(),
+        &host,
+        net,
+        wait,
+    );
 }
 
 /// The buses a joining player may choose, on the gateway's status page (see
 /// `omsi_lan::gateway::publish_vehicles`): `only` when a server's list says, else every bus
 /// installed under `root`.
 pub(crate) fn publish_vehicles(root: PathBuf, only: Vec<String>) {
-    omsi_lan::gateway::publish_vehicles(only, move || crate::menu::Menu::new(&root, "").vehicles.into_iter().map(|v| v.1).collect());
+    omsi_lan::gateway::publish_vehicles(only, move || {
+        crate::menu::Menu::new(&root, "")
+            .vehicles
+            .into_iter()
+            .map(|v| v.1)
+            .collect()
+    });
 }
 
 /// The other players' name tags, as ETS2 has them: the name over the bus's roof and a
@@ -69,10 +87,20 @@ pub(crate) fn name_tags(
         )]
     };
     let mut tags = Vec::new();
-    for r in game.remotes.iter().filter(|(id, _)| !omsi_net::is_parked(**id)).map(|(_, r)| r) {
+    for r in game
+        .remotes
+        .iter()
+        .filter(|(id, _)| !omsi_net::is_parked(**id))
+        .map(|(_, r)| r)
+    {
         let v = r.vehicle();
         // the roof: the bounding box's top when the bus says, else a bus's height
-        let top = v.ty.def.bounding_box.map(|b| (b[5] + b[2] * 0.5) as f64).filter(|t| *t > 1.0).unwrap_or(3.4);
+        let top =
+            v.ty.def
+                .bounding_box
+                .map(|b| (b[5] + b[2] * 0.5) as f64)
+                .filter(|t| *t > 1.0)
+                .unwrap_or(3.4);
         // (a player out of the seat: the name over their head, none over the bus)
         let p = match r.last.walker {
             Some(w) => DVec3::new(w.x, w.y, w.z + 2.15),
@@ -97,8 +125,19 @@ pub(crate) fn name_tags(
             continue;
         };
         let speaking = !radio && speaks(&r.name, r.last.id);
-        let (name, sub) = omsi_lan::game::tag_text(r, d, radio, speaking, &|s| omsi_ui::tr(s).into_owned(), &|m| crate::units::Units::now().distance(m));
-        let alpha = if radio { 1.0 } else { (1.0 - ((d as f32 - 300.0) / 150.0)).clamp(0.0, 1.0) };
+        let (name, sub) = omsi_lan::game::tag_text(
+            r,
+            d,
+            radio,
+            speaking,
+            &|s| omsi_ui::tr(s).into_owned(),
+            &|m| crate::units::Units::now().distance(m),
+        );
+        let alpha = if radio {
+            1.0
+        } else {
+            (1.0 - ((d as f32 - 300.0) / 150.0)).clamp(0.0, 1.0)
+        };
         tags.push(((screen_x, (1.0 - y) * 0.5 * height), name, sub, alpha));
     }
     tags
@@ -114,9 +153,16 @@ mod tests {
         use clap::Parser;
         let full = crate::cli::Args::parse_from(["openomsi"]);
         let args = full.lan_config();
-        let host = AppLanHost { args: &full, world: None };
+        let host = AppLanHost {
+            args: &full,
+            world: None,
+        };
         for w in ["natural", "Natural", "cycle"] {
-            assert_eq!(host_weather(&args, &host, w), Ok(Some(w.to_string())), "{w}");
+            assert_eq!(
+                host_weather(&args, &host, w),
+                Ok(Some(w.to_string())),
+                "{w}"
+            );
         }
         assert_eq!(host_weather(&args, &host, ""), Ok(None));
         assert!(host_weather(&args, &host, "weather/none_such.owt").is_err());

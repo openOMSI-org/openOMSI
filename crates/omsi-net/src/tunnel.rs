@@ -17,25 +17,46 @@ use std::time::{Duration, Instant};
 
 /// Where `cloudflared` is, if anywhere.
 pub fn find_cloudflared() -> Option<PathBuf> {
-    let exe = if cfg!(windows) { "cloudflared.exe" } else { "cloudflared" };
-    if let Some(p) = omsi_cfg::flags::OMSI_CLOUDFLARED.live_os().map(PathBuf::from).filter(|p| p.is_file()) {
+    let exe = if cfg!(windows) {
+        "cloudflared.exe"
+    } else {
+        "cloudflared"
+    };
+    if let Some(p) = omsi_cfg::flags::OMSI_CLOUDFLARED
+        .live_os()
+        .map(PathBuf::from)
+        .filter(|p| p.is_file())
+    {
         return Some(p);
     }
     // (`OMSI_CLOUDFLARED_OWN=1`: only the game's own copy, for testing the download)
-    let own = own_dir().filter(|d| d.join(VERIFIED).is_file()).map(|d| d.join(exe)).filter(|p| p.is_file());
+    let own = own_dir()
+        .filter(|d| d.join(VERIFIED).is_file())
+        .map(|d| d.join(exe))
+        .filter(|p| p.is_file());
     if omsi_cfg::flags::OMSI_CLOUDFLARED_OWN.live_os().is_some() {
         return own;
     }
     let mut dirs: Vec<PathBuf> = Vec::new();
-    if let Some(d) = std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf())) {
+    if let Some(d) = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|p| p.to_path_buf()))
+    {
         dirs.push(d.clone());
         dirs.push(d.join("tools"));
     }
     if let Some(path) = std::env::var_os("PATH") {
         dirs.extend(std::env::split_paths(&path));
     }
-    dirs.extend(["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"].iter().map(PathBuf::from));
-    dirs.into_iter().map(|d| d.join(exe)).find(|p| p.is_file()).or(own)
+    dirs.extend(
+        ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+            .iter()
+            .map(PathBuf::from),
+    );
+    dirs.into_iter()
+        .map(|d| d.join(exe))
+        .find(|p| p.is_file())
+        .or(own)
 }
 
 /// The game's own folder for the tools it fetches (`~/.openomsi/bin`).
@@ -52,14 +73,35 @@ const RELEASE: &str = "2026.9.3";
 /// SHA-256.
 fn release_asset() -> Option<(&'static str, &'static str)> {
     Some(match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("macos", "aarch64") => ("cloudflared-darwin-arm64.tgz", "587c2cfb1c230fe36c7fa7727da78be459dae028cabe8c001291999350f07095"),
-        ("macos", "x86_64") => ("cloudflared-darwin-amd64.tgz", "d1155d0837487f261183b15c1eab6c4ebcad9dc49b94675f1524c3564cea3977"),
-        ("linux", "x86_64") => ("cloudflared-linux-amd64", "77e26d8d900e0b8469f416239d14b5f296525fdf79fee6f511ef55609e3fbac2"),
-        ("linux", "aarch64") => ("cloudflared-linux-arm64", "aaeb2d7d0da3614634c7e03ab13487a1522c2e79165ed2929cfe23d5e95b326d"),
-        ("linux", "arm") => ("cloudflared-linux-arm", "967dc371a3fedbf09e881c13ee7ba317155ebc336cbd4afb756b46fc6785e5af"),
+        ("macos", "aarch64") => (
+            "cloudflared-darwin-arm64.tgz",
+            "587c2cfb1c230fe36c7fa7727da78be459dae028cabe8c001291999350f07095",
+        ),
+        ("macos", "x86_64") => (
+            "cloudflared-darwin-amd64.tgz",
+            "d1155d0837487f261183b15c1eab6c4ebcad9dc49b94675f1524c3564cea3977",
+        ),
+        ("linux", "x86_64") => (
+            "cloudflared-linux-amd64",
+            "77e26d8d900e0b8469f416239d14b5f296525fdf79fee6f511ef55609e3fbac2",
+        ),
+        ("linux", "aarch64") => (
+            "cloudflared-linux-arm64",
+            "aaeb2d7d0da3614634c7e03ab13487a1522c2e79165ed2929cfe23d5e95b326d",
+        ),
+        ("linux", "arm") => (
+            "cloudflared-linux-arm",
+            "967dc371a3fedbf09e881c13ee7ba317155ebc336cbd4afb756b46fc6785e5af",
+        ),
         // (Windows on ARM runs the x64 build)
-        ("windows", "x86_64") | ("windows", "aarch64") => ("cloudflared-windows-amd64.exe", "f096265ec2fcbe9bb6e2d64268db167ced3fcbb83d894bdb9e2fcdb26f2ea7e2"),
-        ("windows", "x86") => ("cloudflared-windows-386.exe", "9b95ddc2eba67b86ed3dc4cc2a15881960563031b52ce564376af41fb91ad402"),
+        ("windows", "x86_64") | ("windows", "aarch64") => (
+            "cloudflared-windows-amd64.exe",
+            "f096265ec2fcbe9bb6e2d64268db167ced3fcbb83d894bdb9e2fcdb26f2ea7e2",
+        ),
+        ("windows", "x86") => (
+            "cloudflared-windows-386.exe",
+            "9b95ddc2eba67b86ed3dc4cc2a15881960563031b52ce564376af41fb91ad402",
+        ),
         _ => return None,
     })
 }
@@ -82,30 +124,54 @@ pub fn ensure_cloudflared() -> Option<PathBuf> {
     }
     let (asset, sha) = release_asset()?;
     let dir = own_dir()?;
-    let exe = dir.join(if cfg!(windows) { "cloudflared.exe" } else { "cloudflared" });
-    let url = format!("https://github.com/cloudflare/cloudflared/releases/download/{RELEASE}/{asset}");
+    let exe = dir.join(if cfg!(windows) {
+        "cloudflared.exe"
+    } else {
+        "cloudflared"
+    });
+    let url =
+        format!("https://github.com/cloudflare/cloudflared/releases/download/{RELEASE}/{asset}");
     log::info!("tunnel: cloudflared is not installed; fetching {url}");
     let t0 = Instant::now();
-    let resp = ureq::get(&url).timeout(Duration::from_secs(300)).call().map_err(|e| log::warn!("tunnel: cloudflared could not be fetched: {e}")).ok()?;
+    let resp = ureq::get(&url)
+        .timeout(Duration::from_secs(300))
+        .call()
+        .map_err(|e| log::warn!("tunnel: cloudflared could not be fetched: {e}"))
+        .ok()?;
     let mut data = Vec::new();
-    std::io::Read::read_to_end(&mut std::io::Read::take(resp.into_reader(), 200 << 20), &mut data).map_err(|e| log::warn!("tunnel: cloudflared download broke off: {e}")).ok()?;
+    std::io::Read::read_to_end(
+        &mut std::io::Read::take(resp.into_reader(), 200 << 20),
+        &mut data,
+    )
+    .map_err(|e| log::warn!("tunnel: cloudflared download broke off: {e}"))
+    .ok()?;
     {
         use sha2::{Digest, Sha256};
-        let got: String = Sha256::digest(&data).iter().map(|b| format!("{b:02x}")).collect();
+        let got: String = Sha256::digest(&data)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
         if got != sha {
-            log::warn!("tunnel: {asset} does not match its published SHA-256 ({got}); not installed");
+            log::warn!(
+                "tunnel: {asset} does not match its published SHA-256 ({got}); not installed"
+            );
             return None;
         }
     }
     let bin = if asset.ends_with(".tgz") {
         let mut raw = Vec::new();
-        std::io::Read::read_to_end(&mut flate2::read::GzDecoder::new(&data[..]), &mut raw).map_err(|e| log::warn!("tunnel: {asset}: {e}")).ok()?;
+        std::io::Read::read_to_end(&mut flate2::read::GzDecoder::new(&data[..]), &mut raw)
+            .map_err(|e| log::warn!("tunnel: {asset}: {e}"))
+            .ok()?;
         tar_entry(&raw, "cloudflared")?
     } else {
         data
     };
     if bin.len() < 1 << 20 {
-        log::warn!("tunnel: {asset} is too small ({} bytes) to be cloudflared", bin.len());
+        log::warn!(
+            "tunnel: {asset} is too small ({} bytes) to be cloudflared",
+            bin.len()
+        );
         return None;
     }
     std::fs::create_dir_all(&dir).ok()?;
@@ -118,7 +184,12 @@ pub fn ensure_cloudflared() -> Option<PathBuf> {
     }
     std::fs::rename(&tmp, &exe).ok()?;
     std::fs::write(dir.join(VERIFIED), format!("{RELEASE} {asset} {sha}\n")).ok()?;
-    log::info!("tunnel: cloudflared installed at {} ({:.1} MB in {:.1} s)", exe.display(), bin.len() as f64 / 1e6, t0.elapsed().as_secs_f32());
+    log::info!(
+        "tunnel: cloudflared installed at {} ({:.1} MB in {:.1} s)",
+        exe.display(),
+        bin.len() as f64 / 1e6,
+        t0.elapsed().as_secs_f32()
+    );
     Some(exe)
 }
 
@@ -130,8 +201,14 @@ fn tar_entry(tar: &[u8], name: &str) -> Option<Vec<u8>> {
         if h.iter().all(|b| *b == 0) {
             return None;
         }
-        let path = String::from_utf8_lossy(&h[..100]).trim_end_matches('\0').to_string();
-        let size = usize::from_str_radix(String::from_utf8_lossy(&h[124..136]).trim_matches(|c: char| c == '\0' || c == ' '), 8).ok()?;
+        let path = String::from_utf8_lossy(&h[..100])
+            .trim_end_matches('\0')
+            .to_string();
+        let size = usize::from_str_radix(
+            String::from_utf8_lossy(&h[124..136]).trim_matches(|c: char| c == '\0' || c == ' '),
+            8,
+        )
+        .ok()?;
         let body = at + 512;
         if h[156] == b'0' || h[156] == 0 {
             if path.rsplit('/').next() == Some(name) {
@@ -162,19 +239,35 @@ impl Drop for Tunnel {
 
 /// Where the running tunnel's process id is kept (`~/.openomsi/cloudflared.pid`).
 fn pid_file() -> Option<std::path::PathBuf> {
-    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| std::path::PathBuf::from(h).join(".openomsi").join("cloudflared.pid"))
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(|h| {
+            std::path::PathBuf::from(h)
+                .join(".openomsi")
+                .join("cloudflared.pid")
+        })
 }
 
 /// A cloudflared an earlier game left running (it was killed, or crashed before it could
 /// stop its tunnel): stopped before a new one starts.
 fn kill_stale() {
     let Some(p) = pid_file() else { return };
-    let Some(pid) = std::fs::read_to_string(&p).ok().and_then(|s| s.trim().parse::<u32>().ok()) else { return };
+    let Some(pid) = std::fs::read_to_string(&p)
+        .ok()
+        .and_then(|s| s.trim().parse::<u32>().ok())
+    else {
+        return;
+    };
     let _ = std::fs::remove_file(&p);
     #[cfg(unix)]
     {
         // only if that process is still a cloudflared (the id may have been reused)
-        let name = Command::new("ps").args(["-p", &pid.to_string(), "-o", "comm="]).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default();
+        let name = Command::new("ps")
+            .args(["-p", &pid.to_string(), "-o", "comm="])
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
         if name.contains("cloudflared") {
             log::info!("tunnel: stopping the cloudflared an earlier game left running (pid {pid})");
             let _ = Command::new("kill").arg(pid.to_string()).status();
@@ -198,7 +291,12 @@ impl Tunnel {
         kill_stale();
         let mut command = Command::new(&bin);
         command
-            .args(["tunnel", "--no-autoupdate", "--url", &format!("http://127.0.0.1:{port}")])
+            .args([
+                "tunnel",
+                "--no-autoupdate",
+                "--url",
+                &format!("http://127.0.0.1:{port}"),
+            ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped());
@@ -257,9 +355,12 @@ impl Tunnel {
 fn trycloudflare_url(line: &str) -> Option<String> {
     let start = line.find("https://")?;
     let rest = &line[start..];
-    let end = rest.find(|c: char| c.is_whitespace() || c == '|' || c == '"').unwrap_or(rest.len());
+    let end = rest
+        .find(|c: char| c.is_whitespace() || c == '|' || c == '"')
+        .unwrap_or(rest.len());
     let u = &rest[..end];
-    (u.ends_with(".trycloudflare.com") && !u.contains("api.trycloudflare.com")).then(|| u.to_string())
+    (u.ends_with(".trycloudflare.com") && !u.contains("api.trycloudflare.com"))
+        .then(|| u.to_string())
 }
 
 #[cfg(test)]
@@ -267,7 +368,13 @@ mod tests {
     #[test]
     fn url_in_log() {
         let l = "2026-09-26T10:00:00Z INF |  https://quiet-river-sample-words.trycloudflare.com                                   |";
-        assert_eq!(super::trycloudflare_url(l).as_deref(), Some("https://quiet-river-sample-words.trycloudflare.com"));
-        assert_eq!(super::trycloudflare_url("https://api.trycloudflare.com/tunnel"), None);
+        assert_eq!(
+            super::trycloudflare_url(l).as_deref(),
+            Some("https://quiet-river-sample-words.trycloudflare.com")
+        );
+        assert_eq!(
+            super::trycloudflare_url("https://api.trycloudflare.com/tunnel"),
+            None
+        );
     }
 }

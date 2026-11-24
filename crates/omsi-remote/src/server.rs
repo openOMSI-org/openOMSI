@@ -1,4 +1,4 @@
-use crate::{lock, Shared};
+use crate::{Shared, lock};
 use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
 use std::net::{IpAddr, TcpListener, TcpStream};
@@ -16,27 +16,73 @@ const KEPT_FOR_PAIRED: usize = 24;
 const HEAD_WITHIN: Duration = Duration::from_secs(5);
 const MAX_HEAD: usize = 8192;
 fn csp(host: &str) -> String {
-    let host: String = host.chars().filter(|c| c.is_ascii_alphanumeric() || ".:-[]".contains(*c)).collect();
-    format!("default-src 'self'; connect-src 'self' ws://{host}; img-src 'self' data:; media-src data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'")
+    let host: String = host
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || ".:-[]".contains(*c))
+        .collect();
+    format!(
+        "default-src 'self'; connect-src 'self' ws://{host}; img-src 'self' data:; media-src data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'"
+    )
 }
 
 static FILES: &[(&str, &str, &str)] = &[
-    ("/", "text/html; charset=utf-8", include_str!("../page/index.html")),
-    ("/style.css", "text/css; charset=utf-8", include_str!("../page/style.css")),
-    ("/app.js", "text/javascript; charset=utf-8", include_str!("../page/app.js")),
-    ("/picto.js", "text/javascript; charset=utf-8", include_str!("../page/picto.js")),
-    ("/widgets.js", "text/javascript; charset=utf-8", include_str!("../page/widgets.js")),
-    ("/map.js", "text/javascript; charset=utf-8", include_str!("../page/map.js")),
-    ("/drive.js", "text/javascript; charset=utf-8", include_str!("../page/drive.js")),
-    ("/editor.js", "text/javascript; charset=utf-8", include_str!("../page/editor.js")),
-    ("/manifest.webmanifest", "application/manifest+json", include_str!("../page/manifest.webmanifest")),
+    (
+        "/",
+        "text/html; charset=utf-8",
+        include_str!("../page/index.html"),
+    ),
+    (
+        "/style.css",
+        "text/css; charset=utf-8",
+        include_str!("../page/style.css"),
+    ),
+    (
+        "/app.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../page/app.js"),
+    ),
+    (
+        "/picto.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../page/picto.js"),
+    ),
+    (
+        "/widgets.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../page/widgets.js"),
+    ),
+    (
+        "/map.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../page/map.js"),
+    ),
+    (
+        "/drive.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../page/drive.js"),
+    ),
+    (
+        "/editor.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../page/editor.js"),
+    ),
+    (
+        "/manifest.webmanifest",
+        "application/manifest+json",
+        include_str!("../page/manifest.webmanifest"),
+    ),
 ];
 
 static APP_ICON: &[u8] = include_bytes!("../../../assets/icons/app/openomsi-256.png");
 
 pub(crate) fn nearby(ip: IpAddr) -> bool {
     match ip {
-        IpAddr::V4(v4) => v4.is_loopback() || v4.is_private() || v4.is_link_local() || (v4.octets()[0] == 100 && v4.octets()[1] & 0xc0 == 64),
+        IpAddr::V4(v4) => {
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || (v4.octets()[0] == 100 && v4.octets()[1] & 0xc0 == 64)
+        }
         IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
             Some(v4) => nearby(IpAddr::V4(v4)),
             None => v6.is_loopback() || v6.is_unique_local() || v6.is_unicast_link_local(),
@@ -44,9 +90,16 @@ pub(crate) fn nearby(ip: IpAddr) -> bool {
     }
 }
 
-pub(crate) fn admit_unpaired(slots: &Mutex<HashMap<IpAddr, usize>>, ip: IpAddr, known: bool) -> bool {
+pub(crate) fn admit_unpaired(
+    slots: &Mutex<HashMap<IpAddr, usize>>,
+    ip: IpAddr,
+    known: bool,
+) -> bool {
     let mut slots = lock(slots);
-    let full = slots.values().sum::<usize>() >= MAX_UNPAIRED || slots.get(&ip).is_some_and(|n| *n >= MAX_UNPAIRED_PER_ADDRESS);
+    let full = slots.values().sum::<usize>() >= MAX_UNPAIRED
+        || slots
+            .get(&ip)
+            .is_some_and(|n| *n >= MAX_UNPAIRED_PER_ADDRESS);
     if full && !known {
         return false;
     }
@@ -70,60 +123,72 @@ pub(crate) fn start(port: u16, shared: Arc<Shared>) -> std::io::Result<u16> {
     let port = listener.local_addr()?.port();
     let open = Arc::new(AtomicUsize::new(0));
     let by_address: Arc<Mutex<HashMap<IpAddr, usize>>> = Arc::default();
-    std::thread::Builder::new().name("remote cockpit".into()).spawn(move || {
-        while !shared.stop.load(Ordering::Relaxed) {
-            match listener.accept() {
-                Ok((stream, peer)) => {
-                    let ip = peer.ip();
-                    if !nearby(ip) {
-                        log::info!("remote cockpit: {ip} is not on this network, refused");
-                        continue;
-                    }
-                    {
-                        let mut counts = lock(&by_address);
-                        let kept = !lock(&shared.trusted).contains(&ip) && open.load(Ordering::Relaxed) >= MAX_CONNECTIONS - KEPT_FOR_PAIRED;
-                        if kept || open.load(Ordering::Relaxed) >= MAX_CONNECTIONS || counts.get(&ip).is_some_and(|n| *n >= MAX_PER_ADDRESS) {
+    std::thread::Builder::new()
+        .name("remote cockpit".into())
+        .spawn(move || {
+            while !shared.stop.load(Ordering::Relaxed) {
+                match listener.accept() {
+                    Ok((stream, peer)) => {
+                        let ip = peer.ip();
+                        if !nearby(ip) {
+                            log::info!("remote cockpit: {ip} is not on this network, refused");
                             continue;
                         }
-                        *counts.entry(ip).or_default() += 1;
-                    }
-                    open.fetch_add(1, Ordering::Relaxed);
-                    let (client_shared, client_open, client_counts) = (shared.clone(), open.clone(), by_address.clone());
-                    let done = move || {
-                        client_open.fetch_sub(1, Ordering::Relaxed);
-                        let mut counts = lock(&client_counts);
-                        if let Some(n) = counts.get_mut(&ip) {
-                            *n -= 1;
-                            if *n == 0 {
-                                counts.remove(&ip);
+                        {
+                            let mut counts = lock(&by_address);
+                            let kept = !lock(&shared.trusted).contains(&ip)
+                                && open.load(Ordering::Relaxed)
+                                    >= MAX_CONNECTIONS - KEPT_FOR_PAIRED;
+                            if kept
+                                || open.load(Ordering::Relaxed) >= MAX_CONNECTIONS
+                                || counts.get(&ip).is_some_and(|n| *n >= MAX_PER_ADDRESS)
+                            {
+                                continue;
+                            }
+                            *counts.entry(ip).or_default() += 1;
+                        }
+                        open.fetch_add(1, Ordering::Relaxed);
+                        let (client_shared, client_open, client_counts) =
+                            (shared.clone(), open.clone(), by_address.clone());
+                        let done = move || {
+                            client_open.fetch_sub(1, Ordering::Relaxed);
+                            let mut counts = lock(&client_counts);
+                            if let Some(n) = counts.get_mut(&ip) {
+                                *n -= 1;
+                                if *n == 0 {
+                                    counts.remove(&ip);
+                                }
+                            }
+                        };
+                        let spawned = std::thread::Builder::new()
+                            .name("remote cockpit client".into())
+                            .spawn(move || {
+                                if let Err(e) = serve(stream, &client_shared) {
+                                    log::debug!("remote cockpit: {e}");
+                                }
+                                done();
+                            });
+                        if spawned.is_err() {
+                            open.fetch_sub(1, Ordering::Relaxed);
+                            let mut counts = lock(&by_address);
+                            if let Some(n) = counts.get_mut(&ip) {
+                                *n = n.saturating_sub(1);
+                                if *n == 0 {
+                                    counts.remove(&ip);
+                                }
                             }
                         }
-                    };
-                    let spawned = std::thread::Builder::new().name("remote cockpit client".into()).spawn(move || {
-                        if let Err(e) = serve(stream, &client_shared) {
-                            log::debug!("remote cockpit: {e}");
-                        }
-                        done();
-                    });
-                    if spawned.is_err() {
-                        open.fetch_sub(1, Ordering::Relaxed);
-                        let mut counts = lock(&by_address);
-                        if let Some(n) = counts.get_mut(&ip) {
-                            *n = n.saturating_sub(1);
-                            if *n == 0 {
-                                counts.remove(&ip);
-                            }
-                        }
                     }
-                }
-                Err(e) if e.kind() == ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(40)),
-                Err(e) => {
-                    log::warn!("remote cockpit: {e}");
-                    std::thread::sleep(Duration::from_millis(200));
+                    Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(40))
+                    }
+                    Err(e) => {
+                        log::warn!("remote cockpit: {e}");
+                        std::thread::sleep(Duration::from_millis(200));
+                    }
                 }
             }
-        }
-    })?;
+        })?;
     Ok(port)
 }
 
@@ -132,7 +197,13 @@ pub(crate) fn icon(name: &str) -> Option<&'static str> {
 }
 
 fn icon_list() -> String {
-    serde_json::Value::Array(ICONS.iter().map(|(n, _)| serde_json::Value::String(n.to_string())).collect()).to_string()
+    serde_json::Value::Array(
+        ICONS
+            .iter()
+            .map(|(n, _)| serde_json::Value::String(n.to_string()))
+            .collect(),
+    )
+    .to_string()
 }
 
 pub(crate) fn route(path: &str) -> (&'static str, &'static str, Vec<u8>) {
@@ -146,15 +217,26 @@ pub(crate) fn route(path: &str) -> (&'static str, &'static str, Vec<u8>) {
     if path == "/icons.json" {
         return ("200 OK", "application/json", icon_list().into_bytes());
     }
-    if let Some(svg) = path.strip_prefix("/icons/").and_then(|n| n.strip_suffix(".svg")).and_then(icon) {
+    if let Some(svg) = path
+        .strip_prefix("/icons/")
+        .and_then(|n| n.strip_suffix(".svg"))
+        .and_then(icon)
+    {
         return ("200 OK", "image/svg+xml", svg.as_bytes().to_vec());
     }
-    ("404 Not Found", "text/plain; charset=utf-8", b"not found".to_vec())
+    (
+        "404 Not Found",
+        "text/plain; charset=utf-8",
+        b"not found".to_vec(),
+    )
 }
 
 fn skin(rest: &str, shared: &Shared) -> (&'static str, &'static str, Vec<u8>) {
     let (name, query) = rest.split_once('?').unwrap_or((rest, ""));
-    let token = query.split('&').find_map(|kv| kv.strip_prefix("k=")).unwrap_or("");
+    let token = query
+        .split('&')
+        .find_map(|kv| kv.strip_prefix("k="))
+        .unwrap_or("");
     if !lock(&shared.devices).knows(token) {
         return ("403 Forbidden", "text/plain", b"pair first".to_vec());
     }
@@ -179,7 +261,10 @@ fn head(stream: &TcpStream) -> Result<(String, usize), String> {
         if n == 0 {
             return Err("closed".into());
         }
-        let end = buf[..n].windows(4).position(|w| w == b"\r\n\r\n").map(|i| i + 4);
+        let end = buf[..n]
+            .windows(4)
+            .position(|w| w == b"\r\n\r\n")
+            .map(|i| i + 4);
         if let Some(size) = end {
             return Ok((String::from_utf8_lossy(&buf[..size]).into_owned(), size));
         }
@@ -195,8 +280,12 @@ fn head(stream: &TcpStream) -> Result<(String, usize), String> {
 
 fn serve(stream: TcpStream, shared: &Shared) -> Result<(), String> {
     stream.set_nonblocking(false).map_err(|e| e.to_string())?;
-    stream.set_read_timeout(Some(HEAD_WITHIN)).map_err(|e| e.to_string())?;
-    stream.set_write_timeout(Some(HEAD_WITHIN)).map_err(|e| e.to_string())?;
+    stream
+        .set_read_timeout(Some(HEAD_WITHIN))
+        .map_err(|e| e.to_string())?;
+    stream
+        .set_write_timeout(Some(HEAD_WITHIN))
+        .map_err(|e| e.to_string())?;
     let (req, size) = head(&stream)?;
     let mut words = req.split_whitespace();
     let method = words.next().unwrap_or("").to_string();
@@ -210,12 +299,22 @@ fn serve(stream: TcpStream, shared: &Shared) -> Result<(), String> {
     let (status, ctype, body) = match (method.as_str(), path.strip_prefix("/vt/")) {
         ("GET" | "HEAD", Some(rest)) => skin(rest, shared),
         ("GET" | "HEAD", None) => route(&path),
-        _ => ("405 Method Not Allowed", "text/plain", b"method not allowed".to_vec()),
+        _ => (
+            "405 Method Not Allowed",
+            "text/plain",
+            b"method not allowed".to_vec(),
+        ),
     };
     let hdr = format!(
         "HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: {}\r\nConnection: close\r\n\r\n",
         body.len(),
-        csp(req.lines().find_map(|l| l.split_once(':').filter(|(k, _)| k.trim().eq_ignore_ascii_case("host")).map(|(_, v)| v.trim())).unwrap_or(""))
+        csp(req
+            .lines()
+            .find_map(|l| l
+                .split_once(':')
+                .filter(|(k, _)| k.trim().eq_ignore_ascii_case("host"))
+                .map(|(_, v)| v.trim()))
+            .unwrap_or(""))
     );
     s.write_all(hdr.as_bytes()).map_err(|e| e.to_string())?;
     if method != "HEAD" {

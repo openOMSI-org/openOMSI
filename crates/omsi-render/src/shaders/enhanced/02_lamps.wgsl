@@ -4,6 +4,10 @@ struct Surface {
     albedo: vec3<f32>,
     f0: vec3<f32>,
     rough: f32,
+    // what the specular reflection leaves the diffuse part (`spec_ms`), and the factor
+    // that gives the specular lobe back the light of its multiple scattering
+    kd: vec3<f32>,
+    comp: f32,
 };
 
 // How much of lamp `li` reaches the point (1 for a lamp without a shadow map): its map is
@@ -54,7 +58,9 @@ fn lamp_shadow_at(li: u32, p: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
     let dims = vec2<f32>(1.0 / camera.shadow.y, camera.lamp_atlas.z);
     let tile = camera.lamp_atlas.x;
     let cols = camera.lamp_atlas.y;
-    let tx = clamp(tuv * tile, vec2<f32>(1.5), vec2<f32>(tile - 1.5));
+    // Keep the entire PCF footprint in this tile (1.25 texel offset plus
+    // the comparison sampler's half-texel reach).
+    let tx = clamp(tuv * tile, vec2<f32>(1.75), vec2<f32>(tile - 1.75));
     let base = vec2<f32>(f32(k % u32(cols)) * tile, dims.x + f32(k / u32(cols)) * tile) + tx;
     // (nine taps; a saloon's lamp - tiles 28 on - four: its tile's texels are three centimetres
     // and every pixel of a saloon takes a handful of lamps)
@@ -271,10 +277,13 @@ fn lamp_light(p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, sf: Surface, thin: bool,
         let fr = f_schlick(sf.f0, dot(v, h));
         var spec = d_ggx(nh, a) * v_smith(nv, nl, a) * fr;
         if (film.x > 0.0) {
-            spec = mix(spec, d_beckmann(nh, a_film) * v_smith(nv, nl, a_film) * fr * film.z, film.x);
+            // The road beam has a finite emitting area. Broaden its wet-road
+            // highlight so a point-source peak cannot wash out the asphalt.
+            let a_wet = select(a_film, max(a_film, 0.09), l.extra.z != 0.0);
+            spec = mix(spec, d_beckmann(nh, a_wet) * v_smith(nv, nl, a_wet) * fr * film.z, film.x);
         }
-        spec = spec * facing;
-        sum = sum + irr * nl * (sf.albedo / PI + spec);
+        spec = spec * facing * sf.comp;
+        sum = sum + irr * nl * (sf.albedo / PI * sf.kd + spec);
     }
     // What the lit ground throws back up: a diffuse reflector of the street's albedo (asphalt
     // and paving about 0.18, under water darker, fresh snow 0.75), seen by a surface over the

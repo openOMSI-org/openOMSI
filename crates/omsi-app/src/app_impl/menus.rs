@@ -53,16 +53,19 @@ impl App {
         self.stop_search_typing();
         self.menus.menu_search.clear();
         if self.menus.menu_edit_number {
-            crate::platform::text_input(self.window.as_deref(),false);
-            self.menus.menu_edit_number=false; self.menus.menu_edit=None;
+            crate::platform::text_input(self.window.as_deref(), false);
+            self.menus.menu_edit_number = false;
+            self.menus.menu_edit = None;
         }
         if self.menus.menu_edit_ident {
-            crate::platform::text_input(self.window.as_deref(),false);
-            self.menus.menu_edit_ident=false; self.menus.menu_edit=None;
+            crate::platform::text_input(self.window.as_deref(), false);
+            self.menus.menu_edit_ident = false;
+            self.menus.menu_edit = None;
         }
         if self.menus.menu_edit_icao {
-            crate::platform::text_input(self.window.as_deref(),false);
-            self.menus.menu_edit_icao=false; self.menus.menu_edit=None;
+            crate::platform::text_input(self.window.as_deref(), false);
+            self.menus.menu_edit_icao = false;
+            self.menus.menu_edit = None;
         }
         let was_open = self.menus.game_menu.take().is_some();
         self.menus.menu_top = None;
@@ -75,7 +78,13 @@ impl App {
         self.menus.menu_kbd = true;
         if self.shell.pause_online.management.is_some() {
             if code == KeyCode::Escape {
-                if let Some((_, stage)) = self.shell.pause_online.management.as_mut().filter(|(_, stage)| stage.is_some()) {
+                if let Some((_, stage)) = self
+                    .shell
+                    .pause_online
+                    .management
+                    .as_mut()
+                    .filter(|(_, stage)| stage.is_some())
+                {
                     *stage = None;
                 } else {
                     self.shell.pause_online.management = None;
@@ -88,19 +97,30 @@ impl App {
         }
         if self.menus.key_capture.is_some() {
             match code {
-                KeyCode::ShiftLeft | KeyCode::ShiftRight | KeyCode::ControlLeft | KeyCode::ControlRight | KeyCode::AltLeft | KeyCode::AltRight => {}
+                KeyCode::ShiftLeft
+                | KeyCode::ShiftRight
+                | KeyCode::ControlLeft
+                | KeyCode::ControlRight
+                | KeyCode::AltLeft
+                | KeyCode::AltRight => {}
                 KeyCode::Escape => self.cancel_key_capture(),
                 KeyCode::Delete | KeyCode::Backspace => self.apply_key_capture(None, 0),
                 _ => match crate::keys::dik_code(code) {
                     Some(scan) => {
                         let chord = omsi_content::input::chord(
-                            self.input.keys.contains(&KeyCode::ShiftLeft) || self.input.keys.contains(&KeyCode::ShiftRight),
-                            self.input.keys.contains(&KeyCode::ControlLeft) || self.input.keys.contains(&KeyCode::ControlRight),
-                            self.input.keys.contains(&KeyCode::AltLeft) || self.input.keys.contains(&KeyCode::AltRight),
+                            self.input.keys.contains(&KeyCode::ShiftLeft)
+                                || self.input.keys.contains(&KeyCode::ShiftRight),
+                            self.input.keys.contains(&KeyCode::ControlLeft)
+                                || self.input.keys.contains(&KeyCode::ControlRight),
+                            self.input.keys.contains(&KeyCode::AltLeft)
+                                || self.input.keys.contains(&KeyCode::AltRight),
                         );
                         self.apply_key_capture(Some(scan), chord);
                     }
-                    None => self.service_msg = Some(("That key has no DirectInput scan code".into(), 3.0)),
+                    None => {
+                        self.service_msg =
+                            Some(("That key has no DirectInput scan code".into(), 3.0))
+                    }
                 },
             }
             return;
@@ -109,13 +129,23 @@ impl App {
             self.chooser_key(code);
             return;
         }
-        if self.quick_editor_key(code) { return; }
+        if self.quick_editor_key(code) {
+            return;
+        }
         let sel = self.menus.game_menu.unwrap_or(0);
         let has = |l, r| self.input.keys.contains(&l) || self.input.keys.contains(&r);
-        let (shift, ctrl, alt) = (has(KeyCode::ShiftLeft, KeyCode::ShiftRight), has(KeyCode::ControlLeft, KeyCode::ControlRight), has(KeyCode::AltLeft, KeyCode::AltRight));
+        let (shift, ctrl, alt) = (
+            has(KeyCode::ShiftLeft, KeyCode::ShiftRight),
+            has(KeyCode::ControlLeft, KeyCode::ControlRight),
+            has(KeyCode::AltLeft, KeyCode::AltRight),
+        );
         let modified = shift || ctrl || alt;
         self.menus.menu_top = None;
-        if code == KeyCode::KeyE && !modified && !self.vr_active() && self.shell.pause_category == crate::shell::pause::navigation::Category::Home {
+        if code == KeyCode::KeyE
+            && !modified
+            && !self.vr_active()
+            && self.shell.pause_category == crate::shell::pause::navigation::Category::Home
+        {
             self.shell.quick_edit = true;
             self.shell.quick_focus = 0;
             self.shell.last_sel = None;
@@ -123,23 +153,47 @@ impl App {
         }
         match code {
             // Pause changes only the simulation state, even while a menu is open.
-            _ if omsi_input::actions::is_pause_key(&self.input.game_keys, code, shift, ctrl, alt, &self.input.own_keys) => self.toggle_pause(),
+            _ if omsi_input::actions::is_pause_key(
+                &self.input.game_keys,
+                code,
+                shift,
+                ctrl,
+                alt,
+                &self.input.own_keys,
+            ) =>
+            {
+                self.toggle_pause()
+            }
             KeyCode::Escape => self.close_game_menu(),
-            KeyCode::ArrowUp | KeyCode::KeyW => self.menus.game_menu = Some(self.pause_menu_step(sel, false)),
-            KeyCode::ArrowDown | KeyCode::KeyS => self.menus.game_menu = Some(self.pause_menu_step(sel, true)),
-            KeyCode::ArrowLeft | KeyCode::KeyA if !self.vr_active() => self.step_pause_category(false),
-            KeyCode::ArrowRight | KeyCode::KeyD if !self.vr_active() => self.step_pause_category(true),
+            KeyCode::ArrowUp | KeyCode::KeyW => {
+                self.menus.game_menu = Some(self.pause_menu_step(sel, false))
+            }
+            KeyCode::ArrowDown | KeyCode::KeyS => {
+                self.menus.game_menu = Some(self.pause_menu_step(sel, true))
+            }
+            KeyCode::ArrowLeft | KeyCode::KeyA if !self.vr_active() => {
+                self.step_pause_category(false)
+            }
+            KeyCode::ArrowRight | KeyCode::KeyD if !self.vr_active() => {
+                self.step_pause_category(true)
+            }
             KeyCode::Tab if !self.vr_active() => {
-                let backwards = self.input.keys.contains(&KeyCode::ShiftLeft) || self.input.keys.contains(&KeyCode::ShiftRight);
+                let backwards = self.input.keys.contains(&KeyCode::ShiftLeft)
+                    || self.input.keys.contains(&KeyCode::ShiftRight);
                 self.step_pause_category(!backwards);
             }
-            KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => self.menu_choose(event_loop, sel),
+            KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
+                self.menu_choose(event_loop, sel)
+            }
             _ => {}
         }
     }
 
     /// The category is only a view of the permission-filtered menu, never a second action list.
-    pub(crate) fn switch_pause_category(&mut self, category: crate::shell::pause::navigation::Category) {
+    pub(crate) fn switch_pause_category(
+        &mut self,
+        category: crate::shell::pause::navigation::Category,
+    ) {
         let menu = self.game_menu_items();
         let ids: Vec<_> = menu.iter().map(|line| line.0).collect();
         if !crate::shell::pause::navigation::Category::available(&ids).contains(&category) {
@@ -149,7 +203,16 @@ impl App {
         self.shell.pause_category = category;
         self.shell.pause_hidden = false;
         self.shell.quick_edit = false;
-        self.menus.game_menu = Some(crate::shell::pause::quick_actions::indices(category, &menu, &self.settings.pause_quick_actions).first().copied().unwrap_or(0));
+        self.menus.game_menu = Some(
+            crate::shell::pause::quick_actions::indices(
+                category,
+                &menu,
+                &self.settings.pause_quick_actions,
+            )
+            .first()
+            .copied()
+            .unwrap_or(0),
+        );
         self.shell.last_sel = None;
     }
 
@@ -157,8 +220,15 @@ impl App {
         let menu = self.game_menu_items();
         let ids: Vec<_> = menu.iter().map(|line| line.0).collect();
         let categories = crate::shell::pause::navigation::Category::available(&ids);
-        let current = categories.iter().position(|c| *c == self.shell.pause_category).unwrap_or(0);
-        let next = if forward { (current + 1) % categories.len() } else { (current + categories.len() - 1) % categories.len() };
+        let current = categories
+            .iter()
+            .position(|c| *c == self.shell.pause_category)
+            .unwrap_or(0);
+        let next = if forward {
+            (current + 1) % categories.len()
+        } else {
+            (current + categories.len() - 1) % categories.len()
+        };
         self.switch_pause_category(categories[next]);
     }
 
@@ -168,8 +238,16 @@ impl App {
             return self.menu_step(from, menu.len(), down);
         }
         let ids: Vec<_> = menu.iter().map(|line| line.0).collect();
-        let mut indices: Vec<_> = ids.iter().position(|id| *id == "resume").into_iter().collect();
-        indices.extend(crate::shell::pause::quick_actions::indices(self.shell.pause_category, &menu, &self.settings.pause_quick_actions));
+        let mut indices: Vec<_> = ids
+            .iter()
+            .position(|id| *id == "resume")
+            .into_iter()
+            .collect();
+        indices.extend(crate::shell::pause::quick_actions::indices(
+            self.shell.pause_category,
+            &menu,
+            &self.settings.pause_quick_actions,
+        ));
         indices.extend(ids.iter().position(|id| *id == "quit"));
         indices.retain(|k| !self.menu_item_off(*k));
         crate::shell::pause::navigation::step(&indices, from, down).unwrap_or(from)
@@ -178,19 +256,32 @@ impl App {
     /// The open drop-down's scroll bar held with the mouse at height `y`: the first entry
     /// shown follows the thumb.
     pub(crate) fn drag_dropdown(&mut self, y: f32) {
-        let (Some(grab), Some(ui)) = (self.menus.dd_scroll_drag, self.ui.as_ref()) else { return };
-        let Some((track, thumb)) = ui.dd_scroll else { return };
+        let (Some(grab), Some(ui)) = (self.menus.dd_scroll_drag, self.ui.as_ref()) else {
+            return;
+        };
+        let Some((track, thumb)) = ui.dd_scroll else {
+            return;
+        };
         let rows = ui.dd_rows.max(1);
-        let Some(d) = self.menus.dropdown.as_mut() else { return };
+        let Some(d) = self.menus.dropdown.as_mut() else {
+            return;
+        };
         d.top = dropdown_top_at(y - grab, track, thumb[3] - thumb[1], d.items.len(), rows);
     }
 
     /// The scroll bar of the timetable beside the tours held with the mouse at height `y`:
     /// the first stop shown follows the thumb.
     pub(crate) fn drag_pane(&mut self, y: f32) {
-        let (Some(grab), Some(k)) = (self.menus.pane_scroll_drag, self.menus.chooser) else { return };
-        let Some((track, thumb, n, fit)) = self.ui.as_ref().and_then(|u| u.menu_pane_scroll) else { return };
-        self.menus.pane_scroll = Some((k, dropdown_top_at(y - grab, track, thumb[3] - thumb[1], n, fit)));
+        let (Some(grab), Some(k)) = (self.menus.pane_scroll_drag, self.menus.chooser) else {
+            return;
+        };
+        let Some((track, thumb, n, fit)) = self.ui.as_ref().and_then(|u| u.menu_pane_scroll) else {
+            return;
+        };
+        self.menus.pane_scroll = Some((
+            k,
+            dropdown_top_at(y - grab, track, thumb[3] - thumb[1], n, fit),
+        ));
     }
 
     /// The mouse wheel over the game menu: the chosen line moves (the menu scrolls with it),
@@ -226,7 +317,9 @@ impl App {
         // the wheel over the timetable beside the tours scrolls its stops
         if let (Some(u), Some(k)) = (self.ui.as_ref(), self.menus.chooser) {
             let (x, y) = self.input.cursor;
-            if u.menu_pane_box.is_some_and(|r| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]) {
+            if u.menu_pane_box
+                .is_some_and(|r| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
+            {
                 let first = (u.menu_pane_start as i64 - steps).max(0) as usize;
                 self.menus.pane_scroll = Some((k, first));
                 return;
@@ -235,15 +328,25 @@ impl App {
         // the list scrolls under the mouse; what is chosen stays chosen (the wheel used to
         // walk the highlight up and down the lines)
         let n = self.menu_len() as f32;
-        let (start, rows) = self.ui.as_ref().map(|u| (u.menu_start as f32, u.menu_rows as f32)).unwrap_or((0.0, n));
-        let top = (self.menus.menu_top.unwrap_or(start) - steps as f32).clamp(0.0, (n - rows).max(0.0));
+        let (start, rows) = self
+            .ui
+            .as_ref()
+            .map(|u| (u.menu_start as f32, u.menu_rows as f32))
+            .unwrap_or((0.0, n));
+        let top =
+            (self.menus.menu_top.unwrap_or(start) - steps as f32).clamp(0.0, (n - rows).max(0.0));
         self.menus.menu_top = Some(top);
     }
 
     /// How many lines the menu shows now (the chooser's list, else the game menu's).
     pub(crate) fn menu_len(&self) -> usize {
         match self.menus.chooser {
-            Some(_) => self.menus.admin_list.as_ref().unwrap_or(&self.menus.vehicle_list).len(),
+            Some(_) => self
+                .menus
+                .admin_list
+                .as_ref()
+                .unwrap_or(&self.menus.vehicle_list)
+                .len(),
             None => self.game_menu_items().len(),
         }
     }
@@ -251,7 +354,11 @@ impl App {
     /// Do what line `k` of the game menu says.
     pub(crate) fn menu_choose(&mut self, event_loop: &ActiveEventLoop, k: usize) {
         // (a click in an open list keeps the scroll where it is: no jump to the line)
-        self.menus.menu_top = if self.menus.chooser.is_some() { self.ui.as_ref().map(|u| u.menu_start as f32) } else { None };
+        self.menus.menu_top = if self.menus.chooser.is_some() {
+            self.ui.as_ref().map(|u| u.menu_start as f32)
+        } else {
+            None
+        };
         if self.menus.chooser.is_some() {
             self.chooser_pick(k);
             return;
@@ -260,14 +367,17 @@ impl App {
         if self.menu_item_off(k) {
             return;
         }
-        let Some(id) = self.game_menu_items().get(k).map(|m| m.0) else { return };
+        let Some(id) = self.game_menu_items().get(k).map(|m| m.0) else {
+            return;
+        };
         match id {
             "load" => {
-                self.close_game_menu();
-                if self.load_quicksave() {
-                    self.finish_session();
-                    crate::platform::exit(event_loop);
-                }
+                let quicksave = self
+                    .integrations
+                    .plugin_command
+                    .then(|| self.quicksave_file())
+                    .flatten();
+                self.choose_load(quicksave);
             }
             "quit" => {
                 self.menus.game_menu = None;
@@ -285,8 +395,15 @@ impl App {
     /// plugins' lines): also the Alt quick menu's tiles. False when `id` is none of them.
     pub(crate) fn game_menu_action(&mut self, id: &str) -> bool {
         if self.shell.pause_category == crate::shell::pause::navigation::Category::Online {
-            if let Some(tab) = match id { "players" => Some(0), "world" => Some(1), "admin" => Some(2), _ => None } {
-                self.close_list(); self.shell.pause_online.tab = tab; self.shell.pause_hidden = false;
+            if let Some(tab) = match id {
+                "players" => Some(0),
+                "world" => Some(1),
+                "admin" => Some(2),
+                _ => None,
+            } {
+                self.close_list();
+                self.shell.pause_online.tab = tab;
+                self.shell.pause_hidden = false;
                 return true;
             }
         }
@@ -295,12 +412,20 @@ impl App {
             "options" => self.open_list(crate::game_lists::ListKind::Options(0)),
             "controls" => self.open_list(crate::game_lists::ListKind::Controls),
             "camera" => {
-                let tab = crate::game_lists::tab_of(self, crate::game_lists::ListKind::Options(0), "Camera");
+                let tab = crate::game_lists::tab_of(
+                    self,
+                    crate::game_lists::ListKind::Options(0),
+                    "Camera",
+                );
                 self.open_list(crate::game_lists::ListKind::Options(tab));
             }
             "vehicle" => self.open_list(crate::game_lists::ListKind::Vehicle(0)),
             "world" => self.open_list(crate::game_lists::ListKind::World(0)),
-            "multiplayer" if self.net.lan.is_some() && self.shell.pause_category != crate::shell::pause::navigation::Category::Online => {
+            "multiplayer"
+                if self.net.lan.is_some()
+                    && self.shell.pause_category
+                        != crate::shell::pause::navigation::Category::Online =>
+            {
                 self.switch_pause_category(crate::shell::pause::navigation::Category::Online);
                 self.shell.pause_online.tab = 0;
                 self.shell.pause_online.management = None;
@@ -372,7 +497,18 @@ impl App {
                 self.menus.swap_pending = id == "swap" && self.player.is_some();
                 if self.menus.vehicle_list.is_empty() {
                     let menu = crate::menu::Menu::new(&self.args.root, &self.args.map);
-                    self.menus.vehicle_meta = menu.vehicles.iter().zip(menu.vehicle_meta).map(|(v, meta)| (v.1.clone(), meta)).collect();
+                    self.menus.vehicle_meta = menu
+                        .vehicles
+                        .iter()
+                        .zip(menu.vehicle_meta)
+                        .map(|(v, meta)| (v.1.clone(), meta))
+                        .collect();
+                    self.menus.vehicle_about = menu
+                        .vehicles
+                        .iter()
+                        .zip(menu.vehicle_about)
+                        .map(|(v, about)| (v.1.clone(), about))
+                        .collect();
                     self.menus.vehicle_list = menu.vehicles;
                     // (alphabetical)
                     self.menus.vehicle_list.sort_by_key(|v| v.0.to_lowercase());
@@ -380,8 +516,17 @@ impl App {
                 }
                 if self.menus.vehicle_list.is_empty() {
                     self.service_msg = Some(("No vehicles found".into(), 3.0));
-                } else if crate::lan::server_offers().is_some_and(|o| !self.menus.vehicle_list.iter().any(|v| crate::lan::offers(&o, &v.1))) {
-                    self.service_msg = Some(("The server offers none of the vehicles installed here".into(), 4.0));
+                } else if crate::lan::server_offers().is_some_and(|o| {
+                    !self
+                        .menus
+                        .vehicle_list
+                        .iter()
+                        .any(|v| crate::lan::offers(&o, &v.1))
+                }) {
+                    self.service_msg = Some((
+                        "The server offers none of the vehicles installed here".into(),
+                        4.0,
+                    ));
                 } else {
                     // (as the launcher's bus step: the manufacturer, then the type)
                     self.open_list(crate::game_lists::ListKind::PlaceMaker);
@@ -431,7 +576,10 @@ impl App {
                         n.toggle_map();
                     }
                     self.menus.teleport_pick = true;
-                    self.service_msg = Some(("Click a street on the map: the bus is put there".into(), 6.0));
+                    self.service_msg = Some((
+                        "Click a street on the map: the bus is put there".into(),
+                        6.0,
+                    ));
                 }
             }
             // (the game's own panels, by name for the plugins and the input script)
@@ -483,8 +631,15 @@ impl App {
             "switchto" => self.open_list(crate::game_lists::ListKind::SwitchTo),
             "later" | "earlier" | "later10" | "earlier10" => {
                 self.close_game_menu();
-                if self.net.lan.as_ref().map(|l| l.role == omsi_net::Role::Client).unwrap_or(false) {
-                    self.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
+                if self
+                    .net
+                    .lan
+                    .as_ref()
+                    .map(|l| l.role == omsi_net::Role::Client)
+                    .unwrap_or(false)
+                {
+                    self.service_msg =
+                        Some(("In a LAN session the host sets the clock".into(), 3.0));
                 } else {
                     self.shift_clock(match id {
                         "later" => 3600.0,
@@ -520,7 +675,10 @@ pub(crate) const SERVER_GAME_MENU: [(&str, &str); 12] = [
 
 /// Whether the session was started on a server (`--lan-join https://…`).
 pub(crate) fn on_server(args: &crate::Args) -> bool {
-    args.lan_join.as_deref().map(|t| omsi_net::ws::ws_url(t).is_some()).unwrap_or(false)
+    args.lan_join
+        .as_deref()
+        .map(|t| omsi_net::ws::ws_url(t).is_some())
+        .unwrap_or(false)
 }
 
 /// The game menu's lines for a session with these arguments.
@@ -534,7 +692,11 @@ pub(crate) fn game_menu_for(args: &crate::Args) -> &'static [(&'static str, &'st
 
 /// A line of the game menu: what it does, its label, and for a plugin's line (`"plugin"`)
 /// whose and which it is, so that a click on it goes to that very line.
-pub(crate) type MenuLine = (&'static str, Cow<'static, str>, Option<omsi_plugin::ui::MenuItem>);
+pub(crate) type MenuLine = (
+    &'static str,
+    Cow<'static, str>,
+    Option<omsi_plugin::ui::MenuItem>,
+);
 
 impl crate::App {
     /// The game menu's lines for this session: back to the own bus while walking about,
@@ -542,7 +704,10 @@ impl crate::App {
     /// (`ui.set_menu_item`, each a `"plugin"` line). What can be set is behind "Options",
     /// "Vehicle options" and "World options".
     pub(crate) fn game_menu_items(&self) -> Vec<MenuLine> {
-        let mut v: Vec<MenuLine> = game_menu_for(&self.args).iter().map(|&(id, label)| (id, Cow::Borrowed(label), None)).collect();
+        let mut v: Vec<MenuLine> = game_menu_for(&self.args)
+            .iter()
+            .map(|&(id, label)| (id, Cow::Borrowed(label), None))
+            .collect();
         let mut at = 1;
         if self.session.on_foot.is_some() && self.player.is_some() {
             v.insert(at, ("tobus", "Back to my bus".into(), None));
@@ -563,7 +728,12 @@ impl crate::App {
         if self.menus.navigator.is_none() {
             v.retain(|x| x.0 != "map");
         }
-        let host = self.net.lan.as_ref().map(|l| l.role == omsi_net::Role::Host).unwrap_or(false);
+        let host = self
+            .net
+            .lan
+            .as_ref()
+            .map(|l| l.role == omsi_net::Role::Host)
+            .unwrap_or(false);
         // the server code: a line to copy it, right under "World options" (only in a LAN session or on a server)
         if self.net.lan.is_some() || on_server(&self.args) {
             if let Some(w) = v.iter().position(|x| x.0 == "world") {
@@ -576,23 +746,44 @@ impl crate::App {
         }
         // everybody in a multiplayer session may see who is there
         if self.net.lan.is_some() {
-            let before_quit = v.iter().position(|x| x.0 == "quit").unwrap_or(v.len()).max(at);
+            let before_quit = v
+                .iter()
+                .position(|x| x.0 == "quit")
+                .unwrap_or(v.len())
+                .max(at);
             v.insert(before_quit, ("players", "Player list...".into(), None));
         }
         if host || self.net.is_admin {
-            let before_quit = v.iter().position(|x| x.0 == "quit").unwrap_or(v.len()).max(at);
+            let before_quit = v
+                .iter()
+                .position(|x| x.0 == "quit")
+                .unwrap_or(v.len())
+                .max(at);
             v.insert(before_quit, ("admin", "Administration...".into(), None));
         }
         // the plugins' lines, a group of their own before saving (or the way out)
         let lines = self.plugin_menu_lines();
-        let before = v.iter().position(|x| matches!(x.0, "save" | "admin" | "quit")).unwrap_or(v.len()).max(at);
-        v.splice(before..before, lines.into_iter().map(|m| ("plugin", Cow::Owned(m.label.clone()), Some(m))));
+        let before = v
+            .iter()
+            .position(|x| matches!(x.0, "save" | "admin" | "quit"))
+            .unwrap_or(v.len())
+            .max(at);
+        v.splice(
+            before..before,
+            lines
+                .into_iter()
+                .map(|m| ("plugin", Cow::Owned(m.label.clone()), Some(m))),
+        );
         v
     }
 
     /// The plugins' lines of the game menu (`ui.set_menu_item`), in their order there.
     pub(crate) fn plugin_menu_lines(&self) -> Vec<omsi_plugin::ui::MenuItem> {
-        self.integrations.plugins.as_ref().map(|p| p.ui.borrow().menu_items().to_vec()).unwrap_or_default()
+        self.integrations
+            .plugins
+            .as_ref()
+            .map(|p| p.ui.borrow().menu_items().to_vec())
+            .unwrap_or_default()
     }
 
     /// The player chose the game menu's line `k`, a plugin's: the menu closes, and that
@@ -608,8 +799,19 @@ impl crate::App {
     /// Put the session's server code on the clipboard.
     pub(crate) fn copy_server_code(&mut self) {
         // (the host's code; a player or a server's join code or address as it was entered)
-        let Some(code) = self.net.lan.as_ref().and_then(|l| l.code()).map(|c| c.encode()).or_else(|| self.args.lan_join.clone()).filter(|c| !c.trim().is_empty()) else {
-            self.service_msg = Some(("No server code: not in a LAN session or on a server".into(), 3.0));
+        let Some(code) = self
+            .net
+            .lan
+            .as_ref()
+            .and_then(|l| l.code())
+            .map(|c| c.encode())
+            .or_else(|| self.args.lan_join.clone())
+            .filter(|c| !c.trim().is_empty())
+        else {
+            self.service_msg = Some((
+                "No server code: not in a LAN session or on a server".into(),
+                3.0,
+            ));
             return;
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -623,14 +825,23 @@ impl crate::App {
                 if c.is_none() {
                     *c = arboard::Clipboard::new().ok();
                 }
-                c.as_mut().is_some_and(|cb| cb.set_text(code.clone()).is_ok())
+                c.as_mut()
+                    .is_some_and(|cb| cb.set_text(code.clone()).is_ok())
             });
-            self.service_msg = Some(if ok { ("Server code copied".into(), 3.0) } else { (format!("{}: {code}", omsi_ui::tr("Server code")), 8.0) });
+            self.service_msg = Some(if ok {
+                ("Server code copied".into(), 3.0)
+            } else {
+                (format!("{}: {code}", omsi_ui::tr("Server code")), 8.0)
+            });
         }
         #[cfg(target_os = "ios")]
         {
             let ok = crate::apple::set_clipboard(&code);
-            self.service_msg = Some(if ok { ("Server code copied".into(), 3.0) } else { (format!("{}: {code}", omsi_ui::tr("Server code")), 8.0) });
+            self.service_msg = Some(if ok {
+                ("Server code copied".into(), 3.0)
+            } else {
+                (format!("{}: {code}", omsi_ui::tr("Server code")), 8.0)
+            });
         }
         #[cfg(target_os = "android")]
         {
@@ -645,7 +856,11 @@ impl crate::App {
 
     /// Whether line `k` of the game menu is greyed out.
     pub(crate) fn menu_item_off(&self, k: usize) -> bool {
-        self.menus.chooser.is_none() && self.game_menu_items().get(k).is_some_and(|m| self.menu_disabled_ids().contains(&m.0))
+        self.menus.chooser.is_none()
+            && self
+                .game_menu_items()
+                .get(k)
+                .is_some_and(|m| self.menu_disabled_ids().contains(&m.0))
     }
 
     /// The next line up or down from `from` that can be chosen (round the ends; the greyed-out
@@ -680,7 +895,7 @@ pub(crate) const GAME_MENU: [(&str, &str); 17] = [
     ("endduty", "End the tour"),
     ("save", "Save the situation"),
     ("saveslot", "Save to a slot..."),
-    ("load", "Load the quicksave"),
+    ("load", "Load a situation..."),
     ("shot", "Screenshot"),
     ("photo", "Photo mode"),
     ("quit", "End the session"),

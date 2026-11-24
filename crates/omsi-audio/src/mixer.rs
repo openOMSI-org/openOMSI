@@ -18,8 +18,8 @@ use parking_lot::Mutex;
 use render::{Back, Cmd, Mixer, MixerCell, Room, Shared, Voice};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 pub struct Clip {
     pub sample_rate: u32,
@@ -71,7 +71,6 @@ impl Default for VoiceParams {
         }
     }
 }
-
 
 #[derive(Debug, Clone, Copy)]
 pub struct Listener {
@@ -258,7 +257,9 @@ fn muted() -> bool {
 }
 
 /// The sound formats tried for a file that is missing under its own name, best first.
-pub const SOUND_EXTENSIONS: [&str; 9] = ["wav", "ogg", "flac", "mp3", "m4a", "aac", "aiff", "aif", "caf"];
+pub const SOUND_EXTENSIONS: [&str; 9] = [
+    "wav", "ogg", "flac", "mp3", "m4a", "aac", "aiff", "aif", "caf",
+];
 
 /// Read and decode a clip (any thread).
 pub fn read_clip(path: &Path) -> Option<Arc<Clip>> {
@@ -291,11 +292,22 @@ pub fn read_clip(path: &Path) -> Option<Arc<Clip>> {
 
 impl AudioEngine {
     /// An engine around a mixer at `rate`/`channels`, no device opened yet.
-    fn with_mixer(rate: u32, channels: usize, muted: bool, capture: bool, silent: bool) -> AudioEngine {
+    fn with_mixer(
+        rate: u32,
+        channels: usize,
+        muted: bool,
+        capture: bool,
+        silent: bool,
+    ) -> AudioEngine {
         let shared = Arc::new(Shared::new(rate, channels, muted, capture));
         let (cmd_tx, cmd_rx) = crate::spsc::channel(RING);
         let (back_tx, back_rx) = crate::spsc::channel(RING / 2);
-        let mixer = Arc::new(MixerCell::new(Mixer::new(shared.clone(), cmd_rx, back_tx, FIRST_ROOM)));
+        let mixer = Arc::new(MixerCell::new(Mixer::new(
+            shared.clone(),
+            cmd_rx,
+            back_tx,
+            FIRST_ROOM,
+        )));
         AudioEngine {
             game: Mutex::new(GameSide {
                 cmds: cmd_tx,
@@ -310,7 +322,12 @@ impl AudioEngine {
             }),
             shared,
             mixer,
-            device: Mutex::new(DeviceState { thread: None, name: String::new(), playing: false, opened: std::time::Instant::now() }),
+            device: Mutex::new(DeviceState {
+                thread: None,
+                name: String::new(),
+                playing: false,
+                opened: std::time::Instant::now(),
+            }),
             reopen: Arc::new(AtomicBool::new(false)),
             clips: Default::default(),
             last_trim: Mutex::new(std::time::Instant::now()),
@@ -378,7 +395,11 @@ impl AudioEngine {
     pub fn new() -> AudioEngine {
         crate::trace::engine("device");
         let mut engine = AudioEngine::with_mixer(48_000, 2, muted(), false, false);
-        let thread = device::DeviceThread::start(engine.shared.clone(), engine.mixer.clone(), engine.reopen.clone());
+        let thread = device::DeviceThread::start(
+            engine.shared.clone(),
+            engine.mixer.clone(),
+            engine.reopen.clone(),
+        );
         let name = thread.as_ref().and_then(|t| t.open());
         engine.enabled = name.is_some();
         *engine.device.get_mut() = DeviceState {
@@ -546,17 +567,31 @@ impl AudioEngine {
 
     fn play_at(&self, clip: Arc<Clip>, params: VoiceParams, start: f64) -> VoiceId {
         let trace_clip = Arc::as_ptr(&clip) as usize;
-        self.start_voice(Some(trace_clip), params, start, |id| Voice::new(id, clip, None, params, start))
+        self.start_voice(Some(trace_clip), params, start, |id| {
+            Voice::new(id, clip, None, params, start)
+        })
     }
 
     /// A new voice given its id (drawn in the order the commands go to the mixer, so that
     /// its list stays in the order of the ids) and handed to the mixer; playing from now on.
-    fn start_voice(&self, trace_clip: Option<usize>, params: VoiceParams, start: f64, voice: impl FnOnce(VoiceId) -> Voice) -> VoiceId {
+    fn start_voice(
+        &self,
+        trace_clip: Option<usize>,
+        params: VoiceParams,
+        start: f64,
+        voice: impl FnOnce(VoiceId) -> Voice,
+    ) -> VoiceId {
         let mut g = self.game.lock();
         let id = g.next_id;
         g.next_id += 1;
         crate::trace::play(id, trace_clip, &params, start);
-        g.live.insert(id, Live { params, pending: None });
+        g.live.insert(
+            id,
+            Live {
+                params,
+                pending: None,
+            },
+        );
         g.make_room();
         self.send(&mut g, Cmd::Play(voice(id)));
         id
@@ -579,9 +614,19 @@ impl AudioEngine {
 
     /// Play what `stream` is fed with (see `stream::StreamBuf`); the voice ends when the
     /// stream is closed.
-    pub fn play_stream(&self, stream: Arc<crate::stream::StreamBuf>, params: VoiceParams) -> VoiceId {
-        let clip = Arc::new(Clip { sample_rate: 44100, channels: 2, samples: Vec::new() });
-        self.start_voice(None, params, 0.0, |id| Voice::new(id, clip, Some(stream), params, 0.0))
+    pub fn play_stream(
+        &self,
+        stream: Arc<crate::stream::StreamBuf>,
+        params: VoiceParams,
+    ) -> VoiceId {
+        let clip = Arc::new(Clip {
+            sample_rate: 44100,
+            channels: 2,
+            samples: Vec::new(),
+        });
+        self.start_voice(None, params, 0.0, |id| {
+            Voice::new(id, clip, Some(stream), params, 0.0)
+        })
     }
 
     /// The bus radio's effects on stream voice `id` (see `radio_fx`): made, retuned, or
@@ -590,7 +635,11 @@ impl AudioEngine {
         crate::trace::radio_fx(id, &params);
         let rate = self.shared.sample_rate.load(Ordering::Relaxed);
         // (made here, should the voice have none yet: the mixer's thread allocates nothing)
-        let fresh = if params.is_off() { None } else { crate::radio_fx::RadioFx::new(params, rate).map(Box::new) };
+        let fresh = if params.is_off() {
+            None
+        } else {
+            crate::radio_fx::RadioFx::new(params, rate).map(Box::new)
+        };
         let mut g = self.game.lock();
         self.send(&mut g, Cmd::RadioFx(id, params, fresh));
     }
@@ -682,7 +731,11 @@ mod tests {
     use super::*;
 
     /// A mixer at 48 kHz, mono, and the game's ends of its rings.
-    fn shared() -> (Mixer, crate::spsc::Producer<Cmd>, crate::spsc::Consumer<Back>) {
+    fn shared() -> (
+        Mixer,
+        crate::spsc::Producer<Cmd>,
+        crate::spsc::Consumer<Back>,
+    ) {
         let s = Arc::new(Shared::new(48_000, 1, false, false));
         let (cmd_tx, cmd_rx) = crate::spsc::channel(64);
         let (back_tx, back_rx) = crate::spsc::channel(64);
@@ -694,7 +747,16 @@ mod tests {
             1,
             clip,
             None,
-            VoiceParams { gain, pitch: 1.0, looping: true, position: None, doppler: true, range: 10.0, lowpass_hz: 0.0, important: false },
+            VoiceParams {
+                gain,
+                pitch: 1.0,
+                looping: true,
+                position: None,
+                doppler: true,
+                range: 10.0,
+                lowpass_hz: 0.0,
+                important: false,
+            },
             0.0,
         );
         v.cur_gain = gain;
@@ -704,7 +766,11 @@ mod tests {
     #[test]
     fn a_loop_has_no_gap_where_it_turns() {
         // a 5-frame loop of a constant level at the device rate: every output frame carries it
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![16_384; 5] });
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![16_384; 5],
+        });
         let (mut s, _, _) = shared();
         s.voices.push(voice(clip, 1.0));
         let mut out = vec![0.0f32; 64];
@@ -714,10 +780,26 @@ mod tests {
 
     #[test]
     fn parameters_arrive_with_the_next_block() {
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![16_384; 5] });
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![16_384; 5],
+        });
         let (mut s, mut cmds, _) = shared();
         s.voices.push(voice(clip, 1.0));
-        assert!(cmds.push(Cmd::Params(1, VoiceParams { gain: 0.0, looping: true, ..Default::default() }, std::time::Instant::now(), 7)).is_ok());
+        assert!(
+            cmds.push(Cmd::Params(
+                1,
+                VoiceParams {
+                    gain: 0.0,
+                    looping: true,
+                    ..Default::default()
+                },
+                std::time::Instant::now(),
+                7
+            ))
+            .is_ok()
+        );
         let mut out = vec![0.0f32; 4];
         s.render(&mut out);
         assert_eq!(s.voices[0].params.gain, 0.0);
@@ -727,15 +809,38 @@ mod tests {
 
     #[test]
     fn listener_vehicle_keeps_spatial_sound_at_its_original_pitch() {
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![0; 5] });
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![0; 5],
+        });
         let mut own = voice(clip.clone(), 1.0);
         let mut passing = voice(clip, 1.0);
         let now = std::time::Instant::now();
         for (distance, elapsed) in [(2.0, 0), (2.2, 20)] {
             let at = now + std::time::Duration::from_millis(elapsed);
             let position = Some(Vec3::new(distance, 0.0, 0.0));
-            apply_params(&mut own, VoiceParams { position, doppler: false, ..Default::default() }, at, Vec3::ZERO, true);
-            apply_params(&mut passing, VoiceParams { position, ..Default::default() }, at, Vec3::ZERO, true);
+            apply_params(
+                &mut own,
+                VoiceParams {
+                    position,
+                    doppler: false,
+                    ..Default::default()
+                },
+                at,
+                Vec3::ZERO,
+                true,
+            );
+            apply_params(
+                &mut passing,
+                VoiceParams {
+                    position,
+                    ..Default::default()
+                },
+                at,
+                Vec3::ZERO,
+                true,
+            );
         }
         assert_eq!(own.doppler.2, 1.0);
         assert!(passing.doppler.2 < 1.0);
@@ -783,14 +888,32 @@ mod tests {
     #[test]
     fn a_capture_mixes_voices_on_demand() {
         let e = AudioEngine::capture(48_000);
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![8_192; 4_800] });
-        e.play(clip, VoiceParams { gain: 1.0, looping: true, ..Default::default() });
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![8_192; 4_800],
+        });
+        e.play(
+            clip,
+            VoiceParams {
+                gain: 1.0,
+                looping: true,
+                ..Default::default()
+            },
+        );
         let t0 = e.shared.now();
         let a = e.render_capture(4_800);
         assert_eq!(a.len(), 9_600);
-        assert!((e.shared.now() - t0).as_millis() == 100, "the clock moves with the sound");
+        assert!(
+            (e.shared.now() - t0).as_millis() == 100,
+            "the clock moves with the sound"
+        );
         assert!(a[2000..].iter().all(|x| (*x - 0.25).abs() < 0.01));
-        assert!(AudioEngine::new_for_test_device_less().render_capture(10).is_empty());
+        assert!(
+            AudioEngine::new_for_test_device_less()
+                .render_capture(10)
+                .is_empty()
+        );
     }
 
     /// What the game asks and tells a voice never waits for a block being mixed (the mixer
@@ -799,9 +922,19 @@ mod tests {
     #[test]
     fn the_game_never_waits_for_the_mixer() {
         let e = AudioEngine::capture(48_000);
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![8_192; 480] });
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![8_192; 480],
+        });
         let short = e.play(clip.clone(), VoiceParams::default());
-        let looped = e.play(clip.clone(), VoiceParams { looping: true, ..Default::default() });
+        let looped = e.play(
+            clip.clone(),
+            VoiceParams {
+                looping: true,
+                ..Default::default()
+            },
+        );
         e.render_capture(4_800);
         assert!(!e.is_playing(short) && e.is_playing(looped) && e.voice_count() == 1);
         // (a block being mixed: the mixer held for half a second)
@@ -814,13 +947,30 @@ mod tests {
         });
         rx.recv().unwrap();
         let t = std::time::Instant::now();
-        e.set_params(looped, VoiceParams { gain: 0.5, looping: true, ..Default::default() });
+        e.set_params(
+            looped,
+            VoiceParams {
+                gain: 0.5,
+                looping: true,
+                ..Default::default()
+            },
+        );
         let other = e.play(clip, VoiceParams::default());
         e.set_radio_fx(other, Default::default());
-        let asked = (e.is_playing(looped), e.voice_state(looped).map(|s| s.1), e.is_playing(other));
+        let asked = (
+            e.is_playing(looped),
+            e.voice_state(looped).map(|s| s.1),
+            e.is_playing(other),
+        );
         e.stop(other);
-        assert!(t.elapsed() < std::time::Duration::from_millis(250), "the game waited for the mixer");
-        assert_eq!((asked, e.is_playing(other)), ((true, Some(1.0), true), false));
+        assert!(
+            t.elapsed() < std::time::Duration::from_millis(250),
+            "the game waited for the mixer"
+        );
+        assert_eq!(
+            (asked, e.is_playing(other)),
+            ((true, Some(1.0), true), false)
+        );
         mixing.join().unwrap();
         e.render_capture(480);
         assert_eq!(e.voice_state(looped).map(|s| s.1), Some(0.5));
@@ -840,11 +990,23 @@ mod tests {
         let render = |fx: Option<crate::radio_fx::RadioFxParams>| {
             let e = AudioEngine::capture(48_000);
             let buf = Arc::new(crate::stream::StreamBuf::default());
-            buf.push(48_000, (0..48_000 * 3).map(|i| {
-                let t = i as f32 / 48_000.0;
-                [(t * 440.0 * std::f32::consts::TAU).sin() * 0.5, (t * 660.0 * std::f32::consts::TAU).sin() * 0.4]
-            }));
-            let id = e.play_stream(buf, VoiceParams { gain: 0.8, ..Default::default() });
+            buf.push(
+                48_000,
+                (0..48_000 * 3).map(|i| {
+                    let t = i as f32 / 48_000.0;
+                    [
+                        (t * 440.0 * std::f32::consts::TAU).sin() * 0.5,
+                        (t * 660.0 * std::f32::consts::TAU).sin() * 0.4,
+                    ]
+                }),
+            );
+            let id = e.play_stream(
+                buf,
+                VoiceParams {
+                    gain: 0.8,
+                    ..Default::default()
+                },
+            );
             if let Some(p) = fx {
                 e.set_radio_fx(id, p);
             }
@@ -853,9 +1015,22 @@ mod tests {
         let plain = render(None);
         assert!(plain.iter().any(|x| x.abs() > 0.1));
         let off = render(Some(Default::default()));
-        assert!(plain.iter().zip(&off).all(|(a, b)| a.to_bits() == b.to_bits()));
-        let speaker = render(Some(crate::radio_fx::RadioFxParams { speaker: 1.0, ..Default::default() }));
-        assert!(plain.iter().zip(&speaker).any(|(a, b)| (a - b).abs() > 0.01));
+        assert!(
+            plain
+                .iter()
+                .zip(&off)
+                .all(|(a, b)| a.to_bits() == b.to_bits())
+        );
+        let speaker = render(Some(crate::radio_fx::RadioFxParams {
+            speaker: 1.0,
+            ..Default::default()
+        }));
+        assert!(
+            plain
+                .iter()
+                .zip(&speaker)
+                .any(|(a, b)| (a - b).abs() > 0.01)
+        );
     }
 
     /// The one-pole low-pass of a voice heard through the bodywork: a 5 kHz tone through
@@ -864,8 +1039,16 @@ mod tests {
     fn the_voice_low_pass_follows_its_corner() {
         let level = |hz: f32| {
             let n = 48_000usize;
-            let samples: Vec<i16> = (0..n).map(|i| ((i as f32 / 48_000.0 * hz * std::f32::consts::TAU).sin() * 16_000.0) as i16).collect();
-            let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples });
+            let samples: Vec<i16> = (0..n)
+                .map(|i| {
+                    ((i as f32 / 48_000.0 * hz * std::f32::consts::TAU).sin() * 16_000.0) as i16
+                })
+                .collect();
+            let clip = Arc::new(Clip {
+                sample_rate: 48_000,
+                channels: 1,
+                samples,
+            });
             let (mut s, _, _) = shared();
             let mut v = voice(clip, 1.0);
             v.params.lowpass_hz = 500.0;
@@ -874,7 +1057,8 @@ mod tests {
             let mut out = vec![0.0f32; n];
             s.render(&mut out);
             let tail = &out[n / 2..];
-            (tail.iter().map(|x| x * x).sum::<f32>() / tail.len() as f32).sqrt() / (16_000.0 / 32_768.0 / 2f32.sqrt())
+            (tail.iter().map(|x| x * x).sum::<f32>() / tail.len() as f32).sqrt()
+                / (16_000.0 / 32_768.0 / 2f32.sqrt())
         };
         let high = 20.0 * level(5_000.0).log10();
         assert!((high + 20.0).abs() < 1.5, "{high} dB");
@@ -883,19 +1067,64 @@ mod tests {
 
     #[test]
     fn a_low_pass_switched_on_starts_from_the_sound() {
-        let mut v = voice(Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![0; 4] }), 1.0);
+        let mut v = voice(
+            Arc::new(Clip {
+                sample_rate: 48_000,
+                channels: 1,
+                samples: vec![0; 4],
+            }),
+            1.0,
+        );
         v.lp = [0.7, -0.7];
-        apply_params(&mut v, VoiceParams { lowpass_hz: 800.0, ..Default::default() }, std::time::Instant::now(), Vec3::ZERO, true);
+        apply_params(
+            &mut v,
+            VoiceParams {
+                lowpass_hz: 800.0,
+                ..Default::default()
+            },
+            std::time::Instant::now(),
+            Vec3::ZERO,
+            true,
+        );
         assert!(v.lp_fresh);
-        apply_params(&mut v, VoiceParams { lowpass_hz: 0.0, ..Default::default() }, std::time::Instant::now(), Vec3::ZERO, true);
-        let mut w = voice(Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![0; 4] }), 1.0);
-        apply_params(&mut w, VoiceParams { lowpass_hz: 0.0, ..Default::default() }, std::time::Instant::now(), Vec3::ZERO, true);
+        apply_params(
+            &mut v,
+            VoiceParams {
+                lowpass_hz: 0.0,
+                ..Default::default()
+            },
+            std::time::Instant::now(),
+            Vec3::ZERO,
+            true,
+        );
+        let mut w = voice(
+            Arc::new(Clip {
+                sample_rate: 48_000,
+                channels: 1,
+                samples: vec![0; 4],
+            }),
+            1.0,
+        );
+        apply_params(
+            &mut w,
+            VoiceParams {
+                lowpass_hz: 0.0,
+                ..Default::default()
+            },
+            std::time::Instant::now(),
+            Vec3::ZERO,
+            true,
+        );
         assert!(!w.lp_fresh);
     }
 
     #[test]
     fn important_voices_win_the_mixer_limit() {
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![64; 100] });
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![64; 100],
+        });
         let (mut s, _, _) = shared();
         for _ in 0..MAX_VOICES {
             s.voices.push(far_voice(clip.clone(), 10.0));
@@ -913,11 +1142,16 @@ mod tests {
 
     #[test]
     fn the_nearest_voices_are_mixed_and_the_driven_bus_is_never_cut() {
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![64; 100] });
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![64; 100],
+        });
         let (mut s, _, _) = shared();
         // 50 far voices, MAX_VOICES near ones, and the bus's own (non-spatial) at half gain
         for k in 0..MAX_VOICES + 50 {
-            s.voices.push(far_voice(clip.clone(), if k < 50 { 900.0 } else { 5.0 }));
+            s.voices
+                .push(far_voice(clip.clone(), if k < 50 { 900.0 } else { 5.0 }));
         }
         s.voices.push(voice(clip, 0.5));
         let mut out = vec![0.0f32; 16];
@@ -933,15 +1167,28 @@ mod tests {
     #[test]
     fn room_is_made_by_the_game_and_ended_voices_come_back() {
         let e = AudioEngine::capture(48_000);
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![64; 48] });
-        let ids: Vec<VoiceId> = (0..FIRST_ROOM * 3).map(|_| e.play(clip.clone(), VoiceParams::default())).collect();
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![64; 48],
+        });
+        let ids: Vec<VoiceId> = (0..FIRST_ROOM * 3)
+            .map(|_| e.play(clip.clone(), VoiceParams::default()))
+            .collect();
         e.render_capture(16);
         let cap = e.mixer.with(|m| (m.voices.len(), m.voices.capacity()));
         assert_eq!(cap.0, FIRST_ROOM * 3);
-        assert!(cap.1 >= FIRST_ROOM * 3 && e.game.lock().room == cap.1, "{cap:?}");
+        assert!(
+            cap.1 >= FIRST_ROOM * 3 && e.game.lock().room == cap.1,
+            "{cap:?}"
+        );
         e.render_capture(480);
         assert!(ids.iter().all(|id| !e.is_playing(*id)) && e.voice_count() == 0);
-        assert_eq!(Arc::strong_count(&clip), 1, "the ended voices' clips are let go of");
+        assert_eq!(
+            Arc::strong_count(&clip),
+            1,
+            "the ended voices' clips are let go of"
+        );
         assert_eq!(e.game.lock().in_mixer, 0);
     }
 
@@ -949,16 +1196,39 @@ mod tests {
     #[test]
     fn commands_beyond_the_ring_arrive_in_order() {
         let e = AudioEngine::capture(48_000);
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![64; 48] });
-        let id = e.play(clip, VoiceParams { looping: true, ..Default::default() });
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![64; 48],
+        });
+        let id = e.play(
+            clip,
+            VoiceParams {
+                looping: true,
+                ..Default::default()
+            },
+        );
         for k in 0..RING + 100 {
-            e.set_params(id, VoiceParams { gain: k as f32, looping: true, ..Default::default() });
+            e.set_params(
+                id,
+                VoiceParams {
+                    gain: k as f32,
+                    looping: true,
+                    ..Default::default()
+                },
+            );
         }
         assert!(!e.game.lock().overflow.is_empty());
         assert_eq!(e.voice_state(id).map(|s| s.0.gain), Some(1.0));
         e.render_capture(16);
-        assert_eq!(e.voice_state(id).map(|s| s.0.gain), Some((RING + 99) as f32));
-        assert_eq!(e.mixer.with(|m| m.voices[0].params.gain), (RING + 99) as f32);
+        assert_eq!(
+            e.voice_state(id).map(|s| s.0.gain),
+            Some((RING + 99) as f32)
+        );
+        assert_eq!(
+            e.mixer.with(|m| m.voices[0].params.gain),
+            (RING + 99) as f32
+        );
     }
 }
 
@@ -992,14 +1262,13 @@ pub fn pan_gains(listener: &Listener, d: Vec3, stereo: f32) -> (f32, f32) {
     }
     let right = listener.right.normalize_or_zero();
     let up = right.cross(listener.forward).normalize_or_zero();
-    let s = (d - up * d.dot(up)).normalize_or_zero().dot(right).clamp(-1.0, 1.0);
+    let s = (d - up * d.dot(up))
+        .normalize_or_zero()
+        .dot(right)
+        .clamp(-1.0, 1.0);
     let pan = (50.0 * stereo * s * s * s).clamp(-10_000.0, 10_000.0);
     let far = 10f32.powf(-pan.abs() / 2000.0);
-    if pan > 0.0 {
-        (far, 1.0)
-    } else {
-        (1.0, far)
-    }
+    if pan > 0.0 { (far, 1.0) } else { (1.0, far) }
 }
 
 #[cfg(test)]
@@ -1010,16 +1279,27 @@ mod distance_tests {
         assert!((super::distance_gain(2.0, 4.0) - 0.5).abs() < 1e-6);
         assert!((super::distance_gain(1.0, 10.0) - 0.1).abs() < 1e-6);
         assert_eq!(super::distance_gain(0.0, 3.0), 0.0, "a range of 0");
-        assert_eq!(super::distance_gain(5.0, f32::NAN), 0.0, "nowhere: not heard");
+        assert_eq!(
+            super::distance_gain(5.0, f32::NAN),
+            0.0,
+            "nowhere: not heard"
+        );
         assert_eq!(super::distance_gain(5.0, f32::INFINITY), 0.0);
     }
 
     #[test]
     fn a_sound_to_the_right_is_5_db_down_on_the_left() {
         use glam::Vec3;
-        let l = super::Listener { forward: Vec3::Y, right: Vec3::X, ..Default::default() };
+        let l = super::Listener {
+            forward: Vec3::Y,
+            right: Vec3::X,
+            ..Default::default()
+        };
         let (left, right) = super::pan_gains(&l, Vec3::new(3.0, 0.0, 1.0), 10.0);
-        assert!((left - 10f32.powf(-0.25)).abs() < 1e-4 && right == 1.0, "{left} {right}");
+        assert!(
+            (left - 10f32.powf(-0.25)).abs() < 1e-4 && right == 1.0,
+            "{left} {right}"
+        );
         let (left, right) = super::pan_gains(&l, Vec3::new(0.0, 5.0, 0.0), 10.0);
         assert_eq!((left, right), (1.0, 1.0), "ahead: both at full");
         let (left, right) = super::pan_gains(&l, Vec3::new(-1.0, 1.0, 0.0), 10.0);
