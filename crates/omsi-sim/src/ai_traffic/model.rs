@@ -907,9 +907,8 @@ impl TrafficSim {
         state.max_speed_kmh = if kind == LaneKind::Air {
             AIRCRAFT_KMH
         } else if bus.is_some() {
-            // a bus driver keeps to the limit (the town's 50) like the cars round him,
-            // with a little more on the arterial roads
-            56.0 + (seed % 7) as f32
+            // Test a higher vehicle cap while keeping the road's speed limit in force.
+            80.0
         } else if heavy {
             // (a truck keeps to the limit like the cars, up to a truck's own 80-90 km/h: it
             // took 38-47 on every road, crawling along 80 km/h roads, #327)
