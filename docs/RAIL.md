@@ -222,3 +222,21 @@ no line. On a map whose `transport` folder has a `catenary.cfg` or `thirdrail.cf
 finds a live section (the pantograph within 2.5 m of the wire, a shoe within 1.2 m of the rail, not in
 a break), and its drive weakens below 80 % of the nominal voltage and is gone at 50 %. The brakes
 always work. A map without the file is as before: the pantograph's switch alone decides.
+
+## Towards a rail simulation (#3969)
+
+What a full tram, Stadtbahn and train simulation needs, and where openOMSI stands. Each step
+is a pull request of its own; nothing here changes how OMSI 2 content loads.
+
+| Part | Now | Next |
+| --- | --- | --- |
+| Track position | A rail vehicle runs on a rail lane of the map's paths (`RailDrive`: the lane, the metres along it, the direction, the net distance moved). Plugins read it with `omsi.bus.track()`. | Routes as chains of lanes with a running distance (kilometre posts), the same for the AI trains. |
+| Switches | Set by the driver's keys, the AI's by their route (see *Switches*). | Switch positions as state that signals and interlockings can lock. |
+| Signals and blocks | The AI trains' signals ask the switches ahead. | Block sections on the lane chains, signals with aspects, a train occupying the blocks under it; the player's train and the AI's both. |
+| Train protection | - | Built on the block state: a plugin API first (`omsi.bus.track()` plus the blocks), then PZB/LZB-like systems as vehicle blocks. |
+| Catenary and pantographs | Wires the map draws, pantographs that touch them, current for the traction (see *Pantographs*, *Current*). | Sections and feeders, voltage drop with distance and load, gaps and section insulators. |
+| Vehicle physics | Traction, brakes and couplings per vehicle (openOMSI blocks); the body on its springs. | Adhesion and wheel slip on wet rails and leaves, train resistance, curve resistance. |
+| Rail infrastructure looks | Tracks and wires as the map's meshes. | Generated sleepers, ballast and catenary masts for maps that only give the lanes. |
+
+Test vehicles from the community (CC-licensed Stadtbahn cars were offered in the issue) are
+welcome once block signalling is in.

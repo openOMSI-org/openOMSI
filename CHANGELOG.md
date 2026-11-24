@@ -16,6 +16,240 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 ## 0.3.57 - 2026-11-23
 
 ### New and improved
+- **Alt menu redone**: the quick menu's thirty tiles are flat, squarer and have pictograms of their own in the style of OMSI 2's menu (a bus with a plus, a cross or arrows for placing, removing and swapping it, a pump, a clock, a chequered flag...) in place of the generic symbols.
+- **Tunnel mouths are open**: a `[terrainhole]` standing upright, as in the Kartoffelphantom tram
+  tunnels, is an opening: the ground is cut behind it up to where the hill is over it, and no wall
+  stands across it. The walls of a cut in the ground show the ground's texture instead of streaks.
+- **No sun inside tunnels**: a spline with a profile as tall as a storey (2 m or more) casts its
+  shadow wherever it lies, also when it is buried in the ground.
+- **Rail vehicles no longer crash into platforms they clear**: on the rails each car of a tram or a
+  train meets scenery with its own box, where that car stands on the track, in bends too. Above the
+  top of a platform (0.35 m over the rails for a tram, 1.0 m for a train, 1.15 m for a metro) the box
+  is the car's whole width, so a pole or a wall beside the body stops it. Below that only the strip
+  over the track's middle counts (0.7 m either side), as the real body overhangs a platform's edge:
+  a buffer stop still stops it, the platform no longer does. Other vehicles meet the leading car's
+  whole body, side impacts included.
+- **An AI tram's rear section follows the bend from the moment it appears**: the track behind a tram
+  put on its rails is laid out from the lanes before it, so a KT4D's rear section no longer stands
+  across the track until the tram has driven its own length.
+- **Trams roll through tight curves**: a street tram's curve resistance is its own (about 10 N/kN
+  in a 25 m curve) instead of a main-line car's, and the curve is taken over 12 m of track, so the
+  kink where a switch's lanes meet no longer reads as the sharpest curve there is. A contact shoe on
+  a car with a pantograph (the NF6D's) no longer makes it a metro car.
+- **Mirrors on every car of a train**: a coupled car's `reflexionN` mirrors show its own mirror
+  cameras, numbered on from car to car, instead of the first car's.
+- **Passengers use every car of a train**: a car coupled turned round, back to back with the car in
+  front of it, is joined into the passenger cabin turned round, so people get in and out by its own
+  doors and ride in it; and the doors of a car that runs its own scripts (the NF6D's sections)
+  open for the passengers and for the player on foot by that car's own `PAX_Entry<n>_Open`.
+- **Third rail and curve squeal on trams and trains**: `[contact_shoe]`s read the `[third_rail]`
+  under them (`contactshoe_N_volt_rail` and the rest, which the NF6D's PZB takes its codes from),
+  and every car's bogies report the curve under them and when the wheels reach the flange
+  (`boogie_N_invradius`, `boogie_N_wheel_at_limit`), which is what starts the curve squeal. A
+  rail's curve is the map's own, not worked out of the path's samples.
+- **`GetHeightAbovePoint` as in Omsi.exe**: the ray starts 3 m over the point, meets a wire or a
+  wall top on a narrow height profile, and reads 1000 with nothing below it (it read 0, which held
+  the Zweiachser tram's pantograph at the top of its travel).
+- **Every car of a train rocks on its own springs**: each car's body leans out of bends by the force
+  on it and rocks on the rails, with `[rail_body_osc]`'s lever, frequency and decay where the file
+  gives them and the class's springs where it switches them off. Joints go with the cars around
+  them; bogies, couplings and wheel sets stay level. **This changes the default**: the lean is now
+  always on, also without the realistic rail physics (which still add the dip under braking and
+  the bounce), and a car shows half of the lean its springs work out (`ROLL_SHOWN`).
+- **Drive a tram from either cab**: in a train with a cab at each end (the NF6D) walk
+  to the other cab and take its wheel (G), or switch driving ends from the outside view with the
+  interior-camera keys. That cab's own scripts then take the keys, the switches and the indicator,
+  and its cameras, driver figure, sounds, roller blinds and destination displays are its own. Every
+  car with scripts of its own pulls and brakes, and the cars talk over their control cables as in
+  OMSI 2. Camera changes glide inside a coupled part too.
+- **Backing through points keeps the train together**: backing, the vehicle follows the track its
+  train lies on, and the train's rear end takes the way the points are set (or the rear cab's
+  indicator says) and throws them.
+- **New key J, set the points**: J sets the first points within 50 m ahead of the train's leading
+  end to their next branch (the rear end when driving from the rear cab or backing). It is
+  openOMSI's own key; OMSI 2 has none for it.
+- **Plugins can lay cards of their own over the navigator's map**: a plugin that fills the navigator's frame (`frame = true`) can put small cards of its own on the map - the next stop, the speed, whatever it shows - with the `map` element's new `overlay` key, at any corner or edge of the map and held inside it (what crosses the map's edge is left out, the card's corners stay rounded); their buttons take clicks as in the rest of the panel (`omsi.ui.version` 8). An example is `docs/examples/plugins/navigator_map.lua`.
+- **mX Graphics (Experimental)** on a Mac: Settings → Graphics → Display → *mX Graphics (Experimental)* draws the game on Metal with [mX](https://github.com/openOMSI-org/mX), openOMSI's own graphics library, instead of wgpu, from the next start. The picture is meant to be the same. It is an early step: the game's shaders do not use mX's bindless textures yet, and in the tests so far it spent less processor time on a frame than wgpu and the same time on the graphics chip. Ray tracing and frame generation stay off with it; where mX cannot open the graphics chip, the game draws with wgpu as before. Off by default. mX's Direct3D 12 and Vulkan have not drawn the game on a real graphics card yet, so Windows and Linux do not offer the switch; `OMSI_MX=on` tries them for one run (without DLSS, FSR 3 and VR), and `OMSI_MX=off` turns mX off for a run on a Mac.
+- **Plugins see the AI vehicles' size**: `omsi.traffic.list()`, `get`, `nearest` and `ahead`
+  give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,
+  the .bus/.ovh `[boundingbox]`), so a blind-spot or distance plugin knows where a truck's or an
+  articulated bus's body really is, not only its origin (#3936).
+- **Plugins know where a train is on its track**: `omsi.bus.track()` gives a tram's, metro's or
+  train's track (lane), the metres along it and its length, its direction and the net distance it
+  has moved on the rails (less after backing up) - the first piece of a rail simulation with blocks and train
+  protection; `docs/RAIL.md` lays out the rest (#3969).
+- **"Place a vehicle..." names and pictures as in the launcher**: a maker's buses are grouped into models as the launcher's bus picker groups them (*Citaro* with *C2*, *C2 G*, *C2 K* under it) instead of type names with folder and file beside them; the picture's second line is the bus's description, not its file's path; a maker's line shows its first bus; and the standard paint is called by the name the bus gives it, as in the launcher.
+- **Controls profiles**: the launcher's Controls page has profiles, each with every key and
+  every controller setting: *Duplicate* makes a new one of the current settings, the list
+  switches between them, and they can be renamed and deleted. One can be the *default for every
+  bus*, and a bus can have its own (*Use for* the bus chosen on the Drive page): before each
+  drive the launcher switches to the bus's profile, or to the default one (#3921).
+- **Frame generation on a Mac**: with Apple MetalFX upscaling on, Settings → Graphics → *Frame generation* shows a generated frame between every two drawn ones (Apple's MetalFX frame interpolator; a Mac with Apple silicon on macOS 26 or newer), for smoother motion at the price of a little more input lag. Where fewer than 30 frames a second are drawn with it (Apple's advice), it is turned off for the drive, as SSAO and the shadows are. The frame rate's corner then reads e.g. `90 fps (45 + FG)`. Off by default, experimental.
+- **Apple MetalFX upscaling on a Mac**: Settings → Graphics → Upscaling offers *Apple MetalFX* on a Mac with Apple silicon (macOS 13 or newer), with the same quality levels as NVIDIA DLSS and AMD FSR 3 on Windows: the picture is drawn smaller and brought up to the window with the help of the last frames, in place of the anti-aliasing and the render scale, from the next start. It is part of macOS, so there is nothing to install. Where the Mac's graphics chip scales up less than Ultra performance asks for, the picture is drawn at the smallest size it takes.
+- **Rename a save**: the pencil beside a save slot in the launcher's *Continue* list gives it a name of your own, without editing its `.osn` file in the map's `Saves` folder. Saving over that slot in the game keeps the name (#3849).
+- **AI reaction time**: the new `ai_reaction` setting (25 to 200 %, default 100 %, a slider in the launcher's Traffic settings) scales how long the AI drivers wait before moving off, so a queue at a light pulls away closer together at a lower value. It never goes under 0.4 s, the shortest reaction the junction code is built for (#3793).
+- **Force feedback sliders in the game's options**: a device's Force feedback tab in the game's controller settings now shows steering force, vibration, self-centring, damping, parking resistance, minimum force and smoothing as sliders like the launcher's, which you can drag as well as step with Left and Right.
+- **What's new in the launcher**: after an update the launcher shows the notes of every
+  version since the one last seen, opened, and the others folded below them; *What's new*
+  beside *Check now* (Settings) opens them at any time, and the offer of an update shows that
+  version's notes before it is installed. The notes come from the releases on GitHub; links in
+  them open in the browser, and only https ones.
+- **Remote cockpit on a phone or tablet**: the game serves a page on your home network
+  (Options > Interface > Remote cockpit, off until switched on); scan the QR code or type the
+  address and the 6-digit code, and the phone or tablet shows a dashboard with the map and the
+  route, the bus's own buttons (every door, lights, indicators, kneeling...), its real
+  destination sign, a touch steering wheel and pedals, and a layout editor per bus. Nothing to
+  install, nothing leaves the network.
+- **Mouse steering keeps the system cursor in the window**: with *Hold the cursor while steering*
+  off, the cursor is the system's own (no frame of delay) and now stays inside the game window
+  while the mouse steers, so a hard turn no longer lets it slip onto another screen (Windows and
+  Linux; macOS keeps it free as before).
+- **Place the bus facing the way you want**: on the city map, Ctrl+drag from the place towards
+  the way the bus should face (a plain Ctrl+click keeps the nearest street's direction); in the
+  map camera (F4), Ctrl+click puts the bus on the street facing the way the camera looks, as in
+  OMSI 2.
+- **Go anywhere on foot from the city map**: Alt+click a place on the city map and you stand
+  there on foot; from the driver's seat you get up first, and the bus stays where it is.
+- **The radio from the Alt menu**: a Radio tile opens a small panel with what plays, the volume,
+  on and off, the station before and after, quieter and louder - for buses whose radio has no
+  volume knob or no switch of its own.
+- **Seat, view and mirrors from the Alt menu**: the quick menu has a tile that opens the panel
+  for the driver's eye, view and mirrors of the bus, without going through the options.
+- **Cleaner photos**: the photo mode hides the route arrows by itself (they come back when you
+  leave it) and its panel has a Hide (H) button at the top.
+- **More traffic for strong computers**: the game's Traffic slider (World options) and the launcher's
+  *Cars around* go on past 120 to 160, 220 and 300 vehicles, for busy maps and rush hours; more
+  cars cost frames and can jam junctions, so 120 stays the top of the usual range. Dedicated
+  servers keep their limit of 120.
+- **Your depot buses in the game**: the game menu's *Place a vehicle* lists the buses of your depot
+  first (*My depot: name | plate*). One taken replaces the bus driven, with its livery, fleet
+  number, plate, odometer and wear; the session is written back to it when it ends, and the time
+  spent in the bus driven before goes to that one (when it was a depot bus too).
+- **Choose which notes show**: under *Notes in the top-left corner* (launcher, game options, Apple
+  app) four switches turn off one kind each - why the bus does not move, the bus's own messages
+  (the announcements among them), the end of a trip, tickets and change - while the rest stay.
+- **Only the buses on the map, if you like**: under "AI vehicles on the map", *Cars on the map too*
+  (`nav_ai_cars`, launcher and game options) can be switched off: the navigator and the city map
+  then show the traffic's buses and trolleybuses, not the cars.
+- **Getting up has a key of its own**: *Get up from the seat (on foot)* is in the Controls'
+  list (keyboard and controllers), on Ctrl+Shift+G as before; it can be moved to another key or a
+  controller button, and the old built-in Ctrl+Shift+G gives way to it.
+- **A flash of the high beam waves the traffic on**: flash the headlights (high beam on for under
+  a second and a half) and for six seconds the cars that were waiting for your bus - at a junction,
+  or holding back for where the bus is about to go - take their turn first. They still stop for
+  the bus itself.
+- **The Alt menu stays open**, as in OMSI 2: a tile that does its work in place (route arrows,
+  refuel, repair, wash, reset, a screenshot...) leaves the menu open on its page, so the next
+  tile is one click away; Alt or Esc closes it. A tile that opens a list, a panel, the city map
+  or the photo mode still hands over to it.
+- **Set the world to the time it is now**: World options › Traffic and people has *Set to the time it
+  is now*: the timetable buses are put out again for the current time and the people waiting at
+  the stops are taken off; the stops fill again as people walk up, as many as the hour wants -
+  after changing the time by a little, or whenever the stops are fuller than the hour wants.
+- **Finer moves in the photo mode**: Alt now slows the turning as well as the moving (to a
+  quarter), for the small adjustments of a zoomed-in shot, and the camera rises and sinks at half
+  the speed it moves along, so it can be lowered to a kneeling height without overshooting.
+- **Several AI vehicles at once**: in Settings › AI Lists, the vehicle picker for adding to a group,
+  a depot or a line has a tick box on each vehicle; tick several and *Add the n ticked* adds them
+  all in one go (one click still previews, a double click still adds one).
+- **Long lists in the launcher filter as you type**: a drop-down with more than twelve entries
+  (the liveries, the depot files, the languages...) shows a search line at its top; typing
+  narrows it down, Backspace and Esc undo the search.
+- **Enhanced has options of its own, and the quality presets cross the modes.** Enhanced+ is no
+  longer a mode: it is Enhanced with *Real-Time Ray Tracing* switched on (`ray_tracing=1`; a
+  `graphics=enhanced_plus` file reads as that, and `--enhanced-plus` still asks for it for a run).
+  Graphics has *Light has shadows* (`light_shadows`: Off, Street lamps and vehicles, Every light),
+  *Cloud shadows and light shafts* (`cloud_shadows`), *Glow of lights* (`light_glow`),
+  *Volumetric fog* (`volumetric_fog`, on by default),
+  *Real-Time Reflections* (the puddles' setting, now with the wet roads' and the water's) and
+  *Reflective objects reflect* (the reflection maps), next to the street light and the mirrors. The
+  presets are Low, Medium, High, Extra, Max and Ultra, and each sets the mode too: Low is Vanilla,
+  Medium Vanilla+ (what the game starts with), High to Max Enhanced with more switched on at each
+  step, Ultra Enhanced with ray tracing and everything on. The launcher, the game's options, the
+  Apple app and the quality optimiser follow it; every new text is translated into all the
+  languages.
+- **The clouds' shadow lies over the land** (Enhanced): the sun is no longer one number for the
+  whole picture. A field of nine kilometres, worked out from the very heaps the sky shows and kept
+  in the sky table's texture, makes patches of sun and shade on the ground that the wind moves, and
+  the air scatters the sun's shafts through the gaps of a broken sky as far as seven kilometres.
+- **Lights shine and cast shadows in every direction** (Enhanced, *Light has shadows: Every
+  light*): a spot that is no headlamp gets a map along its own axis, the two strongest lamps that
+  shine every way a cube map of six tiles (fifty-six lamp tiles now), and a lamp in the dark has a
+  glare round it that falls as the cube of the distance and a halo in the night air (*Glow of
+  lights*).
+- **Wet roads and water mirror the street** (Enhanced): the sheen of a wet road and still water
+  trace what stands round them in screen space at their Fresnel share, not only the pools - the
+  lit windows and lamps of a street stream down a wet road at night.
+- **A clean screen (Alt+U)**: the navigator, the virtual mirrors, the notes and the panels go away
+  while you drive, for a free view of the road or a quick picture; Alt+U again brings them back.
+  The menu, the city map and a plugin's permission question still show over it. It is in the
+  Controls' list as *Hide / show the whole interface*, so it can be moved to another key or a
+  controller button (`clean_screen` in keyboard.cfg's `[game]`).
+- **A flashlight (Alt+F)**: a hand lamp held beside the eye that shines where the view looks, a
+  warm white cone reaching 50 m with a soft edge, in the Vanilla and the Enhanced pictures, in
+  every view, by night in the dark or by day inside a dim cab. `flashlight` in keyboard.cfg's
+  `[game]` (or a controller button) switches it as well.
+- **The cab's steering wheel turns as far as yours** (*Cab wheel rotation*, in the launcher's
+  Settings › Driving › Game controllers and in the game's Options; `cab_wheel_rotation`): the
+  wheel model in the cab turns the set degrees lock to lock, 180° to 1800°, so a 900° or 1080°
+  wheel on the desk and the one in the bus move alike. *Automatic* (0, the default) keeps the
+  bus's own animation, as before. A bus that turns its wheel from a script of its own keeps its
+  own rotation.
+- **A modern engine for HTML screens (opt-in)**: a page that puts
+  `<meta name="omsi-engine" content="modern">` in its head runs on a second engine with flexbox,
+  `position` with `z-index`, borders, `calc()` and custom properties, attribute selectors,
+  combinators, gradients, shadows, and a full JavaScript engine (Boa): classes, `Promise`,
+  `async`/`await`, ES modules, `fetch` of the page's own files and a fuller DOM. Pages without
+  the line keep the classic engine and are not touched; `OMSI_HTML_ENGINE=modern` runs every page
+  on the modern one for comparing. See [docs/HTMLTEXTURE_MODERN.md](docs/HTMLTEXTURE_MODERN.md).
+- **Transport modes in the launcher**: maps and vehicles show their mode (tram, railway, metro,
+  trolleybus), the map and vehicle pickers can filter by it, and a vehicle that does not fit the
+  chosen map is marked with the reason and cannot be started (the game refuses it too).
+- **Signalling blocks, points and depot gates for the AI trains**: blocks of `signals.cfg` (given by
+  where they begin and end) hold AI trains one at a time, and the map's signal objects show
+  whether their block is free; the points of `switches.cfg` stay under a train, return to their
+  rest position, can be `manual` or locked by a signal; the first departure of a service comes out
+  of its depot's gate.
+- **The overhead wire and the third rail power the player's rail vehicle**: with a `catenary.cfg` or
+  `thirdrail.cfg` in the map's `transport` folder a tram's pantograph or a metro's shoe needs a live
+  section under it (dead sections and breaks stop the drive, a sagging line weakens it), a vehicle
+  says `[rail_power]` where it gets its current. `network.cfg` sets the class, street, third rail,
+  tunnel and speed of the rail lanes, and `switches.cfg` the speed of a diverging branch.
+- **AI trams, trains and metro trains by services**: the trips made from a map's `routes.cfg` are
+  routed by the game over the whole map's network (the lanes of the mode's kind nearest each
+  station, the shortest way through them, with the direction of the lanes respected) and timed
+  from the stretch lengths, the segment speeds, acceleration and the standing at stops; their
+  departures wait until the track is found, and a trip that cannot be routed is named in the log.
+- **Scripts for vehicles and map objects**: a vehicle can name Lua or `.oop` scripts with
+  `[vehicle_script]` that start when it becomes the player's and stop when it is left, with the
+  permissions of vehicle content (`ui`, `storage`, `vehicle_write`, `audio`). A `.sco` can name
+  scripts for the objects placed from it (`[lua_script]`, `[lua_range]`, `[lua_rate]`); they hear
+  `object_init`, `object_frame`, `object_click` and `object_gone` and drive their own objects
+  through the new `omsi.object.*` functions: variables, strings, `{trigger}`s, and moving,
+  turning, scaling or hiding single meshes. Scripts are told apart by their whole path, so two
+  folders may each hold a `gate.lua`. See [docs/PLUGINS.md](docs/PLUGINS.md) and
+  [docs/OBJECT_SCRIPTS.md](docs/OBJECT_SCRIPTS.md).
+- **Realistic rail physics** (with the setting "Realistic road physics", or `OMSI_REALISTIC_ROAD=1`;
+  off by default, so no existing tram, train or trolleybus drives differently without it):
+  - **Pantographs meet the wire**: a raised pantograph rises until its head touches the contact
+    wire and no further (the head's travel is measured on the model's own meshes and animations;
+    the script's variable is left alone, only the animation is shown the travel at which the head
+    is on the wire), presses it with its static force, and brings current only while it lies on a
+    live wire. The wire is the standard height of the class over the rails (kept within the
+    pantograph's reach; it is not read from the map yet), staggered across the track, harder at
+    forks and rougher in the wet and the frost. Where the wire is uneven at speed the head leaves
+    it: a break under current strikes an arc, drawn as sparks and a flash; lowering under load does
+    the same. `Panto_Height`, `Panto_Contact`, `Panto_Force`, `Panto_Arc` and `Panto_Powered` are
+    written for models and sounds.
+  - **Rail bodies ride on their springs**: heave, pitch and roll on the secondary suspension answer
+    the lateral acceleration of a bend, the traction and the brake and the unevenness of the rails
+    at each bogie, with damping. `rail_body_roll`, `rail_body_pitch`, `rail_body_heave`,
+    `rail_accel_side` and `rail_accel_vert` are written for scripts.
+  - **AI trams and trains** pull as their class does: the pull falls with speed at the class's power.
+  - **Legacy trolleybuses keep their script's traction**, including its gear and door-brake
+    interlocks, even with realistic physics enabled. An inferred generic drive stays inactive
+    until a script adapter can honor those controls. Explicitly configured trolleybus drives
+    and pole simulation remain available.
 
 - **A lost graphics device says why**: on Direct3D 12 the game's log gets DRED's report (the reason, where each unfinished command list stopped and in which pass, a page fault's address and the resources there or just freed there), on Vulkan the driver's `VK_EXT_device_fault` report where it has one. `OMSI_MX=off` starts a run on wgpu, `OMSI_MX=on` on mX, whatever the setting says.
 
