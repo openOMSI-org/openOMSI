@@ -32,9 +32,15 @@ impl Weather {
         Ok(Self::parse(&f))
     }
     pub fn parse(f: &CfgFile) -> Weather {
+        // What Omsi.exe's loader (0x753554) starts from before it reads the file: 50 km of
+        // visibility at a density of 1, no clouds ("-1") at 500 m, nothing falling. (A file
+        // without one of these blocks kept openOMSI's zeros: a visibility of nothing.)
         let mut w = Weather {
             path: f.path.clone(),
             pressure: 1013.0,
+            fog: (50_000.0, 1.0),
+            clouds: ("-1".to_string(), 500.0),
+            precip: vec![0.0; 5],
             ..Default::default()
         };
         let mut r = f.reader();
@@ -42,7 +48,11 @@ impl Weather {
             match k.as_str() {
                 "name" => w.name = r.str().to_string(),
                 "description" => w.description = r.until("[end]").join("\n"),
-                "fog" => w.fog = (r.f32(), r.f32()),
+                "fog" => {
+                    let range = r.f32();
+                    // (no visibility, or less: Omsi.exe takes 100 km)
+                    w.fog = (if range <= 0.0 { 100_000.0 } else { range }, r.f32());
+                }
                 "wind" => w.wind = (r.f32(), r.f32()),
                 "temp" => {
                     let t = r.f32();
@@ -50,7 +60,7 @@ impl Weather {
                 }
                 "press" => w.pressure = r.f32(),
                 "clouds" => w.clouds = (r.str().to_string(), r.f32()),
-                "precip" => w.precip = (0..5).map(|_| r.f32()).collect(),
+                "precip" => w.precip = read_precip(&mut r),
                 "groundwet" => w.ground_wet = r.f32s::<3>(),
                 "snow" => w.snow = true,
                 "snowonroad" => w.snow_on_road = true,
@@ -59,6 +69,21 @@ impl Weather {
         }
         w
     }
+}
+
+/// A `[precip]` block as Omsi.exe reads it (0x753554): the kind and the strength, then three
+/// more values only if the line after the strength is not empty. The stock `#CAVOK.owt` ends
+/// its block after the strength with a blank line; read as five values regardless, a block
+/// like it took the next keyword (`[groundwet]`, say) for a number and lost that block.
+fn read_precip(r: &mut omsi_cfg::CfgReader<'_>) -> Vec<f32> {
+    let mut p = vec![r.f32(), r.f32()];
+    let third = r.str();
+    if third.trim().is_empty() {
+        p.extend([0.0; 3]);
+    } else {
+        p.extend([omsi_cfg::parse_f32(third), r.f32(), r.f32()]);
+    }
+    p
 }
 
 /// The absolute humidity (g/m³) of air at `temp` °C with the dew point `dew` °C, as OMSI 2
@@ -242,6 +267,35 @@ mod humidity_tests {
         let cfg = omsi_cfg::CfgFile::from_str("x.owt", "[temp]\r\n-6\r\n-7.96\r\n");
         let w = super::Weather::parse(&cfg);
         assert_eq!(w.temp, (-6.0, snow));
+    }
+}
+
+#[cfg(test)]
+mod owt_tests {
+    use super::Weather;
+
+    fn parse(text: &str) -> Weather {
+        Weather::parse(&omsi_cfg::CfgFile::from_str("x.owt", text))
+    }
+
+    #[test]
+    fn a_short_precip_block_leaves_the_next_block_alone() {
+        let w = parse("[precip]\r\n1\r\n120\r\n\r\n[groundwet]\r\n80\r\n255\r\n30\r\n");
+        assert_eq!(w.precip, vec![1.0, 120.0, 0.0, 0.0, 0.0]);
+        assert_eq!(w.ground_wet, [80.0, 255.0, 30.0]);
+        let w = parse("[precip]\r\n0\r\n32\r\n0\r\n-2\r\n0\r\n\r\n[snow]\r\n");
+        assert_eq!(w.precip, vec![0.0, 32.0, 0.0, -2.0, 0.0]);
+        assert!(w.snow);
+    }
+
+    #[test]
+    fn missing_blocks_and_no_visibility_read_as_omsi_reads_them() {
+        let w = parse("[name]\r\nx\r\n");
+        assert_eq!(w.fog, (50_000.0, 1.0));
+        assert_eq!(w.clouds, ("-1".to_string(), 500.0));
+        assert_eq!(w.precip, vec![0.0; 5]);
+        let w = parse("[fog]\r\n0\r\n0.5\r\n");
+        assert_eq!(w.fog, (100_000.0, 0.5));
     }
 }
 
