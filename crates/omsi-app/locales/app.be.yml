@@ -3240,3 +3240,6 @@
 "to the right": "направа"
 "Lights on in a downpour": "Святло ў залеву"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Удзень у моцны дождж у частцы вокнаў дамоў гарыць святло - становіцца досыць цёмна, каб яго ўключыць"
+
+"Read the map's passenger numbers exactly": "Дакладнае чытанне колькасці пасажыраў з карты"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Пасажыры: прыпынак з 0,7 захоўвае 0,7 чалавека замест акруглення да 1 перад шчыльнасцю; выкл: акругленне OMSI 2"

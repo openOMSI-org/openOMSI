@@ -2999,3 +2999,6 @@
 "to the right": "오른쪽으로"
 "Lights on in a downpour": "폭우 시 창문 불빛"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "낮에 폭우가 내리면 불을 켤 만큼 어두워져 일부 집 창문에 불이 켜집니다"
+
+"Read the map's passenger numbers exactly": "지도의 승객 수 정확히 읽기"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "승객: 0.7로 지정된 정류장은 밀도 곱하기 전에 1로 반올림되지 않고 0.7명을 유지합니다. 꺼짐: OMSI 2 기본 반올림"
