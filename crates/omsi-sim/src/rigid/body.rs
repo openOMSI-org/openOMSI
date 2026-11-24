@@ -154,11 +154,11 @@ impl RigidBody {
             inv_min_turn_radius,
             body_freq,
             holding: true,
-            rolling_resistance: if def.rolling_resistance > 0.0 {
-                def.rolling_resistance
-            } else {
-                0.008 * mass * 9.81
-            },
+            // `[rollwiderstand]` as the file gives it, nothing without one: Omsi.exe's
+            // LoadFromFile (0x7cb3f4) leaves it at 0 unless the file sets it, and its
+            // physics (0x7e2574) shares just that over the wheels with the brake force (the
+            // simple model and the coupled parts here read it the same way)
+            rolling_resistance: def.rolling_resistance.max(0.0),
             accel_body: Vec3::ZERO,
             friction: 0.85,
             wheel_impacts: Vec::new(),

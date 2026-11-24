@@ -1633,6 +1633,22 @@ fn omsi_s_body_adds_no_air_drag_of_its_own() {
     assert!(v > 24.7, "{v}");
 }
 
+/// A vehicle file without `[rollwiderstand]` rolls without any (Omsi.exe leaves it at 0,
+/// 0x7cb3f4); one with it keeps its own figure.
+#[test]
+fn rolling_resistance_is_the_file_s_or_none() {
+    let mut def = bus();
+    assert_eq!(
+        RigidBody::from_definition(&def, &[]).rolling_resistance,
+        1000.0
+    );
+    def.rolling_resistance = 0.0;
+    assert_eq!(
+        RigidBody::from_definition(&def, &[]).rolling_resistance,
+        0.0
+    );
+}
+
 /// The OMSI 2 model (the setting off) is as it was: a bus follows its wheels at any speed
 /// short of the grip, asphalt is smooth, and no wind acts.
 #[test]
