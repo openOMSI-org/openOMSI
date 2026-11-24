@@ -54,6 +54,7 @@ pub use coupling::*;
 use drive::*;
 pub use panto::{Catenary, PantoGear};
 pub use pose::*;
+pub use program_ids::ScriptedCabinAir;
 pub use props::*;
 pub use rail::RailEnv;
 pub use sway::SwayRole;

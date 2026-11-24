@@ -7,6 +7,9 @@
 mod messages;
 mod vehicle;
 
+#[cfg(test)]
+mod tests;
+
 use crate::host::host;
 use omsi_launcher_lib as core;
 pub use omsi_launcher_lib::crash::{CRASH_TAIL_GAP, crash_of, disconnect_of};
@@ -1334,7 +1337,6 @@ pub fn root_problem(root: &str) -> String {
         )
     }
 }
-
 #[cfg(test)]
 mod choice_tests;
 #[cfg(test)]

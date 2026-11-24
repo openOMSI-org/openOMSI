@@ -1,0 +1,16 @@
+{
+  "name": "openomsi-site",
+  "private": true,
+  "type": "module",
+  "description": "openomsi.org: a static site generated from site/ and docs/",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node dev.mjs",
+    "check": "node build.mjs --check"
+  },
+  "dependencies": {
+    "highlight.js": "11.11.1",
+    "markdown-it": "14.3.3"
+  }
+}

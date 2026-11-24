@@ -41,6 +41,7 @@ fn the_pool_counts_local_people_and_never_recycles_riders_or_avatars() {
         age: 40.0,
         stuck: 0.0,
         ghost: 0.0,
+        stuck_total: 0.0,
         car_wait: 0.0,
         detour: 0.0,
         detour_side: 0.0,
@@ -118,6 +119,7 @@ fn the_pool_takes_nobody_a_lan_player_could_see() {
         age: 40.0,
         stuck: 0.0,
         ghost: 0.0,
+        stuck_total: 0.0,
         car_wait: 0.0,
         detour: 0.0,
         detour_side: 0.0,
@@ -131,7 +133,10 @@ fn the_pool_takes_nobody_a_lan_player_could_see() {
     h.lan_centers = vec![player];
     h.max_people = 1;
     h.people = vec![standing(1, player + DVec3::X * 20.0)];
-    assert!(!h.pool_room(), "the pool is full and its only person stands beside a player");
+    assert!(
+        !h.pool_room(),
+        "the pool is full and its only person stands beside a player"
+    );
     assert_eq!(h.people.len(), 1, "nobody vanishes in front of a player");
     // out of every player's sight they may be taken
     h.people = vec![standing(2, player + DVec3::X * 1000.0)];
@@ -189,6 +194,7 @@ fn clearing_the_waiting_keeps_riders_avatars_and_strollers() {
         age: 40.0,
         stuck: 0.0,
         ghost: 0.0,
+        stuck_total: 0.0,
         car_wait: 0.0,
         detour: 0.0,
         detour_side: 0.0,
@@ -215,7 +221,13 @@ fn clearing_the_waiting_keeps_riders_avatars_and_strollers() {
         person(2, waiting(), None),
         person(3, State::Pax(Box::new(boarding)), None),
         person(4, State::Standing, None),
-        person(5, waiting(), Some(Puppet { mode: PuppetMode::Avatar })),
+        person(
+            5,
+            waiting(),
+            Some(Puppet {
+                mode: PuppetMode::Avatar,
+            }),
+        ),
         person(6, State::Pax(Box::new(just_off)), None),
     ];
     h.stops.insert(
@@ -244,8 +256,16 @@ fn clearing_the_waiting_keeps_riders_avatars_and_strollers() {
         },
     );
     assert_eq!(h.clear_waiting(), 2);
-    assert_eq!(h.stops[&42].taken, vec![false, false], "the place of the one who waited is free again");
+    assert_eq!(
+        h.stops[&42].taken,
+        vec![false, false],
+        "the place of the one who waited is free again"
+    );
     let mut left: Vec<u32> = h.people.iter().map(|p| p.id).collect();
     left.sort();
-    assert_eq!(left, vec![3, 4, 5, 6], "riders, strollers, avatars and people just off a bus stay");
+    assert_eq!(
+        left,
+        vec![3, 4, 5, 6],
+        "riders, strollers, avatars and people just off a bus stay"
+    );
 }

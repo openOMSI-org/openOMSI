@@ -223,6 +223,10 @@ impl App {
                     // this bus before it
                     c.fov_deg = crate::app_impl::drawn_fov(c.fov_deg, view_fov, fov_setting, zoom);
                 };
+                if self.view == "driver" {
+                    let part = p.trailer_driver_seat().map(|s| s.0);
+                    p.vehicle.follow_driver_camera(part);
+                }
                 let mut cam = p.camera_look(&self.view, &base, head_look, self.cam.orbit);
                 finish(&mut cam);
                 // Smooth cockpit camera switch (arrow keys): the camera left comes closer to the one
@@ -391,7 +395,14 @@ impl App {
             return cam;
         };
         let inside_view = self.view == "driver";
-        let entering = std::mem::take(&mut self.cam.cam_blend.entering);
+        // (a glide stays within one part of the train: the parts' frames differ)
+        let part = p.trailer_driver_seat().map(|(part, _)| part);
+        if self.cam.cam_blend.part != part {
+            self.cam.cam_blend.part = part;
+            self.cam.cam_blend.from = None;
+            self.cam.cam_blend.shown = None;
+        }
+        let entering = std::mem::take(&mut self.cam.cam_blend.entering) && part.is_none();
         let left = self
             .cam
             .cam_blend

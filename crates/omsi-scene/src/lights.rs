@@ -637,17 +637,35 @@ pub fn load_smoke_texture(renderer: &mut omsi_render::Renderer, root: &std::path
     }
 }
 
+#[derive(Clone)]
+enum CoronaSource {
+    File(std::path::PathBuf),
+    Memory {
+        path: std::path::PathBuf,
+        bytes: std::sync::Arc<[u8]>,
+    },
+}
+
+// Bounds the retained bytes only: one authenticated pack read can still reach the 64 MiB asset limit.
+const MAX_SCOPED_CORONA_BYTES: usize = 8 * 1024 * 1024;
+const MAX_SCOPED_CORONA_PATHS: usize = 4096;
+
 /// The pictures of the coronas besides the standard glow: a light's own `bitmap` and the
 /// fog cone's `Texture/light_cone.bmp`, numbered as they are first asked for and uploaded
 /// before the next frame is drawn (`upload_corona_textures`).
 /// Process-wide on purpose: it only numbers picture files (the numbers live on in the
 /// world's lights); which of them a renderer holds is the renderer's
 /// (`Renderer::pictures_taken`), so a second session's renderer gets them all again.
+#[derive(Default)]
 struct CoronaTextures {
     ids: std::collections::HashMap<std::path::PathBuf, u16>,
+    scoped_ids: std::collections::HashMap<std::path::PathBuf, u16>,
+    // Arc<[u8]> hashes and compares by contents, so hash collisions never alias pictures.
+    bytes_ids: std::collections::HashMap<std::sync::Arc<[u8]>, u16>,
     /// Every picture numbered, in the order it was numbered.
-    listed: Vec<(u16, std::path::PathBuf)>,
+    listed: Vec<(u16, CoronaSource)>,
     root: Option<std::path::PathBuf>,
+    scoped_bytes: usize,
 }
 
 static CORONA_TEXTURES: std::sync::Mutex<Option<CoronaTextures>> = std::sync::Mutex::new(None);
@@ -655,11 +673,7 @@ static CORONA_TEXTURES: std::sync::Mutex<Option<CoronaTextures>> = std::sync::Mu
 /// The game folder the standard pictures (`Texture\…`) are found in.
 pub fn set_corona_root(root: &std::path::Path) {
     let mut g = CORONA_TEXTURES.lock().unwrap_or_else(|e| e.into_inner());
-    let t = g.get_or_insert_with(|| CoronaTextures {
-        ids: Default::default(),
-        listed: Vec::new(),
-        root: None,
-    });
+    let t = g.get_or_insert_with(CoronaTextures::default);
     t.root = Some(root.to_path_buf());
     // (the game's own pictures are looked for in the new folder)
     for id in [&CONE_ID, &GLOW_ID, &STAR_ID] {
@@ -669,17 +683,62 @@ pub fn set_corona_root(root: &std::path::Path) {
 
 fn texture_id_of(path: std::path::PathBuf) -> u16 {
     let mut g = CORONA_TEXTURES.lock().unwrap_or_else(|e| e.into_inner());
-    let t = g.get_or_insert_with(|| CoronaTextures {
-        ids: Default::default(),
-        listed: Vec::new(),
-        root: None,
-    });
+    let t = g.get_or_insert_with(CoronaTextures::default);
     if let Some(id) = t.ids.get(&path) {
         return *id;
     }
-    let id = (t.ids.len() + 1).min(u16::MAX as usize) as u16;
+    let Some(id) = next_corona_id(t.listed.len()) else {
+        return 0;
+    };
     t.ids.insert(path.clone(), id);
-    t.listed.push((id, path));
+    t.listed.push((id, CoronaSource::File(path)));
+    id
+}
+
+fn next_corona_id(used: usize) -> Option<u16> {
+    u16::try_from(used.checked_add(1)?).ok()
+}
+
+fn scoped_texture_id(path: std::path::PathBuf, source: Vec<u8>) -> u16 {
+    let mut g = CORONA_TEXTURES.lock().unwrap_or_else(|e| e.into_inner());
+    let t = g.get_or_insert_with(CoronaTextures::default);
+    register_scoped_corona_bytes(t, path, source)
+}
+
+fn memo_scoped_id(t: &mut CoronaTextures, path: std::path::PathBuf, id: u16) -> u16 {
+    if t.scoped_ids.len() >= MAX_SCOPED_CORONA_PATHS && !t.scoped_ids.contains_key(&path) {
+        // Byte IDs remain stable; only the bounded path-to-ID memo is cleared.
+        t.scoped_ids.clear();
+    }
+    t.scoped_ids.insert(path, id);
+    id
+}
+
+fn register_scoped_corona_bytes(
+    t: &mut CoronaTextures,
+    path: std::path::PathBuf,
+    source: Vec<u8>,
+) -> u16 {
+    if let Some(id) = t.scoped_ids.get(&path) {
+        return *id;
+    }
+    if source.len() > MAX_SCOPED_CORONA_BYTES {
+        return memo_scoped_id(t, path, 0);
+    }
+    let bytes: std::sync::Arc<[u8]> = std::sync::Arc::from(source);
+    if let Some(&id) = t.bytes_ids.get(&bytes) {
+        return memo_scoped_id(t, path, id);
+    }
+    if t.scoped_bytes.saturating_add(bytes.len()) > MAX_SCOPED_CORONA_BYTES {
+        return memo_scoped_id(t, path, 0);
+    }
+    let Some(id) = next_corona_id(t.listed.len()) else {
+        return memo_scoped_id(t, path, 0);
+    };
+    t.scoped_bytes += bytes.len();
+    t.bytes_ids.insert(bytes.clone(), id);
+    memo_scoped_id(t, path.clone(), id);
+    t.listed.push((id, CoronaSource::Memory { path, bytes }));
     id
 }
 
@@ -722,6 +781,51 @@ pub fn corona_texture_id(model_dir: &std::path::Path, name: &str) -> u16 {
         .or_default()
         .insert(name.to_string(), id);
     id
+}
+
+pub(super) fn corona_texture_id_with_texture_dirs(
+    model_dir: &std::path::Path,
+    name: &str,
+    publisher_texture_dirs: &[std::path::PathBuf],
+) -> u16 {
+    if publisher_texture_dirs.is_empty() {
+        return corona_texture_id(model_dir, name);
+    }
+    let root = CORONA_TEXTURES
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .and_then(|t| t.root.clone())
+        .unwrap_or_default();
+    let mut search = crate::texture_dirs(&root, model_dir);
+    crate::world::insert_publisher_texture_dirs(&mut search, publisher_texture_dirs, &root);
+    let search: Vec<&std::path::Path> = search.iter().map(|dir| dir.as_path()).collect();
+    // The lower-level memo includes the full search path vector, so map scopes do not share hits.
+    let Some(path) = omsi_texture::find_texture(name, &search) else {
+        return 0;
+    };
+    let in_publisher_mount = publisher_texture_dirs
+        .iter()
+        .filter_map(|dir| dir.parent())
+        .any(|mount| path.starts_with(mount));
+    if in_publisher_mount || omsi_cfg::vfs::is_sealed(&path) {
+        if let Some(id) = CORONA_TEXTURES
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|textures| textures.scoped_ids.get(&path).copied())
+        {
+            return id;
+        }
+        return match omsi_cfg::vfs::read(&path) {
+            Ok(bytes) => scoped_texture_id(path, bytes),
+            Err(_) => {
+                let mut g = CORONA_TEXTURES.lock().unwrap_or_else(|e| e.into_inner());
+                memo_scoped_id(g.get_or_insert_with(CoronaTextures::default), path, 0)
+            }
+        };
+    }
+    texture_id_of(path)
 }
 
 /// The id of a game picture not looked for yet in the current game folder. (The ids below
@@ -784,8 +888,14 @@ pub fn upload_corona_textures(renderer: &mut omsi_render::Renderer) {
         }
     };
     let taken = taken + pending.len();
-    for (id, path) in pending {
-        match omsi_texture::decode_file(&path) {
+    for (id, source) in pending {
+        let (path, decoded) = match source {
+            CoronaSource::File(path) => (path.clone(), omsi_texture::decode_file(&path)),
+            CoronaSource::Memory { path, bytes } => {
+                (path.clone(), omsi_texture::decode_bytes(&bytes, &path))
+            }
+        };
+        match decoded {
             Ok(img) => renderer.set_corona_texture(id, &img),
             Err(e) => log::warn!("corona picture {}: {e}", path.display()),
         }
@@ -919,5 +1029,95 @@ mod traffic_headlight_brightness_tests {
         assert_eq!(beam[0].intensity, 10.0);
         scale_traffic_headlights(&mut [], &mut beam, 0.0);
         assert_eq!(beam[0].intensity, 0.0);
+    }
+}
+
+#[cfg(test)]
+mod scoped_corona_cache_tests {
+    use super::*;
+
+    #[test]
+    fn scoped_images_deduplicate_by_bytes_and_survive_their_virtual_path() {
+        let mut cache = CoronaTextures::default();
+        let bytes = b"authenticated image bytes".to_vec();
+        let first = register_scoped_corona_bytes(
+            &mut cache,
+            "/map/.publisher-world/1/1/Texture/a.png".into(),
+            bytes.clone(),
+        );
+        let second = register_scoped_corona_bytes(
+            &mut cache,
+            "/map/.publisher-world/2/2/Texture/b.png".into(),
+            bytes.clone(),
+        );
+        assert_ne!(first, 0);
+        assert_eq!(second, first);
+        assert_eq!(cache.listed.len(), 1);
+        cache.scoped_ids.clear(); // the mount lease may end; renderer replay still has bytes
+        assert!(
+            matches!(&cache.listed[0].1, CoronaSource::Memory { bytes: saved, .. } if saved.as_ref() == bytes.as_slice())
+        );
+        assert_eq!(
+            register_scoped_corona_bytes(&mut cache, "/map/reopened/Texture/c.png".into(), bytes),
+            first
+        );
+        assert_eq!(cache.listed.len(), 1);
+    }
+
+    #[test]
+    fn scoped_images_and_picture_ids_fail_closed_at_their_limits() {
+        let mut cache = CoronaTextures::default();
+        let oversized = vec![0; MAX_SCOPED_CORONA_BYTES + 1];
+        let rejected = std::path::PathBuf::from("/map/Texture/large.png");
+        assert_eq!(
+            register_scoped_corona_bytes(&mut cache, rejected.clone(), oversized),
+            0
+        );
+        assert_eq!(cache.scoped_ids.get(&rejected), Some(&0));
+        assert!(cache.listed.is_empty());
+        assert_eq!(next_corona_id(u16::MAX as usize - 1), Some(u16::MAX));
+        assert_eq!(next_corona_id(u16::MAX as usize), None);
+    }
+
+    #[test]
+    fn scoped_corona_total_byte_budget_memoizes_rejection() {
+        let mut cache = CoronaTextures::default();
+        let half = MAX_SCOPED_CORONA_BYTES / 2;
+        assert_ne!(
+            register_scoped_corona_bytes(&mut cache, "/map/Texture/a.png".into(), vec![1; half]),
+            0
+        );
+        assert_ne!(
+            register_scoped_corona_bytes(&mut cache, "/map/Texture/b.png".into(), vec![2; half]),
+            0
+        );
+        let rejected = std::path::PathBuf::from("/map/Texture/c.png");
+        assert_eq!(
+            register_scoped_corona_bytes(&mut cache, rejected.clone(), vec![3]),
+            0
+        );
+        assert_eq!(cache.scoped_ids.get(&rejected), Some(&0));
+        assert_eq!(cache.listed.len(), 2);
+    }
+
+    #[test]
+    fn scoped_path_memo_evicts_reopened_aliases_without_changing_content_ids() {
+        let mut cache = CoronaTextures::default();
+        let bytes = b"same authenticated image";
+        let first =
+            register_scoped_corona_bytes(&mut cache, "/map/Texture/0.png".into(), bytes.to_vec());
+        for index in 1..=MAX_SCOPED_CORONA_PATHS {
+            assert_eq!(
+                register_scoped_corona_bytes(
+                    &mut cache,
+                    format!("/map-{index}/Texture/reopened.png").into(),
+                    bytes.to_vec()
+                ),
+                first
+            );
+        }
+        assert!(cache.scoped_ids.len() <= MAX_SCOPED_CORONA_PATHS);
+        assert_eq!(cache.bytes_ids.len(), 1);
+        assert_eq!(cache.listed.len(), 1);
     }
 }

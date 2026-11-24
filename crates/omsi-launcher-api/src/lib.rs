@@ -7,6 +7,7 @@
 
 mod addons;
 pub mod i18n;
+mod plugin_catalog;
 mod timetable;
 mod updates;
 mod versions;
@@ -1197,6 +1198,21 @@ fn answer(cmd: &str, args: &Value, p: &dyn Platform) -> Answer {
         "radio_stations" => radio_stations(),
         "radio_stations_save" => radio_stations_save(arg::<Vec<Value>>(args, "list")?),
         "mods_status" => mods_status(),
+        "plugins_status" => Ok(core::plugins::status()),
+        "plugin_set_enabled" => {
+            core::plugins::set_enabled(&arg::<String>(args, "name")?, arg::<bool>(args, "on")?)
+                .map(|_| json!(true))
+                .map_err(err)
+        }
+        "plugin_catalog" => plugin_catalog::list(),
+        "plugin_install" => plugin_catalog::install(&arg::<String>(args, "id")?),
+        "plugin_remove" => plugin_catalog::remove(&arg::<String>(args, "id")?),
+        "plugin_settings_save" => core::plugins::save_settings(
+            &arg::<String>(args, "name")?,
+            &arg::<Value>(args, "values")?,
+        )
+        .map(|_| json!(true))
+        .map_err(err),
         "add_hofs" => add_hofs(arg::<Vec<String>>(args, "files")?),
         "share_map_hofs" => share_map_hofs(arg::<String>(args, "map")?),
         "mod_set_enabled" => mod_set_enabled(arg::<String>(args, "id")?, arg::<bool>(args, "on")?),

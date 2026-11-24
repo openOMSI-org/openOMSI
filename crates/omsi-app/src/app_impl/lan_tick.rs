@@ -88,6 +88,10 @@ impl App {
             drawn: self.world.is_some() && self.renderer.is_some() && self.scene.is_some(),
         };
         let config = self.args.lan_config();
+        let host = AppLanHost {
+            args: &self.args,
+            world: self.world.as_deref(),
+        };
         if lan.role == omsi_net::Role::Host {
             // (#1464) the buses this session drives: a player who drives another is sent away
             // and told the list, as a dedicated server does with its server.cfg's `vehicles`
@@ -177,6 +181,15 @@ impl App {
             self.session.humans.as_mut(),
             &mut self.gfx.sim_view,
             self.player.as_ref().map(|p| p.vehicle.position),
+        );
+        if let Some(w) = self.world.as_deref() {
+            w.scenery_sync(&mut self.session.scenery);
+        }
+        self.net.lan_world.points.step(
+            lan,
+            &mut self.session.scenery,
+            self.player.as_ref().map(|p| p.vehicle.position),
+            dt,
         );
         let world_ms = phase.elapsed().as_secs_f64() * 1000.0;
         let phase = std::time::Instant::now();
