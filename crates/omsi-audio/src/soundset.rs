@@ -45,6 +45,17 @@ struct RuntimeSound {
     /// A triggered entry: what its volume curves gave when the trigger last fired, kept
     /// for as long as that sound plays (None: read them now).
     fired_curves: Option<f32>,
+    /// An `[onlyone]` entry: who it is among all the sets' entries, and the file it shares
+    /// with the other objects' (lower case) - see [`only_one_permits`].
+    only_one: Option<(u64, String)>,
+}
+
+impl Drop for RuntimeSound {
+    fn drop(&mut self) {
+        if let Some((owner, file)) = &self.only_one {
+            only_one_release(file, *owner);
+        }
+    }
 }
 
 /// The places of an entry's variables in its set's table of variables read each frame: its
@@ -106,7 +117,6 @@ impl RuntimeSound {
     fn new(def: SoundEntry, clip: Option<Arc<Clip>>) -> RuntimeSound {
         let curve_inputs = def.vol_curves.iter().map(CurveInput::of).collect();
         RuntimeSound {
-            def,
             clip,
             voice: None,
             held: false,
@@ -116,6 +126,10 @@ impl RuntimeSound {
             curve_inputs,
             ix: VarIx::default(),
             fired_curves: None,
+            only_one: def
+                .only_one
+                .then(|| (next_only_one_owner(), def.file.trim().to_ascii_lowercase())),
+            def,
         }
     }
 }
@@ -184,6 +198,105 @@ fn warn_missing_once(trigger: &str, path: &Path) {
             path.display()
         );
     }
+}
+
+/// Who holds an `[onlyone]` file: the entry (see [`next_only_one_owner`]), how far its
+/// object is (see [`pack_range`]) and when it last said it plays.
+struct OnlyOneClaim {
+    owner: u64,
+    key: f32,
+    at: std::time::Instant,
+}
+
+/// The `[onlyone]` files playing anywhere, by their path in lower case.
+static ONLY_ONE: std::sync::Mutex<Option<std::collections::HashMap<String, OnlyOneClaim>>> =
+    std::sync::Mutex::new(None);
+
+/// A claim its entry has not renewed for this long (its object gone or no longer
+/// updated) is given up.
+const ONLY_ONE_STALE: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// A new name for an `[onlyone]` entry.
+fn next_only_one_owner() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Whether `[onlyone]` entry `owner`, its object at `key`, may play `file` now; `wants`:
+/// it would be heard. Omsi.exe (sound-pack sort 0x7513e0 with 0x74fab0, the update
+/// 0x750340 stopping an entry flagged at +0x41) visits the objects nearest first - by
+/// their distance over their largest `[3d]` range (0x74f4fc) - and lets an `[onlyone]`
+/// sound play only while none visited before it plays the same file: of all the objects
+/// with that sound, only the nearest that plays it is heard. The map's fireworks
+/// (`Sceneryobjects\Generic\sound\fireworks.cfg`) are one display, not one more for
+/// every object placed. The nearest one heard holds the file; a nearer one that would be
+/// heard takes it over; one that falls silent gives it up.
+fn only_one_permits(
+    file: &str,
+    owner: u64,
+    key: f32,
+    wants: bool,
+    now: std::time::Instant,
+) -> bool {
+    let mut claims = ONLY_ONE.lock().unwrap_or_else(|e| e.into_inner());
+    let claims = claims.get_or_insert_with(Default::default);
+    match claims.get(file) {
+        Some(c) if c.owner == owner => {
+            if wants {
+                claims.insert(
+                    file.to_string(),
+                    OnlyOneClaim {
+                        owner,
+                        key,
+                        at: now,
+                    },
+                );
+            } else {
+                claims.remove(file);
+            }
+            true
+        }
+        Some(c)
+            if now.saturating_duration_since(c.at) < ONLY_ONE_STALE
+                && key.partial_cmp(&c.key) != Some(std::cmp::Ordering::Less) =>
+        {
+            false
+        }
+        _ => {
+            if wants {
+                claims.insert(
+                    file.to_string(),
+                    OnlyOneClaim {
+                        owner,
+                        key,
+                        at: now,
+                    },
+                );
+            }
+            true
+        }
+    }
+}
+
+/// Give up `file` if `owner` holds it (its entry is gone).
+fn only_one_release(file: &str, owner: u64) {
+    let mut claims = ONLY_ONE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(claims) = claims.as_mut()
+        && claims.get(file).is_some_and(|c| c.owner == owner)
+    {
+        claims.remove(file);
+    }
+}
+
+/// How far a sound pack reaches, what Omsi.exe divides its distance by to sort the packs
+/// (the loader's end, 0x74ee68): the largest `[3d]` range among its entries that can be
+/// heard from outside (`[viewpoint]` 0, or one with bit 1 or 4), 10 m when none has one.
+fn pack_range<'a>(entries: impl Iterator<Item = &'a SoundEntry>) -> f32 {
+    let r = entries
+        .filter(|d| d.pos.is_some() && (d.viewpoint == 0 || d.viewpoint & 5 != 0))
+        .map(|d| d.range)
+        .fold(0.0f32, f32::max);
+    if r == 0.0 { 10.0 } else { r }
 }
 
 /// A `[volcurve]` at `x`, as Omsi.exe's `TFuncClass` (0x7f061c) reads it: the first point's
@@ -282,7 +395,12 @@ impl SoundSet {
                 } else {
                     None
                 };
-                RuntimeSound::new(def.clone(), clip)
+                let mut s = RuntimeSound::new(def.clone(), clip);
+                // (Omsi.exe tells `[onlyone]` sounds apart by their whole path)
+                if let Some((_, file)) = &mut s.only_one {
+                    *file = path.to_string_lossy().to_ascii_lowercase();
+                }
+                s
             })
             .collect();
         SoundSet {
@@ -643,6 +761,13 @@ impl SoundSet {
         values.clear();
         values.extend(names.iter().map(|n| var(n)));
         let table = Table(values);
+        // (how near this object is among those sharing an `[onlyone]` sound)
+        let only_one_key = if self.sounds.iter().any(|s| s.only_one.is_some()) {
+            let at = object_to_world.transform_point3(Vec3::ZERO);
+            (at - ctx.listener).length() / pack_range(self.sounds.iter().map(|s| &s.def))
+        } else {
+            0.0
+        };
         for s in self.sounds.iter_mut() {
             // How the exe plays an entry (`TSound` update, 2.2.032):
             // * with a `[trigger]`: once each time the trigger fires, from the start, never
@@ -703,6 +828,17 @@ impl SoundSet {
                 }
                 continue;
             }
+            if let Some((owner, file)) = &s.only_one {
+                let playing = s.voice.is_some_and(|id| engine.is_playing(id));
+                let wants = e.audible && (looping || fired || rising || playing);
+                if !only_one_permits(file, *owner, only_one_key, wants, ctx.now) {
+                    // a nearer object plays this sound: this one is stopped
+                    if let Some(id) = s.voice.take() {
+                        engine.stop(id);
+                    }
+                    continue;
+                }
+            }
             if !triggered && !s.def.no_loop {
                 let params = ctx.params(s, &e, true, object_to_world);
                 match (s.voice, e.audible) {
@@ -736,10 +872,6 @@ impl SoundSet {
             let params = ctx.params(s, &e, false, object_to_world);
             if (fired || rising) && e.audible {
                 if let Some(id) = s.voice {
-                    if s.def.only_one && engine.is_playing(id) {
-                        engine.set_params(id, params);
-                        continue;
-                    }
                     engine.stop(id);
                 }
                 s.voice = Some(engine.play(clip, params));
@@ -1808,5 +1940,113 @@ mod tests {
         // (the name as the script wrote it: a folder "Falkenseer Ch" that is not there)
         assert!(!omsi_cfg::resolve_path(&sound, file).is_file());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// `[onlyone]` (Omsi.exe 0x74fab0): of the objects sharing the sound, the nearest one
+    /// that plays it holds it, a nearer one takes it over, one falling silent gives it up.
+    #[test]
+    fn an_onlyone_sound_is_held_by_the_nearest_object() {
+        let now = std::time::Instant::now();
+        let f = "test-onlyone-claims.wav";
+        assert!(
+            only_one_permits(f, 1, 4.0, true, now),
+            "the first one heard"
+        );
+        assert!(
+            only_one_permits(f, 2, 1.0, true, now),
+            "a nearer one takes over"
+        );
+        assert!(
+            !only_one_permits(f, 1, 4.0, true, now),
+            "the far one is stopped"
+        );
+        assert!(
+            only_one_permits(f, 2, 1.0, false, now),
+            "the near one falls silent"
+        );
+        assert!(
+            only_one_permits(f, 1, 4.0, true, now),
+            "and the far one is heard again"
+        );
+        assert!(!only_one_permits(f, 3, 9.0, true, now));
+        assert!(
+            only_one_permits(f, 3, 9.0, true, now + ONLY_ONE_STALE),
+            "a claim not renewed lapses"
+        );
+        only_one_release(f, 3);
+        assert!(
+            only_one_permits(f, 4, 99.0, true, now),
+            "given up when its entry goes"
+        );
+        only_one_release(f, 4);
+    }
+
+    /// Two fireworks objects (`[onlyone]`, `[3d]` range 50): only the nearer is heard.
+    #[test]
+    fn two_objects_with_the_same_onlyone_sound_play_it_once() {
+        let _g = globals();
+        let engine = AudioEngine::capture(48_000);
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![1000; 4800],
+        });
+        let entry = SoundEntry {
+            file: "test-onlyone-fireworks.wav".into(),
+            volume: 1.0,
+            only_one: true,
+            pos: Some([0.0, 0.0, 0.0]),
+            range: 50.0,
+            ..Default::default()
+        };
+        let make = || SoundSet {
+            sounds: vec![RuntimeSound::new(entry.clone(), Some(clip.clone()))],
+            master: 1.0,
+            dir: Default::default(),
+            inside: false,
+            amount: 0.0,
+            ai: true,
+            scenery: true,
+            listener_vehicle: false,
+            muffled: false,
+            parts: Vec::new(),
+            vars: None,
+        };
+        let far_at = Mat4::from_translation(Vec3::new(40.0, 0.0, 0.0));
+        let near_at = Mat4::from_translation(Vec3::new(10.0, 0.0, 0.0));
+        let (mut far, mut near) = (make(), make());
+        let none = |_: &str| None;
+        let plays = |s: &SoundSet| s.sounds[0].voice.is_some_and(|id| engine.is_playing(id));
+        far.update(&engine, &none, &far_at, &[]);
+        assert!(plays(&far), "alone, the far one is heard");
+        near.update(&engine, &none, &near_at, &[]);
+        far.update(&engine, &none, &far_at, &[]);
+        assert!(plays(&near));
+        assert!(!plays(&far), "the nearer one has taken the sound over");
+        drop(near);
+        far.update(&engine, &none, &far_at, &[]);
+        assert!(plays(&far), "the nearer one gone, the far one plays again");
+    }
+
+    #[test]
+    fn a_pack_reaches_as_far_as_its_largest_outside_3d_range() {
+        let e = |vp: i32, range: f32, pos: bool| SoundEntry {
+            viewpoint: vp,
+            range,
+            pos: pos.then_some([0.0; 3]),
+            ..Default::default()
+        };
+        let pack = [
+            e(0, 20.0, true),
+            e(2, 80.0, true),
+            e(1, 30.0, true),
+            e(0, 99.0, false),
+        ];
+        assert_eq!(pack_range(pack.iter()), 30.0);
+        assert_eq!(
+            pack_range([e(2, 80.0, true)].iter()),
+            10.0,
+            "none from outside: 10 m"
+        );
     }
 }
