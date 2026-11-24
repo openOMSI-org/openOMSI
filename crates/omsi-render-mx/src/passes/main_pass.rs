@@ -19,7 +19,11 @@ struct MainTargets<'t> {
     /// the ordinary scenery's depth, laid into the multisampled buffer at the start of
     /// the pass (of its first part) before the colour draws (see `encode_prefill`)
     prefill: Option<(&'t [Batch], &'t [mx::RenderPipeline; 6])>,
-    masked: Option<(&'t [Batch], &'t [mx::RenderPipeline; 2], &'t mx::BindGroup)>,
+    masked: Option<(
+        &'t [Batch],
+        &'t [mx::RenderPipeline; 2],
+        &'t mx::TextureView,
+    )>,
     /// the bundles of the last part (all of them when the pass is not split)
     bundles: &'t [mx::RenderBundle],
 }
@@ -103,7 +107,7 @@ impl Renderer {
         let masked = prefill.filter(|_| want_mask).and_then(|_| {
             let (panes, cut) = plan.masked.as_ref()?;
             let mask = self.pane_mask.as_ref()?;
-            let (_, view, bg) = self.pane_depth.as_ref()?;
+            let (_, view) = self.pane_depth.as_ref()?;
             let pass_encoder = lead.as_mut().unwrap_or(&mut *encoder);
             let mut pass = pass_encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("pane depth"),
@@ -120,7 +124,7 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             encode_batches(&mut pass, scene, panes, |pipe| &mask.panes[pipe as usize]);
-            Some((&cut[..], &mask.prefill, bg))
+            Some((&cut[..], &mask.prefill, view))
         });
         let mut main_parts: Vec<mx::CommandEncoder> = Vec::new();
         {
@@ -317,14 +321,7 @@ impl Renderer {
         let view = texture
             .create_view(&Default::default())
             .expect("mX: a texture view");
-        let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("pane depth"),
-            entries: &[mx::BindGroupEntry {
-                binding: 0,
-                resource: mx::BindingResource::TextureView(&view),
-            }],
-        });
-        self.pane_depth = Some(((width, height), view, bg));
+        self.pane_depth = Some(((width, height), view));
     }
 
     /// The sky dome (see sky.wgsl `vs_main`: it lies on the far plane and is tested against
@@ -799,10 +796,23 @@ impl Renderer {
 fn encode_masked<'p>(
     pass: &mut mx::RenderPass<'p>,
     scene: &'p Scene,
-    masked: Option<(&[Batch], &'p [mx::RenderPipeline; 2], &'p mx::BindGroup)>,
+    masked: Option<(&[Batch], &'p [mx::RenderPipeline; 2], &'p mx::TextureView)>,
 ) {
-    if let Some((batches, pipes, bg)) = masked {
-        pass.set_bind_group(3, bg);
-        encode_batches(pass, scene, batches, |pipe| &pipes[pipe as usize]);
+    if let Some((batches, pipes, pane_depth)) = masked {
+        // (the panes' multisampled depth at the frame's `ground` place: the cut prefill
+        // reads no ground picture)
+        let heap = FrameHeap {
+            ground: pane_depth.index(),
+            ..scene.frame_heap
+        };
+        encode_batches_in(
+            pass,
+            scene,
+            &heap,
+            batches,
+            |_| true,
+            |b| b.pipe as u16,
+            |pipe| &pipes[pipe as usize],
+        );
     }
 }

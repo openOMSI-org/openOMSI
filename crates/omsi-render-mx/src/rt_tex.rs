@@ -120,14 +120,16 @@ impl TexStore {
                 .create_buffer(&mx::BufferDescriptor {
                     label: Some(label),
                     size: n as u64 * stride,
-                    usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+                    usage: mx::BufferUsages::UNIFORM
+                        | mx::BufferUsages::STORAGE
+                        | mx::BufferUsages::COPY_DST,
                 })
                 .expect("mX: a buffer")
         };
         let module = device
             .create_shader_module(&mx::ShaderModuleDescriptor {
                 label: Some("rt texture coordinates"),
-                source: &*(crate::shaders::hot_wgsl(include_str!("rt_uv.wgsl"), "rt_uv.wgsl")),
+                source: &RT_UV.wgsl(),
             })
             .expect("mX: a shader");
         let uv_pipeline = device
@@ -245,7 +247,7 @@ impl TexStore {
     /// Copy this frame's meshes' coordinates (and what the buffer held, when it grew).
     pub(super) fn encode_uvs(
         &mut self,
-        device: &mx::Device,
+        _device: &mx::Device,
         queue: &mx::Queue,
         encoder: &mut mx::CommandEncoder,
     ) {
@@ -263,36 +265,40 @@ impl TexStore {
         queue
             .write_buffer(&self.job_buf, 0, &bytes)
             .expect("mX: a queue write");
-        let groups: Vec<mx::BindGroup> = self
+        let groups: Vec<HeapGroup> = self
             .jobs
             .iter()
             .enumerate()
             .map(|(k, j)| {
-                device.create_bind_group(&mx::BindGroupDescriptor {
-                    label: Some("rt texture coordinates"),
-                    entries: &[
-                        mx::BindGroupEntry {
-                            binding: 0,
-                            resource: j.vb.as_entire_binding(),
-                        },
-                        mx::BindGroupEntry {
-                            binding: 1,
-                            resource: j.ib.as_entire_binding(),
-                        },
-                        mx::BindGroupEntry {
-                            binding: 2,
-                            resource: self.uvs.as_entire_binding(),
-                        },
-                        mx::BindGroupEntry {
-                            binding: 3,
-                            resource: mx::BindingResource::Buffer(mx::BufferBinding {
-                                buffer: &self.job_buf,
-                                offset: k as u64 * self.stride,
-                                size: Some(16),
-                            }),
-                        },
-                    ],
-                })
+                HeapGroup::of(
+                    RT_UV.layout(),
+                    0,
+                    &mx::BindGroupDescriptor {
+                        label: Some("rt texture coordinates"),
+                        entries: &[
+                            mx::BindGroupEntry {
+                                binding: 0,
+                                resource: j.vb.as_entire_binding(),
+                            },
+                            mx::BindGroupEntry {
+                                binding: 1,
+                                resource: j.ib.as_entire_binding(),
+                            },
+                            mx::BindGroupEntry {
+                                binding: 2,
+                                resource: self.uvs.as_entire_binding(),
+                            },
+                            mx::BindGroupEntry {
+                                binding: 3,
+                                resource: mx::BindingResource::Buffer(mx::BufferBinding {
+                                    buffer: &self.job_buf,
+                                    offset: k as u64 * self.stride,
+                                    size: Some(16),
+                                }),
+                            },
+                        ],
+                    },
+                )
             })
             .collect();
         let mut pass = encoder.begin_compute_pass(&mx::ComputePassDescriptor {
@@ -301,7 +307,7 @@ impl TexStore {
         });
         pass.set_pipeline(&self.uv_pipeline);
         for (j, bg) in self.jobs.iter().zip(&groups) {
-            pass.set_bind_group(0, bg);
+            bg.set_compute(&mut pass);
             // (64 triangles a group; rows of 65535 groups for a mesh of more than 4 M)
             let groups = j.job[2].div_ceil(64);
             pass.dispatch_workgroups(groups.min(65535), groups.div_ceil(65535), 1);
@@ -385,6 +391,11 @@ impl TexStore {
         ]
     }
 }
+
+/// rt_uv.wgsl, its group read from the heap.
+static RT_UV: HeapModule = HeapModule::new(|| {
+    crate::shaders::hot_wgsl(include_str!("rt_uv.wgsl"), "rt_uv.wgsl").to_string()
+});
 
 /// How a material addresses its textures, as rt_reflect.wgsl `tile_texel` takes it.
 pub(super) fn address_mode(a: TexAddressing) -> u32 {

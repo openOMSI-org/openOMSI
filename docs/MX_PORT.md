@@ -148,9 +148,9 @@ benchmark's log has no "drawing with 1x MSAA".
 
 `OMSI_NO_LEAN=1` draws with the full pipelines, for comparison.
 
-## The rest in the heap (2026-11-24)
+## The rest in the heap (2026-11-23)
 
-The renderer draws without bind groups but where mX's heap cannot hold what a shader reads.
+The renderer makes no bind groups: every shader reads its resources from mX's heap.
 
 - **The scene shader** (`frame_from_heap`, `FrameHeap`): the camera group's textures,
   samplers and buffers (the camera, the instances' places and parameters, the draw list, the
@@ -167,10 +167,25 @@ The renderer draws without bind groups but where mX's heap cannot hold what a sh
   A module-scope name is replaced only where no parameter or local shadows it
   (`replace_globals`). The camera group is a `HeapGroup` per module that reads it
   (`CameraHeaps`); the bind group itself is gone.
-- **Left as bind groups**: the ray tracing's passes (storage textures, acceleration
-  structures, writable buffers), the multisampled pane depth (the heap has no multisampled
-  textures) and the temporal upscaling's motion group (the scene shader's 128 bytes of
-  immediates are taken).
+- **Ray tracing, the multisampled pane depth, the motion group** (mX aca1cb9): storage
+  textures (`mx_storage{k}`, heap bindings 12..=15), acceleration structures (`mx_tlas`,
+  binding 11) and writable buffers (read-write buffer views) are heap entries, so are
+  multisampled depth views (`mx_texdepth_ms`, binding 6: the pane depth reads as
+  `t_pane_depth` from the scene shader's `ground` place). The temporal upscaling's motion
+  group reads from the places of the lights and the light grid, which its pass does not use.
+- **OpenGL**: a view dropped before its command buffer is submitted keeps its heap entry
+  until that submission is done (openOMSI-org/mX#17): the GPU mip chain draws each level from a view
+  of the one above that is gone by the submit. Blending and colour masks are set for all
+  draw buffers at once where the targets agree, and per buffer through
+  `OES_draw_buffers_indexed`'s own entry points on ES 3.0 and 3.1 (openOMSI-org/mX#17): glow
+  calls the ES 3.2 names, which ANGLE refused, and blending was off on ANGLE.
+- **Known on the OpenGL tier**: it draws the vanilla picture only (16 texture units), whose
+  FXAA has no screen mask, so a display behind a pane is antialiased there
+  (`display_behind_a_pane_keeps_its_pixel_contrast`, which passed on ANGLE only while
+  blending was off).
+- **The interface and the headset's mirror** (`omsi-ui-mx`, `omsi-xr-mx`): a layer's numbers
+  and the picture's and sampler's places are a draw's 128 bytes of immediates; the per-layer
+  uniform buffer and its bind groups are gone.
 
 The picture and the GPU time are as before (Grundorf cab, the same 12.4 ms with and without
 the heap); the renderer's tests pass as before.
@@ -191,8 +206,8 @@ the heap); the renderer's tests pass as before.
   (`openxr/sync/tests.rs`, rewritten for it, compiles; needs a Windows GPU).
 - **A windowed session that loads a map** on mX (the windowed run above stayed in the menu;
   driving and Enhanced+ are checked offscreen).
-- **Heap**: the other root bind groups (camera, lights, shadows) stay as they are (mX keeps
-  groups 0..=6); per-draw arrays move to the heap pass by pass, with a pixel test each.
+- **Heap**: Direct3D 12 and 11 read the new heap bindings (storage textures, acceleration
+  structures, multisampled depth) compiled, not run.
 - `glSampleMaski` is not in glow: mX's GL ignores the sample mask (logged).
 
 ## Checking other platforms
