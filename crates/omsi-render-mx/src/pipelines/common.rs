@@ -1,6 +1,7 @@
 //! The pieces most of the renderer's pipelines and samplers share.
 
 use crate::DEPTH_FORMAT;
+pub(crate) use crate::shaders::{HeapGroup, HeapModule, picture_wgsl};
 
 /// A native compiler can abort before mX returns an error. Record both sides of each
 /// operation so the last unfinished one identifies the module/entry point, not just "sky"
@@ -73,7 +74,7 @@ pub(crate) fn compile_pipeline(
         || {
             device
                 .create_render_pipeline(descriptor)
-                .expect("mX: a render pipeline")
+                .unwrap_or_else(|e| panic!("mX: a render pipeline ({}): {e:?}", begin()))
         },
     )
 }
@@ -227,12 +228,27 @@ pub(crate) fn clamped_linear_sampler(device: &mx::Device) -> mx::Sampler {
 }
 
 /// A uniform buffer the CPU writes.
-pub(crate) fn uniform_buffer(device: &mx::Device, label: &str, size: u64) -> mx::Buffer {
+/// A uniform buffer the scene shader reads through the heap too (`frame_from_heap`).
+pub(crate) fn frame_buffer(device: &mx::Device, label: &str, size: u64) -> mx::Buffer {
     device
         .create_buffer(&mx::BufferDescriptor {
             label: Some(label),
             size,
-            usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+            usage: mx::BufferUsages::UNIFORM
+                | mx::BufferUsages::STORAGE
+                | mx::BufferUsages::COPY_DST,
         })
         .expect("mX: a buffer")
+}
+
+/// A read-only view of all of `buffer` in the heap.
+pub(crate) fn heap_view(buffer: &mx::Buffer) -> mx::BufferView {
+    buffer
+        .create_view(&Default::default())
+        .expect("mX: a buffer view")
+}
+
+/// A shader's uniform buffer (read through the heap: `groups_to_heap`).
+pub(crate) fn uniform_buffer(device: &mx::Device, label: &str, size: u64) -> mx::Buffer {
+    frame_buffer(device, label, size)
 }

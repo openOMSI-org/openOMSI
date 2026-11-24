@@ -37,7 +37,7 @@ pub(crate) struct CloudTargets {
     display: mx::TextureView,
     hist_tex: mx::Texture,
     /// The resolve's bind groups, per round (`CloudPass::rounds`).
-    resolve_bgs: Vec<mx::BindGroup>,
+    resolve_bgs: Vec<HeapGroup>,
 }
 
 /// What the last traced frame was drawn with (its history is found again from it).
@@ -58,7 +58,9 @@ pub(crate) struct CloudPass {
     /// `STILL_ROUNDS`: x the round, y the history's share (< 0: the usual).
     rounds: Vec<mx::Buffer>,
     /// The trace's bind groups (the probe's layout), per round.
-    trace_bgs: Vec<mx::BindGroup>,
+    trace_bgs: Vec<HeapGroup>,
+    /// the sky module's places in the heap (`SkyBase::layout`)
+    layout: crate::shaders::HeapLayout,
     /// A depth texel for a frame without the prepass's depth (nothing is skipped).
     no_depth: mx::TextureView,
     /// What the camera group reads before there are clouds: no cloud anywhere.
@@ -75,8 +77,9 @@ impl CloudPass {
         device: &mx::Device,
         queue: &mx::Queue,
         shader: &mx::ShaderModule,
+        layout: &crate::shaders::HeapLayout,
         sampler: &mx::Sampler,
-        trace_group: &dyn Fn(&mx::Buffer) -> mx::BindGroup,
+        trace_group: &dyn Fn(&mx::Buffer) -> HeapGroup,
     ) -> CloudPass {
         let trace_pipeline = no_vertex_pipeline(
             "cloud trace",
@@ -102,7 +105,7 @@ impl CloudPass {
                     queue,
                     Some("cloud round"),
                     bytemuck::cast_slice(&p),
-                    mx::BufferUsages::UNIFORM,
+                    mx::BufferUsages::UNIFORM | mx::BufferUsages::STORAGE,
                 )
             })
             .collect();
@@ -166,6 +169,7 @@ impl CloudPass {
             sampler: sampler.clone(),
             rounds,
             trace_bgs,
+            layout: layout.clone(),
             no_depth,
             placeholder: placeholder_tex
                 .create_view(&Default::default())
@@ -250,31 +254,35 @@ impl CloudPass {
             .rounds
             .iter()
             .map(|round| {
-                device.create_bind_group(&mx::BindGroupDescriptor {
-                    label: Some("cloud resolve"),
-                    entries: &[
-                        mx::BindGroupEntry {
-                            binding: 13,
-                            resource: mx::BindingResource::Sampler(&self.sampler),
-                        },
-                        mx::BindGroupEntry {
-                            binding: 15,
-                            resource: round.as_entire_binding(),
-                        },
-                        mx::BindGroupEntry {
-                            binding: 23,
-                            resource: mx::BindingResource::TextureView(&trace),
-                        },
-                        mx::BindGroupEntry {
-                            binding: 24,
-                            resource: mx::BindingResource::TextureView(&trace_depth),
-                        },
-                        mx::BindGroupEntry {
-                            binding: 25,
-                            resource: mx::BindingResource::TextureView(&hist),
-                        },
-                    ],
-                })
+                HeapGroup::of(
+                    &self.layout,
+                    0,
+                    &mx::BindGroupDescriptor {
+                        label: Some("cloud resolve"),
+                        entries: &[
+                            mx::BindGroupEntry {
+                                binding: 13,
+                                resource: mx::BindingResource::Sampler(&self.sampler),
+                            },
+                            mx::BindGroupEntry {
+                                binding: 15,
+                                resource: round.as_entire_binding(),
+                            },
+                            mx::BindGroupEntry {
+                                binding: 23,
+                                resource: mx::BindingResource::TextureView(&trace),
+                            },
+                            mx::BindGroupEntry {
+                                binding: 24,
+                                resource: mx::BindingResource::TextureView(&trace_depth),
+                            },
+                            mx::BindGroupEntry {
+                                binding: 25,
+                                resource: mx::BindingResource::TextureView(&hist),
+                            },
+                        ],
+                    },
+                )
             })
             .collect();
         self.targets = Some(CloudTargets {
@@ -317,10 +325,10 @@ impl CloudPass {
     /// Trace and accumulate this frame's clouds (writes the view uniform the dome reads).
     pub(crate) fn encode(
         &mut self,
-        device: &mx::Device,
+        _device: &mx::Device,
         queue: &mx::Queue,
         enc: &mut mx::CommandEncoder,
-        sky_bg: &mx::BindGroup,
+        sky_bg: &HeapGroup,
         view_buf: &mx::Buffer,
         fr: &CloudFrame,
         timers: &mut PassTimers,
@@ -365,13 +373,17 @@ impl CloudPass {
         queue
             .write_buffer(view_buf, 0, bytemuck::bytes_of(&u))
             .expect("mX: a queue write");
-        let depth_bg = device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("cloud trace depth"),
-            entries: &[mx::BindGroupEntry {
-                binding: 0,
-                resource: mx::BindingResource::TextureView(fr.depth.unwrap_or(&self.no_depth)),
-            }],
-        });
+        let depth_bg = HeapGroup::of(
+            &self.layout,
+            2,
+            &mx::BindGroupDescriptor {
+                label: Some("cloud trace depth"),
+                entries: &[mx::BindGroupEntry {
+                    binding: 0,
+                    resource: mx::BindingResource::TextureView(fr.depth.unwrap_or(&self.no_depth)),
+                }],
+            },
+        );
         let rounds: Vec<usize> = if fr.still {
             (1..=STILL_ROUNDS as usize).collect()
         } else {
@@ -410,9 +422,9 @@ impl CloudPass {
                     occlusion_query_set: None,
                 });
                 pass.set_pipeline(&self.trace_pipeline);
-                pass.set_bind_group(0, &self.trace_bgs[round]);
-                pass.set_bind_group(1, sky_bg);
-                pass.set_bind_group(2, &depth_bg);
+                self.trace_bgs[round].set(&mut pass);
+                sky_bg.set(&mut pass);
+                depth_bg.set(&mut pass);
                 pass.draw(0..3, 0..1);
             }
             {
@@ -428,8 +440,8 @@ impl CloudPass {
                     occlusion_query_set: None,
                 });
                 pass.set_pipeline(&self.resolve_pipeline);
-                pass.set_bind_group(0, &t.resolve_bgs[round]);
-                pass.set_bind_group(1, sky_bg);
+                t.resolve_bgs[round].set(&mut pass);
+                sky_bg.set(&mut pass);
                 pass.draw(0..3, 0..1);
             }
             enc.copy_texture_to_texture(

@@ -23,3 +23,5 @@ node_modules/
 docker/server/config/
 docker/server/.env
 docker/server/content/
+/site/dist
+/site/.cache

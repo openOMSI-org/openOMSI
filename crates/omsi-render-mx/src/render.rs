@@ -9,7 +9,7 @@ pub(crate) fn post_pass(
     view: &mx::TextureView,
     timer: Option<mx::PassTimestampWrites<'_>>,
     pipeline: &mx::RenderPipeline,
-    bg: &mx::BindGroup,
+    bg: &HeapGroup,
 ) {
     let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
         label: Some("post"),
@@ -26,7 +26,7 @@ pub(crate) fn post_pass(
         occlusion_query_set: None,
     });
     pass.set_pipeline(pipeline);
-    pass.set_bind_group(0, bg);
+    bg.set(&mut pass);
     pass.draw(0..3, 0..1);
 }
 
@@ -365,9 +365,7 @@ impl Renderer {
         scene.dirty = true;
         scene.model_buf = None;
         scene.params_buf = None;
-        scene.camera_bind_group = None;
-        scene.shadow_bind_group = None;
-        scene.precip_bind_group = None;
+        scene.camera_heaps = None;
     }
 
     /// Render the scene into `target` (which must have the renderer's format).
@@ -457,25 +455,29 @@ impl Renderer {
                         &self.queue,
                         Some("triple screen composite"),
                         bytemuck::cast_slice(&params),
-                        mx::BufferUsages::UNIFORM,
+                        mx::BufferUsages::UNIFORM | mx::BufferUsages::STORAGE,
                     );
-                    let group = self.device.create_bind_group(&mx::BindGroupDescriptor {
-                        label: Some("triple screen composite"),
-                        entries: &[
-                            mx::BindGroupEntry {
-                                binding: 0,
-                                resource: buf.as_entire_binding(),
-                            },
-                            mx::BindGroupEntry {
-                                binding: 1,
-                                resource: mx::BindingResource::TextureView(&view),
-                            },
-                            mx::BindGroupEntry {
-                                binding: 2,
-                                resource: mx::BindingResource::Sampler(&self.sky.sky_sampler),
-                            },
-                        ],
-                    });
+                    let group = HeapGroup::of(
+                        picture_layout(),
+                        0,
+                        &mx::BindGroupDescriptor {
+                            label: Some("triple screen composite"),
+                            entries: &[
+                                mx::BindGroupEntry {
+                                    binding: 0,
+                                    resource: buf.as_entire_binding(),
+                                },
+                                mx::BindGroupEntry {
+                                    binding: 1,
+                                    resource: mx::BindingResource::TextureView(&view),
+                                },
+                                mx::BindGroupEntry {
+                                    binding: 2,
+                                    resource: mx::BindingResource::Sampler(&self.sky.sky_sampler),
+                                },
+                            ],
+                        },
+                    );
                     (view, group)
                 })
                 .collect();
@@ -532,13 +534,15 @@ impl Renderer {
                 // (the right panel loses its last pixel or two at the window's edge)
                 let [x, y, w, h] = v.viewport;
                 pass.set_scissor_rect(x, y, w.min(width - x), h);
-                pass.set_bind_group(0, &self.targets.triple_targets.as_ref().unwrap().1[i].1);
+                self.targets.triple_targets.as_ref().unwrap().1[i]
+                    .1
+                    .set(&mut pass);
                 pass.draw(0..3, 0..1);
             }
             pass.set_scissor_rect(0, 0, width, height);
             pass.set_pipeline(&self.overlay_pipeline_1x);
             for (_, _, group, _) in &scene.overlay_res {
-                pass.set_bind_group(0, group);
+                group.set(&mut pass);
                 pass.draw(0..6, 0..1);
             }
         }
@@ -635,25 +639,29 @@ impl Renderer {
                 &self.queue,
                 Some("OpenXR menu rectangle"),
                 bytemuck::cast_slice(&uniform),
-                mx::BufferUsages::UNIFORM,
+                mx::BufferUsages::UNIFORM | mx::BufferUsages::STORAGE,
             );
-            let group = self.device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("OpenXR menu rectangle"),
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: buffer.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 1,
-                        resource: mx::BindingResource::TextureView(&texture.view),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 2,
-                        resource: mx::BindingResource::Sampler(&self.sky.sky_sampler),
-                    },
-                ],
-            });
+            let group = HeapGroup::of(
+                picture_layout(),
+                0,
+                &mx::BindGroupDescriptor {
+                    label: Some("OpenXR menu rectangle"),
+                    entries: &[
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: buffer.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 1,
+                            resource: mx::BindingResource::TextureView(&texture.view),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 2,
+                            resource: mx::BindingResource::Sampler(&self.sky.sky_sampler),
+                        },
+                    ],
+                },
+            );
             Some((buffer, group))
         };
         let mut prepared = [Vec::new(), Vec::new()];
@@ -750,7 +758,7 @@ impl Renderer {
             });
             pass.set_pipeline(&self.xr_ui_pipeline);
             for (_, group) in &prepared[eye] {
-                pass.set_bind_group(0, group);
+                group.set(&mut pass);
                 pass.draw(0..6, 0..1);
             }
         }
@@ -788,25 +796,29 @@ impl Renderer {
                 &self.queue,
                 Some("overlay rect"),
                 bytemuck::cast_slice(&ndc),
-                mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+                mx::BufferUsages::UNIFORM | mx::BufferUsages::STORAGE | mx::BufferUsages::COPY_DST,
             );
-            let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("overlay"),
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: buf.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 1,
-                        resource: mx::BindingResource::TextureView(&scene.textures[tex].view),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 2,
-                        resource: mx::BindingResource::Sampler(&self.sky.sky_sampler),
-                    },
-                ],
-            });
+            let bg = HeapGroup::of(
+                picture_layout(),
+                0,
+                &mx::BindGroupDescriptor {
+                    label: Some("overlay"),
+                    entries: &[
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: buf.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 1,
+                            resource: mx::BindingResource::TextureView(&scene.textures[tex].view),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 2,
+                            resource: mx::BindingResource::Sampler(&self.sky.sky_sampler),
+                        },
+                    ],
+                },
+            );
             if k < scene.overlay_res.len() {
                 scene.overlay_res[k] = (tex, buf, bg, ndc);
             } else {
@@ -1223,7 +1235,7 @@ pub(crate) struct ToneMapping {
     /// into by turns (`adapt_front` is the current one), with their bind groups.
     pub(crate) meter_view: mx::TextureView,
     pub(crate) adapt_views: [mx::TextureView; 2],
-    pub(crate) adapt_bg: [mx::BindGroup; 2],
+    pub(crate) adapt_bg: [HeapGroup; 2],
     pub(crate) adapt_front: usize,
     /// OMSI_DEBUG_EXPOSURE: the adapted metering read back now and then, and logged.
     pub(crate) exposure_log: Option<ExposureLog>,

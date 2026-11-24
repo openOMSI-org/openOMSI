@@ -996,19 +996,23 @@ impl Renderer {
                     ..Default::default()
                 })
                 .expect("mX: a texture view");
-            let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("mip"),
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: mx::BindingResource::TextureView(&src),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 1,
-                        resource: mx::BindingResource::Sampler(&self.mip_sampler),
-                    },
-                ],
-            });
+            let bg = HeapGroup::of(
+                crate::pipelines::mip::MIP.layout(),
+                0,
+                &mx::BindGroupDescriptor {
+                    label: Some("mip"),
+                    entries: &[
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: mx::BindingResource::TextureView(&src),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 1,
+                            resource: mx::BindingResource::Sampler(&self.mip_sampler),
+                        },
+                    ],
+                },
+            );
             let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("mip"),
                 color_attachments: &[Some(mx::RenderPassColorAttachment {
@@ -1024,7 +1028,7 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &bg);
+            bg.set(&mut pass);
             pass.draw(0..3, 0..1);
         }
         self.queue.submit([encoder.finish()]);
