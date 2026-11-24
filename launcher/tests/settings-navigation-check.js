@@ -180,11 +180,29 @@ export async function run(root) {
     assertFavouriteCount(4);
     assert(JSON.stringify(JSON.parse(localStorage.getItem('settings-favourites'))) === JSON.stringify(savedFavourites), 'Visibility changes must preserve saved favourite IDs');
     report.push('PASS visible favourite count follows platform and setting changes without removing saved IDs');
+    await click('[data-settings-category="graphics"]');
     for (const theme of ['dark', 'light']) {
       document.documentElement.dataset.theme = theme;
       assert(root.querySelector('.settings-body').getBoundingClientRect().width > 0, 'Settings content is hidden in ' + theme);
       assert(document.documentElement.scrollWidth <= innerWidth + 1, 'Horizontal page overflow in ' + theme);
     }
+    const optionsCard = root.querySelector('.settings-options-card');
+    const helpButton = root.querySelector('.settings-help');
+    const scrollArea = root.querySelector('.settings-body');
+    assert(getComputedStyle(optionsCard).borderStyle === 'none', 'Settings rows must not be framed by an outlined card');
+    assert(getComputedStyle(helpButton).borderTopWidth === '0px', 'Help actions must match the launcher button style without an outline');
+    assert(getComputedStyle(scrollArea).overflowY === 'auto', 'Settings content must remain scrollable');
+    assert(getComputedStyle(scrollArea).scrollbarWidth === 'none', 'Settings content scrollbar must be visually hidden');
+    assert(getComputedStyle(root.querySelector('.settings-subtabs')).scrollbarWidth === 'none', 'Topic strip scrollbar must be visually hidden');
+    assert(getComputedStyle(root.querySelector('.settings-categories nav')).scrollbarWidth === 'none', 'Category rail scrollbar must be visually hidden');
+    const appMain = root.querySelector('main.main');
+    appMain.classList.add('m-main');
+    assert(getComputedStyle(root.querySelector('.settings-frame')).flexDirection === 'column', 'MobileApp settings should use a horizontal category rail');
+    assert(getComputedStyle(appMain).minHeight === '0px', 'MobileApp settings container must allow its content to scroll within the viewport');
+    assert(root.querySelector('.settings-frame').getBoundingClientRect().height <= appMain.getBoundingClientRect().height + 1, 'Mobile settings layout must stay within its viewport and scroll internally');
+    assert(document.documentElement.scrollWidth <= innerWidth + 1, 'MobileApp settings must not cause horizontal viewport overflow');
+    appMain.classList.remove('m-main');
+    report.push('PASS unframed launcher styling with hidden but functional scrollbars');
     report.push('PASS light/dark layout without horizontal page overflow');
     return report.join('\n');
   } finally {
