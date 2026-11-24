@@ -350,3 +350,51 @@ fn a_bus_without_the_counter_is_reported_at_first_stop() {
     assert!(a.off);
     assert_eq!(a.take_note(), Some(announce::QuietReason::NoBusstopCounter));
 }
+
+#[test]
+fn a_single_recording_hof_is_reported_without_pretending_a_two_recording_layout() {
+    use omsi_sim::timetable_run::{PlannedStop, PlannedTrip, PlayerDuty, StopDir};
+
+    let stop = |name: &str| PlannedStop {
+        object_id: 1,
+        name: name.into(),
+        arr: 0.0,
+        dep: 0.0,
+        position: None,
+        dir: StopDir::default(),
+        stops: true,
+        closed: None,
+    };
+    let trip = PlannedTrip {
+        name: "Trip 1".into(),
+        line: "100".into(),
+        terminus: "Terminus".into(),
+        departure: 0.0,
+        end: 600.0,
+        stops: vec![stop("Stop A"), stop("Stop B")],
+    };
+    let duty = PlayerDuty::new("100".into(), "1".into(), vec![trip], 0, 0, true);
+
+    let mut bus =
+        crate::schedule::tests::script_test_vehicle("", "IBIS_RouteIndex\nIBIS_busstop\n", "");
+    bus.set_var("IBIS_RouteIndex", 0.0);
+    bus.host.hof = Some(std::sync::Arc::new(omsi_vehicle::Hof {
+        info_busstop_lists: vec![vec![
+            "Terminus".into(),
+            "Start".into(),
+            "Stop A".into(),
+            "Stop B".into(),
+        ]],
+        ..Default::default()
+    }));
+
+    let mut a = AutoAnnounce::new();
+    a.step(&duty, &mut bus, 0.0);
+
+    assert_eq!(a.layout, Some((0, Some(LayoutStatus::Single))));
+    assert_eq!(a.pairs, 0);
+    assert_eq!(
+        a.take_note(),
+        Some(announce::QuietReason::SingleRecordingHof)
+    );
+}
