@@ -100,7 +100,8 @@ impl HeadIdle {
         self.yaw = YAW_DEG * strength * wander(t, WANDER_S, 15);
         self.pitch = PITCH_DEG * strength * wander(t, WEIGHT_S, 16);
         // the lean: a horizon only just tilting, at its own rate
-        self.roll = ROLL_DEG * strength * (wave(t, LEAN_S, 0.6) * 0.7 + wander(t, WANDER_S, 17) * 0.3);
+        self.roll =
+            ROLL_DEG * strength * (wave(t, LEAN_S, 0.6) * 0.7 + wander(t, WANDER_S, 17) * 0.3);
     }
 
     /// The head is where it began: nothing is added to the view at all.
@@ -133,7 +134,11 @@ impl Hold {
     /// Tell it whether a control is under the cursor (`reaching`) and move it on by `dt`
     /// seconds; the answer is whether the sway is to wait where it is.
     pub fn step(&mut self, dt: f32, reaching: bool) -> bool {
-        self.left = if reaching { HOLD_S } else { (self.left - dt.max(0.0)).max(0.0) };
+        self.left = if reaching {
+            HOLD_S
+        } else {
+            (self.left - dt.max(0.0)).max(0.0)
+        };
         self.left > 0.0
     }
 }
@@ -207,8 +212,14 @@ mod head_idle_tests {
         // (a tenth of a second is the longest step the sway takes whole, see below)
         let slow = after(0.1, 20.0, 1.0, 1.0);
         let fast = after(1.0 / 60.0, 20.0, 1.0, 1.0);
-        assert!((slow.offset - fast.offset).length() < 0.0005, "{slow:?} {fast:?}");
-        assert!((slow.yaw - fast.yaw).abs() < 0.01 && (slow.roll - fast.roll).abs() < 0.01, "{slow:?} {fast:?}");
+        assert!(
+            (slow.offset - fast.offset).length() < 0.0005,
+            "{slow:?} {fast:?}"
+        );
+        assert!(
+            (slow.yaw - fast.yaw).abs() < 0.01 && (slow.roll - fast.roll).abs() < 0.01,
+            "{slow:?} {fast:?}"
+        );
     }
 
     #[test]
@@ -219,7 +230,12 @@ mod head_idle_tests {
             assert!(head.offset.x.abs() <= SIDE_M + 0.001, "{head:?}");
             assert!(head.offset.y.abs() <= FORE_M + 0.001, "{head:?}");
             assert!(head.offset.z.abs() <= UP_M + 0.001, "{head:?}");
-            assert!(head.yaw.abs() <= YAW_DEG + 0.01 && head.pitch.abs() <= PITCH_DEG + 0.01 && head.roll.abs() <= ROLL_DEG + 0.01, "{head:?}");
+            assert!(
+                head.yaw.abs() <= YAW_DEG + 0.01
+                    && head.pitch.abs() <= PITCH_DEG + 0.01
+                    && head.roll.abs() <= ROLL_DEG + 0.01,
+                "{head:?}"
+            );
         }
     }
 
@@ -237,7 +253,11 @@ mod head_idle_tests {
         // it goes somewhere: at least a third of the way across its own range
         assert!(high - low > SIDE_M, "range {low}..{high}");
         // and it stays around the middle: no walking off to one side
-        assert!((sum / frames as f32).abs() < SIDE_M * 0.25, "mean {}", sum / frames as f32);
+        assert!(
+            (sum / frames as f32).abs() < SIDE_M * 0.25,
+            "mean {}",
+            sum / frames as f32
+        );
     }
 
     #[test]
@@ -253,7 +273,10 @@ mod head_idle_tests {
             }
             before = head.offset.x;
         }
-        assert!(changes >= 10, "the sideways sway turned round {changes} times in a minute");
+        assert!(
+            changes >= 10,
+            "the sideways sway turned round {changes} times in a minute"
+        );
     }
 
     #[test]
@@ -261,8 +284,14 @@ mod head_idle_tests {
         for t in [1.0, 3.7, 9.2, 25.0] {
             let full = after(1.0 / 60.0, t, 1.0, 1.0);
             let half = after(1.0 / 60.0, t, 0.5, 1.0);
-            assert!((half.offset - full.offset * 0.5).length() < 1e-5, "{t}: {half:?} {full:?}");
-            assert!((half.roll - full.roll * 0.5).abs() < 1e-4, "{t}: {half:?} {full:?}");
+            assert!(
+                (half.offset - full.offset * 0.5).length() < 1e-5,
+                "{t}: {half:?} {full:?}"
+            );
+            assert!(
+                (half.roll - full.roll * 0.5).abs() < 1e-4,
+                "{t}: {half:?} {full:?}"
+            );
         }
     }
 
@@ -272,11 +301,20 @@ mod head_idle_tests {
         // and it is the pace of every movement at once, not of one of them)
         let quick = after(1.0 / 60.0, 10.0, 1.0, 2.0);
         let patient = after(1.0 / 60.0, 20.0, 1.0, 1.0);
-        assert!((quick.offset - patient.offset).length() < 0.0005, "{quick:?} {patient:?}");
-        assert!((quick.roll - patient.roll).abs() < 0.01, "{quick:?} {patient:?}");
+        assert!(
+            (quick.offset - patient.offset).length() < 0.0005,
+            "{quick:?} {patient:?}"
+        );
+        assert!(
+            (quick.roll - patient.roll).abs() < 0.01,
+            "{quick:?} {patient:?}"
+        );
         // and a pace further out than the setting can ask for is held at its end
         let silly = after(1.0 / 60.0, 10.0, 1.0, 100.0);
-        assert!((silly.offset - quick.offset).length() < 1e-5, "{silly:?} {quick:?}");
+        assert!(
+            (silly.offset - quick.offset).length() < 1e-5,
+            "{silly:?} {quick:?}"
+        );
     }
 
     #[test]
@@ -284,13 +322,19 @@ mod head_idle_tests {
         let mut jumped = HeadIdle::default();
         jumped.step(2.0, 1.0, 1.0);
         let patient = after(0.1, 0.1, 1.0, 1.0);
-        assert!((jumped.offset - patient.offset).length() < 0.002, "{jumped:?} {patient:?}");
+        assert!(
+            (jumped.offset - patient.offset).length() < 0.002,
+            "{jumped:?} {patient:?}"
+        );
     }
 
     #[test]
     fn a_control_under_the_cursor_holds_the_sway_at_once() {
         let mut hold = Hold::default();
-        assert!(hold.step(1.0 / 60.0, true), "the sway went on with a switch under the cursor");
+        assert!(
+            hold.step(1.0 / 60.0, true),
+            "the sway went on with a switch under the cursor"
+        );
     }
 
     #[test]
@@ -310,6 +354,9 @@ mod head_idle_tests {
             waited += 1.0 / 60.0;
             assert!(waited < 5.0, "the sway never went on again");
         }
-        assert!((waited - HOLD_S).abs() < 0.05, "it waited {waited} s, not {HOLD_S}");
+        assert!(
+            (waited - HOLD_S).abs() < 0.05,
+            "it waited {waited} s, not {HOLD_S}"
+        );
     }
 }

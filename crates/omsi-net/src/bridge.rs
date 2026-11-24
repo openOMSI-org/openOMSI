@@ -22,7 +22,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Public STUN servers (any one answering is enough).
-const STUN_SERVERS: &[&str] = &["stun.l.google.com:19302", "stun.cloudflare.com:3478", "stun1.l.google.com:19302"];
+const STUN_SERVERS: &[&str] = &[
+    "stun.l.google.com:19302",
+    "stun.cloudflare.com:3478",
+    "stun1.l.google.com:19302",
+];
 /// The message relay the rendezvous goes through.
 const RELAY: &str = "https://ntfy.sh";
 const STUN_MAGIC: u32 = 0x2112_A442;
@@ -72,7 +76,13 @@ impl Drop for Bridge {
         self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
         // the router's forwarding goes with the session (it stayed open for its two-hour
         // lease after every game)
-        if let Some(m) = self.shared.lock().unwrap_or_else(|e| e.into_inner()).mapping.take() {
+        if let Some(m) = self
+            .shared
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .mapping
+            .take()
+        {
             upnp_remove(&m);
         }
     }
@@ -82,7 +92,10 @@ impl Drop for Bridge {
 /// anyone reading the topic learns the id (it guards the session's mods, see `lan_mods`).
 fn topic(session: u64) -> String {
     use sha2::{Digest, Sha256};
-    let h = Sha256::new().chain_update(b"omsi2rw-topic").chain_update(session.to_le_bytes()).finalize();
+    let h = Sha256::new()
+        .chain_update(b"omsi2rw-topic")
+        .chain_update(session.to_le_bytes())
+        .finalize();
     format!("omsi2rw-{}", hex(&h[..12]))
 }
 
@@ -94,12 +107,21 @@ fn hex(b: &[u8]) -> String {
 /// a post without it (anybody else writing to the public topic) is ignored.
 fn mac(session: u64, text: &str) -> String {
     use sha2::{Digest, Sha256};
-    let key = Sha256::new().chain_update(b"omsi2rw-relay-key").chain_update(session.to_le_bytes()).finalize();
+    let key = Sha256::new()
+        .chain_update(b"omsi2rw-relay-key")
+        .chain_update(session.to_le_bytes())
+        .finalize();
     let mut k = [0u8; 64];
     k[..32].copy_from_slice(&key);
     let pad = |c: u8| k.map(|b| b ^ c);
-    let inner = Sha256::new().chain_update(pad(0x36)).chain_update(text.as_bytes()).finalize();
-    let outer = Sha256::new().chain_update(pad(0x5c)).chain_update(inner).finalize();
+    let inner = Sha256::new()
+        .chain_update(pad(0x36))
+        .chain_update(text.as_bytes())
+        .finalize();
+    let outer = Sha256::new()
+        .chain_update(pad(0x5c))
+        .chain_update(inner)
+        .finalize();
     hex(&outer[..16])
 }
 
@@ -119,7 +141,9 @@ const MAX_PUNCH: usize = 32;
 
 /// Whether a datagram belongs to the bridge (a STUN answer or a punch), not the game.
 pub fn is_bridge_packet(data: &[u8]) -> bool {
-    data.starts_with(PUNCH) || (data.len() >= 20 && u32::from_be_bytes([data[4], data[5], data[6], data[7]]) == STUN_MAGIC)
+    data.starts_with(PUNCH)
+        || (data.len() >= 20
+            && u32::from_be_bytes([data[4], data[5], data[6], data[7]]) == STUN_MAGIC)
 }
 
 impl Bridge {
@@ -127,31 +151,43 @@ impl Bridge {
     /// joining games; a client posts its own and learns the host's. `local` lists this
     /// machine's own addresses (the LAN ones) with the session's port. Set
     /// `OMSI_NO_BRIDGE=1` to leave the internet alone (tests, a LAN party).
-    pub fn start(host: bool, session: u64, key: Option<Arc<crate::hostkey::HostKey>>, local: Vec<SocketAddr>, port: u16) -> Option<Bridge> {
+    pub fn start(
+        host: bool,
+        session: u64,
+        key: Option<Arc<crate::hostkey::HostKey>>,
+        local: Vec<SocketAddr>,
+        port: u16,
+    ) -> Option<Bridge> {
         if cfg!(test) || omsi_cfg::flags::OMSI_NO_BRIDGE.live_os().is_some() {
             return None;
         }
         let shared = Arc::new(Mutex::new(Shared::default()));
         let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (sh, st) = (shared.clone(), stop.clone());
-        let spawned = std::thread::Builder::new().name("lan bridge".into()).spawn(move || {
-            if host {
-                if let Some((fwd, mapping)) = upnp_forward(port) {
-                    log::info!("LAN bridge: the router forwards {fwd} to this computer (UPnP)");
-                    let mut g = sh.lock().unwrap_or_else(|e| e.into_inner());
-                    g.forwarded = Some(fwd);
-                    g.mapping = Some(mapping);
+        let spawned = std::thread::Builder::new()
+            .name("lan bridge".into())
+            .spawn(move || {
+                if host {
+                    if let Some((fwd, mapping)) = upnp_forward(port) {
+                        log::info!("LAN bridge: the router forwards {fwd} to this computer (UPnP)");
+                        let mut g = sh.lock().unwrap_or_else(|e| e.into_inner());
+                        g.forwarded = Some(fwd);
+                        g.mapping = Some(mapping);
+                    }
                 }
-            }
-            relay_loop(host, session, key.as_deref(), local, &sh, &st);
-        });
+                relay_loop(host, session, key.as_deref(), local, &sh, &st);
+            });
         if spawned.is_err() {
             return None;
         }
         // (resolved once; the servers' addresses do not change during a session)
         let stun: Vec<SocketAddr> = STUN_SERVERS
             .iter()
-            .filter_map(|s| s.to_socket_addrs().ok().and_then(|mut a| a.find(|x| x.is_ipv4())))
+            .filter_map(|s| {
+                s.to_socket_addrs()
+                    .ok()
+                    .and_then(|mut a| a.find(|x| x.is_ipv4()))
+            })
             .collect();
         Some(Bridge {
             shared,
@@ -226,7 +262,11 @@ impl Bridge {
 
     /// Client: the host's addresses the relay has told so far.
     pub fn host_addrs(&self) -> Vec<SocketAddr> {
-        self.shared.lock().unwrap_or_else(|e| e.into_inner()).host_addrs.clone()
+        self.shared
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .host_addrs
+            .clone()
     }
 }
 
@@ -263,13 +303,24 @@ fn parse_mapped(d: &[u8]) -> Option<SocketAddr> {
 }
 
 /// The relay side, on its own thread: post our addresses, read the other side's.
-fn relay_loop(host: bool, session: u64, key: Option<&crate::hostkey::HostKey>, local: Vec<SocketAddr>, sh: &Arc<Mutex<Shared>>, stop: &std::sync::atomic::AtomicBool) {
+fn relay_loop(
+    host: bool,
+    session: u64,
+    key: Option<&crate::hostkey::HostKey>,
+    local: Vec<SocketAddr>,
+    sh: &Arc<Mutex<Shared>>,
+    stop: &std::sync::atomic::AtomicBool,
+) {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(5))
         .timeout_read(Duration::from_secs(8))
         .user_agent("openOMSI")
         .build();
-    let (mine, theirs) = if host { (topic(session), format!("{}-c", topic(session))) } else { (format!("{}-c", topic(session)), topic(session)) };
+    let (mine, theirs) = if host {
+        (topic(session), format!("{}-c", topic(session)))
+    } else {
+        (format!("{}-c", topic(session)), topic(session))
+    };
     let mut last_post: Option<(Instant, String)> = None;
     // (the host reposts every quarter of an hour: a joining game reads the last half hour)
     let mut since = "30m".to_string();
@@ -287,7 +338,12 @@ fn relay_loop(host: bool, session: u64, key: Option<&crate::hostkey::HostKey>, l
         // the router's forwarding, asked again before its lease runs out
         if host && renewed.elapsed() > RENEW_EVERY {
             renewed = Instant::now();
-            let port = sh.lock().unwrap_or_else(|e| e.into_inner()).mapping.as_ref().map(|m| m.port);
+            let port = sh
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .mapping
+                .as_ref()
+                .map(|m| m.port);
             if let Some(port) = port {
                 match upnp_forward(port) {
                     Some((fwd, mapping)) => {
@@ -295,7 +351,9 @@ fn relay_loop(host: bool, session: u64, key: Option<&crate::hostkey::HostKey>, l
                         g.forwarded = Some(fwd);
                         g.mapping = Some(mapping);
                     }
-                    None => log::info!("LAN bridge: the router did not renew the forwarding of port {port}"),
+                    None => log::info!(
+                        "LAN bridge: the router did not renew the forwarding of port {port}"
+                    ),
                 }
             }
         }
@@ -313,10 +371,17 @@ fn relay_loop(host: bool, session: u64, key: Option<&crate::hostkey::HostKey>, l
         addrs.dedup();
         // (the player's nonce is its identity towards the host and never leaves the
         // session: anyone reading the topic could otherwise take its place)
-        let text = addrs.iter().take(8).map(|a| a.to_string()).collect::<Vec<_>>().join(",");
+        let text = addrs
+            .iter()
+            .take(8)
+            .map(|a| a.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
         let due = match &last_post {
             None => true,
-            Some((t, prev)) => *prev != text || t.elapsed() > Duration::from_secs(if host { 900 } else { 10 }),
+            Some((t, prev)) => {
+                *prev != text || t.elapsed() > Duration::from_secs(if host { 900 } else { 10 })
+            }
         };
         // (a client posts once it knows its public address, or after 3 s without it)
         let ready = host || public.is_some() || started.elapsed() > Duration::from_secs(3);
@@ -327,12 +392,24 @@ fn relay_loop(host: bool, session: u64, key: Option<&crate::hostkey::HostKey>, l
                 (true, None) => String::new(),
                 (false, _) => signed(session, &format!("C - {text}")),
             };
-            match if post.is_empty() { Ok(()) } else { agent.post(&format!("{RELAY}/{mine}")).set("Cache", "yes").send_string(&post).map(|_| ()) } {
+            match if post.is_empty() {
+                Ok(())
+            } else {
+                agent
+                    .post(&format!("{RELAY}/{mine}"))
+                    .set("Cache", "yes")
+                    .send_string(&post)
+                    .map(|_| ())
+            } {
                 Ok(_) => last_post = Some((Instant::now(), text.clone())),
                 Err(e) => {
-                    sh.lock().unwrap_or_else(|e| e.into_inner()).note = format!("relay unreachable ({e})");
+                    sh.lock().unwrap_or_else(|e| e.into_inner()).note =
+                        format!("relay unreachable ({e})");
                     // (tried again soon, not after the full quarter of an hour)
-                    last_post = Some((Instant::now() - Duration::from_secs(if host { 840 } else { 5 }), text.clone()));
+                    last_post = Some((
+                        Instant::now() - Duration::from_secs(if host { 840 } else { 5 }),
+                        text.clone(),
+                    ));
                     backoff = refused(backoff);
                     last_poll = Some(Instant::now());
                 }
@@ -343,14 +420,20 @@ fn relay_loop(host: bool, session: u64, key: Option<&crate::hostkey::HostKey>, l
         let poll_due = last_poll.is_none_or(|t| t.elapsed() >= every);
         let polled = if poll_due {
             last_poll = Some(Instant::now());
-            match agent.get(&format!("{RELAY}/{theirs}/json?poll=1&since={since}")).call() {
+            match agent
+                .get(&format!("{RELAY}/{theirs}/json?poll=1&since={since}"))
+                .call()
+            {
                 Ok(r) => {
                     backoff = Duration::ZERO;
                     Some(r)
                 }
                 Err(e) => {
                     backoff = refused(backoff);
-                    log::debug!("LAN bridge: relay: {e} (next try in {:.0} s)", backoff.as_secs_f32());
+                    log::debug!(
+                        "LAN bridge: relay: {e} (next try in {:.0} s)",
+                        backoff.as_secs_f32()
+                    );
                     None
                 }
             }
@@ -360,14 +443,19 @@ fn relay_loop(host: bool, session: u64, key: Option<&crate::hostkey::HostKey>, l
         if let Some(resp) = polled {
             let body = resp.into_string().unwrap_or_default();
             for line in body.lines() {
-                let Some(msg) = json_field(line, "message") else { continue };
+                let Some(msg) = json_field(line, "message") else {
+                    continue;
+                };
                 if let Some(id) = json_field(line, "id") {
                     if !seen.insert(id.clone()) {
                         continue;
                     }
                     since = id;
                 }
-                let Some((kind, found)) = relay_post(host, session, &msg, crate::hostkey::now()) else { continue };
+                let Some((kind, found)) = relay_post(host, session, &msg, crate::hostkey::now())
+                else {
+                    continue;
+                };
                 let mut s = sh.lock().unwrap_or_else(|e| e.into_inner());
                 if host && kind == "C" {
                     if s.punch.len() < MAX_PUNCH {
@@ -392,7 +480,12 @@ fn relay_loop(host: bool, session: u64, key: Option<&crate::hostkey::HostKey>, l
     }
 }
 
-fn relay_post(host: bool, session: u64, msg: &str, now: u64) -> Option<(&'static str, Vec<SocketAddr>)> {
+fn relay_post(
+    host: bool,
+    session: u64,
+    msg: &str,
+    now: u64,
+) -> Option<(&'static str, Vec<SocketAddr>)> {
     let (kind, list) = if host {
         let text = verified(session, msg)?;
         ("C", text.strip_prefix("C ")?.split_once(' ')?.1)
@@ -404,7 +497,13 @@ fn relay_post(host: bool, session: u64, msg: &str, now: u64) -> Option<(&'static
         }
         ("H", list)
     };
-    Some((kind, list.split(',').filter_map(|a| a.trim().parse().ok()).take(8).collect()))
+    Some((
+        kind,
+        list.split(',')
+            .filter_map(|a| a.trim().parse().ok())
+            .take(8)
+            .collect(),
+    ))
 }
 
 /// The wait after the relay refused or failed: 10 s, doubled each time up to 5 minutes.
@@ -419,9 +518,16 @@ pub fn post_tunnel(key: &crate::hostkey::HostKey, url: &str) {
     if cfg!(test) || omsi_cfg::flags::OMSI_NO_BRIDGE.live_os().is_some() {
         return;
     }
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(6)).user_agent("openOMSI").build();
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(6))
+        .user_agent("openOMSI")
+        .build();
     let post = key.seal("relay", &format!("W {} {url}", crate::hostkey::now()));
-    if let Err(e) = agent.post(&format!("{RELAY}/{}", topic(key.session()))).set("Cache", "yes").send_string(&post) {
+    if let Err(e) = agent
+        .post(&format!("{RELAY}/{}", topic(key.session())))
+        .set("Cache", "yes")
+        .send_string(&post)
+    {
         log::warn!("LAN bridge: the tunnel address could not be posted: {e}");
     }
 }
@@ -432,8 +538,16 @@ pub fn lookup_tunnel(session: u64) -> Option<String> {
     if cfg!(test) || omsi_cfg::flags::OMSI_NO_BRIDGE.live_os().is_some() {
         return None;
     }
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("openOMSI").build();
-    let body = agent.get(&format!("{RELAY}/{}/json?poll=1&since=6h", topic(session))).call().ok()?.into_string().ok()?;
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(8))
+        .user_agent("openOMSI")
+        .build();
+    let body = agent
+        .get(&format!("{RELAY}/{}/json?poll=1&since=6h", topic(session)))
+        .call()
+        .ok()?
+        .into_string()
+        .ok()?;
     tunnel_of(session, &body, crate::hostkey::now())
 }
 
@@ -441,10 +555,16 @@ fn tunnel_of(session: u64, body: &str, now: u64) -> Option<String> {
     body.lines()
         .filter_map(|l| json_field(l, "message"))
         .filter_map(|m| {
-            let (at, url) = crate::hostkey::opened(session, "relay", &m)?.strip_prefix("W ")?.split_once(' ')?;
+            let (at, url) = crate::hostkey::opened(session, "relay", &m)?
+                .strip_prefix("W ")?
+                .split_once(' ')?;
             let at: u64 = at.parse().ok()?;
             let url = url.trim();
-            (crate::hostkey::fresh(at, now, crate::hostkey::MAX_AGE) && url.starts_with("https://") && url.len() < 300 && !url.contains(char::is_whitespace)).then(|| (at, url.to_string()))
+            (crate::hostkey::fresh(at, now, crate::hostkey::MAX_AGE)
+                && url.starts_with("https://")
+                && url.len() < 300
+                && !url.contains(char::is_whitespace))
+            .then(|| (at, url.to_string()))
         })
         .max_by_key(|(at, _)| *at)
         .map(|(_, u)| u)
@@ -485,9 +605,11 @@ const RENEW_EVERY: Duration = Duration::from_secs(20 * 60);
 /// reachable at from the internet then.
 fn upnp_forward(port: u16) -> Option<(SocketAddr, Mapping)> {
     let sock = UdpSocket::bind(("0.0.0.0", 0)).ok()?;
-    sock.set_read_timeout(Some(Duration::from_millis(1500))).ok()?;
+    sock.set_read_timeout(Some(Duration::from_millis(1500)))
+        .ok()?;
     let search = "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\nST: urn:schemas-upnp-org:device:InternetGatewayDevice:1\r\n\r\n";
-    sock.send_to(search.as_bytes(), "239.255.255.250:1900").ok()?;
+    sock.send_to(search.as_bytes(), "239.255.255.250:1900")
+        .ok()?;
     let mut buf = [0u8; 2048];
     let gateway = default_gateway();
     let deadline = Instant::now() + Duration::from_secs(3);
@@ -499,10 +621,15 @@ fn upnp_forward(port: u16) -> Option<(SocketAddr, Mapping)> {
         let reply = String::from_utf8_lossy(&buf[..n]).to_string();
         let location = reply.lines().find_map(|l| {
             let (k, v) = l.split_once(':')?;
-            k.trim().eq_ignore_ascii_case("location").then(|| v.trim().to_string())
+            k.trim()
+                .eq_ignore_ascii_case("location")
+                .then(|| v.trim().to_string())
         });
         if let (SocketAddr::V4(f), Some(loc)) = (from, location) {
-            if router_ip(*f.ip()) && gateway.is_none_or(|g| g == *f.ip()) && http_host(&loc) == Some(*f.ip()) {
+            if router_ip(*f.ip())
+                && gateway.is_none_or(|g| g == *f.ip())
+                && http_host(&loc) == Some(*f.ip())
+            {
                 break (from, loc);
             }
         }
@@ -512,26 +639,44 @@ fn upnp_forward(port: u16) -> Option<(SocketAddr, Mapping)> {
         SocketAddr::V4(v) => *v.ip(),
         SocketAddr::V6(_) => return None,
     };
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(4)).build();
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(4))
+        .build();
     let desc = agent.get(&location).call().ok()?.into_string().ok()?;
     // the WAN connection service and its control address
-    let (service, control) = ["urn:schemas-upnp-org:service:WANIPConnection:1", "urn:schemas-upnp-org:service:WANIPConnection:2", "urn:schemas-upnp-org:service:WANPPPConnection:1"]
-        .iter()
-        .find_map(|svc| {
-            let at = desc.find(svc)?;
-            let rest = &desc[at..];
-            let c0 = rest.find("<controlURL>")? + "<controlURL>".len();
-            let c1 = rest[c0..].find("</controlURL>")? + c0;
-            Some((svc.to_string(), rest[c0..c1].trim().to_string()))
-        })?;
+    let (service, control) = [
+        "urn:schemas-upnp-org:service:WANIPConnection:1",
+        "urn:schemas-upnp-org:service:WANIPConnection:2",
+        "urn:schemas-upnp-org:service:WANPPPConnection:1",
+    ]
+    .iter()
+    .find_map(|svc| {
+        let at = desc.find(svc)?;
+        let rest = &desc[at..];
+        let c0 = rest.find("<controlURL>")? + "<controlURL>".len();
+        let c1 = rest[c0..].find("</controlURL>")? + c0;
+        Some((svc.to_string(), rest[c0..c1].trim().to_string()))
+    })?;
     let base = {
         let after = location.find("://").map(|i| i + 3).unwrap_or(0);
-        let end = location[after..].find('/').map(|i| i + after).unwrap_or(location.len());
+        let end = location[after..]
+            .find('/')
+            .map(|i| i + after)
+            .unwrap_or(location.len());
         location[..end].to_string()
     };
-    let url = if control.contains("://") { control } else { format!("{base}{}{control}", if control.starts_with('/') { "" } else { "/" }) };
+    let url = if control.contains("://") {
+        control
+    } else {
+        format!(
+            "{base}{}{control}",
+            if control.starts_with('/') { "" } else { "/" }
+        )
+    };
     if http_host(&url) != Some(router_v4) {
-        log::info!("LAN bridge: the router's control address {url:?} is not the router's own; no forwarding asked");
+        log::info!(
+            "LAN bridge: the router's control address {url:?} is not the router's own; no forwarding asked"
+        );
         return None;
     }
     // our address towards the router
@@ -542,7 +687,9 @@ fn upnp_forward(port: u16) -> Option<(SocketAddr, Mapping)> {
         _ => return None,
     };
     let soap = |action: &str, args: &str| -> Option<String> {
-        let body = format!("<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\"><s:Body><u:{action} xmlns:u=\"{service}\">{args}</u:{action}></s:Body></s:Envelope>");
+        let body = format!(
+            "<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\"><s:Body><u:{action} xmlns:u=\"{service}\">{args}</u:{action}></s:Body></s:Envelope>"
+        );
         agent
             .post(&url)
             .set("Content-Type", "text/xml; charset=\"utf-8\"")
@@ -554,15 +701,23 @@ fn upnp_forward(port: u16) -> Option<(SocketAddr, Mapping)> {
     };
     soap(
         "AddPortMapping",
-        &format!("<NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort><NewProtocol>UDP</NewProtocol><NewInternalPort>{port}</NewInternalPort><NewInternalClient>{me}</NewInternalClient><NewEnabled>1</NewEnabled><NewPortMappingDescription>openOMSI</NewPortMappingDescription><NewLeaseDuration>{LEASE}</NewLeaseDuration>"),
+        &format!(
+            "<NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort><NewProtocol>UDP</NewProtocol><NewInternalPort>{port}</NewInternalPort><NewInternalClient>{me}</NewInternalClient><NewEnabled>1</NewEnabled><NewPortMappingDescription>openOMSI</NewPortMappingDescription><NewLeaseDuration>{LEASE}</NewLeaseDuration>"
+        ),
     )?;
     // the same port over TCP: the host's mods go to the joining players that way (with the
     // UDP port alone forwarded they timed out and were never fetched)
     let _ = soap(
         "AddPortMapping",
-        &format!("<NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort><NewProtocol>TCP</NewProtocol><NewInternalPort>{port}</NewInternalPort><NewInternalClient>{me}</NewInternalClient><NewEnabled>1</NewEnabled><NewPortMappingDescription>openOMSI mods</NewPortMappingDescription><NewLeaseDuration>{LEASE}</NewLeaseDuration>"),
+        &format!(
+            "<NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort><NewProtocol>TCP</NewProtocol><NewInternalPort>{port}</NewInternalPort><NewInternalClient>{me}</NewInternalClient><NewEnabled>1</NewEnabled><NewPortMappingDescription>openOMSI mods</NewPortMappingDescription><NewLeaseDuration>{LEASE}</NewLeaseDuration>"
+        ),
     );
-    let mapping = Mapping { url: url.clone(), service: service.clone(), port };
+    let mapping = Mapping {
+        url: url.clone(),
+        service: service.clone(),
+        port,
+    };
     let ext = soap("GetExternalIPAddress", "")?;
     let a = ext.find("<NewExternalIPAddress>")? + "<NewExternalIPAddress>".len();
     let b = ext[a..].find('<')? + a;
@@ -585,27 +740,47 @@ fn gateway_of_system() -> Option<Ipv4Addr> {
     let table = std::fs::read_to_string("/proc/net/route").ok()?;
     table.lines().skip(1).find_map(|l| {
         let f: Vec<&str> = l.split_whitespace().collect();
-        (f.len() > 2 && f[1] == "00000000").then(|| u32::from_str_radix(f[2], 16).ok().map(|g| Ipv4Addr::from(g.swap_bytes())))?
+        (f.len() > 2 && f[1] == "00000000").then(|| {
+            u32::from_str_radix(f[2], 16)
+                .ok()
+                .map(|g| Ipv4Addr::from(g.swap_bytes()))
+        })?
     })
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 fn gateway_of_system() -> Option<Ipv4Addr> {
-    let out = std::process::Command::new("route").args(["-n", "get", "default"]).output().ok()?;
-    String::from_utf8_lossy(&out.stdout).lines().find_map(|l| l.trim().strip_prefix("gateway:").and_then(|g| g.trim().parse().ok()))
+    let out = std::process::Command::new("route")
+        .args(["-n", "get", "default"])
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&out.stdout).lines().find_map(|l| {
+        l.trim()
+            .strip_prefix("gateway:")
+            .and_then(|g| g.trim().parse().ok())
+    })
 }
 
 #[cfg(windows)]
 fn gateway_of_system() -> Option<Ipv4Addr> {
     use std::os::windows::process::CommandExt;
-    let out = std::process::Command::new("route").args(["print", "-4", "0.0.0.0"]).creation_flags(0x0800_0000).output().ok()?;
+    let out = std::process::Command::new("route")
+        .args(["print", "-4", "0.0.0.0"])
+        .creation_flags(0x0800_0000)
+        .output()
+        .ok()?;
     String::from_utf8_lossy(&out.stdout).lines().find_map(|l| {
         let f: Vec<&str> = l.split_whitespace().collect();
         (f.len() >= 3 && f[0] == "0.0.0.0" && f[1] == "0.0.0.0").then(|| f[2].parse().ok())?
     })
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd", windows)))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+    windows
+)))]
 fn gateway_of_system() -> Option<Ipv4Addr> {
     None
 }
@@ -627,21 +802,46 @@ fn http_host(url: &str) -> Option<Ipv4Addr> {
 
 fn public_ipv4(ip: Ipv4Addr) -> bool {
     let [a, b, _, _] = ip.octets();
-    !(ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_unspecified() || ip.is_broadcast() || ip.is_multicast() || ip.is_documentation() || a == 0 || a >= 240 || (a == 100 && (64..128).contains(&b)))
+    !(ip.is_private()
+        || ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_unspecified()
+        || ip.is_broadcast()
+        || ip.is_multicast()
+        || ip.is_documentation()
+        || a == 0
+        || a >= 240
+        || (a == 100 && (64..128).contains(&b)))
 }
 
 /// Take a port forwarding back (UDP and TCP), briefly: the game is ending.
 fn upnp_remove(m: &Mapping) {
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(2)).build();
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(2))
+        .build();
     for proto in ["UDP", "TCP"] {
-        let body = format!("<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\"><s:Body><u:DeletePortMapping xmlns:u=\"{}\"><NewRemoteHost></NewRemoteHost><NewExternalPort>{}</NewExternalPort><NewProtocol>{proto}</NewProtocol></u:DeletePortMapping></s:Body></s:Envelope>", m.service, m.port);
+        let body = format!(
+            "<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\"><s:Body><u:DeletePortMapping xmlns:u=\"{}\"><NewRemoteHost></NewRemoteHost><NewExternalPort>{}</NewExternalPort><NewProtocol>{proto}</NewProtocol></u:DeletePortMapping></s:Body></s:Envelope>",
+            m.service, m.port
+        );
         let ok = agent
             .post(&m.url)
             .set("Content-Type", "text/xml; charset=\"utf-8\"")
-            .set("SOAPAction", &format!("\"{}#DeletePortMapping\"", m.service))
+            .set(
+                "SOAPAction",
+                &format!("\"{}#DeletePortMapping\"", m.service),
+            )
             .send_string(&body)
             .is_ok();
-        log::info!("LAN bridge: the router's {proto} forwarding of port {} {}", m.port, if ok { "was taken back" } else { "could not be taken back" });
+        log::info!(
+            "LAN bridge: the router's {proto} forwarding of port {} {}",
+            m.port,
+            if ok {
+                "was taken back"
+            } else {
+                "could not be taken back"
+            }
+        );
     }
 }
 
@@ -678,7 +878,16 @@ mod tests {
         assert_eq!(http_host("http://router.lan/desc.xml"), None);
         assert_eq!(http_host("file:///etc/passwd"), None);
         assert!(public_ipv4("81.2.3.4".parse().unwrap()));
-        for bad in ["10.0.0.1", "127.0.0.1", "100.64.1.1", "0.0.0.0", "255.255.255.255", "224.0.0.1", "169.254.1.1", "203.0.113.5"] {
+        for bad in [
+            "10.0.0.1",
+            "127.0.0.1",
+            "100.64.1.1",
+            "0.0.0.0",
+            "255.255.255.255",
+            "224.0.0.1",
+            "169.254.1.1",
+            "203.0.113.5",
+        ] {
             assert!(!public_ipv4(bad.parse().unwrap()), "{bad}");
         }
     }
@@ -687,7 +896,10 @@ mod tests {
     fn relay_lines_are_read() {
         let l = r#"{"id":"abc123","time":1,"event":"message","topic":"t","message":"H 00000000000000ff 1.2.3.4:27015,192.168.1.2:27015"}"#;
         assert_eq!(json_field(l, "id").as_deref(), Some("abc123"));
-        assert_eq!(json_field(l, "message").as_deref(), Some("H 00000000000000ff 1.2.3.4:27015,192.168.1.2:27015"));
+        assert_eq!(
+            json_field(l, "message").as_deref(),
+            Some("H 00000000000000ff 1.2.3.4:27015,192.168.1.2:27015")
+        );
     }
 }
 
@@ -711,7 +923,10 @@ mod relay_tests {
     #[test]
     fn relay_posts_are_signed_by_the_session() {
         let post = signed(0xABCDEF, "W 0 https://a.trycloudflare.com");
-        assert_eq!(verified(0xABCDEF, &post), Some("W 0 https://a.trycloudflare.com"));
+        assert_eq!(
+            verified(0xABCDEF, &post),
+            Some("W 0 https://a.trycloudflare.com")
+        );
         // another session's key, a changed text, a post without a MAC
         assert_eq!(verified(0xABCDEE, &post), None);
         assert_eq!(verified(0xABCDEF, &post.replace("a.try", "b.try")), None);
@@ -730,13 +945,25 @@ mod relay_tests {
         let other = crate::hostkey::HostKey::generate().unwrap();
         let s = key.session();
         let real = key.seal("relay", "H 1000 1.2.3.4:27015");
-        assert_eq!(relay_post(false, s, &real, 1000), Some(("H", vec!["1.2.3.4:27015".parse().unwrap()])));
+        assert_eq!(
+            relay_post(false, s, &real, 1000),
+            Some(("H", vec!["1.2.3.4:27015".parse().unwrap()]))
+        );
         assert!(relay_post(false, s, &real, 1000 + 7300).is_some());
         assert_eq!(relay_post(false, s, &real, 1000 + 25 * 3600), None);
-        assert_eq!(relay_post(false, s, &other.seal("relay", "H 1000 6.6.6.6:27015"), 1000), None);
-        assert_eq!(relay_post(false, s, &signed(s, "H - 6.6.6.6:27015"), 1000), None);
+        assert_eq!(
+            relay_post(false, s, &other.seal("relay", "H 1000 6.6.6.6:27015"), 1000),
+            None
+        );
+        assert_eq!(
+            relay_post(false, s, &signed(s, "H - 6.6.6.6:27015"), 1000),
+            None
+        );
         assert_eq!(relay_post(true, s, &real, 1000), None);
-        assert_eq!(relay_post(true, s, &signed(s, "C - 5.6.7.8:4000"), 1000), Some(("C", vec!["5.6.7.8:4000".parse().unwrap()])));
+        assert_eq!(
+            relay_post(true, s, &signed(s, "C - 5.6.7.8:4000"), 1000),
+            Some(("C", vec!["5.6.7.8:4000".parse().unwrap()]))
+        );
     }
 
     #[test]
@@ -752,9 +979,18 @@ mod relay_tests {
             relay_line(&key.seal("relay", "W 1500 http://plain.example")),
         ]
         .join("\n");
-        assert_eq!(tunnel_of(s, &body, 2100).as_deref(), Some("https://new.trycloudflare.com"));
-        assert_eq!(tunnel_of(s, &body, 2000 + 2 * 3600).as_deref(), Some("https://new.trycloudflare.com"));
+        assert_eq!(
+            tunnel_of(s, &body, 2100).as_deref(),
+            Some("https://new.trycloudflare.com")
+        );
+        assert_eq!(
+            tunnel_of(s, &body, 2000 + 2 * 3600).as_deref(),
+            Some("https://new.trycloudflare.com")
+        );
         assert_eq!(tunnel_of(s, &body, 2000 + 25 * 3600), None);
-        assert_eq!(tunnel_of(other.session(), &body, 3000).as_deref(), Some("https://evil.trycloudflare.com"));
+        assert_eq!(
+            tunnel_of(other.session(), &body, 3000).as_deref(),
+            Some("https://evil.trycloudflare.com")
+        );
     }
 }

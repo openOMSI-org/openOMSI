@@ -1100,9 +1100,10 @@ fn object_lamp(
     // names one of its lights, `[trafficlight]` or not - see `names_traffic_light`;
     // a mod lamp without the keyword sat at its "off" picture, blinking yellow.
     // Objects with textures of their own to choose stay ordinary objects.)
-    let child_lamp = o
-        .lamp_parent
-        .is_some_and(|p| index.traffic_light_parents.contains(&p))
+    let has_switch = ot.sco.path_switch_dir.iter().any(|d| d.is_some());
+    let child_lamp = !has_switch
+        && o.lamp_parent
+            .is_some_and(|p| index.traffic_light_parents.contains(&p))
         && omsi_world::map_index::names_traffic_light(&o.extra)
         && ot.dynamic_textures.is_empty()
         && !ot

@@ -4425,6 +4425,11 @@
 "Lights on in a downpour": "大雨時窗戶亮燈"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "白天下大雨時，天色暗到需要開燈，部分房屋的窗戶會亮起燈光"
 
+"Buses of this session": "本次工作階段的公車"
+"every bus": "所有車輛"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "玩家可駕駛的車輛，用分號 ; 分隔：資料夾名如 MAN_SD200 或車輛檔案。駕駛其他車輛的玩家將被請離。留空：所有車輛。"
+"only these buses can be driven here ({list})": "此處只能駕駛這些公車 ({list})"
+
 "Read the map's passenger numbers exactly": "精確讀取地圖乘客數量"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "乘客：地圖設定為0.7的站點在密度相乘前保留0.7人而不是向上取整為1；關閉：OMSI 2原有四捨五入"
 "Load a situation...": "載入情境..."

@@ -112,8 +112,16 @@ impl Spot {
 
 /// What an object is to the ambience, if anything.
 pub fn classify(sco: &SceneryObject) -> Option<Spot> {
-    let stem = sco.path.file_stem().map(|s| s.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-    let groups: Vec<String> = sco.groups.iter().map(|g| g.trim().to_ascii_lowercase()).collect();
+    let stem = sco
+        .path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    let groups: Vec<String> = sco
+        .groups
+        .iter()
+        .map(|g| g.trim().to_ascii_lowercase())
+        .collect();
     let name = sco.friendly_name.to_ascii_lowercase();
     classify_by(&stem, &groups, &name, sco.sound.is_some())
 }
@@ -121,7 +129,11 @@ pub fn classify(sco: &SceneryObject) -> Option<Spot> {
 /// [`classify`] on its pieces: the file's stem, the groups and the friendly name (all lower
 /// case), and whether the object has a `[sound]` of its own.
 pub fn classify_by(stem: &str, groups: &[String], name: &str, own_sound: bool) -> Option<Spot> {
-    let group = |g: &str| groups.iter().any(|x| x == g || x.starts_with(&format!("{g} ")));
+    let group = |g: &str| {
+        groups
+            .iter()
+            .any(|x| x == g || x.starts_with(&format!("{g} ")))
+    };
     let says = |words: &[&str]| words.iter().any(|w| name.contains(w));
     if group("ambient sounds") {
         return Some(if stem.contains("forest") || stem.contains("wald") {
@@ -138,8 +150,24 @@ pub fn classify_by(stem: &str, groups: &[String], name: &str, own_sound: bool) -
         return Some(Spot::OwnSound);
     }
     // (a sign or a road named after a church is not one)
-    let signs = groups.iter().any(|g| g.contains("sign") || g.contains("zeichen") || g.contains("road objects") || g.contains("markings"));
-    let named_church = !signs && (name.starts_with("church") || name.starts_with("st ") && name.contains("church") || says(&["cathedral", " church", "chapel", "kirche", "kapelle", "münster", "dom "]));
+    let signs = groups.iter().any(|g| {
+        g.contains("sign")
+            || g.contains("zeichen")
+            || g.contains("road objects")
+            || g.contains("markings")
+    });
+    let named_church = !signs
+        && (name.starts_with("church")
+            || name.starts_with("st ") && name.contains("church")
+            || says(&[
+                "cathedral",
+                " church",
+                "chapel",
+                "kirche",
+                "kapelle",
+                "münster",
+                "dom ",
+            ]));
     if group("church") || group("churches") || group("kirche") || group("kirchen") || named_church {
         let catholic = says(&["kath", "cathol", "roman"]);
         let protestant = says(&["ev.", "evang", "protest", "luther"]) || name.starts_with("ev ");
@@ -151,41 +179,87 @@ pub fn classify_by(stem: &str, groups: &[String], name: &str, own_sound: bool) -
             Spot::Church
         });
     }
-    if group("stations") || group("bahnhof") || group("bahnhöfe") || (!signs && says(&["train station", "railway station", "s-bahnhof", "u-bahnhof"])) {
-        return Some(if says(&["s-bhf", "s-bahn"]) || stem.starts_with("s-bhf") { Spot::SBahnStation } else { Spot::Station });
+    if group("stations")
+        || group("bahnhof")
+        || group("bahnhöfe")
+        || (!signs && says(&["train station", "railway station", "s-bahnhof", "u-bahnhof"]))
+    {
+        return Some(if says(&["s-bhf", "s-bahn"]) || stem.starts_with("s-bhf") {
+            Spot::SBahnStation
+        } else {
+            Spot::Station
+        });
     }
     if group("education") || group("schools") {
         // (filed under "Education" too: the sports halls, the pool, the sports ground)
         if says(&["kindergarten", "kita", "nursery"]) {
             return Some(Spot::Kindergarten);
         }
-        if says(&["swimming pool", "swimming-pool", "freibad", "schwimmbad", "lido", "open air pool"]) {
+        if says(&[
+            "swimming pool",
+            "swimming-pool",
+            "freibad",
+            "schwimmbad",
+            "lido",
+            "open air pool",
+        ]) {
             return Some(Spot::Pool);
         }
         if says(&["tennis"]) {
             return Some(Spot::Tennis);
         }
-        if says(&["sports ground", "sportsground", "sportplatz", "football", "stadium", "stadion"]) {
+        if says(&[
+            "sports ground",
+            "sportsground",
+            "sportplatz",
+            "football",
+            "stadium",
+            "stadion",
+        ]) {
             return Some(Spot::SportsGround);
         }
-        if says(&["school", "schule", "schulzentrum", "gymnasium,"]) && !says(&["gymnasium, concrete", "gym hall", "sporthalle", "turnhalle"]) {
+        if says(&["school", "schule", "schulzentrum", "gymnasium,"])
+            && !says(&["gymnasium, concrete", "gym hall", "sporthalle", "turnhalle"])
+        {
             return Some(Spot::School);
         }
         return None;
     }
-    if says(&["petrol station", "gas station", "filling station", "tankstelle"]) {
+    if says(&[
+        "petrol station",
+        "gas station",
+        "filling station",
+        "tankstelle",
+    ]) {
         return Some(Spot::PetrolStation);
     }
     if says(&["supermarket", "supermarkt", "kaufhalle", "kaufland"]) {
         return Some(Spot::Supermarket);
     }
-    if says(&["snack bar", "imbiss", "ice cream parlour", "ice-cream parlour", "ice cream parlor", "eisdiele", "chip shop", "takeaway", "take-away"]) {
+    if says(&[
+        "snack bar",
+        "imbiss",
+        "ice cream parlour",
+        "ice-cream parlour",
+        "ice cream parlor",
+        "eisdiele",
+        "chip shop",
+        "takeaway",
+        "take-away",
+    ]) {
         return Some(Spot::SnackBar);
     }
     if says(&["bus depot", "betriebshof", "omnibushof", "bus garage"]) {
         return Some(Spot::BusDepot);
     }
-    if says(&["fitter's shop", "fitters shop", "schlosserei", "metalwork", "blacksmith", "schmiede"]) {
+    if says(&[
+        "fitter's shop",
+        "fitters shop",
+        "schlosserei",
+        "metalwork",
+        "blacksmith",
+        "schmiede",
+    ]) {
         return Some(Spot::Workshop);
     }
     if says(&["substation", "transformer", "umspannwerk", "trafostation"]) {
@@ -194,7 +268,9 @@ pub fn classify_by(stem: &str, groups: &[String], name: &str, own_sound: bool) -
     if group("animals") && says(&["cow", "kuh", "kühe", "cattle", "rinder"]) {
         return Some(Spot::Cows);
     }
-    if (group("agricultural") || group("agriculture") || group("landwirtschaft")) && says(&["barn", "scheune", "stall", "farm", "hof"]) {
+    if (group("agricultural") || group("agriculture") || group("landwirtschaft"))
+        && says(&["barn", "scheune", "stall", "farm", "hof"])
+    {
         return Some(Spot::Farm);
     }
     if group("road works") || group("baustelle") {
@@ -208,7 +284,9 @@ pub fn classify_by(stem: &str, groups: &[String], name: &str, own_sound: bool) -
     if says(&["pelican crossing", "puffin crossing", "toucan crossing"]) {
         return Some(Spot::PedestrianSignal);
     }
-    if group("traffic lights") && (stem.starts_with("ampel_mensch") || says(&["traffic light humans", "pedestrian"])) {
+    if group("traffic lights")
+        && (stem.starts_with("ampel_mensch") || says(&["traffic light humans", "pedestrian"]))
+    {
         return Some(Spot::PedestrianSignal);
     }
     None
@@ -217,15 +295,36 @@ pub fn classify_by(stem: &str, groups: &[String], name: &str, own_sound: bool) -
 /// Whether a tree type is a conifer: filed under "Indeciduous" (OMSI's group for the
 /// evergreens), or else a fir, pine, spruce by its name or texture.
 pub fn is_conifer(sco: &SceneryObject, texture: &str) -> bool {
-    let groups: Vec<String> = sco.groups.iter().map(|g| g.trim().to_ascii_lowercase()).collect();
-    if groups.iter().any(|g| g == "indeciduous" || g == "conifers" || g == "nadelbäume" || g == "nadelbaeume") {
+    let groups: Vec<String> = sco
+        .groups
+        .iter()
+        .map(|g| g.trim().to_ascii_lowercase())
+        .collect();
+    if groups
+        .iter()
+        .any(|g| g == "indeciduous" || g == "conifers" || g == "nadelbäume" || g == "nadelbaeume")
+    {
         return true;
     }
-    if groups.iter().any(|g| g == "deciduous" || g == "laubbäume" || g == "laubbaeume") {
+    if groups
+        .iter()
+        .any(|g| g == "deciduous" || g == "laubbäume" || g == "laubbaeume")
+    {
         return false;
     }
-    let text = format!("{} {} {}", sco.path.to_string_lossy(), sco.friendly_name, texture).to_ascii_lowercase();
-    ["fir", "pine", "spruce", "conifer", "tanne", "fichte", "kiefer", "nadel", "thuja", "cypress", "zypresse", "yew", "eibe"].iter().any(|w| text.contains(w))
+    let text = format!(
+        "{} {} {}",
+        sco.path.to_string_lossy(),
+        sco.friendly_name,
+        texture
+    )
+    .to_ascii_lowercase();
+    [
+        "fir", "pine", "spruce", "conifer", "tanne", "fichte", "kiefer", "nadel", "thuja",
+        "cypress", "zypresse", "yew", "eibe",
+    ]
+    .iter()
+    .any(|w| text.contains(w))
 }
 
 #[cfg(test)]
@@ -238,43 +337,258 @@ mod tests {
 
     #[test]
     fn the_stock_objects_as_their_authors_filed_them() {
-        let c = |stem: &str, groups: &[&str], name: &str| classify_by(stem, &g(groups), &name.to_ascii_lowercase(), false);
-        assert_eq!(c("kirche_ev_stnikolai", &["Buildings", "Church"], "ev. St. Nikolai Spandau"), Some(Spot::ChurchProtestant));
-        assert_eq!(c("kirche_kath_stmarien", &["Buildings", "Church"], "kath. St. Marien Spandau"), Some(Spot::ChurchCatholic));
-        assert_eq!(c("ddr_ev_kirche_seegefeld", &["Buildings", "Church DDR"], "Ev. Kirche Seegefeld"), Some(Spot::ChurchProtestant));
-        assert_eq!(c("kirche_ev_01", &["Buildings", "Church"], "Small ev. 01"), Some(Spot::ChurchProtestant));
-        assert_eq!(c("bw_school1", &["Buildings", "Education"], "School 1"), Some(Spot::School));
-        assert_eq!(c("schulzentrum", &["Buildings", "Education"], "School Center Spektefeld"), Some(Spot::School));
-        assert_eq!(c("schul_turn_01", &["Buildings", "Education"], "Gymnasium, Concrete"), None, "a sports hall");
-        assert_eq!(c("bw_kinder1", &["Buildings", "Education"], "Kindergarten 1"), Some(Spot::Kindergarten));
-        assert_eq!(c("kombibad", &["Buildings", "Education"], "Indoor/Open Air Swimming Pool"), Some(Spot::Pool));
-        assert_eq!(c("sportsground_big", &["Buildings", "Education"], "Sports Ground big"), Some(Spot::SportsGround));
-        assert_eq!(c("tennis-center", &["Buildings", "Education"], "Tennis Center"), Some(Spot::Tennis));
-        assert_eq!(c("tank_2_bp", &["Buildings", "Automobile"], "Petrol Station Type 2 \"BP\""), Some(Spot::PetrolStation));
-        assert_eq!(c("bw_supermarkt_1", &["Buildings", "Commercial"], "Supermarket 1 - Reichelt"), Some(Spot::Supermarket));
-        assert_eq!(c("ddr_falkensee_kaufhalle", &["Buildings", "Commercial DDR"], "Falkensee Kaufhalle"), Some(Spot::Supermarket));
-        assert_eq!(c("ddr_imbissbude", &["Buildings", "Commercial DDR"], "DDR Snack Bar"), Some(Spot::SnackBar));
-        assert_eq!(c("ddr_falkensee_eisdiele", &["Buildings", "Commercial DDR"], "Falkensee Ice Cream Parlour"), Some(Spot::SnackBar));
-        assert_eq!(c("omnibushof_s_1", &["Buildings", "BVG"], "Spandau Bus Depot Pt 1"), Some(Spot::BusDepot));
-        assert_eq!(c("ddr_falkensee_schlosserei", &["Buildings", "Industrial DDR"], "Falkensee Fitter's Shop"), Some(Spot::Workshop));
-        assert_eq!(c("s-bhf_spd-west", &["Railroad", "Stations"], "S-Bhf. Spandau-West"), Some(Spot::SBahnStation));
-        assert_eq!(c("u-bhf ruhleben", &["Railroad", "Stations"], "U-Bhf. Ruhleben"), Some(Spot::Station));
+        let c = |stem: &str, groups: &[&str], name: &str| {
+            classify_by(stem, &g(groups), &name.to_ascii_lowercase(), false)
+        };
+        assert_eq!(
+            c(
+                "kirche_ev_stnikolai",
+                &["Buildings", "Church"],
+                "ev. St. Nikolai Spandau"
+            ),
+            Some(Spot::ChurchProtestant)
+        );
+        assert_eq!(
+            c(
+                "kirche_kath_stmarien",
+                &["Buildings", "Church"],
+                "kath. St. Marien Spandau"
+            ),
+            Some(Spot::ChurchCatholic)
+        );
+        assert_eq!(
+            c(
+                "ddr_ev_kirche_seegefeld",
+                &["Buildings", "Church DDR"],
+                "Ev. Kirche Seegefeld"
+            ),
+            Some(Spot::ChurchProtestant)
+        );
+        assert_eq!(
+            c("kirche_ev_01", &["Buildings", "Church"], "Small ev. 01"),
+            Some(Spot::ChurchProtestant)
+        );
+        assert_eq!(
+            c("bw_school1", &["Buildings", "Education"], "School 1"),
+            Some(Spot::School)
+        );
+        assert_eq!(
+            c(
+                "schulzentrum",
+                &["Buildings", "Education"],
+                "School Center Spektefeld"
+            ),
+            Some(Spot::School)
+        );
+        assert_eq!(
+            c(
+                "schul_turn_01",
+                &["Buildings", "Education"],
+                "Gymnasium, Concrete"
+            ),
+            None,
+            "a sports hall"
+        );
+        assert_eq!(
+            c("bw_kinder1", &["Buildings", "Education"], "Kindergarten 1"),
+            Some(Spot::Kindergarten)
+        );
+        assert_eq!(
+            c(
+                "kombibad",
+                &["Buildings", "Education"],
+                "Indoor/Open Air Swimming Pool"
+            ),
+            Some(Spot::Pool)
+        );
+        assert_eq!(
+            c(
+                "sportsground_big",
+                &["Buildings", "Education"],
+                "Sports Ground big"
+            ),
+            Some(Spot::SportsGround)
+        );
+        assert_eq!(
+            c(
+                "tennis-center",
+                &["Buildings", "Education"],
+                "Tennis Center"
+            ),
+            Some(Spot::Tennis)
+        );
+        assert_eq!(
+            c(
+                "tank_2_bp",
+                &["Buildings", "Automobile"],
+                "Petrol Station Type 2 \"BP\""
+            ),
+            Some(Spot::PetrolStation)
+        );
+        assert_eq!(
+            c(
+                "bw_supermarkt_1",
+                &["Buildings", "Commercial"],
+                "Supermarket 1 - Reichelt"
+            ),
+            Some(Spot::Supermarket)
+        );
+        assert_eq!(
+            c(
+                "ddr_falkensee_kaufhalle",
+                &["Buildings", "Commercial DDR"],
+                "Falkensee Kaufhalle"
+            ),
+            Some(Spot::Supermarket)
+        );
+        assert_eq!(
+            c(
+                "ddr_imbissbude",
+                &["Buildings", "Commercial DDR"],
+                "DDR Snack Bar"
+            ),
+            Some(Spot::SnackBar)
+        );
+        assert_eq!(
+            c(
+                "ddr_falkensee_eisdiele",
+                &["Buildings", "Commercial DDR"],
+                "Falkensee Ice Cream Parlour"
+            ),
+            Some(Spot::SnackBar)
+        );
+        assert_eq!(
+            c(
+                "omnibushof_s_1",
+                &["Buildings", "BVG"],
+                "Spandau Bus Depot Pt 1"
+            ),
+            Some(Spot::BusDepot)
+        );
+        assert_eq!(
+            c(
+                "ddr_falkensee_schlosserei",
+                &["Buildings", "Industrial DDR"],
+                "Falkensee Fitter's Shop"
+            ),
+            Some(Spot::Workshop)
+        );
+        assert_eq!(
+            c(
+                "s-bhf_spd-west",
+                &["Railroad", "Stations"],
+                "S-Bhf. Spandau-West"
+            ),
+            Some(Spot::SBahnStation)
+        );
+        assert_eq!(
+            c(
+                "u-bhf ruhleben",
+                &["Railroad", "Stations"],
+                "U-Bhf. Ruhleben"
+            ),
+            Some(Spot::Station)
+        );
         assert_eq!(c("cows", &["Animals"], "Group of 5 cows"), Some(Spot::Cows));
-        assert_eq!(c("ddr_barn_07", &["Buildings", "Agricultural DDR"], "Barn 07"), Some(Spot::Farm));
-        assert_eq!(c("sodiumlight_l_break_l", &["German Street Side", "Lights"], "Large Sodium on large break pole"), Some(Spot::SodiumLamp));
-        assert_eq!(c("ampel_mensch_1", &["German Street Side", "Traffic Lights"], "Traffic Light Humans"), Some(Spot::PedestrianSignal));
+        assert_eq!(
+            c("ddr_barn_07", &["Buildings", "Agricultural DDR"], "Barn 07"),
+            Some(Spot::Farm)
+        );
+        assert_eq!(
+            c(
+                "sodiumlight_l_break_l",
+                &["German Street Side", "Lights"],
+                "Large Sodium on large break pole"
+            ),
+            Some(Spot::SodiumLamp)
+        );
+        assert_eq!(
+            c(
+                "ampel_mensch_1",
+                &["German Street Side", "Traffic Lights"],
+                "Traffic Light Humans"
+            ),
+            Some(Spot::PedestrianSignal)
+        );
         // what the names would have got wrong
-        assert_eq!(c("taubenhaus", &["Buildings", "Residential"], "Old Cottage"), None);
-        assert_eq!(c("ddr_industrial_01", &["Buildings", "Industrial DDR"], "Small office building"), None);
-        assert_eq!(c("bw_workshop_01", &["Buildings", "Industrial"], "Workshop 01"), None, "a generic block, placed 135 times");
-        assert_eq!(c("bw_wkrank_a", &["Buildings", "Administration"], "Waldkrankenhaus-A"), None);
+        assert_eq!(
+            c("taubenhaus", &["Buildings", "Residential"], "Old Cottage"),
+            None
+        );
+        assert_eq!(
+            c(
+                "ddr_industrial_01",
+                &["Buildings", "Industrial DDR"],
+                "Small office building"
+            ),
+            None
+        );
+        assert_eq!(
+            c(
+                "bw_workshop_01",
+                &["Buildings", "Industrial"],
+                "Workshop 01"
+            ),
+            None,
+            "a generic block, placed 135 times"
+        );
+        assert_eq!(
+            c(
+                "bw_wkrank_a",
+                &["Buildings", "Administration"],
+                "Waldkrankenhaus-A"
+            ),
+            None
+        );
         // a British map (Cotterell): filed under its author's own groups
-        assert_eq!(c("st+helen+skipwith", &["UKDT", "Sketchup Conversions", "G3FX"], "Church - St Helen Skipwith"), Some(Spot::Church));
-        assert_eq!(c("pelicancrossing", &["Cotterell", "Junctions"], "Pelican Crossing (Paths Only)"), Some(Spot::PedestrianSignal));
-        assert_eq!(c("train station a", &["Cotterell", "Junctions"], "Train Station A"), Some(Spot::Station));
-        assert_eq!(c("cotterellbusstnsign", &["UKDT", "Cotterell"], "Bus Station Sign"), None);
-        assert_eq!(c("p544_zebra_crossing", &["Road-hog123", "Road Objects", "Road Signs", "Warning"], "Zebra Crossing Ahead"), None);
-        assert_eq!(c("church_rd_sign", &["Road Objects", "Road Signs"], "Church Road"), None);
+        assert_eq!(
+            c(
+                "st+helen+skipwith",
+                &["UKDT", "Sketchup Conversions", "G3FX"],
+                "Church - St Helen Skipwith"
+            ),
+            Some(Spot::Church)
+        );
+        assert_eq!(
+            c(
+                "pelicancrossing",
+                &["Cotterell", "Junctions"],
+                "Pelican Crossing (Paths Only)"
+            ),
+            Some(Spot::PedestrianSignal)
+        );
+        assert_eq!(
+            c(
+                "train station a",
+                &["Cotterell", "Junctions"],
+                "Train Station A"
+            ),
+            Some(Spot::Station)
+        );
+        assert_eq!(
+            c(
+                "cotterellbusstnsign",
+                &["UKDT", "Cotterell"],
+                "Bus Station Sign"
+            ),
+            None
+        );
+        assert_eq!(
+            c(
+                "p544_zebra_crossing",
+                &["Road-hog123", "Road Objects", "Road Signs", "Warning"],
+                "Zebra Crossing Ahead"
+            ),
+            None
+        );
+        assert_eq!(
+            c(
+                "church_rd_sign",
+                &["Road Objects", "Road Signs"],
+                "Church Road"
+            ),
+            None
+        );
     }
 
     #[test]
@@ -284,7 +598,15 @@ mod tests {
         assert_eq!(own("sound_field"), Some(Spot::OmsiField));
         assert_eq!(own("sound_cock"), Some(Spot::OmsiRooster));
         // a transformer hut with its own hum: nothing of ours
-        assert_eq!(classify_by("trafohaus", &g(&["German Street Side", "Miscellaneous"]), "transformator hut", true), Some(Spot::OwnSound));
+        assert_eq!(
+            classify_by(
+                "trafohaus",
+                &g(&["German Street Side", "Miscellaneous"]),
+                "transformator hut",
+                true
+            ),
+            Some(Spot::OwnSound)
+        );
     }
 
     #[test]

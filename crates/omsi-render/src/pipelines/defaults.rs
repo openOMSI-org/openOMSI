@@ -20,7 +20,11 @@ pub(crate) fn build(device: &wgpu::Device, queue: &wgpu::Queue, anisotropy: u16)
     // repeat beyond its edge - repeated, the plate text tiled the whole rear of the bus
     let clamp_sampler = texture_sampler(device, wgpu::AddressMode::ClampToEdge, anisotropy);
     let mirror_sampler = texture_sampler(device, wgpu::AddressMode::MirrorRepeat, anisotropy);
-    let camera_buf = uniform_buffer(device, "camera", std::mem::size_of::<CameraUniform>() as u64);
+    let camera_buf = uniform_buffer(
+        device,
+        "camera",
+        std::mem::size_of::<CameraUniform>() as u64,
+    );
     let white = omsi_texture::Image::solid([255, 255, 255, 255]);
     let white_texture = upload_texture(device, queue, &white, false);
     let black_texture = upload_texture(
@@ -29,6 +33,19 @@ pub(crate) fn build(device: &wgpu::Device, queue: &wgpu::Queue, anisotropy: u16)
         &omsi_texture::Image::solid([0, 0, 0, 255]),
         false,
     );
-    let flat_normal_texture = upload_texture(device, queue, &omsi_texture::Image::solid([128, 128, 255, 255]), false);
-    Defaults { sampler, clamp_sampler, mirror_sampler, camera_buf, white_texture, black_texture, flat_normal_texture }
+    let flat_normal_texture = upload_texture(
+        device,
+        queue,
+        &omsi_texture::Image::solid([128, 128, 255, 255]),
+        false,
+    );
+    Defaults {
+        sampler,
+        clamp_sampler,
+        mirror_sampler,
+        camera_buf,
+        white_texture,
+        black_texture,
+        flat_normal_texture,
+    }
 }

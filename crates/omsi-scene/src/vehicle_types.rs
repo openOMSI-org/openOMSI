@@ -1,7 +1,6 @@
 //! Vehicle render sets, slots, looks and the vehicle prefetch.
 use super::*;
 
-
 /// GPU-side representation of a vehicle instance: one render instance per mesh.
 pub struct VehicleRender {
     pub window_wipers: Option<crate::window_wipers::WindowWipers>,
@@ -141,7 +140,12 @@ pub struct MultiLight {
 
 impl MultiLight {
     /// The light map made of the maps in `mask`, from the shared store or read now.
-    pub fn composite(&mut self, renderer: &Renderer, scene: &mut Scene, mask: u32) -> Option<TextureId> {
+    pub fn composite(
+        &mut self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        mask: u32,
+    ) -> Option<TextureId> {
         let mut key = String::from("lightmap-sum:");
         for (k, (path, _)) in self.maps.iter().enumerate() {
             if mask & (1 << k) != 0 {
@@ -161,7 +165,9 @@ impl MultiLight {
             if mask & (1 << k) == 0 {
                 continue;
             }
-            let Ok(img) = omsi_texture::decode_file(path) else { continue };
+            let Ok(img) = omsi_texture::decode_file(path) else {
+                continue;
+            };
             match &mut sum {
                 None => sum = Some(img),
                 Some(acc) => {
@@ -203,7 +209,9 @@ pub(super) fn free_texture_defs(halves: &[Vec<&MaterialDef>]) -> Vec<(u32, Strin
     let mut out: Vec<(u32, String, String)> = Vec::new();
     for (bit, records) in halves.iter().enumerate().take(32) {
         for (key, var) in records.iter().flat_map(|o| o.freetexes.iter()) {
-            let same = |e: &&mut (u32, String, String)| e.1.eq_ignore_ascii_case(key) && e.2.eq_ignore_ascii_case(var);
+            let same = |e: &&mut (u32, String, String)| {
+                e.1.eq_ignore_ascii_case(key) && e.2.eq_ignore_ascii_case(var)
+            };
             match out.iter_mut().find(same) {
                 Some(e) => e.0 |= 1 << bit,
                 None => out.push((1 << bit, key.clone(), var.clone())),
@@ -223,7 +231,10 @@ pub struct FreeBuilt {
 
 impl FreeBuilt {
     pub fn materials(&self) -> impl Iterator<Item = MaterialId> + '_ {
-        self.base.into_iter().chain(self.item).chain(self.more.iter().flatten().copied())
+        self.base
+            .into_iter()
+            .chain(self.item)
+            .chain(self.more.iter().flatten().copied())
     }
 }
 
@@ -269,20 +280,38 @@ impl VariantSlot {
         let (base, item) = if self.entries.is_empty() {
             // Without an explicit item, build() aliases it to base. A selective
             // free-texture rebuild updates only base, so keep that fallback here.
-            (self.base, if self.spec.item.is_some() { self.item } else { self.base })
+            (
+                self.base,
+                if self.spec.item.is_some() {
+                    self.item
+                } else {
+                    self.base
+                },
+            )
         } else {
             let v = var(&self.tex_var).unwrap_or(0.0);
             let i = if v.is_finite() { v.trunc() as i64 } else { 0 };
             self.entries[i.clamp(0, self.entries.len() as i64 - 1) as usize]
         };
-        let x = self.var.trim().parse().ok().or_else(|| var(&self.var)).unwrap_or(0.0);
+        let x = self
+            .var
+            .trim()
+            .parse()
+            .ok()
+            .or_else(|| var(&self.var))
+            .unwrap_or(0.0);
         if self.entries.is_empty() && x.is_finite() {
             let n = x.round_ties_even();
             if n >= 2.0 && ((n - 2.0) as usize) < self.more.len() {
                 return self.more[(n - 2.0) as usize];
             }
         }
-        if change_picks_item(x) || self.more_vars.iter().any(|v| var(v).is_some_and(change_picks_item)) {
+        if change_picks_item(x)
+            || self
+                .more_vars
+                .iter()
+                .any(|v| var(v).is_some_and(change_picks_item))
+        {
             item
         } else {
             base
@@ -339,7 +368,12 @@ impl DynTex {
 }
 
 impl Look {
-    pub(super) fn add(&self, renderer: &Renderer, scene: &mut Scene, tex: Option<TextureId>) -> MaterialId {
+    pub(super) fn add(
+        &self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        tex: Option<TextureId>,
+    ) -> MaterialId {
         renderer.address_next.set(self.dyn_tex.address);
         renderer.add_material_extra(
             scene,
@@ -358,7 +392,11 @@ impl Look {
 
     /// This half with one vehicle's text and script textures, set up as
     /// `instantiate_vehicle` sets up a `DynSlot`.
-    pub(super) fn for_vehicle(&self, text: &[Option<TextureId>], script: &[Option<TextureId>]) -> Look {
+    pub(super) fn for_vehicle(
+        &self,
+        text: &[Option<TextureId>],
+        script: &[Option<TextureId>],
+    ) -> Look {
         let d = self.dyn_tex;
         let mut l = self.clone();
         l.dyn_tex = DynTex {
@@ -477,7 +515,12 @@ impl SlotSpec {
         FreeBuilt {
             base: on(0).then(|| make(scene, &self.base)),
             item: self.item.as_ref().filter(|_| on(1)).map(|l| make(scene, l)),
-            more: self.more.iter().enumerate().map(|(k, l)| on(2 + k).then(|| make(scene, l))).collect(),
+            more: self
+                .more
+                .iter()
+                .enumerate()
+                .map(|(k, l)| on(2 + k).then(|| make(scene, l)))
+                .collect(),
         }
     }
 
@@ -528,7 +571,9 @@ impl SlotSpec {
     }
 
     pub fn per_vehicle(&self) -> bool {
-        self.base.dyn_tex.any() || self.item.as_ref().is_some_and(|i| i.dyn_tex.any()) || self.more.iter().any(|i| i.dyn_tex.any())
+        self.base.dyn_tex.any()
+            || self.item.as_ref().is_some_and(|i| i.dyn_tex.any())
+            || self.more.iter().any(|i| i.dyn_tex.any())
     }
 
     pub fn for_vehicle(
@@ -539,7 +584,11 @@ impl SlotSpec {
         SlotSpec {
             base: self.base.for_vehicle(text, script),
             item: self.item.as_ref().map(|i| i.for_vehicle(text, script)),
-            more: self.more.iter().map(|i| i.for_vehicle(text, script)).collect(),
+            more: self
+                .more
+                .iter()
+                .map(|i| i.for_vehicle(text, script))
+                .collect(),
         }
     }
 }
@@ -595,7 +644,8 @@ pub struct VehiclePrefetch {
 #[derive(Default)]
 pub(super) struct PreparedVehicles {
     pub(super) meshes: HashMap<(PathBuf, usize), omsi_render::PreparedMesh>,
-    pub(super) textures: HashMap<PathBuf, (omsi_render::PreparedTexture, omsi_texture::PixelFormat)>,
+    pub(super) textures:
+        HashMap<PathBuf, (omsi_render::PreparedTexture, omsi_texture::PixelFormat)>,
 }
 
 impl World {
@@ -723,11 +773,19 @@ pub(super) fn vehicle_texture_names(
     let mut out: Vec<(String, Vec<PathBuf>)> = Vec::new();
     let mut push = |name: String, d: &Vec<PathBuf>| {
         let name = name.trim().to_string();
-        if !name.is_empty() && !name.starts_with("\\S:") && !name.starts_with('!') && mirror_index(&name).is_none() {
+        if !name.is_empty()
+            && !name.starts_with("\\S:")
+            && !name.starts_with('!')
+            && mirror_index(&name).is_none()
+        {
             out.push((name, d.clone()));
         }
     };
-    let lods = if crate::vehicles::lods::lods_misfit(vt).is_none() { vt.lod_meshes.as_slice() } else { &[] };
+    let lods = if crate::vehicles::lods::lods_misfit(vt).is_none() {
+        vt.lod_meshes.as_slice()
+    } else {
+        &[]
+    };
     for vm in vt.meshes.iter().chain(lods) {
         for m in &vm.materials {
             match vt.texchange(&m.texture) {
@@ -805,7 +863,11 @@ pub(super) fn vehicle_bump_names(
 pub fn lamp_set(indices: &[i32], n: usize) -> Vec<usize> {
     let mut set: Vec<usize> = Vec::new();
     for &k in indices {
-        if k >= 0 && (k as usize) < n && !set.contains(&(k as usize)) && set.len() < omsi_render::MAX_LAMPS_PER_MESH as usize {
+        if k >= 0
+            && (k as usize) < n
+            && !set.contains(&(k as usize))
+            && set.len() < omsi_render::MAX_LAMPS_PER_MESH as usize
+        {
             set.push(k as usize);
         }
     }
@@ -819,13 +881,18 @@ impl VehicleRender {
     pub fn seat_lamps(&self, n: usize, lamps: &[i32; 4]) -> Option<(u32, u32)> {
         let set = lamp_set(lamps, n);
         let blocks = self.interior_blocks.get()?;
-        blocks.iter().find(|b| b.1 == set).map(|b| (b.0, set.len() as u32))
+        blocks
+            .iter()
+            .find(|b| b.1 == set)
+            .map(|b| (b.0, set.len() as u32))
     }
 }
 
 impl World {
     pub(super) fn protect_player_textures(&self, set: &VehicleSet, render: &mut VehicleRender) {
-        self.player_textures.lock().extend(set.textures.iter().cloned());
+        self.player_textures
+            .lock()
+            .extend(set.textures.iter().cloned());
         for f in render.variants.iter_mut().flat_map(|v| &mut v.free) {
             f.is_player = true;
         }

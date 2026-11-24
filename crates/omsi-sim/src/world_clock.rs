@@ -37,16 +37,24 @@ impl WorldClock {
     /// `now`.
     pub fn step(&mut self, now: Instant, dt: f64, speed: f64) -> f64 {
         let speed = speed.max(0.0);
-        let wall = self.last.map(|l| now.saturating_duration_since(l).as_secs_f64()).unwrap_or(dt);
+        let wall = self
+            .last
+            .map(|l| now.saturating_duration_since(l).as_secs_f64())
+            .unwrap_or(dt);
         self.last = Some(now);
         self.behind += (wall - dt) * speed;
         let mut take = dt * speed;
         if self.behind > SKIP {
-            log::warn!("server clock: {:.0} s behind the wall after a stall (the machine asleep or stopped); the world clock goes on at the wall's time", self.behind);
+            log::warn!(
+                "server clock: {:.0} s behind the wall after a stall (the machine asleep or stopped); the world clock goes on at the wall's time",
+                self.behind
+            );
         }
         if self.behind > SLACK {
             // (at most twice the wall's pace: no faster than the players can follow)
-            let extra = self.behind.min(((1.0 + CATCH_UP) * wall * speed - take).max(0.0));
+            let extra = self
+                .behind
+                .min(((1.0 + CATCH_UP) * wall * speed - take).max(0.0));
             take += extra;
             self.behind -= extra;
         } else if self.behind < -SLACK {
@@ -56,8 +64,15 @@ impl WorldClock {
             self.behind += less;
         }
         self.worst = self.worst.max(self.behind);
-        if self.worst > 1.0 && self.told.is_none_or(|t| now.saturating_duration_since(t) >= TELL_EVERY) {
-            log::warn!("server clock: up to {:.1} s behind the wall lately (the machine cannot keep up with its steps: its people and traffic move slower than the clock)", self.worst);
+        if self.worst > 1.0
+            && self
+                .told
+                .is_none_or(|t| now.saturating_duration_since(t) >= TELL_EVERY)
+        {
+            log::warn!(
+                "server clock: up to {:.1} s behind the wall lately (the machine cannot keep up with its steps: its people and traffic move slower than the clock)",
+                self.worst
+            );
             self.told = Some(now);
             self.worst = 0.0;
         }
@@ -98,7 +113,10 @@ mod tests {
         for fps in [60.0, 30.0, 15.0, 10.0, 5.0] {
             let (world, c) = run(1.0 / fps, 60.0, 1.0);
             let lag = 60.0 - world;
-            assert!((-0.06..=0.25).contains(&lag), "{fps} steps a second: {world:.3} world seconds in 60");
+            assert!(
+                (-0.06..=0.25).contains(&lag),
+                "{fps} steps a second: {world:.3} world seconds in 60"
+            );
             assert!(c.behind() < 0.25);
         }
     }
@@ -131,7 +149,10 @@ mod tests {
             assert!(take <= 2.0 * step + 1e-9, "step {i}: {take} in {step}");
             world += take;
         }
-        assert!((wall - world).abs() < SLACK + 1e-9, "caught up: wall {wall:.3}, world {world:.3}");
+        assert!(
+            (wall - world).abs() < SLACK + 1e-9,
+            "caught up: wall {wall:.3}, world {world:.3}"
+        );
     }
 
     /// A stall moves the clock by the wall's time once the steps go on; a clock run at a

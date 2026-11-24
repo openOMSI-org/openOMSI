@@ -7,7 +7,10 @@ impl World {
     /// `TileSurface::surface_under`); `None` where no tile is loaded.
     pub fn surface_under(&self, at: DVec3) -> Option<u8> {
         let key = tile_key(at.x, at.y);
-        let (lx, ly) = ((at.x - key.0 as f64 * tile_size()) as f32, (at.y - key.1 as f64 * tile_size()) as f32);
+        let (lx, ly) = (
+            (at.x - key.0 as f64 * tile_size()) as f32,
+            (at.y - key.1 as f64 * tile_size()) as f32,
+        );
         let data = self.data.peek();
         let terrain = data.ground.terrains.get(&key).map(|t| t.sample(lx, ly));
         let s = data.ground.surfaces.get(&key)?;
@@ -28,7 +31,10 @@ impl World {
             for dx in -reach..=reach {
                 let k = (key.0 + dx, key.1 + dy);
                 if let Some(s) = surfaces.get(&k) {
-                    g.tile(&s.sound, DVec3::new(k.0 as f64 * tile_size(), k.1 as f64 * tile_size(), 0.0));
+                    g.tile(
+                        &s.sound,
+                        DVec3::new(k.0 as f64 * tile_size(), k.1 as f64 * tile_size(), 0.0),
+                    );
                 }
             }
         }

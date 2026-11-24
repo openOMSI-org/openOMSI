@@ -1,11 +1,11 @@
 //! Persistent wetness on the player's glass, cleared by the animated blade's swept area.
 //! A small mask uses the existing transmap binding: no extra draw or offscreen pass.
 
-use omsi_weather::window_drops::{Canvas, Drops};
 use glam::{Vec2, Vec3};
 use omsi_geometry::MeshData;
 use omsi_render::{MaterialId, Renderer, Scene, TextureId};
 use omsi_sim::VehicleInstance;
+use omsi_weather::window_drops::{Canvas, Drops};
 use rayon::prelude::*;
 
 // (the shader reads the mask at this size: `WIPE_MASK_SIZE` in shader.wgsl)
@@ -215,11 +215,25 @@ impl WindowWipers {
                     );
                     let drops_texture = renderer.add_data_texture(scene, &drops.canvas.image);
                     let material = renderer
-                        .add_window_wetness_material(scene, base, texture, drops_texture, bounds, false)
+                        .add_window_wetness_material(
+                            scene,
+                            base,
+                            texture,
+                            drops_texture,
+                            bounds,
+                            false,
+                        )
                         .unwrap();
                     // the same pane wearing the snow the mask holds while it snows
                     let snow_material = renderer
-                        .add_window_wetness_material(scene, base, texture, drops_texture, bounds, true)
+                        .add_window_wetness_material(
+                            scene,
+                            base,
+                            texture,
+                            drops_texture,
+                            bounds,
+                            true,
+                        )
                         .unwrap();
                     films.push(Film {
                         mesh,
@@ -267,7 +281,9 @@ impl WindowWipers {
     }
 
     pub fn materials(&self) -> impl Iterator<Item = MaterialId> + '_ {
-        self.films.iter().flat_map(|f| [f.material, f.snow_material])
+        self.films
+            .iter()
+            .flat_map(|f| [f.material, f.snow_material])
     }
 
     /// `rain_quality`: the rain's (see `rain::quality_of`): below high the films are drawn
@@ -376,7 +392,10 @@ impl WindowWipers {
                     // (a dry pane is not wiped, so whether the blade reaches it at all is
                     // looked at here, while the washer runs)
                     if !film.swept && washer > 0.0 && vehicle.mesh_props[blade.mesh].visible {
-                        film.swept = blade_reaches(&film.points, blade.current.map(|p| inverse.transform_point3(p)));
+                        film.swept = blade_reaches(
+                            &film.points,
+                            blade.current.map(|p| inverse.transform_point3(p)),
+                        );
                     }
                     if !vehicle.mesh_props[blade.mesh].visible || (dry && !drops) {
                         continue;
@@ -387,13 +406,18 @@ impl WindowWipers {
                     // runs only now and then) is swept in short steps: one long step pushed
                     // its whole load to where the blade happened to stand and left a bank of
                     // snow there in the middle of the sweep.
-                    let travel = previous[0].distance(current[0]).max(previous[1].distance(current[1]));
+                    let travel = previous[0]
+                        .distance(current[0])
+                        .max(previous[1].distance(current[1]));
                     // (steps narrower than the blade, so the water it pushes up at its ends
                     // stays one ridge and does not settle as a comb of separate blobs)
                     let steps = (travel / 0.015).ceil().clamp(1.0, 96.0) as usize;
                     let at = |k: usize| {
                         let t = k as f32 / steps as f32;
-                        [previous[0].lerp(current[0], t), previous[1].lerp(current[1], t)]
+                        [
+                            previous[0].lerp(current[0], t),
+                            previous[1].lerp(current[1], t),
+                        ]
                     };
                     for k in 0..steps {
                         let (from, to) = (at(k), at(k + 1));
@@ -422,7 +446,11 @@ impl WindowWipers {
                 }
             }
             // (painted and uploaded 30 times a second; 15 at a lower rain quality)
-            let every = if rain_quality >= 2 { 1.0 / 30.0 } else { 1.0 / 15.0 };
+            let every = if rain_quality >= 2 {
+                1.0 / 30.0
+            } else {
+                1.0 / 15.0
+            };
             if repaint_due(&mut film.paint_phase, dt, every) {
                 if liquid {
                     // Also discard initial seeds which landed outside the mesh's slot.
@@ -453,7 +481,16 @@ impl WindowWipers {
                 renderer.update_texture(scene, film.texture, &film.image);
             }
             let inst = instances[film.mesh];
-            renderer.set_material(scene, inst, film.slot, if liquid { film.material } else { film.snow_material });
+            renderer.set_material(
+                scene,
+                inst,
+                film.slot,
+                if liquid {
+                    film.material
+                } else {
+                    film.snow_material
+                },
+            );
             let mut alpha = scene.instances[inst].slot_alpha.clone();
             // the mask owns wetness; scripts still own visibility. A pane that shows nothing
             // (dry, no drop on it, nothing wiped) keeps its alpha at 0, as its script had it on
@@ -477,7 +514,10 @@ impl WindowWipers {
         let first = |film: &Film| film.paint_due && (!film.painted || pool.is_none());
         if self.films.iter().any(first) {
             let paint = |films: &mut Vec<Film>| -> Vec<bool> {
-                films.par_iter_mut().map(|film| first(film) && film.drops.paint()).collect()
+                films
+                    .par_iter_mut()
+                    .map(|film| first(film) && film.drops.paint())
+                    .collect()
             };
             let painted = match pool {
                 Some(pool) => pool.install(|| paint(&mut self.films)),
@@ -488,7 +528,11 @@ impl WindowWipers {
                     film.paint_due = false;
                     film.painted = true;
                     if painted {
-                        renderer.update_texture(scene, film.drops_texture, &film.drops.canvas.image);
+                        renderer.update_texture(
+                            scene,
+                            film.drops_texture,
+                            &film.drops.canvas.image,
+                        );
                     }
                 }
             }
@@ -527,21 +571,34 @@ impl Film {
         let (bounds, points) = (self.bounds, &self.points);
         self.drops.drops.retain(|d| {
             d.pos.cmpge(Vec2::ZERO).all()
-                && (d.pos * Vec2::new(bounds[2].abs(), bounds[3])).cmplt(Vec2::ONE).all()
+                && (d.pos * Vec2::new(bounds[2].abs(), bounds[3]))
+                    .cmplt(Vec2::ONE)
+                    .all()
                 && points[drop_pixel(d.pos, bounds)].is_finite()
         });
     }
 
     fn take_back(&mut self, renderer: &Renderer, scene: &mut Scene, wait: bool) {
         let Some(pending) = &self.pending else { return };
-        let got = if wait { pending.recv().map_err(|_| std::sync::mpsc::TryRecvError::Disconnected) } else { pending.try_recv() };
+        let got = if wait {
+            pending
+                .recv()
+                .map_err(|_| std::sync::mpsc::TryRecvError::Disconnected)
+        } else {
+            pending.try_recv()
+        };
         match got {
             Ok((canvas, changed)) => {
                 self.drops.canvas = canvas;
                 self.pending = None;
                 if changed {
                     for rect in self.drops.canvas.changed() {
-                        renderer.update_texture_rect(scene, self.drops_texture, &self.drops.canvas.image, rect);
+                        renderer.update_texture_rect(
+                            scene,
+                            self.drops_texture,
+                            &self.drops.canvas.image,
+                            rect,
+                        );
                     }
                 }
             }
@@ -558,8 +615,14 @@ impl Film {
 
 fn drops_pool() -> Option<&'static rayon::ThreadPool> {
     static POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
-    POOL.get_or_init(|| rayon::ThreadPoolBuilder::new().num_threads(2).thread_name(|_| "window drops".into()).build().ok())
-        .as_ref()
+    POOL.get_or_init(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .thread_name(|_| "window drops".into())
+            .build()
+            .ok()
+    })
+    .as_ref()
 }
 
 fn first_paint_phase(k: usize, count: usize) -> f32 {
@@ -582,11 +645,7 @@ fn pane_project(p: Vec3, side: bool) -> Vec2 {
 }
 
 fn pane_depth(p: Vec3, bounds: [f32; 4]) -> f32 {
-    if bounds[2] < 0.0 {
-        p.x
-    } else {
-        p.y
-    }
+    if bounds[2] < 0.0 { p.x } else { p.y }
 }
 
 fn pane_pixel(p: Vec3, bounds: [f32; 4]) -> Vec2 {
@@ -928,7 +987,8 @@ fn push_water(
             if d.dot(normal).abs() <= 0.1 && distance > clear && distance < WIDTH {
                 // Values above one mark mobile water, even when the wiped
                 // pane carried only a few newly landed drops.
-                wet[i] = (wet[i].max(1.0) + amount * (1.0 - (distance - clear) / (WIDTH - clear))).min(2.0);
+                wet[i] = (wet[i].max(1.0) + amount * (1.0 - (distance - clear) / (WIDTH - clear)))
+                    .min(2.0);
             }
         }
     }
@@ -1143,9 +1203,13 @@ mod tests {
 
     #[test]
     fn the_panes_are_repainted_in_turn_not_all_in_one_frame() {
-        for (fps, every) in
-            [(144.0, 1.0 / 30.0), (60.0, 1.0 / 30.0), (30.0, 1.0 / 15.0), (60.0, 1.0 / 15.0), (240.0, 1.0 / 15.0)]
-        {
+        for (fps, every) in [
+            (144.0, 1.0 / 30.0),
+            (60.0, 1.0 / 30.0),
+            (30.0, 1.0 / 15.0),
+            (60.0, 1.0 / 15.0),
+            (240.0, 1.0 / 15.0),
+        ] {
             let count = 12;
             let mut phases: Vec<f32> = (0..count).map(|k| first_paint_phase(k, count)).collect();
             let mut paints = vec![0; count];
@@ -1165,7 +1229,10 @@ mod tests {
             let fair = (count as f32 / (fps * every)).ceil() as usize + 1;
             assert!(most <= fair, "{fps} fps: {most} panes in one frame");
             let rate = (4.0 / every) as i32;
-            assert!(paints.iter().all(|&n| (n - rate).abs() <= 2), "{fps} fps: {paints:?}");
+            assert!(
+                paints.iter().all(|&n| (n - rate).abs() <= 2),
+                "{fps} fps: {paints:?}"
+            );
         }
     }
 
@@ -1394,15 +1461,19 @@ mod tests {
             // Fresh arrivals after a previously cleared pane: much less than saturation.
             wet.fill(0.03);
             assert!(wipe(&mut wet, &points, bounds, from, to));
-            assert!(points
-                .iter()
-                .zip(&wet)
-                .any(|(p, w)| { (0.25..0.55).contains(&p.z) && *w == WIPED_FILM }));
+            assert!(
+                points
+                    .iter()
+                    .zip(&wet)
+                    .any(|(p, w)| { (0.25..0.55).contains(&p.z) && *w == WIPED_FILM })
+            );
             let direction = (to[0].z - from[0].z).signum();
-            assert!(points
-                .iter()
-                .zip(&wet)
-                .any(|(p, w)| { (p.z - to[0].z) * direction > 0.0 && *w > 1.0 }));
+            assert!(
+                points
+                    .iter()
+                    .zip(&wet)
+                    .any(|(p, w)| { (p.z - to[0].z) * direction > 0.0 && *w > 1.0 })
+            );
         }
     }
 
@@ -1437,9 +1508,11 @@ mod tests {
         };
         let (points, bounds) = film_points_in_cab(&data, 0, Some(Vec3::Y * 8.0)).unwrap();
         assert!(bounds[2] < 0.0);
-        assert!(points
-            .iter()
-            .all(|p| p.is_finite() && p.y > 6.2 && p.y < 9.8));
+        assert!(
+            points
+                .iter()
+                .all(|p| p.is_finite() && p.y > 6.2 && p.y < 9.8)
+        );
         let p = points[SIZE * SIZE / 2];
         assert_eq!(pane_depth(p, bounds), 0.0);
         assert!((pane_pixel(p, bounds).y - (SIZE / 2) as f32 - 0.5).abs() < 1e-4);

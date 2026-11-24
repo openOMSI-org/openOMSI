@@ -84,6 +84,12 @@ pub(crate) struct Args {
     /// Explicitly allow selected server-owned bus/repaint downloads for this run.
     #[arg(long)]
     pub(crate) allow_server_fleet: bool,
+    /// When you host a session: the buses it drives, separated by `;` (bus files such as
+    /// Vehicles/MAN_SD200/MAN_SD77.bus, or their folders). Every other bus is refused and its
+    /// player told the list. Empty: every bus, as a session always was. A dedicated server
+    /// takes its list from server.cfg's `vehicles` instead.
+    #[arg(long)]
+    pub(crate) session_buses: Option<String>,
     /// Dedicated server: host a session from this server.cfg (written with the defaults when
     /// missing), with no window, no sound and no graphics card.
     #[arg(long)]
@@ -361,6 +367,12 @@ pub(crate) fn parse_triggers(args: &Args) -> Vec<(String, f32)> {
 }
 
 impl Args {
+    /// The buses this session drives when we host it (`--session-buses`), parsed: empty, every
+    /// bus.
+    pub(crate) fn session_bus_list(&self) -> Vec<String> {
+        omsi_lan::server_cfg::parse_vehicles(self.session_buses.as_deref().unwrap_or_default())
+    }
+
     /// Connections are local until passenger ownership handback is synchronized.
     pub(crate) fn passenger_connections_allowed(&self, connected: bool) -> bool {
         !connected && self.server.is_none() && self.lan_host.is_none() && self.lan_join.is_none()
@@ -401,7 +413,12 @@ mod passenger_connection_authority_tests {
         let solo = Args::parse_from(["openomsi"]);
         assert!(solo.passenger_connections_allowed(false));
         assert!(!solo.passenger_connections_allowed(true));
-        for flags in [vec!["--lan-host", "27015"], vec!["--lan-join", "127.0.0.1:27015"], vec!["--lan-join", "wss://localhost/ws"], vec!["--server", "server.cfg"]] {
+        for flags in [
+            vec!["--lan-host", "27015"],
+            vec!["--lan-join", "127.0.0.1:27015"],
+            vec!["--lan-join", "wss://localhost/ws"],
+            vec!["--server", "server.cfg"],
+        ] {
             let args = Args::parse_from(std::iter::once("openomsi").chain(flags));
             assert!(!args.passenger_connections_allowed(false));
             assert!(!args.passenger_connections_allowed(true));

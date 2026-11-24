@@ -21,7 +21,10 @@ pub enum TerrainError {
 
 impl Terrain {
     pub fn flat() -> Terrain {
-        Terrain { cells: TERRAIN_SAMPLES - 1, heights: vec![0.0; TERRAIN_SAMPLES * TERRAIN_SAMPLES] }
+        Terrain {
+            cells: TERRAIN_SAMPLES - 1,
+            heights: vec![0.0; TERRAIN_SAMPLES * TERRAIN_SAMPLES],
+        }
     }
 
     pub fn parse(bytes: &[u8]) -> Result<Terrain, TerrainError> {
@@ -35,11 +38,17 @@ impl Terrain {
         }
         let samples = cells + 1;
         // a damaged header must not overflow the size it asks for
-        let need = samples.checked_mul(samples).and_then(|n| n.checked_mul(4)).and_then(|n| n.checked_add(4));
+        let need = samples
+            .checked_mul(samples)
+            .and_then(|n| n.checked_mul(4))
+            .and_then(|n| n.checked_add(4));
         let Some(need) = need.filter(|n| bytes.len() >= *n) else {
             return Err(TerrainError::Short(bytes.len()));
         };
-        let heights = bytes[4..need].chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
+        let heights = bytes[4..need]
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
         Ok(Terrain { cells, heights })
     }
 
@@ -118,7 +127,10 @@ impl Water {
             return Water::default();
         }
         let count = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
-        let values = bytes[4..].chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
+        let values = bytes[4..]
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
         Water { count, values }
     }
 }

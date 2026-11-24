@@ -5,7 +5,7 @@
 //! like any junction, first come first served); the cars here let the ring go first where
 //! the map sets no priorities (`Network::must_yield`).
 
-use super::{wrap_deg, LaneKind, Network};
+use super::{LaneKind, Network, wrap_deg};
 
 /// A ring is at most this long all round (m): the largest roundabouts of the stock maps
 /// are some 60 m across.
@@ -21,7 +21,11 @@ const STRAIGHT_SHARE: f32 = 0.15;
 
 /// Heading change along lane `l` from its start to its end (degrees, + to the right).
 fn lane_turn(net: &Network, l: usize) -> f32 {
-    net.lanes[l].headings.windows(2).map(|w| wrap_deg(w[1] - w[0])).sum()
+    net.lanes[l]
+        .headings
+        .windows(2)
+        .map(|w| wrap_deg(w[1] - w[0]))
+        .sum()
 }
 
 /// The loop of lanes `cycle` turns once round the way a roundabout's traffic does, and
@@ -41,7 +45,9 @@ fn is_ring(net: &Network, cycle: &[usize]) -> bool {
         }
         along += lane.length();
     }
-    heading += wrap_deg(net.lanes[cycle[0]].start_heading() - net.lanes[*cycle.last().unwrap()].end_heading());
+    heading += wrap_deg(
+        net.lanes[cycle[0]].start_heading() - net.lanes[*cycle.last().unwrap()].end_heading(),
+    );
     // round once, anticlockwise (headings count clockwise from north) on the right
     let want = if net.left_hand { 360.0 } else { -360.0 };
     if (heading - want).abs() > 45.0 || samples.is_empty() {
@@ -50,7 +56,11 @@ fn is_ring(net: &Network, cycle: &[usize]) -> bool {
     let total = along.max(1.0);
     // (twice round, for the stretches over the loop's start)
     let n = samples.len();
-    let twice: Vec<(f32, f32)> = samples.iter().copied().chain(samples.iter().map(|&(d, h)| (d + total, h + heading))).collect();
+    let twice: Vec<(f32, f32)> = samples
+        .iter()
+        .copied()
+        .chain(samples.iter().map(|&(d, h)| (d + total, h + heading)))
+        .collect();
     let mut longest = 0.0f32;
     for (a, &(da, ha)) in samples.iter().enumerate() {
         let mut end = da;
@@ -118,7 +128,11 @@ fn shortest_loop(net: &Network, start: usize) -> Option<Vec<usize>> {
             }
             nodes.push((n, node));
             open.push((l, nodes.len() - 1));
-            heap.push(std::cmp::Reverse((OrdLen(l), open.len() - 1, nodes.len() - 1)));
+            heap.push(std::cmp::Reverse((
+                OrdLen(l),
+                open.len() - 1,
+                nodes.len() - 1,
+            )));
         }
     }
     let (_, mut k) = best?;
@@ -137,7 +151,11 @@ pub fn find_rings(net: &mut Network, first: usize) -> usize {
     let mut found = 0;
     for start in first..net.lanes.len() {
         let lane = &net.lanes[start];
-        if lane.ring || lane.kind != LaneKind::Street || lane.length() > RING_MAX || lane.next.is_empty() {
+        if lane.ring
+            || lane.kind != LaneKind::Street
+            || lane.length() > RING_MAX
+            || lane.next.is_empty()
+        {
             continue;
         }
         // (a lane that turns the wrong way already is on no ring)
@@ -145,7 +163,9 @@ pub fn find_rings(net: &mut Network, first: usize) -> usize {
         if (net.left_hand && t < -45.0) || (!net.left_hand && t > 45.0) {
             continue;
         }
-        let Some(cycle) = shortest_loop(net, start) else { continue };
+        let Some(cycle) = shortest_loop(net, start) else {
+            continue;
+        };
         if !is_ring(net, &cycle) {
             continue;
         }
@@ -188,7 +208,11 @@ mod tests {
         (0..n)
             .map(|k| {
                 // start on the circle round the origin at angle a (from north, clockwise)
-                let a = if ccw { -(k as f64) * step } else { k as f64 * step };
+                let a = if ccw {
+                    -(k as f64) * step
+                } else {
+                    k as f64 * step
+                };
                 let p = DVec3::new(r * a.to_radians().sin(), r * a.to_radians().cos(), 0.0);
                 // tangent: anticlockwise round the centre heads 90° left of the radius
                 let heading = if ccw { a - 90.0 } else { a + 90.0 };
@@ -199,7 +223,11 @@ mod tests {
     }
 
     fn network(lanes: Vec<crate::traffic::Lane>, left_hand: bool) -> Network {
-        let mut net = Network { lanes, left_hand, ..Default::default() };
+        let mut net = Network {
+            lanes,
+            left_hand,
+            ..Default::default()
+        };
         net.link(1.5);
         net
     }
@@ -224,14 +252,32 @@ mod tests {
     #[test]
     fn a_big_loop_and_a_block_of_streets_are_no_rings() {
         // 60 m across is still a ring, 100 m across is a ring road, not a roundabout
-        assert!(network(ring(28.0, 6, true), false).lanes.iter().all(|l| l.ring));
-        assert!(network(ring(50.0, 6, true), false).lanes.iter().all(|l| !l.ring));
+        assert!(
+            network(ring(28.0, 6, true), false)
+                .lanes
+                .iter()
+                .all(|l| l.ring)
+        );
+        assert!(
+            network(ring(50.0, 6, true), false)
+                .lanes
+                .iter()
+                .all(|l| !l.ring)
+        );
         // a 40 m block driven round by its four left turns
         let mut lanes = Vec::new();
         let (mut at, mut h) = (DVec3::ZERO, 0.0f64);
         for _ in 0..4 {
             let side = LaneBuilder::arc(at, h, 34.0, 0.0, 0.0, LaneKind::Street, 3.0);
-            let corner = LaneBuilder::arc(side.end(), h, 3.0 * std::f64::consts::FRAC_PI_2, -3.0, 0.0, LaneKind::Street, 3.0);
+            let corner = LaneBuilder::arc(
+                side.end(),
+                h,
+                3.0 * std::f64::consts::FRAC_PI_2,
+                -3.0,
+                0.0,
+                LaneKind::Street,
+                3.0,
+            );
             at = corner.end();
             h -= 90.0;
             lanes.push(side);
@@ -246,7 +292,12 @@ mod tests {
         let mut open: Vec<(f32, Vec<usize>)> = vec![(net.lanes[start].length(), vec![start])];
         let mut seen = 0usize;
         let mut best: Option<(f32, Vec<usize>)> = None;
-        while let Some(k) = open.iter().enumerate().min_by(|a, b| a.1 .0.total_cmp(&b.1 .0)).map(|(k, _)| k) {
+        while let Some(k) = open
+            .iter()
+            .enumerate()
+            .min_by(|a, b| a.1.0.total_cmp(&b.1.0))
+            .map(|(k, _)| k)
+        {
             let (len, path) = open.swap_remove(k);
             if best.as_ref().is_some_and(|b| b.0 <= len) {
                 break;
@@ -289,21 +340,38 @@ mod tests {
                         continue;
                     }
                     let p = DVec3::new(x as f64 * step, y as f64 * step, 0.0);
-                    lanes.push(LaneBuilder::arc(p, h, step, 0.0, 0.0, LaneKind::Street, 3.0));
+                    lanes.push(LaneBuilder::arc(
+                        p,
+                        h,
+                        step,
+                        0.0,
+                        0.0,
+                        LaneKind::Street,
+                        3.0,
+                    ));
                     ends.push(((x, y), (tx, ty)));
                 }
             }
         }
         for i in 0..lanes.len() {
-            lanes[i].next = (0..ends.len()).filter(|&j| ends[j].0 == ends[i].1 && ends[j].1 != ends[i].0).collect();
+            lanes[i].next = (0..ends.len())
+                .filter(|&j| ends[j].0 == ends[i].1 && ends[j].1 != ends[i].0)
+                .collect();
         }
-        let net = Network { lanes, ..Default::default() };
+        let net = Network {
+            lanes,
+            ..Default::default()
+        };
         let mut found = 0;
         for start in 0..net.lanes.len() {
             let got = shortest_loop(&net, start);
             assert_eq!(got, scan_loop(&net, start), "start {start}");
             found += got.is_some() as usize;
         }
-        assert_eq!(found, net.lanes.len(), "every lane of the grid is on a loop");
+        assert_eq!(
+            found,
+            net.lanes.len(),
+            "every lane of the grid is on a loop"
+        );
     }
 }

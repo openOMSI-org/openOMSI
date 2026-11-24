@@ -4,7 +4,9 @@
 //! usage: winding <file.o3d>...
 fn main() {
     for p in std::env::args().skip(1) {
-        let Ok(m) = omsi_o3d::load_mesh(std::path::Path::new(&p)) else { continue };
+        let Ok(m) = omsi_o3d::load_mesh(std::path::Path::new(&p)) else {
+            continue;
+        };
         let (mut bad, mut total) = (0usize, 0usize);
         for t in &m.triangles {
             let v: Vec<_> = t.indices.iter().map(|&i| &m.vertices[i as usize]).collect();
@@ -21,7 +23,10 @@ fn main() {
             }
         }
         if total > 0 {
-            println!("{:6.1}% {bad:6}/{total:6} {p}", 100.0 * bad as f64 / total as f64);
+            println!(
+                "{:6.1}% {bad:6}/{total:6} {p}",
+                100.0 * bad as f64 / total as f64
+            );
         }
     }
 }

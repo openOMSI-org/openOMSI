@@ -115,7 +115,11 @@ fn string(out: &mut String, s: &str) {
 /// Read a JSON text. `{"$cb": n}` and `{"$b64": "..."}` read back as a callback and bytes
 /// only when `special` is set (the WASM boundary); a plugin's `json.decode` keeps them maps.
 pub fn decode(text: &str, special: bool) -> Result<Value, String> {
-    let mut p = Parser { s: text.as_bytes(), i: 0, special };
+    let mut p = Parser {
+        s: text.as_bytes(),
+        i: 0,
+        special,
+    };
     p.ws();
     let v = p.value(0)?;
     p.ws();
@@ -222,7 +226,9 @@ impl Parser<'_> {
                             }
                         }
                         ("$b64", Value::Str(s)) => {
-                            return unbase64(s).map(Value::Bytes).ok_or_else(|| self.err("bad base64"));
+                            return unbase64(s)
+                                .map(Value::Bytes)
+                                .ok_or_else(|| self.err("bad base64"));
                         }
                         _ => {}
                     }
@@ -236,7 +242,12 @@ impl Parser<'_> {
 
     fn number(&mut self) -> Result<Value, String> {
         let start = self.i;
-        while self.i < self.s.len() && matches!(self.s[self.i], b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9') {
+        while self.i < self.s.len()
+            && matches!(
+                self.s[self.i],
+                b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9'
+            )
+        {
             self.i += 1;
         }
         let t = std::str::from_utf8(&self.s[start..self.i]).unwrap_or("");
@@ -253,12 +264,16 @@ impl Parser<'_> {
         self.i += 1;
         let mut out: Vec<u8> = Vec::new();
         loop {
-            let Some(&c) = self.s.get(self.i) else { return Err(self.err("the text ends in a string")) };
+            let Some(&c) = self.s.get(self.i) else {
+                return Err(self.err("the text ends in a string"));
+            };
             self.i += 1;
             match c {
                 b'"' => break,
                 b'\\' => {
-                    let Some(&e) = self.s.get(self.i) else { return Err(self.err("the text ends in a string")) };
+                    let Some(&e) = self.s.get(self.i) else {
+                        return Err(self.err("the text ends in a string"));
+                    };
                     self.i += 1;
                     let ch = match e {
                         b'"' => '"',
@@ -273,7 +288,9 @@ impl Parser<'_> {
                             let mut cp = self.hex4()?;
                             if (0xD800..0xDC00).contains(&cp) && self.eat("\\u") {
                                 let lo = self.hex4()?;
-                                cp = 0x10000 + ((cp - 0xD800) << 10) + (lo.wrapping_sub(0xDC00) & 0x3FF);
+                                cp = 0x10000
+                                    + ((cp - 0xD800) << 10)
+                                    + (lo.wrapping_sub(0xDC00) & 0x3FF);
                             }
                             char::from_u32(cp).unwrap_or('\u{FFFD}')
                         }
@@ -289,7 +306,11 @@ impl Parser<'_> {
     }
 
     fn hex4(&mut self) -> Result<u32, String> {
-        let h = self.s.get(self.i..self.i + 4).and_then(|h| std::str::from_utf8(h).ok()).and_then(|h| u32::from_str_radix(h, 16).ok());
+        let h = self
+            .s
+            .get(self.i..self.i + 4)
+            .and_then(|h| std::str::from_utf8(h).ok())
+            .and_then(|h| u32::from_str_radix(h, 16).ok());
         self.i += 4;
         h.ok_or_else(|| self.err("bad \\u escape"))
     }
@@ -301,7 +322,9 @@ const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 pub fn base64(b: &[u8]) -> String {
     let mut out = String::with_capacity(b.len().div_ceil(3) * 4);
     for c in b.chunks(3) {
-        let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+        let n = (c[0] as u32) << 16
+            | (*c.get(1).unwrap_or(&0) as u32) << 8
+            | *c.get(2).unwrap_or(&0) as u32;
         for k in 0..4 {
             if k <= c.len() {
                 out.push(B64[(n >> (18 - 6 * k) & 63) as usize] as char);
@@ -337,15 +360,29 @@ mod tests {
     fn round_trip_keeps_order_and_kinds() {
         let v = Value::Map(vec![
             ("z".into(), Value::Int(3)),
-            ("a".into(), Value::List(vec![Value::Num(1.5), Value::Nil, Value::Bool(true), Value::Str("é\"\n".into())])),
+            (
+                "a".into(),
+                Value::List(vec![
+                    Value::Num(1.5),
+                    Value::Nil,
+                    Value::Bool(true),
+                    Value::Str("é\"\n".into()),
+                ]),
+            ),
             ("cb".into(), Value::Callback(7)),
             ("raw".into(), Value::Bytes(vec![0, 1, 2, 250])),
         ]);
         let text = encode(&v);
-        assert_eq!(text, r#"{"z":3,"a":[1.5,null,true,"é\"\n"],"cb":{"$cb":7},"raw":{"$b64":"AAEC+g=="}}"#);
+        assert_eq!(
+            text,
+            r#"{"z":3,"a":[1.5,null,true,"é\"\n"],"cb":{"$cb":7},"raw":{"$b64":"AAEC+g=="}}"#
+        );
         assert_eq!(decode(&text, true).unwrap(), v);
         // (a plugin's own JSON keeps such maps as maps)
-        assert!(matches!(decode(&text, false).unwrap().get("cb"), Some(Value::Map(_))));
+        assert!(matches!(
+            decode(&text, false).unwrap().get("cb"),
+            Some(Value::Map(_))
+        ));
         assert_eq!(decode(&encode_pretty(&v), true).unwrap(), v);
     }
 
@@ -360,7 +397,11 @@ mod tests {
         for bad in ["", "{", "[1,]", "{\"a\" 1}", "tru", "\"abc", "1 2"] {
             assert!(decode(bad, false).is_err(), "{bad}");
         }
-        assert!(decode(&"[".repeat(500), false).unwrap_err().contains("deep"));
+        assert!(
+            decode(&"[".repeat(500), false)
+                .unwrap_err()
+                .contains("deep")
+        );
     }
 
     #[test]

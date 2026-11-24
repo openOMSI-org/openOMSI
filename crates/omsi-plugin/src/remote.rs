@@ -1,7 +1,7 @@
 //! The game's end of `omsi-plugin-host`: a 32-bit plugin library run in a process of its
 //! own, a frame one round trip over its standard input and output.
 
-use crate::{wire, Frame, Procs, Reply};
+use crate::{Frame, Procs, Reply, wire};
 use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -60,11 +60,22 @@ const START_WAIT: Duration = Duration::from_secs(15);
 impl Remote {
     /// Start `host` (with `runner`, e.g. `wine`, in front when given) on the library in
     /// `dir` and have it call `PluginStart`.
-    pub fn spawn(runner: Option<&Path>, host: &Path, dll: &Path, dir: &Path) -> Result<Remote, String> {
+    pub fn spawn(
+        runner: Option<&Path>,
+        host: &Path,
+        dll: &Path,
+        dir: &Path,
+    ) -> Result<Remote, String> {
         Self::spawn_waiting(runner, host, dll, dir, START_WAIT)
     }
 
-    fn spawn_waiting(runner: Option<&Path>, host: &Path, dll: &Path, dir: &Path, start_wait: Duration) -> Result<Remote, String> {
+    fn spawn_waiting(
+        runner: Option<&Path>,
+        host: &Path,
+        dll: &Path,
+        dir: &Path,
+        start_wait: Duration,
+    ) -> Result<Remote, String> {
         let mut cmd = match runner {
             Some(r) => {
                 let mut c = Command::new(r);
@@ -73,13 +84,19 @@ impl Remote {
             }
             None => Command::new(host),
         };
-        cmd.arg(dll).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).current_dir(dir);
+        cmd.arg(dll)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .current_dir(dir);
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x0800_0000);
         }
-        let mut child = cmd.spawn().map_err(|e| format!("could not start {}: {e}", host.display()))?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| format!("could not start {}: {e}", host.display()))?;
         if let Some(err) = child.stderr.take() {
             std::thread::spawn(move || {
                 for line in std::io::BufRead::lines(BufReader::new(err)).map_while(Result::ok) {
@@ -101,7 +118,11 @@ impl Remote {
         let Ok((answer, to, from)) = start.recv_timeout(start_wait) else {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(format!("{} did not finish starting within {} s and is left out (a message box of its own may be waiting behind the game's window)", dll.display(), start_wait.as_secs()));
+            return Err(format!(
+                "{} did not finish starting within {} s and is left out (a message box of its own may be waiting behind the game's window)",
+                dll.display(),
+                start_wait.as_secs()
+            ));
         };
         let procs = match answer {
             Ok((1, flags)) => Procs::from_flags(flags),
@@ -116,13 +137,26 @@ impl Remote {
         };
         let (asks, asked) = mpsc::channel();
         let (answered, answers) = mpsc::channel();
-        let spawned = std::thread::Builder::new().name("plugin host".into()).spawn(move || exchange(to, from, procs, asked, answered));
+        let spawned = std::thread::Builder::new()
+            .name("plugin host".into())
+            .spawn(move || exchange(to, from, procs, asked, answered));
         if let Err(e) = spawned {
             let _ = child.kill();
             return Err(format!("no thread for the host of {}: {e}", dll.display()));
         }
-        let name = dll.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        Ok(Remote { child, name, asks, answers, owed: None, slow: false, procs })
+        let name = dll
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        Ok(Remote {
+            child,
+            name,
+            asks,
+            answers,
+            owed: None,
+            slow: false,
+            procs,
+        })
     }
 
     pub fn procs(&self) -> Procs {
@@ -134,9 +168,17 @@ impl Remote {
     /// [`Remote::late`] (no frame is asked before it has come). An error when the host
     /// ended.
     pub fn frame(&mut self, f: &Frame) -> std::io::Result<Option<Reply>> {
-        debug_assert!(self.owed.is_none(), "a frame asked while the last one's answer is owed");
-        self.asks.send(Ask::Frame(f.clone())).map_err(|_| std::io::Error::from(std::io::ErrorKind::BrokenPipe))?;
-        match self.answers.recv_timeout(if self.slow { SLOW_WAIT } else { ANSWER_WAIT }) {
+        debug_assert!(
+            self.owed.is_none(),
+            "a frame asked while the last one's answer is owed"
+        );
+        self.asks
+            .send(Ask::Frame(f.clone()))
+            .map_err(|_| std::io::Error::from(std::io::ErrorKind::BrokenPipe))?;
+        match self
+            .answers
+            .recv_timeout(if self.slow { SLOW_WAIT } else { ANSWER_WAIT })
+        {
             Ok(Answer::Frame(r)) => {
                 self.slow = false;
                 r.map(Some)
@@ -144,7 +186,11 @@ impl Remote {
             Ok(Answer::Finalized) => Err(std::io::ErrorKind::BrokenPipe.into()),
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 if !self.slow {
-                    log::warn!("plugin {}: no answer within {} ms - the game goes on without it, at its own pace", self.name, ANSWER_WAIT.as_millis());
+                    log::warn!(
+                        "plugin {}: no answer within {} ms - the game goes on without it, at its own pace",
+                        self.name,
+                        ANSWER_WAIT.as_millis()
+                    );
                 }
                 self.slow = true;
                 self.owed = Some(Instant::now());
@@ -158,18 +204,32 @@ impl Remote {
     /// it is still owed, or when nothing is). An error when the host ended, or owed it
     /// longer than `GIVE_UP` (the host is ended then).
     pub fn late(&mut self) -> std::io::Result<Option<Reply>> {
-        let Some(since) = self.owed else { return Ok(None) };
+        let Some(since) = self.owed else {
+            return Ok(None);
+        };
         match self.answers.try_recv() {
             Ok(Answer::Frame(r)) => {
-                log::info!("plugin {}: answers again after {:.1} s", self.name, since.elapsed().as_secs_f32());
+                log::info!(
+                    "plugin {}: answers again after {:.1} s",
+                    self.name,
+                    since.elapsed().as_secs_f32()
+                );
                 self.owed = None;
                 r.map(Some)
             }
-            Ok(Answer::Finalized) | Err(mpsc::TryRecvError::Disconnected) => Err(std::io::ErrorKind::BrokenPipe.into()),
+            Ok(Answer::Finalized) | Err(mpsc::TryRecvError::Disconnected) => {
+                Err(std::io::ErrorKind::BrokenPipe.into())
+            }
             Err(mpsc::TryRecvError::Empty) if since.elapsed() < GIVE_UP => Ok(None),
             Err(mpsc::TryRecvError::Empty) => {
                 let _ = self.child.kill();
-                Err(std::io::Error::new(std::io::ErrorKind::TimedOut, format!("no answer for {} s, stuck in its own code", GIVE_UP.as_secs())))
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!(
+                        "no answer for {} s, stuck in its own code",
+                        GIVE_UP.as_secs()
+                    ),
+                ))
             }
         }
     }
@@ -197,7 +257,13 @@ impl Remote {
 
 /// The game's side of the host's pipes: one round trip for each frame asked, until the game
 /// finalizes the plugin or goes, or the host ends.
-fn exchange(mut to: BufWriter<ChildStdin>, mut from: BufReader<ChildStdout>, procs: Procs, asks: mpsc::Receiver<Ask>, answers: mpsc::Sender<Answer>) {
+fn exchange(
+    mut to: BufWriter<ChildStdin>,
+    mut from: BufReader<ChildStdout>,
+    procs: Procs,
+    asks: mpsc::Receiver<Ask>,
+    answers: mpsc::Sender<Answer>,
+) {
     for ask in asks {
         match ask {
             Ask::Frame(f) => {
@@ -236,7 +302,13 @@ mod tests {
     #[test]
     fn a_plugin_that_never_finishes_starting_is_left_out() {
         let started = Instant::now();
-        let r = Remote::spawn_waiting(None, Path::new("sleep"), Path::new("30"), Path::new("."), Duration::from_millis(300));
+        let r = Remote::spawn_waiting(
+            None,
+            Path::new("sleep"),
+            Path::new("30"),
+            Path::new("."),
+            Duration::from_millis(300),
+        );
         assert!(r.is_err());
         assert!(started.elapsed() < Duration::from_secs(5));
     }

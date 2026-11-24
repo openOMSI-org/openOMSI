@@ -15,7 +15,9 @@ use std::path::{Path, PathBuf};
 
 /// Every file below `dir`, through the VFS (folders and mounted archives).
 pub fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Some(entries) = vfs::list_dir(dir) else { return };
+    let Some(entries) = vfs::list_dir(dir) else {
+        return;
+    };
     for (name, is_dir) in entries {
         let p = dir.join(&name);
         if is_dir {
@@ -36,7 +38,8 @@ fn fnv(s: &str) -> u64 {
 }
 
 /// Built-in variables (road vehicle, road vehicle strings, scenery object), set by `main`.
-pub static BUILTINS: std::sync::OnceLock<(Vec<String>, Vec<String>, Vec<String>)> = std::sync::OnceLock::new();
+pub static BUILTINS: std::sync::OnceLock<(Vec<String>, Vec<String>, Vec<String>)> =
+    std::sync::OnceLock::new();
 
 /// The compiled scripts of an object (varlists, stringvarlists, scripts, constfiles), in a
 /// stable form (the program's own maps are hash maps).
@@ -45,7 +48,13 @@ fn scripts(lists: [&[PathBuf]; 4], vehicle: bool) -> String {
         return String::new();
     }
     let (rv, rvs, so) = BUILTINS.get().cloned().unwrap_or_default();
-    let mut inp = omsi_script::CompileInput { varlists: lists[0].to_vec(), stringvarlists: lists[1].to_vec(), scripts: lists[2].to_vec(), constfiles: lists[3].to_vec(), ..Default::default() };
+    let mut inp = omsi_script::CompileInput {
+        varlists: lists[0].to_vec(),
+        stringvarlists: lists[1].to_vec(),
+        scripts: lists[2].to_vec(),
+        constfiles: lists[3].to_vec(),
+        ..Default::default()
+    };
     if vehicle {
         inp.builtin_vars = rv;
         inp.builtin_str_vars = rvs;
@@ -64,10 +73,16 @@ fn scripts(lists: [&[PathBuf]; 4], vehicle: bool) -> String {
     macros.sort();
     let mut triggers: Vec<String> = p.triggers.keys().cloned().collect();
     triggers.sort();
-    let blocks: Vec<String> = p.blocks.iter().map(|b| format!("{} {:?}", b.name, b.ops)).collect();
+    let blocks: Vec<String> = p
+        .blocks
+        .iter()
+        .map(|b| format!("{} {:?}", b.name, b.ops))
+        .collect();
     let mut errors: Vec<String> = p.errors.iter().map(|e| e.to_string()).collect();
     errors.sort();
-    format!("scripts: blocks {blocks:#?}\nmacros {macros:?}\ntriggers {triggers:?}\nerrors {errors:#?}")
+    format!(
+        "scripts: blocks {blocks:#?}\nmacros {macros:?}\ntriggers {triggers:?}\nerrors {errors:#?}"
+    )
 }
 
 /// Whether every mesh file of a model resolves to an existing file (and where).
@@ -75,7 +90,12 @@ fn meshes(dir: &Path, model: &omsi_model::Model) -> String {
     let mut s = String::from("meshes:\n");
     for m in &model.meshes {
         let p = omsi_cfg::resolve_path(dir, &m.file);
-        s.push_str(&format!("  {} -> {} {}\n", m.file, p.display(), vfs::is_file(&p)));
+        s.push_str(&format!(
+            "  {} -> {} {}\n",
+            m.file,
+            p.display(),
+            vfs::is_file(&p)
+        ));
     }
     s
 }
@@ -83,7 +103,10 @@ fn meshes(dir: &Path, model: &omsi_model::Model) -> String {
 /// What `p` parses to, or None for a file no loader reads.
 pub fn describe(p: &Path) -> Option<String> {
     let name = p.file_name()?.to_string_lossy().to_ascii_lowercase();
-    let ext = p.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    let ext = p
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
     let lower = p.to_string_lossy().to_ascii_lowercase().replace('\\', "/");
     let dir = p.parent().unwrap_or(Path::new(""));
     let err = |e: omsi_cfg::CfgError| format!("error: {e}");
@@ -91,14 +114,27 @@ pub fn describe(p: &Path) -> Option<String> {
         "bus" | "ovh" => match omsi_vehicle::Vehicle::load(p) {
             Ok(v) => {
                 let s = &v.scripts;
-                format!("{v:#?}\n{}", scripts([&s.varlists, &s.stringvarlists, &s.scripts, &s.constfiles], true))
+                format!(
+                    "{v:#?}\n{}",
+                    scripts(
+                        [&s.varlists, &s.stringvarlists, &s.scripts, &s.constfiles],
+                        true
+                    )
+                )
             }
             Err(e) => err(e),
         },
         "sco" => match omsi_scenery::SceneryObject::load(p) {
             Ok(o) => {
                 let s = &o.scripts;
-                format!("{o:#?}\n{}\n{}", meshes(dir, &o.model), scripts([&s.varlists, &s.stringvarlists, &s.scripts, &s.constfiles], false))
+                format!(
+                    "{o:#?}\n{}\n{}",
+                    meshes(dir, &o.model),
+                    scripts(
+                        [&s.varlists, &s.stringvarlists, &s.scripts, &s.constfiles],
+                        false
+                    )
+                )
             }
             Err(e) => err(e),
         },
@@ -142,7 +178,9 @@ pub fn describe(p: &Path) -> Option<String> {
         "ttr" => format!("{:#?}", omsi_timetable::Track::load(p).map_err(err)),
         "ttl" => format!("{:#?}", omsi_timetable::Line::load(p).map_err(err)),
         "ocu" => format!("{:#?}", omsi_timetable::CarUse::load(p).map_err(err)),
-        "map" if name.starts_with("tile_") || lower.contains("/chrono/") => format!("{:#?}", omsi_map::Tile::load(p).map_err(err)),
+        "map" if name.starts_with("tile_") || lower.contains("/chrono/") => {
+            format!("{:#?}", omsi_map::Tile::load(p).map_err(err))
+        }
         "cfg" => {
             if name == "global.cfg" {
                 format!("{:#?}", omsi_map::GlobalCfg::load(p).map_err(err))
@@ -156,7 +194,10 @@ pub fn describe(p: &Path) -> Option<String> {
                 format!("{:#?}", omsi_vehicle::VehiclePaths::load(p).map_err(err))
             } else if name.contains("sound") {
                 format!("{:#?}", omsi_vehicle::SoundCfg::load(p).map_err(err))
-            } else if lower.contains("/model/") || lower.contains("/model_") || name.starts_with("model") {
+            } else if lower.contains("/model/")
+                || lower.contains("/model_")
+                || name.starts_with("model")
+            {
                 match omsi_model::Model::load(p) {
                     Ok(m) => format!("{m:#?}\n{}", meshes(dir, &m)),
                     Err(e) => err(e),
@@ -174,7 +215,13 @@ pub fn describe(p: &Path) -> Option<String> {
 fn dump_name(p: &Path, roots: &[PathBuf]) -> String {
     for r in roots {
         if let Ok(rel) = p.strip_prefix(r) {
-            return format!("{}/{}", r.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), rel.display());
+            return format!(
+                "{}/{}",
+                r.file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+                rel.display()
+            );
         }
     }
     p.display().to_string()
@@ -190,7 +237,12 @@ pub fn dump(roots: &[PathBuf], out: &Path) -> std::io::Result<()> {
         .par_iter()
         .filter_map(|p| {
             let d = describe(p)?;
-            Some(format!("{}\t{:016x}\t{}", dump_name(p, roots), fnv(&d), d.len()))
+            Some(format!(
+                "{}\t{:016x}\t{}",
+                dump_name(p, roots),
+                fnv(&d),
+                d.len()
+            ))
         })
         .collect();
     rows.sort();
@@ -198,12 +250,22 @@ pub fn dump(roots: &[PathBuf], out: &Path) -> std::io::Result<()> {
     for r in &rows {
         writeln!(f, "{r}")?;
     }
-    println!("[dump] {} of {} files described in {:.0} s -> {}", rows.len(), files.len(), t0.elapsed().as_secs_f64(), out.display());
+    println!(
+        "[dump] {} of {} files described in {:.0} s -> {}",
+        rows.len(),
+        files.len(),
+        t0.elapsed().as_secs_f64(),
+        out.display()
+    );
     Ok(())
 }
 
 pub fn dump_detail(roots: &[PathBuf], list: &Path, out: &Path) -> std::io::Result<()> {
-    let wanted: Vec<String> = std::fs::read_to_string(list)?.lines().map(|l| l.split('\t').next().unwrap_or("").to_string()).filter(|l| !l.is_empty()).collect();
+    let wanted: Vec<String> = std::fs::read_to_string(list)?
+        .lines()
+        .map(|l| l.split('\t').next().unwrap_or("").to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
     let mut files = Vec::new();
     for r in roots {
         walk(r, &mut files);

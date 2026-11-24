@@ -117,11 +117,7 @@ fn denial_budget_is_fail_closed_instead_of_forgetting_new_denials() {
             .unwrap()
             .insert(DenialKey::new(&root.join(format!("plugin-{n}.lua"))));
     }
-    assert!(
-        permissions
-            .check_denied(&request.entry)
-            .is_err()
-    );
+    assert!(permissions.check_denied(&request.entry).is_err());
     assert!(permissions.authorize(&request).is_err());
     assert!(permissions.prompt().is_none());
     std::fs::remove_dir_all(root).unwrap();

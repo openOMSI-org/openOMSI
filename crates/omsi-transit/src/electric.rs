@@ -41,7 +41,7 @@
 //! at a crossing or a switch; a collector shoe bridges it only when two shoes are far enough
 //! apart: `length 12`), the same keys as the overhead's.
 
-use crate::doc::{parse, Block, Issue, Issues};
+use crate::doc::{Block, Issue, Issues, parse};
 use omsi_cfg::transport::ModeSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -118,15 +118,33 @@ impl Electrification {
     pub fn length_m(&self) -> f64 {
         self.spans
             .iter()
-            .map(|s| s.points.windows(2).map(|w| ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2) + (w[1][2] - w[0][2]).powi(2)).sqrt()).sum::<f64>())
+            .map(|s| {
+                s.points
+                    .windows(2)
+                    .map(|w| {
+                        ((w[1][0] - w[0][0]).powi(2)
+                            + (w[1][1] - w[0][1]).powi(2)
+                            + (w[1][2] - w[0][2]).powi(2))
+                        .sqrt()
+                    })
+                    .sum::<f64>()
+            })
             .sum()
     }
 
-    pub fn parse(text: &str, file: &str, third_rail: bool, issues: &mut Vec<Issue>) -> Electrification {
+    pub fn parse(
+        text: &str,
+        file: &str,
+        third_rail: bool,
+        issues: &mut Vec<Issue>,
+    ) -> Electrification {
         let mut is = Issues::new(file);
         let blocks = parse(text, &mut is);
         let p = if third_rail { "thirdrail" } else { "catenary" };
-        let mut out = Electrification { third_rail, ..Default::default() };
+        let mut out = Electrification {
+            third_rail,
+            ..Default::default()
+        };
         out.net.wires = if third_rail { 1 } else { 1 };
         let mut have_net = false;
         for b in &blocks {
@@ -137,7 +155,10 @@ impl Electrification {
                 }
                 Some("section") => out.sections.push(Section {
                     id: b.str("id"),
-                    name: b.get("name").map(str::to_string).unwrap_or_else(|| b.str("id")),
+                    name: b
+                        .get("name")
+                        .map(str::to_string)
+                        .unwrap_or_else(|| b.str("id")),
                     live: b.flag_or("live", true),
                     feeder_ohm: b.f32_or("feeder_ohm", 0.05),
                     regen_kw: b.f32_or("regen_kw", 0.0),
@@ -146,21 +167,36 @@ impl Electrification {
                 Some("span") => {
                     let mut points = Vec::new();
                     for e in b.all("p") {
-                        let n: Vec<f64> = e.value.split_whitespace().filter_map(|w| w.parse().ok()).collect();
+                        let n: Vec<f64> = e
+                            .value
+                            .split_whitespace()
+                            .filter_map(|w| w.parse().ok())
+                            .collect();
                         if n.len() == 3 {
                             points.push([n[0], n[1], n[2]]);
                         } else {
                             is.error(e.line, format!("a point needs x y z, got `{}`", e.value));
                         }
                     }
-                    out.spans.push(Span { section: b.str("section"), points, line: b.line });
+                    out.spans.push(Span {
+                        section: b.str("section"),
+                        points,
+                        line: b.line,
+                    });
                 }
                 Some("insulator") | Some("gap") => {
                     let pos = b.vec3("pos");
                     if pos.is_none() {
                         is.error(b.line, "a break needs pos x y z");
                     }
-                    out.gaps.push(Gap { pos: pos.unwrap_or_default(), length_m: b.metres("length").unwrap_or(if third_rail { 12.0 } else { 0.8 }), between: b.list("between", false), line: b.line });
+                    out.gaps.push(Gap {
+                        pos: pos.unwrap_or_default(),
+                        length_m: b
+                            .metres("length")
+                            .unwrap_or(if third_rail { 12.0 } else { 0.8 }),
+                        between: b.list("between", false),
+                        line: b.line,
+                    });
                 }
                 Some("switch") if !third_rail => {
                     let pos = b.vec3("pos");
@@ -169,9 +205,17 @@ impl Electrification {
                     }
                     let mode = b.get("mode").unwrap_or("fixed").trim().to_ascii_lowercase();
                     if !["power", "indicator", "fixed"].contains(&mode.as_str()) {
-                        is.error(b.line_of("mode"), format!("mode {mode} is not power, indicator or fixed"));
+                        is.error(
+                            b.line_of("mode"),
+                            format!("mode {mode} is not power, indicator or fixed"),
+                        );
                     }
-                    out.switches.push(WireSwitch { id: b.str("id"), pos: pos.unwrap_or_default(), mode, line: b.line });
+                    out.switches.push(WireSwitch {
+                        id: b.str("id"),
+                        pos: pos.unwrap_or_default(),
+                        mode,
+                        line: b.line,
+                    });
                 }
                 _ => is.warn(b.line, format!("unknown block [{}]", b.name)),
             }
@@ -182,7 +226,10 @@ impl Electrification {
         for (i, s) in out.sections.iter().enumerate() {
             if s.id.is_empty() {
                 is.error(s.line, "a section has no id");
-            } else if out.sections[..i].iter().any(|o| o.id.eq_ignore_ascii_case(&s.id)) {
+            } else if out.sections[..i]
+                .iter()
+                .any(|o| o.id.eq_ignore_ascii_case(&s.id))
+            {
                 is.error(s.line, format!("section id {} is used twice", s.id));
             }
         }
@@ -191,7 +238,10 @@ impl Electrification {
                 is.error(sp.line, "a span needs at least two points");
             }
             if out.section(&sp.section).is_none() {
-                is.error(sp.line, format!("span: section {} does not exist", sp.section));
+                is.error(
+                    sp.line,
+                    format!("span: section {} does not exist", sp.section),
+                );
             }
         }
         for g in &out.gaps {
@@ -240,8 +290,19 @@ fn read_net(b: &Block, third_rail: bool, is: &mut Issues) -> Net {
             1
         }
     };
-    let bottom_contact = b.get("kind").is_some_and(|k| k.trim().eq_ignore_ascii_case("bottom"));
-    Net { kind, voltage, wires: wires.clamp(1, 2) as u8, spacing_m: b.metres("spacing").unwrap_or(0.6), height_m: b.metres("height").unwrap_or(5.5), modes, side, bottom_contact }
+    let bottom_contact = b
+        .get("kind")
+        .is_some_and(|k| k.trim().eq_ignore_ascii_case("bottom"));
+    Net {
+        kind,
+        voltage,
+        wires: wires.clamp(1, 2) as u8,
+        spacing_m: b.metres("spacing").unwrap_or(0.6),
+        height_m: b.metres("height").unwrap_or(5.5),
+        modes,
+        side,
+        bottom_contact,
+    }
 }
 
 #[cfg(test)]
@@ -270,7 +331,10 @@ mod tests {
         let mut issues = Vec::new();
         let e = Electrification::parse(text, "thirdrail.cfg", true, &mut issues);
         assert!(issues.is_empty(), "{issues:?}");
-        assert_eq!((e.net.side, e.net.bottom_contact, e.net.voltage), (-1, true, 750.0));
+        assert_eq!(
+            (e.net.side, e.net.bottom_contact, e.net.voltage),
+            (-1, true, 750.0)
+        );
         assert_eq!(e.gaps[0].length_m, 12.0);
     }
 
@@ -280,8 +344,19 @@ mod tests {
         let mut issues = Vec::new();
         Electrification::parse(text, "catenary.cfg", false, &mut issues);
         let all: Vec<String> = issues.iter().map(|i| i.to_string()).collect();
-        for want in ["[catenary_net] is missing", "used twice", "needs x y z", "at least two points", "section B does not exist", "needs pos", "section C does not exist"] {
-            assert!(all.iter().any(|t| t.contains(want)), "missing `{want}` in {all:#?}");
+        for want in [
+            "[catenary_net] is missing",
+            "used twice",
+            "needs x y z",
+            "at least two points",
+            "section B does not exist",
+            "needs pos",
+            "section C does not exist",
+        ] {
+            assert!(
+                all.iter().any(|t| t.contains(want)),
+                "missing `{want}` in {all:#?}"
+            );
         }
     }
 }

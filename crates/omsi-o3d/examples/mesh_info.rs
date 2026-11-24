@@ -13,14 +13,36 @@ fn main() {
             std::process::exit(1);
         }
     };
-    let (lo, hi) = m.vertices.iter().fold((glam::Vec3::MAX, glam::Vec3::MIN), |(a, b), v| (a.min(v.position), b.max(v.position)));
-    println!("{} vertices, {} triangles, bounds {lo:.3} .. {hi:.3}", m.vertices.len(), m.triangles.len());
+    let (lo, hi) = m
+        .vertices
+        .iter()
+        .fold((glam::Vec3::MAX, glam::Vec3::MIN), |(a, b), v| {
+            (a.min(v.position), b.max(v.position))
+        });
+    println!(
+        "{} vertices, {} triangles, bounds {lo:.3} .. {hi:.3}",
+        m.vertices.len(),
+        m.triangles.len()
+    );
     for (i, mat) in m.materials.iter().enumerate() {
-        println!("material {i}: diffuse {:?} texture {:?}", mat.diffuse, mat.texture);
+        println!(
+            "material {i}: diffuse {:?} texture {:?}",
+            mat.diffuse, mat.texture
+        );
     }
-    println!("{} bones, {} joints, {} blend shapes", m.bones.len(), m.joints.len(), m.morphs.len());
+    println!(
+        "{} bones, {} joints, {} blend shapes",
+        m.bones.len(),
+        m.joints.len(),
+        m.morphs.len()
+    );
     for j in &m.joints {
-        println!("  joint {:?} parent {:?} at {:.3}", j.name, j.parent.map(|p| &m.joints[p].name), j.position);
+        println!(
+            "  joint {:?} parent {:?} at {:.3}",
+            j.name,
+            j.parent.map(|p| &m.joints[p].name),
+            j.position
+        );
     }
     for mo in &m.morphs {
         println!("  shape {:?}: {} vertices", mo.name, mo.offsets.len());

@@ -255,6 +255,29 @@ impl App {
             ));
             return;
         }
+        if self
+            .net
+            .lan
+            .as_ref()
+            .is_some_and(|lan| lan.role == omsi_net::Role::Host)
+        {
+            let list = self
+                .net
+                .session_buses
+                .get_or_insert_with(|| self.args.session_bus_list());
+            if !omsi_lan::server_cfg::allows(list, bus) {
+                let names: Vec<_> = list
+                    .iter()
+                    .map(|v| v.rsplit('/').next().unwrap_or(v))
+                    .collect();
+                let reason = omsi_ui::i18n::tr_fill(
+                    "only these buses can be driven here ({list})",
+                    &[("{list}", &names.join(", "))],
+                );
+                self.service_msg = Some((reason, 4.0));
+                return;
+            }
+        }
         let bus = bus.to_string();
         let (Some(w), Some(r), Some(cam)) = (
             self.world.clone(),
@@ -449,12 +472,18 @@ impl App {
 
 crate::app::stage_ctx!(
     /// The placement stage's part of the game: a vehicle read on a worker put into the world.
-    PlacementCx { reads: [world, sound], writes: [menus, player, people, view, ui, gfx] }
+    PlacementCx {
+        reads: [world, sound],
+        writes: [menus, player, people, view, ui, gfx]
+    }
 );
 
 crate::app::stage_ctx!(
     /// Driving the next placed vehicle: its part of the game.
-    SwitchCx { reads: [sound], writes: [player, people, view, ui] }
+    SwitchCx {
+        reads: [sound],
+        writes: [player, people, view, ui]
+    }
 );
 
 impl SwitchCx<'_, '_> {

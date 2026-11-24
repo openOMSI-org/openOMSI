@@ -22,11 +22,7 @@ pub fn player_label(lan: &LanSession, id: u32) -> String {
 /// A word that may hold spaces, as one word.
 pub fn esc(s: &str) -> String {
     let s = s.trim().replace('%', "%25").replace(' ', "%20");
-    if s.is_empty() {
-        "-".into()
-    } else {
-        s
-    }
+    if s.is_empty() { "-".into() } else { s }
 }
 
 /// `esc` read back.
@@ -41,7 +37,12 @@ pub fn unesc(s: &str) -> String {
 fn short_vehicle(file: &str) -> String {
     let f = file.replace('\\', "/");
     let name = f.rsplit('/').next().unwrap_or(&f);
-    name.rsplit_once('.').map(|(n, _)| n).unwrap_or(name).chars().take(24).collect()
+    name.rsplit_once('.')
+        .map(|(n, _)| n)
+        .unwrap_or(name)
+        .chars()
+        .take(24)
+        .collect()
 }
 
 /// One player's line: `admin-p <id> <conn> <state> <admin role|-> <aboard|-> <online s>
@@ -53,7 +54,9 @@ pub fn player_line(p: &Player) -> String {
         p.conn,
         p.state.name(),
         p.admin.map(Role::name).unwrap_or("-"),
-        p.aboard.map(|a| a.to_string()).unwrap_or_else(|| "-".into()),
+        p.aboard
+            .map(|a| a.to_string())
+            .unwrap_or_else(|| "-".into()),
         p.online_secs,
         esc(&short_vehicle(&p.vehicle)),
         p.name
@@ -72,7 +75,18 @@ pub fn parse_player(arg: &str) -> Option<Player> {
     let online_secs = next()?.parse().ok()?;
     let vehicle = unesc(next()?);
     let name = next().unwrap_or("").trim().to_string();
-    Some(Player { id, conn, name, state, vehicle, line: String::new(), tour: String::new(), aboard, online_secs, admin })
+    Some(Player {
+        id,
+        conn,
+        name,
+        state,
+        vehicle,
+        line: String::new(),
+        tour: String::new(),
+        aboard,
+        online_secs,
+        admin,
+    })
 }
 
 /// The players (those a search finds, see `omsi_admin::search`), then `admin-end <count>
@@ -82,7 +96,10 @@ pub fn players_list(lan: &mut LanSession, to: u32, all: &[Player], query: &str) 
     for p in found.iter().take(MAX_LISTED) {
         lan.command(to, &player_line(p));
     }
-    lan.command(to, &format!("admin-end {} {}", found.len().min(MAX_LISTED), all.len()));
+    lan.command(
+        to,
+        &format!("admin-end {} {}", found.len().min(MAX_LISTED), all.len()),
+    );
 }
 
 /// One ban's line: `admin-b <id> <scope> <until s or -> <name> <reason>`; the name escaped, the
@@ -90,7 +107,14 @@ pub fn players_list(lan: &mut LanSession, to: u32, all: &[Player], query: &str) 
 pub fn ban_line(b: &omsi_admin::BanView) -> String {
     let name: String = b.name.chars().take(24).collect();
     let reason: String = b.reason.chars().take(60).collect();
-    format!("admin-b {} {} {} {} {}", b.id, b.scope, b.until.map(|u| u.to_string()).unwrap_or_else(|| "-".into()), esc(&name), reason)
+    format!(
+        "admin-b {} {} {} {} {}",
+        b.id,
+        b.scope,
+        b.until.map(|u| u.to_string()).unwrap_or_else(|| "-".into()),
+        esc(&name),
+        reason
+    )
 }
 
 /// An `admin-b` line read back.
@@ -100,13 +124,24 @@ pub fn parse_ban(arg: &str) -> Option<omsi_admin::BanView> {
     if id.is_empty() || id.len() > 16 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
-    let scope = w.next().filter(|s| matches!(*s, "session" | "all"))?.to_string();
+    let scope = w
+        .next()
+        .filter(|s| matches!(*s, "session" | "all"))?
+        .to_string();
     let until = match w.next()? {
         "-" => None,
         u => Some(u.parse().ok()?),
     };
     let name = unesc(w.next()?);
-    Some(omsi_admin::BanView { id, name, reason: w.next().unwrap_or("").trim().to_string(), by: String::new(), at: 0, until, scope })
+    Some(omsi_admin::BanView {
+        id,
+        name,
+        reason: w.next().unwrap_or("").trim().to_string(),
+        by: String::new(),
+        at: 0,
+        until,
+        scope,
+    })
 }
 
 /// The bans that hold (the newest first, as many as fit), then `admin-bend <count> <total>`.
@@ -114,7 +149,14 @@ pub fn bans_list(lan: &mut LanSession, to: u32, bans: &[omsi_admin::BanView]) {
     for b in bans.iter().take(MAX_BANS_LISTED) {
         lan.command(to, &ban_line(b));
     }
-    lan.command(to, &format!("admin-bend {} {}", bans.len().min(MAX_BANS_LISTED), bans.len()));
+    lan.command(
+        to,
+        &format!(
+            "admin-bend {} {}",
+            bans.len().min(MAX_BANS_LISTED),
+            bans.len()
+        ),
+    );
 }
 
 /// The most bans listed in one answer.
@@ -158,13 +200,43 @@ mod tests {
 
     #[test]
     fn a_ban_line_goes_and_comes_back() {
-        let b = omsi_admin::BanView { id: "0badf00d".into(), name: "Pichau da Silva".into(), reason: "spam in the chat".into(), by: "me".into(), at: 5, until: Some(1_900_000_000), scope: "all".into() };
+        let b = omsi_admin::BanView {
+            id: "0badf00d".into(),
+            name: "Pichau da Silva".into(),
+            reason: "spam in the chat".into(),
+            by: "me".into(),
+            at: 5,
+            until: Some(1_900_000_000),
+            scope: "all".into(),
+        };
         let line = ban_line(&b);
         assert!(line.len() <= omsi_net::MAX_CHAT);
         let back = parse_ban(line.strip_prefix("admin-b ").unwrap()).unwrap();
-        assert_eq!((back.id.as_str(), back.name.as_str(), back.reason.as_str(), back.until, back.scope.as_str()), ("0badf00d", "Pichau da Silva", "spam in the chat", Some(1_900_000_000), "all"));
+        assert_eq!(
+            (
+                back.id.as_str(),
+                back.name.as_str(),
+                back.reason.as_str(),
+                back.until,
+                back.scope.as_str()
+            ),
+            (
+                "0badf00d",
+                "Pichau da Silva",
+                "spam in the chat",
+                Some(1_900_000_000),
+                "all"
+            )
+        );
         let forever = parse_ban("0badf00d session - - ").unwrap();
-        assert_eq!((forever.name.as_str(), forever.reason.as_str(), forever.until), ("", "", None));
+        assert_eq!(
+            (
+                forever.name.as_str(),
+                forever.reason.as_str(),
+                forever.until
+            ),
+            ("", "", None)
+        );
         for bad in ["", "xyz all - a b", "0bad world - a b", "0bad all soon a b"] {
             assert!(parse_ban(bad).is_none(), "{bad}");
         }
@@ -172,15 +244,48 @@ mod tests {
 
     #[test]
     fn a_player_line_goes_and_comes_back() {
-        let p = Player { id: 3, conn: 17, name: "Pichau  da Silva".into(), state: PlayerState::Driving, vehicle: "Vehicles/MAN SD200/MAN_SD77.bus".into(), line: String::new(), tour: String::new(), aboard: None, online_secs: 95, admin: Some(Role::Moderator) };
+        let p = Player {
+            id: 3,
+            conn: 17,
+            name: "Pichau  da Silva".into(),
+            state: PlayerState::Driving,
+            vehicle: "Vehicles/MAN SD200/MAN_SD77.bus".into(),
+            line: String::new(),
+            tour: String::new(),
+            aboard: None,
+            online_secs: 95,
+            admin: Some(Role::Moderator),
+        };
         let line = player_line(&p);
         assert!(line.len() <= omsi_net::MAX_CHAT, "{line}");
         let back = parse_player(line.strip_prefix("admin-p ").unwrap()).unwrap();
-        assert_eq!((back.id, back.conn, back.state, back.admin, back.aboard, back.online_secs), (3, 17, PlayerState::Driving, Some(Role::Moderator), None, 95));
-        assert_eq!((back.vehicle.as_str(), back.name.as_str()), ("MAN_SD77", "Pichau  da Silva"));
-        let on_foot = Player { vehicle: String::new(), state: PlayerState::Aboard, aboard: Some(2), admin: None, ..p };
+        assert_eq!(
+            (
+                back.id,
+                back.conn,
+                back.state,
+                back.admin,
+                back.aboard,
+                back.online_secs
+            ),
+            (3, 17, PlayerState::Driving, Some(Role::Moderator), None, 95)
+        );
+        assert_eq!(
+            (back.vehicle.as_str(), back.name.as_str()),
+            ("MAN_SD77", "Pichau  da Silva")
+        );
+        let on_foot = Player {
+            vehicle: String::new(),
+            state: PlayerState::Aboard,
+            aboard: Some(2),
+            admin: None,
+            ..p
+        };
         let back = parse_player(player_line(&on_foot).strip_prefix("admin-p ").unwrap()).unwrap();
-        assert_eq!((back.vehicle.as_str(), back.aboard, back.admin, back.state), ("", Some(2), None, PlayerState::Aboard));
+        assert_eq!(
+            (back.vehicle.as_str(), back.aboard, back.admin, back.state),
+            ("", Some(2), None, PlayerState::Aboard)
+        );
         assert_eq!(parse_player("x 1 driving - - 0 - n"), None);
         assert_eq!(unesc(&esc("100% sure")), "100% sure");
     }

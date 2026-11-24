@@ -30,7 +30,19 @@ fn main() {
                 }
             }
         }
-        let frac_uv = m.vertices.iter().filter(|v| v.uv.x >= -0.001 && v.uv.x <= 1.001 && v.uv.y >= -1.001 && v.uv.y <= 1.001).count();
-        println!("{}: v{} verts {} tris {} normal agreement {:.3} uv-in-range {:.3}", p, m.version, m.vertices.len(), m.triangles.len(), agree as f64 / total.max(1) as f64, frac_uv as f64 / m.vertices.len().max(1) as f64);
+        let frac_uv = m
+            .vertices
+            .iter()
+            .filter(|v| v.uv.x >= -0.001 && v.uv.x <= 1.001 && v.uv.y >= -1.001 && v.uv.y <= 1.001)
+            .count();
+        println!(
+            "{}: v{} verts {} tris {} normal agreement {:.3} uv-in-range {:.3}",
+            p,
+            m.version,
+            m.vertices.len(),
+            m.triangles.len(),
+            agree as f64 / total.max(1) as f64,
+            frac_uv as f64 / m.vertices.len().max(1) as f64
+        );
     }
 }

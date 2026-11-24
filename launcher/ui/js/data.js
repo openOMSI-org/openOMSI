@@ -12,7 +12,7 @@ export const CHOICE_DEFAULTS = {
   time: 9 * 60, start_trip: null, date: '1989-05-30',
   season: 'auto', phase: 'mid', own_date: null,
   weather: '', traffic: 30, passengers: true, schedule: true, autostart: false, comfortable_cabin_on_start: false, on_foot: false,
-  lan_mode: 'off', lan_addr: '', lan_ws_fallback: null, version: 2,
+  lan_mode: 'off', lan_addr: '', lan_ws_fallback: null, session_buses: '', version: 2,
 };
 
 export async function boot() {
@@ -608,6 +608,7 @@ export async function duty(extra = {}) {
     lan: c.lan_mode === 'host' ? 'host' : c.lan_mode === 'join' ? `join:${c.lan_addr.trim()}` : 'off',
     lan_name: null,
     lan_ws_fallback: c.lan_mode === 'join' ? c.lan_ws_fallback || null : null,
+    session_buses: c.lan_mode === 'host' ? c.session_buses?.trim() || null : null,
     season: seasonWord || null,
     tutorial: null,
     situation: null,

@@ -6,63 +6,63 @@
 //! and sound like, and taking the lanes and the vehicle types from the world, is omsi-app's
 //! `traffic` (its `Traffic` is a `TrafficSim` with its pictures and sounds).
 
-pub mod body_link;
 pub mod admission;
 pub mod berths;
 pub mod blocks;
+pub mod body_link;
+#[cfg(test)]
+mod body_tests;
 pub mod bus_service;
 pub mod control;
 pub mod deadlock;
-pub mod fixed_step;
-pub mod horn;
 pub mod density;
 pub mod dormant;
 pub mod emergency;
+#[cfg(test)]
+mod emergency_tests;
+pub mod fixed_step;
+pub mod foot_grid;
+pub mod horn;
+#[cfg(test)]
+mod junction_tests;
 pub mod junctions;
 pub mod lateral;
+#[cfg(test)]
+mod lateral_tests;
 pub mod light_paths;
 pub mod lights;
 pub mod mirror;
 pub mod model;
 pub mod obstacles;
-pub mod foot_grid;
 pub mod parked;
 pub mod planning;
+#[cfg(test)]
+mod population_tests;
 pub mod random;
+#[cfg(test)]
+mod request_tests;
+#[cfg(test)]
+mod scenario_tests;
 pub mod scenery;
+#[cfg(test)]
+pub(crate) mod service_tests;
 pub mod setup;
+#[cfg(test)]
+mod signal_tests;
 pub mod stats;
+#[cfg(test)]
+mod tests;
 pub mod tick;
 pub mod viewer;
 pub mod waving;
-#[cfg(test)]
-mod body_tests;
-#[cfg(test)]
-mod scenario_tests;
-#[cfg(test)]
-mod junction_tests;
-#[cfg(test)]
-pub(crate) mod service_tests;
-#[cfg(test)]
-mod population_tests;
-#[cfg(test)]
-mod tests;
-#[cfg(test)]
-mod lateral_tests;
-#[cfg(test)]
-mod emergency_tests;
-#[cfg(test)]
-mod signal_tests;
-#[cfg(test)]
-mod request_tests;
 
 use crate::ai_motion::{
-    back_in_ramp, pull_out_ramps, AiBody, MotionKind, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL,
-    PULL_OUT_CLEARANCE,
+    AiBody, BACK_IN_LAT_ACCEL, MotionKind, PULL_OUT_ACCEL, PULL_OUT_CLEARANCE, back_in_ramp,
+    pull_out_ramps,
 };
 use crate::collision::Obb;
 use crate::traffic::{
-    arrival_time, AiState, Aspect, LaneKind, Lead, Network, TrafficLightController, MAX_BRAKE,
+    AiState, Aspect, LaneKind, Lead, MAX_BRAKE, Network, TrafficLightController, arrival_time,
 };
 use crate::vehicle::AiFrame;
 use crate::{VehicleInstance, VehicleType};
@@ -100,7 +100,9 @@ fn spread_schemes(n: usize, h: u64) -> Vec<usize> {
         stride += 1;
     }
     let start = (h % n.max(1) as u64) as usize;
-    (0..n.min(AI_SCHEMES)).map(|i| (start + i * stride) % n).collect()
+    (0..n.min(AI_SCHEMES))
+        .map(|i| (start + i * stride) % n)
+        .collect()
 }
 
 pub struct TrafficSim {

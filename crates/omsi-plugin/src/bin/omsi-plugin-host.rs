@@ -7,7 +7,7 @@
 #[path = "../steam_error_dialog.rs"]
 mod steam_error_dialog;
 
-use omsi_plugin::{wire, Library};
+use omsi_plugin::{Library, wire};
 use std::io::{BufReader, BufWriter, Write};
 
 fn main() {
@@ -27,14 +27,18 @@ fn main() {
         }
     };
     loop {
-        let Ok(op) = wire::get_u8(&mut input) else { return };
+        let Ok(op) = wire::get_u8(&mut input) else {
+            return;
+        };
         let res = match (op, &mut lib) {
             (wire::START, Some(lib)) => {
                 lib.start();
                 wire::put_u8(&mut out, 1).and_then(|_| wire::put_u8(&mut out, lib.procs().flags()))
             }
             (wire::START, None) => {
-                let _ = wire::put_u8(&mut out, 0).and_then(|_| wire::put_u8(&mut out, 0)).and_then(|_| out.flush());
+                let _ = wire::put_u8(&mut out, 0)
+                    .and_then(|_| wire::put_u8(&mut out, 0))
+                    .and_then(|_| out.flush());
                 return;
             }
             (wire::FRAME, Some(lib)) => {
@@ -42,16 +46,23 @@ fn main() {
                 // as the game knows from the flags of START)
                 // (and the passengers' tickets only for one with AccessTicketRequest)
                 let (textures, tickets) = (lib.procs().texture, lib.procs().ticket);
-                let frame = wire::get_frame(&mut input, textures, lib.procs().pointer).and_then(|mut f| {
-                    if tickets {
-                        f.tickets = wire::get_tickets(&mut input)?;
-                    }
-                    Ok(f)
-                });
+                let frame =
+                    wire::get_frame(&mut input, textures, lib.procs().pointer).and_then(|mut f| {
+                        if tickets {
+                            f.tickets = wire::get_tickets(&mut input)?;
+                        }
+                        Ok(f)
+                    });
                 match frame {
                     Ok(f) => {
                         let reply = lib.frame(&f);
-                        wire::put_reply(&mut out, &reply, textures).and_then(|_| if tickets { wire::put_ticket_answers(&mut out, &reply.tickets) } else { Ok(()) })
+                        wire::put_reply(&mut out, &reply, textures).and_then(|_| {
+                            if tickets {
+                                wire::put_ticket_answers(&mut out, &reply.tickets)
+                            } else {
+                                Ok(())
+                            }
+                        })
                     }
                     Err(_) => return,
                 }
@@ -72,11 +83,15 @@ fn main() {
 #[cfg(windows)]
 fn protocol_out() -> Box<dyn Write> {
     use std::os::windows::io::AsHandle;
-    use windows_sys::Win32::System::Console::{GetStdHandle, SetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
+    use windows_sys::Win32::System::Console::{
+        GetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle,
+    };
     unsafe extern "C" {
         fn _dup2(from: i32, to: i32) -> i32;
     }
-    let Ok(own) = std::io::stdout().as_handle().try_clone_to_owned() else { return Box::new(std::io::stdout()) };
+    let Ok(own) = std::io::stdout().as_handle().try_clone_to_owned() else {
+        return Box::new(std::io::stdout());
+    };
     unsafe {
         SetStdHandle(STD_OUTPUT_HANDLE, GetStdHandle(STD_ERROR_HANDLE));
         _dup2(2, 1);

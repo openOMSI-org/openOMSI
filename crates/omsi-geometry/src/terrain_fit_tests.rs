@@ -1070,7 +1070,10 @@ fn a_ditch_ending_short_of_the_border_still_moves_both_sides_alike() {
         for i in 0..200 {
             let y = 28.0 + i as f64 * 0.1;
             let (a, b) = (sample(&left, tile_size(), y), sample(&right, 0.0, y));
-            assert!((a - b).abs() < 0.0001, "end {end} m before the border, y {y}: {a} != {b}");
+            assert!(
+                (a - b).abs() < 0.0001,
+                "end {end} m before the border, y {y}: {a} != {b}"
+            );
         }
     }
 }
@@ -1080,15 +1083,24 @@ fn a_spline_in_a_cutting_is_left_to_the_hole_but_a_trough_is_not() {
     let c = curve([40.0, 40.0, 0.0], 0.0, 0.0);
     let profile = test_profile(&ditch(), &c, false, 1, DVec3::ZERO);
     let mut hill = ground();
-    assert!(!profile_in_cutting(&profile, DVec3::ZERO, &hill, &[]), "flat ground");
+    assert!(
+        !profile_in_cutting(&profile, DVec3::ZERO, &hill, &[]),
+        "flat ground"
+    );
     for v in hill.heights.iter_mut() {
         *v = 0.5;
     }
-    assert!(!profile_in_cutting(&profile, DVec3::ZERO, &hill, &[]), "a lip 0.5 m under the hill");
+    assert!(
+        !profile_in_cutting(&profile, DVec3::ZERO, &hill, &[]),
+        "a lip 0.5 m under the hill"
+    );
     for v in hill.heights.iter_mut() {
         *v = 5.0;
     }
-    assert!(profile_in_cutting(&profile, DVec3::ZERO, &hill, &[]), "a 5 m cutting");
+    assert!(
+        profile_in_cutting(&profile, DVec3::ZERO, &hill, &[]),
+        "a 5 m cutting"
+    );
 }
 
 #[test]

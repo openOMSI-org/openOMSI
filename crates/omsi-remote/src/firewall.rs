@@ -22,7 +22,12 @@ pub fn state() -> FirewallState {
 }
 
 pub fn check(ip: &str, port: u16) {
-    if STATE.try_update(Ordering::Relaxed, Ordering::Relaxed, |s| (s != FirewallState::Asking as u8).then_some(FirewallState::Unknown as u8)).is_ok() {
+    if STATE
+        .try_update(Ordering::Relaxed, Ordering::Relaxed, |s| {
+            (s != FirewallState::Asking as u8).then_some(FirewallState::Unknown as u8)
+        })
+        .is_ok()
+    {
         spawn(false, ip, port);
     }
 }
@@ -38,20 +43,29 @@ fn spawn(allow: bool, ip: &str, port: u16) {
         Ok(exe) if cfg!(windows) => exe,
         _ => return STATE.store(FirewallState::Unknown as u8, Ordering::Relaxed),
     };
-    let ip = ip.parse::<std::net::IpAddr>().ok().filter(|a| !a.is_loopback()).map(|a| a.to_string()).unwrap_or_default();
-    let started = std::thread::Builder::new().name("firewall".into()).spawn(move || {
-        let exe = exe.to_string_lossy();
-        if allow && run(&allow_script(&exe, port)) != Some(0) {
-            log::info!("remote cockpit: the firewall rule was not added");
-        }
-        let now = match run(&check_script(&exe, &ip, port)) {
-            Some(0) => FirewallState::Open,
-            Some(3) => FirewallState::Blocked,
-            Some(4) => FirewallState::Setting,
-            _ => FirewallState::Unknown,
-        };
-        let _ = STATE.try_update(Ordering::Relaxed, Ordering::Relaxed, |s| (allow || s != FirewallState::Asking as u8).then_some(now as u8));
-    });
+    let ip = ip
+        .parse::<std::net::IpAddr>()
+        .ok()
+        .filter(|a| !a.is_loopback())
+        .map(|a| a.to_string())
+        .unwrap_or_default();
+    let started = std::thread::Builder::new()
+        .name("firewall".into())
+        .spawn(move || {
+            let exe = exe.to_string_lossy();
+            if allow && run(&allow_script(&exe, port)) != Some(0) {
+                log::info!("remote cockpit: the firewall rule was not added");
+            }
+            let now = match run(&check_script(&exe, &ip, port)) {
+                Some(0) => FirewallState::Open,
+                Some(3) => FirewallState::Blocked,
+                Some(4) => FirewallState::Setting,
+                _ => FirewallState::Unknown,
+            };
+            let _ = STATE.try_update(Ordering::Relaxed, Ordering::Relaxed, |s| {
+                (allow || s != FirewallState::Asking as u8).then_some(now as u8)
+            });
+        });
     if started.is_err() {
         STATE.store(FirewallState::Unknown as u8, Ordering::Relaxed);
     }
@@ -59,7 +73,9 @@ fn spawn(allow: bool, ip: &str, port: u16) {
 
 fn path_literal(exe: &str) -> String {
     let hex: String = exe.encode_utf16().map(|u| format!("{u:04x}")).collect();
-    format!("$e = -join ('{hex}' -split '(.{{4}})' | Where-Object {{ $_ }} | ForEach-Object {{ [char][Convert]::ToInt32($_, 16) }})")
+    format!(
+        "$e = -join ('{hex}' -split '(.{{4}})' | Where-Object {{ $_ }} | ForEach-Object {{ [char][Convert]::ToInt32($_, 16) }})"
+    )
 }
 
 const RULE: &str = "openOMSI, allowed from the game";
@@ -109,12 +125,14 @@ fn run(script: &str) -> Option<i32> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let root = std::env::var_os("SystemRoot")?;
-    std::process::Command::new(std::path::Path::new(&root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe"))
-        .args(["-NoProfile", "-NonInteractive", "-Command", script])
-        .creation_flags(CREATE_NO_WINDOW)
-        .status()
-        .ok()
-        .and_then(|s| s.code())
+    std::process::Command::new(
+        std::path::Path::new(&root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe"),
+    )
+    .args(["-NoProfile", "-NonInteractive", "-Command", script])
+    .creation_flags(CREATE_NO_WINDOW)
+    .status()
+    .ok()
+    .and_then(|s| s.code())
 }
 
 #[cfg(not(windows))]

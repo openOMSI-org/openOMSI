@@ -9,8 +9,8 @@
 //! sounds (`Sounds\rain_outside.wav`, its ambient sound objects, an object's `[sound]`) keep
 //! playing; ours give way to them.
 
-pub use omsi_soundscape::{pack, place, rules};
 use omsi_soundscape::voices;
+pub use omsi_soundscape::{pack, place, rules};
 
 use glam::DVec3;
 use omsi_audio::AudioEngine;
@@ -74,7 +74,9 @@ impl Soundscape {
     pub fn new(enabled: bool, volume: f32) -> Soundscape {
         let pack = Pack::find();
         if pack.is_none() {
-            log::info!("ambience: no recordings found (an `ambience` folder beside the program, ~/.openomsi/ambience or OMSI_AMBIENCE_DIR)");
+            log::info!(
+                "ambience: no recordings found (an `ambience` folder beside the program, ~/.openomsi/ambience or OMSI_AMBIENCE_DIR)"
+            );
             if enabled {
                 Pack::fetch_if_missing();
             }
@@ -106,9 +108,24 @@ impl Soundscape {
         if !self.active() {
             return;
         }
-        let slot = if distance < 1500.0 { "thunder.close" } else if distance < 4000.0 { "thunder.mid" } else { "thunder.far" };
-        let at = ear + DVec3::new((dir[0] * distance) as f64, (dir[1] * distance) as f64, 800.0);
-        let placing = Placing { at: Some(at), range: reference(slot), lowpass: air(at, ear) };
+        let slot = if distance < 1500.0 {
+            "thunder.close"
+        } else if distance < 4000.0 {
+            "thunder.mid"
+        } else {
+            "thunder.far"
+        };
+        let at = ear
+            + DVec3::new(
+                (dir[0] * distance) as f64,
+                (dir[1] * distance) as f64,
+                800.0,
+            );
+        let placing = Placing {
+            at: Some(at),
+            range: reference(slot),
+            lowpass: air(at, ear),
+        };
         self.strokes.push((slot, placing, self.now + delay as f64));
     }
 
@@ -126,7 +143,9 @@ impl Soundscape {
 
     /// One frame.
     pub fn update(&mut self, engine: &AudioEngine, m: Moment) {
-        let Some(mut pack) = self.pack.take() else { return };
+        let Some(mut pack) = self.pack.take() else {
+            return;
+        };
         if !self.enabled || !engine.enabled || m.paused {
             self.silence(engine);
             self.pack = Some(pack);
@@ -135,13 +154,22 @@ impl Soundscape {
         self.now += m.dt as f64;
         let dt = m.dt;
         // what stands around: twice a second, or at once after a jump
-        let again = self.looked.is_none_or(|(at, t)| t >= LOOK_EVERY || (at - m.ear).length() > 30.0);
+        let again = self
+            .looked
+            .is_none_or(|(at, t)| t >= LOOK_EVERY || (at - m.ear).length() > 30.0);
         if again {
             if let Some(w) = m.world {
                 self.place = w.sound_place(m.ear);
                 if omsi_cfg::flags::OMSI_DEBUG_SOUND.is_set() && self.looked.is_none() {
                     for (k, at, id) in &self.place.spots {
-                        log::info!("ambience: {} #{id} at ({:.0}, {:.0}, {:.0}), {:.0} m", k.name(), at.x, at.y, at.z, (*at - m.ear).length());
+                        log::info!(
+                            "ambience: {} #{id} at ({:.0}, {:.0}, {:.0}), {:.0} m",
+                            k.name(),
+                            at.x,
+                            at.y,
+                            at.z,
+                            (*at - m.ear).length()
+                        );
                     }
                 }
                 if self.lht.is_none() {
@@ -157,12 +185,21 @@ impl Soundscape {
         let place = std::mem::take(&mut self.place);
         let c = self.ctx(&m, &place);
         // through the bodywork: quieter and dull, unless the doors stand open
-        let open = if m.inside { m.open.clamp(0.0, 1.0) } else { 1.0 };
+        let open = if m.inside {
+            m.open.clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         let through = 0.22 + 0.78 * open;
-        let lowpass = if open < 0.95 { 500.0 + 6000.0 * open * open } else { 0.0 };
+        let lowpass = if open < 0.95 {
+            500.0 + 6000.0 * open * open
+        } else {
+            0.0
+        };
         let master = self.volume * through;
         // ---- the layers around
-        let mut wanted: hashbrown::HashMap<&'static str, (f32, Option<(DVec3, f32)>)> = hashbrown::HashMap::new();
+        let mut wanted: hashbrown::HashMap<&'static str, (f32, Option<(DVec3, f32)>)> =
+            hashbrown::HashMap::new();
         for (slot, w, from) in rules::beds(&c) {
             if pack.has(slot) {
                 wanted.insert(slot, (w, from));
@@ -175,7 +212,11 @@ impl Soundscape {
         for (slot, layer) in self.layers.iter_mut() {
             let (w, from) = wanted.get(slot).copied().unwrap_or((0.0, None));
             layer.target = w * master;
-            layer.placing = Placing { at: from.map(|f| f.0), range: from.map(|f| f.1).unwrap_or(1.0), lowpass };
+            layer.placing = Placing {
+                at: from.map(|f| f.0),
+                range: from.map(|f| f.1).unwrap_or(1.0),
+                lowpass,
+            };
             layer.tick(engine, &pack, self.now, dt, level(slot), r);
         }
         self.layers.retain(|_, l| !l.is_silent());
@@ -184,7 +225,8 @@ impl Soundscape {
         // (the nearest few of each kind: a row of lamps hums from the lamp one stands under)
         loops.sort_by(|a, b| (a.1 - m.ear).length().total_cmp(&(b.1 - m.ear).length()));
         let mut per_slot: hashbrown::HashMap<&'static str, usize> = hashbrown::HashMap::new();
-        let mut want_spots: hashbrown::HashMap<(&'static str, i64), (DVec3, f32, f32)> = hashbrown::HashMap::new();
+        let mut want_spots: hashbrown::HashMap<(&'static str, i64), (DVec3, f32, f32)> =
+            hashbrown::HashMap::new();
         let mut taken: Vec<(&'static str, DVec3)> = Vec::new();
         for (slot, at, range, w, id) in loops {
             let n = per_slot.entry(slot).or_insert(0);
@@ -192,7 +234,10 @@ impl Soundscape {
                 continue;
             }
             // (one building of several parts - a supermarket, a station - sounds once)
-            if taken.iter().any(|(s, p)| *s == slot && (*p - at).length() < 60.0) {
+            if taken
+                .iter()
+                .any(|(s, p)| *s == slot && (*p - at).length() < 60.0)
+            {
                 continue;
             }
             taken.push((slot, at));
@@ -203,9 +248,17 @@ impl Soundscape {
             self.spots.entry(*key).or_insert_with(|| Layer::new(key.0));
         }
         for (key, layer) in self.spots.iter_mut() {
-            let (at, range, w) = want_spots.get(key).copied().unwrap_or((layer.placing.at.unwrap_or(m.ear), layer.placing.range, 0.0));
+            let (at, range, w) = want_spots.get(key).copied().unwrap_or((
+                layer.placing.at.unwrap_or(m.ear),
+                layer.placing.range,
+                0.0,
+            ));
             layer.target = w * master;
-            layer.placing = Placing { at: Some(at), range, lowpass: lowpass.max(air(at, m.ear)) };
+            layer.placing = Placing {
+                at: Some(at),
+                range,
+                lowpass: lowpass.max(air(at, m.ear)),
+            };
             layer.tick(engine, &pack, self.now, dt, level(key.0), r);
         }
         self.spots.retain(|_, l| !l.is_silent());
@@ -223,10 +276,17 @@ impl Soundscape {
     }
 
     fn ctx<'p>(&mut self, m: &Moment, place: &'p Place) -> Ctx<'p> {
-        let (kind, rate) = m.weather.map(crate::weather_setup::precip_of).unwrap_or((0, 0.0));
+        let (kind, rate) = m
+            .weather
+            .map(crate::weather_setup::precip_of)
+            .unwrap_or((0, 0.0));
         let rain = if kind == 1 { rate } else { 0.0 };
         // the trees take up rain and drip it off over some twenty minutes after
-        self.wet_trees = if rain > 0.05 { (self.wet_trees + m.dt * rain / 120.0).min(1.0) } else { (self.wet_trees - m.dt / 1200.0).max(0.0) };
+        self.wet_trees = if rain > 0.05 {
+            (self.wet_trees + m.dt * rain / 120.0).min(1.0)
+        } else {
+            (self.wet_trees - m.dt / 1200.0).max(0.0)
+        };
         // a thunderstorm: towering clouds over a warm shower (thunder in a snowfall is a rarity
         // not worth making up)
         // (its thunder follows the flashes the picture shows, `Soundscape::thunder`: the random
@@ -234,7 +294,14 @@ impl Soundscape {
         let storm = false;
         let (d, mo) = m.clock.day_month();
         let h = m.clock.hour();
-        let day = m.world.map(|w| w.day_kind(m.clock)).unwrap_or(crate::scene::DayKind { workday: m.clock.weekday() < 5, holiday: false, school_holiday: false });
+        let day = m
+            .world
+            .map(|w| w.day_kind(m.clock))
+            .unwrap_or(crate::scene::DayKind {
+                workday: m.clock.weekday() < 5,
+                holiday: false,
+                school_holiday: false,
+            });
         Ctx {
             place,
             ear: m.ear,
@@ -269,14 +336,33 @@ impl Soundscape {
                 Where::Around { near, far, up } => {
                     let a = self.rand() * std::f32::consts::TAU;
                     let d = near + (far - near) * self.rand();
-                    c.ear + DVec3::new((a.sin() * d) as f64, (a.cos() * d) as f64, (up * (0.5 + self.rand())) as f64)
+                    c.ear
+                        + DVec3::new(
+                            (a.sin() * d) as f64,
+                            (a.cos() * d) as f64,
+                            (up * (0.5 + self.rand())) as f64,
+                        )
                 }
             };
-            due.push((slot, Placing { at: Some(at), range: reference(slot), lowpass: lowpass.max(air(at, c.ear)) }));
+            due.push((
+                slot,
+                Placing {
+                    at: Some(at),
+                    range: reference(slot),
+                    lowpass: lowpass.max(air(at, c.ear)),
+                },
+            ));
         }
         for (slot, per_minute, at, range) in rules::spot_events(c) {
             if pack.has(slot) && self.rand() < per_minute * density(slot) * dt / 60.0 {
-                due.push((slot, Placing { at: Some(at), range, lowpass: lowpass.max(air(at, c.ear)) }));
+                due.push((
+                    slot,
+                    Placing {
+                        at: Some(at),
+                        range,
+                        lowpass: lowpass.max(air(at, c.ear)),
+                    },
+                ));
             }
         }
         for (slot, placing) in due {
@@ -292,13 +378,19 @@ impl Soundscape {
             if !pack.has(t.slot) || !self.fired.insert((t.key.0, t.key.1, c.doy as i32)) {
                 continue;
             }
-            let placing = Placing { at: Some(t.at), range: t.range, lowpass: lowpass.max(air(t.at, c.ear)) };
+            let placing = Placing {
+                at: Some(t.at),
+                range: t.range,
+                lowpass: lowpass.max(air(t.at, c.ear)),
+            };
             if t.strokes > 1 || t.slot == "church.strike" {
                 for k in 0..t.strokes {
-                    self.strokes.push((t.slot, placing, self.now + k as f64 * 2.6));
+                    self.strokes
+                        .push((t.slot, placing, self.now + k as f64 * 2.6));
                 }
             } else {
-                self.pending.push((t.slot, master, placing, self.now + 30.0));
+                self.pending
+                    .push((t.slot, master, placing, self.now + 30.0));
             }
         }
         // (a new day: yesterday's are forgotten)
@@ -320,7 +412,16 @@ impl Soundscape {
         let pending = std::mem::take(&mut self.pending);
         for (slot, gain, placing, until) in pending {
             let r = self.rand();
-            if voices::one_shot(engine, pack, slot, level(slot), gain, placing, r, &mut self.last_take) {
+            if voices::one_shot(
+                engine,
+                pack,
+                slot,
+                level(slot),
+                gain,
+                placing,
+                r,
+                &mut self.last_take,
+            ) {
                 if self.heard.len() < 64 {
                     self.heard.push(slot);
                 }
@@ -348,15 +449,28 @@ impl Soundscape {
         h.sort();
         let mut out: Vec<String> = Vec::new();
         for g in h.chunk_by(|a, b| a == b) {
-            out.push(if g.len() > 1 { format!("{} x{}", g[0], g.len()) } else { g[0].to_string() });
+            out.push(if g.len() > 1 {
+                format!("{} x{}", g[0], g.len())
+            } else {
+                g[0].to_string()
+            });
         }
         out.join(", ")
     }
 
     fn describe(&self, c: &Ctx) -> String {
-        let mut beds: Vec<(&str, f32)> = self.layers.iter().map(|(s, l)| (*s, l.gain())).filter(|(_, g)| *g > 0.005).collect();
+        let mut beds: Vec<(&str, f32)> = self
+            .layers
+            .iter()
+            .map(|(s, l)| (*s, l.gain()))
+            .filter(|(_, g)| *g > 0.005)
+            .collect();
         beds.sort_by(|a, b| b.1.total_cmp(&a.1));
-        let spots: Vec<String> = self.spots.keys().map(|(s, id)| format!("{s}#{id}")).collect();
+        let spots: Vec<String> = self
+            .spots
+            .keys()
+            .map(|(s, id)| format!("{s}#{id}"))
+            .collect();
         let mut known: Vec<&str> = c.place.spots.iter().map(|(k, _, _)| k.name()).collect();
         known.sort();
         known.dedup();
@@ -381,7 +495,9 @@ impl Soundscape {
             p.deciduous,
             p.conifer,
             p.open,
-            p.water.map(|w| format!("{:.0} m at ({:.0}, {:.0})", w.0, w.1.x, w.1.y)).unwrap_or("-".into()),
+            p.water
+                .map(|w| format!("{:.0} m at ({:.0}, {:.0})", w.0, w.1.x, w.1.y))
+                .unwrap_or("-".into()),
             p.fast_roads,
             p.far_roads,
             p.tracks,
@@ -389,16 +505,25 @@ impl Soundscape {
             p.tunnel,
             p.spots.len(),
             known.join(", "),
-            beds.iter().map(|(s, g)| format!("{s} {:.0} dB", 20.0 * g.max(1.0e-6).log10())).collect::<Vec<_>>().join(", "),
+            beds.iter()
+                .map(|(s, g)| format!("{s} {:.0} dB", 20.0 * g.max(1.0e-6).log10()))
+                .collect::<Vec<_>>()
+                .join(", "),
             spots.join(", "),
-            self.pending.iter().map(|p| p.0).collect::<Vec<_>>().join(", ")
+            self.pending
+                .iter()
+                .map(|p| p.0)
+                .collect::<Vec<_>>()
+                .join(", ")
         )
     }
 }
 
 /// `OMSI_AMBIENCE_DENSITY`: how many times as often a one-shot of `slot` comes (1 unset).
 fn density(slot: &str) -> f32 {
-    let Some(v) = omsi_cfg::flags::OMSI_AMBIENCE_DENSITY.var() else { return 1.0 };
+    let Some(v) = omsi_cfg::flags::OMSI_AMBIENCE_DENSITY.var() else {
+        return 1.0;
+    };
     if let Ok(all) = v.trim().parse::<f32>() {
         return all.max(0.0);
     }
@@ -425,7 +550,10 @@ pub fn level(slot: &str) -> f32 {
         "place.tunnel" => -38.0,
         // nature
         "nature.dawn_urban" | "nature.dawn_wood" => -31.0,
-        "nature.wood_deciduous" | "nature.wood_conifer" | "nature.field_summer" | "nature.garden" => -34.0,
+        "nature.wood_deciduous"
+        | "nature.wood_conifer"
+        | "nature.field_summer"
+        | "nature.garden" => -34.0,
         "nature.wood_winter" | "nature.field_autumn" | "nature.night_country" => -40.0,
         "nature.night_crickets" | "nature.frogs" => -33.0,
         "nature.water" => -35.0,

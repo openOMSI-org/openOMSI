@@ -176,7 +176,7 @@ pub struct Renderer {
     prepass_msaa_pipelines: Option<[mx::RenderPipeline; 6]>,
     prepass_eye_pipelines: Option<[mx::RenderPipeline; 6]>,
     pane_mask: Option<pipelines::scene::PaneMaskPipelines>,
-    pane_depth: Option<((u32, u32), mx::TextureView, mx::BindGroup)>,
+    pane_depth: Option<((u32, u32), mx::TextureView)>,
     /// The ground albedo pass's pipelines (see `SceneBase::ground_pipeline_at`); none where
     /// the enhanced path is left out or on OpenGL.
     ground_pipelines: Option<[mx::RenderPipeline; 8]>,

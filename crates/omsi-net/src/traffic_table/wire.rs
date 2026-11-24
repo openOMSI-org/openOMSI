@@ -41,8 +41,10 @@
 //! A row that is not a delta, and every spawn, stands by itself. A delta is against the row
 //! the host knows the client holds (one it acknowledged), `baseline` snapshots back.
 
-use super::ids::{TrafficId, ID_BITS};
-use super::row::{Kind, Look, Meta, Row, FLAGS_BITS, MAX_DESTINATION, MAX_HOF, MAX_IDENT, MAX_LINE, MAX_NUMBER};
+use super::ids::{ID_BITS, TrafficId};
+use super::row::{
+    FLAGS_BITS, Kind, Look, MAX_DESTINATION, MAX_HOF, MAX_IDENT, MAX_LINE, MAX_NUMBER, Meta, Row,
+};
 use crate::wire::{BitReader, BitWriter};
 
 pub const MAGIC: u8 = 0xBA;
@@ -75,13 +77,27 @@ pub struct Anchor {
 
 impl Anchor {
     pub fn at(pos: [f64; 3]) -> Anchor {
-        let r = |v: f64| if v.is_finite() { v.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32 } else { 0 };
-        Anchor { x: r(pos[0]), y: r(pos[1]), z: r(pos[2]).clamp(i16::MIN as i32, i16::MAX as i32) as i16 }
+        let r = |v: f64| {
+            if v.is_finite() {
+                v.round().clamp(i32::MIN as f64, i32::MAX as f64) as i32
+            } else {
+                0
+            }
+        };
+        Anchor {
+            x: r(pos[0]),
+            y: r(pos[1]),
+            z: r(pos[2]).clamp(i16::MIN as i32, i16::MAX as i32) as i16,
+        }
     }
 
     /// `row` in centimetres from the anchor, when that fits a full row.
     fn rel(&self, row: &Row) -> Option<(i64, i64, i64)> {
-        let (dx, dy, dz) = (row.x as i64 - self.x as i64 * 100, row.y as i64 - self.y as i64 * 100, row.z as i64 - self.z as i64 * 100);
+        let (dx, dy, dz) = (
+            row.x as i64 - self.x as i64 * 100,
+            row.y as i64 - self.y as i64 * 100,
+            row.z as i64 - self.z as i64 * 100,
+        );
         let ok = |v: i64, bits: u32| v >= -(1 << (bits - 1)) && v < 1 << (bits - 1);
         (ok(dx, 20) && ok(dy, 20) && ok(dz, 18)).then_some((dx, dy, dz))
     }
@@ -113,15 +129,21 @@ pub struct Delta {
 impl Delta {
     /// `new` as a change of `base`; None when it is too far from it for a delta.
     pub fn between(base: &Row, new: &Row) -> Option<Delta> {
-        let (dx, dy, dz) = (new.x as i64 - base.x as i64, new.y as i64 - base.y as i64, new.z as i64 - base.z as i64);
+        let (dx, dy, dz) = (
+            new.x as i64 - base.x as i64,
+            new.y as i64 - base.y as i64,
+            new.z as i64 - base.z as i64,
+        );
         let dh = (new.heading as i64 - base.heading as i64 + 2048).rem_euclid(4096) - 2048;
         let fits = |v: i64, bits: u32| v >= -(1 << (bits - 1)) && v < 1 << (bits - 1);
         if !(fits(dx, 13) && fits(dy, 13) && fits(dz, 9) && fits(dh, 8)) {
             return None;
         }
         Some(Delta {
-            pose: (dx != 0 || dy != 0 || dz != 0 || dh != 0).then_some([dx as i16, dy as i16, dz as i16, dh as i16]),
-            attitude: (new.pitch != base.pitch || new.bank != base.bank).then_some((new.pitch, new.bank)),
+            pose: (dx != 0 || dy != 0 || dz != 0 || dh != 0)
+                .then_some([dx as i16, dy as i16, dz as i16, dh as i16]),
+            attitude: (new.pitch != base.pitch || new.bank != base.bank)
+                .then_some((new.pitch, new.bank)),
             speed: (new.speed != base.speed).then_some(new.speed),
             steer: (new.steer != base.steer).then_some(new.steer),
             flags: (new.flags != base.flags).then_some(new.flags),
@@ -161,7 +183,11 @@ impl Delta {
             + if self.attitude.is_some() { 16 } else { 0 }
             + if self.speed.is_some() { 11 } else { 0 }
             + if self.steer.is_some() { 8 } else { 0 }
-            + if self.flags.is_some() { FLAGS_BITS as usize } else { 0 }
+            + if self.flags.is_some() {
+                FLAGS_BITS as usize
+            } else {
+                0
+            }
     }
 }
 
@@ -170,7 +196,11 @@ pub enum RowUpdate {
     /// A row by itself (absolute here: the anchor is added when it is read).
     Full { id: TrafficId, row: Row },
     /// A change of the row the sender knows the receiver holds, `base_back` snapshots back.
-    Delta { id: TrafficId, base_back: u8, delta: Delta },
+    Delta {
+        id: TrafficId,
+        base_back: u8,
+        delta: Delta,
+    },
 }
 
 impl RowUpdate {
@@ -223,12 +253,19 @@ pub fn look_bits(l: &Look) -> usize {
 }
 
 pub fn meta_bits(m: &Meta) -> usize {
-    ID_BITS as usize + str_bits(&m.line) + str_bits(&m.destination) + str_bits(&m.number) + str_bits(&m.ident) + str_bits(&m.hof)
+    ID_BITS as usize
+        + str_bits(&m.line)
+        + str_bits(&m.destination)
+        + str_bits(&m.number)
+        + str_bits(&m.ident)
+        + str_bits(&m.hof)
 }
 
 /// A look that fits the wire, and a file a client may open.
 pub fn look_is_sendable(l: &Look) -> bool {
-    l.file.len() <= MAX_STRING && l.paint.len() <= MAX_STRING && crate::world::content_file(&l.file, &["bus", "ovh", "sco"]).is_some()
+    l.file.len() <= MAX_STRING
+        && l.paint.len() <= MAX_STRING
+        && crate::world::content_file(&l.file, &["bus", "ovh", "sco"]).is_some()
 }
 
 impl Packet {
@@ -244,7 +281,11 @@ impl Packet {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.looks.is_empty() && self.spawns.is_empty() && self.metas.is_empty() && self.removes.is_empty() && self.rows.is_empty()
+        self.looks.is_empty()
+            && self.spawns.is_empty()
+            && self.metas.is_empty()
+            && self.removes.is_empty()
+            && self.rows.is_empty()
     }
 }
 
@@ -358,7 +399,11 @@ fn encode_with(p: &Packet, protocol: u8, numbers: bool) -> Option<Vec<u8>> {
                 w.put(0, 1);
                 put_full(&mut w, row, p.anchor.rel(row)?);
             }
-            RowUpdate::Delta { id, base_back, delta } => {
+            RowUpdate::Delta {
+                id,
+                base_back,
+                delta,
+            } => {
                 if *base_back == 0 || *base_back as u32 > MAX_BASELINE {
                     return None;
                 }
@@ -375,7 +420,10 @@ fn encode_with(p: &Packet, protocol: u8, numbers: bool) -> Option<Vec<u8>> {
                     }
                     None => w.put(0, 1),
                 }
-                let mask = delta.attitude.is_some() as u64 | (delta.speed.is_some() as u64) << 1 | (delta.steer.is_some() as u64) << 2 | (delta.flags.is_some() as u64) << 3;
+                let mask = delta.attitude.is_some() as u64
+                    | (delta.speed.is_some() as u64) << 1
+                    | (delta.steer.is_some() as u64) << 2
+                    | (delta.flags.is_some() as u64) << 3;
                 w.put(mask, 4);
                 if let Some((pitch, bank)) = delta.attitude {
                     w.put_signed(pitch as i64, 8);
@@ -435,7 +483,11 @@ pub fn decode(data: &[u8], protocol: u8) -> Option<Packet> {
         let paint = get_str(&mut r, Some(64))?;
         // (a file a client would not open is not a vehicle)
         let file = crate::world::content_file(&file, &["bus", "ovh", "sco"])?;
-        let look = Look { file, scheme, paint };
+        let look = Look {
+            file,
+            scheme,
+            paint,
+        };
         p.looks.push((i, look));
     }
     for _ in 0..r.get(6)? {
@@ -443,13 +495,25 @@ pub fn decode(data: &[u8], protocol: u8) -> Option<Packet> {
         let look = r.get(12)? as u16;
         let kind = Kind::from_code(r.get(3)?);
         let row = get_full(&mut r, &anchor)?;
-        p.spawns.push(Spawn { id, look, kind, row });
+        p.spawns.push(Spawn {
+            id,
+            look,
+            kind,
+            row,
+        });
     }
     for _ in 0..r.get(5)? {
         let id = TrafficId::from_raw(r.get(ID_BITS)? as u32)?;
         let line = get_str(&mut r, Some(MAX_LINE))?;
         let destination = get_str(&mut r, Some(MAX_DESTINATION))?;
-        p.metas.push((id, Meta { line, destination, ..Default::default() }));
+        p.metas.push((
+            id,
+            Meta {
+                line,
+                destination,
+                ..Default::default()
+            },
+        ));
     }
     for _ in 0..r.get(6)? {
         p.removes.push(TrafficId::from_raw(r.get(ID_BITS)? as u32)?);
@@ -457,7 +521,10 @@ pub fn decode(data: &[u8], protocol: u8) -> Option<Packet> {
     for _ in 0..r.get(8)? {
         let id = TrafficId::from_raw(r.get(ID_BITS)? as u32)?;
         if r.get(1)? == 0 {
-            p.rows.push(RowUpdate::Full { id, row: get_full(&mut r, &anchor)? });
+            p.rows.push(RowUpdate::Full {
+                id,
+                row: get_full(&mut r, &anchor)?,
+            });
             continue;
         }
         let base_back = r.get(5)? as u8;
@@ -465,23 +532,60 @@ pub fn decode(data: &[u8], protocol: u8) -> Option<Packet> {
             return None;
         }
         let pose = if r.get(1)? == 1 {
-            Some([r.get_signed(13)? as i16, r.get_signed(13)? as i16, r.get_signed(9)? as i16, r.get_signed(8)? as i16])
+            Some([
+                r.get_signed(13)? as i16,
+                r.get_signed(13)? as i16,
+                r.get_signed(9)? as i16,
+                r.get_signed(8)? as i16,
+            ])
         } else {
             None
         };
         let mask = r.get(4)?;
-        let attitude = if mask & 1 != 0 { Some((r.get_signed(8)? as i8, r.get_signed(8)? as i8)) } else { None };
-        let speed = if mask & 2 != 0 { Some(r.get_signed(11)? as i16) } else { None };
-        let steer = if mask & 4 != 0 { Some(r.get_signed(8)? as i8) } else { None };
-        let flags = if mask & 8 != 0 { Some(r.get(FLAGS_BITS)? as u8) } else { None };
-        p.rows.push(RowUpdate::Delta { id, base_back, delta: Delta { pose, attitude, speed, steer, flags } });
+        let attitude = if mask & 1 != 0 {
+            Some((r.get_signed(8)? as i8, r.get_signed(8)? as i8))
+        } else {
+            None
+        };
+        let speed = if mask & 2 != 0 {
+            Some(r.get_signed(11)? as i16)
+        } else {
+            None
+        };
+        let steer = if mask & 4 != 0 {
+            Some(r.get_signed(8)? as i8)
+        } else {
+            None
+        };
+        let flags = if mask & 8 != 0 {
+            Some(r.get(FLAGS_BITS)? as u8)
+        } else {
+            None
+        };
+        p.rows.push(RowUpdate::Delta {
+            id,
+            base_back,
+            delta: Delta {
+                pose,
+                attitude,
+                speed,
+                steer,
+                flags,
+            },
+        });
     }
     // the metas' numbers (a host older than them sends none: the padding reads as 0, or
     // there are not even 5 bits left)
     if !p.metas.is_empty() && r.get(5) == Some(p.metas.len() as u64) {
         let mut numbers = Vec::with_capacity(p.metas.len());
         for _ in 0..p.metas.len() {
-            let Some(n) = (|| Some((get_str(&mut r, Some(MAX_NUMBER))?, get_str(&mut r, Some(MAX_IDENT))?, get_str(&mut r, Some(MAX_HOF))?)))() else {
+            let Some(n) = (|| {
+                Some((
+                    get_str(&mut r, Some(MAX_NUMBER))?,
+                    get_str(&mut r, Some(MAX_IDENT))?,
+                    get_str(&mut r, Some(MAX_HOF))?,
+                ))
+            })() else {
                 numbers.clear();
                 break;
             };
@@ -530,10 +634,11 @@ pub fn encode_ack(a: &Ack, protocol: u8) -> Vec<u8> {
     let n = a.troubles.len().min(MAX_TROUBLES);
     out.push(n as u8);
     for (id, t) in a.troubles.iter().take(n) {
-        let v = id.raw() | match t {
-            Trouble::SendWhole => 0,
-            Trouble::Unknown => 1,
-        } << ID_BITS;
+        let v = id.raw()
+            | match t {
+                Trouble::SendWhole => 0,
+                Trouble::Unknown => 1,
+            } << ID_BITS;
         out.extend_from_slice(&v.to_le_bytes()[..3]);
     }
     out
@@ -559,7 +664,12 @@ pub fn decode_ack(data: &[u8], protocol: u8) -> Option<Ack> {
         };
         troubles.push((id, t));
     }
-    Some(Ack { epoch: data[2], seq: u16::from_le_bytes([data[3], data[4]]), mask: u32::from_le_bytes(data[5..9].try_into().ok()?), troubles })
+    Some(Ack {
+        epoch: data[2],
+        seq: u16::from_le_bytes([data[3], data[4]]),
+        mask: u32::from_le_bytes(data[5..9].try_into().ok()?),
+        troubles,
+    })
 }
 
 /// Whether snapshot number `a` is newer than `b` (they wrap).
@@ -576,17 +686,38 @@ mod tests {
     }
 
     fn row(i: i32) -> Row {
-        Row::from_state([892_248.18 + i as f64, 4_196_461.37, 33.21], 271.3 + i as f64, -1.2, 0.4, 13.85, -7.5, 2, true, true, -1)
+        Row::from_state(
+            [892_248.18 + i as f64, 4_196_461.37, 33.21],
+            271.3 + i as f64,
+            -1.2,
+            0.4,
+            13.85,
+            -7.5,
+            2,
+            true,
+            true,
+            -1,
+        )
     }
 
     fn look() -> Look {
-        Look { file: "Vehicles/MAN_NL_NG/MAN_EN92_main.bus".into(), scheme: Some(3), paint: "BVG 1990".into() }
+        Look {
+            file: "Vehicles/MAN_NL_NG/MAN_EN92_main.bus".into(),
+            scheme: Some(3),
+            paint: "BVG 1990".into(),
+        }
     }
 
     fn packet() -> Packet {
         let a = Anchor::at([892_300.0, 4_196_400.0, 33.0]);
         let base = row(0);
-        let moved = Row { x: base.x + 120, y: base.y - 40, heading: (base.heading + 4090) % 4096, speed: base.speed + 7, ..base };
+        let moved = Row {
+            x: base.x + 120,
+            y: base.y - 40,
+            heading: (base.heading + 4090) % 4096,
+            speed: base.speed + 7,
+            ..base
+        };
         Packet {
             epoch: 9,
             seq: 65535,
@@ -594,13 +725,38 @@ mod tests {
             host_ms: 123_456_789,
             anchor: a,
             looks: vec![(7, look())],
-            spawns: vec![Spawn { id: id(1, 1), look: 7, kind: Kind::Bus, row: row(1) }],
-            metas: vec![(id(1, 1), Meta { line: "37".into(), destination: "#4".into(), number: "80.849".into(), ident: "EMT-1234".into(), hof: "Brigadeiro".into() })],
+            spawns: vec![Spawn {
+                id: id(1, 1),
+                look: 7,
+                kind: Kind::Bus,
+                row: row(1),
+            }],
+            metas: vec![(
+                id(1, 1),
+                Meta {
+                    line: "37".into(),
+                    destination: "#4".into(),
+                    number: "80.849".into(),
+                    ident: "EMT-1234".into(),
+                    hof: "Brigadeiro".into(),
+                },
+            )],
             removes: vec![id(2, 5), id(4095, 255)],
             rows: vec![
-                RowUpdate::Full { id: id(3, 1), row: row(2) },
-                RowUpdate::Delta { id: id(4, 2), base_back: 2, delta: Delta::between(&base, &moved).unwrap() },
-                RowUpdate::Delta { id: id(5, 2), base_back: 31, delta: Delta::default() },
+                RowUpdate::Full {
+                    id: id(3, 1),
+                    row: row(2),
+                },
+                RowUpdate::Delta {
+                    id: id(4, 2),
+                    base_back: 2,
+                    delta: Delta::between(&base, &moved).unwrap(),
+                },
+                RowUpdate::Delta {
+                    id: id(5, 2),
+                    base_back: 31,
+                    delta: Delta::default(),
+                },
             ],
         }
     }
@@ -624,7 +780,12 @@ mod tests {
         for n in old.len()..d.len() {
             if let Some(q) = decode(&d[..n], 15) {
                 assert_eq!(q.rows, p.rows);
-                assert!(q.metas.iter().all(|(_, m)| m.number.is_empty() && m.hof.is_empty()), "{n}");
+                assert!(
+                    q.metas
+                        .iter()
+                        .all(|(_, m)| m.number.is_empty() && m.hof.is_empty()),
+                    "{n}"
+                );
             }
         }
     }
@@ -637,8 +798,18 @@ mod tests {
         let p = packet();
         let old = encode_with(&p, 15, false).unwrap();
         let q = decode(&old, 15).unwrap();
-        assert_eq!(q.metas[0].1, Meta { line: "37".into(), destination: "#4".into(), ..Default::default() });
-        assert_eq!((&q.looks, &q.spawns, &q.removes, &q.rows), (&p.looks, &p.spawns, &p.removes, &p.rows));
+        assert_eq!(
+            q.metas[0].1,
+            Meta {
+                line: "37".into(),
+                destination: "#4".into(),
+                ..Default::default()
+            }
+        );
+        assert_eq!(
+            (&q.looks, &q.spawns, &q.removes, &q.rows),
+            (&p.looks, &p.spawns, &p.removes, &p.rows)
+        );
         // the new datagram is the old one with the numbers after it (an older client's
         // decoder is this one's without them)
         let new = encode(&p, 15).unwrap();
@@ -649,19 +820,49 @@ mod tests {
     #[test]
     fn a_delta_costs_less_than_a_whole_row() {
         let base = row(0);
-        let moved = Row { x: base.x + 150, y: base.y + 20, ..base };
+        let moved = Row {
+            x: base.x + 150,
+            y: base.y + 20,
+            ..base
+        };
         let d = Delta::between(&base, &moved).unwrap();
         assert_eq!(d.apply(&base), moved);
-        assert!(d.bits() + 20 < FULL_ROW_BITS, "{} bits against {}", d.bits(), FULL_ROW_BITS);
+        assert!(
+            d.bits() + 20 < FULL_ROW_BITS,
+            "{} bits against {}",
+            d.bits(),
+            FULL_ROW_BITS
+        );
         // an unchanged row is a few bits
         let same = Delta::between(&base, &base).unwrap();
         assert_eq!(same, Delta::default());
         assert_eq!(same.bits(), ID_BITS as usize + 1 + 5 + 1 + 4);
         // too far for a delta: a whole row is sent instead
-        assert!(Delta::between(&base, &Row { x: base.x + 5000, ..base }).is_none());
-        assert!(Delta::between(&base, &Row { heading: (base.heading + 200) % 4096, ..base }).is_none());
+        assert!(
+            Delta::between(
+                &base,
+                &Row {
+                    x: base.x + 5000,
+                    ..base
+                }
+            )
+            .is_none()
+        );
+        assert!(
+            Delta::between(
+                &base,
+                &Row {
+                    heading: (base.heading + 200) % 4096,
+                    ..base
+                }
+            )
+            .is_none()
+        );
         // the heading turns the short way round north
-        let a = Row { heading: 4090, ..base };
+        let a = Row {
+            heading: 4090,
+            ..base
+        };
         let b = Row { heading: 6, ..base };
         let d = Delta::between(&a, &b).unwrap();
         assert_eq!(d.pose.unwrap()[3], 12);
@@ -671,21 +872,47 @@ mod tests {
     #[test]
     fn what_does_not_fit_is_not_encoded() {
         let mut p = packet();
-        p.rows.push(RowUpdate::Full { id: id(9, 1), row: Row { x: p.anchor.x * 100 + 600_000, ..row(0) } });
+        p.rows.push(RowUpdate::Full {
+            id: id(9, 1),
+            row: Row {
+                x: p.anchor.x * 100 + 600_000,
+                ..row(0)
+            },
+        });
         assert!(encode(&p, 15).is_none(), "6 km from the anchor");
         let mut p = packet();
-        p.rows = (0..100).map(|i| RowUpdate::Full { id: id(i + 10, 1), row: row(0) }).collect();
+        p.rows = (0..100)
+            .map(|i| RowUpdate::Full {
+                id: id(i + 10, 1),
+                row: row(0),
+            })
+            .collect();
         assert!(p.size() > MAX_DATAGRAM && encode(&p, 15).is_none());
         let mut p = packet();
-        p.rows = vec![RowUpdate::Delta { id: id(1, 1), base_back: 0, delta: Delta::default() }];
+        p.rows = vec![RowUpdate::Delta {
+            id: id(1, 1),
+            base_back: 0,
+            delta: Delta::default(),
+        }];
         assert!(encode(&p, 15).is_none());
     }
 
     #[test]
     fn a_bad_file_or_a_bad_id_is_not_taken() {
-        for file in ["../../x.bus", "/etc/passwd.bus", "Vehicles/x.exe", "Vehicles/a|b.bus"] {
+        for file in [
+            "../../x.bus",
+            "/etc/passwd.bus",
+            "Vehicles/x.exe",
+            "Vehicles/a|b.bus",
+        ] {
             let mut p = packet();
-            p.looks = vec![(0, Look { file: file.into(), ..look() })];
+            p.looks = vec![(
+                0,
+                Look {
+                    file: file.into(),
+                    ..look()
+                },
+            )];
             // (the sender checks nothing; the receiver does)
             let d = encode(&p, 15);
             assert!(d.is_none_or(|d| decode(&d, 15).is_none()), "{file}");
@@ -696,7 +923,12 @@ mod tests {
 
     #[test]
     fn an_ack_names_the_datagrams_heard() {
-        let a = Ack { epoch: 4, seq: 2, mask: 0b101, troubles: vec![(id(7, 3), Trouble::SendWhole), (id(9, 1), Trouble::Unknown)] };
+        let a = Ack {
+            epoch: 4,
+            seq: 2,
+            mask: 0b101,
+            troubles: vec![(id(7, 3), Trouble::SendWhole), (id(9, 1), Trouble::Unknown)],
+        };
         let b = decode_ack(&encode_ack(&a, 15), 15).unwrap();
         assert_eq!(a, b);
         assert!(a.covers(2) && a.covers(1) && !a.covers(0) && a.covers(65535));

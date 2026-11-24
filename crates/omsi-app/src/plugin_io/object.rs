@@ -32,7 +32,14 @@ fn plugin_name(path: &std::path::Path) -> String {
 /// plugins' frame, so that they hear it in the same frame.
 pub(crate) fn drive(app: &mut App, plugins: &mut Plugins, dt: f32) {
     // the objects that have scripts, in range or not
-    let Some(center) = app.camera.as_ref().map(|c| c.position).or_else(|| app.player.as_ref().map(|p| p.vehicle.position)) else { return };
+    let Some(center) = app
+        .camera
+        .as_ref()
+        .map(|c| c.position)
+        .or_else(|| app.player.as_ref().map(|p| p.vehicle.position))
+    else {
+        return;
+    };
     struct Seen {
         id: i64,
         kind: String,
@@ -45,13 +52,25 @@ pub(crate) fn drive(app: &mut App, plugins: &mut Plugins, dt: f32) {
     for o in app.session.scenery.objects() {
         let Some(l) = o.lua.as_ref() else { continue };
         if o.pos.distance(center) <= l.range {
-            near.push(Seen { id: o.map_id, kind: l.type_name.clone(), pos: [o.pos.x, o.pos.y, o.pos.z], heading: o.heading, files: l.files.clone(), gap: if l.rate > 0.0 { 1.0 / l.rate } else { 0.0 } });
+            near.push(Seen {
+                id: o.map_id,
+                kind: l.type_name.clone(),
+                pos: [o.pos.x, o.pos.y, o.pos.z],
+                heading: o.heading,
+                files: l.files.clone(),
+                gap: if l.rate > 0.0 { 1.0 / l.rate } else { 0.0 },
+            });
         }
     }
     let state = &mut app.integrations.object_scripts;
     let now: HashSet<i64> = near.iter().map(|s| s.id).collect();
     // gone: out of range, or unloaded with their tile
-    let gone: Vec<i64> = state.known.keys().copied().filter(|id| !now.contains(id)).collect();
+    let gone: Vec<i64> = state
+        .known
+        .keys()
+        .copied()
+        .filter(|id| !now.contains(id))
+        .collect();
     for id in gone {
         if let Some(k) = state.known.remove(&id) {
             for name in &k.plugins {
@@ -76,12 +95,30 @@ pub(crate) fn drive(app: &mut App, plugins: &mut Plugins, dt: f32) {
                     }
                 }
                 for n in &names {
-                    plugins.post(n, "object_init", vec![Value::from(s.id), Value::from(s.kind.as_str()), Value::from(s.pos[0]), Value::from(s.pos[1]), Value::from(s.pos[2]), Value::from(s.heading)]);
+                    plugins.post(
+                        n,
+                        "object_init",
+                        vec![
+                            Value::from(s.id),
+                            Value::from(s.kind.as_str()),
+                            Value::from(s.pos[0]),
+                            Value::from(s.pos[1]),
+                            Value::from(s.pos[2]),
+                            Value::from(s.heading),
+                        ],
+                    );
                 }
-                state.known.entry(s.id).or_insert(Known { since: f32::INFINITY, plugins: names })
+                state.known.entry(s.id).or_insert(Known {
+                    since: f32::INFINITY,
+                    plugins: names,
+                })
             }
         };
-        k.since = if k.since.is_infinite() { 0.0 } else { k.since + dt };
+        k.since = if k.since.is_infinite() {
+            0.0
+        } else {
+            k.since + dt
+        };
         if k.since >= s.gap {
             let acc = k.since;
             k.since = 0.0;
@@ -94,11 +131,24 @@ pub(crate) fn drive(app: &mut App, plugins: &mut Plugins, dt: f32) {
 
 /// The player clicked a `[mouseevent]` of an object: its scripts hear it.
 pub(crate) fn clicked(app: &mut App, map_id: i64, event: &str) {
-    let Some(plugins) = app.integrations.plugins.as_ref() else { return };
-    let Some(o) = app.session.scenery.find(map_id).map(|i| app.session.scenery.get(i)) else { return };
+    let Some(plugins) = app.integrations.plugins.as_ref() else {
+        return;
+    };
+    let Some(o) = app
+        .session
+        .scenery
+        .find(map_id)
+        .map(|i| app.session.scenery.get(i))
+    else {
+        return;
+    };
     let Some(l) = o.lua.as_ref() else { return };
     for f in &l.files {
-        plugins.post(&plugin_name(f), "object_click", vec![Value::from(map_id), Value::from(event)]);
+        plugins.post(
+            &plugin_name(f),
+            "object_click",
+            vec![Value::from(map_id), Value::from(event)],
+        );
     }
 }
 
@@ -108,20 +158,50 @@ fn find(app: &mut App, id: i64) -> Option<&mut omsi_sim::scenery::SceneryObject>
 
 pub(crate) fn owned_by(app: &App, id: i64, plugin: &str) -> bool {
     let s = &app.session.scenery;
-    s.find(id).map(|i| s.get(i)).and_then(|o| o.lua.as_ref()).is_some_and(|l| l.files.iter().any(|f| plugin_name(f).eq_ignore_ascii_case(plugin)))
+    s.find(id)
+        .map(|i| s.get(i))
+        .and_then(|o| o.lua.as_ref())
+        .is_some_and(|l| {
+            l.files
+                .iter()
+                .any(|f| plugin_name(f).eq_ignore_ascii_case(plugin))
+        })
 }
 
 pub(crate) fn list(app: &App, plugin: &str) -> Vec<i64> {
-    app.session.scenery.objects().iter().filter(|o| o.lua.as_ref().is_some_and(|l| l.files.iter().any(|f| plugin_name(f).eq_ignore_ascii_case(plugin)))).map(|o| o.map_id).collect()
+    app.session
+        .scenery
+        .objects()
+        .iter()
+        .filter(|o| {
+            o.lua.as_ref().is_some_and(|l| {
+                l.files
+                    .iter()
+                    .any(|f| plugin_name(f).eq_ignore_ascii_case(plugin))
+            })
+        })
+        .map(|o| o.map_id)
+        .collect()
 }
 
 pub(crate) fn info(app: &App, id: i64) -> Option<ObjectInfo> {
     let s = &app.session.scenery;
     let o = s.get(s.find(id)?);
     let l = o.lua.as_ref()?;
-    let center = app.camera.as_ref().map(|c| c.position).or_else(|| app.player.as_ref().map(|p| p.vehicle.position))?;
+    let center = app
+        .camera
+        .as_ref()
+        .map(|c| c.position)
+        .or_else(|| app.player.as_ref().map(|p| p.vehicle.position))?;
     let distance = o.pos.distance(center);
-    Some(ObjectInfo { id, kind: l.type_name.clone(), pos: [o.pos.x, o.pos.y, o.pos.z], heading: o.heading, active: distance <= l.range, distance })
+    Some(ObjectInfo {
+        id,
+        kind: l.type_name.clone(),
+        pos: [o.pos.x, o.pos.y, o.pos.z],
+        heading: o.heading,
+        active: distance <= l.range,
+        distance,
+    })
 }
 
 pub(crate) fn var(app: &mut App, id: i64, name: &str) -> Option<f32> {
@@ -134,7 +214,10 @@ pub(crate) fn set_var(app: &mut App, id: i64, name: &str, v: f32) -> bool {
 
 pub(crate) fn str_var(app: &mut App, id: i64, name: &str) -> Option<String> {
     let o = find(app, id)?;
-    o.inst.program.str_var(name).map(|_| o.inst.str_var(name).to_string())
+    o.inst
+        .program
+        .str_var(name)
+        .map(|_| o.inst.str_var(name).to_string())
 }
 
 pub(crate) fn set_str(app: &mut App, id: i64, name: &str, v: &str) -> bool {
@@ -187,21 +270,47 @@ mod tests {
 
     #[test]
     fn a_transform_turns_about_its_pivot() {
-        let t = MeshTransform { pos: [0.0; 3], rot: [0.0, 0.0, 90.0], scale: [1.0; 3], pivot: [1.0, 0.0, 0.0] };
+        let t = MeshTransform {
+            pos: [0.0; 3],
+            rot: [0.0, 0.0, 90.0],
+            scale: [1.0; 3],
+            pivot: [1.0, 0.0, 0.0],
+        };
         let m = matrix(&t);
         // the pivot stays; a point 1 m beyond it (x = 2) goes to y = 1 (quarter turn counter-clockwise)
-        assert!((m.transform_point3(Vec3::new(1.0, 0.0, 0.0)) - Vec3::new(1.0, 0.0, 0.0)).length() < 1e-5);
-        assert!((m.transform_point3(Vec3::new(2.0, 0.0, 0.0)) - Vec3::new(1.0, 1.0, 0.0)).length() < 1e-5);
-        let moved = matrix(&MeshTransform { pos: [0.0, 0.0, 3.0], rot: [0.0; 3], scale: [2.0, 2.0, 2.0], pivot: [0.0; 3] });
-        assert!((moved.transform_point3(Vec3::new(1.0, 1.0, 1.0)) - Vec3::new(2.0, 2.0, 5.0)).length() < 1e-5);
+        assert!(
+            (m.transform_point3(Vec3::new(1.0, 0.0, 0.0)) - Vec3::new(1.0, 0.0, 0.0)).length()
+                < 1e-5
+        );
+        assert!(
+            (m.transform_point3(Vec3::new(2.0, 0.0, 0.0)) - Vec3::new(1.0, 1.0, 0.0)).length()
+                < 1e-5
+        );
+        let moved = matrix(&MeshTransform {
+            pos: [0.0, 0.0, 3.0],
+            rot: [0.0; 3],
+            scale: [2.0, 2.0, 2.0],
+            pivot: [0.0; 3],
+        });
+        assert!(
+            (moved.transform_point3(Vec3::new(1.0, 1.0, 1.0)) - Vec3::new(2.0, 2.0, 5.0)).length()
+                < 1e-5
+        );
     }
 
     #[test]
     fn plugin_names_follow_the_whole_path() {
         let a = plugin_name(std::path::Path::new("Objects/A/gate.lua"));
         let b = plugin_name(std::path::Path::new("Objects/B/gate.lua"));
-        assert!(a.starts_with("object:gate-") && b.starts_with("object:gate-"), "{a} {b}");
+        assert!(
+            a.starts_with("object:gate-") && b.starts_with("object:gate-"),
+            "{a} {b}"
+        );
         assert_ne!(a, b, "the same file name in two folders is two scripts");
-        assert_eq!(a, plugin_name(std::path::Path::new("Objects/A/gate.lua")), "the same file is the same script");
+        assert_eq!(
+            a,
+            plugin_name(std::path::Path::new("Objects/A/gate.lua")),
+            "the same file is the same script"
+        );
     }
 }

@@ -16,19 +16,76 @@ pub const SENSORS: [(&str, f32, f32); 5] = [
 ];
 
 /// The f-numbers in third stops.
-pub const APERTURES: [f32; 31] = [1.0, 1.1, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.5, 2.8, 3.2, 3.5, 4.0, 4.5, 5.0, 5.6, 6.3, 7.1, 8.0, 9.0, 10.0, 11.0, 13.0, 14.0, 16.0, 18.0, 20.0, 22.0, 25.0, 29.0, 32.0];
+pub const APERTURES: [f32; 31] = [
+    1.0, 1.1, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.5, 2.8, 3.2, 3.5, 4.0, 4.5, 5.0, 5.6, 6.3, 7.1, 8.0,
+    9.0, 10.0, 11.0, 13.0, 14.0, 16.0, 18.0, 20.0, 22.0, 25.0, 29.0, 32.0,
+];
 
 /// Shutter times in third stops (s) and how a camera shows them.
 pub const SHUTTERS: [(f32, &str); 55] = [
-    (30.0, "30\""), (25.0, "25\""), (20.0, "20\""), (15.0, "15\""), (13.0, "13\""), (10.0, "10\""), (8.0, "8\""), (6.0, "6\""), (5.0, "5\""), (4.0, "4\""), (3.2, "3.2\""), (2.5, "2.5\""), (2.0, "2\""), (1.6, "1.6\""), (1.3, "1.3\""), (1.0, "1\""),
-    (0.8, "0.8\""), (0.6, "0.6\""), (0.5, "0.5\""), (0.4, "0.4\""), (0.3, "0.3\""), (1.0 / 4.0, "1/4"), (1.0 / 5.0, "1/5"), (1.0 / 6.0, "1/6"), (1.0 / 8.0, "1/8"), (1.0 / 10.0, "1/10"), (1.0 / 13.0, "1/13"), (1.0 / 15.0, "1/15"), (1.0 / 20.0, "1/20"),
-    (1.0 / 25.0, "1/25"), (1.0 / 30.0, "1/30"), (1.0 / 40.0, "1/40"), (1.0 / 50.0, "1/50"), (1.0 / 60.0, "1/60"), (1.0 / 80.0, "1/80"), (1.0 / 100.0, "1/100"), (1.0 / 125.0, "1/125"), (1.0 / 160.0, "1/160"), (1.0 / 200.0, "1/200"),
-    (1.0 / 250.0, "1/250"), (1.0 / 320.0, "1/320"), (1.0 / 400.0, "1/400"), (1.0 / 500.0, "1/500"), (1.0 / 640.0, "1/640"), (1.0 / 800.0, "1/800"), (1.0 / 1000.0, "1/1000"), (1.0 / 1250.0, "1/1250"), (1.0 / 1600.0, "1/1600"), (1.0 / 2000.0, "1/2000"),
-    (1.0 / 2500.0, "1/2500"), (1.0 / 3200.0, "1/3200"), (1.0 / 4000.0, "1/4000"), (1.0 / 5000.0, "1/5000"), (1.0 / 6400.0, "1/6400"), (1.0 / 8000.0, "1/8000"),
+    (30.0, "30\""),
+    (25.0, "25\""),
+    (20.0, "20\""),
+    (15.0, "15\""),
+    (13.0, "13\""),
+    (10.0, "10\""),
+    (8.0, "8\""),
+    (6.0, "6\""),
+    (5.0, "5\""),
+    (4.0, "4\""),
+    (3.2, "3.2\""),
+    (2.5, "2.5\""),
+    (2.0, "2\""),
+    (1.6, "1.6\""),
+    (1.3, "1.3\""),
+    (1.0, "1\""),
+    (0.8, "0.8\""),
+    (0.6, "0.6\""),
+    (0.5, "0.5\""),
+    (0.4, "0.4\""),
+    (0.3, "0.3\""),
+    (1.0 / 4.0, "1/4"),
+    (1.0 / 5.0, "1/5"),
+    (1.0 / 6.0, "1/6"),
+    (1.0 / 8.0, "1/8"),
+    (1.0 / 10.0, "1/10"),
+    (1.0 / 13.0, "1/13"),
+    (1.0 / 15.0, "1/15"),
+    (1.0 / 20.0, "1/20"),
+    (1.0 / 25.0, "1/25"),
+    (1.0 / 30.0, "1/30"),
+    (1.0 / 40.0, "1/40"),
+    (1.0 / 50.0, "1/50"),
+    (1.0 / 60.0, "1/60"),
+    (1.0 / 80.0, "1/80"),
+    (1.0 / 100.0, "1/100"),
+    (1.0 / 125.0, "1/125"),
+    (1.0 / 160.0, "1/160"),
+    (1.0 / 200.0, "1/200"),
+    (1.0 / 250.0, "1/250"),
+    (1.0 / 320.0, "1/320"),
+    (1.0 / 400.0, "1/400"),
+    (1.0 / 500.0, "1/500"),
+    (1.0 / 640.0, "1/640"),
+    (1.0 / 800.0, "1/800"),
+    (1.0 / 1000.0, "1/1000"),
+    (1.0 / 1250.0, "1/1250"),
+    (1.0 / 1600.0, "1/1600"),
+    (1.0 / 2000.0, "1/2000"),
+    (1.0 / 2500.0, "1/2500"),
+    (1.0 / 3200.0, "1/3200"),
+    (1.0 / 4000.0, "1/4000"),
+    (1.0 / 5000.0, "1/5000"),
+    (1.0 / 6400.0, "1/6400"),
+    (1.0 / 8000.0, "1/8000"),
 ];
 
 /// ISO sensitivities in third stops.
-pub const ISOS: [f32; 28] = [50.0, 64.0, 80.0, 100.0, 125.0, 160.0, 200.0, 250.0, 320.0, 400.0, 500.0, 640.0, 800.0, 1000.0, 1250.0, 1600.0, 2000.0, 2500.0, 3200.0, 4000.0, 5000.0, 6400.0, 8000.0, 10000.0, 12800.0, 16000.0, 25600.0, 51200.0];
+pub const ISOS: [f32; 28] = [
+    50.0, 64.0, 80.0, 100.0, 125.0, 160.0, 200.0, 250.0, 320.0, 400.0, 500.0, 640.0, 800.0, 1000.0,
+    1250.0, 1600.0, 2000.0, 2500.0, 3200.0, 4000.0, 5000.0, 6400.0, 8000.0, 10000.0, 12800.0,
+    16000.0, 25600.0, 51200.0,
+];
 
 /// The exposure modes, as a camera's dial names them.
 pub const MODES: [&str; 4] = ["P", "A", "S", "M"];
@@ -41,7 +98,15 @@ pub fn ev100(fstop: f32, shutter: f32, iso: f32) -> f32 {
 }
 
 fn nearest(list: &[f32], x: f32) -> usize {
-    list.iter().enumerate().min_by(|a, b| (a.1.ln() - x.ln()).abs().total_cmp(&(b.1.ln() - x.ln()).abs())).map(|e| e.0).unwrap_or(0)
+    list.iter()
+        .enumerate()
+        .min_by(|a, b| {
+            (a.1.ln() - x.ln())
+                .abs()
+                .total_cmp(&(b.1.ln() - x.ln()).abs())
+        })
+        .map(|e| e.0)
+        .unwrap_or(0)
 }
 
 pub fn nearest_aperture(f: f32) -> usize {
@@ -71,7 +136,15 @@ pub struct Exposure {
 
 impl Default for Exposure {
     fn default() -> Exposure {
-        Exposure { mode: 1, aperture: nearest_aperture(4.0), shutter: nearest_shutter(1.0 / 250.0), iso: nearest_iso(100.0), auto_iso: true, compensation: 0.0, metering: 0 }
+        Exposure {
+            mode: 1,
+            aperture: nearest_aperture(4.0),
+            shutter: nearest_shutter(1.0 / 250.0),
+            iso: nearest_iso(100.0),
+            auto_iso: true,
+            compensation: 0.0,
+            metering: 0,
+        }
     }
 }
 
@@ -111,7 +184,8 @@ pub fn meter(e: &Exposure, scene_ev: f32, lens: (f32, f32), focal_eq: f32) -> Me
         match e.mode {
             // the program: the aperture opens with the dark and closes in the bright
             0 => {
-                let av = (total * 0.42 - 0.6).clamp(2.0 * lens.0.log2(), 2.0 * 11f32.log2().min(lens.1.log2()));
+                let av = (total * 0.42 - 0.6)
+                    .clamp(2.0 * lens.0.log2(), 2.0 * 11f32.log2().min(lens.1.log2()));
                 *ap_ix = nearest_aperture(2f32.powf(av * 0.5)).clamp(lo, hi);
                 let n = APERTURES[*ap_ix];
                 *sh_ix = nearest_shutter(n * n / 2f32.powf(total));
@@ -146,7 +220,15 @@ pub fn meter(e: &Exposure, scene_ev: f32, lens: (f32, f32), focal_eq: f32) -> Me
     }
     let (fstop, shutter, iso) = (APERTURES[ap_ix], SHUTTERS[sh_ix].0, ISOS[iso_ix]);
     let offset = scene_ev - ev100(fstop, shutter, iso);
-    Metered { fstop, shutter, iso, aperture_ix: ap_ix, shutter_ix: sh_ix, iso_ix, offset }
+    Metered {
+        fstop,
+        shutter,
+        iso,
+        aperture_ix: ap_ix,
+        shutter_ix: sh_ix,
+        iso_ix,
+        offset,
+    }
 }
 
 /// The light of the scene as a meter reads it (EV at ISO 100) from the strength of the sun
@@ -206,12 +288,30 @@ pub const WHITE_BALANCE: [(&str, f32); 8] = [
 /// Planckian locus, decoded from sRGB).
 pub fn blackbody(k: f32) -> [f32; 3] {
     let t = k.clamp(1500.0, 15000.0) / 100.0;
-    let r = if t <= 66.0 { 255.0 } else { 329.698_73 * (t - 60.0).powf(-0.133_204_76) };
-    let g = if t <= 66.0 { 99.470_8 * t.ln() - 161.119_57 } else { 288.122_16 * (t - 60.0).powf(-0.075_514_85) };
-    let b = if t >= 66.0 { 255.0 } else if t <= 19.0 { 0.0 } else { 138.517_73 * (t - 10.0).ln() - 305.044_8 };
+    let r = if t <= 66.0 {
+        255.0
+    } else {
+        329.698_73 * (t - 60.0).powf(-0.133_204_76)
+    };
+    let g = if t <= 66.0 {
+        99.470_8 * t.ln() - 161.119_57
+    } else {
+        288.122_16 * (t - 60.0).powf(-0.075_514_85)
+    };
+    let b = if t >= 66.0 {
+        255.0
+    } else if t <= 19.0 {
+        0.0
+    } else {
+        138.517_73 * (t - 10.0).ln() - 305.044_8
+    };
     let lin = |c: f32| {
         let c = (c / 255.0).clamp(0.0, 1.0);
-        if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
     };
     [lin(r), lin(g), lin(b)]
 }
@@ -226,7 +326,11 @@ pub fn kelvin_gains(k: f32) -> [f32; 3] {
     // (the camera divides out the light it assumes: set to 6500 K it takes the light for
     // bluer than it is and warms it; to 3200 K for redder, and cools it)
     let (assumed, real) = (blackbody(k), blackbody(5500.0));
-    let m = [real[0] / assumed[0].max(1e-4), real[1] / assumed[1].max(1e-4), real[2] / assumed[2].max(1e-4)];
+    let m = [
+        real[0] / assumed[0].max(1e-4),
+        real[1] / assumed[1].max(1e-4),
+        real[2] / assumed[2].max(1e-4),
+    ];
     let l = 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2];
     [m[0] / l, m[1] / l, m[2] / l]
 }
@@ -252,7 +356,11 @@ pub fn dof_limits(f_mm: f32, fstop: f32, focus: f32, sensor_h: f32) -> (f32, f32
     let hyper = f * f / (fstop * c / 1000.0) + f;
     let s = focus.max(f * 1.01);
     let near = s * (hyper - f) / (hyper + s - 2.0 * f);
-    let far = if s >= hyper { f32::INFINITY } else { s * (hyper - f) / (hyper - s) };
+    let far = if s >= hyper {
+        f32::INFINITY
+    } else {
+        s * (hyper - f) / (hyper - s)
+    };
     (near, far, hyper)
 }
 
@@ -267,7 +375,11 @@ pub fn diffraction_px(fstop: f32, sensor_h: f32, h_px: f32) -> f32 {
 /// A lens as it comes, uncorrected: its distortion (k1: barrel below 0) and how much its
 /// corners darken wide open, from its full-frame equivalent focal length and the f-number.
 pub fn lens_character(focal_eq: f32, fstop: f32) -> (f32, f32) {
-    let k1 = if focal_eq < 50.0 { -0.06 * (50.0 - focal_eq) / 36.0 } else { 0.018 * ((focal_eq - 50.0) / 150.0).min(1.0) };
+    let k1 = if focal_eq < 50.0 {
+        -0.06 * (50.0 - focal_eq) / 36.0
+    } else {
+        0.018 * ((focal_eq - 50.0) / 150.0).min(1.0)
+    };
     let open = (1.0 - (fstop.log2() * 2.0 - 1.0) / 3.0).clamp(0.0, 1.0);
     (k1.max(-0.08), 0.55 * open)
 }
@@ -281,36 +393,70 @@ mod tests {
         // f/16 at 1/100 s and ISO 100 is right for a sunny day
         assert!((ev100(16.0, 1.0 / 100.0, 100.0) - 14.6).abs() < 0.1);
         // a stop of ISO is a stop of EV
-        assert!((ev100(8.0, 1.0 / 125.0, 200.0) - ev100(8.0, 1.0 / 125.0, 100.0) + 1.0).abs() < 1e-4);
+        assert!(
+            (ev100(8.0, 1.0 / 125.0, 200.0) - ev100(8.0, 1.0 / 125.0, 100.0) + 1.0).abs() < 1e-4
+        );
     }
 
     #[test]
     fn the_automatic_modes_meet_the_meter() {
         for mode in 0..3 {
             for ev in [6.0, 10.0, 15.0] {
-                let e = Exposure { mode, auto_iso: false, iso: nearest_iso(400.0), ..Exposure::default() };
+                let e = Exposure {
+                    mode,
+                    auto_iso: false,
+                    iso: nearest_iso(400.0),
+                    ..Exposure::default()
+                };
                 let m = meter(&e, ev, (1.4, 22.0), 50.0);
-                assert!(m.offset.abs() < 0.4 || (mode == 2 && ev < 8.0), "mode {mode} ev {ev}: {m:?}");
+                assert!(
+                    m.offset.abs() < 0.4 || (mode == 2 && ev < 8.0),
+                    "mode {mode} ev {ev}: {m:?}"
+                );
             }
         }
         // compensation brightens
-        let e = Exposure { compensation: 1.0, auto_iso: false, ..Exposure::default() };
+        let e = Exposure {
+            compensation: 1.0,
+            auto_iso: false,
+            ..Exposure::default()
+        };
         assert!((meter(&e, 12.0, (1.4, 22.0), 50.0).offset - 1.0).abs() < 0.4);
     }
 
     #[test]
     fn manual_shows_the_meter_and_auto_iso_fixes_it() {
-        let e = Exposure { mode: 3, aperture: nearest_aperture(8.0), shutter: nearest_shutter(1.0 / 125.0), iso: nearest_iso(100.0), auto_iso: false, ..Exposure::default() };
+        let e = Exposure {
+            mode: 3,
+            aperture: nearest_aperture(8.0),
+            shutter: nearest_shutter(1.0 / 125.0),
+            iso: nearest_iso(100.0),
+            auto_iso: false,
+            ..Exposure::default()
+        };
         // EV 15 light, settings right for EV 13: two stops over
         let m = meter(&e, 15.0, (1.4, 22.0), 50.0);
         assert!((m.offset - 2.0).abs() < 0.2, "{m:?}");
-        let m = meter(&Exposure { auto_iso: true, ..e }, 10.0, (1.4, 22.0), 50.0);
+        let m = meter(
+            &Exposure {
+                auto_iso: true,
+                ..e
+            },
+            10.0,
+            (1.4, 22.0),
+            50.0,
+        );
         assert!(m.offset.abs() < 0.4 && m.iso > 100.0, "{m:?}");
     }
 
     #[test]
     fn auto_iso_keeps_the_shutter_hand_held() {
-        let e = Exposure { mode: 1, aperture: nearest_aperture(2.8), auto_iso: true, ..Exposure::default() };
+        let e = Exposure {
+            mode: 1,
+            aperture: nearest_aperture(2.8),
+            auto_iso: true,
+            ..Exposure::default()
+        };
         let m = meter(&e, 5.0, (1.4, 22.0), 50.0);
         assert!(m.shutter <= 1.0 / 40.0 && m.iso > 400.0, "{m:?}");
     }
@@ -339,7 +485,16 @@ mod tests {
     #[test]
     fn spot_metering_on_a_bright_middle_reads_more_light() {
         let (w, h) = (64u32, 48u32);
-        let luma: Vec<f32> = (0..w * h).map(|i| { let (x, y) = (i % w, i / w); if (x as i32 - 32).abs() < 4 && (y as i32 - 24).abs() < 4 { 0.9 } else { 0.1 } }).collect();
+        let luma: Vec<f32> = (0..w * h)
+            .map(|i| {
+                let (x, y) = (i % w, i / w);
+                if (x as i32 - 32).abs() < 4 && (y as i32 - 24).abs() < 4 {
+                    0.9
+                } else {
+                    0.1
+                }
+            })
+            .collect();
         assert!(metering_shift(2, &luma, w, h) > 2.0);
         assert_eq!(metering_shift(0, &luma, w, h), 0.0);
     }

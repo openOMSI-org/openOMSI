@@ -407,10 +407,7 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         // light, as the sprite's distance floor keeps it on the screen)
         let lit = textureSampleLevel(t_corona, s_corona, vec2<f32>(0.5, 0.5), 0.0).rgb;
         let w = max(0.1, px * 1.5);
-        if (compact) {
-            // Keep the vehicle's visible lamp face inside its compact core.
-            shape = exp(-r * r / (w * w)) * max(lit, shape);
-        } else {
+        if (!compact) {
             let core = exp(-r * r / (w * w)) * 3.0 + exp(-r * 9.0) * 0.35;
             shape = mix(core * max(lit, shape) + shape * 0.22, shape, wet);
         }

@@ -44,7 +44,7 @@
 //! depart 05:30 05:42 05:54   // or: at 05:30
 //! ```
 
-use crate::doc::{parse, parse_clock, Block, Issue, Issues};
+use crate::doc::{Block, Issue, Issues, parse, parse_clock};
 use crate::stations::Stations;
 use omsi_cfg::transport::{ModeSet, TransportMode};
 
@@ -67,14 +67,23 @@ pub struct Segment {
 impl Segment {
     /// Every station of the segment in order, ends included.
     pub fn stations(&self) -> Vec<&str> {
-        std::iter::once(self.from.as_str()).chain(self.via.iter().map(String::as_str)).chain(std::iter::once(self.to.as_str())).collect()
+        std::iter::once(self.from.as_str())
+            .chain(self.via.iter().map(String::as_str))
+            .chain(std::iter::once(self.to.as_str()))
+            .collect()
     }
 
     /// The stations the vehicle stops at: all but the skipped ones (the ends always stop).
     pub fn stops(&self) -> Vec<&str> {
         let all = self.stations();
         let last = all.len() - 1;
-        all.into_iter().enumerate().filter(|(i, s)| *i == 0 || *i == last || !self.skip.iter().any(|k| k.eq_ignore_ascii_case(s))).map(|(_, s)| s).collect()
+        all.into_iter()
+            .enumerate()
+            .filter(|(i, s)| {
+                *i == 0 || *i == last || !self.skip.iter().any(|k| k.eq_ignore_ascii_case(s))
+            })
+            .map(|(_, s)| s)
+            .collect()
     }
 }
 
@@ -140,7 +149,9 @@ impl Route {
     pub fn service_stops(&self, service: &Service) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for id in &service.segments {
-            let Some(seg) = self.segment(id) else { continue };
+            let Some(seg) = self.segment(id) else {
+                continue;
+            };
             for st in seg.stops() {
                 if out.last().is_none_or(|l| !l.eq_ignore_ascii_case(st)) {
                     out.push(st.to_string());
@@ -158,7 +169,9 @@ pub struct Routes {
 
 impl Routes {
     pub fn get(&self, id: &str) -> Option<&Route> {
-        self.list.iter().find(|r| r.id.eq_ignore_ascii_case(id.trim()))
+        self.list
+            .iter()
+            .find(|r| r.id.eq_ignore_ascii_case(id.trim()))
     }
 
     pub fn parse(text: &str, file: &str, issues: &mut Vec<Issue>) -> Routes {
@@ -189,12 +202,22 @@ impl Routes {
 
     /// Checks the routes against the map's stations and depots: every station exists and serves
     /// the route's mode, every service's segments join up, a service is timed in one way.
-    pub fn check(&self, file: &str, stations: &Stations, depots: &[String], map_modes: ModeSet, issues: &mut Vec<Issue>) {
+    pub fn check(
+        &self,
+        file: &str,
+        stations: &Stations,
+        depots: &[String],
+        map_modes: ModeSet,
+        issues: &mut Vec<Issue>,
+    ) {
         let mut is = Issues::new(file);
         for (i, r) in self.list.iter().enumerate() {
             if r.id.is_empty() {
                 is.error(r.line, "a route has no id");
-            } else if self.list[..i].iter().any(|o| o.id.eq_ignore_ascii_case(&r.id)) {
+            } else if self.list[..i]
+                .iter()
+                .any(|o| o.id.eq_ignore_ascii_case(&r.id))
+            {
                 is.error(r.line, format!("route id {} is used twice", r.id));
             }
             let Some(mode) = r.mode else {
@@ -202,31 +225,73 @@ impl Routes {
                 continue;
             };
             if !map_modes.is_empty() && !map_modes.contains(mode) {
-                is.error(r.line, format!("route {} is a {mode} route, the map is made for {}", r.id, map_modes.describe()));
+                is.error(
+                    r.line,
+                    format!(
+                        "route {} is a {mode} route, the map is made for {}",
+                        r.id,
+                        map_modes.describe()
+                    ),
+                );
             }
             for (j, s) in r.segments.iter().enumerate() {
                 if s.id.is_empty() {
                     is.error(s.line, format!("route {}: a segment has no id", r.id));
-                } else if r.segments[..j].iter().any(|o| o.id.eq_ignore_ascii_case(&s.id)) {
-                    is.error(s.line, format!("route {}: segment id {} is used twice", r.id, s.id));
+                } else if r.segments[..j]
+                    .iter()
+                    .any(|o| o.id.eq_ignore_ascii_case(&s.id))
+                {
+                    is.error(
+                        s.line,
+                        format!("route {}: segment id {} is used twice", r.id, s.id),
+                    );
                 }
                 if s.from.is_empty() || s.to.is_empty() {
-                    is.error(s.line, format!("route {} segment {}: needs from and to", r.id, s.id));
+                    is.error(
+                        s.line,
+                        format!("route {} segment {}: needs from and to", r.id, s.id),
+                    );
                 } else if s.from.eq_ignore_ascii_case(&s.to) && s.via.is_empty() {
-                    is.error(s.line, format!("route {} segment {}: begins and ends at {}", r.id, s.id, s.from));
+                    is.error(
+                        s.line,
+                        format!(
+                            "route {} segment {}: begins and ends at {}",
+                            r.id, s.id, s.from
+                        ),
+                    );
                 }
                 for st in s.stations() {
                     match stations.get(st) {
-                        None => is.error(s.line, format!("route {} segment {}: station {st} is not in stations.cfg", r.id, s.id)),
-                        Some(station) if !station.modes.is_empty() && !station.modes.contains(mode) => {
-                            is.error(s.line, format!("route {} segment {}: station {st} does not serve {mode}", r.id, s.id));
+                        None => is.error(
+                            s.line,
+                            format!(
+                                "route {} segment {}: station {st} is not in stations.cfg",
+                                r.id, s.id
+                            ),
+                        ),
+                        Some(station)
+                            if !station.modes.is_empty() && !station.modes.contains(mode) =>
+                        {
+                            is.error(
+                                s.line,
+                                format!(
+                                    "route {} segment {}: station {st} does not serve {mode}",
+                                    r.id, s.id
+                                ),
+                            );
                         }
                         Some(_) => {}
                     }
                 }
                 for k in &s.skip {
                     if !s.via.iter().any(|v| v.eq_ignore_ascii_case(k)) {
-                        is.warn(s.line, format!("route {} segment {}: skip {k} is not among the via stations", r.id, s.id));
+                        is.warn(
+                            s.line,
+                            format!(
+                                "route {} segment {}: skip {k} is not among the via stations",
+                                r.id, s.id
+                            ),
+                        );
                     }
                 }
             }
@@ -243,16 +308,31 @@ fn check_service(r: &Route, sv: &Service, mode: TransportMode, depots: &[String]
         is.error(sv.line, format!("route {}: a service has no id", r.id));
     }
     if sv.segments.is_empty() {
-        is.error(sv.line, format!("route {} service {}: no segments", r.id, sv.id));
+        is.error(
+            sv.line,
+            format!("route {} service {}: no segments", r.id, sv.id),
+        );
     }
     let mut prev: Option<&Segment> = None;
     for id in &sv.segments {
         match r.segment(id) {
-            None => is.error(sv.line, format!("route {} service {}: segment {id} does not exist", r.id, sv.id)),
+            None => is.error(
+                sv.line,
+                format!(
+                    "route {} service {}: segment {id} does not exist",
+                    r.id, sv.id
+                ),
+            ),
             Some(seg) => {
                 if let Some(p) = prev {
                     if !p.to.eq_ignore_ascii_case(&seg.from) {
-                        is.error(sv.line, format!("route {} service {}: segment {} ends at {} but {} begins at {}", r.id, sv.id, p.id, p.to, seg.id, seg.from));
+                        is.error(
+                            sv.line,
+                            format!(
+                                "route {} service {}: segment {} ends at {} but {} begins at {}",
+                                r.id, sv.id, p.id, p.to, seg.id, seg.from
+                            ),
+                        );
                     }
                 }
                 prev = Some(seg);
@@ -260,27 +340,60 @@ fn check_service(r: &Route, sv: &Service, mode: TransportMode, depots: &[String]
         }
     }
     if sv.headway_s.is_none() && sv.departures.is_empty() {
-        is.error(sv.line, format!("route {} service {}: give a headway or [trip] departures", r.id, sv.id));
+        is.error(
+            sv.line,
+            format!(
+                "route {} service {}: give a headway or [trip] departures",
+                r.id, sv.id
+            ),
+        );
     }
     if let Some(h) = sv.headway_s {
         if h < 10.0 {
-            is.error(sv.line, format!("route {} service {}: headway {h} s is too short", r.id, sv.id));
+            is.error(
+                sv.line,
+                format!(
+                    "route {} service {}: headway {h} s is too short",
+                    r.id, sv.id
+                ),
+            );
         }
         if sv.from_s.is_some() != sv.to_s.is_some() {
-            is.warn(sv.line, format!("route {} service {}: give both from and to, or neither", r.id, sv.id));
+            is.warn(
+                sv.line,
+                format!(
+                    "route {} service {}: give both from and to, or neither",
+                    r.id, sv.id
+                ),
+            );
         }
     }
     if let (Some(a), Some(b)) = (sv.from_s, sv.to_s) {
         if b <= a {
-            is.error(sv.line, format!("route {} service {}: to is not after from", r.id, sv.id));
+            is.error(
+                sv.line,
+                format!("route {} service {}: to is not after from", r.id, sv.id),
+            );
         }
     }
     if sv.days == 0 {
-        is.error(sv.line, format!("route {} service {}: no day is valid", r.id, sv.id));
+        is.error(
+            sv.line,
+            format!("route {} service {}: no day is valid", r.id, sv.id),
+        );
     }
-    if let (Some(first), Some(last)) = (sv.segments.iter().find_map(|i| r.segment(i)), sv.segments.iter().rev().find_map(|i| r.segment(i))) {
+    if let (Some(first), Some(last)) = (
+        sv.segments.iter().find_map(|i| r.segment(i)),
+        sv.segments.iter().rev().find_map(|i| r.segment(i)),
+    ) {
         if sv.turn_back == TurnBack::Loop && !last.to.eq_ignore_ascii_case(&first.from) {
-            is.error(sv.line, format!("route {} service {}: a loop must end where it begins ({} to {})", r.id, sv.id, last.to, first.from));
+            is.error(
+                sv.line,
+                format!(
+                    "route {} service {}: a loop must end where it begins ({} to {})",
+                    r.id, sv.id, last.to, first.from
+                ),
+            );
         }
     }
     for d in sv.depot.iter().chain(match &sv.turn_back {
@@ -288,15 +401,30 @@ fn check_service(r: &Route, sv: &Service, mode: TransportMode, depots: &[String]
         _ => None,
     }) {
         if !depots.iter().any(|x| x.eq_ignore_ascii_case(d)) {
-            is.error(sv.line, format!("route {} service {}: depot {d} is not in depots.cfg", r.id, sv.id));
+            is.error(
+                sv.line,
+                format!(
+                    "route {} service {}: depot {d} is not in depots.cfg",
+                    r.id, sv.id
+                ),
+            );
         }
     }
     if let Some(c) = sv.consist {
         if c == 0 {
-            is.error(sv.line, format!("route {} service {}: consist is 0", r.id, sv.id));
+            is.error(
+                sv.line,
+                format!("route {} service {}: consist is 0", r.id, sv.id),
+            );
         }
         if c > 1 && mode == TransportMode::Bus {
-            is.warn(sv.line, format!("route {} service {}: a bus with a consist of {c}", r.id, sv.id));
+            is.warn(
+                sv.line,
+                format!(
+                    "route {} service {}: a bus with a consist of {c}",
+                    r.id, sv.id
+                ),
+            );
         }
     }
 }
@@ -305,16 +433,33 @@ fn read_route(b: &Block, is: &mut Issues) -> Route {
     let mode = b.get("mode").and_then(|m| {
         let r = TransportMode::from_name(m);
         if r.is_none() {
-            is.error(b.line_of("mode"), format!("mode {m} is not bus, tram, railway, metro or trolleybus"));
+            is.error(
+                b.line_of("mode"),
+                format!("mode {m} is not bus, tram, railway, metro or trolleybus"),
+            );
         }
         r
     });
     let colour = b.get("colour").or_else(|| b.get("color")).and_then(|v| {
-        let n: Vec<u8> = v.split_whitespace().filter_map(|w| w.parse().ok()).collect();
+        let n: Vec<u8> = v
+            .split_whitespace()
+            .filter_map(|w| w.parse().ok())
+            .collect();
         (n.len() == 3).then(|| [n[0], n[1], n[2]])
     });
     let id = b.str("id");
-    Route { name: b.get("name").map(str::to_string).unwrap_or_else(|| id.clone()), id, mode, colour, segments: Vec::new(), services: Vec::new(), line: b.line }
+    Route {
+        name: b
+            .get("name")
+            .map(str::to_string)
+            .unwrap_or_else(|| id.clone()),
+        id,
+        mode,
+        colour,
+        segments: Vec::new(),
+        services: Vec::new(),
+        line: b.line,
+    }
 }
 
 fn read_segment(b: &Block, is: &mut Issues) -> Segment {
@@ -323,7 +468,10 @@ fn read_segment(b: &Block, is: &mut Issues) -> Segment {
         Some(d) if d == "both" => false,
         Some(d) if d == "forward" || d == "oneway" => true,
         Some(d) => {
-            is.error(b.line_of("direction"), format!("direction {d} is not forward or both"));
+            is.error(
+                b.line_of("direction"),
+                format!("direction {d} is not forward or both"),
+            );
             false
         }
     };
@@ -349,10 +497,16 @@ fn read_service(b: &Block, is: &mut Issues) -> Service {
                 TurnBack::Reverse
             } else if v.eq_ignore_ascii_case("loop") {
                 TurnBack::Loop
-            } else if let Some(d) = v.strip_prefix("depot:").or_else(|| v.strip_prefix("Depot:")) {
+            } else if let Some(d) = v
+                .strip_prefix("depot:")
+                .or_else(|| v.strip_prefix("Depot:"))
+            {
                 TurnBack::Depot(d.trim().to_string())
             } else {
-                is.error(b.line_of("turn_back"), format!("turn_back {v} is not reverse, loop or depot:<id>"));
+                is.error(
+                    b.line_of("turn_back"),
+                    format!("turn_back {v} is not reverse, loop or depot:<id>"),
+                );
                 TurnBack::Reverse
             }
         }
@@ -361,7 +515,10 @@ fn read_service(b: &Block, is: &mut Issues) -> Service {
         b.get(key).and_then(|v| {
             let t = parse_clock(v);
             if t.is_none() {
-                is.error(b.line_of(key), format!("{key} {v} is not a time like 05:30"));
+                is.error(
+                    b.line_of(key),
+                    format!("{key} {v} is not a time like 05:30"),
+                );
             }
             t
         })
@@ -370,14 +527,20 @@ fn read_service(b: &Block, is: &mut Issues) -> Service {
     let days = match b.get("days") {
         None => ALL_DAYS,
         Some(v) => parse_days(v).unwrap_or_else(|| {
-            is.error(b.line_of("days"), format!("days {v} is not like Mo-Fr or Sa,Su"));
+            is.error(
+                b.line_of("days"),
+                format!("days {v} is not like Mo-Fr or Sa,Su"),
+            );
             0
         }),
     };
     let headway_s = b.get("headway").and_then(|_| {
         let h = b.seconds("headway");
         if h.is_none() {
-            is.error(b.line_of("headway"), format!("headway {} is not like 150 s or 4 min", b.str("headway")));
+            is.error(
+                b.line_of("headway"),
+                format!("headway {} is not like 150 s or 4 min", b.str("headway")),
+            );
         }
         h
     });
@@ -411,9 +574,16 @@ fn read_trip(r: &mut Route, b: &Block, is: &mut Issues) {
             }
         }
     }
-    match r.services.iter_mut().find(|s| s.id.eq_ignore_ascii_case(&sid)) {
+    match r
+        .services
+        .iter_mut()
+        .find(|s| s.id.eq_ignore_ascii_case(&sid))
+    {
         Some(s) => s.departures.extend(times),
-        None => is.error(b.line, format!("[trip]: service {sid} does not exist in route {}", r.id)),
+        None => is.error(
+            b.line,
+            format!("[trip]: service {sid} does not exist in route {}", r.id),
+        ),
     }
 }
 
@@ -441,7 +611,10 @@ pub fn parse_days(v: &str) -> Option<u8> {
         _ => {}
     }
     let mut mask = 0u8;
-    for part in v.split(|c: char| c == ',' || c == ';' || c.is_whitespace()).filter(|p| !p.is_empty()) {
+    for part in v
+        .split(|c: char| c == ',' || c == ';' || c.is_whitespace())
+        .filter(|p| !p.is_empty())
+    {
         if let Some((a, b)) = part.split_once('-') {
             let (a, b) = (day(a)?, day(b)?);
             let mut d = a;
@@ -475,14 +648,24 @@ mod tests {
         let text = "[route]\nid M1\nname Red\nmode metro\ncolour 220 40 40\n[segment]\nid s1\nfrom A\nto C\nvia B\nskip B\ndwell 20 s\nspeed 80 km/h\n[segment]\nid s2\nfrom C\nto D\n[service]\nid peak\nsegments s1 s2\nheadway 150 s\nfrom 05:30\nto 24:30\ndays Mo-Fr\nturn_back depot:Dep\nconsist 6\ndepot Dep\n";
         let mut issues = Vec::new();
         let routes = Routes::parse(text, "routes.cfg", &mut issues);
-        routes.check("routes.cfg", &stations(), &["Dep".to_string()], ModeSet::EMPTY, &mut issues);
+        routes.check(
+            "routes.cfg",
+            &stations(),
+            &["Dep".to_string()],
+            ModeSet::EMPTY,
+            &mut issues,
+        );
         assert!(issues.is_empty(), "{issues:?}");
         let r = routes.get("m1").unwrap();
         assert_eq!(r.colour, Some([220, 40, 40]));
         let s = r.service("peak").unwrap();
         assert_eq!(s.days, 0b001_1111);
         assert_eq!(s.turn_back, TurnBack::Depot("Dep".into()));
-        assert_eq!(r.service_stops(s), vec!["A", "C", "D"], "B is skipped, C counts once");
+        assert_eq!(
+            r.service_stops(s),
+            vec!["A", "C", "D"],
+            "B is skipped, C counts once"
+        );
         assert!((r.segment("s1").unwrap().speed.unwrap() - 80.0 / 3.6).abs() < 1e-3);
         assert_eq!(r.segment("s1").unwrap().stations(), vec!["A", "B", "C"]);
     }
@@ -495,7 +678,10 @@ mod tests {
         routes.check("routes.cfg", &stations(), &[], ModeSet::EMPTY, &mut issues);
         assert!(issues.is_empty(), "{issues:?}");
         let r = routes.get("M").unwrap();
-        assert_eq!(r.service_stops(r.service("to_d").unwrap()), vec!["A", "B", "D"]);
+        assert_eq!(
+            r.service_stops(r.service("to_d").unwrap()),
+            vec!["A", "B", "D"]
+        );
     }
 
     #[test]
@@ -505,7 +691,15 @@ mod tests {
         let routes = Routes::parse(text, "routes.cfg", &mut issues);
         routes.check("routes.cfg", &stations(), &[], ModeSet::EMPTY, &mut issues);
         assert!(issues.is_empty(), "{issues:?}");
-        assert_eq!(routes.get("R").unwrap().service("timed").unwrap().departures, vec![19800.0, 20520.0, 21600.0]);
+        assert_eq!(
+            routes
+                .get("R")
+                .unwrap()
+                .service("timed")
+                .unwrap()
+                .departures,
+            vec![19800.0, 20520.0, 21600.0]
+        );
     }
 
     #[test]
@@ -513,10 +707,28 @@ mod tests {
         let text = "[route]\nid R\nmode metro\n[segment]\nid s1\nfrom A\nto B\n[segment]\nid s2\nfrom C\nto X\n[service]\nid broken\nsegments s1 s2 s3\nheadway 2 s\nturn_back loop\ndepot Nowhere\n[service]\nid untimed\nsegments s1\n";
         let mut issues = Vec::new();
         let routes = Routes::parse(text, "routes.cfg", &mut issues);
-        routes.check("routes.cfg", &stations(), &[], ModeSet::of(TransportMode::Tram), &mut issues);
+        routes.check(
+            "routes.cfg",
+            &stations(),
+            &[],
+            ModeSet::of(TransportMode::Tram),
+            &mut issues,
+        );
         let all: Vec<String> = issues.iter().map(|i| i.to_string()).collect();
-        for want in ["does not serve metro", "ends at B but s2 begins at C", "segment s3 does not exist", "too short", "must end where it begins", "depot Nowhere", "give a headway", "the map is made for tram"] {
-            assert!(all.iter().any(|t| t.contains(want)), "missing `{want}` in {all:#?}");
+        for want in [
+            "does not serve metro",
+            "ends at B but s2 begins at C",
+            "segment s3 does not exist",
+            "too short",
+            "must end where it begins",
+            "depot Nowhere",
+            "give a headway",
+            "the map is made for tram",
+        ] {
+            assert!(
+                all.iter().any(|t| t.contains(want)),
+                "missing `{want}` in {all:#?}"
+            );
         }
     }
 
