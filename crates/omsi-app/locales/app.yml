@@ -8767,18 +8767,6 @@ _version: 2
   en: "Folders of objects and splines that no other map uses go with it: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.":
   en: "Folders of objects and splines that another map still uses stay: {n}."
-<<<<<<< HEAD
-"Load a situation...":
-  en: "Load a situation..."
-"Enter saves, Esc cancels":
-  en: "Enter saves, Esc cancels"
-"Save under a name...":
-  en: "Save under a name..."
-"No saved situation of this map yet":
-  en: "No saved situation of this map yet"
-"Saved as \"{}\"":
-  en: "Saved as \"{}\""
-=======
 "Yes":
   en: "Yes"
 "Take control of this bus?":
@@ -8789,7 +8777,16 @@ _version: 2
   en: "The bus could not be taken over"
 "You have control of the bus":
   en: "You have control of the bus"
->>>>>>> origin/main
+"Load a situation...":
+  en: "Load a situation..."
+"Enter saves, Esc cancels":
+  en: "Enter saves, Esc cancels"
+"Save under a name...":
+  en: "Save under a name..."
+"No saved situation of this map yet":
+  en: "No saved situation of this map yet"
+"Saved as \"{}\"":
+  en: "Saved as \"{}\""
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.":
   en: "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one."
 "Rename the profile":
