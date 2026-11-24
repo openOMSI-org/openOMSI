@@ -399,12 +399,7 @@ impl RigidWheel {
 /// The static load on each wheel of each axle (N): the weight shared so that the axle loads
 /// balance the centre of gravity (a least-squares split when there are more than two axles).
 pub fn wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
-    let mass = if def.mass < 100.0 {
-        def.mass * 1000.0
-    } else {
-        def.mass
-    }
-    .max(500.0);
+    let mass = def.mass_kg().max(500.0);
     let cog_y = def.cog.map(|c| c[1]).unwrap_or(0.0);
     let g = 9.81;
     let n = (def.axles.len() * 2).max(1) as f32;
