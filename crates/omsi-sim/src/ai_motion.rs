@@ -33,7 +33,11 @@ pub fn rotation_point(def: &Vehicle) -> (f32, f32) {
         return (-1.3, 2.6);
     }
     // a rotation point at (or in front of) the front axle is a file without one
-    let rot = if def.axles.len() >= 2 && def.rot_pnt_long < front - 0.5 { def.rot_pnt_long } else { rear };
+    let rot = if def.axles.len() >= 2 && def.rot_pnt_long < front - 0.5 {
+        def.rot_pnt_long
+    } else {
+        rear
+    };
     (rot, (front - rot).max(0.8))
 }
 
@@ -53,7 +57,11 @@ pub const PULL_OUT_ACCEL: f32 = 1.0;
 /// well before it.
 pub fn pull_out_ramps(real: f32, front: f32, rolling: bool) -> Vec<f32> {
     let base = real + 0.5 * front;
-    let (factors, max): (&[f32], f32) = if rolling { (&[1.0, 0.8, 0.6, 0.45], 20.0) } else { (&[1.5, 1.2, 1.0, 0.8, 0.6], 12.0) };
+    let (factors, max): (&[f32], f32) = if rolling {
+        (&[1.0, 0.8, 0.6, 0.45], 20.0)
+    } else {
+        (&[1.5, 1.2, 1.0, 0.8, 0.6], 12.0)
+    };
     let mut out: Vec<f32> = Vec::new();
     for f in factors {
         let r = (base * f).clamp(4.0, max);
@@ -94,17 +102,38 @@ pub fn straight_pull_out(side: f32, ramp: f32) -> impl Fn(f32) -> DVec3 {
 /// in the middle of the lane, the oncoming lane `side` metres over) with
 /// `PULL_OUT_CLEARANCE` to spare, and half a metre more for where it comes to rest.
 /// `extent` is (origin to front bumper, to rear bumper, half width).
-pub fn pull_out_room(def: &Vehicle, extent: (f32, f32, f32), obstacle_half_width: f64, side: f32) -> f32 {
+pub fn pull_out_room(
+    def: &Vehicle,
+    extent: (f32, f32, f32),
+    obstacle_half_width: f64,
+    side: f32,
+) -> f32 {
     let (front, _, _) = extent;
     let bus_half_len = 6.0;
     let mut gap = 0.75f32;
     while gap <= 12.0 {
-        let obstacle = crate::collision::Obb::vehicle(DVec2::new(0.0, (front + gap) as f64 + bus_half_len), 0.0, bus_half_len, bus_half_len, obstacle_half_width);
+        let obstacle = crate::collision::Obb::vehicle(
+            DVec2::new(0.0, (front + gap) as f64 + bus_half_len),
+            0.0,
+            bus_half_len,
+            bus_half_len,
+            obstacle_half_width,
+        );
         for ramp in pull_out_ramps(gap, front, false) {
             let way = straight_pull_out(side, ramp);
             let mut body = AiBody::new(def, MotionKind::Road);
             body.place(&way, None, None, 0.0);
-            if body.sweep_clearance(&way, 0.0, PULL_OUT_WAIT, PULL_OUT_ACCEL, 8.0, gap + 6.0, extent, &[obstacle]) >= PULL_OUT_CLEARANCE {
+            if body.sweep_clearance(
+                &way,
+                0.0,
+                PULL_OUT_WAIT,
+                PULL_OUT_ACCEL,
+                8.0,
+                gap + 6.0,
+                extent,
+                &[obstacle],
+            ) >= PULL_OUT_CLEARANCE
+            {
                 return gap + 0.5;
             }
         }
@@ -212,7 +241,11 @@ impl AiBody {
         let (rot_long, wheelbase) = rotation_point(def);
         let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
         let rear_long = def.axles.iter().map(|a| a.long).fold(f32::MAX, f32::min);
-        let (front_long, rear_long) = if def.axles.len() >= 2 { (front_long, rear_long) } else { (rot_long + wheelbase, rot_long) };
+        let (front_long, rear_long) = if def.axles.len() >= 2 {
+            (front_long, rear_long)
+        } else {
+            (rot_long + wheelbase, rot_long)
+        };
         // `[mass]` is in tonnes (a few files give kilograms), `[momentofintertia]` in the
         // same unit times m²: 1 t and 1.49 for a Golf, 10.9 t and 300 for an SD200
         let tonnes = def.mass < 100.0;
@@ -220,13 +253,27 @@ impl AiBody {
         let unit = if tonnes { 1000.0 } else { 1.0 };
         let heavy = mass > 6000.0;
         // inv_min_turnradius = tan(max angle) / wheelbase
-        let max_steer = if def.inv_min_turn_radius > 0.0 { (def.inv_min_turn_radius * wheelbase).atan().to_degrees().clamp(15.0, 55.0) } else { 35.0 };
+        let max_steer = if def.inv_min_turn_radius > 0.0 {
+            (def.inv_min_turn_radius * wheelbase)
+                .atan()
+                .to_degrees()
+                .clamp(15.0, 55.0)
+        } else {
+            35.0
+        };
         let mut wheels = Vec::new();
         for (i, a) in def.axles.iter().enumerate() {
             let half = (a.max_width * 0.5).max(0.4);
             for (side, lat) in [(0, -half), (1, half)] {
                 // `achse_feder` / `achse_daempfer`: kN/m and kNs/m per side
-                wheels.push(Wheel { axle: i, side, lat, long: a.long, k: a.spring.max(0.0) * 1000.0, c: a.damper.max(0.0) * 1000.0 });
+                wheels.push(Wheel {
+                    axle: i,
+                    side,
+                    lat,
+                    long: a.long,
+                    k: a.spring.max(0.0) * 1000.0,
+                    c: a.damper.max(0.0) * 1000.0,
+                });
             }
         }
         let n = wheels.len().max(1) as f32;
@@ -252,7 +299,10 @@ impl AiBody {
         let half_track = wheels.iter().map(|w| w.lat.abs()).fold(0.5, f32::max);
         // (pitch and roll: the first and the third value, as Omsi.exe reads them - see
         // `RigidBody::from_definition`)
-        let mut inertia = [def.moment_of_inertia[0] * unit, def.moment_of_inertia[2] * unit];
+        let mut inertia = [
+            def.moment_of_inertia[0] * unit,
+            def.moment_of_inertia[2] * unit,
+        ];
         if inertia[0] <= 0.0 {
             inertia[0] = mass * (front_long * front_long + rear_long * rear_long) * 0.5;
         }
@@ -295,7 +345,11 @@ impl AiBody {
             wheels,
             axle_count,
             mass,
-            cog: if def.cog_height > 0.0 { def.cog_height } else { 0.6 },
+            cog: if def.cog_height > 0.0 {
+                def.cog_height
+            } else {
+                0.6
+            },
             inertia,
             spring,
             damper,
@@ -341,7 +395,13 @@ impl AiBody {
 
     /// Put the body onto its way, standing still and straight. `way(d)` is the point `d`
     /// metres along the way from the vehicle's origin.
-    pub fn place(&mut self, way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::rigid::Ground>, speed: f32) {
+    pub fn place(
+        &mut self,
+        way: &dyn Fn(f32) -> DVec3,
+        ground: Option<&dyn Fn(f64, f64) -> Option<f64>>,
+        contact: Option<&dyn crate::rigid::Ground>,
+        speed: f32,
+    ) {
         self.started = false;
         self.ground = None;
         self.contact_z.clear();
@@ -354,7 +414,14 @@ impl AiBody {
     /// Follow the way for `dt` seconds at `speed` (m/s, the planner's speed).
     /// `contact`: what the wheels stand on (the faces under a height, as the player's wheels
     /// ask it); without it the plain height sampler `ground`.
-    pub fn step(&mut self, dt: f32, speed: f32, way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::rigid::Ground>) {
+    pub fn step(
+        &mut self,
+        dt: f32,
+        speed: f32,
+        way: &dyn Fn(f32) -> DVec3,
+        ground: Option<&dyn Fn(f64, f64) -> Option<f64>>,
+        contact: Option<&dyn crate::rigid::Ground>,
+    ) {
         if dt > 0.0 {
             let a = (speed - self.last_speed) / dt;
             self.a_long += (a - self.a_long) * (dt / 0.15).min(1.0);
@@ -395,7 +462,11 @@ impl AiBody {
         {
             return;
         }
-        let e = if closing_speed > 1.0 { crate::rigid::RESTITUTION } else { 0.0 };
+        let e = if closing_speed > 1.0 {
+            crate::rigid::RESTITUTION
+        } else {
+            0.0
+        };
         let recoil_speed = (1.0 + e) * striker / (striker + mass) * closing_speed;
         self.impact_velocity += direction.normalize_or_zero() * recoil_speed as f64;
         self.impact_velocity = self.impact_velocity.clamp_length_max(12.0);
@@ -428,7 +499,11 @@ impl AiBody {
             // spawned, or put somewhere else: stand on the way, straight
             let ahead = way(self.rot_long + 2.0).truncate();
             let d = ahead - target;
-            self.heading = if d.length() > 1e-3 { d.x.atan2(d.y).to_degrees() } else { self.heading };
+            self.heading = if d.length() > 1e-3 {
+                d.x.atan2(d.y).to_degrees()
+            } else {
+                self.heading
+            };
             self.rear = target;
             self.steer = 0.0;
             self.steer_cmd = 0.0;
@@ -438,27 +513,45 @@ impl AiBody {
         let right = DVec2::new(fwd.y, -fwd.x);
         // the planner's position along the way leads; the body keeps up with it
         let along = (target - self.rear).dot(fwd) as f32;
-        let v = if speed < 0.02 && along.abs() < 0.05 { 0.0 } else { (speed + 1.5 * along).clamp(0.0, speed + 3.0) };
+        let v = if speed < 0.02 && along.abs() < 0.05 {
+            0.0
+        } else {
+            (speed + 1.5 * along).clamp(0.0, speed + 3.0)
+        };
         // (a long wheelbase looks less far ahead: 1.2 wheelbases and more, a bus aimed 8-10 m
         // down its way and cut every junction turn over the kerb)
-        let (base, per_speed) = if self.wheelbase <= 3.0 { ((1.2 * self.wheelbase).max(3.5), 0.6) } else { (3.6 + 0.5 * (self.wheelbase - 3.0), 0.45) };
+        let (base, per_speed) = if self.wheelbase <= 3.0 {
+            ((1.2 * self.wheelbase).max(3.5), 0.6)
+        } else {
+            (3.6 + 0.5 * (self.wheelbase - 3.0), 0.45)
+        };
         let look = (base + per_speed * speed.min(20.0)) * self.look_scale.clamp(0.25, 2.0);
         let g = way(self.rot_long + look).truncate() - self.rear;
-        let alpha = (g.dot(right) as f32).atan2(g.dot(fwd) as f32).clamp(-FRAC_PI_2, FRAC_PI_2);
+        let alpha = (g.dot(right) as f32)
+            .atan2(g.dot(fwd) as f32)
+            .clamp(-FRAC_PI_2, FRAC_PI_2);
         let reach = (g.length() as f32).max(1.0);
         // The way itself says how tight it bends here: a junction's turn laid tighter than
         // the model's `[inv_min_turnradius]` still has to be followed - capped at the
         // model's lock the car ran wide of it, through the kerb, the corner house and the
         // people on the pavement (#249; OMSI's AI keeps to its path). The lock the bend
         // needs, and a little more, is allowed, and the wheel may turn that much faster.
-        let (a, b, c) = (way(self.rot_long).truncate(), way(self.rot_long + 0.5 * look).truncate(), way(self.rot_long + look).truncate());
+        let (a, b, c) = (
+            way(self.rot_long).truncate(),
+            way(self.rot_long + 0.5 * look).truncate(),
+            way(self.rot_long + look).truncate(),
+        );
         let (u, w) = (b - a, c - b);
         let turn = (u.x * w.y - u.y * w.x).atan2(u.dot(w)).abs() as f32;
         let bend_k = if look > 0.1 { 2.0 * turn / look } else { 0.0 };
         let need = (bend_k * self.wheelbase).atan().to_degrees() * 1.15;
         // (both switches are read once and kept: asked of the environment here, every car
         // every frame took the process's environment lock from each worker thread)
-        let limit = if omsi_cfg::flags::OMSI_AI_MODEL_LOCK.is_set() { self.max_steer } else { self.max_steer.max(need.min(60.0)) };
+        let limit = if omsi_cfg::flags::OMSI_AI_MODEL_LOCK.is_set() {
+            self.max_steer
+        } else {
+            self.max_steer.max(need.min(60.0))
+        };
         // OMSI_DEBUG_AI_WIDE: every tenth of a second a car stands over 1.5 m beside its way
         if omsi_cfg::flags::OMSI_DEBUG_AI_WIDE.is_set() {
             let off = ((target - self.rear).dot(right)).abs();
@@ -466,11 +559,20 @@ impl AiBody {
                 static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
                 let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 if n % 50 == 0 {
-                    log::info!("ai wide: {off:.1} m beside its way at ({:.0}, {:.0}), bend needs {need:.0} deg, lock {:.0} ({} so far)", self.rear.x, self.rear.y, self.max_steer, n + 1);
+                    log::info!(
+                        "ai wide: {off:.1} m beside its way at ({:.0}, {:.0}), bend needs {need:.0} deg, lock {:.0} ({} so far)",
+                        self.rear.x,
+                        self.rear.y,
+                        self.max_steer,
+                        n + 1
+                    );
                 }
             }
         }
-        let want = (2.0 * self.wheelbase * alpha.sin() / reach).atan().to_degrees().clamp(-limit, limit);
+        let want = (2.0 * self.wheelbase * alpha.sin() / reach)
+            .atan()
+            .to_degrees()
+            .clamp(-limit, limit);
         if dt > 0.0 {
             let rate = self.steer_rate * dt * if limit > self.max_steer { 1.5 } else { 1.0 };
             self.steer_cmd += (want - self.steer_cmd).clamp(-rate, rate);
@@ -482,7 +584,11 @@ impl AiBody {
         let mid = dir(self.heading + dpsi.to_degrees() * 0.5);
         self.rear += mid * (v * dt) as f64;
         self.heading = (self.heading + dpsi.to_degrees()).rem_euclid(360.0);
-        self.yaw_rate = if dt > 0.0 { (dpsi / dt as f64) as f32 } else { 0.0 };
+        self.yaw_rate = if dt > 0.0 {
+            (dpsi / dt as f64) as f32
+        } else {
+            0.0
+        };
         self.a_lat = v * v * k;
         let o = self.rear - dir(self.heading) * self.rot_long as f64;
         self.position.x = o.x;
@@ -492,7 +598,13 @@ impl AiBody {
     /// The body on its springs over the ground under its wheels: the plane through the
     /// contact points is where the body wants to be, braking and cornering lean it off
     /// that plane, and the difference is how far each wheel moves in its arch.
-    fn settle(&mut self, dt: f32, way: &dyn Fn(f32) -> DVec3, ground: Option<&dyn Fn(f64, f64) -> Option<f64>>, contact: Option<&dyn crate::rigid::Ground>) {
+    fn settle(
+        &mut self,
+        dt: f32,
+        way: &dyn Fn(f32) -> DVec3,
+        ground: Option<&dyn Fn(f64, f64) -> Option<f64>>,
+        contact: Option<&dyn crate::rigid::Ground>,
+    ) {
         let fwd = dir(self.heading);
         let right = DVec2::new(fwd.y, -fwd.x);
         let origin = self.position.truncate();
@@ -526,13 +638,25 @@ impl AiBody {
             // starts over the wheel's last contact, or over the lane where it has none yet.
             // Without the world's faces, the plain height sampler.
             let last = self.contact_z[k];
-            let from = if last.is_finite() && (last - path_z).abs() < AI_RAY_UP { last.max(path_z) } else { path_z };
+            let from = if last.is_finite() && (last - path_z).abs() < AI_RAY_UP {
+                last.max(path_z)
+            } else {
+                path_z
+            };
             let (drawn, deeper) = match contact {
                 Some(c) => {
                     let below = c.probe(p.x, p.y, from + AI_RAY_UP).below;
-                    (below.filter(|g| *g >= path_z - AI_DROP), below.filter(|g| *g < path_z - AI_DROP && *g > path_z - AI_RAY_UP))
+                    (
+                        below.filter(|g| *g >= path_z - AI_DROP),
+                        below.filter(|g| *g < path_z - AI_DROP && *g > path_z - AI_RAY_UP),
+                    )
                 }
-                None => (ground.and_then(|g| g(p.x, p.y)).filter(|g| (*g - path_z).abs() < AI_RAY_UP), None),
+                None => (
+                    ground
+                        .and_then(|g| g(p.x, p.y))
+                        .filter(|g| (*g - path_z).abs() < AI_RAY_UP),
+                    None,
+                ),
             };
             low.push(deeper);
             contacts.push((w.lat, w.long, drawn.unwrap_or(path_z)));
@@ -556,7 +680,13 @@ impl AiBody {
         // least-squares plane h = a + b·long + c·lat (the wheels sit symmetrically, so the
         // two slopes separate)
         let n = contacts.len().max(1) as f64;
-        let (ml, mt, mh) = contacts.iter().fold((0.0, 0.0, 0.0), |acc, c| (acc.0 + c.1 as f64 / n, acc.1 + c.0 as f64 / n, acc.2 + c.2 / n));
+        let (ml, mt, mh) = contacts.iter().fold((0.0, 0.0, 0.0), |acc, c| {
+            (
+                acc.0 + c.1 as f64 / n,
+                acc.1 + c.0 as f64 / n,
+                acc.2 + c.2 / n,
+            )
+        });
         let (mut sll, mut slh, mut stt, mut sth) = (0.0, 0.0, 0.0, 0.0);
         for c in &contacts {
             let (dl, dt_, dh) = (c.1 as f64 - ml, c.0 as f64 - mt, c.2 - mh);
@@ -574,16 +704,28 @@ impl AiBody {
         match self.ground {
             Some((z0, p0, r0)) if (zg - self.z).abs() < 1.0 && dt > 0.0 => {
                 let k = (dt / 0.1).min(1.0);
-                let rates = [((zg - z0) / dt as f64) as f32, (pg - p0) / dt, (rg - r0) / dt];
+                let rates = [
+                    ((zg - z0) / dt as f64) as f32,
+                    (pg - p0) / dt,
+                    (rg - r0) / dt,
+                ];
                 for (r, new) in self.ground_rate.iter_mut().zip(rates) {
                     *r += (new.clamp(-5.0, 5.0) - *r) * k;
                 }
                 let steps = 4;
                 let h = dt / steps as f32;
                 for _ in 0..steps {
-                    let az = (self.spring[0] * (zg - self.z) as f32 + self.damper[0] * (self.ground_rate[0] - self.vz)) / self.mass;
-                    let ap = (self.spring[1] * (pg - self.pitch) + self.damper[1] * (self.ground_rate[1] - self.vpitch) + self.mass * self.a_long * self.cog) / self.inertia[0];
-                    let ar = (self.spring[2] * (rg - self.roll) + self.damper[2] * (self.ground_rate[2] - self.vroll) - self.mass * self.a_lat * self.cog) / self.inertia[1];
+                    let az = (self.spring[0] * (zg - self.z) as f32
+                        + self.damper[0] * (self.ground_rate[0] - self.vz))
+                        / self.mass;
+                    let ap = (self.spring[1] * (pg - self.pitch)
+                        + self.damper[1] * (self.ground_rate[1] - self.vpitch)
+                        + self.mass * self.a_long * self.cog)
+                        / self.inertia[0];
+                    let ar = (self.spring[2] * (rg - self.roll)
+                        + self.damper[2] * (self.ground_rate[2] - self.vroll)
+                        - self.mass * self.a_lat * self.cog)
+                        / self.inertia[1];
                     self.vz += az * h;
                     self.vpitch += ap * h;
                     self.vroll += ar * h;
@@ -596,9 +738,17 @@ impl AiBody {
                 self.roll = self.roll.clamp(rg - 0.09, rg + 0.09);
                 // (should the springs still run away, the car stands on the ground again -
                 // the clamps above hid an inf velocity until it came out as NaN)
-                if !([self.vz, self.vpitch, self.vroll, self.pitch, self.roll].iter().all(|x| x.is_finite()) && self.z.is_finite()) {
+                if !([self.vz, self.vpitch, self.vroll, self.pitch, self.roll]
+                    .iter()
+                    .all(|x| x.is_finite())
+                    && self.z.is_finite())
+                {
                     static ONCE: std::sync::Once = std::sync::Once::new();
-                    ONCE.call_once(|| log::warn!("ai car springs ran away (no number); the car is put back on the ground"));
+                    ONCE.call_once(|| {
+                        log::warn!(
+                            "ai car springs ran away (no number); the car is put back on the ground"
+                        )
+                    });
                     (self.z, self.pitch, self.roll) = (zg, pg, rg);
                     (self.vz, self.vpitch, self.vroll) = (0.0, 0.0, 0.0);
                 }
@@ -651,7 +801,14 @@ impl AiBody {
         let p = way(0.0);
         let d = way(15.0) - way(-15.0);
         let run = d.truncate().length();
-        let (h_t, p_t) = if run > 1e-3 { (d.x.atan2(d.y).to_degrees(), (d.z / run).atan().to_degrees() as f32) } else { (self.heading, self.pitch_deg) };
+        let (h_t, p_t) = if run > 1e-3 {
+            (
+                d.x.atan2(d.y).to_degrees(),
+                (d.z / run).atan().to_degrees() as f32,
+            )
+        } else {
+            (self.heading, self.pitch_deg)
+        };
         if !self.started || dt <= 0.0 {
             self.heading = h_t.rem_euclid(360.0);
             self.pitch_deg = p_t;
@@ -664,7 +821,10 @@ impl AiBody {
             self.heading = (self.heading + dh).rem_euclid(360.0);
             let rate = (dh.to_radians() / dt as f64) as f32;
             self.yaw_rate += (rate - self.yaw_rate) * (dt / 0.5).min(1.0);
-            let bank = (speed * self.yaw_rate / 9.81).atan().to_degrees().clamp(-30.0, 30.0);
+            let bank = (speed * self.yaw_rate / 9.81)
+                .atan()
+                .to_degrees()
+                .clamp(-30.0, 30.0);
             let k = (dt / 0.8).min(1.0);
             self.bank_deg += (bank - self.bank_deg) * k;
             self.pitch_deg += (p_t - self.pitch_deg) * k;
@@ -685,15 +845,34 @@ impl AiBody {
     /// is what decides whether a car standing a few metres behind a bus can get its front
     /// corner past the bus's.
     #[allow(clippy::too_many_arguments)]
-    pub fn sweep_clearance(&self, way: &dyn Fn(f32) -> DVec3, speed: f32, wait: f32, accel: f32, v_max: f32, distance: f32, extent: (f32, f32, f32), obstacles: &[crate::collision::Obb]) -> f64 {
+    pub fn sweep_clearance(
+        &self,
+        way: &dyn Fn(f32) -> DVec3,
+        speed: f32,
+        wait: f32,
+        accel: f32,
+        v_max: f32,
+        distance: f32,
+        extent: (f32, f32, f32),
+        obstacles: &[crate::collision::Obb],
+    ) -> f64 {
         let mut body = self.clone();
         let (front, rear, half_width) = extent;
         let dt = 1.0 / 20.0;
         let mut v = speed.max(0.0);
         let mut x = 0.0f32;
         let gap = |b: &AiBody| {
-            let me = crate::collision::Obb::vehicle(b.position.truncate(), b.heading, front as f64, rear as f64, half_width as f64);
-            obstacles.iter().map(|o| me.separation(o)).fold(f64::MAX, f64::min)
+            let me = crate::collision::Obb::vehicle(
+                b.position.truncate(),
+                b.heading,
+                front as f64,
+                rear as f64,
+                half_width as f64,
+            );
+            obstacles
+                .iter()
+                .map(|o| me.separation(o))
+                .fold(f64::MAX, f64::min)
         };
         let mut best = gap(&body);
         if v < 0.05 {
@@ -723,7 +902,14 @@ impl AiBody {
     /// pure pursuit cutting a bend), so the poses are where this body will be, not where
     /// its way is. `way(d)` is the point `d` metres along the new way from where the
     /// vehicle's planner is now.
-    pub fn predict(&self, way: &dyn Fn(f32) -> DVec3, speed: f32, step: f32, distance: f32, visit: &mut dyn FnMut(f32, &AiBody) -> bool) {
+    pub fn predict(
+        &self,
+        way: &dyn Fn(f32) -> DVec3,
+        speed: f32,
+        step: f32,
+        distance: f32,
+        visit: &mut dyn FnMut(f32, &AiBody) -> bool,
+    ) {
         if self.kind != MotionKind::Road {
             return;
         }
@@ -761,7 +947,11 @@ impl AiBody {
         // over that plane (`[ai_deltaheight]` and the model's wheel geometry) comes on top,
         // once: the springs here only add their travel about it. Rail and air vehicles
         // follow their path's own height.
-        let (lift, delta) = if self.kind == MotionKind::Road { v.ai_rest_offset() } else { (0.0, 0.0) };
+        let (lift, delta) = if self.kind == MotionKind::Road {
+            v.ai_rest_offset()
+        } else {
+            (0.0, 0.0)
+        };
         v.position = self.position + DVec3::new(0.0, 0.0, lift as f64);
         v.heading = self.heading;
         v.pitch = self.pitch_deg;
@@ -786,8 +976,15 @@ mod tests {
             let len = back_in_ramp(offset, v, BACK_IN_LAT_ACCEL);
             // the peak of the smoothstep's second derivative, at its ends
             let peak = 6.0 * offset * v * v / (len * len);
-            assert!(peak <= BACK_IN_LAT_ACCEL + 1e-3, "{offset} m at {kmh} km/h: {len:.1} m, {peak:.2} m/s²");
-            assert!(len / v >= 2.0, "{offset} m at {kmh} km/h: {len:.1} m is {:.2} s", len / v);
+            assert!(
+                peak <= BACK_IN_LAT_ACCEL + 1e-3,
+                "{offset} m at {kmh} km/h: {len:.1} m, {peak:.2} m/s²"
+            );
+            assert!(
+                len / v >= 2.0,
+                "{offset} m at {kmh} km/h: {len:.1} m is {:.2} s",
+                len / v
+            );
         }
         // creeping round something: the old geometric length
         assert_eq!(back_in_ramp(3.0, 1.0, BACK_IN_LAT_ACCEL), 10.5);
@@ -800,11 +997,17 @@ mod tests {
         let origin = body.position;
         body.collision_impulse(DVec2::new(0.0, -1.0), 5.0, 10_000.0, 1_000.0);
         body.step(0.1, 0.0, &|_| DVec3::ZERO, None, None);
-        assert!(body.position.y < origin.y - 0.1, "the collision must move the car backwards");
+        assert!(
+            body.position.y < origin.y - 0.1,
+            "the collision must move the car backwards"
+        );
         for _ in 0..80 {
             body.step(0.05, 0.0, &|_| DVec3::ZERO, None, None);
         }
-        assert!((body.position.y - origin.y).abs() < 0.1, "the AI should settle back onto its path");
+        assert!(
+            (body.position.y - origin.y).abs() < 0.1,
+            "the AI should settle back onto its path"
+        );
     }
 
     #[test]
@@ -817,7 +1020,10 @@ mod tests {
         };
         let light = recoil_speed(1_000.0);
         let heavy = recoil_speed(12_000.0);
-        assert!(heavy > light * 1.5, "light striker {light:.3} m/s, heavy striker {heavy:.3} m/s");
+        assert!(
+            heavy > light * 1.5,
+            "light striker {light:.3} m/s, heavy striker {heavy:.3} m/s"
+        );
         // momentum: a 12 t bus at 3 m/s gives a 1 t car at most (1 + e) 12/13 of it
         assert!((heavy - 1.2 * 12.0 / 13.0 * 3.0).abs() < 1e-3, "{heavy}");
     }
@@ -827,25 +1033,83 @@ mod tests {
     /// stay numbers (they ran away within a minute and put the car at NaN, #3161).
     #[test]
     fn stiff_springs_stay_numbers() {
-        let mut def = Vehicle { mass: 12.0, moment_of_inertia: [1760.0, 54.0, 1803.0], cog_height: 0.6, rot_pnt_long: 0.0, inv_min_turn_radius: 0.1, ..Default::default() };
-        def.axles = [7.15, 4.65, -4.65, -7.15].iter().map(|&long| Axle { long, max_width: 1.606, spring: 5000.0, damper: 5000.0, wheel_diameter: 0.503, ..Default::default() }).collect();
+        let mut def = Vehicle {
+            mass: 12.0,
+            moment_of_inertia: [1760.0, 54.0, 1803.0],
+            cog_height: 0.6,
+            rot_pnt_long: 0.0,
+            inv_min_turn_radius: 0.1,
+            ..Default::default()
+        };
+        def.axles = [7.15, 4.65, -4.65, -7.15]
+            .iter()
+            .map(|&long| Axle {
+                long,
+                max_width: 1.606,
+                spring: 5000.0,
+                damper: 5000.0,
+                wheel_diameter: 0.503,
+                ..Default::default()
+            })
+            .collect();
         let mut body = AiBody::new(&def, MotionKind::Road);
         let bumpy = |_x: f64, y: f64| Some(10.0 + 0.02 * (y * 1.7).sin() + 0.01 * (y * 5.3).sin());
-        body.place(&|d| DVec3::new(0.0, d as f64, 10.0), Some(&bumpy), None, 10.0);
+        body.place(
+            &|d| DVec3::new(0.0, d as f64, 10.0),
+            Some(&bumpy),
+            None,
+            10.0,
+        );
         let dt = 0.02;
         let mut at = 0.0f64;
         for i in 0..3000 {
             let speed = if (i / 250) % 2 == 0 { 10.0 } else { 2.0 };
             at += speed as f64 * dt as f64;
             let s = at;
-            body.step(dt, speed, &|d| DVec3::new(0.0, s + d as f64, 10.0), Some(&bumpy), None);
-            assert!(body.position.is_finite() && body.vz.is_finite() && body.vpitch.is_finite(), "step {i}: {:?} vz {} vpitch {}", body.position, body.vz, body.vpitch);
+            body.step(
+                dt,
+                speed,
+                &|d| DVec3::new(0.0, s + d as f64, 10.0),
+                Some(&bumpy),
+                None,
+            );
+            assert!(
+                body.position.is_finite() && body.vz.is_finite() && body.vpitch.is_finite(),
+                "step {i}: {:?} vz {} vpitch {}",
+                body.position,
+                body.vz,
+                body.vpitch
+            );
         }
     }
 
     fn golf() -> Vehicle {
-        let mut v = Vehicle { mass: 1.0, moment_of_inertia: [1.49, 0.40, 1.56], cog_height: 0.4, rot_pnt_long: -1.304, inv_min_turn_radius: 0.1904, ..Default::default() };
-        v.axles = vec![Axle { long: 1.21, max_width: 1.606, spring: 40.0, damper: 2.0, wheel_diameter: 0.503, ..Default::default() }, Axle { long: -1.304, max_width: 1.606, spring: 50.0, damper: 2.0, wheel_diameter: 0.503, ..Default::default() }];
+        let mut v = Vehicle {
+            mass: 1.0,
+            moment_of_inertia: [1.49, 0.40, 1.56],
+            cog_height: 0.4,
+            rot_pnt_long: -1.304,
+            inv_min_turn_radius: 0.1904,
+            ..Default::default()
+        };
+        v.axles = vec![
+            Axle {
+                long: 1.21,
+                max_width: 1.606,
+                spring: 40.0,
+                damper: 2.0,
+                wheel_diameter: 0.503,
+                ..Default::default()
+            },
+            Axle {
+                long: -1.304,
+                max_width: 1.606,
+                spring: 50.0,
+                damper: 2.0,
+                wheel_diameter: 0.503,
+                ..Default::default()
+            },
+        ];
         v
     }
 
@@ -885,8 +1149,15 @@ mod tests {
         }
         // a quarter turn done at 6 m/s: the heading has turned right, the yaw rate never
         // jumps by more than a few degrees per second between frames, the car keeps to its lane
-        assert!(body.heading > 60.0 && body.heading < 300.0, "heading {}", body.heading);
-        assert!(worst_jump < 3.0, "yaw rate jumps by {worst_jump} deg/s in one frame");
+        assert!(
+            body.heading > 60.0 && body.heading < 300.0,
+            "heading {}",
+            body.heading
+        );
+        assert!(
+            worst_jump < 3.0,
+            "yaw rate jumps by {worst_jump} deg/s in one frame"
+        );
         assert!(worst_off < 0.6, "rear axle {worst_off} m off the way");
     }
 
@@ -895,7 +1166,12 @@ mod tests {
         let def = golf();
         let mut body = AiBody::new(&def, MotionKind::Road);
         let flat = |_x: f64, _y: f64| Some(10.0);
-        body.place(&|d| DVec3::new(0.0, d as f64, 10.0), Some(&flat), None, 10.0);
+        body.place(
+            &|d| DVec3::new(0.0, d as f64, 10.0),
+            Some(&flat),
+            None,
+            10.0,
+        );
         let dt = 1.0 / 30.0;
         let mut speed = 10.0f32;
         let mut s = 0.0f64;
@@ -904,26 +1180,66 @@ mod tests {
             speed = (speed - 3.0 * dt).max(0.0);
             s += (speed * dt) as f64;
             let at = s;
-            body.step(dt, speed, &|d| DVec3::new(0.0, at + d as f64, 10.0), Some(&flat), None);
+            body.step(
+                dt,
+                speed,
+                &|d| DVec3::new(0.0, at + d as f64, 10.0),
+                Some(&flat),
+                None,
+            );
             min_pitch = min_pitch.min(body.pitch_deg);
         }
         assert!(min_pitch < -0.1, "braking pitch {min_pitch}");
         assert!((body.position.z - 10.0).abs() < 0.1);
         // the front wheels come up in their arches while the nose dives
-        assert!(body.suspension[0][0] < 0.0 && body.suspension[1][0] > 0.0, "{:?}", body.suspension);
+        assert!(
+            body.suspension[0][0] < 0.0 && body.suspension[1][0] > 0.0,
+            "{:?}",
+            body.suspension
+        );
     }
 
     /// A two-axle lorry: 4.5 m between the axles, a turning circle of 11 m radius.
     fn lorry() -> Vehicle {
-        let mut v = Vehicle { mass: 12.0, moment_of_inertia: [40.0, 10.0, 45.0], cog_height: 1.2, rot_pnt_long: -2.0, inv_min_turn_radius: 0.09, ..Default::default() };
-        v.axles = vec![Axle { long: 2.5, max_width: 2.0, spring: 300.0, damper: 20.0, wheel_diameter: 1.0, ..Default::default() }, Axle { long: -2.0, max_width: 1.8, spring: 400.0, damper: 25.0, wheel_diameter: 1.0, ..Default::default() }];
+        let mut v = Vehicle {
+            mass: 12.0,
+            moment_of_inertia: [40.0, 10.0, 45.0],
+            cog_height: 1.2,
+            rot_pnt_long: -2.0,
+            inv_min_turn_radius: 0.09,
+            ..Default::default()
+        };
+        v.axles = vec![
+            Axle {
+                long: 2.5,
+                max_width: 2.0,
+                spring: 300.0,
+                damper: 20.0,
+                wheel_diameter: 1.0,
+                ..Default::default()
+            },
+            Axle {
+                long: -2.0,
+                max_width: 1.8,
+                spring: 400.0,
+                damper: 25.0,
+                wheel_diameter: 1.0,
+                ..Default::default()
+            },
+        ];
         v
     }
 
     /// A standing bus `half_width` × 2 wide, `gap` metres ahead of a vehicle whose front is `front`
     /// metres ahead of its origin at (0, 0) facing north.
     fn bus_ahead(front: f32, gap: f32, half_width: f64) -> crate::collision::Obb {
-        crate::collision::Obb::vehicle(DVec2::new(0.0, (front + gap) as f64 + 6.0), 0.0, 6.0, 6.0, half_width)
+        crate::collision::Obb::vehicle(
+            DVec2::new(0.0, (front + gap) as f64 + 6.0),
+            0.0,
+            6.0,
+            6.0,
+            half_width,
+        )
     }
 
     #[test]
@@ -937,7 +1253,16 @@ mod tests {
                     let way = straight_pull_out(3.3, ramp);
                     let mut body = AiBody::new(&def, MotionKind::Road);
                     body.place(&way, None, None, 0.0);
-                    body.sweep_clearance(&way, 0.0, PULL_OUT_WAIT, PULL_OUT_ACCEL, 8.0, gap + 6.0, extent, &[bus_ahead(extent.0, gap, 1.25)])
+                    body.sweep_clearance(
+                        &way,
+                        0.0,
+                        PULL_OUT_WAIT,
+                        PULL_OUT_ACCEL,
+                        8.0,
+                        gap + 6.0,
+                        extent,
+                        &[bus_ahead(extent.0, gap, 1.25)],
+                    )
                 })
                 .fold(f64::MIN, f64::max)
         };
@@ -958,7 +1283,11 @@ mod tests {
             let at = x;
             body.step(dt, 4.0, &|d| way(at + d), None, None);
         }
-        assert!((body.position.x + 3.3).abs() < 0.2, "ended at x {}", body.position.x);
+        assert!(
+            (body.position.x + 3.3).abs() < 0.2,
+            "ended at x {}",
+            body.position.x
+        );
     }
 
     #[test]
@@ -969,7 +1298,10 @@ mod tests {
         let wide = pull_out_room(&golf(), (2.1, 2.2, 0.85), 1.6, 3.3);
         assert!(wide > car, "{wide} against {car}");
         assert!(car > 1.5 && car < 6.0, "car {car}");
-        assert!(lorry > car + 0.5 && lorry < 12.5, "lorry {lorry}, car {car}");
+        assert!(
+            lorry > car + 0.5 && lorry < 12.5,
+            "lorry {lorry}, car {car}"
+        );
         // what it found works: from that room less the half metre of slack one of the
         // curves clears, from a metre less none does
         let clears = |gap: f32| {
@@ -977,7 +1309,16 @@ mod tests {
                 let way = straight_pull_out(3.3, ramp);
                 let mut body = AiBody::new(&golf(), MotionKind::Road);
                 body.place(&way, None, None, 0.0);
-                body.sweep_clearance(&way, 0.0, PULL_OUT_WAIT, PULL_OUT_ACCEL, 8.0, gap + 6.0, (2.1, 2.2, 0.85), &[bus_ahead(2.1, gap, 1.25)]) >= PULL_OUT_CLEARANCE
+                body.sweep_clearance(
+                    &way,
+                    0.0,
+                    PULL_OUT_WAIT,
+                    PULL_OUT_ACCEL,
+                    8.0,
+                    gap + 6.0,
+                    (2.1, 2.2, 0.85),
+                    &[bus_ahead(2.1, gap, 1.25)],
+                ) >= PULL_OUT_CLEARANCE
             })
         };
         assert!(clears(car - 0.5));
@@ -991,7 +1332,10 @@ mod tests {
         assert!(r.iter().all(|&x| (4.0..=12.0).contains(&x)), "{r:?}");
         let rolling = pull_out_ramps(30.0, 2.0, true);
         assert_eq!(rolling[0], 20.0);
-        assert!(rolling.iter().all(|&x| (4.0..=20.0).contains(&x)), "{rolling:?}");
+        assert!(
+            rolling.iter().all(|&x| (4.0..=20.0).contains(&x)),
+            "{rolling:?}"
+        );
     }
 
     /// Every wheel stands on the face drawn under it, as Omsi.exe's ground query stands an
@@ -1005,7 +1349,17 @@ mod tests {
             let road = move |x: f64, _y: f64| 10.0 + lift + camber * x;
             let ground = move |x: f64, y: f64, top: f64| {
                 let z = road(x, y);
-                if z <= top { crate::rigid::GroundProbe { below: Some(z), above: None } } else { crate::rigid::GroundProbe { below: Some(9.0), above: Some(z) } }
+                if z <= top {
+                    crate::rigid::GroundProbe {
+                        below: Some(z),
+                        above: None,
+                    }
+                } else {
+                    crate::rigid::GroundProbe {
+                        below: Some(9.0),
+                        above: Some(z),
+                    }
+                }
             };
             let way = |d: f32| DVec3::new(0.0, d as f64, 10.0);
             let mut body = AiBody::new(&def, MotionKind::Road);
@@ -1018,11 +1372,23 @@ mod tests {
             }
             for (w, z) in body.wheels.iter().zip(&body.contact_z) {
                 let p = body.position.truncate() + DVec2::new(w.lat as f64, w.long as f64);
-                assert!((z - road(p.x, p.y)).abs() < 0.01, "lift {lift} camber {camber}: wheel at {z:.3}, road {:.3}", road(p.x, p.y));
+                assert!(
+                    (z - road(p.x, p.y)).abs() < 0.01,
+                    "lift {lift} camber {camber}: wheel at {z:.3}, road {:.3}",
+                    road(p.x, p.y)
+                );
             }
-            assert!((body.position.z - (10.0 + lift)).abs() < 0.02, "lift {lift} camber {camber}: body at {:.3}", body.position.z);
+            assert!(
+                (body.position.z - (10.0 + lift)).abs() < 0.02,
+                "lift {lift} camber {camber}: body at {:.3}",
+                body.position.z
+            );
             let lean = (-camber).atan().to_degrees() as f32;
-            assert!((body.bank_deg - lean).abs() < 0.3, "camber {camber}: bank {} against {lean}", body.bank_deg);
+            assert!(
+                (body.bank_deg - lean).abs() < 0.3,
+                "camber {camber}: bank {} against {lean}",
+                body.bank_deg
+            );
         }
     }
 
@@ -1035,7 +1401,10 @@ mod tests {
         for (drop, expect) in [(0.5f64, 9.5f64), (6.0, 10.0)] {
             let ground = move |_x: f64, _y: f64, top: f64| {
                 let z = 10.0 - drop;
-                crate::rigid::GroundProbe { below: (z <= top).then_some(z), above: None }
+                crate::rigid::GroundProbe {
+                    below: (z <= top).then_some(z),
+                    above: None,
+                }
             };
             let way = |d: f32| DVec3::new(0.0, d as f64, 10.0);
             let mut body = AiBody::new(&def, MotionKind::Road);
@@ -1046,7 +1415,11 @@ mod tests {
                 let at = x;
                 body.step(1.0 / 30.0, 6.0, &|d| way(at + d), None, Some(&ground));
             }
-            assert!((body.position.z - expect).abs() < 0.02, "drop {drop}: body at {:.3}", body.position.z);
+            assert!(
+                (body.position.z - expect).abs() < 0.02,
+                "drop {drop}: body at {:.3}",
+                body.position.z
+            );
         }
     }
 
@@ -1059,6 +1432,10 @@ mod tests {
         body.place(&way, None, None, 70.0);
         body.step(1.0 / 30.0, 70.0, &way, None, None);
         assert!((body.position.z - 300.0).abs() < 1e-6);
-        assert!(body.pitch_deg < -2.0 && body.pitch_deg > -4.0, "pitch {}", body.pitch_deg);
+        assert!(
+            body.pitch_deg < -2.0 && body.pitch_deg > -4.0,
+            "pitch {}",
+            body.pitch_deg
+        );
     }
 }

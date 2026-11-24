@@ -7,7 +7,8 @@ fn one_ip_cannot_fill_the_whole_waiting_queue() {
     let mut host = LanSession::host(0, "host", world("m"), false).unwrap();
     // Seed queued entries so admission stays in FIFO mode without creating peers.
     for port in 10000..10032 {
-        host.waiting_joins.push_back((SocketAddr::from(([127, 0, 0, 1], port)), Instant::now()));
+        host.waiting_joins
+            .push_back((SocketAddr::from(([127, 0, 0, 1], port)), Instant::now()));
     }
     assert!(host.defer_new_join(SocketAddr::from(([127, 0, 0, 1], 11000)), true));
     assert_eq!(host.waiting_joins.len(), 32);
@@ -18,9 +19,13 @@ fn one_ip_cannot_fill_the_whole_waiting_queue() {
 #[test]
 fn legacy_client_is_told_to_retry_instead_of_silently_ignoring_wait() {
     let mut host = LanSession::host(0, "host", world("m"), false).unwrap();
-    host.waiting_joins.push_back((SocketAddr::from(([127, 0, 0, 2], 10000)), Instant::now()));
+    host.waiting_joins
+        .push_back((SocketAddr::from(([127, 0, 0, 2], 10000)), Instant::now()));
     let client = raw();
-    assert!(host.defer_new_join(SocketAddr::from((Ipv4Addr::LOCALHOST, client.local_addr().unwrap().port())), false));
+    assert!(host.defer_new_join(
+        SocketAddr::from((Ipv4Addr::LOCALHOST, client.local_addr().unwrap().port())),
+        false
+    ));
     let mut buf = [0; 1024];
     let (n, _) = client.recv_from(&mut buf).unwrap();
     assert!(String::from_utf8_lossy(&buf[..n]).contains("try again in a minute"));
@@ -41,7 +46,11 @@ fn configured_player_capacity_limits_new_remote_peers() {
     let second = raw();
     second.send_to(hello.as_bytes(), at).unwrap();
     host.tick(0.02, &pose(0.0));
-    assert_eq!(host.peer_count(), 1, "the configured limit rejects new joins");
+    assert_eq!(
+        host.peer_count(),
+        1,
+        "the configured limit rejects new joins"
+    );
 
     host.set_peer_limit(100);
     assert_eq!(host.max_peers, MAX_PEERS);
@@ -118,7 +127,10 @@ fn twenty_simultaneous_hellos_eventually_admit_every_player() {
         std::thread::sleep(Duration::from_millis(2));
     }
     assert!(saw_wait, "the loading limit must temporarily defer a burst");
-    assert!(welcomed.iter().all(|done| *done), "welcome state: {welcomed:?}");
+    assert!(
+        welcomed.iter().all(|done| *done),
+        "welcome state: {welcomed:?}"
+    );
     assert_eq!(host.peer_count(), 20);
 }
 
@@ -128,11 +140,13 @@ fn burst_waiters_are_admitted_in_first_in_first_out_order() {
     host.set_peer_limit(20);
     for id in 100..100 + MAX_JOINING as u32 {
         let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, id as u16 + 30000));
-        host.peers.insert(id, Peer::new(Some(addr), Pose::default()));
+        host.peers
+            .insert(id, Peer::new(Some(addr), Pose::default()));
     }
     let a = SocketAddr::from((Ipv4Addr::LOCALHOST, 42001));
     let b = SocketAddr::from((Ipv4Addr::LOCALHOST, 42002));
-    let hello = format!("HELLO|{PROTOCOL}|-|queued|Vehicles/x.bus|m|1989-05-30|32400|||||||wait-v1");
+    let hello =
+        format!("HELLO|{PROTOCOL}|-|queued|Vehicles/x.bus|m|1989-05-30|32400|||||||wait-v1");
     let fields: Vec<&str> = hello.split('|').collect();
     host.on_hello(&fields, a);
     host.on_hello(&fields, b);
@@ -159,8 +173,13 @@ fn unrecognized_source_cannot_inject_wait_reject_or_welcome() {
     let intended = raw();
     let from = intended.local_addr().unwrap();
     let attacker = raw();
-    let mut client =
-        LanSession::join(&from.to_string(), "player", world("m"), Duration::from_secs(10)).unwrap();
+    let mut client = LanSession::join(
+        &from.to_string(),
+        "player",
+        world("m"),
+        Duration::from_secs(10),
+    )
+    .unwrap();
     let target = to_client(&client);
     for text in [
         format!("WAIT|{PROTOCOL}|2"),
@@ -180,10 +199,16 @@ fn unrecognized_source_cannot_inject_wait_reject_or_welcome() {
 fn a_busy_host_keeps_the_client_waiting_without_permanent_rejection() {
     let host = raw();
     let at = host.local_addr().unwrap();
-    let mut client =
-        LanSession::join(&at.to_string(), "waiting", world("m"), Duration::from_secs(10)).unwrap();
+    let mut client = LanSession::join(
+        &at.to_string(),
+        "waiting",
+        world("m"),
+        Duration::from_secs(10),
+    )
+    .unwrap();
     let from = to_client(&client);
-    host.send_to(format!("WAIT|{PROTOCOL}|2").as_bytes(), from).unwrap();
+    host.send_to(format!("WAIT|{PROTOCOL}|2").as_bytes(), from)
+        .unwrap();
     client.tick(0.02, &pose(0.0));
     assert!(client.waiting_for_slot);
     assert!(client.rejected.is_none());
@@ -192,13 +217,19 @@ fn a_busy_host_keeps_the_client_waiting_without_permanent_rejection() {
 
     // A different socket cannot put the client in the wait state.
     let other = raw();
-    let mut fresh =
-        LanSession::join(&at.to_string(), "fresh", world("m"), Duration::from_secs(10)).unwrap();
-    other.send_to(format!("WAIT|{PROTOCOL}|2").as_bytes(), to_client(&fresh)).unwrap();
+    let mut fresh = LanSession::join(
+        &at.to_string(),
+        "fresh",
+        world("m"),
+        Duration::from_secs(10),
+    )
+    .unwrap();
+    other
+        .send_to(format!("WAIT|{PROTOCOL}|2").as_bytes(), to_client(&fresh))
+        .unwrap();
     fresh.tick(0.02, &pose(0.0));
     assert!(!fresh.waiting_for_slot);
 }
-
 
 /// A loading player not heard from for `LOADING_ALIVE` (its game closed or stuck) holds no
 /// loading slot: the next one comes in instead of waiting up to `LOAD_TIMEOUT` for it.
@@ -208,18 +239,31 @@ fn a_silent_loader_holds_no_loading_slot() {
     host.set_peer_limit(20);
     for id in 100..100 + MAX_JOINING as u32 {
         let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, id as u16 + 30000));
-        host.peers.insert(id, Peer::new(Some(addr), Pose::default()));
+        host.peers
+            .insert(id, Peer::new(Some(addr), Pose::default()));
     }
     let a = SocketAddr::from((Ipv4Addr::LOCALHOST, 42011));
     let hello = format!("HELLO|{PROTOCOL}|-|next|Vehicles/x.bus|m|1989-05-30|32400|||||||wait-v1");
     let fields: Vec<&str> = hello.split('|').collect();
     host.on_hello(&fields, a);
-    assert_eq!(host.peer_count(), MAX_JOINING, "every slot is held by a live loader: it waits");
+    assert_eq!(
+        host.peer_count(),
+        MAX_JOINING,
+        "every slot is held by a live loader: it waits"
+    );
     // one loader has been silent past LOADING_ALIVE (but not yet timed out)
-    host.peers.get_mut(&100).unwrap().last_seen = Instant::now() - LOADING_ALIVE - Duration::from_secs(1);
+    host.peers.get_mut(&100).unwrap().last_seen =
+        Instant::now() - LOADING_ALIVE - Duration::from_secs(1);
     host.on_hello(&fields, a);
-    assert_eq!(host.peer_count(), MAX_JOINING + 1, "the silent loader's slot is free");
-    assert!(host.peers.contains_key(&100), "it is still timed out only after LOAD_TIMEOUT");
+    assert_eq!(
+        host.peer_count(),
+        MAX_JOINING + 1,
+        "the silent loader's slot is free"
+    );
+    assert!(
+        host.peers.contains_key(&100),
+        "it is still timed out only after LOAD_TIMEOUT"
+    );
 }
 
 /// A server loading its world tells new players to wait (an old game: to try again) and lets
@@ -233,7 +277,10 @@ fn a_server_loading_its_world_lets_nobody_new_in() {
     assert!(host.defer_new_join(from, true));
     let mut buf = [0u8; 256];
     let (n, _) = client.recv_from(&mut buf).unwrap();
-    assert_eq!(String::from_utf8_lossy(&buf[..n]), format!("WAIT|{PROTOCOL}|2|starting"));
+    assert_eq!(
+        String::from_utf8_lossy(&buf[..n]),
+        format!("WAIT|{PROTOCOL}|2|starting")
+    );
     assert!(host.defer_new_join(from, false));
     let (n, _) = client.recv_from(&mut buf).unwrap();
     assert!(String::from_utf8_lossy(&buf[..n]).contains("still loading its world"));

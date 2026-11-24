@@ -1,8 +1,8 @@
 use super::*;
 
-mod freetex_reload;
 mod classic_spot;
 mod depth_metadata;
+mod freetex_reload;
 
 /// The night meter takes the street the picture shows: from 30 m over a lot lit by a
 /// grid of street lamps, looking down at it, the eye adapts to the lit lot - not, as
@@ -25,18 +25,63 @@ fn the_night_meter_sees_a_lamp_lit_lot_from_above() {
             });
         }
     }
-    let cam = Camera { position: DVec3::new(0.0, -35.0, 30.0), yaw: 0.0, pitch: -40.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 1000.0 };
+    let cam = Camera {
+        position: DVec3::new(0.0, -35.0, 30.0),
+        yaw: 0.0,
+        pitch: -40.0,
+        roll: 0.0,
+        fov_deg: 60.0,
+        near: 0.1,
+        far: 1000.0,
+    };
     let cam_rel = cam.position.as_vec3();
-    let seen = view_lamp_light(&lights, DVec3::ZERO, cam_rel, &cam, 16.0 / 9.0, Some(0.0), &|_| 1.0);
-    let in_air = view_lamp_light(&lights, DVec3::ZERO, cam_rel, &cam, 16.0 / 9.0, None, &|_| 1.0);
+    let seen = view_lamp_light(
+        &lights,
+        DVec3::ZERO,
+        cam_rel,
+        &cam,
+        16.0 / 9.0,
+        Some(0.0),
+        &|_| 1.0,
+    );
+    let in_air = view_lamp_light(
+        &lights,
+        DVec3::ZERO,
+        cam_rel,
+        &cam,
+        16.0 / 9.0,
+        None,
+        &|_| 1.0,
+    );
     // (the lot's ground: some 10-30 lux under the lamps, 1e-3 .. 3e-3, less between and
     // round them - a log-average of some 10 lux; a moonless night is 2e-6)
     assert!(seen > 5e-5, "{seen}");
     assert!(in_air < seen * 0.2, "{in_air} vs {seen}");
     // and the lamps seen from beside the lot, at eye height, veil the eye as well
-    let eye = Camera { position: DVec3::new(0.0, -40.0, 1.7), pitch: 0.0, ..cam };
-    assert!(glare_veil(&lights, DVec3::ZERO, eye.position.as_vec3(), eye.forward(), &|_| 1.0) > 1e-5);
-    assert_eq!(glare_veil(&lights, DVec3::ZERO, eye.position.as_vec3(), eye.forward(), &|_| 0.0), 0.0);
+    let eye = Camera {
+        position: DVec3::new(0.0, -40.0, 1.7),
+        pitch: 0.0,
+        ..cam
+    };
+    assert!(
+        glare_veil(
+            &lights,
+            DVec3::ZERO,
+            eye.position.as_vec3(),
+            eye.forward(),
+            &|_| 1.0
+        ) > 1e-5
+    );
+    assert_eq!(
+        glare_veil(
+            &lights,
+            DVec3::ZERO,
+            eye.position.as_vec3(),
+            eye.forward(),
+            &|_| 0.0
+        ),
+        0.0
+    );
 }
 
 /// A textured material can have black diffuse but white ambient (depot interiors).
@@ -49,36 +94,100 @@ fn enhanced_respects_material_ambient() {
         &instance,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
-    )).expect("test renderer");
+        RenderOptions {
+            msaa: 1,
+            ssao: false,
+            shadow_size: 1024,
+            fxaa: false,
+            render_scale: 1.0,
+            ..Default::default()
+        },
+    ))
+    .expect("test renderer");
     let mut scene = renderer.new_scene();
-    let mesh = renderer.add_mesh(&mut scene, &MeshData {
-        positions: vec![Vec3::new(-8.0, 4.0, -8.0), Vec3::new(8.0, 4.0, -8.0), Vec3::new(8.0, 4.0, 8.0), Vec3::new(-8.0, 4.0, 8.0)],
-        normals: vec![-Vec3::Y; 4],
-        uvs: vec![glam::Vec2::ZERO; 4],
-        ranges: vec![(0, 6, 0)],
-        indices: vec![0, 1, 2, 0, 2, 3],
-        one_sided: false,
-    });
-    let texture = renderer.add_texture(&mut scene, &omsi_texture::Image {
-        width: 1, height: 1, rgba: vec![180, 180, 180, 255], has_alpha: true,
-    }, false);
-    let camera = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 90.0, near: 0.1, far: 100.0 };
-    let lighting = Lighting { enhanced: true, shadows: false, fog_density: 0.0, sun_dir: -Vec3::Y, ..Default::default() };
+    let mesh = renderer.add_mesh(
+        &mut scene,
+        &MeshData {
+            positions: vec![
+                Vec3::new(-8.0, 4.0, -8.0),
+                Vec3::new(8.0, 4.0, -8.0),
+                Vec3::new(8.0, 4.0, 8.0),
+                Vec3::new(-8.0, 4.0, 8.0),
+            ],
+            normals: vec![-Vec3::Y; 4],
+            uvs: vec![glam::Vec2::ZERO; 4],
+            ranges: vec![(0, 6, 0)],
+            indices: vec![0, 1, 2, 0, 2, 3],
+            one_sided: false,
+        },
+    );
+    let texture = renderer.add_texture(
+        &mut scene,
+        &omsi_texture::Image {
+            width: 1,
+            height: 1,
+            rgba: vec![180, 180, 180, 255],
+            has_alpha: true,
+        },
+        false,
+    );
+    let camera = Camera {
+        position: DVec3::ZERO,
+        yaw: 0.0,
+        pitch: 0.0,
+        roll: 0.0,
+        fov_deg: 90.0,
+        near: 0.1,
+        far: 100.0,
+    };
+    let lighting = Lighting {
+        enhanced: true,
+        shadows: false,
+        fog_density: 0.0,
+        sun_dir: -Vec3::Y,
+        ..Default::default()
+    };
     let mut pixels = Vec::new();
     for ambient in [[0.0; 3], [1.0; 3], [1.0, 0.0, 0.0]] {
-        let material = renderer.add_material_extra(&mut scene, Some(texture), AlphaMode::Blend,
-            [0.0, 0.0, 0.0, 1.0], false, None, None, None, None, [0.0; 3],
-            MaterialExtra { ambient: Some(ambient), ..Default::default() });
-        let id = renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![material]);
-        let rgba = renderer.render_to_image(&mut scene, 64, 64, &camera, &lighting).unwrap();
+        let material = renderer.add_material_extra(
+            &mut scene,
+            Some(texture),
+            AlphaMode::Blend,
+            [0.0, 0.0, 0.0, 1.0],
+            false,
+            None,
+            None,
+            None,
+            None,
+            [0.0; 3],
+            MaterialExtra {
+                ambient: Some(ambient),
+                ..Default::default()
+            },
+        );
+        let id = renderer.add_instance(
+            &mut scene,
+            mesh,
+            DVec3::ZERO,
+            Mat4::IDENTITY,
+            vec![material],
+        );
+        let rgba = renderer
+            .render_to_image(&mut scene, 64, 64, &camera, &lighting)
+            .unwrap();
         pixels.push(rgba[(32 * 64 + 32) * 4..][..3].to_vec());
         scene.instances[id].visible = false;
     }
-    assert!(pixels[1].iter().map(|&v| v as u32).sum::<u32>() > pixels[0].iter().map(|&v| v as u32).sum::<u32>() + 60,
-        "white ambient must illuminate black diffuse: {pixels:?}");
-    assert!(pixels[2][0] > pixels[2][1].saturating_add(20) && pixels[2][0] > pixels[2][2].saturating_add(20),
-        "the material's ambient tint must be preserved: {pixels:?}");
+    assert!(
+        pixels[1].iter().map(|&v| v as u32).sum::<u32>()
+            > pixels[0].iter().map(|&v| v as u32).sum::<u32>() + 60,
+        "white ambient must illuminate black diffuse: {pixels:?}"
+    );
+    assert!(
+        pixels[2][0] > pixels[2][1].saturating_add(20)
+            && pixels[2][0] > pixels[2][2].saturating_add(20),
+        "the material's ambient tint must be preserved: {pixels:?}"
+    );
 }
 
 /// A road must cover flush terrain without covering a building floor above it.
@@ -87,35 +196,97 @@ fn enhanced_respects_material_ambient() {
 fn surface_bias_keeps_raised_floors_visible_at_a_distance() {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let mut renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
-    )).expect("test renderer");
+        &instance,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        RenderOptions {
+            msaa: 1,
+            ssao: false,
+            shadow_size: 1024,
+            fxaa: false,
+            render_scale: 1.0,
+            ..Default::default()
+        },
+    ))
+    .expect("test renderer");
     let mut scene = renderer.new_scene();
-    let mesh = renderer.add_mesh(&mut scene, &MeshData {
-        positions: vec![Vec3::new(-1000.0, -1000.0, 0.0), Vec3::new(1000.0, -1000.0, 0.0), Vec3::new(1000.0, 1000.0, 0.0), Vec3::new(-1000.0, 1000.0, 0.0)],
-        normals: vec![Vec3::Z; 4], uvs: vec![glam::Vec2::ZERO; 4],
-        ranges: vec![(0, 6, 0)], indices: vec![0, 1, 2, 0, 2, 3], one_sided: false,
-    });
-    let blue = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 1.0, 1.0], true);
-    let green = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 1.0, 0.0, 1.0], true);
-    let red = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 0.0, 0.0, 1.0], true);
+    let mesh = renderer.add_mesh(
+        &mut scene,
+        &MeshData {
+            positions: vec![
+                Vec3::new(-1000.0, -1000.0, 0.0),
+                Vec3::new(1000.0, -1000.0, 0.0),
+                Vec3::new(1000.0, 1000.0, 0.0),
+                Vec3::new(-1000.0, 1000.0, 0.0),
+            ],
+            normals: vec![Vec3::Z; 4],
+            uvs: vec![glam::Vec2::ZERO; 4],
+            ranges: vec![(0, 6, 0)],
+            indices: vec![0, 1, 2, 0, 2, 3],
+            one_sided: false,
+        },
+    );
+    let blue = renderer.add_material(
+        &mut scene,
+        None,
+        AlphaMode::Opaque,
+        [0.0, 0.0, 1.0, 1.0],
+        true,
+    );
+    let green = renderer.add_material(
+        &mut scene,
+        None,
+        AlphaMode::Opaque,
+        [0.0, 1.0, 0.0, 1.0],
+        true,
+    );
+    let red = renderer.add_material(
+        &mut scene,
+        None,
+        AlphaMode::Opaque,
+        [1.0, 0.0, 0.0, 1.0],
+        true,
+    );
     let ground = renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![blue]);
     scene.instances[ground].render_phase = RenderPhase::Terrain;
-    let road = renderer.add_surface_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![green]);
+    let road =
+        renderer.add_surface_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![green]);
     scene.instances[road].render_phase = RenderPhase::Spline;
-    let floor = renderer.add_instance(&mut scene, mesh, DVec3::new(0.0, 0.0, 0.03), Mat4::IDENTITY, vec![red]);
+    let floor = renderer.add_instance(
+        &mut scene,
+        mesh,
+        DVec3::new(0.0, 0.0, 0.03),
+        Mat4::IDENTITY,
+        vec![red],
+    );
     scene.instances[floor].render_phase = RenderPhase::AfterVehicles;
-    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let lighting = Lighting {
+        shadows: false,
+        fog_density: 0.0,
+        ..Default::default()
+    };
     for (pitch, fov) in [(-5.0, 60.0), (-5.0, 20.0), (-30.0, 60.0)] {
-        let camera = Camera { position: DVec3::new(0.0, 0.0, 5.0), yaw: 0.0, pitch, roll: 0.0, fov_deg: fov, near: 0.1, far: 2000.0 };
+        let camera = Camera {
+            position: DVec3::new(0.0, 0.0, 5.0),
+            yaw: 0.0,
+            pitch,
+            roll: 0.0,
+            fov_deg: fov,
+            near: 0.1,
+            far: 2000.0,
+        };
         for show_floor in [false, true] {
             scene.instances[floor].visible = show_floor;
             scene.dirty = true;
-            let rgba = renderer.render_to_image(&mut scene, 64, 64, &camera, &lighting).unwrap();
+            let rgba = renderer
+                .render_to_image(&mut scene, 64, 64, &camera, &lighting)
+                .unwrap();
             let pixel = &rgba[(32 * 64 + 32) * 4..][..3];
             let wanted = if show_floor { 0 } else { 1 };
-            assert!(pixel[wanted] > 200 && pixel[1 - wanted] < 20 && pixel[2] < 20,
-                "pitch {pitch}, fov {fov}, floor {show_floor}: {pixel:?}");
+            assert!(
+                pixel[wanted] > 200 && pixel[1 - wanted] < 20 && pixel[2] < 20,
+                "pitch {pitch}, fov {fov}, floor {show_floor}: {pixel:?}"
+            );
         }
     }
 }
@@ -130,34 +301,94 @@ fn enhanced_untextured_keeps_its_colour() {
         &instance,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
-    )).expect("test renderer");
+        RenderOptions {
+            msaa: 1,
+            ssao: false,
+            shadow_size: 1024,
+            fxaa: false,
+            render_scale: 1.0,
+            ..Default::default()
+        },
+    ))
+    .expect("test renderer");
     let mut scene = renderer.new_scene();
-    let mesh = renderer.add_mesh(&mut scene, &MeshData {
-        positions: vec![Vec3::new(-8.0, 4.0, -8.0), Vec3::new(8.0, 4.0, -8.0), Vec3::new(8.0, 4.0, 8.0), Vec3::new(-8.0, 4.0, 8.0)],
-        normals: vec![-Vec3::Y; 4],
-        uvs: vec![glam::Vec2::ZERO; 4],
-        ranges: vec![(0, 6, 0)],
-        indices: vec![0, 1, 2, 0, 2, 3],
-        one_sided: false,
-    });
-    let camera = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 90.0, near: 0.1, far: 100.0 };
-    let lighting = Lighting { enhanced: true, shadows: false, fog_density: 0.0, sun_dir: -Vec3::Y, ..Default::default() };
-    let material = renderer.add_material_extra(&mut scene, None, AlphaMode::Opaque,
-        [0.8, 0.05, 0.05, 1.0], false, None, None, None, None, [0.0; 3],
-        MaterialExtra { ambient: Some([1.0; 3]), ..Default::default() });
-    renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![material]);
-    let rgba = renderer.render_to_image(&mut scene, 64, 64, &camera, &lighting).unwrap();
+    let mesh = renderer.add_mesh(
+        &mut scene,
+        &MeshData {
+            positions: vec![
+                Vec3::new(-8.0, 4.0, -8.0),
+                Vec3::new(8.0, 4.0, -8.0),
+                Vec3::new(8.0, 4.0, 8.0),
+                Vec3::new(-8.0, 4.0, 8.0),
+            ],
+            normals: vec![-Vec3::Y; 4],
+            uvs: vec![glam::Vec2::ZERO; 4],
+            ranges: vec![(0, 6, 0)],
+            indices: vec![0, 1, 2, 0, 2, 3],
+            one_sided: false,
+        },
+    );
+    let camera = Camera {
+        position: DVec3::ZERO,
+        yaw: 0.0,
+        pitch: 0.0,
+        roll: 0.0,
+        fov_deg: 90.0,
+        near: 0.1,
+        far: 100.0,
+    };
+    let lighting = Lighting {
+        enhanced: true,
+        shadows: false,
+        fog_density: 0.0,
+        sun_dir: -Vec3::Y,
+        ..Default::default()
+    };
+    let material = renderer.add_material_extra(
+        &mut scene,
+        None,
+        AlphaMode::Opaque,
+        [0.8, 0.05, 0.05, 1.0],
+        false,
+        None,
+        None,
+        None,
+        None,
+        [0.0; 3],
+        MaterialExtra {
+            ambient: Some([1.0; 3]),
+            ..Default::default()
+        },
+    );
+    renderer.add_instance(
+        &mut scene,
+        mesh,
+        DVec3::ZERO,
+        Mat4::IDENTITY,
+        vec![material],
+    );
+    let rgba = renderer
+        .render_to_image(&mut scene, 64, 64, &camera, &lighting)
+        .unwrap();
     let px = &rgba[(32 * 64 + 32) * 4..][..3];
-    assert!(px[0] as u32 > px[1] as u32 * 2 + 10 && px[0] as u32 > px[2] as u32 * 2 + 10, "an untextured red slot must stay red: {px:?}");
+    assert!(
+        px[0] as u32 > px[1] as u32 * 2 + 10 && px[0] as u32 > px[2] as u32 * 2 + 10,
+        "an untextured red slot must stay red: {px:?}"
+    );
 }
 
 /// Overlays drawn texel for pixel: onto whole pixels, their size kept.
 #[test]
 fn overlays_land_on_whole_pixels() {
     // (a 120 x 26 text a quarter and a half pixel off: moved, the same size)
-    assert_eq!(snap_rect([25.25, 40.5, 145.25, 66.5]), [25.0, 41.0, 145.0, 67.0]);
-    assert_eq!(snap_rect([10.0, 20.0, 30.0, 40.0]), [10.0, 20.0, 30.0, 40.0]);
+    assert_eq!(
+        snap_rect([25.25, 40.5, 145.25, 66.5]),
+        [25.0, 41.0, 145.0, 67.0]
+    );
+    assert_eq!(
+        snap_rect([10.0, 20.0, 30.0, 40.0]),
+        [10.0, 20.0, 30.0, 40.0]
+    );
     // (left of the window as well: the same size)
     assert_eq!(snap_rect([-0.5, -2.5, 19.5, 7.5]), [0.0, -2.0, 20.0, 8.0]);
     // (a separator 0.6 px high stays a line)
@@ -230,17 +461,9 @@ fn enhanced_masked_and_uncut_ground_share_lighting() {
     let grey = texture([100, 100, 100, 255]);
     let opaque = texture([255; 4]);
     let transparent = texture([100, 100, 100, 0]);
-    let masked = renderer.add_terrain_material(
-        &mut scene,
-        Some(grey),
-        Some(opaque),
-        None,
-        1.0,
-        None,
-        0.0,
-    );
-    let uncut =
-        renderer.add_terrain_material(&mut scene, Some(grey), None, None, 1.0, None, 0.0);
+    let masked =
+        renderer.add_terrain_material(&mut scene, Some(grey), Some(opaque), None, 1.0, None, 0.0);
+    let uncut = renderer.add_terrain_material(&mut scene, Some(grey), None, None, 1.0, None, 0.0);
     let cut = renderer.add_terrain_material(
         &mut scene,
         Some(grey),
@@ -250,8 +473,7 @@ fn enhanced_masked_and_uncut_ground_share_lighting() {
         None,
         0.0,
     );
-    let foliage =
-        renderer.add_material(&mut scene, Some(grey), AlphaMode::Test, [1.0; 4], false);
+    let foliage = renderer.add_material(&mut scene, Some(grey), AlphaMode::Test, [1.0; 4], false);
     let cut_foliage = renderer.add_material(
         &mut scene,
         Some(transparent),
@@ -417,18 +639,39 @@ fn on_no_device_the_mesh_pages_hold_places_but_no_bytes() {
     descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
     let instance = wgpu::Instance::new(descriptor);
     let renderer = pollster::block_on(Renderer::new_with(
-        &instance, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
-    )).expect("no-op renderer");
+        &instance,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        RenderOptions {
+            msaa: 1,
+            shadow_size: 1024,
+            ..Default::default()
+        },
+    ))
+    .expect("no-op renderer");
     let mut scene = renderer.new_scene();
     let mesh = |n: usize, x: f32| {
         let positions: Vec<Vec3> = (0..n).map(|i| Vec3::new(x + i as f32, 0.0, 0.0)).collect();
         let indices: Vec<u32> = (0..n as u32 / 3 * 3).collect();
-        MeshData { normals: vec![Vec3::Z; n], uvs: vec![glam::Vec2::ZERO; n], ranges: vec![(0, indices.len() as u32, 0)], positions, indices, ..Default::default() }
+        MeshData {
+            normals: vec![Vec3::Z; n],
+            uvs: vec![glam::Vec2::ZERO; n],
+            ranges: vec![(0, indices.len() as u32, 0)],
+            positions,
+            indices,
+            ..Default::default()
+        }
     };
-    let ids: Vec<MeshId> = (0..2000).map(|k| renderer.add_mesh(&mut scene, &mesh(300, k as f32))).collect();
+    let ids: Vec<MeshId> = (0..2000)
+        .map(|k| renderer.add_mesh(&mut scene, &mesh(300, k as f32)))
+        .collect();
     let big = renderer.add_mesh(&mut scene, &mesh(400_000, 0.0));
-    let pages: Vec<PreparedMesh> = prepare_meshes(&renderer.device, &renderer.queue, &[&mesh(900, 0.0), &mesh(600, 0.0)], renderer.mesh_pages());
+    let pages: Vec<PreparedMesh> = prepare_meshes(
+        &renderer.device,
+        &renderer.queue,
+        &[&mesh(900, 0.0), &mesh(600, 0.0)],
+        renderer.mesh_pages(),
+    );
     for m in pages {
         renderer.add_prepared_mesh(&mut scene, m);
     }
@@ -439,13 +682,24 @@ fn on_no_device_the_mesh_pages_hold_places_but_no_bytes() {
     assert_eq!(m1.vertex_bytes, 300 * std::mem::size_of::<Vertex>() as u64);
     assert!((m1.bounds_center.x - (1.0 + 149.5)).abs() < 1e-3);
     // and the buffers a token: 2000 meshes of 300 vertices did not take 19 MB
-    assert!(scene.mesh_pages.iter().all(|p| p.vertex.size() == 32 && p.index.size() == 32));
+    assert!(
+        scene
+            .mesh_pages
+            .iter()
+            .all(|p| p.vertex.size() == 32 && p.index.size() == 32)
+    );
     assert_eq!(scene.meshes[big].vertex_buf.size(), 32);
     // a freed mesh's place is taken by the next
-    let at = (scene.meshes[ids[5]].page, scene.meshes[ids[5]].vertex_offset);
+    let at = (
+        scene.meshes[ids[5]].page,
+        scene.meshes[ids[5]].vertex_offset,
+    );
     renderer.free_mesh(&mut scene, ids[5]);
     let again = renderer.add_mesh(&mut scene, &mesh(300, 0.0));
-    assert_eq!((scene.meshes[again].page, scene.meshes[again].vertex_offset), at);
+    assert_eq!(
+        (scene.meshes[again].page, scene.meshes[again].vertex_offset),
+        at
+    );
 }
 
 #[test]
@@ -453,17 +707,33 @@ fn on_no_device_the_mesh_pages_hold_places_but_no_bytes() {
 fn meshes_coming_and_going_tile_by_tile_keep_the_pages_from_growing() {
     let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let renderer = pollster::block_on(Renderer::new_with(
-        &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
-    )).expect("test renderer");
+        &adapter,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        RenderOptions {
+            msaa: 1,
+            shadow_size: 1024,
+            ..Default::default()
+        },
+    ))
+    .expect("test renderer");
     if !renderer.mesh_pages() {
         return;
     }
     let mut scene = renderer.new_scene();
     let mesh = |n: usize| {
-        let positions: Vec<Vec3> = (0..n).map(|i| Vec3::new(i as f32, (i % 7) as f32, 0.0)).collect();
+        let positions: Vec<Vec3> = (0..n)
+            .map(|i| Vec3::new(i as f32, (i % 7) as f32, 0.0))
+            .collect();
         let indices: Vec<u32> = (0..n as u32 / 3 * 3).collect();
-        MeshData { normals: vec![Vec3::Z; n], uvs: vec![glam::Vec2::ZERO; n], ranges: vec![(0, indices.len() as u32, 0)], positions, indices, ..Default::default() }
+        MeshData {
+            normals: vec![Vec3::Z; n],
+            uvs: vec![glam::Vec2::ZERO; n],
+            ranges: vec![(0, indices.len() as u32, 0)],
+            positions,
+            indices,
+            ..Default::default()
+        }
     };
     // tiles of a few thousand meshes of every size, loaded and unloaded in no order, as
     // a long drive across a map brings them; the scene's pages must not keep growing
@@ -477,7 +747,9 @@ fn meshes_coming_and_going_tile_by_tile_keep_the_pages_from_growing() {
     };
     let mut most = 0;
     for round in 0..300 {
-        let tile: Vec<MeshId> = (0..400).map(|_| renderer.add_mesh(&mut scene, &mesh(3 + (rand() % 600) as usize))).collect();
+        let tile: Vec<MeshId> = (0..400)
+            .map(|_| renderer.add_mesh(&mut scene, &mesh(3 + (rand() % 600) as usize)))
+            .collect();
         tiles.push(tile);
         if tiles.len() > 12 {
             let gone = tiles.remove((rand() % tiles.len() as u64) as usize);
@@ -489,10 +761,22 @@ fn meshes_coming_and_going_tile_by_tile_keep_the_pages_from_growing() {
             most = scene.mesh_pages.len();
         }
     }
-    assert!(scene.mesh_pages.len() <= most + 1, "the pages grew from {most} to {} over the drive", scene.mesh_pages.len());
+    assert!(
+        scene.mesh_pages.len() <= most + 1,
+        "the pages grew from {most} to {} over the drive",
+        scene.mesh_pages.len()
+    );
     let held = scene.mesh_page_bytes();
-    let used: u64 = scene.meshes.iter().filter(|m| m.page != u32::MAX).map(|m| m.vertex_bytes + m.index_bytes).sum();
-    assert!(held < used * 3, "{held} bytes of pages held for {used} in use");
+    let used: u64 = scene
+        .meshes
+        .iter()
+        .filter(|m| m.page != u32::MAX)
+        .map(|m| m.vertex_bytes + m.index_bytes)
+        .sum();
+    assert!(
+        held < used * 3,
+        "{held} bytes of pages held for {used} in use"
+    );
     for t in &tiles {
         for &id in t {
             let m = &scene.meshes[id];
@@ -565,8 +849,7 @@ fn msaa_depth_prepass_preserves_layered_surfaces() {
     let base = renderer.add_terrain_material(&mut scene, None, None, None, 1.0, None, 1.0);
     let ground = quad(&renderer, &mut scene, 0.0, base);
     scene.instances[ground].render_phase = RenderPhase::Terrain;
-    let paint =
-        renderer.add_terrain_layer_material(&mut scene, None, mask, None, 1.0, None, 1.0);
+    let paint = renderer.add_terrain_layer_material(&mut scene, None, mask, None, 1.0, None, 1.0);
     let layer = quad(&renderer, &mut scene, 0.0, paint);
     scene.instances[layer].ground_layer = true;
     scene.instances[layer].render_phase = RenderPhase::Terrain;
@@ -602,10 +885,18 @@ fn msaa_depth_prepass_preserves_layered_surfaces() {
     let floor = quad(&renderer, &mut scene, -0.1, road_mat);
     scene.instances[floor].presurface = true;
     scene.instances[floor].transform = Mat4::from_translation(Vec3::new(7.0, 7.0, 0.0));
-    let clear = renderer.add_texture(&mut scene, &omsi_texture::Image {
-        width: 1, height: 1, rgba: vec![255, 255, 255, 0], has_alpha: true,
-    }, false);
-    let cover_material = renderer.add_material(&mut scene, Some(clear), AlphaMode::Blend, [1.0; 4], true);
+    let clear = renderer.add_texture(
+        &mut scene,
+        &omsi_texture::Image {
+            width: 1,
+            height: 1,
+            rgba: vec![255, 255, 255, 0],
+            has_alpha: true,
+        },
+        false,
+    );
+    let cover_material =
+        renderer.add_material(&mut scene, Some(clear), AlphaMode::Blend, [1.0; 4], true);
     let cover = quad(&renderer, &mut scene, 0.1, cover_material);
     scene.instances[cover].presurface = true;
     scene.instances[cover].transform = Mat4::from_translation(Vec3::new(7.0, 7.0, 0.0));
@@ -667,21 +958,44 @@ fn msaa_depth_prepass_preserves_layered_surfaces() {
 fn a_reshaped_mesh_moves_the_bounds_of_every_instance_drawing_it() {
     let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let renderer = pollster::block_on(Renderer::new_with(
-        &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
-    )).expect("test renderer");
+        &adapter,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        RenderOptions {
+            msaa: 1,
+            shadow_size: 1024,
+            ..Default::default()
+        },
+    ))
+    .expect("test renderer");
     let mut scene = renderer.new_scene();
     scene.cache_bounds = true;
     let material = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0; 4], true);
     let data = MeshData {
         positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
-        normals: vec![Vec3::Z; 3], uvs: vec![glam::Vec2::ZERO; 3],
-        indices: vec![0, 1, 2], ranges: vec![(0, 3, 0)], ..Default::default()
+        normals: vec![Vec3::Z; 3],
+        uvs: vec![glam::Vec2::ZERO; 3],
+        indices: vec![0, 1, 2],
+        ranges: vec![(0, 3, 0)],
+        ..Default::default()
     };
-    let (skinned, plain) = (renderer.add_mesh(&mut scene, &data), renderer.add_mesh(&mut scene, &data));
-    let add = |scene: &mut Scene, mesh, x: f64| renderer.add_instance(scene, mesh, DVec3::new(x, 0.0, 0.0), Mat4::IDENTITY, vec![material]);
+    let (skinned, plain) = (
+        renderer.add_mesh(&mut scene, &data),
+        renderer.add_mesh(&mut scene, &data),
+    );
+    let add = |scene: &mut Scene, mesh, x: f64| {
+        renderer.add_instance(
+            scene,
+            mesh,
+            DVec3::new(x, 0.0, 0.0),
+            Mat4::IDENTITY,
+            vec![material],
+        )
+    };
     let first = add(&mut scene, skinned, 0.0);
-    let others: Vec<usize> = (0..300).map(|k| add(&mut scene, plain, k as f64 * 10.0)).collect();
+    let others: Vec<usize> = (0..300)
+        .map(|k| add(&mut scene, plain, k as f64 * 10.0))
+        .collect();
     renderer.prepare(&mut scene);
     let pose = |scale: f32| -> Vec<Vec3> { data.positions.iter().map(|p| *p * scale).collect() };
     renderer.update_mesh(&mut scene, skinned, &pose(5.0), &data.normals, &data.uvs);
@@ -694,10 +1008,17 @@ fn a_reshaped_mesh_moves_the_bounds_of_every_instance_drawing_it() {
     renderer.prepare(&mut scene);
     let expected = InstanceBounds::new(&scene.meshes[skinned], Mat4::IDENTITY);
     for i in [first, late, others[7]] {
-        assert_eq!(scene.instances[i].bounds.radius, expected.radius, "instance {i}");
+        assert_eq!(
+            scene.instances[i].bounds.radius, expected.radius,
+            "instance {i}"
+        );
     }
     assert_ne!(scene.instances[others[8]].bounds.radius, expected.radius);
-    assert!(scene.bounds_users.len() <= 4, "{} instances rescanned", scene.bounds_users.len());
+    assert!(
+        scene.bounds_users.len() <= 4,
+        "{} instances rescanned",
+        scene.bounds_users.len()
+    );
 }
 
 #[test]
@@ -766,9 +1087,7 @@ fn terrain_paint_fast_path_preserves_composition() {
                     height: 4,
                     rgba: (0..16)
                         .flat_map(|i| {
-                            let c = rgb.map(|v| {
-                                if (i / 4 + i % 4) % 2 == 0 { v } else { v / 2 }
-                            });
+                            let c = rgb.map(|v| if (i / 4 + i % 4) % 2 == 0 { v } else { v / 2 });
                             [c[0], c[1], c[2], 255]
                         })
                         .collect(),
@@ -902,32 +1221,74 @@ fn terrain_paint_fast_path_preserves_composition() {
 fn a_freed_and_recycled_mesh_slot_is_no_longer_counted_as_reshaped() {
     let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let renderer = pollster::block_on(Renderer::new_with(
-        &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
-    )).expect("test renderer");
+        &adapter,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        RenderOptions {
+            msaa: 1,
+            shadow_size: 1024,
+            ..Default::default()
+        },
+    ))
+    .expect("test renderer");
     let mut scene = renderer.new_scene();
     scene.cache_bounds = true;
     let material = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0; 4], true);
     let data = MeshData {
         positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
-        normals: vec![Vec3::Z; 3], uvs: vec![glam::Vec2::ZERO; 3],
-        indices: vec![0, 1, 2], ranges: vec![(0, 3, 0)], ..Default::default()
+        normals: vec![Vec3::Z; 3],
+        uvs: vec![glam::Vec2::ZERO; 3],
+        indices: vec![0, 1, 2],
+        ranges: vec![(0, 3, 0)],
+        ..Default::default()
     };
     let pose = |scale: f32| -> Vec<Vec3> { data.positions.iter().map(|p| *p * scale).collect() };
-    let (once_skinned, skinned) = (renderer.add_mesh(&mut scene, &data), renderer.add_mesh(&mut scene, &data));
-    let first = renderer.add_instance(&mut scene, skinned, DVec3::ZERO, Mat4::IDENTITY, vec![material]);
-    renderer.update_mesh(&mut scene, once_skinned, &pose(2.0), &data.normals, &data.uvs);
+    let (once_skinned, skinned) = (
+        renderer.add_mesh(&mut scene, &data),
+        renderer.add_mesh(&mut scene, &data),
+    );
+    let first = renderer.add_instance(
+        &mut scene,
+        skinned,
+        DVec3::ZERO,
+        Mat4::IDENTITY,
+        vec![material],
+    );
+    renderer.update_mesh(
+        &mut scene,
+        once_skinned,
+        &pose(2.0),
+        &data.normals,
+        &data.uvs,
+    );
     renderer.prepare(&mut scene);
     // the slot is freed and taken by a plain mesh, which a whole tile then draws
     renderer.free_mesh(&mut scene, once_skinned);
     renderer.prepare(&mut scene);
     let plain = renderer.add_mesh(&mut scene, &data);
-    assert_eq!(renderer.recycle_mesh(&mut scene, plain, once_skinned), once_skinned);
-    let tile: Vec<usize> = (0..200).map(|k| renderer.add_instance(&mut scene, once_skinned, DVec3::new(k as f64, 0.0, 0.0), Mat4::IDENTITY, vec![material])).collect();
+    assert_eq!(
+        renderer.recycle_mesh(&mut scene, plain, once_skinned),
+        once_skinned
+    );
+    let tile: Vec<usize> = (0..200)
+        .map(|k| {
+            renderer.add_instance(
+                &mut scene,
+                once_skinned,
+                DVec3::new(k as f64, 0.0, 0.0),
+                Mat4::IDENTITY,
+                vec![material],
+            )
+        })
+        .collect();
     renderer.prepare(&mut scene);
     renderer.update_mesh(&mut scene, skinned, &pose(7.0), &data.normals, &data.uvs);
     renderer.prepare(&mut scene);
-    assert!(scene.bounds_users.len() <= 2, "{} instances rescanned", scene.bounds_users.len());
+    assert!(
+        scene.bounds_users.len() <= 2,
+        "{} instances rescanned",
+        scene.bounds_users.len()
+    );
     let expected = InstanceBounds::new(&scene.meshes[skinned], Mat4::IDENTITY);
     assert_eq!(scene.instances[first].bounds.radius, expected.radius);
     let plain_bounds = InstanceBounds::new(&scene.meshes[once_skinned], Mat4::IDENTITY);
@@ -939,16 +1300,46 @@ fn a_freed_and_recycled_mesh_slot_is_no_longer_counted_as_reshaped() {
 fn materials_that_look_alike_are_batched_together_whenever_they_were_made() {
     let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let renderer = pollster::block_on(Renderer::new_with(
-        &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
-    )).expect("test renderer");
+        &adapter,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        RenderOptions {
+            msaa: 1,
+            shadow_size: 1024,
+            ..Default::default()
+        },
+    ))
+    .expect("test renderer");
     let mut scene = renderer.new_scene();
-    let image = omsi_texture::Image { width: 1, height: 1, rgba: vec![200, 100, 50, 255], has_alpha: false };
+    let image = omsi_texture::Image {
+        width: 1,
+        height: 1,
+        rgba: vec![200, 100, 50, 255],
+        has_alpha: false,
+    };
     let texture = renderer.add_texture(&mut scene, &image, true);
-    let a = renderer.add_material(&mut scene, Some(texture), AlphaMode::Opaque, [1.0; 4], false);
+    let a = renderer.add_material(
+        &mut scene,
+        Some(texture),
+        AlphaMode::Opaque,
+        [1.0; 4],
+        false,
+    );
     renderer.prepare(&mut scene);
-    let b = renderer.add_material(&mut scene, Some(texture), AlphaMode::Opaque, [1.0; 4], false);
-    let c = renderer.add_material(&mut scene, Some(texture), AlphaMode::Opaque, [0.5, 0.5, 0.5, 1.0], false);
+    let b = renderer.add_material(
+        &mut scene,
+        Some(texture),
+        AlphaMode::Opaque,
+        [1.0; 4],
+        false,
+    );
+    let c = renderer.add_material(
+        &mut scene,
+        Some(texture),
+        AlphaMode::Opaque,
+        [0.5, 0.5, 0.5, 1.0],
+        false,
+    );
     let other = renderer.add_texture(&mut scene, &image, true);
     let d = renderer.add_material(&mut scene, Some(other), AlphaMode::Opaque, [1.0; 4], false);
     let look = |scene: &Scene, m: MaterialId| scene.materials[m].look;
@@ -958,8 +1349,11 @@ fn materials_that_look_alike_are_batched_together_whenever_they_were_made() {
     assert_ne!(look(&scene, a), look(&scene, d));
     let data = MeshData {
         positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
-        normals: vec![Vec3::Z; 3], uvs: vec![glam::Vec2::ZERO; 3],
-        indices: vec![0, 1, 2], ranges: vec![(0, 3, 0)], ..Default::default()
+        normals: vec![Vec3::Z; 3],
+        uvs: vec![glam::Vec2::ZERO; 3],
+        indices: vec![0, 1, 2],
+        ranges: vec![(0, 3, 0)],
+        ..Default::default()
     };
     let mesh = renderer.add_mesh(&mut scene, &data);
     let instances: Vec<usize> = [a, c, b, d]
@@ -971,17 +1365,34 @@ fn materials_that_look_alike_are_batched_together_whenever_they_were_made() {
         .iter()
         .map(|&i| {
             let material = scene.instances[i].materials[0];
-            DrawItem { pipe: 0, mesh: mesh as u32, range: 0, material: material as u32, look: look(&scene, material), entry: scene.instances[i].base }
+            DrawItem {
+                pipe: 0,
+                mesh: mesh as u32,
+                range: 0,
+                material: material as u32,
+                look: look(&scene, material),
+                entry: scene.instances[i].base,
+            }
         })
         .collect();
     let (mut list, mut batches) = (Vec::new(), Vec::new());
     batch_items(&scene, &mut items, true, &mut list, &mut batches);
     assert_eq!(batches.len(), 3);
-    let shared = batches.iter().find(|b| b.instances.len() == 2).expect("a and b in one batch");
+    let shared = batches
+        .iter()
+        .find(|b| b.instances.len() == 2)
+        .expect("a and b in one batch");
     assert!(shared.material == a as u32 || shared.material == b as u32);
-    let mut entries: Vec<u32> = list[shared.instances.start as usize..shared.instances.end as usize].to_vec();
+    let mut entries: Vec<u32> =
+        list[shared.instances.start as usize..shared.instances.end as usize].to_vec();
     entries.sort_unstable();
-    assert_eq!(entries, vec![scene.instances[instances[0]].base, scene.instances[instances[2]].base]);
+    assert_eq!(
+        entries,
+        vec![
+            scene.instances[instances[0]].base,
+            scene.instances[instances[2]].base
+        ]
+    );
 }
 
 #[test]
@@ -989,16 +1400,26 @@ fn materials_that_look_alike_are_batched_together_whenever_they_were_made() {
 fn cached_bounds_follow_transforms_skinning_and_recycled_resources() {
     let adapter = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let renderer = pollster::block_on(Renderer::new_with(
-        &adapter, None, Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, shadow_size: 1024, ..Default::default() },
-    )).expect("test renderer");
+        &adapter,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        RenderOptions {
+            msaa: 1,
+            shadow_size: 1024,
+            ..Default::default()
+        },
+    ))
+    .expect("test renderer");
     let mut scene = renderer.new_scene();
     scene.cache_bounds = true;
     let material = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0; 4], true);
     let data = MeshData {
         positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
-        normals: vec![Vec3::Z; 3], uvs: vec![glam::Vec2::ZERO; 3],
-        indices: vec![0, 1, 2], ranges: vec![(0, 3, 0)], ..Default::default()
+        normals: vec![Vec3::Z; 3],
+        uvs: vec![glam::Vec2::ZERO; 3],
+        indices: vec![0, 1, 2],
+        ranges: vec![(0, 3, 0)],
+        ..Default::default()
     };
     let mesh = renderer.add_mesh(&mut scene, &data);
     let origin = DVec3::new(1_000_000.000_001, 2_000_000.0, 12.0);
@@ -1006,14 +1427,22 @@ fn cached_bounds_follow_transforms_skinning_and_recycled_resources() {
     let check = |scene: &Scene, i: usize| {
         let inst = &scene.instances[i];
         let expected = InstanceBounds::new(&scene.meshes[inst.mesh], inst.transform);
-        assert_eq!(Renderer::bounding_sphere(scene, inst),
-            (expected.centre + (inst.origin - scene.render_origin).as_vec3(), expected.radius));
+        assert_eq!(
+            Renderer::bounding_sphere(scene, inst),
+            (
+                expected.centre + (inst.origin - scene.render_origin).as_vec3(),
+                expected.radius
+            )
+        );
         assert_eq!(Renderer::instance_scale(scene, inst), expected.scale);
     };
     renderer.prepare(&mut scene);
     check(&scene, i);
     let transform = Mat4::from_scale_rotation_translation(
-        Vec3::new(-2.0, 3.0, 4.0), glam::Quat::from_rotation_z(0.7), Vec3::new(10.0, 20.0, 30.0));
+        Vec3::new(-2.0, 3.0, 4.0),
+        glam::Quat::from_rotation_z(0.7),
+        Vec3::new(10.0, 20.0, 30.0),
+    );
     renderer.set_transform(&mut scene, i, origin, transform);
     renderer.prepare(&mut scene);
     check(&scene, i);
@@ -1031,7 +1460,8 @@ fn cached_bounds_follow_transforms_skinning_and_recycled_resources() {
     assert_eq!(renderer.recycle_mesh(&mut scene, new, mesh), mesh);
     renderer.prepare(&mut scene);
     check(&scene, i);
-    let replacement = renderer.add_instance(&mut scene, mesh, origin, Mat4::IDENTITY, vec![material]);
+    let replacement =
+        renderer.add_instance(&mut scene, mesh, origin, Mat4::IDENTITY, vec![material]);
     assert_eq!(renderer.recycle_instance(&mut scene, replacement, i), i);
     renderer.prepare(&mut scene);
     check(&scene, i);
@@ -1162,11 +1592,23 @@ fn presurface_reveals_excavation_before_terrain_is_drawn() {
         // Prefilling its depth before the floor's colour erases the excavation, even
         // though the cover will reject that object's later colour draw.
         let background_mesh = quad(&renderer, &mut scene, 7.0, 2.0);
-        renderer.add_instance(&mut scene, background_mesh, DVec3::ZERO, Mat4::IDENTITY, vec![red]);
+        renderer.add_instance(
+            &mut scene,
+            background_mesh,
+            DVec3::ZERO,
+            Mat4::IDENTITY,
+            vec![red],
+        );
         // Ordinary cutouts need shading to determine visibility on tile GPUs.
         // Keep a transparent one in the view to exercise mixed-scene prefilling.
         let foliage_mesh = quad(&renderer, &mut scene, 10.0, 0.25);
-        renderer.add_instance(&mut scene, foliage_mesh, DVec3::ZERO, Mat4::IDENTITY, vec![cutout]);
+        renderer.add_instance(
+            &mut scene,
+            foliage_mesh,
+            DVec3::ZERO,
+            Mat4::IDENTITY,
+            vec![cutout],
+        );
         let foreground_mesh = quad(&renderer, &mut scene, 2.0, 0.25);
         let foreground = renderer.add_instance(
             &mut scene,
@@ -1191,16 +1633,28 @@ fn presurface_reveals_excavation_before_terrain_is_drawn() {
             .render_to_image(&mut scene, 64, 64, &camera, &lighting)
             .unwrap();
         if enhanced {
-            let key = if renderer.options.msaa > 1 { "msaa prepass batches" } else { "presurface prepass batches" };
-            assert!(renderer.counts.borrow().get(key).copied().unwrap_or(0.0) > 0.0,
-                "an excavation must not disable depth prefilling for the rest of the view");
+            let key = if renderer.options.msaa > 1 {
+                "msaa prepass batches"
+            } else {
+                "presurface prepass batches"
+            };
+            assert!(
+                renderer.counts.borrow().get(key).copied().unwrap_or(0.0) > 0.0,
+                "an excavation must not disable depth prefilling for the rest of the view"
+            );
         }
         if enhanced {
             let saved = renderer.prepass_msaa_pipelines.take();
-            let reference = renderer.render_to_image(&mut scene, 64, 64, &camera, &lighting).unwrap();
+            let reference = renderer
+                .render_to_image(&mut scene, 64, 64, &camera, &lighting)
+                .unwrap();
             renderer.prepass_msaa_pipelines = saved;
-            assert!(rgba.iter().zip(&reference).all(|(a, b)| a.abs_diff(*b) <= 2),
-                "presurface depth optimization changed the image: {msaa}/{ssao}/{enhanced}");
+            assert!(
+                rgba.iter()
+                    .zip(&reference)
+                    .all(|(a, b)| a.abs_diff(*b) <= 2),
+                "presurface depth optimization changed the image: {msaa}/{ssao}/{enhanced}"
+            );
         }
         let centre = pixel(&rgba, 32);
         assert!(
@@ -1276,12 +1730,24 @@ fn stacked_panes_hide_each_other_in_model_order_where_they_write_depth() {
         &instance,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
+        RenderOptions {
+            msaa: 1,
+            ssao: false,
+            shadow_size: 1024,
+            fxaa: false,
+            render_scale: 1.0,
+            ..Default::default()
+        },
     ))
     .expect("test renderer");
     let mut scene = renderer.new_scene();
     let quad = |y: f32, half: f32| -> [Vec3; 4] {
-        [Vec3::new(-half, y, -half), Vec3::new(half, y, -half), Vec3::new(half, y, half), Vec3::new(-half, y, half)]
+        [
+            Vec3::new(-half, y, -half),
+            Vec3::new(half, y, -half),
+            Vec3::new(half, y, half),
+            Vec3::new(-half, y, half),
+        ]
     };
     let wall = renderer.add_mesh(
         &mut scene,
@@ -1294,7 +1760,13 @@ fn stacked_panes_hide_each_other_in_model_order_where_they_write_depth() {
             one_sided: false,
         },
     );
-    let green = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 1.0, 0.0, 1.0], true);
+    let green = renderer.add_material(
+        &mut scene,
+        None,
+        AlphaMode::Opaque,
+        [0.0, 1.0, 0.0, 1.0],
+        true,
+    );
     renderer.add_instance(&mut scene, wall, DVec3::ZERO, Mat4::IDENTITY, vec![green]);
     // the near pane (slot 0) and the far one (slot 1), half transparent
     let panes = renderer.add_mesh(
@@ -1310,24 +1782,59 @@ fn stacked_panes_hide_each_other_in_model_order_where_they_write_depth() {
     );
     let half = renderer.add_texture(
         &mut scene,
-        &omsi_texture::Image { width: 1, height: 1, rgba: vec![255, 255, 255, 128], has_alpha: true },
+        &omsi_texture::Image {
+            width: 1,
+            height: 1,
+            rgba: vec![255, 255, 255, 128],
+            has_alpha: true,
+        },
         false,
     );
-    let near = renderer.add_material(&mut scene, Some(half), AlphaMode::Blend, [1.0, 0.0, 0.0, 1.0], true);
-    let far = renderer.add_material(&mut scene, Some(half), AlphaMode::Blend, [0.0, 0.0, 1.0, 1.0], true);
-    renderer.add_instance(&mut scene, panes, DVec3::ZERO, Mat4::IDENTITY, vec![near, far]);
-    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let near = renderer.add_material(
+        &mut scene,
+        Some(half),
+        AlphaMode::Blend,
+        [1.0, 0.0, 0.0, 1.0],
+        true,
+    );
+    let far = renderer.add_material(
+        &mut scene,
+        Some(half),
+        AlphaMode::Blend,
+        [0.0, 0.0, 1.0, 1.0],
+        true,
+    );
+    renderer.add_instance(
+        &mut scene,
+        panes,
+        DVec3::ZERO,
+        Mat4::IDENTITY,
+        vec![near, far],
+    );
+    let lighting = Lighting {
+        shadows: false,
+        fog_density: 0.0,
+        ..Default::default()
+    };
     for writes_depth in [true, false] {
         for m in [near, far] {
             scene.materials[m].no_z_write = true;
             scene.materials[m].writes_depth = writes_depth;
         }
-        let rgba = renderer.render_to_image(&mut scene, 64, 64, &camera, &lighting).unwrap();
+        let rgba = renderer
+            .render_to_image(&mut scene, 64, 64, &camera, &lighting)
+            .unwrap();
         let c = &rgba[(32 * 64 + 32) * 4..(32 * 64 + 32) * 4 + 3];
         if writes_depth {
-            assert!(c[2] < 20 && c[0] > 60 && c[1] > 60, "far pane hidden behind the near one: {c:?}");
+            assert!(
+                c[2] < 20 && c[0] > 60 && c[1] > 60,
+                "far pane hidden behind the near one: {c:?}"
+            );
         } else {
-            assert!(c[2] > 40 && c[0] > 60, "far pane blended over the near one: {c:?}");
+            assert!(
+                c[2] > 40 && c[0] > 60,
+                "far pane blended over the near one: {c:?}"
+            );
         }
     }
 }
@@ -1340,13 +1847,28 @@ fn stacked_panes_hide_each_other_in_model_order_where_they_write_depth() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn vanilla_sphere_map_is_read_where_direct3d_generates_it() {
-    let camera = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 60.0, near: 0.1, far: 100.0 };
+    let camera = Camera {
+        position: DVec3::ZERO,
+        yaw: 0.0,
+        pitch: 0.0,
+        roll: 0.0,
+        fov_deg: 60.0,
+        near: 0.1,
+        far: 100.0,
+    };
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
+        RenderOptions {
+            msaa: 1,
+            ssao: false,
+            shadow_size: 1024,
+            fxaa: false,
+            render_scale: 1.0,
+            ..Default::default()
+        },
     ))
     .expect("test renderer");
     let mut scene = renderer.new_scene();
@@ -1359,9 +1881,37 @@ fn vanilla_sphere_map_is_read_where_direct3d_generates_it() {
             rgba.extend_from_slice(&[at(x), at(y), 0, 255]);
         }
     }
-    let env = renderer.add_texture(&mut scene, &omsi_texture::Image { width: size as u32, height: size as u32, rgba, has_alpha: false }, false);
-    let white = renderer.add_texture(&mut scene, &omsi_texture::Image { width: 1, height: 1, rgba: vec![255; 4], has_alpha: false }, false);
-    let paint = renderer.add_material_env(&mut scene, Some(white), AlphaMode::Opaque, [1.0; 4], false, None, None, None, Some((env, 1.0)));
+    let env = renderer.add_texture(
+        &mut scene,
+        &omsi_texture::Image {
+            width: size as u32,
+            height: size as u32,
+            rgba,
+            has_alpha: false,
+        },
+        false,
+    );
+    let white = renderer.add_texture(
+        &mut scene,
+        &omsi_texture::Image {
+            width: 1,
+            height: 1,
+            rgba: vec![255; 4],
+            has_alpha: false,
+        },
+        false,
+    );
+    let paint = renderer.add_material_env(
+        &mut scene,
+        Some(white),
+        AlphaMode::Opaque,
+        [1.0; 4],
+        false,
+        None,
+        None,
+        None,
+        Some((env, 1.0)),
+    );
     // a pane 5 m ahead, its normal turned 30 degrees from the view: about z (a side
     // to the right) or about x (the pane tipped back, mirroring the sky)
     let pane = |renderer: &Renderer, scene: &mut Scene, n: Vec3, along: Vec3| {
@@ -1370,7 +1920,12 @@ fn vanilla_sphere_map_is_read_where_direct3d_generates_it() {
         let mesh = renderer.add_mesh(
             scene,
             &MeshData {
-                positions: vec![c - along - across, c + along - across, c + along + across, c - along + across],
+                positions: vec![
+                    c - along - across,
+                    c + along - across,
+                    c + along + across,
+                    c - along + across,
+                ],
                 normals: vec![n; 4],
                 uvs: vec![glam::Vec2::splat(0.5); 4],
                 ranges: vec![(0, 6, 0)],
@@ -1381,18 +1936,31 @@ fn vanilla_sphere_map_is_read_where_direct3d_generates_it() {
         renderer.add_instance(scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![paint])
     };
     let (s, c) = 30f32.to_radians().sin_cos();
-    let lighting = Lighting { shadows: false, fog_density: 0.0, classic: true, ..Default::default() };
+    let lighting = Lighting {
+        shadows: false,
+        fog_density: 0.0,
+        classic: true,
+        ..Default::default()
+    };
     let mut read = |n: Vec3, along: Vec3| {
         let id = pane(&renderer, &mut scene, n, along);
-        let rgba = renderer.render_to_image(&mut scene, 64, 64, &camera, &lighting).unwrap();
+        let rgba = renderer
+            .render_to_image(&mut scene, 64, 64, &camera, &lighting)
+            .unwrap();
         scene.instances[id].visible = false;
         let p = &rgba[(32 * 64 + 32) * 4..(32 * 64 + 32) * 4 + 3];
         (p[0] as f32 / 255.0, p[1] as f32 / 255.0)
     };
     let (u, v) = read(Vec3::new(s, -c, 0.0), Vec3::Z);
-    assert!((u - 0.75).abs() < 0.03 && (v - 0.5).abs() < 0.03, "turned to the side: ({u}, {v})");
+    assert!(
+        (u - 0.75).abs() < 0.03 && (v - 0.5).abs() < 0.03,
+        "turned to the side: ({u}, {v})"
+    );
     let (u, v) = read(Vec3::new(0.0, -c, s), Vec3::X);
-    assert!((u - 0.5).abs() < 0.03 && (v - 0.75).abs() < 0.03, "tipped back: ({u}, {v})");
+    assert!(
+        (u - 0.5).abs() < 0.03 && (v - 0.75).abs() < 0.03,
+        "tipped back: ({u}, {v})"
+    );
 }
 
 /// A lamp's flare behind a window that writes its depth: seen from inside the vehicle
@@ -1402,18 +1970,38 @@ fn vanilla_sphere_map_is_read_where_direct3d_generates_it() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn flares_show_through_the_glass_of_the_vehicle_the_camera_is_in() {
-    let camera = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 90.0, near: 0.1, far: 100.0 };
+    let camera = Camera {
+        position: DVec3::ZERO,
+        yaw: 0.0,
+        pitch: 0.0,
+        roll: 0.0,
+        fov_deg: 90.0,
+        near: 0.1,
+        far: 100.0,
+    };
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
+        RenderOptions {
+            msaa: 1,
+            ssao: false,
+            shadow_size: 1024,
+            fxaa: false,
+            render_scale: 1.0,
+            ..Default::default()
+        },
     ))
     .expect("test renderer");
     let mut scene = renderer.new_scene();
     let quad = |y: f32, half: f32| MeshData {
-        positions: vec![Vec3::new(-half, y, -half), Vec3::new(half, y, -half), Vec3::new(half, y, half), Vec3::new(-half, y, half)],
+        positions: vec![
+            Vec3::new(-half, y, -half),
+            Vec3::new(half, y, -half),
+            Vec3::new(half, y, half),
+            Vec3::new(-half, y, half),
+        ],
         normals: vec![-Vec3::Y; 4],
         uvs: vec![glam::Vec2::ZERO; 4],
         ranges: vec![(0, 6, 0)],
@@ -1421,19 +2009,48 @@ fn flares_show_through_the_glass_of_the_vehicle_the_camera_is_in() {
         one_sided: false,
     };
     let wall = renderer.add_mesh(&mut scene, &quad(30.0, 60.0));
-    let black = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [0.0, 0.0, 0.0, 1.0], true);
-    renderer.add_instance(&mut scene, wall, DVec3::new(0.0, 0.0, 0.0), Mat4::IDENTITY, vec![black]);
+    let black = renderer.add_material(
+        &mut scene,
+        None,
+        AlphaMode::Opaque,
+        [0.0, 0.0, 0.0, 1.0],
+        true,
+    );
+    renderer.add_instance(
+        &mut scene,
+        wall,
+        DVec3::new(0.0, 0.0, 0.0),
+        Mat4::IDENTITY,
+        vec![black],
+    );
     let pane = renderer.add_mesh(&mut scene, &quad(2.0, 4.0));
     let half = renderer.add_texture(
         &mut scene,
-        &omsi_texture::Image { width: 1, height: 1, rgba: vec![255, 255, 255, 64], has_alpha: true },
+        &omsi_texture::Image {
+            width: 1,
+            height: 1,
+            rgba: vec![255, 255, 255, 64],
+            has_alpha: true,
+        },
         false,
     );
-    let glass = renderer.add_material(&mut scene, Some(half), AlphaMode::Blend, [0.2, 0.2, 0.2, 1.0], true);
+    let glass = renderer.add_material(
+        &mut scene,
+        Some(half),
+        AlphaMode::Blend,
+        [0.2, 0.2, 0.2, 1.0],
+        true,
+    );
     scene.materials[glass].no_z_write = true;
     scene.materials[glass].writes_depth = true;
     renderer.add_instance(&mut scene, pane, DVec3::ZERO, Mat4::IDENTITY, vec![glass]);
-    scene.coronas = vec![Corona { position: DVec3::new(0.0, 10.0, 0.0), size: 3.0, color: [1.0; 3], brightness: 1.0, ..Default::default() }];
+    scene.coronas = vec![Corona {
+        position: DVec3::new(0.0, 10.0, 0.0),
+        size: 3.0,
+        color: [1.0; 3],
+        brightness: 1.0,
+        ..Default::default()
+    }];
     for inside in [true, false] {
         let lighting = Lighting {
             shadows: false,
@@ -1442,12 +2059,17 @@ fn flares_show_through_the_glass_of_the_vehicle_the_camera_is_in() {
             inside: inside.then_some((DVec3::ZERO, 0.0, [6.0, 6.0, 6.0, 0.0, 0.0, 0.0])),
             ..Default::default()
         };
-        let rgba = renderer.render_to_image(&mut scene, 64, 64, &camera, &lighting).unwrap();
+        let rgba = renderer
+            .render_to_image(&mut scene, 64, 64, &camera, &lighting)
+            .unwrap();
         let c = &rgba[(32 * 64 + 32) * 4..(32 * 64 + 32) * 4 + 3];
         if inside {
             assert!(c[0] > 120, "the flare shows through the windscreen: {c:?}");
         } else {
-            assert!(c[0] < 80, "the flare behind a bus's window seen from outside: {c:?}");
+            assert!(
+                c[0] < 80,
+                "the flare behind a bus's window seen from outside: {c:?}"
+            );
         }
     }
 }
@@ -1459,10 +2081,10 @@ mod fog;
 mod fsr;
 mod instance_layout;
 mod lamp_shadows;
+mod light;
 mod light_grid;
 mod light_maps;
 mod long_road;
-mod light;
 mod more;
 mod night_coverage;
 mod prepass_reach;
@@ -1470,6 +2092,6 @@ mod snow_track_field;
 mod transparency;
 mod vanilla_lighting;
 
-mod xr_targets;
 mod xr_culling;
 mod xr_diagnostics;
+mod xr_targets;

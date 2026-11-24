@@ -7,7 +7,12 @@ impl RigidBody {
     /// `hub_heights[a]`: unloaded hub height of axle `a` above the model origin; the tyre
     /// radius when the model does not say (see `VehicleType::wheel_geometry`).
     pub fn from_definition(def: &Vehicle, hub_heights: &[Option<f32>]) -> RigidBody {
-        let mass = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass }.max(500.0);
+        let mass = if def.mass < 100.0 {
+            def.mass * 1000.0
+        } else {
+            def.mass
+        }
+        .max(500.0);
         let moi = def.moment_of_inertia;
         let scale = if moi[0] < 5000.0 { 1000.0 } else { 1.0 };
         // `[momentofintertia]` goes to ODE as I11, I22, I33 of Omsi.exe's y-up body frame
@@ -16,9 +21,17 @@ impl RigidBody {
         // (0x7e5110), whatever the SDK's comment says. Here (right, forward, up): pitch,
         // roll, yaw. Read in the comment's order the SD202 rolled on 80 t m² instead of
         // 300, twice as fast, and every uneven patch rocked it like a boat.
-        let inertia = Vec3::new((moi[0] * scale).max(100.0), (moi[2] * scale).max(100.0), (moi[1] * scale).max(100.0));
+        let inertia = Vec3::new(
+            (moi[0] * scale).max(100.0),
+            (moi[2] * scale).max(100.0),
+            (moi[1] * scale).max(100.0),
+        );
         let cog_xy = def.cog.map(|c| (c[0], c[1])).unwrap_or((0.0, 0.0));
-        let cog_z = if def.cog_height > 0.0 { def.cog_height } else { def.cog.map(|c| c[2]).filter(|z| *z > 0.0).unwrap_or(1.0) };
+        let cog_z = if def.cog_height > 0.0 {
+            def.cog_height
+        } else {
+            def.cog.map(|c| c[2]).filter(|z| *z > 0.0).unwrap_or(1.0)
+        };
         let cog = Vec3::new(cog_xy.0, cog_xy.1, cog_z);
         let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
         let mut wheels = Vec::new();
@@ -26,18 +39,79 @@ impl RigidBody {
         for (ai, a) in def.axles.iter().enumerate() {
             let r = (a.wheel_diameter / 2.0).max(0.15);
             let z = hub_heights.get(ai).copied().flatten().unwrap_or(r);
-            let k = if a.spring > 0.0 { a.spring * 1000.0 } else { 150_000.0 };
-            let c = if a.damper > 0.0 { a.damper * 1000.0 } else { 12_000.0 };
-            let max_force = if a.max_force > 0.0 { a.max_force * 1000.0 } else { 200_000.0 };
+            let k = if a.spring > 0.0 {
+                a.spring * 1000.0
+            } else {
+                150_000.0
+            };
+            let c = if a.damper > 0.0 {
+                a.damper * 1000.0
+            } else {
+                12_000.0
+            };
+            let max_force = if a.max_force > 0.0 {
+                a.max_force * 1000.0
+            } else {
+                200_000.0
+            };
             // where the tyres stand across (the middle of the band between the two widths)
             // and where the strut pushes the body (the outer width)
             let outer = (a.max_width / 2.0).max(0.3);
-            let inner = if a.min_width > 0.0 && a.min_width < a.max_width { (a.max_width + a.min_width) / 4.0 } else { outer * 0.85 };
+            let inner = if a.min_width > 0.0 && a.min_width < a.max_width {
+                (a.max_width + a.min_width) / 4.0
+            } else {
+                outer * 0.85
+            };
             let tyre_k = TYRE_K.max(k * TYRE_OVER_SPRING);
             let tyre_c = TYRE_C * (tyre_k / TYRE_K).sqrt();
             for side in [-1.0f32, 1.0] {
-                let inertia_inv = if a.inertia_inv > 0.0 { a.inertia_inv } else { DEFAULT_INERTIA_INV };
-                wheels.push(RigidWheel { spin: 0.0, slipping: false, locked: false, inertia_inv, attach: Vec3::new(side * inner, a.long, z), lever: side * (outer - inner), radius: r, driven: a.driven, steered: (a.long - front_long).abs() < 0.01, steer: 0.0, tyre_k, tyre_c, spring: k, damper: c, max_force, spring_factor: 1.0, strut: Strut::from_block(omsi_vehicle::vehicle::Suspension::for_axle(&def.suspensions, ai)), rest_load: 0.0, compression: 0.0, compression_rate: 0.0, touch: None, on_ground: true, rotation_deg: 0.0, turned: 0.0, rpm: 0.0, load: 0.0, ground_z: 0.0, ground_seen: false, walls: Vec::new(), step_force: 0.0, lat_defl: 0.0, surface: 0, surface_now: 0, surface_was: 0, surface_mix: 1.0, mu_scale: 1.0, rough: 0.0 });
+                let inertia_inv = if a.inertia_inv > 0.0 {
+                    a.inertia_inv
+                } else {
+                    DEFAULT_INERTIA_INV
+                };
+                wheels.push(RigidWheel {
+                    spin: 0.0,
+                    slipping: false,
+                    locked: false,
+                    inertia_inv,
+                    attach: Vec3::new(side * inner, a.long, z),
+                    lever: side * (outer - inner),
+                    radius: r,
+                    driven: a.driven,
+                    steered: (a.long - front_long).abs() < 0.01,
+                    steer: 0.0,
+                    tyre_k,
+                    tyre_c,
+                    spring: k,
+                    damper: c,
+                    max_force,
+                    spring_factor: 1.0,
+                    strut: Strut::from_block(omsi_vehicle::vehicle::Suspension::for_axle(
+                        &def.suspensions,
+                        ai,
+                    )),
+                    rest_load: 0.0,
+                    compression: 0.0,
+                    compression_rate: 0.0,
+                    touch: None,
+                    on_ground: true,
+                    rotation_deg: 0.0,
+                    turned: 0.0,
+                    rpm: 0.0,
+                    load: 0.0,
+                    ground_z: 0.0,
+                    ground_seen: false,
+                    walls: Vec::new(),
+                    step_force: 0.0,
+                    lat_defl: 0.0,
+                    surface: 0,
+                    surface_now: 0,
+                    surface_was: 0,
+                    surface_mix: 1.0,
+                    mu_scale: 1.0,
+                    rough: 0.0,
+                });
                 wheel_axle.push(ai);
             }
         }
@@ -46,13 +120,58 @@ impl RigidBody {
             w.rest_load = loads.get(*a).copied().unwrap_or(0.0);
         }
         let s = (front_long - def.rot_pnt_long).abs().max(1.0);
-        let max_steer_deg = (def.inv_min_turn_radius * s).atan().to_degrees().clamp(10.0, 60.0);
+        let max_steer_deg = (def.inv_min_turn_radius * s)
+            .atan()
+            .to_degrees()
+            .clamp(10.0, 60.0);
         // a file without a usable `[inv_min_turnradius]` still steers its front axle as far
         // as the old default lock
-        let inv_min_turn_radius = if def.inv_min_turn_radius > 0.0 { def.inv_min_turn_radius } else { max_steer_deg.to_radians().tan() / s };
-        let springs: f32 = def.axles.iter().map(|a| 2.0 * if a.spring > 0.0 { a.spring } else { 150.0 }).sum();
+        let inv_min_turn_radius = if def.inv_min_turn_radius > 0.0 {
+            def.inv_min_turn_radius
+        } else {
+            max_steer_deg.to_radians().tan() / s
+        };
+        let springs: f32 = def
+            .axles
+            .iter()
+            .map(|a| 2.0 * if a.spring > 0.0 { a.spring } else { 150.0 })
+            .sum();
         let body_freq = (springs / (mass / 1000.0)).max(0.0).sqrt();
-        RigidBody { mass, inertia, cog, position: DVec3::ZERO, orientation: Quat::IDENTITY, velocity: Vec3::ZERO, omega: Vec3::ZERO, wheels, wheel_axle, steer_deg: 0.0, kappa: 0.0, max_steer_deg, rot_pnt_long: def.rot_pnt_long, inv_min_turn_radius, body_freq, holding: true, rolling_resistance: if def.rolling_resistance > 0.0 { def.rolling_resistance } else { 0.008 * mass * 9.81 }, accel_body: Vec3::ZERO, friction: 0.85, wheel_impacts: Vec::new(), coupled: Vec::new(), spawned_inside: None, wheel_walls: true, aero: realism::Aero::of(def.bounding_box.map(|b| [b[0], b[1], b[2]]), mass), air_density: realism::air_density(20.0, 0.0), wind: Vec3::ZERO, wetness: 0.0, road_s: 0.0, realistic: realistic_default() }
+        RigidBody {
+            mass,
+            inertia,
+            cog,
+            position: DVec3::ZERO,
+            orientation: Quat::IDENTITY,
+            velocity: Vec3::ZERO,
+            omega: Vec3::ZERO,
+            wheels,
+            wheel_axle,
+            steer_deg: 0.0,
+            kappa: 0.0,
+            max_steer_deg,
+            rot_pnt_long: def.rot_pnt_long,
+            inv_min_turn_radius,
+            body_freq,
+            holding: true,
+            rolling_resistance: if def.rolling_resistance > 0.0 {
+                def.rolling_resistance
+            } else {
+                0.008 * mass * 9.81
+            },
+            accel_body: Vec3::ZERO,
+            friction: 0.85,
+            wheel_impacts: Vec::new(),
+            coupled: Vec::new(),
+            spawned_inside: None,
+            wheel_walls: true,
+            aero: realism::Aero::of(def.bounding_box.map(|b| [b[0], b[1], b[2]]), mass),
+            air_density: realism::air_density(20.0, 0.0),
+            wind: Vec3::ZERO,
+            wetness: 0.0,
+            road_s: 0.0,
+            realistic: realistic_default(),
+        }
     }
 
     /// Place the body at rest with its wheels on the ground plane at `origin.z`: heading
@@ -60,7 +179,12 @@ impl RigidBody {
     pub fn place(&mut self, origin: DVec3, heading_deg: f64) {
         self.orientation = Quat::from_rotation_z((-heading_deg).to_radians() as f32);
         let n = self.wheels.len().max(1) as f32;
-        let sag: f32 = self.wheels.iter().map(|w| w.radius - w.attach.z - w.rest_compression().min(BUMP)).sum::<f32>() / n;
+        let sag: f32 = self
+            .wheels
+            .iter()
+            .map(|w| w.radius - w.attach.z - w.rest_compression().min(BUMP))
+            .sum::<f32>()
+            / n;
         let origin = origin + DVec3::Z * sag as f64;
         self.position = origin + self.orientation.mul_vec3(self.cog).as_dvec3();
         self.velocity = Vec3::ZERO;
@@ -103,8 +227,12 @@ impl RigidBody {
     /// wheel of the cab, which turns with `Axle_Steering_0_L`, go further to the left than
     /// to the right (#953, #1073).
     pub fn axle_steer(&self, i: usize) -> f32 {
-        let Some(w) = self.wheels.get(i) else { return 0.0 };
-        ((w.attach.y - self.rot_pnt_long) * self.kappa).atan().clamp(-1.05, 1.05)
+        let Some(w) = self.wheels.get(i) else {
+            return 0.0;
+        };
+        ((w.attach.y - self.rot_pnt_long) * self.kappa)
+            .atan()
+            .clamp(-1.05, 1.05)
     }
 
     /// Forward speed (m/s) in the body frame.
@@ -113,7 +241,8 @@ impl RigidBody {
     }
 
     pub fn kinetic_energy(&self) -> f32 {
-        0.5 * self.mass * self.velocity.length_squared() + 0.5 * (self.inertia * self.omega * self.omega).element_sum()
+        0.5 * self.mass * self.velocity.length_squared()
+            + 0.5 * (self.inertia * self.omega * self.omega).element_sum()
     }
 
     /// Inverse of the effective mass the body shows along world direction `n` at world
@@ -138,12 +267,20 @@ impl RigidBody {
         let (heading, _, _) = self.heading_pitch_bank();
         let origin = self.origin();
         let mut o = Obb::from_box(bb, origin, heading);
-        let centre = origin + self.orientation.mul_vec3(Vec3::new(bb[3], bb[4], bb[5])).as_dvec3();
+        let centre = origin
+            + self
+                .orientation
+                .mul_vec3(Vec3::new(bb[3], bb[4], bb[5]))
+                .as_dvec3();
         let (mut lo, mut hi) = (f64::MAX, f64::MIN);
         for sx in [-0.5f32, 0.5] {
             for sy in [-0.5f32, 0.5] {
                 for sz in [-0.5f32, 0.5] {
-                    let z = centre.z + self.orientation.mul_vec3(Vec3::new(bb[0] * sx, bb[1] * sy, bb[2] * sz)).z as f64;
+                    let z = centre.z
+                        + self
+                            .orientation
+                            .mul_vec3(Vec3::new(bb[0] * sx, bb[1] * sy, bb[2] * sz))
+                            .z as f64;
                     lo = lo.min(z);
                     hi = hi.max(z);
                 }
@@ -161,18 +298,33 @@ impl RigidBody {
         let centre = self.origin() + r.mul_vec3(Vec3::new(bb[3], bb[4], bb[5])).as_dvec3();
         crate::collision::Box3 {
             center: centre,
-            axes: [r.mul_vec3(Vec3::X).as_dvec3(), r.mul_vec3(Vec3::Y).as_dvec3(), r.mul_vec3(Vec3::Z).as_dvec3()],
+            axes: [
+                r.mul_vec3(Vec3::X).as_dvec3(),
+                r.mul_vec3(Vec3::Y).as_dvec3(),
+                r.mul_vec3(Vec3::Z).as_dvec3(),
+            ],
             half: (Vec3::new(bb[0], bb[1], bb[2]) * 0.5 + Vec3::splat(margin)).as_dvec3(),
         }
     }
 
     /// One step. `drive_torque` (N m at the driven wheels, from `M_Wheel`), `brake` per
     /// wheel (N), `steer` −1..1, `probe(x, y, z_top)` the ground at a point.
-    pub fn step(&mut self, dt: f32, drive_torque: f32, brake: &[f32], steer: f32, probe: &dyn Fn(f64, f64, f64) -> GroundProbe) {
+    pub fn step(
+        &mut self,
+        dt: f32,
+        drive_torque: f32,
+        brake: &[f32],
+        steer: f32,
+        probe: &dyn Fn(f64, f64, f64) -> GroundProbe,
+    ) {
         // a long frame (below 20 fps) is stepped in slices of at most 50 ms, so that the
         // body covers the whole frame the clock, the odometer and the scripts count (it was
         // cut to 50 ms: at 10 fps the bus went half as far as the time went on)
-        let dt = if dt.is_finite() { dt.clamp(0.0, 0.25) } else { 0.0 };
+        let dt = if dt.is_finite() {
+            dt.clamp(0.0, 0.25)
+        } else {
+            0.0
+        };
         // A script's value that is no number - a bus's `M_Wheel` or a brake force of 0/0 or
         // 1/0 - put the whole body at NaN within a step: the bus vanished and the steering's
         // clamp stopped the game a frame later ("min > max, or either was NaN", #1045).
@@ -188,7 +340,11 @@ impl RigidBody {
             &sane
         };
         let before = (self.position, self.orientation, self.steer_deg);
-        let wheels_before: Vec<(f32, Option<f32>)> = self.wheels.iter().map(|w| (w.compression, w.touch)).collect();
+        let wheels_before: Vec<(f32, Option<f32>)> = self
+            .wheels
+            .iter()
+            .map(|w| (w.compression, w.touch))
+            .collect();
         let slices = (dt / 0.05).ceil().max(1.0) as usize;
         let mut impacts = Vec::new();
         for _ in 0..slices {
@@ -204,7 +360,10 @@ impl RigidBody {
             self.omega.y *= k;
             // (one impact per obstacle a frame, as a single slice gives)
             for m in self.wheel_impacts.drain(..) {
-                match impacts.iter_mut().find(|x: &&mut Impact| x.obstacle == m.obstacle) {
+                match impacts
+                    .iter_mut()
+                    .find(|x: &&mut Impact| x.obstacle == m.obstacle)
+                {
                     Some(x) if x.energy >= m.energy => {}
                     Some(x) => *x = m,
                     None => impacts.push(m),
@@ -212,7 +371,11 @@ impl RigidBody {
             }
         }
         self.wheel_impacts = impacts;
-        if !(self.position.is_finite() && self.orientation.is_finite() && self.velocity.is_finite() && self.omega.is_finite()) {
+        if !(self.position.is_finite()
+            && self.orientation.is_finite()
+            && self.velocity.is_finite()
+            && self.omega.is_finite())
+        {
             static ONCE: std::sync::Once = std::sync::Once::new();
             ONCE.call_once(|| log::warn!("vehicle physics: the body's state became no number; it stays where it was, at rest"));
             (self.position, self.orientation, self.steer_deg) = before;
@@ -228,7 +391,14 @@ impl RigidBody {
         }
     }
 
-    fn step_slice(&mut self, dt: f32, drive_torque: f32, brake: &[f32], steer: f32, probe: &dyn Fn(f64, f64, f64) -> GroundProbe) {
+    fn step_slice(
+        &mut self,
+        dt: f32,
+        drive_torque: f32,
+        brake: &[f32],
+        steer: f32,
+        probe: &dyn Fn(f64, f64, f64) -> GroundProbe,
+    ) {
         self.steer_axles(steer);
         // (substeps of at most ~4 ms whatever the frame: a frame held up by loading - 50 ms -
         // made 12 ms substeps, too long for the stiff tyres, and the body hopped on its
@@ -252,7 +422,8 @@ impl RigidBody {
             // driven wheels of its own (a pusher's front section) was pushed by nothing: the
             // count was clamped to one and the torque went to wheels that do not drive.
             let coupled_wheels: usize = self.coupled.iter().map(|d| d.driven_wheels).sum();
-            let driven = (self.wheels.iter().filter(|w| w.driven).count() + coupled_wheels).max(1) as f32;
+            let driven =
+                (self.wheels.iter().filter(|w| w.driven).count() + coupled_wheels).max(1) as f32;
             // the towed mass moves with the body along its length
             let body_fwd = rot.mul_vec3(Vec3::Y);
             let towed: f32 = self.coupled.iter().map(|d| d.mass).sum();
@@ -266,7 +437,13 @@ impl RigidBody {
                 let right = rot.mul_vec3(Vec3::new(ang.cos(), -ang.sin(), 0.0));
                 let hub0 = position + rot.mul_vec3(w.attach - cog).as_dvec3();
                 let hub = hub0 + (up * w.compression.max(-DROOP)).as_dvec3();
-                (fwd, right, Vec3::new(fwd.x, fwd.y, 0.0).normalize_or(Vec3::Y), hub0, hub)
+                (
+                    fwd,
+                    right,
+                    Vec3::new(fwd.x, fwd.y, 0.0).normalize_or(Vec3::Y),
+                    hub0,
+                    hub,
+                )
             };
             let found = self.read_ground(&tyre, rot, h, probe);
             self.stop_at_faces(&tyre, rot, h);
@@ -281,7 +458,8 @@ impl RigidBody {
                     let n = face.normal.extend(0.0);
                     let pen = face.reach(fwd_h, r) - face.distance(hub);
                     if pen > 0.0 {
-                        let v_hub = self.velocity + omega_world.cross((hub - self.position).as_vec3());
+                        let v_hub =
+                            self.velocity + omega_world.cross((hub - self.position).as_vec3());
                         f_world += n * (WALL_K * pen - WALL_C * v_hub.dot(n)).max(0.0);
                     }
                 }
@@ -291,7 +469,20 @@ impl RigidBody {
                 // load already where it just touches, so that the ride height stays the
                 // springs' alone (see the module's notes).
                 let (tyre_f, tyre_static, n) = if omsi_suspension() {
-                    omsi_strut(w, r, hub0, position, cog, self.cog, rot, up, self.velocity, omega_world, h, probe)
+                    omsi_strut(
+                        w,
+                        r,
+                        hub0,
+                        position,
+                        cog,
+                        self.cog,
+                        rot,
+                        up,
+                        self.velocity,
+                        omega_world,
+                        h,
+                        probe,
+                    )
                 } else {
                     let m_w = (w.rest_load / 9.81 * UNSPRUNG).max(40.0);
                     let k = w.spring * w.spring_factor.max(0.05);
@@ -301,9 +492,18 @@ impl RigidBody {
                     // substep: +25 cm under the Urbino's front wheel at a Spandau kerb) is
                     // climbed at that pace - taken at once it struck the wheel with 260 kN and
                     // threw it into its arch.
-                    let v_along = (self.velocity + omega_world.cross((hub - self.position).as_vec3())).dot(fwd_h).abs();
+                    let v_along = (self.velocity
+                        + omega_world.cross((hub - self.position).as_vec3()))
+                    .dot(fwd_h)
+                    .abs();
                     let max_rise = (v_along.max(0.5) * 2.4 + 0.3) * h;
-                    let need = found[i].map(|(need, _, _)| if w.ground_seen { need.min(w.ground_z + r as f64 + max_rise as f64) } else { need });
+                    let need = found[i].map(|(need, _, _)| {
+                        if w.ground_seen {
+                            need.min(w.ground_z + r as f64 + max_rise as f64)
+                        } else {
+                            need
+                        }
+                    });
                     let touch = need.map(|need| ((need - hub0.z) / up.z.max(0.3) as f64) as f32);
                     if let Some(need) = need {
                         w.ground_z = need - r as f64;
@@ -313,7 +513,11 @@ impl RigidBody {
                         // (a wheel that cannot reach the ground at full droop hangs in the air)
                         Some(t) if t >= -DROOP - 0.05 => {
                             let pen = t - w.compression;
-                            let closing = w.touch.map(|p| ((t - p) / h).clamp(-3.0, 3.0)).unwrap_or(0.0) - w.compression_rate;
+                            let closing = w
+                                .touch
+                                .map(|p| ((t - p) / h).clamp(-3.0, 3.0))
+                                .unwrap_or(0.0)
+                                - w.compression_rate;
                             let s = w.tyre_k * pen + w.rest_load;
                             if s > 0.0 {
                                 ((s + w.tyre_c * closing).clamp(0.0, w.max_force * 3.0), s)
@@ -333,8 +537,14 @@ impl RigidBody {
                     // beyond it the bump stop, a rubber block of its own, takes over)
                     let c = w.compression;
                     let rate_c = w.compression_rate.clamp(-1.5, 1.5);
-                    let bump = if c > BUMP { (w.spring * 10.0 * (c - BUMP)).min(w.max_force * 2.0) } else { 0.0 };
-                    let n = (k * c.max(0.0) + w.damper * rate_c).clamp(-w.max_force * 0.5, w.max_force) + bump;
+                    let bump = if c > BUMP {
+                        (w.spring * 10.0 * (c - BUMP)).min(w.max_force * 2.0)
+                    } else {
+                        0.0
+                    };
+                    let n = (k * c.max(0.0) + w.damper * rate_c)
+                        .clamp(-w.max_force * 0.5, w.max_force)
+                        + bump;
                     // the wheel moves against the body, which is itself accelerated by what holds
                     // it up (`accel_body.z`, 9.81 m/s² standing, 0 in the air: a wheel off a kerb
                     // drops, a wheel of a body in the air does not) - semi-implicit Euler, stable
@@ -362,7 +572,14 @@ impl RigidBody {
                 }
                 let Some((_, slope, contact_dx)) = found[i].filter(|_| tyre_f > 0.0) else {
                     // off the ground the wheel keeps its turning (a brake stops it)
-                    let (drive_w, brake_w) = (if w.driven { drive_torque / r / driven } else { 0.0 }, brake.get(i).copied().unwrap_or(0.0).max(0.0));
+                    let (drive_w, brake_w) = (
+                        if w.driven {
+                            drive_torque / r / driven
+                        } else {
+                            0.0
+                        },
+                        brake.get(i).copied().unwrap_or(0.0).max(0.0),
+                    );
                     let before = w.spin;
                     w.spin += h * w.inertia_inv * (drive_w - sign(w.spin) * brake_w);
                     if before != 0.0 && sign(before) != sign(w.spin) && brake_w > 0.0 {
@@ -376,7 +593,10 @@ impl RigidBody {
                     // world): the strut still pushes on the body
                     let f = f_world + up * n;
                     force += f;
-                    torque += rot.inverse().mul_vec3((hub - self.position).as_vec3()).cross(rot.inverse().mul_vec3(f));
+                    torque += rot
+                        .inverse()
+                        .mul_vec3((hub - self.position).as_vec3())
+                        .cross(rot.inverse().mul_vec3(f));
                     continue;
                 };
                 // The ground pushes along its own normal; the strut carries the part along
@@ -390,7 +610,8 @@ impl RigidBody {
                 let carried = tyre_static.min(w.max_force * 2.0);
                 let step = (normal - up * normal.dot(up)) * (carried / along_up);
                 w.step_force += step.dot(fwd_h);
-                let contact = hub + (fwd_h * contact_dx.clamp(-r, r)).as_dvec3() - DVec3::Z * r as f64;
+                let contact =
+                    hub + (fwd_h * contact_dx.clamp(-r, r)).as_dvec3() - DVec3::Z * r as f64;
                 let r_world = (contact - self.position).as_vec3();
                 let v_point = self.velocity + omega_world.cross(r_world);
                 let v_long = v_point.dot(fwd);
@@ -403,8 +624,22 @@ impl RigidBody {
                     fwd,
                     right,
                     base: f_world + up * n + step,
-                    drive: if w.driven { drive_torque / r / driven } else { 0.0 },
-                    brake: brake.get(i).copied().unwrap_or(0.0).max(0.0) + self.rolling_resistance / n_wheels * if self.realistic { realism::rolling_scale(w.surface_now, v_long, tyre_f / w.rest_load.max(1.0)) } else { 1.0 },
+                    drive: if w.driven {
+                        drive_torque / r / driven
+                    } else {
+                        0.0
+                    },
+                    brake: brake.get(i).copied().unwrap_or(0.0).max(0.0)
+                        + self.rolling_resistance / n_wheels
+                            * if self.realistic {
+                                realism::rolling_scale(
+                                    w.surface_now,
+                                    v_long,
+                                    tyre_f / w.rest_load.max(1.0),
+                                )
+                            } else {
+                                1.0
+                            },
                     grip,
                     mu: self.friction * w.mu_scale,
                     v_long,
@@ -416,10 +651,18 @@ impl RigidBody {
             // body's axis and takes no side force.
             let fwd_flat = Vec3::new(body_fwd.x, body_fwd.y, 0.0).normalize_or(Vec3::Y);
             for d in &self.coupled {
-                let share = Vec3::new(d.dir.x, d.dir.y, 0.0).normalize_or(fwd_flat).dot(fwd_flat).max(0.0);
+                let share = Vec3::new(d.dir.x, d.dir.y, 0.0)
+                    .normalize_or(fwd_flat)
+                    .dot(fwd_flat)
+                    .max(0.0);
                 let r_world = rot.mul_vec3(d.point - self.cog);
                 let cap = self.friction * d.driven_load;
-                let drive = if d.driven_wheels > 0 { (drive_torque / d.radius.max(0.1) / driven * d.driven_wheels as f32).clamp(-cap, cap) } else { 0.0 };
+                let drive = if d.driven_wheels > 0 {
+                    (drive_torque / d.radius.max(0.1) / driven * d.driven_wheels as f32)
+                        .clamp(-cap, cap)
+                } else {
+                    0.0
+                };
                 contacts.push(Contact {
                     r: r_world,
                     fwd: body_fwd,
@@ -460,11 +703,26 @@ impl RigidBody {
                     outer += c.fwd * c.drive;
                 }
             }
-            let standing: Vec<usize> = (0..contacts.len()).filter(|&k| contacts[k].v_long.abs() <= STANDING && !contacts[k].wheel.is_some_and(|i| self.wheels[i].slipping)).collect();
+            let standing: Vec<usize> = (0..contacts.len())
+                .filter(|&k| {
+                    contacts[k].v_long.abs() <= STANDING
+                        && !contacts[k].wheel.is_some_and(|i| self.wheels[i].slipping)
+                })
+                .collect();
             let hold = |axis: Vec3, mass: f32, cap: &dyn Fn(&Contact) -> f32| -> Vec<f32> {
                 let need = -outer.dot(axis) - self.velocity.dot(axis) * mass / h;
                 let total: f32 = standing.iter().map(|&k| cap(&contacts[k])).sum();
-                standing.iter().map(|&k| if total > 1e-3 { (need * cap(&contacts[k]) / total).clamp(-cap(&contacts[k]), cap(&contacts[k])) } else { 0.0 }).collect()
+                standing
+                    .iter()
+                    .map(|&k| {
+                        if total > 1e-3 {
+                            (need * cap(&contacts[k]) / total)
+                                .clamp(-cap(&contacts[k]), cap(&contacts[k]))
+                        } else {
+                            0.0
+                        }
+                    })
+                    .collect()
             };
             let hold_long = hold(body_fwd, self.mass + towed, &|c| c.brake);
             // (the tyres' pull along the body, for the pitch lever below)
@@ -481,24 +739,34 @@ impl RigidBody {
                 let f_world = c.base + c.fwd * f_long;
                 long_sum += f_long * c.fwd.dot(body_fwd);
                 if let Some(i) = c.wheel {
-                    let wanted = if standing.contains(&k) { c.drive.signum() * (c.drive.abs() - c.brake).max(0.0) } else { f_long };
+                    let wanted = if standing.contains(&k) {
+                        c.drive.signum() * (c.drive.abs() - c.brake).max(0.0)
+                    } else {
+                        f_long
+                    };
                     self.wheels[i].advance_spin(c, wanted, c.mu, h);
                 }
                 force += f_world;
-                torque += rot.inverse().mul_vec3(c.r).cross(rot.inverse().mul_vec3(f_world));
+                torque += rot
+                    .inverse()
+                    .mul_vec3(c.r)
+                    .cross(rot.inverse().mul_vec3(f_world));
             }
             // Driving and braking pitch the body about a lever longer than the centre of
             // gravity's height over the road: Omsi.exe takes the tyres' forces at the hubs,
             // their radius more (0x7e46a5: (drive - brake) x d/2 besides [schwerpunkt] x
             // the pull), and not while the bus stands with its brakes holding (0x7e4660).
             if self.velocity.dot(body_fwd).abs() > 0.2 {
-                let r = self.wheels.iter().map(|w| w.radius).sum::<f32>() / self.wheels.len().max(1) as f32;
+                let r = self.wheels.iter().map(|w| w.radius).sum::<f32>()
+                    / self.wheels.len().max(1) as f32;
                 torque.x += long_sum * r;
             }
-            (force, torque) = self.hold_across(&contacts, &longs, force, torque, rot, body_fwd, towed, h);
+            (force, torque) =
+                self.hold_across(&contacts, &longs, force, torque, rot, body_fwd, towed, h);
             // integrate
             let along = force.dot(body_fwd);
-            let acc = (force - body_fwd * along) / self.mass + body_fwd * (along / (self.mass + towed));
+            let acc =
+                (force - body_fwd * along) / self.mass + body_fwd * (along / (self.mass + towed));
             accel_sum += rot.inverse().mul_vec3(acc - Vec3::new(0.0, 0.0, -9.81));
             self.velocity += acc * h;
             self.position += (self.velocity * h).as_dvec3();
@@ -521,7 +789,12 @@ impl RigidBody {
             // (every OMSI 2 bus already has its still-air drag in its brake script - bremse.osc
             // adds 9.5 m2 x cw 0.8 x 0.6 v2 to every wheel's brake force - so only what the weather
             // changes is added here: the wind and an air that is not 1.2 kg/m3)
-            let (f, t) = realism::wind_force(&self.aero, self.air_density, inv.mul_vec3(self.velocity), inv.mul_vec3(self.wind));
+            let (f, t) = realism::wind_force(
+                &self.aero,
+                self.air_density,
+                inv.mul_vec3(self.velocity),
+                inv.mul_vec3(self.wind),
+            );
             (rot.mul_vec3(f), t)
         } else {
             let v = self.velocity;
@@ -545,7 +818,12 @@ impl RigidBody {
             let side = (w.attach.x > 0.0) as u8;
             let at = self.road_s + w.attach.y as f64;
             let now = realism::roughness(w.surface_now, at, side);
-            w.rough = if w.surface_mix < 1.0 { realism::roughness(w.surface_was, at, side) * (1.0 - w.surface_mix) + now * w.surface_mix } else { now };
+            w.rough = if w.surface_mix < 1.0 {
+                realism::roughness(w.surface_was, at, side) * (1.0 - w.surface_mix)
+                    + now * w.surface_mix
+            } else {
+                now
+            };
         }
         (force, torque)
     }
@@ -559,7 +837,11 @@ impl RigidBody {
         // lagged every mouse and controller movement by up to 0.4 s.
         let kappa = steer.clamp(-1.0, 1.0) * self.inv_min_turn_radius;
         self.kappa = kappa;
-        let front = self.wheels.iter().map(|w| w.attach.y).fold(f32::MIN, f32::max);
+        let front = self
+            .wheels
+            .iter()
+            .map(|w| w.attach.y)
+            .fold(f32::MIN, f32::max);
         for w in self.wheels.iter_mut() {
             // each tyre square to the line from the centre of the turn to itself - the inner
             // one turned further than the outer (Ackermann). With both at the axle's angle the
@@ -567,15 +849,26 @@ impl RigidBody {
             // scrub ate the drive, 60 % steering left a twentieth of the push and full lock
             // none ("the engine revs but the bus gets slower the more I steer")
             let across = (1.0 - w.attach.x * kappa).max(0.2);
-            w.steer = ((w.attach.y - self.rot_pnt_long) * kappa / across).atan().clamp(-1.05, 1.05);
+            w.steer = ((w.attach.y - self.rot_pnt_long) * kappa / across)
+                .atan()
+                .clamp(-1.05, 1.05);
             w.steered = w.steer != 0.0;
         }
-        self.steer_deg = ((front - self.rot_pnt_long) * kappa).atan().clamp(-1.05, 1.05).to_degrees();
+        self.steer_deg = ((front - self.rot_pnt_long) * kappa)
+            .atan()
+            .clamp(-1.05, 1.05)
+            .to_degrees();
     }
 
     /// What each tyre finds this substep: the hub height it needs (with how steeply that
     /// rises and where), and the faces it cannot climb, which it keeps.
-    fn read_ground(&mut self, tyre: &impl Fn(&RigidWheel) -> (Vec3, Vec3, Vec3, DVec3, DVec3), rot: Quat, h: f32, probe: &dyn Fn(f64, f64, f64) -> GroundProbe) -> Vec<Option<(f64, f32, f32)>> {
+    fn read_ground(
+        &mut self,
+        tyre: &impl Fn(&RigidWheel) -> (Vec3, Vec3, Vec3, DVec3, DVec3),
+        rot: Quat,
+        h: f32,
+        probe: &dyn Fn(f64, f64, f64) -> GroundProbe,
+    ) -> Vec<Option<(f64, f32, f32)>> {
         let position = self.position;
         // What each tyre finds under and around it: the hub height it needs, how steeply
         // that rises as the wheel rolls on, and the faces it cannot climb. Steps up to
@@ -587,20 +880,36 @@ impl RigidBody {
             let w = &self.wheels[i];
             let (_, _, fwd_h, _, hub) = tyre(w);
             let r = w.radius;
-            let z_top = if w.ground_seen { w.ground_z + (CLIMB * r) as f64 } else { hub.z + 0.05 };
+            let z_top = if w.ground_seen {
+                w.ground_z + (CLIMB * r) as f64
+            } else {
+                hub.z + 0.05
+            };
             let wall_top = hub.z + WALL_HEIGHT;
             // faces are looked for as far ahead as the hub moves in a substep, so that
             // the first touch is already answered before the tyre is in the face
             let v_hub = self.velocity + rot.mul_vec3(self.omega).cross((hub - position).as_vec3());
-            let look = Vec2::new(v_hub.dot(fwd_h).abs(), v_hub.dot(Vec3::new(fwd_h.y, -fwd_h.x, 0.0)).abs()) * h;
+            let look = Vec2::new(
+                v_hub.dot(fwd_h).abs(),
+                v_hub.dot(Vec3::new(fwd_h.y, -fwd_h.x, 0.0)).abs(),
+            ) * h;
             let line = tyre_line(probe, hub, fwd_h, r, z_top, wall_top, look.x);
             let ground = match line.ground {
-                None if w.ground_seen => tyre_line(probe, hub, fwd_h, r, hub.z + 0.05, wall_top, look.x).ground,
+                None if w.ground_seen => {
+                    tyre_line(probe, hub, fwd_h, r, hub.z + 0.05, wall_top, look.x).ground
+                }
                 g => g,
             };
             // across the tread: a kerb under part of it (see `tread_step`)
-            let ground = ground.map(|(need, slope, x)| (need + tread_step(probe, hub, fwd_h, r, z_top), slope, x));
-            let walls = if self.wheel_walls { track_walls(probe, &w.walls, &line, hub, fwd_h, r, z_top, wall_top, look.y) } else { Vec::new() };
+            let ground = ground
+                .map(|(need, slope, x)| (need + tread_step(probe, hub, fwd_h, r, z_top), slope, x));
+            let walls = if self.wheel_walls {
+                track_walls(
+                    probe, &w.walls, &line, hub, fwd_h, r, z_top, wall_top, look.y,
+                )
+            } else {
+                Vec::new()
+            };
             found.push(ground);
             let w = &mut self.wheels[i];
             w.walls = walls;
@@ -610,7 +919,12 @@ impl RigidBody {
     }
 
     /// Stop the hubs at the faces the tyres meet (see `step_slice`).
-    fn stop_at_faces(&mut self, tyre: &impl Fn(&RigidWheel) -> (Vec3, Vec3, Vec3, DVec3, DVec3), rot: Quat, h: f32) {
+    fn stop_at_faces(
+        &mut self,
+        tyre: &impl Fn(&RigidWheel) -> (Vec3, Vec3, Vec3, DVec3, DVec3),
+        rot: Quat,
+        h: f32,
+    ) {
         // A face stops the hub at once: whatever would close on it within the substep is
         // taken away by an impulse at the hub, as the body's own collisions do (and it is
         // a crash like theirs). A spring alone gave way - a front wheel met at 30 km/h
@@ -643,7 +957,14 @@ impl RigidBody {
                         }
                         None => {
                             let point = rot.inverse().mul_vec3(r_hub - n * reach) + self.cog;
-                            self.wheel_impacts.push(Impact { point, speed: closing, energy: lost, obstacle: i, broke: false, push: -n });
+                            self.wheel_impacts.push(Impact {
+                                point,
+                                speed: closing,
+                                energy: lost,
+                                obstacle: i,
+                                broke: false,
+                                push: -n,
+                            });
                         }
                     }
                 }
@@ -654,7 +975,17 @@ impl RigidBody {
     /// The tyres' hold across, solved over the substep with everything else that pushes the
     /// body; returns the force and the torque with it.
     #[allow(clippy::too_many_arguments)]
-    fn hold_across(&mut self, contacts: &[Contact], longs: &[f32], mut force: Vec3, mut torque: Vec3, rot: Quat, body_fwd: Vec3, towed: f32, h: f32) -> (Vec3, Vec3) {
+    fn hold_across(
+        &mut self,
+        contacts: &[Contact],
+        longs: &[f32],
+        mut force: Vec3,
+        mut torque: Vec3,
+        rot: Quat,
+        body_fwd: Vec3,
+        towed: f32,
+        h: f32,
+    ) -> (Vec3, Vec3) {
         // Across the tyre: OMSI has no slip angle. Each axle takes away the sideways
         // speed it has - the bus follows its wheels exactly - with no more force than
         // the road's grip times the load on it; only beyond that does it slide
@@ -667,18 +998,26 @@ impl RigidBody {
             return self.slip_across(contacts, longs, force, torque, rot, h);
         }
         let (m, mt) = (self.mass, self.mass + towed);
-        let lin = |p: Vec3| (p - body_fwd * p.dot(body_fwd)) / m + body_fwd * (p.dot(body_fwd) / mt);
+        let lin =
+            |p: Vec3| (p - body_fwd * p.dot(body_fwd)) / m + body_fwd * (p.dot(body_fwd) / mt);
         let along = force.dot(body_fwd);
         let mut v = self.velocity + ((force - body_fwd * along) / m + body_fwd * (along / mt)) * h;
-        let mut w = self.omega + (torque - self.omega.cross(self.inertia * self.omega)) / self.inertia * h;
-        let lat: Vec<usize> = (0..contacts.len()).filter(|&k| contacts[k].lateral && contacts[k].grip > 0.0).collect();
+        let mut w =
+            self.omega + (torque - self.omega.cross(self.inertia * self.omega)) / self.inertia * h;
+        let lat: Vec<usize> = (0..contacts.len())
+            .filter(|&k| contacts[k].lateral && contacts[k].grip > 0.0)
+            .collect();
         // (following its wheels: hardly any speed across the body)
-        let gripped = self.velocity.dot(rot.mul_vec3(Vec3::X)).abs() < 0.5 && self.velocity.dot(body_fwd).abs() > 1.0;
+        let gripped = self.velocity.dot(rot.mul_vec3(Vec3::X)).abs() < 0.5
+            && self.velocity.dot(body_fwd).abs() > 1.0;
         let arms: Vec<(Vec3, f32)> = lat
             .iter()
             .map(|&k| {
                 let c = &contacts[k];
-                let mut rn = rot.inverse().mul_vec3(c.r).cross(rot.inverse().mul_vec3(c.right));
+                let mut rn = rot
+                    .inverse()
+                    .mul_vec3(c.r)
+                    .cross(rot.inverse().mul_vec3(c.right));
                 // (holding, no roll from the tyres' hold across: Omsi.exe then sets the
                 // sideways motion outright and rolls the body by the bend's pull alone,
                 // below - taken at the ground, every turn of the wheel kicked the body
@@ -694,7 +1033,16 @@ impl RigidBody {
         // no wheel spinning or locked (0x7e3c3b)
         let grip_all: f32 = lat.iter().map(|&k| contacts[k].mu * contacts[k].grip).sum();
         let v_fwd = self.velocity.dot(body_fwd);
-        let kappa = (self.steer_deg.to_radians().tan() / (self.wheels.iter().map(|w| w.attach.y).fold(f32::MIN, f32::max) - self.rot_pnt_long).abs().max(0.5)).abs();
+        let kappa = (self.steer_deg.to_radians().tan()
+            / (self
+                .wheels
+                .iter()
+                .map(|w| w.attach.y)
+                .fold(f32::MIN, f32::max)
+                - self.rot_pnt_long)
+                .abs()
+                .max(0.5))
+        .abs();
         let slipping = self.wheels.iter().any(|w| w.slipping && w.on_ground);
         // (and a wheel in the air: Omsi.exe drops the holding state there, 0x7e4b13)
         let airborne = omsi_suspension() && self.wheels.iter().any(|w| !w.on_ground);
@@ -721,7 +1069,15 @@ impl RigidBody {
             force += contacts[k].right * (j[q] / h);
             torque += arms[q].0 * (j[q] / h);
         }
-        if !self.holding && !slipping && lat.iter().all(|&k| (v + rot.mul_vec3(w).cross(contacts[k].r)).dot(contacts[k].right).abs() < 0.1) {
+        if !self.holding
+            && !slipping
+            && lat.iter().all(|&k| {
+                (v + rot.mul_vec3(w).cross(contacts[k].r))
+                    .dot(contacts[k].right)
+                    .abs()
+                    < 0.1
+            })
+        {
             self.holding = true;
         }
         // the bend's pull rolls the body out of it (0x7e4629: [schwerpunkt] x mass x
@@ -746,18 +1102,31 @@ impl RigidBody {
     /// not at once, lets its tail out when the rear tyres are overloaded, and why a braking
     /// wheel loses its hold across: none of it follows from OMSI's rule that the body follows
     /// its wheels exactly until the grip is passed. Realistic road physics off gives that back.
-    fn slip_across(&mut self, contacts: &[Contact], longs: &[f32], mut force: Vec3, mut torque: Vec3, rot: Quat, h: f32) -> (Vec3, Vec3) {
+    fn slip_across(
+        &mut self,
+        contacts: &[Contact],
+        longs: &[f32],
+        mut force: Vec3,
+        mut torque: Vec3,
+        rot: Quat,
+        h: f32,
+    ) -> (Vec3, Vec3) {
         let inv = rot.inverse();
         let omega_world = rot.mul_vec3(self.omega);
         let n = contacts.len().max(1) as f32;
         // a tyre in the air or off the ground has no patch: it starts afresh when it lands
         for (i, w) in self.wheels.iter_mut().enumerate() {
-            if !contacts.iter().any(|c| c.wheel == Some(i) && c.lateral && c.grip > 0.0) {
+            if !contacts
+                .iter()
+                .any(|c| c.wheel == Some(i) && c.lateral && c.grip > 0.0)
+            {
                 w.lat_defl = 0.0;
             }
         }
         for (k, c) in contacts.iter().enumerate() {
-            let Some(i) = c.wheel.filter(|_| c.lateral && c.grip > 0.0) else { continue };
+            let Some(i) = c.wheel.filter(|_| c.lateral && c.grip > 0.0) else {
+                continue;
+            };
             let v_pt = self.velocity + omega_world.cross(c.r);
             let (v_lat, v_lng) = (v_pt.dot(c.right), v_pt.dot(c.fwd));
             let w = &mut self.wheels[i];
@@ -765,7 +1134,8 @@ impl RigidBody {
             // load (a tyre loaded far beyond what it was built for gives less per newton)
             let n_tyre = c.grip;
             let rated = w.max_force.max(1.0);
-            let c_alpha = tyre::CORNERING * n_tyre * (rated / n_tyre.max(0.2 * rated)).powf(0.15).min(1.5);
+            let c_alpha =
+                tyre::CORNERING * n_tyre * (rated / n_tyre.max(0.2 * rated)).powf(0.15).min(1.5);
             let sigma = tyre::RELAXATION * w.radius.max(0.2);
             let k_y = c_alpha / sigma;
             // damping: critical for the vehicle's share at this tyre, at a standstill only
@@ -778,7 +1148,11 @@ impl RigidBody {
             // the friction ellipse: what the longitudinal force takes the side cannot
             let lng = (longs.get(k).copied().unwrap_or(0.0) / grip.max(1.0)).clamp(-1.0, 1.0);
             let cap = grip * (1.0 - lng * lng).max(0.0).sqrt();
-            let damping = if v_lng.abs() < 3.0 { c_y * rate * (1.0 - v_lng.abs() / 3.0) } else { 0.0 };
+            let damping = if v_lng.abs() < 3.0 {
+                c_y * rate * (1.0 - v_lng.abs() / 3.0)
+            } else {
+                0.0
+            };
             let mut f = -(k_y * w.lat_defl + damping);
             if f.abs() > cap {
                 f = f.signum() * cap;
@@ -827,12 +1201,23 @@ impl RigidBody {
     /// that drives into the bus is still there after its answer - the bus only steps a
     /// millimetre out of its way and takes none of its speed - and was taken as the same
     /// crash four times over.
-    pub fn collide(&mut self, bb: [f32; 6], obstacles: &[Obb], skip: &dyn Fn(usize) -> bool, dt: f32) -> Vec<Impact> {
+    pub fn collide(
+        &mut self,
+        bb: [f32; 6],
+        obstacles: &[Obb],
+        skip: &dyn Fn(usize) -> bool,
+        dt: f32,
+    ) -> Vec<Impact> {
         let mut impacts: Vec<Impact> = Vec::new();
         let mut answered: Vec<usize> = Vec::new();
         {
             let me = self.body_box(bb);
-            let touching: Vec<i64> = obstacles.iter().enumerate().filter(|(i, o)| o.id >= 0 && o.mass <= 0.0 && !skip(*i) && me.contact(o).is_some()).map(|(_, o)| o.id).collect();
+            let touching: Vec<i64> = obstacles
+                .iter()
+                .enumerate()
+                .filter(|(i, o)| o.id >= 0 && o.mass <= 0.0 && !skip(*i) && me.contact(o).is_some())
+                .map(|(_, o)| o.id)
+                .collect();
             match self.spawned_inside.as_mut() {
                 None => self.spawned_inside = Some(touching),
                 // (once out of one, it counts again)
@@ -857,7 +1242,10 @@ impl RigidBody {
                     ONCE.call_once(|| log::warn!("vehicle physics: obstacle {i} (id {}) touches with no number (centre {:?}, heading {}); left out", o.id, o.center, o.heading));
                     continue;
                 }
-                let rel = (glam::DVec2::new(self.velocity.x as f64, self.velocity.y as f64) - o.velocity).length() + self.omega.z.abs() as f64 * 6.0;
+                let rel = (glam::DVec2::new(self.velocity.x as f64, self.velocity.y as f64)
+                    - o.velocity)
+                    .length()
+                    + self.omega.z.abs() as f64 * 6.0;
                 if c.depth > 0.5 + rel * dt as f64 * 2.0 {
                     continue;
                 }
@@ -892,8 +1280,16 @@ impl RigidBody {
             // The scripts are told where the bodies meet, low down where the bumpers are
             // (the stock buses damage their rear engine only below 1.10 m), not where the
             // blow is taken: at the centre of gravity every wall and car read 1.2-1.3 m.
-            let seen = DVec3::new(c.point.x, c.point.y, crate::collision::impact_height(c.z0, c.z1));
-            let point = self.orientation.inverse().mul_vec3((seen - self.position).as_vec3()) + self.cog;
+            let seen = DVec3::new(
+                c.point.x,
+                c.point.y,
+                crate::collision::impact_height(c.z0, c.z1),
+            );
+            let point = self
+                .orientation
+                .inverse()
+                .mul_vec3((seen - self.position).as_vec3())
+                + self.cog;
             if let Some((mass_t, load_kn)) = o.pole.filter(|_| vn < 0.0) {
                 // A post breaks at its foot when stopping the vehicle would take more than it
                 // can bear; the vehicle then only loses what it takes to throw the post.
@@ -902,7 +1298,14 @@ impl RigidBody {
                     let m_pole = (mass_t * 1000.0).max(5.0);
                     let j = -(1.0 + RESTITUTION) * vn / (k_n + 1.0 / m_pole);
                     self.apply_impulse(r, n * j);
-                    impacts.push(Impact { point, speed: -vn, energy: (before - self.kinetic_energy()).max(0.0), obstacle: i, broke: true, push: -n });
+                    impacts.push(Impact {
+                        point,
+                        speed: -vn,
+                        energy: (before - self.kinetic_energy()).max(0.0),
+                        obstacle: i,
+                        broke: true,
+                        push: -n,
+                    });
                     continue;
                 }
             }
@@ -916,7 +1319,11 @@ impl RigidBody {
             // drag it along (not even creeping, below the crash speed). Out of a car that
             // stands or draws away the bus comes all the way: it no longer hangs in it.
             let approaching = o.mass > 0.0 && v_other.dot(n) > 0.0;
-            let out = if approaching { (c.depth as f32).min((-vn).max(0.0) * dt + 0.001) } else { c.depth as f32 + 0.001 };
+            let out = if approaching {
+                (c.depth as f32).min((-vn).max(0.0) * dt + 0.001)
+            } else {
+                c.depth as f32 + 0.001
+            };
             self.position += (n * out).as_dvec3();
             if vn_full >= 0.0 {
                 continue;
@@ -929,14 +1336,23 @@ impl RigidBody {
             let vt = Vec3::new(vt.x, vt.y, 0.0);
             if vt.length() > 1e-3 {
                 let t = vt.normalize();
-                let jt = (vt.length() / (self.inv_mass_at(r, t) + inv_other)).min(SCRAPE_FRICTION * j);
+                let jt =
+                    (vt.length() / (self.inv_mass_at(r, t) + inv_other)).min(SCRAPE_FRICTION * j);
                 p -= t * jt;
             }
             self.apply_impulse(r, p);
             // what the crash destroyed: the closing motion of the two, less what bounced back
             // (the bus alone may even gain energy when the other one does the hitting)
-            let energy = (before - self.kinetic_energy()).max(0.5 * vn_full * vn_full * (1.0 - e * e) / k_n);
-            impacts.push(Impact { point, speed: -vn_full, energy, obstacle: i, broke: false, push: -n });
+            let energy =
+                (before - self.kinetic_energy()).max(0.5 * vn_full * vn_full * (1.0 - e * e) / k_n);
+            impacts.push(Impact {
+                point,
+                speed: -vn_full,
+                energy,
+                obstacle: i,
+                broke: false,
+                push: -n,
+            });
         }
         // (and should a crash still come out at NaN, the bus stays where it was before it -
         // step() only guards its own motion)
@@ -958,7 +1374,20 @@ impl RigidBody {
 /// Omsi.exe's strut for one wheel (see `RigidBody::step_slice`): returns the tyre's force,
 /// its static part and the strut's force.
 #[allow(clippy::too_many_arguments)]
-fn omsi_strut(w: &mut RigidWheel, r: f32, hub0: DVec3, position: DVec3, cog: Vec3, body_cog: Vec3, rot: Quat, up: Vec3, velocity: Vec3, omega_world: Vec3, h: f32, probe: &dyn Fn(f64, f64, f64) -> GroundProbe) -> (f32, f32, f32) {
+fn omsi_strut(
+    w: &mut RigidWheel,
+    r: f32,
+    hub0: DVec3,
+    position: DVec3,
+    cog: Vec3,
+    body_cog: Vec3,
+    rot: Quat,
+    up: Vec3,
+    velocity: Vec3,
+    omega_world: Vec3,
+    h: f32,
+    probe: &dyn Fn(f64, f64, f64) -> GroundProbe,
+) -> (f32, f32, f32) {
     // Omsi.exe's suspension (0x7e47aa..0x7e4de8): the body hangs straight on
     // the ground point under each wheel. The spring pushes by how far the
     // ground lies over the wheel's unloaded place, times `Axle_Springfactor`
@@ -981,8 +1410,13 @@ fn omsi_strut(w: &mut RigidWheel, r: f32, hub0: DVec3, position: DVec3, cog: Vec
     // measured straight up. Measured from the hub less the `.bus` file's tyre
     // radius instead, a mod whose tyre mesh is larger than that radius stood
     // with its wheels drawn sunk a few centimetres into the road.
-    let plane0 = position + rot.mul_vec3(Vec3::new(w.attach.x, w.attach.y, 0.0) - cog).as_dvec3();
-    let under = probe(plane0.x, plane0.y, top).below.or_else(|| probe(plane0.x, plane0.y, plane0.z + 3.0).below);
+    let plane0 = position
+        + rot
+            .mul_vec3(Vec3::new(w.attach.x, w.attach.y, 0.0) - cog)
+            .as_dvec3();
+    let under = probe(plane0.x, plane0.y, top)
+        .below
+        .or_else(|| probe(plane0.x, plane0.y, plane0.z + 3.0).below);
     // (the road's own unevenness lifts the ground under the tyre; the ground itself stays
     // what it is for everything that asks where it lies)
     let t = under.map(|g| (g - plane0.z) as f32 + w.rough);
@@ -996,7 +1430,8 @@ fn omsi_strut(w: &mut RigidWheel, r: f32, hub0: DVec3, position: DVec3, cog: Vec
     if let Some(t) = t {
         // (a coil strut is this and nothing else: `Strut::spring` is `k * t` for it)
         if w.strut.kind == omsi_vehicle::vehicle::SuspensionKind::Air && k > 1.0 {
-            w.strut.level(k, t, w.rest_load / k, h, w.rest_load.max(1.0));
+            w.strut
+                .level(k, t, w.rest_load / k, h, w.rest_load.max(1.0));
         }
         let spring = w.strut.spring(k, t);
         if spring >= 0.0 {
@@ -1005,11 +1440,19 @@ fn omsi_strut(w: &mut RigidWheel, r: f32, hub0: DVec3, position: DVec3, cog: Vec
     }
     let travel = t.unwrap_or(-DROOP);
     let full = if k > 1.0 { w.max_force / k } else { BUMP };
-    w.compression_rate = if w.touch.is_some() { (travel.clamp(-DROOP, full) - w.compression) / h } else { 0.0 };
+    w.compression_rate = if w.touch.is_some() {
+        (travel.clamp(-DROOP, full) - w.compression) / h
+    } else {
+        0.0
+    };
     w.compression = travel.clamp(-DROOP, full);
     w.touch = t;
     let on = t.is_some_and(|t| k * t >= 0.0);
     w.on_ground = on;
     w.load = n.max(0.0);
-    (if on { n.max(0.0) } else { 0.0 }, if on { n.max(0.0) } else { 0.0 }, n)
+    (
+        if on { n.max(0.0) } else { 0.0 },
+        if on { n.max(0.0) } else { 0.0 },
+        n,
+    )
 }

@@ -11,7 +11,11 @@ pub struct ArcRule {
 
 impl Default for ArcRule {
     fn default() -> Self {
-        Self { chance: 1.0, scale: 1.0, min_amps: 3.0 }
+        Self {
+            chance: 1.0,
+            scale: 1.0,
+            min_amps: 3.0,
+        }
     }
 }
 

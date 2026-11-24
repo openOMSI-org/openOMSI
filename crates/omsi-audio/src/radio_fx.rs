@@ -19,7 +19,11 @@ impl RadioFxParams {
     /// The amounts as the settings give them, each cut to 0..1 (a NaN is none).
     pub fn clamped(self) -> RadioFxParams {
         let c = |v: f32| if v > 0.0 { v.min(1.0) } else { 0.0 };
-        RadioFxParams { speaker: c(self.speaker), hiss: c(self.hiss), dropouts: c(self.dropouts) }
+        RadioFxParams {
+            speaker: c(self.speaker),
+            hiss: c(self.hiss),
+            dropouts: c(self.dropouts),
+        }
     }
 
     pub fn is_off(&self) -> bool {
@@ -41,14 +45,20 @@ impl Biquad {
     pub fn low_pass(fc: f32, rate: f32) -> Biquad {
         let (cos, alpha) = Self::omega(fc, rate);
         let b1 = 1.0 - cos;
-        Self::normalised([b1 / 2.0, b1, b1 / 2.0], [1.0 + alpha, -2.0 * cos, 1.0 - alpha])
+        Self::normalised(
+            [b1 / 2.0, b1, b1 / 2.0],
+            [1.0 + alpha, -2.0 * cos, 1.0 - alpha],
+        )
     }
 
     /// A Butterworth high-pass at `fc` Hz.
     pub fn high_pass(fc: f32, rate: f32) -> Biquad {
         let (cos, alpha) = Self::omega(fc, rate);
         let b1 = 1.0 + cos;
-        Self::normalised([b1 / 2.0, -b1, b1 / 2.0], [1.0 + alpha, -2.0 * cos, 1.0 - alpha])
+        Self::normalised(
+            [b1 / 2.0, -b1, b1 / 2.0],
+            [1.0 + alpha, -2.0 * cos, 1.0 - alpha],
+        )
     }
 
     fn omega(fc: f32, rate: f32) -> (f32, f32) {
@@ -58,7 +68,11 @@ impl Biquad {
     }
 
     fn normalised(b: [f32; 3], a: [f32; 3]) -> Biquad {
-        Biquad { b: b.map(|x| x / a[0]), a: [a[1] / a[0], a[2] / a[0]], z: [0.0; 2] }
+        Biquad {
+            b: b.map(|x| x / a[0]),
+            a: [a[1] / a[0], a[2] / a[0]],
+            z: [0.0; 2],
+        }
     }
 
     /// The same filter with new coefficients, its memory kept (no click when they change).
@@ -180,7 +194,8 @@ impl RadioFx {
                 if self.signal_target < 1.0 {
                     self.signal_target = 1.0;
                     let mean = 12.0 / p.dropouts;
-                    self.signal_left = (-(1.0 - self.random()).max(1e-6).ln() * mean * rate) as u32 + 1;
+                    self.signal_left =
+                        (-(1.0 - self.random()).max(1e-6).ln() * mean * rate) as u32 + 1;
                 } else {
                     self.signal_target = 0.04 + 0.2 * self.random();
                     self.signal_left = ((0.15 + 1.05 * self.random()) * rate) as u32;
@@ -247,9 +262,15 @@ mod tests {
         let mut lp = Biquad::low_pass(1_000.0, RATE as f32);
         assert!((db(gain_of(&mut |x| lp.process(x), 1_000.0)) + 3.01).abs() < 0.1);
         let mut lp = Biquad::low_pass(1_000.0, RATE as f32);
-        assert!(db(gain_of(&mut |x| lp.process(x), 100.0)).abs() < 0.05, "the pass band is flat");
+        assert!(
+            db(gain_of(&mut |x| lp.process(x), 100.0)).abs() < 0.05,
+            "the pass band is flat"
+        );
         let mut lp = Biquad::low_pass(1_000.0, RATE as f32);
-        assert!(db(gain_of(&mut |x| lp.process(x), 10_000.0)) < -38.0, "12 dB an octave: some 40 dB a decade");
+        assert!(
+            db(gain_of(&mut |x| lp.process(x), 10_000.0)) < -38.0,
+            "12 dB an octave: some 40 dB a decade"
+        );
         let mut hp = Biquad::high_pass(300.0, RATE as f32);
         assert!((db(gain_of(&mut |x| hp.process(x), 300.0)) + 3.01).abs() < 0.1);
         let mut hp = Biquad::high_pass(300.0, RATE as f32);
@@ -259,13 +280,39 @@ mod tests {
     #[test]
     fn nothing_is_made_for_effects_all_at_zero() {
         assert!(RadioFx::new(RadioFxParams::default(), RATE).is_none());
-        assert!(RadioFx::new(RadioFxParams { speaker: -1.0, hiss: f32::NAN, dropouts: 0.0 }, RATE).is_none());
-        assert!(RadioFx::new(RadioFxParams { hiss: 0.1, ..Default::default() }, RATE).is_some());
+        assert!(
+            RadioFx::new(
+                RadioFxParams {
+                    speaker: -1.0,
+                    hiss: f32::NAN,
+                    dropouts: 0.0
+                },
+                RATE
+            )
+            .is_none()
+        );
+        assert!(
+            RadioFx::new(
+                RadioFxParams {
+                    hiss: 0.1,
+                    ..Default::default()
+                },
+                RATE
+            )
+            .is_some()
+        );
     }
 
     #[test]
     fn a_cheap_speaker_keeps_the_voice_band_and_loses_bass_and_treble() {
-        let mut fx = RadioFx::new(RadioFxParams { speaker: 1.0, ..Default::default() }, RATE).unwrap();
+        let mut fx = RadioFx::new(
+            RadioFxParams {
+                speaker: 1.0,
+                ..Default::default()
+            },
+            RATE,
+        )
+        .unwrap();
         // (quiet, so that the saturation stays out of it)
         let mut run = |hz: f32| {
             fx.hp = [Biquad::default(); 2].map(|b| b.retuned(fx.hp[0]));
@@ -281,7 +328,14 @@ mod tests {
 
     #[test]
     fn the_speaker_rounds_off_loud_peaks_only() {
-        let mut fx = RadioFx::new(RadioFxParams { speaker: 1.0, ..Default::default() }, RATE).unwrap();
+        let mut fx = RadioFx::new(
+            RadioFxParams {
+                speaker: 1.0,
+                ..Default::default()
+            },
+            RATE,
+        )
+        .unwrap();
         let mut peak = 0.0f32;
         for i in 0..RATE {
             let x = (2.0 * std::f32::consts::PI * 1_000.0 * i as f32 / RATE as f32).sin();
@@ -292,20 +346,35 @@ mod tests {
 
     #[test]
     fn hiss_on_silence_is_quiet_and_bright() {
-        let mut fx = RadioFx::new(RadioFxParams { hiss: 1.0, ..Default::default() }, RATE).unwrap();
+        let mut fx = RadioFx::new(
+            RadioFxParams {
+                hiss: 1.0,
+                ..Default::default()
+            },
+            RATE,
+        )
+        .unwrap();
         let out: Vec<f32> = (0..RATE).map(|_| fx.process(0.0, 0.0).0).collect();
         let rms = (out.iter().map(|x| x * x).sum::<f32>() / out.len() as f32).sqrt();
         assert!(rms > 0.005 && rms < 0.06, "{rms}");
         assert!(out.iter().all(|x| x.abs() < 0.5));
         // bright: neighbouring samples hardly alike (white noise's correlation is 0, a
         // low rumble's near 1)
-        let corr: f32 = out.windows(2).map(|w| w[0] * w[1]).sum::<f32>() / out.iter().map(|x| x * x).sum::<f32>();
+        let corr: f32 = out.windows(2).map(|w| w[0] * w[1]).sum::<f32>()
+            / out.iter().map(|x| x * x).sum::<f32>();
         assert!(corr < 0.5, "{corr}");
     }
 
     #[test]
     fn dropouts_come_now_and_then_and_hiss_while_the_signal_is_gone() {
-        let mut fx = RadioFx::new(RadioFxParams { dropouts: 1.0, ..Default::default() }, RATE).unwrap();
+        let mut fx = RadioFx::new(
+            RadioFxParams {
+                dropouts: 1.0,
+                ..Default::default()
+            },
+            RATE,
+        )
+        .unwrap();
         // a minute of a steady tone: most of it heard as it is, a few moments of it lost
         let (mut lost, mut clear) = (0usize, 0usize);
         for _ in 0..60 * RATE {
@@ -323,12 +392,25 @@ mod tests {
 
     #[test]
     fn new_amounts_keep_the_filters_running() {
-        let mut fx = RadioFx::new(RadioFxParams { speaker: 0.5, ..Default::default() }, RATE).unwrap();
+        let mut fx = RadioFx::new(
+            RadioFxParams {
+                speaker: 0.5,
+                ..Default::default()
+            },
+            RATE,
+        )
+        .unwrap();
         for _ in 0..100 {
             fx.process(0.3, 0.3);
         }
         let z = fx.hp[0].z;
-        fx.set(RadioFxParams { speaker: 0.8, ..Default::default() }, RATE);
+        fx.set(
+            RadioFxParams {
+                speaker: 0.8,
+                ..Default::default()
+            },
+            RATE,
+        );
         assert_eq!(fx.hp[0].z, z);
         assert_eq!(fx.params().speaker, 0.8);
     }

@@ -7,7 +7,9 @@ impl Model {
     /// is bound to a page with `[useHtmlTexture]`, or with `[useScriptTexture]` naming
     /// the page's index. Every consumer of a page asks here.
     pub fn html_page(&self, script_index: usize) -> Option<&HtmlTextureDef> {
-        self.html_textures.iter().find(|h| h.script_index == script_index)
+        self.html_textures
+            .iter()
+            .find(|h| h.script_index == script_index)
     }
 
     /// Whether that page declares itself a surface (`lit` after its path): the word is

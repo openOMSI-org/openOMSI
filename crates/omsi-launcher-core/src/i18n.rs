@@ -1,12 +1,15 @@
+use omsi_cfg::template::Index;
 use std::collections::HashMap;
 use std::fmt::Display;
-use omsi_cfg::template::Index;
 use std::sync::{Arc, Mutex, OnceLock};
 
 pub static TABLES: &str = concat!(
-    include_str!("../../omsi-app/locales/app.yml"), "\n",
-    include_str!("../../omsi-app/locales/storage.yml"), "\n",
-    include_str!("../../omsi-app/locales/graphics.yml"), "\n",
+    include_str!("../../omsi-app/locales/app.yml"),
+    "\n",
+    include_str!("../../omsi-app/locales/storage.yml"),
+    "\n",
+    include_str!("../../omsi-app/locales/graphics.yml"),
+    "\n",
     include_str!("../../omsi-app/locales/server_fleet.yml"),
 );
 
@@ -67,11 +70,15 @@ pub fn pairs(text: &str) -> HashMap<String, String> {
         .filter_map(|line| {
             // the key's closing quote: the first `"` not escaped by a `\`
             let mut escaped = false;
-            let end = line.char_indices().skip(1).find(|&(_, c)| {
-                let close = c == '"' && !escaped;
-                escaped = c == '\\' && !escaped;
-                close
-            })?.0;
+            let end = line
+                .char_indices()
+                .skip(1)
+                .find(|&(_, c)| {
+                    let close = c == '"' && !escaped;
+                    escaped = c == '\\' && !escaped;
+                    close
+                })?
+                .0;
             let (key, rest) = line.split_at(end + 1);
             Some((unquote(key)?, unquote(rest.strip_prefix(": ")?)?))
         })
@@ -98,7 +105,9 @@ fn language() -> &'static str {
     if cfg!(test) {
         return "";
     }
-    let at = std::fs::metadata(crate::data_dir().join("settings.cfg")).and_then(|m| m.modified()).ok();
+    let at = std::fs::metadata(crate::data_dir().join("settings.cfg"))
+        .and_then(|m| m.modified())
+        .ok();
     let mut g = SEEN.lock().unwrap_or_else(|e| e.into_inner());
     match *g {
         Some((t, l)) if t == at => l,
@@ -131,11 +140,18 @@ pub fn tr(text: &str) -> String {
         }
     };
     let (t, index) = &*words;
-    t.get(text).cloned().or_else(|| index.templated(text, |k| t.get(k).cloned())).unwrap_or_else(|| text.to_string())
+    t.get(text)
+        .cloned()
+        .or_else(|| index.templated(text, |k| t.get(k).cloned()))
+        .unwrap_or_else(|| text.to_string())
 }
 
 pub fn tr_said(text: &str) -> String {
-    for key in ["the host turned us away: {reason}", "the host sent you away: {reason}", "Host's mods could not be fetched: {e}"] {
+    for key in [
+        "the host turned us away: {reason}",
+        "the host sent you away: {reason}",
+        "Host's mods could not be fetched: {e}",
+    ] {
         let (head, hole) = key.rsplit_once('{').unwrap_or((key, ""));
         if let Some(value) = text.strip_prefix(head) {
             return tr(key).replace(&format!("{{{hole}"), &tr(value));
@@ -145,7 +161,9 @@ pub fn tr_said(text: &str) -> String {
 }
 
 pub fn fill(text: String, vars: &[(&str, &dyn Display)]) -> String {
-    vars.iter().fold(text, |s, (k, v)| s.replace(&format!("{{{k}}}"), &v.to_string()))
+    vars.iter().fold(text, |s, (k, v)| {
+        s.replace(&format!("{{{k}}}"), &v.to_string())
+    })
 }
 
 pub fn trf(text: &str, vars: &[(&str, &dyn Display)]) -> String {
@@ -175,8 +193,12 @@ mod tests {
         for lang in langs.split(' ') {
             let table = super::language_table(lang);
             for text in texts {
-                assert!(table.get(text).is_some_and(|value| !value.is_empty() && value != text),
-                    "{lang}: missing translation for {text}");
+                assert!(
+                    table
+                        .get(text)
+                        .is_some_and(|value| !value.is_empty() && value != text),
+                    "{lang}: missing translation for {text}"
+                );
             }
         }
     }
@@ -212,7 +234,11 @@ mod tests {
         // (by lines: a Windows checkout has the tables with CRLF endings)
         for text in texts {
             let key = format!("\"{text}\":");
-            assert_eq!(super::TABLES.lines().filter(|l| *l == key).count(), 1, "{text}");
+            assert_eq!(
+                super::TABLES.lines().filter(|l| *l == key).count(),
+                1,
+                "{text}"
+            );
         }
     }
 }

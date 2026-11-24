@@ -33,7 +33,13 @@ pub enum TransportMode {
 }
 
 impl TransportMode {
-    pub const ALL: [TransportMode; 5] = [TransportMode::Bus, TransportMode::Tram, TransportMode::Railway, TransportMode::Metro, TransportMode::Trolleybus];
+    pub const ALL: [TransportMode; 5] = [
+        TransportMode::Bus,
+        TransportMode::Tram,
+        TransportMode::Railway,
+        TransportMode::Metro,
+        TransportMode::Trolleybus,
+    ];
 
     /// The mode's name as the launcher and the log show it.
     pub fn name(self) -> &'static str {
@@ -59,7 +65,9 @@ impl TransportMode {
 
     /// The mode a keyword such as `bus_transport` declares.
     pub fn from_keyword(k: &str) -> Option<TransportMode> {
-        TransportMode::ALL.into_iter().find(|m| m.keyword().eq_ignore_ascii_case(k.trim()))
+        TransportMode::ALL
+            .into_iter()
+            .find(|m| m.keyword().eq_ignore_ascii_case(k.trim()))
     }
 
     /// The mode a free-form name stands for (`tram`, `Strassenbahn`, `u-bahn`, ...).
@@ -67,16 +75,23 @@ impl TransportMode {
         match s.trim().to_ascii_lowercase().as_str() {
             "bus" | "coach" => Some(TransportMode::Bus),
             "tram" | "streetcar" | "strassenbahn" | "tramway" => Some(TransportMode::Tram),
-            "railway" | "rail" | "train" | "sbahn" | "s-bahn" | "freight" => Some(TransportMode::Railway),
+            "railway" | "rail" | "train" | "sbahn" | "s-bahn" | "freight" => {
+                Some(TransportMode::Railway)
+            }
             "metro" | "subway" | "ubahn" | "u-bahn" | "underground" => Some(TransportMode::Metro),
-            "trolleybus" | "trolley" | "trolleybuses" | "trolleycoach" => Some(TransportMode::Trolleybus),
+            "trolleybus" | "trolley" | "trolleybuses" | "trolleycoach" => {
+                Some(TransportMode::Trolleybus)
+            }
             _ => None,
         }
     }
 
     /// Runs on rails.
     pub fn is_rail(self) -> bool {
-        matches!(self, TransportMode::Tram | TransportMode::Railway | TransportMode::Metro)
+        matches!(
+            self,
+            TransportMode::Tram | TransportMode::Railway | TransportMode::Metro
+        )
     }
 
     /// Runs on the road (buses, trolleybuses).
@@ -123,7 +138,9 @@ impl ModeSet {
     }
 
     pub fn iter(self) -> impl Iterator<Item = TransportMode> {
-        TransportMode::ALL.into_iter().filter(move |m| self.contains(*m))
+        TransportMode::ALL
+            .into_iter()
+            .filter(move |m| self.contains(*m))
     }
 
     /// The first (lowest) mode of the set.
@@ -192,7 +209,15 @@ pub fn admit(map: ModeSet, vehicle: ModeSet, declared: bool) -> Admission {
         return Admission::Allowed;
     }
     let how = if declared { "is made for" } else { "counts as" };
-    Admission::Refused(format!("This map is made for {} only; the vehicle {how} {}.", map.describe(), if vehicle.is_empty() { "nothing known".to_string() } else { vehicle.describe() }))
+    Admission::Refused(format!(
+        "This map is made for {} only; the vehicle {how} {}.",
+        map.describe(),
+        if vehicle.is_empty() {
+            "nothing known".to_string()
+        } else {
+            vehicle.describe()
+        }
+    ))
 }
 
 #[cfg(test)]
@@ -204,7 +229,10 @@ mod tests {
     fn keywords_round_trip() {
         for m in TransportMode::ALL {
             assert_eq!(TransportMode::from_keyword(m.keyword()), Some(m));
-            assert_eq!(TransportMode::from_keyword(&m.keyword().to_ascii_uppercase()), Some(m));
+            assert_eq!(
+                TransportMode::from_keyword(&m.keyword().to_ascii_uppercase()),
+                Some(m)
+            );
         }
         assert_eq!(TransportMode::from_keyword("rail_class"), None);
     }
@@ -215,7 +243,10 @@ mod tests {
         assert_eq!(TransportMode::from_name("u-bahn"), Some(Metro));
         assert_eq!(TransportMode::from_name("train"), Some(Railway));
         assert_eq!(TransportMode::from_name("spaceship"), None);
-        assert_eq!(ModeSet::parse_names("tram, metro").describe(), "tram, metro");
+        assert_eq!(
+            ModeSet::parse_names("tram, metro").describe(),
+            "tram, metro"
+        );
     }
 
     #[test]
@@ -236,7 +267,12 @@ mod tests {
 
     #[test]
     fn refusal_names_both_sides() {
-        let Admission::Refused(t) = admit(ModeSet::of(Metro), ModeSet::of(Bus), false) else { panic!() };
-        assert!(t.contains("metro") && t.contains("bus") && t.contains("counts as"), "{t}");
+        let Admission::Refused(t) = admit(ModeSet::of(Metro), ModeSet::of(Bus), false) else {
+            panic!()
+        };
+        assert!(
+            t.contains("metro") && t.contains("bus") && t.contains("counts as"),
+            "{t}"
+        );
     }
 }

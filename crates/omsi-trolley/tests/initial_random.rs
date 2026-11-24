@@ -13,7 +13,10 @@ fn net(way: &str) -> WireNet {
 
 #[test]
 fn a_random_switch_is_straight_until_drawn_and_the_draw_leaves_fixed_ones_alone() {
-    assert!(!net("random").switch_branch(0), "parsing alone is deterministic");
+    assert!(
+        !net("random").switch_branch(0),
+        "parsing alone is deterministic"
+    );
     for way in ["straight", "branch"] {
         let mut n = net(way);
         n.draw_random_switches();

@@ -20,7 +20,11 @@ pub trait LanHost {
     /// `weather` is a weather report (METAR): Some(whether the game can read it).
     fn weather_report(&self, weather: &str) -> Option<bool>;
     /// The depot file of vehicle type `ty` for the map and `cfg`'s depot choice.
-    fn depot_of(&self, cfg: &LanConfig, ty: &omsi_sim::VehicleType) -> Option<Arc<omsi_vehicle::Hof>>;
+    fn depot_of(
+        &self,
+        cfg: &LanConfig,
+        ty: &omsi_sim::VehicleType,
+    ) -> Option<Arc<omsi_vehicle::Hof>>;
     /// Another player's vehicle of type `ty` in paint scheme `scheme`, made as the game
     /// makes its vehicles (fonts, text textures, coupled rear sections), on `clock`; and
     /// the depot file its destination display is set from. Set the owner-only script texture
@@ -36,7 +40,13 @@ pub trait LanHost {
         fonts: Option<crate::mods::vehicles::SharedFonts>,
     ) -> (omsi_sim::VehicleInstance, Option<Arc<omsi_vehicle::Hof>>);
     /// Set a vehicle's line and destination displays as the timetable sets an AI bus's.
-    fn set_destination(&self, v: &mut omsi_sim::VehicleInstance, hof: Option<&omsi_vehicle::Hof>, line: &str, destination: &str);
+    fn set_destination(
+        &self,
+        v: &mut omsi_sim::VehicleInstance,
+        hof: Option<&omsi_vehicle::Hof>,
+        line: &str,
+        destination: &str,
+    );
     /// The game's version, for the session's public listing.
     fn version(&self) -> String;
     /// Offer the buses a joining player may choose (`only`, else every bus installed).

@@ -426,9 +426,8 @@ fn fit_profiles(
         return Ok(build_terrain_mesh(terrain));
     }
     let terrain_at = |p: DVec2| {
-        saved_ground(terrain, neighbors, p).unwrap_or_else(|| {
-            super::terrain_walls::height(terrain, p, tile_size())
-        })
+        saved_ground(terrain, neighbors, p)
+            .unwrap_or_else(|| super::terrain_walls::height(terrain, p, tile_size()))
     };
     // Side shoulders need a full ground cell even if the lip itself is already
     // aligned: the saved hill can rise steeply immediately beside that lip.

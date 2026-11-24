@@ -7,7 +7,11 @@ fn main() {
     for url in std::env::args().skip(1) {
         let b = omsi_audio::radio::open(&url);
         std::thread::sleep(std::time::Duration::from_secs(6));
-        println!("{url}: {:.1} s buffered, status {:?}", b.buffered(), b.status());
+        println!(
+            "{url}: {:.1} s buffered, status {:?}",
+            b.buffered(),
+            b.status()
+        );
         b.close();
     }
 }

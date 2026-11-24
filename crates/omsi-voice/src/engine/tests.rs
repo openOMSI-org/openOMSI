@@ -3,7 +3,10 @@ use crate::dsp::tone_frame;
 use omsi_audio::{AudioEngine, VoiceParams};
 
 fn on() -> Settings {
-    Settings { enabled: true, ..Default::default() }
+    Settings {
+        enabled: true,
+        ..Default::default()
+    }
 }
 
 fn core() -> Core {
@@ -19,7 +22,13 @@ fn frames(c: &mut Core, n: usize, freq: f32, amp: f32, tx: Option<Channel>) {
 }
 
 fn as_frame(from: u32, o: &Outgoing) -> Frame {
-    Frame { from, channel: o.channel, seq: o.seq, end: o.end, payload: o.payload.clone() }
+    Frame {
+        from,
+        channel: o.channel,
+        seq: o.seq,
+        end: o.end,
+        payload: o.payload.clone(),
+    }
 }
 
 /// Energy of `x` (stereo interleaved, left) at `freq`.
@@ -55,7 +64,13 @@ fn hear(packets: Vec<(u64, Frame)>, settle_ms: u64, gain: f32, spatial: bool) ->
         }
         b.play(t0 + Duration::from_millis(ms));
         for s in b.new_streams.drain(..) {
-            let params = VoiceParams { gain, position: spatial.then_some(glam::Vec3::new(3.0, 0.0, 0.0)), range: 1.0e9, doppler: false, ..Default::default() };
+            let params = VoiceParams {
+                gain,
+                position: spatial.then_some(glam::Vec3::new(3.0, 0.0, 0.0)),
+                range: 1.0e9,
+                doppler: false,
+                ..Default::default()
+            };
             ids.insert(s.id, audio.play_stream(s.stream, params));
         }
         // 4 ms of sound
@@ -76,7 +91,11 @@ fn a_held_key_sends_a_packet_every_20_ms_and_the_release_ends_it() {
     let mut a = core();
     let sent = transmission(&mut a, Channel::Nearby, 10, 440.0, 0.3);
     assert_eq!(sent.len(), 11);
-    assert!(sent[..10].iter().enumerate().all(|(i, o)| !o.end && o.seq == i as u16 && o.channel == Channel::Nearby && !o.payload.is_empty() && o.payload.len() <= 400));
+    assert!(sent[..10].iter().enumerate().all(|(i, o)| !o.end
+        && o.seq == i as u16
+        && o.channel == Channel::Nearby
+        && !o.payload.is_empty()
+        && o.payload.len() <= 400));
     assert!(sent[10].end && sent[10].payload.is_empty() && sent[10].channel == Channel::Nearby);
     // no key: the microphone is not sent, whatever it hears
     frames(&mut a, 10, 440.0, 0.5, None);
@@ -96,7 +115,13 @@ fn nothing_is_sent_while_voice_chat_is_off() {
 #[test]
 fn the_open_microphone_sends_what_is_loud_enough_on_its_channel() {
     let mut a = Core::new().unwrap();
-    a.apply(&Settings { enabled: true, mode: Mode::Open, open_channel: Channel::Radio, gate_db: -40.0, ..Default::default() });
+    a.apply(&Settings {
+        enabled: true,
+        mode: Mode::Open,
+        open_channel: Channel::Radio,
+        gate_db: -40.0,
+        ..Default::default()
+    });
     assert!(a.wants_mic(None));
     frames(&mut a, 5, 300.0, 0.002, None);
     assert!(a.out.is_empty(), "a hum is not speech");
@@ -114,7 +139,11 @@ fn the_open_microphone_sends_what_is_loud_enough_on_its_channel() {
 fn a_nearby_voice_is_heard_as_it_was_spoken() {
     let mut a = core();
     let sent = transmission(&mut a, Channel::Nearby, 40, 440.0, 0.4);
-    let packets: Vec<_> = sent.iter().enumerate().map(|(i, o)| (i as u64 * 20, as_frame(7, o))).collect();
+    let packets: Vec<_> = sent
+        .iter()
+        .enumerate()
+        .map(|(i, o)| (i as u64 * 20, as_frame(7, o)))
+        .collect();
     let heard = hear(packets, 300, 1.0, false);
     // about 40 frames of 20 ms came out, at the pitch spoken
     let loud = heard.chunks(1920).filter(|c| peak(c) > 0.05).count();
@@ -131,7 +160,11 @@ fn a_nearby_voice_is_heard_as_it_was_spoken() {
 fn the_radio_is_band_limited_with_a_click_each_end() {
     let mut a = core();
     let sent = transmission(&mut a, Channel::Radio, 30, 100.0, 0.4);
-    let packets: Vec<_> = sent.iter().enumerate().map(|(i, o)| (i as u64 * 20, as_frame(8, o))).collect();
+    let packets: Vec<_> = sent
+        .iter()
+        .enumerate()
+        .map(|(i, o)| (i as u64 * 20, as_frame(8, o)))
+        .collect();
     let heard = hear(packets, 400, 1.0, false);
     // a 100 Hz hum is mostly gone through the radio's band
     let mid = &heard[heard.len() / 2 - 4800..heard.len() / 2 + 4800];
@@ -140,8 +173,14 @@ fn the_radio_is_band_limited_with_a_click_each_end() {
     let first = peak(&heard[..2 * 48 * 120]);
     assert!(first > 0.01, "opening click {first}");
     let tail_start = (30 * 20 + 30) * 96;
-    assert!(peak(&heard[tail_start..tail_start + 96 * 100]) > 0.01, "closing click");
-    assert!(peak(&heard[heard.len() - 9600..]) < 0.02, "quiet at the end");
+    assert!(
+        peak(&heard[tail_start..tail_start + 96 * 100]) > 0.01,
+        "closing click"
+    );
+    assert!(
+        peak(&heard[heard.len() - 9600..]) < 0.02,
+        "quiet at the end"
+    );
 }
 
 #[test]
@@ -160,7 +199,11 @@ fn lost_and_late_packets_are_covered() {
     packets.sort_by_key(|p| p.0);
     let heard = hear(packets, 300, 1.0, false);
     let mid = &heard[heard.len() / 2 - 9600..heard.len() / 2 + 9600];
-    assert!(at(mid, 440.0) > 0.2, "the voice goes on through the losses: {}", at(mid, 440.0));
+    assert!(
+        at(mid, 440.0) > 0.2,
+        "the voice goes on through the losses: {}",
+        at(mid, 440.0)
+    );
     assert!(heard.iter().all(|v| v.is_finite() && v.abs() <= 1.5));
 }
 
@@ -168,12 +211,24 @@ fn lost_and_late_packets_are_covered() {
 fn a_spatial_voice_is_louder_in_the_nearer_ear_and_the_gain_applies() {
     let mut a = core();
     let sent = transmission(&mut a, Channel::Nearby, 30, 440.0, 0.4);
-    let packets: Vec<_> = sent.iter().enumerate().map(|(i, o)| (i as u64 * 20, as_frame(7, o))).collect();
+    let packets: Vec<_> = sent
+        .iter()
+        .enumerate()
+        .map(|(i, o)| (i as u64 * 20, as_frame(7, o)))
+        .collect();
     let full = hear(packets.clone(), 200, 1.0, true);
     let half = hear(packets, 200, 0.5, true);
     let mid = full.len() / 2 - 4800..full.len() / 2 + 4800;
-    let (l, r): (Vec<f32>, Vec<f32>) = (full[mid.clone()].chunks(2).map(|c| c[0]).collect(), full[mid.clone()].chunks(2).map(|c| c[1]).collect());
-    assert!(peak(&r) > peak(&l), "a voice to the right is louder on the right: {} {}", peak(&l), peak(&r));
+    let (l, r): (Vec<f32>, Vec<f32>) = (
+        full[mid.clone()].chunks(2).map(|c| c[0]).collect(),
+        full[mid.clone()].chunks(2).map(|c| c[1]).collect(),
+    );
+    assert!(
+        peak(&r) > peak(&l),
+        "a voice to the right is louder on the right: {} {}",
+        peak(&l),
+        peak(&r)
+    );
     assert!(peak(&half[mid.clone()]) < peak(&full[mid]) * 0.6);
 }
 
@@ -211,15 +266,51 @@ fn a_flood_of_speakers_and_junk_is_bounded() {
     let mut b = core();
     let now = Instant::now();
     for id in 1..=500u32 {
-        b.receive(now, Frame { from: id, channel: Channel::Nearby, seq: 1, end: false, payload: vec![1, 2, 3] });
+        b.receive(
+            now,
+            Frame {
+                from: id,
+                channel: Channel::Nearby,
+                seq: 1,
+                end: false,
+                payload: vec![1, 2, 3],
+            },
+        );
     }
     assert_eq!(b.speaker_count(), MAX_SPEAKERS);
     // junk that is not Opus, a packet from nobody, an end with nothing before it
-    b.receive(now, Frame { from: 0, channel: Channel::Radio, seq: 1, end: false, payload: vec![9; 50] });
-    b.receive(now, Frame { from: 900, channel: Channel::Radio, seq: 1, end: true, payload: Vec::new() });
+    b.receive(
+        now,
+        Frame {
+            from: 0,
+            channel: Channel::Radio,
+            seq: 1,
+            end: false,
+            payload: vec![9; 50],
+        },
+    );
+    b.receive(
+        now,
+        Frame {
+            from: 900,
+            channel: Channel::Radio,
+            seq: 1,
+            end: true,
+            payload: Vec::new(),
+        },
+    );
     for ms in (0..400).step_by(4) {
         for id in 1..=40u32 {
-            b.receive(now + Duration::from_millis(ms), Frame { from: id, channel: Channel::Radio, seq: ms as u16, end: false, payload: vec![0xFF; 399] });
+            b.receive(
+                now + Duration::from_millis(ms),
+                Frame {
+                    from: id,
+                    channel: Channel::Radio,
+                    seq: ms as u16,
+                    end: false,
+                    payload: vec![0xFF; 399],
+                },
+            );
         }
         b.play(now + Duration::from_millis(ms));
     }
@@ -254,12 +345,27 @@ fn two_engines_talk_through_the_test_tone() {
         std::thread::sleep(Duration::from_millis(5));
     }
     let st = b.status();
-    assert!(heard, "the second engine heard nothing: a {:?} b {:?}", a.status(), st);
-    assert!(a.status().transmitting == Some(Channel::Radio) && a.status().mic_open && a.status().device == "test tone");
+    assert!(
+        heard,
+        "the second engine heard nothing: a {:?} b {:?}",
+        a.status(),
+        st
+    );
+    assert!(
+        a.status().transmitting == Some(Channel::Radio)
+            && a.status().mic_open
+            && a.status().device == "test tone"
+    );
     let (_, sent) = a.counters();
     let (got, _) = b.counters();
     assert!(sent >= 30 && got >= 30, "sent {sent}, got {got}");
-    assert!(st.talkers.iter().all(|t| t.id == 1 && t.channel == Channel::Radio && t.level_db > -40.0), "{:?}", st.talkers);
+    assert!(
+        st.talkers
+            .iter()
+            .all(|t| t.id == 1 && t.channel == Channel::Radio && t.level_db > -40.0),
+        "{:?}",
+        st.talkers
+    );
     // let go of the key: a final packet, then the microphone closes after its grace
     a.set_transmit(None);
     std::thread::sleep(Duration::from_millis(100));

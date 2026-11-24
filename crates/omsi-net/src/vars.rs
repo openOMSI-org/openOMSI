@@ -114,7 +114,15 @@ impl AnimationSender {
         EVERY.max(count.div_ceil(per_packet) as f32 / 20.0)
     }
 
-    pub fn tick(&mut self, protocol: u8, id: u32, table: u32, sent_ms: u32, values: &[(u16, f32)], dt: f32) -> Vec<Vec<u8>> {
+    pub fn tick(
+        &mut self,
+        protocol: u8,
+        id: u32,
+        table: u32,
+        sent_ms: u32,
+        values: &[(u16, f32)],
+        dt: f32,
+    ) -> Vec<Vec<u8>> {
         if self.table != Some(table) {
             self.table = Some(table);
             self.acc = EVERY;
@@ -123,43 +131,76 @@ impl AnimationSender {
         // Keep the added traffic at twenty datagrams/second even for large models.
         let per_packet = (ROOM - HEADER - 6) / 6;
         let interval = Self::interval(values.len());
-        if values.is_empty() || self.acc < interval { return Vec::new(); }
+        if values.is_empty() || self.acc < interval {
+            return Vec::new();
+        }
         self.acc = 0.0;
-        values.chunks(per_packet).map(|chunk| {
-            let mut d = header(protocol, id, table, 4);
-            d.extend_from_slice(&sent_ms.max(1).to_le_bytes());
-            d.extend_from_slice(&(chunk.len() as u16).to_le_bytes());
-            for &(index, value) in chunk {
-                d.extend_from_slice(&index.to_le_bytes());
-                d.extend_from_slice(&value.to_le_bytes());
-            }
-            d
-        }).collect()
+        values
+            .chunks(per_packet)
+            .map(|chunk| {
+                let mut d = header(protocol, id, table, 4);
+                d.extend_from_slice(&sent_ms.max(1).to_le_bytes());
+                d.extend_from_slice(&(chunk.len() as u16).to_le_bytes());
+                for &(index, value) in chunk {
+                    d.extend_from_slice(&index.to_le_bytes());
+                    d.extend_from_slice(&value.to_le_bytes());
+                }
+                d
+            })
+            .collect()
     }
 }
 
 impl VarSender {
     pub fn subscribers(&mut self, peers: &[u32]) {
         self.subscribers = peers.to_vec();
-        if let Some(p) = &mut self.pending { p.awaiting.retain(|id| peers.contains(id)); }
+        if let Some(p) = &mut self.pending {
+            p.awaiting.retain(|id| peers.contains(id));
+        }
     }
 
     pub fn acknowledge(&mut self, peer: u32, table: u32, index: u16, version: u64) {
-        if self.table != table { return; }
+        if self.table != table {
+            return;
+        }
         if let Some(p) = &mut self.pending {
-            if p.index == index && p.version == version { p.awaiting.retain(|id| *id != peer); }
+            if p.index == index && p.version == version {
+                p.awaiting.retain(|id| *id != peer);
+            }
         }
     }
 
     /// Our vehicle's variables (`ids[k]` holds `values[k]`, the same for strings) for this
     /// frame: the datagrams due now (none most frames).
     #[allow(clippy::too_many_arguments)]
-    pub fn tick(&mut self, protocol: u8, id: u32, table: u32, float_ids: &[u16], floats: &[f32], string_ids: &[u16], strings: &[String], dt: f32) -> Vec<Vec<u8>> {
-        if table != self.table || self.floats.len() != floats.len() || self.strings.len() != strings.len() {
+    pub fn tick(
+        &mut self,
+        protocol: u8,
+        id: u32,
+        table: u32,
+        float_ids: &[u16],
+        floats: &[f32],
+        string_ids: &[u16],
+        strings: &[String],
+        dt: f32,
+    ) -> Vec<Vec<u8>> {
+        if table != self.table
+            || self.floats.len() != floats.len()
+            || self.strings.len() != strings.len()
+        {
             // another vehicle (or another table): everything is new
             let subscribers = self.subscribers.clone();
             let sequence = self.sequence;
-            *self = VarSender { sequence, subscribers, versions: vec![0; strings.len()], table, floats: vec![f32::NAN; floats.len()], strings: vec!["\u{0}".into(); strings.len()], acc: EVERY, ..VarSender::default() };
+            *self = VarSender {
+                sequence,
+                subscribers,
+                versions: vec![0; strings.len()],
+                table,
+                floats: vec![f32::NAN; floats.len()],
+                strings: vec!["\u{0}".into(); strings.len()],
+                acc: EVERY,
+                ..VarSender::default()
+            };
         }
         self.acc += dt;
         if self.acc < EVERY {
@@ -198,7 +239,9 @@ impl VarSender {
             let take = ((ROOM - HEADER - 4) / 4).min(n - first);
             // (only a run of ids one after another can go as a run: they mostly are)
             let mut run = 1;
-            while run < take && float_ids[first].checked_add(run as u16) == Some(float_ids[first + run]) {
+            while run < take
+                && float_ids[first].checked_add(run as u16) == Some(float_ids[first + run])
+            {
                 run += 1;
             }
             // Sparse tables must progress by a packetful too, rather than one id every
@@ -230,7 +273,9 @@ impl VarSender {
             let mut count = 0u16;
             let put = |this: &mut Self, d: &mut Vec<u8>, k: usize, count: &mut u16| -> bool {
                 let s = &strings[k];
-                if s.len() > MAX_INLINE { return true; }
+                if s.len() > MAX_INLINE {
+                    return true;
+                }
                 if d.len() + 12 + s.len() > ROOM {
                     return false;
                 }
@@ -275,31 +320,50 @@ impl VarSender {
             }
         }
         // An inline replacement supersedes an obsolete long transfer immediately.
-        if self.pending.as_ref().is_some_and(|p| string_ids.iter().position(|id| *id == p.index)
-            .is_some_and(|k| strings.get(k).is_some_and(|s| s.len() <= MAX_INLINE))) {
+        if self.pending.as_ref().is_some_and(|p| {
+            string_ids
+                .iter()
+                .position(|id| *id == p.index)
+                .is_some_and(|k| strings.get(k).is_some_and(|s| s.len() <= MAX_INLINE))
+        }) {
             self.pending = None;
         }
         // Finish a selected snapshot even when its source changes every frame. Recovery
         // uses the same version, so fragments lost on one pass fill in on the next pass.
-        if self.ticks % STRINGS_KEY_EVERY == 0 { self.long_key_due = true; }
+        if self.ticks % STRINGS_KEY_EVERY == 0 {
+            self.long_key_due = true;
+        }
         if m > 0 && self.pending.is_none() {
             let key = std::mem::take(&mut self.long_key_due);
             let mut k = if key { self.long_key } else { self.long_delta } % m;
             for _ in 0..m {
                 let value = &strings[k];
-                if value.len() > MAX_INLINE && value.len() <= MAX_STRING && (key || *value != self.strings[k]) {
+                if value.len() > MAX_INLINE
+                    && value.len() <= MAX_STRING
+                    && (key || *value != self.strings[k])
+                {
                     if *value != self.strings[k] {
                         self.sequence += 1;
                         self.versions[k] = self.sequence;
                         self.strings[k].clone_from(value);
                     }
-                    self.pending = Some(PendingString { index: string_ids[k], version: self.versions[k], value: value.clone(), offset: 0, awaiting: self.subscribers.clone() });
+                    self.pending = Some(PendingString {
+                        index: string_ids[k],
+                        version: self.versions[k],
+                        value: value.clone(),
+                        offset: 0,
+                        awaiting: self.subscribers.clone(),
+                    });
                     k = (k + 1) % m;
                     break;
                 }
                 k = (k + 1) % m;
             }
-            if key { self.long_key = k; } else { self.long_delta = k; }
+            if key {
+                self.long_key = k;
+            } else {
+                self.long_delta = k;
+            }
         }
         if let Some(pending) = &mut self.pending {
             let end = (pending.offset + CHUNK).min(pending.value.len());
@@ -312,8 +376,11 @@ impl VarSender {
             pending.offset = end;
             out.push(d);
             if end == pending.value.len() {
-                if pending.awaiting.is_empty() { self.pending = None; }
-                else { pending.offset = 0; }
+                if pending.awaiting.is_empty() {
+                    self.pending = None;
+                } else {
+                    pending.offset = 0;
+                }
             }
         }
         out
@@ -325,20 +392,32 @@ pub fn decode(data: &[u8], protocol: u8) -> Option<VarsIn> {
     if data.len() < HEADER + 2 || data[0] != VARS_MAGIC || data[1] != protocol {
         return None;
     }
-    let u16_at = |at: usize| -> Option<u16> { Some(u16::from_le_bytes(data.get(at..at + 2)?.try_into().ok()?)) };
-    let f32_at = |at: usize| -> Option<f32> { Some(f32::from_le_bytes(data.get(at..at + 4)?.try_into().ok()?)) };
+    let u16_at = |at: usize| -> Option<u16> {
+        Some(u16::from_le_bytes(data.get(at..at + 2)?.try_into().ok()?))
+    };
+    let f32_at = |at: usize| -> Option<f32> {
+        Some(f32::from_le_bytes(data.get(at..at + 4)?.try_into().ok()?))
+    };
     let id = u32::from_le_bytes(data[2..6].try_into().ok()?);
     let table = u32::from_le_bytes(data[6..10].try_into().ok()?);
-    let mut v = VarsIn { id, table, ..VarsIn::default() };
+    let mut v = VarsIn {
+        id,
+        table,
+        ..VarsIn::default()
+    };
     let mut at = HEADER;
     match data[10] {
         4 => {
             v.sent_ms = u32::from_le_bytes(data.get(at..at + 4)?.try_into().ok()?);
-            if v.sent_ms == 0 { return None; }
+            if v.sent_ms == 0 {
+                return None;
+            }
             at += 4;
             let count = u16_at(at)? as usize;
             at += 2;
-            if data.len() != at + count * 6 { return None; }
+            if data.len() != at + count * 6 {
+                return None;
+            }
             for _ in 0..count {
                 v.floats.push((u16_at(at)?, f32_at(at + 2)?));
                 at += 6;
@@ -376,7 +455,14 @@ pub fn decode(data: &[u8], protocol: u8) -> Option<VarsIn> {
             let len = u32::from_le_bytes(data.get(at + 10..at + 14)?.try_into().ok()?) as usize;
             let offset = u32::from_le_bytes(data.get(at + 14..at + 18)?.try_into().ok()?) as usize;
             let bytes = data.get(at + 18..)?;
-            if len <= MAX_INLINE || len > MAX_STRING || offset % CHUNK != 0 || offset >= len || bytes.len() != CHUNK.min(len - offset) { return None; }
+            if len <= MAX_INLINE
+                || len > MAX_STRING
+                || offset % CHUNK != 0
+                || offset >= len
+                || bytes.len() != CHUNK.min(len - offset)
+            {
+                return None;
+            }
         }
         _ => return None,
     }
@@ -398,7 +484,9 @@ struct ReceivedString {
 
 impl VarReceiver {
     pub fn completed_fragment(&self, data: &[u8]) -> Option<(u16, u64)> {
-        if *data.get(10)? != 3 { return None; }
+        if *data.get(10)? != 3 {
+            return None;
+        }
         let id = u32::from_le_bytes(data.get(2..6)?.try_into().ok()?);
         let index = u16::from_le_bytes(data.get(HEADER..HEADER + 2)?.try_into().ok()?);
         let version = u64::from_le_bytes(data.get(HEADER + 2..HEADER + 10)?.try_into().ok()?);
@@ -412,16 +500,44 @@ impl VarReceiver {
 
     pub fn receive(&mut self, data: &[u8], protocol: u8) -> Option<VarsIn> {
         let mut value = decode(data, protocol)?;
-        if data[10] != 2 && data[10] != 3 { return Some(value); }
-        let reserved: usize = self.peers.values().flat_map(|(_, strings)| strings.values()).map(|s| s.bytes.len()).sum();
+        if data[10] != 2 && data[10] != 3 {
+            return Some(value);
+        }
+        let reserved: usize = self
+            .peers
+            .values()
+            .flat_map(|(_, strings)| strings.values())
+            .map(|s| s.bytes.len())
+            .sum();
         let (table, strings) = self.peers.entry(value.id).or_default();
-        if *table != value.table { *table = value.table; strings.clear(); }
-        fn accept(strings: &mut std::collections::HashMap<u16, ReceivedString>, reserved: usize, index: u16, version: u64, len: usize) -> Option<&mut ReceivedString> {
-            if strings.get(&index).is_some_and(|s| s.version > version) { return None; }
+        if *table != value.table {
+            *table = value.table;
+            strings.clear();
+        }
+        fn accept(
+            strings: &mut std::collections::HashMap<u16, ReceivedString>,
+            reserved: usize,
+            index: u16,
+            version: u64,
+            len: usize,
+        ) -> Option<&mut ReceivedString> {
+            if strings.get(&index).is_some_and(|s| s.version > version) {
+                return None;
+            }
             if strings.get(&index).is_none_or(|s| s.version != version) {
                 let old = strings.get(&index).map_or(0, |s| s.bytes.len());
-                if reserved - old + len > 16 * MAX_STRING { return None; }
-                strings.insert(index, ReceivedString { version, complete: false, bytes: vec![0; len], parts: vec![false; len.div_ceil(CHUNK)] });
+                if reserved - old + len > 16 * MAX_STRING {
+                    return None;
+                }
+                strings.insert(
+                    index,
+                    ReceivedString {
+                        version,
+                        complete: false,
+                        bytes: vec![0; len],
+                        parts: vec![false; len.div_ceil(CHUNK)],
+                    },
+                );
             }
             strings.get_mut(&index)
         }
@@ -430,19 +546,29 @@ impl VarReceiver {
             value.strings.retain(|(index, text)| {
                 let version = u64::from_le_bytes(data[at + 2..at + 10].try_into().unwrap());
                 at += 12 + text.len();
-                if let Some(state) = accept(strings, reserved, *index, version, 0) { state.complete = true; true } else { false }
+                if let Some(state) = accept(strings, reserved, *index, version, 0) {
+                    state.complete = true;
+                    true
+                } else {
+                    false
+                }
             });
         } else {
             let index = u16::from_le_bytes(data[HEADER..HEADER + 2].try_into().ok()?);
             let version = u64::from_le_bytes(data[HEADER + 2..HEADER + 10].try_into().ok()?);
             let len = u32::from_le_bytes(data[HEADER + 10..HEADER + 14].try_into().ok()?) as usize;
-            let offset = u32::from_le_bytes(data[HEADER + 14..HEADER + 18].try_into().ok()?) as usize;
+            let offset =
+                u32::from_le_bytes(data[HEADER + 14..HEADER + 18].try_into().ok()?) as usize;
             let bytes = &data[HEADER + 18..];
             if let Some(state) = accept(strings, reserved, index, version, len) {
-                if state.bytes.len() != len { return None; }
+                if state.bytes.len() != len {
+                    return None;
+                }
                 if state.complete {
                     if offset == 0 {
-                        value.strings.push((index, String::from_utf8(state.bytes.clone()).ok()?));
+                        value
+                            .strings
+                            .push((index, String::from_utf8(state.bytes.clone()).ok()?));
                     }
                     return Some(value);
                 }
@@ -474,7 +600,9 @@ mod tests {
             let texts = [format!("{tick}:{}", "ő".repeat(3000)), "other".repeat(900)];
             for packet in tx.tick(14, 7, 99, &[], &[], &[0, 1], &texts, 0.1) {
                 // Lose fragments and acknowledgements while both fields keep getting turns.
-                if tick % 7 == 1 { continue; }
+                if tick % 7 == 1 {
+                    continue;
+                }
                 for (index, value) in rx.receive(&packet, 14).unwrap().strings {
                     assert!(value == texts[1] || value.ends_with(&"ő".repeat(3000)));
                     seen.insert(index);
@@ -487,7 +615,10 @@ mod tests {
             }
         }
         assert_eq!(seen.len(), 2);
-        assert!(tx.sequence > 5, "continuous changes must advance after recovery");
+        assert!(
+            tx.sequence > 5,
+            "continuous changes must advance after recovery"
+        );
     }
 
     #[test]
@@ -550,18 +681,37 @@ mod tests {
             }
         };
         // the first message after a change carries it
-        take(tx.tick(5, 7, 99, &ids, &floats, &sids, &strings, 0.1), &mut got, &mut got_s);
+        take(
+            tx.tick(5, 7, 99, &ids, &floats, &sids, &strings, 0.1),
+            &mut got,
+            &mut got_s,
+        );
         floats[2500] = -1.0;
         strings[3] = "Hauptbahnhof".into();
-        take(tx.tick(5, 7, 99, &ids, &floats, &sids, &strings, 0.1), &mut got, &mut got_s);
+        take(
+            tx.tick(5, 7, 99, &ids, &floats, &sids, &strings, 0.1),
+            &mut got,
+            &mut got_s,
+        );
         // (the first tick sent everything changed from "unknown", as far as a datagram holds)
         for _ in 0..200 {
-            take(tx.tick(5, 7, 99, &ids, &floats, &sids, &strings, 0.1), &mut got, &mut got_s);
+            take(
+                tx.tick(5, 7, 99, &ids, &floats, &sids, &strings, 0.1),
+                &mut got,
+                &mut got_s,
+            );
         }
         assert_eq!(got, floats);
         assert_eq!(got_s, strings);
         // an unchanged state sends little: the key frame slices only
-        let quiet: usize = (0..10).map(|_| tx.tick(5, 7, 99, &ids, &floats, &sids, &strings, 0.1).iter().map(Vec::len).sum::<usize>()).sum();
+        let quiet: usize = (0..10)
+            .map(|_| {
+                tx.tick(5, 7, 99, &ids, &floats, &sids, &strings, 0.1)
+                    .iter()
+                    .map(Vec::len)
+                    .sum::<usize>()
+            })
+            .sum();
         assert!(quiet < 4 * ROOM, "{quiet} bytes a second for nothing new");
         // one change: in the very next datagram
         floats[17] = 4.25;
@@ -573,7 +723,9 @@ mod tests {
     #[test]
     fn changing_strings_do_not_starve_later_strings_or_lost_updates() {
         let ids: Vec<u16> = (0..30).collect();
-        let mut strings: Vec<String> = (0..30).map(|k| format!("{k}:{}", "x".repeat(240))).collect();
+        let mut strings: Vec<String> = (0..30)
+            .map(|k| format!("{k}:{}", "x".repeat(240)))
+            .collect();
         let mut tx = VarSender::default();
         // Establish the sender's baseline, but lose these datagrams.
         for _ in 0..20 {
@@ -596,7 +748,11 @@ mod tests {
             }
         }
         for k in 5..strings.len() {
-            assert_eq!(got[k].as_deref(), Some(strings[k].as_str()), "string {k} never recovered");
+            assert_eq!(
+                got[k].as_deref(),
+                Some(strings[k].as_str()),
+                "string {k} never recovered"
+            );
         }
     }
 
@@ -614,10 +770,20 @@ mod tests {
                 *s = format!("{tick}:{k}:{}", "x".repeat(240));
             }
             for msg in tx.tick(5, 7, 99, &[], &[], &ids, &strings, 0.1) {
-                seen.extend(decode(&msg, 5).unwrap().strings.into_iter().map(|(id, _)| id));
+                seen.extend(
+                    decode(&msg, 5)
+                        .unwrap()
+                        .strings
+                        .into_iter()
+                        .map(|(id, _)| id),
+                );
             }
         }
-        assert_eq!(seen.len(), ids.len(), "all changed strings need a turn before the next key frame");
+        assert_eq!(
+            seen.len(),
+            ids.len(),
+            "all changed strings need a turn before the next key frame"
+        );
     }
 
     #[test]
@@ -651,13 +817,17 @@ mod tests {
             packets.reverse();
             for packet in packets {
                 assert!(packet.len() <= ROOM);
-                if tick == 1 { continue; } // lose one chunk in the first snapshot
+                if tick == 1 {
+                    continue;
+                } // lose one chunk in the first snapshot
                 for (_, value) in rx.receive(&packet, 8).unwrap().strings {
                     assert_eq!(value, strings[0]);
                     got = Some(value);
                 }
             }
-            if tick < 9 { assert!(got.is_none(), "partial snapshot became visible"); }
+            if tick < 9 {
+                assert!(got.is_none(), "partial snapshot became visible");
+            }
         }
         assert_eq!(got, Some(strings[0].clone()));
         // A game may have consumed the first complete value before its remote bus exists.
@@ -681,7 +851,11 @@ mod tests {
         }
         let short = vec!["new value".to_string()];
         let messages = tx.tick(8, 7, 99, &[], &[], &[0], &short, 0.1);
-        assert!(messages.iter().any(|p| rx.receive(p, 8).unwrap().strings == vec![(0, short[0].clone())]));
+        assert!(
+            messages
+                .iter()
+                .any(|p| rx.receive(p, 8).unwrap().strings == vec![(0, short[0].clone())])
+        );
         for packet in delayed {
             assert!(rx.receive(&packet, 8).unwrap().strings.is_empty());
         }
@@ -693,7 +867,11 @@ mod tests {
         let mut rx = VarReceiver::default();
         let mut seen = std::collections::HashSet::new();
         for tick in 0..100 {
-            let strings = vec![format!("{tick}:{}", "x".repeat(6000)), "y".repeat(4000), format!("small {tick}")];
+            let strings = vec![
+                format!("{tick}:{}", "x".repeat(6000)),
+                "y".repeat(4000),
+                format!("small {tick}"),
+            ];
             for packet in tx.tick(8, 7, 99, &[], &[], &[0, 1, 2], &strings, 0.1) {
                 for (id, value) in rx.receive(&packet, 8).unwrap().strings {
                     assert!(!value.is_empty());
@@ -709,13 +887,20 @@ mod tests {
         let mut tx = VarSender::default();
         let mut strings = vec!["x".repeat(CHUNK * 10), "unchanged but lost".repeat(200)];
         // Lose the complete initial state, then let the first field occupy every key tick.
-        for _ in 0..100 { tx.tick(8, 7, 99, &[], &[], &[0, 1], &strings, 0.1); }
+        for _ in 0..100 {
+            tx.tick(8, 7, 99, &[], &[], &[0, 1], &strings, 0.1);
+        }
         let mut rx = VarReceiver::default();
         let mut recovered = false;
         for tick in 0..100 {
             strings[0] = format!("{tick:04}{}", "x".repeat(CHUNK * 10 - 4));
             for packet in tx.tick(8, 7, 99, &[], &[], &[0, 1], &strings, 0.1) {
-                recovered |= rx.receive(&packet, 8).unwrap().strings.iter().any(|(id, s)| *id == 1 && *s == strings[1]);
+                recovered |= rx
+                    .receive(&packet, 8)
+                    .unwrap()
+                    .strings
+                    .iter()
+                    .any(|(id, s)| *id == 1 && *s == strings[1]);
             }
         }
         assert!(recovered, "a busy transfer must not discard recovery work");

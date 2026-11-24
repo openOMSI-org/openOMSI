@@ -19,11 +19,17 @@ impl LanSession {
             return false;
         }
         self.recv_budget_hits = self.recv_budget_hits.saturating_add(1);
-        if self.recv_budget_last_log.is_none_or(|at| at.elapsed() >= RECEIVE_DIAGNOSTIC_INTERVAL) {
+        if self
+            .recv_budget_last_log
+            .is_none_or(|at| at.elapsed() >= RECEIVE_DIAGNOSTIC_INTERVAL)
+        {
             log::warn!(
                 "LAN: receive budget reached {} time(s) since last report; last batch {} datagrams in {:.2} ms (limit {} / {} ms); queued datagrams deferred to next tick",
-                self.recv_budget_hits, packets, elapsed.as_secs_f64() * 1000.0,
-                RECEIVE_PACKET_LIMIT, RECEIVE_TIME_BUDGET.as_millis()
+                self.recv_budget_hits,
+                packets,
+                elapsed.as_secs_f64() * 1000.0,
+                RECEIVE_PACKET_LIMIT,
+                RECEIVE_TIME_BUDGET.as_millis()
             );
             self.recv_budget_last_log = Some(Instant::now());
             self.recv_budget_hits = 0;

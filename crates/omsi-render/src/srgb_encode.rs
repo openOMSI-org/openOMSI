@@ -34,11 +34,18 @@ pub(crate) struct SrgbEncode {
 impl SrgbEncode {
     /// For a window of the sRGB `format` on ANGLE, else none.
     pub(crate) fn wanted(renderer: &crate::Renderer, format: wgpu::TextureFormat) -> Option<Self> {
-        if !(cfg!(windows) && crate::gl_backend() && renderer.adapter_name.contains("ANGLE") && format.is_srgb()) {
+        if !(cfg!(windows)
+            && crate::gl_backend()
+            && renderer.adapter_name.contains("ANGLE")
+            && format.is_srgb())
+        {
             return None;
         }
         let device = &renderer.device;
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("sRGB encode"), source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("sRGB encode"),
+            source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+        });
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("sRGB encode"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -60,7 +67,12 @@ impl SrgbEncode {
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("sRGB encode"),
             layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState { module: &module, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
+            vertex: wgpu::VertexState {
+                module: &module,
+                entry_point: Some("vs"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
             fragment: Some(wgpu::FragmentState {
                 module: &module,
                 entry_point: Some("fs"),
@@ -73,8 +85,16 @@ impl SrgbEncode {
             multiview_mask: None,
             cache: None,
         });
-        log::info!("{}: the window keeps no sRGB colour space; each frame is encoded into it", renderer.adapter_name);
-        Some(SrgbEncode { pipeline, layout, stand_in: Default::default(), format })
+        log::info!(
+            "{}: the window keeps no sRGB colour space; each frame is encoded into it",
+            renderer.adapter_name
+        );
+        Some(SrgbEncode {
+            pipeline,
+            layout,
+            stand_in: Default::default(),
+            format,
+        })
     }
 
     /// The window's own format: plain RGBA8 where the frame is encoded into it.
@@ -94,18 +114,26 @@ impl SrgbEncode {
                 dimension: wgpu::TextureDimension::D2,
                 format: self.format,
                 // (copied from as well: the glass behind the game's screens, see `SurfaceState::picture`)
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             });
             let view = texture.create_view(&Default::default());
             let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("sRGB encode"),
                 layout: &self.layout,
-                entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) }],
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                }],
             });
             *stand_in = Some((texture, view, group));
         }
-        stand_in.as_ref().map(|(_, v, _)| v.clone()).expect("stand-in")
+        stand_in
+            .as_ref()
+            .map(|(_, v, _)| v.clone())
+            .expect("stand-in")
     }
 
     /// The stand-in the frame is drawn into, when there is one.
@@ -114,11 +142,20 @@ impl SrgbEncode {
     }
 
     /// Encodes the stand-in into the window's `frame`.
-    pub(crate) fn encode(&self, device: &wgpu::Device, queue: &wgpu::Queue, frame: &wgpu::SurfaceTexture) {
+    pub(crate) fn encode(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        frame: &wgpu::SurfaceTexture,
+    ) {
         let stand_in = self.stand_in.borrow();
-        let Some((_, _, group)) = stand_in.as_ref() else { return };
+        let Some((_, _, group)) = stand_in.as_ref() else {
+            return;
+        };
         let target = frame.texture.create_view(&Default::default());
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("sRGB encode") });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("sRGB encode"),
+        });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("sRGB encode"),
@@ -126,7 +163,10 @@ impl SrgbEncode {
                     view: &target,
                     depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -147,8 +187,11 @@ mod tests {
     #[test]
     fn the_shader_validates() {
         let module = wgpu::naga::front::wgsl::parse_str(super::SHADER).expect("parse");
-        wgpu::naga::valid::Validator::new(wgpu::naga::valid::ValidationFlags::all(), wgpu::naga::valid::Capabilities::empty())
-            .validate(&module)
-            .expect("validate");
+        wgpu::naga::valid::Validator::new(
+            wgpu::naga::valid::ValidationFlags::all(),
+            wgpu::naga::valid::Capabilities::empty(),
+        )
+        .validate(&module)
+        .expect("validate");
     }
 }

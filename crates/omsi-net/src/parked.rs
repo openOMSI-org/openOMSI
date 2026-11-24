@@ -43,7 +43,10 @@ impl Parked {
 
 impl LanSession {
     pub fn set_parked(&mut self, buses: Vec<Pose>) {
-        let mut buses: Vec<Pose> = buses.into_iter().filter(|p| is_parked(p.id) && !p.bus.is_empty()).collect();
+        let mut buses: Vec<Pose> = buses
+            .into_iter()
+            .filter(|p| is_parked(p.id) && !p.bus.is_empty())
+            .collect();
         for p in &mut buses {
             p.flags = FLAG_VEHICLE;
             p.walker = None;
@@ -81,9 +84,21 @@ impl LanSession {
         }
         let sent_ms = self.stamp_ms().max(1);
         for peer in self.peers.values() {
-            let (Some(addr), true) = (peer.addr, peer.has_pose) else { continue };
-            let (x, y) = peer.pose.walker.map(|w| (w.x, w.y)).unwrap_or((peer.pose.x, peer.pose.y));
-            let mut near: Vec<(f64, &Pose)> = self.parked.buses.iter().map(|p| ((p.x - x).hypot(p.y - y), p)).filter(|n| n.0 < TOLD_WITHIN).collect();
+            let (Some(addr), true) = (peer.addr, peer.has_pose) else {
+                continue;
+            };
+            let (x, y) = peer
+                .pose
+                .walker
+                .map(|w| (w.x, w.y))
+                .unwrap_or((peer.pose.x, peer.pose.y));
+            let mut near: Vec<(f64, &Pose)> = self
+                .parked
+                .buses
+                .iter()
+                .map(|p| ((p.x - x).hypot(p.y - y), p))
+                .filter(|n| n.0 < TOLD_WITHIN)
+                .collect();
             near.sort_by(|a, b| a.0.total_cmp(&b.0));
             // (fewer of them in a full session: a game keeps `MAX_PEERS` others, players first)
             let most = TOLD_AT_MOST.min(MAX_PEERS.saturating_sub(self.peers.len() + 1));
@@ -92,8 +107,14 @@ impl LanSession {
                     self.send(p.encode_info().as_bytes(), addr);
                 }
                 if state {
-                    let state = Pose { sent_ms, ..p.clone() };
-                    self.send(&wire::encode_state(&state, PROTOCOL as u8, self.parked.seq), addr);
+                    let state = Pose {
+                        sent_ms,
+                        ..p.clone()
+                    };
+                    self.send(
+                        &wire::encode_state(&state, PROTOCOL as u8, self.parked.seq),
+                        addr,
+                    );
                 }
             }
         }
@@ -106,14 +127,26 @@ impl LanSession {
     }
 
     pub(crate) fn hide_far_parked(&mut self, mine: &Pose) {
-        let Some(most) = self.parked.drawn_most else { return };
+        let Some(most) = self.parked.drawn_most else {
+            return;
+        };
         let (x, y) = mine.walker.map(|w| (w.x, w.y)).unwrap_or((mine.x, mine.y));
         let hidden = std::mem::take(&mut self.parked.hidden);
         let mut near: Vec<(f64, u32)> = self
             .peers
             .values()
             .filter(|p| is_parked(p.pose.id) && p.has_pose)
-            .map(|p| ((p.pose.x - x).hypot(p.pose.y - y) + if hidden.contains(&p.pose.id) { DRAWN_STAYS } else { 0.0 }, p.pose.id))
+            .map(|p| {
+                (
+                    (p.pose.x - x).hypot(p.pose.y - y)
+                        + if hidden.contains(&p.pose.id) {
+                            DRAWN_STAYS
+                        } else {
+                            0.0
+                        },
+                    p.pose.id,
+                )
+            })
             .collect();
         near.sort_by(|a, b| a.0.total_cmp(&b.0));
         self.parked.hidden = near.into_iter().skip(most).map(|n| n.1).collect();
@@ -128,7 +161,9 @@ impl LanSession {
         if self.peers.len() < MAX_PEERS {
             return true;
         }
-        let Some(out) = self.peers.keys().copied().filter(|k| is_parked(*k)).max() else { return false };
+        let Some(out) = self.peers.keys().copied().filter(|k| is_parked(*k)).max() else {
+            return false;
+        };
         // (the game drops what it drew of a peer the session no longer has)
         self.peers.remove(&out);
         true
@@ -138,7 +173,11 @@ impl LanSession {
     pub(crate) fn fresh_id(&mut self) -> u32 {
         loop {
             let id = self.next_id;
-            self.next_id = if self.next_id + 1 >= FIRST_PARKED_ID { 2 } else { self.next_id + 1 };
+            self.next_id = if self.next_id + 1 >= FIRST_PARKED_ID {
+                2
+            } else {
+                self.next_id + 1
+            };
             if !self.peers.contains_key(&id) {
                 return id;
             }

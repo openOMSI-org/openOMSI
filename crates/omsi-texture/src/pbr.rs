@@ -44,7 +44,11 @@ pub struct PbrFiles {
 
 impl PbrFiles {
     pub fn is_empty(&self) -> bool {
-        self.normals.is_empty() && self.rough.is_none() && self.metal.is_none() && self.ao.is_none() && self.packed.is_none()
+        self.normals.is_empty()
+            && self.rough.is_none()
+            && self.metal.is_none()
+            && self.ao.is_none()
+            && self.packed.is_none()
     }
 }
 
@@ -64,7 +68,10 @@ const MAX_SIDE: u32 = 4096;
 /// The PBR files beside `diffuse` (none: an empty set).
 pub fn find(diffuse: &Path) -> PbrFiles {
     let mut out = PbrFiles::default();
-    let (Some(dir), Some(stem)) = (diffuse.parent(), diffuse.file_stem().map(|s| s.to_string_lossy().to_string())) else {
+    let (Some(dir), Some(stem)) = (
+        diffuse.parent(),
+        diffuse.file_stem().map(|s| s.to_string_lossy().to_string()),
+    ) else {
         return out;
     };
     // (the folder's pictures listed once, archives too, and compared case-insensitively:
@@ -85,11 +92,18 @@ pub fn find(diffuse: &Path) -> PbrFiles {
         }
     }
     let pick = |keys: &[&str]| -> Option<PathBuf> {
-        keys.iter().find_map(|k| names.iter().find(|(s, _)| s == k).map(|(_, p)| p.clone()))
+        keys.iter()
+            .find_map(|k| names.iter().find(|(s, _)| s == k).map(|(_, p)| p.clone()))
     };
     for (keys, gl) in [
-        (&["nn_gl", "normal_gl", "nrm_gl", "normalgl", "normal_opengl"][..], true),
-        (&["nn", "normal", "nrm", "normal_dx", "nn_dx", "normalmap"][..], false),
+        (
+            &["nn_gl", "normal_gl", "nrm_gl", "normalgl", "normal_opengl"][..],
+            true,
+        ),
+        (
+            &["nn", "normal", "nrm", "normal_dx", "nn_dx", "normalmap"][..],
+            false,
+        ),
     ] {
         for k in keys {
             if let Some((_, p)) = names.iter().find(|(s, _)| s == k) {
@@ -109,7 +123,13 @@ pub fn find(diffuse: &Path) -> PbrFiles {
         out.gloss = true;
     }
     out.metal = pick(&["mm", "metal", "metallic", "metalness", "mtl"]);
-    out.ao = pick(&["aa", "ao", "occlusion", "ambientocclusion", "ambient_occlusion"]);
+    out.ao = pick(&[
+        "aa",
+        "ao",
+        "occlusion",
+        "ambientocclusion",
+        "ambient_occlusion",
+    ]);
     if let Some(p) = pick(&["orm", "arm"]) {
         out.packed = Some((p, [0, 1, 2]));
     } else if let Some(p) = pick(&["mra"]) {
@@ -126,7 +146,8 @@ type Listing = std::sync::Arc<Vec<(String, std::ffi::OsString)>>;
 /// (lower-case stem, file name). Kept per folder: a scenery folder of thousands of files is
 /// asked once for every texture in it.
 fn pictures_in(dir: &Path) -> Listing {
-    static DIRS: std::sync::Mutex<Option<std::collections::HashMap<PathBuf, Listing>>> = std::sync::Mutex::new(None);
+    static DIRS: std::sync::Mutex<Option<std::collections::HashMap<PathBuf, Listing>>> =
+        std::sync::Mutex::new(None);
     let mut g = DIRS.lock().unwrap_or_else(|e| e.into_inner());
     let map = g.get_or_insert_with(Default::default);
     if let Some(l) = map.get(dir) {
@@ -138,7 +159,9 @@ fn pictures_in(dir: &Path) -> Listing {
             continue;
         }
         let p = Path::new(&name);
-        let (Some(s), Some(x)) = (p.file_stem(), p.extension()) else { continue };
+        let (Some(s), Some(x)) = (p.file_stem(), p.extension()) else {
+            continue;
+        };
         let x = x.to_string_lossy().to_ascii_lowercase();
         let s = s.to_string_lossy().to_ascii_lowercase();
         if EXTS.contains(&x.as_str()) && (s.contains('_') || s.contains('-')) {
@@ -151,21 +174,32 @@ fn pictures_in(dir: &Path) -> Listing {
 }
 
 fn load(p: &Path) -> Option<Image> {
-    crate::decode_file(p).map_err(|e| log::warn!("PBR map {}: {e}", p.display())).ok()
+    crate::decode_file(p)
+        .map_err(|e| log::warn!("PBR map {}: {e}", p.display()))
+        .ok()
 }
 
 /// An image no larger than `max` a side (halved as often as needed).
 fn capped(mut img: Image, max: u32) -> Image {
     while img.width > max || img.height > max {
         let (rgba, w, h) = crate::bc::downsample(&img.rgba, img.width, img.height);
-        img = Image { width: w, height: h, rgba, has_alpha: img.has_alpha };
+        img = Image {
+            width: w,
+            height: h,
+            rgba,
+            has_alpha: img.has_alpha,
+        };
     }
     img
 }
 
 /// A channel of `img` at `w` x `h` (resized when it has another size).
 fn channel(img: &Image, c: usize, w: u32, h: u32) -> Vec<u8> {
-    let src = if img.width == w && img.height == h { img.rgba.clone() } else { crate::bc::resize(&img.rgba, img.width, img.height, w, h) };
+    let src = if img.width == w && img.height == h {
+        img.rgba.clone()
+    } else {
+        crate::bc::resize(&img.rgba, img.width, img.height, w, h)
+    };
     src.chunks_exact(4).map(|px| px[c]).collect()
 }
 
@@ -189,8 +223,15 @@ pub fn looks_like_normal_map(img: &Image) -> bool {
     if k == 0 {
         return false;
     }
-    let (r, g, b) = (r as f64 / k as f64, g as f64 / k as f64, b as f64 / k as f64);
-    b > 170.0 && (r - 128.0).abs() < 45.0 && (g - 128.0).abs() < 45.0 && blue as f64 >= 0.9 * k as f64
+    let (r, g, b) = (
+        r as f64 / k as f64,
+        g as f64 / k as f64,
+        b as f64 / k as f64,
+    );
+    b > 170.0
+        && (r - 128.0).abs() < 45.0
+        && (g - 128.0).abs() < 45.0
+        && blue as f64 >= 0.9 * k as f64
 }
 
 /// A grey picture: red, green and blue within a few steps of each other nearly everywhere.
@@ -219,7 +260,10 @@ pub fn load_set(files: &PbrFiles) -> Option<PbrImages> {
             normal_gl = *gl;
             Some(capped(i, MAX_SIDE))
         } else {
-            log::info!("{}: not a normal map (a night map by OMSI's `_n` naming?): left alone", p.display());
+            log::info!(
+                "{}: not a normal map (a night map by OMSI's `_n` naming?): left alone",
+                p.display()
+            );
             None
         }
     });
@@ -230,14 +274,22 @@ pub fn load_set(files: &PbrFiles) -> Option<PbrImages> {
         if is_grey(&i) {
             Some(i)
         } else {
-            log::info!("{}: not a grey PBR map: left alone", p.as_deref().map(|p| p.display().to_string()).unwrap_or_default());
+            log::info!(
+                "{}: not a grey PBR map: left alone",
+                p.as_deref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default()
+            );
             None
         }
     };
     let rough = grey(&files.rough);
     let metal = grey(&files.metal);
     let ao = grey(&files.ao);
-    let packed = files.packed.as_ref().and_then(|(p, order)| load(p).map(|i| (i, *order)));
+    let packed = files
+        .packed
+        .as_ref()
+        .and_then(|(p, order)| load(p).map(|i| (i, *order)));
     let mut flags = [0.0f32; 4];
     if normal.is_some() {
         flags[0] = if normal_gl { 2.0 } else { 1.0 };
@@ -254,10 +306,20 @@ pub fn load_set(files: &PbrFiles) -> Option<PbrImages> {
         flags[1] = 1.0;
         flags[2] = 1.0;
         flags[3] = 1.0;
-        Some(Image { width: w, height: h, rgba, has_alpha: false })
+        Some(Image {
+            width: w,
+            height: h,
+            rgba,
+            has_alpha: false,
+        })
     } else if rough.is_some() || metal.is_some() || ao.is_some() {
         // the largest of the single maps sets the size
-        let (w, h) = [&rough, &metal, &ao].iter().filter_map(|m| m.as_ref()).map(|m| (m.width, m.height)).max_by_key(|s| s.0 as u64 * s.1 as u64).unwrap_or((1, 1));
+        let (w, h) = [&rough, &metal, &ao]
+            .iter()
+            .filter_map(|m| m.as_ref())
+            .map(|m| (m.width, m.height))
+            .max_by_key(|s| s.0 as u64 * s.1 as u64)
+            .unwrap_or((1, 1));
         let (mut w, mut h) = (w, h);
         while w > MAX_SIDE || h > MAX_SIDE {
             w = (w / 2).max(1);
@@ -283,7 +345,12 @@ pub fn load_set(files: &PbrFiles) -> Option<PbrImages> {
             }
             flags[3] = 1.0;
         }
-        Some(Image { width: w, height: h, rgba, has_alpha: false })
+        Some(Image {
+            width: w,
+            height: h,
+            rgba,
+            has_alpha: false,
+        })
     } else {
         None
     };
@@ -299,11 +366,21 @@ mod tests {
 
     #[test]
     fn a_night_map_is_no_normal_map() {
-        let flat = Image { width: 4, height: 4, rgba: [128u8, 128, 255, 255].repeat(16), has_alpha: false };
+        let flat = Image {
+            width: 4,
+            height: 4,
+            rgba: [128u8, 128, 255, 255].repeat(16),
+            has_alpha: false,
+        };
         assert!(looks_like_normal_map(&flat));
         let mut night = [0u8, 0, 0, 255].repeat(16);
         night[0..4].copy_from_slice(&[255, 220, 120, 255]);
-        let night = Image { width: 4, height: 4, rgba: night, has_alpha: false };
+        let night = Image {
+            width: 4,
+            height: 4,
+            rgba: night,
+            has_alpha: false,
+        };
         assert!(!looks_like_normal_map(&night));
     }
 
@@ -311,11 +388,29 @@ mod tests {
     fn finds_a_set_beside_the_texture() {
         let dir = std::env::temp_dir().join(format!("omsi_pbr_{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
-        for f in ["Bus.dds", "Bus_NN.png", "bus_rr.tga", "bus_mm.png", "bus_aa.jpg", "busstop_nn.png", "lamp.tga", "lamp_r.tga", "lamp_n.tga", "tram.dds", "tram_normal_gl.png"] {
+        for f in [
+            "Bus.dds",
+            "Bus_NN.png",
+            "bus_rr.tga",
+            "bus_mm.png",
+            "bus_aa.jpg",
+            "busstop_nn.png",
+            "lamp.tga",
+            "lamp_r.tga",
+            "lamp_n.tga",
+            "tram.dds",
+            "tram_normal_gl.png",
+        ] {
             std::fs::write(dir.join(f), b"x").unwrap();
         }
         let set = find(&dir.join("Bus.dds"));
-        assert_eq!(set.normal.as_deref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string()), Some("Bus_NN.png".into()));
+        assert_eq!(
+            set.normal
+                .as_deref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().to_string()),
+            Some("Bus_NN.png".into())
+        );
         assert!(set.rough.is_some() && set.metal.is_some() && set.ao.is_some());
         assert!(!set.normal_gl && !set.gloss);
         // another texture's maps are not taken (busstop_nn is not bus_nn)

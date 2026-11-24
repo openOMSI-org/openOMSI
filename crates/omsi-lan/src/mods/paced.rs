@@ -18,7 +18,15 @@ pub(super) struct Paced<R> {
 
 impl<R> Paced<R> {
     pub fn greeting(inner: R) -> Paced<R> {
-        Paced { inner, until: Some(Instant::now() + GREETING), ends: Instant::now() + WHOLE, window: WINDOW, min_bytes: MIN_BYTES, busy: Duration::ZERO, bytes: 0 }
+        Paced {
+            inner,
+            until: Some(Instant::now() + GREETING),
+            ends: Instant::now() + WHOLE,
+            window: WINDOW,
+            min_bytes: MIN_BYTES,
+            busy: Duration::ZERO,
+            bytes: 0,
+        }
     }
 
     pub fn pace(&mut self) {
@@ -36,10 +44,16 @@ impl<R: Read> Read for Paced<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let t0 = Instant::now();
         if self.until.is_some_and(|u| t0 > u) {
-            return Err(std::io::Error::new(ErrorKind::TimedOut, "the host did not greet in time"));
+            return Err(std::io::Error::new(
+                ErrorKind::TimedOut,
+                "the host did not greet in time",
+            ));
         }
         if t0 > self.ends {
-            return Err(std::io::Error::new(ErrorKind::TimedOut, "the host's mods took too long"));
+            return Err(std::io::Error::new(
+                ErrorKind::TimedOut,
+                "the host's mods took too long",
+            ));
         }
         let n = self.inner.read(buf)?;
         if self.until.is_none() {
@@ -47,7 +61,10 @@ impl<R: Read> Read for Paced<R> {
             self.bytes += n as u64;
             if self.busy >= self.window {
                 if self.bytes < self.min_bytes {
-                    return Err(std::io::Error::new(ErrorKind::TimedOut, "the host sends too slowly"));
+                    return Err(std::io::Error::new(
+                        ErrorKind::TimedOut,
+                        "the host sends too slowly",
+                    ));
                 }
                 self.busy = Duration::ZERO;
                 self.bytes = 0;
@@ -78,7 +95,9 @@ mod tests {
         p.window = Duration::from_millis(50);
         p.min_bytes = 1000;
         let mut b = [0u8; 16];
-        let err = (0..1000).find_map(|_| p.read(&mut b).err()).expect("given up");
+        let err = (0..1000)
+            .find_map(|_| p.read(&mut b).err())
+            .expect("given up");
         assert_eq!(err.kind(), ErrorKind::TimedOut);
     }
 
@@ -87,7 +106,9 @@ mod tests {
         let mut p = Paced::greeting(Trickle);
         p.until = Some(Instant::now() + Duration::from_millis(30));
         let mut b = [0u8; 16];
-        let err = (0..1000).find_map(|_| p.read(&mut b).err()).expect("given up");
+        let err = (0..1000)
+            .find_map(|_| p.read(&mut b).err())
+            .expect("given up");
         assert_eq!(err.kind(), ErrorKind::TimedOut);
     }
 

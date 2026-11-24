@@ -4435,7 +4435,6 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "mirror_particles"
             | "ai_wait_timed_stops_only"
             | "pax_bad_driving"
-            | "pax_bad_driving"
             | "pax_no_ticket"
             | "pax_board_when_stopped"
             | "passenger_connections"

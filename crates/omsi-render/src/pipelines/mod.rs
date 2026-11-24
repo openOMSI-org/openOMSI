@@ -4,7 +4,6 @@
 pub(crate) mod common;
 pub(crate) mod coronas;
 pub(crate) mod defaults;
-pub(crate) mod temporal;
 pub(crate) mod enhanced;
 pub(crate) mod errors;
 pub(crate) mod mip;
@@ -16,6 +15,7 @@ pub(crate) mod scene;
 pub(crate) mod shadows;
 pub(crate) mod sky;
 pub(crate) mod ssao;
+pub(crate) mod temporal;
 pub(crate) mod upscale;
 
 #[cfg(all(test, windows))]

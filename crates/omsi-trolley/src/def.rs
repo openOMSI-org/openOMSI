@@ -271,10 +271,23 @@ impl DriveKind {
         let k = (mass / 13_000.0).clamp(0.5, 2.2);
         if chopper {
             let a = AsyncDef::default();
-            DriveKind::Async(AsyncDef { max_force: a.max_force * k, max_power_kw: a.max_power_kw * k, regen_power_kw: a.regen_power_kw * k, regen_force: a.regen_force * k, brake_force: a.brake_force * k, ..a })
+            DriveKind::Async(AsyncDef {
+                max_force: a.max_force * k,
+                max_power_kw: a.max_power_kw * k,
+                regen_power_kw: a.regen_power_kw * k,
+                regen_force: a.regen_force * k,
+                brake_force: a.brake_force * k,
+                ..a
+            })
         } else {
             let r = RheostatDef::default();
-            DriveKind::Rheostat(RheostatDef { current_min: r.current_min * k, current_max: r.current_max * k, brake_current: r.brake_current * k, brake_force: r.brake_force * k, ..r })
+            DriveKind::Rheostat(RheostatDef {
+                current_min: r.current_min * k,
+                current_max: r.current_max * k,
+                brake_current: r.brake_current * k,
+                brake_force: r.brake_force * k,
+                ..r
+            })
         }
     }
 }
@@ -304,11 +317,14 @@ fn pairs<'a>(lines: &[&'a str]) -> Vec<(String, Vec<&'a str>)> {
 }
 
 fn num(v: &[&str], i: usize) -> Option<f32> {
-    v.get(i).and_then(|s| s.replace(',', ".").parse::<f32>().ok()).filter(|x| x.is_finite())
+    v.get(i)
+        .and_then(|s| s.replace(',', ".").parse::<f32>().ok())
+        .filter(|x| x.is_finite())
 }
 
 fn flag(v: &[&str]) -> bool {
-    v.first().is_none_or(|s| !matches!(*s, "0" | "false" | "no" | "off"))
+    v.first()
+        .is_none_or(|s| !matches!(*s, "0" | "false" | "no" | "off"))
 }
 
 impl PoleDef {
@@ -320,7 +336,11 @@ impl PoleDef {
                     if let Some(x) = num(&v, 0) {
                         p.side = if x < 0.0 { -1 } else { 1 };
                     } else if let Some(s) = v.first() {
-                        p.side = if s.eq_ignore_ascii_case("left") { -1 } else { 1 };
+                        p.side = if s.eq_ignore_ascii_case("left") {
+                            -1
+                        } else {
+                            1
+                        };
                     }
                 }
                 "pos" | "base" => {
@@ -329,20 +349,36 @@ impl PoleDef {
                     }
                 }
                 "length" => p.length = num(&v, 0).unwrap_or(p.length).clamp(2.0, 12.0),
-                "rest_angle" => p.rest_angle = num(&v, 0).unwrap_or(p.rest_angle).clamp(-10.0, 30.0),
+                "rest_angle" => {
+                    p.rest_angle = num(&v, 0).unwrap_or(p.rest_angle).clamp(-10.0, 30.0)
+                }
                 "work_angle" => p.work_angle = num(&v, 0).unwrap_or(p.work_angle).clamp(5.0, 70.0),
                 "tip_force" => p.tip_force = num(&v, 0).unwrap_or(p.tip_force).clamp(20.0, 600.0),
                 "mass" => p.mass = num(&v, 0).unwrap_or(p.mass).clamp(2.0, 80.0),
                 "head_mass" => p.head_mass = num(&v, 0).unwrap_or(p.head_mass).clamp(0.2, 20.0),
-                "groove_depth" => p.groove_depth = num(&v, 0).unwrap_or(p.groove_depth).clamp(0.005, 0.15),
+                "groove_depth" => {
+                    p.groove_depth = num(&v, 0).unwrap_or(p.groove_depth).clamp(0.005, 0.15)
+                }
                 "funnel" => p.funnel = num(&v, 0).unwrap_or(p.funnel).clamp(0.01, 0.4),
-                "max_wire_angle" => p.max_wire_angle = num(&v, 0).unwrap_or(p.max_wire_angle).clamp(5.0, 80.0),
+                "max_wire_angle" => {
+                    p.max_wire_angle = num(&v, 0).unwrap_or(p.max_wire_angle).clamp(5.0, 80.0)
+                }
                 "kink_speed" => p.kink_speed = num(&v, 0).unwrap_or(p.kink_speed).clamp(0.2, 10.0),
-                "retriever" => p.retriever = if v.len() > 0 && num(&v, 0).is_none() { if flag(&v) { 35.0 } else { 0.0 } } else { num(&v, 0).unwrap_or(0.0).max(0.0) },
+                "retriever" => {
+                    p.retriever = if v.len() > 0 && num(&v, 0).is_none() {
+                        if flag(&v) { 35.0 } else { 0.0 }
+                    } else {
+                        num(&v, 0).unwrap_or(0.0).max(0.0)
+                    }
+                }
                 "max_angle" => p.max_angle = num(&v, 0).unwrap_or(p.max_angle).clamp(10.0, 80.0),
                 "motor" => p.motor = flag(&v),
-                "boom_bounce" => p.boom_bounce = num(&v, 0).unwrap_or(p.boom_bounce).clamp(0.2, 5.0),
-                "boom_damping" => p.boom_damping = num(&v, 0).unwrap_or(p.boom_damping).clamp(0.02, 1.0),
+                "boom_bounce" => {
+                    p.boom_bounce = num(&v, 0).unwrap_or(p.boom_bounce).clamp(0.2, 5.0)
+                }
+                "boom_damping" => {
+                    p.boom_damping = num(&v, 0).unwrap_or(p.boom_damping).clamp(0.02, 1.0)
+                }
                 "visible" => p.visible = flag(&v),
                 "reach" => p.reach = num(&v, 0).unwrap_or(p.reach).clamp(1.0, 30.0),
                 _ => {}
@@ -360,21 +396,31 @@ impl RheostatDef {
             match k.as_str() {
                 "motors" => d.motors = x.map_or(d.motors, |x| x.clamp(1.0, 8.0) as u32),
                 "gear_ratio" => d.gear_ratio = x.unwrap_or(d.gear_ratio).clamp(1.0, 60.0),
-                "gear_efficiency" => d.gear_efficiency = x.unwrap_or(d.gear_efficiency).clamp(0.5, 1.0),
+                "gear_efficiency" => {
+                    d.gear_efficiency = x.unwrap_or(d.gear_efficiency).clamp(0.5, 1.0)
+                }
                 "armature_ohm" => d.armature_ohm = x.unwrap_or(d.armature_ohm).clamp(0.01, 5.0),
                 "flux_sat" => d.flux_sat = x.unwrap_or(d.flux_sat).clamp(0.2, 30.0),
-                "flux_half_amps" => d.flux_half_amps = x.unwrap_or(d.flux_half_amps).clamp(1.0, 500.0),
+                "flux_half_amps" => {
+                    d.flux_half_amps = x.unwrap_or(d.flux_half_amps).clamp(1.0, 500.0)
+                }
                 "steps" => d.steps = x.map_or(d.steps, |x| x.clamp(2.0, 60.0) as u32),
                 "start_ohm" => d.start_ohm = x.unwrap_or(d.start_ohm).clamp(0.0, 50.0),
                 "field_steps" => {
-                    d.field_steps = v.iter().filter_map(|s| s.replace(',', ".").parse::<f32>().ok()).filter(|f| *f > 0.1 && *f < 1.0).collect();
+                    d.field_steps = v
+                        .iter()
+                        .filter_map(|s| s.replace(',', ".").parse::<f32>().ok())
+                        .filter(|f| *f > 0.1 && *f < 1.0)
+                        .collect();
                 }
                 "step_up_s" => d.step_up_s = x.unwrap_or(d.step_up_s).clamp(0.02, 3.0),
                 "step_down_s" => d.step_down_s = x.unwrap_or(d.step_down_s).clamp(0.01, 3.0),
                 "current_min" => d.current_min = x.unwrap_or(d.current_min).max(1.0),
                 "current_max" => d.current_max = x.unwrap_or(d.current_max).max(d.current_min),
                 "brake_current" => d.brake_current = x.unwrap_or(d.brake_current).max(0.0),
-                "brake_excitation" => d.brake_excitation = x.unwrap_or(d.brake_excitation).clamp(0.05, 1.0),
+                "brake_excitation" => {
+                    d.brake_excitation = x.unwrap_or(d.brake_excitation).clamp(0.05, 1.0)
+                }
                 "brake_force" => d.brake_force = x.unwrap_or(d.brake_force).max(0.0),
                 "overspeed" => d.overspeed_rad = x.unwrap_or(d.overspeed_rad).max(50.0),
                 _ => {}
@@ -411,7 +457,11 @@ impl AsyncDef {
 
 impl BatteryDef {
     pub fn parse(lines: &[&str]) -> BatteryDef {
-        let mut b = BatteryDef { kwh: 4.0, kw: 30.0, max_kmh: 15.0 };
+        let mut b = BatteryDef {
+            kwh: 4.0,
+            kw: 30.0,
+            max_kmh: 15.0,
+        };
         for (k, v) in pairs(lines) {
             let x = num(&v, 0);
             match k.as_str() {
@@ -455,7 +505,10 @@ impl TrolleyDef {
             "trolley_vars" => VarNames::parse(lines, &mut self.vars),
             "trolley_none" => self.none = true,
             "trolley_aux" => {
-                if let Some(x) = pairs(lines).first().and_then(|(k, v)| num(v, 0).or_else(|| k.parse().ok())) {
+                if let Some(x) = pairs(lines)
+                    .first()
+                    .and_then(|(k, v)| num(v, 0).or_else(|| k.parse().ok()))
+                {
                     self.aux_kw = x.max(0.0);
                 }
             }
@@ -465,7 +518,15 @@ impl TrolleyDef {
     }
 
     pub fn keywords() -> &'static [&'static str] {
-        &["trolley_pole", "trolley_rheostat", "trolley_async", "trolley_battery", "trolley_vars", "trolley_aux", "trolley_none"]
+        &[
+            "trolley_pole",
+            "trolley_rheostat",
+            "trolley_async",
+            "trolley_battery",
+            "trolley_vars",
+            "trolley_aux",
+            "trolley_none",
+        ]
     }
 }
 
@@ -475,14 +536,22 @@ mod tests {
 
     #[test]
     fn pole_block_overrides_defaults() {
-        let p = PoleDef::parse(&["side left", "pos -0.4 -1.2 3.05", "length 7.0 // m", "retriever 1"]);
+        let p = PoleDef::parse(&[
+            "side left",
+            "pos -0.4 -1.2 3.05",
+            "length 7.0 // m",
+            "retriever 1",
+        ]);
         assert_eq!(p.side, -1);
         assert_eq!(p.base, Vec3::new(-0.4, -1.2, 3.05));
         assert_eq!(p.length, 7.0);
         assert!(p.retriever > 0.0);
         let m = PoleDef::parse(&["motor 1", "boom_bounce 1.5", "boom_damping 0.2"]);
         assert_eq!((m.boom_bounce, m.boom_damping), (1.5, 0.2));
-        assert_eq!((p.max_angle, PoleDef::parse(&["max_angle 38"]).max_angle), (45.0, 38.0));
+        assert_eq!(
+            (p.max_angle, PoleDef::parse(&["max_angle 38"]).max_angle),
+            (45.0, 38.0)
+        );
         assert_eq!(p.tip_force, 120.0);
     }
 
@@ -522,12 +591,27 @@ mod tests {
         let small = DriveKind::typical(8_000.0, false);
         let big = DriveKind::typical(26_000.0, false);
         assert!(matches!(small, DriveKind::Rheostat(_)) && matches!(big, DriveKind::Rheostat(_)));
-        assert!(force(&big) > force(&small) * 2.0, "an articulated bus has the force to start");
-        assert!(matches!(DriveKind::typical(13_000.0, true), DriveKind::Async(_)));
+        assert!(
+            force(&big) > force(&small) * 2.0,
+            "an articulated bus has the force to start"
+        );
+        assert!(matches!(
+            DriveKind::typical(13_000.0, true),
+            DriveKind::Async(_)
+        ));
         // a 13 t bus is the reference one
-        assert_eq!(force(&DriveKind::typical(13_000.0, false)), RheostatDef::default().brake_force);
+        assert_eq!(
+            force(&DriveKind::typical(13_000.0, false)),
+            RheostatDef::default().brake_force
+        );
         // a toy mass and a freak one stay within bounds
-        assert_eq!(force(&DriveKind::typical(1.0, false)), RheostatDef::default().brake_force * 0.5);
-        assert_eq!(force(&DriveKind::typical(1e9, false)), RheostatDef::default().brake_force * 2.2);
+        assert_eq!(
+            force(&DriveKind::typical(1.0, false)),
+            RheostatDef::default().brake_force * 0.5
+        );
+        assert_eq!(
+            force(&DriveKind::typical(1e9, false)),
+            RheostatDef::default().brake_force * 2.2
+        );
     }
 }

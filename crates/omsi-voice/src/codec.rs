@@ -6,10 +6,10 @@
 //! itself); this module is the only place that touches its raw interface.
 
 use unsafe_libopus::{
-    opus_decode, opus_decoder_create, opus_decoder_destroy, opus_encode, opus_encoder_create, opus_encoder_ctl,
-    opus_encoder_destroy, OpusDecoder, OpusEncoder, OPUS_APPLICATION_VOIP, OPUS_SET_BITRATE_REQUEST,
-    OPUS_SET_COMPLEXITY_REQUEST, OPUS_SET_INBAND_FEC_REQUEST, OPUS_SET_PACKET_LOSS_PERC_REQUEST,
-    OPUS_SET_SIGNAL_REQUEST, OPUS_SIGNAL_VOICE,
+    OPUS_APPLICATION_VOIP, OPUS_SET_BITRATE_REQUEST, OPUS_SET_COMPLEXITY_REQUEST,
+    OPUS_SET_INBAND_FEC_REQUEST, OPUS_SET_PACKET_LOSS_PERC_REQUEST, OPUS_SET_SIGNAL_REQUEST,
+    OPUS_SIGNAL_VOICE, OpusDecoder, OpusEncoder, opus_decode, opus_decoder_create,
+    opus_decoder_destroy, opus_encode, opus_encoder_create, opus_encoder_ctl, opus_encoder_destroy,
 };
 
 pub const RATE: u32 = 48_000;
@@ -55,7 +55,15 @@ impl Encoder {
             *o = (s.clamp(-1.0, 1.0) * 32767.0) as i16;
         }
         let mut out = vec![0u8; MAX_PACKET];
-        let n = unsafe { opus_encode(self.raw, samples.as_ptr(), FRAME as i32, out.as_mut_ptr(), MAX_PACKET as i32) };
+        let n = unsafe {
+            opus_encode(
+                self.raw,
+                samples.as_ptr(),
+                FRAME as i32,
+                out.as_mut_ptr(),
+                MAX_PACKET as i32,
+            )
+        };
         if n <= 0 {
             return None;
         }
@@ -93,7 +101,16 @@ impl Decoder {
             Some(p) => (p.as_ptr(), p.len() as i32),
             None => (std::ptr::null(), 0),
         };
-        let n = unsafe { opus_decode(self.raw, data, len, pcm.as_mut_ptr(), FRAME as i32, fec as i32) };
+        let n = unsafe {
+            opus_decode(
+                self.raw,
+                data,
+                len,
+                pcm.as_mut_ptr(),
+                FRAME as i32,
+                fec as i32,
+            )
+        };
         if n != FRAME as i32 {
             return None;
         }
@@ -131,7 +148,15 @@ mod tests {
     use super::*;
 
     pub fn tone(freq: f32, frame: usize, amp: f32) -> Vec<f32> {
-        (0..FRAME).map(|i| amp * (2.0 * std::f32::consts::PI * freq * ((frame * FRAME + i) as f32 / RATE as f32)).sin()).collect()
+        (0..FRAME)
+            .map(|i| {
+                amp * (2.0
+                    * std::f32::consts::PI
+                    * freq
+                    * ((frame * FRAME + i) as f32 / RATE as f32))
+                    .sin()
+            })
+            .collect()
     }
 
     fn rms(x: &[f32]) -> f32 {
@@ -171,14 +196,20 @@ mod tests {
     #[test]
     fn a_lost_frame_is_recovered_or_concealed() {
         let (mut e, mut d) = (Encoder::new().unwrap(), Decoder::new().unwrap());
-        let packets: Vec<_> = (0..12).map(|f| e.encode(&tone(300.0, f, 0.5)).unwrap()).collect();
+        let packets: Vec<_> = (0..12)
+            .map(|f| e.encode(&tone(300.0, f, 0.5)).unwrap())
+            .collect();
         for p in &packets[..8] {
             d.decode(p).unwrap();
         }
         // frame 8 is lost: frame 9 carries it
         let healed = d.recover(&packets[9]).unwrap();
         let after = d.decode(&packets[9]).unwrap();
-        assert!(rms(&healed) > 0.1, "recovered frame is not silent: {}", rms(&healed));
+        assert!(
+            rms(&healed) > 0.1,
+            "recovered frame is not silent: {}",
+            rms(&healed)
+        );
         assert!(rms(&after) > 0.1);
         // two lost in a row: concealment carries on (not a click, not a silent hole at once)
         let c = d.conceal();
@@ -191,7 +222,9 @@ mod tests {
         assert!(d.decode(&[]).is_none());
         // (random bytes may parse as some Opus frame - it must not crash, nor give a wrong size)
         for seed in 0..50u8 {
-            let junk: Vec<u8> = (0..40u8).map(|i| seed.wrapping_mul(31).wrapping_add(i.wrapping_mul(7))).collect();
+            let junk: Vec<u8> = (0..40u8)
+                .map(|i| seed.wrapping_mul(31).wrapping_add(i.wrapping_mul(7)))
+                .collect();
             let _ = d.decode(&junk);
         }
         assert!(Encoder::new().unwrap().encode(&[0.0; 10]).is_none());

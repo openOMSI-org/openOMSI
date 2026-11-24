@@ -119,7 +119,8 @@ impl Rig {
                 top = top.max(p.z);
             }
             for (i, inf) in m.skin.iter().enumerate() {
-                if (0..inf.n as usize).any(|k| inf.slot[k] as usize == HEAD && inf.weight[k] > 0.5) {
+                if (0..inf.n as usize).any(|k| inf.slot[k] as usize == HEAD && inf.weight[k] > 0.5)
+                {
                     head_sum += m.data.positions[i];
                     head_n += 1;
                 }
@@ -210,15 +211,25 @@ impl Rig {
                 let (mut sum, mut n) = (Vec3::ZERO, 0u32);
                 for m in meshes {
                     for p in &m.data.positions {
-                        if (p.z - j.neck.z).abs() < 0.03 && Vec2::new(p.x - c.x, p.y - c.y).length() < 0.09 {
+                        if (p.z - j.neck.z).abs() < 0.03
+                            && Vec2::new(p.x - c.x, p.y - c.y).length() < 0.09
+                        {
                             sum += *p;
                             n += 1;
                         }
                     }
                 }
-                let at = if n >= 8 { sum / n as f32 } else { Vec3::new(c.x, j.neck.y + (c.y - j.neck.y) * 0.75, j.neck.z) };
+                let at = if n >= 8 {
+                    sum / n as f32
+                } else {
+                    Vec3::new(c.x, j.neck.y + (c.y - j.neck.y) * 0.75, j.neck.z)
+                };
                 // (never further than 12 cm from the linked point)
-                Vec3::new(j.neck.x, j.neck.y + (at.y - j.neck.y).clamp(-0.12, 0.12), j.neck.z)
+                Vec3::new(
+                    j.neck.x,
+                    j.neck.y + (at.y - j.neck.y).clamp(-0.12, 0.12),
+                    j.neck.z,
+                )
             } else {
                 j.neck
             },
@@ -349,7 +360,10 @@ impl HumanType {
                         seen.push(name);
                         md.materials
                             .iter()
-                            .find(|d| d.texture.trim().eq_ignore_ascii_case(mat.texture.trim()) && d.index == n)
+                            .find(|d| {
+                                d.texture.trim().eq_ignore_ascii_case(mat.texture.trim())
+                                    && d.index == n
+                            })
                             .map(|d| d.alpha)
                             .unwrap_or(0)
                     })
@@ -379,7 +393,13 @@ impl HumanType {
         for c in &model.ctc {
             let mut d = omsi_cfg::resolve_path(dir, &c.path);
             if !omsi_cfg::vfs::is_dir(&d) {
-                let last = c.path.trim().trim_end_matches(['\\', '/']).rsplit(['\\', '/']).next().unwrap_or("");
+                let last = c
+                    .path
+                    .trim()
+                    .trim_end_matches(['\\', '/'])
+                    .rsplit(['\\', '/'])
+                    .next()
+                    .unwrap_or("");
                 if !last.is_empty() {
                     let alt = omsi_cfg::resolve_path(dir, last);
                     if omsi_cfg::vfs::is_dir(&alt) {
@@ -436,7 +456,11 @@ impl HumanType {
 
     /// The texture a material shows in clothing variant `variant` (0 = the default):
     /// the file name and the folder to look in first.
-    pub fn variant_texture<'a>(&'a self, texture: &'a str, variant: usize) -> (&'a str, Option<&'a Path>) {
+    pub fn variant_texture<'a>(
+        &'a self,
+        texture: &'a str,
+        variant: usize,
+    ) -> (&'a str, Option<&'a Path>) {
         let Some(s) = variant.checked_sub(1).and_then(|k| self.variants.get(k)) else {
             return (texture, None);
         };
@@ -464,7 +488,9 @@ pub(super) fn fit_leg_joints(j: &mut Joints, meshes: &[HumanMesh], path: &Path) 
         let mut out = Vec::new();
         for m in meshes {
             for (i, inf) in m.skin.iter().enumerate() {
-                if (0..inf.n as usize).any(|k| slots.contains(&(inf.slot[k] as usize)) && inf.weight[k] > 0.5) {
+                if (0..inf.n as usize)
+                    .any(|k| slots.contains(&(inf.slot[k] as usize)) && inf.weight[k] > 0.5)
+                {
                     out.push(m.data.positions[i]);
                 }
             }
@@ -477,10 +503,19 @@ pub(super) fn fit_leg_joints(j: &mut Joints, meshes: &[HumanMesh], path: &Path) 
         if limb.len() < 8 {
             return;
         }
-        let near: Vec<&Vec3> = limb.iter().filter(|p| (p.z - joint.z).abs() < 0.06).collect();
-        let near: Vec<&Vec3> = if near.len() >= 4 { near } else { limb.iter().collect() };
+        let near: Vec<&Vec3> = limb
+            .iter()
+            .filter(|p| (p.z - joint.z).abs() < 0.06)
+            .collect();
+        let near: Vec<&Vec3> = if near.len() >= 4 {
+            near
+        } else {
+            limb.iter().collect()
+        };
         let n = near.len() as f32;
-        let (lo, hi) = limb.iter().fold((Vec3::MAX, Vec3::MIN), |(a, b), p| (a.min(*p), b.max(*p)));
+        let (lo, hi) = limb
+            .iter()
+            .fold((Vec3::MAX, Vec3::MIN), |(a, b), p| (a.min(*p), b.max(*p)));
         let mut fixed = false;
         if joint.x < lo.x - 0.05 || joint.x > hi.x + 0.05 {
             joint.x = near.iter().map(|p| p.x).sum::<f32>() / n;

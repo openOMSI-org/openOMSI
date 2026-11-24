@@ -32,7 +32,11 @@ impl Weather {
         Ok(Self::parse(&f))
     }
     pub fn parse(f: &CfgFile) -> Weather {
-        let mut w = Weather { path: f.path.clone(), pressure: 1013.0, ..Default::default() };
+        let mut w = Weather {
+            path: f.path.clone(),
+            pressure: 1013.0,
+            ..Default::default()
+        };
         let mut r = f.reader();
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
@@ -65,7 +69,11 @@ impl Weather {
 /// heating's misting of the panes. The saturation pressure is Magnus's in base 10, over ice
 /// below 0 °C (chosen by the temperature, not the dew point, as in the original).
 pub fn absolute_humidity(temp: f32, dew: f32) -> f32 {
-    let (a, b) = if temp < 0.0 { (7.6, 240.7) } else { (7.5, 237.3) };
+    let (a, b) = if temp < 0.0 {
+        (7.6, 240.7)
+    } else {
+        (7.5, 237.3)
+    };
     6.1078 * 216.69 * 10f32.powf(a * dew / (b + dew)) / (273.15 + temp)
 }
 
@@ -101,7 +109,12 @@ pub fn from_metar(station: &str, text: &str) -> Weather {
         // wind: dddff(Gff)KT / MPS
         if (t.ends_with("KT") || t.ends_with("MPS")) && t.len() >= 7 {
             let dir = t[..3].parse::<f32>().unwrap_or(0.0);
-            let spd: f32 = t[3..].chars().take_while(|c| c.is_ascii_digit()).collect::<String>().parse().unwrap_or(0.0);
+            let spd: f32 = t[3..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect::<String>()
+                .parse()
+                .unwrap_or(0.0);
             w.wind = (dir, if t.ends_with("KT") { spd * 0.514 } else { spd });
             continue;
         }
@@ -113,7 +126,11 @@ pub fn from_metar(station: &str, text: &str) -> Weather {
         }
         if let Some(sm) = t.strip_suffix("SM") {
             if let Ok(v) = sm.parse::<f32>() {
-                w.fog.0 = if v >= 10.0 { 50_000.0 } else { (v * 1609.0).max(50.0) };
+                w.fog.0 = if v >= 10.0 {
+                    50_000.0
+                } else {
+                    (v * 1609.0).max(50.0)
+                };
             }
             continue;
         }
@@ -134,14 +151,24 @@ pub fn from_metar(station: &str, text: &str) -> Weather {
             w.pressure = q;
             continue;
         }
-        if let Some(a) = t.strip_prefix('A').filter(|a| a.len() == 4).and_then(|a| a.parse::<f32>().ok()) {
+        if let Some(a) = t
+            .strip_prefix('A')
+            .filter(|a| a.len() == 4)
+            .and_then(|a| a.parse::<f32>().ok())
+        {
             w.pressure = a / 100.0 * 33.8639;
             continue;
         }
         // clouds: the densest layer (FEW < SCT < BKN < OVC), its base in feet
         for (code, rank) in [("FEW", 1), ("SCT", 2), ("BKN", 3), ("OVC", 4), ("VV", 4)] {
             if let Some(h) = t.strip_prefix(code) {
-                let base = h.chars().take(3).collect::<String>().parse::<f32>().map(|x| x * 30.48).unwrap_or(600.0);
+                let base = h
+                    .chars()
+                    .take(3)
+                    .collect::<String>()
+                    .parse::<f32>()
+                    .map(|x| x * 30.48)
+                    .unwrap_or(600.0);
                 if rank > cover_rank {
                     cover_rank = rank;
                     let kind = match rank {
@@ -160,10 +187,28 @@ pub fn from_metar(station: &str, text: &str) -> Weather {
             Some('+') => (230.0, &t[1..]),
             _ => (150.0, t),
         };
-        let rest = rest.trim_start_matches("VC").trim_start_matches("SH").trim_start_matches("TS").trim_start_matches("FZ");
-        let kind = if rest.starts_with("SN") || rest.starts_with("SG") || rest.starts_with("PL") { Some(2.0) } else if rest.starts_with("RA") || rest.starts_with("DZ") || rest.starts_with("GR") || rest.starts_with("GS") { Some(1.0) } else { None };
+        let rest = rest
+            .trim_start_matches("VC")
+            .trim_start_matches("SH")
+            .trim_start_matches("TS")
+            .trim_start_matches("FZ");
+        let kind = if rest.starts_with("SN") || rest.starts_with("SG") || rest.starts_with("PL") {
+            Some(2.0)
+        } else if rest.starts_with("RA")
+            || rest.starts_with("DZ")
+            || rest.starts_with("GR")
+            || rest.starts_with("GS")
+        {
+            Some(1.0)
+        } else {
+            None
+        };
         if let Some(k) = kind {
-            let s = if rest.starts_with("DZ") { strength * 0.5 } else { strength };
+            let s = if rest.starts_with("DZ") {
+                strength * 0.5
+            } else {
+                strength
+            };
             if precip.map(|p| s > p.1).unwrap_or(true) {
                 precip = Some((k, s));
             }
@@ -204,7 +249,10 @@ mod humidity_tests {
 mod metar_tests {
     #[test]
     fn berlin_rain() {
-        let w = super::from_metar("EDDT", "EDDT 241250Z 23008KT 4000 -RA BKN012 OVC030 14/12 Q0997");
+        let w = super::from_metar(
+            "EDDT",
+            "EDDT 241250Z 23008KT 4000 -RA BKN012 OVC030 14/12 Q0997",
+        );
         assert_eq!(w.wind.0, 230.0);
         assert!((w.wind.1 - 4.1).abs() < 0.1);
         assert_eq!(w.fog.0, 4000.0);
@@ -212,10 +260,16 @@ mod metar_tests {
         assert_eq!(w.precip[0], 1.0);
         assert_eq!(w.pressure, 997.0);
         assert_eq!(w.temp.0, 14.0);
-        let c = super::from_metar("EDDT", "EDDT 241250Z VRB02KT CAVOK M03/M09 Q1030 TEMPO 4000 -RA BKN009");
+        let c = super::from_metar(
+            "EDDT",
+            "EDDT 241250Z VRB02KT CAVOK M03/M09 Q1030 TEMPO 4000 -RA BKN009",
+        );
         assert_eq!(c.clouds.0, "-1");
         assert_eq!(c.temp.0, -3.0);
-        let s = super::from_metar("EDDT", "EDDT 241250Z 30012G25KT 1200 +SN VV008 M02/M03 Q1005");
+        let s = super::from_metar(
+            "EDDT",
+            "EDDT 241250Z 30012G25KT 1200 +SN VV008 M02/M03 Q1005",
+        );
         assert!(s.snow && s.precip[0] == 2.0 && s.fog.0 == 1200.0);
     }
 }

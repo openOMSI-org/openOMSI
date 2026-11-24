@@ -15,7 +15,14 @@ fn renderer(instance: &wgpu::Instance) -> Renderer {
         instance,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions { msaa: 1, ssao: false, shadow_size: 1024, fxaa: false, render_scale: 1.0, ..Default::default() },
+        RenderOptions {
+            msaa: 1,
+            ssao: false,
+            shadow_size: 1024,
+            fxaa: false,
+            render_scale: 1.0,
+            ..Default::default()
+        },
     ))
     .expect("test renderer")
 }
@@ -63,28 +70,71 @@ struct Wall {
 fn wall(r: &Renderer) -> Wall {
     let mut scene = r.new_scene();
     let h = 0.42;
-    let mesh = r.add_mesh(&mut scene, &MeshData {
-        positions: vec![Vec3::new(-h, 0.0, -h), Vec3::new(h, 0.0, -h), Vec3::new(h, 0.0, h), Vec3::new(-h, 0.0, h)],
-        normals: vec![-Vec3::Y; 4],
-        uvs: vec![glam::Vec2::ZERO; 4],
-        ranges: vec![(0, 6, 0)],
-        indices: vec![0, 1, 2, 0, 2, 3],
-        one_sided: false,
-    });
-    let texture = r.add_texture(&mut scene, &omsi_texture::Image { width: 1, height: 1, rgba: vec![255, 0, 0, 255], has_alpha: false }, false);
+    let mesh = r.add_mesh(
+        &mut scene,
+        &MeshData {
+            positions: vec![
+                Vec3::new(-h, 0.0, -h),
+                Vec3::new(h, 0.0, -h),
+                Vec3::new(h, 0.0, h),
+                Vec3::new(-h, 0.0, h),
+            ],
+            normals: vec![-Vec3::Y; 4],
+            uvs: vec![glam::Vec2::ZERO; 4],
+            ranges: vec![(0, 6, 0)],
+            indices: vec![0, 1, 2, 0, 2, 3],
+            one_sided: false,
+        },
+    );
+    let texture = r.add_texture(
+        &mut scene,
+        &omsi_texture::Image {
+            width: 1,
+            height: 1,
+            rgba: vec![255, 0, 0, 255],
+            has_alpha: false,
+        },
+        false,
+    );
     for k in 0..SIDE * SIDE {
-        let (x, z) = ((k % SIDE) as f64 - SIDE as f64 / 2.0, (k / SIDE) as f64 - SIDE as f64 / 2.0);
-        let c = [(k % 7) as f32 / 6.0, (k % 11) as f32 / 10.0, (k % 13) as f32 / 12.0, 1.0];
+        let (x, z) = (
+            (k % SIDE) as f64 - SIDE as f64 / 2.0,
+            (k / SIDE) as f64 - SIDE as f64 / 2.0,
+        );
+        let c = [
+            (k % 7) as f32 / 6.0,
+            (k % 11) as f32 / 10.0,
+            (k % 13) as f32 / 12.0,
+            1.0,
+        ];
         let material = if k == SIDE * SIDE / 2 {
             r.add_material(&mut scene, Some(texture), AlphaMode::Opaque, [1.0; 4], true)
         } else {
             r.add_material(&mut scene, None, AlphaMode::Opaque, c, true)
         };
-        r.add_instance(&mut scene, mesh, DVec3::new(x, 22.0, z), Mat4::IDENTITY, vec![material]);
+        r.add_instance(
+            &mut scene,
+            mesh,
+            DVec3::new(x, 22.0, z),
+            Mat4::IDENTITY,
+            vec![material],
+        );
     }
-    let spare = r.add_material(&mut scene, None, AlphaMode::Opaque, [1.0, 1.0, 0.0, 1.0], true);
+    let spare = r.add_material(
+        &mut scene,
+        None,
+        AlphaMode::Opaque,
+        [1.0, 1.0, 0.0, 1.0],
+        true,
+    );
     let mirror = r.add_render_texture(&mut scene, 64, 64);
-    Wall { scene, mesh, texture, spare, mirror }
+    Wall {
+        scene,
+        mesh,
+        texture,
+        spare,
+        mirror,
+    }
 }
 
 /// Make `change` to the wall (the same on either renderer).
@@ -98,11 +148,22 @@ fn apply(r: &mut Renderer, w: &mut Wall, change: Change, camera: &Camera, lighti
         }
         Change::Add => {
             let m = r.add_material(s, None, AlphaMode::Opaque, [0.0, 1.0, 1.0, 1.0], true);
-            r.add_instance(s, w.mesh, DVec3::new(0.0, 21.0, 0.3), Mat4::IDENTITY, vec![m]);
+            r.add_instance(
+                s,
+                w.mesh,
+                DVec3::new(0.0, 21.0, 0.3),
+                Mat4::IDENTITY,
+                vec![m],
+            );
         }
         Change::Remove => r.remove_instance(s, 3),
         Change::Texture => {
-            let green = omsi_texture::Image { width: 1, height: 1, rgba: vec![0, 255, 0, 255], has_alpha: false };
+            let green = omsi_texture::Image {
+                width: 1,
+                height: 1,
+                rgba: vec![0, 255, 0, 255],
+                has_alpha: false,
+            };
             r.replace_texture(s, w.texture, &omsi_texture::TextureData::from_image(green));
             r.rebind_textures(s, &[w.texture]);
         }
@@ -124,12 +185,17 @@ fn apply(r: &mut Renderer, w: &mut Wall, change: Change, camera: &Camera, lighti
 }
 
 fn picture(r: &mut Renderer, w: &mut Wall, camera: &Camera, lighting: &Lighting) -> Vec<u8> {
-    r.render_to_image(&mut w.scene, SIZE, SIZE, camera, lighting).unwrap()
+    r.render_to_image(&mut w.scene, SIZE, SIZE, camera, lighting)
+        .unwrap()
 }
 
 fn settle(r: &mut Renderer, w: &mut Wall, camera: &Camera, lighting: &Lighting, parts: usize) {
     picture(r, w, camera, lighting);
-    assert_eq!(r.history.bundle_stats.get(), (parts, 0), "the first repeat records again to keep what it binds");
+    assert_eq!(
+        r.history.bundle_stats.get(),
+        (parts, 0),
+        "the first repeat records again to keep what it binds"
+    );
 }
 
 #[test]
@@ -138,14 +204,29 @@ fn kept_bundles_draw_what_a_fresh_recording_draws() {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let mut kept = renderer(&instance);
     let mut fresh = renderer(&instance);
-    let camera = Camera { position: DVec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_deg: 90.0, near: 0.1, far: 200.0 };
-    let lighting = Lighting { shadows: false, fog_density: 0.0, ..Default::default() };
+    let camera = Camera {
+        position: DVec3::ZERO,
+        yaw: 0.0,
+        pitch: 0.0,
+        roll: 0.0,
+        fov_deg: 90.0,
+        near: 0.1,
+        far: 200.0,
+    };
+    let lighting = Lighting {
+        shadows: false,
+        fog_density: 0.0,
+        ..Default::default()
+    };
     let mut w = wall(&kept);
     // frame A: everything recorded
     let mut before = picture(&mut kept, &mut w, &camera, &lighting);
     let (recorded, reused) = kept.history.bundle_stats.get();
     assert_eq!(reused, 0);
-    assert!(recorded >= 4, "the wall should take four bundles or more, got {recorded}");
+    assert!(
+        recorded >= 4,
+        "the wall should take four bundles or more, got {recorded}"
+    );
     let parts = recorded;
     settle(&mut kept, &mut w, &camera, &lighting, parts);
     for (n, &change) in CASES.iter().enumerate() {
@@ -155,22 +236,42 @@ fn kept_bundles_draw_what_a_fresh_recording_draws() {
         assert_eq!(recorded + reused, parts, "{change:?}: parts");
         match change {
             // the same draws (a move is in the instances' buffer, not in the bundles)
-            Change::Nothing | Change::Move | Change::Mirror | Change::MirrorSteady => assert_eq!(recorded, 0, "{change:?}: nothing to record"),
+            Change::Nothing | Change::Move | Change::Mirror | Change::MirrorSteady => {
+                assert_eq!(recorded, 0, "{change:?}: nothing to record")
+            }
             // one draw more or less, or another texture or material in one: its part and
             // those after it again, the ones before it kept
-            _ => assert!(recorded >= 1, "{change:?}: a changed part must be recorded again"),
+            _ => assert!(
+                recorded >= 1,
+                "{change:?}: a changed part must be recorded again"
+            ),
         }
         if matches!(change, Change::Add | Change::Texture) {
-            assert!(reused >= 1, "{change:?}: the parts before the change should be kept");
+            assert!(
+                reused >= 1,
+                "{change:?}: the parts before the change should be kept"
+            );
         }
-        if matches!(change, Change::Move | Change::Add | Change::Remove | Change::Texture | Change::Material | Change::Hide | Change::Lod) {
+        if matches!(
+            change,
+            Change::Move
+                | Change::Add
+                | Change::Remove
+                | Change::Texture
+                | Change::Material
+                | Change::Hide
+                | Change::Lod
+        ) {
             assert_ne!(now, before, "{change:?}: the change should show");
         }
         // the same frame recorded from scratch on this renderer
         *kept.history.main_bundles.borrow_mut() = None;
         let again = picture(&mut kept, &mut w, &camera, &lighting);
         assert_eq!(kept.history.bundle_stats.get().1, 0);
-        assert!(now == again, "{change:?}: kept bundles drew something else than recorded ones");
+        assert!(
+            now == again,
+            "{change:?}: kept bundles drew something else than recorded ones"
+        );
         settle(&mut kept, &mut w, &camera, &lighting, parts);
         // and the same scene drawn by another renderer for the first time
         let mut other = wall(&fresh);
@@ -179,13 +280,23 @@ fn kept_bundles_draw_what_a_fresh_recording_draws() {
         }
         *fresh.history.main_bundles.borrow_mut() = None;
         let first = picture(&mut fresh, &mut other, &camera, &lighting);
-        assert!(now == first, "{change:?}: kept bundles drew something else than a fresh renderer");
+        assert!(
+            now == first,
+            "{change:?}: kept bundles drew something else than a fresh renderer"
+        );
         before = now;
     }
     // another pass mode is never served the bundles of the last one
-    let enhanced = Lighting { enhanced: true, ..lighting.clone() };
+    let enhanced = Lighting {
+        enhanced: true,
+        ..lighting.clone()
+    };
     picture(&mut kept, &mut w, &camera, &enhanced);
-    assert_eq!(kept.history.bundle_stats.get().1, 0, "the enhanced pass must not reuse the plain pass's bundles");
+    assert_eq!(
+        kept.history.bundle_stats.get().1,
+        0,
+        "the enhanced pass must not reuse the plain pass's bundles"
+    );
     picture(&mut kept, &mut w, &camera, &lighting);
     assert_eq!(kept.history.bundle_stats.get().1, 0, "and back");
 }
