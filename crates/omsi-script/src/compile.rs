@@ -590,7 +590,19 @@ impl<'a> Compiler<'a> {
 
     fn compile_file(&mut self, f: &CfgFile) {
         self.file_frames = (self.p.frame.len(), self.p.frame_ai.len());
-        let mut cur: Option<(Vec<BlockKind>, Block, Vec<(usize, bool)>)> = None; // kinds (aliases), block, if-stack: (jump op index, has_else)
+        // kinds (aliases), block, if-stack: (jump op index, has_else). When the last block of
+        // the file before runs on into this one, so do the words before this file's first
+        // header: Omsi.exe chains the words of all files, so they run between the two blocks.
+        let mut cur: Option<(Vec<BlockKind>, Block, Vec<(usize, bool)>)> = (self.reached != 0)
+            .then(|| {
+                let block = Block {
+                    name: format!("(start of {})", f.path.display()),
+                    file: f.path.clone(),
+                    line: 1,
+                    ..Default::default()
+                };
+                (Vec::new(), block, Vec::new())
+            });
         // the jumps of `{else}`s after an `{if}`'s first, with the depth of their `{if}` in
         // the if-stack: in OMSI every `{else}` reached goes on at the `{endif}`, so
         // `{if} X {else} Y {else} Z {endif}` never runs Z (DBC Chicago Citybus
@@ -634,8 +646,11 @@ impl<'a> Compiler<'a> {
             for t in toks {
                 match t {
                     Tok::Brace(b) => {
-                        let bl = b.to_ascii_lowercase();
-                        match bl.as_str() {
+                        // (case-sensitive: Omsi.exe sub_5d1db8 compares each word with
+                        // `{end}`, `{frame}` … and the first letters with `{macro:` and
+                        // `{trigger:` exactly, so a mod's `{End}` does not end its block)
+                        let bl = b.as_str();
+                        match bl {
                             "init" | "frame" | "frame_ai" | _
                                 if bl == "init"
                                     || bl == "frame"
@@ -643,10 +658,10 @@ impl<'a> Compiler<'a> {
                                     || bl.starts_with("macro:")
                                     || bl.starts_with("trigger:") =>
                             {
-                                let (kind, name) = match bl.as_str() {
-                                    "init" => (BlockKind::Init, bl.clone()),
-                                    "frame" => (BlockKind::Frame, bl.clone()),
-                                    "frame_ai" => (BlockKind::FrameAi, bl.clone()),
+                                let (kind, name) = match bl {
+                                    "init" => (BlockKind::Init, b.clone()),
+                                    "frame" => (BlockKind::Frame, b.clone()),
+                                    "frame_ai" => (BlockKind::FrameAi, b.clone()),
                                     _ => {
                                         let name = b[b.find(':').unwrap() + 1..].trim().to_string();
                                         let kind = if bl.starts_with("macro:") {
@@ -662,6 +677,11 @@ impl<'a> Compiler<'a> {
                                     // makes both names refer to the same body - stock scripts
                                     // stack `{trigger:a}` `{trigger:b}` this way.
                                     Some((kinds, block, _)) if block.ops.is_empty() => {
+                                        if kinds.is_empty() {
+                                            // (nothing before this file's first header)
+                                            block.name = name;
+                                            block.line = line_no;
+                                        }
                                         kinds.push(kind)
                                     }
                                     Some(_) => {

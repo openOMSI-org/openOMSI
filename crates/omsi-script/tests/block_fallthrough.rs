@@ -6,6 +6,12 @@
 use omsi_script::{CompileInput, NullHost, Program, State, Vm, compile};
 
 fn program(files: &[&str]) -> Program {
+    let p = compile_files(files);
+    assert!(p.errors.is_empty(), "{:?}", p.errors);
+    p
+}
+
+fn compile_files(files: &[&str]) -> Program {
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("omsi_fallthrough_{}_{n}", std::process::id()));
@@ -19,13 +25,11 @@ fn program(files: &[&str]) -> Program {
             path
         })
         .collect();
-    let p = compile(&CompileInput {
+    compile(&CompileInput {
         builtin_vars: ["a", "b", "c", "f"].map(String::from).to_vec(),
         scripts,
         ..Default::default()
-    });
-    assert!(p.errors.is_empty(), "{:?}", p.errors);
-    p
+    })
 }
 
 fn count(p: &Program, st: &State) -> [f32; 4] {
@@ -90,4 +94,36 @@ fn a_long_chain_of_blocks_without_their_end_runs_at_the_callers_depth() {
     let mut st = State::new(&p);
     vm.run_frame(&p, &mut st, &mut NullHost);
     assert_eq!(count(&p, &st), [100.0, 0.0, 0.0, 0.0]);
+}
+
+#[test]
+fn the_words_before_a_files_first_header_run_after_a_block_without_its_end() {
+    // the words before `{macro:m}` sit between the `{frame}` and `m` in the word chain
+    let next = "(L.L.b) 1 + (S.L.b)\n{macro:m}\n(L.L.c) 1 + (S.L.c)\n{end}\n";
+    let p = program(&["{frame}\n(L.L.a) 1 + (S.L.a)\n", next]);
+    let mut vm = Vm::new();
+    let mut st = State::new(&p);
+    vm.run_frame(&p, &mut st, &mut NullHost);
+    assert_eq!(count(&p, &st), [1.0, 1.0, 1.0, 0.0]);
+    assert!(p.macro_block("m").is_some());
+    // after an `{end}` nothing links to them
+    let p = program(&["{frame}\n(L.L.a) 1 + (S.L.a)\n{end}\n", next]);
+    let mut st = State::new(&p);
+    vm.run_frame(&p, &mut st, &mut NullHost);
+    assert_eq!(count(&p, &st), [1.0, 0.0, 0.0, 0.0]);
+}
+
+#[test]
+fn block_words_are_case_sensitive() {
+    // Omsi.exe compares them exactly: `{End}` does not end the frame, which runs on into
+    // `{trigger:t}`, and `{Frame}` starts no block
+    let p = compile_files(&[
+        "{frame}\n(L.L.a) 1 + (S.L.a)\n{End}\n{trigger:t}\n(L.L.b) 1 + (S.L.b)\n{end}\n{Frame}\n(L.L.c) 1 + (S.L.c)\n{end}\n",
+    ]);
+    assert_eq!(p.errors.len(), 2, "{:?}", p.errors);
+    assert_eq!(p.frame.len(), 1);
+    let mut vm = Vm::new();
+    let mut st = State::new(&p);
+    vm.run_frame(&p, &mut st, &mut NullHost);
+    assert_eq!(count(&p, &st), [1.0, 1.0, 0.0, 0.0]);
 }
