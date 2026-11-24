@@ -237,7 +237,8 @@ impl World {
         };
         // (through the map's publisher aliases, as the objects themselves are read)
         let resolve = |f: &str| self.resolve_map_asset(f);
-        let mut built = MapIndex::build_with(&self.map_tiles(), &self.chrono_dirs(), &resolve, numbers);
+        let mut built =
+            MapIndex::build_with(&self.map_tiles(), &self.chrono_dirs(), &resolve, numbers);
         // the index's object positions go to `object_positions` (kept once, not twice: 345 000
         // objects on Ahlheim took 30 MB in each)
         let objects = std::mem::take(&mut built.objects);
