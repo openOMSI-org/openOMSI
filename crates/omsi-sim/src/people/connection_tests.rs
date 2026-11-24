@@ -193,7 +193,7 @@ fn chance_zero_twenty_and_hundred_respect_draw_and_service() {
 }
 
 #[test]
-fn a_stop_in_range_gets_one_more_waiting_person_each_time_its_clock_runs_out() {
+fn a_stop_in_range_fills_up_a_person_a_frame_once_its_clock_runs_out() {
     let (mut h, _) = super::super::pax_stops::brt_tests::setup("stop-fill-pace", None);
     h.types = vec![h.people[0].ty.clone()];
     h.pool_types = 1;
@@ -209,14 +209,23 @@ fn a_stop_in_range_gets_one_more_waiting_person_each_time_its_clock_runs_out() {
     let world = FlatWorld::default();
     let waiting = |h: &PeopleSim| h.people.iter().filter(|p| matches!(&p.state, State::Pax(x) if x.stop == Some(42))).count();
     assert_eq!(waiting(&h), 1);
+    // (0x61bf94 / 0x61bd44: its clock run out, a stop short of its number gets one more each
+    // frame until it has it, and only then starts the clock again)
     for _ in 0..5 {
         h.stops_tick(0.1, &world);
     }
     assert_eq!(h.stops[&42].want, 5);
-    assert_eq!(waiting(&h), 2);
-    h.stops.get_mut(&42).unwrap().clock_ms = 15_001.0;
+    assert_eq!(waiting(&h), 5);
+    assert!(h.stops[&42].clock_ms < 1000.0);
+    // short of it again, nobody comes until 10 to 15 s after it was full
+    h.stops.get_mut(&42).unwrap().enter_max = 6.0;
+    h.stops.get_mut(&42).unwrap().enter_min = 6.0;
     for _ in 0..5 {
         h.stops_tick(0.1, &world);
     }
-    assert_eq!(waiting(&h), 3);
+    assert_eq!(h.stops[&42].want, 6);
+    assert_eq!(waiting(&h), 5);
+    h.stops.get_mut(&42).unwrap().clock_ms = 15_001.0;
+    h.stops_tick(0.1, &world);
+    assert_eq!(waiting(&h), 6);
 }

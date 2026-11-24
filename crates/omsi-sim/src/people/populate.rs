@@ -232,10 +232,15 @@ impl PeopleSim {
     }
 
     /// The stops near the player fill with people (sub_61bf94, every frame): a stop coming
-    /// into range gets its people at once, one in range another one every 10..15 s while
-    /// it has fewer than it should - its pass_enter mean times its own random factor
-    /// times the passenger density, at most one per waiting place. A stop going out of
-    /// range loses the people waiting there.
+    /// into range gets its people at once - its pass_enter mean times its own random factor
+    /// times the passenger density (times the share its due trips ask for), at most one per
+    /// waiting place. One in range that has fewer than that 10..15 s after it last had them
+    /// all gets one more each frame until it has (0x61bd44 adds one, and only a stop at its
+    /// number starts its clock again). The people who boarded a bus still count for the stop
+    /// while that bus is within 60 m (0x62d75b), and once it has left the stop its trip asks
+    /// for nobody there any more (0x61a068, `DueTrips`): the stop does not fill again for the
+    /// bus standing at it, nor for the one that has just left. A stop going out of range
+    /// loses the people waiting there.
     pub fn stops_tick(&mut self, dt: f32, world: &dyn World) {
         if self.mirror || self.avatar_only {
             return;
@@ -368,7 +373,9 @@ impl PeopleSim {
                     break;
                 }
             }
-            if count >= want || !changed {
+            // (0x61bf94: the clock starts again only at exactly the stop's number - short of
+            // it, the next frame adds another one)
+            if count == want {
                 self.stops.get_mut(&id).unwrap().clock_ms = 0.0;
             }
         }
