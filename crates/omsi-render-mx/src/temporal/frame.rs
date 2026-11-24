@@ -37,6 +37,24 @@ const METALFX_SHARPEN: f32 = 0.4;
 /// the window's size (bark, the gauges' numbers, grass).
 const METALFX_MIP_BIAS: f32 = -1.0;
 
+/// The motion vectors' uniform and the last frame's model places in the heap: the motion
+/// pipelines read them at the scene shader's `lights` and `grid` places, which they do not
+/// otherwise read (temporal/motion.wgsl; `frame_from_heap`).
+pub(crate) struct MotionHeap {
+    views: [mx::BufferView; 2],
+}
+
+impl MotionHeap {
+    /// The frame's places with the motion's in `lights` and `grid`.
+    pub(crate) fn heap(&self, frame: &FrameHeap) -> FrameHeap {
+        FrameHeap {
+            lights: self.views[0].index(),
+            grid: self.views[1].index(),
+            ..*frame
+        }
+    }
+}
+
 pub(crate) struct TemporalPipelines {
     pub(crate) prepass: [mx::RenderPipeline; 6],
     pub(crate) late_motion: [mx::RenderPipeline; 6],
@@ -80,7 +98,7 @@ pub(crate) struct TemporalState {
     keep: std::collections::VecDeque<Vec<mx::Texture>>,
     motion_buf: mx::Buffer,
     blit_buf: mx::Buffer,
-    pub(crate) prev_models: Option<(mx::Buffer, mx::BindGroup)>,
+    pub(crate) prev_models: Option<(mx::Buffer, MotionHeap)>,
     prev_epoch: u64,
     prev_entries: u32,
     prev: Option<TemporalPrev>,
@@ -472,20 +490,11 @@ impl Renderer {
                         usage: mx::BufferUsages::STORAGE | mx::BufferUsages::COPY_DST,
                     })
                     .expect("mX: a buffer");
-                let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
-                    label: Some("temporal motion"),
-                    entries: &[
-                        mx::BindGroupEntry {
-                            binding: 0,
-                            resource: d.motion_buf.as_entire_binding(),
-                        },
-                        mx::BindGroupEntry {
-                            binding: 1,
-                            resource: buf.as_entire_binding(),
-                        },
-                    ],
-                });
-                d.prev_models = Some((buf, bg));
+                let views = [
+                    crate::pipelines::common::heap_view(&d.motion_buf),
+                    crate::pipelines::common::heap_view(&buf),
+                ];
+                d.prev_models = Some((buf, MotionHeap { views }));
                 d.prev_epoch = u64::MAX;
             }
         }

@@ -369,7 +369,7 @@ pub(crate) fn glsl_through_mx(
 /// (`FrameHeap`). The last step of the scene shader's forms: the others match the bound names.
 pub(crate) fn frame_from_heap(src: &str) -> String {
     // (the variable, the immediates' field it is read at)
-    const FIELDS: [(&str, &str); 26] = [
+    const FIELDS: [(&str, &str); 28] = [
         ("vehicle_reflection", "ground"),
         ("t_shadow", "shadow"),
         ("t_shadow_far", "shadow_far"),
@@ -396,6 +396,9 @@ pub(crate) fn frame_from_heap(src: &str) -> String {
         ("snow_track_px", "snow_px"),
         ("snow_track", "snow"),
         ("material", "row"),
+        // (the motion pipelines', temporal/motion.wgsl: they read no lights)
+        ("motion", "lights"),
+        ("prev_models", "grid"),
     ];
     let mut out = src.replace('\r', "");
     let mut views: Vec<(String, String)> = Vec::new(); // (type, view array)
@@ -405,9 +408,11 @@ pub(crate) fn frame_from_heap(src: &str) -> String {
     let mut swaps: Vec<(String, String)> = Vec::new();
     for line in lines {
         let t = line.trim_start();
-        let group = ["@group(0)", "@group(1)", "@group(2)"]
+        // (group 3's multisampled pane depth stays a root binding: no such array in the heap)
+        let group = ["@group(0)", "@group(1)", "@group(2)", "@group(3)"]
             .iter()
-            .any(|g| t.starts_with(g));
+            .any(|g| t.starts_with(g))
+            && !t.contains("multisampled");
         let Some(var) = t.find(" var").filter(|_| group) else {
             kept.push(line);
             continue;
