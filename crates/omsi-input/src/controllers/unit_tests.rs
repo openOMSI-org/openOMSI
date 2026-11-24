@@ -17,6 +17,31 @@ mod axis_shape_tests {
 #[cfg(test)]
 mod tests {
 
+    /// #4138: one button set up leaves the pad's other buttons on their default actions;
+    /// the button set up does only what it was given.
+    #[test]
+    fn a_pad_keeps_its_default_buttons_beside_one_set_up() {
+        use super::{DeviceCfg, preset_applies};
+        assert!(preset_applies(None, Some(0)));
+        let mut d = DeviceCfg {
+            name: "Pad".into(),
+            buttons: vec![(String::new(), "0".into()); 10],
+            ..Default::default()
+        };
+        assert!(preset_applies(Some(&d), Some(9)));
+        assert!(preset_applies(Some(&d), None));
+        d.buttons[9].0 = "horn".into();
+        assert!(!preset_applies(Some(&d), Some(9)));
+        assert!(preset_applies(Some(&d), Some(0)));
+        assert!(preset_applies(Some(&d), Some(40)));
+        // (a press not known by number: the file's buttons alone, as before)
+        assert!(!preset_applies(Some(&d), None));
+        // a button set up with more than one action
+        d.more.push((3, "gear_up".into()));
+        d.buttons[3].0 = "gear_down".into();
+        assert!(!preset_applies(Some(&d), Some(3)));
+    }
+
     #[test]
     fn a_gilrs_event_that_panics_is_skipped() {
         let mut queue = vec![Some(2), None, Some(1)];
@@ -391,6 +416,7 @@ mod tests {
             vec![(
                 "Xbox One Game Controller".to_string(),
                 gilrs::Button::East,
+                Some(1),
                 false
             )]
         );
