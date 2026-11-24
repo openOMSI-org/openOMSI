@@ -316,6 +316,27 @@ mod tests {
         assert!(!crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get()));
     }
 
+    /// #3769: the keyboard is shared with the lists' search line. The LAN chat closing while
+    /// that search is still typed into leaves it up; the search ending puts it away.
+    #[test]
+    fn closing_the_chat_keeps_the_keyboard_for_a_search_still_typed_into() {
+        let on = || crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get());
+        let hud = [0.0, 0.0, 1280.0, 720.0];
+        let mut app = app();
+        app.open_multiplayer();
+        app.net.remotes.chat.open();
+        app.frame_game_panels(0.0, hud, false);
+        assert!(on());
+        app.menus.menu_edit = Some(String::new());
+        app.menus.menu_edit_search = true;
+        app.net.remotes.chat.blur();
+        app.frame_game_panels(0.0, hud, false);
+        assert!(on());
+        app.stop_search_typing();
+        app.frame_game_panels(0.0, hud, false);
+        assert!(!on());
+    }
+
     #[test]
     fn escape_cancels_the_form_and_pending_confirmation() {
         let mut app = app();
