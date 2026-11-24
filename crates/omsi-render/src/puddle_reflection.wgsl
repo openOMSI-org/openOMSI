@@ -181,10 +181,13 @@ fn fs_trace(in: PuddleVertex) -> @location(0) vec4<f32> {
     } else {
         ripple = puddle_ripple_classic(world.xy + p.origin_rain.xy, p.eye_time.w, p.origin_rain.z, 1.0);
     }
-    let normal = normalize(surface_normal + vec3<f32>(ripple.xy, 0.0));
+    // The discrete screen-space hit must stay on the same ray as the ripple
+    // moves. Keep the rain distortion in the filtered planar sample below.
+    let normal = select(normalize(surface_normal + vec3<f32>(ripple.xy, 0.0)), surface_normal, p.vehicle_info.w > 0.5);
     let direction = reflect(normalize(world - p.eye_time.xyz), normal);
     if (local_vehicle_plane(world)) {
-        let vehicle = textureSampleLevel(t_vehicle, s_linear, uv + ripple.xy * 0.006, 0.0);
+        let distortion = select(0.006, 0.0015, p.vehicle_info.w > 0.5);
+        let vehicle = textureSampleLevel(t_vehicle, s_linear, uv + ripple.xy * distortion, 0.0);
         if (vehicle.a > 0.01) {
             if (p.projection_trace.z == 2.0) { return vec4<f32>(0.0, 1.0, 0.0, depth); }
             if (p.projection_trace.z == 3.0) { return vec4<f32>(finite_colour(vehicle.rgb), depth); }

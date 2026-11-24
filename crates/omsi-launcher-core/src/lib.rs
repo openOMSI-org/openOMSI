@@ -3959,6 +3959,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "head_movement"
             | "driverview_smooth"
             | "hands_in_cab"
+            | "driver_like_omsi"
             | "alt_view"
             | "precision_zoom" => v[&k] = json!(b(val)),
             "maintenance" | "ai_unsched_factor" | "ai_reaction" | "ai_max_scheduled"

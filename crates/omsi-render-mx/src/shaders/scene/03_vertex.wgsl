@@ -287,7 +287,10 @@ fn tree_crown_normal(local: vec3<f32>, m: mat4x4<f32>, up: vec3<f32>) -> vec3<f3
 }
 
 fn tree_card_fade(world: vec3<f32>) -> f32 {
-    if (!detailed_trees() || (!is_tree_card() && material.sway.x < 0.5)) {
+    // Shrubs and hedges bend from the ground (up to 3 m in foliage_sway).
+    // Keep their long side visible between the short crosswise cards.
+    let crown_mesh = material.sway.x > 0.5 && material.sway.z - material.sway.y > 3.0;
+    if (!detailed_trees() || (!is_tree_card() && !crown_mesh)) {
         return 1.0;
     }
     let c = cross(dpdx(world), dpdy(world));

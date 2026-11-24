@@ -1271,7 +1271,17 @@ fn object_lights(
             mode,
             ..Default::default()
         };
-        if window_glow && ml.radius <= 25.0 {
+        if ot.sco.crash_mode_pole.is_some() {
+            // A pole's baked maplight radius is often just 2 m, smaller than the
+            // height of the head. Give its Enhanced pool room to reach the street.
+            let street_core = held.max(0.7 * ml.pos[2].max(0.0)).min(15.0);
+            state
+                .lights
+                .push(light(held, glow, omsi_render::LightMode::Vanilla));
+            state
+                .lights
+                .push(light(street_core, 1.0, omsi_render::LightMode::Enhanced));
+        } else if window_glow && ml.radius <= 25.0 {
             state
                 .lights
                 .push(light(held, glow, omsi_render::LightMode::Vanilla));
