@@ -162,6 +162,34 @@ pub fn overcast(kind: &str) -> Option<bool> {
     o
 }
 
+/// The weather's precipitation strength (0..1, of its 255) whatever falls, or nothing: the
+/// scripts' `PrecipRate` system variable, which Omsi.exe sets every frame to the
+/// strength / 255 alone (0x6ff020) - a `#CAVOK` weather's `0` / `32` reads 0.125 there,
+/// where `precip_of` says nothing falls.
+pub fn precip_strength(w: &Weather) -> f32 {
+    (w.precip.get(1).copied().unwrap_or(0.0) / 255.0).clamp(0.0, 1.0)
+}
+
+#[cfg(test)]
+mod strength_tests {
+    use super::*;
+
+    #[test]
+    fn the_strength_reads_whatever_falls() {
+        let w = |precip: Vec<f32>| Weather {
+            precip,
+            ..Weather::default()
+        };
+        // #CAVOK's "0 / 32": nothing falls, yet the scripts read 32 / 255
+        let cavok = w(vec![0.0, 32.0]);
+        assert_eq!(precip_of(&cavok), (0, 0.0));
+        assert_eq!(precip_strength(&cavok), 32.0 / 255.0);
+        assert_eq!(precip_strength(&w(vec![1.0, 255.0])), 1.0);
+        assert_eq!(precip_strength(&w(vec![2.0])), 0.0);
+        assert_eq!(precip_strength(&w(vec![])), 0.0);
+    }
+}
+
 /// The road under the wheels as the scripts and the sound configurations read it
 /// (`StreetCond`): 0 dry, 1 wet, 2 covered in snow. A snowfall (or a weather with
 /// `[snowOnRoad]`) puts it into the upper half, everything else follows the water film.

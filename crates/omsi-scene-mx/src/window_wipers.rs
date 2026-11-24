@@ -322,11 +322,12 @@ impl WindowWipers {
                     vehicle.host.wind - crate::lights::vehicle_velocity(vehicle),
                 );
                 let normal_air = pane_depth(air, film.bounds).abs();
-                let rain = vehicle.host.precip_rate * (1.0 + normal_air * 0.035).min(2.0);
+                let falling = vehicle.host.falling_precip();
+                let rain = falling * (1.0 + normal_air * 0.035).min(2.0);
                 let rate = if !liquid && rain > 0.0 {
-                    rain * (0.09 + vehicle.host.precip_rate * 0.10) * SNOW_SETTLING
+                    rain * (0.09 + falling * 0.10) * SNOW_SETTLING
                 } else if rain > 0.0 || pane_washer > 0.0 {
-                    rain * (0.09 + vehicle.host.precip_rate * 0.10) + pane_washer * 0.8
+                    rain * (0.09 + falling * 0.10) + pane_washer * 0.8
                 } else if !liquid {
                     0.0 // settled snow neither runs off nor dries in the frost
                 } else {

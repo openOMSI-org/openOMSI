@@ -58,7 +58,7 @@ impl VehicleInstance {
     /// (`dirt.osc` adds it up into `Dirt_Wiped`, which the wipers clear), and `PrecipRate`
     /// is signed, so rain wets the glass in `rain.osc` and dry weather dries it again.
     pub(super) fn update_dirt(&mut self, dt: f32) {
-        let rain = self.host.precip_rate.clamp(0.0, 1.0);
+        let rain = self.host.falling_precip().clamp(0.0, 1.0);
         let speed = (self.physics.velocity_kmh().abs() / 50.0).min(2.0);
         // a dry duty adds a few percent, a wet one soils the bus in a couple of hours
         // a dry duty of a couple of hours shows; a wet one soils the bus in half an hour
