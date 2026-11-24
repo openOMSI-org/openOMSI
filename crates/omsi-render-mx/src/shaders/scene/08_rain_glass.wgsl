@@ -223,7 +223,10 @@ fn glass_bead(a: ptr<function, DropAcc>, p: PaneProj, layer: f32, cell: f32, occ
     // (a layer whose drops are smaller than the pixel, or cells no wider than it - a mirror's
     // small picture, the glass seen from afar - is taken at its average cover: sampled one
     // random cell a pixel, it drew white noise)
-    let fine = max(1.0 - smoothstep(0.7, 1.5, r0 * size / px), 1.0 - smoothstep(1.0, 2.5, cell / px));
+    // Filter by the typical bead diameter. Using its minimum radius suppressed
+    // distinguishable drops on oblique panes and at reduced render scales.
+    let diameter = 2.0 * (4.0 / 3.0) * r0 * size;
+    let fine = max(1.0 - smoothstep(0.7, 1.5, diameter / px), 1.0 - smoothstep(1.0, 2.5, cell / px));
     if (fine > 0.0) {
         let rr = 1.6 * r0 * size / cell;
         (*a).avg = (*a).avg + fine * occ * min(3.14159 * rr * rr, 1.0);

@@ -269,7 +269,11 @@ fn rain_drop(vid: u32, k: u32) -> RainOutE {
     let n0 = u32(rp.fall.z);
     let n1 = u32(rp.fall.w);
     let layer = select(select(2u, 1u, k < n0 + n1), 0u, k < n0);
-    let lh = RAIN_LAYERS[layer];
+    var lh = RAIN_LAYERS[layer];
+    if (layer == 2u) {
+        // Extend the sparse layer without thinning the two nearby fields.
+        lh.x = 48.0;
+    }
     let size = vec3<f32>(2.0 * lh.x, 2.0 * lh.x, lh.z - lh.y);
     let h1 = hash4(k * 2u + 3u);
     let h2 = hash4(k * 2u + 6007u);
@@ -291,7 +295,7 @@ fn rain_drop(vid: u32, k: u32) -> RainOutE {
     // way at the far side of the field differs from the near side's), the denser ones
     // over their whole reach into the thinner round them
     let rel = q0 - lo;
-    let e = min(rel, size - rel) / (lh.x * 0.3);
+    let e = min(rel, size - rel) / (size * 0.15);
     let edge = clamp(min(min(e.x, e.y), e.z), 0.0, 1.0);
     let reach = 1.0 - smoothstep(0.25 * lh.x, lh.x, length((q - world_cam).xy));
     let fade = edge * select(1.0, reach, layer < 2u);

@@ -299,24 +299,44 @@ fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
     return out;
 }
 
-// The sprite's picture at `uv`, interpolated between its texels with a quintic ease instead
-// of linearly. The pictures are small (light_cone.bmp is 64 x 64) and a lamp's sprite or a
-// fog cone spans hundreds of pixels: a linear blend between texels has a kink at every texel
-// line, and a steep gradient - the cone's bright axis, a glow's rim - shows them as a stair
-// of squares along its edge, in the light of a lamp or a headlight's beam. The eased blend
-// is smooth to the second order and costs the same single fetch.
+// Reconstruct the original bitmap with a cubic B-spline when magnified.
+// Pair adjacent cubic weights so hardware bilinear sampling handles all 16 taps
+// with four reads. Use the original mipmapped sample as the sprite gets smaller.
 fn soft_picture(uv: vec2<f32>) -> vec4<f32> {
     let dims = vec2<f32>(textureDimensions(t_corona));
+    let dx = dpdx(uv);
+    let dy = dpdy(uv);
+    let footprint = max(length(dx * dims), length(dy * dims));
+    if (footprint >= 1.0) {
+        return textureSampleGrad(t_corona, s_corona, uv, dx, dy);
+    }
     let p = uv * dims - vec2<f32>(0.5);
     let i = floor(p);
     let f = p - i;
-    let e = f * f * f * (f * (f * 6.0 - vec2<f32>(15.0)) + vec2<f32>(10.0));
-    // (the level of detail from the true coordinates: the eased ones run slower and faster)
-    return textureSampleGrad(t_corona, s_corona, (i + e + vec2<f32>(0.5)) / dims, dpdx(uv), dpdy(uv));
+    let g = 1.0 - f;
+    let w0 = g * g * g / 6.0;
+    let w1 = (4.0 - 6.0 * f * f + 3.0 * f * f * f) / 6.0;
+    let w2 = (4.0 - 6.0 * g * g + 3.0 * g * g * g) / 6.0;
+    let w3 = f * f * f / 6.0;
+    let lo_weight = w0 + w1;
+    let hi_weight = w2 + w3;
+    let lo = (i - 0.5 + w1 / lo_weight) / dims;
+    let hi = (i + 1.5 + w3 / hi_weight) / dims;
+    let top = mix(
+        textureSampleLevel(t_corona, s_corona, lo, 0.0),
+        textureSampleLevel(t_corona, s_corona, vec2<f32>(hi.x, lo.y), 0.0),
+        hi_weight.x);
+    let bottom = mix(
+        textureSampleLevel(t_corona, s_corona, vec2<f32>(lo.x, hi.y), 0.0),
+        textureSampleLevel(t_corona, s_corona, hi, 0.0),
+        hi_weight.x);
+    let cubic = mix(top, bottom, hi_weight.y);
+    let filtered = textureSampleGrad(t_corona, s_corona, uv, dx, dy);
+    return mix(cubic, filtered, smoothstep(0.5, 1.0, footprint));
 }
 
 // The sprite's light: the round texture (in its own colours), and for a star light four thin rays across it.
-fn corona_shape(in: CoronaOut) -> vec3<f32> {
+fn corona_shape(in: CoronaOut, enhanced: bool) -> vec3<f32> {
     // (the sprite keeps the bitmap's own colours, modulated by the light's colour)
     // Read the right way up. `in.uv` is built the way the HUD's is (overlay.wgsl), where
     // v = 0 is the picture's *first*, topmost row; but a sprite's corners are placed by its
@@ -341,14 +361,18 @@ fn corona_shape(in: CoronaOut) -> vec3<f32> {
     let tb = soft_picture(fan_uv).r;
     if (in.beam > 0.5) {
         let inside = select(0.0, 1.0, r <= 1.0 && phi <= in.cone.y);
-        return vec3<f32>(tb * inside);
+        // Fade to zero before the fan reaches the edge of its mesh.
+        let radial = 1.0 - smoothstep(0.7, 1.0, r);
+        let angular = 1.0 - smoothstep(in.cone.y * 0.82, max(in.cone.y, 1e-4), phi);
+        let coverage = select(inside, radial * angular, enhanced);
+        return vec3<f32>(tb * coverage);
     }
     return t;
 }
 
 @fragment
 fn fs_main(in: CoronaOut) -> @location(0) vec4<f32> {
-    var shape = corona_shape(in);
+    var shape = corona_shape(in, false);
     if (in.kind < 0.5 && in.beam < 0.5) {
         // A lamp's glare ends softly at its sprite's edge whatever its bitmap does there: a
         // glow picture whose border is not quite black (a model's own, some a few levels
@@ -369,7 +393,7 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
     if (in.wpos.w > 0.5) {
         let to_eye = normalize(camera.cam_pos.xyz - in.wpos.xyz);
         let l = precip_light(in.wpos.xyz, to_eye, in.wpos.w > 1.5);
-        return vec4<f32>(in.color.rgb * corona_shape(in) * in.color.a * l * enh.exposure.x, 1.0);
+        return vec4<f32>(in.color.rgb * corona_shape(in, false) * in.color.a * l * enh.exposure.x, 1.0);
     }
     // (a fog cone is lit fog, not glare: it keeps the scene's level too)
     let scale = select(enh.exposure.w, enh.exposure.y, in.kind > 0.5);
@@ -382,10 +406,19 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
     if (lamp) {
         qin.uv = (in.uv - vec2<f32>(0.5)) * glare + vec2<f32>(0.5);
     }
-    var shape = corona_shape(qin);
+    var shape = corona_shape(qin, true);
     // (taken here, in uniform control flow: how much of the sprite one pixel spans)
     let r = length(qin.uv - vec2<f32>(0.5)) * 2.0;
     let px = fwidth(r);
+    if (in.kind > 0.5 && in.beam < 0.5) {
+        // This is the pulled-forward fog halo. Compress just its additive light
+        // so the corona core and the volume can still show through it.
+        let radius = 2.0 * length(in.uv - vec2<f32>(0.5));
+        let edge = 1.0 - smoothstep(0.6, 1.0, radius);
+        let light = in.color.rgb * shape * in.color.a * scale * edge;
+        let peak = max(light.r, max(light.g, light.b));
+        return vec4<f32>(light * (0.16 / (0.28 + peak)), 1.0);
+    }
     var tail = 0.0;
     let wet = clamp(enh.fog.x * 400.0 + enh.weather.z * 0.7, 0.0, 1.0);
     if (lamp && glare > 1.0) {
