@@ -4,10 +4,20 @@ pub fn disconnect_of(log: &std::path::Path) -> Option<String> {
     let text = std::fs::read(log).ok()?;
     let text = String::from_utf8_lossy(&text[text.len().saturating_sub(64 * 1024)..]).to_string();
     let all: Vec<&str> = text.lines().collect();
-    let run = &all[all.iter().rposition(|l| l.contains("starting the game:")).unwrap_or(0)..];
-    let line = run.iter().rev().find(|l| l.contains(omsi_net::LEFT_SERVER))?;
+    let run = &all[all
+        .iter()
+        .rposition(|l| l.contains("starting the game:"))
+        .unwrap_or(0)..];
+    let line = run
+        .iter()
+        .rev()
+        .find(|l| l.contains(omsi_net::LEFT_SERVER))?;
     let why = line.split_once(omsi_net::LEFT_SERVER)?.1.trim();
-    Some(if why.is_empty() { "sent away by the host".to_string() } else { why.chars().take(300).collect() })
+    Some(if why.is_empty() {
+        "sent away by the host".to_string()
+    } else {
+        why.chars().take(300).collect()
+    })
 }
 
 /// What a game's log says when the game ended on an error: the error (a panic, "no graphics
@@ -26,19 +36,36 @@ pub fn crash_of(log: &std::path::Path) -> Option<(String, String)> {
     };
     // (an error the game got over - "the game goes on", a part of the picture left out -
     // is no crash)
-    let recovered = |l: &str| l.contains("the game goes on") || l.contains("left out") || l.contains("could not be recorded");
+    let recovered = |l: &str| {
+        l.contains("the game goes on")
+            || l.contains("left out")
+            || l.contains("could not be recorded")
+    };
     // (a lost graphics device ends the game in order - it saves the run - but it is a crash
     // for the player all the same: the driver gave up)
     // (one the game got over by starting again with safer graphics is no crash)
-    if lines.iter().any(|l| l.contains("starting again with safer graphics")) {
+    if lines
+        .iter()
+        .any(|l| l.contains("starting again with safer graphics"))
+    {
         return None;
     }
-    let lost = lines.iter().rposition(|l| l.contains("the graphics device was lost"));
+    let lost = lines
+        .iter()
+        .rposition(|l| l.contains("the graphics device was lost"));
     if lost.is_none() && lines.iter().any(|l| l.contains("game ends")) {
         return None;
     }
-    let at = lost.or_else(|| lines.iter().rposition(|l| l.contains("the game stopped on an error") || (l.contains(" ERROR ") && !recovered(l))))?;
-    let first = lines[at].split_once("] ").map(|x| x.1).unwrap_or(lines[at]).trim();
+    let at = lost.or_else(|| {
+        lines.iter().rposition(|l| {
+            l.contains("the game stopped on an error") || (l.contains(" ERROR ") && !recovered(l))
+        })
+    })?;
+    let first = lines[at]
+        .split_once("] ")
+        .map(|x| x.1)
+        .unwrap_or(lines[at])
+        .trim();
     // (a panic's message is on the following lines)
     let mut what = first.to_string();
     // (and stops at the next record: a lost device's line had "game ends" and the tile
@@ -54,9 +81,16 @@ pub fn crash_of(log: &std::path::Path) -> Option<(String, String)> {
     // run, before the end of the log and a line `…`: a report of the end alone never said
     // what it happened on (#1187). Its GitHub link keeps them and shortens only the end.
     let whole = String::from_utf8_lossy(&bytes);
-    let machine: Vec<&str> = MACHINE_LINES.iter().filter_map(|k| whole.lines().rfind(|l| l.contains(k))).collect();
+    let machine: Vec<&str> = MACHINE_LINES
+        .iter()
+        .filter_map(|k| whole.lines().rfind(|l| l.contains(k)))
+        .collect();
     let end = all[all.len().saturating_sub(150)..].join("\n");
-    let tail = if machine.is_empty() { end } else { format!("{}\n{CRASH_TAIL_GAP}\n{end}", machine.join("\n")) };
+    let tail = if machine.is_empty() {
+        end
+    } else {
+        format!("{}\n{CRASH_TAIL_GAP}\n{end}", machine.join("\n"))
+    };
     let what = redact(&what);
     Some((what.chars().take(600).collect(), redact(&tail)))
 }
@@ -67,37 +101,68 @@ pub fn crash_of(log: &std::path::Path) -> Option<(String, String)> {
 /// players' names in the multiplayer lines and the chat. The report goes to a public GitHub
 /// issue.
 pub fn redact(text: &str) -> String {
-    let home = ["USERPROFILE", "HOME"].iter().find_map(|k| std::env::var(k).ok());
+    let home = ["USERPROFILE", "HOME"]
+        .iter()
+        .find_map(|k| std::env::var(k).ok());
     redact_with(text, home.as_deref())
 }
 
 fn redact_with(text: &str, home: Option<&str>) -> String {
     let mut out = text.to_string();
     // (a home folder that is a drive or the root names nobody)
-    if let Some(home) = home.map(|h| h.trim_end_matches(['/', '\\'])).filter(|h| h.len() > 3) {
-        for h in [home.replace('\\', "\\\\"), home.to_string(), home.replace('\\', "/"), home.replace('/', "\\")] {
+    if let Some(home) = home
+        .map(|h| h.trim_end_matches(['/', '\\']))
+        .filter(|h| h.len() > 3)
+    {
+        for h in [
+            home.replace('\\', "\\\\"),
+            home.to_string(),
+            home.replace('\\', "/"),
+            home.replace('/', "\\"),
+        ] {
             out = replace_whole(&out, &h, "~");
         }
     }
     let user_end = |rest: &str| {
-        let end = rest.find(['\\', '/', '"', '\n', '\r']).unwrap_or(rest.len());
+        let end = rest
+            .find(['\\', '/', '"', '\n', '\r'])
+            .unwrap_or(rest.len());
         // (a name at the end of a path stops at the next word: "C:\\Users\\x exited")
-        if rest[end..].starts_with(['\\', '/']) { end } else { rest[..end].find(char::is_whitespace).unwrap_or(end) }
+        if rest[end..].starts_with(['\\', '/']) {
+            end
+        } else {
+            rest[..end].find(char::is_whitespace).unwrap_or(end)
+        }
     };
-    out = replace_segments(&out, &["\\\\users\\\\", "\\users\\", "/users/", "/home/"], user_end, "<user>");
+    out = replace_segments(
+        &out,
+        &["\\\\users\\\\", "\\users\\", "/users/", "/home/"],
+        user_end,
+        "<user>",
+    );
     let driver_end = |rest: &str| {
-        let line = &rest[..rest.find(['\n', '\r', '"', '/', '\\']).unwrap_or(rest.len())];
+        let line = &rest[..rest
+            .find(['\n', '\r', '"', '/', '\\'])
+            .unwrap_or(rest.len())];
         line.to_ascii_lowercase().find(".odr").unwrap_or(0)
     };
-    out = replace_segments(&out, &["drivers/", "drivers\\\\", "drivers\\"], driver_end, "<driver>");
+    out = replace_segments(
+        &out,
+        &["drivers/", "drivers\\\\", "drivers\\"],
+        driver_end,
+        "<driver>",
+    );
     // the other players: their names in the multiplayer lines, and the chat left out
     let quoted = |rest: &str| quoted_name_end(rest).unwrap_or(0);
     out = replace_segments(&out, &["lan: '", "connected to '"], quoted, "<player>");
     out = player_names(&out);
-    out.lines().map(|l| match l.find("LAN chat") {
-        Some(i) => format!("{} (left out of the report)", &l[..i + "LAN chat".len()]),
-        None => l.to_string(),
-    }).collect::<Vec<_>>().join("\n")
+    out.lines()
+        .map(|l| match l.find("LAN chat") {
+            Some(i) => format!("{} (left out of the report)", &l[..i + "LAN chat".len()]),
+            None => l.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
         + if out.ends_with('\n') { "\n" } else { "" }
 }
 
@@ -106,9 +171,13 @@ fn player_names(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut at = 0;
     while let Some(i) = text[at..].find("player ").map(|i| at + i + "player ".len()) {
-        let digits = text[i..].find(|c: char| !c.is_ascii_digit()).unwrap_or(text.len() - i);
+        let digits = text[i..]
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(text.len() - i);
         let open = i + digits;
-        let name = (digits > 0 && text[open..].starts_with(" '")).then(|| &text[open + 2..]).and_then(quoted_name_end);
+        let name = (digits > 0 && text[open..].starts_with(" '"))
+            .then(|| &text[open + 2..])
+            .and_then(quoted_name_end);
         out.push_str(&text[at..i]);
         match name {
             Some(n) => {
@@ -127,8 +196,20 @@ fn player_names(text: &str) -> String {
 /// conservatively remove through the last quote on the line if the wording is unknown.
 fn quoted_name_end(rest: &str) -> Option<usize> {
     let line = rest.split(['\n', '\r']).next().unwrap_or("");
-    ["' (session ", "' at ", "' left", "' joined", "' is back", "' shows ", "' in ", "': "]
-        .iter().filter_map(|suffix| line.find(suffix)).min().or_else(|| line.rfind('\''))
+    [
+        "' (session ",
+        "' at ",
+        "' left",
+        "' joined",
+        "' is back",
+        "' shows ",
+        "' in ",
+        "': ",
+    ]
+    .iter()
+    .filter_map(|suffix| line.find(suffix))
+    .min()
+    .or_else(|| line.rfind('\''))
 }
 
 /// `text` with `what` replaced where it is a whole name (`/root`, not the start of `/rootfs`).
@@ -147,11 +228,20 @@ fn replace_whole(text: &str, what: &str, with: &str) -> String {
 }
 
 /// `text` with the part after each of `markers` (any case) that `end` measures replaced by `with`.
-fn replace_segments(text: &str, markers: &[&str], end: impl Fn(&str) -> usize, with: &str) -> String {
+fn replace_segments(
+    text: &str,
+    markers: &[&str],
+    end: impl Fn(&str) -> usize,
+    with: &str,
+) -> String {
     let lower = text.to_ascii_lowercase();
     let mut out = String::with_capacity(text.len());
     let mut at = 0;
-    while let Some((start, m)) = markers.iter().filter_map(|m| lower[at..].find(m).map(|i| (at + i, m.len()))).min_by_key(|&(start, len)| (start, std::cmp::Reverse(len))) {
+    while let Some((start, m)) = markers
+        .iter()
+        .filter_map(|m| lower[at..].find(m).map(|i| (at + i, m.len())))
+        .min_by_key(|&(start, len)| (start, std::cmp::Reverse(len)))
+    {
         let from = start + m;
         let n = end(&text[from..]);
         out.push_str(&text[at..from]);
@@ -164,7 +254,12 @@ fn replace_segments(text: &str, markers: &[&str], end: impl Fn(&str) -> usize, w
 }
 
 /// The log lines that tell what a game ran on (see `crash_of`).
-const MACHINE_LINES: [&str; 4] = ["] system: ", "] graphics adapter: ", "] opening graphics device: ", "] command line: "];
+const MACHINE_LINES: [&str; 4] = [
+    "] system: ",
+    "] graphics adapter: ",
+    "] opening graphics device: ",
+    "] command line: ",
+];
 
 /// The line between the machine and the end of the log in a crash's tail.
 pub const CRASH_TAIL_GAP: &str = "...";
@@ -178,7 +273,10 @@ mod disconnect_tests {
         let p = dir.join("game.log");
         let left = omsi_net::LEFT_SERVER;
         std::fs::write(&p, format!("[x INFO a] starting the game: one\n[x WARN openomsi_game::lan] {left}old\n[x INFO a] starting the game: two\n[x WARN openomsi_game::lan] {left}Expulsé : conduite dangereuse\n[x INFO a] game ends\n")).unwrap();
-        assert_eq!(super::disconnect_of(&p).as_deref(), Some("Expulsé : conduite dangereuse"));
+        assert_eq!(
+            super::disconnect_of(&p).as_deref(),
+            Some("Expulsé : conduite dangereuse")
+        );
         // a run that ended in any other way: nothing
         std::fs::write(&p, format!("[x INFO a] starting the game: one\n[x WARN openomsi_game::lan] {left}old\n[x INFO a] starting the game: two\n[x INFO a] game ends\n")).unwrap();
         assert!(super::disconnect_of(&p).is_none());
@@ -191,9 +289,20 @@ mod disconnect_tests {
 /// compile stage anywhere in the log said so of every silent end - a phone run out of memory
 /// 75 % into loading a map on OpenGL was told its Vulkan driver had failed (#848).
 pub fn died_compiling_on_vulkan(log: &str) -> bool {
-    let last = log.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("");
-    let compiling = last.contains("renderer: compiling") || last.contains("cloud noise made") || last.contains("opening graphics device") || last.contains("compiling renderer pipelines");
-    let vulkan = log.lines().any(|l| (l.contains("renderer: ") || l.contains("opening graphics device")) && l.contains("(Vulkan")) || log.lines().any(|l| l.contains("graphics: ") && l.to_ascii_uppercase().contains("VULKAN"));
+    let last = log
+        .lines()
+        .rev()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("");
+    let compiling = last.contains("renderer: compiling")
+        || last.contains("cloud noise made")
+        || last.contains("opening graphics device")
+        || last.contains("compiling renderer pipelines");
+    let vulkan = log.lines().any(|l| {
+        (l.contains("renderer: ") || l.contains("opening graphics device")) && l.contains("(Vulkan")
+    }) || log
+        .lines()
+        .any(|l| l.contains("graphics: ") && l.to_ascii_uppercase().contains("VULKAN"));
     compiling && vulkan
 }
 
@@ -204,9 +313,13 @@ mod hint_tests {
         let compiled = "[t INFO r] opening graphics device: Mali (Vulkan, vendor 0x13b5)\n[t INFO r] renderer: compiling the scene shaders\n";
         assert!(super::died_compiling_on_vulkan(compiled));
         // compiled long ago, then ran out of memory loading
-        assert!(!super::died_compiling_on_vulkan(&format!("{compiled}[t INFO g] status: 63 fps, view driver\n[t INFO m] loading tiles 75 %\n")));
+        assert!(!super::died_compiling_on_vulkan(&format!(
+            "{compiled}[t INFO g] status: 63 fps, view driver\n[t INFO m] loading tiles 75 %\n"
+        )));
         // on OpenGL it is never the Vulkan driver
-        assert!(!super::died_compiling_on_vulkan("[t INFO r] opening graphics device: Mali (Gl, vendor 0x13b5)\n[t INFO r] renderer: compiling the scene shaders\n"));
+        assert!(!super::died_compiling_on_vulkan(
+            "[t INFO r] opening graphics device: Mali (Gl, vendor 0x13b5)\n[t INFO r] renderer: compiling the scene shaders\n"
+        ));
     }
 }
 
@@ -220,7 +333,10 @@ mod redact_tests {
         let debug = format!("{path:?}");
         let redacted = redact_with(&debug, None);
         assert_eq!(redacted, r#""C:\\Users\\<user>\\AppData\\game.log""#);
-        assert_eq!(redact_with(&debug, Some(r"C:\Users\O'Brien")), r#""~\\AppData\\game.log""#);
+        assert_eq!(
+            redact_with(&debug, Some(r"C:\Users\O'Brien")),
+            r#""~\\AppData\\game.log""#
+        );
         for text in [
             r"C:\Users\O'Brien\AppData /home/O'Brien/game.log /Users/O' Brien/Library",
             r"Drivers/O'Brien.odr Drivers\\O'Brien.odr",
@@ -231,7 +347,13 @@ mod redact_tests {
             let redacted = redact_with(text, None);
             assert!(!redacted.contains("Brien"), "{redacted}");
         }
-        assert!(redact_with("LAN: connected to 'O'Brien' (session 1f); weather 'rain'", None).contains("weather 'rain'"));
+        assert!(
+            redact_with(
+                "LAN: connected to 'O'Brien' (session 1f); weather 'rain'",
+                None
+            )
+            .contains("weather 'rain'")
+        );
     }
 
     #[test]
@@ -245,11 +367,22 @@ mod redact_tests {
         for gone in ["Isaac", "rafa", "ana/", "other", "Joao"] {
             assert!(!r.contains(gone), "{gone}: {r}");
         }
-        assert!(r.contains("command line: ~\\openomsi.exe --root D:\\OMSI 2 --driver Drivers/<driver>.odr"), "{r}");
+        assert!(
+            r.contains(
+                "command line: ~\\openomsi.exe --root D:\\OMSI 2 --driver Drivers/<driver>.odr"
+            ),
+            "{r}"
+        );
         assert!(r.contains("working folder: ~/AppData"), "{r}");
-        assert!(r.contains("/home/<user>/.openomsi/x.cfg and /Users/<user>/Library"), "{r}");
+        assert!(
+            r.contains("/home/<user>/.openomsi/x.cfg and /Users/<user>/Library"),
+            "{r}"
+        );
         assert!(r.contains("panicked at C:\\Users\\<user>\n"), "{r}");
-        assert!(r.contains("DRIVERS\\<driver>.ODR read; vehicle Vehicles/MAN/MAN.bus"), "{r}");
+        assert!(
+            r.contains("DRIVERS\\<driver>.ODR read; vehicle Vehicles/MAN/MAN.bus"),
+            "{r}"
+        );
         // what names nobody stays as it is
         let plain = "[t ERROR omsi_render] the graphics device was lost (Unknown)\n[t INFO a] maps/Grundorf/global.cfg";
         assert_eq!(redact_with(plain, Some("/")), plain);
@@ -260,11 +393,22 @@ mod redact_tests {
         for gone in ["Ana", "9999", "Isaac", "Bob"] {
             assert!(!r.contains(gone), "{gone}: {r}");
         }
-        assert!(r.contains("LAN: player 3 '<player>' left\n") && r.contains("] LAN chat (left out of the report)\n"), "{r}");
-        assert!(r.contains("connected to '<player>' (session 1f), we are player 2; weather 'rain'") && r.contains("LAN: '<player>' at"), "{r}");
+        assert!(
+            r.contains("LAN: player 3 '<player>' left\n")
+                && r.contains("] LAN chat (left out of the report)\n"),
+            "{r}"
+        );
+        assert!(
+            r.contains("connected to '<player>' (session 1f), we are player 2; weather 'rain'")
+                && r.contains("LAN: '<player>' at"),
+            "{r}"
+        );
         assert!(r.ends_with("player 4 skipped\n"), "{r}");
         // (the home folder itself, not a longer name it begins)
-        assert_eq!(redact_with("/root/a /rootfs/b", Some("/root")), "~/a /rootfs/b");
+        assert_eq!(
+            redact_with("/root/a /rootfs/b", Some("/root")),
+            "~/a /rootfs/b"
+        );
     }
 }
 
@@ -279,7 +423,11 @@ mod crash_tests {
         let (what, tail) = super::crash_of(&p).unwrap();
         assert!(what.contains("index out of bounds"), "{what}");
         assert!(tail.contains("loading"));
-        std::fs::write(&p, "[t INFO x] loading\n[t INFO openomsi_game::app_events] game ends\n").unwrap();
+        std::fs::write(
+            &p,
+            "[t INFO x] loading\n[t INFO openomsi_game::app_events] game ends\n",
+        )
+        .unwrap();
         assert!(super::crash_of(&p).is_none());
         std::fs::write(&p, "[t ERROR omsi_render] the graphics device was lost (Unknown): Unexpected error variant\n[t INFO openomsi_game::app_events] game ends\n").unwrap();
         assert!(super::crash_of(&p).unwrap().0.contains("device was lost"));
@@ -293,20 +441,35 @@ mod crash_tests {
     /// error alone, not the records after it (#1187).
     #[test]
     fn the_report_has_the_computer_and_a_clean_title() {
-        let dir = std::env::temp_dir().join(format!("openomsi-crash-machine-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("openomsi-crash-machine-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let p = dir.join("game.log");
-        let mut log = String::from("[t INFO openomsi_game::applog] system: windows x86_64 (10.0), 8 threads, 8192 MB memory\n[t INFO openomsi_game::applog] command line: openomsi --map maps/X/global.cfg\n[t INFO omsi_render] graphics adapter: GTX 750 (DiscreteGpu, Dx12, 2048 MB of its own), texture memory taken for it: 716 MB\n");
+        let mut log = String::from(
+            "[t INFO openomsi_game::applog] system: windows x86_64 (10.0), 8 threads, 8192 MB memory\n[t INFO openomsi_game::applog] command line: openomsi --map maps/X/global.cfg\n[t INFO omsi_render] graphics adapter: GTX 750 (DiscreteGpu, Dx12, 2048 MB of its own), texture memory taken for it: 716 MB\n",
+        );
         // (more than the end that goes with the report)
         for k in 0..400 {
-            log.push_str(&format!("[t INFO openomsi_game::scene] tile loading: placed tile {k},0\n"));
+            log.push_str(&format!(
+                "[t INFO openomsi_game::scene] tile loading: placed tile {k},0\n"
+            ));
         }
         log.push_str("[t ERROR openomsi_game::app_events] ending the session: the graphics device was lost (Unknown: Out of memory)\n[t INFO openomsi_game::app_events] game ends\n[t WARN openomsi_game::scene] tile loading: first-area batch prepared in 352.71 s\n");
         std::fs::write(&p, log).unwrap();
         let (what, tail) = super::crash_of(&p).unwrap();
-        assert_eq!(what, "ending the session: the graphics device was lost (Unknown: Out of memory)");
-        let (machine, end) = tail.split_once(&format!("\n{}\n", super::CRASH_TAIL_GAP)).unwrap();
-        assert!(machine.contains("8192 MB memory") && machine.contains("GTX 750") && machine.contains("maps/X/global.cfg"), "{machine}");
+        assert_eq!(
+            what,
+            "ending the session: the graphics device was lost (Unknown: Out of memory)"
+        );
+        let (machine, end) = tail
+            .split_once(&format!("\n{}\n", super::CRASH_TAIL_GAP))
+            .unwrap();
+        assert!(
+            machine.contains("8192 MB memory")
+                && machine.contains("GTX 750")
+                && machine.contains("maps/X/global.cfg"),
+            "{machine}"
+        );
         assert!(end.contains("352.71 s") && !end.contains("placed tile 0,0"));
         let _ = std::fs::remove_dir_all(&dir);
     }

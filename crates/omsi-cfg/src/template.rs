@@ -22,13 +22,25 @@ pub fn templates(keys: impl IntoIterator<Item = String>) -> Vec<Template> {
         .filter_map(|k| {
             let p = pieces(&k)?;
             let head = matches!(p.first(), Some(Piece::Text(h)) if h.chars().count() >= 2);
-            let worded = p.iter().filter(|x| matches!(x, Piece::Text(s) if s.chars().any(char::is_alphanumeric))).count() >= 2;
+            let worded = p
+                .iter()
+                .filter(|x| matches!(x, Piece::Text(s) if s.chars().any(char::is_alphanumeric)))
+                .count()
+                >= 2;
             let closed = matches!(p.last(), Some(Piece::Text(_)));
-            let apart = p.windows(2).all(|w| !matches!(w, [Piece::Hole(_), Piece::Hole(_)]));
+            let apart = p
+                .windows(2)
+                .all(|w| !matches!(w, [Piece::Hole(_), Piece::Hole(_)]));
             (head && (worded || closed) && apart).then_some((k, p))
         })
         .collect();
-    t.sort_by_key(|(_, p)| std::cmp::Reverse(p.iter().map(|x| if let Piece::Text(s) = x { s.len() } else { 0 }).sum::<usize>()));
+    t.sort_by_key(|(_, p)| {
+        std::cmp::Reverse(
+            p.iter()
+                .map(|x| if let Piece::Text(s) = x { s.len() } else { 0 })
+                .sum::<usize>(),
+        )
+    });
     t
 }
 
@@ -44,7 +56,9 @@ fn pieces(s: &str) -> Option<Vec<Piece>> {
         if open > 0 {
             out.push(Piece::Text(rest[..open].to_string()));
         }
-        out.push(Piece::Hole(inner.split(':').next().unwrap_or("").to_string()));
+        out.push(Piece::Hole(
+            inner.split(':').next().unwrap_or("").to_string(),
+        ));
         rest = &rest[close + 1..];
     }
     if !rest.is_empty() {
@@ -56,7 +70,9 @@ fn pieces(s: &str) -> Option<Vec<Piece>> {
 fn captures<'a>(pieces: &[Piece], text: &'a str, out: &mut Vec<&'a str>) -> bool {
     match pieces.split_first() {
         None => text.is_empty(),
-        Some((Piece::Text(t), rest)) => text.strip_prefix(t.as_str()).is_some_and(|r| captures(rest, r, out)),
+        Some((Piece::Text(t), rest)) => text
+            .strip_prefix(t.as_str())
+            .is_some_and(|r| captures(rest, r, out)),
         Some((Piece::Hole(_), rest)) => match rest.first() {
             None => {
                 out.push(text);
@@ -75,7 +91,17 @@ fn captures<'a>(pieces: &[Piece], text: &'a str, out: &mut Vec<&'a str>) -> bool
 }
 
 fn fill(key: &[Piece], got: &[&str], translation: &str) -> Option<String> {
-    let holes: Vec<(&str, &str)> = key.iter().filter_map(|p| if let Piece::Hole(n) = p { Some(n.as_str()) } else { None }).zip(got.iter().copied()).collect();
+    let holes: Vec<(&str, &str)> = key
+        .iter()
+        .filter_map(|p| {
+            if let Piece::Hole(n) = p {
+                Some(n.as_str())
+            } else {
+                None
+            }
+        })
+        .zip(got.iter().copied())
+        .collect();
     let mut positional = holes.iter().filter(|(n, _)| n.is_empty()).map(|(_, v)| *v);
     let mut out = String::new();
     for p in pieces(translation)? {
@@ -91,21 +117,36 @@ fn fill(key: &[Piece], got: &[&str], translation: &str) -> Option<String> {
 /// `text` translated by the first of `templates` that fits it (None when none fits, or
 /// the one that fits has no translation): its values go into the key's translation, and a
 /// value that is itself a text of the tables ("Arrow keys only") is translated too.
-pub fn templated(templates: &[Template], text: &str, lookup: impl Fn(&str) -> Option<String>) -> Option<String> {
+pub fn templated(
+    templates: &[Template],
+    text: &str,
+    lookup: impl Fn(&str) -> Option<String>,
+) -> Option<String> {
     templated_among(templates.iter(), text, lookup)
 }
 
-fn templated_among<'a>(mut templates: impl Iterator<Item = &'a Template>, text: &str, lookup: impl Fn(&str) -> Option<String>) -> Option<String> {
+fn templated_among<'a>(
+    mut templates: impl Iterator<Item = &'a Template>,
+    text: &str,
+    lookup: impl Fn(&str) -> Option<String>,
+) -> Option<String> {
     let mut got = Vec::new();
     let (key, p) = templates.find(|(_, p)| {
         got.clear();
-        matches!(p.first(), Some(Piece::Text(h)) if text.starts_with(h.as_str())) && captures(p, text, &mut got)
+        matches!(p.first(), Some(Piece::Text(h)) if text.starts_with(h.as_str()))
+            && captures(p, text, &mut got)
     })?;
     let translation = lookup(key)?;
-    let values: Vec<String> = got.iter().map(|v| lookup(v).unwrap_or_else(|| v.to_string())).collect();
-    fill(p, &values.iter().map(String::as_str).collect::<Vec<_>>(), &translation)
+    let values: Vec<String> = got
+        .iter()
+        .map(|v| lookup(v).unwrap_or_else(|| v.to_string()))
+        .collect();
+    fill(
+        p,
+        &values.iter().map(String::as_str).collect::<Vec<_>>(),
+        &translation,
+    )
 }
-
 
 /// The templates, most specific first, and where to look among them: by the first two
 /// characters of their leading text (every template has 2+), so a text no template can fit
@@ -125,7 +166,13 @@ impl Index {
         let list = templates(keys);
         let mut by_head: HashMap<(char, char), Vec<usize>> = HashMap::new();
         for (i, (_, p)) in list.iter().enumerate() {
-            if let Some(h) = p.first().and_then(|x| if let Piece::Text(t) = x { head2(t) } else { None }) {
+            if let Some(h) = p.first().and_then(|x| {
+                if let Piece::Text(t) = x {
+                    head2(t)
+                } else {
+                    None
+                }
+            }) {
                 by_head.entry(h).or_default().push(i);
             }
         }

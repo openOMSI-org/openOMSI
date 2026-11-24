@@ -35,16 +35,15 @@
 //! BLOB <sha256>                                         → OK <len> + the bytes | ERR
 //! ```
 
-use super::identity::VehicleManifest;
 use super::Entry;
+use super::identity::VehicleManifest;
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
-
 
 mod notices;
 mod own_bus;

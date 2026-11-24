@@ -19,7 +19,8 @@ const TOPIC: &str = "openomsi-official-server-7f3a9c";
 const RELAY: &str = "https://ntfy.sh";
 /// The official server's public key (Ed25519).
 const PUBLIC_KEY: [u8; 32] = [
-    0x3d, 0xda, 0x37, 0xfc, 0x2b, 0x53, 0xcc, 0x9f, 0x38, 0x36, 0x8f, 0xc4, 0xbd, 0x88, 0x2b, 0x1e, 0x09, 0xc1, 0xcf, 0x9b, 0xd4, 0xc5, 0xd4, 0xf4, 0x2a, 0xfe, 0x98, 0x2b, 0x65, 0xa7, 0xd1, 0x2c,
+    0x3d, 0xda, 0x37, 0xfc, 0x2b, 0x53, 0xcc, 0x9f, 0x38, 0x36, 0x8f, 0xc4, 0xbd, 0x88, 0x2b, 0x1e,
+    0x09, 0xc1, 0xcf, 0x9b, 0xd4, 0xc5, 0xd4, 0xf4, 0x2a, 0xfe, 0x98, 0x2b, 0x65, 0xa7, 0xd1, 0x2c,
 ];
 /// A post older than this is not taken (the server posts every five minutes).
 const FRESH: Duration = Duration::from_secs(40 * 60);
@@ -30,7 +31,10 @@ pub fn is_alias(target: &str) -> bool {
 }
 
 fn now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -42,7 +46,10 @@ fn unhex(s: &str) -> Option<Vec<u8>> {
     if s.len() % 2 != 0 {
         return None;
     }
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok()).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok())
+        .collect()
 }
 
 /// The text a post signs: the address and the time it was posted.
@@ -64,7 +71,9 @@ fn verify(msg: &str, key: &[u8], now: u64) -> Option<(String, u64)> {
         return None;
     }
     let sig = unhex(sig)?;
-    ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, key).verify(text.as_bytes(), &sig).ok()?;
+    ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, key)
+        .verify(text.as_bytes(), &sig)
+        .ok()?;
     (at <= now + 300 && now.saturating_sub(at) <= FRESH.as_secs()).then_some((url, at))
 }
 
@@ -73,7 +82,10 @@ pub fn resolve() -> Result<String, String> {
     if PUBLIC_KEY == [0; 32] {
         return Err("this build does not know the official server".into());
     }
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("openOMSI").build();
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(8))
+        .user_agent("openOMSI")
+        .build();
     let body = agent
         .get(&format!("{RELAY}/{TOPIC}/json?poll=1&since=1h"))
         .call()
@@ -102,10 +114,14 @@ pub fn resolve_target(target: &str) -> Result<String, String> {
 /// The official server: post where it is reached (`url`, its tunnel), signed with its key
 /// (a PKCS#8 Ed25519 key, `OMSI_OFFICIAL_KEY` names the file). Call every few minutes.
 pub fn announce(url: &str, pkcs8: &[u8]) -> Result<(), String> {
-    let pair = ring::signature::Ed25519KeyPair::from_pkcs8_maybe_unchecked(pkcs8).map_err(|e| format!("the official key: {e}"))?;
+    let pair = ring::signature::Ed25519KeyPair::from_pkcs8_maybe_unchecked(pkcs8)
+        .map_err(|e| format!("the official key: {e}"))?;
     let text = signed_text(url, now());
     let sig = pair.sign(text.as_bytes());
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).user_agent("openOMSI").build();
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(8))
+        .user_agent("openOMSI")
+        .build();
     agent
         .post(&format!("{RELAY}/{TOPIC}"))
         .set("Cache", "yes")
@@ -119,7 +135,8 @@ pub fn generate_key() -> Result<(Vec<u8>, String), String> {
     use ring::signature::KeyPair;
     let rng = ring::rand::SystemRandom::new();
     let doc = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng).map_err(|e| e.to_string())?;
-    let pair = ring::signature::Ed25519KeyPair::from_pkcs8(doc.as_ref()).map_err(|e| e.to_string())?;
+    let pair =
+        ring::signature::Ed25519KeyPair::from_pkcs8(doc.as_ref()).map_err(|e| e.to_string())?;
     Ok((doc.as_ref().to_vec(), hex(pair.public_key().as_ref())))
 }
 
@@ -138,13 +155,25 @@ mod tests {
             format!("{text} #{}", hex(pair.sign(text.as_bytes()).as_ref()))
         };
         let t = 1_800_000_000;
-        assert_eq!(verify(&post("https://a.trycloudflare.com", t - 60), &key, t).map(|x| x.0).as_deref(), Some("https://a.trycloudflare.com"));
+        assert_eq!(
+            verify(&post("https://a.trycloudflare.com", t - 60), &key, t)
+                .map(|x| x.0)
+                .as_deref(),
+            Some("https://a.trycloudflare.com")
+        );
         // too old, forged, tampered
         assert!(verify(&post("https://a.trycloudflare.com", t - 3 * 3600), &key, t).is_none());
         let (other, _) = generate_key().unwrap();
         let other = ring::signature::Ed25519KeyPair::from_pkcs8(&other).unwrap();
         let text = signed_text("https://evil.example", t);
-        assert!(verify(&format!("{text} #{}", hex(other.sign(text.as_bytes()).as_ref())), &key, t).is_none());
+        assert!(
+            verify(
+                &format!("{text} #{}", hex(other.sign(text.as_bytes()).as_ref())),
+                &key,
+                t
+            )
+            .is_none()
+        );
         let good = post("https://a.trycloudflare.com", t);
         assert!(verify(&good.replace("https://a.", "https://b."), &key, t).is_none());
         assert!(is_alias(" OpenOMSI "));

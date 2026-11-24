@@ -5,33 +5,69 @@ use crate::DEPTH_FORMAT;
 /// A native compiler can abort before wgpu returns an error. Record both sides of each
 /// operation so the last unfinished one identifies the module/entry point, not just "sky"
 /// (at debug level: two lines a shader and a pipeline; the texts are only made when logged).
-fn logged<T>(begin: impl FnOnce() -> String, end: impl FnOnce() -> String, op: impl FnOnce() -> T) -> T {
+fn logged<T>(
+    begin: impl FnOnce() -> String,
+    end: impl FnOnce() -> String,
+    op: impl FnOnce() -> T,
+) -> T {
     let level = log::Level::Debug;
     if !log::log_enabled!(level) {
         return op();
     }
     let thread = std::thread::current();
     let started = std::time::Instant::now();
-    log::log!(level, "renderer: {}, thread {:?} ({})", begin(), thread.id(), thread.name().unwrap_or("unnamed"));
+    log::log!(
+        level,
+        "renderer: {}, thread {:?} ({})",
+        begin(),
+        thread.id(),
+        thread.name().unwrap_or("unnamed")
+    );
     let done = op();
-    log::log!(level, "renderer: {}, thread {:?}, {:.1} ms", end(), thread.id(), started.elapsed().as_secs_f64() * 1000.0);
+    log::log!(
+        level,
+        "renderer: {}, thread {:?}, {:.1} ms",
+        end(),
+        thread.id(),
+        started.elapsed().as_secs_f64() * 1000.0
+    );
     done
 }
 
-pub(crate) fn compile_shader(device: &wgpu::Device, descriptor: wgpu::ShaderModuleDescriptor<'_>) -> wgpu::ShaderModule {
+pub(crate) fn compile_shader(
+    device: &wgpu::Device,
+    descriptor: wgpu::ShaderModuleDescriptor<'_>,
+) -> wgpu::ShaderModule {
     let label = descriptor.label.unwrap_or("unnamed").to_string();
-    logged(|| format!("shader begin {label}"), || format!("shader end {label}"), || device.create_shader_module(descriptor))
+    logged(
+        || format!("shader begin {label}"),
+        || format!("shader end {label}"),
+        || device.create_shader_module(descriptor),
+    )
 }
 
-pub(crate) fn compile_pipeline(device: &wgpu::Device, descriptor: &wgpu::RenderPipelineDescriptor<'_>) -> wgpu::RenderPipeline {
+pub(crate) fn compile_pipeline(
+    device: &wgpu::Device,
+    descriptor: &wgpu::RenderPipelineDescriptor<'_>,
+) -> wgpu::RenderPipeline {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let fragment = descriptor.fragment.as_ref();
-    let begin = || format!("pipeline begin #{id} {}, vs {}, fs {}, {}x MSAA, constants {:?}",
-        descriptor.label.unwrap_or("unnamed"), descriptor.vertex.entry_point.unwrap_or("auto"),
-        fragment.and_then(|f| f.entry_point).unwrap_or("none"), descriptor.multisample.count,
-        fragment.map(|f| f.compilation_options.constants));
-    logged(begin, || format!("pipeline end #{id}"), || device.create_render_pipeline(descriptor))
+    let begin = || {
+        format!(
+            "pipeline begin #{id} {}, vs {}, fs {}, {}x MSAA, constants {:?}",
+            descriptor.label.unwrap_or("unnamed"),
+            descriptor.vertex.entry_point.unwrap_or("auto"),
+            fragment.and_then(|f| f.entry_point).unwrap_or("none"),
+            descriptor.multisample.count,
+            fragment.map(|f| f.compilation_options.constants)
+        )
+    };
+    logged(
+        begin,
+        || format!("pipeline end #{id}"),
+        || device.create_render_pipeline(descriptor),
+    )
 }
 
 /// A pipeline that draws without vertex buffers (a triangle over the screen, or quads the
@@ -56,7 +92,17 @@ pub(crate) fn no_vertex_pipeline<'a>(
     fs: &'a str,
     targets: &'a [Option<wgpu::ColorTargetState>],
 ) -> NoVertexPipeline<'a> {
-    NoVertexPipeline { label, layout, module, vs: "vs_main", fs, targets, depth_stencil: None, samples: 1, strip: false }
+    NoVertexPipeline {
+        label,
+        layout,
+        module,
+        vs: "vs_main",
+        fs,
+        targets,
+        depth_stencil: None,
+        samples: 1,
+        strip: false,
+    }
 }
 
 impl<'a> NoVertexPipeline<'a> {
@@ -65,7 +111,10 @@ impl<'a> NoVertexPipeline<'a> {
     }
 
     pub(crate) fn depth(self, depth_stencil: wgpu::DepthStencilState) -> Self {
-        NoVertexPipeline { depth_stencil: Some(depth_stencil), ..self }
+        NoVertexPipeline {
+            depth_stencil: Some(depth_stencil),
+            ..self
+        }
     }
 
     /// Quads as triangle strips of four vertices, not lists of six (the vertex shader makes
@@ -79,36 +128,43 @@ impl<'a> NoVertexPipeline<'a> {
     }
 
     pub(crate) fn create(self, device: &wgpu::Device) -> wgpu::RenderPipeline {
-        compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
-            label: Some(self.label),
-            layout: Some(self.layout),
-            vertex: wgpu::VertexState {
-                module: self.module,
-                entry_point: Some(self.vs),
-                buffers: &[],
-                compilation_options: Default::default(),
+        compile_pipeline(
+            device,
+            &wgpu::RenderPipelineDescriptor {
+                label: Some(self.label),
+                layout: Some(self.layout),
+                vertex: wgpu::VertexState {
+                    module: self.module,
+                    entry_point: Some(self.vs),
+                    buffers: &[],
+                    compilation_options: Default::default(),
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: if self.strip {
+                        wgpu::PrimitiveTopology::TriangleStrip
+                    } else {
+                        wgpu::PrimitiveTopology::TriangleList
+                    },
+                    cull_mode: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    ..Default::default()
+                },
+                depth_stencil: self.depth_stencil,
+                multisample: wgpu::MultisampleState {
+                    count: self.samples,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: self.module,
+                    entry_point: Some(self.fs),
+                    targets: self.targets,
+                    compilation_options: Default::default(),
+                }),
+                multiview_mask: None,
+                cache: crate::pipeline_cache::get(device).as_ref(),
             },
-            primitive: wgpu::PrimitiveState {
-                topology: if self.strip { wgpu::PrimitiveTopology::TriangleStrip } else { wgpu::PrimitiveTopology::TriangleList },
-                cull_mode: None,
-                front_face: wgpu::FrontFace::Ccw,
-                ..Default::default()
-            },
-            depth_stencil: self.depth_stencil,
-            multisample: wgpu::MultisampleState {
-                count: self.samples,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: self.module,
-                entry_point: Some(self.fs),
-                targets: self.targets,
-                compilation_options: Default::default(),
-            }),
-            multiview_mask: None,
-            cache: crate::pipeline_cache::get(device).as_ref(),
-        })
+        )
     }
 }
 
@@ -124,12 +180,23 @@ pub(crate) fn depth_test(compare: wgpu::CompareFunction) -> wgpu::DepthStencilSt
 }
 
 /// One colour target, every channel written.
-pub(crate) fn target(format: wgpu::TextureFormat, blend: Option<wgpu::BlendState>) -> Option<wgpu::ColorTargetState> {
-    Some(wgpu::ColorTargetState { format, blend, write_mask: wgpu::ColorWrites::ALL })
+pub(crate) fn target(
+    format: wgpu::TextureFormat,
+    blend: Option<wgpu::BlendState>,
+) -> Option<wgpu::ColorTargetState> {
+    Some(wgpu::ColorTargetState {
+        format,
+        blend,
+        write_mask: wgpu::ColorWrites::ALL,
+    })
 }
 
 /// A material texture sampler: linear, mip-mapped, anisotropic, `address` on all axes.
-pub(crate) fn texture_sampler(device: &wgpu::Device, address: wgpu::AddressMode, anisotropy: u16) -> wgpu::Sampler {
+pub(crate) fn texture_sampler(
+    device: &wgpu::Device,
+    address: wgpu::AddressMode,
+    anisotropy: u16,
+) -> wgpu::Sampler {
     device.create_sampler(&wgpu::SamplerDescriptor {
         address_mode_u: address,
         address_mode_v: address,
@@ -163,7 +230,10 @@ pub(crate) fn uniform_buffer(device: &wgpu::Device, label: &str, size: u64) -> w
     })
 }
 
-pub(crate) fn uniform_entry(binding: u32, visibility: wgpu::ShaderStages) -> wgpu::BindGroupLayoutEntry {
+pub(crate) fn uniform_entry(
+    binding: u32,
+    visibility: wgpu::ShaderStages,
+) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility,
@@ -185,14 +255,22 @@ pub(crate) fn texture_entry(
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::FRAGMENT,
-        ty: wgpu::BindingType::Texture { sample_type, view_dimension, multisampled: false },
+        ty: wgpu::BindingType::Texture {
+            sample_type,
+            view_dimension,
+            multisampled: false,
+        },
         count: None,
     }
 }
 
 /// A filterable 2D float texture the fragment shader reads.
 pub(crate) fn float_texture_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
-    texture_entry(binding, wgpu::TextureSampleType::Float { filterable: true }, wgpu::TextureViewDimension::D2)
+    texture_entry(
+        binding,
+        wgpu::TextureSampleType::Float { filterable: true },
+        wgpu::TextureViewDimension::D2,
+    )
 }
 
 /// A filtering sampler the fragment shader uses.

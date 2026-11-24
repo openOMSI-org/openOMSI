@@ -5,6 +5,7 @@ use super::*;
 /// CPU seconds this process has used so far (all threads): on Windows from the system,
 /// which has no `ps`; elsewhere from `ps`.
 #[cfg(windows)]
+#[rustfmt::skip]
 pub(crate) fn process_cpu_seconds() -> Option<f64> {
     use windows::Win32::Foundation::FILETIME;
     use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
@@ -38,6 +39,7 @@ pub(crate) fn process_cpu_seconds() -> Option<f64> {
 /// The CPU time the calling thread has used (s): what the frame's own work costs, whatever
 /// else the machine runs meanwhile - wall-clock stage times grow with every other busy
 /// program, a thread's CPU time hardly.
+#[rustfmt::skip]
 pub(crate) fn thread_cpu_seconds() -> Option<f64> {
     #[cfg(unix)]
     {
@@ -65,6 +67,7 @@ pub(crate) fn thread_cpu_seconds() -> Option<f64> {
 /// The instructions the process has retired (macOS): the work done, counted the same however
 /// busy the machine is and whichever cores ran it - CPU times grow when other programs push
 /// the game's threads onto the efficiency cores.
+#[rustfmt::skip]
 pub(crate) fn process_instructions() -> Option<u64> {
     #[cfg(target_os = "macos")]
     {
@@ -92,6 +95,7 @@ pub(crate) fn is_omsi_root(p: &Path) -> bool {
 
 /// Say that the game cannot start, where the player sees it: a dialog when there is no
 /// terminal to print to (a double click, the launcher), and the log as always.
+#[rustfmt::skip]
 pub(crate) fn fatal_dialog(title: &str, text: &str) {
     log::error!("{title}: {text}");
     // started from a terminal (the message is right there) or by a test harness
@@ -144,10 +148,12 @@ pub(crate) fn own_keys(root: &Path) -> std::collections::HashSet<i32> {
 /// own assignment ([`crate::stock_keys::STOCK_KEYS`]): the player's own. Told apart from the
 /// built-in list, not from the installation's file - a player who edited that file had
 /// every change overridden by the game's conveniences (Z / X / C, Shift+number).
+#[rustfmt::skip]
 pub(crate) fn own_bindings(root: &Path, modifier: i32) -> std::collections::HashSet<i32> {
     own_bindings_in(&keyboard_cfg(root), modifier)
 }
 
+#[rustfmt::skip]
 fn own_bindings_in(file: &Path, modifier: i32) -> std::collections::HashSet<i32> {
     let Ok(m) = omsi_content::KeyboardCfg::load(file) else { return Default::default() };
     let stock: std::collections::HashSet<(String, i32, i32)> = crate::stock_keys::STOCK_KEYS.iter().map(|(a, k, md)| (a.to_ascii_lowercase(), *k, *md)).collect();
@@ -177,6 +183,7 @@ pub(crate) fn root_memo() -> Option<PathBuf> {
 }
 
 /// Find the OMSI 2 installation without being told where it is.
+#[rustfmt::skip]
 pub(crate) fn find_root() -> Option<PathBuf> {
     let mut first: Vec<PathBuf> = Vec::new();
     if let Some(p) = omsi_cfg::flags::OMSI_ROOT.os().map(PathBuf::from) {
@@ -198,48 +205,40 @@ pub(crate) fn find_root() -> Option<PathBuf> {
     omsi_cfg::find_original_install(&first)
 }
 
-/// mX Graphics (Experimental): the game's instance is mX's, openOMSI's own graphics library
-/// behind wgpu's API, instead of one of wgpu's own backends. Set from the settings before the
-/// game makes its instance (`game_graphics_instance`); the launcher's previews stay on wgpu.
-static MX_GRAPHICS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// The game's instance: mX's when `setting` says so (`mx_graphics`, read on a Mac only: mX has
-/// drawn the game on Metal, not yet on Direct3D 12 or Vulkan) or `OMSI_MX=on` does, else
-/// `graphics_instance`'s.
-pub(crate) fn game_graphics_instance(setting: bool) -> wgpu::Instance {
-    let on = match omsi_cfg::flags::OMSI_MX.var() {
-        Some(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "on" | "true" | "yes"),
-        None => setting && cfg!(target_os = "macos"),
-    };
-    MX_GRAPHICS.store(on, std::sync::atomic::Ordering::Relaxed);
-    if on {
-        log::info!("graphics: mX Graphics (experimental) asked for");
-    }
-    graphics_instance()
+/// mX Graphics (Experimental), the player's setting: the whole game runs on mX, openOMSI's
+/// own graphics library (the `*-mx` crates, `openomsi_game_mx`), and wgpu is never started;
+/// off, the game runs on wgpu alone and nothing of mX is started. Read once at the start.
+pub fn mx_graphics() -> bool {
+    mx_asked().unwrap_or_else(|| settings::Settings::load().mx_graphics)
 }
 
-/// mX's instance, when mX Graphics is on and mX finds a device it can draw on (Metal 3 on a
-/// Mac, Vulkan 1.2 with descriptor indexing, Direct3D 12): else none, and wgpu's own backends
-/// draw as usual. A device mX lists but cannot open is passed over the same way, by `Opener`.
-fn mx_instance() -> Option<wgpu::Instance> {
-    if !MX_GRAPHICS.load(std::sync::atomic::Ordering::Relaxed) {
-        return None;
+/// `OMSI_MX` for this run, over the setting: on (1, true) starts the game on mX, off (0,
+/// false) on wgpu; unset, the setting decides.
+fn mx_asked() -> Option<bool> {
+    let asked = omsi_cfg::flags::OMSI_MX
+        .var()
+        .map(|v| v.trim().to_ascii_lowercase());
+    match asked.as_deref() {
+        Some("1" | "on" | "true" | "yes") => Some(true),
+        Some("0" | "off" | "false" | "no") => Some(false),
+        _ => None,
     }
-    let instance = wgpu_mx::custom::instance();
-    let adapters = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::all()));
-    match adapters.first() {
-        Some(a) => {
-            log::info!("graphics: mX Graphics (experimental) on {}", a.get_info().name);
-            Some(instance)
-        }
-        None => {
-            log::warn!("graphics: mX Graphics found no graphics chip it can draw on; wgpu draws instead");
-            None
-        }
+}
+
+/// [`mx_graphics`], from the settings under `home` (the phones' entry points ask before they
+/// set HOME, which the mX game sets again in its own).
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub(crate) fn mx_graphics_in(home: &std::path::Path) -> bool {
+    if let Some(asked) = mx_asked() {
+        return asked;
     }
+    let text =
+        std::fs::read_to_string(home.join(".openomsi").join("settings.cfg")).unwrap_or_default();
+    settings::Settings::from_text(&text).mx_graphics
 }
 
 /// Use the native supported API for both windowed and offscreen rendering.
+#[rustfmt::skip]
 pub(crate) fn graphics_instance() -> wgpu::Instance {
     let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
     if crate::server::SERVER_MODE.load(std::sync::atomic::Ordering::Relaxed) {
@@ -247,9 +246,6 @@ pub(crate) fn graphics_instance() -> wgpu::Instance {
         descriptor.backends = wgpu::Backends::NOOP;
         descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
         return wgpu::Instance::new(descriptor);
-    }
-    if let Some(instance) = mx_instance() {
-        return instance;
     }
     descriptor.backend_options.gl.context_lock_timeout = Some(GL_CONTEXT_LOCK_TIMEOUT);
     // (an interface whose only adapter is a software renderer - DirectX 12's "Microsoft
@@ -311,6 +307,7 @@ impl std::fmt::Debug for GraphicsApi {
 /// Is ANGLE there to be tried: on Windows, with Google's `libEGL.dll` and `libGLESv2.dll`
 /// next to the game (the package brings them; without them it is left out, with a line in
 /// the log once).
+#[rustfmt::skip]
 fn angle_available() -> bool {
     static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *AVAILABLE.get_or_init(|| {
@@ -335,6 +332,7 @@ fn angle_available() -> bool {
 /// are there; elsewhere Vulkan, then OpenGL. Settings → Graphics API (`graphics_api`) or
 /// OMSI_BACKEND=vulkan|dx12|gl|angle puts one first: a driver whose Vulkan misbehaves is
 /// got round.
+#[rustfmt::skip]
 pub(crate) fn backend_order() -> Vec<GraphicsApi> {
     if cfg!(any(target_os = "macos", target_os = "ios")) {
         return vec![GraphicsApi::Native(wgpu::Backends::METAL)];
@@ -372,6 +370,7 @@ pub(crate) fn backend_order() -> Vec<GraphicsApi> {
 
 static VULKAN_FIRST: std::sync::OnceLock<Option<(u32, u32)>> = std::sync::OnceLock::new();
 
+#[rustfmt::skip]
 fn vulkan_first(wanted: &str) -> bool {
     VULKAN_FIRST
         .get_or_init(|| {
@@ -394,20 +393,24 @@ fn vulkan_first(wanted: &str) -> bool {
         .is_some()
 }
 
+#[rustfmt::skip]
 fn auto_api(wanted: &str) -> bool {
     matches!(wanted.trim().to_ascii_lowercase().as_str(), "" | "auto")
 }
 
+#[rustfmt::skip]
 fn vulkan_adapter(wanted: &str, lost_mark: Option<&str>, adapters: &[(wgpu::DeviceType, u32, u32)]) -> Option<(u32, u32)> {
     let (_, vendor, device) = *adapters.iter().find(|a| a.0 == wgpu::DeviceType::DiscreteGpu)?;
     let lost = lost_mark.is_some_and(|m| m.trim() == vulkan_lost_mark(vendor, device));
     (auto_api(wanted) && vendor == 0x1002 && !lost).then_some((vendor, device))
 }
 
+#[rustfmt::skip]
 fn vulkan_lost_mark(vendor: u32, device: u32) -> String {
     format!("{}|{vendor:04x}-{device:04x}", omsi_platform::VERSION)
 }
 
+#[rustfmt::skip]
 pub(crate) fn mark_vulkan_lost() {
     let (Some(Some((vendor, device))), Some(p)) = (VULKAN_FIRST.get(), vulkan_lost_path()) else { return };
     if let Some(dir) = p.parent() {
@@ -416,10 +419,12 @@ pub(crate) fn mark_vulkan_lost() {
     let _ = std::fs::write(p, vulkan_lost_mark(*vendor, *device));
 }
 
+#[rustfmt::skip]
 fn vulkan_pin_after(pin: Option<(u32, u32)>, mut made: impl Iterator<Item = Option<GraphicsApi>>) -> Option<(u32, u32)> {
     pin.filter(|_| !made.any(|b| b == Some(GraphicsApi::Native(wgpu::Backends::DX12))))
 }
 
+#[rustfmt::skip]
 fn vulkan_passed_over(pin: Option<(u32, u32)>, backend: wgpu::Backend, vendor: u32, device: u32) -> bool {
     backend == wgpu::Backend::Vulkan && pin.is_some_and(|p| p != (vendor, device))
 }
@@ -431,14 +436,17 @@ fn vulkan_lost_path() -> Option<PathBuf> {
 
 /// A renderer in software on the processor (wgpu calls it a CPU adapter: WARP, llvmpipe,
 /// SwiftShader).
+#[rustfmt::skip]
 fn is_software(info: &wgpu::AdapterInfo) -> bool {
     software_adapter(&info.name, info.device_type)
 }
 
+#[rustfmt::skip]
 fn software_adapter(name: &str, device_type: wgpu::DeviceType) -> bool {
     device_type == wgpu::DeviceType::Cpu || name.contains("Microsoft Basic Render Driver") || name.contains("llvmpipe")
 }
 
+#[rustfmt::skip]
 fn backend_instance(api: GraphicsApi) -> wgpu::Instance {
     let mut d = wgpu::InstanceDescriptor::new_without_display_handle();
     d.backend_options.gl.context_lock_timeout = Some(GL_CONTEXT_LOCK_TIMEOUT);
@@ -461,6 +469,7 @@ fn backend_instance(api: GraphicsApi) -> wgpu::Instance {
 /// processor's graphics - on Vulkan, DirectX 12 and OpenGL, and only when none opens is the
 /// game given up, saying so. (Where the last try stands is kept: a renderer whose pipelines
 /// then fail to build is followed by the next adapter.)
+#[rustfmt::skip]
 struct Opener {
     window: std::sync::Arc<winit::window::Window>,
     options: omsi_render::RenderOptions,
@@ -486,6 +495,7 @@ struct Opener {
     vulkan_pin: Option<(u32, u32)>,
 }
 
+#[rustfmt::skip]
 impl Opener {
     fn new(instance: &wgpu::Instance, window: &std::sync::Arc<winit::window::Window>, options: omsi_render::RenderOptions) -> Opener {
         Opener {
@@ -614,6 +624,7 @@ fn as_urgent_as_the_main_thread() {
     }
 }
 
+#[rustfmt::skip]
 impl RendererStart {
     /// The graphics device for `window`, on `instance` or the next interface and adapter that
     /// can (`instance` then becomes that one's, see `Opener`); its pipelines are
@@ -685,6 +696,7 @@ impl RendererStart {
 
 /// A picture of `color` alone into `surface`, shown (no pipeline needed: a clear). False when
 /// the window gave no picture to draw into (hidden, covered, being resized).
+#[rustfmt::skip]
 pub(crate) fn present_clear(surface: &mut SurfaceState<'_>, device: &wgpu::Device, queue: &wgpu::Queue, window: &winit::window::Window, color: wgpu::Color) -> bool {
     let frame = match surface.acquire() {
         wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
@@ -711,6 +723,7 @@ pub(crate) fn present_clear(surface: &mut SurfaceState<'_>, device: &wgpu::Devic
 /// Tell the player why the game cannot go on, also where there is no window yet (a message
 /// box on Windows, the desktop's own message dialog on Linux; the log and the terminal
 /// everywhere).
+#[rustfmt::skip]
 pub(crate) fn fatal_message(text: &str) {
     log::error!("{text}");
     eprintln!("openOMSI: {text}");
@@ -733,6 +746,7 @@ pub(crate) fn fatal_message(text: &str) {
 /// terminal (#2458: a Steam Deck without WebKitGTK just did nothing). Not without a desktop,
 /// nor in a background run.
 #[cfg(target_os = "linux")]
+#[rustfmt::skip]
 fn linux_message(text: &str) {
     let desktop = std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some();
     if !desktop || std::env::var_os("OMSI_BACKGROUND").is_some_and(|v| !v.is_empty() && v != "0") {
@@ -753,6 +767,7 @@ fn linux_message(text: &str) {
 
 /// The commit this binary was built from, so a log or a screenshot says which version is
 /// running, and the release version (both stamped by omsi-platform's `build.rs`).
+#[rustfmt::skip]
 pub use omsi_platform::{BUILD, VERSION};
 
 /// A window of `w` x `h` points made to fit the screen it opens on, and placed in its
@@ -761,12 +776,14 @@ pub use omsi_platform::{BUILD, VERSION};
 /// size as asked and no place.
 /// The game runs inside gamescope (a Steam Deck's Gaming Mode, a Steam Machine): one
 /// window, shown over the whole screen.
+#[rustfmt::skip]
 pub(crate) fn under_gamescope() -> bool {
     std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some() || std::env::var("XDG_CURRENT_DESKTOP").is_ok_and(|d| d.to_ascii_lowercase().contains("gamescope"))
 }
 
 /// The screen the game opens on: the one the launcher stands on (`OMSI_SCREEN_AT`, the
 /// launcher's middle), else the main one (#1959: it always opened on the main screen).
+#[rustfmt::skip]
 pub(crate) fn home_monitor(event_loop: &winit::event_loop::ActiveEventLoop) -> Option<winit::monitor::MonitorHandle> {
     let at = omsi_cfg::flags::OMSI_SCREEN_AT.var().and_then(|v| {
         let (x, y) = v.split_once(',')?;
@@ -782,6 +799,7 @@ pub(crate) fn home_monitor(event_loop: &winit::event_loop::ActiveEventLoop) -> O
     .or_else(|| event_loop.available_monitors().next())
 }
 
+#[rustfmt::skip]
 pub(crate) fn fit_window(event_loop: &winit::event_loop::ActiveEventLoop, w: f64, h: f64) -> (winit::dpi::LogicalSize<f64>, Option<winit::dpi::PhysicalPosition<i32>>) {
     let Some(m) = home_monitor(event_loop) else {
         return (winit::dpi::LogicalSize::new(w, h), None);
@@ -795,6 +813,7 @@ pub(crate) fn fit_window(event_loop: &winit::event_loop::ActiveEventLoop, w: f64
 /// `want` points fitted into a screen of `screen` pixels at `scale` (the size kept to 90 %
 /// of its width and 85 % of its height - a title bar and a task bar take some - with the
 /// shape kept), and where it starts for the screen's middle (pixels).
+#[rustfmt::skip]
 pub(crate) fn fit_rect(want: (f64, f64), screen: (f64, f64), scale: f64) -> ((f64, f64), (i32, i32)) {
     let (sw, sh) = (screen.0 / scale, screen.1 / scale);
     let k = (sw * 0.9 / want.0).min(sh * 0.85 / want.1).min(1.0);
@@ -819,6 +838,7 @@ pub(crate) fn window_icon() -> Option<winit::window::Icon> {
 /// world (`World::settings`). (A field, not statics: a second drive in the same process
 /// starts from its own.)
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[rustfmt::skip]
 pub(crate) struct SessionSettings {
     /// Enhanced+ (ray tracing) asked for by `--enhanced-plus` or OMSI_ENHANCED_PLUS=1
     /// whatever the settings say (see `Settings::render_options`).
@@ -833,14 +853,18 @@ pub(crate) struct SessionSettings {
     pub(crate) sound_scenery: f32,
     pub(crate) mirror_size: u32,
     pub(crate) rain_quality: u8,
+    /// The `pax_stop_numbers_exact` setting (#3154), read when the map index is built.
+    pub(crate) pax_stop_numbers_exact: bool,
 }
 
+#[rustfmt::skip]
 impl Default for SessionSettings {
     fn default() -> SessionSettings {
-        SessionSettings { enhanced_plus: false, enhanced: false, classic: false, clouds: true, sound_scenery: 1.0, mirror_size: 256, rain_quality: 2 }
+        SessionSettings { enhanced_plus: false, enhanced: false, classic: false, clouds: true, sound_scenery: 1.0, mirror_size: 256, rain_quality: 2, pax_stop_numbers_exact: false }
     }
 }
 
+#[rustfmt::skip]
 impl SessionSettings {
     /// A game session's: the settings, the arguments and the switches.
     pub(crate) fn for_session(settings: &crate::settings::Settings, args: &crate::Args) -> SessionSettings {
@@ -855,6 +879,7 @@ impl SessionSettings {
             sound_scenery: settings.vol_scenery,
             mirror_size: settings.mirror_size,
             rain_quality: crate::rain::quality_of(&settings.rain_quality),
+            pax_stop_numbers_exact: settings.pax_stop_numbers_exact,
         }
     }
 
@@ -886,6 +911,7 @@ impl SessionSettings {
         world.settings.set_sound_scenery(self.sound_scenery);
         world.settings.set_mirror_size(self.mirror_size);
         world.settings.set_rain_quality(self.rain_quality);
+        world.settings.set_stop_numbers_exact(self.pax_stop_numbers_exact);
     }
 
     /// The scene's graphics kind (Vanilla before Enhanced, as the showroom may ask both).
@@ -901,9 +927,9 @@ impl SessionSettings {
     }
 }
 
-
 /// The game's settings a world reads as it opens (see `scene::host::OpenSettings`), from the
 /// settings file at that moment.
+#[rustfmt::skip]
 pub(crate) fn install_scene_settings() {
     crate::scene::host::install_open_settings(|| crate::scene::host::OpenSettings { max_parked: crate::settings::Settings::load().ai_max_parked as i64 });
 }
@@ -975,6 +1001,7 @@ mod own_key_tests {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod window_tests {
     use super::software_adapter;
 

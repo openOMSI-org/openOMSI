@@ -35,11 +35,21 @@ fn name_hint(name: &str) -> Option<(Option<RailClass>, TrackClass, bool)> {
     let n = name.to_ascii_lowercase();
     let n = n.rsplit(['/', '\\']).next().unwrap_or(&n);
     let has = |keys: &[&str]| keys.iter().any(|k| n.contains(k));
-    if has(&["metro", "ubahn", "u-bahn", "u_bahn", "subway", "u-bhf", "ubhf"]) {
+    if has(&[
+        "metro", "ubahn", "u-bahn", "u_bahn", "subway", "u-bhf", "ubhf",
+    ]) {
         Some((Some(RailClass::Metro), TrackClass::Mainline, true))
     } else if has(&["tram", "strassenbahn", "straßenbahn", "str_bahn", "tramway"]) {
         Some((Some(RailClass::Tram), TrackClass::Street, false))
-    } else if has(&["train", "railway", "sbahn", "s-bahn", "eisenbahn", "fernbahn", "mainline"]) {
+    } else if has(&[
+        "train",
+        "railway",
+        "sbahn",
+        "s-bahn",
+        "eisenbahn",
+        "fernbahn",
+        "mainline",
+    ]) {
         Some((None, TrackClass::Mainline, false))
     } else {
         None
@@ -73,17 +83,32 @@ pub fn glob(pattern: &str, text: &str) -> bool {
             Some((c, rest)) => t.first().is_some_and(|x| x == c) && go(rest, &t[1..]),
         }
     }
-    let norm = |s: &str| s.to_lowercase().replace('\\', "/").chars().collect::<Vec<_>>();
+    let norm = |s: &str| {
+        s.to_lowercase()
+            .replace('\\', "/")
+            .chars()
+            .collect::<Vec<_>>()
+    };
     let (p, t) = (norm(pattern), norm(text));
     // a pattern without a folder matches the file name alone
-    let t: &[char] = if pattern.contains(['/', '\\']) { &t } else { &t[t.iter().rposition(|c| *c == '/').map(|i| i + 1).unwrap_or(0)..] };
+    let t: &[char] = if pattern.contains(['/', '\\']) {
+        &t
+    } else {
+        &t[t.iter()
+            .rposition(|c| *c == '/')
+            .map(|i| i + 1)
+            .unwrap_or(0)..]
+    };
     go(&p, t)
 }
 
 impl TrackRule {
     pub fn matches(&self, lane: &Lane) -> bool {
         if let Some(k) = lane.key {
-            if self.tile.is_some_and(|t| t != k.tile) || self.id.is_some_and(|i| i != k.id) || self.path.is_some_and(|p| p != k.path) {
+            if self.tile.is_some_and(|t| t != k.tile)
+                || self.id.is_some_and(|i| i != k.id)
+                || self.path.is_some_and(|p| p != k.path)
+            {
                 return false;
             }
         } else if self.tile.is_some() || self.id.is_some() || self.path.is_some() {
@@ -133,9 +158,17 @@ impl RailMapConfig {
             });
         }
         for w in &transit.switches.list {
-            let (Some(speed), Some(id)) = (w.diverging_speed, w.object) else { continue };
+            let (Some(speed), Some(id)) = (w.diverging_speed, w.object) else {
+                continue;
+            };
             for &path in &w.diverging_paths {
-                self.rules.push(TrackRule { tile: w.tile, id: Some(id), path: Some(path), speed_kmh: Some(speed * 3.6), ..Default::default() });
+                self.rules.push(TrackRule {
+                    tile: w.tile,
+                    id: Some(id),
+                    path: Some(path),
+                    speed_kmh: Some(speed * 3.6),
+                    ..Default::default()
+                });
             }
         }
     }
@@ -160,12 +193,21 @@ impl RailMapConfig {
             }
             if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
                 cfg.rules.extend(cur.take());
-                cur = name.trim().eq_ignore_ascii_case("track").then(TrackRule::default);
+                cur = name
+                    .trim()
+                    .eq_ignore_ascii_case("track")
+                    .then(TrackRule::default);
                 continue;
             }
-            let (Some(rule), Some((k, v))) = (cur.as_mut(), line.split_once('=')) else { continue };
+            let (Some(rule), Some((k, v))) = (cur.as_mut(), line.split_once('=')) else {
+                continue;
+            };
             let (k, v) = (k.trim().to_ascii_lowercase(), v.trim());
-            let nums = || v.split_whitespace().filter_map(|x| x.parse::<i64>().ok()).collect::<Vec<_>>();
+            let nums = || {
+                v.split_whitespace()
+                    .filter_map(|x| x.parse::<i64>().ok())
+                    .collect::<Vec<_>>()
+            };
             match k.as_str() {
                 "file" | "spline" | "object" | "profile" => rule.file = Some(v.to_string()),
                 "tile" => {
@@ -246,14 +288,23 @@ pub fn classify(net: &mut Network, cfg: &RailMapConfig) -> usize {
         let beside = || {
             let n = l.points.len();
             let step = (n / 6).max(1);
-            (0..n).step_by(step).filter(|&i| street_near(l.points[i])).count() * 2 >= (n / step).max(1)
+            (0..n)
+                .step_by(step)
+                .filter(|&i| street_near(l.points[i]))
+                .count()
+                * 2
+                >= (n / step).max(1)
         };
         let third_rail = said.third_rail.unwrap_or(hint.is_some_and(|h| h.2));
         let class = match (said.street, hint) {
             (Some(true), _) => TrackClass::Street,
             (Some(false), _) => TrackClass::Mainline,
             (None, Some((_, c, _))) => c,
-            (None, None) => TrackClass::of(TrackFacts { street_beside: beside(), min_radius: radius, third_rail }),
+            (None, None) => TrackClass::of(TrackFacts {
+                street_beside: beside(),
+                min_radius: radius,
+                third_rail,
+            }),
         };
         let info = TrackInfo {
             class,
@@ -288,10 +339,16 @@ mod transit_tests {
         cfg.add_transit(&transit);
         assert_eq!(cfg.rules.len(), 5, "{issues:?}");
         let tram = &cfg.rules[1];
-        assert_eq!((tram.class, tram.street, tram.third_rail), (Some(RailClass::Tram), Some(true), Some(false)));
+        assert_eq!(
+            (tram.class, tram.street, tram.third_rail),
+            (Some(RailClass::Tram), Some(true), Some(false))
+        );
         assert!((tram.speed_kmh.unwrap() - 40.0).abs() < 0.01);
         let metro = &cfg.rules[2];
-        assert_eq!((metro.class, metro.third_rail, metro.tunnel), (Some(RailClass::Metro), Some(true), Some(true)));
+        assert_eq!(
+            (metro.class, metro.third_rail, metro.tunnel),
+            (Some(RailClass::Metro), Some(true), Some(true))
+        );
         assert_eq!(cfg.rules[3].class, None, "tram and railway: any");
         let sw = &cfg.rules[4];
         assert_eq!((sw.tile, sw.id, sw.path), (Some((1, 2)), Some(77), Some(1)));
@@ -306,7 +363,11 @@ mod tests {
     use glam::DVec3;
 
     fn straight(x: f64, kind: LaneKind, name: &str) -> Lane {
-        let mut l = LaneBuilder::polyline(vec![DVec3::new(x, 0.0, 0.0), DVec3::new(x, 200.0, 0.0)], kind, 1.435);
+        let mut l = LaneBuilder::polyline(
+            vec![DVec3::new(x, 0.0, 0.0), DVec3::new(x, 200.0, 0.0)],
+            kind,
+            1.435,
+        );
         l.name = name.into();
         l
     }
@@ -332,7 +393,10 @@ mod tests {
         assert_eq!(cfg.rules[0].speed_kmh, Some(40.0));
         assert_eq!(cfg.rules[1].tile, Some((3, -4)));
         assert_eq!((cfg.rules[1].id, cfg.rules[1].path), (Some(77), Some(1)));
-        assert_eq!((cfg.rules[1].tunnel, cfg.rules[1].third_rail), (Some(true), Some(true)));
+        assert_eq!(
+            (cfg.rules[1].tunnel, cfg.rules[1].third_rail),
+            (Some(true), Some(true))
+        );
         assert_eq!(RailMapConfig::parse("").rules.len(), 0);
     }
 
@@ -341,22 +405,30 @@ mod tests {
         let mut net = Network {
             lanes: vec![
                 straight(0.0, LaneKind::Street, "str_2spur_9m.sli"),
-                straight(3.0, LaneKind::Rail, "sbahn_typ001.sli"),       // 1: railway by name, though beside a street
-                straight(3.0, LaneKind::Rail, "plain.sli"),              // 2: beside the street: tram
-                straight(500.0, LaneKind::Rail, "plain.sli"),            // 3: alone: railway
-                straight(900.0, LaneKind::Rail, "U-Bahn_tunnel.sli"),    // 4: metro by name
-                straight(1300.0, LaneKind::Rail, "weird.sli"),           // 5: told by a rule
+                straight(3.0, LaneKind::Rail, "sbahn_typ001.sli"), // 1: railway by name, though beside a street
+                straight(3.0, LaneKind::Rail, "plain.sli"),        // 2: beside the street: tram
+                straight(500.0, LaneKind::Rail, "plain.sli"),      // 3: alone: railway
+                straight(900.0, LaneKind::Rail, "U-Bahn_tunnel.sli"), // 4: metro by name
+                straight(1300.0, LaneKind::Rail, "weird.sli"),     // 5: told by a rule
             ],
             ..Default::default()
         };
-        let cfg = RailMapConfig::parse("[track]\nfile = weird.sli\nclass = tram\nstreet = yes\nspeed = 30\ntunnel = yes\n");
+        let cfg = RailMapConfig::parse(
+            "[track]\nfile = weird.sli\nclass = tram\nstreet = yes\nspeed = 30\ntunnel = yes\n",
+        );
         assert_eq!(classify(&mut net, &cfg), 5);
         let t = |i: usize| net.lanes[i].track.unwrap();
         assert_eq!(t(1).class, TrackClass::Mainline);
         assert_eq!(t(2).class, TrackClass::Street);
         assert_eq!(t(3).class, TrackClass::Mainline);
-        assert_eq!((t(4).class, t(4).only, t(4).third_rail), (TrackClass::Mainline, Some(RailClass::Metro), true));
-        assert_eq!((t(5).class, t(5).only, t(5).tunnel, t(5).speed_kmh), (TrackClass::Street, Some(RailClass::Tram), true, Some(30.0)));
+        assert_eq!(
+            (t(4).class, t(4).only, t(4).third_rail),
+            (TrackClass::Mainline, Some(RailClass::Metro), true)
+        );
+        assert_eq!(
+            (t(5).class, t(5).only, t(5).tunnel, t(5).speed_kmh),
+            (TrackClass::Street, Some(RailClass::Tram), true, Some(30.0))
+        );
         assert_eq!(net.lanes[5].speed_limit_kmh, 30.0);
         assert!(net.lanes[0].track.is_none(), "a street is no track");
     }
@@ -366,10 +438,29 @@ mod tests {
         // a tram loop of 25 m radius: 0.8 m/s² is 16 km/h; a railway bend of 300 m 74 km/h
         assert!((curve_speed_kmh(25.0, TrackClass::Street) - 16.1).abs() < 0.5);
         assert!((curve_speed_kmh(300.0, TrackClass::Mainline) - 73.8).abs() < 1.0);
-        let mut net = Network { lanes: vec![LaneBuilder::arc(DVec3::ZERO, 0.0, 60.0, 25.0, 0.0, LaneKind::Rail, 1.435)], ..Default::default() };
+        let mut net = Network {
+            lanes: vec![LaneBuilder::arc(
+                DVec3::ZERO,
+                0.0,
+                60.0,
+                25.0,
+                0.0,
+                LaneKind::Rail,
+                1.435,
+            )],
+            ..Default::default()
+        };
         classify(&mut net, &RailMapConfig::default());
         let l = &net.lanes[0];
-        assert!(l.speed_limit_kmh < 20.0 && l.speed_limit_kmh >= 10.0, "{}", l.speed_limit_kmh);
-        assert_eq!(l.track.unwrap().class, TrackClass::Street, "a 25 m loop is no railway");
+        assert!(
+            l.speed_limit_kmh < 20.0 && l.speed_limit_kmh >= 10.0,
+            "{}",
+            l.speed_limit_kmh
+        );
+        assert_eq!(
+            l.track.unwrap().class,
+            TrackClass::Street,
+            "a 25 m loop is no railway"
+        );
     }
 }

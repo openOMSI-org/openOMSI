@@ -3,7 +3,9 @@
 //! set, and the arcs where the current is broken.
 
 use crate::def::TrolleyDef;
-use crate::pole::{rotate_tip_pub, DewireCause, Pole, PoleEvent, PoleEventKind, PoleMode, PoseSpan, Rope, G};
+use crate::pole::{
+    DewireCause, G, Pole, PoleEvent, PoleEventKind, PoleMode, PoseSpan, Rope, rotate_tip_pub,
+};
 use crate::traction::{Traction, TractionIn, TractionOut};
 use crate::wire::{ArcRule, Contact, SwitchRequest, WireNet};
 use glam::{DMat3, DVec3, Vec3};
@@ -20,10 +22,16 @@ pub enum RopeCmd {
     Pull,
     /// Raise and guide: along the player's line of sight (origin, direction) to the wire it
     /// meets, or by itself (a motor) to the wire the boom reaches.
-    Raise { ray: Option<(DVec3, DVec3)>, auto: bool },
+    Raise {
+        ray: Option<(DVec3, DVec3)>,
+        auto: bool,
+    },
     /// Held by the rope at this elevation and swing (radians, the bus's frame), with no help to
     /// the wire: let go (`Idle`), it rises on its spring from where it was held.
-    Hold { theta: f64, psi: f64 },
+    Hold {
+        theta: f64,
+        psi: f64,
+    },
     /// Let go of a pole held by hand: it is lifted by its spring, and swung on to the nearest wire
     /// above its tip as it rises.
     Release,
@@ -150,14 +158,26 @@ fn free_aim(o: DVec3, d: DVec3, base: DVec3, len: f64) -> DVec3 {
     let b = d.dot(oc);
     let c = oc.length_squared() - len * len;
     let disc = b * b - c;
-    let p = if disc >= 0.0 { o + d * (-b + disc.sqrt()) } else { o + d * (-b).max(0.0) };
+    let p = if disc >= 0.0 {
+        o + d * (-b + disc.sqrt())
+    } else {
+        o + d * (-b).max(0.0)
+    };
     base + (p - base).normalize_or_zero() * len
 }
 
 impl TrolleyRig {
     pub fn new(def: &TrolleyDef, seed: u64) -> TrolleyRig {
-        let poles = def.poles.iter().enumerate().map(|(i, p)| Pole::new(p.clone(), seed.wrapping_add(i as u64 * 977))).collect();
-        let traction = def.drive.as_ref().map(|d| Traction::new(d, def.battery.clone()));
+        let poles = def
+            .poles
+            .iter()
+            .enumerate()
+            .map(|(i, p)| Pole::new(p.clone(), seed.wrapping_add(i as u64 * 977)))
+            .collect();
+        let traction = def
+            .drive
+            .as_ref()
+            .map(|d| Traction::new(d, def.battery.clone()));
         TrolleyRig {
             def: def.clone(),
             poles,
@@ -180,7 +200,10 @@ impl TrolleyRig {
             radio_previous: None,
             hit_level: vec![0.0; def.poles.len()],
             route_from: None,
-            rng: seed.wrapping_add(0x5bd1_e995).wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1,
+            rng: seed
+                .wrapping_add(0x5bd1_e995)
+                .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+                | 1,
         }
     }
 
@@ -200,22 +223,34 @@ impl TrolleyRig {
     /// heading `fwd`: the right pole takes the wire on the right of the way it runs.
     fn wanted_side(side: i8, t: DVec3, fwd: DVec3) -> u8 {
         let same = t.dot(fwd) >= 0.0;
-        if (side > 0) == same {
-            0
-        } else {
-            1
-        }
+        if (side > 0) == same { 0 } else { 1 }
     }
 
-    fn goal_for(&self, k: usize, cmd: RopeCmd, net: &WireNet, pos: DVec3, rot: &DMat3) -> Option<Contact> {
-        let RopeCmd::Raise { ray, auto } = cmd else { return None };
+    fn goal_for(
+        &self,
+        k: usize,
+        cmd: RopeCmd,
+        net: &WireNet,
+        pos: DVec3,
+        rot: &DMat3,
+    ) -> Option<Contact> {
+        let RopeCmd::Raise { ray, auto } = cmd else {
+            return None;
+        };
         let pole = &self.poles[k];
         let base = pole.base_at(pos, rot);
         let fwd = *rot * DVec3::Y;
         let side = pole.def.side;
         let reach = pole.def.length as f64;
         if let Some((o, d)) = ray {
-            let hit = net.aim_wire(o, d, base, reach, &|t| Some(Self::wanted_side(side, t, fwd)), 2.2);
+            let hit = net.aim_wire(
+                o,
+                d,
+                base,
+                reach,
+                &|t| Some(Self::wanted_side(side, t, fwd)),
+                2.2,
+            );
             if hit.is_some() {
                 return hit.map(|h| h.0);
             }
@@ -223,8 +258,17 @@ impl TrolleyRig {
         // (a pole the motor has in hand or has just let go is carried to the wire nearest its own
         // tip; one not raised yet, or a hand's whose look found no wire, to the wire above its
         // working angle)
-        let held = auto && matches!(pole.mode, PoleMode::Hand | PoleMode::Free) && pole.tip.length_squared() > 1.0;
-        let (tip, radius) = if held { (pole.tip, 4.5) } else { (base + *rot * rotate_tip_pub((pole.def.work_angle as f64).to_radians(), 0.0, reach), 3.5) };
+        let held = auto
+            && matches!(pole.mode, PoleMode::Hand | PoleMode::Free)
+            && pole.tip.length_squared() > 1.0;
+        let (tip, radius) = if held {
+            (pole.tip, 4.5)
+        } else {
+            (
+                base + *rot * rotate_tip_pub((pole.def.work_angle as f64).to_radians(), 0.0, reach),
+                3.5,
+            )
+        };
         net.candidates(tip, radius)
             .into_iter()
             .filter(|(c, _)| {
@@ -239,18 +283,34 @@ impl TrolleyRig {
     pub fn step(&mut self, inp: &RigInput) -> &TractionOut {
         let dt = inp.dt.max(1e-4) as f64;
         let (p0, r0) = self.last.unwrap_or((inp.pos, inp.rot));
-        let span = PoseSpan { pos0: p0, rot0: r0, pos1: inp.pos, rot1: inp.rot, accel: inp.accel };
+        let span = PoseSpan {
+            pos0: p0,
+            rot0: r0,
+            pos1: inp.pos,
+            rot1: inp.rot,
+            accel: inp.accel,
+        };
         self.last = Some((inp.pos, inp.rot));
         self.events.clear();
         static EMPTY: std::sync::OnceLock<WireNet> = std::sync::OnceLock::new();
-        let net = inp.net.unwrap_or_else(|| EMPTY.get_or_init(|| WireNet::parse("")));
-        let request = SwitchRequest { current: self.amps - self.out.charge_amps, blinker: inp.blinker, radio: inp.radio, code: inp.route_code, channel: inp.channel };
+        let net = inp
+            .net
+            .unwrap_or_else(|| EMPTY.get_or_init(|| WireNet::parse("")));
+        let request = SwitchRequest {
+            current: self.amps - self.out.charge_amps,
+            blinker: inp.blinker,
+            radio: inp.radio,
+            code: inp.route_code,
+            channel: inp.channel,
+        };
         // (a release sends nothing: it would hand a toggled or chosen switch back to the route)
-        let transmit = self.radio_previous.is_some_and(|(radio, code)| match inp.radio {
-            2 => radio != 2,
-            0 => code != inp.route_code,
-            direction => (radio, code) != (direction, inp.route_code),
-        });
+        let transmit = self
+            .radio_previous
+            .is_some_and(|(radio, code)| match inp.radio {
+                2 => radio != 2,
+                0 => code != inp.route_code,
+                direction => (radio, code) != (direction, inp.route_code),
+            });
         if transmit {
             net.receive_radio(inp.pos, &request);
         }
@@ -271,10 +331,25 @@ impl TrolleyRig {
                 RopeCmd::Idle | RopeCmd::Release => Rope::Idle,
                 RopeCmd::Pull => Rope::Pull,
                 RopeCmd::Hold { theta, psi } => Rope::Hold { theta, psi },
-                RopeCmd::Raise { auto, .. } => Rope::Aim { goal: self.goal_for(k, cmd, net, inp.pos, &inp.rot), auto },
+                RopeCmd::Raise { auto, .. } => Rope::Aim {
+                    goal: self.goal_for(k, cmd, net, inp.pos, &inp.rot),
+                    auto,
+                },
             };
             let rope = match (rope, self.poles[k].gear_order()) {
-                (Rope::Idle, Some(at)) => Rope::Gear { at, goal: self.goal_for(k, RopeCmd::Raise { ray: None, auto: true }, net, inp.pos, &inp.rot) },
+                (Rope::Idle, Some(at)) => Rope::Gear {
+                    at,
+                    goal: self.goal_for(
+                        k,
+                        RopeCmd::Raise {
+                            ray: None,
+                            auto: true,
+                        },
+                        net,
+                        inp.pos,
+                        &inp.rot,
+                    ),
+                },
                 (Rope::Idle, None) => Rope::Idle,
                 (r, _) => {
                     self.poles[k].gear_cancel();
@@ -284,17 +359,26 @@ impl TrolleyRig {
             let mut ev = std::mem::take(&mut self.events);
             self.poles[k].steer_to = match cmd {
                 RopeCmd::Release => {
-                    let (tip, side, fwd) = (self.poles[k].tip, self.poles[k].def.side, inp.rot * DVec3::Y);
+                    let (tip, side, fwd) = (
+                        self.poles[k].tip,
+                        self.poles[k].def.side,
+                        inp.rot * DVec3::Y,
+                    );
                     net.candidates(tip, 2.5)
                         .into_iter()
-                        .filter(|(c, _)| c.side == Self::wanted_side(side, net.wire_point(c).1, fwd))
+                        .filter(|(c, _)| {
+                            c.side == Self::wanted_side(side, net.wire_point(c).1, fwd)
+                        })
                         .min_by(|a, b| a.1.total_cmp(&b.1))
                         .map(|x| net.wire_point(&x.0).0)
                 }
                 _ => None,
             };
             self.poles[k].free_aim = match cmd {
-                RopeCmd::Raise { ray: Some((o, d)), auto: false } => {
+                RopeCmd::Raise {
+                    ray: Some((o, d)),
+                    auto: false,
+                } => {
                     let base = self.poles[k].base_at(inp.pos, &inp.rot);
                     Some(free_aim(o, d, base, self.poles[k].def.length as f64))
                 }
@@ -326,7 +410,9 @@ impl TrolleyRig {
             Some(s) if self.circuit => net.section_volts(s, 0.0),
             _ => 0.0,
         };
-        let accept = section.filter(|_| self.circuit).map_or(0.0, |s| net.regen_capacity_kw(s));
+        let accept = section
+            .filter(|_| self.circuit)
+            .map_or(0.0, |s| net.regen_capacity_kw(s));
         if let Some(tr) = self.traction.as_mut() {
             let o = tr.step(&TractionIn {
                 dt: inp.dt,
@@ -350,12 +436,25 @@ impl TrolleyRig {
             // a script's drive: the line current its force and speed ask for, with the start-up
             // current a rheostat controller draws while it holds the motors back
             let chopper = self.def.legacy.as_ref().is_some_and(|l| l.chopper);
-            let power_w = inp.script_force.max(0.0) * inp.speed.abs().max(0.0) / 0.82 + self.def.aux_kw * 1000.0;
-            let start = if chopper { 0.0 } else { (inp.script_force * 0.011).min(260.0) * (1.0 - (inp.speed.abs() / 4.0).min(1.0)) };
-            let a = if self.circuit && self.volts > 50.0 { power_w / self.volts + start } else { 0.0 };
+            let power_w = inp.script_force.max(0.0) * inp.speed.abs().max(0.0) / 0.82
+                + self.def.aux_kw * 1000.0;
+            let start = if chopper {
+                0.0
+            } else {
+                (inp.script_force * 0.011).min(260.0) * (1.0 - (inp.speed.abs() / 4.0).min(1.0))
+            };
+            let a = if self.circuit && self.volts > 50.0 {
+                power_w / self.volts + start
+            } else {
+                0.0
+            };
             self.amps = a;
         }
-        self.script_gate = if self.circuit && self.volts >= 0.55 * nominal { (self.volts / nominal).min(1.0) } else { 0.0 };
+        self.script_gate = if self.circuit && self.volts >= 0.55 * nominal {
+            (self.volts / nominal).min(1.0)
+        } else {
+            0.0
+        };
         if let Some(s) = section.filter(|_| self.circuit) {
             net.add_current(s, self.amps);
         }
@@ -394,19 +493,30 @@ impl TrolleyRig {
             let live = a > 3.0;
             self.last_event = Some((e.kind, e.pole));
             if self.verbose {
-                self.notes.push(format!("{:?} pole {} at ({:.1}, {:.1}, {:.2}) with {:.0} A", e.kind, e.pole + 1, e.pos.x, e.pos.y, e.pos.z, e.amps));
+                self.notes.push(format!(
+                    "{:?} pole {} at ({:.1}, {:.1}, {:.2}) with {:.0} A",
+                    e.kind,
+                    e.pole + 1,
+                    e.pos.x,
+                    e.pos.y,
+                    e.pos.z,
+                    e.amps
+                ));
             }
             match e.kind {
                 PoleEventKind::Engaged => {
                     // (how fast the shoe came up into the wire, 2 m/s and more: 1)
                     let p = &self.poles[e.pole];
-                    self.hit_level[e.pole] = (p.w_theta.abs() * p.def.length as f64 / 2.0).clamp(0.2, 1.0) as f32;
+                    self.hit_level[e.pole] =
+                        (p.w_theta.abs() * p.def.length as f64 / 2.0).clamp(0.2, 1.0) as f32;
                     self.sounds.push(RigSound::OnWire { pole: e.pole });
-                    self.notes.push(format!("Pole {} is on the wire", e.pole + 1));
+                    self.notes
+                        .push(format!("Pole {} is on the wire", e.pole + 1));
                 }
                 PoleEventKind::Latched => {
                     self.sounds.push(RigSound::Latch { pole: e.pole });
-                    self.notes.push(format!("Pole {} is down on its hook", e.pole + 1));
+                    self.notes
+                        .push(format!("Pole {} is down on its hook", e.pole + 1));
                 }
                 PoleEventKind::Released => self.sounds.push(RigSound::Release { pole: e.pole }),
                 PoleEventKind::ContactOpened => {
@@ -425,11 +535,19 @@ impl TrolleyRig {
                     }
                 }
                 PoleEventKind::Dewired(cause) => {
-                    self.notes.push(format!("Pole {} came off the wire: {}", e.pole + 1, cause.describe()));
+                    self.notes.push(format!(
+                        "Pole {} came off the wire: {}",
+                        e.pole + 1,
+                        cause.describe()
+                    ));
                     if live {
                         self.spark(e.pos, ind(a) + a * 100.0 * 0.02, a, SparkKind::Dewire);
                     }
-                    self.sounds.push(if cause == DewireCause::Rope { RigSound::OffWire { pole: e.pole } } else { RigSound::Dewire { pole: e.pole } });
+                    self.sounds.push(if cause == DewireCause::Rope {
+                        RigSound::OffWire { pole: e.pole }
+                    } else {
+                        RigSound::Dewire { pole: e.pole }
+                    });
                 }
                 PoleEventKind::RopeTaut { speed } => {
                     let loud = (speed / 2.0).min(1.0);
@@ -439,18 +557,33 @@ impl TrolleyRig {
                 PoleEventKind::GapEntered => {
                     self.sounds.push(RigSound::Insulator { pole: e.pole });
                     if self.strikes(net.insulator_arc, a) {
-                        self.spark(e.pos, net.insulator_arc.scale * ind(a), a, SparkKind::Insulator);
+                        self.spark(
+                            e.pos,
+                            net.insulator_arc.scale * ind(a),
+                            a,
+                            SparkKind::Insulator,
+                        );
                     }
                 }
                 PoleEventKind::GapLeft => {
                     if self.strikes(net.insulator_arc, a) {
-                        self.spark(e.pos, net.insulator_arc.scale * a * 60.0 * 0.002, a, SparkKind::Insulator);
+                        self.spark(
+                            e.pos,
+                            net.insulator_arc.scale * a * 60.0 * 0.002,
+                            a,
+                            SparkKind::Insulator,
+                        );
                     }
                 }
                 PoleEventKind::FrogPassed { .. } => {
                     self.sounds.push(RigSound::Frog { pole: e.pole });
                     if self.strikes(net.frog_arc, a) {
-                        self.spark(e.pos, net.frog_arc.scale * (0.15 * ind(a) + 0.5 * a), a, SparkKind::Frog);
+                        self.spark(
+                            e.pos,
+                            net.frog_arc.scale * (0.15 * ind(a) + 0.5 * a),
+                            a,
+                            SparkKind::Frog,
+                        );
                     }
                 }
                 PoleEventKind::CrossingPassed { .. } => {}
@@ -459,7 +592,13 @@ impl TrolleyRig {
                     if definition.mode == crate::wire::SwitchMode::Radio {
                         continue;
                     }
-                    let request = SwitchRequest { current: amps - self.out.charge_amps, blinker: inp.blinker, radio: inp.radio, code: inp.route_code, channel: inp.channel };
+                    let request = SwitchRequest {
+                        current: amps - self.out.charge_amps,
+                        blinker: inp.blinker,
+                        radio: inp.radio,
+                        code: inp.route_code,
+                        channel: inp.channel,
+                    };
                     net.trigger_switch(switch as usize, &request);
                 }
             }
@@ -471,7 +610,12 @@ impl TrolleyRig {
         if energy < 0.05 {
             return;
         }
-        self.sparks.push(Spark { pos, energy, amps, kind });
+        self.sparks.push(Spark {
+            pos,
+            energy,
+            amps,
+            kind,
+        });
         let loud = (energy.sqrt() / 18.0).min(1.0);
         if loud > 0.05 {
             self.sounds.push(RigSound::Snap(loud));
@@ -517,7 +661,10 @@ impl TrolleyRig {
 
     /// The gravity-compensated weight of the gear, for tests.
     pub fn pole_weight_n(&self) -> f32 {
-        self.poles.iter().map(|p| (p.def.mass + p.def.head_mass) * G as f32).sum()
+        self.poles
+            .iter()
+            .map(|p| (p.def.mass + p.def.head_mass) * G as f32)
+            .sum()
     }
 }
 
@@ -527,8 +674,18 @@ mod tests {
     use crate::def::{DriveKind, PoleDef, RheostatDef};
 
     fn def() -> TrolleyDef {
-        let pole = |side: i8| PoleDef { side, base: Vec3::new(0.3 * side as f32, -1.0, 3.0), length: 6.5, ..Default::default() };
-        TrolleyDef { poles: vec![pole(-1), pole(1)], drive: Some(DriveKind::Rheostat(RheostatDef::default())), aux_kw: 3.0, ..Default::default() }
+        let pole = |side: i8| PoleDef {
+            side,
+            base: Vec3::new(0.3 * side as f32, -1.0, 3.0),
+            length: 6.5,
+            ..Default::default()
+        };
+        TrolleyDef {
+            poles: vec![pole(-1), pole(1)],
+            drive: Some(DriveKind::Rheostat(RheostatDef::default())),
+            aux_kw: 3.0,
+            ..Default::default()
+        }
     }
 
     fn rot() -> DMat3 {
@@ -544,7 +701,12 @@ mod tests {
 
     impl Sim {
         fn new() -> Sim {
-            Sim { rig: TrolleyRig::new(&def(), 3), x: 30.0, v: 0.0, forces: Vec::new() }
+            Sim {
+                rig: TrolleyRig::new(&def(), 3),
+                x: 30.0,
+                v: 0.0,
+                forces: Vec::new(),
+            }
         }
 
         fn step(&mut self, net: &WireNet, pedal: f32, brake: f32, ropes: &[RopeCmd]) {
@@ -570,7 +732,11 @@ mod tests {
             });
             let (f, mb) = (o.wheel_force, o.mech_brake);
             // a 16 t bus with rolling resistance 1 %
-            let roll = if self.v > 0.01 { 0.01 * 16_000.0 * 9.81 } else { 0.0 };
+            let roll = if self.v > 0.01 {
+                0.01 * 16_000.0 * 9.81
+            } else {
+                0.0
+            };
             let a = (f - roll - mb.min(60_000.0) - o.electric_brake) / 16_000.0;
             self.v = (self.v + a * dt as f32).max(0.0);
             self.x += self.v as f64 * dt as f64;
@@ -579,7 +745,15 @@ mod tests {
 
         fn raise_both(&mut self, net: &WireNet) {
             for _ in 0..(60 * 6) {
-                self.step(net, 0.0, 0.0, &[RopeCmd::Raise { ray: None, auto: true }; 2]);
+                self.step(
+                    net,
+                    0.0,
+                    0.0,
+                    &[RopeCmd::Raise {
+                        ray: None,
+                        auto: true,
+                    }; 2],
+                );
             }
             for _ in 0..120 {
                 self.step(net, 0.0, 0.0, &[RopeCmd::Idle; 2]);
@@ -588,7 +762,9 @@ mod tests {
     }
 
     fn line() -> WireNet {
-        WireNet::parse("[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np -50 0 5.5\np 100 0 5.5\np 250 0 5.5\n")
+        WireNet::parse(
+            "[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np -50 0 5.5\np 100 0 5.5\np 250 0 5.5\n",
+        )
     }
 
     /// A radio switch at (50, 0) on channel 1, range 20, its branch leaving to the north-east.
@@ -602,9 +778,23 @@ mod tests {
     /// A bus standing at `pos` with its poles down, sending nothing on channel 1.
     fn standing(net: &WireNet, pos: DVec3) -> RigInput<'_> {
         RigInput {
-            net: Some(net), dt: 1.0 / 60.0, pos, rot: rot(), accel: Vec3::ZERO, speed: 0.0,
-            wheel_radius: 0.5, pedal: 0.0, brake: 0.0, dir: 1.0, blinker: 0, radio: 0,
-            route_code: 0, channel: 1, ropes: &[RopeCmd::Idle; 2], drive: false, script_force: 0.0,
+            net: Some(net),
+            dt: 1.0 / 60.0,
+            pos,
+            rot: rot(),
+            accel: Vec3::ZERO,
+            speed: 0.0,
+            wheel_radius: 0.5,
+            pedal: 0.0,
+            brake: 0.0,
+            dir: 1.0,
+            blinker: 0,
+            radio: 0,
+            route_code: 0,
+            channel: 1,
+            ropes: &[RopeCmd::Idle; 2],
+            drive: false,
+            script_force: 0.0,
         }
     }
 
@@ -612,7 +802,10 @@ mod tests {
     fn radio_requests_reach_a_receiver_without_poles_on_the_wire() {
         let net = radio_y("");
         let mut rig = TrolleyRig::new(&def(), 3);
-        let mut input = RigInput { radio: -1, ..standing(&net, DVec3::ZERO) };
+        let mut input = RigInput {
+            radio: -1,
+            ..standing(&net, DVec3::ZERO)
+        };
         rig.step(&input);
         assert!(!net.switch_branch(0));
         input.pos = DVec3::new(50.0, 10.0, 0.0);
@@ -629,7 +822,17 @@ mod tests {
         rig.step(&input);
         assert!(!net.switch_branch(0));
         assert_eq!(net.switch_display(0).map(|display| display.0), Some(2.0));
-        assert_eq!(net.receive_radio(input.pos, &SwitchRequest { radio: -1, channel: 1, ..Default::default() }), 1);
+        assert_eq!(
+            net.receive_radio(
+                input.pos,
+                &SwitchRequest {
+                    radio: -1,
+                    channel: 1,
+                    ..Default::default()
+                }
+            ),
+            1
+        );
         rig.step(&input);
         assert!(net.switch_branch(0));
         input.pos = DVec3::ZERO;
@@ -656,7 +859,10 @@ mod tests {
     fn radio_route_codes_are_sent_on_entry_but_not_on_a_channel_change() {
         let net = radio_y("route 158 left\nroute 159 right\n");
         let mut rig = TrolleyRig::new(&def(), 3);
-        let mut input = RigInput { route_code: 158, ..standing(&net, DVec3::new(50.0, 0.0, 0.0)) };
+        let mut input = RigInput {
+            route_code: 158,
+            ..standing(&net, DVec3::new(50.0, 0.0, 0.0))
+        };
         rig.step(&input);
         assert!(!net.switch_branch(0));
         input.route_code = 159;
@@ -700,7 +906,10 @@ mod tests {
     fn releasing_a_toggle_or_a_direction_does_not_hand_the_switch_back_to_the_route() {
         let net = radio_y("route 158 left\n");
         let mut rig = TrolleyRig::new(&def(), 3);
-        let mut input = RigInput { route_code: 158, ..standing(&net, DVec3::new(50.0, 0.0, 0.0)) };
+        let mut input = RigInput {
+            route_code: 158,
+            ..standing(&net, DVec3::new(50.0, 0.0, 0.0))
+        };
         rig.step(&input);
         net.set_switch(0, true);
         for (press, after) in [(2, false), (2, true), (1, false), (-1, true)] {
@@ -723,7 +932,10 @@ mod tests {
     fn radio_toggle_requires_a_new_press_not_range_entry_or_channel_change() {
         let net = radio_y("");
         let mut rig = TrolleyRig::new(&def(), 3);
-        let mut input = RigInput { radio: 2, ..standing(&net, DVec3::new(50.0, 0.0, 0.0)) };
+        let mut input = RigInput {
+            radio: 2,
+            ..standing(&net, DVec3::new(50.0, 0.0, 0.0))
+        };
         rig.step(&input);
         assert!(!net.switch_branch(0));
         input.radio = 0;
@@ -769,25 +981,53 @@ mod tests {
     #[test]
     fn frog_and_insulator_arcs_follow_the_net_settings() {
         let arcs = |settings: &str, kind: PoleEventKind, amps: f32| {
-            let net = WireNet::parse(&format!("[trolley_net]\n{settings}\n[trolley_span]\np 0 0 5.5\np 50 0 5.5\n"));
+            let net = WireNet::parse(&format!(
+                "[trolley_net]\n{settings}\n[trolley_span]\np 0 0 5.5\np 50 0 5.5\n"
+            ));
             let mut rig = TrolleyRig::new(&def(), 7);
             let input = standing(&net, DVec3::ZERO);
             let (mut count, mut energy) = (0, 0.0f32);
             for _ in 0..1000 {
                 rig.events.clear();
-                rig.events.push(PoleEvent { pole: 0, kind, pos: DVec3::ZERO, amps });
+                rig.events.push(PoleEvent {
+                    pole: 0,
+                    kind,
+                    pos: DVec3::ZERO,
+                    amps,
+                });
                 rig.handle_events(&net, &input, amps);
                 let frog = matches!(kind, PoleEventKind::FrogPassed { .. });
                 for spark in rig.take_sparks() {
-                    assert_eq!(spark.kind, if frog { SparkKind::Frog } else { SparkKind::Insulator });
+                    assert_eq!(
+                        spark.kind,
+                        if frog {
+                            SparkKind::Frog
+                        } else {
+                            SparkKind::Insulator
+                        }
+                    );
                     count += 1;
                     energy = spark.energy;
                 }
-                assert_eq!(rig.sounds.drain(..).any(|sound| matches!(sound, RigSound::Frog { .. })), frog);
+                assert_eq!(
+                    rig.sounds
+                        .drain(..)
+                        .any(|sound| matches!(sound, RigSound::Frog { .. })),
+                    frog
+                );
             }
             (count, energy)
         };
-        let frogs = |settings: &str, amps: f32| arcs(settings, PoleEventKind::FrogPassed { switch: 0, branch: false }, amps);
+        let frogs = |settings: &str, amps: f32| {
+            arcs(
+                settings,
+                PoleEventKind::FrogPassed {
+                    switch: 0,
+                    branch: false,
+                },
+                amps,
+            )
+        };
         let entries = |settings: &str, amps: f32| arcs(settings, PoleEventKind::GapEntered, amps);
         let exits = |settings: &str, amps: f32| arcs(settings, PoleEventKind::GapLeft, amps);
         let (count, full) = frogs("", 100.0);
@@ -832,7 +1072,13 @@ mod tests {
             heard.extend(s.rig.take_sounds());
         }
         assert!(s.rig.all_on_wire());
-        let hits: Vec<usize> = heard.iter().filter_map(|h| match h { RigSound::OnWire { pole } => Some(*pole), _ => None }).collect();
+        let hits: Vec<usize> = heard
+            .iter()
+            .filter_map(|h| match h {
+                RigSound::OnWire { pole } => Some(*pole),
+                _ => None,
+            })
+            .collect();
         assert_eq!(hits.len(), 2, "{hits:?}");
         assert_ne!(hits[0], hits[1]);
     }
@@ -840,15 +1086,33 @@ mod tests {
     #[test]
     fn shoes_keep_contact_through_joints_and_frogs_under_power() {
         let frog = "[trolley_span]\np -50 0 5.5\np 100 0 5.5\n[trolley_span]\np 100 0 5.5\np 400 0 5.5\n[trolley_span]\np 100 0 5.5\np 300 80 5.5\n";
-        let joint = "[trolley_span]\np -50 0 5.5\np 100 0 5.5\n[trolley_span]\np 100 0 5.5\np 400 0 5.5\n";
-        for (wire, roughness) in [(frog, "0"), (frog, "0.0012"), (joint, "0"), (joint, "0.0012")] {
-            let net = WireNet::parse(&format!("[trolley_net]\nroughness {roughness}\nfrog_arc_chance 0\n{wire}[trolley_switch]\npos 100 0 5.5\nmode fixed\n"));
+        let joint =
+            "[trolley_span]\np -50 0 5.5\np 100 0 5.5\n[trolley_span]\np 100 0 5.5\np 400 0 5.5\n";
+        for (wire, roughness) in [
+            (frog, "0"),
+            (frog, "0.0012"),
+            (joint, "0"),
+            (joint, "0.0012"),
+        ] {
+            let net = WireNet::parse(&format!(
+                "[trolley_net]\nroughness {roughness}\nfrog_arc_chance 0\n{wire}[trolley_switch]\npos 100 0 5.5\nmode fixed\n"
+            ));
             let mut s = Sim::new();
             s.raise_both(&net);
             let mut sparks = Vec::new();
             for _ in 0..(60 * 20) {
-                s.step(&net, if s.v < 8.0 { 1.0 } else { 0.4 }, 0.0, &[RopeCmd::Idle; 2]);
-                sparks.extend(s.rig.take_sparks().into_iter().map(|spark| (spark.kind, spark.pos.x.round())));
+                s.step(
+                    &net,
+                    if s.v < 8.0 { 1.0 } else { 0.4 },
+                    0.0,
+                    &[RopeCmd::Idle; 2],
+                );
+                sparks.extend(
+                    s.rig
+                        .take_sparks()
+                        .into_iter()
+                        .map(|spark| (spark.kind, spark.pos.x.round())),
+                );
             }
             assert!(s.x > 150.0 && s.rig.all_on_wire() && s.rig.amps > 20.0);
             assert!(sparks.is_empty(), "roughness {roughness}: {sparks:?}");
@@ -858,7 +1122,9 @@ mod tests {
     #[test]
     fn a_shoe_going_through_a_frog_is_reported() {
         let frog = "[trolley_span]\np -50 0 5.5\np 100 0 5.5\n[trolley_span]\np 100 0 5.5\np 400 0 5.5\n[trolley_span]\np 100 0 5.5\np 300 80 5.5\n";
-        let net = WireNet::parse(&format!("[trolley_net]\nfrog_arc_chance 0\n{frog}[trolley_switch]\npos 100 0 5.5\nmode fixed\n"));
+        let net = WireNet::parse(&format!(
+            "[trolley_net]\nfrog_arc_chance 0\n{frog}[trolley_switch]\npos 100 0 5.5\nmode fixed\n"
+        ));
         let mut s = Sim::new();
         s.raise_both(&net);
         let mut crossed = Vec::new();
@@ -867,8 +1133,14 @@ mod tests {
             crossed.extend(s.rig.frogs_crossed());
         }
         assert!(s.x > 150.0, "the bus did not reach the frog: {}", s.x);
-        assert!(!crossed.is_empty(), "the bus went over the frog without saying so");
-        assert!(crossed.iter().all(|(_, switch)| *switch == 0), "{crossed:?}");
+        assert!(
+            !crossed.is_empty(),
+            "the bus went over the frog without saying so"
+        );
+        assert!(
+            crossed.iter().all(|(_, switch)| *switch == 0),
+            "{crossed:?}"
+        );
         assert!(crossed.iter().any(|(pole, _)| *pole < 2), "{crossed:?}");
     }
 
@@ -888,7 +1160,11 @@ mod tests {
         let net = line();
         let mut s = Sim::new();
         s.raise_both(&net);
-        assert!(s.rig.all_on_wire(), "{:?}", s.rig.poles.iter().map(|p| p.mode).collect::<Vec<_>>());
+        assert!(
+            s.rig.all_on_wire(),
+            "{:?}",
+            s.rig.poles.iter().map(|p| p.mode).collect::<Vec<_>>()
+        );
         assert!(s.rig.circuit);
         for _ in 0..(60 * 10) {
             s.step(&net, 1.0, 0.0, &[RopeCmd::Idle; 2]);

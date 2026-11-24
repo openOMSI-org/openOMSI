@@ -48,6 +48,12 @@ export function DriveMode() {
           <${Icon} name="users" size=${18} /><strong>${t('Join friends')}</strong><${Icon} name="external" size=${16} />
         </button>
       </div>`}
+    ${mode === 'host' && html`<div class="drive-session-buses row wrap">
+      <label class="small muted" for="drive-session-buses">${t('Buses of this session')}</label>
+      <input id="drive-session-buses" type="text" class="input" value=${s.choice.session_buses || ''}
+        placeholder=${t('every bus')} title=${t('The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.')}
+        onInput=${(e) => choose({ session_buses: e.currentTarget.value })} />
+    </div>`}
     ${(mode === 'host' || session) && html`<${Notice} icon="users">${t("As the host, your game receives your players' driver names, network addresses, chat and voice. You are responsible for what you keep of it, such as logs and bans.")}</${Notice}>`}
     ${mode !== 'join' && session?.code && html`<div class="drive-session">
       <div class="drive-session-info"><span class="small">${t('Running hosted session')}</span>

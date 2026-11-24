@@ -31,6 +31,9 @@ forbid omsi-render omsi-vehicle
 
 # File formats and content stay below the simulation and presentation.
 forbid omsi-cfg omsi-*
+# The independent publisher format has no game dependencies; cfg supplies its VFS adapter.
+allow omsi-cfg omsi-pack
+forbid omsi-pack omsi-*
 forbid omsi-o3d omsi-sim
 forbid omsi-o3d omsi-render
 forbid omsi-texture omsi-sim

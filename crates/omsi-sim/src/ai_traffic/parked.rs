@@ -48,13 +48,26 @@ impl TrafficSim {
             let lat = (p - q).dot(right) as f32;
             if lat.abs() < 0.9 && omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
                 let lane = &self.net.lanes[l];
-                log::info!("parked car at ({:.1}, {:.1}) stands in lane {l} ({} {:?}, width {:.1}, heading {:.0} there, s {s:.1} of {:.1}, {lat:+.2} m to the side)", p.x, p.y, lane.name, lane.key, lane.width, h, lane.length());
+                log::info!(
+                    "parked car at ({:.1}, {:.1}) stands in lane {l} ({} {:?}, width {:.1}, heading {:.0} there, s {s:.1} of {:.1}, {lat:+.2} m to the side)",
+                    p.x,
+                    p.y,
+                    lane.name,
+                    lane.key,
+                    lane.width,
+                    h,
+                    lane.length()
+                );
             }
             self.parked.entry(l).or_default().push((s, lat));
             on_lanes += 1;
         }
         if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
-            log::info!("traffic: {new_cars} parked cars placed, {on_lanes} more stand in or beside a lane ({} in all, {} not beside one)", self.parked.values().map(|v| v.len()).sum::<usize>(), self.parked_waiting.len());
+            log::info!(
+                "traffic: {new_cars} parked cars placed, {on_lanes} more stand in or beside a lane ({} in all, {} not beside one)",
+                self.parked.values().map(|v| v.len()).sum::<usize>(),
+                self.parked_waiting.len()
+            );
         }
     }
 }

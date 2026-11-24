@@ -3,11 +3,24 @@
 
 use super::*;
 
+/// The first door leaf of a bus's exits, past its front door's: exits in standard OMSI city
+/// buses (2 or more front door leaves) begin at door_2 (middle door), while coaches with a
+/// single front door leaf begin at door_1. Exits must not be offset by the number of entries,
+/// because buses with all doors configured as entries (e.g. 3-door buses with 6 entries)
+/// still place middle-door exits at door_2/3 and rear-door exits at door_4/5.
+fn exit_door_base(n_entry: usize) -> usize {
+    if n_entry <= 1 { 1 } else { 2 }
+}
+
 impl PeopleSim {
     /// Whether the bus script reports `name`: it writes it (`PAX_*` are engine variables every
     /// vehicle has, so stock scripts set them without a varlist entry) or declares it.
     pub fn script_reports(v: &VehicleInstance, name: &str) -> bool {
-        v.has_script_var(name) || v.ty.program.var(name).is_some_and(|id| v.ty.program.stores(id))
+        v.has_script_var(name)
+            || v.ty
+                .program
+                .var(name)
+                .is_some_and(|id| v.ty.program.stores(id))
     }
 
     /// Whether entry or exit `i` (`kind` "Entry" or "Exit") has variables of its own: one of
@@ -32,7 +45,11 @@ impl PeopleSim {
         ] {
             let mut slots = vec![false; flags.len().min(crate::vehicle::PAX_DOORS)];
             for (i, r) in flags.iter().enumerate() {
-                let slot = if Self::own_pax_door(v, kind, i) { i } else { OMSI_PAX_DOORS - 1 };
+                let slot = if Self::own_pax_door(v, kind, i) {
+                    i
+                } else {
+                    OMSI_PAX_DOORS - 1
+                };
                 if let Some(s) = slots.get_mut(slot) {
                     *s |= *r;
                 }
@@ -46,30 +63,58 @@ impl PeopleSim {
         }
     }
 
+    /// [`Self::write_door_requests`], and for the doors of `cabin` in a section that runs its
+    /// own scripts (see [`Self::doors_open_cabin`]) into that car's own `PAX_Entry<n>_Req` /
+    /// `_Busy`, by its own count of its doors.
+    pub fn write_door_requests_cabin(v: &mut VehicleInstance, doors: &DoorWants, cabin: &Cabin) {
+        Self::write_door_requests(v, doors);
+        for (kind, list, flags, what) in [
+            ("Entry", &cabin.entries, &doors.entry_req, "Req"),
+            ("Exit", &cabin.exits, &doors.exit_req, "Req"),
+            ("Entry", &cabin.entries, &doors.entry_busy, "Busy"),
+            ("Exit", &cabin.exits, &doors.exit_busy, "Busy"),
+        ] {
+            for (door, on) in list.iter().zip(flags) {
+                let (part, n) = door.part;
+                let Some(run) = part
+                    .checked_sub(1)
+                    .and_then(|k| v.trailers.get_mut(k))
+                    .and_then(|t| t.run.as_deref_mut())
+                else {
+                    continue;
+                };
+                run.set_own(
+                    &format!("PAX_{kind}{n}_{what}"),
+                    if *on { 1.0 } else { 0.0 },
+                );
+            }
+        }
+    }
+
     /// Whether the bus says when its doors are open: any `PAX_Entry<i>_Open` /
     /// `PAX_Exit<i>_Open` its script reports, or any `door_<i>` / `door<i>` animation of an
     /// entry or exit, including buses whose front door is not an entry. Only an AI bus that
     /// says nothing of any door is taken to open them all while it boards.
     pub(super) fn reports_doors(v: &VehicleInstance, n_entry: usize, n_exit: usize) -> bool {
-        let base = if n_entry <= 1 { 1 } else { 2 };
-        [("Entry", n_entry, 0), ("Exit", n_exit, base)].into_iter().any(|(kind, count, offset)| {
-            (0..count).any(|i| {
-                v.pax_reports_open(kind, i) || v.door_anim(offset + i).is_some()
+        let base = exit_door_base(n_entry);
+        [("Entry", n_entry, 0), ("Exit", n_exit, base)]
+            .into_iter()
+            .any(|(kind, count, offset)| {
+                (0..count).any(|i| v.pax_reports_open(kind, i) || v.door_anim(offset + i).is_some())
             })
-        })
     }
 
     /// `PAX_Entry<i>_Open` / `PAX_Exit<i>_Open` as the bus script reports them. A bus whose
     /// script never sets them (or only sets some of them) falls back to its physical `door_<i>`
     /// or `door<i>` animations; an entry or exit past the eighth without variables of its own
     /// is open with the eighth ([`PeopleSim::own_pax_door`]).
-    pub fn doors_open(v: &VehicleInstance, n_entry: usize, n_exit: usize) -> (Vec<bool>, Vec<bool>) {
+    pub fn doors_open(
+        v: &VehicleInstance,
+        n_entry: usize,
+        n_exit: usize,
+    ) -> (Vec<bool>, Vec<bool>) {
         let door_val = |k: usize| -> bool { v.door_anim(k).unwrap_or(0.0) > 0.5 };
-        // Exits in standard OMSI city buses (2 or more front door leaves) begin at door_2 (middle door),
-        // while coaches with a single front door leaf begin at door_1. Exits must not be offset by
-        // n_entry, because buses with all doors configured as entries (e.g. 3-door buses with 6 entries)
-        // still place middle-door exits at door_2/3 and rear-door exits at door_4/5.
-        let exit_door_base = if n_entry <= 1 { 1 } else { 2 };
+        let exit_door_base = exit_door_base(n_entry);
         let states = |kind: &str, n: usize, door: &dyn Fn(usize) -> bool| -> Vec<bool> {
             let mut out: Vec<bool> = Vec::with_capacity(n);
             for i in 0..n {
@@ -95,6 +140,81 @@ impl PeopleSim {
         (entry, exit)
     }
 
+    /// [`Self::doors_open`] for the doors of `cabin`: one in a section that runs its own
+    /// scripts (a train car, the NF6D's middle part) is open by that car's own
+    /// `PAX_Entry<n>_Open` / `PAX_Exit<n>_Open`, counted among its own doors. Without those
+    /// it follows the section's own door leaves as [`Self::doors_open`] numbers them: entry
+    /// `n` by `door_<n>` (or `door<n>`), exit `n` by the leaf past the section's front entry
+    /// leaves.
+    pub fn doors_open_cabin(v: &VehicleInstance, cabin: &Cabin) -> (Vec<bool>, Vec<bool>) {
+        let (mut entry, mut exit) = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
+        let (own_entry, own_exit) = Self::section_doors(v, cabin);
+        for (open, own) in entry.iter_mut().zip(own_entry) {
+            if let Some(o) = own {
+                *open = o;
+            }
+        }
+        for (open, own) in exit.iter_mut().zip(own_exit) {
+            if let Some(o) = own {
+                *open = o;
+            }
+        }
+        (entry, exit)
+    }
+
+    /// The doors of an AI vehicle that has stood at a stop for `since` seconds: as its
+    /// scripts say where the leading vehicle reports its doors ([`Self::doors_open_cabin`]).
+    /// Where it does not, a section running its own scripts that says has its doors as it
+    /// says, and the rest open once it has stood 2.5 s, as a bus whose script does not say.
+    pub(super) fn ai_doors_open(
+        v: &VehicleInstance,
+        cabin: &Cabin,
+        since: f64,
+    ) -> (Vec<bool>, Vec<bool>) {
+        if Self::reports_doors(v, cabin.entries.len(), cabin.exits.len()) {
+            return Self::doors_open_cabin(v, cabin);
+        }
+        let (entry, exit) = Self::section_doors(v, cabin);
+        let fill = |own: Vec<Option<bool>>| -> Vec<bool> {
+            own.into_iter().map(|o| o.unwrap_or(since > 2.5)).collect()
+        };
+        (fill(entry), fill(exit))
+    }
+
+    /// The doors of the sections that run their own scripts, as those scripts say (each
+    /// entry and exit of `cabin`): None for a door of the leading vehicle, or of a section
+    /// that says nothing of it.
+    fn section_doors(v: &VehicleInstance, cabin: &Cabin) -> (Vec<Option<bool>>, Vec<Option<bool>>) {
+        let own = |door: &Door, kind: &str| -> Option<bool> {
+            let (part, n) = door.part;
+            let car = v.trailers.get(part.checked_sub(1)?)?;
+            let run = car.run.as_deref()?;
+            // (every program has the `PAX_*_Open` variables: they count where the car's
+            // scripts declare or write them, as the leading vehicle's do)
+            let p = &car.ty.program;
+            let says =
+                |name: &str| p.has_script_var(name) || p.var(name).is_some_and(|id| p.stores(id));
+            let open = format!("PAX_{kind}{n}_Open");
+            if says(&open) {
+                return run.own(&open).map(|x| x > 0.5);
+            }
+            let leaf = if kind == "Exit" {
+                let entries = cabin.entries.iter().filter(|d| d.part.0 == part).count();
+                exit_door_base(entries) + n
+            } else {
+                n
+            };
+            // (`door_<n>`, else `door<n>`, as the door animations are found)
+            run.own(&format!("door_{leaf}"))
+                .or_else(|| run.own(&format!("door{leaf}")))
+                .map(|x| x > 0.5)
+        };
+        (
+            cabin.entries.iter().map(|d| own(d, "Entry")).collect(),
+            cabin.exits.iter().map(|d| own(d, "Exit")).collect(),
+        )
+    }
+
     /// The stop the player's duty is due at next: (stop object, its timetable name, where it
     /// is when the timetable knows it).
     pub fn set_player_next_stop(&mut self, stop: Option<(i64, &str, Option<DVec3>)>) {
@@ -104,8 +224,8 @@ impl PeopleSim {
                 return;
             }
         }
-        self.player_next_stop = stop
-            .and_then(|stop| self.request_stop(stop.0, Some(stop.1), stop.2));
+        self.player_next_stop =
+            stop.and_then(|stop| self.request_stop(stop.0, Some(stop.1), stop.2));
     }
 
     pub fn request_stop(
@@ -138,16 +258,34 @@ impl PeopleSim {
     }
 
     pub fn vehicle_next_stop(&self, vehicle: &VehicleInstance) -> Option<RequestStop> {
-        let tt = usize::try_from(vehicle.host.tt_busstop_index).ok().and_then(|index| {
-            vehicle.host.tt_stop_ids.get(index).map(|id| (*id, vehicle.host.tt_stops.get(index).map(|stop| stop.0.as_str())))
-        });
-        self.next_stop_at(tt, &vehicle.str_var("act_busstop"), vehicle.position, vehicle.heading)
+        let tt = usize::try_from(vehicle.host.tt_busstop_index)
+            .ok()
+            .and_then(|index| {
+                vehicle.host.tt_stop_ids.get(index).map(|id| {
+                    (
+                        *id,
+                        vehicle.host.tt_stops.get(index).map(|stop| stop.0.as_str()),
+                    )
+                })
+            });
+        self.next_stop_at(
+            tt,
+            &vehicle.str_var("act_busstop"),
+            vehicle.position,
+            vehicle.heading,
+        )
     }
 
     /// The stop a bus at `position`, heading `heading`, is due at: its timetable's (`tt`: the
     /// stop's object and name), else the nearest stop of the name its scripts give
     /// (`act_busstop`), one facing its way first.
-    pub fn next_stop_at(&self, tt: Option<(i64, Option<&str>)>, act_busstop: &str, position: DVec3, heading: f64) -> Option<RequestStop> {
+    pub fn next_stop_at(
+        &self,
+        tt: Option<(i64, Option<&str>)>,
+        act_busstop: &str,
+        position: DVec3,
+        heading: f64,
+    ) -> Option<RequestStop> {
         if let Some((id, name)) = tt {
             if let Some(stop) = self.request_stop(id, name, None) {
                 return Some(stop);
@@ -162,8 +300,7 @@ impl PeopleSim {
             .iter()
             .filter(|(_, stop)| stop.is_named(name))
             .min_by(|(_, a), (_, b)| {
-                let back =
-                    |stop: &PaxStop| crowd::angle_diff(heading, stop.heading).abs() > 100.0;
+                let back = |stop: &PaxStop| crowd::angle_diff(heading, stop.heading).abs() > 100.0;
                 back(a).cmp(&back(b)).then_with(|| {
                     (a.pos - position)
                         .length_squared()
@@ -192,7 +329,8 @@ impl PeopleSim {
                 .iter()
                 .filter(|s| (s.1 - pos).length() < reach)
                 .min_by(|a, c| {
-                    let back = |s: &(i64, DVec3, f64)| crowd::angle_diff(heading, s.2).abs() > 100.0;
+                    let back =
+                        |s: &(i64, DVec3, f64)| crowd::angle_diff(heading, s.2).abs() > 100.0;
                     back(a)
                         .cmp(&back(c))
                         .then((a.1 - pos).length().total_cmp(&(c.1 - pos).length()))
@@ -207,7 +345,11 @@ impl PeopleSim {
             )
         };
         let bb_of = |v: &VehicleInstance| bb_from(v.ty.def.bounding_box);
-        if let (Some(b), Some(cabin), Some(cv)) = (bus, self.player_cabin.clone(), bus.and_then(|b| b.cabin.as_ref())) {
+        if let (Some(b), Some(cabin), Some(cv)) = (
+            bus,
+            self.player_cabin.clone(),
+            bus.and_then(|b| b.cabin.as_ref()),
+        ) {
             let speed = b.speed_kmh as f64 / 3.6;
             let (entry_open, exit_open) = (cv.entry_open.clone(), cv.exit_open.clone());
             let (half, centre) = bb_from(b.bounding_box);
@@ -237,7 +379,10 @@ impl PeopleSim {
                 .filter(|route| match &b.terminus {
                     None => true,
                     Some(shown) => shown.as_ref().is_some_and(|shown| {
-                        route.same_service.iter().any(|name| name.trim() == shown.trim())
+                        route
+                            .same_service
+                            .iter()
+                            .any(|name| name.trim() == shown.trim())
                     }),
                 })
                 .cloned()
@@ -246,10 +391,14 @@ impl PeopleSim {
                 terminus,
                 takes,
                 id: BusId::Player,
-                next_stop: self
-                    .player_next_stop
-                    .clone()
-                    .or_else(|| self.next_stop_at(b.tt_stop.as_ref().map(|(id, n)| (*id, n.as_deref())), &b.act_busstop, b.position, b.heading)),
+                next_stop: self.player_next_stop.clone().or_else(|| {
+                    self.next_stop_at(
+                        b.tt_stop.as_ref().map(|(id, n)| (*id, n.as_deref())),
+                        &b.act_busstop,
+                        b.position,
+                        b.heading,
+                    )
+                }),
                 walk_open: None,
                 places_off: cv.places_off.clone(),
                 served: None,
@@ -279,11 +428,21 @@ impl PeopleSim {
                 })
                 .collect();
             let mut visits = HashMap::new();
-            for c in t.cars.iter().filter(|c| c.is_bus() || c.vehicle.ty.def.passenger_cabin.is_some()) {
-                let from_eye = self.eye.map(|e| (c.vehicle.position - e.pos).length()).unwrap_or(f64::MAX);
+            for c in t
+                .cars
+                .iter()
+                .filter(|c| c.is_bus() || c.vehicle.ty.def.passenger_cabin.is_some())
+            {
+                let from_eye = self
+                    .eye
+                    .map(|e| (c.vehicle.position - e.pos).length())
+                    .unwrap_or(f64::MAX);
                 // (the timetable buses near every player: the people waiting around the other
                 // LAN players board them too)
-                if from_eye > 400.0 && self.far_from_players(c.vehicle.position, 400.0) && !riding.contains(&c.id) {
+                if from_eye > 400.0
+                    && self.far_from_players(c.vehicle.position, 400.0)
+                    && !riding.contains(&c.id)
+                {
                     continue;
                 }
                 let Some(cabin) = self.cabin_for(&c.vehicle) else {
@@ -301,7 +460,9 @@ impl PeopleSim {
                 };
                 // Only buses without an authoritative scheduled stop use nearby geometry.
                 let stop = served.or_else(|| {
-                    boarding.then(|| serving(c.vehicle.position, c.vehicle.heading, 18.0)).flatten()
+                    boarding
+                        .then(|| serving(c.vehicle.position, c.vehicle.heading, 18.0))
+                        .flatten()
                 });
                 let since = match stop {
                     Some(s) => {
@@ -315,33 +476,32 @@ impl PeopleSim {
                     None => 0.0,
                 };
                 let open = stop.is_some();
-                let (mut entry_open, mut exit_open) = (
-                    vec![false; cabin.entries.len()],
-                    vec![false; cabin.exits.len()],
-                );
-                if open {
-                    if Self::reports_doors(&c.vehicle, cabin.entries.len(), cabin.exits.len()) {
-                        let (e, x) =
-                            Self::doors_open(&c.vehicle, cabin.entries.len(), cabin.exits.len());
-                        entry_open = e;
-                        exit_open = x;
-                    } else if since > 2.5 {
-                        // the script does not say: the doors are open while the bus boards
-                        entry_open
-                            .iter_mut()
-                            .chain(exit_open.iter_mut())
-                            .for_each(|o| *o = true);
-                    }
-                }
-                let walk_open = (!c.is_bus()).then(|| Self::doors_open(&c.vehicle, cabin.entries.len(), cabin.exits.len()));
+                // (where the scripts do not say, the doors are open while the bus boards)
+                let (entry_open, exit_open) = if open {
+                    Self::ai_doors_open(&c.vehicle, &cabin, since)
+                } else {
+                    (
+                        vec![false; cabin.entries.len()],
+                        vec![false; cabin.exits.len()],
+                    )
+                };
+                let walk_open = (!c.is_bus()).then(|| Self::doors_open_cabin(&c.vehicle, &cabin));
                 self.seats
                     .entry(BusId::Ai(c.id))
                     .or_insert_with(|| vec![false; cabin.seats.len()]);
                 let (half, centre) = bb_of(&c.vehicle);
                 let trailers = part_frames(&c.vehicle, &cabin);
                 out.push(BusNow {
-                    terminus: c.bus.as_ref().map(|b| b.terminus.trim().to_string()).filter(|t| !t.is_empty()),
-                    takes: if c.is_bus() { Takes::Terminus } else { Takes::Nobody },
+                    terminus: c
+                        .bus
+                        .as_ref()
+                        .map(|b| b.terminus.trim().to_string())
+                        .filter(|t| !t.is_empty()),
+                    takes: if c.is_bus() {
+                        Takes::Terminus
+                    } else {
+                        Takes::Nobody
+                    },
                     id: BusId::Ai(c.id),
                     next_stop: c
                         .bus
@@ -376,17 +536,29 @@ impl PeopleSim {
                 });
             }
             self.ai_visits = visits;
-            let alive: HashSet<u64> = t.cars.iter().map(|c| c.id).chain(self.remote_now.iter().chain(self.placed_now.iter()).filter_map(|b| match b.id {
-                BusId::Ai(id) => Some(id),
-                BusId::Player => None,
-            })).collect();
+            let alive: HashSet<u64> = t
+                .cars
+                .iter()
+                .map(|c| c.id)
+                .chain(
+                    self.remote_now
+                        .iter()
+                        .chain(self.placed_now.iter())
+                        .filter_map(|b| match b.id {
+                            BusId::Ai(id) => Some(id),
+                            BusId::Player => None,
+                        }),
+                )
+                .collect();
             self.seats.retain(|k, _| match k {
                 BusId::Ai(id) => alive.contains(id),
                 BusId::Player => true,
             });
         }
         for b in self.remote_now.iter().chain(self.placed_now.iter()) {
-            self.seats.entry(b.id).or_insert_with(|| vec![false; b.cabin.seats.len()]);
+            self.seats
+                .entry(b.id)
+                .or_insert_with(|| vec![false; b.cabin.seats.len()]);
             out.push(b.clone());
         }
         out
@@ -394,7 +566,10 @@ impl PeopleSim {
 
     /// The vehicles standing in the world that the player placed and does not drive now:
     /// (their `Player::uid`, the vehicle). Their riders stay aboard; nobody new boards them.
-    pub fn set_placed_buses<'a>(&mut self, buses: impl Iterator<Item = (u64, &'a VehicleInstance)>) {
+    pub fn set_placed_buses<'a>(
+        &mut self,
+        buses: impl Iterator<Item = (u64, &'a VehicleInstance)>,
+    ) {
         let mut out = Vec::new();
         for (uid, v) in buses {
             if let Some(b) = self.parked_bus(BusId::Ai(placed_bus_id(uid)), v) {
@@ -407,9 +582,12 @@ impl PeopleSim {
     /// A bus people may be in but do not board here (another player's, one the player left).
     pub fn parked_bus(&mut self, id: BusId, v: &VehicleInstance) -> Option<BusNow> {
         let cabin = self.cabin_for(v)?;
-        let bb = v.ty.def.bounding_box.unwrap_or([2.5, 11.0, 3.0, 0.0, 0.0, 1.5]);
+        let bb =
+            v.ty.def
+                .bounding_box
+                .unwrap_or([2.5, 11.0, 3.0, 0.0, 0.0, 1.5]);
         let trailers = part_frames(v, &cabin);
-        let walk_open = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
+        let walk_open = Self::doors_open_cabin(v, &cabin);
         Some(BusNow {
             terminus: None,
             takes: Takes::Nobody,
@@ -440,7 +618,12 @@ impl PeopleSim {
     /// taken over is the player's bus's, and the player's cabin is the new vehicle's own.
     /// (Riders followed the player into the next bus, and people boarding it took the old
     /// bus's seats - places in the air round a minibus's bonnet.)
-    pub fn player_bus_swapped(&mut self, old_uid: u64, new_uid: u64, new_vehicle: &mut VehicleInstance) {
+    pub fn player_bus_swapped(
+        &mut self,
+        old_uid: u64,
+        new_uid: u64,
+        new_vehicle: &mut VehicleInstance,
+    ) {
         let old = BusId::Ai(placed_bus_id(old_uid));
         let new = BusId::Ai(placed_bus_id(new_uid));
         // (through a free id: Player -> old, new -> Player)
@@ -465,7 +648,8 @@ impl PeopleSim {
         let _ = world;
         for i in (0..self.people.len()).rev() {
             let p = &self.people[i];
-            let theirs = matches!(p.place, Place::Bus(b, _) if b == bus) || matches!(&p.state, State::Pax(x) if x.bus == Some(bus) || x.inside == Some(bus));
+            let theirs = matches!(p.place, Place::Bus(b, _) if b == bus)
+                || matches!(&p.state, State::Pax(x) if x.bus == Some(bus) || x.inside == Some(bus));
             if theirs {
                 self.release(i);
                 let p = self.people.swap_remove(i);
@@ -510,15 +694,23 @@ impl PeopleSim {
 
     /// LAN play: the other players' buses this frame, by player id (their riders are drawn
     /// in them, see `remote_bus_id`).
-    pub fn set_remote_buses<'a>(&mut self, buses: impl Iterator<Item = (u32, &'a VehicleInstance)>) {
+    pub fn set_remote_buses<'a>(
+        &mut self,
+        buses: impl Iterator<Item = (u32, &'a VehicleInstance)>,
+    ) {
         let mut out = Vec::new();
         for (player, v) in buses {
-            let Some(cabin) = self.cabin_for(v) else { continue };
-            let bb = v.ty.def.bounding_box.unwrap_or([2.5, 11.0, 3.0, 0.0, 0.0, 1.5]);
+            let Some(cabin) = self.cabin_for(v) else {
+                continue;
+            };
+            let bb =
+                v.ty.def
+                    .bounding_box
+                    .unwrap_or([2.5, 11.0, 3.0, 0.0, 0.0, 1.5]);
             let trailers = part_frames(v, &cabin);
             // (their doors as their game has them: a walker gets in only where one is open;
             // the passengers here never board it - that bus's own game boards them)
-            let walk_open = Self::doors_open(v, cabin.entries.len(), cabin.exits.len());
+            let walk_open = Self::doors_open_cabin(v, &cabin);
             out.push(BusNow {
                 terminus: None,
                 takes: Takes::Nobody,
@@ -548,6 +740,7 @@ impl PeopleSim {
 
     /// Is `bus` among the buses people can be in this frame (an AI bus, or another player's)?
     pub fn knows_bus(&self, bus: u64) -> bool {
-        self.remote_now.iter().any(|b| b.id == BusId::Ai(bus)) || self.seats.contains_key(&BusId::Ai(bus))
+        self.remote_now.iter().any(|b| b.id == BusId::Ai(bus))
+            || self.seats.contains_key(&BusId::Ai(bus))
     }
 }

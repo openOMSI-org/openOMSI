@@ -1,0 +1,18 @@
+[package]
+name = "omsi-mt-mx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "openOMSI's machine translation of the interface: texts the translation tables lack, translated on this machine by NLLB-200 through CTranslate2, cached per language, and offered to omsi-ui as its fallback"
+
+[dependencies]
+omsi-cfg = { path = "../omsi-cfg" }
+omsi-ui = { package = "omsi-ui-mx", path = "../omsi-ui-mx" }
+log.workspace = true
+parking_lot.workspace = true
+serde_json.workspace = true
+ureq.workspace = true
+sha2.workspace = true
+
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+ct2rs = { version = "0.10.1", default-features = false, features = ["tokenizers", "accelerate", "ruy"] }

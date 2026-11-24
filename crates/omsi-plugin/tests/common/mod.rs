@@ -299,6 +299,15 @@ impl PluginIo for Game {
     fn bus_steer(&self) -> Option<(f32, f32)> {
         Some((-10.0, 45.0))
     }
+    fn bus_track(&self) -> Option<omsi_plugin::io::TrackPos> {
+        Some(omsi_plugin::io::TrackPos {
+            lane: 12,
+            s: 40.5,
+            lane_length: 120.0,
+            forward: true,
+            travelled: 1234.5,
+        })
+    }
     fn bus_action(&mut self, name: &str, down: bool) -> bool {
         self.did(format!("action {name} {down}"));
         if name == "horn" {

@@ -29,7 +29,13 @@ pub const MOST_BEHIND: f32 = OLDER_STEPS as f32 * SIM_DT;
 /// the next frames, up to `max_steps` of them; the time beyond that is dropped. The steps
 /// depend only on the time that went by, not on how it was split into frames (as long as
 /// no frame needs more than `per_frame`, or the frames after it make up for it).
-pub fn advance_fixed_clock(accum: &mut f64, frame_dt: f32, dt: f32, per_frame: u32, max_steps: u32) -> u32 {
+pub fn advance_fixed_clock(
+    accum: &mut f64,
+    frame_dt: f32,
+    dt: f32,
+    per_frame: u32,
+    max_steps: u32,
+) -> u32 {
     if !(frame_dt > 0.0) || !(dt > 0.0) {
         return 0;
     }
@@ -61,7 +67,13 @@ impl TrafficSim {
             self.frame_alpha = 1.0;
             return 1;
         }
-        let steps = advance_fixed_clock(&mut self.sim_accum, frame_dt, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS);
+        let steps = advance_fixed_clock(
+            &mut self.sim_accum,
+            frame_dt,
+            SIM_DT,
+            STEPS_PER_FRAME,
+            MAX_SIM_STEPS,
+        );
         let mut split = [0.0; 3];
         for k in 0..steps {
             if k + 1 + OLDER_STEPS as u32 >= steps {
@@ -83,7 +95,11 @@ impl TrafficSim {
     /// times a second, for every car, was allocator traffic for nothing.)
     fn remember_poses(&mut self) {
         let p = &mut self.poses;
-        let mut kept = if p.older.len() >= OLDER_STEPS { p.older.pop_back().unwrap_or_default() } else { Default::default() };
+        let mut kept = if p.older.len() >= OLDER_STEPS {
+            p.older.pop_back().unwrap_or_default()
+        } else {
+            Default::default()
+        };
         std::mem::swap(&mut kept.0, &mut p.before);
         std::mem::swap(&mut kept.1, &mut p.before_at);
         p.older.push_front(kept);
@@ -91,9 +107,14 @@ impl TrafficSim {
         p.before_at.clear();
         for c in &self.cars {
             let v = &c.vehicle;
-            p.before_at.insert(c.id, (p.before.len() as u32, 1 + v.trailers.len() as u32));
+            p.before_at
+                .insert(c.id, (p.before.len() as u32, 1 + v.trailers.len() as u32));
             p.before.push((v.position, v.heading, v.pitch, v.bank));
-            p.before.extend(v.trailers.iter().map(|t| (t.position, t.heading, t.pitch, t.bank)));
+            p.before.extend(
+                v.trailers
+                    .iter()
+                    .map(|t| (t.position, t.heading, t.pitch, t.bank)),
+            );
         }
     }
 
@@ -114,7 +135,9 @@ impl TrafficSim {
         }
         for (i, c) in self.cars.iter_mut().enumerate() {
             let n = 1 + c.vehicle.trailers.len();
-            let Some(b) = span(&p.before_at, c.id, n) else { continue };
+            let Some(b) = span(&p.before_at, c.id, n) else {
+                continue;
+            };
             let before = &p.before[b..b + n];
             let v = &mut c.vehicle;
             if (v.position - before[0].0).length() > JUMP {
@@ -123,14 +146,23 @@ impl TrafficSim {
             let mut kept: [&[PartPose]; 1 + OLDER_STEPS] = [before; 1 + OLDER_STEPS];
             let mut back = 1;
             for (poses, at) in &p.older {
-                let Some(e) = span(at, c.id, n).map(|e| &poses[e..e + n]).filter(|e| (kept[back - 1][0].0 - e[0].0).length() <= JUMP) else { break };
+                let Some(e) = span(at, c.id, n)
+                    .map(|e| &poses[e..e + n])
+                    .filter(|e| (kept[back - 1][0].0 - e[0].0).length() <= JUMP)
+                else {
+                    break;
+                };
                 kept[back] = e;
                 back += 1;
             }
             let k = p.actual.len();
             p.shown.push((i, k as u32));
             p.actual.push((v.position, v.heading, v.pitch, v.bank));
-            p.actual.extend(v.trailers.iter().map(|t| (t.position, t.heading, t.pitch, t.bank)));
+            p.actual.extend(
+                v.trailers
+                    .iter()
+                    .map(|t| (t.position, t.heading, t.pitch, t.bank)),
+            );
             let now = &p.actual[k..k + n];
             let (from, to, w) = shown(&kept[..back], now, a);
             (v.position, v.heading, v.pitch, v.bank) = between(from[0], to[0], w);
@@ -144,7 +176,9 @@ impl TrafficSim {
     pub fn show_actual(&mut self) {
         let p = &mut self.poses;
         for &(i, at) in &p.shown {
-            let Some(c) = self.cars.get_mut(i) else { continue };
+            let Some(c) = self.cars.get_mut(i) else {
+                continue;
+            };
             let v = &mut c.vehicle;
             let saved = &p.actual[at as usize..];
             if let Some(&q) = saved.first() {
@@ -177,7 +211,11 @@ fn shown_alpha(frame_alpha: f32, behind: f32) -> f32 {
     frame_alpha - behind.clamp(0.0, MOST_BEHIND) / SIM_DT
 }
 
-fn shown<'a>(kept: &[&'a [PartPose]], now: &'a [PartPose], a: f32) -> (&'a [PartPose], &'a [PartPose], f32) {
+fn shown<'a>(
+    kept: &[&'a [PartPose]],
+    now: &'a [PartPose],
+    a: f32,
+) -> (&'a [PartPose], &'a [PartPose], f32) {
     if a >= 0.0 {
         return (kept[0], now, a);
     }
@@ -189,7 +227,9 @@ fn shown<'a>(kept: &[&'a [PartPose]], now: &'a [PartPose], a: f32) -> (&'a [Part
 }
 
 fn span(at: &HashMap<u64, (u32, u32)>, id: u64, n: usize) -> Option<usize> {
-    at.get(&id).filter(|&&(_, m)| m as usize == n).map(|&(b, _)| b as usize)
+    at.get(&id)
+        .filter(|&&(_, m)| m as usize == n)
+        .map(|&(b, _)| b as usize)
 }
 
 /// `a` of the way from `from` to `to`, the angles the short way round.
@@ -217,9 +257,15 @@ mod tests {
         };
         assert!((y(0.25) - 1.25).abs() < 1e-9);
         assert!((y(-0.25) - 0.75).abs() < 1e-9);
-        assert!((y(-1e-6) - y(0.0)).abs() < 1e-5, "no jump where the step is");
+        assert!(
+            (y(-1e-6) - y(0.0)).abs() < 1e-5,
+            "no jump where the step is"
+        );
         let (from, to, w) = shown(&[&before], &now, -0.25);
-        assert!((between(from[0], to[0], w).0.y - 1.0).abs() < 1e-9, "without the step before: where it stood before the last");
+        assert!(
+            (between(from[0], to[0], w).0.y - 1.0).abs() < 1e-9,
+            "without the step before: where it stood before the last"
+        );
     }
 
     #[test]
@@ -233,7 +279,10 @@ mod tests {
             between(from[0], to[0], w).0.y
         };
         let deepest = shown_alpha(0.0, 1.0);
-        assert!((deepest + OLDER_STEPS as f32).abs() < 1e-5, "as far back as the steps kept: {deepest}");
+        assert!(
+            (deepest + OLDER_STEPS as f32).abs() < 1e-5,
+            "as far back as the steps kept: {deepest}"
+        );
         assert!((shown_alpha(0.5, 0.05) + 2.0).abs() < 1e-5);
         assert!((y(deepest) - 0.0).abs() < 1e-6, "{}", y(deepest));
         assert!((y(deepest + 0.5) - 0.5).abs() < 1e-6);
@@ -241,10 +290,16 @@ mod tests {
         assert!((y(0.5) - (OLDER_STEPS as f64 + 0.5)).abs() < 1e-6);
         for k in 1..OLDER_STEPS {
             let edge = -(k as f32);
-            assert!((y(edge - 1e-5) - y(edge)).abs() < 1e-4, "no jump {k} steps back");
+            assert!(
+                (y(edge - 1e-5) - y(edge)).abs() < 1e-4,
+                "no jump {k} steps back"
+            );
         }
         let (from, to, w) = shown(&kept[..2], now, -3.5);
-        assert!((between(from[0], to[0], w).0.y - (OLDER_STEPS as f64 - 1.0)).abs() < 1e-9, "past the steps kept: the oldest");
+        assert!(
+            (between(from[0], to[0], w).0.y - (OLDER_STEPS as f64 - 1.0)).abs() < 1e-9,
+            "past the steps kept: the oldest"
+        );
     }
 
     /// The same seconds give the same steps whether they come as 15, 30, 60 or 144 frames
@@ -255,7 +310,15 @@ mod tests {
             let mut accum = 0.0;
             let frames = (10.0 * fps).round() as u32;
             let steps: u32 = (0..frames)
-                .map(|_| advance_fixed_clock(&mut accum, 1.0 / fps, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS))
+                .map(|_| {
+                    advance_fixed_clock(
+                        &mut accum,
+                        1.0 / fps,
+                        SIM_DT,
+                        STEPS_PER_FRAME,
+                        MAX_SIM_STEPS,
+                    )
+                })
                 .sum();
             assert_eq!(steps, 500, "{fps} fps");
         }
@@ -265,15 +328,25 @@ mod tests {
     fn a_frame_runs_at_most_four_steps_and_the_next_ones_make_up_for_it() {
         let mut accum = 0.0;
         // a hitch of 0.14 s: seven steps, four now and three in the next frame
-        assert_eq!(advance_fixed_clock(&mut accum, 0.14, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS), 4);
-        assert_eq!(advance_fixed_clock(&mut accum, 0.005, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS), 3);
-        assert_eq!(advance_fixed_clock(&mut accum, 0.005, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS), 0);
+        assert_eq!(
+            advance_fixed_clock(&mut accum, 0.14, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS),
+            4
+        );
+        assert_eq!(
+            advance_fixed_clock(&mut accum, 0.005, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS),
+            3
+        );
+        assert_eq!(
+            advance_fixed_clock(&mut accum, 0.005, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS),
+            0
+        );
     }
 
     #[test]
     fn a_long_stall_keeps_at_most_the_cap_and_drops_the_rest() {
         let mut accum = 0.0;
-        let mut steps = advance_fixed_clock(&mut accum, 1.0, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS);
+        let mut steps =
+            advance_fixed_clock(&mut accum, 1.0, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS);
         assert_eq!(steps, STEPS_PER_FRAME);
         assert!(accum < MAX_SIM_STEPS as f64 * SIM_DT as f64);
         for _ in 0..10 {
@@ -281,14 +354,23 @@ mod tests {
         }
         assert_eq!(steps, MAX_SIM_STEPS);
         // and the next frame is ordinary again
-        assert_eq!(advance_fixed_clock(&mut accum, 0.021, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS), 1);
+        assert_eq!(
+            advance_fixed_clock(&mut accum, 0.021, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS),
+            1
+        );
     }
 
     #[test]
     fn nothing_runs_for_no_time() {
         let mut accum = 0.0;
-        assert_eq!(advance_fixed_clock(&mut accum, 0.0, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS), 0);
-        assert_eq!(advance_fixed_clock(&mut accum, f32::NAN, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS), 0);
+        assert_eq!(
+            advance_fixed_clock(&mut accum, 0.0, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS),
+            0
+        );
+        assert_eq!(
+            advance_fixed_clock(&mut accum, f32::NAN, SIM_DT, STEPS_PER_FRAME, MAX_SIM_STEPS),
+            0
+        );
         assert_eq!(accum, 0.0);
     }
 

@@ -39,6 +39,7 @@ fn the_bus() {
         local d = omsi.bus.damage(); assert(d.crashes == 1 and d.last_impact_kj == 136 and d.repair_minutes == 30)
         local t, b, c, st = omsi.bus.controls(); assert(t == 0.5 and st == -0.25)
         assert(omsi.bus.steering_angle() == -10)
+        local tr = omsi.bus.track(); assert(tr.lane == 12 and tr.s == 40.5 and tr.lane_length == 120 and tr.forward == true and tr.travelled == 1234.5)
         assert(#omsi.bus.wheels() == 1 and omsi.bus.wheels()[1].radius == 0.5)
         assert(omsi.bus.horn() == false and omsi.bus.sound_horn(true) and omsi.bus.horn() == true)
         assert(omsi.bus.handbrake() == true and omsi.bus.toggle_handbrake())

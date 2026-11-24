@@ -36,7 +36,9 @@ pub fn instance(mut descriptor: wgpu::InstanceDescriptor) -> wgpu::Instance {
                 serial_compiler_overrides(&existing),
             );
         }
-        log::info!("ANGLE: native shader worker jobs disabled; renderer compilation uses a managed {COMPILER_STACK_MB} MB stack");
+        log::info!(
+            "ANGLE: native shader worker jobs disabled; renderer compilation uses a managed {COMPILER_STACK_MB} MB stack"
+        );
     }
     descriptor.backends = wgpu::Backends::GL;
     descriptor.backend_options.gl.platform = wgpu::GlPlatform::Angle;
@@ -65,7 +67,9 @@ where
             std::thread::Builder::new()
                 .name("ANGLE shader compiler".into())
                 .stack_size(COMPILER_STACK_MB << 20)
-                .spawn_scoped(scope, move || crate::with_auxiliary_context(context, operation))
+                .spawn_scoped(scope, move || {
+                    crate::with_auxiliary_context(context, operation)
+                })
                 .expect("ANGLE shader compiler thread")
                 .join()
                 .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
@@ -88,9 +92,14 @@ where
 fn no_parallel_compiles(device: &wgpu::Device) {
     use glow::HasContext;
     // SAFETY: the context is only locked (made current) to set a piece of its state
-    let Some(hal) = (unsafe { device.as_hal::<wgpu::hal::api::Gles>() }) else { return };
+    let Some(hal) = (unsafe { device.as_hal::<wgpu::hal::api::Gles>() }) else {
+        return;
+    };
     let gl = hal.context().lock();
-    if gl.supported_extensions().contains("GL_KHR_parallel_shader_compile") {
+    if gl
+        .supported_extensions()
+        .contains("GL_KHR_parallel_shader_compile")
+    {
         // SAFETY: the extension is there, so the KHR entry point is loaded
         unsafe { gl.max_shader_compiler_threads(0) };
         log::info!("ANGLE: no parallel shader compiler threads (GL_KHR_parallel_shader_compile)");

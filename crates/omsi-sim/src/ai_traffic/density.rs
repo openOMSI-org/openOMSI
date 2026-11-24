@@ -11,7 +11,13 @@ impl TrafficSim {
     /// How far behind something standing a vehicle of `ty` stops so that it can pull out
     /// round it later (`crate::ai_motion::pull_out_room` against a standing bus with the
     /// oncoming lane 3.3 m over; by vehicle file).
-    pub fn pull_out_room(&mut self, ty: &VehicleType, front: f32, rear: f32, half_width: f32) -> f32 {
+    pub fn pull_out_room(
+        &mut self,
+        ty: &VehicleType,
+        front: f32,
+        rear: f32,
+        half_width: f32,
+    ) -> f32 {
         if let Some(&r) = self.pull_out_rooms.get(&ty.def.path) {
             return r;
         }
@@ -125,8 +131,19 @@ impl TrafficSim {
         let mut busiest: Option<f32> = None;
         for (g, group) in self.groups.iter().enumerate() {
             // (a group with no street vehicles brings nobody here)
-            let on_streets = self.types.iter().any(|t| t.3 == g && t.2 == LaneKind::Street);
-            let Some(rules) = self.group_uvg.get(g).copied().flatten().filter(|_| on_streets) else { continue };
+            let on_streets = self
+                .types
+                .iter()
+                .any(|t| t.3 == g && t.2 == LaneKind::Street);
+            let Some(rules) = self
+                .group_uvg
+                .get(g)
+                .copied()
+                .flatten()
+                .filter(|_| on_streets)
+            else {
+                continue;
+            };
             let density_here = lane.pool_density(&self.uvg_defaults, rules);
             if density_here > 0.0 {
                 let weighed = density_here * (group.factor / reference).clamp(0.0, 1.0);
@@ -139,7 +156,12 @@ impl TrafficSim {
     /// `spawn_density` for the lanes `lanes` (those of a new tile, or all at the start).
     pub fn set_spawn_densities(&mut self, lanes: std::ops::Range<usize>) {
         for l in lanes {
-            if let Some(d) = self.net.lanes.get(l).and_then(|lane| self.spawn_density(lane)) {
+            if let Some(d) = self
+                .net
+                .lanes
+                .get(l)
+                .and_then(|lane| self.spawn_density(lane))
+            {
                 self.net.lanes[l].density = d;
             }
         }
@@ -173,8 +195,16 @@ impl TrafficSim {
             .collect();
         // (and only the vehicles the lane is open to: Grundorf's trucks where it says
         // `trucks`, Omsi.exe 0x71d714)
-        let barred: Vec<*const VehicleType> = match lane.filter(|_| kind == LaneKind::Street).and_then(|i| self.net.lanes.get(i)) {
-            Some(l) => self.types.iter().filter(|t| !l.allows(t.0.def.ai_veh_type)).map(|t| Arc::as_ptr(&t.0)).collect(),
+        let barred: Vec<*const VehicleType> = match lane
+            .filter(|_| kind == LaneKind::Street)
+            .and_then(|i| self.net.lanes.get(i))
+        {
+            Some(l) => self
+                .types
+                .iter()
+                .filter(|t| !l.allows(t.0.def.ai_veh_type))
+                .map(|t| Arc::as_ptr(&t.0))
+                .collect(),
             None => Vec::new(),
         };
         let weight = |t: &(Arc<VehicleType>, f32, LaneKind, usize)| -> f32 {

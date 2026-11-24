@@ -90,7 +90,10 @@ static POINTER: AtomicU32 = AtomicU32::new(0);
 #[unsafe(no_mangle)]
 pub extern "system" fn AccessScriptTexturePointer(index: u16, kind: i32, x: f32, y: f32) {
     if index == 0 {
-        POINTER.store(u32::from_le_bytes([x as u8, y as u8, kind as u8, 1]), Ordering::SeqCst);
+        POINTER.store(
+            u32::from_le_bytes([x as u8, y as u8, kind as u8, 1]),
+            Ordering::SeqCst,
+        );
     }
 }
 
@@ -101,7 +104,13 @@ pub extern "system" fn AccessScriptTexturePointer(index: u16, kind: i32, x: f32,
 /// # Safety
 /// `pixels` is `width` x `height` RGBA bytes, `write` points to a Boolean.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn AccessScriptTexture(index: u16, width: i32, height: i32, pixels: *mut u8, write: *mut u8) {
+pub unsafe extern "system" fn AccessScriptTexture(
+    index: u16,
+    width: i32,
+    height: i32,
+    pixels: *mut u8,
+    write: *mut u8,
+) {
     unsafe {
         if index != 0 || width <= 0 || height <= 0 {
             return;
@@ -165,7 +174,11 @@ pub unsafe extern "system" fn AccessTicketRequest(
         let n = destination_number - stop_number;
         *price = n as f32 * 10.0;
         let put = |buf: *mut u16, text: &str| {
-            let t: Vec<u16> = text.encode_utf16().take(255).chain(std::iter::once(0)).collect();
+            let t: Vec<u16> = text
+                .encode_utf16()
+                .take(255)
+                .chain(std::iter::once(0))
+                .collect();
             std::ptr::copy_nonoverlapping(t.as_ptr(), buf, t.len());
         };
         put(name, &format!("{dest}, {n} stops"));

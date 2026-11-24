@@ -44,7 +44,9 @@ pub fn decode(b: &[u8]) -> Result<Image, String> {
     // (a pixel or palette entry of no bytes has no colour to read; a picture wider than
     // any texture is a damaged header, not something to allocate gigabytes for)
     if px_bytes == 0 || px_bytes > 4 || (base == 1 && !(1..=4).contains(&cmap_bytes)) {
-        return Err(format!("unsupported pixel depth {bpp} (palette {cmap_bpp})"));
+        return Err(format!(
+            "unsupported pixel depth {bpp} (palette {cmap_bpp})"
+        ));
     }
     if width > crate::MAX_DIMENSION || height > crate::MAX_DIMENSION {
         return Err(format!("{width}x{height} is larger than any texture"));
@@ -88,14 +90,25 @@ pub fn decode(b: &[u8]) -> Result<Image, String> {
                 let bl = (v & 31) as u32;
                 // D3DX picks its format by the depth alone: 16 bits are A1R5G5B5 (the top
                 // bit is the alpha, whatever the descriptor says), 15 bits X1R5G5B5
-                let a = if bits == 16 && v & 0x8000 == 0 { 0 } else { 255 };
-                [((r * 255) / 31) as u8, ((g * 255) / 31) as u8, ((bl * 255) / 31) as u8, a]
+                let a = if bits == 16 && v & 0x8000 == 0 {
+                    0
+                } else {
+                    255
+                };
+                [
+                    ((r * 255) / 31) as u8,
+                    ((g * 255) / 31) as u8,
+                    ((bl * 255) / 31) as u8,
+                    a,
+                ]
             }
             _ => [p[0], p[0], p[0], 255],
         }
     };
     let mut rgba = vec![0u8; n * 4];
-    let has_alpha = (base == 2 && matches!(bpp, 16 | 32)) || (base == 1 && matches!(cmap_bpp, 16 | 32)) || (base == 3 && px_bytes == 2);
+    let has_alpha = (base == 2 && matches!(bpp, 16 | 32))
+        || (base == 1 && matches!(cmap_bpp, 16 | 32))
+        || (base == 3 && px_bytes == 2);
     for y in 0..height {
         for x in 0..width {
             let i = y * width + x;
@@ -107,7 +120,10 @@ pub fn decode(b: &[u8]) -> Result<Image, String> {
                         idx |= (p[k] as usize) << (8 * k);
                     }
                     let idx = idx.saturating_sub(cmap_start);
-                    match (idx < cmap_len).then(|| cmap.get(idx * cmap_bytes..(idx + 1) * cmap_bytes)).flatten() {
+                    match (idx < cmap_len)
+                        .then(|| cmap.get(idx * cmap_bytes..(idx + 1) * cmap_bytes))
+                        .flatten()
+                    {
                         Some(entry) => to_rgba(entry, cmap_bpp),
                         None => [0, 0, 0, 255],
                     }
@@ -120,7 +136,12 @@ pub fn decode(b: &[u8]) -> Result<Image, String> {
             rgba[(dy * width + dx) * 4..][..4].copy_from_slice(&c);
         }
     }
-    Ok(Image { width: width as u32, height: height as u32, rgba, has_alpha })
+    Ok(Image {
+        width: width as u32,
+        height: height as u32,
+        rgba,
+        has_alpha,
+    })
 }
 
 #[cfg(test)]

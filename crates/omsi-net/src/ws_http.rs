@@ -44,7 +44,11 @@ pub(crate) fn peek_head(s: &TcpStream, deadline: Instant) -> Vec<u8> {
 
 /// Read on until the head's end (`\r\n\r\n`): Err with the answer when it never comes
 /// (too long, too slow, or the connection ended first).
-pub(crate) fn read_head(s: &mut TcpStream, request: &mut Vec<u8>, deadline: Instant) -> Result<(), &'static str> {
+pub(crate) fn read_head(
+    s: &mut TcpStream,
+    request: &mut Vec<u8>,
+    deadline: Instant,
+) -> Result<(), &'static str> {
     let mut buf = [0u8; 1024];
     loop {
         if head_complete(request) {
@@ -59,7 +63,9 @@ pub(crate) fn read_head(s: &mut TcpStream, request: &mut Vec<u8>, deadline: Inst
         match s.read(&mut buf) {
             Ok(0) => return Err("400 Bad Request"),
             Ok(n) => request.extend_from_slice(&buf[..n]),
-            Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => return Err("408 Request Timeout"),
+            Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                return Err("408 Request Timeout");
+            }
             Err(_) => return Err("400 Bad Request"),
         }
     }
@@ -69,9 +75,14 @@ pub(crate) fn read_head(s: &mut TcpStream, request: &mut Vec<u8>, deadline: Inst
 /// `deadline`.
 pub(crate) fn read_body(s: &mut TcpStream, request: &mut Vec<u8>, deadline: Instant) {
     // (the head's end found in the bytes: an offset into the lossy text is not one into them)
-    let Some(head_end) = request.windows(4).position(|w| w == b"\r\n\r\n") else { return };
+    let Some(head_end) = request.windows(4).position(|w| w == b"\r\n\r\n") else {
+        return;
+    };
     let text = String::from_utf8_lossy(&request[..head_end]).to_string();
-    let want = header(&text, "content-length").and_then(|v| v.parse::<usize>().ok()).unwrap_or(0).min(4096);
+    let want = header(&text, "content-length")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0)
+        .min(4096);
     let mut buf = [0u8; 1024];
     while request.len() < head_end + 4 + want && wait_until(s, deadline) {
         match s.read(&mut buf) {
@@ -85,7 +96,10 @@ pub(crate) fn read_body(s: &mut TcpStream, request: &mut Vec<u8>, deadline: Inst
 /// read and dropped for a moment before the connection closes (closed with bytes unread,
 /// Windows resets it and the answer is lost).
 pub(crate) fn refuse(mut s: TcpStream, status: &str, extra: &str) {
-    let _ = s.write_all(format!("HTTP/1.1 {status}\r\n{extra}Content-Length: 0\r\nConnection: close\r\n\r\n").as_bytes());
+    let _ = s.write_all(
+        format!("HTTP/1.1 {status}\r\n{extra}Content-Length: 0\r\nConnection: close\r\n\r\n")
+            .as_bytes(),
+    );
     let _ = s.shutdown(std::net::Shutdown::Write);
     let until = Instant::now() + Duration::from_secs(1);
     let mut buf = [0u8; 4096];
@@ -99,12 +113,23 @@ pub(crate) fn refuse(mut s: TcpStream, status: &str, extra: &str) {
 }
 
 pub(crate) fn header<'a>(head: &'a str, name: &str) -> Option<&'a str> {
-    head.lines().skip(1).find_map(|l| l.split_once(':').filter(|(k, _)| k.trim().eq_ignore_ascii_case(name)).map(|(_, v)| v.trim()))
+    head.lines().skip(1).find_map(|l| {
+        l.split_once(':')
+            .filter(|(k, _)| k.trim().eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.trim())
+    })
 }
 
 /// A header's last line (a proxy adds its own after the client's).
 pub(crate) fn last_header<'a>(head: &'a str, name: &str) -> Option<&'a str> {
-    head.lines().skip(1).filter_map(|l| l.split_once(':').filter(|(k, _)| k.trim().eq_ignore_ascii_case(name)).map(|(_, v)| v.trim())).last()
+    head.lines()
+        .skip(1)
+        .filter_map(|l| {
+            l.split_once(':')
+                .filter(|(k, _)| k.trim().eq_ignore_ascii_case(name))
+                .map(|(_, v)| v.trim())
+        })
+        .last()
 }
 
 #[cfg(test)]
@@ -127,7 +152,10 @@ mod tests {
         });
         let t0 = Instant::now();
         let mut request = Vec::new();
-        assert_eq!(read_head(&mut srv, &mut request, t0 + Duration::from_millis(400)), Err("408 Request Timeout"));
+        assert_eq!(
+            read_head(&mut srv, &mut request, t0 + Duration::from_millis(400)),
+            Err("408 Request Timeout")
+        );
         assert!(t0.elapsed() < Duration::from_secs(2), "{:?}", t0.elapsed());
         assert!(!request.is_empty());
     }

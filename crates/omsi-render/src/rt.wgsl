@@ -2,8 +2,8 @@
 //
 // Per pixel of the depth prepass, at full size, and the same every frame (nothing noisy that
 // needs frames to settle, so nothing that smears or crawls when the camera moves):
-// - the sun's shadow: one ray towards a point of the sun's disc, one of 16 of a fixed
-//   pattern that repeats every 4 x 4 pixels;
+// - the sun's shadow: one ray towards a point of the sun's disc (its true size, widened by a
+//   veil of high cloud: rt.rs), one of 16 of a fixed pattern that repeats every 4 x 4 pixels;
 // - ambient occlusion: two rays over the surface's hemisphere, their directions one of 32 of
 //   a fixed pattern that repeats every 4 x 4 pixels; the filter averages the pattern away
 //   over 5 x 5 pixels at the same depth.

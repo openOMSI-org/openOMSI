@@ -40,7 +40,12 @@ fn trace() -> Option<&'static Mutex<Trace>> {
                 Ok(f) => {
                     let mut out = std::io::BufWriter::new(f);
                     let _ = writeln!(out, "# openomsi audio trace 1");
-                    Some(Mutex::new(Trace { out, files: HashMap::new(), last: HashMap::new(), frame: 0 }))
+                    Some(Mutex::new(Trace {
+                        out,
+                        files: HashMap::new(),
+                        last: HashMap::new(),
+                        frame: 0,
+                    }))
                 }
                 Err(e) => {
                     log::warn!("OMSI_AUDIO_TRACE: {}: {e}", Path::new(path).display());
@@ -87,7 +92,9 @@ pub(crate) fn engine(kind: &str) {
 /// A clip was read from `path` (its data at `key`).
 pub(crate) fn clip_read(key: usize, path: &Path) {
     if let Some(t) = trace() {
-        t.lock().files.insert(key, path.to_string_lossy().replace('\\', "/"));
+        t.lock()
+            .files
+            .insert(key, path.to_string_lossy().replace('\\', "/"));
     }
 }
 

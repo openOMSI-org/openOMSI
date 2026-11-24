@@ -45,7 +45,15 @@ pub struct Animation {
 
 impl Default for Animation {
     fn default() -> Self {
-        Self { origins: Vec::new(), kind: None, variable: String::new(), factor: 1.0, offset: 0.0, delay: 0.0, max_speed: 0.0 }
+        Self {
+            origins: Vec::new(),
+            kind: None,
+            variable: String::new(),
+            factor: 1.0,
+            offset: 0.0,
+            delay: 0.0,
+            max_speed: 0.0,
+        }
     }
 }
 
@@ -135,7 +143,23 @@ impl MaterialDef {
         macro_rules! opt {
             ($($f:ident),*) => { $( if self.$f.is_none() { self.$f = base.$f.clone(); } )* };
         }
-        opt!(envmap, envmap_mask, bumpmap, transmap, raindropmap, texcoord_trans_x, texcoord_trans_y, use_script_texture, use_text_texture, alphascale, freetex, nightmap, glow, led_glow, allcolor);
+        opt!(
+            envmap,
+            envmap_mask,
+            bumpmap,
+            transmap,
+            raindropmap,
+            texcoord_trans_x,
+            texcoord_trans_y,
+            use_script_texture,
+            use_text_texture,
+            alphascale,
+            freetex,
+            nightmap,
+            glow,
+            led_glow,
+            allcolor
+        );
         self.envmap_realtime |= base.envmap_realtime;
         if self.tex_address == TexAddress::Wrap {
             self.tex_address = base.tex_address;
@@ -203,7 +227,11 @@ pub struct VisibleCond {
 impl VisibleCond {
     /// Whether the condition holds with its variable at `x`.
     pub fn holds(&self, x: f32) -> bool {
-        let met = if self.range { x >= self.lo && x <= self.hi } else { (x - self.lo).abs() < 0.5 };
+        let met = if self.range {
+            x >= self.lo && x <= self.hi
+        } else {
+            (x - self.lo).abs() < 0.5
+        };
         met != self.not
     }
 }
@@ -220,7 +248,10 @@ impl MeshDef {
     pub fn visible_by(&self, var: impl Fn(&str) -> Option<f32>) -> Option<bool> {
         let mut groups = self.visible_groups().peekable();
         groups.peek()?;
-        Some(groups.any(|g| g.iter().all(|c| var(&c.variable).is_none_or(|x| c.holds(x)))))
+        Some(groups.any(|g| {
+            g.iter()
+                .all(|c| var(&c.variable).is_none_or(|x| c.holds(x)))
+        }))
     }
 }
 
@@ -356,7 +387,11 @@ impl PsValue {
     /// names a variable.
     pub fn parse(s: &str) -> PsValue {
         let t = s.trim();
-        let numeric = t.chars().next().map(|c| c.is_ascii_digit() || matches!(c, '-' | '+' | '.' | ',')).unwrap_or(true);
+        let numeric = t
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_digit() || matches!(c, '-' | '+' | '.' | ','))
+            .unwrap_or(true);
         if numeric {
             PsValue::Const(omsi_cfg::parse_f32(t))
         } else {
@@ -437,12 +472,28 @@ impl ParticleSystemDef {
 
     /// `[particle_emitter]`: position and direction, then labelled pairs (value, spread).
     pub fn from_emitter(e: &ParticleEmitter) -> ParticleSystemDef {
-        let lines: Vec<&str> = e.lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+        let lines: Vec<&str> = e
+            .lines
+            .iter()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .collect();
         let f = |i: usize| lines.get(i).map(|s| omsi_cfg::parse_f32(s)).unwrap_or(0.0);
-        let mut d = ParticleSystemDef { pos: [f(0), f(1), f(2)], dir: [f(3), f(4), f(5)], calc_dist: 500.0, ..Default::default() };
+        let mut d = ParticleSystemDef {
+            pos: [f(0), f(1), f(2)],
+            dir: [f(3), f(4), f(5)],
+            calc_dist: 500.0,
+            ..Default::default()
+        };
         let mut i = 6;
         let pair = |i: usize| -> PsRange {
-            (lines.get(i).map(|s| PsValue::parse(s)).unwrap_or_default(), lines.get(i + 1).map(|s| PsValue::parse(s)).unwrap_or_default())
+            (
+                lines.get(i).map(|s| PsValue::parse(s)).unwrap_or_default(),
+                lines
+                    .get(i + 1)
+                    .map(|s| PsValue::parse(s))
+                    .unwrap_or_default(),
+            )
         };
         while i < lines.len() {
             let l = lines[i];
@@ -458,23 +509,56 @@ impl ParticleSystemDef {
                     d.velocity_all_round = label.ends_with("constvar");
                     i += 2;
                 }
-                "ps_freq" => { d.freq = pair(i); i += 2; }
-                "ps_instexplosion_partcount" => { d.burst = Some(pair(i)); i += 2; }
-                "ps_livetime" => { d.life = pair(i); i += 2; }
-                "ps_brakefactor" => { d.brake = pair(i); i += 2; }
-                "ps_g" => { d.gravity = pair(i); i += 2; }
-                "ps_size_start" => { d.size_start = pair(i); i += 2; }
-                "ps_size_grow" => { d.size_grow = pair(i); i += 2; }
-                "ps_alpha_initial" => { d.alpha_initial = pair(i); i += 2; }
-                "ps_alpha_final" => { d.alpha_final = pair(i); i += 2; }
+                "ps_freq" => {
+                    d.freq = pair(i);
+                    i += 2;
+                }
+                "ps_instexplosion_partcount" => {
+                    d.burst = Some(pair(i));
+                    i += 2;
+                }
+                "ps_livetime" => {
+                    d.life = pair(i);
+                    i += 2;
+                }
+                "ps_brakefactor" => {
+                    d.brake = pair(i);
+                    i += 2;
+                }
+                "ps_g" => {
+                    d.gravity = pair(i);
+                    i += 2;
+                }
+                "ps_size_start" => {
+                    d.size_start = pair(i);
+                    i += 2;
+                }
+                "ps_size_grow" => {
+                    d.size_grow = pair(i);
+                    i += 2;
+                }
+                "ps_alpha_initial" => {
+                    d.alpha_initial = pair(i);
+                    i += 2;
+                }
+                "ps_alpha_final" => {
+                    d.alpha_final = pair(i);
+                    i += 2;
+                }
                 "ps_rgb" => {
                     d.rgb = [pair(i), pair(i + 2), pair(i + 4)];
                     i += 6;
                 }
-                "ps_calcdist" => { d.calc_dist = f(i); i += 1; }
+                "ps_calcdist" => {
+                    d.calc_dist = f(i);
+                    i += 1;
+                }
                 "ps_emissive" => d.emissive = true,
                 "ps_bitmap" => {
-                    d.bitmap = lines.get(i).map(|s| s.to_string()).filter(|s| !s.starts_with("--"));
+                    d.bitmap = lines
+                        .get(i)
+                        .map(|s| s.to_string())
+                        .filter(|s| !s.starts_with("--"));
                     i += 1;
                 }
                 _ => {}
@@ -544,8 +628,15 @@ impl Model {
     /// All declared cutters, plus legacy mesh fields supplied by programmatic callers.
     pub fn terrain_hole_meshes(&self) -> impl Iterator<Item = &str> {
         self.terrain_holes.iter().map(String::as_str).chain(
-            self.meshes.iter().filter_map(|m| m.terrain_hole.as_deref())
-                .filter(move |f| !self.terrain_holes.iter().any(|declared| declared.as_str() == *f)),
+            self.meshes
+                .iter()
+                .filter_map(|m| m.terrain_hole.as_deref())
+                .filter(move |f| {
+                    !self
+                        .terrain_holes
+                        .iter()
+                        .any(|declared| declared.as_str() == *f)
+                }),
         )
     }
 
@@ -555,7 +646,12 @@ impl Model {
     }
 
     pub fn parse(file: &CfgFile) -> Model {
-        let mut m = Model { path: file.path.clone(), detail_factor: 1.0, tex_detail_factor: 1.0, ..Default::default() };
+        let mut m = Model {
+            path: file.path.clone(),
+            detail_factor: 1.0,
+            tex_detail_factor: 1.0,
+            ..Default::default()
+        };
         let mut r = file.reader().disabled_blocks();
         while let Some(e) = r.next_entry(ANIM_TOKENS) {
             match e {
@@ -588,7 +684,11 @@ impl Model {
     pub fn handle_token(&mut self, t: &str, r: &mut CfgReader) {
         // `||` between two `[visible]` blocks: the next conditions are another group (#729)
         if t == "||" {
-            if let Some(m) = self.meshes.last_mut().filter(|m| m.visible_any.last().is_some_and(|g| !g.is_empty())) {
+            if let Some(m) = self
+                .meshes
+                .last_mut()
+                .filter(|m| m.visible_any.last().is_some_and(|g| !g.is_empty()))
+            {
                 m.visible_any.push(Vec::new());
             }
             return;
@@ -610,7 +710,9 @@ impl Model {
         let value = matches!(t, "offset" | "delay" | "maxspeed").then(|| r.f32());
         // a sub-command before any `[newanim]` of the mesh has nothing to act on (the
         // original stops reading the model there; no known file has one)
-        let Some(a) = self.meshes.last_mut().and_then(|m| m.animations.last_mut()) else { return };
+        let Some(a) = self.meshes.last_mut().and_then(|m| m.animations.last_mut()) else {
+            return;
+        };
         if let Some(o) = origin {
             a.origins.push(o);
         }
@@ -645,14 +747,26 @@ impl Model {
             Some(d) if !d.item && d.change.is_some() => (d.texture.clone(), d.index),
             _ => return mesh.materials.last_mut(),
         };
-        let base = |d: &MaterialDef| !d.item && d.change.is_none() && d.index == index && d.texture.eq_ignore_ascii_case(&texture);
+        let base = |d: &MaterialDef| {
+            !d.item
+                && d.change.is_none()
+                && d.index == index
+                && d.texture.eq_ignore_ascii_case(&texture)
+        };
         let k = match mesh.materials.iter().rposition(base) {
             Some(k) => k,
             None => {
                 // (before the change, which stays the last record: the commands after this
                 // one still find it)
                 let at = mesh.materials.len() - 1;
-                mesh.materials.insert(at, MaterialDef { texture, index, ..Default::default() });
+                mesh.materials.insert(
+                    at,
+                    MaterialDef {
+                        texture,
+                        index,
+                        ..Default::default()
+                    },
+                );
                 at
             }
         };
@@ -700,7 +814,10 @@ impl Model {
                     self.implicit_lod = false;
                 } else {
                     self.implicit_lod = false;
-                    self.lods.push(Lod { min_size, first_mesh: self.meshes.len() });
+                    self.lods.push(Lod {
+                        min_size,
+                        first_mesh: self.meshes.len(),
+                    });
                 }
             }
             "vfdmaxmin" => self.vfd_max_min = Some(r.f32s::<6>()),
@@ -726,7 +843,11 @@ impl Model {
                 let variable = r.str().to_string();
                 let path = r.str().to_string();
                 let value = r.i32();
-                self.ctc.push(Ctc { variable, path, value });
+                self.ctc.push(Ctc {
+                    variable,
+                    path,
+                    value,
+                });
             }
             "ctctexture" => {
                 let a = r.str().to_string();
@@ -744,7 +865,13 @@ impl Model {
                 let path = r.str().to_string();
                 let lit = Self::take_lit_flag(r);
                 let script_index = self.reserve_script_texture(width, height);
-                self.html_textures.push(HtmlTextureDef { script_index, width, height, path, lit });
+                self.html_textures.push(HtmlTextureDef {
+                    script_index,
+                    width,
+                    height,
+                    path,
+                    lit,
+                });
             }
             "navigatortexture" => self.parse_navigator_texture(r),
             "texttexture" => {
@@ -754,7 +881,16 @@ impl Model {
                 let height = r.i32();
                 let full_color = Self::text_full_color(r);
                 let color = r.f32s::<3>();
-                self.text_textures.push(TextTexture { variable, font, width, height, full_color, color, orientation: 0, grid: 1 });
+                self.text_textures.push(TextTexture {
+                    variable,
+                    font,
+                    width,
+                    height,
+                    full_color,
+                    color,
+                    orientation: 0,
+                    grid: 1,
+                });
             }
             "texttexture_enh" => {
                 // The same first eight fields as [texttexture] and two more: orientation
@@ -772,14 +908,26 @@ impl Model {
                 let extra: Vec<String> = (0..2).map(|_| r.str().to_string()).collect();
                 let orientation = omsi_cfg::parse_i32(&extra[0]);
                 let grid = omsi_cfg::parse_i32(&extra[1]).max(1);
-                self.text_textures.push(TextTexture { variable: variable.clone(), font: font.clone(), width, height, full_color, color, orientation, grid });
+                self.text_textures.push(TextTexture {
+                    variable: variable.clone(),
+                    font: font.clone(),
+                    width,
+                    height,
+                    full_color,
+                    color,
+                    orientation,
+                    grid,
+                });
                 let mut lines = vec![variable, font, width.to_string(), height.to_string()];
                 lines.extend(extra);
                 self.text_textures_enh.push(lines);
             }
             "mesh" => {
                 if self.lods.is_empty() {
-                    self.lods.push(Lod { min_size: 0.0, first_mesh: 0 });
+                    self.lods.push(Lod {
+                        min_size: 0.0,
+                        first_mesh: 0,
+                    });
                     self.implicit_lod = true;
                 }
                 let file = r.str().to_string();
@@ -787,14 +935,28 @@ impl Model {
                 // mesh before it, the first one lights 0 to 3 - a mesh without its own
                 // [illumination_interior] is lit like the one written before it (the GN92's
                 // rear saloon, its walls and seats, has no line of its own and stayed dark)
-                let illumination_interior = self.meshes.last().map(|m| m.illumination_interior.clone()).unwrap_or_else(|| vec![0, 1, 2, 3]);
-                self.meshes.push(MeshDef { file, lod: self.lods.len() - 1, illumination_interior, ..Default::default() });
+                let illumination_interior = self
+                    .meshes
+                    .last()
+                    .map(|m| m.illumination_interior.clone())
+                    .unwrap_or_else(|| vec![0, 1, 2, 3]);
+                self.meshes.push(MeshDef {
+                    file,
+                    lod: self.lods.len() - 1,
+                    illumination_interior,
+                    ..Default::default()
+                });
             }
             "item" => {
                 let name = r.str().trim().to_string();
                 let ctc = r.str().to_string();
                 let texture = r.str().to_string();
-                self.items.push(ModelItem { name, ctc, texture, set_vars: Vec::new() });
+                self.items.push(ModelItem {
+                    name,
+                    ctc,
+                    texture,
+                    set_vars: Vec::new(),
+                });
             }
             "setvar" => {
                 let n = r.str().to_string();
@@ -861,7 +1023,11 @@ impl Model {
                 let not = line.ends_with('!');
                 let v = line.trim_end_matches('!').trim().to_string();
                 let lo = r.f32();
-                let (hi, range) = if k == "visible_range" { (r.f32(), true) } else { (lo, false) };
+                let (hi, range) = if k == "visible_range" {
+                    (r.f32(), true)
+                } else {
+                    (lo, false)
+                };
                 if let Some(m) = self.cur_mesh() {
                     if !range && !not {
                         m.visible = Some((v.clone(), lo));
@@ -870,7 +1036,13 @@ impl Model {
                         m.visible_any.push(Vec::new());
                     }
                     if let Some(g) = m.visible_any.last_mut() {
-                        g.push(VisibleCond { variable: v, lo: lo.min(hi), hi: lo.max(hi), range, not });
+                        g.push(VisibleCond {
+                            variable: v,
+                            lo: lo.min(hi),
+                            hi: lo.max(hi),
+                            range,
+                            not,
+                        });
                     }
                 }
             }
@@ -902,13 +1074,24 @@ impl Model {
                 // optional texture line (not a keyword, not empty, not numeric)
                 let save = r.pos();
                 let t = r.str();
-                if !t.trim().is_empty() && omsi_cfg::keyword_of(t).is_none() && t.trim().parse::<f64>().is_err() && t.contains('.') {
+                if !t.trim().is_empty()
+                    && omsi_cfg::keyword_of(t).is_none()
+                    && t.trim().parse::<f64>().is_err()
+                    && t.contains('.')
+                {
                     texture = Some(t.to_string());
                 } else {
                     r.seek(save);
                 }
                 if let Some(m) = self.cur_mesh() {
-                    m.light_enh.push(LightEnh { pos, color, size, variable, values, texture });
+                    m.light_enh.push(LightEnh {
+                        pos,
+                        color,
+                        size,
+                        variable,
+                        values,
+                        texture,
+                    });
                 }
             }
             "light_enh_2" => {
@@ -932,18 +1115,46 @@ impl Model {
                     let mut ahead = r.clone();
                     let l = ahead.str().trim().to_string();
                     let lower = l.to_ascii_lowercase();
-                    if [".bmp", ".tga", ".dds", ".png", ".jpg"].iter().any(|e| lower.ends_with(e)) {
+                    if [".bmp", ".tga", ".dds", ".png", ".jpg"]
+                        .iter()
+                        .any(|e| lower.ends_with(e))
+                    {
                         bitmap = Some(l);
                         *r = ahead;
                     }
                 }
-                let cone = values.get(1).map(|v| omsi_cfg::parse_f32(v) >= 0.5).unwrap_or(false);
-                let time_const = values.get(2).map(|v| omsi_cfg::parse_f32(v).max(0.0)).unwrap_or(0.0);
+                let cone = values
+                    .get(1)
+                    .map(|v| omsi_cfg::parse_f32(v) >= 0.5)
+                    .unwrap_or(false);
+                let time_const = values
+                    .get(2)
+                    .map(|v| omsi_cfg::parse_f32(v).max(0.0))
+                    .unwrap_or(0.0);
                 if let Some(m) = self.cur_mesh() {
-                    m.light_enh_2.push(LightEnh2 { pos, dir, up, omni, rotating, color, size, cone_inner, cone_outer, variable, factor, z_offset, values, cone, time_const, bitmap });
+                    m.light_enh_2.push(LightEnh2 {
+                        pos,
+                        dir,
+                        up,
+                        omni,
+                        rotating,
+                        color,
+                        size,
+                        cone_inner,
+                        cone_outer,
+                        variable,
+                        factor,
+                        z_offset,
+                        values,
+                        cone,
+                        time_const,
+                        bitmap,
+                    });
                 }
             }
-            "spotlight" => self.spotlights.push(Spotlight { values: r.f32s::<12>() }),
+            "spotlight" => self.spotlights.push(Spotlight {
+                values: r.f32s::<12>(),
+            }),
             "spotlight_2" => {
                 let values = r.f32s::<12>();
                 let variable = r.str().to_string();
@@ -956,7 +1167,11 @@ impl Model {
                     *r = ahead;
                     omsi_cfg::parse_f32(flag) < 0.5
                 };
-                self.spotlights_2.push(Spotlight2 { values, variable, mirrored });
+                self.spotlights_2.push(Spotlight2 {
+                    values,
+                    variable,
+                    mirrored,
+                });
             }
             "spotlight_cookie" => self.spotlight_cookies.push(SpotlightCookie::read(r)),
             "interiorlight" => {
@@ -964,7 +1179,12 @@ impl Model {
                 let range = r.f32();
                 let color = r.f32s::<3>();
                 let pos = r.f32s::<3>();
-                self.interior_lights.push(InteriorLight { variable, range, color, pos });
+                self.interior_lights.push(InteriorLight {
+                    variable,
+                    range,
+                    color,
+                    pos,
+                });
             }
             _ => return self.handle_material_keyword(k, r),
         }
@@ -984,13 +1204,22 @@ impl Model {
                     // the same one goes on with it (TH_Wald's chain barrier gives its slot an
                     // envmap in one block and [matl_alpha] 1 in the next - the second block was
                     // lost and the chain stood on a white band)
-                    let same = |d: &MaterialDef| !d.item && d.change.is_none() && d.index == index && d.texture.eq_ignore_ascii_case(&texture);
+                    let same = |d: &MaterialDef| {
+                        !d.item
+                            && d.change.is_none()
+                            && d.index == index
+                            && d.texture.eq_ignore_ascii_case(&texture)
+                    };
                     match m.materials.iter().position(same) {
                         Some(k) => {
                             let d = m.materials.remove(k);
                             m.materials.push(d);
                         }
-                        None => m.materials.push(MaterialDef { texture, index, ..Default::default() }),
+                        None => m.materials.push(MaterialDef {
+                            texture,
+                            index,
+                            ..Default::default()
+                        }),
                     }
                 }
             }
@@ -999,7 +1228,12 @@ impl Model {
                 let index = r.i32();
                 let var = r.str().to_string();
                 if let Some(m) = self.cur_mesh() {
-                    m.materials.push(MaterialDef { texture: texture.clone(), index, change: Some((texture, index, var)), ..Default::default() });
+                    m.materials.push(MaterialDef {
+                        texture: texture.clone(),
+                        index,
+                        change: Some((texture, index, var)),
+                        ..Default::default()
+                    });
                 }
             }
             "matl_item" => {
@@ -1009,13 +1243,24 @@ impl Model {
                     // (a second item starts from the slot's material as well, not from the
                     // item before it: 0x5efae8 copies the record the [matl_change] picked)
                     let open = mesh.materials.last().is_some_and(|m| m.change.is_some());
-                    if let Some(change) = mesh.materials.iter().rev().find(|m| open && m.change.is_some() && !m.item).cloned() {
+                    if let Some(change) = mesh
+                        .materials
+                        .iter()
+                        .rev()
+                        .find(|m| open && m.change.is_some() && !m.item)
+                        .cloned()
+                    {
                         // inherit the plain [matl] of the same slot (alpha, transmap, ...)
                         let base = mesh
                             .materials
                             .iter()
                             .rev()
-                            .find(|m| !m.item && m.change.is_none() && m.texture.eq_ignore_ascii_case(&change.texture) && m.index == change.index)
+                            .find(|m| {
+                                !m.item
+                                    && m.change.is_none()
+                                    && m.texture.eq_ignore_ascii_case(&change.texture)
+                                    && m.index == change.index
+                            })
                             .cloned();
                         // - with what was set after the [matl_change], which went to that
                         // [matl] (see `cur_matl`): Omsi.exe copies the whole material record
@@ -1079,7 +1324,10 @@ impl Model {
                 }
             }
             "usehtmltexture" => {
-                let index = usize::try_from(r.i32()).ok().and_then(|n| self.html_textures.get(n)).map(|d| d.script_index);
+                let index = usize::try_from(r.i32())
+                    .ok()
+                    .and_then(|n| self.html_textures.get(n))
+                    .map(|d| d.script_index);
                 self.bind_script_texture(index);
             }
             "usenavigatortexture" => self.parse_use_navigator_texture(r),
@@ -1133,7 +1381,11 @@ impl Model {
                 // reads as 0, as any number of the format does)
                 let v = r.f32();
                 if let Some(m) = self.cur_matl() {
-                    m.led_glow = Some(if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 });
+                    m.led_glow = Some(if v.is_finite() {
+                        v.clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    });
                 }
             }
             "matl_allcolor" => {
@@ -1201,8 +1453,15 @@ impl Model {
                 self.smokes.push(Smoke { params });
             }
             "particle_emitter" => {
-                let lines: Vec<String> = r.rest_of_block().into_iter().map(|s| s.to_string()).collect();
-                self.particle_emitters.push(ParticleEmitter { lines, attach_to: None });
+                let lines: Vec<String> = r
+                    .rest_of_block()
+                    .into_iter()
+                    .map(|s| s.to_string())
+                    .collect();
+                self.particle_emitters.push(ParticleEmitter {
+                    lines,
+                    attach_to: None,
+                });
             }
             "ps_attachto" => {
                 let v = r.f32s::<3>();
@@ -1221,14 +1480,22 @@ impl Model {
         self.particle_emitters
             .iter()
             .map(ParticleSystemDef::from_emitter)
-            .chain(self.smokes.iter().map(|s| ParticleSystemDef::from_smoke(&s.params)))
+            .chain(
+                self.smokes
+                    .iter()
+                    .map(|s| ParticleSystemDef::from_smoke(&s.params)),
+            )
             .collect()
     }
 
     /// Meshes belonging to LOD `i`.
     pub fn lod_meshes(&self, i: usize) -> &[MeshDef] {
         let start = self.lods[i].first_mesh;
-        let end = self.lods.get(i + 1).map(|l| l.first_mesh).unwrap_or(self.meshes.len());
+        let end = self
+            .lods
+            .get(i + 1)
+            .map(|l| l.first_mesh)
+            .unwrap_or(self.meshes.len());
         &self.meshes[start..end]
     }
 }
@@ -1237,7 +1504,19 @@ impl Model {
 /// the way it compares keywords (so the EN92 ignition key's tab-indented origin lines, the
 /// BR481 mirrors' `origin_rot_Y` and the F90 lorry's indented, switched-off second rear axle
 /// are free text), anywhere after the `[newanim]` they belong to.
-pub const ANIM_TOKENS: &[&str] = &["origin_trans", "origin_rot_x", "origin_rot_y", "origin_rot_z", "origin_from_mesh", "anim_rot", "anim_trans", "offset", "delay", "maxspeed", "||"];
+pub const ANIM_TOKENS: &[&str] = &[
+    "origin_trans",
+    "origin_rot_x",
+    "origin_rot_y",
+    "origin_rot_z",
+    "origin_from_mesh",
+    "anim_rot",
+    "anim_trans",
+    "offset",
+    "delay",
+    "maxspeed",
+    "||",
+];
 
 /// One `[newtexchangemaster]` of a `[texchanges]` file: the texture name used in the mesh,
 /// the script variable that picks a replacement, and the replacements themselves.
@@ -1262,7 +1541,10 @@ impl TexChangeMaster {
             return None;
         }
         let i = value.trunc() as i64;
-        usize::try_from(i).ok().and_then(|i| self.entries.get(i)).map(|s| s.as_str())
+        usize::try_from(i)
+            .ok()
+            .and_then(|i| self.entries.get(i))
+            .map(|s| s.as_str())
     }
 }
 
@@ -1276,7 +1558,12 @@ pub fn parse_texchanges(file: &CfgFile) -> Vec<TexChangeMaster> {
             "newtexchangemaster" => {
                 let texture = r.str().trim().to_string();
                 let variable = r.word().to_string();
-                out.push(TexChangeMaster { texture, variable, entries: Vec::new(), dir: dir.clone() });
+                out.push(TexChangeMaster {
+                    texture,
+                    variable,
+                    entries: Vec::new(),
+                    dir: dir.clone(),
+                });
             }
             "entries" => {
                 let n = r.count();
@@ -1302,8 +1589,12 @@ pub fn load_texchanges(base: &Path, files: &[String]) -> Vec<TexChangeMaster> {
             Ok(cfg) => out.extend(parse_texchanges(&cfg)),
             Err(e) => {
                 // every vehicle of a kind refers to the same file: say it once
-                static REPORTED: std::sync::Mutex<Option<std::collections::HashSet<PathBuf>>> = std::sync::Mutex::new(None);
-                let first = REPORTED.lock().map(|mut r| r.get_or_insert_with(Default::default).insert(path.clone())).unwrap_or(true);
+                static REPORTED: std::sync::Mutex<Option<std::collections::HashSet<PathBuf>>> =
+                    std::sync::Mutex::new(None);
+                let first = REPORTED
+                    .lock()
+                    .map(|mut r| r.get_or_insert_with(Default::default).insert(path.clone()))
+                    .unwrap_or(true);
                 if first {
                     log::warn!("[texchanges] {}: {e}", path.display());
                 }
@@ -1336,24 +1627,30 @@ mod tests {
     fn several_visible_conditions_combine() {
         let text = "[mesh]\na.o3d\n[visible]\ndoor\n1\n[visible]\nlight\n1\n\n[mesh]\ne.o3d\n[visible_range]\ndoor\n1\n1\n[visible]\nlight\n1\n\n[mesh]\nb.o3d\n[visible_range]\ngear\n1\n4\n\n[mesh]\nc.o3d\n[visible]\ndoor !\n1\n||\n[visible]\nlight\n1\n\n[mesh]\nd.o3d\n[visible]\ndoor\n2\n";
         let m = super::Model::parse(&omsi_cfg::CfgFile::from_str("model.cfg", text));
-        let vars = |door: f32, light: f32, gear: f32| move |n: &str| match n {
-            "door" => Some(door),
-            "light" => Some(light),
-            "gear" => Some(gear),
-            _ => None,
+        let vars = |door: f32, light: f32, gear: f32| {
+            move |n: &str| match n {
+                "door" => Some(door),
+                "light" => Some(light),
+                "gear" => Some(gear),
+                _ => None,
+            }
         };
         let shown = |i: usize, d, l, g| m.meshes[i].visible_by(vars(d, l, g)).unwrap();
         assert!(shown(0, 1.0, 1.0, 0.0) && !shown(0, 1.0, 0.0, 0.0) && shown(0, 0.0, 1.0, 0.0));
         assert_eq!(m.meshes[0].visible, Some(("light".to_string(), 1.0)));
         assert!(shown(1, 1.0, 1.0, 0.0) && !shown(1, 1.0, 0.0, 0.0) && !shown(1, 0.0, 1.0, 0.0));
-        assert!(shown(2, 0.0, 0.0, 1.0) && shown(2, 0.0, 0.0, 4.0) && !shown(2, 0.0, 0.0, 5.0) && !shown(2, 0.0, 0.0, 0.0));
+        assert!(
+            shown(2, 0.0, 0.0, 1.0)
+                && shown(2, 0.0, 0.0, 4.0)
+                && !shown(2, 0.0, 0.0, 5.0)
+                && !shown(2, 0.0, 0.0, 0.0)
+        );
         assert!(shown(3, 0.0, 0.0, 0.0) && shown(3, 1.0, 1.0, 0.0) && !shown(3, 1.0, 0.0, 0.0));
         assert!(shown(4, 2.0, 0.0, 0.0) && !shown(4, 1.0, 0.0, 0.0));
         assert_eq!(m.meshes[4].visible, Some(("door".to_string(), 2.0)));
         assert_eq!(m.meshes[3].visible, Some(("light".to_string(), 1.0)));
         assert!(m.unknown_keywords.is_empty(), "{:?}", m.unknown_keywords);
     }
-
 
     #[test]
     fn compatibility_fixture_preserves_material_slots_and_variant_inheritance() {
@@ -1364,7 +1661,10 @@ mod tests {
         // OMSI's known keywords require their original spelling. A typo in a
         // synthetic fixture must not masquerade as missing material support.
         for line in file.lines.iter().filter(|l| l.starts_with('[')) {
-            assert!(omsi_cfg::keyword_of(line).is_some(), "invalid fixture keyword: {line}");
+            assert!(
+                omsi_cfg::keyword_of(line).is_some(),
+                "invalid fixture keyword: {line}"
+            );
         }
         let model = super::Model::parse(&file);
         let materials = &model.meshes[0].materials;
@@ -1374,23 +1674,40 @@ mod tests {
         assert!(base.no_z_write && base.no_z_check);
         assert_eq!(base.z_bias, 1);
         assert_eq!(base.alphascale.as_deref(), Some("display_alpha"));
-        assert_eq!(base.freetex, Some(("display.dds".into(), "display_texture".into())));
-        assert_eq!(base.lightmaps, vec![("bright.dds".into(), "bright".into()), ("dim.dds".into(), "dim".into())]);
+        assert_eq!(
+            base.freetex,
+            Some(("display.dds".into(), "display_texture".into()))
+        );
+        assert_eq!(
+            base.lightmaps,
+            vec![
+                ("bright.dds".into(), "bright".into()),
+                ("dim.dds".into(), "dim".into())
+            ]
+        );
         assert_eq!(base.lightmap, base.lightmaps.last().cloned());
         let other = &materials[1];
         assert_eq!((other.texture.as_str(), other.index), ("display.dds", 1));
         assert!(!other.alpha_set && other.lightmaps.is_empty());
         let variant = &materials[3];
         assert!(variant.item);
-        assert_eq!(variant.change, Some(("DISPLAY.dds".into(), 0, "display_mode".into())));
+        assert_eq!(
+            variant.change,
+            Some(("DISPLAY.dds".into(), 0, "display_mode".into()))
+        );
         assert_eq!(variant.alpha, base.alpha);
-        assert_eq!((variant.no_z_write, variant.no_z_check, variant.z_bias),
-            (base.no_z_write, base.no_z_check, base.z_bias));
+        assert_eq!(
+            (variant.no_z_write, variant.no_z_check, variant.z_bias),
+            (base.no_z_write, base.no_z_check, base.z_bias)
+        );
         assert_eq!(variant.alphascale, base.alphascale);
         assert_eq!(variant.freetex, base.freetex);
         assert_eq!(variant.lightmaps, base.lightmaps);
         assert_eq!(variant.transmap.as_deref(), Some("mask.dds"));
-        assert!(base.transmap.is_none(), "variant changes must not mutate the base slot");
+        assert!(
+            base.transmap.is_none(),
+            "variant changes must not mutate the base slot"
+        );
     }
 
     #[test]
@@ -1401,7 +1718,10 @@ mod tests {
         ));
         assert!(model.meshes.is_empty());
         assert!(model.lods.is_empty());
-        assert_eq!(model.terrain_hole_meshes().collect::<Vec<_>>(), ["first.o3d", "second.o3d"]);
+        assert_eq!(
+            model.terrain_hole_meshes().collect::<Vec<_>>(),
+            ["first.o3d", "second.o3d"]
+        );
 
         model = super::Model::parse(&omsi_cfg::CfgFile::from_str(
             "cutters.cfg",
@@ -1410,13 +1730,19 @@ mod tests {
         assert_eq!(model.meshes.len(), 1);
         assert_eq!(model.meshes[0].file, "visible.o3d");
         assert_eq!(model.meshes[0].terrain_hole.as_deref(), Some("third.o3d"));
-        assert_eq!(model.terrain_hole_meshes().collect::<Vec<_>>(), ["first.o3d", "second.o3d", "third.o3d"]);
+        assert_eq!(
+            model.terrain_hole_meshes().collect::<Vec<_>>(),
+            ["first.o3d", "second.o3d", "third.o3d"]
+        );
 
         model.meshes.push(super::MeshDef {
             terrain_hole: Some("legacy.o3d".into()),
             ..Default::default()
         });
-        assert_eq!(model.terrain_hole_meshes().collect::<Vec<_>>(), ["first.o3d", "second.o3d", "third.o3d", "legacy.o3d"]);
+        assert_eq!(
+            model.terrain_hole_meshes().collect::<Vec<_>>(),
+            ["first.o3d", "second.o3d", "third.o3d", "legacy.o3d"]
+        );
     }
 
     /// `[spotlight_2]`: the spot's numbers, its variable and whether it has a mirrored twin
@@ -1424,22 +1750,36 @@ mod tests {
     #[test]
     fn a_spotlight_2_reads_its_variable_and_mirror_flag() {
         let spot = "0\n5.95\n0.652\n0\n1\n-0.3\n255\n255\n233\n200\n30\n80\n";
-        let text = format!("[spotlight]\n{spot}\n[spotlight_2]\n{spot}lights_fern\n0\n\n[spotlight_2]\n{spot}door_light\n1\n[spotlight_2]\n{spot}lights_nebel\n[mesh]\nbody.o3d\n");
+        let text = format!(
+            "[spotlight]\n{spot}\n[spotlight_2]\n{spot}lights_fern\n0\n\n[spotlight_2]\n{spot}door_light\n1\n[spotlight_2]\n{spot}lights_nebel\n[mesh]\nbody.o3d\n"
+        );
         let m = super::Model::parse(&omsi_cfg::CfgFile::from_str("model.cfg", &text));
         assert_eq!(m.spotlights.len(), 1);
         let s = &m.spotlights_2;
         assert_eq!(s.len(), 3);
         assert_eq!(s[0].values, m.spotlights[0].values);
-        assert_eq!((s[0].variable.as_str(), s[0].mirrored), ("lights_fern", true));
-        assert_eq!((s[1].variable.as_str(), s[1].mirrored), ("door_light", false));
-        assert_eq!((s[2].variable.as_str(), s[2].mirrored), ("lights_nebel", true));
+        assert_eq!(
+            (s[0].variable.as_str(), s[0].mirrored),
+            ("lights_fern", true)
+        );
+        assert_eq!(
+            (s[1].variable.as_str(), s[1].mirrored),
+            ("door_light", false)
+        );
+        assert_eq!(
+            (s[2].variable.as_str(), s[2].mirrored),
+            ("lights_nebel", true)
+        );
         assert_eq!(m.meshes.len(), 1);
     }
 
     /// Two [matl] blocks of one material are one material (Absperrung_grau.sco).
     #[test]
     fn a_second_matl_block_goes_on_with_the_same_material() {
-        let f = omsi_cfg::CfgFile::from_str("x.sco", "[mesh]\nx.o3d\n\n[matl]\nAbsperr_gr.dds\n0\n[matl_envmap]\nenvmap_Glas.dds\n0.03\n\n[matl]\nOther.dds\n0\n\n[matl]\nAbsperr_gr.dds\n0\n[matl_alpha]\n1\n");
+        let f = omsi_cfg::CfgFile::from_str(
+            "x.sco",
+            "[mesh]\nx.o3d\n\n[matl]\nAbsperr_gr.dds\n0\n[matl_envmap]\nenvmap_Glas.dds\n0.03\n\n[matl]\nOther.dds\n0\n\n[matl]\nAbsperr_gr.dds\n0\n[matl_alpha]\n1\n",
+        );
         let m = super::Model::parse(&f);
         let mats = &m.meshes[0].materials;
         assert_eq!(mats.len(), 2, "{mats:?}");
@@ -1454,16 +1794,26 @@ mod tests {
     fn a_matl_glow_reads_its_picture_and_strength() {
         let text = "[mesh]\nled.o3d\n\n[matl]\nled.dds\n0\n[matl_glow]\nled.png\n20\n";
         let m = Model::parse(&omsi_cfg::CfgFile::from_str("model.cfg", text));
-        let (tex, v) = m.meshes[0].materials[0].glow.clone().expect("a [matl_glow]");
+        let (tex, v) = m.meshes[0].materials[0]
+            .glow
+            .clone()
+            .expect("a [matl_glow]");
         assert_eq!(tex, "led.png");
         assert_eq!(v, 20.0);
         // the slot after it still reads as itself (an old .cfg that wrote a third number
         // there leaves a line the material manager has no use for, and nothing else)
-        let text = "[mesh]\nled.o3d\n\n[matl]\nled.dds\n0\n[matl_glow]\nled.png\n5\n[matl_alpha]\n1\n";
+        let text =
+            "[mesh]\nled.o3d\n\n[matl]\nled.dds\n0\n[matl_glow]\nled.png\n5\n[matl_alpha]\n1\n";
         let m = Model::parse(&omsi_cfg::CfgFile::from_str("model.cfg", text));
-        let (_, v) = m.meshes[0].materials[0].glow.clone().expect("a [matl_glow]");
+        let (_, v) = m.meshes[0].materials[0]
+            .glow
+            .clone()
+            .expect("a [matl_glow]");
         assert_eq!(v, 5.0);
-        assert_eq!(m.meshes[0].materials[0].alpha, 1, "the keyword after it still counts");
+        assert_eq!(
+            m.meshes[0].materials[0].alpha, 1,
+            "the keyword after it still counts"
+        );
         let both = "[mesh]\nled.o3d\n\n[matl]\nled.dds\n0\n[matl_lightmap]\nl.bmp\nlights\n[matl_glow]\nled.png\n5\n";
         let m = Model::parse(&omsi_cfg::CfgFile::from_str("model.cfg", both));
         let d = &m.meshes[0].materials[0];
@@ -1493,14 +1843,30 @@ mod tests {
         let m = Model::parse(&CfgFile::from_str("model.cfg", text));
         let d = &m.particle_systems()[0];
         assert_eq!(d.pos, [-1.1, -5.334, 0.406]);
-        assert_eq!(d.velocity, (PsValue::Var("auspuff_vel".into()), PsValue::Const(0.2)));
+        assert_eq!(
+            d.velocity,
+            (PsValue::Var("auspuff_vel".into()), PsValue::Const(0.2))
+        );
         assert_eq!(d.freq.0, PsValue::Var("auspuff_freq".into()));
         assert_eq!(d.life.0, PsValue::Var("auspuff_leben".into()));
-        assert_eq!((d.brake.0.clone(), d.gravity.0.clone()), (PsValue::Const(0.95), PsValue::Const(-0.2)));
-        assert_eq!((d.size_start.0.clone(), d.size_grow.0.clone()), (PsValue::Const(0.5), PsValue::Const(3.0)));
+        assert_eq!(
+            (d.brake.0.clone(), d.gravity.0.clone()),
+            (PsValue::Const(0.95), PsValue::Const(-0.2))
+        );
+        assert_eq!(
+            (d.size_start.0.clone(), d.size_grow.0.clone()),
+            (PsValue::Const(0.5), PsValue::Const(3.0))
+        );
         assert_eq!(d.alpha_initial.0, PsValue::Var("auspuff_alpha".into()));
         assert_eq!(d.alpha_final.0, PsValue::Const(0.0));
-        assert_eq!(d.rgb.clone().map(|c| c.0), [PsValue::Const(0.66), PsValue::Const(0.66), PsValue::Const(0.8)]);
+        assert_eq!(
+            d.rgb.clone().map(|c| c.0),
+            [
+                PsValue::Const(0.66),
+                PsValue::Const(0.66),
+                PsValue::Const(0.8)
+            ]
+        );
     }
 
     /// `[setvar]` belongs to the `[item]` before it (a paint scheme in the model.cfg), as
@@ -1512,7 +1878,14 @@ mod tests {
         assert_eq!(m.items.len(), 2);
         assert_eq!(m.items[0].set_vars, vec![("Display_Type".to_string(), 2.0)]);
         assert!(m.items[1].set_vars.is_empty());
-        assert_eq!((m.items[1].name.as_str(), m.items[1].ctc.as_str(), m.items[1].texture.as_str()), ("HVL", "body", "hvl.dds"));
+        assert_eq!(
+            (
+                m.items[1].name.as_str(),
+                m.items[1].ctc.as_str(),
+                m.items[1].texture.as_str()
+            ),
+            ("HVL", "body", "hvl.dds")
+        );
         assert_eq!(m.set_vars, vec![("lost".to_string(), 1.0)]);
     }
 
@@ -1521,11 +1894,16 @@ mod tests {
     #[test]
     fn text_texture_full_colour_flag_is_any_non_zero_value() {
         let text = |flag: &str| {
-            format!("[texttexture]\nnr\nArial\n256\n32\n{flag}\n255\n255\n0\n[texttexture_enh]\nnr\nArial\n256\n32\n{flag}\n255\n255\n0\n1\n1\n")
+            format!(
+                "[texttexture]\nnr\nArial\n256\n32\n{flag}\n255\n255\n0\n[texttexture_enh]\nnr\nArial\n256\n32\n{flag}\n255\n255\n0\n1\n1\n"
+            )
         };
         for (flag, want) in [("255", true), ("1", true), ("true", true), ("0", false)] {
             let m = Model::parse(&CfgFile::from_str("model.cfg", &text(flag)));
-            assert!(m.text_textures.iter().all(|t| t.full_color == want), "{flag}");
+            assert!(
+                m.text_textures.iter().all(|t| t.full_color == want),
+                "{flag}"
+            );
             assert_eq!(m.text_textures.len(), 2);
         }
     }
@@ -1551,11 +1929,21 @@ mod tests {
     fn a_material_item_copies_the_change_before_it() {
         let text = "[mesh]\nrollo.o3d\n[matl_change]\nzielband1.bmp\n0\nlights_stand\n[matl_freetex]\nzielband1.bmp\nRollband_Tex_V\n[texcoordtransY]\nrlbnd_ziel_trans\n[matl_texadress_border]\n255\n255\n255\n0\n[matl_alpha]\n1\n[matl_item]\n[matl_lightmap]\nzielbeleuchtung.bmp\n";
         let m = Model::parse(&CfgFile::from_str("model.cfg", text));
-        let item = m.meshes[0].materials.iter().find(|x| x.item).expect("the item");
-        assert_eq!(item.freetex.as_ref().map(|f| f.1.as_str()), Some("Rollband_Tex_V"));
+        let item = m.meshes[0]
+            .materials
+            .iter()
+            .find(|x| x.item)
+            .expect("the item");
+        assert_eq!(
+            item.freetex.as_ref().map(|f| f.1.as_str()),
+            Some("Rollband_Tex_V")
+        );
         assert_eq!(item.texcoord_trans_y.as_deref(), Some("rlbnd_ziel_trans"));
         assert_eq!((item.alpha, item.tex_address), (1, TexAddress::Border));
-        assert_eq!(item.lightmap.as_ref().map(|l| l.0.as_str()), Some("zielbeleuchtung.bmp"));
+        assert_eq!(
+            item.lightmap.as_ref().map(|l| l.0.as_str()),
+            Some("zielbeleuchtung.bmp")
+        );
         let base = m.meshes[0].materials.iter().find(|x| !x.item).unwrap();
         assert!(base.lightmap.is_none(), "the lit map is the item's only");
     }
@@ -1579,15 +1967,28 @@ mod tests {
         let m = Model::parse(&omsi_cfg::CfgFile::from_str("model.cfg", text));
         assert_eq!(m.html_textures.len(), 1);
         assert!(m.html_textures[0].lit, "the word after the path");
-        assert_eq!(m.meshes[0].materials[0].use_script_texture, Some(0), "the slots still bind the page");
+        assert_eq!(
+            m.meshes[0].materials[0].use_script_texture,
+            Some(0),
+            "the slots still bind the page"
+        );
         let text = "[htmltexture]\n800\n480\nhtml\\demo.html\n\n[mesh]\nx.o3d\n\n[matl]\nx.dds\n0\n[useHtmlTexture]\n0\n";
         let m = Model::parse(&omsi_cfg::CfgFile::from_str("model.cfg", text));
-        assert!(!m.html_textures[0].lit, "without the word it stays a display");
+        assert!(
+            !m.html_textures[0].lit,
+            "without the word it stays a display"
+        );
         assert_eq!(m.meshes[0].materials[0].use_script_texture, Some(0));
         let text = "[htmltexture]\n64\n32\nsign.html\nlit\n\n[htmltexture]\n64\n32\nother.html\n\n[mesh]\nx.o3d\n";
         let m = Model::parse(&omsi_cfg::CfgFile::from_str("model.cfg", text));
-        assert!(m.html_textures[0].lit && !m.html_textures[1].lit, "each page has its own word");
-        assert!(m.html_page_lit(0) && !m.html_page_lit(1), "the lookup every consumer asks");
+        assert!(
+            m.html_textures[0].lit && !m.html_textures[1].lit,
+            "each page has its own word"
+        );
+        assert!(
+            m.html_page_lit(0) && !m.html_page_lit(1),
+            "the lookup every consumer asks"
+        );
         assert_eq!(m.html_page(1).map(|p| p.path.as_str()), Some("other.html"));
         assert!(m.html_page(2).is_none(), "no page of that script index");
     }
@@ -1601,7 +2002,10 @@ mod tests {
         assert_eq!(m.meshes.len(), 1);
         let a = &m.meshes[0].animations[0];
         assert_eq!(a.origins, vec![AnimOrigin::RotY(-90.0)]);
-        assert_eq!((a.kind, a.variable.as_str()), (Some(AnimKind::Trans), "Axle_Suspension_1_R"));
+        assert_eq!(
+            (a.kind, a.variable.as_str()),
+            (Some(AnimKind::Trans), "Axle_Suspension_1_R")
+        );
     }
 
     /// The EN92's ignition key: indented origin lines are free text, the column-0 ones count;
@@ -1612,7 +2016,10 @@ mod tests {
         let m = Model::parse(&CfgFile::from_str("model.cfg", text));
         let anims = &m.meshes[0].animations;
         assert_eq!(anims[0].origins, vec![AnimOrigin::FromMesh]);
-        assert_eq!((anims[0].kind, anims[0].variable.as_str(), anims[0].factor), (Some(AnimKind::Rot), "cp_schluessel_rot", -90.0));
+        assert_eq!(
+            (anims[0].kind, anims[0].variable.as_str(), anims[0].factor),
+            (Some(AnimKind::Rot), "cp_schluessel_rot", -90.0)
+        );
         assert_eq!(anims[1].origins, vec![AnimOrigin::RotZ(90.0)]);
         assert_eq!(anims[1].max_speed, 30.0);
         assert_eq!(m.meshes[0].materials[0].texture, "key.bmp");

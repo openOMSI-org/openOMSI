@@ -54,9 +54,23 @@ impl SpotlightCookie {
             more.push(l.to_string());
             *r = ahead;
         }
-        let fade = more.first().map_or(0.0, |v| omsi_cfg::parse_f32(v).max(0.0));
+        let fade = more
+            .first()
+            .map_or(0.0, |v| omsi_cfg::parse_f32(v).max(0.0));
         let name = |k: usize| more.get(k).filter(|v| !v.is_empty()).cloned();
-        SpotlightCookie { pos, dir, color, range, width, height, picture, variable, fade, yaw: name(1), pitch: name(2) }
+        SpotlightCookie {
+            pos,
+            dir,
+            color,
+            range,
+            width,
+            height,
+            picture,
+            variable,
+            fade,
+            yaw: name(1),
+            pitch: name(2),
+        }
     }
 }
 
@@ -88,7 +102,8 @@ impl Model {
             let implicit = mesh.illumination_interior == [0, 1, 2, 3];
             if bad && !implicit && n > 0 {
                 bad_meshes += 1;
-                first_bad.get_or_insert_with(|| (mesh.file.clone(), mesh.illumination_interior.clone()));
+                first_bad
+                    .get_or_insert_with(|| (mesh.file.clone(), mesh.illumination_interior.clone()));
             }
             mesh.illumination_interior = kept;
         }

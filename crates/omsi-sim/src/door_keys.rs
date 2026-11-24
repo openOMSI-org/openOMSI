@@ -4,25 +4,46 @@
 /// `doorTarget_0` names the same leaf).
 fn door_leaf_of(var: &str) -> Option<String> {
     let v = var.to_ascii_lowercase();
-    let rest = v.strip_prefix("doortarget_").or_else(|| v.strip_prefix("door_"))?;
+    let rest = v
+        .strip_prefix("doortarget_")
+        .or_else(|| v.strip_prefix("door_"))?;
     let digits = rest.chars().take_while(|c| c.is_ascii_digit()).count();
     let tail = &rest[digits..];
-    (digits > 0 && tail.len() <= 1 && tail.chars().all(|c| c.is_ascii_alphabetic())).then(|| format!("door_{rest}"))
+    (digits > 0 && tail.len() <= 1 && tail.chars().all(|c| c.is_ascii_alphabetic()))
+        .then(|| format!("door_{rest}"))
 }
 
 /// The door leaves a trigger moves: the leaf variables (or their targets) it stores, itself
 /// or in its macros; failing that, the ones it reads.
 pub fn trigger_leaves(program: &omsi_script::Program, name: &str) -> Vec<String> {
-    fn walk(program: &omsi_script::Program, block: omsi_script::BlockId, seen: &mut hashbrown::HashSet<omsi_script::BlockId>, stored: &mut Vec<String>, read: &mut Vec<String>) {
+    fn walk(
+        program: &omsi_script::Program,
+        block: omsi_script::BlockId,
+        seen: &mut hashbrown::HashSet<omsi_script::BlockId>,
+        stored: &mut Vec<String>,
+        read: &mut Vec<String>,
+    ) {
         if !seen.insert(block) || seen.len() > 64 {
             return;
         }
-        let Some(b) = program.blocks.get(block as usize) else { return };
+        let Some(b) = program.blocks.get(block as usize) else {
+            return;
+        };
         for op in &b.ops {
             match op {
                 omsi_script::Op::Store(id) | omsi_script::Op::Load(id) => {
-                    let Some(leaf) = program.var_names.get(*id as usize).and_then(|n| door_leaf_of(n)) else { continue };
-                    let list = if matches!(op, omsi_script::Op::Store(_)) { &mut *stored } else { &mut *read };
+                    let Some(leaf) = program
+                        .var_names
+                        .get(*id as usize)
+                        .and_then(|n| door_leaf_of(n))
+                    else {
+                        continue;
+                    };
+                    let list = if matches!(op, omsi_script::Op::Store(_)) {
+                        &mut *stored
+                    } else {
+                        &mut *read
+                    };
                     if !list.contains(&leaf) {
                         list.push(leaf);
                     }
@@ -32,9 +53,17 @@ pub fn trigger_leaves(program: &omsi_script::Program, name: &str) -> Vec<String>
             }
         }
     }
-    let Some(b) = program.trigger(name) else { return Vec::new() };
+    let Some(b) = program.trigger(name) else {
+        return Vec::new();
+    };
     let (mut stored, mut read) = (Vec::new(), Vec::new());
-    walk(program, b, &mut hashbrown::HashSet::new(), &mut stored, &mut read);
+    walk(
+        program,
+        b,
+        &mut hashbrown::HashSet::new(),
+        &mut stored,
+        &mut read,
+    );
     if stored.is_empty() { read } else { stored }
 }
 
@@ -48,14 +77,29 @@ fn doorways(ty: &crate::VehicleType) -> Option<Vec<Vec<String>>> {
     // where each leaf is along the bus (the centre of the meshes it moves)
     let mut at: Vec<(String, f32, u32)> = Vec::new();
     for vm in &ty.meshes {
-        let Some(def) = ty.model.meshes.get(vm.def_index) else { continue };
+        let Some(def) = ty.model.meshes.get(vm.def_index) else {
+            continue;
+        };
         // (a pantograph some mod animates with a door variable is no door)
         let pantograph = ty.def.pantograph_var.as_deref();
-        let Some(leaf) = def.animations.iter().filter(|a| pantograph.is_none_or(|p| !p.eq_ignore_ascii_case(&a.variable))).find_map(|a| door_leaf_of(&a.variable)) else { continue };
+        let Some(leaf) = def
+            .animations
+            .iter()
+            .filter(|a| pantograph.is_none_or(|p| !p.eq_ignore_ascii_case(&a.variable)))
+            .find_map(|a| door_leaf_of(&a.variable))
+        else {
+            continue;
+        };
         if vm.data.positions.is_empty() {
             continue;
         }
-        let y = vm.data.positions.iter().map(|p| vm.pivot.transform_point3(*p).y).sum::<f32>() / vm.data.positions.len() as f32;
+        let y = vm
+            .data
+            .positions
+            .iter()
+            .map(|p| vm.pivot.transform_point3(*p).y)
+            .sum::<f32>()
+            / vm.data.positions.len() as f32;
         match at.iter_mut().find(|e| e.0 == leaf) {
             Some(e) => {
                 e.1 += y;
@@ -67,7 +111,8 @@ fn doorways(ty: &crate::VehicleType) -> Option<Vec<Vec<String>>> {
     if at.is_empty() {
         return None;
     }
-    let mut leaves: Vec<(String, f32)> = at.into_iter().map(|(l, y, n)| (l, y / n as f32)).collect();
+    let mut leaves: Vec<(String, f32)> =
+        at.into_iter().map(|(l, y, n)| (l, y / n as f32)).collect();
     leaves.sort_by(|a, b| b.1.total_cmp(&a.1));
     let mut ways: Vec<Vec<(String, f32)>> = Vec::new();
     for l in leaves {
@@ -88,7 +133,11 @@ fn doorways(ty: &crate::VehicleType) -> Option<Vec<Vec<String>>> {
                 None => leaf
                     .strip_prefix("door_")
                     .filter(|d| d.len() > 1 && d.bytes().all(|c| c.is_ascii_digit()))
-                    .and_then(|d| d.chars().map(|c| way_of(&format!("door_{c}"))).collect::<Option<Vec<usize>>>())
+                    .and_then(|d| {
+                        d.chars()
+                            .map(|c| way_of(&format!("door_{c}")))
+                            .collect::<Option<Vec<usize>>>()
+                    })
                     .filter(|w| w.iter().all(|x| *x == w[0]))
                     .map(|w| vec![w[0]])
                     .unwrap_or_default(),
@@ -107,23 +156,52 @@ fn doorways(ty: &crate::VehicleType) -> Option<Vec<Vec<String>>> {
             continue;
         }
         let parts: Vec<Vec<String>> = match (g.first(), g.get(1)) {
-            (Some(a), Some(b)) if !reach(a).is_empty() && !reach(b).is_empty() && !reach(a).iter().any(|w| reach(b).contains(w)) => vec![vec![a.clone()], vec![b.clone()]],
+            (Some(a), Some(b))
+                if !reach(a).is_empty()
+                    && !reach(b).is_empty()
+                    && !reach(a).iter().any(|w| reach(b).contains(w)) =>
+            {
+                vec![vec![a.clone()], vec![b.clone()]]
+            }
             // (leaves on a coupled part, the Urbanway 18's `doorTarget_45` and `_67`: by their numbers)
-            (Some(a), Some(b)) if (reach(a).is_empty() || reach(b).is_empty()) && numbers_differ(&trigger_door_numbers(program, a, true), &trigger_door_numbers(program, b, true)) => vec![vec![a.clone()], vec![b.clone()]],
+            (Some(a), Some(b))
+                if (reach(a).is_empty() || reach(b).is_empty())
+                    && numbers_differ(
+                        &trigger_door_numbers(program, a, true),
+                        &trigger_door_numbers(program, b, true),
+                    ) =>
+            {
+                vec![vec![a.clone()], vec![b.clone()]]
+            }
             _ => vec![g.clone()],
         };
         for part in parts {
-            let front = part.iter().flat_map(|n| reach(n)).min().unwrap_or(usize::MAX);
+            let front = part
+                .iter()
+                .flat_map(|n| reach(n))
+                .min()
+                .unwrap_or(usize::MAX);
             groups.push((part, front));
         }
     }
     // doorways no stock key reaches: a mod's own door triggers, all of whose leaves lie in
     // that doorway (a toggle, or an open and close pair written `open|close`)
-    let reached: Vec<usize> = groups.iter().flat_map(|(g, _)| g.iter().flat_map(|n| reach(n))).collect();
-    let mut names: Vec<&String> = program.triggers.keys().filter(|n| {
-        let n = n.to_ascii_lowercase();
-        (n.starts_with("bus_door") || n.starts_with("bus_tuer")) && !n.ends_with("_off") && !n.ends_with("_close") && !n.starts_with("bus_doorfront") && n != "bus_dooraft"
-    }).collect();
+    let reached: Vec<usize> = groups
+        .iter()
+        .flat_map(|(g, _)| g.iter().flat_map(|n| reach(n)))
+        .collect();
+    let mut names: Vec<&String> = program
+        .triggers
+        .keys()
+        .filter(|n| {
+            let n = n.to_ascii_lowercase();
+            (n.starts_with("bus_door") || n.starts_with("bus_tuer"))
+                && !n.ends_with("_off")
+                && !n.ends_with("_close")
+                && !n.starts_with("bus_doorfront")
+                && n != "bus_dooraft"
+        })
+        .collect();
     names.sort();
     for w in 0..ways.len() {
         if reached.contains(&w) {
@@ -136,7 +214,11 @@ fn doorways(ty: &crate::VehicleType) -> Option<Vec<Vec<String>>> {
                 continue;
             }
             let close = format!("{n}_close");
-            group.push(if program.trigger(&close).is_some() { format!("{n}|{close}") } else { (*n).clone() });
+            group.push(if program.trigger(&close).is_some() {
+                format!("{n}|{close}")
+            } else {
+                (*n).clone()
+            });
         }
         if !group.is_empty() {
             groups.push((group, w));
@@ -154,23 +236,45 @@ fn doorways(ty: &crate::VehicleType) -> Option<Vec<Vec<String>>> {
 /// The door keys of a vehicle type: its doorways from the model ([`doorways`]), else the
 /// trigger names ([`door_trigger_groups`]).
 pub fn door_keys(ty: &crate::VehicleType) -> Vec<Vec<String>> {
-    doorways(ty).unwrap_or_else(|| split_numbered_doors(&ty.program, door_trigger_groups(&ty.program)))
+    doorways(ty)
+        .unwrap_or_else(|| split_numbered_doors(&ty.program, door_trigger_groups(&ty.program)))
 }
 
 /// The door numbers (`Tuer_1`, `Tür_2`, with `targets` also `doorTarget_45`) a trigger stores into, itself or in its macros.
 fn trigger_door_numbers(program: &omsi_script::Program, name: &str, targets: bool) -> Vec<u32> {
-    fn walk(program: &omsi_script::Program, block: omsi_script::BlockId, seen: &mut hashbrown::HashSet<omsi_script::BlockId>, out: &mut Vec<u32>, targets: bool) {
+    fn walk(
+        program: &omsi_script::Program,
+        block: omsi_script::BlockId,
+        seen: &mut hashbrown::HashSet<omsi_script::BlockId>,
+        out: &mut Vec<u32>,
+        targets: bool,
+    ) {
         if !seen.insert(block) || seen.len() > 64 {
             return;
         }
-        let Some(b) = program.blocks.get(block as usize) else { return };
+        let Some(b) = program.blocks.get(block as usize) else {
+            return;
+        };
         for op in &b.ops {
             match op {
                 omsi_script::Op::Store(id) => {
-                    let Some(n) = program.var_names.get(*id as usize).map(|n| n.to_lowercase()) else { continue };
-                    for word in ["tuer_", "tür_", "doortarget_"].iter().take(if targets { 3 } else { 2 }) {
+                    let Some(n) = program
+                        .var_names
+                        .get(*id as usize)
+                        .map(|n| n.to_lowercase())
+                    else {
+                        continue;
+                    };
+                    for word in
+                        ["tuer_", "tür_", "doortarget_"]
+                            .iter()
+                            .take(if targets { 3 } else { 2 })
+                    {
                         if let Some(at) = n.find(word) {
-                            let digits: String = n[at + word.len()..].chars().take_while(|c| c.is_ascii_digit()).collect();
+                            let digits: String = n[at + word.len()..]
+                                .chars()
+                                .take_while(|c| c.is_ascii_digit())
+                                .collect();
                             if let Ok(d) = digits.parse::<u32>() {
                                 if !out.contains(&d) {
                                     out.push(d);
@@ -186,7 +290,13 @@ fn trigger_door_numbers(program: &omsi_script::Program, name: &str, targets: boo
     }
     let mut out = Vec::new();
     if let Some(b) = program.trigger(name) {
-        walk(program, b, &mut hashbrown::HashSet::new(), &mut out, targets);
+        walk(
+            program,
+            b,
+            &mut hashbrown::HashSet::new(),
+            &mut out,
+            targets,
+        );
     }
     out
 }
@@ -197,11 +307,17 @@ fn numbers_differ(a: &[u32], b: &[u32]) -> bool {
 }
 
 /// A `bus_doorfront<n>` pair split when its triggers work differently numbered doors (the C2's first and second).
-fn split_numbered_doors(program: &omsi_script::Program, groups: Vec<Vec<String>>) -> Vec<Vec<String>> {
+fn split_numbered_doors(
+    program: &omsi_script::Program,
+    groups: Vec<Vec<String>>,
+) -> Vec<Vec<String>> {
     let mut out = Vec::new();
     for g in groups {
         if let [a, b] = g.as_slice() {
-            if numbers_differ(&trigger_door_numbers(program, a, false), &trigger_door_numbers(program, b, false)) {
+            if numbers_differ(
+                &trigger_door_numbers(program, a, false),
+                &trigger_door_numbers(program, b, false),
+            ) {
                 out.push(vec![a.clone()]);
                 out.push(vec![b.clone()]);
                 continue;
@@ -258,16 +374,29 @@ fn door_trigger_groups(program: &omsi_script::Program) -> Vec<Vec<String>> {
 /// second door leaf for one - mod door scripts read `door_close_time` and the like while
 /// opening - and Shift+1 moved one leaf, Shift+2 the other.
 fn door_trigger_closes(program: &omsi_script::Program, name: &str) -> bool {
-    let Some(b) = program.trigger(name).and_then(|b| program.blocks.get(b as usize)) else {
+    let Some(b) = program
+        .trigger(name)
+        .and_then(|b| program.blocks.get(b as usize))
+    else {
         return false;
     };
-    if b.ops.len() > 6 || b.ops.iter().any(|op| matches!(op, omsi_script::Op::Macro(_))) {
+    if b.ops.len() > 6
+        || b.ops
+            .iter()
+            .any(|op| matches!(op, omsi_script::Op::Macro(_)))
+    {
         return false;
     }
     b.ops.iter().any(|op| match op {
         omsi_script::Op::Store(id) => {
-            let n = program.var_names.get(*id as usize).map(|n| n.to_ascii_lowercase()).unwrap_or_default();
-            ["close", "closing", "schliess", "schließ"].iter().any(|x| n.contains(x))
+            let n = program
+                .var_names
+                .get(*id as usize)
+                .map(|n| n.to_ascii_lowercase())
+                .unwrap_or_default();
+            ["close", "closing", "schliess", "schließ"]
+                .iter()
+                .any(|x| n.contains(x))
         }
         _ => false,
     })
@@ -275,8 +404,15 @@ fn door_trigger_closes(program: &omsi_script::Program, name: &str) -> bool {
 
 /// The variable a door trigger toggles to say where the leaf is going (`doorTarget_0` of
 /// the stock door scripts: the trigger's macros store it), if it has one.
-pub fn door_trigger_target(program: &omsi_script::Program, name: &str) -> Option<omsi_script::VarId> {
-    fn find(program: &omsi_script::Program, block: omsi_script::BlockId, seen: &mut hashbrown::HashSet<omsi_script::BlockId>) -> Option<omsi_script::VarId> {
+pub fn door_trigger_target(
+    program: &omsi_script::Program,
+    name: &str,
+) -> Option<omsi_script::VarId> {
+    fn find(
+        program: &omsi_script::Program,
+        block: omsi_script::BlockId,
+        seen: &mut hashbrown::HashSet<omsi_script::BlockId>,
+    ) -> Option<omsi_script::VarId> {
         if !seen.insert(block) {
             return None;
         }
@@ -284,7 +420,11 @@ pub fn door_trigger_target(program: &omsi_script::Program, name: &str) -> Option
         for op in &b.ops {
             match op {
                 omsi_script::Op::Store(id) => {
-                    let n = program.var_names.get(*id as usize).map(|n| n.to_ascii_lowercase()).unwrap_or_default();
+                    let n = program
+                        .var_names
+                        .get(*id as usize)
+                        .map(|n| n.to_ascii_lowercase())
+                        .unwrap_or_default();
                     if n.contains("target") || n.contains("soll") {
                         return Some(*id);
                     }
@@ -299,7 +439,9 @@ pub fn door_trigger_target(program: &omsi_script::Program, name: &str) -> Option
         }
         None
     }
-    program.trigger(name).and_then(|b| find(program, b, &mut hashbrown::HashSet::new()))
+    program
+        .trigger(name)
+        .and_then(|b| find(program, b, &mut hashbrown::HashSet::new()))
 }
 
 #[cfg(test)]
@@ -313,7 +455,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("t.osc"), src).unwrap();
         std::fs::write(dir.join("v.txt"), vars).unwrap();
-        omsi_script::compile(&omsi_script::CompileInput { varlists: vec![dir.join("v.txt")], scripts: vec![dir.join("t.osc")], ..Default::default() })
+        omsi_script::compile(&omsi_script::CompileInput {
+            varlists: vec![dir.join("v.txt")],
+            scripts: vec![dir.join("t.osc")],
+            ..Default::default()
+        })
     }
 
     #[test]
@@ -323,17 +469,39 @@ mod tests {
             "{trigger:bus_doorfront0}\n1 (S.L.C2_CP_BT_Tuer_1)\n{end}\n{trigger:bus_doorfront1}\n1 (S.L.C2_CP_BT_Tuer_2)\n{end}\n{trigger:bus_dooraft}\n{end}\n",
             "C2_CP_BT_Tuer_1\nC2_CP_BT_Tuer_2\n",
         );
-        assert_eq!(split_numbered_doors(&p, door_trigger_groups(&p)), vec![vec!["bus_doorfront0".to_string()], vec!["bus_doorfront1".to_string()], vec!["bus_dooraft".to_string()]]);
+        assert_eq!(
+            split_numbered_doors(&p, door_trigger_groups(&p)),
+            vec![
+                vec!["bus_doorfront0".to_string()],
+                vec!["bus_doorfront1".to_string()],
+                vec!["bus_dooraft".to_string()]
+            ]
+        );
     }
 
     #[test]
     fn the_two_leaves_of_one_door_stay_one_door_key() {
         // the stock SD202: one door's two leaves, `doorTarget_0` and `_1`
-        let p = program("{trigger:bus_doorfront0}\n1 (S.L.doorTarget_0)\n{end}\n{trigger:bus_doorfront1}\n1 (S.L.doorTarget_1)\n{end}\n", "doorTarget_0\ndoorTarget_1\n");
-        assert_eq!(split_numbered_doors(&p, door_trigger_groups(&p)), vec![vec!["bus_doorfront0".to_string(), "bus_doorfront1".to_string()]]);
+        let p = program(
+            "{trigger:bus_doorfront0}\n1 (S.L.doorTarget_0)\n{end}\n{trigger:bus_doorfront1}\n1 (S.L.doorTarget_1)\n{end}\n",
+            "doorTarget_0\ndoorTarget_1\n",
+        );
+        assert_eq!(
+            split_numbered_doors(&p, door_trigger_groups(&p)),
+            vec![vec![
+                "bus_doorfront0".to_string(),
+                "bus_doorfront1".to_string()
+            ]]
+        );
         // (the targets count only where the leaves cannot be placed, the Urbanway 18's rear section)
-        let p = program("{trigger:bus_doorfront2}\n1 (S.L.doorTarget_45)\n{end}\n{trigger:bus_doorfront3}\n1 (S.L.doorTarget_67)\n{end}\n", "doorTarget_45\ndoorTarget_67\n");
-        assert!(numbers_differ(&trigger_door_numbers(&p, "bus_doorfront2", true), &trigger_door_numbers(&p, "bus_doorfront3", true)));
+        let p = program(
+            "{trigger:bus_doorfront2}\n1 (S.L.doorTarget_45)\n{end}\n{trigger:bus_doorfront3}\n1 (S.L.doorTarget_67)\n{end}\n",
+            "doorTarget_45\ndoorTarget_67\n",
+        );
+        assert!(numbers_differ(
+            &trigger_door_numbers(&p, "bus_doorfront2", true),
+            &trigger_door_numbers(&p, "bus_doorfront3", true)
+        ));
         assert!(trigger_door_numbers(&p, "bus_doorfront2", false).is_empty());
     }
 }

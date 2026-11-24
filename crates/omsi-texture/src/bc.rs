@@ -35,7 +35,11 @@ fn to565(c: [f32; 3]) -> u16 {
 #[inline]
 fn from565(v: u16) -> [f32; 3] {
     let v = v as u32;
-    [expand5((v >> 11) & 31) as f32, expand6((v >> 5) & 63) as f32, expand5(v & 31) as f32]
+    [
+        expand5((v >> 11) & 31) as f32,
+        expand6((v >> 5) & 63) as f32,
+        expand5(v & 31) as f32,
+    ]
 }
 
 /// For every 8-bit value, the 5- and 6-bit end point pairs whose 2:1 mix (palette index 2)
@@ -70,7 +74,10 @@ fn single_colour() -> &'static SingleColour {
             }
             out
         };
-        SingleColour { five: table(5), six: table(6) }
+        SingleColour {
+            five: table(5),
+            six: table(6),
+        }
     })
 }
 
@@ -97,16 +104,32 @@ fn palette(c0: u16, c1: u16, four: bool) -> [[f32; 3]; 4] {
     let p1 = from565(c1);
     if four {
         let m = |a: f32, b: f32| ((2.0 * a + b) / 3.0).floor();
-        [p0, p1, [m(p0[0], p1[0]), m(p0[1], p1[1]), m(p0[2], p1[2])], [m(p1[0], p0[0]), m(p1[1], p0[1]), m(p1[2], p0[2])]]
+        [
+            p0,
+            p1,
+            [m(p0[0], p1[0]), m(p0[1], p1[1]), m(p0[2], p1[2])],
+            [m(p1[0], p0[0]), m(p1[1], p0[1]), m(p1[2], p0[2])],
+        ]
     } else {
         let m = |a: f32, b: f32| ((a + b) / 2.0).floor();
-        [p0, p1, [m(p0[0], p1[0]), m(p0[1], p1[1]), m(p0[2], p1[2])], [0.0; 3]]
+        [
+            p0,
+            p1,
+            [m(p0[0], p1[0]), m(p0[1], p1[1]), m(p0[2], p1[2])],
+            [0.0; 3],
+        ]
     }
 }
 
 /// Indices of the pixels against a palette; returns the total error.
 #[inline]
-fn assign(px: &[[f32; 3]; 16], use_px: u16, pal: &[[f32; 3]; 4], n: usize, idx: &mut [u8; 16]) -> f32 {
+fn assign(
+    px: &[[f32; 3]; 16],
+    use_px: u16,
+    pal: &[[f32; 3]; 4],
+    n: usize,
+    idx: &mut [u8; 16],
+) -> f32 {
     let mut total = 0.0;
     for i in 0..16 {
         if use_px & (1 << i) == 0 {
@@ -132,7 +155,12 @@ fn assign(px: &[[f32; 3]; 16], use_px: u16, pal: &[[f32; 3]; 4], n: usize, idx: 
 }
 
 /// Least-squares end points for fixed indices (`n` = 4 or 3 colours).
-fn least_squares(px: &[[f32; 3]; 16], use_px: u16, idx: &[u8; 16], n: usize) -> Option<([f32; 3], [f32; 3])> {
+fn least_squares(
+    px: &[[f32; 3]; 16],
+    use_px: u16,
+    idx: &[u8; 16],
+    n: usize,
+) -> Option<([f32; 3], [f32; 3])> {
     let (mut aa, mut bb, mut ab) = (0.0f32, 0.0f32, 0.0f32);
     let mut ax = [0.0f32; 3];
     let mut bx = [0.0f32; 3];
@@ -140,9 +168,18 @@ fn least_squares(px: &[[f32; 3]; 16], use_px: u16, idx: &[u8; 16], n: usize) -> 
         if use_px & (1 << i) == 0 {
             continue;
         }
-        const FOUR: [(f32, f32); 4] = [(1.0, 0.0), (0.0, 1.0), (2.0 / 3.0, 1.0 / 3.0), (1.0 / 3.0, 2.0 / 3.0)];
+        const FOUR: [(f32, f32); 4] = [
+            (1.0, 0.0),
+            (0.0, 1.0),
+            (2.0 / 3.0, 1.0 / 3.0),
+            (1.0 / 3.0, 2.0 / 3.0),
+        ];
         const THREE: [(f32, f32); 4] = [(1.0, 0.0), (0.0, 1.0), (0.5, 0.5), (0.5, 0.5)];
-        let (a, b) = if n == 4 { FOUR[idx[i] as usize & 3] } else { THREE[idx[i] as usize & 3] };
+        let (a, b) = if n == 4 {
+            FOUR[idx[i] as usize & 3]
+        } else {
+            THREE[idx[i] as usize & 3]
+        };
         aa += a * a;
         bb += b * b;
         ab += a * b;
@@ -233,7 +270,11 @@ fn encode_colour(px: &[[u8; 4]; 16], mode: ColourMode) -> ([u8; 8], f32) {
         let c = px[first];
         let q = to565([c[0] as f32, c[1] as f32, c[2] as f32]);
         let exact = from565(q) == [c[0] as f32, c[1] as f32, c[2] as f32];
-        let (c0, c1, k) = if !exact && !transparent { flat_ends([c[0], c[1], c[2]]) } else { (q, q, 0u8) };
+        let (c0, c1, k) = if !exact && !transparent {
+            flat_ends([c[0], c[1], c[2]])
+        } else {
+            (q, q, 0u8)
+        };
         // (with transparent pixels the block is in three-colour mode, c0 == c1 = q)
         let mut idx = [k; 16];
         for (i, v) in idx.iter_mut().enumerate() {
@@ -242,7 +283,10 @@ fn encode_colour(px: &[[u8; 4]; 16], mode: ColourMode) -> ([u8; 8], f32) {
             }
         }
         let pal = palette(c0, c1, c0 > c1);
-        let err = (0..16).filter(|i| use_px & (1 << i) != 0).map(|i| werr(fpx[i], pal[idx[i] as usize])).sum();
+        let err = (0..16)
+            .filter(|i| use_px & (1 << i) != 0)
+            .map(|i| werr(fpx[i], pal[idx[i] as usize]))
+            .sum();
         return (write(c0, c1, &idx), err);
     }
     // the used pixels' mean colour, and what a pair costs for moving it (see DC_PENALTY)
@@ -261,7 +305,11 @@ fn encode_colour(px: &[[u8; 4]; 16], mode: ColourMode) -> ([u8; 8], f32) {
                 m[c] += pal[idx[i] as usize][c] / used;
             }
         }
-        DC_PENALTY * used * (0..3).map(|c| (m[c] - mean_u[c]) * (m[c] - mean_u[c])).sum::<f32>()
+        DC_PENALTY
+            * used
+            * (0..3)
+                .map(|c| (m[c] - mean_u[c]) * (m[c] - mean_u[c]))
+                .sum::<f32>()
     };
     // principal axis of the used pixels (weighted space)
     let sw = [WEIGHTS[0].sqrt(), WEIGHTS[1].sqrt(), WEIGHTS[2].sqrt()];
@@ -288,7 +336,11 @@ fn encode_colour(px: &[[u8; 4]; 16], mode: ColourMode) -> ([u8; 8], f32) {
         if use_px & (1 << i) == 0 {
             continue;
         }
-        let d = [fpx[i][0] * sw[0] - mean[0], fpx[i][1] * sw[1] - mean[1], fpx[i][2] * sw[2] - mean[2]];
+        let d = [
+            fpx[i][0] * sw[0] - mean[0],
+            fpx[i][1] * sw[1] - mean[1],
+            fpx[i][2] * sw[2] - mean[2],
+        ];
         cov[0] += d[0] * d[0];
         cov[1] += d[0] * d[1];
         cov[2] += d[0] * d[2];
@@ -298,7 +350,11 @@ fn encode_colour(px: &[[u8; 4]; 16], mode: ColourMode) -> ([u8; 8], f32) {
     }
     let mut axis = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
     for _ in 0..3 {
-        let v = [cov[0] * axis[0] + cov[1] * axis[1] + cov[2] * axis[2], cov[1] * axis[0] + cov[3] * axis[1] + cov[4] * axis[2], cov[2] * axis[0] + cov[4] * axis[1] + cov[5] * axis[2]];
+        let v = [
+            cov[0] * axis[0] + cov[1] * axis[1] + cov[2] * axis[2],
+            cov[1] * axis[0] + cov[3] * axis[1] + cov[4] * axis[2],
+            cov[2] * axis[0] + cov[4] * axis[1] + cov[5] * axis[2],
+        ];
         let len = v[0].abs().max(v[1].abs()).max(v[2].abs());
         if len < 1e-6 {
             break;
@@ -314,14 +370,20 @@ fn encode_colour(px: &[[u8; 4]; 16], mode: ColourMode) -> ([u8; 8], f32) {
         if use_px & (1 << i) == 0 {
             continue;
         }
-        let t = (0..3).map(|c| (fpx[i][c] * sw[c] - mean[c]) * axis[c]).sum::<f32>();
+        let t = (0..3)
+            .map(|c| (fpx[i][c] * sw[c] - mean[c]) * axis[c])
+            .sum::<f32>();
         tmin = tmin.min(t);
         tmax = tmax.max(t);
     }
     let a2 = axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2];
     let point = |t: f32| -> [f32; 3] {
         let s = t / a2.max(1e-12);
-        [(mean[0] + axis[0] * s) / sw[0], (mean[1] + axis[1] * s) / sw[1], (mean[2] + axis[2] * s) / sw[2]]
+        [
+            (mean[0] + axis[0] * s) / sw[0],
+            (mean[1] + axis[1] * s) / sw[1],
+            (mean[2] + axis[2] * s) / sw[2],
+        ]
     };
     let mut e0 = point(tmax);
     let mut e1 = point(tmin);
@@ -389,7 +451,10 @@ fn encode_colour(px: &[[u8; 4]; 16], mode: ColourMode) -> ([u8; 8], f32) {
     }
     let (_, c0, c1, idx) = best.unwrap();
     let pal = palette(c0, c1, c0 > c1 || (n_col == 4 && c0 == c1));
-    let err = (0..16).filter(|i| use_px & (1 << i) != 0).map(|i| werr(fpx[i], pal[idx[i] as usize])).sum();
+    let err = (0..16)
+        .filter(|i| use_px & (1 << i) != 0)
+        .map(|i| werr(fpx[i], pal[idx[i] as usize]))
+        .sum();
     (write(c0, c1, &idx), err)
 }
 
@@ -479,7 +544,10 @@ fn encode_alpha_bc3(px: &[[u8; 4]; 16]) -> ([u8; 8], f32) {
         let (h0, l0, six) = (best.1, best.2, best.1 <= best.2);
         for d0 in [-1i32, 1, 0] {
             for d1 in [-1i32, 0, 1] {
-                let (a0, a1) = ((h0 as i32 + d0).clamp(0, 255) as u8, (l0 as i32 + d1).clamp(0, 255) as u8);
+                let (a0, a1) = (
+                    (h0 as i32 + d0).clamp(0, 255) as u8,
+                    (l0 as i32 + d1).clamp(0, 255) as u8,
+                );
                 if (a0 <= a1) != six || (d0 == 0 && d1 == 0) {
                     continue;
                 }
@@ -510,7 +578,9 @@ fn encode_alpha_bc2(px: &[[u8; 4]; 16]) -> ([u8; 8], f32) {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Bc {
     /// DXT1; `punch` = 1-bit alpha (pixels below alpha 128 become transparent).
-    Bc1 { punch: bool },
+    Bc1 {
+        punch: bool,
+    },
     Bc2,
     Bc3,
 }
@@ -555,12 +625,23 @@ pub fn encode(rgba: &[u8], width: u32, height: u32, format: Bc) -> (Vec<u8>, f64
             match format {
                 Bc::Bc1 { punch } => {
                     let has_clear = punch && px.iter().any(|p| p[3] < 128);
-                    let (c, e) = encode_colour(&px, if has_clear { ColourMode::Punch } else { ColourMode::Four });
+                    let (c, e) = encode_colour(
+                        &px,
+                        if has_clear {
+                            ColourMode::Punch
+                        } else {
+                            ColourMode::Four
+                        },
+                    );
                     blk.copy_from_slice(&c);
                     ec += e as f64;
                 }
                 Bc::Bc2 | Bc::Bc3 => {
-                    let (a, e_a) = if format == Bc::Bc2 { encode_alpha_bc2(&px) } else { encode_alpha_bc3(&px) };
+                    let (a, e_a) = if format == Bc::Bc2 {
+                        encode_alpha_bc2(&px)
+                    } else {
+                        encode_alpha_bc3(&px)
+                    };
                     let (c, e) = encode_colour(&px, ColourMode::Four);
                     blk[..8].copy_from_slice(&a);
                     blk[8..].copy_from_slice(&c);
@@ -575,7 +656,11 @@ pub fn encode(rgba: &[u8], width: u32, height: u32, format: Bc) -> (Vec<u8>, f64
     // big pictures row by row on the worker pool
     if bw * bh >= 4096 {
         use rayon::prelude::*;
-        let sums: Vec<(f64, f64)> = out.par_chunks_mut(bw * bb).enumerate().map(|(by, dst)| row(by, dst)).collect();
+        let sums: Vec<(f64, f64)> = out
+            .par_chunks_mut(bw * bb)
+            .enumerate()
+            .map(|(by, dst)| row(by, dst))
+            .collect();
         for (c, a) in sums {
             ec += c;
             ea += a;
@@ -632,10 +717,18 @@ pub fn worst_patch_shift(src: &[u8], dec: &[u8], width: u32, height: u32) -> f64
     worst_shift(src, w, h, |bx, by| gather(dec, w, h, bx, by))
 }
 
-pub(crate) fn worst_block_patch_shift(src: &[u8], blocks: &[u8], width: u32, height: u32, format: Bc) -> f64 {
+pub(crate) fn worst_block_patch_shift(
+    src: &[u8],
+    blocks: &[u8],
+    width: u32,
+    height: u32,
+    format: Bc,
+) -> f64 {
     let (w, h) = (width as usize, height as usize);
     let (bw, bb, kind) = (w.div_ceil(4), format.block_bytes(), decode_kind(format));
-    worst_shift(src, w, h, |bx, by| decode_block(&blocks[(by * bw + bx) * bb..][..bb], kind))
+    worst_shift(src, w, h, |bx, by| {
+        decode_block(&blocks[(by * bw + bx) * bb..][..bb], kind)
+    })
 }
 
 fn worst_shift(src: &[u8], w: usize, h: usize, dec: impl Fn(usize, usize) -> [[u8; 4]; 16]) -> f64 {
@@ -666,11 +759,14 @@ fn swatch_counts(keys: &[u32; 16]) -> Option<[u8; 16]> {
     if keys.iter().all(|&k| k == keys[0]) {
         return None;
     }
-    let counts: [u8; 16] = std::array::from_fn(|i| keys.iter().map(|&k| (k == keys[i]) as u8).sum());
+    let counts: [u8; 16] =
+        std::array::from_fn(|i| keys.iter().map(|&k| (k == keys[i]) as u8).sum());
     if counts.iter().filter(|&&n| n >= 2).count() < 12 {
         return None;
     }
-    let patches = (0..16).filter(|&i| counts[i] >= 2 && !keys[..i].contains(&keys[i])).count();
+    let patches = (0..16)
+        .filter(|&i| counts[i] >= 2 && !keys[..i].contains(&keys[i]))
+        .count();
     (patches >= 3).then_some(counts)
 }
 
@@ -701,7 +797,11 @@ fn keys_shift(keys: &[u32; 16], counts: &[u8; 16], dec: &[[u8; 4]; 16]) -> f64 {
 }
 
 fn quantised_ends(c: [f32; 3]) -> [u16; 3] {
-    let q = |v: f32, max: f32, up: f32| ((v.clamp(0.0, 255.0) * max / 255.0) + up).floor().clamp(0.0, max) as u16;
+    let q = |v: f32, max: f32, up: f32| {
+        ((v.clamp(0.0, 255.0) * max / 255.0) + up)
+            .floor()
+            .clamp(0.0, max) as u16
+    };
     let at = |up: f32| (q(c[0], 31.0, up) << 11) | (q(c[1], 63.0, up) << 5) | q(c[2], 31.0, up);
     [at(0.5), at(0.0), at(0.999)]
 }
@@ -736,13 +836,18 @@ fn swatch_block(px: &[[u8; 4]; 16], four_only: bool, max_shift_sq: f64) -> Optio
             if best.as_ref().is_some_and(|b| err >= b.0) {
                 continue;
             }
-            let fits = (0..16).all(|i| !patch[i] || (werr(fpx[i], pal[idx[i] as usize]) as f64) <= max_shift_sq);
+            let fits = (0..16)
+                .all(|i| !patch[i] || (werr(fpx[i], pal[idx[i] as usize]) as f64) <= max_shift_sq);
             if fits {
                 best = Some((err, c0, c1, idx));
             }
         }
     };
-    let weights: Vec<f32> = if four_only { FOUR.to_vec() } else { FOUR.iter().chain(THREE.iter()).copied().collect() };
+    let weights: Vec<f32> = if four_only {
+        FOUR.to_vec()
+    } else {
+        FOUR.iter().chain(THREE.iter()).copied().collect()
+    };
     for (ai, a) in colours.iter().enumerate() {
         for b in &colours[ai + 1..] {
             for &u in &weights {
@@ -774,7 +879,14 @@ fn swatch_block(px: &[[u8; 4]; 16], four_only: bool, max_shift_sq: f64) -> Optio
     Some((out, err))
 }
 
-pub fn repair_swatches(src: &[u8], blocks: &mut [u8], width: u32, height: u32, format: Bc, max_shift_sq: f64) -> Option<f64> {
+pub fn repair_swatches(
+    src: &[u8],
+    blocks: &mut [u8],
+    width: u32,
+    height: u32,
+    format: Bc,
+    max_shift_sq: f64,
+) -> Option<f64> {
     let (w, h) = (width as usize, height as usize);
     let bw = w.div_ceil(4);
     let bb = format.block_bytes();
@@ -795,8 +907,16 @@ pub fn repair_swatches(src: &[u8], blocks: &mut [u8], width: u32, height: u32, f
             if matches!(format, Bc::Bc1 { punch: true }) && px.iter().any(|p| p[3] < 128) {
                 return None;
             }
-            let (colour, err) = swatch_block(&px, format != Bc::Bc1 { punch: false }, max_shift_sq)?;
-            let before: f32 = (0..16).map(|i| werr([px[i][0] as f32, px[i][1] as f32, px[i][2] as f32], [dec[i][0] as f32, dec[i][1] as f32, dec[i][2] as f32])).sum();
+            let (colour, err) =
+                swatch_block(&px, format != Bc::Bc1 { punch: false }, max_shift_sq)?;
+            let before: f32 = (0..16)
+                .map(|i| {
+                    werr(
+                        [px[i][0] as f32, px[i][1] as f32, px[i][2] as f32],
+                        [dec[i][0] as f32, dec[i][1] as f32, dec[i][2] as f32],
+                    )
+                })
+                .sum();
             blk[colour_at..colour_at + 8].copy_from_slice(&colour);
             delta += (err - before) as f64;
         }
@@ -821,7 +941,11 @@ fn srgb_to_linear_table() -> &'static [f32; 256] {
         let mut t = [0.0f32; 256];
         for (i, v) in t.iter_mut().enumerate() {
             let c = i as f32 / 255.0;
-            *v = if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
+            *v = if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            };
         }
         t
     })
@@ -833,7 +957,11 @@ fn linear_to_srgb_table() -> &'static [u8; 4097] {
         let mut t = [0u8; 4097];
         for (i, v) in t.iter_mut().enumerate() {
             let l = i as f32 / 4096.0;
-            let s = if l <= 0.003_130_8 { l * 12.92 } else { 1.055 * l.powf(1.0 / 2.4) - 0.055 };
+            let s = if l <= 0.003_130_8 {
+                l * 12.92
+            } else {
+                1.055 * l.powf(1.0 / 2.4) - 0.055
+            };
             *v = (s * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
         }
         t
@@ -873,14 +1001,20 @@ fn downsample_filtered(rgba: &[u8], w: u32, h: u32, weighted: bool) -> (Vec<u8>,
                     for k in 0..3 {
                         let v = lin[rgba[o + k] as usize];
                         c[k] += v;
-                        if weighted { covered[k] += v * alpha as f32; }
+                        if weighted {
+                            covered[k] += v * alpha as f32;
+                        }
                     }
                     a += alpha;
                 }
             }
             let d = &mut dst[x * 4..x * 4 + 4];
             for k in 0..3 {
-                let v = if weighted && a > 0 { covered[k] / a as f32 } else { c[k] * 0.25 };
+                let v = if weighted && a > 0 {
+                    covered[k] / a as f32
+                } else {
+                    c[k] * 0.25
+                };
                 d[k] = back[((v * 4096.0 + 0.5) as usize).min(4096)];
             }
             d[3] = ((a + 2) / 4) as u8;
@@ -888,7 +1022,9 @@ fn downsample_filtered(rgba: &[u8], w: u32, h: u32, weighted: bool) -> (Vec<u8>,
     };
     if nw * nh >= 65536 {
         use rayon::prelude::*;
-        out.par_chunks_mut(nw * 4).enumerate().for_each(|(y, dst)| fill_row(y, dst));
+        out.par_chunks_mut(nw * 4)
+            .enumerate()
+            .for_each(|(y, dst)| fill_row(y, dst));
     } else {
         for (y, dst) in out.chunks_mut(nw * 4).enumerate() {
             fill_row(y, dst);
@@ -914,7 +1050,12 @@ pub fn resize(rgba: &[u8], w: u32, h: u32, nw: u32, nh: u32) -> Vec<u8> {
                 let t = src - i;
                 let i = i as isize;
                 let (t2, t3) = (t * t, t * t * t);
-                let wts = [(-t3 + 2.0 * t2 - t) * 0.5, (3.0 * t3 - 5.0 * t2 + 2.0) * 0.5, (-3.0 * t3 + 4.0 * t2 + t) * 0.5, (t3 - t2) * 0.5];
+                let wts = [
+                    (-t3 + 2.0 * t2 - t) * 0.5,
+                    (3.0 * t3 - 5.0 * t2 + 2.0) * 0.5,
+                    (-3.0 * t3 + 4.0 * t2 + t) * 0.5,
+                    (t3 - t2) * 0.5,
+                ];
                 let idx = [i - 1, i, i + 1, i + 2].map(|k| k.clamp(0, from as isize - 1) as usize);
                 (idx, wts)
             })
@@ -935,26 +1076,35 @@ pub fn resize(rgba: &[u8], w: u32, h: u32, nw: u32, nh: u32) -> Vec<u8> {
     let mut out = vec![0u8; nw * nh * 4];
     use rayon::prelude::*;
     let band = 64usize;
-    out.par_chunks_mut(nw * 4 * band).enumerate().for_each(|(b, rows)| {
-        let mut cache: Vec<(usize, Vec<f32>)> = Vec::with_capacity(6);
-        for (r, row) in rows.chunks_mut(nw * 4).enumerate() {
-            let (idx, wts) = &ty[b * band + r];
-            for &sy in idx {
-                if !cache.iter().any(|(k, _)| *k == sy) {
-                    let mut v = if cache.len() >= 6 { cache.remove(0).1 } else { vec![0f32; nw * 4] };
-                    across(sy, &mut v);
-                    cache.push((sy, v));
+    out.par_chunks_mut(nw * 4 * band)
+        .enumerate()
+        .for_each(|(b, rows)| {
+            let mut cache: Vec<(usize, Vec<f32>)> = Vec::with_capacity(6);
+            for (r, row) in rows.chunks_mut(nw * 4).enumerate() {
+                let (idx, wts) = &ty[b * band + r];
+                for &sy in idx {
+                    if !cache.iter().any(|(k, _)| *k == sy) {
+                        let mut v = if cache.len() >= 6 {
+                            cache.remove(0).1
+                        } else {
+                            vec![0f32; nw * 4]
+                        };
+                        across(sy, &mut v);
+                        cache.push((sy, v));
+                    }
+                }
+                let rows4: Vec<&Vec<f32>> = idx
+                    .iter()
+                    .map(|sy| &cache.iter().find(|(k, _)| k == sy).unwrap().1)
+                    .collect();
+                for x in 0..nw {
+                    for c in 0..4 {
+                        let v: f32 = (0..4).map(|k| rows4[k][x * 4 + c] * wts[k]).sum();
+                        row[x * 4 + c] = (v + 0.5).clamp(0.0, 255.0) as u8;
+                    }
                 }
             }
-            let rows4: Vec<&Vec<f32>> = idx.iter().map(|sy| &cache.iter().find(|(k, _)| k == sy).unwrap().1).collect();
-            for x in 0..nw {
-                for c in 0..4 {
-                    let v: f32 = (0..4).map(|k| rows4[k][x * 4 + c] * wts[k]).sum();
-                    row[x * 4 + c] = (v + 0.5).clamp(0.0, 255.0) as u8;
-                }
-            }
-        }
-    });
+        });
     out
 }
 
@@ -982,7 +1132,12 @@ mod tests {
         let mut v = Vec::new();
         for y in 0..h {
             for x in 0..w {
-                v.extend_from_slice(&[(x * 255 / (w - 1)) as u8, (y * 255 / (h - 1)) as u8, ((x + y) * 127 / (w + h - 2)) as u8, ((x ^ y) & 0xFF) as u8]);
+                v.extend_from_slice(&[
+                    (x * 255 / (w - 1)) as u8,
+                    (y * 255 / (h - 1)) as u8,
+                    ((x + y) * 127 / (w + h - 2)) as u8,
+                    ((x ^ y) & 0xFF) as u8,
+                ]);
             }
         }
         v
@@ -1027,7 +1182,13 @@ mod tests {
 
     #[test]
     fn flat_blocks_are_exact_or_nearly() {
-        for c in [[0u8, 0, 0], [255, 255, 255], [47, 74, 83], [128, 64, 200], [13, 250, 7]] {
+        for c in [
+            [0u8, 0, 0],
+            [255, 255, 255],
+            [47, 74, 83],
+            [128, 64, 200],
+            [13, 250, 7],
+        ] {
             let rgba: Vec<u8> = (0..16).flat_map(|_| [c[0], c[1], c[2], 255]).collect();
             let (blk, _, _) = encode(&rgba, 4, 4, Bc::Bc1 { punch: false });
             let back = decode(&blk, 4, 4, Bc::Bc1 { punch: false });
@@ -1088,7 +1249,12 @@ mod tests {
         let (blk, _, _) = encode(&rgba, 16, 16, Bc::Bc3);
         let back = decode(&blk, 16, 16, Bc::Bc3);
         for (a, b) in rgba.chunks_exact(4).zip(back.chunks_exact(4)) {
-            assert!((a[3] as i32 - b[3] as i32).abs() <= 4, "{} -> {}", a[3], b[3]);
+            assert!(
+                (a[3] as i32 - b[3] as i32).abs() <= 4,
+                "{} -> {}",
+                a[3],
+                b[3]
+            );
         }
     }
 
@@ -1106,7 +1272,9 @@ mod tests {
     #[test]
     fn downsample_is_linear_light() {
         // black and white average to sRGB 188 in linear light, not 128
-        let rgba = [0u8, 0, 0, 255, 255, 255, 255, 255, 0, 0, 0, 255, 255, 255, 255, 255];
+        let rgba = [
+            0u8, 0, 0, 255, 255, 255, 255, 255, 0, 0, 0, 255, 255, 255, 255, 255,
+        ];
         let (d, w, h) = downsample(&rgba, 2, 2);
         assert_eq!((w, h), (1, 1));
         assert!((d[0] as i32 - 188).abs() <= 1, "{}", d[0]);
@@ -1117,7 +1285,16 @@ mod tests {
     fn resize_by_a_texel_keeps_the_picture() {
         // a smooth picture 2 texels wider: the texels land where they were
         let (w, h) = (130u32, 64u32);
-        let src: Vec<u8> = (0..w * h).flat_map(|i| [((i % w) * 255 / (w - 1)) as u8, ((i / w) * 4) as u8, 90, 255]).collect();
+        let src: Vec<u8> = (0..w * h)
+            .flat_map(|i| {
+                [
+                    ((i % w) * 255 / (w - 1)) as u8,
+                    ((i / w) * 4) as u8,
+                    90,
+                    255,
+                ]
+            })
+            .collect();
         let out = resize(&src, w, h, 132, 64);
         assert_eq!(out.len(), 132 * 64 * 4);
         for y in [0usize, 30, 63] {
@@ -1161,7 +1338,11 @@ mod tests {
                 block_worst = block_worst.max(e);
             }
         }
-        if patches >= 3 && covered >= 12 { block_worst } else { 0.0 }
+        if patches >= 3 && covered >= 12 {
+            block_worst
+        } else {
+            0.0
+        }
     }
 
     fn old_worst_patch_shift(src: &[u8], dec: &[u8], width: u32, height: u32) -> f64 {
@@ -1169,7 +1350,10 @@ mod tests {
         let mut worst = 0.0f64;
         for by in 0..h / 4 {
             for bx in 0..w / 4 {
-                worst = worst.max(old_block_patch_shift(&gather(src, w, h, bx, by), &gather(dec, w, h, bx, by)));
+                worst = worst.max(old_block_patch_shift(
+                    &gather(src, w, h, bx, by),
+                    &gather(dec, w, h, bx, by),
+                ));
             }
         }
         worst
@@ -1187,7 +1371,10 @@ mod tests {
     }
 
     fn swatch_picture(rng: &mut Rng, w: u32, h: u32) -> Vec<u8> {
-        let palette: Vec<[u8; 4]> = (0..24).map(|_| rng.next().to_le_bytes()).map(|c| [c[0], c[1], c[2], if c[3] > 40 { 255 } else { c[3] }]).collect();
+        let palette: Vec<[u8; 4]> = (0..24)
+            .map(|_| rng.next().to_le_bytes())
+            .map(|c| [c[0], c[1], c[2], if c[3] > 40 { 255 } else { c[3] }])
+            .collect();
         let mut rgba = vec![0u8; (w * h * 4) as usize];
         for by in 0..h / 4 {
             for bx in 0..w / 4 {
@@ -1203,7 +1390,8 @@ mod tests {
                         3 => palette[(base + (i % 4) as usize % colours) % palette.len()],
                         4 => palette[(base + rng.next() as usize % colours) % palette.len()],
                         _ => {
-                            let mut c = palette[(base + (i / 4) as usize % colours) % palette.len()];
+                            let mut c =
+                                palette[(base + (i / 4) as usize % colours) % palette.len()];
                             c[0] = c[0].wrapping_add(rng.next().is_multiple_of(3) as u8);
                             c
                         }
@@ -1228,20 +1416,38 @@ mod tests {
                 c
             });
             let noisy = rng.next().is_multiple_of(2);
-            let dec: [[u8; 4]; 16] = std::array::from_fn(|i| if noisy { rng.next().to_le_bytes() } else { src[i].map(|v| v.saturating_add(rng.next() as u8 % 9)) });
+            let dec: [[u8; 4]; 16] = std::array::from_fn(|i| {
+                if noisy {
+                    rng.next().to_le_bytes()
+                } else {
+                    src[i].map(|v| v.saturating_add(rng.next() as u8 % 9))
+                }
+            });
             let old = old_block_patch_shift(&src, &dec);
-            assert_eq!(block_patch_shift(&src, &dec).to_bits(), old.to_bits(), "{src:?} {dec:?}");
+            assert_eq!(
+                block_patch_shift(&src, &dec).to_bits(),
+                old.to_bits(),
+                "{src:?} {dec:?}"
+            );
             swatch_blocks += (old > 0.0) as u32;
         }
         assert!(swatch_blocks > 10_000, "{swatch_blocks}");
         for (w, h) in [(64u32, 64u32), (256, 128), (36, 20), (6, 9)] {
             let src = swatch_picture(&mut rng, w, h);
-            for format in [Bc::Bc1 { punch: false }, Bc::Bc1 { punch: true }, Bc::Bc3, Bc::Bc2] {
+            for format in [
+                Bc::Bc1 { punch: false },
+                Bc::Bc1 { punch: true },
+                Bc::Bc3,
+                Bc::Bc2,
+            ] {
                 let (blocks, _, _) = encode(&src, w, h, format);
                 let dec = decode(&blocks, w, h, format);
                 let old = old_worst_patch_shift(&src, &dec, w, h);
                 assert_eq!(worst_patch_shift(&src, &dec, w, h).to_bits(), old.to_bits());
-                assert_eq!(worst_block_patch_shift(&src, &blocks, w, h, format).to_bits(), old.to_bits());
+                assert_eq!(
+                    worst_block_patch_shift(&src, &blocks, w, h, format).to_bits(),
+                    old.to_bits()
+                );
                 if w >= 64 {
                     assert!(old > 0.0);
                 }
@@ -1262,7 +1468,11 @@ mod tests {
         let new = worst_block_patch_shift(&src, &blocks, w, h, Bc::Bc1 { punch: false });
         let after = t.elapsed().as_secs_f64();
         assert_eq!(old.to_bits(), new.to_bits());
-        eprintln!("swatch check of a 1024x1024 BC1 picture: decode + check {:.1} ms before, {:.1} ms now", before * 1e3, after * 1e3);
+        eprintln!(
+            "swatch check of a 1024x1024 BC1 picture: decode + check {:.1} ms before, {:.1} ms now",
+            before * 1e3,
+            after * 1e3
+        );
     }
 
     #[test]
@@ -1280,6 +1490,10 @@ mod tests {
         let (blk, _, _) = encode(&rgba, w, h, Bc::Bc1 { punch: false });
         let secs = t.elapsed().as_secs_f64();
         let back = decode(&blk, w, h, Bc::Bc1 { punch: false });
-        eprintln!("BC1 1024x1024 in {:.3} s (all cores), PSNR {:.1}", secs, psnr(&rgba, &back, &[0, 1, 2]));
+        eprintln!(
+            "BC1 1024x1024 in {:.3} s (all cores), PSNR {:.1}",
+            secs,
+            psnr(&rgba, &back, &[0, 1, 2])
+        );
     }
 }

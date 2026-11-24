@@ -111,7 +111,6 @@ fn accept_errors_back_off_and_keep_the_room_server_alive() {
     }
 }
 
-
 /// Loopback protocol regression: a valid secure session must reject a selected
 /// bus outside the dedicated server's fleet. Ordinary LIST remains available,
 /// but the client's selected path must not silently substitute it for LISTBUS.
@@ -135,12 +134,16 @@ fn selected_bus_request_is_rejected_without_an_authorized_fleet() {
     let error = request_mod_manifest(&mut client, &format!("LISTBUS {bus} -"))
         .expect_err("server must not provide a downloadable unauthorized bus");
     assert!(
-        error.contains("fleet not configured") || error.contains("not in the dedicated server's vehicles list"),
+        error.contains("fleet not configured")
+            || error.contains("not in the dedicated server's vehicles list"),
         "unexpected rejection: {error}"
     );
-    let ordinary = request_mod_manifest(&mut client, "LIST")
-        .expect("ordinary map-only LIST still works");
-    assert!(ordinary.bus.is_empty(), "LIST must not smuggle a selected bus");
+    let ordinary =
+        request_mod_manifest(&mut client, "LIST").expect("ordinary map-only LIST still works");
+    assert!(
+        ordinary.bus.is_empty(),
+        "LIST must not smuggle a selected bus"
+    );
     drop(client);
     drop(server);
 }

@@ -102,12 +102,8 @@ const CLOUD_FIELD_TILE: f32 = 14000.0;
 // The ground point under the sky at distance `t` along the view ray `d`, in the clouds' own
 // frame (world coordinates modulo 70 km, lib.rs `CLOUD_ORIGIN_PERIOD`), so that the cloud
 // field stays where it is when the floating render origin moves on.
-// Where the clouds are seen from, relative to the camera (the enhanced sky cube's own eye
-// while it is drawn; 0 everywhere else).
-var<private> eye_off: vec3<f32> = vec3<f32>(0.0);
-
 fn cloud_ground(d: vec3<f32>, t: f32) -> vec2<f32> {
-    return camera.cam_pos.xy + eye_off.xy + camera.world_origin.zw + d.xy * t;
+    return camera.cam_pos.xy + camera.world_origin.zw + d.xy * t;
 }
 
 // The cloud cover over ground point p (x, 0..1, its edges frayed by the billows), how tall

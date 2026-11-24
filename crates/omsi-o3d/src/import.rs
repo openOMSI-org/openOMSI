@@ -24,14 +24,21 @@ pub(crate) struct Builder {
 impl Builder {
     /// A vertex in the file's frame; returns its index.
     pub fn vertex(&mut self, position: Vec3, normal: Vec3, uv: Vec2) -> u32 {
-        self.mesh.vertices.push(Vertex { position: from_rh(position), normal: from_rh(normal).normalize_or_zero(), uv });
+        self.mesh.vertices.push(Vertex {
+            position: from_rh(position),
+            normal: from_rh(normal).normalize_or_zero(),
+            uv,
+        });
         self.mesh.vertices.len() as u32 - 1
     }
 
     /// A triangle wound counter-clockwise in the file's frame (as glTF, FBX and OBJ wind
     /// their front faces): clockwise once z has turned round, as Direct3D draws it.
     pub fn triangle(&mut self, a: u32, b: u32, c: u32, material: u16) {
-        self.mesh.triangles.push(Triangle { indices: [a, c, b], material });
+        self.mesh.triangles.push(Triangle {
+            indices: [a, c, b],
+            material,
+        });
     }
 
     /// Normals for the vertices that came without any (an OBJ without `vn`, a glTF
@@ -102,8 +109,23 @@ pub(crate) fn texture_name(model: &Path, file: &str) -> String {
 /// `omsi_cfg::vfs::put_memory_file`); returns the texture name that finds it.
 pub(crate) fn embedded_texture(model: &Path, key: &str, bytes: &[u8]) -> String {
     let ext = picture_extension(bytes);
-    let safe: String = key.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect();
-    let file = format!("{}.{safe}.{ext}", model.file_name().map(|f| f.to_string_lossy()).unwrap_or_default());
+    let safe: String = key
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let file = format!(
+        "{}.{safe}.{ext}",
+        model
+            .file_name()
+            .map(|f| f.to_string_lossy())
+            .unwrap_or_default()
+    );
     let path = model.parent().unwrap_or(Path::new("")).join(&file);
     omsi_cfg::vfs::put_memory_file(path.clone(), Arc::from(bytes));
     omsi_cfg::register_model_texture(&file, path);
@@ -165,7 +187,10 @@ pub(crate) fn percent_decode(s: &str) -> String {
     let mut i = 0;
     while i < b.len() {
         if b[i] == b'%' && i + 2 < b.len() {
-            if let Some(v) = std::str::from_utf8(&b[i + 1..i + 3]).ok().and_then(|h| u8::from_str_radix(h, 16).ok()) {
+            if let Some(v) = std::str::from_utf8(&b[i + 1..i + 3])
+                .ok()
+                .and_then(|h| u8::from_str_radix(h, 16).ok())
+            {
                 out.push(v);
                 i += 3;
                 continue;
@@ -205,7 +230,10 @@ mod tests {
         let m = model.join("bus.gltf");
         assert_eq!(texture_name(&m, "../pics/inside-pic.png"), "inside-pic.png");
         assert!(omsi_cfg::model_texture("inside-pic.png").is_some());
-        assert_eq!(texture_name(&m, "../../../../../../../../outside/outside-pic.png"), "outside-pic.png");
+        assert_eq!(
+            texture_name(&m, "../../../../../../../../outside/outside-pic.png"),
+            "outside-pic.png"
+        );
         assert_eq!(omsi_cfg::model_texture("outside-pic.png"), None);
         assert_eq!(texture_name(&m, "C:outside-pic.png"), "C:outside-pic.png");
         omsi_cfg::remove_content_root(&root);
@@ -233,7 +261,9 @@ mod tests {
         assert_eq!(m.triangles[0].indices, [0, 2, 1]);
         assert_eq!(m.vertices[0].normal, Vec3::new(0.0, 0.0, -1.0));
         // normals made for it point the same way as the file's
-        let mut b = Builder { mesh: std::mem::take(&mut m) };
+        let mut b = Builder {
+            mesh: std::mem::take(&mut m),
+        };
         b.fill_normals(&[true, true, true]);
         assert!((b.mesh.vertices[1].normal - Vec3::new(0.0, 0.0, -1.0)).length() < 1e-6);
     }

@@ -3,7 +3,13 @@
 /// A 64-bit hash of a tour: its depot group (lower case), line and tour number.
 pub fn tour_key_of(group: &str, line: &str, tour: &str) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in group.bytes().chain([0]).chain(line.trim().bytes()).chain([0]).chain(tour.trim().bytes()) {
+    for b in group
+        .bytes()
+        .chain([0])
+        .chain(line.trim().bytes())
+        .chain([0])
+        .chain(tour.trim().bytes())
+    {
         h = (h ^ b as u64).wrapping_mul(0x0000_0100_0000_01b3);
     }
     mix(h)
@@ -27,8 +33,16 @@ pub fn norm_vehicle_path(p: &str) -> String {
 /// (masks 287 and 288); read the other way round they ran only in the holidays (#1883).
 pub fn day_bits(calendar: &omsi_map::Calendar, clock: &crate::SimClock) -> (i32, i32) {
     let date = clock.date_code();
-    let day_bit = if calendar.is_holiday(date) { 1 << 7 } else { 1 << clock.weekday() };
-    let school_bit = if calendar.in_holiday_range(date) { 1 << 9 } else { 1 << 8 };
+    let day_bit = if calendar.is_holiday(date) {
+        1 << 7
+    } else {
+        1 << clock.weekday()
+    };
+    let school_bit = if calendar.in_holiday_range(date) {
+        1 << 9
+    } else {
+        1 << 8
+    };
     (day_bit, school_bit)
 }
 
@@ -41,12 +55,24 @@ mod day_bit_tests {
     #[test]
     fn a_school_run_runs_on_school_days() {
         let calendar = omsi_map::Calendar {
-            ranges: vec![omsi_map::HolidayRange { start: 19890701, end: 19890820, name: "Sommerferien".into() }],
+            ranges: vec![omsi_map::HolidayRange {
+                start: 19890701,
+                end: 19890820,
+                name: "Sommerferien".into(),
+            }],
             holidays: Vec::new(),
         };
         // 30 May 1989 (day 150), a Tuesday in term; 1 August 1989 (day 213) in the holidays
-        let term = crate::SimClock { year: 1989, day_of_year: 150, ..Default::default() };
-        let holidays = crate::SimClock { year: 1989, day_of_year: 213, ..Default::default() };
+        let term = crate::SimClock {
+            year: 1989,
+            day_of_year: 150,
+            ..Default::default()
+        };
+        let holidays = crate::SimClock {
+            year: 1989,
+            day_of_year: 213,
+            ..Default::default()
+        };
         let runs = |c: &crate::SimClock| {
             let (day, school) = day_bits(&calendar, c);
             287 & day != 0 && 287 & school != 0

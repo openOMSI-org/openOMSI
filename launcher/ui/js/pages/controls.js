@@ -10,6 +10,7 @@ import { saveSettings, cached } from '../data.js';
 import { Button, Card, Search, Segmented, Tabs, Notice, Empty, Spinner, Dialog, useConfirm, PageHead } from '../ui.js';
 import { KNOWN, H_GEARS, actionText, useActionNames, useKeyCatalog } from './actions.js';
 import { Controllers } from './controllers.js';
+import { InputProfiles } from './input-profiles.js';
 
 // --- keys ---------------------------------------------------------------------------------
 
@@ -138,7 +139,8 @@ export function ControlsPage() {
       text=${tab === 'keyboard' ? 'Click a key and press the new one (hold Shift, Ctrl or Alt for a combination); Escape leaves it as it is.' : 'Your wheel, pedals, gamepad or button box: set them up, give their buttons what they do and check that they answer.'}
       actions=${html`<${Segmented} value=${tab} onChange=${setTab} options=${[['keyboard', 'Keyboard'], ['pads', 'Game controllers']]} />`}
     />
-    ${tab === 'keyboard' ? html`<${Keyboard} />` : html`<${Controllers} />`}
+    <${InputProfiles} />
+    ${tab === 'keyboard' ? html`<${Keyboard} key=${s.controlsProfileStamp || 0} />` : html`<${Controllers} key=${s.controlsProfileStamp || 0} />`}
   `;
 }
 

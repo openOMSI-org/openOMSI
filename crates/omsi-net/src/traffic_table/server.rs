@@ -14,7 +14,9 @@
 use super::ids::TrafficId;
 use super::row::{Kind, Row};
 use super::table::TrafficTable;
-use super::wire::{self, newer, Ack, Anchor, Delta, Packet, RowUpdate, Spawn, Trouble, MAX_BASELINE, MAX_DATAGRAM};
+use super::wire::{
+    self, Ack, Anchor, Delta, MAX_BASELINE, MAX_DATAGRAM, Packet, RowUpdate, Spawn, Trouble, newer,
+};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Snapshots per second.
@@ -139,7 +141,12 @@ impl Builder {
 
     /// Bytes this snapshot has taken so far.
     fn used(&self) -> usize {
-        self.spent + if self.cur.is_empty() { 0 } else { self.cur.size() }
+        self.spent
+            + if self.cur.is_empty() {
+                0
+            } else {
+                self.cur.size()
+            }
     }
 
     fn flush(&mut self) {
@@ -178,20 +185,34 @@ impl ClientSync {
 
     /// Tell the client everything anew (it is asked to forget what it holds).
     pub fn reset(&mut self) {
-        *self = ClientSync { stats: self.stats, radius_in: self.radius_in, radius_out: self.radius_out, bytes_per_second: self.bytes_per_second, ..ClientSync::new(self.epoch.wrapping_add(1)) };
+        *self = ClientSync {
+            stats: self.stats,
+            radius_in: self.radius_in,
+            radius_out: self.radius_out,
+            bytes_per_second: self.bytes_per_second,
+            ..ClientSync::new(self.epoch.wrapping_add(1))
+        };
     }
 
     /// Vehicles the client is told of (or being told of).
     pub fn tracked(&self) -> usize {
-        self.entries.values().filter(|e| e.removing.is_none()).count()
+        self.entries
+            .values()
+            .filter(|e| e.removing.is_none())
+            .count()
     }
 
     pub fn live(&self) -> usize {
-        self.entries.values().filter(|e| e.state == State::Live && e.removing.is_none()).count()
+        self.entries
+            .values()
+            .filter(|e| e.state == State::Live && e.removing.is_none())
+            .count()
     }
 
     pub fn knows(&self, id: TrafficId) -> bool {
-        self.entries.get(&id).is_some_and(|e| e.state == State::Live && e.removing.is_none())
+        self.entries
+            .get(&id)
+            .is_some_and(|e| e.state == State::Live && e.removing.is_none())
     }
 
     /// The client's news of what it heard.
@@ -199,13 +220,17 @@ impl ClientSync {
         if ack.epoch != self.epoch {
             return;
         }
-        let (done, keep): (VecDeque<Sent>, VecDeque<Sent>) = std::mem::take(&mut self.inflight).into_iter().partition(|s| ack.covers(s.seq));
+        let (done, keep): (VecDeque<Sent>, VecDeque<Sent>) = std::mem::take(&mut self.inflight)
+            .into_iter()
+            .partition(|s| ack.covers(s.seq));
         self.inflight = keep;
         for sent in done {
             self.confirm(sent);
         }
         for (id, t) in &ack.troubles {
-            let Some(e) = self.entries.get_mut(id) else { continue };
+            let Some(e) = self.entries.get_mut(id) else {
+                continue;
+            };
             match t {
                 Trouble::SendWhole => e.known = None,
                 Trouble::Unknown => {
@@ -257,7 +282,14 @@ impl ClientSync {
 
     /// The datagrams of this moment for a client at `viewer`: none while it is not time for
     /// a snapshot (`SNAP_HZ`). `now` is the table's clock (s), `host_ms` the stamp.
-    pub fn publish(&mut self, table: &TrafficTable, viewer: [f64; 3], dt: f32, host_ms: u32, now: f64) -> Vec<Vec<u8>> {
+    pub fn publish(
+        &mut self,
+        table: &TrafficTable,
+        viewer: [f64; 3],
+        dt: f32,
+        host_ms: u32,
+        now: f64,
+    ) -> Vec<Vec<u8>> {
         self.acc += dt;
         if self.acc + 1.0e-4 < SNAP_INTERVAL {
             return Vec::new();
@@ -267,11 +299,21 @@ impl ClientSync {
         let anchor = Anchor::at(viewer);
         let cap = self.bytes_per_second * SNAP_INTERVAL as f64;
         self.bucket = (self.bucket + cap).min(cap * 2.0);
-        while self.inflight.front().is_some_and(|s| now - s.at > INFLIGHT_KEEP) || self.inflight.len() > INFLIGHT_MAX {
+        while self
+            .inflight
+            .front()
+            .is_some_and(|s| now - s.at > INFLIGHT_KEEP)
+            || self.inflight.len() > INFLIGHT_MAX
+        {
             self.inflight.pop_front();
         }
         self.track(table, viewer, anchor);
-        let mut b = Builder { cur: Packet::default(), sent: Sent::default(), done: Vec::new(), spent: 0 };
+        let mut b = Builder {
+            cur: Packet::default(),
+            sent: Sent::default(),
+            done: Vec::new(),
+            spent: 0,
+        };
         self.pack_events(table, now, anchor, &mut b);
         self.pack_rows(table, viewer, now, anchor, &mut b);
         b.flush();
@@ -287,7 +329,10 @@ impl ClientSync {
             s.snap = self.snap;
             s.at = now;
             let Some(bytes) = wire::encode(&p, crate::PROTOCOL as u8) else {
-                log::warn!("traffic table: a datagram of {} bytes could not be made", p.size());
+                log::warn!(
+                    "traffic table: a datagram of {} bytes could not be made",
+                    p.size()
+                );
                 continue;
             };
             self.stats.datagrams += 1;
@@ -308,22 +353,41 @@ impl ClientSync {
                     if d <= self.radius_in && anchor.reaches(&slot.row) && sendable {
                         self.entries.insert(
                             slot.id,
-                            Entry { state: State::Spawning, kind: slot.kind, look: slot.look, spawn_sent: None, known: None, last: None, meta_acked: 0, meta_sent: None, removing: None },
+                            Entry {
+                                state: State::Spawning,
+                                kind: slot.kind,
+                                look: slot.look,
+                                spawn_sent: None,
+                                known: None,
+                                last: None,
+                                meta_acked: 0,
+                                meta_sent: None,
+                                removing: None,
+                            },
                         );
                     }
                 }
-                Some(e) if e.removing.is_none() && (d > self.radius_out || !anchor.reaches(&slot.row)) => {
+                Some(e)
+                    if e.removing.is_none()
+                        && (d > self.radius_out || !anchor.reaches(&slot.row)) =>
+                {
                     e.removing = Some(Removal { sent: None });
                 }
                 Some(_) => {}
             }
         }
-        let ended: Vec<TrafficId> = self.entries.iter().filter(|(id, e)| e.removing.is_none() && table.get(**id).is_none()).map(|(id, _)| *id).collect();
+        let ended: Vec<TrafficId> = self
+            .entries
+            .iter()
+            .filter(|(id, e)| e.removing.is_none() && table.get(**id).is_none())
+            .map(|(id, _)| *id)
+            .collect();
         for id in ended {
             self.entries.get_mut(&id).unwrap().removing = Some(Removal { sent: None });
         }
         // (a vehicle the client was never told of needs no goodbye)
-        self.entries.retain(|_, e| !(e.removing.is_some() && e.spawn_sent.is_none() && e.known.is_none()));
+        self.entries
+            .retain(|_, e| !(e.removing.is_some() && e.spawn_sent.is_none() && e.known.is_none()));
     }
 
     fn pack_events(&mut self, table: &TrafficTable, now: f64, anchor: Anchor, b: &mut Builder) {
@@ -331,7 +395,11 @@ impl ClientSync {
         let mut removes: Vec<TrafficId> = self
             .entries
             .iter()
-            .filter(|(_, e)| e.removing.as_ref().is_some_and(|r| r.sent.is_none_or(|t| now - t >= RESEND_AFTER)))
+            .filter(|(_, e)| {
+                e.removing
+                    .as_ref()
+                    .is_some_and(|r| r.sent.is_none_or(|t| now - t >= RESEND_AFTER))
+            })
             .map(|(id, _)| *id)
             .collect();
         removes.sort_unstable();
@@ -341,23 +409,56 @@ impl ClientSync {
             }
             b.cur.removes.push(id);
             b.sent.removes.push(id);
-            self.entries.get_mut(&id).unwrap().removing.as_mut().unwrap().sent = Some(now);
+            self.entries
+                .get_mut(&id)
+                .unwrap()
+                .removing
+                .as_mut()
+                .unwrap()
+                .sent = Some(now);
             self.stats.removes += 1;
         }
         // the newcomers, the nearest the client's first
-        let mut fresh: Vec<TrafficId> = self.entries.iter().filter(|(_, e)| e.state == State::Spawning && e.removing.is_none() && e.spawn_sent.is_none_or(|t| now - t >= RESEND_AFTER)).map(|(id, _)| *id).collect();
+        let mut fresh: Vec<TrafficId> = self
+            .entries
+            .iter()
+            .filter(|(_, e)| {
+                e.state == State::Spawning
+                    && e.removing.is_none()
+                    && e.spawn_sent.is_none_or(|t| now - t >= RESEND_AFTER)
+            })
+            .map(|(id, _)| *id)
+            .collect();
         fresh.sort_unstable();
         fresh.truncate(SPAWNS_PER_SNAP);
         for id in fresh {
-            let (Some(slot), Some(e)) = (table.get(id), self.entries.get(&id)) else { continue };
-            let Some(look) = table.look(e.look) else { continue };
-            let look_bits = if self.looks_acked.contains(&e.look) { 0 } else { wire::look_bits(look) };
-            let want_meta = slot.meta_rev > e.meta_acked && !(slot.meta == Default::default() && e.meta_acked == 0);
-            let meta_bits = if want_meta { wire::meta_bits(&slot.meta) } else { 0 };
-            if (look_bits > 0 && b.cur.looks.len() >= 31) || (want_meta && b.cur.metas.len() >= 31) {
+            let (Some(slot), Some(e)) = (table.get(id), self.entries.get(&id)) else {
+                continue;
+            };
+            let Some(look) = table.look(e.look) else {
+                continue;
+            };
+            let look_bits = if self.looks_acked.contains(&e.look) {
+                0
+            } else {
+                wire::look_bits(look)
+            };
+            let want_meta = slot.meta_rev > e.meta_acked
+                && !(slot.meta == Default::default() && e.meta_acked == 0);
+            let meta_bits = if want_meta {
+                wire::meta_bits(&slot.meta)
+            } else {
+                0
+            };
+            if (look_bits > 0 && b.cur.looks.len() >= 31) || (want_meta && b.cur.metas.len() >= 31)
+            {
                 b.flush();
             }
-            if !b.room(look_bits + wire::SPAWN_BITS + meta_bits, b.cur.spawns.len(), 63) {
+            if !b.room(
+                look_bits + wire::SPAWN_BITS + meta_bits,
+                b.cur.spawns.len(),
+                63,
+            ) {
                 break;
             }
             // (a spawn is told with its look until the look is acknowledged)
@@ -366,7 +467,12 @@ impl ClientSync {
                 b.sent.looks.push(e.look);
                 self.looks_sent.insert(e.look, now);
             }
-            b.cur.spawns.push(Spawn { id, look: e.look, kind: e.kind, row: slot.row });
+            b.cur.spawns.push(Spawn {
+                id,
+                look: e.look,
+                kind: e.kind,
+                row: slot.row,
+            });
             b.sent.spawns.push((id, slot.row));
             if want_meta {
                 b.cur.metas.push((id, slot.meta.clone()));
@@ -387,7 +493,11 @@ impl ClientSync {
             .filter(|(id, e)| {
                 e.state == State::Live
                     && e.removing.is_none()
-                    && table.get(**id).is_some_and(|s| s.meta_rev > e.meta_acked && e.meta_sent.is_none_or(|(rev, t)| rev != s.meta_rev || now - t >= RESEND_AFTER))
+                    && table.get(**id).is_some_and(|s| {
+                        s.meta_rev > e.meta_acked
+                            && e.meta_sent
+                                .is_none_or(|(rev, t)| rev != s.meta_rev || now - t >= RESEND_AFTER)
+                    })
             })
             .map(|(id, _)| *id)
             .collect();
@@ -404,7 +514,14 @@ impl ClientSync {
         let _ = anchor;
     }
 
-    fn pack_rows(&mut self, table: &TrafficTable, viewer: [f64; 3], now: f64, anchor: Anchor, b: &mut Builder) {
+    fn pack_rows(
+        &mut self,
+        table: &TrafficTable,
+        viewer: [f64; 3],
+        now: f64,
+        anchor: Anchor,
+        b: &mut Builder,
+    ) {
         let mut due: Vec<Due> = Vec::new();
         for (id, e) in &self.entries {
             if e.state != State::Live || e.removing.is_some() {
@@ -415,7 +532,10 @@ impl ClientSync {
             let same_as_known = e.known.is_some_and(|(_, r)| r == slot.row);
             if same_as_known {
                 if since >= KEEPALIVE {
-                    due.push(Due { id: *id, score: 0.1 });
+                    due.push(Due {
+                        id: *id,
+                        score: 0.1,
+                    });
                 }
                 continue;
             }
@@ -423,12 +543,21 @@ impl ClientSync {
                 continue;
             }
             let d = slot.row.distance_to(viewer);
-            let interval = if d < 200.0 { 0.1 } else if d < 400.0 { 0.2 } else { 0.3 };
+            let interval = if d < 200.0 {
+                0.1
+            } else if d < 400.0 {
+                0.2
+            } else {
+                0.3
+            };
             // (a little early is on time: snapshots come at 0.1 s, give or take)
             if since + 0.02 < interval {
                 continue;
             }
-            due.push(Due { id: *id, score: since.min(10.0) / interval });
+            due.push(Due {
+                id: *id,
+                score: since.min(10.0) / interval,
+            });
         }
         due.sort_unstable_by(|a, b| b.score.total_cmp(&a.score).then(a.id.cmp(&b.id)));
         let mut deferred = 0;
@@ -437,10 +566,20 @@ impl ClientSync {
             let slot = table.get(item.id).unwrap();
             let update = match e.known.and_then(|(ks, kr)| {
                 let back = self.snap.wrapping_sub(ks) as u32;
-                (1..=MAX_BASELINE).contains(&back).then(|| Delta::between(&kr, &slot.row).map(|d| (back as u8, d))).flatten()
+                (1..=MAX_BASELINE)
+                    .contains(&back)
+                    .then(|| Delta::between(&kr, &slot.row).map(|d| (back as u8, d)))
+                    .flatten()
             }) {
-                Some((back, delta)) => RowUpdate::Delta { id: item.id, base_back: back, delta },
-                None if anchor.reaches(&slot.row) => RowUpdate::Full { id: item.id, row: slot.row },
+                Some((back, delta)) => RowUpdate::Delta {
+                    id: item.id,
+                    base_back: back,
+                    delta,
+                },
+                None if anchor.reaches(&slot.row) => RowUpdate::Full {
+                    id: item.id,
+                    row: slot.row,
+                },
                 None => continue,
             };
             let bits = update.bits();

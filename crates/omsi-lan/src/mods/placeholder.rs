@@ -18,16 +18,39 @@ const HEIGHT: f32 = 3.0;
 static MADE: Mutex<Option<HashMap<String, Arc<omsi_sim::VehicleType>>>> = Mutex::new(None);
 
 /// The box for a bus of that size (m; `offset`: how far its centre lies ahead of its origin).
-pub(crate) fn of_size(root: &Path, length: f32, width: f32, height: f32, offset: f32) -> Option<Arc<omsi_sim::VehicleType>> {
-    let sane = |v: f32, lo: f32, hi: f32, d: f32| if v.is_finite() && v >= lo && v <= hi { v } else { d };
-    let (l, w, h) = (sane(length, 2.0, 60.0, LENGTH), sane(width, 1.0, 8.0, WIDTH), sane(height, 1.0, 10.0, HEIGHT));
+pub(crate) fn of_size(
+    root: &Path,
+    length: f32,
+    width: f32,
+    height: f32,
+    offset: f32,
+) -> Option<Arc<omsi_sim::VehicleType>> {
+    let sane = |v: f32, lo: f32, hi: f32, d: f32| {
+        if v.is_finite() && v >= lo && v <= hi {
+            v
+        } else {
+            d
+        }
+    };
+    let (l, w, h) = (
+        sane(length, 2.0, 60.0, LENGTH),
+        sane(width, 1.0, 8.0, WIDTH),
+        sane(height, 1.0, 10.0, HEIGHT),
+    );
     let o = sane(offset, -40.0, 40.0, 0.0);
     // (to a decimetre: one box for every bus of about that size)
     let key = format!("{:.1}x{:.1}x{:.1}{:+.1}", l, w, h, o);
-    if let Some(t) = MADE.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|m| m.get(&key)) {
+    if let Some(t) = MADE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .and_then(|m| m.get(&key))
+    {
         return Some(t.clone());
     }
-    let dir = super::sandbox_base()?.with_file_name("placeholders").join(&key);
+    let dir = super::sandbox_base()?
+        .with_file_name("placeholders")
+        .join(&key);
     let bus = match write(&dir, l, w, h, o) {
         Ok(b) => b,
         Err(e) => {
@@ -42,7 +65,10 @@ pub(crate) fn of_size(root: &Path, length: f32, width: f32, height: f32, offset:
             return None;
         }
     };
-    MADE.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(key, ty.clone());
+    MADE.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get_or_insert_with(HashMap::new)
+        .insert(key, ty.clone());
     Some(ty)
 }
 
@@ -59,7 +85,10 @@ fn write(dir: &Path, l: f32, w: f32, h: f32, o: f32) -> std::io::Result<PathBuf>
             h / 2.0
         ),
     )?;
-    std::fs::write(model.join("model.cfg"), "[mesh]\nbox.x\n\n[matl]\nbox.bmp\n0\n")?;
+    std::fs::write(
+        model.join("model.cfg"),
+        "[mesh]\nbox.x\n\n[matl]\nbox.bmp\n0\n",
+    )?;
     std::fs::write(model.join("box.x"), box_x(l, w, h, o))?;
     std::fs::write(model.join("box.bmp"), grey_bmp())?;
     Ok(bus)
@@ -69,8 +98,24 @@ fn write(dir: &Path, l: f32, w: f32, h: f32, o: f32) -> std::io::Result<PathBuf>
 /// round - seen from outside and from inside alike, whichever way the renderer culls.
 fn box_x(l: f32, w: f32, h: f32, o: f32) -> String {
     let (x0, x1, y0, y1, z0, z1) = (-w / 2.0, w / 2.0, 0.0, h, o - l / 2.0, o + l / 2.0);
-    let v = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
-    let faces = [[0, 1, 2, 3], [5, 4, 7, 6], [4, 0, 3, 7], [1, 5, 6, 2], [3, 2, 6, 7], [4, 5, 1, 0]];
+    let v = [
+        [x0, y0, z0],
+        [x1, y0, z0],
+        [x1, y1, z0],
+        [x0, y1, z0],
+        [x0, y0, z1],
+        [x1, y0, z1],
+        [x1, y1, z1],
+        [x0, y1, z1],
+    ];
+    let faces = [
+        [0, 1, 2, 3],
+        [5, 4, 7, 6],
+        [4, 0, 3, 7],
+        [1, 5, 6, 2],
+        [3, 2, 6, 7],
+        [4, 5, 1, 0],
+    ];
     let mut tris: Vec<[usize; 3]> = Vec::new();
     for f in faces {
         for t in [[f[0], f[1], f[2]], [f[0], f[2], f[3]]] {
@@ -78,8 +123,14 @@ fn box_x(l: f32, w: f32, h: f32, o: f32) -> String {
             tris.push([t[0], t[2], t[1]]);
         }
     }
-    let verts: Vec<String> = v.iter().map(|p| format!(" {:.3};{:.3};{:.3};", p[0], p[1], p[2])).collect();
-    let tri: Vec<String> = tris.iter().map(|t| format!(" 3;{},{},{};", t[0], t[1], t[2])).collect();
+    let verts: Vec<String> = v
+        .iter()
+        .map(|p| format!(" {:.3};{:.3};{:.3};", p[0], p[1], p[2]))
+        .collect();
+    let tri: Vec<String> = tris
+        .iter()
+        .map(|t| format!(" 3;{},{},{};", t[0], t[1], t[2]))
+        .collect();
     let uvs: Vec<String> = v.iter().map(|_| " 0.5;0.5;".to_string()).collect();
     format!(
         "xof 0303txt 0032\nMesh placeholder {{\n {};\n{};\n {};\n{};\n MeshMaterialList {{\n  1;\n  {};\n{};\n  Material {{ 1;1;1;1;; 0; 0;0;0;; 0;0;0;; TextureFilename {{ \"box.bmp\"; }} }}\n }}\n MeshTextureCoords {{\n  {};\n{};\n }}\n}}\n",
@@ -140,12 +191,19 @@ mod tests {
     /// script, its box of the size asked.
     #[test]
     fn it_loads_as_a_vehicle_of_its_size() {
-        let Some(root) = std::env::var_os("OMSI_ROOT").map(PathBuf::from) else { return };
+        let Some(root) = std::env::var_os("OMSI_ROOT").map(PathBuf::from) else {
+            return;
+        };
         let ty = of_size(&root, 18.0, 2.55, 3.1, -2.0).unwrap();
-        assert_eq!(ty.def.bounding_box.map(|b| [b[0], b[1], b[2], b[4]]), Some([2.55, 18.0, 3.1, -2.0]));
+        assert_eq!(
+            ty.def.bounding_box.map(|b| [b[0], b[1], b[2], b[4]]),
+            Some([2.55, 18.0, 3.1, -2.0])
+        );
         assert_eq!(ty.meshes.len(), 1);
         // the same size again: the one made already
-        assert!(Arc::ptr_eq(&ty, &of_size(&root, 18.02, 2.55, 3.1, -2.0).unwrap()));
+        assert!(Arc::ptr_eq(
+            &ty,
+            &of_size(&root, 18.02, 2.55, 3.1, -2.0).unwrap()
+        ));
     }
 }
-

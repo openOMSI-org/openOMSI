@@ -10,9 +10,9 @@ pub mod money;
 pub mod options;
 pub mod situation;
 pub mod tickets;
+pub mod tutorial;
 pub mod weather;
 pub mod weather_choice;
-pub mod tutorial;
 
 pub use driver::Driver;
 pub use envir::Envir;

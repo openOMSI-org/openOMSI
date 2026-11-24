@@ -42,7 +42,8 @@ pub(crate) fn weekday(code: i32) -> i32 {
     if m < 3 {
         y -= 1;
     }
-    let sunday0 = (y + y / 4 - y / 100 + y / 400 + t[((m - 1).clamp(0, 11)) as usize] + d).rem_euclid(7);
+    let sunday0 =
+        (y + y / 4 - y / 100 + y / 400 + t[((m - 1).clamp(0, 11)) as usize] + d).rem_euclid(7);
     (sunday0 + 6) % 7
 }
 
@@ -57,10 +58,18 @@ pub(crate) fn days_of(mask: i32) -> String {
         0x3f => tr("Mon-Sat"),
         0x60 => tr("Sat-Sun"),
         0 => String::new(),
-        w => (0..7).filter(|i| w & (1 << i) != 0).map(|i| tr(names[i])).collect::<Vec<_>>().join(", "),
+        w => (0..7)
+            .filter(|i| w & (1 << i) != 0)
+            .map(|i| tr(names[i]))
+            .collect::<Vec<_>>()
+            .join(", "),
     };
     if mask & (1 << 7) != 0 && week != 0x7f {
-        out = if out.is_empty() { tr("holidays") } else { trf("{days} & holidays", &[("days", &out)]) };
+        out = if out.is_empty() {
+            tr("holidays")
+        } else {
+            trf("{days} & holidays", &[("days", &out)])
+        };
     }
     let school = match (mask & (1 << 8) != 0, mask & (1 << 9) != 0) {
         (true, false) => Some(("school days", "{days}, school days")),
@@ -68,7 +77,11 @@ pub(crate) fn days_of(mask: i32) -> String {
         _ => None,
     };
     if let Some((alone, after)) = school {
-        out = if out.is_empty() { tr(alone) } else { trf(after, &[("days", &out)]) };
+        out = if out.is_empty() {
+            tr(alone)
+        } else {
+            trf(after, &[("days", &out)])
+        };
     }
     out
 }

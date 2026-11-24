@@ -350,9 +350,8 @@ const DOORS_GIVE_UP: f32 = 45.0;
 const STOP_REACH: f32 = 80.0;
 /// This near its stop a timetable bus settles whether it stops there at all (Omsi.exe
 /// 0x7da5b5: 50 m): not when nobody aboard wants to get off and nobody waits there,
-/// unless it is the trip's first or last stop or the bus is more than `EARLY_STOP` early.
+/// unless it is the trip's first or last stop or its profile explicitly says to serve it early.
 const SKIP_DECIDE: f32 = 50.0;
-const EARLY_STOP: f64 = 120.0;
 const EARLY_STOP_SHORT: f64 = 20.0;
 
 /// What the service needs of the world this frame.
@@ -557,7 +556,6 @@ impl BusService {
         let last = (self.stops.len() == 1 && !self.route_open) || self.last_stop == Some(stop.id);
         let early = stop.depart - day_time;
         last || self.layover
-            || early > EARLY_STOP
             || self.always.contains(&stop.id)
             || (early > EARLY_STOP_SHORT && self.serve_early.contains(&stop.id))
     }

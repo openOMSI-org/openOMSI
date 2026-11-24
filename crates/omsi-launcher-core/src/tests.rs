@@ -5,7 +5,10 @@ fn vehicle_type_label_falls_back_to_the_file_name() {
     for empty in ["", "   "] {
         assert_eq!(super::vehicle_type_label(empty, path), "NL 202");
     }
-    assert_eq!(super::vehicle_type_label("  MAN_NL202  ", path), "MAN NL202");
+    assert_eq!(
+        super::vehicle_type_label("  MAN_NL202  ", path),
+        "MAN NL202"
+    );
 }
 
 #[test]
@@ -18,7 +21,11 @@ fn a_part_found_from_the_vehicle_folder_is_no_missing_pack() {
     std::fs::write(obj.join("a.o3d"), b"x").unwrap();
     omsi_cfg::add_content_root(root.clone());
     let model = cfgs.join("m.cfg");
-    std::fs::write(&model, "[mesh]\r\n..\\..\\..\\Sceneryobjects\\X\\a.o3d\r\n..\\..\\..\\Other\\b.o3d\r\n").unwrap();
+    std::fs::write(
+        &model,
+        "[mesh]\r\n..\\..\\..\\Sceneryobjects\\X\\a.o3d\r\n..\\..\\..\\Other\\b.o3d\r\n",
+    )
+    .unwrap();
     let packs = super::missing_packs_of(&model);
     omsi_cfg::remove_content_root(&root);
     let _ = std::fs::remove_dir_all(&root);
@@ -32,75 +39,215 @@ include!("plugin_launch_tests.rs");
 fn the_games_options_survive_a_save() {
     // what the pause menu's Options change, read back as they were set
     let mut v = settings_from_text(None);
-    for (k, x) in [("steer_look", json!(true)), ("discord_status", json!(false)), ("remote_cockpit", json!(true)), ("remote_cockpit_port", json!(9000)), ("voice_enabled", json!(true)), ("voice_mode", json!("open")), ("voice_range", json!(120)), ("voice_mic_gain", json!(2.0)), ("launcher_rest", json!(false)), ("camera_collision", json!(false)), ("brake_hold", json!(false)), ("auto_clutch", json!(false)), ("momentary_gears", json!(true)), ("ff_enabled", json!(false)), ("head_tracking", json!(true)), ("collision_objects", json!(false)), ("realistic_road_physics", json!(true)), ("led_mips", json!(2.5)), ("led_glow", json!(11)), ("look_sens", json!(0.5)), ("look_smoothing_ms", json!(120.0)), ("blinker_cancel", json!(false)), ("pedal_brake", json!(1.5)), ("mouse_pedal_strength", json!(1.75)), ("head_idle", json!(0.35)), ("head_idle_pace", json!(1.5)), ("seat_y", json!(-0.1)), ("seat_pitch_deg", json!(8.0))] {
+    for (k, x) in [
+        ("steer_look", json!(true)),
+        ("discord_status", json!(false)),
+        ("remote_cockpit", json!(true)),
+        ("remote_cockpit_port", json!(9000)),
+        ("voice_enabled", json!(true)),
+        ("voice_mode", json!("open")),
+        ("voice_range", json!(120)),
+        ("voice_mic_gain", json!(2.0)),
+        ("launcher_rest", json!(false)),
+        ("camera_collision", json!(false)),
+        ("brake_hold", json!(false)),
+        ("auto_clutch", json!(false)),
+        ("momentary_gears", json!(true)),
+        ("ff_enabled", json!(false)),
+        ("head_tracking", json!(true)),
+        ("collision_objects", json!(false)),
+        ("realistic_road_physics", json!(true)),
+        ("led_mips", json!(2.5)),
+        ("led_glow", json!(11)),
+        ("look_sens", json!(0.5)),
+        ("look_smoothing_ms", json!(120.0)),
+        ("blinker_cancel", json!(false)),
+        ("pedal_brake", json!(1.5)),
+        ("mouse_pedal_strength", json!(1.75)),
+        ("head_idle", json!(0.35)),
+        ("head_idle_pace", json!(1.5)),
+        ("seat_y", json!(-0.1)),
+        ("seat_pitch_deg", json!(8.0)),
+    ] {
         v[k] = x;
     }
     let back = settings_from_text(Some(&settings_to_text(&v, None)));
-    assert_eq!(settings_from_text(Some("seat_pitch_deg=NaN\n"))["seat_pitch_deg"], json!(0.0));
-    assert_eq!(settings_from_text(Some("seat_pitch_deg=90\n"))["seat_pitch_deg"], json!(45.0));
+    assert_eq!(
+        settings_from_text(Some("seat_pitch_deg=NaN\n"))["seat_pitch_deg"],
+        json!(0.0)
+    );
+    assert_eq!(
+        settings_from_text(Some("seat_pitch_deg=90\n"))["seat_pitch_deg"],
+        json!(45.0)
+    );
     let mut r = settings_from_text(None);
     assert_eq!(r["resolution"], json!("auto"));
     r["resolution"] = json!("1280x800");
-    assert_eq!(settings_from_text(Some(&settings_to_text(&r, None)))["resolution"], json!("1280x800"));
+    assert_eq!(
+        settings_from_text(Some(&settings_to_text(&r, None)))["resolution"],
+        json!("1280x800")
+    );
     assert_eq!(resolution_text("1920 x 1080"), "1920x1080");
     assert_eq!(resolution_text("huge"), "auto");
-    for k in ["steer_look", "discord_status", "remote_cockpit", "remote_cockpit_port", "voice_enabled", "voice_mode", "voice_range", "voice_mic_gain", "launcher_rest", "camera_collision", "brake_hold", "auto_clutch", "momentary_gears", "ff_enabled", "head_tracking", "collision_objects", "realistic_road_physics", "led_mips", "led_glow", "look_sens", "look_smoothing_ms", "blinker_cancel", "pedal_brake", "mouse_pedal_strength", "head_idle", "head_idle_pace", "seat_y", "seat_pitch_deg"] {
+    for k in [
+        "steer_look",
+        "discord_status",
+        "remote_cockpit",
+        "remote_cockpit_port",
+        "voice_enabled",
+        "voice_mode",
+        "voice_range",
+        "voice_mic_gain",
+        "launcher_rest",
+        "camera_collision",
+        "brake_hold",
+        "auto_clutch",
+        "momentary_gears",
+        "ff_enabled",
+        "head_tracking",
+        "collision_objects",
+        "realistic_road_physics",
+        "led_mips",
+        "led_glow",
+        "look_sens",
+        "look_smoothing_ms",
+        "blinker_cancel",
+        "pedal_brake",
+        "mouse_pedal_strength",
+        "head_idle",
+        "head_idle_pace",
+        "seat_y",
+        "seat_pitch_deg",
+    ] {
         assert_eq!(back[k], v[k], "{k}");
     }
-    assert!(!settings_from_text(None)["discord_status"].as_bool().unwrap());
+    assert!(
+        !settings_from_text(None)["discord_status"]
+            .as_bool()
+            .unwrap()
+    );
     // (a player who switched it on keeps it)
-    assert!(settings_from_text(Some("discord_status=1\n"))["discord_status"].as_bool().unwrap());
+    assert!(
+        settings_from_text(Some("discord_status=1\n"))["discord_status"]
+            .as_bool()
+            .unwrap()
+    );
     assert!(settings_from_text(None)["launcher_rest"].as_bool().unwrap());
     // voice chat is off until switched on
     assert!(!settings_from_text(None)["voice_enabled"].as_bool().unwrap());
-    assert_eq!(settings_from_text(Some("voice_chat=1\n"))["voice_enabled"], json!(false));
+    assert_eq!(
+        settings_from_text(Some("voice_chat=1\n"))["voice_enabled"],
+        json!(false)
+    );
     let prior = settings_from_text(Some("discord_status=1\ndiscord_status=0\n"));
     assert!(!prior["discord_status"].as_bool().unwrap());
     let mut enabled = prior;
     enabled["discord_status"] = json!(true);
     let saved = settings_to_text(&enabled, Some("discord_status=0\ndiscord_status=0\n"));
-    assert_eq!(saved.lines().filter(|line| line.starts_with("discord_status=")).count(), 1);
-    assert!(settings_from_text(Some(&saved))["discord_status"].as_bool().unwrap());
+    assert_eq!(
+        saved
+            .lines()
+            .filter(|line| line.starts_with("discord_status="))
+            .count(),
+        1
+    );
+    assert!(
+        settings_from_text(Some(&saved))["discord_status"]
+            .as_bool()
+            .unwrap()
+    );
     let custom_id = "discord_app_id=123456\n";
     let values = settings_from_text(Some(custom_id));
     assert_eq!(values["discord_app_id"], json!("123456"));
     let saved = settings_to_text(&values, Some(custom_id));
-    assert_eq!(settings_from_text(Some(&saved))["discord_app_id"], json!("123456"));
+    assert_eq!(
+        settings_from_text(Some(&saved))["discord_app_id"],
+        json!("123456")
+    );
 }
 
 #[test]
 fn launcher_settings_bridge_unifies_ui_theme_with_legacy_nav_light() {
     assert_eq!(settings_from_text(None)["ui_theme"], json!("dark"));
-    assert_eq!(settings_from_text(Some("ui_theme=light\n"))["ui_theme"], json!("light"));
-    assert_eq!(settings_from_text(Some("ui_theme=dark\n"))["ui_theme"], json!("dark"));
-    assert_eq!(settings_from_text(Some("ui_theme=blue\n"))["ui_theme"], json!("dark"));
-    assert_eq!(settings_from_text(Some("nav_light=1\n"))["ui_theme"], json!("light"));
-    assert_eq!(settings_from_text(Some("ui_theme=dark\nnav_light=1\n"))["ui_theme"], json!("dark"));
+    assert_eq!(
+        settings_from_text(Some("ui_theme=light\n"))["ui_theme"],
+        json!("light")
+    );
+    assert_eq!(
+        settings_from_text(Some("ui_theme=dark\n"))["ui_theme"],
+        json!("dark")
+    );
+    assert_eq!(
+        settings_from_text(Some("ui_theme=blue\n"))["ui_theme"],
+        json!("dark")
+    );
+    assert_eq!(
+        settings_from_text(Some("nav_light=1\n"))["ui_theme"],
+        json!("light")
+    );
+    assert_eq!(
+        settings_from_text(Some("ui_theme=dark\nnav_light=1\n"))["ui_theme"],
+        json!("dark")
+    );
 
     let saved = settings_to_text(&json!({ "ui_theme": "light", "nav_light": true }), None);
-    assert!(saved.lines().any(|line| line == "ui_theme=light"), "{saved}");
-    assert!(!saved.lines().any(|line| line.starts_with("nav_light=")), "{saved}");
+    assert!(
+        saved.lines().any(|line| line == "ui_theme=light"),
+        "{saved}"
+    );
+    assert!(
+        !saved.lines().any(|line| line.starts_with("nav_light=")),
+        "{saved}"
+    );
 
-    let rewritten = settings_to_text(&json!({ "ui_theme": "light", "nav_light": true }), Some("nav_light=1\n"));
-    assert!(rewritten.lines().any(|line| line == "ui_theme=light"), "{rewritten}");
-    assert!(!rewritten.lines().any(|line| line.starts_with("nav_light=")), "{rewritten}");
+    let rewritten = settings_to_text(
+        &json!({ "ui_theme": "light", "nav_light": true }),
+        Some("nav_light=1\n"),
+    );
+    assert!(
+        rewritten.lines().any(|line| line == "ui_theme=light"),
+        "{rewritten}"
+    );
+    assert!(
+        !rewritten.lines().any(|line| line.starts_with("nav_light=")),
+        "{rewritten}"
+    );
 
     let invalid = settings_to_text(&json!({ "ui_theme": "blue" }), None);
-    assert!(invalid.lines().any(|line| line == "ui_theme=dark"), "{invalid}");
+    assert!(
+        invalid.lines().any(|line| line == "ui_theme=dark"),
+        "{invalid}"
+    );
 }
 
 #[test]
 fn dsc_files_give_name_and_description() {
-    let d = super::parse_dsc("\r\n[friendlyname]\r\nMAN\r\nNL202 - EN92\r\nBeige\r\n\r\n[description]\r\nAlthough the BVG did not purchase\r\n\r\n-Technical specifications-\r\n[end]\r\n");
+    let d = super::parse_dsc(
+        "\r\n[friendlyname]\r\nMAN\r\nNL202 - EN92\r\nBeige\r\n\r\n[description]\r\nAlthough the BVG did not purchase\r\n\r\n-Technical specifications-\r\n[end]\r\n",
+    );
     assert_eq!(d.name, vec!["MAN", "NL202 - EN92", "Beige"]);
-    assert_eq!(d.description, "Although the BVG did not purchase\n\n-Technical specifications-");
-    let w = super::parse_dsc("[name]\r\nGround Fog\r\n\r\n[description]\r\nHeavy ground fog limits the maximum visibility dangerously!\r\n[end]\r\n");
+    assert_eq!(
+        d.description,
+        "Although the BVG did not purchase\n\n-Technical specifications-"
+    );
+    let w = super::parse_dsc(
+        "[name]\r\nGround Fog\r\n\r\n[description]\r\nHeavy ground fog limits the maximum visibility dangerously!\r\n[end]\r\n",
+    );
     assert_eq!(w.name, vec!["Ground Fog"]);
-    assert_eq!(w.description, "Heavy ground fog limits the maximum visibility dangerously!");
+    assert_eq!(
+        w.description,
+        "Heavy ground fog limits the maximum visibility dangerously!"
+    );
     let p = std::path::Path::new("/x/maps/Spandau/global.cfg");
-    assert_eq!(super::dsc_candidates(p, "ENG"), vec![std::path::PathBuf::from("/x/maps/Spandau/global_ENG.dsc")]);
+    assert_eq!(
+        super::dsc_candidates(p, "ENG"),
+        vec![std::path::PathBuf::from("/x/maps/Spandau/global_ENG.dsc")]
+    );
     assert_eq!(super::dsc_candidates(p, "FRA").len(), 2);
-    assert_eq!(super::dsc_candidates(std::path::Path::new("/v/MAN_EN92_main.bus"), "DEU"), vec![std::path::PathBuf::from("/v/MAN_EN92_main_DEU.dsc")]);
+    assert_eq!(
+        super::dsc_candidates(std::path::Path::new("/v/MAN_EN92_main.bus"), "DEU"),
+        vec![std::path::PathBuf::from("/v/MAN_EN92_main_DEU.dsc")]
+    );
 }
 
 use super::*;
@@ -109,29 +256,160 @@ use super::*;
 /// with no plate, and a plate the player typed is kept as it stands.
 #[test]
 fn a_picked_trip_starts_the_rest_of_the_tour() {
-    let d = Duty { map: "maps/x/global.cfg".into(), bus: "Vehicles/x.bus".into(), time: "09:43".into(), line: Some("14".into()), tour: Some("1".into()), trip: Some("5".into()), whole_tour: true, ..Default::default() };
+    let d = Duty {
+        map: "maps/x/global.cfg".into(),
+        bus: "Vehicles/x.bus".into(),
+        time: "09:43".into(),
+        line: Some("14".into()),
+        tour: Some("1".into()),
+        trip: Some("5".into()),
+        whole_tour: true,
+        ..Default::default()
+    };
     let a = duty_args_for_root(&d, Path::new("test-omsi")).unwrap();
     let k = a.iter().position(|x| x == "--trip").unwrap();
-    assert_eq!((a[k + 1].as_str(), a[k + 2].as_str()), ("5", "--whole-tour"));
-    let alone = duty_args_for_root(&Duty { whole_tour: false, ..d }, Path::new("test-omsi")).unwrap();
+    assert_eq!(
+        (a[k + 1].as_str(), a[k + 2].as_str()),
+        ("5", "--whole-tour")
+    );
+    let alone = duty_args_for_root(
+        &Duty {
+            whole_tour: false,
+            ..d
+        },
+        Path::new("test-omsi"),
+    )
+    .unwrap();
     assert!(!alone.iter().any(|x| x == "--whole-tour"));
 }
 
 include!("lan_join_tests.rs");
 #[test]
 fn a_duty_keeps_its_plate_and_older_files_load_without_one() {
-    let old: Duty = serde_json::from_str(r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00"}"#).unwrap();
+    let old: Duty = serde_json::from_str(
+        r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00"}"#,
+    )
+    .unwrap();
     assert_eq!(old.plate, None);
-    let typed: Duty = serde_json::from_str(r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00","plate":"B-AB 1234"}"#).unwrap();
+    let typed: Duty = serde_json::from_str(
+        r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00","plate":"B-AB 1234"}"#,
+    )
+    .unwrap();
     assert_eq!(typed.plate.as_deref(), Some("B-AB 1234"));
 }
 
 /// The fleet number picked in the launcher reaches the game.
 #[test]
 fn a_duty_passes_its_fleet_number() {
-    let d: Duty = serde_json::from_str(r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00","number":"4711"}"#).unwrap();
+    let d: Duty = serde_json::from_str(
+        r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00","number":"4711"}"#,
+    )
+    .unwrap();
     let a = duty_args_for_root(&d, Path::new("test-omsi")).unwrap();
-    assert!(a.windows(2).any(|w| w[0] == "--number" && w[1] == "4711"), "{a:?}");
+    assert!(
+        a.windows(2).any(|w| w[0] == "--number" && w[1] == "4711"),
+        "{a:?}"
+    );
+}
+
+/// The onboard computer the player picked reaches the game as `--setvar`, which the game sets
+/// over the paint scheme's own `[setvar]`s before the scripts' {init} (#4077).
+#[test]
+fn a_duty_passes_the_variables_picked_for_the_bus() {
+    let d: Duty = serde_json::from_str(r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00","setvars":{"vis_ibis_type":"1","v_drzwi":"0"}}"#).unwrap();
+    let a = duty_args_for_root(&d, Path::new("test-omsi")).unwrap();
+    assert!(
+        a.windows(2)
+            .any(|w| w[0] == "--setvar" && w[1] == "v_drzwi=0,vis_ibis_type=1"),
+        "{a:?}"
+    );
+    let plain: Duty = serde_json::from_str(
+        r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00"}"#,
+    )
+    .unwrap();
+    assert!(
+        !duty_args_for_root(&plain, Path::new("test-omsi"))
+            .unwrap()
+            .iter()
+            .any(|x| x == "--setvar")
+    );
+    let empty: Duty = serde_json::from_str(
+        r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00","setvars":{}}"#,
+    )
+    .unwrap();
+    assert!(
+        !duty_args_for_root(&empty, Path::new("test-omsi"))
+            .unwrap()
+            .iter()
+            .any(|x| x == "--setvar")
+    );
+}
+
+/// The variable names the launcher offers as the bus's onboard computer: the words the vehicle
+/// packs of OMSI use for it, and not the ones they use for doors, seats and the rest.
+#[test]
+fn the_onboard_computers_are_the_variables_the_packs_name() {
+    for name in [
+        "vis_ibis_type",
+        "IBIS_Type",
+        "vis_kasse",
+        "Ticketprinter",
+        "AFR4_unit",
+        "vis_almex",
+        "bordcomputer",
+        "vis_ticketbox",
+    ] {
+        assert!(is_onboard_computer(name), "{name}");
+    }
+    for name in [
+        "v_drzwi",
+        "vis_tuer",
+        "cockpit_frame",
+        "v_seat",
+        "matrix_type",
+        "vis_spiegel",
+    ] {
+        assert!(!is_onboard_computer(name), "{name}");
+    }
+}
+
+/// The variables a bus's paints set, as the launcher offers them: one entry per variable, its
+/// values ascending with the paints that give them, the onboard computers first.
+#[test]
+fn a_buss_variables_come_from_its_paints() {
+    let paints = vec![
+        (
+            "IBIS classic".to_string(),
+            vec![
+                ("vis_ibis_type".to_string(), 0.0),
+                ("v_drzwi".to_string(), 1.0),
+            ],
+        ),
+        ("AFR4".to_string(), vec![("VIS_IBIS_TYPE".to_string(), 2.0)]),
+        (
+            "Almex".to_string(),
+            vec![("vis_ibis_type".to_string(), 1.0)],
+        ),
+    ];
+    let vars = vehicle_variables(&paints);
+    assert_eq!(
+        vars[0].name, "vis_ibis_type",
+        "the onboard computer comes first"
+    );
+    assert!(vars[0].onboard_computer);
+    assert_eq!(
+        vars[0]
+            .values
+            .iter()
+            .map(|v| v.value.as_str())
+            .collect::<Vec<_>>(),
+        ["0", "1", "2"]
+    );
+    assert_eq!(vars[0].values[0].paints, ["IBIS classic"]);
+    assert_eq!(vars[0].values[1].paints, ["Almex"]);
+    assert_eq!(vars[0].values[2].paints, ["AFR4"]);
+    assert_eq!(vars[1].name, "v_drzwi");
+    assert!(!vars[1].onboard_computer);
 }
 
 #[test]
@@ -169,7 +447,10 @@ fn mirror_refresh_survives_the_launcher() {
         let v = settings_from_text(Some(&format!("mirror_refresh={mode}\n")));
         assert_eq!(v["mirror_refresh"], mode);
         let text = settings_to_text(&v, None);
-        assert!(text.lines().any(|l| l == format!("mirror_refresh={mode}")), "{text}");
+        assert!(
+            text.lines().any(|l| l == format!("mirror_refresh={mode}")),
+            "{text}"
+        );
     }
 }
 
@@ -180,7 +461,13 @@ fn mirror_hud_survives_the_launcher() {
         let v = settings_from_text(Some(&format!("mirror_hud={word}\n")));
         assert_eq!(v["mirror_hud"], kept, "{word}");
         let text = settings_to_text(&v, Some("mirror_hud=1\n"));
-        assert_eq!(text.lines().filter(|l| l.starts_with("mirror_hud=")).collect::<Vec<_>>(), [format!("mirror_hud={kept}")], "{text}");
+        assert_eq!(
+            text.lines()
+                .filter(|l| l.starts_with("mirror_hud="))
+                .collect::<Vec<_>>(),
+            [format!("mirror_hud={kept}")],
+            "{text}"
+        );
     }
 }
 
@@ -191,7 +478,11 @@ fn mirror_hud_every_frame_survives_the_launcher() {
         let v = settings_from_text(Some(&format!("mirror_hud_every_frame={word}\n")));
         assert_eq!(v["mirror_hud_every_frame"], on, "{word}");
         let text = settings_to_text(&v, None);
-        assert!(text.lines().any(|l| l == format!("mirror_hud_every_frame={}", on as u8)), "{text}");
+        assert!(
+            text.lines()
+                .any(|l| l == format!("mirror_hud_every_frame={}", on as u8)),
+            "{text}"
+        );
     }
 }
 
@@ -201,23 +492,42 @@ fn sixteen_x_anisotropy_survives_the_launcher() {
     assert_eq!(v["anisotropy"], 16);
     let text = settings_to_text(&v, None);
     assert!(text.lines().any(|l| l == "anisotropy=16"), "{text}");
-    assert_eq!(settings_from_text(Some("anisotropy=32\n"))["anisotropy"], 16);
+    assert_eq!(
+        settings_from_text(Some("anisotropy=32\n"))["anisotropy"],
+        16
+    );
 }
 
 #[test]
 fn update_settings_round_trip() {
     // no file: look for updates, ask before installing
     let d = settings_from_text(None);
-    assert_eq!((d["update_check"].clone(), d["update_auto"].clone()), (json!(true), json!(false)));
+    assert_eq!(
+        (d["update_check"].clone(), d["update_auto"].clone()),
+        (json!(true), json!(false))
+    );
     let v = settings_from_text(Some("update_check=0\nupdate_auto=1\n"));
-    assert_eq!((v["update_check"].clone(), v["update_auto"].clone()), (json!(false), json!(true)));
+    assert_eq!(
+        (v["update_check"].clone(), v["update_auto"].clone()),
+        (json!(false), json!(true))
+    );
     let text = settings_to_text(&v, None);
-    assert!(text.lines().any(|l| l == "update_check=0") && text.lines().any(|l| l == "update_auto=1"), "{text}");
+    assert!(
+        text.lines().any(|l| l == "update_check=0") && text.lines().any(|l| l == "update_auto=1"),
+        "{text}"
+    );
     assert_eq!(d["update_channel"], json!("stable"));
     let beta = settings_from_text(Some("update_channel=Beta\n"));
     assert_eq!(beta["update_channel"], json!("beta"));
-    assert!(settings_to_text(&beta, None).lines().any(|l| l == "update_channel=beta"));
-    assert_eq!(settings_from_text(Some("update_channel=nightly\n"))["update_channel"], json!("stable"));
+    assert!(
+        settings_to_text(&beta, None)
+            .lines()
+            .any(|l| l == "update_channel=beta")
+    );
+    assert_eq!(
+        settings_from_text(Some("update_channel=nightly\n"))["update_channel"],
+        json!("stable")
+    );
 }
 
 #[test]
@@ -230,7 +540,13 @@ fn vr_settings_round_trip() {
     settings["vr_desktop_mirror"] = json!(false);
     let saved = settings_to_text(&settings, None);
     let loaded = settings_from_text(Some(&saved));
-    for key in ["vr", "vr_scale", "vr_head_smoothing_ms", "vr_mirror_rate", "vr_desktop_mirror"] {
+    for key in [
+        "vr",
+        "vr_scale",
+        "vr_head_smoothing_ms",
+        "vr_mirror_rate",
+        "vr_desktop_mirror",
+    ] {
         assert_eq!(loaded[key], settings[key], "{key} was not saved");
     }
 }
@@ -270,13 +586,24 @@ fn triple_screen_settings_survive_launcher_save() {
 
 #[test]
 fn steering_view_settings_survive_the_launcher() {
-    let values = settings_from_text(Some("steer_look=1\nsteer_look_angle=45\nsteer_look_response=0.5\n"));
-    let saved = settings_to_text(&values, Some("steer_look_angle=10\nsteer_look_response=0.1\n"));
+    let values = settings_from_text(Some(
+        "steer_look=1\nsteer_look_angle=45\nsteer_look_response=0.5\n",
+    ));
+    let saved = settings_to_text(
+        &values,
+        Some("steer_look_angle=10\nsteer_look_response=0.1\n"),
+    );
     let loaded = settings_from_text(Some(&saved));
     assert_eq!(loaded["steer_look"], json!(true));
     assert_eq!(loaded["steer_look_angle"], json!(45.0));
     assert_eq!(loaded["steer_look_response"], json!(0.5));
-    assert_eq!(saved.lines().filter(|l| l.starts_with("steer_look_angle=")).count(), 1);
+    assert_eq!(
+        saved
+            .lines()
+            .filter(|l| l.starts_with("steer_look_angle="))
+            .count(),
+        1
+    );
     let invalid = settings_from_text(Some("steer_look_angle=NaN\nsteer_look_response=NaN\n"));
     assert_eq!(invalid["steer_look_angle"], json!(30.0));
     assert_eq!(invalid["steer_look_response"], json!(0.25));
@@ -292,8 +619,14 @@ fn high_vr_mirror_rates_survive_launcher_settings() {
         let loaded = settings_from_text(Some(&saved));
         assert_eq!(loaded["vr_mirror_rate"], json!(rate));
     }
-    assert_eq!(settings_from_text(Some("vr_mirror_rate=NaN\n"))["vr_mirror_rate"], json!(16));
-    assert_eq!(settings_from_text(Some("vr_mirror_rate=999\n"))["vr_mirror_rate"], json!(360));
+    assert_eq!(
+        settings_from_text(Some("vr_mirror_rate=NaN\n"))["vr_mirror_rate"],
+        json!(16)
+    );
+    assert_eq!(
+        settings_from_text(Some("vr_mirror_rate=999\n"))["vr_mirror_rate"],
+        json!(360)
+    );
 }
 
 /// The interface size: 100% without a file, kept as set, and a hand-written value out
@@ -308,32 +641,75 @@ fn interface_size_round_trip() {
     assert_eq!(settings_from_text(Some(&text))["ui_scale"], json!(1.5));
     v["chat_size"] = json!(2.2);
     let text = settings_to_text(&v, None);
-    assert_eq!(text.lines().filter(|l| l.starts_with("chat_size=")).collect::<Vec<_>>(), ["chat_size=2.2"], "{text}");
+    assert_eq!(
+        text.lines()
+            .filter(|l| l.starts_with("chat_size="))
+            .collect::<Vec<_>>(),
+        ["chat_size=2.2"],
+        "{text}"
+    );
     assert_eq!(settings_from_text(Some(&text))["chat_size"], json!(2.2));
     v["timetable_size"] = json!(1.4);
     let text = settings_to_text(&v, None);
-    assert_eq!(text.lines().filter(|l| l.starts_with("timetable_size=")).collect::<Vec<_>>(), ["timetable_size=1.4"], "{text}");
-    assert_eq!(settings_from_text(Some(&text))["timetable_size"], json!(1.4));
-    assert_eq!(settings_from_text(Some("perf_size=9\n"))["perf_size"], json!(2.0));
+    assert_eq!(
+        text.lines()
+            .filter(|l| l.starts_with("timetable_size="))
+            .collect::<Vec<_>>(),
+        ["timetable_size=1.4"],
+        "{text}"
+    );
+    assert_eq!(
+        settings_from_text(Some(&text))["timetable_size"],
+        json!(1.4)
+    );
+    assert_eq!(
+        settings_from_text(Some("perf_size=9\n"))["perf_size"],
+        json!(2.0)
+    );
     assert_eq!(settings_from_text(None)["info_size"], json!(1.0));
-    assert_eq!(settings_from_text(Some("ui_scale=9\n"))["ui_scale"], json!(2.0));
-    assert_eq!(settings_from_text(Some("ui_scale=0.1\n"))["ui_scale"], json!(0.5));
-    assert_eq!(settings_from_text(Some("ui_scale=big\n"))["ui_scale"], json!(1.0));
+    assert_eq!(
+        settings_from_text(Some("ui_scale=9\n"))["ui_scale"],
+        json!(2.0)
+    );
+    assert_eq!(
+        settings_from_text(Some("ui_scale=0.1\n"))["ui_scale"],
+        json!(0.5)
+    );
+    assert_eq!(
+        settings_from_text(Some("ui_scale=big\n"))["ui_scale"],
+        json!(1.0)
+    );
     // (growing with the window: on unless switched off, and kept)
     assert_eq!(settings_from_text(None)["ui_scale_window"], json!(true));
     let off = settings_from_text(Some("ui_scale_window=0\n"));
     assert_eq!(off["ui_scale_window"], json!(false));
-    assert!(settings_to_text(&off, None).lines().any(|l| l == "ui_scale_window=0"));
+    assert!(
+        settings_to_text(&off, None)
+            .lines()
+            .any(|l| l == "ui_scale_window=0")
+    );
     // (the notes in the corner: on unless switched off, and kept)
     assert_eq!(settings_from_text(None)["notes"], json!(true));
-    assert!(settings_to_text(&settings_from_text(Some("notes=0\n")), None).lines().any(|l| l == "notes=0"));
+    assert!(
+        settings_to_text(&settings_from_text(Some("notes=0\n")), None)
+            .lines()
+            .any(|l| l == "notes=0")
+    );
     // (the game's information bar: off unless the game left it on, and kept, #1164)
     assert_eq!(settings_from_text(None)["info_bar"], json!(false));
     let on = settings_from_text(Some("info_bar=1\n"));
     assert_eq!(on["info_bar"], json!(true));
-    assert!(settings_to_text(&on, None).lines().any(|l| l == "info_bar=1"));
+    assert!(
+        settings_to_text(&on, None)
+            .lines()
+            .any(|l| l == "info_bar=1")
+    );
     assert_eq!(settings_from_text(None)["perf_overlay"], json!("off"));
-    assert!(settings_to_text(&settings_from_text(Some("perf_overlay=detailed\n")), None).lines().any(|l| l == "perf_overlay=detailed"));
+    assert!(
+        settings_to_text(&settings_from_text(Some("perf_overlay=detailed\n")), None)
+            .lines()
+            .any(|l| l == "perf_overlay=detailed")
+    );
 }
 
 /// The opacity is the whole interface's now: a file of an older build, where it was the
@@ -351,7 +727,14 @@ fn the_navigators_opacity_becomes_the_interfaces() {
 #[test]
 fn the_wheels_tremble_settings_round_trip() {
     let mut settings = settings_from_text(None);
-    assert_eq!((settings["ff_road_vib"].clone(), settings["ff_engine_vib"].clone(), settings["ff_fade"].clone()), (json!(1.0), json!(1.0), json!(0.28)));
+    assert_eq!(
+        (
+            settings["ff_road_vib"].clone(),
+            settings["ff_engine_vib"].clone(),
+            settings["ff_fade"].clone()
+        ),
+        (json!(1.0), json!(1.0), json!(0.28))
+    );
     settings["ff_road_vib"] = json!(1.5);
     settings["ff_engine_vib"] = json!(0.0);
     settings["ff_fade"] = json!(0.5);
@@ -361,8 +744,14 @@ fn the_wheels_tremble_settings_round_trip() {
         assert_eq!(loaded[key], settings[key], "{key} was not saved");
     }
     // the launcher's own line, and a value past what a wheel can be set to
-    assert_eq!(settings_from_text(Some("ff_road_vib=1.5\n"))["ff_road_vib"], 1.5);
-    assert_eq!(settings_from_text(Some("ff_road_vib=9\n"))["ff_road_vib"], 4.0);
+    assert_eq!(
+        settings_from_text(Some("ff_road_vib=1.5\n"))["ff_road_vib"],
+        1.5
+    );
+    assert_eq!(
+        settings_from_text(Some("ff_road_vib=9\n"))["ff_road_vib"],
+        4.0
+    );
     assert_eq!(settings_from_text(Some("ff_fade=12\n"))["ff_fade"], 1.5);
 }
 
@@ -371,19 +760,48 @@ fn the_cab_wheel_rotation_round_trips() {
     // 0: the bus's own animation, as before the setting
     let mut settings = settings_from_text(None);
     assert_eq!(settings["cab_wheel_rotation"], json!(0));
-    assert!(settings_to_text(&settings, None).lines().any(|l| l == "cab_wheel_rotation=0"));
+    assert!(
+        settings_to_text(&settings, None)
+            .lines()
+            .any(|l| l == "cab_wheel_rotation=0")
+    );
     settings["cab_wheel_rotation"] = json!(1080);
     let saved = settings_to_text(&settings, None);
-    assert!(saved.lines().any(|l| l == "cab_wheel_rotation=1080"), "{saved}");
-    assert_eq!(settings_from_text(Some(&saved))["cab_wheel_rotation"], json!(1080));
+    assert!(
+        saved.lines().any(|l| l == "cab_wheel_rotation=1080"),
+        "{saved}"
+    );
+    assert_eq!(
+        settings_from_text(Some(&saved))["cab_wheel_rotation"],
+        json!(1080)
+    );
     // below the slider's first step is Automatic; past a wheel's rotation is its most
-    for (line, kept) in [("40", 0), ("120", 180), ("900.4", 900), ("5000", 1800), ("-90", 0), ("x", 0)] {
-        assert_eq!(settings_from_text(Some(&format!("cab_wheel_rotation={line}\n")))["cab_wheel_rotation"], json!(kept), "{line}");
+    for (line, kept) in [
+        ("40", 0),
+        ("120", 180),
+        ("900.4", 900),
+        ("5000", 1800),
+        ("-90", 0),
+        ("x", 0),
+    ] {
+        assert_eq!(
+            settings_from_text(Some(&format!("cab_wheel_rotation={line}\n")))["cab_wheel_rotation"],
+            json!(kept),
+            "{line}"
+        );
     }
     settings["cab_wheel_rotation"] = json!(60);
-    assert!(settings_to_text(&settings, None).lines().any(|l| l == "cab_wheel_rotation=0"));
+    assert!(
+        settings_to_text(&settings, None)
+            .lines()
+            .any(|l| l == "cab_wheel_rotation=0")
+    );
     settings["cab_wheel_rotation"] = json!(3600);
-    assert!(settings_to_text(&settings, None).lines().any(|l| l == "cab_wheel_rotation=1800"));
+    assert!(
+        settings_to_text(&settings, None)
+            .lines()
+            .any(|l| l == "cab_wheel_rotation=1800")
+    );
 }
 
 #[test]
@@ -407,14 +825,32 @@ fn settings_keep_what_the_page_does_not_manage() {
     page["video_memory"] = json!("3000");
     page["texture_compression"] = json!(false);
     let text = settings_to_text(&page, Some(old));
-    for line in ["view_distance=2000", "language=FRA", "video_memory=3000", "texture_compression=0", "detail_textures=0", "future_switch=7", "OMSI_Thing = on"] {
+    for line in [
+        "view_distance=2000",
+        "language=FRA",
+        "video_memory=3000",
+        "texture_compression=0",
+        "detail_textures=0",
+        "future_switch=7",
+        "OMSI_Thing = on",
+    ] {
         assert!(text.lines().any(|l| l == line), "{line} missing in\n{text}");
     }
     // the old spellings would override what was just written: gone, and nothing twice
-    for gone in ["lang=", "texmemlimit=", "texture_memory=", "fractal=", "view_distance=1500"] {
+    for gone in [
+        "lang=",
+        "texmemlimit=",
+        "texture_memory=",
+        "fractal=",
+        "view_distance=1500",
+    ] {
         assert!(!text.contains(gone), "{gone} kept in\n{text}");
     }
-    let keys: Vec<&str> = text.lines().filter_map(|l| l.split_once('=')).map(|(k, _)| k.trim()).collect();
+    let keys: Vec<&str> = text
+        .lines()
+        .filter_map(|l| l.split_once('='))
+        .map(|(k, _)| k.trim())
+        .collect();
     let mut unique = keys.clone();
     unique.sort();
     unique.dedup();
@@ -435,12 +871,27 @@ fn lines_follow_the_chrono_date() {
     let root = original_root();
     let map = root.join("maps/Berlin-Spandau");
     require_content(&[&map.join("TTData")]);
-    let names = |date: &str| lines_on(&map, date).unwrap().into_iter().map(|l| l.name).collect::<Vec<_>>();
+    let names = |date: &str| {
+        lines_on(&map, date)
+            .unwrap()
+            .into_iter()
+            .map(|l| l.name)
+            .collect::<Vec<_>>()
+    };
     let (then, now) = (names(""), names("2026-09-17"));
     assert_eq!(then, names(DEFAULT_DATE));
-    assert!(then.iter().any(|l| l == "5 & 5N") && !then.iter().any(|l| l == "130 & N30"), "{then:?}");
-    assert!(!now.iter().any(|l| l == "5 & 5N") && now.iter().any(|l| l == "130 & N30"), "{now:?}");
-    assert!(names("1991-06-01").iter().any(|l| l == "5 & 5N") && !names("1991-06-02").iter().any(|l| l == "5 & 5N"));
+    assert!(
+        then.iter().any(|l| l == "5 & 5N") && !then.iter().any(|l| l == "130 & N30"),
+        "{then:?}"
+    );
+    assert!(
+        !now.iter().any(|l| l == "5 & 5N") && now.iter().any(|l| l == "130 & N30"),
+        "{now:?}"
+    );
+    assert!(
+        names("1991-06-01").iter().any(|l| l == "5 & 5N")
+            && !names("1991-06-02").iter().any(|l| l == "5 & 5N")
+    );
     assert!(lines_on(&map, "someday").is_err());
 }
 
@@ -451,15 +902,36 @@ fn settings_defaults_and_automatic_values() {
     assert_eq!(v["language"], "ENG");
     assert_eq!(v["video_memory"], 0);
     let text = settings_to_text(&v, None);
-    for line in ["view_distance=auto", "language=ENG", "video_memory=0", "texture_compression=1", "render_scale=auto"] {
+    for line in [
+        "view_distance=auto",
+        "language=ENG",
+        "video_memory=0",
+        "texture_compression=1",
+        "render_scale=auto",
+    ] {
         assert!(text.lines().any(|l| l == line), "{line} missing in\n{text}");
     }
     // nonsense from a hand-edited file falls back to the defaults
-    let v = settings_from_text(Some("view_distance=far\nview_distance=-5\nlanguage=Klingon\nvideo_memory=lots\n"));
-    assert_eq!((v["view_distance"].as_str(), v["language"].as_str(), v["video_memory"].as_i64()), (Some("auto"), Some("ENG"), Some(0)));
+    let v = settings_from_text(Some(
+        "view_distance=far\nview_distance=-5\nlanguage=Klingon\nvideo_memory=lots\n",
+    ));
+    assert_eq!(
+        (
+            v["view_distance"].as_str(),
+            v["language"].as_str(),
+            v["video_memory"].as_i64()
+        ),
+        (Some("auto"), Some("ENG"), Some(0))
+    );
     // a number from a script instead of the select's string
-    let text = settings_to_text(&json!({ "view_distance": 900, "video_memory": 1500.0 }), None);
-    assert!(text.contains("\nview_distance=900\n") && text.contains("\nvideo_memory=1500\n"), "{text}");
+    let text = settings_to_text(
+        &json!({ "view_distance": 900, "video_memory": 1500.0 }),
+        None,
+    );
+    assert!(
+        text.contains("\nview_distance=900\n") && text.contains("\nvideo_memory=1500\n"),
+        "{text}"
+    );
 }
 
 /// Dates fitted to a map's year span: moved to the nearest allowed year keeping the day,
@@ -468,12 +940,26 @@ fn settings_defaults_and_automatic_values() {
 #[test]
 fn dates_are_fitted_to_the_maps_year_span() {
     let nineties = Some((1991, 1999));
-    for (date, fitted) in [("1996-07-04", "1996-07-04"), ("2031-03-15", "1999-03-15"), ("1960-12-01", "1991-12-01"), ("1999-12-31", "1999-12-31")] {
+    for (date, fitted) in [
+        ("1996-07-04", "1996-07-04"),
+        ("2031-03-15", "1999-03-15"),
+        ("1960-12-01", "1991-12-01"),
+        ("1999-12-31", "1999-12-31"),
+    ] {
         assert_eq!(fit_date_to_years(date, nineties), fitted);
     }
-    assert_eq!(fit_date_to_years("2028-02-29", Some((2001, 2003))), "2003-02-28");
-    assert_eq!(fit_date_to_years("2028-02-29", Some((1979, 1980))), "1980-02-29");
-    assert_eq!(fit_date_to_years("1950-06-30", Some((1972, i32::MAX))), "1972-06-30");
+    assert_eq!(
+        fit_date_to_years("2028-02-29", Some((2001, 2003))),
+        "2003-02-28"
+    );
+    assert_eq!(
+        fit_date_to_years("2028-02-29", Some((1979, 1980))),
+        "1980-02-29"
+    );
+    assert_eq!(
+        fit_date_to_years("1950-06-30", Some((1972, i32::MAX))),
+        "1972-06-30"
+    );
     assert_eq!(fit_date_to_years("2031-03-15", None), "2031-03-15");
     assert_eq!(fit_date_to_years("next tuesday", nineties), "next tuesday");
     let mut g = omsi_map::GlobalCfg::default();
@@ -484,7 +970,11 @@ fn dates_are_fitted_to_the_maps_year_span() {
     assert_eq!(span((0, 0)), None);
     assert_eq!(span((0, 1988)), Some((i32::MIN, 1988)));
     assert_eq!(span((2010, 0)), Some((2010, i32::MAX)));
-    assert_eq!(span((2010, 2004)), Some((2010, i32::MAX)), "a last year before the first");
+    assert_eq!(
+        span((2010, 2004)),
+        Some((2010, i32::MAX)),
+        "a last year before the first"
+    );
     assert_eq!(span((1972, 1989)), Some((1972, 1989)));
 }
 
@@ -502,20 +992,35 @@ fn todays_year_is_kept_when_the_player_asks_for_it() {
     let dir = std::env::temp_dir().join(format!("openomsi-real-year-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("maps/x")).unwrap();
     std::fs::write(dir.join("maps/x/global.cfg"), "[years]\n1988\n2000\n").unwrap();
-    let d = Duty { map: "maps/x/global.cfg".into(), bus: "Vehicles/x.bus".into(), time: "09:00".into(), date: Some("1995-01-01".into()), ..Default::default() };
+    let d = Duty {
+        map: "maps/x/global.cfg".into(),
+        bus: "Vehicles/x.bus".into(),
+        time: "09:00".into(),
+        date: Some("1995-01-01".into()),
+        ..Default::default()
+    };
     let year = |st: serde_json::Value| {
         let a = duty_args_with_settings(&d, &dir, &st).unwrap();
         a[a.iter().position(|x| x == "--date").unwrap() + 1][..4].to_string()
     };
     let (y, ..) = local_now().unwrap();
     assert_eq!(year(serde_json::json!({"use_real_date": true})), "1995");
-    assert_eq!(year(serde_json::json!({"use_real_date": true, "use_real_year": true})), format!("{y:04}"));
+    assert_eq!(
+        year(serde_json::json!({"use_real_date": true, "use_real_year": true})),
+        format!("{y:04}")
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn a_depot_bus_is_handed_to_the_game() {
-    let d = Duty { map: "maps/x/global.cfg".into(), bus: "Vehicles/x.bus".into(), time: "09:00".into(), depot: Some("6703c1a0".into()), ..Default::default() };
+    let d = Duty {
+        map: "maps/x/global.cfg".into(),
+        bus: "Vehicles/x.bus".into(),
+        time: "09:00".into(),
+        depot: Some("6703c1a0".into()),
+        ..Default::default()
+    };
     let a = duty_args_for_root(&d, Path::new("test-omsi")).unwrap();
     let k = a.iter().position(|x| x == "--depot").unwrap();
     assert_eq!(a[k + 1], "6703c1a0");
@@ -592,7 +1097,10 @@ fn frame_generation_survives_the_settings_file() {
     assert_eq!(page["frame_generation"].as_str(), Some("metalfx"));
     assert!(super::settings_to_text(&page, None).contains("frame_generation=metalfx\n"));
     let windows = super::settings_from_text(Some("frame_generation=dlss2x\n"));
-    assert!(super::settings_to_text(&windows, None).contains("frame_generation=dlss2x\n"), "a Windows choice is kept");
+    assert!(
+        super::settings_to_text(&windows, None).contains("frame_generation=dlss2x\n"),
+        "a Windows choice is kept"
+    );
     let other = super::settings_from_text(Some("frame_generation=warp\n"));
     assert!(super::settings_to_text(&other, None).contains("frame_generation=off\n"));
     assert!(crate::graphics_profiles::GRAPHICS_PROFILE_KEYS.contains(&"frame_generation"));
@@ -600,16 +1108,170 @@ fn frame_generation_survives_the_settings_file() {
 
 #[test]
 fn the_upscaler_and_its_quality_survive_the_settings_file() {
-    let page = super::settings_from_text(Some("upscaler=dlss
+    let page = super::settings_from_text(Some(
+        "upscaler=dlss
 upscale_quality=native
-"));
-    assert_eq!((page["upscaler"].as_str(), page["upscale_quality"].as_str()), (Some("dlss"), Some("native")));
+",
+    ));
+    assert_eq!(
+        (page["upscaler"].as_str(), page["upscale_quality"].as_str()),
+        (Some("dlss"), Some("native"))
+    );
     let saved = super::settings_to_text(&page, None);
-    assert!(saved.contains("upscaler=dlss
-") && saved.contains("upscale_quality=native
-"), "{saved}");
+    assert!(
+        saved.contains(
+            "upscaler=dlss
+"
+        ) && saved.contains(
+            "upscale_quality=native
+"
+        ),
+        "{saved}"
+    );
     // (a Mac's upscaler is a word the page keeps too, not the standard one in its place)
     let mac = super::settings_from_text(Some("upscaler=MetalFX\n"));
     assert_eq!(mac["upscaler"].as_str(), Some("metalfx"));
     assert!(super::settings_to_text(&mac, None).contains("upscaler=metalfx\n"));
+}
+
+#[test]
+fn how_late_the_bus_may_be_is_kept_in_the_settings_file() {
+    let fresh = super::settings_from_text(None);
+    assert_eq!(fresh["pax_late_tolerance_min"], serde_json::json!(5.0));
+    for (written, kept) in [
+        ("10", 10.0),
+        ("0", 0.0),
+        ("7.5", 7.5),
+        ("-5", 0.0),
+        ("500", 120.0),
+        ("junk", 5.0),
+    ] {
+        let v = super::settings_from_text(Some(&format!("pax_late_tolerance_min={written}\n")));
+        assert_eq!(
+            v["pax_late_tolerance_min"],
+            serde_json::json!(kept),
+            "{written:?}"
+        );
+    }
+    let ten = super::settings_from_text(Some("pax_late_tolerance_min=10\n"));
+    let text = super::settings_to_text(&ten, None);
+    assert!(
+        text.lines()
+            .any(|l| l.trim() == "pax_late_tolerance_min=10"),
+        "{text}"
+    );
+}
+
+#[test]
+fn the_dead_zone_of_each_axis_is_kept_as_the_settings_file_wrote_it() {
+    let fresh = super::settings_from_text(None);
+    assert_eq!(
+        fresh["ctrl_deadzone_axes"],
+        serde_json::json!(""),
+        "no axis until one is given one"
+    );
+    let own = super::settings_from_text(Some(
+        "ctrl_deadzone=0.03\nctrl_deadzone_axes=throttle=0.12;brake=0.08\n",
+    ));
+    assert_eq!(
+        own["ctrl_deadzone_axes"],
+        serde_json::json!("throttle=0.12;brake=0.08")
+    );
+    let text = super::settings_to_text(&own, None);
+    assert!(
+        text.lines()
+            .any(|l| l.trim() == "ctrl_deadzone_axes=throttle=0.12;brake=0.08"),
+        "{text}"
+    );
+    assert!(
+        text.lines().any(|l| l.trim() == "ctrl_deadzone=0.03"),
+        "the general one is kept beside them: {text}"
+    );
+    let odd =
+        super::settings_from_text(Some("ctrl_deadzone_axes= throttle=0.12 ; leftover=zzz \n"));
+    assert!(
+        super::settings_to_text(&odd, None)
+            .lines()
+            .any(|l| l.trim() == "ctrl_deadzone_axes=throttle=0.12 ; leftover=zzz"),
+        "trimmed, not parsed"
+    );
+}
+
+#[test]
+fn whether_the_stops_fill_in_free_drive_is_kept_in_the_settings_file() {
+    // (#2712) `auto` by default - the stops fill while the player has no duty, as OMSI's own
+    // passengers turned up whatever was being driven - and the other two spellings kept.
+    let fresh = super::settings_from_text(None);
+    assert_eq!(fresh["pax_free_drive"], serde_json::json!("auto"));
+    for (written, kept) in [
+        ("on", "on"),
+        ("1", "on"),
+        ("yes", "on"),
+        ("off", "off"),
+        ("0", "off"),
+        ("nonsense", "auto"),
+        ("", "auto"),
+    ] {
+        let v = super::settings_from_text(Some(&format!("pax_free_drive={written}\n")));
+        assert_eq!(v["pax_free_drive"], serde_json::json!(kept), "{written:?}");
+    }
+    let off = super::settings_from_text(Some("pax_free_drive=off\n"));
+    assert!(
+        super::settings_to_text(&off, None)
+            .lines()
+            .any(|l| l.trim() == "pax_free_drive=off")
+    );
+}
+
+#[test]
+fn whether_the_stops_passengers_wait_for_a_standing_bus_is_kept_in_the_settings_file() {
+    // (#2757) off by default - OMSI's own passengers set off as the bus rolls in - and kept
+    // both ways through the launcher's file.
+    let fresh = super::settings_from_text(None);
+    assert_eq!(fresh["pax_board_when_stopped"], serde_json::json!(false));
+    let asked = super::settings_from_text(Some("pax_board_when_stopped=1\n"));
+    assert_eq!(asked["pax_board_when_stopped"], serde_json::json!(true));
+    let text = super::settings_to_text(&asked, None);
+    assert!(
+        text.lines().any(|l| l.trim() == "pax_board_when_stopped=1"),
+        "{text}"
+    );
+    let off = super::settings_from_text(Some("pax_board_when_stopped=0\n"));
+    assert!(
+        super::settings_to_text(&off, None)
+            .lines()
+            .any(|l| l.trim() == "pax_board_when_stopped=0")
+    );
+}
+
+#[test]
+fn the_maps_own_passenger_numbers_reach_the_world_through_the_settings_file() {
+    // (#3154) A stop the map gives 0.7 to keeps 0.7 people only when the player asks for it;
+    // the switch has to survive the launcher's own file both ways.
+    let fresh = super::settings_from_text(None);
+    assert_eq!(
+        fresh["pax_stop_numbers_exact"],
+        serde_json::json!(false),
+        "OMSI 2's rounding is what a fresh file asks for"
+    );
+    let asked = super::settings_from_text(Some("pax_stop_numbers_exact=1\n"));
+    assert_eq!(asked["pax_stop_numbers_exact"], serde_json::json!(true));
+    let text = super::settings_to_text(&asked, None);
+    assert!(
+        text.lines().any(|l| l.trim() == "pax_stop_numbers_exact=1"),
+        "the file the game reads says it: {text}"
+    );
+    for off in ["0", "false", "off", "no"] {
+        let v = super::settings_from_text(Some(&format!("pax_stop_numbers_exact={off}\n")));
+        assert_eq!(
+            v["pax_stop_numbers_exact"],
+            serde_json::json!(false),
+            "{off}"
+        );
+        assert!(
+            super::settings_to_text(&v, None)
+                .lines()
+                .any(|l| l.trim() == "pax_stop_numbers_exact=0")
+        );
+    }
 }

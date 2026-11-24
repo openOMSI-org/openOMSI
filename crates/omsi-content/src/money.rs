@@ -16,7 +16,10 @@ pub struct Currency {
 impl Currency {
     pub fn load(path: &Path) -> Result<Currency, omsi_cfg::CfgError> {
         let f = CfgFile::read(path)?;
-        let mut c = Currency { path: f.path.clone(), ..Default::default() };
+        let mut c = Currency {
+            path: f.path.clone(),
+            ..Default::default()
+        };
         let mut r = f.reader();
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
