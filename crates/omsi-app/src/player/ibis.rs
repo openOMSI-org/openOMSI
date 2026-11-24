@@ -534,51 +534,26 @@ mod hold_tests {
         assert_eq!(player.ibis_shown, Some(1));
         assert_eq!(player.vehicle.var("IBIS_busstop"), Some(1.0));
 
-        // Advance to trip 2 and make the player busy with auto-start / typist
         duty.start_at(1, 0);
-        player.ibis_duty = Some((
-            "100".into(),
-            "Terminus B".into(),
-            vec!["Stop 2".into(), "Stop 3".into()],
-            (0, "Stop 2".into()),
-        ));
+        player.startup = Some(omsi_sim::startup::StartUp::new(&player.vehicle, &[]));
+        player.set_duty_destination(duty.trip_for_ibis().0, duty.trip_for_ibis().1);
         assert!(player.ibis_busy());
 
-        // While busy, update_duty_ibis resets shown stop but defers setting the new stop
         player.update_duty_ibis(&mut duty);
-        assert_eq!(
-            player.ibis_shown, None,
-            "deferred during transition while busy"
-        );
-        assert_eq!(
-            player.vehicle.var("IBIS_busstop"),
-            Some(1.0),
-            "retains old stop while transition is busy"
-        );
-        assert_eq!(
-            player.vehicle.var("IBIS_RouteIndex"),
-            Some(0.0),
-            "retains old route while transition is busy"
-        );
+        assert_eq!(player.ibis_shown, None, "deferred during transition while busy");
+        assert_eq!(player.vehicle.var("IBIS_busstop"), Some(1.0), "retains old stop while transition is busy");
+        assert_eq!(player.vehicle.var("IBIS_RouteIndex"), Some(0.0), "retains old route while transition is busy");
 
-        // Drive queued trip typing to completion through the production typing path
-        if let Some((line, terminus, stops, stop)) = player.ibis_duty.take() {
-            player.type_destination(&line, &terminus, &stops, (stop.0, &stop.1));
+        for _ in 0..300 {
+            if !player.tick_startup(0.5) && !player.ibis_busy() {
+                break;
+            }
         }
-        player.tick_ibis(1.0);
         assert!(!player.ibis_busy());
-        assert_eq!(
-            player.vehicle.var("IBIS_RouteIndex"),
-            Some(1.0),
-            "new route established by typing"
-        );
+        assert_eq!(player.vehicle.var("IBIS_RouteIndex"), Some(1.0), "new route established by typing");
 
         player.update_duty_ibis(&mut duty);
-        assert_eq!(
-            player.ibis_shown,
-            Some(0),
-            "shown stop updated after typing completes"
-        );
+        assert_eq!(player.ibis_shown, Some(0), "shown stop updated after typing completes");
         assert_eq!(player.vehicle.var("IBIS_busstop"), Some(0.0));
     }
 }
