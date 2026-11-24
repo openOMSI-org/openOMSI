@@ -397,6 +397,10 @@ impl CloudPass {
         });
         let rounds: Vec<usize> = if fr.still {
             (1..=STILL_ROUNDS as usize).collect()
+        } else if history.is_none() {
+            // Seed all four subpixel phases on the first frame after a reset.
+            // A single first-frame trace left blocks that the history kept reusing.
+            (1..=4).collect()
         } else {
             vec![0]
         };
