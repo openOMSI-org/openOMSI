@@ -154,7 +154,7 @@ fn a_file_deduplicates_identical_frame_blocks_and_keeps_distinct_ones() {
     let cut_short = program_of("{frame}\n1 (S.L.a)\n{frame}\n2 (S.L.b)\n{end}\n");
     assert_eq!(cut_short.frame.len(), 1);
     let first = &cut_short.blocks[cut_short.frame[0] as usize].ops;
-    assert_eq!(first.last(), Some(&Op::Macro(cut_short.frame[0] + 1)));
+    assert_eq!(first.last(), Some(&Op::FallThrough(cut_short.frame[0] + 1)));
 }
 
 #[test]

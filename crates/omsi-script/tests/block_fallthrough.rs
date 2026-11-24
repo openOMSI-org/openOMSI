@@ -67,3 +67,27 @@ fn the_last_block_without_its_end_just_ends() {
     vm.run_init(&p, &mut st, &mut NullHost);
     assert_eq!(count(&p, &st), [1.0, 0.0, 0.0, 0.0]);
 }
+
+#[test]
+fn a_long_chain_of_blocks_without_their_end_runs_at_the_callers_depth() {
+    // 60 macros deep (`d0` … `d59`), then 100 blocks without their `{end}` (`c0` … `c99`):
+    // in Omsi.exe they are one word chain, not 100 nested calls
+    let mut text = String::from("{frame}\n(M.L.d0)\n{end}\n");
+    for i in 0..60 {
+        let next = if i < 59 {
+            format!("d{}", i + 1)
+        } else {
+            "c0".into()
+        };
+        text += &format!("{{macro:d{i}}}\n(M.L.{next})\n{{end}}\n");
+    }
+    for i in 0..100 {
+        text += &format!("{{macro:c{i}}}\n(L.L.a) 1 + (S.L.a)\n");
+    }
+    text += "{end}\n";
+    let p = program(&[&text]);
+    let mut vm = Vm::new();
+    let mut st = State::new(&p);
+    vm.run_frame(&p, &mut st, &mut NullHost);
+    assert_eq!(count(&p, &st), [100.0, 0.0, 0.0, 0.0]);
+}

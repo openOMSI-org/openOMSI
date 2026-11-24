@@ -478,7 +478,7 @@ fn stored_by(p: &Program, mut pending: Vec<usize>) -> Vec<bool> {
                 if let Some(flag) = stored.get_mut(*var as usize) {
                     *flag = true;
                 }
-            } else if let Op::Macro(m) = op {
+            } else if let Op::Macro(m) | Op::FallThrough(m) = op {
                 pending.push(*m as usize);
             }
         }

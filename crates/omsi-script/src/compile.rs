@@ -205,7 +205,7 @@ impl Program {
             for op in &block.ops {
                 match op {
                     Op::Store(v) if *v == var => return true,
-                    Op::Macro(m) => todo.push(*m),
+                    Op::Macro(m) | Op::FallThrough(m) => todo.push(*m),
                     _ => {}
                 }
             }
@@ -281,7 +281,7 @@ impl Program {
                 let value = b.ops[..i].iter().rev().find(|o| !matches!(o, Op::Store(_)));
                 !matches!(value, Some(Op::Push(x)) if *x == 0.0)
             }
-            Op::Macro(m) => self.block_sets_rec(*m, var, seen),
+            Op::Macro(m) | Op::FallThrough(m) => self.block_sets_rec(*m, var, seen),
             _ => false,
         })
     }
@@ -306,7 +306,7 @@ impl Program {
         };
         b.ops.iter().any(|op| match op {
             Op::Load(v) => *v == var,
-            Op::Macro(m) => self.block_reads_rec(*m, var, seen),
+            Op::Macro(m) | Op::FallThrough(m) => self.block_reads_rec(*m, var, seen),
             _ => false,
         })
     }
@@ -889,11 +889,12 @@ impl<'a> Compiler<'a> {
     /// A block without its `{end}` runs on into the next block (the next to finish; `compile`
     /// takes it back past the last). Omsi.exe sub_5d1db8 links the words of all script files
     /// into one chain: a header marks where a block starts in it, only `{end}` cuts it (the
-    /// Opel Manta's `antrieb_frame` runs on into `calc_eng_M`). Called before the jumps are
-    /// patched, so a `{end}` inside an `{if}` still leaves the block.
+    /// Opel Manta's `antrieb_frame` runs on into `calc_eng_M`). A [`Op::FallThrough`], not a
+    /// macro call: the VM goes on in the next block at the same depth. Called before the jumps
+    /// are patched, so a `{end}` inside an `{if}` still leaves the block.
     fn fall_through(&mut self, block: &mut Block) {
         let next = self.p.blocks.len() as BlockId + 1;
-        block.ops.push(Op::Macro(next));
+        block.ops.push(Op::FallThrough(next));
     }
 
     fn finish_block(&mut self, mut kinds: Vec<BlockKind>, block: Block, falls: bool) {

@@ -1220,7 +1220,9 @@ pub(crate) fn triggers_storing(program: &Program, var: &str) -> Vec<String> {
         };
         b.ops.iter().any(|op| match op {
             omsi_script::Op::Store(v) => *v == id,
-            omsi_script::Op::Macro(m) => stores(program, *m, id, seen),
+            omsi_script::Op::Macro(m) | omsi_script::Op::FallThrough(m) => {
+                stores(program, *m, id, seen)
+            }
             _ => false,
         })
     }
