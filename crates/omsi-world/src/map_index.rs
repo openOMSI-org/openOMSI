@@ -211,6 +211,16 @@ fn light_naming_parents(tile: &Tile) -> HashSet<i64> {
 }
 
 impl MapIndex {
+    /// Record a stop object's numbers, read the way `numbers` says (#3154).
+    fn add_stop(&mut self, id: i64, strings: &[String], numbers: StopNumbers) {
+        self.stop_weights
+            .insert(id, stop_exit_weight_with(strings, numbers));
+        self.stop_enter
+            .insert(id, stop_enter_with(strings, numbers));
+        self.stop_side.insert(id, stop_side(strings));
+        self.stop_length.insert(id, stop_length(strings));
+    }
+
     /// Read every tile file of the map (with the active chrono patches), without meshes.
     /// Signal types are read only to identify installed traffic lights. The tiles are read
     /// on the worker pool; a tile that cannot be read is logged and left out. `tiles` are
@@ -368,12 +378,7 @@ impl MapIndex {
                         ),
                     );
                     if o.extra.len() >= 2 {
-                        part.stop_weights
-                            .insert(o.id, stop_exit_weight_with(&o.extra, numbers));
-                        part.stop_enter
-                            .insert(o.id, stop_enter_with(&o.extra, numbers));
-                        part.stop_side.insert(o.id, stop_side(&o.extra));
-                        part.stop_length.insert(o.id, stop_length(&o.extra));
+                        part.add_stop(o.id, &o.extra, numbers);
                     }
                 }
                 for a in tile
@@ -381,12 +386,7 @@ impl MapIndex {
                     .iter()
                     .filter(|a| a.repeater.is_none() && a.strings.len() >= 2)
                 {
-                    part.stop_weights
-                        .insert(a.id, stop_exit_weight_with(&a.strings, numbers));
-                    part.stop_enter
-                        .insert(a.id, stop_enter_with(&a.strings, numbers));
-                    part.stop_side.insert(a.id, stop_side(&a.strings));
-                    part.stop_length.insert(a.id, stop_length(&a.strings));
+                    part.add_stop(a.id, &a.strings, numbers);
                 }
                 rows.3 = tile.attach_objects;
                 part.tiles_read = 1;
@@ -433,12 +433,7 @@ impl MapIndex {
                     [parent.2[0] + o.rot[0], 0.0, 0.0],
                 ));
                 if o.extra.len() >= 2 {
-                    part.stop_weights
-                        .insert(o.id, stop_exit_weight_with(&o.extra, numbers));
-                    part.stop_enter
-                        .insert(o.id, stop_enter_with(&o.extra, numbers));
-                    part.stop_side.insert(o.id, stop_side(&o.extra));
-                    part.stop_length.insert(o.id, stop_length(&o.extra));
+                    part.add_stop(o.id, &o.extra, numbers);
                 }
             }
         });
