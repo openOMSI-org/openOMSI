@@ -74,10 +74,38 @@ impl Player {
         hands: bool,
         like_omsi: bool,
     ) {
-        if let Some(d) = self.driver.as_mut() {
-            d.show_hands_in_cab = hands;
-            d.set_original_pose(like_omsi);
-            d.update(
+        let Some(d) = self.driver.as_mut() else {
+            return;
+        };
+        d.show_hands_in_cab = hands;
+        d.set_original_pose(like_omsi);
+        let cab = self.vehicle.driving_cab();
+        if cab != d.cab {
+            let seated = match cab {
+                Some(k) => d.attach(&crate::driver::PartCar {
+                    part: &self.vehicle.trailers[k],
+                    main: &self.vehicle,
+                }),
+                None => d.attach(&self.vehicle),
+            };
+            if seated {
+                d.cab = cab;
+            }
+        }
+        match (d.cab, d.cab.and_then(|k| self.trailer_renders.get(k))) {
+            (Some(k), Some(r)) => d.update(
+                renderer,
+                scene,
+                &crate::driver::PartCar {
+                    part: &self.vehicle.trailers[k],
+                    main: &self.vehicle,
+                },
+                r,
+                dt,
+                show,
+                mirror_only,
+            ),
+            _ => d.update(
                 renderer,
                 scene,
                 &self.vehicle,
@@ -85,22 +113,21 @@ impl Player {
                 dt,
                 show,
                 mirror_only,
-            );
+            ),
         }
     }
 
     /// The driver's chosen camera as it is fixed in the bus (before the bus's own motion), turned
     /// by the look and the steering: what a glide between two cameras mixes.
     pub(crate) fn driver_local(&self, look: (f32, f32)) -> Option<omsi_vehicle::Camera> {
-        // (no glide onto a coupled part's camera: it is not in the front's frame)
-        if self.trailer_driver_camera().is_some() {
-            return None;
-        }
         let def = &self.vehicle.ty.def;
-        let c = def
-            .cameras_driver
-            .get(self.driver_camera_slot())
-            .or(def.cameras_driver.first())?;
+        let c = match self.trailer_driver_camera() {
+            Some((_, c)) => c,
+            None => def
+                .cameras_driver
+                .get(self.driver_camera_slot())
+                .or(def.cameras_driver.first())?,
+        };
         Some(omsi_vehicle::Camera {
             yaw: c.yaw + look.0 + self.steer_look,
             pitch: (c.pitch + look.1).clamp(-89.0, 89.0),
@@ -111,6 +138,18 @@ impl Player {
     /// `driver_local`'s camera in the world, with the bus's pitch and bank and the head on it
     /// (the same as `camera_look` makes of the driver's camera).
     pub(crate) fn driver_world(&self, turned: &omsi_vehicle::Camera) -> Camera {
+        if let Some((t, _)) = self.trailer_driver_camera() {
+            let (eye, yaw, pitch, roll) = t.camera_world_full(turned);
+            return Camera {
+                position: eye,
+                yaw,
+                pitch: pitch.clamp(-89.0, 89.0),
+                roll,
+                fov_deg: turned.fov,
+                near: 0.1,
+                far: 6000.0,
+            };
+        }
         let (eye, yaw, pitch, roll) = self.vehicle.camera_world_full(turned);
         // the driver's eye sits a touch forward of the authored seat point.
         let eye = eye
@@ -159,12 +198,8 @@ impl Player {
         dist: f32,
         dt: f32,
     ) -> Camera {
-        let def = &self.vehicle.ty.def;
-        let c = def.camera_outside_center;
-        let centre = camera_arm::lift_pivot(
-            world,
-            orbit_pivot(self.vehicle.position, self.vehicle.heading, c),
-        );
+        let (at, heading, c) = self.vehicle.orbit_target();
+        let centre = camera_arm::lift_pivot(world, orbit_pivot(at, heading, c));
         let want = dist.clamp(ORBIT_MIN, ORBIT_MAX);
         let back = -cam.forward().as_dvec3().normalize_or_zero();
         if back.length_squared() < 0.5 {
@@ -236,19 +271,15 @@ impl Player {
     pub(crate) fn trailer_driver_camera(
         &self,
     ) -> Option<(&omsi_sim::vehicle::TrailerPart, &omsi_vehicle::Camera)> {
-        let front = self.vehicle.ty.def.cameras_driver.len();
-        let mut k = self.driver_camera_slot();
-        if k < front {
-            return None;
-        }
-        k -= front;
-        for t in &self.vehicle.trailers {
-            if let Some(c) = t.ty.def.cameras_driver.get(k) {
-                return Some((t, c));
-            }
-            k -= t.ty.def.cameras_driver.len();
-        }
-        None
+        let (part, k) = self.trailer_driver_seat()?;
+        let t = &self.vehicle.trailers[part];
+        Some((t, &t.ty.def.cameras_driver[k]))
+    }
+
+    /// The coupled part (its index) whose driver camera is chosen, and the camera's index
+    /// among that part's (None while one of the front's is chosen).
+    pub(crate) fn trailer_driver_seat(&self) -> Option<(usize, usize)> {
+        self.vehicle.driver_camera_part(self.driver_camera_slot())
     }
 
     /// `look`: yaw/pitch the player has turned the head (or the orbit) by; `dist`: how far
@@ -400,11 +431,11 @@ impl Player {
             }
             None => {
                 // outside view: an orbit around the vehicle
-                let c = def.camera_outside_center;
-                let center = orbit_pivot(self.vehicle.position, self.vehicle.heading, c);
+                let (at, heading, c) = self.vehicle.orbit_target();
+                let center = orbit_pivot(at, heading, c);
                 let mut cam = Camera {
                     position: center,
-                    yaw: self.vehicle.heading as f32 + look.0,
+                    yaw: heading as f32 + look.0,
                     pitch: (-15.0 + look.1).clamp(-85.0, 85.0),
                     roll: 0.0,
                     fov_deg: fallback.fov_deg,
@@ -518,10 +549,11 @@ pub(crate) fn sync_vehicle_transforms(
             renderer.set_interior(scene, *inst, p.interior);
         }
     }
-    scene::sync_vehicle_textures(renderer, scene, vehicle, render, &mut { usize::MAX });
+    let mut budget = usize::MAX;
+    scene::sync_vehicle_textures(renderer, scene, vehicle, render, &mut budget);
     let mut trailers = std::mem::take(&mut vehicle.trailers);
     for (t, r) in trailers.iter_mut().zip(trailer_renders.iter_mut()) {
-        scene::sync_vehicle_part(renderer, scene, &vehicle, t, r);
+        scene::sync_vehicle_part(renderer, scene, &vehicle, t, r, &mut budget);
     }
     vehicle.trailers = trailers;
 }

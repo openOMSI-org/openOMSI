@@ -8,10 +8,24 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Multiplayer
 
+- **Rail points lie the same way for every player**: the hosting game's points go to each
+  player's game with the traffic lights (those within 600 m of its vehicle, once a second), and
+  points a player's tram throws (driving over them, the J key, a click) go to the host and from
+  there to the others. Each game used to keep its own points, so a tram that turned off in one
+  game drove straight on in the others'. With a host of the previous release each game still
+  keeps its own.
+
 - **A long tram is drawn whole in the others' games**: every coupled part of a player's train goes
   to the others (up to 15), not only the first three. The NF6D is made of eleven, so its B car and
   bogies stood off the rails or across the track in the other players' games. A game of the
   previous release still draws the first three.
+
+### Fixes
+
+- **mX graphics have the tram changes too**: the rear cab, backing a tram from it and the J
+  points key, the tunnel mouths and the sun kept out of tunnels, the rail vehicles' collisions,
+  the curves and the body sway came only to the standard graphics. With mX graphics switched on
+  the NF6D's B car could not be driven and tunnel mouths stood closed.
 
 ## 0.3.57 - 2026-11-23
 
@@ -78,6 +92,7 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   train's track (lane), the metres along it and its length, its direction and the net distance it
   has moved on the rails (less after backing up) - the first piece of a rail simulation with blocks and train
   protection; `docs/RAIL.md` lays out the rest (#3969).
+- **Take control of an AI bus, as in OMSI 2**: in the map camera (F4), click a bus of the AI traffic and answer *Yes*: you drive it at once, even while it moves, with its passengers, its switches and displays as the AI left them, and its line and tour from the stop it was driving to. The bus you drove before stays where it is. As in OMSI 2, the bus is not changed while a timetable is active; not for a LAN client (#3974).
 - **Saves with names of your own, and loaded by name in the game**: Esc → *Save to a slot...*
   → *Save under a name...* lets you type the save's name (Enter saves); it keeps that name when
   you save over it later. *Load the quicksave* became *Load a situation...*: the quicksave and

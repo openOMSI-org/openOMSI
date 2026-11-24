@@ -91,6 +91,7 @@ fn 435 crates/omsi-app-mx::world_pages crates/omsi-app-mx/src/game_lists/menu_pa
 fn 322 crates/omsi-app::game_action crates/omsi-app/src/app_impl/actions.rs
 fn 342 crates/omsi-app::host crates/omsi-app/src/lan_world.rs
 fn 510 crates/omsi-app::items crates/omsi-app/src/game_lists.rs
+fn 366 crates/omsi-app::left_now crates/omsi-app/src/app_impl/mouse.rs
 fn 301 crates/omsi-app::from_text crates/omsi-app/src/settings.rs
 fn 371 crates/omsi-app::option_set crates/omsi-app/src/game_lists/options.rs
 fn 342 crates/omsi-app::options_pages crates/omsi-app/src/game_lists/menu_pages.rs

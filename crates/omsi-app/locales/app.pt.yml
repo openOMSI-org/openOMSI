@@ -4381,11 +4381,19 @@
 "At most 5": "No máximo 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "As pastas de objetos e splines que nenhum outro mapa usa são excluídas junto com ele: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "As pastas de objetos e splines que outro mapa ainda usa são mantidas: {n}."
+<<<<<<< HEAD
 "Load a situation...": "Carregar uma situação..."
 "Enter saves, Esc cancels": "Enter salva, Esc cancela"
 "Save under a name...": "Salvar com um nome..."
 "No saved situation of this map yet": "Ainda não há situações salvas deste mapa"
 "Saved as \"{}\"": "Salvo como \"{}\""
+=======
+"Yes": "Sim"
+"Take control of this bus?": "Assumir o controle deste ônibus?"
+"The bus cannot be changed while a timetable is active": "Não é possível trocar de ônibus com um horário ativo"
+"The bus could not be taken over": "Não foi possível assumir o ônibus"
+"You have control of the bus": "Você controla o ônibus"
+>>>>>>> origin/main
 "Onboard computer": "Computador de bordo"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Um perfil guarda todas as teclas e todas as configurações dos controles. Antes de cada viagem, o launcher troca para o perfil próprio do ônibus ou para o padrão."
 "Rename the profile": "Renomear o perfil"
