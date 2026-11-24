@@ -3220,6 +3220,7 @@
 "At most 5": "अधिकतम 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "जिन ऑब्जेक्ट और स्प्लाइन फ़ोल्डरों को कोई दूसरा मैप इस्तेमाल नहीं करता, वे भी साथ में हट जाते हैं: {n}, {size}।"
 "Folders of objects and splines that another map still uses stay: {n}.": "जिन ऑब्जेक्ट और स्प्लाइन फ़ोल्डरों को कोई दूसरा मैप अब भी इस्तेमाल करता है, वे बने रहते हैं: {n}।"
+<<<<<<< HEAD
 "Plugins": "प्लगइन"
 "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.": "गेम के plugins फ़ोल्डरों में Lua और OMSI प्लगइन। यहाँ बंद किया गया प्लगइन अगले गेम में लोड नहीं होगा; उसकी फ़ाइलें और सेटिंग्स बनी रहती हैं।"
 "No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder.": "अभी कोई प्लगइन नहीं है। plugins फ़ोल्डर में एक .lua फ़ाइल, प्लगइन फ़ोल्डर या .oop फ़ाइल रखें।"
@@ -3239,6 +3240,13 @@
 "Its files, settings and saved data are deleted.": "इसकी फ़ाइलें, सेटिंग्स और सहेजा गया डेटा हटा दिया जाता है।"
 "Reviewed, open source plugins of the openOMSI plugin catalog.": "openOMSI प्लगइन कैटलॉग के जाँचे गए, ओपन सोर्स प्लगइन।"
 "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.": "प्लगइन आपके गेम में कोड चलाते हैं। कैटलॉग के प्लगइन ओपन सोर्स हैं और जोड़े जाने से पहले openOMSI के मेंटेनर उन्हें पढ़ते हैं; आप पहले कोड पढ़ सकते हैं।"
+=======
+"Yes": "हाँ"
+"Take control of this bus?": "इस बस का नियंत्रण लें?"
+"The bus cannot be changed while a timetable is active": "समय सारणी चालू रहते बस नहीं बदली जा सकती"
+"The bus could not be taken over": "बस अपने हाथ में नहीं ली जा सकी"
+"You have control of the bus": "अब बस आपके नियंत्रण में है"
+>>>>>>> origin/main
 "Onboard computer": "वाहन कंप्यूटर"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "प्रोफ़ाइल में हर कुंजी और हर कंट्रोलर सेटिंग रहती है। हर ड्राइव से पहले लॉन्चर बस की अपनी प्रोफ़ाइल या डिफ़ॉल्ट प्रोफ़ाइल पर चला जाता है।"
 "Rename the profile": "प्रोफ़ाइल का नाम बदलें"

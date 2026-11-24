@@ -3274,6 +3274,7 @@
 "At most 5": "最大5台"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "他のどのマップも使っていないオブジェクトとスプラインのフォルダも一緒に削除されます：{n} 個、{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "他のマップがまだ使っているオブジェクトとスプラインのフォルダは残ります：{n} 個。"
+<<<<<<< HEAD
 "Plugins": "プラグイン"
 "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.": "ゲームの plugins フォルダーにある Lua と OMSI のプラグイン。ここでオフにしたものは次のゲームで読み込まれません。ファイルと設定はそのまま残ります。"
 "No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder.": "プラグインはまだありません。plugins フォルダーに .lua ファイル、プラグインのフォルダー、または .oop ファイルを入れてください。"
@@ -3293,6 +3294,13 @@
 "Its files, settings and saved data are deleted.": "ファイル、設定、保存データが削除されます。"
 "Reviewed, open source plugins of the openOMSI plugin catalog.": "openOMSI プラグインカタログの、確認済みのオープンソースプラグイン。"
 "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.": "プラグインはゲーム内でコードを実行します。カタログのプラグインはオープンソースで、追加される前に openOMSI のメンテナーが読んでいます。先にコードを読むこともできます。"
+=======
+"Yes": "はい"
+"Take control of this bus?": "このバスの運転を引き継ぎますか?"
+"The bus cannot be changed while a timetable is active": "時刻表が有効な間はバスを変更できません"
+"The bus could not be taken over": "バスを引き継げませんでした"
+"You have control of the bus": "バスの運転を引き継ぎました"
+>>>>>>> origin/main
 "Onboard computer": "車載コンピューター"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "プロファイルにはすべてのキーとすべてのコントローラー設定が入ります。運転のたびに、ランチャーはそのバス専用のプロファイルか既定のプロファイルに切り替えます。"
 "Rename the profile": "プロファイル名を変更"

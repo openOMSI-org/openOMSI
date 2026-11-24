@@ -4380,6 +4380,7 @@
 "At most 5": "Höchstens 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Ordner mit Objekten und Splines, die keine andere Karte nutzt, werden mitgelöscht: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Ordner mit Objekten und Splines, die eine andere Karte noch nutzt, bleiben erhalten: {n}."
+<<<<<<< HEAD
 "Plugins": "Plugins"
 "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.": "Lua- und OMSI-Plugins in den plugins-Ordnern des Spiels. Ein hier ausgeschaltetes Plugin wird beim nächsten Spiel nicht geladen; seine Dateien und Einstellungen bleiben."
 "No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder.": "Noch kein Plugin. Lege eine .lua-Datei, einen Plugin-Ordner oder eine .oop-Datei in den plugins-Ordner."
@@ -4399,6 +4400,13 @@
 "Its files, settings and saved data are deleted.": "Seine Dateien, Einstellungen und gespeicherten Daten werden gelöscht."
 "Reviewed, open source plugins of the openOMSI plugin catalog.": "Geprüfte Open-Source-Plugins aus dem openOMSI-Plugin-Katalog."
 "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.": "Plugins führen Code in deinem Spiel aus. Die Plugins des Katalogs sind Open Source und werden von den openOMSI-Betreuern gelesen, bevor sie aufgenommen werden; du kannst den Code vorher lesen."
+=======
+"Yes": "Ja"
+"Take control of this bus?": "Die Kontrolle über diesen Bus übernehmen?"
+"The bus cannot be changed while a timetable is active": "Der Bus kann nicht gewechselt werden, solange ein Fahrplan aktiv ist"
+"The bus could not be taken over": "Der Bus konnte nicht übernommen werden"
+"You have control of the bus": "Sie haben die Kontrolle über den Bus"
+>>>>>>> origin/main
 "Onboard computer": "Bordrechner"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Ein Profil enthält alle Tasten und alle Controller-Einstellungen. Vor jeder Fahrt wechselt der Launcher zum eigenen Profil des Busses oder zum Standardprofil."
 "Rename the profile": "Profil umbenennen"

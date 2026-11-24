@@ -4379,6 +4379,7 @@
 "At most 5": "მაქსიმუმ 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "ობიექტებისა და სპლაინების საქაღალდეები, რომლებსაც სხვა რუკა არ იყენებს, მასთან ერთად წაიშლება: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "ობიექტებისა და სპლაინების საქაღალდეები, რომლებსაც სხვა რუკა ჯერ კიდევ იყენებს, რჩება: {n}."
+<<<<<<< HEAD
 "Plugins": "პლაგინები"
 "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.": "Lua და OMSI პლაგინები თამაშის plugins საქაღალდეებში. აქ გამორთული პლაგინი შემდეგ თამაშში არ ჩაიტვირთება; მისი ფაილები და პარამეტრები რჩება."
 "No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder.": "პლაგინი ჯერ არ არის. ჩადეთ .lua ფაილი, პლაგინის საქაღალდე ან .oop ფაილი plugins საქაღალდეში."
@@ -4398,6 +4399,13 @@
 "Its files, settings and saved data are deleted.": "წაიშლება მისი ფაილები, პარამეტრები და შენახული მონაცემები."
 "Reviewed, open source plugins of the openOMSI plugin catalog.": "openOMSI-ის პლაგინების კატალოგის შემოწმებული, ღია კოდის პლაგინები."
 "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.": "პლაგინები თქვენს თამაშში კოდს უშვებენ. კატალოგის პლაგინები ღია კოდისაა და openOMSI-ის მხარდამჭერები მათ დამატებამდე კითხულობენ; შეგიძლიათ ჯერ კოდი წაიკითხოთ."
+=======
+"Yes": "დიახ"
+"Take control of this bus?": "აიღოთ ამ ავტობუსის მართვა?"
+"The bus cannot be changed while a timetable is active": "ავტობუსის შეცვლა შეუძლებელია, სანამ განრიგი აქტიურია"
+"The bus could not be taken over": "ავტობუსის გადაბარება ვერ მოხერხდა"
+"You have control of the bus": "ავტობუსს თქვენ მართავთ"
+>>>>>>> origin/main
 "Onboard computer": "ბორტო კომპიუტერი"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "პროფილი ინახავს ყველა კლავიშს და კონტროლერის ყველა პარამეტრს. ყოველი მგზავრობის წინ ლაუნჩერი გადადის ავტობუსის საკუთარ პროფილზე ან ნაგულისხმევზე."
 "Rename the profile": "პროფილის გადარქმევა"

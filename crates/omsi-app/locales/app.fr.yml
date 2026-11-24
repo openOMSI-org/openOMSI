@@ -4380,6 +4380,7 @@
 "At most 5": "Au plus 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Les dossiers d'objets et de splines qu'aucune autre carte n'utilise sont supprimés avec lui : {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Les dossiers d'objets et de splines qu'une autre carte utilise encore restent : {n}."
+<<<<<<< HEAD
 "Plugins": "Plugins"
 "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.": "Plugins Lua et OMSI des dossiers plugins du jeu. Un plugin désactivé ici n'est pas chargé à la prochaine partie ; ses fichiers et réglages restent."
 "No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder.": "Aucun plugin pour l'instant. Placez un fichier .lua, un dossier de plugin ou un fichier .oop dans le dossier plugins."
@@ -4399,6 +4400,13 @@
 "Its files, settings and saved data are deleted.": "Ses fichiers, réglages et données enregistrées sont supprimés."
 "Reviewed, open source plugins of the openOMSI plugin catalog.": "Plugins open source vérifiés du catalogue de plugins openOMSI."
 "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.": "Les plugins exécutent du code dans votre jeu. Ceux du catalogue sont open source et lus par les mainteneurs d'openOMSI avant d'être ajoutés ; vous pouvez lire le code d'abord."
+=======
+"Yes": "Oui"
+"Take control of this bus?": "Prendre le contrôle de ce bus ?"
+"The bus cannot be changed while a timetable is active": "Impossible de changer de bus tant qu'un horaire est actif"
+"The bus could not be taken over": "Impossible de reprendre le bus"
+"You have control of the bus": "Vous avez le contrôle du bus"
+>>>>>>> origin/main
 "Onboard computer": "Ordinateur de bord"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Un profil garde toutes les touches et tous les réglages des contrôleurs. Avant chaque conduite, le lanceur passe au profil propre du bus ou au profil par défaut."
 "Rename the profile": "Renommer le profil"

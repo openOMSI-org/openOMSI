@@ -1749,6 +1749,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     Ok(h) => {
                         let name = h.name.clone();
                         p.vehicle.host.hof = Some(std::sync::Arc::new(h));
+                        p.vehicle.set_yard(&name);
                         app.service_msg = Some((
                             omsi_ui::i18n::tr_fill("Depot file: {}", &[("{}", &name.trim())]),
                             3.0,

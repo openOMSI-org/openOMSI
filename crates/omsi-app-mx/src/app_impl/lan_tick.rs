@@ -145,6 +145,15 @@ impl App {
             &mut self.gfx.sim_view,
             self.player.as_ref().map(|p| p.vehicle.position),
         );
+        if let Some(w) = self.world.as_deref() {
+            w.scenery_sync(&mut self.session.scenery);
+        }
+        self.net.lan_world.points.step(
+            lan,
+            &mut self.session.scenery,
+            self.player.as_ref().map(|p| p.vehicle.position),
+            dt,
+        );
         let world_ms = phase.elapsed().as_secs_f64() * 1000.0;
         let phase = std::time::Instant::now();
         if let Some(t) = self.session.traffic.as_mut().filter(|t| t.sim.mirror) {

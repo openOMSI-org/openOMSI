@@ -3327,6 +3327,7 @@
 "At most 5": "Не більше 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Теки об'єктів і сплайнів, які не використовує жодна інша мапа, видаляються разом із ним: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Теки об'єктів і сплайнів, які ще використовує інша мапа, залишаються: {n}."
+<<<<<<< HEAD
 "Plugins": "Плагіни"
 "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.": "Плагіни Lua та OMSI в теках plugins гри. Вимкнений тут плагін не завантажиться в наступній грі; його файли й налаштування залишаються."
 "No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder.": "Плагінів поки немає. Покладіть файл .lua, теку плагіна або файл .oop у теку plugins."
@@ -3346,6 +3347,13 @@
 "Its files, settings and saved data are deleted.": "Його файли, налаштування та збережені дані буде видалено."
 "Reviewed, open source plugins of the openOMSI plugin catalog.": "Перевірені плагіни з відкритим кодом із каталогу плагінів openOMSI."
 "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.": "Плагіни виконують код у вашій грі. Плагіни каталогу мають відкритий код, і супровідники openOMSI читають його перед додаванням; ви можете спершу переглянути код."
+=======
+"Yes": "Так"
+"Take control of this bus?": "Взяти керування цим автобусом?"
+"The bus cannot be changed while a timetable is active": "Не можна змінити автобус, поки активний розклад"
+"The bus could not be taken over": "Не вдалося перехопити автобус"
+"You have control of the bus": "Ви керуєте автобусом"
+>>>>>>> origin/main
 "Onboard computer": "Бортовий комп'ютер"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Профіль зберігає всі клавіші й усі налаштування контролерів. Перед кожною поїздкою лаунчер перемикається на власний профіль автобуса або на типовий."
 "Rename the profile": "Перейменувати профіль"
