@@ -440,8 +440,6 @@ mod hold_tests {
         assert!(!duty_trip_pending);
     }
 
-    /// A trip and route change defers marking the IBIS stop shown while startup or typist is running,
-    /// and invalidates `ibis_shown` across trip transition (#2267).
     #[test]
     fn deferred_trip_and_route_transition_waits_for_startup_and_typist() {
         use omsi_sim::timetable_run::{PlannedStop, PlannedTrip, PlayerDuty, StopDir};
