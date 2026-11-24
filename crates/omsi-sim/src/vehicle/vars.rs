@@ -228,7 +228,10 @@ impl VehicleInstance {
     }
 
     pub fn has_trigger(&self, name: &str) -> bool {
-        self.ty.program.triggers.contains_key(&name.to_ascii_lowercase())
+        self.ty
+            .program
+            .triggers
+            .contains_key(&name.to_ascii_lowercase())
     }
 
     pub fn trigger(&mut self, name: &str) -> bool {

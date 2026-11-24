@@ -341,7 +341,12 @@ fn a_bus_without_the_counter_is_reported_at_first_stop() {
 
     let mut a = AutoAnnounce::new();
     a.at_stop = Some(true);
-    a.park(&NoCounterBus, 0, Some(TwoRecordings { first: 2, pairs: 3 }), 1.0);
+    a.park(
+        &NoCounterBus,
+        0,
+        Some(TwoRecordings { first: 2, pairs: 3 }),
+        1.0,
+    );
     assert!(a.off);
     assert_eq!(a.take_note(), Some(announce::QuietReason::NoBusstopCounter));
 }
