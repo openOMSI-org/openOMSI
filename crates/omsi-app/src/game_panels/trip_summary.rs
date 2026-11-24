@@ -158,8 +158,7 @@ pub(crate) fn to_clipboard(text: &str) -> bool {
     }
     #[cfg(target_os = "android")]
     {
-        let _ = text;
-        false
+        crate::android::set_clipboard(text)
     }
 }
 

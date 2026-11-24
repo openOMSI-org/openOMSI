@@ -291,6 +291,31 @@ mod tests {
         assert!(app.net.room.leave);
     }
 
+    /// #3769: on a phone the join code field brings up the on-screen keyboard while it takes
+    /// the keys, and the keyboard goes when typing ends.
+    #[test]
+    fn the_code_field_asks_for_the_phone_keyboard_while_typed_into() {
+        let hud = [0.0, 0.0, 1280.0, 720.0];
+        let mut app = app();
+        app.open_multiplayer();
+        app.frame_game_panels(0.0, hud, false);
+        crate::platform::PHONE_KEYBOARD_ON.with(|t| t.set(false));
+        app.menus.game_panels.ui.click(super::super::GAME, "multiplayer", Some("code"));
+        assert!(app.menus.game_panels.ui.typing().is_some());
+        app.frame_game_panels(0.0, hud, false);
+        assert!(crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get()));
+        app.menus.game_panels.ui.stop_typing(false);
+        app.frame_game_panels(0.0, hud, false);
+        assert!(!crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get()));
+        // the LAN chat line as well
+        app.net.remotes.chat.open();
+        app.frame_game_panels(0.0, hud, false);
+        assert!(crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get()));
+        app.net.remotes.chat.blur();
+        app.frame_game_panels(0.0, hud, false);
+        assert!(!crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get()));
+    }
+
     #[test]
     fn escape_cancels_the_form_and_pending_confirmation() {
         let mut app = app();
