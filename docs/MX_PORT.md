@@ -174,10 +174,10 @@ The renderer makes no bind groups: every shader reads its resources from mX's he
   `t_pane_depth` from the scene shader's `ground` place). The temporal upscaling's motion
   group reads from the places of the lights and the light grid, which its pass does not use.
 - **OpenGL**: a view dropped before its command buffer is submitted keeps its heap entry
-  until that submission is done (mX 8118158): the GPU mip chain draws each level from a view
+  until that submission is done (openOMSI-org/mX#17): the GPU mip chain draws each level from a view
   of the one above that is gone by the submit. Blending and colour masks are set for all
   draw buffers at once where the targets agree, and per buffer through
-  `OES_draw_buffers_indexed`'s own entry points on ES 3.0 and 3.1 (mX a78aa1a, eaa7aa1): glow
+  `OES_draw_buffers_indexed`'s own entry points on ES 3.0 and 3.1 (openOMSI-org/mX#17): glow
   calls the ES 3.2 names, which ANGLE refused, and blending was off on ANGLE.
 - **Known on the OpenGL tier**: it draws the vanilla picture only (16 texture units), whose
   FXAA has no screen mask, so a display behind a pane is antialiased there
