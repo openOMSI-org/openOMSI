@@ -391,9 +391,47 @@ mod tests {
             vec![(
                 "Xbox One Game Controller".to_string(),
                 gilrs::Button::East,
+                Some(1),
                 false
             )]
         );
+    }
+
+    #[test]
+    fn binding_one_pad_button_keeps_the_defaults_of_the_others() {
+        use super::{DeviceCfg, preset_applies};
+        let bound = |n: usize, action: &str| {
+            let mut d = DeviceCfg {
+                name: "Pad".into(),
+                ..Default::default()
+            };
+            d.buttons.resize(n + 1, (String::new(), "0".into()));
+            d.buttons[n].0 = action.to_string();
+            d
+        };
+        // a pad nobody set up, or one with no button bound: every default drives
+        assert!(preset_applies(None, Some(0)));
+        assert!(preset_applies(
+            Some(&DeviceCfg {
+                name: "Pad".into(),
+                ..Default::default()
+            }),
+            Some(0)
+        ));
+        // button 8 (the left stick's click) bound: the other buttons keep their defaults...
+        let d = bound(8, "horn");
+        assert!(preset_applies(Some(&d), Some(0)));
+        assert!(preset_applies(Some(&d), Some(5)));
+        // ...and the bound one drives what the player chose, not its default
+        assert!(!preset_applies(Some(&d), Some(8)));
+        // a second action on the same button counts as bound as well
+        let mut d = bound(8, "");
+        d.more.push((3, "door_2".into()));
+        assert!(!preset_applies(Some(&d), Some(3)));
+        assert!(preset_applies(Some(&d), Some(0)));
+        // a button whose number is unknown keeps the old rule
+        assert!(!preset_applies(Some(&bound(8, "horn")), None));
+        assert!(preset_applies(Some(&bound(8, "")), None));
     }
 }
 
