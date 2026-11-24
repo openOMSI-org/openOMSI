@@ -523,20 +523,18 @@ mod hold_tests {
         player.duty_typed = true;
         player.ibis_auto_stop = true;
 
-        // Initial trip update: stop 0 is typed and shown
         player.update_duty_ibis(&mut duty);
         assert_eq!(player.ibis_shown, Some(0));
         assert_eq!(player.vehicle.var("IBIS_busstop"), Some(0.0));
 
-        // Advance duty to next stop 1 on trip 1
         duty.next_stop = 1;
         player.update_duty_ibis(&mut duty);
         assert_eq!(player.ibis_shown, Some(1));
         assert_eq!(player.vehicle.var("IBIS_busstop"), Some(1.0));
 
         duty.start_at(1, 0);
-        player.startup = Some(omsi_sim::startup::StartUp::new(&player.vehicle, &[]));
-        player.set_duty_destination(duty.trip_for_ibis().0, duty.trip_for_ibis().1);
+        player.start_up();
+        player.update_duty_ibis(&mut duty);
         assert!(player.ibis_busy());
 
         player.update_duty_ibis(&mut duty);
