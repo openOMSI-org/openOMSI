@@ -313,6 +313,11 @@ impl RailDrive {
         )
     }
 
+    /// Net, not an odometer: backing up takes metres off, below zero too.
+    pub(crate) fn travelled(&self) -> f64 {
+        self.u
+    }
+
     /// The contact wire above the track at the pantograph: at the standard height of the
     /// vehicle's class, kept within what its pantograph reaches (a wire it cannot touch would
     /// strand it on a map that draws none), staggered across the track as a real wire is so
@@ -377,7 +382,6 @@ impl RailDrive {
             if !self.step(net, Some((world, &mut *scenery)), ds, blinker) {
                 p.vehicle.set_speed(0.0);
             }
-            self.u += ds as f64;
         }
         let track_pos = net.lanes[self.lane].at(self.s).0;
         if backing {
@@ -595,6 +599,7 @@ impl RailDrive {
                     None => {
                         // the end of the track: the vehicle stops at its buffer
                         self.s = len;
+                        self.travel(ds, t - len);
                         return false;
                     }
                 }
@@ -616,15 +621,23 @@ impl RailDrive {
                     }
                     None => {
                         self.s = 0.0;
+                        self.travel(ds, t);
                         return false;
                     }
                 }
             } else {
                 self.s = t;
+                d = 0.0;
                 break;
             }
         }
+        self.travel(ds, d);
         true
+    }
+
+    fn travel(&mut self, ds: f32, short: f32) {
+        let short = if self.along { short } else { -short };
+        self.u += (ds - short) as f64;
     }
 
     /// What the track under the vehicle is like for its dynamics: the grade in the direction
@@ -1166,3 +1179,7 @@ mod tests {
         assert_eq!(lane, 1);
     }
 }
+
+#[cfg(test)]
+#[path = "rail_drive/travelled_tests.rs"]
+mod travelled_tests;

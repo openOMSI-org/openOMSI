@@ -4419,3 +4419,6 @@
 "to the right": "向右"
 "Lights on in a downpour": "大雨時窗戶亮燈"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "白天下大雨時，天色暗到需要開燈，部分房屋的窗戶會亮起燈光"
+
+"Read the map's passenger numbers exactly": "精確讀取地圖乘客數量"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "乘客：地圖設定為0.7的站點在密度相乘前保留0.7人而不是向上取整為1；關閉：OMSI 2原有四捨五入"

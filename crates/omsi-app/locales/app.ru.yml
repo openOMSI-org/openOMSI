@@ -4418,3 +4418,6 @@
 "to the right": "направо"
 "Lights on in a downpour": "Свет в окнах в ливень"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Днём в сильный дождь в части окон домов горит свет - становится достаточно темно, чтобы его включить"
+
+"Read the map's passenger numbers exactly": "Точное чтение числа пассажиров с карты"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Пассажиры: остановка с 0,7 сохраняет 0,7 человека вместо округления до 1 перед умножением на плотность; выкл: округление OMSI 2"

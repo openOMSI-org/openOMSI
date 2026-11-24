@@ -3700,6 +3700,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["zoom_hold_amount"] = json!(0.5);
     v["zoom_hold_latch"] = json!(false);
     v["flashlight_cursor"] = json!(false);
+    // (#3154: OMSI 2's own rounding of a stop's passenger numbers until the player asks)
+    v["pax_stop_numbers_exact"] = json!(false);
     v["pad_steer_smooth"] = json!(120.0);
     v["pad_steer_linear"] = json!(false);
     v["ctrl_background"] = json!(false);
@@ -4279,7 +4281,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 )
             }
             "zoom_hold_latch" => v[&k] = json!(b(val)),
-            "flashlight_cursor" => v[&k] = json!(b(val)),
+            "flashlight_cursor" | "pax_stop_numbers_exact" => v[&k] = json!(b(val)),
             "pad_steer_smooth" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -5128,6 +5130,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!(
         "flashlight_cursor={}\n",
         b("flashlight_cursor", false)
+    ));
+    text.push_str(&format!(
+        "pax_stop_numbers_exact={}\n",
+        b("pax_stop_numbers_exact", false)
     ));
     text.push_str(&format!("look_sens={}\nlook_smoothing_ms={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\n", f("look_sens", 1.0).clamp(0.1, 2.0), f("look_smoothing_ms", 0.0).clamp(0.0, 200.0), f("steer_look_angle", 30.0).clamp(0.0, 60.0), f("steer_look_response", 0.25).clamp(0.05, 1.0), f("head_idle", 0.0).clamp(0.0, 1.0), f("head_idle_pace", 1.0).clamp(0.5, 2.0), b("time_sync", false), b("metar_sync", false), v.get("metar_station").and_then(|x| x.as_str()).unwrap_or("").chars().filter(|c| c.is_ascii_alphabetic()).take(4).collect::<String>().to_ascii_uppercase()));
     text.push_str(&format!(

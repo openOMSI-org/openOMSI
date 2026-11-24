@@ -87,6 +87,8 @@ pub struct MapIndex {
     pub stop_length: HashMap<i64, f32>,
 }
 
+pub use crate::stop_numbers::StopNumbers;
+
 /// How many passengers get off at a bus stop, as Omsi.exe reads the stop object's strings
 /// when it sets the station up (0x620058): `pass_enter_max` (string 1, else 1) and
 /// `pass_enter_min` (string 2, else 0) rounded, and `pass_exit` (string 3) rounded - or,
@@ -94,26 +96,39 @@ pub struct MapIndex {
 /// off among the stops ahead by these numbers (0x61baa8), so a stop with twice the number
 /// takes twice the riders; the stock maps put 10 on every stop.
 pub fn stop_exit_weight(strings: &[String]) -> f32 {
-    let (max, min) = stop_enter(strings);
-    stop_num(strings, 3).unwrap_or((min + max) / 2.0).max(0.0)
+    stop_exit_weight_with(strings, StopNumbers::Omsi)
 }
 
-fn stop_num(strings: &[String], i: usize) -> Option<f32> {
-    strings
+/// [`stop_exit_weight`] read the way `numbers` says (#3154).
+pub fn stop_exit_weight_with(strings: &[String], numbers: StopNumbers) -> f32 {
+    let (max, min) = stop_enter_with(strings, numbers);
+    stop_num(strings, 3, numbers)
+        .unwrap_or((min + max) / 2.0)
+        .max(0.0)
+}
+
+fn stop_num(strings: &[String], i: usize, numbers: StopNumbers) -> Option<f32> {
+    let v = strings
         .get(i)
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .and_then(|s| s.replace(',', ".").parse::<f64>().ok())
-        .filter(|v| v.is_finite())
-        .map(|v| v.round() as f32)
+        .filter(|v| v.is_finite())?;
+    Some(numbers.round(v))
 }
 
 /// A bus stop's `pass_enter_max` (string 1, else 1) and `pass_enter_min` (string 2, else
 /// 0), rounded, as Omsi.exe sets the station up (0x620058): how many people wait there.
 pub fn stop_enter(strings: &[String]) -> (f32, f32) {
+    stop_enter_with(strings, StopNumbers::Omsi)
+}
+
+/// [`stop_enter`] read the way `numbers` says (#3154): `Omsi` rounds each string, `Exact`
+/// leaves it for whoever multiplies it by the passenger density.
+pub fn stop_enter_with(strings: &[String], numbers: StopNumbers) -> (f32, f32) {
     (
-        stop_num(strings, 1).unwrap_or(1.0),
-        stop_num(strings, 2).unwrap_or(0.0),
+        stop_num(strings, 1, numbers).unwrap_or(1.0),
+        stop_num(strings, 2, numbers).unwrap_or(0.0),
     )
 }
 
@@ -206,6 +221,17 @@ impl MapIndex {
         tiles: &[(usize, i32, i32, PathBuf)],
         chrono_dirs: &[PathBuf],
         resolve: &(dyn Fn(&str) -> PathBuf + Sync),
+    ) -> MapIndex {
+        MapIndex::build_with(tiles, chrono_dirs, resolve, StopNumbers::Omsi)
+    }
+
+    /// [`MapIndex::build`], with the stops' passenger numbers read the way `numbers` says
+    /// (#3154).
+    pub fn build_with(
+        tiles: &[(usize, i32, i32, PathBuf)],
+        chrono_dirs: &[PathBuf],
+        resolve: &(dyn Fn(&str) -> PathBuf + Sync),
+        numbers: StopNumbers,
     ) -> MapIndex {
         /// What one tile adds besides its own index part: its rows (key, spline, start
         /// distance, interval), its repeaters (id, spline, the first object of the row on that
@@ -342,8 +368,10 @@ impl MapIndex {
                         ),
                     );
                     if o.extra.len() >= 2 {
-                        part.stop_weights.insert(o.id, stop_exit_weight(&o.extra));
-                        part.stop_enter.insert(o.id, stop_enter(&o.extra));
+                        part.stop_weights
+                            .insert(o.id, stop_exit_weight_with(&o.extra, numbers));
+                        part.stop_enter
+                            .insert(o.id, stop_enter_with(&o.extra, numbers));
                         part.stop_side.insert(o.id, stop_side(&o.extra));
                         part.stop_length.insert(o.id, stop_length(&o.extra));
                     }
@@ -353,8 +381,10 @@ impl MapIndex {
                     .iter()
                     .filter(|a| a.repeater.is_none() && a.strings.len() >= 2)
                 {
-                    part.stop_weights.insert(a.id, stop_exit_weight(&a.strings));
-                    part.stop_enter.insert(a.id, stop_enter(&a.strings));
+                    part.stop_weights
+                        .insert(a.id, stop_exit_weight_with(&a.strings, numbers));
+                    part.stop_enter
+                        .insert(a.id, stop_enter_with(&a.strings, numbers));
                     part.stop_side.insert(a.id, stop_side(&a.strings));
                     part.stop_length.insert(a.id, stop_length(&a.strings));
                 }
@@ -403,8 +433,10 @@ impl MapIndex {
                     [parent.2[0] + o.rot[0], 0.0, 0.0],
                 ));
                 if o.extra.len() >= 2 {
-                    part.stop_weights.insert(o.id, stop_exit_weight(&o.extra));
-                    part.stop_enter.insert(o.id, stop_enter(&o.extra));
+                    part.stop_weights
+                        .insert(o.id, stop_exit_weight_with(&o.extra, numbers));
+                    part.stop_enter
+                        .insert(o.id, stop_enter_with(&o.extra, numbers));
                     part.stop_side.insert(o.id, stop_side(&o.extra));
                     part.stop_length.insert(o.id, stop_length(&o.extra));
                 }

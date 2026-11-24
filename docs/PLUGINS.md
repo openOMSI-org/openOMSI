@@ -760,6 +760,7 @@ declared to call the function (a plain `.lua` file has all except native process
 | `omsi.bus.tickets()` | list of tables | The tickets the map sells: `{name, price, day_ticket}`. | 0.2.22 |
 | `omsi.bus.toggle_door([n])` | boolean | Presses the key of doorway `n` (from 1; 0 or none: all doors), as the player would. *Permission: `vehicle_write`.* | 0.2.22 |
 | `omsi.bus.toggle_handbrake()` | boolean | Puts the parking brake on or off, as its key does. *Permission: `vehicle_write`.* | 0.2.22 |
+| `omsi.bus.track()` | table or nil | Where the player's rail vehicle (tram, metro, train) is on its track, as distances along it rather than x and y: `{lane, s, lane_length, forward, travelled}` - the track (an index into the map's lanes), the metres from its start and its length, whether the vehicle faces the track's direction, and the net metres it has moved along the tracks since it was put on them (they go down, below zero too, while it backs up). `nil` for a road vehicle. A plugin can work out block sections, distances to a signal or a stop, or a train protection system from it. | 0.3.55 |
 | `omsi.bus.trailers()` | integer or nil | Parts coupled behind the bus (an articulated bus's rear counts). | 0.2.22 |
 | `omsi.bus.triggers()` | list of strings | The names of the bus's script triggers (for `trigger`, `press`). | 0.2.22 |
 | `omsi.bus.velocity()` | number or nil | The bus's speed in km/h, negative backwards. | 0.2.22 |
